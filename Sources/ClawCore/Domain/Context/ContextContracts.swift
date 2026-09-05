@@ -19,6 +19,7 @@ public enum ContextRowID: String, Sendable, Equatable, CaseIterable {
   case systemWorkspace
   case tools
   case metadata
+  case lessons
   case userFile
   case memoryFile
   case memoryItems
@@ -93,6 +94,10 @@ public struct BuildResult: Sendable, Equatable {
   public let messages: [ChatMessage]
   public let ownerNotices: [String]
   public let hasPrivateDataAccess: Bool
+  /// Whether this assembly carries a bound run's non-empty pinned lesson set. The row and the taint
+  /// it raises are two decisions about one fact, so both read it here rather than each re-deriving
+  /// it from the set.
+  public let hasPinnedLessons: Bool
   /// The per-run prompt/workspace fingerprint; "" only for test doubles that do not
   /// exercise the approval fabric — `ContextBuilder.assemble` always sets the real value.
   public let policyVersion: String
@@ -101,11 +106,13 @@ public struct BuildResult: Sendable, Equatable {
     messages: [ChatMessage],
     ownerNotices: [String],
     hasPrivateDataAccess: Bool,
+    hasPinnedLessons: Bool = false,
     policyVersion: String = ""
   ) {
     self.messages = messages
     self.ownerNotices = ownerNotices
     self.hasPrivateDataAccess = hasPrivateDataAccess
+    self.hasPinnedLessons = hasPinnedLessons
     self.policyVersion = policyVersion
   }
 }

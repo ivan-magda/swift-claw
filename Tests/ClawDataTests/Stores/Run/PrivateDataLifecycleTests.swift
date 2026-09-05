@@ -127,7 +127,8 @@ import Testing
         usage: nil,
         chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
         setTainted: false,
-        setPrivateData: true
+        setPrivateData: true,
+        cause: .providerFailure
       ),
       now: now
     )

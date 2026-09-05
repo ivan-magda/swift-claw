@@ -263,6 +263,22 @@ public enum ClawDatabase {
         table.add(column: "reply_to_message_id", .integer)
       }
     }
+    migrator.registerMigration("v11") { db in
+      try createLearningStateTables(db)
+      try createLearningRunTables(db)
+      try createLearningOperationTables(db)
+      try createLearningFeedbackTables(db)
+      try createLearningCandidateTables(db)
+      try createLearningTrialResolutionTables(db)
+      try addLearningUsageScope(db)
+      try rebuildOutboundDeliveriesWithoutRunOwnership(db)
+    }
+    migrator.registerMigration("v12") { db in
+      try addLearningOperationClaimKey(db)
+    }
+    migrator.registerMigration("v13") { db in
+      try replaceOpenTrialIndexWithLiveTrialIndex(db)
+    }
     return migrator
   }
 

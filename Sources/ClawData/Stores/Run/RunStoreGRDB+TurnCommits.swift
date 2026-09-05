@@ -23,17 +23,34 @@ extension RunStoreGRDB {
         }
         return try Self.recordTerminalUsageIfNeeded(
           db,
+          runId: turn.runId,
           usage: turn.usage,
           state: currentState,
           now: now
         )
       }
 
-      guard try Self.transitionRun(db, runId: turn.runId, event: .complete, now: now) != nil else {
+      // Settled with the terminal row: every primary fact of a DONE turn — the assistant message,
+      // its usage and its outbox chunks — commits inside this same transaction.
+      guard
+        try Self.transitionRun(
+          db,
+          runId: turn.runId,
+          event: .complete,
+          now: now,
+          terminal: .settled(.taskCompleted)
+        ) != nil
+      else {
         return .ignored
       }
 
-      try Self.finalizeCompletedTurn(db, turn: turn, now: now)
+      let feedbackTargetCommitted = try Self.commitFeedbackTarget(db, turn: turn, now: now)
+      try Self.finalizeCompletedTurn(
+        db,
+        turn: turn,
+        feedbackTargetCommitted: feedbackTargetCommitted,
+        now: now
+      )
 
       return .committed
     }
@@ -58,6 +75,7 @@ extension RunStoreGRDB {
         if let usage = turn.usage {
           return try Self.recordTerminalUsageIfNeeded(
             db,
+            runId: turn.runId,
             usage: usage,
             state: currentState,
             now: now
@@ -66,7 +84,15 @@ extension RunStoreGRDB {
         return .ignored
       }
 
-      guard try Self.transitionRun(db, runId: turn.runId, event: .fail, now: now) != nil else {
+      guard
+        try Self.transitionRun(
+          db,
+          runId: turn.runId,
+          event: .fail,
+          now: now,
+          terminal: .settled(turn.cause)
+        ) != nil
+      else {
         return .ignored
       }
       try Self.appendJobFailedIfJobRun(db, runId: turn.runId, now: now)
@@ -119,6 +145,7 @@ private extension RunStoreGRDB {
   static func finalizeCompletedTurn(
     _ db: Database,
     turn: AssistantTurn,
+    feedbackTargetCommitted: Bool,
     now: Date
   ) throws {
     for exchange in turn.exchanges {
@@ -155,10 +182,14 @@ private extension RunStoreGRDB {
 
     let stepBase = try nextOutboxStepBase(db, runId: turn.runId)
     for chunk in turn.chunks {
+      let committedChunk =
+        turn.feedbackTarget != nil && feedbackTargetCommitted == false
+        ? strippingReplyMarkup(from: chunk)
+        : chunk
       _ = try insertOutbox(
         db,
         runId: turn.runId,
-        chunk: shiftedChunk(chunk, by: stepBase),
+        chunk: shiftedChunk(committedChunk, by: stepBase),
         now: now
       )
     }
@@ -171,13 +202,95 @@ private extension RunStoreGRDB {
     }
   }
 
+  /// The cheap caller-side resolution is advisory. This query is the race-closing authority: the
+  /// bound scheduled run, current epoch and exact effective lesson row must still agree here.
+  static func commitFeedbackTarget(
+    _ db: Database,
+    turn: AssistantTurn,
+    now: Date
+  ) throws -> Bool {
+    guard let target = turn.feedbackTarget else {
+      return false
+    }
+    let expectedActions: [OwnerSignal] = [
+      .resultUseful, .resultNotUseful, .resultCorrection,
+    ]
+    guard
+      target.subjectKind == .run,
+      target.subjectDigest == String(turn.runId),
+      target.ownerUserId == turn.chatId,
+      target.chatId == turn.chatId,
+      target.allowedActions == expectedActions,
+      target.expiresAt > now
+    else {
+      return false
+    }
+
+    let row = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT binding.job_id, binding.learning_epoch, binding.occurrence_at
+        FROM run_learning_bindings AS binding
+        JOIN runs AS run ON run.id = binding.run_id AND run.job_id = binding.job_id
+        JOIN scheduled_jobs AS job ON job.id = run.job_id AND job.owner_chat_id = ?
+        JOIN job_learning_state AS state
+          ON state.job_id = binding.job_id
+          AND state.learning_epoch = binding.learning_epoch
+        JOIN lesson_sets AS effective
+          ON effective.job_id = binding.job_id AND effective.digest = binding.effective_digest
+        WHERE binding.run_id = ? AND run.origin = ?
+        """,
+      arguments: [turn.chatId, turn.runId, RunOrigin.scheduled.rawValue]
+    )
+    guard
+      let row,
+      target.jobId == row["job_id"],
+      target.epoch.value == row["learning_epoch"],
+      let occurrenceAt = EpochSecondCodec.date(fromEpoch: row["occurrence_at"]),
+      target.expiresAt == occurrenceAt.addingTimeInterval(EvidenceWindow.maximumAge)
+    else {
+      return false
+    }
+
+    let nonceExists =
+      try Bool.fetchOne(
+        db,
+        sql: "SELECT EXISTS(SELECT 1 FROM feedback_targets WHERE nonce = ?)",
+        arguments: [target.nonce]
+      ) ?? true
+    guard nonceExists == false else {
+      return false
+    }
+    try ScheduledLearningStoreGRDB.insertTarget(db, target)
+    return true
+  }
+
+  static func strippingReplyMarkup(from chunk: OutboxChunk) -> OutboxChunk {
+    OutboxChunk(
+      stepIndex: chunk.stepIndex,
+      chatId: chunk.chatId,
+      payload: chunk.payload,
+      payloadHash: chunk.payloadHash,
+      approvalId: chunk.approvalId,
+      replyMarkup: nil
+    )
+  }
+
   static func recordTerminalUsageIfNeeded(
     _ db: Database,
+    runId: Int64,
     usage: ProviderUsage,
     state: RunState,
     now: Date
   ) throws -> RunCommitResult {
     guard state == .cancelled || state == .superseded else {
+      return .ignored
+    }
+
+    // Usage is a primary fact, and no primary fact may land once the run's evidence is frozen.
+    // Deferring settlement on the cancel/supersede paths is what leaves this window open at all;
+    // once the lane tail (or the boot backstop) has closed it, the spend has nowhere truthful to go.
+    guard try !ScheduledLearningStoreGRDB.isSettled(db, runId: runId) else {
       return .ignored
     }
 

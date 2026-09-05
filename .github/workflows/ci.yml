@@ -38,7 +38,7 @@ jobs:
       - name: Re-run the concurrency-sensitive suites on one cooperative thread
         env:
           LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
-        run: swift test --filter 'CommandApprovalCancelSignalRaceTests|ApprovalExpiryServiceTests|ApprovalWaiterTests|ApprovalBootReconcilerTests'
+        run: swift test --filter 'CommandApprovalCancelSignalRaceTests|ApprovalExpiryServiceTests|ApprovalWaiterTests|ApprovalBootReconcilerTests|TrialSerializationTests'
 
   test-macos:
     runs-on: macos-26

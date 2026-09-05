@@ -1,0 +1,373 @@
+import ClawCore
+import Foundation
+import GRDB
+
+// MARK: - Operation Lifecycle
+
+extension ScheduledLearningStoreGRDB {
+  public func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation? {
+    try database.writeMapping { db in
+      try Self.claim(db, key: key, now: now)
+    }
+  }
+
+  public func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome {
+    try database.writeMapping { db in
+      try Self.authorize(db, authorization, now: now)
+    }
+  }
+
+  public func finishOperation(
+    _ result: LearningOperationResult,
+    now: Date
+  ) throws(StoreError) -> Bool {
+    try database.writeMapping { db in
+      try Self.finish(db, result, now: now)
+    }
+  }
+
+  @discardableResult
+  public func reconcileOperationsAtBoot(
+    now: Date
+  ) throws(StoreError) -> OperationReconciliation {
+    try database.writeMapping { db in
+      try Self.reconcile(db, now: now)
+    }
+  }
+}
+
+// MARK: - Claim
+
+private extension ScheduledLearningStoreGRDB {
+  /// Refuses far more often than it claims, and every refusal is the same nil: a claim is only
+  /// worth taking when the job is still in the epoch the key names, the source is still work the
+  /// evaluator may do, and no other attempt at this key is live or already finished.
+  static func claim(
+    _ db: Database,
+    key: LearningOperationKey,
+    now: Date
+  ) throws -> ClaimedOperation? {
+    guard try readState(db, jobId: key.jobId)?.epoch == key.epoch else {
+      return nil
+    }
+    guard try jobPermitsLearningCalls(db, jobId: key.jobId) else {
+      return nil
+    }
+    guard try sourceIsClaimable(db, key: key) else {
+      return nil
+    }
+    let claimed: ClaimedOperation?
+    if let latest = try latestAttempt(db, key: key.digest) {
+      switch latest.state {
+      case .pending:
+        // A claim the last process took but never authorized. No call was ever made under this row,
+        // so the attempt is resumed where it stopped rather than replaced by a new generation.
+        claimed = try reclaim(db, latest, key: key)
+      case .interruptedUnknown:
+        claimed = try insertClaim(
+          db,
+          key: key,
+          generation: latest.attemptGeneration + 1,
+          supersedes: latest.id,
+          now: now
+        )
+      case .claimed, .started, .succeeded, .failed, .failedNoCall:
+        claimed = nil
+      }
+    } else {
+      claimed = try insertClaim(db, key: key, generation: 1, supersedes: nil, now: now)
+    }
+    if claimed != nil, key.phase == .evaluator {
+      try recomputeEvaluatorSource(
+        db,
+        jobId: key.jobId,
+        epoch: key.epoch,
+        evidenceDigest: key.sourceDigest,
+        now: now
+      )
+    }
+    return claimed
+  }
+
+  /// What the key's source has to be for the question to still be worth asking.
+  static func sourceIsClaimable(_ db: Database, key: LearningOperationKey) throws -> Bool {
+    switch key.phase {
+    case .evaluator:
+      guard try evidenceReachesEvaluator(db, key: key) else {
+        return false
+      }
+      return try Bool.fetchOne(
+        db,
+        sql: """
+          SELECT NOT EXISTS(
+            SELECT 1 FROM learning_evaluations WHERE job_id = ? AND evidence_digest = ?
+          )
+          """,
+        arguments: [key.jobId, key.sourceDigest]
+      ) ?? false
+    case .reflector:
+      // The reflector's source is a frozen trigger identity, not a run receipt. What makes a
+      // trigger admissible — the window, the qualifying issue codes, no open trial — is decided
+      // where the trigger is frozen; there is nothing about it to re-derive from a digest here.
+      return true
+    }
+  }
+
+  /// Only a sealed receipt classified as task evidence may be evaluated, and only under the job and
+  /// epoch it was sealed for: a digest alone would let one job's evidence be claimed under another.
+  static func evidenceReachesEvaluator(_ db: Database, key: LearningOperationKey) throws -> Bool {
+    let raw = try String.fetchOne(
+      db,
+      sql: """
+        SELECT eligibility FROM learning_evidence
+        WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
+        """,
+      arguments: [key.jobId, key.epoch.value, key.sourceDigest]
+    )
+    guard let eligibility = raw.flatMap(LearningEligibility.init(rawValue:)) else {
+      return false
+    }
+    return eligibility.reachesEvaluator
+  }
+
+  static func insertClaim(
+    _ db: Database,
+    key: LearningOperationKey,
+    generation: Int,
+    supersedes: LearningOperationID?,
+    now: Date
+  ) throws -> ClaimedOperation {
+    let id = LearningOperationID(key: key.digest, attemptGeneration: generation)
+    try db.execute(
+      sql: """
+        INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase, source_digest,
+          attempt_generation, supersedes, state, key_digest, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+      arguments: [
+        id.rawValue,
+        key.jobId,
+        key.epoch.value,
+        key.phase.rawValue,
+        key.sourceDigest,
+        generation,
+        supersedes?.rawValue,
+        LearningOperationState.claimed.rawValue,
+        key.digest.rawValue,
+        EpochSecondCodec.epoch(now),
+      ]
+    )
+    return ClaimedOperation(
+      id: id,
+      key: key,
+      attemptGeneration: generation,
+      supersedes: supersedes
+    )
+  }
+
+  static func reclaim(
+    _ db: Database,
+    _ attempt: AttemptRow,
+    key: LearningOperationKey
+  ) throws -> ClaimedOperation? {
+    try db.execute(
+      sql: "UPDATE learning_operations SET state = ? WHERE operation_id = ? AND state = ?",
+      arguments: [
+        LearningOperationState.claimed.rawValue,
+        attempt.id.rawValue,
+        LearningOperationState.pending.rawValue,
+      ]
+    )
+    guard db.changesCount > 0 else {
+      return nil
+    }
+    return ClaimedOperation(
+      id: attempt.id,
+      key: key,
+      attemptGeneration: attempt.attemptGeneration,
+      supersedes: attempt.supersedes
+    )
+  }
+}
+
+// MARK: - Job Gate
+
+extension ScheduledLearningStoreGRDB {
+  /// Whether the job still permits new learning calls against its evidence. Cancellation alone
+  /// blocks here: a paused or completed job's settled evidence is still evidence, and the wider
+  /// "repeatable, non-cancelled" rule belongs to candidate admission rather than to one inference.
+  /// A job row that has gone missing fails closed — nothing may be spent on a job that is not there.
+  static func jobPermitsLearningCalls(_ db: Database, jobId: Int64) throws -> Bool {
+    let status = try String.fetchOne(
+      db,
+      sql: "SELECT status FROM scheduled_jobs WHERE id = ?",
+      arguments: [jobId]
+    )
+    guard let status else {
+      return false
+    }
+    return status != ScheduledJobStatus.cancelled.rawValue
+  }
+}
+
+// MARK: - Operation Rows
+
+extension ScheduledLearningStoreGRDB {
+  /// The newest attempt at one key, whatever became of it. Generations are dense and ascending, so
+  /// the newest row is the only one whose state can still permit or refuse a claim.
+  static func latestAttempt(_ db: Database, key: LearningOperationKeyDigest) throws -> AttemptRow? {
+    let row = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT operation_id, attempt_generation, state, supersedes
+        FROM learning_operations WHERE key_digest = ?
+        ORDER BY attempt_generation DESC LIMIT 1
+        """,
+      arguments: [key.rawValue]
+    )
+    guard let row else {
+      return nil
+    }
+    let id = LearningOperationID(rawValue: row["operation_id"])
+    return AttemptRow(
+      id: id,
+      attemptGeneration: row["attempt_generation"],
+      state: try operationState(row["state"], of: id),
+      supersedes: (row["supersedes"] as String?).map(LearningOperationID.init(rawValue:))
+    )
+  }
+
+  static func readOperation(_ db: Database, id: LearningOperationID) throws -> OperationRow? {
+    let row = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT job_id, learning_epoch, phase, source_digest, key_digest, carrier_digest, state,
+          failure_code, route, provider_call_id, reserved_tokens, reserved_cost_usd,
+          reservation_state
+        FROM learning_operations WHERE operation_id = ?
+        """,
+      arguments: [id.rawValue]
+    )
+    guard let row else {
+      return nil
+    }
+    guard
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      let phaseRaw = SQLiteStoredValue.string(in: row, column: "phase"),
+      let sourceDigest = SQLiteStoredValue.string(in: row, column: "source_digest"),
+      let keyDigest = SQLiteStoredValue.string(in: row, column: "key_digest"),
+      let carrier = SQLiteStoredValue.nullableString(in: row, column: "carrier_digest"),
+      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+      let failureRaw = SQLiteStoredValue.nullableString(in: row, column: "failure_code"),
+      let route = SQLiteStoredValue.nullableString(in: row, column: "route"),
+      let providerCall = SQLiteStoredValue.nullableString(in: row, column: "provider_call_id"),
+      let reservedTokens = SQLiteStoredValue.nullableInt(in: row, column: "reserved_tokens"),
+      let reservedCost = SQLiteStoredValue.nullableDouble(in: row, column: "reserved_cost_usd"),
+      let reservationState = SQLiteStoredValue.nullableString(in: row, column: "reservation_state")
+    else {
+      throw StoreError.unexpected("operation \(id.rawValue) holds unreadable stored values")
+    }
+    let failure = failureRaw.value.flatMap(LearningOperationFailure.init(rawValue:))
+    guard failureRaw.value == nil || failure != nil else {
+      throw StoreError.unexpected("operation \(id.rawValue) holds an unreadable failure")
+    }
+    return OperationRow(
+      id: id,
+      jobId: jobId,
+      epoch: LearningEpoch(epoch),
+      phase: try learningPhase(phaseRaw, of: id),
+      sourceDigest: sourceDigest,
+      keyDigest: LearningOperationKeyDigest(rawValue: keyDigest),
+      carrierDigest: carrier.value.map(CarrierDigest.init(rawValue:)),
+      state: try operationState(stateRaw, of: id),
+      failure: failure,
+      route: route.value,
+      providerCallID: providerCall.value.map(ProviderCallID.init(rawValue:)),
+      reservedTokens: reservedTokens.value,
+      reservedCostUSD: reservedCost.value,
+      reservationState: reservationState.value
+    )
+  }
+
+  static func startedOperationReservation(
+    _ operation: OperationRow
+  ) throws -> StartedOperationReservation {
+    guard
+      let providerCallID = operation.providerCallID,
+      providerCallID.rawValue.isEmpty == false,
+      let route = operation.route,
+      route.isEmpty == false,
+      let reservedTokens = operation.reservedTokens,
+      reservedTokens >= 0,
+      let reservedCostUSD = operation.reservedCostUSD,
+      reservedCostUSD.isFinite,
+      reservedCostUSD >= 0,
+      operation.reservationState == LearningReservationState.open.rawValue
+    else {
+      throw StoreError.unexpected(
+        "started operation \(operation.id.rawValue) has an unreadable call reservation"
+      )
+    }
+    return StartedOperationReservation(
+      providerCallID: providerCallID,
+      route: route,
+      reservedTokens: reservedTokens,
+      reservedCostUSD: reservedCostUSD
+    )
+  }
+
+  static func operationState(
+    _ raw: String,
+    of id: LearningOperationID
+  ) throws -> LearningOperationState {
+    guard let state = LearningOperationState(rawValue: raw) else {
+      throw StoreError.unexpected("operation \(id.rawValue) holds an unreadable state '\(raw)'")
+    }
+    return state
+  }
+
+  static func learningPhase(_ raw: String, of id: LearningOperationID) throws -> LearningPhase {
+    guard let phase = LearningPhase(rawValue: raw) else {
+      throw StoreError.unexpected("operation \(id.rawValue) holds an unreadable phase '\(raw)'")
+    }
+    return phase
+  }
+
+  struct AttemptRow {
+    let id: LearningOperationID
+    let attemptGeneration: Int
+    let state: LearningOperationState
+    let supersedes: LearningOperationID?
+  }
+
+  struct OperationRow {
+    let id: LearningOperationID
+    let jobId: Int64
+    let epoch: LearningEpoch
+    let phase: LearningPhase
+    let sourceDigest: String
+    let keyDigest: LearningOperationKeyDigest
+    let carrierDigest: CarrierDigest?
+    let state: LearningOperationState
+    let failure: LearningOperationFailure?
+    let route: String?
+    let providerCallID: ProviderCallID?
+    let reservedTokens: Int?
+    let reservedCostUSD: Double?
+    let reservationState: String?
+  }
+
+  struct StartedOperationReservation {
+    let providerCallID: ProviderCallID
+    let route: String
+    let reservedTokens: Int
+    let reservedCostUSD: Double
+  }
+}

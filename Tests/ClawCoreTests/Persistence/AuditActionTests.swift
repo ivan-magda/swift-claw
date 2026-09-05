@@ -56,4 +56,13 @@ import Testing
     // given / when / then — rawValues are the durable audit vocabulary (spec §3.1, preamble)
     #expect(fixture.action.rawValue == fixture.rawValue)
   }
+
+  @Test func learningResetVocabularyHasStableTypedRawValues() {
+    // given / when / then — duplicated string literals at write sites would let one durable value
+    // drift while the other values continue to pass their integration paths.
+    #expect(AuditAction.learningReset.rawValue == "learning_reset")
+    #expect(LearningTrialCloseReason.learningReset.rawValue == "learning_reset")
+    #expect(LearningOperationFailure.staleEpoch.rawValue == "stale_epoch")
+    #expect(ResetReceipt.kind == "learning_reset")
+  }
 }

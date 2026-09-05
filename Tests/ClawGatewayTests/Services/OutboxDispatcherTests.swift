@@ -17,9 +17,12 @@ private struct MarkSentFailingOutbox: OutboxStore {
     try base.claimOutbound(runId: runId, chunk: chunk)
   }
 
+  func claimNotice(_ chunk: LearningNoticeChunk) throws(StoreError) -> Bool {
+    try base.claimNotice(chunk)
+  }
+
   func markSent(
-    runId: Int64,
-    stepIndex: Int,
+    deliveryKey: String,
     telegramMessageId: Int64,
     now: Date
   ) throws(StoreError) {

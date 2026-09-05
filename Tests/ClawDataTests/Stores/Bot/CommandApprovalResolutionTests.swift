@@ -41,7 +41,13 @@ import Testing
 
     let now = Date()
     let approvalId = try queue.write { db -> Int64 in
-      _ = try RunStoreGRDB.transitionRun(db, runId: runId, event: .suspendForApproval, now: now)
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .suspendForApproval,
+        now: now,
+        terminal: nil
+      )
       let canonicalArgs = #"{"path":"/w/plan.md"}"#
       return try ApprovalStoreGRDB.insertApproval(
         db,

@@ -2,21 +2,16 @@ import ClawCore
 import Foundation
 import GRDB
 
-// swiftlint:disable file_length
-
-/// GRDB implementation of `ScheduledJobStore`. Occurrence instants persist as UTC epoch-second
-/// INTEGERs so the fused claim's compare-and-advance is exact integer equality; callers pass
-/// whole-second `Date`s (`OccurrenceCalculator` emits whole seconds). `Sendable` is declared
-/// because the task-group race test captures the store in `@Sendable` child tasks — strict
-/// concurrency rejects that until the conformance exists (the only stored property is the
-/// `Sendable` `MappedDatabase`). Method groups live in same-type extensions below purely to
-/// keep each extension's body under the project's `type_body_length` gate; the store is still
-/// one type with one stored property.
+/// GRDB persistence for scheduled jobs. Occurrence instants use UTC epoch seconds so the
+/// fused claim compares exactly; callers must pass whole-second dates.
 public struct ScheduledJobStoreGRDB: Sendable {
-  private let database: MappedDatabase
+  let database: MappedDatabase
+  /// `CLAW_LEARNING_ENABLED`. Disarmed, a fire binds nothing and the learning tables stay empty.
+  let learningEnabled: Bool
 
-  public init(writer: any DatabaseWriter) {
+  public init(writer: any DatabaseWriter, learningEnabled: Bool = false) {
     database = MappedDatabase(writer: writer)
+    self.learningEnabled = learningEnabled
   }
 }
 
@@ -78,7 +73,9 @@ extension ScheduledJobStoreGRDB {
   public func listAll() throws(StoreError) -> [ScheduledJob] {
     try database.readMapping { db in
       let rows = try Row.fetchAll(db, sql: "SELECT * FROM scheduled_jobs ORDER BY id ASC")
-      return try rows.map { row in try Self.jobFromRow(row) }
+      return try rows.map { row in
+        try Self.jobFromRow(row)
+      }
     }
   }
 
@@ -93,7 +90,9 @@ extension ScheduledJobStoreGRDB {
           """,
         arguments: [ScheduledJobStatus.active.rawValue, EpochSecondCodec.epoch(now)]
       )
-      return try rows.map { row in try Self.jobFromRow(row) }
+      return try rows.map { row in
+        try Self.jobFromRow(row)
+      }
     }
   }
 }
@@ -151,305 +150,6 @@ extension ScheduledJobStoreGRDB {
       createdTs: createdTs,
       updatedTs: updatedTs
     )
-  }
-}
-
-// MARK: - Occurrence Compare-and-Advance
-
-extension ScheduledJobStoreGRDB {
-  /// Moves a job off the occurrence it is currently due at, and reports whether this caller won.
-  ///
-  /// The WHERE arms (id, the stored due instant, ACTIVE) are what make two racers for the same
-  /// (job, due) structurally single-winner: the loser matches no row and changes nothing. A
-  /// recurring job advances to `nextOccurrence`; a one-shot has no next, so firing means done —
-  /// terminal, NULL next, invisible to the ticker index. Both the fire claim and the misfire skip
-  /// turn on this one predicate, so a change to the race is a change to both.
-  static func advanceOccurrence(
-    _ db: Database,
-    jobId: Int64,
-    due: Date,
-    nextOccurrence: Date?,
-    now: Date
-  ) throws -> Bool {
-    if let nextOccurrence {
-      try db.execute(
-        sql: """
-          UPDATE scheduled_jobs
-          SET next_occurrence = ?, updated_ts = ?
-          WHERE id = ? AND next_occurrence = ? AND status = ?
-          """,
-        arguments: [
-          EpochSecondCodec.epoch(nextOccurrence),
-          EpochSecondCodec.epoch(now),
-          jobId,
-          EpochSecondCodec.epoch(due),
-          ScheduledJobStatus.active.rawValue,
-        ]
-      )
-    } else {
-      try db.execute(
-        sql: """
-          UPDATE scheduled_jobs
-          SET next_occurrence = NULL, status = ?, updated_ts = ?
-          WHERE id = ? AND next_occurrence = ? AND status = ?
-          """,
-        arguments: [
-          ScheduledJobStatus.completed.rawValue,
-          EpochSecondCodec.epoch(now),
-          jobId,
-          EpochSecondCodec.epoch(due),
-          ScheduledJobStatus.active.rawValue,
-        ]
-      )
-    }
-    return db.changesCount > 0
-  }
-}
-
-// MARK: - Fused Claim
-
-extension ScheduledJobStoreGRDB {
-  public func claimAndFire(
-    jobId: Int64,
-    due: Date,
-    fireAt: Date,
-    nextOccurrence: Date?,
-    now: Date
-  ) throws(StoreError) -> ClaimedFire? {
-    try database.writeMapping { db in
-      // Step 1: the compare-and-advance. This IS the atomic claim expressed on the occurrence.
-      // `last_fired_at` is deliberately NOT set here: it must move only when a run is actually
-      // created, so an overlap-skipped fire (insertFireRows → nil) leaves it untouched, like a
-      // misfire skip. insertFireRows stamps it with `fireAt` after the overlap guard passes.
-      //
-      // Step 2: no winner ⇒ claimed elsewhere or the job mutated — abort silently, no fire.
-      guard
-        try Self.advanceOccurrence(
-          db,
-          jobId: jobId,
-          due: due,
-          nextOccurrence: nextOccurrence,
-          now: now
-        )
-      else {
-        return nil
-      }
-      return try Self.insertFireRows(db, jobId: jobId, fireAt: fireAt, now: now)
-    }
-  }
-
-  /// Steps 3-6 of the fire transaction: lazy session, trigger message, PENDING run, audit, and the
-  /// `last_fired_at` stamp. Shared by `claimAndFire` (which advances the schedule first) and
-  /// `fireNow` (which doesn't). `fireAt` is the fire's logical instant — `claimAndFire`'s T_fire,
-  /// `now` for `fireNow` — recorded to `last_fired_at` only if the overlap guard lets the fire run.
-  static func insertFireRows(  // swiftlint:disable:this function_body_length
-    _ db: Database,
-    jobId: Int64,
-    fireAt: Date,
-    now: Date
-  ) throws -> ClaimedFire? {
-    guard
-      let jobRow = try Row.fetchOne(
-        db,
-        sql: "SELECT owner_chat_id, prompt, session_id FROM scheduled_jobs WHERE id = ?",
-        arguments: [jobId]
-      )
-    else {
-      throw StoreError.unexpected("claimed scheduled job \(jobId) has no row")
-    }
-    let ownerChatId: Int64 = jobRow["owner_chat_id"]
-    let prompt: String = jobRow["prompt"]
-
-    let sessionId = try ensureJobSession(
-      db,
-      jobId: jobId,
-      existingSessionId: jobRow["session_id"],
-      now: now
-    )
-
-    // Skip this occurrence when the prior run on this job's session is still live; the schedule
-    // already advanced, so it drops like a misfire rather than resetting the shared window.
-    if try shouldSkipOverlappingFire(
-      db,
-      sessionId: sessionId,
-      action: .jobOverlapSkipped,
-      argsRedacted: "{\"job_id\":\(jobId)}",
-      now: now
-    ) {
-      return nil
-    }
-
-    // The overlap guard passed — this fire creates a run, so stamp last_fired_at now (never on the
-    // claim, which also matches an about-to-be-skipped occurrence). Rides the same transaction.
-    try db.execute(
-      sql: "UPDATE scheduled_jobs SET last_fired_at = ?, updated_ts = ? WHERE id = ?",
-      arguments: [EpochSecondCodec.epoch(fireAt), EpochSecondCodec.epoch(now), jobId]
-    )
-
-    // Each fire opens on a fresh context window (the /new mechanism): prior fires stay durable
-    // for audit and FTS, but a past turn — including a bad one — never replays into this run's
-    // context. The trigger inserted below is the new window's first row.
-    try SessionMessageStoreGRDB.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
-
-    // Step 4: the trigger message — the owner's own confirmed text, frozen at arm time, so
-    // trusted-tier deliberately (anything the RUN ingests stays untrusted).
-    try db.execute(
-      sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        sessionId,
-        MessageRole.user.rawValue,
-        prompt,
-        Provenance.trusted.rawValue,
-        now,
-      ]
-    )
-    let triggerMessageId = db.lastInsertedRowID
-
-    let runId = try insertPendingJobRun(
-      db,
-      sessionId: sessionId,
-      triggerMessageId: triggerMessageId,
-      jobId: jobId,
-      now: now
-    )
-
-    // Step 6: the audit row rides the same transaction as its side effect (house rule).
-    try AuditLogGRDB.insertAudit(
-      db,
-      AuditEvent(
-        actor: .system,
-        action: .jobExecuted,
-        argsRedacted: "{\"job_id\":\(jobId)}",
-        runId: runId,
-        sessionId: sessionId,
-        ts: now
-      )
-    )
-
-    return ClaimedFire(
-      runId: runId,
-      sessionId: sessionId,
-      triggerMessageId: triggerMessageId,
-      ownerChatId: ownerChatId
-    )
-  }
-}
-
-// MARK: - Run-Now and Misfire Skip
-
-extension ScheduledJobStoreGRDB {
-  public func fireNow(jobId: Int64, now: Date) throws(StoreError) -> RunNowOutcome {
-    try database.writeMapping { db in
-      let rawStatus = try String.fetchOne(
-        db,
-        sql: "SELECT status FROM scheduled_jobs WHERE id = ?",
-        arguments: [jobId]
-      )
-      guard
-        let rawStatus,
-        let status = ScheduledJobStatus(rawValue: rawStatus),
-        status == .active || status == .paused
-      else {
-        return .ineligible
-      }
-
-      // NO schedule advance and NO status change — /runnow on a PAUSED job tests it without
-      // unmuting it. insertFireRows stamps last_fired_at (fireAt = now) only if a run is created;
-      // a nil means the overlap guard skipped this fire (a prior run on the session is still
-      // live) — distinct from an absent job, so the owner ack can differ.
-      guard let fire = try Self.insertFireRows(db, jobId: jobId, fireAt: now, now: now) else {
-        return .skippedActiveRun
-      }
-      return .fired(fire)
-    }
-  }
-
-  public func skipMisfire(
-    jobId: Int64,
-    due: Date,
-    nextOccurrence: Date?,
-    skippedCount: Int,
-    now: Date
-  ) throws(StoreError) -> Bool {
-    try database.writeMapping { db in
-      // A concurrently-mutated job means no skip.
-      guard
-        try Self.advanceOccurrence(
-          db,
-          jobId: jobId,
-          due: due,
-          nextOccurrence: nextOccurrence,
-          now: now
-        )
-      else {
-        return false
-      }
-
-      try db.execute(
-        sql: """
-          INSERT INTO scheduler_state(id, last_misfire_at, last_misfire_skipped_count)
-          VALUES (1, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            last_misfire_at = excluded.last_misfire_at,
-            last_misfire_skipped_count = excluded.last_misfire_skipped_count
-          """,
-        arguments: [EpochSecondCodec.epoch(now), skippedCount]
-      )
-      try AuditLogGRDB.insertAudit(
-        db,
-        AuditEvent(
-          actor: .system,
-          action: .jobMisfire,
-          argsRedacted: "{\"job_id\":\(jobId),\"skipped_count\":\(skippedCount)}",
-          ts: now
-        )
-      )
-      return true
-    }
-  }
-}
-
-// MARK: - Scheduler State
-
-extension ScheduledJobStoreGRDB {
-  public func schedulerState() throws(StoreError) -> SchedulerState {
-    try database.readMapping { db in
-      guard
-        let row = try Row.fetchOne(db, sql: "SELECT * FROM scheduler_state WHERE id = 1")
-      else {
-        return SchedulerState(
-          lastTickAt: nil,
-          lastMisfireAt: nil,
-          lastMisfireSkippedCount: 0,
-          lastHeartbeatAt: nil,
-          heartbeatCountDay: nil,
-          heartbeatCount: 0
-        )
-      }
-      return SchedulerState(
-        lastTickAt: EpochSecondCodec.date(fromEpoch: row["last_tick_at"]),
-        lastMisfireAt: EpochSecondCodec.date(fromEpoch: row["last_misfire_at"]),
-        lastMisfireSkippedCount: row["last_misfire_skipped_count"],
-        lastHeartbeatAt: EpochSecondCodec.date(fromEpoch: row["last_heartbeat_at"]),
-        heartbeatCountDay: row["heartbeat_count_day"],
-        heartbeatCount: row["heartbeat_count"]
-      )
-    }
-  }
-
-  public func recordTick(at tickTime: Date) throws(StoreError) {
-    try database.writeMapping { db in
-      try db.execute(
-        sql: """
-          INSERT INTO scheduler_state(id, last_tick_at) VALUES (1, ?)
-          ON CONFLICT(id) DO UPDATE SET last_tick_at = excluded.last_tick_at
-          """,
-        arguments: [EpochSecondCodec.epoch(tickTime)]
-      )
-    }
   }
 }
 
@@ -565,8 +265,12 @@ extension ScheduledJobStoreGRDB {
       return try Self.fetchJob(db, id: id)
     }
   }
+}
 
-  private static func insertVerbAudit(
+// MARK: - Owner Verb Audit
+
+private extension ScheduledJobStoreGRDB {
+  static func insertVerbAudit(
     _ db: Database,
     action: AuditAction,
     jobId: Int64,
@@ -583,182 +287,6 @@ extension ScheduledJobStoreGRDB {
         ts: now
       )
     )
-  }
-}
-
-// MARK: - Heartbeat Fire (the gating lives in SchedulerService)
-
-extension ScheduledJobStoreGRDB {
-  // swiftlint:disable:next function_body_length
-  public func fireHeartbeat(
-    prompt: String,
-    ownerChatId: Int64,
-    now: Date,
-    day: String
-  ) throws(StoreError) -> ClaimedFire? {
-    try database.writeMapping { db in
-      let sessionId = try SessionMessageStoreGRDB.upsertSession(
-        db,
-        sessionKey: SessionKey.heartbeat,
-        now: now
-      )
-
-      // Same overlap guard as a job fire: a prior beat still in flight owns the shared heartbeat
-      // window; resetting it here would empty that beat's context on resume. Skip this beat by
-      // returning nil — overlap is fireHeartbeat's only nil reason, so nil alone carries the
-      // signal. The caller records the canonical heartbeat_skipped audit (reason in `decision`).
-      if try RunStoreGRDB.hasLiveRun(db, sessionId: sessionId) {
-        return nil
-      }
-
-      // Same per-fire isolation as a job fire: each beat starts on a fresh window of the
-      // persistent heartbeat session.
-      try SessionMessageStoreGRDB.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
-
-      // The gateway-authored template WRAPS HEARTBEAT.md content, so the combined trigger text
-      // carries the untrusted tier — workspace-file data must never enter context as trusted
-      // (contrast the scheduled-job trigger, which is pure owner-confirmed text).
-      try db.execute(
-        sql: """
-          INSERT INTO messages(session_id, role, content, provenance, ts)
-          VALUES (?, ?, ?, ?, ?)
-          """,
-        arguments: [
-          sessionId,
-          MessageRole.user.rawValue,
-          prompt,
-          Provenance.untrusted.rawValue,
-          now,
-        ]
-      )
-      let triggerMessageId = db.lastInsertedRowID
-
-      try db.execute(
-        sql: """
-          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
-          VALUES (?, ?, ?, ?, ?, ?)
-          """,
-        arguments: [
-          sessionId,
-          RunState.pending.rawValue,
-          now,
-          now,
-          triggerMessageId,
-          RunOrigin.heartbeat.rawValue,
-        ]
-      )
-      let runId = db.lastInsertedRowID
-
-      // Day-counter roll: same `day` increments; a new `day` resets to 1. `day` is computed by
-      // the caller in CLAW_TIMEZONE so the cap boundary aligns with quiet hours, not UTC.
-      let previous = try Row.fetchOne(
-        db,
-        sql: "SELECT heartbeat_count_day, heartbeat_count FROM scheduler_state WHERE id = 1"
-      )
-      let previousDay = previous?["heartbeat_count_day"] as String?
-      let previousCount = previous?["heartbeat_count"] as Int? ?? 0
-      let newCount = previousDay == day ? previousCount + 1 : 1
-      try db.execute(
-        sql: """
-          INSERT INTO scheduler_state(id, last_heartbeat_at, heartbeat_count_day, heartbeat_count)
-          VALUES (1, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            last_heartbeat_at = excluded.last_heartbeat_at,
-            heartbeat_count_day = excluded.heartbeat_count_day,
-            heartbeat_count = excluded.heartbeat_count
-          """,
-        arguments: [EpochSecondCodec.epoch(now), day, newCount]
-      )
-
-      return ClaimedFire(
-        runId: runId,
-        sessionId: sessionId,
-        triggerMessageId: triggerMessageId,
-        ownerChatId: ownerChatId
-      )
-    }
-  }
-}
-
-// MARK: - Fire-Row Helpers
-
-private extension ScheduledJobStoreGRDB {
-  /// The job fire's per-session serialization guard: true (and a `.jobOverlapSkipped` audit
-  /// written in the fire transaction) when the target session already carries a live run.
-  /// Firing again would reset the shared context window out from under that run, emptying its
-  /// context on resume — so the caller drops this occurrence like a misfire. (The heartbeat path
-  /// returns nil instead and audits from the gateway, where its skip-reason enum lives.)
-  static func shouldSkipOverlappingFire(
-    _ db: Database,
-    sessionId: Int64,
-    action: AuditAction,
-    argsRedacted: String,
-    now: Date
-  ) throws -> Bool {
-    guard try RunStoreGRDB.hasLiveRun(db, sessionId: sessionId) else {
-      return false
-    }
-    try AuditLogGRDB.insertAudit(
-      db,
-      AuditEvent(
-        actor: .system,
-        action: action,
-        argsRedacted: argsRedacted,
-        sessionId: sessionId,
-        ts: now
-      )
-    )
-    return true
-  }
-
-  /// Step 3: the job's dedicated session, created lazily on first fire. The session row
-  /// stores NO chat id — the delivery target stays on the job row.
-  static func ensureJobSession(
-    _ db: Database,
-    jobId: Int64,
-    existingSessionId: Int64?,
-    now: Date
-  ) throws -> Int64 {
-    if let existingSessionId {
-      return existingSessionId
-    }
-    let sessionId = try SessionMessageStoreGRDB.upsertSession(
-      db,
-      sessionKey: SessionKey.scheduledJob(id: jobId),
-      now: now
-    )
-    try db.execute(
-      sql: "UPDATE scheduled_jobs SET session_id = ? WHERE id = ?",
-      arguments: [sessionId, jobId]
-    )
-    return sessionId
-  }
-
-  /// Step 5: the PENDING run TurnRunner will pick up, stamped with origin + job linkage.
-  static func insertPendingJobRun(
-    _ db: Database,
-    sessionId: Int64,
-    triggerMessageId: Int64,
-    jobId: Int64,
-    now: Date
-  ) throws -> Int64 {
-    try db.execute(
-      sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
-          origin, job_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        sessionId,
-        RunState.pending.rawValue,
-        now,
-        now,
-        triggerMessageId,
-        RunOrigin.scheduled.rawValue,
-        jobId,
-      ]
-    )
-    return db.lastInsertedRowID
   }
 }
 

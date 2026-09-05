@@ -487,9 +487,10 @@ private extension V9PersistenceAcceptanceTests {
     callID: String,
     model: String?
   ) -> StatementArguments {
+    // The trailing pair is the learning scope, null for every call a run made.
     [
       env.runId, env.sessionId, model, 11, 5, 0.004, CostSource.priceFile.rawValue, false,
-      seededAt, callID,
+      seededAt, callID, nil, nil,
     ]
   }
 }

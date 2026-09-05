@@ -25,12 +25,22 @@ public struct ClaimedFire: Sendable, Equatable {
   public let sessionId: Int64
   public let triggerMessageId: Int64
   public let ownerChatId: Int64
+  /// Present only when learning is armed for this job. `nil` means the run carries no lessons and
+  /// produces a technical learning exclusion — the shape a heartbeat and a pre-upgrade run share.
+  public let binding: RunLearningBinding?
 
-  public init(runId: Int64, sessionId: Int64, triggerMessageId: Int64, ownerChatId: Int64) {
+  public init(
+    runId: Int64,
+    sessionId: Int64,
+    triggerMessageId: Int64,
+    ownerChatId: Int64,
+    binding: RunLearningBinding? = nil
+  ) {
     self.runId = runId
     self.sessionId = sessionId
     self.triggerMessageId = triggerMessageId
     self.ownerChatId = ownerChatId
+    self.binding = binding
   }
 }
 
@@ -58,7 +68,8 @@ public protocol ScheduledJobStore: Sendable {
   /// occurrence when coalescing); `nextOccurrence` nil ⇒ one-shot → COMPLETED. Creates the
   /// job session on first fire (session_key = SessionKey.scheduledJob(id:)), inserts the
   /// trigger message (role user, provenance trusted, text = job prompt), the PENDING run
-  /// (origin 'scheduled', job_id set), and the jobExecuted audit row — one writeMapping.
+  /// (origin 'scheduled', job_id set), the run's learning binding when learning is armed, and the
+  /// jobExecuted audit row — one writeMapping.
   /// Returns nil for either of two distinct reasons, both meaning "no run to enqueue": the CAS
   /// matched no row (claimed elsewhere / job mutated) — nothing is written; OR the job's session
   /// already has a live run (the overlap guard) — nothing is inserted except a `job_overlap_skipped`

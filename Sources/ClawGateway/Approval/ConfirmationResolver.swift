@@ -9,6 +9,7 @@ struct ConfirmationResolver: Sendable {
   let sessionMessages: any SessionMessageStore
   let pendingConfirmations: PendingConfirmationRegistry
   let memoryCommands: any MemoryCommandStore
+  let learningReset: (any LearningResetApplying)?
 
   let schedule: ScheduleSurface
   let replies: ReplySender
@@ -166,6 +167,18 @@ private extension ConfirmationResolver {
         now: now()
       )
       return (result.newlyClaimed, ScheduleReplies.armed(job: result.job))
+    case .learningReset(let jobId):
+      guard let learningReset else {
+        throw StoreError.unexpected("learning reset is unavailable")
+      }
+      let result = try learningReset.applyReset(updateId: updateId, jobId: jobId, now: now())
+      guard result.newlyClaimed else {
+        return (false, "")
+      }
+      guard let outcome = result.outcome else {
+        throw StoreError.unexpected("claimed learning reset has no outcome")
+      }
+      return (true, LearningReplies.resetOutcome(outcome, jobId: jobId))
     }
   }
 
@@ -207,6 +220,8 @@ private extension ConfirmationResolver {
         MemoryReplies.deleteFailed
       case .scheduleArm:
         ScheduleReplies.armFailed
+      case .learningReset:
+        LearningReplies.resetFailed
       }
 
     return await replies.sendCommandAck(

@@ -420,7 +420,8 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
       payloadHash: "hash"
     )
   )
-  try outbox.markSent(runId: deliveredRunId, stepIndex: 0, telegramMessageId: 555, now: seededAt)
+  let deliveredKey = try #require(try outbox.pendingOutbound().first).deliveryKey
+  try outbox.markSent(deliveryKey: deliveredKey, telegramMessageId: 555, now: seededAt)
 
   return HealthyRunsFixture(
     runs: runs,

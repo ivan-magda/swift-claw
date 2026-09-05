@@ -1,5 +1,202 @@
 import Foundation
 
+public enum RunState: String, Sendable, Equatable, CaseIterable {
+  /// Persisted after the inbound message and run are created atomically, before lane execution.
+  case pending = "PENDING"
+  /// Persisted when the session lane successfully picks up the turn.
+  case running = "RUNNING"
+  /// Terminal success: the assistant reply and outbox rows committed atomically.
+  case done = "DONE"
+  /// Terminal failure: the turn could not complete and should not be picked up again.
+  case failed = "FAILED"
+  /// Terminal cancellation requested by `/stop`.
+  case cancelled = "CANCELLED"
+  /// Terminal cancellation requested by `/new`; queued turns are superseded too.
+  case superseded = "SUPERSEDED"
+  /// Suspended to a durable checkpoint: an `approvals` row is the one source of truth for
+  /// "blocked on approval"; resolved by callback, ticker, boot, or command.
+  case awaitingApproval = "AWAITING_APPROVAL"
+
+  /// The non-terminal states: a run in any of these can still advance and pick up an
+  /// advanced context window. The single definition of "live" — `terminateActiveRuns` and the
+  /// proactive-fire overlap guard both build their `state IN (…)` predicate from this set so the
+  /// live triple is never duplicated. `pending` is included because a claimed-but-not-yet-picked-up
+  /// run loads the current window at pickup.
+  public static let liveStates: [RunState] = [.pending, .running, .awaitingApproval]
+
+  /// The absorbing states: `RunFSM` returns nil for every event once a run reaches one, which is
+  /// what makes a terminal transition win exactly once and lets its receipt be written there.
+  public var isTerminal: Bool {
+    !Self.liveStates.contains(self)
+  }
+
+  /// The complement of `liveStates`, derived rather than listed so a new state joins exactly one
+  /// of the two sets.
+  public static let terminalStates: [RunState] = allCases.filter(\.isTerminal)
+}
+
+/// The two command-owned reasons for terminating a live run.
+///
+/// This is intentionally narrower than `RunState`: callers cannot accidentally request an
+/// unrelated terminal state such as `.done` or `.failed`.
+public enum CancelReason: Sendable, Equatable {
+  case cancelled
+  case superseded
+}
+
+/// Outcome of a commit attempt at the run-store seam.
+public enum RunCommitResult: Sendable, Equatable {
+  /// The run was still RUNNING and the terminal state plus owner-visible side effects committed.
+  case committed
+  /// Cancellation/supersede had already won; provider usage was still durably recorded.
+  case usageRecordedAfterTerminal
+  /// The run was not in a state where this commit owns any side effect.
+  case ignored
+}
+
+/// Outcome of the pre-execution claim at the approved-resume seam. The claim is what
+/// makes an approved external write and a `/stop`//`new` cancellation mutually exclusive: both
+/// contend on the run row's FSM transition, so exactly one side ever owns the effect.
+public enum ApprovedExecutionClaim: Sendable, Equatable {
+  /// The AWAITING_APPROVAL → RUNNING flip committed; the caller now owns the execution.
+  case committed
+  /// The observation is no longer the placeholder — a duplicate signal is replaying an
+  /// already-executed resume. Nothing to do.
+  case alreadyResumed
+  /// The run reached a terminal state (`/stop`, `/new`) before the claim. Nothing may execute;
+  /// the placeholder observation was resolved with the not-run note in the claim's transaction.
+  case runNotResumable
+}
+
+/// Boot triage of an APPROVED approval whose observation is still the placeholder.
+public enum ClaimedApprovalBootOutcome: Sendable, Equatable {
+  /// The run is still AWAITING_APPROVAL: the crash landed between the approve CAS and the
+  /// execution claim, nothing ran — the boot belt re-parks a waiter to replay the recorded action.
+  case reparkForReplay
+  /// The claim committed but the result record never landed (crash mid-execution): the run is
+  /// terminal (or was failed here), the placeholder was resolved with the unknown-outcome note,
+  /// and the owner notice was enqueued — all in one transaction.
+  case settled
+  /// The observation already holds a real result; nothing to do.
+  case alreadyResolved
+}
+
+public struct AssistantTurn: Sendable, Equatable {
+  public let runId: Int64
+  public let sessionId: Int64
+  public let chatId: Int64
+  public let content: String
+  public let usage: ProviderUsage
+  public let chunks: [OutboxChunk]
+  public let exchanges: [ToolExchange]
+  public let setTainted: Bool
+  /// Sticky private-data flag — persisted like `setTainted`, on every commit path.
+  public let setPrivateData: Bool
+  /// The final assistant message's replay state, committed in the same transaction as the message
+  /// it belongs to so an anchor and its state can never be persisted apart.
+  public let providerState: ProviderExchangeState?
+  /// Optional result feedback address. The run-store validates and inserts it with final delivery.
+  public let feedbackTarget: NewFeedbackTarget?
+
+  public init(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    content: String,
+    usage: ProviderUsage,
+    chunks: [OutboxChunk],
+    exchanges: [ToolExchange] = [],
+    setTainted: Bool = false,
+    setPrivateData: Bool = false,
+    providerState: ProviderExchangeState? = nil,
+    feedbackTarget: NewFeedbackTarget? = nil
+  ) {
+    self.runId = runId
+    self.sessionId = sessionId
+    self.chatId = chatId
+    self.content = content
+    self.usage = usage
+    self.chunks = chunks
+    self.exchanges = exchanges
+    self.setTainted = setTainted
+    self.setPrivateData = setPrivateData
+    self.providerState = providerState
+    self.feedbackTarget = feedbackTarget
+  }
+}
+
+public struct DegradedTurn: Sendable, Equatable {
+  public let runId: Int64
+  public let sessionId: Int64
+  public let chatId: Int64
+  public let usage: ProviderUsage?
+  public let chunk: OutboxChunk
+  public let exchanges: [ToolExchange]
+  public let setTainted: Bool
+  /// Sticky private-data flag — persisted like `setTainted`, incl. on the failure path.
+  public let setPrivateData: Bool
+  /// Why this turn ended, supplied by the caller that knows. FAILED alone cannot tell a provider
+  /// outage from a budget stop, a context failure or a policy block, and this commit writes the
+  /// run's terminal receipt.
+  public let cause: TerminalCause
+
+  public init(
+    runId: Int64,
+    sessionId: Int64,
+    chatId: Int64,
+    usage: ProviderUsage?,
+    chunk: OutboxChunk,
+    exchanges: [ToolExchange] = [],
+    setTainted: Bool = false,
+    setPrivateData: Bool = false,
+    cause: TerminalCause
+  ) {
+    self.runId = runId
+    self.sessionId = sessionId
+    self.chatId = chatId
+    self.usage = usage
+    self.chunk = chunk
+    self.exchanges = exchanges
+    self.setTainted = setTainted
+    self.setPrivateData = setPrivateData
+    self.cause = cause
+  }
+}
+
+public struct RunsHealth: Sendable, Equatable {
+  public let inFlight: Int
+  public let oldestRunAgeSeconds: Double?
+  public let lastFailedAt: Date?
+  public let lastSuccessAt: Date?
+  public let consecutiveFailures: Int
+
+  public init(
+    inFlight: Int,
+    oldestRunAgeSeconds: Double?,
+    lastFailedAt: Date?,
+    lastSuccessAt: Date?,
+    consecutiveFailures: Int
+  ) {
+    self.inFlight = inFlight
+    self.oldestRunAgeSeconds = oldestRunAgeSeconds
+    self.lastFailedAt = lastFailedAt
+    self.lastSuccessAt = lastSuccessAt
+    self.consecutiveFailures = consecutiveFailures
+  }
+}
+
+public struct DegradationReply: Sendable, Equatable {
+  public let chatId: Int64
+  public let runId: Int64
+  public let text: String
+
+  public init(chatId: Int64, runId: Int64, text: String) {
+    self.chatId = chatId
+    self.runId = runId
+    self.text = text
+  }
+}
+
 /// One already-executed observation of the suspending batch, in the order it ran.
 public struct ToolObservationRow: Sendable, Equatable {
   public let toolCallId: String
@@ -155,8 +352,9 @@ public protocol RunStore: Sendable {
     _ turn: DegradedTurn,
     now: Date
   ) throws(StoreError) -> RunCommitResult
-  /// RUNNING → FAILED through `RunFSM`; no-ops unless the run is RUNNING.
-  func failRun(runId: Int64, now: Date) throws(StoreError)
+  /// RUNNING → FAILED through `RunFSM`; no-ops unless the run is RUNNING. `cause` is the caller's
+  /// own reason for failing the run — the terminal receipt records it verbatim.
+  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError)
   /// Terminates the current RUNNING turn for `/stop`; returns the affected run, if any.
   func cancelActiveRun(
     sessionId: Int64,
@@ -248,6 +446,11 @@ public protocol RunStore: Sendable {
   func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage
   /// The run's origin, read WITHOUT a re-pick-up (the resume path never re-flips PENDING).
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin?
+  /// The scheduled job this run fired for, as the fire that created it wrote it and nothing since
+  /// has changed it. Nil for every run with no job — inbound turns and heartbeats. The pinned
+  /// lesson read compares it against the job its learning binding claims: a lesson set is named by
+  /// the pair `(job_id, digest)`, so a digest that resolves is not yet proof of the right owner.
+  func jobId(runId: Int64) throws(StoreError) -> Int64?
   /// Stale-policy crash-window belt: fail the run (AWAITING_APPROVAL → FAILED), resolve the
   /// placeholder observation with `observationContent` (left dangling it would assert a pending
   /// approval to every later assembly and false-trigger the boot claimed-window settlement), and

@@ -649,7 +649,11 @@ private extension V9MigrationTests {
     runId: Int64? = 1,
     model: String? = "gpt-4o"
   ) -> StatementArguments {
-    [runId, 1, model, 11, 5, 0.004, CostSource.priceFile.rawValue, false, seededAt, callID]
+    // The trailing pair is the learning scope, null for every call a run made.
+    [
+      runId, 1, model, 11, 5, 0.004, CostSource.priceFile.rawValue, false, seededAt, callID,
+      nil, nil,
+    ]
   }
 }
 
