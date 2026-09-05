@@ -178,6 +178,9 @@ public struct EvaluatorOutput: Sendable, Equatable, Codable {
     guard issueCodes.allSatisfy(Self.isWithinBounds) else {
       throw Self.corrupt(container, "an issue code is empty or exceeds the length bound")
     }
+    guard Set(issueCodes).count == issueCodes.count else {
+      throw Self.corrupt(container, "issue codes contain a duplicate")
+    }
 
     self.init(schemaVersion: schemaVersion, outcome: outcome, issueCodes: issueCodes)
   }

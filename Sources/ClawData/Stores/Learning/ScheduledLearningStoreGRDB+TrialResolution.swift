@@ -28,7 +28,7 @@ extension ScheduledLearningStoreGRDB {
     guard let trialRow = try trialRow(db, trialId: cached.identity.trial.trialId) else {
       throw StoreError.unexpected("assignment \(runId) names a missing trial")
     }
-    let trial = try strictTrial(db, row: trialRow, currentState: nil)
+    var trial = try strictTrial(db, row: trialRow, currentState: nil)
     try validateAssignmentIdentity(db, cached: cached, trial: trial)
     guard let current = try readState(db, jobId: trial.jobId) else {
       throw StoreError.unexpected("assignment \(runId) belongs to a job without learning state")
@@ -38,6 +38,9 @@ extension ScheduledLearningStoreGRDB {
     }
     guard trial.epoch == current.epoch else {
       throw StoreError.unexpected("assignment \(runId) is ahead of the job learning epoch")
+    }
+    if trial.state == .open || trial.state == .draining {
+      trial = try strictTrial(db, row: trialRow, currentState: current)
     }
 
     let projected = try projectAssignment(
@@ -313,22 +316,6 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Authoritative Projection
 
 extension ScheduledLearningStoreGRDB {
-  private struct StrictEvidence {
-    let digest: EvidenceDigest
-    let eligibility: LearningEligibility
-  }
-
-  private struct StrictAttempt {
-    let operation: OperationRow
-    let generation: Int
-    let supersedes: LearningOperationID?
-  }
-
-  private struct StrictEvaluation {
-    let digest: EvaluationDigest
-    let evaluation: LearningEvaluation
-  }
-
   private static func projectAssignment(
     _ db: Database,
     cached: CachedAssignment,
@@ -336,6 +323,11 @@ extension ScheduledLearningStoreGRDB {
     currentState: JobLearningState
   ) throws -> TrialAssignment {
     let runId = cached.identity.runId
+    if let cachedRevision = cached.feedbackRevision,
+      cachedRevision > currentState.feedbackRevision
+    {
+      throw StoreError.unexpected("assignment \(runId) names a future feedback revision")
+    }
     guard let settlement = try readSettlement(db, runId: runId), settlement.settledAt != nil else {
       return unresolvedAssignment(cached, state: .created)
     }
@@ -357,19 +349,26 @@ extension ScheduledLearningStoreGRDB {
       )
     }
 
-    guard let attempt = try latestEvaluatorAttempt(db, trial: trial, evidence: evidence) else {
+    let source = try strictEvaluatorSource(
+      db,
+      runId: runId,
+      trial: trial,
+      evidence: evidence
+    )
+    guard let attempt = source.attempt else {
       return unresolvedAssignment(cached, state: .primaryRunSettled)
     }
     switch attempt.operation.state {
     case .pending, .claimed, .started, .interruptedUnknown:
       return unresolvedAssignment(cached, state: .learningOutcomeUnresolved)
     case .failed, .failedNoCall:
-      let feedback = try storedFeedback(
+      let feedback = try assignmentFeedback(
         db,
         jobId: trial.jobId,
         epoch: trial.epoch,
         runIds: [runId],
-        evaluationRuns: [:]
+        evaluationRuns: [:],
+        currentRevision: currentState.feedbackRevision
       )
       let resolved = OwnerPrecedence.resolve(
         evaluator: nil,
@@ -389,19 +388,16 @@ extension ScheduledLearningStoreGRDB {
         currentState: currentState
       )
     case .succeeded:
-      let evaluation = try strictEvaluation(
-        db,
-        runId: runId,
-        trial: trial,
-        evidence: evidence,
-        operation: attempt.operation
-      )
-      let feedback = try storedFeedback(
+      guard let evaluation = source.evaluation else {
+        throw StoreError.unexpected("succeeded evaluator has no exact evaluation")
+      }
+      let feedback = try assignmentFeedback(
         db,
         jobId: trial.jobId,
         epoch: trial.epoch,
         runIds: [runId],
-        evaluationRuns: [evaluation.digest.rawValue: runId]
+        evaluationRuns: [evaluation.digest.rawValue: runId],
+        currentRevision: currentState.feedbackRevision
       )
       let resolved = OwnerPrecedence.resolve(
         evaluator: evaluation.evaluation.outcome,
@@ -468,155 +464,28 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  private static func strictEvidence(
+  private static func assignmentFeedback(
     _ db: Database,
-    runId: Int64,
-    trial: LearningTrial
-  ) throws -> StrictEvidence? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: """
-          SELECT run_id, job_id, learning_epoch, evidence_digest, eligibility,
-            classifier_version, sealed_at
-          FROM learning_evidence WHERE run_id = ?
-          """,
-        arguments: [runId]
-      )
-    else {
-      return nil
-    }
-    guard
-      let storedRunId = SQLiteStoredValue.int64(in: row, column: "run_id"),
-      storedRunId == runId,
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      jobId == trial.jobId,
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      LearningEpoch(epoch) == trial.epoch,
-      let digestRaw = SQLiteStoredValue.string(in: row, column: "evidence_digest"),
-      isCanonicalDigest(digestRaw),
-      let eligibilityRaw = SQLiteStoredValue.string(in: row, column: "eligibility"),
-      let eligibility = LearningEligibility(rawValue: eligibilityRaw),
-      let classifier = SQLiteStoredValue.string(in: row, column: "classifier_version"),
-      classifier == EligibilityClassifier.version,
-      let sealedRaw = SQLiteStoredValue.int64(in: row, column: "sealed_at"),
-      EpochSecondCodec.date(fromEpoch: sealedRaw) != nil
-    else {
-      throw StoreError.unexpected("assignment \(runId) has an unreadable evidence receipt")
-    }
-    return StrictEvidence(digest: EvidenceDigest(rawValue: digestRaw), eligibility: eligibility)
-  }
-
-  private static func latestEvaluatorAttempt(
-    _ db: Database,
-    trial: LearningTrial,
-    evidence: StrictEvidence
-  ) throws -> StrictAttempt? {
-    let key = LearningOperationKey(
-      jobId: trial.jobId,
-      epoch: trial.epoch,
-      phase: .evaluator,
-      sourceDigest: evidence.digest.rawValue,
-      promptVersion: EvaluatorPrompt.v1.version,
-      schemaVersion: EvaluatorOutput.currentSchemaVersion,
-      rubricVersion: EvaluatorRubric.v1.version
-    )
-    let rows = try Row.fetchAll(
+    jobId: Int64,
+    epoch: LearningEpoch,
+    runIds: Set<Int64>,
+    evaluationRuns: [String: Int64],
+    currentRevision: FeedbackRevision
+  ) throws -> [StoredFeedbackProjection] {
+    let feedback = try storedFeedback(
       db,
-      sql: """
-        SELECT operation_id, attempt_generation, supersedes
-        FROM learning_operations
-        WHERE job_id = ? AND learning_epoch = ? AND phase = ? AND source_digest = ?
-          AND key_digest = ?
-        ORDER BY attempt_generation
-        """,
-      arguments: [
-        trial.jobId,
-        trial.epoch.value,
-        LearningPhase.evaluator.rawValue,
-        evidence.digest.rawValue,
-        key.digest.rawValue,
-      ]
+      jobId: jobId,
+      epoch: epoch,
+      runIds: runIds,
+      evaluationRuns: evaluationRuns
     )
-    var attempts: [StrictAttempt] = []
-    for row in rows {
-      guard
-        let idRaw = SQLiteStoredValue.string(in: row, column: "operation_id"),
-        let generation = SQLiteStoredValue.int(in: row, column: "attempt_generation"),
-        generation > 0,
-        let supersedesRaw = SQLiteStoredValue.nullableString(in: row, column: "supersedes"),
-        idRaw == LearningOperationID(key: key.digest, attemptGeneration: generation).rawValue,
-        let operation = try readOperation(db, id: LearningOperationID(rawValue: idRaw)),
-        operation.jobId == trial.jobId,
-        operation.epoch == trial.epoch,
-        operation.phase == .evaluator,
-        operation.sourceDigest == evidence.digest.rawValue,
-        operation.keyDigest == key.digest
-      else {
-        throw StoreError.unexpected("evaluator operation lineage is unreadable")
-      }
-      attempts.append(
-        StrictAttempt(
-          operation: operation,
-          generation: generation,
-          supersedes: supersedesRaw.value.map(LearningOperationID.init(rawValue:))
-        )
-      )
-    }
-    for (offset, attempt) in attempts.enumerated() {
-      guard attempt.generation == offset + 1 else {
-        throw StoreError.unexpected("evaluator operation lineage has a generation gap")
-      }
-      let expectedPredecessor = offset == 0 ? nil : attempts[offset - 1].operation.id
-      guard attempt.supersedes == expectedPredecessor else {
-        throw StoreError.unexpected("evaluator operation lineage has a broken predecessor")
-      }
-    }
-    return attempts.last
-  }
-
-  private static func strictEvaluation(
-    _ db: Database,
-    runId: Int64,
-    trial: LearningTrial,
-    evidence: StrictEvidence,
-    operation: OperationRow
-  ) throws -> StrictEvaluation {
-    let rows = try storedEvaluations(db, runId: runId)
-    guard rows.count == 1, let stored = rows.first else {
-      throw StoreError.unexpected("succeeded evaluator requires exactly one evaluation")
-    }
     guard
-      stored.jobId == trial.jobId,
-      stored.epoch == trial.epoch,
-      stored.runId == runId,
-      stored.evidenceDigest == evidence.digest,
-      stored.evaluation.evaluator.rubricVersion == EvaluatorRubric.v1.version,
-      stored.evaluation.evaluator.promptVersion == EvaluatorPrompt.v1.version,
-      stored.evaluation.evaluator.schemaVersion == EvaluatorOutput.currentSchemaVersion,
-      let compatibility = try readCompatibility(db, runId: runId),
-      let binding = try readBinding(db, runId: runId)
+      feedback.allSatisfy({ stored in
+        stored.event.revision <= currentRevision
+      })
     else {
-      throw StoreError.unexpected("assignment \(runId) has an unreadable evaluation")
+      throw StoreError.unexpected("assignment source names a future feedback revision")
     }
-    let compatibilityDigest = compatibility.digest(
-      binding: binding,
-      terminalRoute: try readTerminalRoute(db, runId: runId),
-      evaluator: stored.evaluation.evaluator
-    )
-    guard compatibilityDigest == stored.compatibilityDigest else {
-      throw StoreError.unexpected("assignment \(runId) evaluation surface does not match")
-    }
-    let expectedDigest = digest(
-      operation: operation,
-      runId: runId,
-      evaluation: stored.evaluation,
-      issueCodes: stored.issueCodesJSON,
-      compatibility: compatibilityDigest
-    )
-    guard expectedDigest == stored.digest else {
-      throw StoreError.unexpected("assignment \(runId) evaluation digest does not match")
-    }
-    return StrictEvaluation(digest: expectedDigest, evaluation: stored.evaluation)
+    return feedback
   }
 }

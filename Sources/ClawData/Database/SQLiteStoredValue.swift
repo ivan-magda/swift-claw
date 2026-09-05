@@ -122,6 +122,20 @@ enum SQLiteStoredValue {
     }
   }
 
+  static func nullableData(in row: Row, column: String) -> Nullable<Data>? {
+    guard let storage = databaseValue(in: row, column: column)?.storage else {
+      return nil
+    }
+    switch storage {
+    case .null:
+      return Nullable(value: nil)
+    case .blob(let value):
+      return Nullable(value: value)
+    case .int64, .double, .string:
+      return nil
+    }
+  }
+
   private static func databaseValue(in row: Row, column: String) -> DatabaseValue? {
     row[column] as DatabaseValue?
   }

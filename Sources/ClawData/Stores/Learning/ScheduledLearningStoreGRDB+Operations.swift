@@ -248,7 +248,8 @@ extension ScheduledLearningStoreGRDB {
       db,
       sql: """
         SELECT job_id, learning_epoch, phase, source_digest, key_digest, carrier_digest, state,
-          route, provider_call_id, reserved_tokens, reserved_cost_usd, reservation_state
+          failure_code, route, provider_call_id, reserved_tokens, reserved_cost_usd,
+          reservation_state
         FROM learning_operations WHERE operation_id = ?
         """,
       arguments: [id.rawValue]
@@ -264,6 +265,7 @@ extension ScheduledLearningStoreGRDB {
       let keyDigest = SQLiteStoredValue.string(in: row, column: "key_digest"),
       let carrier = SQLiteStoredValue.nullableString(in: row, column: "carrier_digest"),
       let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+      let failureRaw = SQLiteStoredValue.nullableString(in: row, column: "failure_code"),
       let route = SQLiteStoredValue.nullableString(in: row, column: "route"),
       let providerCall = SQLiteStoredValue.nullableString(in: row, column: "provider_call_id"),
       let reservedTokens = SQLiteStoredValue.nullableInt(in: row, column: "reserved_tokens"),
@@ -271,6 +273,10 @@ extension ScheduledLearningStoreGRDB {
       let reservationState = SQLiteStoredValue.nullableString(in: row, column: "reservation_state")
     else {
       throw StoreError.unexpected("operation \(id.rawValue) holds unreadable stored values")
+    }
+    let failure = failureRaw.value.flatMap(LearningOperationFailure.init(rawValue:))
+    guard failureRaw.value == nil || failure != nil else {
+      throw StoreError.unexpected("operation \(id.rawValue) holds an unreadable failure")
     }
     return OperationRow(
       id: id,
@@ -281,6 +287,7 @@ extension ScheduledLearningStoreGRDB {
       keyDigest: LearningOperationKeyDigest(rawValue: keyDigest),
       carrierDigest: carrier.value.map(CarrierDigest.init(rawValue:)),
       state: try operationState(stateRaw, of: id),
+      failure: failure,
       route: route.value,
       providerCallID: providerCall.value.map(ProviderCallID.init(rawValue:)),
       reservedTokens: reservedTokens.value,
@@ -349,6 +356,7 @@ extension ScheduledLearningStoreGRDB {
     let keyDigest: LearningOperationKeyDigest
     let carrierDigest: CarrierDigest?
     let state: LearningOperationState
+    let failure: LearningOperationFailure?
     let route: String?
     let providerCallID: ProviderCallID?
     let reservedTokens: Int?

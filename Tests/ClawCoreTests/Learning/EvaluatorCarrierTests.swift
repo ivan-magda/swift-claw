@@ -17,6 +17,7 @@ private let repliesOutsideTheFrozenSchema: [String] = [
   #"{"schema_version":2,"outcome":"no_issue","issue_codes":[]}"#,
   #"{"schema_version":1,"outcome":"maybe","issue_codes":[]}"#,
   #"{"schema_version":1,"outcome":"reusable_issue","issue_codes":[""]}"#,
+  reply(issueCodes: ["duplicate", "duplicate"]),
   reply(issueCodes: (0...EvaluatorOutput.maxIssueCodes).map { "code_\($0)" }),
   reply(issueCodes: [String(repeating: "x", count: EvaluatorOutput.maxIssueCodeCharacters + 1)]),
 ]

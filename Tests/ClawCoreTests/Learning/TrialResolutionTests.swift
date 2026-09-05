@@ -27,6 +27,19 @@ import Testing
         now: trial.assignmentDeadline
       ) == false
     )
+    // Removing either the open-state or capacity gate admits its matching invalid trial.
+    #expect(
+      fixtureTrial(state: .draining).acceptsAssignment(
+        occurrenceAt: admittedAt,
+        now: admittedAt.addingTimeInterval(1)
+      ) == false
+    )
+    #expect(
+      fixtureTrial(consumed: TrialAdmissionPolicy.maximumAssignments).acceptsAssignment(
+        occurrenceAt: admittedAt,
+        now: admittedAt.addingTimeInterval(1)
+      ) == false
+    )
   }
 
   @Test func twoPositivesWaitForTheLastUnresolvedAssignment() {

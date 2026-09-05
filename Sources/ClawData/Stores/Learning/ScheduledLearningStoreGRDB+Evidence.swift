@@ -232,8 +232,8 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-        SELECT job_id, learning_epoch, evidence_digest, payload, exclusion_reason, eligibility,
-          classifier_version, sealed_at
+        SELECT run_id, job_id, learning_epoch, evidence_digest, payload, exclusion_reason,
+          eligibility, classifier_version, sealed_at
         FROM learning_evidence WHERE run_id = ?
         """,
       arguments: [runId]
@@ -241,25 +241,93 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
+    return try decodeEvidence(row, expectedRunId: runId)
+  }
+}
+
+// MARK: - Receipt Decoding
+
+private extension ScheduledLearningStoreGRDB {
+  static func decodeEvidence(_ row: Row, expectedRunId: Int64) throws -> SealedEvidence {
     guard
-      let eligibility = LearningEligibility(rawValue: row["eligibility"]),
-      let sealedAt = EpochSecondCodec.date(fromEpoch: row["sealed_at"])
+      let storedRunId = SQLiteStoredValue.int64(in: row, column: "run_id"),
+      storedRunId == expectedRunId,
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      jobId > 0,
+      let epochRaw = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      epochRaw > 0,
+      let digestRaw = SQLiteStoredValue.string(in: row, column: "evidence_digest"),
+      isCanonicalDigest(digestRaw),
+      let payloadStored = SQLiteStoredValue.nullableData(in: row, column: "payload"),
+      let exclusionStored = SQLiteStoredValue.nullableString(in: row, column: "exclusion_reason"),
+      let eligibilityRaw = SQLiteStoredValue.string(in: row, column: "eligibility"),
+      let eligibility = LearningEligibility(rawValue: eligibilityRaw),
+      let classifier = SQLiteStoredValue.string(in: row, column: "classifier_version"),
+      classifier == EligibilityClassifier.version,
+      let sealedRaw = SQLiteStoredValue.int64(in: row, column: "sealed_at"),
+      let sealedAt = EpochSecondCodec.date(fromEpoch: sealedRaw)
     else {
-      throw StoreError.unexpected("run \(runId) has an unreadable evidence receipt")
+      throw StoreError.unexpected("run \(expectedRunId) has an unreadable evidence receipt")
     }
-    let payloadBytes: Data? = row["payload"]
-    return SealedEvidence(
-      runId: runId,
-      jobId: row["job_id"],
-      epoch: LearningEpoch(row["learning_epoch"]),
-      digest: EvidenceDigest(rawValue: row["evidence_digest"]),
+    let exclusion = exclusionStored.value.flatMap(EvidenceExclusion.init(rawValue:))
+    guard exclusionStored.value == nil || exclusion != nil else {
+      throw StoreError.unexpected("run \(expectedRunId) has an unknown evidence exclusion")
+    }
+    let payload = try decodeEvidencePayload(
+      payloadStored.value,
+      runId: expectedRunId,
+      digestRaw: digestRaw,
       eligibility: eligibility,
-      classifierVersion: row["classifier_version"],
-      exclusion: (row["exclusion_reason"] as String?).flatMap(EvidenceExclusion.init(rawValue:)),
-      payload: payloadBytes.flatMap { bytes in
-        try? JSONDecoder().decode(EvidencePayload.self, from: bytes)
-      },
+      exclusion: exclusion
+    )
+    return SealedEvidence(
+      runId: expectedRunId,
+      jobId: jobId,
+      epoch: LearningEpoch(epochRaw),
+      digest: EvidenceDigest(rawValue: digestRaw),
+      eligibility: eligibility,
+      classifierVersion: classifier,
+      exclusion: exclusion,
+      payload: payload,
       sealedAt: sealedAt
     )
+  }
+
+  static func decodeEvidencePayload(
+    _ payloadBytes: Data?,
+    runId: Int64,
+    digestRaw: String,
+    eligibility: LearningEligibility,
+    exclusion: EvidenceExclusion?
+  ) throws -> EvidencePayload? {
+    if let payloadBytes {
+      guard
+        eligibility.reachesEvaluator,
+        exclusion == nil,
+        let decoded = try? JSONDecoder().decode(EvidencePayload.self, from: payloadBytes),
+        decoded.schemaVersion == EvidenceLimits.schemaVersion,
+        let canonical = try? CanonicalJSON.data(encoding: decoded),
+        canonical == payloadBytes,
+        digest(runId: runId, eligibility: eligibility, payloadBytes: payloadBytes).rawValue
+          == digestRaw
+      else {
+        throw StoreError.unexpected("run \(runId) has an invalid evidence payload")
+      }
+      return decoded
+    }
+    guard
+      eligibility.reachesEvaluator
+        || digest(
+          runId: runId,
+          eligibility: eligibility,
+          payloadBytes: nil
+        ).rawValue == digestRaw,
+      exclusion == nil
+        || (eligibility == .insufficientEvidence && exclusion != .legacyUnbound),
+      eligibility.reachesEvaluator == false || exclusion == nil
+    else {
+      throw StoreError.unexpected("run \(runId) has an invalid evidence receipt shape")
+    }
+    return nil
   }
 }
