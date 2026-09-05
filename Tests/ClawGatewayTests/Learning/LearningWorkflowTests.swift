@@ -143,7 +143,7 @@ extension LearningWorkflowTests {
     #expect(try env.learning.evaluation(runId: env.runId) == nil)
     // when
     env.authorizing.failBootReconciliation = false
-    await service.reconcileAtBoot(now: env.now)
+    await service.sweep(now: env.now)
     // then
     #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
     #expect(await env.provider.requests.count == 1)
@@ -571,6 +571,7 @@ extension LearningWorkflowTests {
     let service = Self.service(env)
     // when
     await service.reconcileAtBoot(now: env.now)
+    await service.sweep(now: env.now)
     // then
     #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
     #expect(await env.provider.requests.count == 1)
@@ -582,7 +583,6 @@ extension LearningWorkflowTests {
     // given
     let entered = AsyncGate()
     let release = AsyncGate()
-    let bootReachedSweep = AsyncGate()
     defer { release.open() }
     let env = try EvaluationRunEnvironment.make(
       reply: EvaluationRunEnvironment.noIssueReply,
@@ -591,18 +591,16 @@ extension LearningWorkflowTests {
         await release.wait()
       }
     )
-    let bootStore = RecordingLearningStore(base: env.learning, onUnsealed: bootReachedSweep.open)
-    let service = Self.service(env, bootStore: bootStore)
+    let service = Self.service(env)
     await service.notifySettled(runId: env.runId)
     await entered.wait()
     // when
-    let boot = Task { await service.reconcileAtBoot(now: env.now) }
-    await bootReachedSweep.wait()
+    await service.reconcileAtBoot(now: env.now)
     // then
     #expect(try env.operationState() == .started)
     #expect(try env.learningUsage().isEmpty)
     release.open()
-    await boot.value
+    await service.waitForPendingWork()
     await service.sweep(now: env.now)
     #expect(try env.operationState() == .succeeded)
     #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
@@ -615,5 +613,68 @@ extension LearningWorkflowTests {
       usage.tokens == EvaluationRunEnvironment.replyPromptTokens
         + EvaluationRunEnvironment.replyCompletionTokens
     )
+  }
+}
+
+extension LearningWorkflowTests {
+  @Test func runtimeCancellationJoinsNotificationStartedInference() async throws {
+    // given
+    let setupFinished = AsyncGate()
+    let entered = AsyncGate()
+    let release = AsyncGate()
+    let returned = AsyncGate()
+    let sweeping = AsyncGate()
+    defer { release.open() }
+    let env = try EvaluationRunEnvironment.make(
+      reply: Self.negative,
+      followingReplies: [
+        Self.negative, EvaluationRunEnvironment.noIssueReply,
+        #"{"schema_version":1,"candidate":null}"#,
+      ],
+      repeatable: true,
+      beforeResponse: {
+        guard setupFinished.isOpen else {
+          return
+        }
+        entered.open()
+        await release.wait()
+        returned.open()
+      }
+    )
+    let bootStore = RecordingLearningStore(base: env.learning, onUnsealed: sweeping.open)
+    let service = Self.service(env, bootStore: bootStore)
+    await service.advance(runId: env.runId)
+    setupFinished.open()
+    let secondRun = try env.settledBoundRun()
+    await service.notifySettled(runId: secondRun)
+    await entered.wait()
+
+    // when
+    let runtime = Task {
+      try await service.run()
+    }
+    await sweeping.wait()
+    runtime.cancel()
+    _ = await runtime.result
+
+    // then
+    #expect(release.isOpen == false)
+    #expect(returned.isOpen)
+    #expect(try env.learning.evaluation(runId: secondRun)?.outcome == .reusableIssue)
+    #expect(try env.learningUsage().count == 2)
+    #expect(await env.provider.requests.count == 2)
+
+    // when
+    let lateRun = try env.settledBoundRun()
+    await service.notifySettled(runId: lateRun)
+    await service.waitForPendingWork()
+
+    // then
+    #expect(try env.learning.evaluation(runId: lateRun) == nil)
+    #expect(await env.provider.requests.count == 2)
+    release.open()
+    let restarted = Self.service(env)
+    await restarted.sweep(now: env.now)
+    #expect(try env.learning.evaluation(runId: lateRun)?.outcome == .noIssue)
   }
 }

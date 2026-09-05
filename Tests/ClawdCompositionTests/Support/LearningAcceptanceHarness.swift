@@ -268,7 +268,7 @@ struct LearningAcceptanceHarness {
 
 // MARK: - Scripted Wire Replies
 
-private extension LearningAcceptanceHarness {
+extension LearningAcceptanceHarness {
   static func completion(_ content: String) throws -> ScriptedHTTPExecutor.Step {
     let object: [String: Any] = [
       "id": "reply", "object": "chat.completion", "model": "gpt-4o",

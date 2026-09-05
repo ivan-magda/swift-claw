@@ -915,8 +915,15 @@ budget and cost resolver, the redactor including MCP secrets, and notices using 
 signal. Operation orphan reconciliation succeeds once per service instance before learning dispatch.
 A settlement notification from a resumed approval may establish that boundary before the explicit
 boot pass; the later pass reuses its success and does not reclassify this process's live calls.
-Failed reconciliation remains retryable and prevents learning dispatch; ordinary delivery remains
-available.
+The explicit boot pass attempts only local operation reconciliation after primary orphan and
+approval reconciliation, before ordinary services start. It neither dispatches inference nor joins
+an existing network drain. Failed reconciliation remains retryable and prevents learning dispatch;
+ordinary services still start under the best-effort boot policy. Network recovery starts in the
+learning service's initial sweep alongside the poller, outbox and scheduler. The service owns its
+drain chain, propagates cancellation through it and joins it before stopping. Once the drain is
+closing, late settlement and feedback notifications leave their durable work for the next process
+instead of dispatching new calls. A late evaluator response still commits its accounting; cancellation
+then stops the workflow before another job transition or reflection call.
 
 The run pass seals evidence, evaluates it under the durable operation claim, recomputes its trial
 assignment and advances the job. Evaluation commit includes the content-free `learning_evaluated`
@@ -926,8 +933,8 @@ commits review notices, then discovers eligible reflection windows. These transi
 existing store claims and compare-and-swap transactions. Exact rollback-trigger replay returns its
 original receipt; a later distinct feedback event receives a distinct decision.
 
-Recovery reads in `LearningWorkflowStore` do not arm jobs. The periodic sweep pages through armed
-job IDs, recovering sealed unevaluated runs, artifacts awaiting admission or notice, controls and
+Recovery reads in `LearningWorkflowStore` do not arm jobs. The initial and periodic sweeps page through
+armed job IDs, recovering sealed unevaluated runs, artifacts awaiting admission or notice, controls and
 trial deadlines. Terminal denied or completed operations do not occupy the claimable queue.
 `LearningWorkflow.maxTransitionsPerInvocation` limits a job pass to 64 reviewed transitions and
 logs an error when more work remains. The next sweep resumes durable work.

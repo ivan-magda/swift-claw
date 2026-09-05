@@ -60,8 +60,9 @@ import Testing
     recording.clearServiceCalls()
     recording.failBootReconciliation = true
     await service.reconcileAtBoot(now: Date(timeIntervalSince1970: 11))
+    await service.sweep(now: Date(timeIntervalSince1970: 11))
 
-    // then — operation failure is isolated; boot still seals before using the same trial pass.
+    // then — operation failure is isolated; the runtime sweep still seals before its trial pass.
     #expect(
       recording.serviceCalls
         == ["operations", "unsealed", "seal:91", "live", "trial:11"]
