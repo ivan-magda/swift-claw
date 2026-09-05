@@ -34,7 +34,6 @@ import Testing
     let standardInput = Data([0x00, 0x01, 0x7f, 0x80, 0xff])
     let command = testCommand(
       [],
-      timeout: .seconds(30),
       standardInput: standardInput
     )
 
@@ -59,7 +58,7 @@ import Testing
         count=$((count + 1))
       done
       """
-    let command = testCommand(["-c", script], captureLimit: 1024, timeout: .seconds(5))
+    let command = testCommand(["-c", script], captureLimit: 1024)
 
     // when
     let result = await runner.run(command)
@@ -145,9 +144,10 @@ import Testing
   @Test func callerCancellationTearsDownTheCreatedProcessGroup() async throws {
     // given
     let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
-    let grandchildPIDFile = FileManager.default.temporaryDirectory.appendingPathComponent(
-      "claw-grandchild-\(UUID().uuidString).pid"
-    )
+    let root = try makeTemporaryRoot(prefix: "claw-grandchild")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let pipe = try makeGrandchildPipe(in: root)
+    let grandchildPIDFile = root.appendingPathComponent("grandchild.pid")
     let runner = SwiftSubprocessRunner(
       executablePath: "/bin/sh",
       onSpawnForTesting: { processIdentifier in
@@ -156,7 +156,7 @@ import Testing
     )
     let script = """
       trap '' TERM
-      (trap '' TERM; exec sleep 30) &
+      (trap '' TERM; exec cat "$2") &
       grandchild=$!
       printf '%s\n' "$grandchild" > "$1"
       wait
@@ -164,31 +164,22 @@ import Testing
     let task = Task {
       await runner.run(
         testCommand(
-          ["-c", script, "claw-subprocess-test", grandchildPIDFile.path],
-          timeout: .seconds(30)
+          ["-c", script, "claw-subprocess-test", grandchildPIDFile.path, pipe.path]
         )
       )
     }
-    var leakedGrandchild: Int32?
     defer {
       task.cancel()
       continuation.finish()
-      if let leakedGrandchild {
-        _ = kill(leakedGrandchild, SIGKILL)
-      }
-      try? FileManager.default.removeItem(at: grandchildPIDFile)
     }
 
     // when
     let processIdentifier = try await firstValue(from: spawned)
+    defer { _ = kill(-processIdentifier, SIGKILL) }
     let grandchild = try #require(await readProcessIdentifier(from: grandchildPIDFile))
-    leakedGrandchild = grandchild
     task.cancel()
     let result = await task.value
     let grandchildBecameUnreachable = await processBecameUnreachable(grandchild)
-    if grandchildBecameUnreachable {
-      leakedGrandchild = nil
-    }
 
     // then
     #expect(processIdentifier > 0)
@@ -200,29 +191,32 @@ import Testing
 
   @Test func childExitDoesNotWaitForGrandchildHoldingThePipe() async throws {
     // given
+    let root = try makeTemporaryRoot(prefix: "claw-grandchild-pipe")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let pipe = try makeGrandchildPipe(in: root)
     let runner = SwiftSubprocessRunner(executablePath: "/bin/sh")
-    // The backgrounded sleep inherits stdout (the asserted pipe); stderr only publishes its
-    // PID so the test can reap the grandchild instead of orphaning a real 30-second sleep.
-    let command = testCommand(["-c", "sleep 30 & echo $! >&2; printf child"], timeout: .seconds(2))
+    let command = testCommand([
+      "-c", "cat \"$1\" & printf child", "claw-subprocess-test", pipe.path,
+    ])
 
     // when
     let result = await runner.run(command)
+    defer {
+      if let processIdentifier = result.processIdentifier {
+        _ = kill(-processIdentifier, SIGKILL)
+      }
+    }
 
     // then
     #expect(result.termination == .exited(0))
     #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "child")
-    let pidText = try #require(String(bytes: result.stderr.bytes, encoding: .utf8))
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    let grandchild = try #require(Int32(pidText))
-    // ESRCH just means the grandchild already exited; anything else is equally moot here.
-    _ = kill(grandchild, SIGKILL)
   }
 }
 
 private func testCommand(
   _ arguments: [String],
   captureLimit: Int = 1024,
-  timeout: Duration = .seconds(2),
+  timeout: Duration = boundedTestPollCeiling,
   standardInput: Data = Data(),
   environmentKeysToRemove: [String] = []
 ) -> SubprocessCommand {
@@ -244,7 +238,7 @@ private func firstValue<Value>(from stream: AsyncStream<Value>) async throws -> 
 }
 
 private func readProcessIdentifier(from file: URL) async -> Int32? {
-  await pollUntil(timeout: .seconds(5)) {
+  await pollUntil {
     guard
       let data = try? Data(contentsOf: file),
       let text = String(bytes: data, encoding: .utf8),
@@ -258,7 +252,7 @@ private func readProcessIdentifier(from file: URL) async -> Int32? {
 }
 
 private func processBecameUnreachable(_ processIdentifier: Int32) async -> Bool {
-  await pollUntil(timeout: .seconds(5)) {
+  await pollUntil {
     #if canImport(Glibc)
       if let stat = try? String(
         contentsOfFile: "/proc/\(processIdentifier)/stat",
@@ -276,3 +270,9 @@ private func processBecameUnreachable(_ processIdentifier: Int32) async -> Bool 
 }
 
 private struct MissingSpawnError: Error {}
+
+private func makeGrandchildPipe(in root: URL) throws -> URL {
+  let pipe = root.appendingPathComponent("input.fifo")
+  try #require(mkfifo(pipe.path, 0o600) == 0)
+  return pipe
+}
