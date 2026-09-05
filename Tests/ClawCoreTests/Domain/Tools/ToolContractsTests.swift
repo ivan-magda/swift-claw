@@ -137,15 +137,21 @@ private struct DefaultPrepareTool: Tool {
   @Test func dispatchContextIsAValueType() {
     // given / when — the per-call policy inputs are a Sendable value type (no grant since Inc 5a)
     let context = ToolDispatchContext(
+      runId: 5,
+      chatId: 9,
       sessionTainted: true,
       runIngestedUntrusted: false,
       assemblyPrivateData: true,
       runPrivateData: false,
       sessionHasPrivateData: false,
-      approvalAlreadyPending: false
+      approvalAlreadyPending: false,
+      runOrigin: .interactive,
+      autoApproveWindowOpen: false
     )
 
     // then
+    #expect(context.runId == 5)
+    #expect(context.chatId == 9)
     #expect(context.sessionTainted)
     #expect(context.approvalAlreadyPending == false)
   }
@@ -164,7 +170,8 @@ private struct DefaultPrepareTool: Tool {
       canonicalArgsJSON: #"{"code":"print('hello')"}"#,
       presentation: presentation,
       guardTexts: ["print('hello')", "staged text"],
-      canExfiltrate: true
+      canExfiltrate: true,
+      approvalReason: .codeExec
     )
 
     // then
@@ -173,6 +180,7 @@ private struct DefaultPrepareTool: Tool {
     #expect(action.presentation == presentation)
     #expect(action.guardTexts == ["print('hello')", "staged text"])
     #expect(action.canExfiltrate)
+    #expect(action.approvalReason == .codeExec)
     #expect(PreparedActionResolution.prepared(action) == .prepared(action))
     #expect(PreparedActionResolution.refused(reason: "no") == .refused(reason: "no"))
   }

@@ -41,7 +41,8 @@ import Testing
     risk: RiskLevel = .safe,
     egress: ToolEgressClass = .none,
     fenceLabel: String? = nil,
-    invocationIdentity: String? = nil
+    invocationIdentity: String? = nil,
+    requiresInteractiveRun: Bool = false
   ) -> ToolDefinition {
     ToolDefinition(
       name: name,
@@ -51,7 +52,8 @@ import Testing
       egressClass: egress,
       riskLevel: risk,
       fenceLabel: fenceLabel,
-      invocationIdentity: invocationIdentity
+      invocationIdentity: invocationIdentity,
+      requiresInteractiveRun: requiresInteractiveRun
     )
   }
 
@@ -101,6 +103,16 @@ import Testing
       subhash(tools: [tool(name: "t", params: schema)])
         == subhash(tools: [tool(name: "t", params: schema)])
     )
+  }
+
+  @Test func registryMembershipIsAnInputClass() {
+    // given — the surface with and without one conditionally registered dangerous tool
+    let base = [tool(name: "execute_code", risk: .dangerous)]
+    let widened =
+      base + [tool(name: "bash", risk: .dangerous, requiresInteractiveRun: true)]
+
+    // when / then — a tool joining or leaving the registry voids every parked approval
+    #expect(subhash(tools: base) != subhash(tools: widened))
   }
 
   @Test func toolNameIsAnInputClass() {
@@ -157,6 +169,15 @@ import Testing
         != subhash(
           tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://b/mcp")]
         )
+    )
+  }
+
+  @Test func interactiveRunRequirementIsAnInputClass() {
+    // given / when / then — a tool that starts demanding an owner-present run has a different
+    // policy surface, so an approval parked under the older surface may not resolve against it.
+    #expect(
+      subhash(tools: [tool(name: "bash", requiresInteractiveRun: true)])
+        != subhash(tools: [tool(name: "bash", requiresInteractiveRun: false)])
     )
   }
 

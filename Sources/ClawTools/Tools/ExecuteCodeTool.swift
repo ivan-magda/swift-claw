@@ -16,12 +16,14 @@ public struct ExecuteCodeSettings: Sendable, Equatable {
 }
 
 public struct ExecuteCodeTool: Tool {
+  /// The registry name, exposed so the composition root can enable this tool's dangerous-tier
+  /// backstop without repeating the literal.
+  public static let toolName = "execute_code"
+
   public static let maxCodeBytes = ExecStagingLimits.standard.maxCodeBytes
   public static let maxStagedFileBytes = ExecStagingLimits.standard.maxStagedFileBytes
   public static let maxStagedTotalBytes = ExecStagingLimits.standard.maxStagedTotalBytes
   public static let maxStagedFiles = ExecStagingLimits.standard.maxStagedFiles
-  public static let rawOutputTruncationNotice =
-    "[raw output truncated after the first 1 MiB of one or more streams]"
 
   let workspaceRoot: URL
   let backend: any ExecutionBackend
@@ -42,7 +44,7 @@ public struct ExecuteCodeTool: Tool {
 
   public var definition: ToolDefinition {
     ToolDefinition(
-      name: "execute_code",
+      name: Self.toolName,
       description:
         "Run a short Python or shell script in a locked-down, throwaway sandbox (owner approval required; no network unless explicitly requested).",
       parameters: .object([
@@ -79,7 +81,7 @@ public struct ExecuteCodeTool: Tool {
   }
 
   public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
-    guard let raw = Self.decode(RawArguments.self, from: arguments) else {
+    guard let raw = DangerousToolSupport.decode(RawArguments.self, from: arguments) else {
       return .refused(
         reason: "execute_code needs language, code, stage, and network in their declared types."
       )
@@ -111,7 +113,7 @@ public struct ExecuteCodeTool: Tool {
         readsPrivateData: readsPrivateData(in: loaded),
         stage: loaded.map(\.record)
       )
-      guard let canonicalArgsJSON = Self.canonicalJSON(recorded) else {
+      guard let canonicalArgsJSON = DangerousToolSupport.canonicalJSON(recorded) else {
         return .refused(reason: "The prepared code action could not be encoded safely.")
       }
       let target = Self.canonicalTarget(language: language, canonicalArgsJSON: canonicalArgsJSON)
@@ -121,7 +123,8 @@ public struct ExecuteCodeTool: Tool {
           canonicalArgsJSON: canonicalArgsJSON,
           presentation: approvalPresentation(raw: raw, recorded: recorded),
           guardTexts: [raw.code] + loaded.map(\.guardText),
-          canExfiltrate: network
+          canExfiltrate: network,
+          approvalReason: .codeExec
         )
       )
     }
@@ -131,10 +134,10 @@ public struct ExecuteCodeTool: Tool {
     guard let approvedTarget = canonicalTarget else {
       return errorPayload("execute_code was dispatched without its approved target.")
     }
-    guard let recorded = Self.decode(RecordedArguments.self, from: arguments) else {
+    guard let recorded = DangerousToolSupport.decode(RecordedArguments.self, from: arguments) else {
       return errorPayload("The recorded code action is unreadable; nothing ran.")
     }
-    guard let canonicalArgsJSON = Self.canonicalJSON(recorded) else {
+    guard let canonicalArgsJSON = DangerousToolSupport.canonicalJSON(recorded) else {
       return errorPayload("The recorded code action cannot be re-encoded safely; nothing ran.")
     }
 
@@ -463,17 +466,6 @@ private extension ExecuteCodeTool {
 // MARK: - Canonical Encoding
 
 private extension ExecuteCodeTool {
-  static func decode<Value: Decodable>(_ type: Value.Type, from arguments: JSONValue) -> Value? {
-    guard let data = try? JSONEncoder().encode(arguments) else {
-      return nil
-    }
-    return try? JSONDecoder().decode(type, from: data)
-  }
-
-  static func canonicalJSON<Value: Encodable>(_ value: Value) -> String? {
-    CanonicalJSON.encode(value)
-  }
-
   static func canonicalTarget(language: ExecLanguage, canonicalArgsJSON: String) -> String {
     "code_exec:\(language.rawValue):"
       + String(SHA256Digest.hex(Data(canonicalArgsJSON.utf8)).prefix(16))
@@ -487,9 +479,12 @@ private extension ExecuteCodeTool {
     let totalBytes = recorded.stage.reduce(0) { partial, stage in
       partial + stage.bytes
     }
+    let visibleCode = OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(
+      in: redactor.redact(raw.code)
+    )
     let preview = """
       ```\(recorded.language.rawValue)
-      \(redactor.redact(raw.code))
+      \(visibleCode)
       ```
       \(stagedInputsSummary(recorded.stage))
       """
@@ -654,25 +649,15 @@ private extension ExecuteCodeTool {
   func map(result: ExecutionResult, readsPrivateData: Bool) -> ToolPayload {
     switch result.terminationReason {
     case .exited(let code):
-      let stdout = redactor.redact(result.stdout)
-      let stderr = redactor.redact(result.stderr)
-      var content = """
-        exit \(code)
-        --- stdout ---
-        \(stdout)
-        --- stderr ---
-        \(stderr)
-        """
-      if code == 137 {
-        content += "\n" + Self.memoryCapHint
-      }
-      if result.truncatedRawBytes {
-        content += "\n" + Self.rawOutputTruncationNotice
-      }
-      return ToolPayload(
-        content: ToolOutputCap.cap(content),
-        status: .ok,
-        ingestedUntrusted: true,
+      return DangerousToolSupport.outcomePayload(
+        DangerousToolSupport.CommandOutcome(
+          statusLine: DangerousToolSupport.exitStatusLine(code),
+          stdout: result.stdout,
+          stderr: result.stderr,
+          notes: code == 137 ? [Self.memoryCapHint] : [],
+          truncatedRawStreams: result.truncatedRawBytes
+        ),
+        redactor: redactor,
         readPrivateData: readsPrivateData
       )
     case .timedOutKilled:
@@ -687,11 +672,6 @@ private extension ExecuteCodeTool {
   }
 
   func errorPayload(_ reason: String) -> ToolPayload {
-    ToolPayload(
-      content: redactor.redact(reason),
-      status: .error,
-      ingestedUntrusted: false,
-      readPrivateData: false
-    )
+    DangerousToolSupport.errorPayload(reason, redactor: redactor)
   }
 }

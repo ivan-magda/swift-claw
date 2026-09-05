@@ -11,7 +11,8 @@ import Testing
     buildResult: BuildResult = makeBuildResult(),
     sessionTainted: Bool = false,
     origin: RunOrigin = .interactive,
-    proactiveTodayUSD: Double = 0
+    proactiveTodayUSD: Double = 0,
+    autoApproveWindowOpen: Bool = false
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
       runId: 1,
@@ -20,6 +21,7 @@ import Testing
       buildResult: buildResult,
       sessionTainted: sessionTainted,
       sessionHasPrivateData: false,
+      autoApproveWindowOpen: autoApproveWindowOpen,
       todayTokens: 0,
       todayUSD: 0,
       origin: origin,
@@ -148,6 +150,83 @@ import Testing
     // then
     #expect(await dispatcher.records.first?.context.runIngestedUntrusted == true)
     #expect(outcome.ingestedUntrusted)
+  }
+
+  @Test(arguments: [RunOrigin.interactive, RunOrigin.scheduled, RunOrigin.heartbeat])
+  func everyDispatchCarriesTheRunsOrigin(origin: RunOrigin) async throws {
+    // given
+    let definition = ToolDefinition(
+      name: "web_fetch",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .none,
+      riskLevel: .safe
+    )
+    let provider = SequenceProvider([
+      toolCallResponse([ToolCall(id: "c1", name: definition.name, argumentsJSON: "{}")]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    _ = try await run(runtime, origin: origin)
+
+    // then
+    #expect(await dispatcher.records.first?.context.runOrigin == origin)
+  }
+
+  @Test(arguments: [true, false])
+  func everyDispatchCarriesTheRunsAutoApproveWindow(windowOpen: Bool) async throws {
+    // given
+    let definition = ToolDefinition(
+      name: "bash",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .none,
+      riskLevel: .dangerous,
+      requiresInteractiveRun: true
+    )
+    let provider = SequenceProvider([
+      toolCallResponse([ToolCall(id: "c1", name: definition.name, argumentsJSON: "{}")]),
+      okResponse(content: "done"),
+    ])
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+
+    // when
+    _ = try await run(runtime, autoApproveWindowOpen: windowOpen)
+
+    // then — the gate decides whether to widen, but only the run can say the window is open
+    #expect(await dispatcher.records.first?.context.autoApproveWindowOpen == windowOpen)
+  }
+
+  @Test func cancellationDuringAToolBatchStopsBeforeTheNextDispatch() async throws {
+    // given — the first host call observes `/stop` cancellation and returns; the second must never
+    // reach a stale turn-scoped approval window from this provider response
+    let firstDispatchStarted = AsyncGate()
+    let dispatcher = CancellationGatedDispatcher(firstDispatchStarted: firstDispatchStarted)
+    let provider = SequenceProvider([
+      toolCallResponse([
+        ToolCall(id: "c1", name: "bash", argumentsJSON: #"{"command":"first"}"#),
+        ToolCall(id: "c2", name: "bash", argumentsJSON: #"{"command":"second"}"#),
+      ])
+    ])
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+    let turn = Task {
+      try await run(runtime, autoApproveWindowOpen: true)
+    }
+
+    // when
+    await firstDispatchStarted.waitIgnoringCancellation()
+    turn.cancel()
+    let outcome = try await turn.value
+
+    // then
+    #expect(outcome.result == .degraded(.providerUnavailable, usage: nil))
+    #expect(await dispatcher.dispatchedCallIds == ["c1"])
   }
 
   @Test func liveObservationsFenceUnderTheToolsDeclaredLabel() async throws {
@@ -286,11 +365,11 @@ import Testing
     #expect(outcome.ingestedUntrusted == false)  // blocked observations do not taint (§10)
   }
 
-  @Test func inRunTaintAndPrivateFlagsFeedTheVeryNextGateContext() async throws {
-    // given (rev.1 H1) — call 1 reads MEMORY.md (private), call 2's context must see BOTH flags
+  @Test func bashPrivateDataAndTaintFlagsFeedTheVeryNextGateContext() async throws {
+    // given — a host command can read any private file, so call 2 must see both security flags
     let provider = SequenceProvider([
       toolCallResponse([
-        ToolCall(id: "c1", name: "file_read", argumentsJSON: #"{"path":"MEMORY.md"}"#),
+        ToolCall(id: "c1", name: "bash", argumentsJSON: #"{"command":"cat private.txt"}"#),
         fetchProposal(id: "c2"),
       ]),
       okResponse(content: "done"),
@@ -471,5 +550,34 @@ import Testing
     // then — the run recovers with the error observation in history
     #expect(try requireCompleted(outcome.result).content == "recovered")
     #expect(outcome.exchanges[0].observations[0].status == .error)
+  }
+}
+
+private actor CancellationGatedDispatcher: ToolDispatching {
+  nonisolated let definitions: [ToolDefinition] = []
+  private let firstDispatchStarted: AsyncGate
+  private let cancellationHold = AsyncGate()
+  private(set) var dispatchedCallIds: [String] = []
+
+  init(firstDispatchStarted: AsyncGate) {
+    self.firstDispatchStarted = firstDispatchStarted
+  }
+
+  func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
+    dispatchedCallIds.append(call.id)
+    if dispatchedCallIds.count == 1 {
+      firstDispatchStarted.open()
+      await cancellationHold.wait()
+    }
+    return ToolDispatchOutcome(
+      observation: ToolObservation(
+        callId: call.id,
+        toolName: call.name,
+        content: "cancelled",
+        status: .error,
+        ingestedUntrusted: false
+      ),
+      argsRedacted: call.argumentsJSON
+    )
   }
 }

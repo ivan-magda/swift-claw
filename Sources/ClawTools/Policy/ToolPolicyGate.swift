@@ -12,9 +12,14 @@ public struct ToolPolicyGate: Sendable {
     /// carries its resolved target here too, because its `execute` requires one.
     ///
     /// `preparedArgsJSON` is the dangerous tier's prepared canonical arguments, present only when
-    /// the gate allowed a dangerous action outright. `execute` decodes that recorded shape, not
-    /// the model's raw arguments, so the dispatcher must hand it over verbatim.
+    /// a group topic allowed a dangerous action outright. `execute` decodes that recorded shape,
+    /// not the model's raw arguments, so the dispatcher must hand it over verbatim.
     case allow(argsRedacted: String, action: ToolAction?, preparedArgsJSON: String? = nil)
+    /// A dangerous action the run's open turn-scoped window already authorized: it runs now, on
+    /// the canonical args the tool prepared and the guards scanned, never on the model's raw ones.
+    /// Separate from `.allow` because a windowed tool acts on the host, so the dispatcher awaits
+    /// it to completion instead of abandoning it on the generic deadline race.
+    case allowPrepared(recorded: RecordedToolAction, argsRedacted: String)
     case block(payload: ToolPayload, argsRedacted: String)
     /// An ask-tier action parked for the owner's durable approval. Carries the recorded
     /// canonical args the suspend commit persists and the resume replays.
@@ -23,16 +28,18 @@ public struct ToolPolicyGate: Sendable {
 
   private let argGuard: ExfilArgGuard
   private let privateFileLoader: @Sendable () -> [String]
-  private let execEnabled: Bool
+  /// One switch per dangerous tool, keyed by tool name: the owner enables host execution and the
+  /// sandbox independently, so neither config flag can turn the other tool on.
+  private let enabledDangerousTools: Set<String>
 
   public init(
     argGuard: ExfilArgGuard,
     privateFileLoader: @escaping @Sendable () -> [String],
-    execEnabled: Bool
+    enabledDangerousTools: Set<String>
   ) {
     self.argGuard = argGuard
     self.privateFileLoader = privateFileLoader
-    self.execEnabled = execEnabled
+    self.enabledDangerousTools = enabledDangerousTools
   }
 
   public func evaluate(
@@ -40,6 +47,10 @@ public struct ToolPolicyGate: Sendable {
     tool: any Tool,
     context: ToolDispatchContext
   ) async -> Verdict {
+    if let refusal = ownerAbsentRefusal(call: call, tool: tool, context: context) {
+      return refusal
+    }
+
     // Total over RiskLevel. Ask-tier resolves before the egress fast-path so a `.none`-egress
     // ask tool (file_write) still parks; dangerous consumes only a tool-prepared action; safe
     // egress falls through to the unconditional/trifecta tiers below.
@@ -164,6 +175,44 @@ public struct ToolPolicyGate: Sendable {
       ),
       argsRedacted: argsRedacted
     )
+  }
+}
+
+// MARK: - Owner Presence
+
+private extension ToolPolicyGate {
+  /// A tool that acts only under the owner's eye is refused outright wherever the owner is not
+  /// there to watch. A proactive run would leave a host action queued against an owner who is not
+  /// reading; a group topic is served to people who are not the owner at all, and its dangerous
+  /// tier runs untapped, so the refusal is the only thing standing between an attendee and the
+  /// host.
+  func ownerAbsentRefusal(
+    call: ToolCall,
+    tool: any Tool,
+    context: ToolDispatchContext
+  ) -> Verdict? {
+    guard tool.definition.requiresInteractiveRun, let absence = ownerAbsence(context) else {
+      return nil
+    }
+    return .block(
+      payload: ToolPayload(
+        content:
+          "\(tool.definition.name) is unavailable in \(absence): "
+          + "it runs only while the owner is present.",
+        status: .error,
+        ingestedUntrusted: false
+      ),
+      argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
+    )
+  }
+
+  /// Where the run leaves the owner unable to watch it, phrased for the refusal; nil when the
+  /// owner is the one at the other end.
+  func ownerAbsence(_ context: ToolDispatchContext) -> String? {
+    if context.runOrigin.isProactive {
+      return "a \(context.runOrigin.rawValue) run"
+    }
+    return context.mode == .group ? "a group chat" : nil
   }
 }
 
@@ -376,7 +425,7 @@ private extension ToolPolicyGate {
 // MARK: - Dangerous-tier Approval
 
 private extension ToolPolicyGate {
-  /// Dangerous tools park ONLY over a tool-prepared canonical action. The `execEnabled` backstop
+  /// Dangerous tools park ONLY over a tool-prepared canonical action. The per-tool backstop
   /// fails closed; the arg-guard scans run over the prepared `guardTexts` (never the model's raw
   /// arguments), and the recorded action binds the prepared canonical JSON verbatim.
   func evaluateDangerousTier(
@@ -384,8 +433,8 @@ private extension ToolPolicyGate {
     tool: any Tool,
     context: ToolDispatchContext
   ) async -> Verdict {
-    guard execEnabled else {
-      return dangerousBlock(reason: "Code execution is disabled.", call: call)
+    guard enabledDangerousTools.contains(tool.definition.name) else {
+      return dangerousBlock(reason: "\(tool.definition.name) is disabled.", call: call)
     }
     // A dangerous action can never take the second approval slot, and it cannot park or execute
     // while one is pending, so refuse here before the expensive staging and content scans run.
@@ -417,26 +466,23 @@ private extension ToolPolicyGate {
       return dangerousBlock(reason: reason, call: call)
     }
 
-    for text in prepared.guardTexts {
-      let verdict = argGuard.evaluate(text: text)
-      if let rule = verdict.blockedRule {
-        return blockedArgs(rule: rule, argsRedacted: "[REDACTED:\(rule)]")
-      }
+    if let blocked = scanPrepared(prepared) {
+      return blocked
     }
 
-    // The disk-time private-substring scan runs only when the prepared action can leave the host.
-    if prepared.canExfiltrate {
-      let privateIndex = ExfilArgGuard.PrivateTextIndex(texts: privateFileLoader())
-      for text in prepared.guardTexts {
-        let verdict = argGuard.evaluateConditional(text: text, index: privateIndex)
-        if let rule = verdict.blockedRule {
-          return blockedArgs(rule: rule, argsRedacted: "[REDACTED:\(rule)]")
-        }
-      }
-    }
+    let recorded = RecordedToolAction(
+      tool: call.name,
+      canonicalArgsJSON: prepared.canonicalArgsJSON,
+      argsHash: ApprovalArgsHash.sha256Hex(prepared.canonicalArgsJSON),
+      canonicalTarget: prepared.canonicalTarget,
+      reason: prepared.approvalReason,
+      presentation: prepared.presentation
+    )
 
-    // Group mode runs the prepared action untapped — the sandbox is the containment, not a prompt.
-    // `execEnabled` and every scan above still apply; only the approval round-trip is gone.
+    // A group topic has nobody to press the button, so the prepared action runs untapped — the
+    // sandbox is the containment, not a prompt. It stays on the bounded execution path: a tool
+    // that must not be abandoned mid-flight declares `requiresInteractiveRun` and was refused
+    // upstream, so only a disposable sandbox reaches here.
     guard context.mode == .direct else {
       return .allow(
         argsRedacted: argGuard.renderRedacted(argsJSON: prepared.canonicalArgsJSON),
@@ -445,15 +491,39 @@ private extension ToolPolicyGate {
       )
     }
 
-    let recorded = RecordedToolAction(
-      tool: call.name,
-      canonicalArgsJSON: prepared.canonicalArgsJSON,
-      argsHash: ApprovalArgsHash.sha256Hex(prepared.canonicalArgsJSON),
-      canonicalTarget: prepared.canonicalTarget,
-      reason: .codeExec,
-      presentation: prepared.presentation
+    // The window widens only the reason the owner was offered it on, and only past the scans
+    // above: the guards run on a window-approved command exactly as they do on a parked one.
+    guard context.autoApproveWindowOpen, prepared.approvalReason.offersTurnScopedWindow else {
+      return .requireApproval(recorded: recorded)
+    }
+    return .allowPrepared(
+      recorded: recorded,
+      argsRedacted: argGuard.renderRedacted(argsJSON: prepared.canonicalArgsJSON)
     )
-    return .requireApproval(recorded: recorded)
+  }
+
+  /// The arg-guard pass over what the tool actually prepared, never the model's raw arguments —
+  /// the dangerous-tier counterpart to `scanArguments`. Nil clears the action to proceed.
+  func scanPrepared(_ prepared: PreparedToolAction) -> Verdict? {
+    for text in prepared.guardTexts {
+      let verdict = argGuard.evaluate(text: text)
+      if let rule = verdict.blockedRule {
+        return blockedArgs(rule: rule, argsRedacted: "[REDACTED:\(rule)]")
+      }
+    }
+
+    // The disk-time private-substring scan runs only when the prepared action can leave the host.
+    guard prepared.canExfiltrate else {
+      return nil
+    }
+    let privateIndex = ExfilArgGuard.PrivateTextIndex(texts: privateFileLoader())
+    for text in prepared.guardTexts {
+      let verdict = argGuard.evaluateConditional(text: text, index: privateIndex)
+      if let rule = verdict.blockedRule {
+        return blockedArgs(rule: rule, argsRedacted: "[REDACTED:\(rule)]")
+      }
+    }
+    return nil
   }
 
   func dangerousBlock(reason: String, call: ToolCall) -> Verdict {
@@ -471,15 +541,21 @@ public struct GatedToolDispatcher: ToolDispatching {
   private let gate: ToolPolicyGate
   /// Injected so tests drive the timeout race deterministically (same seam as `AgentRuntime`).
   private let clock: any Clock<Duration>
+  /// Announces a call the gate cleared, before it runs. Absent wherever nothing delivers to the
+  /// owner (a probe, a test); a tool that declares an announcement then fails its call rather
+  /// than acting unannounced, so the owner never misses a command that ran.
+  private let echo: (any ToolInvocationEchoing)?
 
   public init(
     registry: ToolRegistry,
     gate: ToolPolicyGate,
-    clock: any Clock<Duration> = ContinuousClock()
+    clock: any Clock<Duration> = ContinuousClock(),
+    echo: (any ToolInvocationEchoing)? = nil
   ) {
     self.registry = registry
     self.gate = gate
     self.clock = clock
+    self.echo = echo
   }
 
   public var definitions: [ToolDefinition] {
@@ -502,7 +578,9 @@ public struct GatedToolDispatcher: ToolDispatching {
       return errorOutcome(call: call, reason: "Malformed arguments for \(call.name).")
     }
     // (2)/(3) the gate
-    switch await gate.evaluate(call: call, tool: tool, context: context) {
+    let verdict = await gate.evaluate(call: call, tool: tool, context: context)
+    guard Task.isCancelled == false else { return cancellationOutcome(call: call) }
+    switch verdict {
     case .block(let payload, let argsRedacted):
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
@@ -523,12 +601,31 @@ public struct GatedToolDispatcher: ToolDispatching {
         argsRedacted: gate.renderRedacted(argsJSON: recorded.canonicalArgsJSON),
         requiresApproval: recorded
       )
+    case .allowPrepared(let recorded, let argsRedacted):
+      return await runWindowed(
+        call: call,
+        tool: tool,
+        recorded: recorded,
+        argsRedacted: argsRedacted,
+        context: context
+      )
     case .allow(let argsRedacted, let action, let preparedArgsJSON):
-      // (4) execute under the tool's own timeout, on the gate-resolved canonical target
+      // (4) execute under the tool's own timeout, on the gate-resolved canonical target. A
+      // dangerous action a group topic allowed outright runs its prepared canonical args, and the
+      // announcement resolves from the same value, so the owner never reads one command while
+      // another one runs.
+      guard let executed = executedArguments(raw: arguments, prepared: preparedArgsJSON) else {
+        return errorOutcome(call: call, reason: "The prepared \(call.name) action is unreadable.")
+      }
+      guard await announce(tool: tool, arguments: executed, context: context) else {
+        return announcementFailureOutcome(call: call)
+      }
+      guard Task.isCancelled == false else {
+        return cancellationOutcome(call: call)
+      }
       let payload = await executeWithTimeout(
         tool: tool,
-        arguments: arguments,
-        preparedArgsJSON: preparedArgsJSON,
+        arguments: executed,
         canonicalTarget: action?.target
       )
       return ToolDispatchOutcome(
@@ -538,47 +635,98 @@ public struct GatedToolDispatcher: ToolDispatching {
     }
   }
 
+  /// What `execute` receives: the prepared canonical arguments when the gate allowed a dangerous
+  /// action outright, the model's own otherwise. Nil when the recorded form no longer parses.
+  private func executedArguments(raw: JSONValue, prepared: String?) -> JSONValue? {
+    guard let prepared else {
+      return raw
+    }
+    return JSONValue.parse(prepared)
+  }
+
+  /// (4) the same execution an approval resume would replay: the recorded canonical args on the
+  /// recorded target, so a widened call and an approved one act on identical inputs. Awaited and
+  /// never raced — a turn-scoped window is the one way a host-acting tool executes without an
+  /// approval, and its side effects must stay owned until its own bounded teardown has completed.
+  private func runWindowed(
+    call: ToolCall,
+    tool: any Tool,
+    recorded: RecordedToolAction,
+    argsRedacted: String,
+    context: ToolDispatchContext
+  ) async -> ToolDispatchOutcome {
+    guard let preparedArguments = JSONValue.parse(recorded.canonicalArgsJSON) else {
+      return errorOutcome(call: call, reason: "The prepared \(call.name) action is unreadable.")
+    }
+    guard await announce(tool: tool, arguments: preparedArguments, context: context) else {
+      return announcementFailureOutcome(call: call)
+    }
+    guard Task.isCancelled == false else {
+      return cancellationOutcome(call: call)
+    }
+    let payload = await tool.execute(
+      arguments: preparedArguments,
+      canonicalTarget: recorded.canonicalTarget
+    )
+    return ToolDispatchOutcome(
+      observation: ToolObservation(call: call, payload: payload),
+      argsRedacted: argsRedacted
+    )
+  }
+
+  /// The pre-execution announcement, on the exact arguments `execute` is about to receive. It
+  /// sits after the gate and before the side effect, so a blocked or parked call is never
+  /// announced and an announced one is always still interruptible.
+  private func announce(
+    tool: any Tool,
+    arguments: JSONValue,
+    context: ToolDispatchContext
+  ) async -> Bool {
+    guard let detail = tool.invocationEcho(arguments: arguments) else {
+      return true
+    }
+    guard let echo else {
+      return false
+    }
+    return await echo.echo(
+      ToolInvocationEcho(
+        runId: context.runId,
+        chatId: context.chatId,
+        tool: tool.definition.name,
+        detail: detail
+      )
+    )
+  }
+
   /// Bounded by the shared `DeadlineRace`, whose loser is cancelled and ABANDONED, never
   /// awaited: a task group always awaits its children (the pitfall `sendDraftBounded`
   /// documents), so a wedged tool — a blocking syscall, hung I/O — would otherwise hold the
   /// strict-FIFO session lane hostage far past its declared timeout, beyond `/stop`'s reach.
-  /// The abandoned execute task keeps running detached until its I/O returns.
+  /// The abandoned execute task keeps running detached until its I/O returns. A host-acting tool
+  /// never reaches this race — it is awaited directly in `.allowPrepared`.
   ///
   /// A group turn dispatches write tools here, so the abandonment is no longer free — and it is
   /// still the right trade. `file_write` commits through a staged temp file and a single
   /// `rename(2)`/`link(2)`, so an abandoned write either lands whole or leaves the previous file
   /// untouched; there is no torn state to observe. `execute_code` runs inside a sandbox that
-  /// enforces its own shorter timeout, and the dispatcher's allowance sits 20s above it, so the
-  /// race fires only when the sandbox itself has already wedged — exactly the case worth
-  /// abandoning. In both cases the turn observes a timeout, which may understate what happened;
-  /// the alternative is a wedged tool holding the session lane, which is worse.
+  /// enforces its own shorter timeout and tears itself down under a detached shield, and the
+  /// dispatcher's allowance sits 20s above it, so the race fires only once the sandbox has
+  /// already wedged — exactly the case worth abandoning, since the container FIFO lane is shared
+  /// and a held turn would queue every other topic behind it. In both cases the turn observes a
+  /// timeout, which may understate what happened; the alternative is a wedged tool holding the
+  /// session lane, which is worse.
   private func executeWithTimeout(
     tool: any Tool,
     arguments: JSONValue,
-    preparedArgsJSON: String?,
     canonicalTarget: String?
   ) async -> ToolPayload {
-    let executedArguments: JSONValue
-    if let preparedArgsJSON {
-      guard let prepared = JSONValue.parse(preparedArgsJSON) else {
-        return ToolPayload(
-          content: "The prepared \(tool.definition.name) action is unreadable; nothing ran.",
-          status: .error,
-          ingestedUntrusted: false
-        )
-      }
-      executedArguments = prepared
-    } else {
-      executedArguments = arguments
-    }
-
     let outcome = await DeadlineRace.race(
       allowance: tool.timeout,
       sleep: { [clock] duration in
         try await clock.sleep(for: duration)
       },
       operation: {
-        await tool.execute(arguments: executedArguments, canonicalTarget: canonicalTarget)
+        await tool.execute(arguments: arguments, canonicalTarget: canonicalTarget)
       }
     )
 
@@ -604,6 +752,17 @@ public struct GatedToolDispatcher: ToolDispatching {
         ingestedUntrusted: false
       ),
       argsRedacted: gate.renderRedacted(argsJSON: call.argumentsJSON)
+    )
+  }
+
+  private func cancellationOutcome(call: ToolCall) -> ToolDispatchOutcome {
+    errorOutcome(call: call, reason: "The \(call.name) call was cancelled; nothing ran.")
+  }
+
+  private func announcementFailureOutcome(call: ToolCall) -> ToolDispatchOutcome {
+    errorOutcome(
+      call: call,
+      reason: "The \(call.name) call could not be announced safely; nothing ran."
     )
   }
 }

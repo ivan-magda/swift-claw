@@ -62,9 +62,10 @@ public enum MemoryWriteBuilder {
       sessionId: sessionId
     )
 
-    let visibleText = renderVisibleControls(in: normalizedText).trimmingCharacters(
-      in: .whitespacesAndNewlines
-    )
+    let visibleText = OwnerDisplaySanitizer.renderUnsafeScalars(in: normalizedText)
+      .trimmingCharacters(
+        in: .whitespacesAndNewlines
+      )
     var lines = [
       "Remember as \(kind.rawValue):",
       visibleText,
@@ -111,27 +112,6 @@ private extension MemoryWriteBuilder {
 private extension MemoryWriteBuilder {
   static func stripBlockedControls(from text: String) -> String {
     String(text.unicodeScalars.filter { blockedControls.contains($0.value) == false })
-  }
-
-  static func renderVisibleControls(in text: String) -> String {
-    var rendered = ""
-    rendered.reserveCapacity(text.count)
-
-    for scalar in text.unicodeScalars {
-      if blockedControls.contains(scalar.value) {
-        rendered.append(visibleScalarCode(for: scalar))
-      } else {
-        rendered.unicodeScalars.append(scalar)
-      }
-    }
-
-    return rendered
-  }
-
-  static func visibleScalarCode(for scalar: Unicode.Scalar) -> String {
-    let hex = String(scalar.value, radix: 16, uppercase: true)
-    let paddedHex = String(repeating: "0", count: max(0, 4 - hex.count)) + hex
-    return "<U+\(paddedHex)>"
   }
 
   static let blockedControls: Set<UInt32> = {

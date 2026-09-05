@@ -46,6 +46,9 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
 
   private let redactArguments: @Sendable (String) -> String
   private let now: @Sendable () -> Date
+  /// Announces the approved action before it runs — the same seam the dispatcher uses, so a
+  /// button-approved command and a window-widened one are echoed identically.
+  private let echo: (any ToolInvocationEchoing)?
 
   private let logger: Logger
 
@@ -54,6 +57,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
     runs: any RunStore,
     redactArguments: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> Date = { Date() },
+    echo: (any ToolInvocationEchoing)? = nil,
     logger: Logger
   ) {
     self.tools = tools
@@ -61,6 +65,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
 
     self.redactArguments = redactArguments
     self.now = now
+    self.echo = echo
 
     self.logger = logger
   }
@@ -137,6 +142,25 @@ private extension ApprovedActionExecutor {
         ingestedUntrusted: false
       )
     }
+    // Announced after the claim: a run `/stop` drove terminal never reaches here, so the owner is
+    // never told about a command that will not run.
+    if let detail = tool.invocationEcho(arguments: arguments) {
+      guard let echo else {
+        return announcementFailurePayload(tool: approval.tool)
+      }
+      guard
+        await echo.echo(
+          ToolInvocationEcho(
+            runId: approval.runId,
+            chatId: approval.ownerUserId,
+            tool: approval.tool,
+            detail: detail
+          )
+        )
+      else {
+        return announcementFailurePayload(tool: approval.tool)
+      }
+    }
     // Run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s
     // abandon-on-timeout race, so the observation is always truthful (file_write is atomic).
     return await tool.execute(
@@ -151,6 +175,14 @@ private extension ApprovedActionExecutor {
     ApprovedExecutionAudit(
       tool: approval.tool,
       argsRedacted: redactArguments(approval.canonicalArgsJSON)
+    )
+  }
+
+  func announcementFailurePayload(tool: String) -> ToolPayload {
+    ToolPayload(
+      content: "The \(tool) call could not be announced safely; nothing ran.",
+      status: .error,
+      ingestedUntrusted: false
     )
   }
 }

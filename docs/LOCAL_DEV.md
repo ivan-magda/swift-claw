@@ -211,6 +211,90 @@ error row rather than silently degrading.
 
 ---
 
+## Running bash (host shell)
+
+`bash` runs one command **on this machine**, as the user running `clawd`, with your real
+toolchain and your real files. This is not the sandbox. Nothing isolates the command, so the
+approval you tap is the only check on it. It ships off, and while it is off the tool is absent
+from the registry — the model cannot see it or call it.
+
+**Enable it.** One line in `~/.swift-claw/clawd.env`; the other three keys have defaults
+(`/bin/zsh`, 30 s default timeout, 300 s ceiling):
+
+```bash
+CLAW_BASH_ENABLED=true
+```
+
+**Confirm it registered.** `clawd doctor --check-config` renders a `Host Shell` group without
+booting anything:
+
+```bash
+clawd doctor --check-config
+```
+
+Enabled with a usable shell:
+
+```
+Host Shell ............................. ok
+    bash.available  true
+    bash.shell      /bin/zsh
+    bash.timeout    30s default (maximum 300s)
+```
+
+Left off, the group states which flag turns it on — the tool is absent, and the row says so
+rather than staying silent:
+
+```
+Host Shell ............................. ok
+    bash  disabled by CLAW_BASH_ENABLED
+```
+
+**Two failure shapes, and they fail at different times.** A shell that is not there is a
+registration failure: the daemon boots, the tool is absent, and the group fails the run.
+
+```
+Host Shell ............................. FAIL
+  ✗ bash.available   false
+  ✗ bash.shell       /bin/nope
+  ✗ bash.last_error  no file at /bin/nope
+```
+
+A *relative* `CLAW_BASH_SHELL` is a config failure instead — it never reaches a row, and no
+daemon starts:
+
+```
+Config ................................. FAIL
+  ✗ config  FAIL: invalidBashShell("zsh")
+```
+
+**Exercise it from Telegram.** Ask for something that needs the host, e.g. "run `git status` in
+the workspace". The first call parks the turn and sends a card carrying the shell, the working
+directory, the timeout, and the exact redacted command, with three buttons: **Approve**,
+**Approve for this turn**, **Deny**. Approve, and the daemon durably queues the command notice
+before starting the process, then replies with the combined output and the exit code. Telegram
+delivery drains asynchronously. A non-zero exit comes back as ordinary output the model reads —
+only a timeout or a shell that would not start is an error.
+
+**The turn-scoped window.** *Approve for this turn* opens a window on the run that suppresses
+later `bash` prompts until the turn ends; each command still passes the arg guard and must be
+durably queued for delivery before its process starts. `/stop` and `/new` end the run and therefore
+the window, and the next turn prompts again. The window widens `bash` only — an ask-tier or sandbox
+action inside it still parks.
+
+**Scheduled and heartbeat runs cannot use it.** They refuse before preparing an action. You
+are not there to read the card, and that is the worst time for a host command to run.
+
+**Secrets never enter the command's environment.** The child inherits the daemon's environment
+minus the whole `CLAW_` prefix, so `env | grep CLAW_` inside a call returns nothing. The
+invariant is pinned by `prefixPolicyDropsAKeyThisProcessReallyInherited` in `ClawProcessTests`,
+which launches `/usr/bin/env` directly rather than through a shell — `sh` regenerates a default
+`PATH` when the variable is absent, which would hide the removal.
+
+Every non-`CLAW_*` variable is inherited. Keep the daemon environment minimal: variables such as
+`GH_TOKEN`, cloud credentials, and `SSH_AUTH_SOCK` remain available to an approved command.
+
+---
+
 ## Voice-message transcription (macOS 26)
 
 Telegram voice notes are transcribed **on-device** with Apple's `SpeechAnalyzer` stack and the
@@ -334,12 +418,12 @@ topic on its own.
 In a group the bot follows the text in a topic but answers only when addressed: an `@handle`
 mention, a slash command, or a reply to something it said. Unaddressed text joins the topic's
 transcript without starting a run. The bot does not download, transcribe, or store unaddressed
-media. Tools execute without approval prompts, `/remember`,
-`/memory`, `/schedule`, `/pause`, `/resume`, `/run` and `/cancel` are refused, and recall stays
-inside the topic that asked. `docs/ARCHITECTURE.md` §12.1 is the normative description, including
-what the mode trades away — **use a separate state root from your personal install**, because the
-owner's `MEMORY.md`, `USER.md` and durable facts assemble into a group topic just as they do into
-a DM.
+media. Tools execute without approval prompts — except the host `bash` tool, which is refused in a
+group because there is nobody there to approve it — `/remember`, `/memory`, `/schedule`, `/pause`,
+`/resume`, `/run` and `/cancel` are refused, and recall stays inside the topic that asked.
+`docs/ARCHITECTURE.md` §12.1 is the normative description, including what the mode trades away —
+**use a separate state root from your personal install**, because the owner's `MEMORY.md`,
+`USER.md` and durable facts assemble into a group topic just as they do into a DM.
 
 ### Onboarding order
 

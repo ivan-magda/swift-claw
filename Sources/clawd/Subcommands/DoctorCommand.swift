@@ -43,6 +43,7 @@ struct DoctorCommand: AsyncParsableCommand {
     if checkConfig {
       addConfigDetailRows(to: &report, config: config)
       report.add(contentsOf: await sandboxRows(config: config, live: false))
+      report.add(contentsOf: DoctorHealth.bashChecks(config: config))
     }
 
     let secretsRow = SecretStoreResolver.doctorRow(
@@ -74,6 +75,7 @@ struct DoctorCommand: AsyncParsableCommand {
     await addConnectivityRows(to: &report, config: config)
     await addMCPProbeRows(to: &report, mcp: mcp.inputs)
     report.add(contentsOf: await sandboxRows(config: config, live: true))
+    report.add(contentsOf: DoctorHealth.bashChecks(config: config))
 
     emit(report)
 

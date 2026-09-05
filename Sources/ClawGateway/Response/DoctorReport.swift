@@ -12,6 +12,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
   case connectivity
   case mcp
   case sandbox
+  case hostShell = "host_shell"
 
   public var title: String {
     switch self {
@@ -26,6 +27,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
     case .connectivity: "Connectivity"
     case .mcp: "MCP"
     case .sandbox: "Sandbox"
+    case .hostShell: "Host Shell"
     }
   }
 }
@@ -104,7 +106,7 @@ public struct DoctorReport: Sendable {
   }
 
   /// One group on its own, every row included. The whole-report summary prints only failures under
-  /// each heading, which is right when eleven groups compete for one message; a reply asking about a
+  /// each heading, which is right when a dozen groups compete for one message; a reply asking about a
   /// single subsystem is asking to read its rows.
   public func renderTelegramGroup(_ group: DoctorGroup) -> String {
     let rows = checks.filter { $0.group == group }

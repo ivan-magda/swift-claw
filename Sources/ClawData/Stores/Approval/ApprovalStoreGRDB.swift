@@ -31,6 +31,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
   public func approve(
     id: Int64,
     currentPolicyVersion: String,
+    openTurnWindow: Bool,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome {
     try database.writeMapping { db in
@@ -77,6 +78,10 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         decision: nil,
         now: now
       )
+
+      if openTurnWindow {
+        try RunStoreGRDB.openAutoApproveWindow(db, runId: approval.runId, now: now)
+      }
 
       guard let approved = try Self.fetchApproval(db, id: id) else {
         return .notPending

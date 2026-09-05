@@ -160,6 +160,7 @@ public struct TurnRunner: TurnDispatching {
       buildResult: inputs.buildResult,
       sessionTainted: inputs.snapshot.isTainted,
       sessionHasPrivateData: inputs.snapshot.hasPrivateData,
+      autoApproveWindowOpen: autoApproveWindowOpen(runId: runId),
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
       origin: origin,
@@ -226,6 +227,7 @@ public struct TurnRunner: TurnDispatching {
         buildResult: inputs.buildResult,
         sessionTainted: inputs.snapshot.isTainted,
         sessionHasPrivateData: inputs.snapshot.hasPrivateData,
+        autoApproveWindowOpen: autoApproveWindowOpen(runId: runId),
         todayTokens: inputs.todayTokens,
         todayUSD: inputs.todayUSD,
         origin: origin,
@@ -255,11 +257,12 @@ public struct TurnRunner: TurnDispatching {
   }
 }
 
-// MARK: - Context Assembly
+// MARK: - Per-Run Turn Inputs
 
 private extension TurnRunner {
-  /// The resumed run's origin, or nil when it cannot be read — a resume runs inside the waiter's
-  /// `park`, so both "no such run" and a failed read resolve in-band by abandoning the resume.
+  /// The run's origin, read without a re-pick-up. The prompt wording, the budget pool, and the
+  /// gate's owner-present check all key on it, so a missing or unreadable origin ends the resume
+  /// rather than guessing — a resume runs inside the waiter's `park`, so both resolve in-band.
   func resumeOrigin(runId: Int64) -> RunOrigin? {
     do {
       guard let origin = try runs.runOrigin(runId: runId) else {
@@ -273,6 +276,22 @@ private extension TurnRunner {
     }
   }
 
+  /// Reads the run's turn-scoped window for the gate. Both entry points ask, so the widening is a
+  /// property of the run rather than of how the turn started; a read that fails reports closed,
+  /// which costs the owner one more prompt and never one fewer.
+  func autoApproveWindowOpen(runId: Int64) -> Bool {
+    do {
+      return try runs.isAutoApproveWindowOpen(runId: runId)
+    } catch {
+      logger.error("auto-approve window read failed for run \(runId): \(error)")
+      return false
+    }
+  }
+}
+
+// MARK: - Context Assembly
+
+private extension TurnRunner {
   /// Loads the bounded snapshot, today's budget totals, and the assembled context in one place —
   /// `run` and `resume` share it; only the bounding message id and the clock differ.
   func loadTurnInputs(

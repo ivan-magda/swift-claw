@@ -44,7 +44,7 @@ func suspendFileWrite() async throws -> (SC3Harness, ApprovalRowSnapshot) {
 
 /// The owner-side Approve callback payload for a parked approval's nonce.
 func approveData(_ nonce: String) -> String {
-  ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.approveVerdict)
+  ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.Verdict.approve)
 }
 
 /// One pool per database path: these helpers run inside 10 ms poll loops, and a fresh

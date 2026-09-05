@@ -248,6 +248,16 @@ public protocol RunStore: Sendable {
   func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage
   /// The run's origin, read WITHOUT a re-pick-up (the resume path never re-flips PENDING).
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin?
+  /// Opens the run's auto-approve window: the owner sanctioned a dangerous tool for the rest of
+  /// this turn, so its later calls execute without a second prompt. Idempotent. A run that already
+  /// reached a terminal state refuses and returns false.
+  /// - Returns: whether the window is open on this run after the call.
+  @discardableResult
+  func openAutoApproveWindow(runId: Int64, now: Date) throws(StoreError) -> Bool
+  /// Whether the run still carries an open auto-approve window. A terminal run always reads
+  /// closed, which is what bounds the window to one turn: `/stop` and `/new` drive the run
+  /// terminal, so neither can leave a window standing for the next turn to inherit.
+  func isAutoApproveWindowOpen(runId: Int64) throws(StoreError) -> Bool
   /// Stale-policy crash-window belt: fail the run (AWAITING_APPROVAL → FAILED), resolve the
   /// placeholder observation with `observationContent` (left dangling it would assert a pending
   /// approval to every later assembly and false-trigger the boot claimed-window settlement), and

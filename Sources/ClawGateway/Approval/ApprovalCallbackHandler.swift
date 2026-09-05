@@ -125,7 +125,7 @@ private extension ApprovalCallbackHandler {
       return await denyAuth(callback, approval: approval)
     }
 
-    return await commitResolution(callback, approval: approval, approve: parsed.approve)
+    return await commitResolution(callback, approval: approval, verdict: parsed.verdict)
   }
 }
 
@@ -135,15 +135,30 @@ private extension ApprovalCallbackHandler {
   func commitResolution(
     _ callback: RawCallback,
     approval: Approval,
-    approve: Bool
+    verdict: ApprovalKeyboard.Verdict
   ) async -> HandleOutcome {
-    if approve {
-      return await commitApprove(callback, approval: approval)
+    switch verdict {
+    case .approve:
+      return await commitApprove(callback, approval: approval, openTurnWindow: false)
+    case .approveForTurn:
+      // The reason is what the prompt drew its buttons from, so an approval that never offered
+      // the widening resolves as the plain approval it did offer — no window opens off a verdict
+      // the owner had no button for.
+      return await commitApprove(
+        callback,
+        approval: approval,
+        openTurnWindow: approval.reason.offersTurnScopedWindow
+      )
+    case .deny:
+      return await commitDeny(callback, approval: approval)
     }
-    return await commitDeny(callback, approval: approval)
   }
 
-  func commitApprove(_ callback: RawCallback, approval: Approval) async -> HandleOutcome {
+  func commitApprove(
+    _ callback: RawCallback,
+    approval: Approval,
+    openTurnWindow: Bool
+  ) async -> HandleOutcome {
     let policyVersion: String
     do {
       policyVersion = try currentPolicyVersion()
@@ -156,6 +171,7 @@ private extension ApprovalCallbackHandler {
       outcome = try approvals.approve(
         id: approval.id,
         currentPolicyVersion: policyVersion,
+        openTurnWindow: openTurnWindow,
         now: now()
       )
     } catch {
@@ -165,7 +181,10 @@ private extension ApprovalCallbackHandler {
     switch outcome {
     case .approved:
       await coordinator.signal(approvalId: approval.id, .approved)
-      return await finish(callback, toast: Self.approvedToast)
+      return await finish(
+        callback,
+        toast: openTurnWindow ? Self.approvedForTurnToast : Self.approvedToast
+      )
     case .stalePolicy:
       await coordinator.signal(approvalId: approval.id, .denied(.stalePolicy))
       return await finish(callback, toast: Self.stalePolicyToast)
@@ -265,6 +284,7 @@ private extension ApprovalCallbackHandler {
   static let neutralToast = "This action is no longer available."
   static let retryToast = "Something went wrong — please try again."
   static let approvedToast = "Approved."
+  static let approvedForTurnToast = "Approved for this turn."
   static let deniedToast = "Denied."
   static let alreadyHandledToast = "Already handled."
   static let stalePolicyToast = "This approval is no longer valid."

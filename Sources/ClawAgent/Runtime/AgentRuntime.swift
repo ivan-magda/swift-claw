@@ -220,6 +220,9 @@ public struct AgentRuntime: Sendable {
     buildResult: BuildResult,
     sessionTainted: Bool,
     sessionHasPrivateData: Bool,
+    // Defaults CLOSED: a caller that carries no window state must let the gate park its approval,
+    // never widen one it cannot vouch for.
+    autoApproveWindowOpen: Bool = false,
     todayTokens: Int,
     todayUSD: Double,
     origin: RunOrigin = .interactive,
@@ -469,6 +472,10 @@ public struct AgentRuntime: Sendable {
       await typingIndicator.sendTyping(chatId: chatId, messageThreadId: threadId)
       var observations: [ToolObservation] = []
       for call in response.toolCalls {
+        guard Task.isCancelled == false else {
+          return outcome(.degraded(.providerUnavailable, usage: nil))
+        }
+
         proposedToolCalls += 1
         guard proposedToolCalls <= budget.maxToolCalls else {
           return outcome(.budgetStopped(cap: "per-run tool-call"))
@@ -479,12 +486,16 @@ public struct AgentRuntime: Sendable {
         }
 
         let context = ToolDispatchContext(
+          runId: runId,
+          chatId: chatId,
           sessionTainted: sessionTainted,
           runIngestedUntrusted: ingestedUntrusted,
           assemblyPrivateData: buildResult.hasPrivateDataAccess,
           runPrivateData: runPrivateData,
           sessionHasPrivateData: sessionHasPrivateData,
           approvalAlreadyPending: pendingSuspension != nil,
+          runOrigin: origin,
+          autoApproveWindowOpen: autoApproveWindowOpen,
           mode: mode
         )
 

@@ -49,6 +49,66 @@ import Testing
     #expect(text.contains("code_exec:python:0123456789abcdef"))
   }
 
+  @Test func hostShellReasonGetsItsOwnOwnerCopy() {
+    // given
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "bash",
+        target: "/bin/zsh · /workspace",
+        reason: .hostShell,
+        blastRadius: "run on the host · cwd /workspace · 30s"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let text = ToolApprovalPrompt.text(for: input)
+
+    // then — host execution must never read as the sandbox's copy
+    #expect(text.contains("on your machine"))
+    #expect(text.contains("disposable sandbox") == false)
+    #expect(text.contains("Approve for this turn"))
+  }
+
+  @Test func onlyAHostShellPromptOffersTheTurnScopedButton() {
+    // given — the same prompt shape under each reason
+    let offering = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "bash",
+        target: "/bin/zsh · /workspace",
+        reason: .hostShell,
+        blastRadius: "run on the host"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+    let others: [ApprovalReason] = [.askTier, .exfilTrifecta, .codeExec]
+
+    // when
+    let offeringChunks = ToolApprovalPrompt.chunks(for: offering, chatId: 7, nonce: "n-1")
+
+    // then — the third button rides the bash keyboard only
+    #expect(offeringChunks.last?.replyMarkup?.contains("apr:n-1:t") == true)
+    for reason in others {
+      let input = ToolApprovalPrompt.Input(
+        recorded: recorded(
+          tool: "file_write",
+          target: "/workspace/notes.md",
+          reason: reason,
+          blastRadius: "create, 1.2 KB"
+        ),
+        taintBanner: false,
+        privilegedFileBanner: false
+      )
+      let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "n-1")
+      #expect(chunks.last?.replyMarkup?.contains("apr:n-1:t") == false)
+      #expect(chunks.last?.replyMarkup?.contains("apr:n-1:y") == true)
+      #expect(chunks.last?.replyMarkup?.contains("apr:n-1:n") == true)
+      #expect(ToolApprovalPrompt.text(for: input).contains("Approve for this turn") == false)
+    }
+  }
+
   @Test func richPromptCarriesToolFullTargetAndBlastRadius() {
     // given
     let input = ToolApprovalPrompt.Input(
@@ -274,13 +334,70 @@ import Testing
 
     // then
     #expect(chunks.count > 1)
-    #expect(chunks.map(\.payload).joined() == ToolApprovalPrompt.text(for: input))
-    #expect(chunks.map(\.payload).joined().contains(code))
+    #expect(chunks.allSatisfy { $0.payload.count <= ReplySplitter.limit })
+    #expect(
+      chunks.allSatisfy { chunk in
+        chunk.payload.hasPrefix("```\n")
+          && chunk.payload.hasSuffix("\n```")
+          && chunk.payload.components(separatedBy: "```").count == 3
+      }
+    )
+    let deliveredText = chunks.map { chunk in
+      String(chunk.payload.dropFirst("```\n".count).dropLast("\n```".count))
+    }.joined()
+    #expect(
+      deliveredText
+        == OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(
+          in: ToolApprovalPrompt.text(for: input)
+        )
+    )
+    #expect(deliveredText.contains(code))
     #expect(
       chunks.dropLast().allSatisfy { chunk in
         chunk.replyMarkup == nil
       }
     )
+    #expect(chunks.last?.replyMarkup != nil)
+  }
+
+  @Test func everyChunkOfAnOverlongFencedPreviewKeepsItsContentInsideAFence() {
+    // given
+    let command = String(repeating: "printf safe-output\n", count: 2_000)
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: "bash",
+        target: "/bin/zsh · /workspace",
+        reason: .hostShell,
+        blastRadius: "run on the host",
+        preview: "```bash\n\(command)```"
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false
+    )
+
+    // when
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "nonce")
+
+    // then
+    #expect(chunks.count > 1)
+    #expect(chunks.allSatisfy { $0.payload.count <= ReplySplitter.limit })
+    #expect(
+      chunks.allSatisfy { chunk in
+        chunk.payload.hasPrefix("```\n")
+          && chunk.payload.hasSuffix("\n```")
+          && chunk.payload.components(separatedBy: "```").count == 3
+      }
+    )
+    let deliveredText = chunks.map { chunk in
+      String(chunk.payload.dropFirst("```\n".count).dropLast("\n```".count))
+    }.joined()
+    #expect(
+      deliveredText
+        == OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(
+          in: ToolApprovalPrompt.text(for: input)
+        )
+    )
+    #expect(deliveredText.contains(command))
     #expect(chunks.last?.replyMarkup != nil)
   }
 

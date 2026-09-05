@@ -263,6 +263,11 @@ public enum ClawDatabase {
         table.add(column: "reply_to_message_id", .integer)
       }
     }
+    migrator.registerMigration("v11") { db in
+      try db.alter(table: "runs") { table in
+        table.add(column: "auto_approve_window", .boolean).notNull().defaults(to: false)
+      }
+    }
     return migrator
   }
 

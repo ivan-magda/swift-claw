@@ -1,8 +1,22 @@
 import ClawCore
+import ClawProcess
 import Foundation
 
 public actor ContainerBackend {
-  public static let maxRawStreamBytes = 1024 * 1024
+  /// Absolute path of the Apple `container` CLI this backend drives.
+  public static let cliPath = "/usr/local/bin/container"
+
+  /// Ambient host values the container CLI must never receive: a forwarded agent socket, and
+  /// two knobs that would rewrite how the sandbox itself launches.
+  static let commandEnvironment = LocalCommandEnvironment.inherit(
+    removingKeys: [
+      "SSH_AUTH_SOCK",
+      "CONTAINER_DEBUG",
+      "CONTAINER_DEFAULT_PLATFORM",
+    ]
+  )
+
+  public static let maxRawStreamBytes = LocalCommandLimits.maxRawStreamBytes
   public static let maxControlStreamBytes = 1024 * 1024
 
   public static let teardownAllowance: Duration = .seconds(20)
@@ -10,14 +24,14 @@ public actor ContainerBackend {
   public static let ordinaryCommandTimeout: Duration = .seconds(15)
   public static let pullTimeout: Duration = .seconds(120)
   public static let prepareTimeout: Duration = .seconds(300)
-  static let commandTeardownGrace: Duration = .seconds(2)
+  static let commandTeardownGrace = LocalCommandLimits.teardownGracePeriod
   // Head start the host watchdog grants the runner's own timeout + teardown, so in the
   // cooperative case the runner always reports its typed outcome before the watchdog fires.
   static let hostWatchdogSlack: Duration = .seconds(2)
 
   let settings: ExecSandboxSettings
   let stateRoot: URL
-  let commands: any ContainerCommandRunning
+  let commands: any LocalCommandRunning
 
   let sanitizeReason: @Sendable (String) -> String
   let now: @Sendable () -> ContinuousClock.Instant
@@ -38,7 +52,7 @@ public actor ContainerBackend {
   public init(
     settings: ExecSandboxSettings,
     stateRoot: URL,
-    commands: any ContainerCommandRunning,
+    commands: any LocalCommandRunning,
     sanitizeReason: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
   ) {
@@ -56,7 +70,7 @@ public actor ContainerBackend {
   init(
     settings: ExecSandboxSettings,
     stateRoot: URL,
-    commands: any ContainerCommandRunning,
+    commands: any LocalCommandRunning,
     sanitizeReason: @escaping @Sendable (String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant,
     supportedHost: @escaping @Sendable () -> Bool,
@@ -79,7 +93,7 @@ public actor ContainerBackend {
       stateRoot.path,
       stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,
       FileManager.default.homeDirectoryForCurrentUser.path,
-      "/usr/local/bin/container",
+      Self.cliPath,
     ]
     .filter { !$0.isEmpty }
     .sorted { $0.count > $1.count }

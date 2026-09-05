@@ -58,6 +58,11 @@ public struct AppConfig: Sendable, Equatable {
     static let execTimeout = "CLAW_EXEC_TIMEOUT"
     static let execAllowEgress = "CLAW_EXEC_ALLOW_EGRESS"
 
+    static let bashEnabled = "CLAW_BASH_ENABLED"
+    static let bashShell = "CLAW_BASH_SHELL"
+    static let bashTimeoutDefault = "CLAW_BASH_TIMEOUT_DEFAULT"
+    static let bashTimeoutMax = "CLAW_BASH_TIMEOUT_MAX"
+
     static let mcpConfigPath = "CLAW_MCP_CONFIG"
   }
 
@@ -88,6 +93,10 @@ public struct AppConfig: Sendable, Equatable {
     static let execMemoryMiB = 1024
     static let execCPUs = 4
     static let execTimeoutSeconds = 30
+
+    static let bashShell = "/bin/zsh"
+    static let bashTimeoutDefaultSeconds = 30
+    static let bashTimeoutMaxSeconds = 300
   }
 
   public let allowlist: Set<Int64>
@@ -121,6 +130,7 @@ public struct AppConfig: Sendable, Equatable {
   public let approvalExpirySeconds: Int
   public let webFetchExemptCIDRs: [CIDR]
   public let exec: ExecConfig
+  public let bash: BashConfig
   public let voice: VoiceConfig
   public let image: ImageConfig
   public let mcpConfigSource: MCPConfigSource
@@ -143,6 +153,7 @@ public struct AppConfig: Sendable, Equatable {
     approvalExpirySeconds: Int,
     webFetchExemptCIDRs: [CIDR],
     exec: ExecConfig,
+    bash: BashConfig,
     voice: VoiceConfig,
     image: ImageConfig,
     mcpConfigSource: MCPConfigSource
@@ -168,6 +179,7 @@ public struct AppConfig: Sendable, Equatable {
     self.approvalExpirySeconds = approvalExpirySeconds
     self.webFetchExemptCIDRs = webFetchExemptCIDRs
     self.exec = exec
+    self.bash = bash
     self.voice = voice
     self.image = image
     self.mcpConfigSource = mcpConfigSource
@@ -213,6 +225,7 @@ public struct AppConfig: Sendable, Equatable {
     let approvalExpirySeconds = try parseApprovalExpiry(env[EnvKey.approvalExpiry])
     let webFetchExemptCIDRs = try parseWebFetchExemptCIDRs(from: env[EnvKey.webFetchExemptCIDRs])
     let exec = try parseExecConfig(from: env)
+    let bash = try parseBashConfig(from: env)
     let voice = try parseVoiceConfig(from: env)
     let image = try parseImageConfig(from: env)
     let mcpConfigSource = Self.mcpConfigSource(from: env, stateRoot: stateRoot)
@@ -235,6 +248,7 @@ public struct AppConfig: Sendable, Equatable {
       approvalExpirySeconds: approvalExpirySeconds,
       webFetchExemptCIDRs: webFetchExemptCIDRs,
       exec: exec,
+      bash: bash,
       voice: voice,
       image: image,
       mcpConfigSource: mcpConfigSource

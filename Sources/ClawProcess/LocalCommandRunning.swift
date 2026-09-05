@@ -1,0 +1,448 @@
+import ClawCore
+import Foundation
+import Subprocess
+import Synchronization
+
+#if canImport(Glibc)
+  import Glibc
+#elseif canImport(Darwin)
+  import Darwin
+#endif
+
+#if canImport(System)
+  import System
+#else
+  import SystemPackage
+#endif
+
+/// What the child process inherits from this process: everything, minus the named keys and
+/// minus every key carrying one of the named prefixes.
+public struct LocalCommandEnvironment: Sendable, Equatable {
+  public let removedKeys: Set<String>
+  public let removedPrefixes: Set<String>
+
+  public static func inherit(
+    removingKeys removedKeys: Set<String> = [],
+    removingPrefixes removedPrefixes: Set<String> = []
+  ) -> LocalCommandEnvironment {
+    LocalCommandEnvironment(removedKeys: removedKeys, removedPrefixes: removedPrefixes)
+  }
+
+  private init(removedKeys: Set<String>, removedPrefixes: Set<String>) {
+    self.removedKeys = removedKeys
+    self.removedPrefixes = removedPrefixes
+  }
+
+  /// Whether this policy drops `key` from the child's environment.
+  public func removes(_ key: String) -> Bool {
+    removedKeys.contains(key) || removedPrefixes.contains { key.hasPrefix($0) }
+  }
+}
+
+/// Launcher-side bounds every caller shares, so a capture limit or a teardown grace cannot drift
+/// between the sandbox and a host tool.
+public enum LocalCommandLimits {
+  /// Bytes kept per stream before the launcher stops appending; the counter keeps running so the
+  /// caller can still tell the output was cut.
+  public static let maxRawStreamBytes = 1024 * 1024
+  public static let maxRawStreamMiB = maxRawStreamBytes / (1024 * 1024)
+  /// How long a terminating process group has to leave on its own before the launcher stops waiting.
+  public static let teardownGracePeriod: Duration = .seconds(2)
+}
+
+public struct LocalCommand: Sendable, Equatable {
+  public let arguments: [String]
+  public let timeout: Duration
+  public let captureLimit: Int
+  public let teardownGracePeriod: Duration
+  /// Absolute path the child starts in; `nil` keeps this process's own working directory.
+  public let workingDirectory: String?
+  public let environment: LocalCommandEnvironment
+
+  public init(
+    arguments: [String],
+    timeout: Duration,
+    captureLimit: Int,
+    teardownGracePeriod: Duration,
+    workingDirectory: String? = nil,
+    environment: LocalCommandEnvironment
+  ) {
+    precondition(captureLimit >= 0)
+    self.arguments = arguments
+    self.timeout = timeout
+    self.captureLimit = captureLimit
+    self.teardownGracePeriod = teardownGracePeriod
+    self.workingDirectory = workingDirectory
+    self.environment = environment
+  }
+}
+
+public enum LocalCommandTermination: Sendable, Equatable {
+  case exited(Int32)
+  case signaled(Int32)
+  case timedOut
+  case cancelled
+  case startFailed(String)
+}
+
+public struct CapturedCommandStream: Sendable, Equatable {
+  public let bytes: Data
+  public let totalBytes: Int
+  public let truncated: Bool
+
+  public init(bytes: Data, totalBytes: Int, truncated: Bool) {
+    precondition(totalBytes >= bytes.count)
+    self.bytes = bytes
+    self.totalBytes = totalBytes
+    self.truncated = truncated
+  }
+}
+
+public struct LocalCommandResult: Sendable, Equatable {
+  public let termination: LocalCommandTermination
+
+  public let stdout: CapturedCommandStream
+  public let stderr: CapturedCommandStream
+
+  public let processIdentifier: Int32?
+
+  public init(
+    termination: LocalCommandTermination,
+    stdout: CapturedCommandStream,
+    stderr: CapturedCommandStream,
+    processIdentifier: Int32?
+  ) {
+    self.termination = termination
+
+    self.stdout = stdout
+    self.stderr = stderr
+
+    self.processIdentifier = processIdentifier
+  }
+}
+
+public protocol LocalCommandRunning: Sendable {
+  func run(_ command: LocalCommand) async -> LocalCommandResult
+}
+
+public struct SwiftSubprocessLocalCommandRunner: LocalCommandRunning {
+  private let executablePath: String
+  private let environmentForTesting: [String: String]
+  private let onSpawnForTesting: @Sendable (Int32) -> Void
+
+  public init(executablePath: String) {
+    self.executablePath = executablePath
+    self.environmentForTesting = [:]
+    self.onSpawnForTesting = { _ in }
+  }
+
+  init(
+    executablePath: String,
+    environmentForTesting: [String: String] = [:],
+    onSpawnForTesting: @escaping @Sendable (Int32) -> Void = { _ in }
+  ) {
+    self.executablePath = executablePath
+    self.environmentForTesting = environmentForTesting
+    self.onSpawnForTesting = onSpawnForTesting
+  }
+
+  public func run(_ command: LocalCommand) async -> LocalCommandResult {
+    let clock = ContinuousClock()
+    let spawnedProcessIdentifier = SpawnedProcessIdentifierBox()
+    let stdoutCapture = CommandStreamCapture(limit: command.captureLimit)
+    let stderrCapture = CommandStreamCapture(limit: command.captureLimit)
+    guard Task.isCancelled == false else {
+      return Self.cancelledResult(
+        spawnedProcessIdentifier: spawnedProcessIdentifier,
+        stdoutCapture: stdoutCapture,
+        stderrCapture: stderrCapture
+      )
+    }
+    let executionTask = Task {
+      guard Task.isCancelled == false else {
+        return Self.cancelledResult(
+          spawnedProcessIdentifier: spawnedProcessIdentifier,
+          stdoutCapture: stdoutCapture,
+          stderrCapture: stderrCapture
+        )
+      }
+      return await self.spawnAndCapture(
+        command,
+        spawnedProcessIdentifier: spawnedProcessIdentifier,
+        stdoutCapture: stdoutCapture,
+        stderrCapture: stderrCapture
+      )
+    }
+
+    let outcome = await DeadlineRace.race(
+      allowance: command.timeout,
+      sleep: { try await clock.sleep(for: $0) },
+      operation: {
+        await executionTask.value
+      }
+    )
+
+    let termination: LocalCommandTermination
+    switch outcome {
+    case .operationReturned(let result):
+      termination = result.termination
+    case .deadlineExpired:
+      executionTask.cancel()
+      _ = await executionTask.value
+      termination = .timedOut
+    case .callerCancelled:
+      executionTask.cancel()
+      _ = await executionTask.value
+      termination = .cancelled
+    }
+
+    // Reaping runs on EVERY path and outside the race above. The library's own teardown gives up
+    // as soon as the direct child is gone, so a descendant that outlived it is only ever this
+    // launcher's to collect — and the timeout paths are exactly where one is most likely to
+    // remain. Keeping it out of the race also means slow housekeeping can never be reported back
+    // as the command itself timing out.
+    await Self.terminateRemainingProcessGroup(
+      spawnedProcessIdentifier.value,
+      gracePeriod: command.teardownGracePeriod
+    )
+
+    return LocalCommandResult(
+      termination: termination,
+      stdout: stdoutCapture.snapshot(),
+      stderr: stderrCapture.snapshot(),
+      processIdentifier: spawnedProcessIdentifier.value
+    )
+  }
+
+  private func spawnAndCapture(
+    _ command: LocalCommand,
+    spawnedProcessIdentifier: SpawnedProcessIdentifierBox,
+    stdoutCapture: CommandStreamCapture,
+    stderrCapture: CommandStreamCapture
+  ) async -> LocalCommandResult {
+    let teardownSequence = Self.teardownSequence(gracePeriod: command.teardownGracePeriod)
+
+    do {
+      let result = try await Subprocess.run(
+        .path(FilePath(executablePath)),
+        arguments: Arguments(command.arguments),
+        environment: environment(for: command),
+        workingDirectory: command.workingDirectory.map { FilePath($0) },
+        platformOptions: Self.platformOptions(teardownSequence: teardownSequence),
+        input: .none,
+        output: .sequence,
+        error: .sequence
+      ) { execution in
+        let processIdentifier = Int32(execution.processIdentifier.value)
+        spawnedProcessIdentifier.value = processIdentifier
+        onSpawnForTesting(processIdentifier)
+
+        async let stdout = Self.capture(execution.standardOutput, into: stdoutCapture)
+        async let stderr = Self.capture(execution.standardError, into: stderrCapture)
+        let streams = try await (stdout, stderr)
+
+        return CommandClosureResult(stdout: streams.0, stderr: streams.1)
+      }
+
+      let processIdentifier = Int32(result.processIdentifier.value)
+      return LocalCommandResult(
+        termination: Self.classifyTermination(status: result.terminationStatus),
+        stdout: result.closureResult.stdout,
+        stderr: result.closureResult.stderr,
+        processIdentifier: processIdentifier
+      )
+    } catch {
+      let termination: LocalCommandTermination =
+        Task.isCancelled || error is CancellationError
+        ? .cancelled
+        : .startFailed(String(describing: error))
+
+      return LocalCommandResult(
+        termination: termination,
+        stdout: stdoutCapture.snapshot(),
+        stderr: stderrCapture.snapshot(),
+        processIdentifier: spawnedProcessIdentifier.value
+      )
+    }
+  }
+}
+
+// MARK: - Launch & Termination
+
+private extension SwiftSubprocessLocalCommandRunner {
+  static func cancelledResult(
+    spawnedProcessIdentifier: SpawnedProcessIdentifierBox,
+    stdoutCapture: CommandStreamCapture,
+    stderrCapture: CommandStreamCapture
+  ) -> LocalCommandResult {
+    LocalCommandResult(
+      termination: .cancelled,
+      stdout: stdoutCapture.snapshot(),
+      stderr: stderrCapture.snapshot(),
+      processIdentifier: spawnedProcessIdentifier.value
+    )
+  }
+
+  static func teardownSequence(gracePeriod: Duration) -> [TeardownStep] {
+    [.gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: gracePeriod)]
+  }
+
+  static func platformOptions(teardownSequence: [TeardownStep]) -> PlatformOptions {
+    var options = PlatformOptions()
+    options.createSession = true
+    options.teardownSequence = teardownSequence
+    return options
+  }
+
+  static func classifyTermination(
+    status: TerminationStatus
+  ) -> LocalCommandTermination {
+    if Task.isCancelled {
+      return .cancelled
+    }
+
+    switch status {
+    case .exited(let code):
+      return .exited(Int32(code))
+    case .signaled(let signal):
+      return .signaled(Int32(signal))
+    }
+  }
+
+  /// The direct child has already been reaped when this runs, so its session identifier names a
+  /// live process group only when descendants remain. Terminate that group before returning to the
+  /// caller; a background job must never outlive the command that created it.
+  ///
+  /// Liveness is `ProcessLiveness`, not a bare `kill(-pgid, 0)`: a descendant this method just
+  /// terminated stays visible to the signal probe until something reaps it, and an orphan's
+  /// adoptive init may never do that, which would make the wait below run its full budget every
+  /// time rather than only when a descendant is genuinely still running.
+  static func terminateRemainingProcessGroup(
+    _ processIdentifier: Int32?,
+    gracePeriod: Duration
+  ) async {
+    guard let processIdentifier, processIdentifier > 0, kill(-processIdentifier, SIGTERM) == 0
+    else {
+      return
+    }
+
+    let clock = ContinuousClock()
+    let gracefulDeadline = clock.now.advanced(by: gracePeriod)
+    while clock.now < gracefulDeadline, ProcessLiveness.groupIsRunning(processIdentifier) {
+      // Sleeping stops suspending once this task is cancelled, so a cancelled caller would spin
+      // here at full tilt. Escalate straight to the kill instead.
+      guard (try? await Task.sleep(for: .milliseconds(10))) != nil else {
+        break
+      }
+    }
+
+    guard ProcessLiveness.groupIsRunning(processIdentifier) else {
+      return
+    }
+    // SIGKILL cannot be caught or ignored, so nothing in the group can run once it lands. There is
+    // no second state worth waiting for, and waiting for the pids to vanish would again depend on
+    // an init that reaps.
+    _ = kill(-processIdentifier, SIGKILL)
+  }
+}
+
+// MARK: - Environment
+
+private extension SwiftSubprocessLocalCommandRunner {
+  func environment(for command: LocalCommand) -> Environment {
+    var updates: [Environment.Key: String?] = [:]
+
+    for (key, value) in environmentForTesting {
+      updates[Environment.Key(stringLiteral: key)] = value
+    }
+
+    // A prefix names no key on its own, so the deletions have to be resolved against the set of
+    // keys the child would otherwise inherit.
+    let inheritedKeys = Set(ProcessInfo.processInfo.environment.keys)
+      .union(environmentForTesting.keys)
+      .union(command.environment.removedKeys)
+
+    for key in inheritedKeys where command.environment.removes(key) {
+      updates[Environment.Key(stringLiteral: key)] = String?.none
+    }
+
+    return .inherit.updating(updates)
+  }
+}
+
+// MARK: - Raw Capture
+
+private extension SwiftSubprocessLocalCommandRunner {
+  static func capture(
+    _ sequence: SubprocessOutputSequence,
+    into capture: CommandStreamCapture
+  ) async throws -> CapturedCommandStream {
+    for try await buffer in sequence {
+      capture.append(Data(buffer: buffer))
+    }
+    return capture.snapshot()
+  }
+}
+
+private struct CommandClosureResult: Sendable {
+  let stdout: CapturedCommandStream
+  let stderr: CapturedCommandStream
+}
+
+private final class SpawnedProcessIdentifierBox: Sendable {
+  private let storage = Mutex<Int32?>(nil)
+
+  var value: Int32? {
+    get {
+      storage.withLock { $0 }
+    }
+    set {
+      storage.withLock {
+        $0 = newValue
+      }
+    }
+  }
+}
+
+private final class CommandStreamCapture: Sendable {
+  private struct State {
+    var prefix: Data
+    var totalBytes = 0
+    var overflowedCounter = false
+  }
+
+  private let limit: Int
+  private let storage: Mutex<State>
+
+  init(limit: Int) {
+    self.limit = limit
+    var prefix = Data()
+    prefix.reserveCapacity(min(limit, 64 * 1024))
+    storage = Mutex(State(prefix: prefix))
+  }
+
+  func append<Bytes: Sequence>(_ buffer: Bytes) where Bytes.Element == UInt8 {
+    let bytes = Data(buffer)
+    storage.withLock { state in
+      let addition = state.totalBytes.addingReportingOverflow(bytes.count)
+      state.totalBytes = addition.overflow ? Int.max : addition.partialValue
+      state.overflowedCounter = state.overflowedCounter || addition.overflow
+
+      let remaining = max(0, limit - state.prefix.count)
+      guard remaining > 0 else {
+        return
+      }
+      state.prefix.append(contentsOf: bytes.prefix(remaining))
+    }
+  }
+
+  func snapshot() -> CapturedCommandStream {
+    storage.withLock { state in
+      CapturedCommandStream(
+        bytes: state.prefix,
+        totalBytes: state.totalBytes,
+        truncated: state.overflowedCounter || state.totalBytes > state.prefix.count
+      )
+    }
+  }
+}

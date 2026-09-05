@@ -1,4 +1,6 @@
 import ClawCore
+import ClawProcess
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -76,6 +78,42 @@ import Testing
     // then
     #expect(result.terminationReason == .unavailable(reason: "sandbox is not prepared"))
     #expect(await runner.recorded().isEmpty)
+  }
+
+  @Test func everyContainerCommandKeepsTheAmbientEnvironmentDeletions() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, _ in
+      switch command.arguments.first {
+      case "run":
+        writeCidfile(from: command.arguments)
+        return commandResult(.exited(0))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
+      }
+    }
+    let backend = fixture.backend(commands: runner)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    _ = await backend.run(executionRequest())
+
+    // then
+    let commands = await runner.recorded()
+    #expect(!commands.isEmpty)
+    #expect(
+      commands.allSatisfy {
+        $0.environment
+          == .inherit(
+            removingKeys: ["SSH_AUTH_SOCK", "CONTAINER_DEBUG", "CONTAINER_DEFAULT_PLATFORM"]
+          )
+      }
+    )
   }
 
   @Test func cidBackedNonzeroExitIsGuestResultWithLossyBoundedStreams() async throws {

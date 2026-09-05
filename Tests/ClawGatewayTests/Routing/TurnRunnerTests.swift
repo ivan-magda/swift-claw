@@ -39,18 +39,22 @@ actor StubLLMProvider: LLMProvider {
   }
 }
 
-/// Delegates to the real run store but flips the active run to CANCELLED immediately before the
-/// assistant commit, modeling `/stop` winning after the provider returned usage.
-struct CancellingBeforeAssistantCommitRuns: RunStore {
+/// Delegates to the real run store while intercepting one seam selected by a test. Keeping the
+/// forwarding in one double avoids a second copy of the large `RunStore` protocol surface.
+struct InterceptingRuns: RunStore {
   let base: RunStoreGRDB
   let sessionId: Int64
+  var cancelBeforeAssistantCommit = false
+  var failAutoApproveWindowRead = false
 
   func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
     try base.pickUp(runId: runId, policyVersion: policyVersion, now: now)
   }
 
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult {
-    _ = try base.cancelActiveRun(sessionId: sessionId, reason: .cancelled, now: now)
+    if cancelBeforeAssistantCommit {
+      _ = try base.cancelActiveRun(sessionId: sessionId, reason: .cancelled, now: now)
+    }
     return try base.commitAssistantTurn(turn, now: now)
   }
 
@@ -169,6 +173,17 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
 
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     try base.runOrigin(runId: runId)
+  }
+
+  func openAutoApproveWindow(runId: Int64, now: Date) throws(StoreError) -> Bool {
+    try base.openAutoApproveWindow(runId: runId, now: now)
+  }
+
+  func isAutoApproveWindowOpen(runId: Int64) throws(StoreError) -> Bool {
+    if failAutoApproveWindowRead {
+      throw StoreError.diskFull
+    }
+    return try base.isAutoApproveWindowOpen(runId: runId)
   }
 
   func failRunStalePolicy(
@@ -336,6 +351,14 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.runOrigin(runId: runId)
   }
 
+  func openAutoApproveWindow(runId: Int64, now: Date) throws(StoreError) -> Bool {
+    try base.openAutoApproveWindow(runId: runId, now: now)
+  }
+
+  func isAutoApproveWindowOpen(runId: Int64) throws(StoreError) -> Bool {
+    try base.isAutoApproveWindowOpen(runId: runId)
+  }
+
   func failRunStalePolicy(
     runId: Int64,
     sessionId: Int64,
@@ -451,6 +474,12 @@ struct DiskFullRuns: RunStore {
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     throw StoreError.diskFull
   }
+  func openAutoApproveWindow(runId: Int64, now: Date) throws(StoreError) -> Bool {
+    throw StoreError.diskFull
+  }
+  func isAutoApproveWindowOpen(runId: Int64) throws(StoreError) -> Bool {
+    throw StoreError.diskFull
+  }
   func failRunStalePolicy(
     runId: Int64,
     sessionId: Int64,
@@ -530,6 +559,7 @@ private func makeContextBuilder(
 
 func makeEnv(
   agentOutcome: StubLLMProvider.Outcome,
+  toolDispatcher: (any ToolDispatching)? = nil,
   providerOverride: (any LLMProvider)? = nil,
   runs: (any RunStore)? = nil,
   runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil,
@@ -586,6 +616,7 @@ func makeEnv(
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
     ),
     budget: budget,
+    toolDispatcher: toolDispatcher,
     usageStore: usage,
     auditLog: audit,
     clock: ContinuousClock()
@@ -1007,9 +1038,10 @@ private func okResponse(content: String) -> ChatResponse {
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "must not send")),
       runsFactory: { queue, sessionId in
-        CancellingBeforeAssistantCommitRuns(
+        InterceptingRuns(
           base: RunStoreGRDB(writer: queue),
-          sessionId: sessionId
+          sessionId: sessionId,
+          cancelBeforeAssistantCommit: true
         )
       }
     )
@@ -1307,6 +1339,111 @@ private func okResponse(content: String) -> ChatResponse {
     let counts = try heartbeatAuditCounts(env.queue)
     #expect(counts.suppressed == 0)
     #expect(counts.fired == 0)
+  }
+
+  @Test func resumeCarriesTheRunsOpenAutoApproveWindowIntoDispatch() async throws {
+    // given — a run the owner approved with the turn-scoped window, resuming into a tool call
+    let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
+    let definition = ToolDefinition(
+      name: "bash",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .none,
+      riskLevel: .dangerous,
+      requiresInteractiveRun: true
+    )
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let env = try makeEnv(
+      agentOutcome: .respond(
+        toolCallResponse([ToolCall(id: "b1", name: "bash", argumentsJSON: "{}")])
+      ),
+      toolDispatcher: dispatcher,
+      now: { fixedNow }
+    )
+    let observationMessageId = try await suspendOnAGatedFetchThenApprove(env: env, now: fixedNow)
+    let runs = RunStoreGRDB(writer: env.queue)
+    #expect(try runs.openAutoApproveWindow(runId: env.runId, now: fixedNow))
+
+    // when
+    await env.runner.resume(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      contextBoundMessageId: observationMessageId
+    )
+
+    // then — the durable window reached the gate's inputs, so the turn's later host calls widen
+    #expect(await dispatcher.records.first?.context.autoApproveWindowOpen == true)
+  }
+
+  @Test func aFreshRunDispatchesWithTheWindowClosed() async throws {
+    // given — a pick-up carries no approval of its own, so nothing may ride a window
+    let definition = ToolDefinition(
+      name: "bash",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .none,
+      riskLevel: .dangerous,
+      requiresInteractiveRun: true
+    )
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let env = try makeEnv(
+      agentOutcome: .respond(
+        toolCallResponse([ToolCall(id: "b1", name: "bash", argumentsJSON: "{}")])
+      ),
+      toolDispatcher: dispatcher
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then
+    #expect(await dispatcher.records.first?.context.autoApproveWindowOpen == false)
+  }
+
+  @Test func anUnreadableAutoApproveWindowFailsClosedAtDispatch() async throws {
+    // given — every other run-store operation remains real; only the window read fails
+    let definition = ToolDefinition(
+      name: "bash",
+      description: "d",
+      parameters: .object(["type": .string("object")]),
+      metadataProvenance: .trusted,
+      egressClass: .none,
+      riskLevel: .dangerous,
+      requiresInteractiveRun: true
+    )
+    let dispatcher = ScriptedDispatcher(definitions: [definition], respond: okOutcome())
+    let env = try makeEnv(
+      agentOutcome: .respond(
+        toolCallResponse([ToolCall(id: "b1", name: "bash", argumentsJSON: "{}")])
+      ),
+      toolDispatcher: dispatcher,
+      runsFactory: { queue, sessionId in
+        InterceptingRuns(
+          base: RunStoreGRDB(writer: queue),
+          sessionId: sessionId,
+          failAutoApproveWindowRead: true
+        )
+      }
+    )
+
+    // when
+    try await env.runner.run(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: env.triggerMessageId
+    )
+
+    // then
+    #expect(await dispatcher.records.first?.context.autoApproveWindowOpen == false)
   }
 
   @Test func scheduledRunResumesUnderTheProactivePromptWithoutRecall() async throws {

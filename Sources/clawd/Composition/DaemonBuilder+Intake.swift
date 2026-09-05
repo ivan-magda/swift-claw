@@ -1,6 +1,7 @@
 import ClawAppleSpeech
 import ClawCore
 import ClawGateway
+import ClawProcess
 import ClawTelegram
 import ClawTools
 import ClawWorkspace
@@ -112,7 +113,8 @@ extension DaemonBuilder {
   func makeToolDispatcher(
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
-    mcpTools: [any Tool]
+    mcpTools: [any Tool],
+    echo: any ToolInvocationEchoing
   ) -> GatedToolDispatcher {
     let secretValues = redactionValues
     let redactor = SecretRedactor(secretValues: secretValues)
@@ -156,6 +158,10 @@ extension DaemonBuilder {
       )
     }
 
+    if let bash = makeBashTool(workspace: workspace, redactor: redactor) {
+      tools.append(bash)
+    }
+
     tools.append(contentsOf: mcpTools)
 
     let privateFileLoader: @Sendable () -> [String] = {
@@ -172,8 +178,9 @@ extension DaemonBuilder {
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: secretValues),
         privateFileLoader: privateFileLoader,
-        execEnabled: config.exec.enabled
-      )
+        enabledDangerousTools: enabledDangerousTools
+      ),
+      echo: echo
     )
   }
 
@@ -191,5 +198,51 @@ extension DaemonBuilder {
         exec: config.exec
       )
     )
+  }
+}
+
+// MARK: - Host Shell
+
+private extension DaemonBuilder {
+  /// Nil unless the owner turned host execution on AND the shell they named is one the daemon can
+  /// launch: a tool that would refuse every call is worse than an absent one, since the model would
+  /// keep proposing it and the owner would keep being asked to approve it.
+  func makeBashTool(workspace: FileSystemWorkspace, redactor: SecretRedactor) -> BashTool? {
+    guard config.bash.enabled else {
+      return nil
+    }
+    guard HostShellProbe.availability(shellPath: config.bash.shellPath).isAvailable else {
+      logger.warning(
+        """
+        host shell execution is enabled but \(config.bash.shellPath) cannot be launched; \
+        the bash tool is absent
+        """
+      )
+      return nil
+    }
+
+    return BashTool(
+      workspaceRoot: workspace.root,
+      config: config.bash,
+      runner: SwiftSubprocessLocalCommandRunner(executablePath: config.bash.shellPath),
+      redactor: redactor
+    )
+  }
+}
+
+// MARK: - Dangerous-tier Backstop
+
+private extension DaemonBuilder {
+  /// The sandbox and host execution are separate owner decisions, so each dangerous tool carries
+  /// its own switch — enabling one must never open the other.
+  var enabledDangerousTools: Set<String> {
+    var names: Set<String> = []
+    if config.exec.enabled {
+      names.insert(ExecuteCodeTool.toolName)
+    }
+    if config.bash.enabled {
+      names.insert(BashTool.toolName)
+    }
+    return names
   }
 }

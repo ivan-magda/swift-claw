@@ -209,7 +209,7 @@ func makeSC7Harness(
     gate: ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: secretValues),
       privateFileLoader: privateFileLoader,
-      execEnabled: false
+      enabledDangerousTools: []
     )
   )
 

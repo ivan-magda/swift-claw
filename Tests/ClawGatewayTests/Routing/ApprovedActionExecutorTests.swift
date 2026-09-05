@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
@@ -210,13 +211,15 @@ import Testing
     _ env: Fixture,
     tools: [any Tool],
     runs: (any RunStore)? = nil,
-    redactArguments: @escaping @Sendable (String) -> String = { $0 }
+    redactArguments: @escaping @Sendable (String) -> String = { $0 },
+    echo: (any ToolInvocationEchoing)? = nil
   ) -> ApprovedActionExecutor {
     ApprovedActionExecutor(
       tools: Dictionary(uniqueKeysWithValues: tools.map { ($0.definition.name, $0) }),
       runs: runs ?? env.runs,
       redactArguments: redactArguments,
       now: { Date() },
+      echo: echo,
       logger: Logger(label: "test")
     )
   }
@@ -265,6 +268,119 @@ import Testing
         )
       )
     }
+  }
+
+  /// A host-execution stand-in: it announces its recorded command, then reports how many
+  /// announcements had landed by the time it ran.
+  private struct AnnouncingHostTool: Tool {
+    let recorder: RecordingInvocationEcho
+    var probe: ExecutionProbe?
+
+    var definition: ToolDefinition {
+      ToolDefinition(
+        name: "bash",
+        description: "stub",
+        parameters: .object(["type": .string("object")]),
+        metadataProvenance: .trusted,
+        egressClass: .none,
+        riskLevel: .dangerous,
+        requiresInteractiveRun: true
+      )
+    }
+
+    var timeout: Duration { .seconds(1) }
+
+    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+
+    func invocationEcho(arguments: JSONValue) -> String? {
+      arguments.objectValue?["command"]?.stringValue
+    }
+
+    func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+      await probe?.mark()
+      return ToolPayload(
+        content: "echoes=\(await recorder.landed())",
+        status: .ok,
+        ingestedUntrusted: true
+      )
+    }
+  }
+
+  @Test func aButtonApprovedCommandIsAnnouncedBeforeItRuns() async throws {
+    // given — the path a single Approve tap takes, where the dispatcher never sees the call
+    let env = try makeSuspendedFixture()
+    let recorder = RecordingInvocationEcho()
+    let executor = makeExecutor(
+      env,
+      tools: [AnnouncingHostTool(recorder: recorder, probe: nil)],
+      echo: recorder
+    )
+
+    // when
+    let commit = await executor.executeApproved(
+      approval(
+        env,
+        tool: "bash",
+        argsJSON: #"{"command":"swift build","timeoutSeconds":30}"#,
+        target: "host_exec:/bin/zsh:/w"
+      )
+    )
+
+    // then — the same one line a window-widened call gets, already enqueued when the command ran
+    #expect(commit == .committed)
+    #expect(try messageContent(env) == "echoes=1")
+    let echoes = await recorder.echoes
+    #expect(echoes.count == 1)
+    #expect(echoes.first?.runId == env.runId)
+    #expect(echoes.first?.chatId == 7)
+    #expect(echoes.first?.tool == "bash")
+    #expect(echoes.first?.detail == "swift build")
+  }
+
+  @Test func aButtonApprovedCommandDoesNotRunWhenItsAnnouncementFails() async throws {
+    // given
+    let env = try makeSuspendedFixture()
+    let recorder = RecordingInvocationEcho(succeeds: false)
+    let probe = ExecutionProbe()
+    let executor = makeExecutor(
+      env,
+      tools: [AnnouncingHostTool(recorder: recorder, probe: probe)],
+      echo: recorder
+    )
+
+    // when
+    let commit = await executor.executeApproved(
+      approval(
+        env,
+        tool: "bash",
+        argsJSON: #"{"command":"swift build","timeoutSeconds":30}"#,
+        target: "host_exec:/bin/zsh:/w"
+      )
+    )
+
+    // then
+    #expect(commit == .committed)
+    #expect(await probe.executed == false)
+    #expect(try messageContent(env)?.contains("nothing ran") == true)
+  }
+
+  @Test func aToolThatAnnouncesNothingIsNotEchoed() async throws {
+    // given — an ordinary write tool, which takes the default nil `invocationEcho`
+    let env = try makeSuspendedFixture()
+    let recorder = RecordingInvocationEcho()
+    let executor = makeExecutor(
+      env,
+      tools: [RecordingWriteTool(toolName: "file_write", result: "Wrote 12 B to /w/plan.md.")],
+      echo: recorder
+    )
+
+    // when
+    _ = await executor.executeApproved(
+      approval(env, tool: "file_write", argsJSON: #"{"path":"plan.md"}"#)
+    )
+
+    // then
+    #expect(await recorder.echoes.isEmpty)
   }
 
   @Test func executesRecordedArgsAndFillsTheObservation() async throws {
@@ -665,6 +781,8 @@ import Testing
       throw StoreError.unexpected("unused in this fixture")
     }
     func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? { nil }
+    func openAutoApproveWindow(runId: Int64, now: Date) throws(StoreError) -> Bool { false }
+    func isAutoApproveWindowOpen(runId: Int64) throws(StoreError) -> Bool { false }
     func failRunStalePolicy(
       runId: Int64,
       sessionId: Int64,

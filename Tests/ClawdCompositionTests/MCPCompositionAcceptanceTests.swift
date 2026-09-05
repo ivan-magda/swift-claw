@@ -358,12 +358,16 @@ private extension MCPCompositionAcceptanceTests {
   /// A taint-free, no-private-data context: the ask tier is then the only thing that can park a
   /// call, which is what makes the approval below an assertion about the MCP tier and nothing else.
   static let untaintedContext = ToolDispatchContext(
+    runId: 1,
+    chatId: 1,
     sessionTainted: false,
     runIngestedUntrusted: false,
     assemblyPrivateData: false,
     runPrivateData: false,
     sessionHasPrivateData: false,
-    approvalAlreadyPending: false
+    approvalAlreadyPending: false,
+    runOrigin: .interactive,
+    autoApproveWindowOpen: false
   )
 
   func serverConfig(
@@ -418,7 +422,8 @@ private extension MCPCompositionAcceptanceTests {
         health: nil,
         unavailableReason: nil
       ),
-      mcpTools: mcpTools
+      mcpTools: mcpTools,
+      echo: RecordingInvocationEcho()
     )
   }
 

@@ -40,6 +40,7 @@ private final class RecordingApprovalStore: ApprovalStore, @unchecked Sendable {
   func approve(
     id: Int64,
     currentPolicyVersion: String,
+    openTurnWindow: Bool,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome {
     throw StoreError.unexpected("unused by ApprovalExpiryService")

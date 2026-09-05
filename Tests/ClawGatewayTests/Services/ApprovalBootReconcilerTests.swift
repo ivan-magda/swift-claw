@@ -339,7 +339,12 @@ import Testing
 
     // and — a live callback (approve CAS + coordinator signal) still resolves through the
     // boot-parked waiter after restart: buttons survive the reboot
-    let outcome = try env.store.approve(id: approvalId, currentPolicyVersion: "pv16", now: now)
+    let outcome = try env.store.approve(
+      id: approvalId,
+      currentPolicyVersion: "pv16",
+      openTurnWindow: false,
+      now: now
+    )
     guard case .approved = outcome else {
       Issue.record("expected the callback approve CAS to commit, got \(outcome)")
       return

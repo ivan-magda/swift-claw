@@ -22,11 +22,11 @@ import Testing
     // given / when
     let approve = ApprovalKeyboard.callbackData(
       nonce: "AbC-1_dEfG",
-      verdict: ApprovalKeyboard.approveVerdict
+      verdict: .approve
     )
     let deny = ApprovalKeyboard.callbackData(
       nonce: "AbC-1_dEfG",
-      verdict: ApprovalKeyboard.denyVerdict
+      verdict: .deny
     )
 
     // then — "apr:<nonce>:y" | "apr:<nonce>:n" (spec §4.6/§5.4)
@@ -41,9 +41,9 @@ import Testing
     // when
     let approve = ApprovalKeyboard.callbackData(
       nonce: nonce,
-      verdict: ApprovalKeyboard.approveVerdict
+      verdict: .approve
     )
-    let deny = ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.denyVerdict)
+    let deny = ApprovalKeyboard.callbackData(nonce: nonce, verdict: .deny)
 
     // then — the framing must never overflow Telegram's callback_data cap (spec §4.6)
     #expect(approve.utf8.count <= 64)
@@ -56,17 +56,49 @@ import Testing
 
     // when
     let approve = ApprovalKeyboard.parse(
-      ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.approveVerdict)
+      ApprovalKeyboard.callbackData(nonce: nonce, verdict: .approve)
     )
     let deny = ApprovalKeyboard.parse(
-      ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.denyVerdict)
+      ApprovalKeyboard.callbackData(nonce: nonce, verdict: .deny)
     )
 
-    // then — the nonce survives verbatim; the verdict maps to the approve flag
+    // then — the nonce survives verbatim; each verdict maps to its own case
     #expect(approve?.nonce == nonce)
-    #expect(approve?.approve == true)
+    #expect(approve?.verdict == .approve)
     #expect(deny?.nonce == nonce)
-    #expect(deny?.approve == false)
+    #expect(deny?.verdict == .deny)
+  }
+
+  @Test func theTurnScopedVerdictRoundTripsUnderTheSameFraming() {
+    // given — a real 22-char base64url nonce is the production width
+    let nonce = ApprovalNonce.generate()
+
+    // when
+    let data = ApprovalKeyboard.callbackData(nonce: nonce, verdict: .approveForTurn)
+
+    // then — a third verdict must not push the framing past Telegram's callback_data cap
+    #expect(data == "apr:\(nonce):t")
+    #expect(data.utf8.count <= 64)
+    #expect(ApprovalKeyboard.parse(data)?.verdict == .approveForTurn)
+  }
+
+  @Test func onlyAWindowOfferingPromptDrawsTheThirdButton() {
+    // given
+    let nonce = "AbC-1_dEfG"
+
+    // when
+    let plain = ApprovalKeyboard.markup(nonce: nonce)
+    let offering = ApprovalKeyboard.markup(nonce: nonce, offersTurnWindow: true)
+
+    // then — the turn verdict is tappable only where the prompt offered it, and the other two
+    // buttons keep their framing and order
+    #expect(plain.contains("apr:AbC-1_dEfG:t") == false)
+    #expect(offering.contains("apr:AbC-1_dEfG:t"))
+    #expect(offering.contains("Approve for this turn"))
+    for markup in [plain, offering] {
+      #expect(markup.contains("apr:AbC-1_dEfG:y"))
+      #expect(markup.contains("apr:AbC-1_dEfG:n"))
+    }
   }
 
   @Test(arguments: malformedCallbacks)
@@ -101,13 +133,13 @@ import Testing
     // then
     #expect(
       markup.contains(
-        ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.approveVerdict)
+        ApprovalKeyboard.callbackData(nonce: nonce, verdict: .approve)
       )
     )
     let approve = ApprovalKeyboard.parse(
-      ApprovalKeyboard.callbackData(nonce: nonce, verdict: ApprovalKeyboard.approveVerdict)
+      ApprovalKeyboard.callbackData(nonce: nonce, verdict: .approve)
     )
     #expect(approve?.nonce == nonce)
-    #expect(approve?.approve == true)
+    #expect(approve?.verdict == .approve)
   }
 }

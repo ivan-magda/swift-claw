@@ -83,6 +83,10 @@ enum DoctorHealth {
     )
   }
 
+  static func bashChecks(config: AppConfig) -> [DoctorReport.Check] {
+    BashHealthRows.rows(for: .resolve(config: config.bash))
+  }
+
   static func bootSandboxChecks(
     execEnabled: Bool,
     health: SandboxHealth?,

@@ -25,7 +25,7 @@ import Testing
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: ["s3cret-value-1"]),
       privateFileLoader: { [Self.memoryText] },
-      execEnabled: true
+      enabledDangerousTools: [ExecuteCodeTool.toolName]
     )
   }
 
@@ -41,12 +41,16 @@ import Testing
     trifectaHeld: Bool = false
   ) -> ToolDispatchContext {
     ToolDispatchContext(
+      runId: 1,
+      chatId: 42,
       sessionTainted: trifectaHeld,
       runIngestedUntrusted: false,
       assemblyPrivateData: trifectaHeld,
       runPrivateData: false,
       sessionHasPrivateData: false,
       approvalAlreadyPending: false,
+      runOrigin: .interactive,
+      autoApproveWindowOpen: false,
       mode: mode
     )
   }

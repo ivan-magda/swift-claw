@@ -15,6 +15,18 @@ public struct OutboxStoreGRDB: OutboxStore {
     }
   }
 
+  public func enqueueNotice(runId: Int64, chatId: Int64, text: String) throws(StoreError) -> Bool {
+    try database.writeMapping { db in
+      let chunk = OutboxChunk(
+        stepIndex: try RunStoreGRDB.nextOutboxStepBase(db, runId: runId),
+        chatId: chatId,
+        payload: text,
+        payloadHash: ContentHash.fnv1a(text)
+      )
+      return try RunStoreGRDB.insertOutbox(db, runId: runId, chunk: chunk, now: Date())
+    }
+  }
+
   public func markSent(
     runId: Int64,
     stepIndex: Int,

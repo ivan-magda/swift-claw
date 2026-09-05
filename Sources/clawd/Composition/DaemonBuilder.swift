@@ -96,7 +96,8 @@ struct DaemonBuilder: Sendable {
       workspace: workspace,
       costResolver: costResolver,
       sandbox: sandbox,
-      mcpTools: mcpStack.tools
+      mcpTools: mcpStack.tools,
+      echo: makeInvocationEcho(coordination: coordination)
     )
 
     let consumers = makeRunnerConsumers(

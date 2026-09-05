@@ -185,9 +185,10 @@ Send `/skills` to the bot. The Accepted section should contain
 workspace-boundary problem that kept a skill out.
 
 [CUSTOMIZATION.md](CUSTOMIZATION.md) covers every file and its trust tier, the skill
-authoring rules, the environment knobs for budgets, schedules, voice locales, and the
-code sandbox, and how to [connect MCP servers](CUSTOMIZATION.md#mcp-servers) so their
-tools show up in chat.
+authoring rules, the environment knobs for budgets, schedules, voice locales, the code
+sandbox, and [host shell commands](CUSTOMIZATION.md#host-shell-commands) — off by default,
+and the one setting that lets the agent run on your real machine — plus how to
+[connect MCP servers](CUSTOMIZATION.md#mcp-servers) so their tools show up in chat.
 
 ## 7. Keep it running
 
@@ -198,6 +199,10 @@ your machine — run that.
 [INSTALL.md section 4](INSTALL.md#4-running-as-a-service) covers both layouts (script
 install and manual `/usr/local/bin`), plus the linger/auto-login notes for a machine
 that should stay on after you log out, log locations, and the exit codes.
+
+If you later enable host shell commands, keep the service environment minimal. The child drops
+`CLAW_*` variables but inherits other credentials and `SSH_AUTH_SOCK`; see
+[CUSTOMIZATION.md](CUSTOMIZATION.md#host-shell-commands).
 
 ## 8. ChatGPT subscription instead of an API key
 

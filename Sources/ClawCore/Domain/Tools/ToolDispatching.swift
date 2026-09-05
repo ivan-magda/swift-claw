@@ -1,8 +1,14 @@
 import Foundation
 
-/// The per-call policy inputs the gate reads. Taint and private-data are each the OR of the
-/// persisted/assembly flag and the run-local flag (`(session ∪ run)` / `(assembly ∪ run)`).
+/// The per-call policy inputs the gate reads, plus the identity of the run that made the call.
+/// Taint and private-data are each the OR of the persisted/assembly flag and the run-local flag
+/// (`(session ∪ run)` / `(assembly ∪ run)`).
 public struct ToolDispatchContext: Sendable, Equatable {
+  /// The run the call belongs to, and the chat that reads its delivery sequence. Not policy: this
+  /// is what a pre-execution announcement (`ToolInvocationEchoing`) is addressed to, and the
+  /// dispatcher is the only place that knows a call will execute before it does.
+  public let runId: Int64
+  public let chatId: Int64
   public let sessionTainted: Bool
   public let runIngestedUntrusted: Bool
   public let assemblyPrivateData: Bool
@@ -12,25 +18,40 @@ public struct ToolDispatchContext: Sendable, Equatable {
   /// the context window rolls past the private read that first set it.
   public let sessionHasPrivateData: Bool
   public let approvalAlreadyPending: Bool
+  /// Which pathway created the run, so the gate can refuse a tool that needs the owner present
+  /// (`ToolDefinition.requiresInteractiveRun`) instead of parking an approval nobody will answer.
+  public let runOrigin: RunOrigin
+  /// Whether the run carries an open turn-scoped auto-approve window. The owner opened it on one
+  /// approval prompt, so only an action whose `ApprovalReason.offersTurnScopedWindow` is true may
+  /// ride it, and only after the same argument scans a parked call takes.
+  public let autoApproveWindowOpen: Bool
   /// How the conversation is served. A group topic has no approval keyboard and no single owner
   /// to press it, so the gate resolves consent itself instead of parking a prompt nobody owns.
   public let mode: ChatMode
 
   public init(
+    runId: Int64,
+    chatId: Int64,
     sessionTainted: Bool,
     runIngestedUntrusted: Bool,
     assemblyPrivateData: Bool,
     runPrivateData: Bool,
     sessionHasPrivateData: Bool,
     approvalAlreadyPending: Bool,
+    runOrigin: RunOrigin,
+    autoApproveWindowOpen: Bool,
     mode: ChatMode = .direct
   ) {
+    self.runId = runId
+    self.chatId = chatId
     self.sessionTainted = sessionTainted
     self.runIngestedUntrusted = runIngestedUntrusted
     self.assemblyPrivateData = assemblyPrivateData
     self.runPrivateData = runPrivateData
     self.sessionHasPrivateData = sessionHasPrivateData
     self.approvalAlreadyPending = approvalAlreadyPending
+    self.runOrigin = runOrigin
+    self.autoApproveWindowOpen = autoApproveWindowOpen
     self.mode = mode
   }
 }

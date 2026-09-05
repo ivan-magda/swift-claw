@@ -52,7 +52,7 @@ public enum ToolApprovalPrompt {
       lines.append("⚠ \(warning)")
     }
 
-    lines.append("Tap Approve to allow this one action, or Deny to cancel.")
+    lines.append(tapInstruction(reason: recorded.reason))
 
     return lines.joined(separator: "\n")
   }
@@ -64,7 +64,7 @@ public enum ToolApprovalPrompt {
   /// and the suspend commit stamps `approval_id` onto exactly that keyboard-carrying chunk
   /// (`enqueuePromptChunks`), so button disarm keeps working across a split.
   public static func chunks(for input: Input, chatId: Int64, nonce: String) -> [OutboxChunk] {
-    let parts = ReplySplitter.split(text: text(for: input))
+    let parts = chunkPayloads(for: text(for: input))
     return parts.enumerated().map { index, payload in
       OutboxChunk(
         stepIndex: index,
@@ -72,7 +72,11 @@ public enum ToolApprovalPrompt {
         payload: payload,
         payloadHash: ContentHash.fnv1a(payload),
         approvalId: nil,
-        replyMarkup: index == parts.count - 1 ? ApprovalKeyboard.markup(nonce: nonce) : nil
+        replyMarkup: index == parts.count - 1
+          ? ApprovalKeyboard.markup(
+            nonce: nonce,
+            offersTurnWindow: input.recorded.reason.offersTurnScopedWindow
+          ) : nil
       )
     }
   }
@@ -85,6 +89,25 @@ private extension ToolApprovalPrompt {
     "⚠ TAINT: this turn read external/untrusted content — inspect the target before approving."
   static let privilegedFileBannerText =
     "⚠ PRIVILEGED FILE: this path feeds my system prompt / private-data tier."
+  static let splitFencePrefix = "```\n"
+  static let splitFenceSuffix = "\n```"
+
+  /// Telegram renders every outbox row as an independent Markdown document. An overlong prompt
+  /// containing a fenced preview therefore becomes plain fenced text per row, with command-authored
+  /// backticks made visible before splitting; no middle row can inherit an opening fence from the
+  /// previous message or expose preview text as active Markdown.
+  static func chunkPayloads(for text: String) -> [String] {
+    let ordinaryParts = ReplySplitter.split(text: text)
+    guard ordinaryParts.count > 1, text.contains("```") else {
+      return ordinaryParts
+    }
+
+    let visibleText = OwnerDisplaySanitizer.renderMarkdownCodeFenceContent(in: text)
+    let contentLimit = ReplySplitter.limit - splitFencePrefix.count - splitFenceSuffix.count
+    return ReplySplitter.split(text: visibleText, limit: contentLimit).map { part in
+      splitFencePrefix + part + splitFenceSuffix
+    }
+  }
 
   static func headline(tool: String, reason: ApprovalReason) -> String {
     switch reason {
@@ -94,6 +117,19 @@ private extension ToolApprovalPrompt {
       "⚠ I want to run \(tool) while this session holds private data after reading external content."
     case .codeExec:
       "⚠ I want to run \(tool) in a disposable sandbox. Review the complete script and staged inputs before approving."
+    case .hostShell:
+      "⚠ I want to run \(tool) on your machine, outside any sandbox. Read the exact command before approving."
     }
+  }
+
+  /// The closing instruction names every button the keyboard actually draws, so the copy and the
+  /// markup cannot disagree about what a tap does.
+  static func tapInstruction(reason: ApprovalReason) -> String {
+    guard reason.offersTurnScopedWindow else {
+      return "Tap Approve to allow this one action, or Deny to cancel."
+    }
+    return
+      "Tap Approve to allow this one action, Approve for this turn to stop asking until this "
+      + "turn ends, or Deny to cancel."
   }
 }

@@ -210,6 +210,10 @@ public struct ToolDefinition: Sendable, Equatable {
   /// not fully identify what will run (for example, an adapter backed by a configured endpoint).
   /// NOT advertised on the wire.
   public let invocationIdentity: String?
+  /// Declares that the tool may act only while the owner is watching the run. The gate refuses the
+  /// call outright in a scheduled or heartbeat run rather than parking an approval nobody is
+  /// present to answer. NOT advertised on the wire.
+  public let requiresInteractiveRun: Bool
 
   public init(
     name: String,
@@ -219,7 +223,8 @@ public struct ToolDefinition: Sendable, Equatable {
     egressClass: ToolEgressClass,
     riskLevel: RiskLevel,
     fenceLabel: String? = nil,
-    invocationIdentity: String? = nil
+    invocationIdentity: String? = nil,
+    requiresInteractiveRun: Bool = false
   ) {
     self.name = name
     self.description = description
@@ -230,6 +235,7 @@ public struct ToolDefinition: Sendable, Equatable {
     self.riskLevel = riskLevel
     self.fenceLabel = fenceLabel ?? name
     self.invocationIdentity = invocationIdentity
+    self.requiresInteractiveRun = requiresInteractiveRun
   }
 }
 
@@ -328,6 +334,11 @@ public protocol Tool: Sendable {
   /// exactly what was authorized, never re-derive it; `nil` for the other classes.
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload
 
+  /// The owner-facing detail to announce before this call runs, read from the same arguments
+  /// `execute` receives. The default nil announces nothing, which is right for every tool whose
+  /// effect the owner already sees in the reply; a tool that acts on the host overrides it.
+  func invocationEcho(arguments: JSONValue) -> String?
+
   /// The prompt inputs for an ask-tier or trifecta approval, produced at gate time on the
   /// gate-resolved `canonicalTarget`. The default is a generic egress presentation; write tools
   /// override with blast radius, a redacted preview, and any scan warnings.
@@ -339,6 +350,10 @@ public protocol Tool: Sendable {
 
 extension Tool {
   public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
+    nil
+  }
+
+  public func invocationEcho(arguments: JSONValue) -> String? {
     nil
   }
 
