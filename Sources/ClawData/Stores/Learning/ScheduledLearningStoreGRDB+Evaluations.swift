@@ -187,6 +187,7 @@ extension ScheduledLearningStoreGRDB {
       codes.allSatisfy({ code in
         code.isEmpty == false && code.count <= EvaluatorOutput.maxIssueCodeCharacters
       }),
+      Set(codes).count == codes.count,
       codes == codes.sorted(),
       try issueCodesJSON(codes) == json
     else {

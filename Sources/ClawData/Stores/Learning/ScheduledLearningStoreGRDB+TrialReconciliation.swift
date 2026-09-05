@@ -58,16 +58,20 @@ extension ScheduledLearningStoreGRDB {
     guard let row = try trialRow(db, trialId: identity.trialId) else {
       return .stale
     }
-    let trial = try strictTrial(db, row: row, currentState: nil)
+    var trial = try strictTrial(db, row: row, currentState: nil)
     guard trial.state == .open || trial.state == .draining else {
       return .stale
     }
     guard trial.identity == identity else {
       throw StoreError.unexpected("live trial identity changed during reconciliation")
     }
-    guard try readState(db, jobId: trial.jobId)?.epoch == trial.epoch else {
+    guard
+      let currentState = try readState(db, jobId: trial.jobId),
+      currentState.epoch == trial.epoch
+    else {
       return .stale
     }
+    trial = try strictTrial(db, row: row, currentState: currentState)
 
     let runIds = try assignmentRunIds(db, trialId: trial.trialId)
     guard

@@ -332,8 +332,9 @@ import Testing
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
     try env.apply(corruption, runId: sealed.runId)
+    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
 
-    // when / then
+    // when / then — removing any binding or assignment identity predicate admits its own case.
     #expect {
       _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
     } throws: { error in
@@ -342,6 +343,48 @@ import Testing
       }
       return true
     }
+    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+  }
+
+  @Test(arguments: LiveTrialStateDrift.allCases)
+  func recomputeRejectsSameEpochLiveTrialStateDrift(_ drift: LiveTrialStateDrift) throws {
+    // given
+    let env = try trialEnvironment()
+    let sealed = try env.sealedTrialEvidence()
+    try env.apply(drift)
+    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+
+    // when / then — omitting the current-state strict decode accepts same-epoch live drift.
+    #expect {
+      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+    } throws: { error in
+      guard case StoreError.unexpected = error else {
+        return false
+      }
+      return true
+    }
+    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+  }
+
+  @Test(arguments: LiveTrialStateDrift.allCases)
+  func reconcileRejectsSameEpochLiveTrialStateDrift(_ drift: LiveTrialStateDrift) throws {
+    // given
+    let env = try trialEnvironment()
+    let sealed = try env.sealedTrialEvidence()
+    let identity = try #require(try env.learning.liveTrialIdentities().first)
+    try env.apply(drift)
+    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+
+    // when / then — omitting reconciliation's strict current-state decode accepts live drift.
+    #expect {
+      _ = try env.learning.reconcileTrial(identity, now: env.now)
+    } throws: { error in
+      guard case StoreError.unexpected = error else {
+        return false
+      }
+      return true
+    }
+    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
   }
 
   @Test(arguments: EvaluationCorruption.allCases)
@@ -364,6 +407,107 @@ import Testing
       }
       return true
     }
+  }
+
+  @Test(arguments: EvaluatorSourceCorruption.allCases)
+  func evaluatorSourceRequiresOneConsistentOperationAndEvaluationState(
+    _ corruption: EvaluatorSourceCorruption
+  ) throws {
+    // given
+    let env = try trialEnvironment()
+    let sealed = try env.sealedTrialEvidence()
+    let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
+    _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
+    try env.resetAssignmentCache(runId: sealed.runId, state: .primaryRunSettled)
+    try env.apply(corruption, operationId: operation.id, runId: sealed.runId)
+    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+
+    // when / then — removing independent evaluation counting or state-shape validation admits
+    // the matching impossible source combination.
+    #expect {
+      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+    } throws: { error in
+      guard case StoreError.unexpected = error else {
+        return false
+      }
+      return true
+    }
+    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+  }
+
+  @Test func supersededEvaluatorAttemptMustBeInterrupted() throws {
+    // given
+    let env = try trialEnvironment()
+    let sealed = try env.sealedTrialEvidence()
+    let first = try env.startedOperation(env.evaluatorKey(for: sealed))
+    _ = try env.learning.reconcileOperationsAtBoot(now: env.now)
+    let second = try env.startedOperation(env.evaluatorKey(for: sealed))
+    _ = try env.learning.finishOperation(env.result(for: second.id), now: env.now)
+    try env.resetAssignmentCache(runId: sealed.runId, state: .primaryRunSettled)
+    try env.replaceInterruptedOperationWithFailed(first.id)
+    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+
+    // when / then — accepting a non-interrupted predecessor loses the retry lineage invariant.
+    #expect {
+      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+    } throws: { error in
+      guard case StoreError.unexpected = error else {
+        return false
+      }
+      return true
+    }
+    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+  }
+
+  @Test(arguments: EvidenceReceiptCorruption.allCases)
+  func evidenceReceiptCorruptionFailsBeforeAssignmentCacheRepair(
+    _ corruption: EvidenceReceiptCorruption
+  ) throws {
+    // given
+    let env = try trialEnvironment()
+    let sealed = try env.sealedTrialEvidence()
+    try env.apply(corruption, runId: sealed.runId)
+    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+
+    // when / then — removing receipt shape, canonical-payload, or digest validation admits the
+    // matching corruption through both public readers.
+    #expect {
+      _ = try env.learning.evidence(runId: sealed.runId)
+    } throws: { error in
+      guard case StoreError.unexpected = error else {
+        return false
+      }
+      return true
+    }
+    #expect {
+      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+    } throws: { error in
+      guard case StoreError.unexpected = error else {
+        return false
+      }
+      return true
+    }
+    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+  }
+
+  @Test func eligibleReceiptMayLoseItsPayloadAfterRetention() throws {
+    // given
+    let env = try trialEnvironment()
+    let sealed = try env.sealedTrialEvidence()
+    try env.removeEvidencePayload(runId: sealed.runId)
+
+    // when
+    let retained = try #require(try env.learning.evidence(runId: sealed.runId))
+    let recomputed = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+
+    // then — requiring payload bytes for every eligible receipt breaks compact retention.
+    #expect(retained.eligibility == .eligibleTaskEvidence)
+    #expect(retained.payload == nil)
+    guard case .unchanged(let assignment) = recomputed else {
+      Issue.record("expected unchanged retained assignment")
+      return
+    }
+    #expect(assignment.state == .primaryRunSettled)
   }
 
   @Test func relevantFeedbackRefreshesRevisionAndTimestampEvenWhenOutcomeStaysPositive() throws {
@@ -428,6 +572,54 @@ import Testing
     #expect(after == before)
     #expect(assignment.resolvedEvidence?.effectiveFeedbackRevision == FeedbackRevision(0))
     #expect(try env.currentLearningState().feedbackRevision == FeedbackRevision(1))
+  }
+
+  @Test func assignmentCacheCannotNameAFutureFeedbackRevision() throws {
+    // given
+    let env = try trialEnvironment()
+    let sealed = try env.sealedTrialEvidence()
+    let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
+    _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
+    try env.setAssignmentFeedbackRevision(runId: sealed.runId, revision: 99)
+    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+
+    // when / then — removing the cached-revision upper bound manufactures future provenance.
+    #expect {
+      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+    } throws: { error in
+      guard case StoreError.unexpected = error else {
+        return false
+      }
+      return true
+    }
+    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+  }
+
+  @Test func assignmentProjectionCannotConsumeAFutureFeedbackEvent() throws {
+    // given
+    let env = try trialEnvironment()
+    let sealed = try env.sealedTrialEvidence()
+    let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
+    _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
+    try env.recordRunFeedback(
+      runId: sealed.runId,
+      signal: .resultNotUseful,
+      updateId: 18
+    )
+    try env.setCurrentFeedbackRevision(0)
+    try env.resetAssignmentCache(runId: sealed.runId, state: .primaryRunSettled)
+    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+
+    // when / then — removing the source-revision upper bound consumes a future event.
+    #expect {
+      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+    } throws: { error in
+      guard case StoreError.unexpected = error else {
+        return false
+      }
+      return true
+    }
+    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
   }
 
   @Test func terminallyIneligibleEvidenceIgnoresResultFeedbackAsQualityEvidence() throws {
@@ -540,14 +732,20 @@ import Testing
     #expect(try env.trialState(trialId: trial.trialId) == .fellBack)
 
     // when
+    let finishedAt = env.now.addingTimeInterval(2)
     _ = try env.learning.finishOperation(
       env.result(for: operation.id),
-      now: env.now.addingTimeInterval(2)
+      now: finishedAt
     )
 
     // then — the current-epoch product may repair history but cannot apply Task 17 transitions.
-    let refreshed = try #require(try env.assignment(runId: sealed.runId))
-    #expect(refreshed.resolvedEvidence?.outcome == .positive)
+    let refreshed = try env.rawResolvedAssignment(runId: sealed.runId)
+    #expect(refreshed.state == .learningOutcomeResolved)
+    #expect(refreshed.outcome == .positive)
+    #expect(refreshed.evaluationDigest == refreshed.sourceEvaluationDigest)
+    #expect(refreshed.evaluationDigest != nil)
+    #expect(refreshed.feedbackRevision == terminalState.feedbackRevision)
+    #expect(refreshed.resolvedAt == finishedAt)
     #expect(try env.trialState(trialId: trial.trialId) == .fellBack)
     #expect(try env.currentLearningState() == terminalState)
   }
@@ -872,14 +1070,30 @@ private struct AssignmentCacheSnapshot: Equatable {
   let values: [DatabaseValue]
 }
 
+private struct RawResolvedAssignment {
+  let state: TrialAssignmentState
+  let outcome: TrialOutcomeKind
+  let evaluationDigest: EvaluationDigest?
+  let sourceEvaluationDigest: EvaluationDigest?
+  let feedbackRevision: FeedbackRevision
+  let resolvedAt: Date
+}
+
 enum AssignmentIdentityCorruption: CaseIterable {
   case assignmentJob
   case assignmentEpoch
   case assignmentGeneration
+  case bindingJob
+  case bindingEpoch
   case bindingTrial
   case bindingGeneration
   case bindingStableDigest
   case bindingEffectiveDigest
+}
+
+enum LiveTrialStateDrift: CaseIterable {
+  case stableDigest
+  case stableRevision
 }
 
 enum EvaluationCorruption: CaseIterable {
@@ -891,11 +1105,61 @@ enum EvaluationCorruption: CaseIterable {
   case evidence
   case outcome
   case issueCodes
+  case duplicateIssueCode
   case rubric
   case prompt
   case schema
   case compatibility
   case createdAt
+}
+
+enum EvidenceReceiptCorruption: CaseIterable {
+  case ineligibleWithPayload
+  case eligibleWithExclusion
+  case exclusionWithWrongEligibility
+  case unknownExclusion
+  case payloadStorageClass
+  case malformedPayload
+  case noncanonicalPayload
+  case payloadSchema
+  case payloadDigest
+  case compactDigest
+}
+
+enum EvaluatorSourceCorruption: CaseIterable {
+  case orphanEvaluation
+  case startedWithEvaluation
+  case failedWithEvaluation
+  case pendingFailure
+  case claimedCallIdentity
+  case startedMissingCarrier
+  case startedMissingRoute
+  case startedMissingProviderCall
+  case startedNegativeTokens
+  case startedNegativeCost
+  case startedClosedReservation
+  case succeededFailure
+  case succeededMissingCarrier
+  case succeededMissingRoute
+  case succeededMissingProviderCall
+  case succeededNonzeroTokens
+  case succeededNonzeroCost
+  case succeededMissingReservation
+  case succeededOpenReservation
+  case failedMissingFailure
+  case failedWrongFailure
+  case failedNoCallWrongFailure
+  case failedNoCallCallIdentity
+  case interruptedFailure
+  case interruptedOpenReservation
+  case unknownFailure
+  case job
+  case epoch
+  case phase
+  case sourceDigest
+  case keyDigest
+  case attemptGeneration
+  case supersedes
 }
 
 enum TrialSnapshotCorruption: CaseIterable {
@@ -1136,10 +1400,63 @@ extension BoundRunEnvironment {
     }
   }
 
+  func setAssignmentFeedbackRevision(runId: Int64, revision: Int64) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          UPDATE trial_assignments SET effective_feedback_revision = ? WHERE run_id = ?
+          """,
+        arguments: [revision, runId]
+      )
+    }
+  }
+
+  func setCurrentFeedbackRevision(_ revision: Int64) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE job_learning_state SET feedback_revision = ? WHERE job_id = ?",
+        arguments: [revision, jobId]
+      )
+    }
+  }
+
   func apply(
     _ corruption: AssignmentIdentityCorruption,
     runId: Int64
   ) throws {
+    if case .bindingJob = corruption {
+      let otherJob = try jobs.create(
+        NewScheduledJob(
+          ownerChatId: 777,
+          label: "foreign binding",
+          prompt: "Read a different archive",
+          recurrence: nil,
+          timezone: "Europe/Berlin",
+          nextOccurrence: now
+        ),
+        now: now
+      )
+      try queue.write { db in
+        try db.execute(
+          sql: """
+            INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
+              created_at)
+            SELECT ?, lesson_sets.digest, lesson_sets.schema_version, lesson_sets.canonical_bytes,
+              lesson_sets.source, lesson_sets.created_at
+            FROM lesson_sets
+            JOIN run_learning_bindings ON run_learning_bindings.effective_digest = lesson_sets.digest
+              AND run_learning_bindings.job_id = lesson_sets.job_id
+            WHERE run_learning_bindings.run_id = ?
+            """,
+          arguments: [otherJob.id, runId]
+        )
+        try db.execute(
+          sql: "UPDATE run_learning_bindings SET job_id = ? WHERE run_id = ?",
+          arguments: [otherJob.id, runId]
+        )
+      }
+      return
+    }
     let mutation: String
     switch corruption {
     case .assignmentJob:
@@ -1149,6 +1466,11 @@ extension BoundRunEnvironment {
     case .assignmentGeneration:
       mutation =
         "UPDATE trial_assignments SET trial_generation = trial_generation + 1 WHERE run_id = ?"
+    case .bindingJob:
+      preconditionFailure("binding job corruption returns after creating its referenced job")
+    case .bindingEpoch:
+      mutation =
+        "UPDATE run_learning_bindings SET learning_epoch = learning_epoch + 1 WHERE run_id = ?"
     case .bindingTrial:
       mutation = "UPDATE run_learning_bindings SET trial_id = trial_id + 1 WHERE run_id = ?"
     case .bindingGeneration:
@@ -1163,6 +1485,31 @@ extension BoundRunEnvironment {
     }
     try queue.write { db in
       try db.execute(sql: mutation, arguments: [runId])
+    }
+  }
+
+  func apply(_ drift: LiveTrialStateDrift) throws {
+    try queue.write { db in
+      switch drift {
+      case .stableDigest:
+        try db.execute(
+          sql: """
+            UPDATE job_learning_state
+            SET stable_lesson_set_digest = (
+              SELECT replacement_digest FROM learning_candidates WHERE job_id = ?
+            )
+            WHERE job_id = ?
+            """,
+          arguments: [jobId, jobId]
+        )
+      case .stableRevision:
+        try db.execute(
+          sql: """
+            UPDATE job_learning_state SET stable_revision = stable_revision + 1 WHERE job_id = ?
+            """,
+          arguments: [jobId]
+        )
+      }
     }
   }
 
@@ -1212,6 +1559,13 @@ extension BoundRunEnvironment {
         try updateEvaluation(db, runId: runId, column: "outcome", value: "unknown")
       case .issueCodes:
         try updateEvaluation(db, runId: runId, column: "issue_codes", value: "[\"z\",\"a\"]")
+      case .duplicateIssueCode:
+        try updateEvaluation(
+          db,
+          runId: runId,
+          column: "issue_codes",
+          value: "[\"duplicate\",\"duplicate\"]"
+        )
       case .rubric:
         try updateEvaluation(db, runId: runId, column: "rubric_version", value: "999")
       case .prompt:
@@ -1241,6 +1595,348 @@ extension BoundRunEnvironment {
           arguments: [runId]
         )
       }
+    }
+  }
+
+  func apply(
+    _ corruption: EvidenceReceiptCorruption,
+    runId: Int64
+  ) throws {
+    try queue.write { db in
+      switch corruption {
+      case .ineligibleWithPayload:
+        try db.execute(
+          sql: "UPDATE learning_evidence SET eligibility = ? WHERE run_id = ?",
+          arguments: [LearningEligibility.transientInfrastructureFailure.rawValue, runId]
+        )
+      case .eligibleWithExclusion:
+        try db.execute(
+          sql: "UPDATE learning_evidence SET exclusion_reason = ? WHERE run_id = ?",
+          arguments: [EvidenceExclusion.staleEpoch.rawValue, runId]
+        )
+      case .exclusionWithWrongEligibility:
+        let eligibility = LearningEligibility.transientInfrastructureFailure
+        let digest = SHA256Digest.hex(
+          "\(EvidenceLimits.schemaVersion):\(runId):\(eligibility.rawValue)"
+        )
+        try db.execute(
+          sql: """
+            UPDATE learning_evidence
+            SET payload = NULL, eligibility = ?, exclusion_reason = ?, evidence_digest = ?
+            WHERE run_id = ?
+            """,
+          arguments: [eligibility.rawValue, EvidenceExclusion.staleEpoch.rawValue, digest, runId]
+        )
+      case .unknownExclusion:
+        try db.execute(
+          sql: "UPDATE learning_evidence SET exclusion_reason = ? WHERE run_id = ?",
+          arguments: ["unknown", runId]
+        )
+      case .payloadStorageClass:
+        try db.execute(
+          sql: "UPDATE learning_evidence SET payload = ? WHERE run_id = ?",
+          arguments: ["not-a-blob", runId]
+        )
+      case .malformedPayload:
+        try replaceEvidencePayload(db, runId: runId, with: Data("{}".utf8))
+      case .noncanonicalPayload:
+        var bytes = try evidencePayloadBytes(db, runId: runId)
+        bytes.append(0x20)
+        try replaceEvidencePayload(db, runId: runId, with: bytes)
+      case .payloadSchema:
+        let bytes = try evidencePayloadBytes(db, runId: runId)
+        guard
+          let json = String(data: bytes, encoding: .utf8),
+          json.contains(EvidenceLimits.schemaVersion)
+        else {
+          throw StoreError.unexpected("fixture evidence payload is unreadable")
+        }
+        let changed = json.replacingOccurrences(
+          of: EvidenceLimits.schemaVersion,
+          with: "evidence/v2"
+        )
+        try replaceEvidencePayload(db, runId: runId, with: Data(changed.utf8))
+      case .payloadDigest:
+        try db.execute(
+          sql: "UPDATE learning_evidence SET evidence_digest = ? WHERE run_id = ?",
+          arguments: [String(repeating: "f", count: 64), runId]
+        )
+      case .compactDigest:
+        try db.execute(
+          sql: """
+            UPDATE learning_evidence
+            SET payload = NULL, eligibility = ?, exclusion_reason = NULL
+            WHERE run_id = ?
+            """,
+          arguments: [LearningEligibility.insufficientEvidence.rawValue, runId]
+        )
+      }
+    }
+  }
+
+  func apply(
+    _ corruption: EvaluatorSourceCorruption,
+    operationId: LearningOperationID,
+    runId: Int64
+  ) throws {
+    try queue.write { db in
+      switch corruption {
+      case .orphanEvaluation:
+        try db.execute(
+          sql: "DELETE FROM learning_operations WHERE operation_id = ?",
+          arguments: [operationId.rawValue]
+        )
+      case .startedWithEvaluation:
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: [
+            "state": LearningOperationState.started.rawValue,
+            "reservation_state": LearningReservationState.open.rawValue,
+            "reserved_tokens": 1,
+            "reserved_cost_usd": 1.0,
+          ]
+        )
+      case .failedWithEvaluation:
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: [
+            "state": LearningOperationState.failed.rawValue,
+            "failure_code": LearningOperationFailure.providerTerminal.rawValue,
+          ]
+        )
+      case .pendingFailure:
+        try makeNoCallOperation(
+          db,
+          id: operationId,
+          runId: runId,
+          state: .pending,
+          failure: .budgetDenied,
+          retainEvaluation: false
+        )
+      case .claimedCallIdentity:
+        try db.execute(
+          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+          arguments: [runId]
+        )
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: ["state": LearningOperationState.claimed.rawValue]
+        )
+      case .startedMissingCarrier:
+        try db.execute(
+          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+          arguments: [runId]
+        )
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: [
+            "state": LearningOperationState.started.rawValue,
+            "carrier_digest": nil,
+            "reservation_state": LearningReservationState.open.rawValue,
+          ]
+        )
+      case .startedMissingRoute:
+        try makeStartedOperationCorruption(
+          db,
+          id: operationId,
+          runId: runId,
+          assignments: ["route": nil]
+        )
+      case .startedMissingProviderCall:
+        try makeStartedOperationCorruption(
+          db,
+          id: operationId,
+          runId: runId,
+          assignments: ["provider_call_id": nil]
+        )
+      case .startedNegativeTokens:
+        try makeStartedOperationCorruption(
+          db,
+          id: operationId,
+          runId: runId,
+          assignments: ["reserved_tokens": -1]
+        )
+      case .startedNegativeCost:
+        try makeStartedOperationCorruption(
+          db,
+          id: operationId,
+          runId: runId,
+          assignments: ["reserved_cost_usd": -1.0]
+        )
+      case .startedClosedReservation:
+        try db.execute(
+          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+          arguments: [runId]
+        )
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: ["state": LearningOperationState.started.rawValue]
+        )
+      case .succeededFailure:
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: ["failure_code": LearningOperationFailure.providerTerminal.rawValue]
+        )
+      case .succeededMissingCarrier:
+        try updateOperation(db, id: operationId, assignments: ["carrier_digest": nil])
+      case .succeededMissingRoute:
+        try updateOperation(db, id: operationId, assignments: ["route": nil])
+      case .succeededMissingProviderCall:
+        try updateOperation(db, id: operationId, assignments: ["provider_call_id": nil])
+      case .succeededNonzeroTokens:
+        try updateOperation(db, id: operationId, assignments: ["reserved_tokens": 1])
+      case .succeededNonzeroCost:
+        try updateOperation(db, id: operationId, assignments: ["reserved_cost_usd": 1.0])
+      case .succeededMissingReservation:
+        try updateOperation(db, id: operationId, assignments: ["reservation_state": nil])
+      case .succeededOpenReservation:
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: ["reservation_state": LearningReservationState.open.rawValue]
+        )
+      case .failedMissingFailure:
+        try db.execute(
+          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+          arguments: [runId]
+        )
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: [
+            "state": LearningOperationState.failed.rawValue,
+            "failure_code": nil,
+          ]
+        )
+      case .failedWrongFailure:
+        try db.execute(
+          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+          arguments: [runId]
+        )
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: [
+            "state": LearningOperationState.failed.rawValue,
+            "failure_code": LearningOperationFailure.budgetDenied.rawValue,
+          ]
+        )
+      case .failedNoCallWrongFailure:
+        try makeNoCallOperation(
+          db,
+          id: operationId,
+          runId: runId,
+          state: .failedNoCall,
+          failure: .providerTerminal,
+          retainEvaluation: false
+        )
+      case .failedNoCallCallIdentity:
+        try db.execute(
+          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+          arguments: [runId]
+        )
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: [
+            "state": LearningOperationState.failedNoCall.rawValue,
+            "failure_code": LearningOperationFailure.budgetDenied.rawValue,
+          ]
+        )
+      case .interruptedFailure:
+        try db.execute(
+          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+          arguments: [runId]
+        )
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: [
+            "state": LearningOperationState.interruptedUnknown.rawValue,
+            "failure_code": LearningOperationFailure.providerTerminal.rawValue,
+          ]
+        )
+      case .interruptedOpenReservation:
+        try db.execute(
+          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+          arguments: [runId]
+        )
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: [
+            "state": LearningOperationState.interruptedUnknown.rawValue,
+            "reservation_state": LearningReservationState.open.rawValue,
+          ]
+        )
+      case .unknownFailure:
+        try db.execute(
+          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+          arguments: [runId]
+        )
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: [
+            "state": LearningOperationState.failed.rawValue,
+            "failure_code": "unknown",
+          ]
+        )
+      case .job:
+        try updateOperation(db, id: operationId, assignments: ["job_id": jobId + 1])
+      case .epoch:
+        try updateOperation(db, id: operationId, assignments: ["learning_epoch": 2])
+      case .phase:
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: ["phase": LearningPhase.reflector.rawValue]
+        )
+      case .sourceDigest:
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: ["source_digest": String(repeating: "f", count: 64)]
+        )
+      case .keyDigest:
+        try updateOperation(
+          db,
+          id: operationId,
+          assignments: ["key_digest": String(repeating: "f", count: 64)]
+        )
+      case .attemptGeneration:
+        try updateOperation(db, id: operationId, assignments: ["attempt_generation": 2])
+      case .supersedes:
+        try updateOperation(db, id: operationId, assignments: ["supersedes": operationId.rawValue])
+      }
+    }
+  }
+
+  func replaceInterruptedOperationWithFailed(_ id: LearningOperationID) throws {
+    try queue.write { db in
+      try updateOperation(
+        db,
+        id: id,
+        assignments: [
+          "state": LearningOperationState.failed.rawValue,
+          "failure_code": LearningOperationFailure.providerTerminal.rawValue,
+        ]
+      )
+    }
+  }
+
+  func removeEvidencePayload(runId: Int64) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE learning_evidence SET payload = NULL WHERE run_id = ?",
+        arguments: [runId]
+      )
     }
   }
 
@@ -1338,6 +2034,54 @@ extension BoundRunEnvironment {
     }
   }
 
+  fileprivate func rawResolvedAssignment(runId: Int64) throws -> RawResolvedAssignment {
+    try queue.read { db in
+      guard
+        let row = try Row.fetchOne(
+          db,
+          sql: """
+            SELECT assignment.state, assignment.outcome, assignment.evaluation_digest,
+              assignment.effective_feedback_revision, assignment.resolved_at,
+              evaluation.evaluation_digest AS source_evaluation_digest
+            FROM trial_assignments AS assignment
+            LEFT JOIN learning_evaluations AS evaluation ON evaluation.run_id = assignment.run_id
+            WHERE assignment.run_id = ?
+            """,
+          arguments: [runId]
+        ),
+        let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+        let state = TrialAssignmentState(rawValue: stateRaw),
+        let outcomeRaw = SQLiteStoredValue.string(in: row, column: "outcome"),
+        let outcome = TrialOutcomeKind(rawValue: outcomeRaw),
+        let evaluationRaw = SQLiteStoredValue.nullableString(
+          in: row,
+          column: "evaluation_digest"
+        ),
+        let sourceRaw = SQLiteStoredValue.nullableString(
+          in: row,
+          column: "source_evaluation_digest"
+        ),
+        let feedbackRaw = SQLiteStoredValue.int64(
+          in: row,
+          column: "effective_feedback_revision"
+        ),
+        feedbackRaw >= 0,
+        let resolvedRaw = SQLiteStoredValue.int64(in: row, column: "resolved_at"),
+        let resolvedAt = EpochSecondCodec.date(fromEpoch: resolvedRaw)
+      else {
+        throw StoreError.unexpected("fixture assignment cache is not resolved")
+      }
+      return RawResolvedAssignment(
+        state: state,
+        outcome: outcome,
+        evaluationDigest: evaluationRaw.value.map(EvaluationDigest.init(rawValue:)),
+        sourceEvaluationDigest: sourceRaw.value.map(EvaluationDigest.init(rawValue:)),
+        feedbackRevision: FeedbackRevision(feedbackRaw),
+        resolvedAt: resolvedAt
+      )
+    }
+  }
+
   func feedbackEventCount() throws -> Int {
     try queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM feedback_events") ?? -1
@@ -1382,6 +2126,96 @@ extension BoundRunEnvironment {
     try db.execute(
       sql: "UPDATE learning_evaluations SET \(column) = ? WHERE run_id = ?",
       arguments: [value, runId]
+    )
+  }
+
+  private func evidencePayloadBytes(_ db: Database, runId: Int64) throws -> Data {
+    guard
+      let bytes = try Data.fetchOne(
+        db,
+        sql: "SELECT payload FROM learning_evidence WHERE run_id = ?",
+        arguments: [runId]
+      )
+    else {
+      throw StoreError.unexpected("fixture evidence payload is missing")
+    }
+    return bytes
+  }
+
+  private func replaceEvidencePayload(
+    _ db: Database,
+    runId: Int64,
+    with bytes: Data
+  ) throws {
+    try db.execute(
+      sql: "UPDATE learning_evidence SET payload = ?, evidence_digest = ? WHERE run_id = ?",
+      arguments: [bytes, SHA256Digest.hex(bytes), runId]
+    )
+  }
+
+  private func makeNoCallOperation(
+    _ db: Database,
+    id: LearningOperationID,
+    runId: Int64,
+    state: LearningOperationState,
+    failure: LearningOperationFailure,
+    retainEvaluation: Bool
+  ) throws {
+    if retainEvaluation == false {
+      try db.execute(
+        sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+        arguments: [runId]
+      )
+    }
+    try updateOperation(
+      db,
+      id: id,
+      assignments: [
+        "state": state.rawValue,
+        "failure_code": failure.rawValue,
+        "carrier_digest": nil,
+        "route": nil,
+        "provider_call_id": nil,
+        "reserved_tokens": 0,
+        "reserved_cost_usd": 0.0,
+        "reservation_state": LearningReservationState.closed.rawValue,
+      ]
+    )
+  }
+
+  private func makeStartedOperationCorruption(
+    _ db: Database,
+    id: LearningOperationID,
+    runId: Int64,
+    assignments: [String: (any DatabaseValueConvertible)?]
+  ) throws {
+    try db.execute(
+      sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
+      arguments: [runId]
+    )
+    var source = assignments
+    source["state"] = LearningOperationState.started.rawValue
+    source["reservation_state"] =
+      source["reservation_state"] ?? LearningReservationState.open.rawValue
+    try updateOperation(db, id: id, assignments: source)
+  }
+
+  private func updateOperation(
+    _ db: Database,
+    id: LearningOperationID,
+    assignments: [String: (any DatabaseValueConvertible)?]
+  ) throws {
+    let ordered = assignments.sorted { left, right in
+      left.key < right.key
+    }
+    let columns = ordered.map { assignment in
+      "\(assignment.key) = ?"
+    }.joined(separator: ", ")
+    var arguments = StatementArguments(ordered.map(\.value))
+    arguments += [id.rawValue]
+    try db.execute(
+      sql: "UPDATE learning_operations SET \(columns) WHERE operation_id = ?",
+      arguments: arguments
     )
   }
 }
