@@ -1,5 +1,18 @@
 import Foundation
 
+/// Doctor snapshot of the approvals table: how many owner decisions are outstanding
+/// and how long the oldest one has waited. `oldestPendingAgeSeconds` is nil when nothing is
+/// pending. The ClawGateway renderer compares the age against `approval_expiry`.
+public struct ApprovalsHealth: Sendable, Equatable {
+  public let pendingCount: Int
+  public let oldestPendingAgeSeconds: Int?
+
+  public init(pendingCount: Int, oldestPendingAgeSeconds: Int?) {
+    self.pendingCount = pendingCount
+    self.oldestPendingAgeSeconds = oldestPendingAgeSeconds
+  }
+}
+
 /// The four outcomes of the approve CAS. Only `.approved`/`.stalePolicy` mutate the
 /// row (each with its own same-txn audit); `.notPending`/`.expiredRow` leave it untouched for the
 /// caller to route (duplicate-tap toast, or the deny path for an aged-out row).
