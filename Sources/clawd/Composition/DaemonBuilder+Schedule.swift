@@ -75,11 +75,40 @@ extension DaemonBuilder {
   /// The learning loop's driver, or nil when `CLAW_LEARNING_ENABLED` is unset. Nil is what keeps
   /// the flag-off daemon exactly as it is today: no lane tail settles, no sweep ticks, and no
   /// compatibility or evidence row is written.
-  func makeLearningService() -> ScheduledLearningService? {
+  func makeLearningService(
+    roster: ProviderRoster,
+    cooldown: any PrimaryRouteCooldownTracking,
+    costResolver: CostResolver,
+    signal: OutboxSignal
+  ) -> ScheduledLearningService? {
     guard config.learningEnabled else {
       return nil
     }
-    return ScheduledLearningService(store: stores.learning, now: { Date() }, logger: logger)
+    let redactor = SecretRedactor(secretValues: redactionValues)
+    let runner = LearningOperationRunner(
+      learning: stores.learning,
+      jobs: stores.scheduledJobs,
+      roster: roster,
+      cooldown: cooldown,
+      budget: config.budget,
+      costResolver: costResolver,
+      redactor: redactor,
+      logger: logger
+    )
+    let workflow = LearningWorkflow(
+      store: stores.learning,
+      jobs: stores.scheduledJobs,
+      runner: runner,
+      notices: LearningNotices(learning: stores.learning, signal: signal),
+      redactor: redactor,
+      logger: logger
+    )
+    return ScheduledLearningService(
+      store: stores.learning,
+      workflow: workflow,
+      now: { Date() },
+      logger: logger
+    )
   }
 
   /// The pickup-time compatibility freeze `TurnRunner` calls. Assembled here because the tool

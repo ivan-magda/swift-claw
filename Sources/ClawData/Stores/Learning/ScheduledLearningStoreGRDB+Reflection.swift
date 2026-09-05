@@ -518,3 +518,159 @@ private struct StoredCandidateProjection {
       && algorithm == manifest.algorithm.rawValue
   }
 }
+
+// MARK: - Workflow Trigger Discovery
+
+extension ScheduledLearningStoreGRDB {
+  public func workflowTriggers(jobId: Int64, now: Date) throws(StoreError) -> [TriggerIdentity] {
+    try database.readMapping { db in
+      guard let state = try Self.readState(db, jobId: jobId),
+        try Self.jobIsRepeatable(db, jobId: jobId),
+        try Self.liveTrial(db, jobId: jobId) == nil
+      else {
+        return []
+      }
+      let rows = try Row.fetchAll(
+        db,
+        sql: """
+          SELECT evidence_digest, compatibility_digest FROM (
+            SELECT evaluation.evidence_digest, evaluation.compatibility_digest,
+              ROW_NUMBER() OVER (PARTITION BY evaluation.compatibility_digest
+                ORDER BY binding.occurrence_at DESC, binding.run_id DESC) AS position
+            FROM learning_evaluations AS evaluation
+            JOIN run_learning_bindings AS binding ON binding.run_id = evaluation.run_id
+            WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
+              AND binding.stable_digest = ? AND binding.trial_id IS NULL
+              AND binding.occurrence_at >= ? AND binding.occurrence_at <= ?
+              AND evaluation.created_at <= ?
+          ) WHERE position <= ? ORDER BY compatibility_digest, position DESC
+          """,
+        arguments: [
+          jobId, state.epoch.value, state.stableDigest.rawValue,
+          EpochSecondCodec.epoch(now.addingTimeInterval(-EvidenceWindow.maximumAge)),
+          EpochSecondCodec.epoch(now), EpochSecondCodec.epoch(now), EvidenceWindow.maximumCount,
+        ]
+      )
+      let grouped = Dictionary(grouping: rows) { row in
+        row["compatibility_digest"] as String
+      }
+      return try grouped.keys.sorted().compactMap { compatibility in
+        let digests = (grouped[compatibility] ?? []).map { row in
+          EvidenceDigest(rawValue: row["evidence_digest"])
+        }
+        let snapshot = TriggerIdentity(
+          jobId: jobId,
+          epoch: state.epoch,
+          algorithm: .v1,
+          stableDigest: state.stableDigest,
+          evidenceDigests: digests,
+          feedbackRevision: state.feedbackRevision,
+          issueCodes: [],
+          reason: .recurringIssue
+        )
+        let sources = try Self.reflectionRows(db, trigger: snapshot)
+        let feedback = try Self.reflectionFeedback(
+          db,
+          trigger: snapshot,
+          rows: sources,
+          cutoff: state.feedbackRevision
+        )
+        let reduced = try Self.reduceReflectionRows(sources, feedback: feedback, trigger: snapshot)
+        guard reduced.vetoed == false else {
+          return nil
+        }
+        let window = EvidenceWindow.select(
+          from: reduced.effective,
+          compatibility: CompatibilityDigest(rawValue: compatibility),
+          cutoff: now
+        )
+        guard let trigger = LearningTrigger.detect(window: window, corrections: reduced.events),
+          try Self.workflowReflectionIsClaimable(db, trigger: trigger),
+          try Self.onlyControlsChangedSinceAttempt(db, trigger: trigger) == false
+        else {
+          return nil
+        }
+        return trigger
+      }
+    }
+  }
+}
+
+// MARK: - Effective Trigger Changes
+
+private extension ScheduledLearningStoreGRDB {
+  static func workflowReflectionIsClaimable(_ db: Database, trigger: TriggerIdentity) throws -> Bool
+  {
+    let key = LearningOperationKey(
+      jobId: trigger.jobId,
+      epoch: trigger.epoch,
+      phase: .reflector,
+      sourceDigest: trigger.digest.rawValue,
+      promptVersion: ReflectorPrompt.v1.version,
+      schemaVersion: ReflectorOutput.currentSchemaVersion,
+      rubricVersion: ReflectorRubric.v1
+    )
+    let raw = try String.fetchOne(
+      db,
+      sql: """
+        SELECT state FROM learning_operations WHERE key_digest = ?
+        ORDER BY attempt_generation DESC LIMIT 1
+        """,
+      arguments: [key.digest.rawValue]
+    )
+    return raw == nil || raw == LearningOperationState.pending.rawValue
+      || raw == LearningOperationState.interruptedUnknown.rawValue
+  }
+
+  static func onlyControlsChangedSinceAttempt(_ db: Database, trigger: TriggerIdentity) throws
+    -> Bool
+  {
+    let revisions = try Int64.fetchAll(
+      db,
+      sql: """
+        SELECT feedback_revision - 1 FROM feedback_events
+        WHERE job_id = ? AND learning_epoch = ? AND subject_kind IN (?, ?)
+          AND feedback_revision > COALESCE((SELECT MAX(feedback_revision) FROM feedback_events
+            WHERE job_id = ? AND learning_epoch = ? AND subject_kind NOT IN (?, ?)), 0)
+          AND feedback_revision <= ? ORDER BY feedback_revision DESC
+        """,
+      arguments: [
+        trigger.jobId, trigger.epoch.value,
+        FeedbackSubjectKind.candidate.rawValue, FeedbackSubjectKind.promotion.rawValue,
+        trigger.jobId, trigger.epoch.value,
+        FeedbackSubjectKind.candidate.rawValue, FeedbackSubjectKind.promotion.rawValue,
+        trigger.feedbackRevision.value,
+      ]
+    )
+    for revision in revisions {
+      let prior = TriggerIdentity(
+        jobId: trigger.jobId,
+        epoch: trigger.epoch,
+        algorithm: trigger.algorithm,
+        stableDigest: trigger.stableDigest,
+        evidenceDigests: trigger.evidenceDigests,
+        feedbackRevision: FeedbackRevision(revision),
+        issueCodes: trigger.issueCodes,
+        reason: trigger.reason
+      )
+      let key = LearningOperationKey(
+        jobId: prior.jobId,
+        epoch: prior.epoch,
+        phase: .reflector,
+        sourceDigest: prior.digest.rawValue,
+        promptVersion: ReflectorPrompt.v1.version,
+        schemaVersion: ReflectorOutput.currentSchemaVersion,
+        rubricVersion: ReflectorRubric.v1
+      )
+      if try Bool.fetchOne(
+        db,
+        sql:
+          "SELECT EXISTS(SELECT 1 FROM learning_operations WHERE key_digest = ?)",
+        arguments: [key.digest.rawValue]
+      ) == true {
+        return true
+      }
+    }
+    return false
+  }
+}

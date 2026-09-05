@@ -48,6 +48,10 @@ struct EvaluationRunEnvironment {
 
   static func make(
     reply: String,
+    followingReplies: [String] = [],
+    repeatable: Bool = false,
+    sealsEvidence: Bool = true,
+    beforeResponse: @escaping @Sendable () async -> Void = {},
     finalOutput: String = EvaluationRunEnvironment.defaultFinalOutput,
     secretValues: [String] = [],
     proactivePerDayUSD: Double = RunBudget.default.proactivePerDayUSD,
@@ -65,7 +69,8 @@ struct EvaluationRunEnvironment {
         ownerChatId: chatId,
         label: "digest",
         prompt: "Check the page for material changes.",
-        recurrence: nil,
+        recurrence: repeatable
+          ? SchedulingRuleFixtures.weekdayEnvelope(zone: .gmt) : nil,
         timezone: "Europe/Berlin",
         nextOccurrence: now
       ),
@@ -94,7 +99,9 @@ struct EvaluationRunEnvironment {
       ),
       now: now
     )
-    _ = try learning.sealEvidence(runId: fired.runId, now: now)
+    if sealsEvidence {
+      _ = try learning.sealEvidence(runId: fired.runId, now: now)
+    }
 
     let answer = ChatResponse(
       content: reply,
@@ -109,7 +116,19 @@ struct EvaluationRunEnvironment {
     let primary =
       primaryFailure.map { failure in
         SequenceProvider([], then: failure)
-      } ?? SequenceProvider([answer])
+      }
+      ?? SequenceProvider(
+        [answer]
+          + followingReplies.map { text in
+            ChatResponse(
+              content: text,
+              finishReason: "stop",
+              usage: ChatUsage(promptTokens: 100, completionTokens: 30, totalTokens: 130),
+              costFromProvider: replyCostUSD
+            )
+          },
+        beforeResponse: beforeResponse
+      )
     let fallback = SequenceProvider(primaryFailure == nil ? [] : [answer])
     let roster = ProviderRoster(
       primary: routeBinding(provider: primary, reference: primaryRoute),
@@ -649,5 +668,58 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
 private extension RecordingLearningStore {
   func recordServiceCall(_ call: String) {
     lock.withLock { recordedServiceCalls.append(call) }
+  }
+}
+
+extension EvaluationRunEnvironment {
+  func settledBoundRun(at date: Date? = nil, toolCatalog: String = "tools-v1") throws -> Int64 {
+    let instant = date ?? now
+    let fired = try Self.fire(jobs, jobId: jobId, now: instant)
+    _ = try runs.pickUp(runId: fired.runId, now: instant)
+    try learning.freezeCompatibility(
+      runId: fired.runId,
+      surface: RunSurface(
+        toolCatalogDigest: toolCatalog,
+        policyVersion: "pv16",
+        skillSetDigest: "skills-v1",
+        configuredRoute: Self.primaryRoute
+      )
+    )
+    _ = try runs.commitAssistantTurn(
+      Self.answeredTurn(
+        runId: fired.runId,
+        sessionId: fired.sessionId,
+        finalOutput: Self.defaultFinalOutput
+      ),
+      now: instant
+    )
+    return fired.runId
+  }
+}
+
+extension EvaluationRunEnvironment {
+  func candidateTargets() throws -> [FeedbackTarget] {
+    let nonces = try queue.read { db in
+      try String.fetchAll(
+        db,
+        sql: "SELECT nonce FROM feedback_targets WHERE subject_kind = ?",
+        arguments: [FeedbackSubjectKind.candidate.rawValue]
+      )
+    }
+    return try nonces.compactMap { nonce in
+      try learning.feedbackTarget(nonce: nonce)
+    }
+  }
+}
+
+extension EvaluationRunEnvironment {
+  func evaluationAuditCount() throws -> Int {
+    try queue.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM audit_events WHERE action = ? AND run_id = ?",
+        arguments: [AuditAction.learningEvaluated.rawValue, runId]
+      ) ?? 0
+    }
   }
 }

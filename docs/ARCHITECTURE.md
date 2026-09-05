@@ -864,6 +864,39 @@ transaction. Only the final chunk carries the rollback button. The gateway pokes
 after commit. A stale promotion exposes no new target. Callback-driven progression belongs to the
 workflow coordinator; the feedback boundary still authenticates, consumes and records the request.
 
+### 14.2 Scheduled learning workflow
+
+`ScheduledLearningService` queues lane-settlement and authenticated-feedback notifications on its
+stored drain task. Owner callbacks and challenge acknowledgements enqueue work without awaiting
+an inference. Direct `advance(runId:)` and `advance(jobId:)` calls await a bounded `LearningWorkflow`
+pass. The composition root supplies the actual provider roster, shared primary cooldown, configured
+budget and cost resolver, the redactor including MCP secrets, and notices using the shared outbox
+signal. A failed boot operation reconciliation prevents learning dispatch; ordinary delivery remains
+available.
+
+The run pass seals evidence, evaluates it under the durable operation claim, recomputes its trial
+assignment and advances the job. Evaluation commit includes the content-free `learning_evaluated`
+audit event in the same transaction. The job pass applies pending immutable candidate controls,
+reconciles trial decisions and exact promotion rollback triggers, admits retained artifacts and
+commits review notices, then discovers eligible reflection windows. These transitions use their
+existing store claims and compare-and-swap transactions. Exact rollback-trigger replay returns its
+original receipt; a later distinct feedback event receives a distinct decision.
+
+Recovery reads in `LearningWorkflowStore` do not arm jobs. The periodic sweep pages through armed
+job IDs, recovering sealed unevaluated runs, artifacts awaiting admission or notice, controls and
+trial deadlines. Terminal denied or completed operations do not occupy the claimable queue.
+`LearningWorkflow.maxTransitionsPerInvocation` limits a job pass to 64 reviewed transitions and
+logs an error when more work remains. The next sweep resumes durable work.
+
+Trigger discovery preserves the canonical trigger digest and the current global feedback revision
+required by admission. When an attempted trigger has the identical evidence window, base, algorithm
+and qualifying issue codes, candidate or promotion controls alone do not authorize another
+reflection. Discovery compares the prior exact operation keys across the trailing control-only
+revision sequence and waits. New evidence or run/evaluation feedback can authorize another trigger.
+This follows the algorithm's owner-edit bypass and effective-feedback retry boundary; it resolves
+the reference reducer's discrepancy between skipping trigger discovery on a candidate event and
+rediscovering the same window on its clock path. No persisted revision or algorithm parameter changes.
+
 ## 15. Configuration & secrets
 
 - **Environment variables are the active configuration surface; `config.toml` remains future work.** The typed `AppConfig` is loaded from the environment/`.env` today; the structured-file behavior described below is the intended shape once that file lands, not a shipped surface. **A provider-qualified `CLAW_LLM_MODEL` value (`openai-chatgpt/<model>`) is the only configuration selector the subscription route adds** — there is deliberately **no per-provider environment namespace**. The model value carries the route selector, provider-owned OAuth state lives in the credential store, and fixed protocol details are implementation constants (§8.3), so ad-hoc `CLAW_CHATGPT_*` variables would only duplicate the structure that structured configuration will supply; they are **deferred with `config.toml`**, not merely unimplemented. When it lands, the registry deserializes provider-specific blocks into the same resolved route (§8.1) without changing any downstream seam.

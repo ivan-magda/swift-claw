@@ -11,22 +11,26 @@ import Foundation
 /// then fails), so one double covers plain playback, fail-only, and playback-then-fail.
 public actor SequenceProvider: LLMProvider {
   private var responses: [ChatResponse]
+  private let beforeResponse: @Sendable () async -> Void
   private let exhaustionError: any Error & Sendable
   public private(set) var requests: [ChatRequest] = []
 
   public init(
     _ responses: [ChatResponse],
+    beforeResponse: @escaping @Sendable () async -> Void = {},
     then exhaustionError: any Error & Sendable = ProviderError.terminal(
       status: nil,
       message: "unscripted round-trip"
     )
   ) {
     self.responses = responses
+    self.beforeResponse = beforeResponse
     self.exhaustionError = exhaustionError
   }
 
   public func complete(request: ChatRequest) async throws -> ChatResponse {
     requests.append(request)
+    await beforeResponse()
     guard responses.isEmpty == false else {
       throw exhaustionError
     }

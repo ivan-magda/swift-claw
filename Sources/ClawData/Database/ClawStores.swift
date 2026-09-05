@@ -22,7 +22,7 @@ public struct ClawStores: Sendable {
   public let scheduleCommands: any ScheduleCommandStore
 
   public let approvals: any ApprovalStore
-  public let learning: any ScheduledLearningStore
+  public let learning: any LearningWorkflowStore
 
   public init(
     allowlist: any AllowlistStore,
@@ -40,7 +40,7 @@ public struct ClawStores: Sendable {
     scheduledJobs: any ScheduledJobStore,
     scheduleCommands: any ScheduleCommandStore,
     approvals: any ApprovalStore,
-    learning: any ScheduledLearningStore
+    learning: any LearningWorkflowStore
   ) {
     self.allowlist = allowlist
     self.processed = processed

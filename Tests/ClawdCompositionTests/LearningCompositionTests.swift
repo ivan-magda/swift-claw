@@ -35,7 +35,7 @@ import Testing
     )
     #expect(frozen.skillSetDigest == DaemonBuilder.skillSetDigest([]))
     #expect(frozen.configuredRoute == CompositionAcceptance.qualifiedModel)
-    #expect(builder.makeLearningService() != nil)
+    #expect(LearningComposition.learningService(builder) != nil)
     #expect(builder.makePinnedLessonStore() != nil)
   }
 
@@ -52,7 +52,7 @@ import Testing
     freeze(runId, "pv-at-pickup")
 
     // then — the daemon behaves exactly as it does today: nothing to sweep, nothing frozen
-    #expect(builder.makeLearningService() == nil)
+    #expect(LearningComposition.learningService(builder) == nil)
     #expect(try builder.stores.learning.compatibility(runId: runId) == nil)
     // The turn path must refuse the pinned read too: a binding written before the flag came off
     // outlives the flag, and an approval parked on it can resume under a disarmed daemon.
@@ -142,7 +142,7 @@ import Testing
     #expect(outcome == .processed)
     #expect(resetPrompt == .processed)
     #expect(reset == .processed)
-    #expect(builder.makeLearningService() == nil)
+    #expect(LearningComposition.learningService(builder) == nil)
     let calls = await http.recorded
     let call = try #require(calls.first)
     let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
@@ -427,6 +427,25 @@ private enum LearningComposition {
         nextOccurrence: now
       ),
       now: now
+    )
+  }
+
+  static func learningService(_ builder: DaemonBuilder) -> ScheduledLearningService? {
+    let route = LLMRouteBinding(
+      provider: SequenceProvider([]),
+      wireModel: "test",
+      configuredReference: CompositionAcceptance.qualifiedModel,
+      costPolicy: .metered,
+      reservationPolicy: .textOnly
+    )
+    return builder.makeLearningService(
+      roster: ProviderRoster(primary: route),
+      cooldown: PrimaryRouteCooldown(longSeconds: 900, clock: ContinuousClock()),
+      costResolver: CostResolver(
+        priceTable: .empty,
+        referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
+      ),
+      signal: OutboxSignal()
     )
   }
 

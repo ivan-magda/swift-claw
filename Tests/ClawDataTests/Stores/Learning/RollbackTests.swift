@@ -31,7 +31,9 @@ import Testing
   }
 
   @Test(arguments: [OwnerSignal.resultNotUseful, .evaluationDispute, .resultCorrection])
-  func supportWithdrawal(_ signal: OwnerSignal) throws {
+  func rediscoveredWithdrawalReusesReceiptAndLaterFeedbackStillRollsBack(_ signal: OwnerSignal)
+    throws
+  {
     // given
     let env = try BoundRunEnvironment.promotionEnvironment()
     let first = try env.positiveTrialRun()
@@ -51,6 +53,10 @@ import Testing
       .supportWithdrawal(promotionId: promotion.decisionId, eventId: firstEvent.id),
       now: env.now
     )
+    let rediscovered = try env.learning.rollback(
+      .supportWithdrawal(promotionId: promotion.decisionId, eventId: firstEvent.id),
+      now: env.now
+    )
     let secondEvent = try env.withdrawalFeedback(
       runId: pending,
       signal: .resultNotUseful,
@@ -63,6 +69,8 @@ import Testing
 
     // then
     #expect(stillSupported?.result == .stale)
+    #expect(rediscovered == stillSupported)
+    #expect(rollback?.decisionId != stillSupported?.decisionId)
     #expect(rollback?.result == .rolledBack)
     #expect(promotion.cohort.count == 3)
     #expect(try env.currentLearningState().stableDigest == promotion.inputs.baseDigest)

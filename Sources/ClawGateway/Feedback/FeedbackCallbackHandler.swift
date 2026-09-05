@@ -10,6 +10,7 @@ public struct FeedbackCallbackHandler: Sendable {
   private let audit: any AuditLog
   private let callbacks: any CallbackResponding
   private let challenges: FeedbackChallengeHandler?
+  private let workflow: ScheduledLearningService?
   private let now: @Sendable () -> Date
   private let logger: Logger
 
@@ -20,6 +21,7 @@ public struct FeedbackCallbackHandler: Sendable {
     audit: any AuditLog,
     callbacks: any CallbackResponding,
     challenges: FeedbackChallengeHandler? = nil,
+    workflow: ScheduledLearningService? = nil,
     now: @escaping @Sendable () -> Date,
     logger: Logger
   ) {
@@ -29,6 +31,7 @@ public struct FeedbackCallbackHandler: Sendable {
     self.audit = audit
     self.callbacks = callbacks
     self.challenges = challenges
+    self.workflow = workflow
     self.now = now
     self.logger = logger
   }
@@ -41,6 +44,7 @@ public struct FeedbackCallbackHandler: Sendable {
     audit: any AuditLog,
     callbacks: any CallbackResponding,
     challenges: FeedbackChallengeHandler? = nil,
+    workflow: ScheduledLearningService? = nil,
     now: @escaping @Sendable () -> Date,
     logger: Logger
   ) -> FeedbackCallbackHandler {
@@ -51,6 +55,7 @@ public struct FeedbackCallbackHandler: Sendable {
       audit: audit,
       callbacks: callbacks,
       challenges: challenges,
+      workflow: workflow,
       now: now,
       logger: logger
     )
@@ -173,6 +178,7 @@ private extension FeedbackCallbackHandler {
     }
     switch outcome {
     case .recorded:
+      await workflow?.notifyChanged(jobId: target.jobId)
       return await finish(callback, toast: Self.recordedToast)
     case .challengeOpened, .targetMissing, .ownerMismatch, .chatMismatch, .expired,
       .actionMismatch, .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:

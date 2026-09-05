@@ -6,17 +6,20 @@ import Logging
 public struct FeedbackChallengeHandler: Sendable {
   private let replies: ReplySender
   private let learning: any ScheduledLearningStore
+  private let workflow: ScheduledLearningService?
   private let notifyOutbox: @Sendable () -> Void
   private let now: @Sendable () -> Date
 
   init(
     replies: ReplySender,
     learning: any ScheduledLearningStore,
+    workflow: ScheduledLearningService? = nil,
     notifyOutbox: @escaping @Sendable () -> Void,
     now: @escaping @Sendable () -> Date
   ) {
     self.replies = replies
     self.learning = learning
+    self.workflow = workflow
     self.notifyOutbox = notifyOutbox
     self.now = now
   }
@@ -25,6 +28,7 @@ public struct FeedbackChallengeHandler: Sendable {
     processed: any ProcessedUpdateStore,
     delivery: any MessageDelivery,
     learning: any ScheduledLearningStore,
+    workflow: ScheduledLearningService? = nil,
     notifyOutbox: @escaping @Sendable () -> Void,
     now: @escaping @Sendable () -> Date,
     logger: Logger
@@ -32,6 +36,7 @@ public struct FeedbackChallengeHandler: Sendable {
     FeedbackChallengeHandler(
       replies: ReplySender(processed: processed, delivery: delivery, logger: logger),
       learning: learning,
+      workflow: workflow,
       notifyOutbox: notifyOutbox,
       now: now
     )
@@ -80,6 +85,7 @@ public struct FeedbackChallengeHandler: Sendable {
     let acknowledgement: String
     switch outcome {
     case .recorded:
+      await workflow?.notifyChanged(jobId: challenge.jobId)
       acknowledgement = Self.recordedText
     case .challengeOpened, .targetMissing, .ownerMismatch, .chatMismatch, .expired,
       .actionMismatch, .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
