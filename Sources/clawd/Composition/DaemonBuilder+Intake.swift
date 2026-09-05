@@ -92,6 +92,7 @@ extension DaemonBuilder {
       typing: TelegramTypingIndicator(transport: transport),
       coordinator: coordination.approvalCoordinator,
       doctor: doctor,
+      now: now,
       logger: logger
     )
   }

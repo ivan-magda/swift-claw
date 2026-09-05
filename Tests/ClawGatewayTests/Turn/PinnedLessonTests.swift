@@ -440,6 +440,10 @@ private extension FeedbackTarget {
 /// The real learning store with one fact removed: no lesson set ever resolves. Everything else
 /// — the binding above all — stays the real row the fire wrote.
 private struct UnresolvableLessonSets: ScheduledLearningStore {
+  func sweepRetention(now: Date) throws(StoreError) -> RetentionSweepResult {
+    try base.sweepRetention(now: now)
+  }
+
   let base: ScheduledLearningStoreGRDB
 
   func applyTrialDecision(

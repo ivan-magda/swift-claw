@@ -91,9 +91,15 @@ public actor ScheduledLearningService {
     if let workflow { await workflow.advance(jobId: jobId, now: now()) }
   }
 
-  /// Seals settled runs, then reconciles live trials against their deadlines. Retention joins
-  /// later; errors remain isolated so one bad row cannot starve later work.
+  /// Recovers settled work and trial deadlines, then collects unreferenced learning history.
   public func sweep(now: Date) async {
+    defer {
+      do {
+        _ = try store.sweepRetention(now: now)
+      } catch {
+        logger.error("learning retention deferred: \(error)")
+      }
+    }
     if let workflow {
       guard ensureOperations(now: now) else {
         return

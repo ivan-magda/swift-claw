@@ -35,6 +35,9 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   accepted skill and each file the scanner rejected.
 - **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
   occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
+- **Scheduled tasks that learn from feedback.** Opt in with `CLAW_LEARNING_ENABLED=true`.
+  Correct one result to start a bounded lesson trial; two positive runs can promote it.
+  Inspect lessons and roll back a promotion with `/learning`.
 - **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
   execution wait for an explicit tap-to-approve in Telegram. clawd enforces policy in
   code and treats inbound content as data, never as instructions.
@@ -98,6 +101,11 @@ sudo install -m755 .build/release/clawd /usr/local/bin/clawd
 
 The full walkthrough, including the ChatGPT-subscription route and troubleshooting, is
 in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
+
+In Telegram, `/schedule` creates or lists jobs; `/runnow <jobId>` runs one now;
+`/pause`, `/resume`, and `/cancel` control a job. `/learning <jobId>` shows its lessons and
+trial, and `/learning reset <jobId>` asks you to confirm an empty lesson set. `/help` lists
+commands and confirmation rules.
 
 ## Security model
 

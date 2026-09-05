@@ -321,6 +321,10 @@ private extension EvaluationRunEnvironment {
 /// `Sendable` wrappers that lean on GRDB's own serialization — and an actor cannot satisfy a
 /// synchronous requirement.
 final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable {
+  func sweepRetention(now: Date) throws(StoreError) -> RetentionSweepResult {
+    try base.sweepRetention(now: now)
+  }
+
   struct ServiceBehavior: Sendable {
     let identities: [LearningTrialIdentity]?
     let trialResults: [Int64: TrialReconciliationResult]

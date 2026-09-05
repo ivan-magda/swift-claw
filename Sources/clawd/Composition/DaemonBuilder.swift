@@ -30,6 +30,7 @@ struct DaemonBuilder: Sendable {
   let mcp: MCPBootInputs
 
   let logger: Logger
+  var now: @Sendable () -> Date = { Date() }
 
   /// Builds the encrypted credential store the managed route loads its record from. A field rather
   /// than a literal so a composition test scripts a missing or malformed envelope in place of the

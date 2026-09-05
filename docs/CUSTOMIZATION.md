@@ -129,7 +129,7 @@ every time, whatever else the session did.
 and MCP calls, for your approval once the session has done *both* of these:
 
 - **Ingested untrusted content.** A web page, a file read, tool output, a voice transcript,
-  or a photo. Durable memory and a skill you loaded do not count: both are labeled
+  a photo, or non-empty pinned job lessons. Durable memory and a skill you loaded do not count: both are labeled
   untrusted, and neither taints the session on its own.
 - **Touched private data.** Assembling `USER.md`, `MEMORY.md`, or stored memory items into
   the context is enough; no tool has to read them. Once you have filled in `USER.md`, this
@@ -227,7 +227,7 @@ All optional; unset means the built-in defaults.
 |---|---|
 | `CLAW_PER_RUN_USD` | Cap per single run |
 | `CLAW_PER_DAY_USD` | Daily spend kill-switch |
-| `CLAW_PROACTIVE_PER_DAY_USD` | Nested daily cap for scheduled + heartbeat runs (default 2.00) |
+| `CLAW_PROACTIVE_PER_DAY_USD` | Nested daily cap for scheduled + heartbeat runs and learning calls (default 2.00) |
 | `CLAW_MAX_TURNS` / `CLAW_MAX_TOOL_CALLS` | Bounds on the agentic loop per run |
 
 **On the ChatGPT subscription route these dollar caps do not gate.** A plan-included call
@@ -258,17 +258,59 @@ exactly one allowlisted owner), then it works through `HEARTBEAT.md` up to
 `CLAW_HEARTBEAT_MAX_PER_DAY` times a day, every `CLAW_HEARTBEAT_INTERVAL_MINUTES`
 minutes, staying silent during `CLAW_HEARTBEAT_QUIET_HOURS` (default `22:00-09:00`).
 
-### Inspect scheduled learning
+### Scheduled learning
+
+`CLAW_LEARNING_ENABLED=true` enables learning for scheduled jobs. It is off by default;
+with the flag unset, new runs create no learning state or feedback keyboard. Learning
+uses your configured provider route and shares the global and proactive spending limits.
+Eligible settled runs receive one evaluation each. Technical failures and canned degradation
+notices supply no quality evidence.
+
+On a result, tap **Useful**, **Not useful**, or **Correct it**. Correction opens a one-shot
+prompt; reply with the change you want. An evaluation notice lets you confirm or dispute that
+exact evaluation. One owner correction can trigger reflection after one eligible run;
+automatic reflection needs two distinct negative runs sharing an issue code among the last
+five compatible stable evaluations from the last 30 days.
+
+clawd can propose one complete replacement lesson set and admit it to a trial. A review
+notice lets you reject or edit the candidate. **Edit** opens a prompt for JSON such as:
+
+```json
+{"lessons":["Report only material changes."]}
+```
+
+Your edit creates a new candidate and carries no prior approval. Use its **Approve** button
+to send it through admission again. Approval starts a trial; it does not count as a positive
+result. A trial exposes at most three created runs, including `/runnow` runs. Two distinct
+positive runs promote the candidate once all assigned runs resolve; one negative or a hard
+veto ends the trial and leaves stable lessons unchanged. Assignment ends after 30 days;
+unresolved runs have until day 37. Pausing the job does not extend either deadline.
 
 Send `/learning` to list jobs with retained learning state, or `/learning <jobId>` to inspect
-lessons, trial assignments and the last decision. Promotion receipts show the runs that supplied
-support and distinguish heuristic activation from owner-confirmed evidence.
+lessons, trial assignments and the last decision. Promotion receipts show the supporting runs
+and distinguish heuristic activation from owner-confirmed evidence. The detail reply offers
+**Roll back promotion** while that promotion is current. Rollback restores its direct prior
+lesson set. Stale rollback requests change nothing.
 
-A detail reply for a current promotion carries **Roll back promotion** on its final message.
-That button records an authenticated request for that exact promotion. The learning coordinator
-applies rollback only while the promotion remains current. Rollback restores its direct prior
-lesson set and keeps the learning epoch. `/learning reset <jobId>` asks you to confirm a new epoch
-with an empty set and invalidates pending feedback controls.
+`/learning reset <jobId>` asks for confirmation, starts a new learning epoch with an empty
+stable set, closes a live trial, and invalidates pending feedback controls. Old in-flight
+inferences may record usage but cannot create new learning artifacts. Reset stops active use;
+it does not erase stored history or change the scheduled prompt. A run created before reset
+keeps its pinned lesson set.
+
+`scheduled-learning/v1` exposes no per-job overrides. A replacement holds at most three
+lessons, each at most 512 UTF-8 bytes, with 1536 bytes total. clawd treats lessons as untrusted
+context, excludes high-sensitivity memory when it loads them, and keeps the existing tool
+policy and approvals in force. Lessons cannot change a job's prompt, schedule, recipients,
+route, budgets or permissions.
+
+While learning is enabled, the sweep removes unreferenced evidence and feedback payloads
+after 30 days, and compact receipts and provenance after 90 days. Live trials, candidates,
+the current promotion and rollback base keep their dependencies. Live runs keep pinned
+lesson bytes; unfinished calls keep their accounting records. The daemon also keeps compact
+closed-replacement history while its base is current or can be restored by the current promotion’s
+rollback, so collection cannot restart a failed trial. Turning learning off pauses collection and lesson loading and preserves stored
+state. `/learning` and reset remain available.
 
 ## Voice messages (macOS 26)
 

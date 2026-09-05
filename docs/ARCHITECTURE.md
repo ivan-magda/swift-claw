@@ -355,8 +355,9 @@ Exactly-once across the network is **impossible**. We implement an honest **at-l
 
 ```
 table outbound_deliveries(
-  run_id, step_index, chat_id,
-  dedup_key UNIQUE  = run_id + ':' + step_index,   -- deterministic, NOT UUID/wall-clock
+  run_id NULL, delivery_source, step_index, chat_id,
+  dedup_key UNIQUE,   -- run_id + ':' + step_index for run delivery;
+                      -- learning:<subject digest>:<ordinal> for a learning notice
   payload_hash, telegram_message_id NULL,
   status [PENDING | SENT | FAILED], created_ts, sent_ts )
 
@@ -369,6 +370,12 @@ OutboxDispatcher:
       deterministic dedup_key prevent duplicate rows; a true network double-send
       is the irreducible at-least-once tail.
 ```
+
+Runless learning notices set `delivery_source = learning`; the schema permits a null
+`run_id` only for a non-run source. Candidate reviews and challenge prompts commit their feedback
+targets and all outbox chunks in the same transaction. A scheduled answer keeps its run provenance;
+only its final chunk may carry the run-feedback keyboard. The dispatcher acknowledges by delivery
+key, so runless messages use the same retry and idempotent completion path.
 
 **Two honestly-distinct idempotency mechanisms** (do not conflate them):
 
@@ -410,6 +417,11 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 | `memory_items` | 3 | type, content, source/provenance, ts, importance, sensitivity (durable facts; `confidence` deferred, `visibility`→`sensitivity` — Inc 3a) | `session_id → sessions.id` (nullable) |
 | `scheduled_jobs` | 4 | `owner_chat_id` (set in code at arm time), `label`, `prompt` (owner-authored, trusted, frozen at confirm), `recurrence` (`{"schema_version":1,"rule":<RecurrenceRule JSON>}`; NULL ⇔ one-shot), `timezone` (IANA), materialized `next_occurrence` (advanced only inside the claim; NULL once terminal; partial index `(status, next_occurrence)`), `last_fired_at`, status FSM `ACTIVE\|PAUSED\|COMPLETED\|CANCELLED`, `session_id` (the job's dedicated session `sched:job:<id>`, NULL until first fire), `created_ts`/`updated_ts` | `session_id → sessions.id` |
 | `scheduler_state` | 4 | single row (`id = 1` CHECK): `last_tick_at`, `last_misfire_at`, `last_misfire_skipped_count`, `last_heartbeat_at`, `heartbeat_count_day` (day string in `CLAW_TIMEZONE` — the cap boundary aligns with quiet hours, not UTC), `heartbeat_count`; `due_count` is computed by query, never stored | — |
+| `job_learning_state`, `lesson_sets` | Learning | Per-job epoch, stable pointer/revisions and immutable canonical lesson bytes; lesson identity is `(job_id, digest)` | state → `scheduled_jobs` |
+| `run_learning_bindings`, `run_compatibility`, `run_settlements`, `learning_evidence` | Learning | Fire-time pin, pickup surface, terminal/settlement receipt and sealed evidence | run → `runs`; effective set → `lesson_sets` |
+| `learning_operations`, `learning_evaluations` | Learning | Durable inference claims/reservations and blind evaluator verdicts | evaluation → `runs`; operation supersession → prior operation |
+| `feedback_targets`, `feedback_challenges`, `feedback_events` | Learning | Single-use nonce targets, owner payload prompts and exact-subject append-only signals | challenge/event supersession → prior or replacement row |
+| `learning_candidates`, `learning_trials`, `trial_assignments`, `learning_decisions` | Learning | Typed candidate provenance, bounded exposure and immutable decision receipts | trial → candidate; assignment → trial/run; candidate replacement → `lesson_sets` |
 | `approvals` | 5a | PENDING/APPROVED/REJECTED/EXPIRED (EXPIRED resolves to a DENY outcome at execution), tool + canonical args, **canonical-args hash, policy_version, ownerUserId, random callback nonce**, expiry | `approvals.run_id → runs.id` |
 
 `runs.state = AWAITING_APPROVAL` references `approvals.id` as the **one** canonical source of truth for "blocked on approval" (no ambiguous dual flags).
@@ -450,9 +462,8 @@ func persistInbound(_ msg: IncomingMessage) throws         // db.write { dedup r
 func persistAssistant(_ reply: AssistantTurn) throws       // db.write { message + run update }
 
 // outbox
-func claimOutbound(runId: Int64, stepIndex: Int, chatId: Int64,
-                   payloadHash: String) throws -> Bool      // INSERT OR IGNORE
-func markSent(runId: Int64, stepIndex: Int, telegramMessageId: Int64) throws
+func claimOutbound(runId: Int64, chunk: OutboxChunk) throws(StoreError) -> Bool
+func markSent(deliveryKey: String, telegramMessageId: Int64, now: Date) throws(StoreError)
 
 // usage + audit (each INSERT OR IGNORE in its own/shared write txn)
 func recordUsage(_ usage: ProviderUsage) throws
@@ -614,7 +625,7 @@ One canonical ordered assembly. Each section carries a **priority** and a **trun
 | 2 | Identity files (SOUL/AGENTS) | system (trusted) | high | no |
 | 3 | Developer config / tool policy (TOOLS) | system (trusted) | high | no |
 | 4 | Current date/time | system (trusted) | high | no |
-| 4b | Pinned job lessons (bound scheduled run only) | **untrusted/labeled wrapper** | high | no — the whole frozen set, or the run fails |
+| 4b | `ContextRowID.lessons`: pinned job lessons (bound scheduled run only) | **untrusted/labeled wrapper** | high | no — the whole frozen set, or the run fails |
 | 5 | Owner profile (USER.md) | **untrusted/labeled wrapper** | med-high | no — hard cap 1375; overflow → omit + owner error (not silent truncation) |
 | 6a | Durable memory file (MEMORY.md) | **untrusted/labeled wrapper** | med | no — hard cap 2200; overflow → omit + owner error |
 | 6b | Durable memory items (`memory_items`) | **untrusted/labeled wrapper** | med | yes (budget cap; recency + importance — relevance deferred, Inc 3a) |
@@ -636,14 +647,15 @@ One canonical ordered assembly. Each section carries a **priority** and a **trun
 - **Caps (grapheme `String.count`):** `MEMORY.md` = **2200**, `USER.md` = **1375**. **On overflow → ERROR, never silent truncation.** For these **hand-curated** files, "force consolidation" means the runtime **omits the over-cap file for the turn and delivers an owner-facing consolidation notice** — it never auto-rewrites the file (Inc 3a). **This is the v1 contract** (it resolves the former §21 open question; it is not also listed as open).
 - **Flush-before-compact:** durable facts are written to disk *before* any history summarization.
 - **Compaction preserves provenance:** never fold an UNTRUSTED `tool_result` into the trusted rolling summary; retain an `untrusted` marker (§12).
-- **High-sensitivity memory is NOT auto-injected** into a turn that already ingested untrusted content (§12).
+- **High-sensitivity memory is NOT auto-injected** when the persisted session is tainted or the bound run carries non-empty lessons. Non-empty lessons also join untrusted tool metadata as an initial provider-dispatch and tool-gate taint input. Neither input replaces persisted session taint (§12).
 - **Confirm-on-write** shows the **EXACT verbatim text** post-Unicode-normalization, with invisible/zero-width/bidi chars **made visible/stripped**. The pattern scan is **defense-in-depth only** (not an acceptance gate — it must not block the owner's own notes).
 - `/memory review` + `/memory delete` (confirm-gated) with provenance.
 - **Recall:** FTS5/BM25 over the message archive; durable facts (`memory_items`) by recency + importance, subject to the budget above. **Item-lane *relevance* is deferred** until item-FTS / `sqlite-vec` lands (Inc 3a); message recall uses BM25. Row-8 recall searches `user`/`assistant` roles only — tool rows stay FTS-indexed (and delete with their message) but are excluded from BM25 recall.
 
 ### 9.4 Counting unit
 
-Grapheme counting (`String.count`) is used uniformly for all caps and budgets.
+Context fitting uses grapheme counting (`String.count`). The learning artifact schema has separate
+UTF-8 byte limits: 512 bytes per lesson and 1536 bytes for the complete set (§14.3).
 
 ## 10. Tool system & policy
 
@@ -810,6 +822,35 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
 - **Per-fire context isolation.** The fire transaction resets the session's context window (`window_start_message_id` → the pre-fire high-water mark, taint/private-data cleared — `/new` semantics) before inserting the trigger row, so every fire that runs starts on a fresh transcript of its persistent `sched:job:<id>` (or `sched:heartbeat`) session. That reset is session-global, so a fire into a session that already has a live run (PENDING/RUNNING/AWAITING_APPROVAL — e.g. one parked on an approval) is **skipped entirely** rather than run: resetting would advance the shared `window_start_message_id` past the live run's own rows and empty its context on resume (silent data loss). A skip resets nothing and inserts no trigger/run — the occurrence is dropped misfire-style with the schedule still advancing, audited as `job_overlap_skipped` (jobs) or `heartbeat_skipped` with the overlap reason (heartbeat). Prior fires stay durable (audit, FTS, interactive recall) but never replay into a proactive run's context, and proactive turns assemble under the dedicated proactive prompt with recall omitted (§9.2) — a fired task can never read as a "please arm a schedule" chat message, and one bad fire cannot poison the next.
 - `getUpdates` recovery is pinned: socket read timeout = long-poll timeout + 10 s; backoff-reconnect on timeout/network error. Scheduler-side gap recovery is lateness-based (§6.3's catch-up table) — no wake detection. Doctor exposes `last_tick_at`.
 
+### 14.0 Scheduled learning capture
+
+`CLAW_LEARNING_ENABLED` is deployment-scoped and off by default. Without it the root composes no
+learning worker, the fire path creates no binding, pickup loads no lessons, and scheduled delivery
+adds no learning keyboard. A new disarmed deployment writes no learning rows. `/learning` reads
+retained state and owner-confirmed reset remains available even while the worker is disabled.
+
+With the flag on, `claimAndFire` and `fireNow` extend the existing fire transaction after its
+occurrence and overlap guards. They arm the job with its canonical empty set if needed, freeze
+job ID, learning epoch, occurrence, fire kind, job-definition digest, stable and effective digests,
+and optional trial ID/generation on the created run. A live trial supplies the effective set only
+while assignment remains open. The same transaction consumes that assignment. A created run
+consumes exposure even if it fails; a skipped occurrence or overlap consumes none. Heartbeats
+and legacy unbound runs hold no lessons.
+
+Pickup and approval resume load the exact `(job_id, effective_digest)` binding and verify it against
+the run and lesson-set identities. They never substitute the current stable set. The row remains
+pinned across restart and owner reset. Primary boot reconciliation fails pending/running orphans;
+the approval boot path owns suspended runs. Neither path rewrites their learning binding.
+
+Terminal state and evidence settlement are separate. A winning terminal transaction records its
+state, cause, routes and time. A normal completed turn settles after its final primary facts commit;
+a cancellation or supersession waits for the lane tail to join late provider usage and tool
+observations. The tail settles and notifies the learning service. Boot reconciliation is the
+backstop. Writers reject primary evidence changes after `settled_at`; sealing reads that boundary,
+not terminality alone, and freezes an immutable receipt plus bounded payload or exclusion.
+All nine `DegradationKind` cases and infrastructure failures supply no quality evidence. The
+service cannot delay the owner's primary delivery while it evaluates settled work.
+
 ### 14.1 Scheduled learning terminal decisions
 
 The generic learning loop follows the accepted
@@ -899,6 +940,87 @@ revision sequence and waits. New evidence or run/evaluation feedback can authori
 This follows the algorithm's owner-edit bypass and effective-feedback retry boundary; it resolves
 the reference reducer's discrepancy between skipping trigger discovery on a candidate event and
 rediscovering the same window on its clock path. No persisted revision or algorithm parameter changes.
+
+### 14.3 Fixed learning policy and owner controls
+
+`scheduled-learning/v1` uses the last five compatible stable-run evaluations with logical
+occurrences within 30 days. Trial runs cannot enter a new stable window. Compatibility binds
+job/epoch, stable digest, job definition, context/tool/policy/skill surface, actual terminal route,
+and evaluator evidence/classifier/prompt/schema/rubric versions.
+
+Two distinct negative runs sharing an exact issue code can trigger reflection; one authenticated
+owner correction can trigger it after one eligible run. Candidate/promotion controls alone do not
+retry an unchanged evidence window (§14.2). One frozen trigger permits one logical reflector call
+and zero or one immutable candidate. A candidate is a complete ordered replacement: zero to three
+lessons, at most 512 UTF-8 bytes each and 1536 total. Canonicalization normalizes Unicode and line
+endings and trims surrounding whitespace. Admission rejects empty individual lessons, duplicates,
+no-op replacements, Unicode control/format characters including tabs and bidi controls, secret
+leakage, stale identities and source vetoes. There are no per-job policy overrides.
+
+Evaluation is tool-free and blind to lesson text, trial state and candidate identity. Reflection
+receives only the closed carrier's frozen stable lessons, compatible evidence and bounded owner
+payloads, with untrusted fields fenced. Each phase uses the configured roster and cooldown and
+counts against global/proactive budgets; its output cap is 512 tokens for evaluation and 768 for
+reflection. A durable claim plus atomic authorization/reservation precedes dispatch. Invalid
+semantic output ends the operation without a repair call. Boot converts a started orphan to
+`interrupted_unknown`, accounts for uncertain usage, and never resends it as the same inference;
+a later authorized attempt needs a new generation and provider-call ID.
+
+Only one open or draining trial may exist per job, enforced by the partial unique index.
+Admission freezes three maximum assignments, an assignment deadline 30 days after admission and
+a decision deadline 37 days after admission. Pausing the job changes neither deadline. Two positive
+runs close assignment early; promotion waits for all assigned outcomes and permits zero negatives.
+Missing evaluations remain unresolved until policy permits a decision. One negative or a hard
+veto causes fallback. The periodic workflow closes assignment and decides overdue paused trials.
+
+`fb:` callbacks resolve an opaque single-use nonce to its exact run, evaluation, candidate or
+promotion. Access checks, recorded owner/chat identity, epoch, expiry, action and consumption CAS
+precede the event and audit commit. Forged, third-party and replayed callbacks change no learning
+state and leave an audit result. Correction and edit open one live challenge per owner DM; only an
+authenticated plain-text reply can consume it. Forwarded content, media captions and transcripts
+cannot answer it. Run feedback replaces that run's effective outcome. An evaluation dispute vetoes
+dependents requiring that exact evaluation. Candidate approval and edit create immutable successors;
+an edit carries no prior approval and needs admission again. These controls do not add quality
+support. Review and challenge notices have null run IDs in the outbox.
+
+`/learning` lists armed jobs; `/learning <jobId>` shows lesson identity/content, trial counts and
+deadlines, and decision evidence. `/learning reset <jobId>` requires owner confirmation and
+atomically advances the epoch, installs the empty stable set, closes live trials and invalidates
+feedback targets/challenges. Late old-epoch operations can record usage but cannot create an
+evaluation, candidate or trial. Reset is an active-use/epoch barrier, not immediate history deletion.
+Rollback remains the separate exact current-promotion transaction in §14.1.
+
+### 14.4 Reference-aware retention
+
+`sweepRetention(now:)` runs in one `writeMapping` transaction and returns cleared payload and
+deleted compact-row counts. The service runs it after recovery, including when operation recovery
+fails. Collection failures remain isolated from ordinary delivery and the next sweep retries.
+The five-minute sweep exists only while learning is enabled. Turning the flag off pauses collection
+and preserves existing stored state; re-enabling applies the ordinary age windows.
+
+The store excludes live references before testing age. Open/draining trials retain their complete
+cohort and candidate sources. The current promotion retains its exact frozen support set, candidate,
+receipt and direct rollback base. Live candidates retain predecessor/control/source identities;
+notice and successor markers remain while their live subjects depend on them. Live bound runs
+retain exact lesson bytes. Unfinished operations retain accounting records and source evidence;
+an in-flight reflector has no candidate manifest yet, so its job/epoch source rows form the bounded
+durable superset until it finishes. Supersession chains remain readable.
+
+Unreferenced evidence and feedback payloads clear after 30 days. Evaluation rows contain categorical
+results and issue codes, with no separate excerpt payload to clear. Compact digests, evaluations,
+operations, decision receipts and provenance expire after 90 days, subject to retained dependencies.
+Recent compact provenance retains source identities without extending the live payload window.
+Lesson-set references always include the job ID; equal content digests in other jobs confer no
+ownership. Collection removes terminal bindings, compatibility and settlement rows with collected
+evidence, so neither the unsealed queue nor workflow recovery can resurrect completed inference.
+Primary messages, runs, audit and provider usage remain outside this learning-only sweep.
+
+A closed or rolled-back replacement remains blocked while its same-job/epoch base is current or
+is the current promotion’s direct rollback base. The store keeps the existing closed trial and
+candidate replacement identity as the minimal no-retry receipt,
+without keeping obsolete source payloads alive. It does not introduce another tombstone schema.
+The current reset receipt and its compact dependencies retain the reset replay barrier. Owner reset
+and epoch checks outrank ordinary retention; retained old records cannot reactivate old-epoch work.
 
 ## 15. Configuration & secrets
 

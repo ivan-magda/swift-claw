@@ -48,7 +48,7 @@ extension DaemonBuilder {
       // Last, and read-only with respect to settlement: it seals what the run sweep just froze
       // without settling anything itself, so the ordering the run sweep and the approval backstop
       // depend on is untouched.
-      await learning?.reconcileAtBoot(now: Date())
+      await learning?.reconcileAtBoot(now: now())
     }
   }
 
@@ -73,7 +73,7 @@ extension DaemonBuilder {
     {
       do {
         let replies = try stores.runs.reconcileRunsAtBoot(
-          now: Date(),
+          now: now(),
           degradationText: Degradation.unfinished,
           heartbeatNoticeChatId: heartbeatOwner
         )

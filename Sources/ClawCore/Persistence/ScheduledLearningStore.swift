@@ -213,7 +213,20 @@ public struct JobLearningState: Sendable, Equatable {
   }
 }
 
+public struct RetentionSweepResult: Sendable, Equatable {
+  public let deletedPayloads: Int
+  public let deletedReceipts: Int
+
+  public init(deletedPayloads: Int, deletedReceipts: Int) {
+    self.deletedPayloads = deletedPayloads
+    self.deletedReceipts = deletedReceipts
+  }
+}
+
 public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
+  /// Excludes live dependencies before applying the 30-day payload and 90-day receipt windows.
+  func sweepRetention(now: Date) throws(StoreError) -> RetentionSweepResult
+
   /// One read snapshot for the complete owner-facing learning projection. nil lists armed jobs;
   /// a positive id returns exactly one readable, unarmed, missing, or unreadable result.
   func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView]
