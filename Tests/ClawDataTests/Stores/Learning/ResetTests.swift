@@ -160,6 +160,76 @@ import Testing
     #expect(try fixture.resetAuditCount() == 0)
   }
 
+  @Test(arguments: ResetStartedOperationCorruption.allCases)
+  func unreadableStartedOperationRollsBackTheBarrierAndClaim(
+    _ corruption: ResetStartedOperationCorruption
+  ) throws {
+    // given
+    let fixture = try ResetFixture.make()
+    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    let otherJobId = try fixture.createOtherJob()
+    try fixture.seedOperations(otherJobId: otherJobId)
+    try fixture.corruptStartedOperation(corruption)
+    let stateBefore = try fixture.state()
+    let pendingBefore = try fixture.operation("op-pending")
+    let claimedBefore = try fixture.operation("op-claimed")
+    let startedBefore = try fixture.operation("op-started")
+    let otherBefore = try fixture.operation("op-other")
+
+    // when
+    #expect(throws: StoreError.self) {
+      _ = try fixture.env.learning.applyReset(
+        updateId: 9_024,
+        jobId: fixture.env.jobId,
+        now: fixture.env.now
+      )
+    }
+
+    // then — accepting any incomplete started-call reservation makes the receipt promise a
+    // usage-only finish that the operation lifecycle cannot safely perform.
+    #expect(try fixture.state() == stateBefore)
+    #expect(try fixture.operation("op-pending") == pendingBefore)
+    #expect(try fixture.operation("op-claimed") == claimedBefore)
+    #expect(try fixture.operation("op-started") == startedBefore)
+    #expect(try fixture.operation("op-other") == otherBefore)
+    #expect(try fixture.processed(updateId: 9_024) == false)
+    #expect(try fixture.resetDecisionCount() == 0)
+    #expect(try fixture.resetAuditCount() == 0)
+  }
+
+  @Test func unreadableReceiptNamedStartedOperationRollsBackReplayClaim() throws {
+    // given
+    let fixture = try ResetFixture.make()
+    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    let otherJobId = try fixture.createOtherJob()
+    try fixture.seedOperations(otherJobId: otherJobId)
+    _ = try fixture.env.learning.applyReset(
+      updateId: 9_025,
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
+    try fixture.corruptStartedOperation(.missingProviderCallID)
+    let stateBefore = try fixture.state()
+    let startedBefore = try fixture.operation("op-started")
+
+    // when
+    #expect(throws: StoreError.self) {
+      _ = try fixture.env.learning.applyReset(
+        updateId: 9_026,
+        jobId: fixture.env.jobId,
+        now: fixture.env.now
+      )
+    }
+
+    // then — clean replay must revalidate a still-started receipt row, while terminal late-result
+    // rows remain covered by the separate usage-only settlement test.
+    #expect(try fixture.state() == stateBefore)
+    #expect(try fixture.operation("op-started") == startedBefore)
+    #expect(try fixture.processed(updateId: 9_026) == false)
+    #expect(try fixture.resetDecisionCount() == 1)
+    #expect(try fixture.resetAuditCount() == 1)
+  }
+
   @Test func resetClearsTheConvenienceTrialPointer() throws {
     // given
     let fixture = try ResetFixture.make()
@@ -201,7 +271,7 @@ import Testing
     #expect(duplicate == .duplicate)
   }
 
-  @Test func cleanRepeatReplaysButCurrentEpochActivityRaisesAnotherBarrier() throws {
+  @Test func cleanRepeatReplaysTheExactBarrier() throws {
     // given
     let fixture = try ResetFixture.make()
     _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
@@ -219,24 +289,11 @@ import Testing
       now: fixture.env.now.addingTimeInterval(1)
     )
 
-    // then
+    // then — always advancing for a fresh update would duplicate the barrier despite no new
+    // activity or live effect.
     #expect(cleanRepeat.alreadyResetReceipt == firstReceipt)
     #expect(try fixture.resetDecisionCount() == 1)
     #expect(try fixture.resetAuditCount() == 1)
-
-    // when — a fire in the reset epoch is activity even though it still binds the empty set.
-    _ = try fixture.env.pendingBoundRun()
-    let dirtyRepeat = try fixture.env.learning.applyReset(
-      updateId: 9_006,
-      jobId: fixture.env.jobId,
-      now: fixture.env.now.addingTimeInterval(2)
-    )
-
-    // then — treating `stable == empty` as clean would incorrectly replay the first barrier.
-    let secondReceipt = try #require(dirtyRepeat.appliedReceipt)
-    #expect(secondReceipt.result.newEpoch == firstReceipt.result.newEpoch.next())
-    #expect(try fixture.resetDecisionCount() == 2)
-    #expect(try fixture.resetAuditCount() == 2)
   }
 
   @Test(arguments: ResetCurrentEpochActivity.allCases)
@@ -311,18 +368,66 @@ import Testing
       jobId: 99_999,
       now: fixture.env.now
     )
+
+    // then — returning a semantic outcome before the durable claim permits endless redelivery.
+    #expect(missing.newlyClaimed)
+    #expect(missing.outcome == .notFound)
+    let afterMissing = try fixture.absenceProjection()
+    #expect(
+      afterMissing.processedUpdates
+        == [.init(updateId: 9_007, claimedAt: fixture.env.now)]
+    )
+    #expect(afterMissing.learningStateCount == 0)
+    #expect(afterMissing.lessonSetCount == 0)
+    #expect(afterMissing.resetDecisionCount == 0)
+    #expect(afterMissing.resetAuditCount == 0)
+
+    // when
+    let missingReplay = try fixture.env.learning.applyReset(
+      updateId: 9_007,
+      jobId: 99_999,
+      now: fixture.env.now
+    )
+
+    // then
+    #expect(missingReplay.newlyClaimed == false)
+    #expect(missingReplay.outcome == nil)
+    #expect(try fixture.absenceProjection() == afterMissing)
+
+    // when
     let unarmed = try fixture.env.learning.applyReset(
       updateId: 9_008,
       jobId: fixture.env.jobId,
       now: fixture.env.now
     )
 
-    // then — the reset port must not arm a job merely to report an outcome.
-    #expect(missing.outcome == .notFound)
+    // then — the reset port claims but must not arm a job merely to report an outcome.
+    #expect(unarmed.newlyClaimed)
     #expect(unarmed.outcome == .unarmed)
-    #expect(try fixture.learningStateCount() == 0)
-    #expect(try fixture.lessonSetCount() == 0)
-    #expect(try fixture.resetAuditCount() == 0)
+    let afterUnarmed = try fixture.absenceProjection()
+    #expect(
+      afterUnarmed.processedUpdates
+        == [
+          .init(updateId: 9_007, claimedAt: fixture.env.now),
+          .init(updateId: 9_008, claimedAt: fixture.env.now),
+        ]
+    )
+    #expect(afterUnarmed.learningStateCount == 0)
+    #expect(afterUnarmed.lessonSetCount == 0)
+    #expect(afterUnarmed.resetDecisionCount == 0)
+    #expect(afterUnarmed.resetAuditCount == 0)
+
+    // when
+    let unarmedReplay = try fixture.env.learning.applyReset(
+      updateId: 9_008,
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
+
+    // then
+    #expect(unarmedReplay.newlyClaimed == false)
+    #expect(unarmedReplay.outcome == nil)
+    #expect(try fixture.absenceProjection() == afterUnarmed)
   }
 
   @Test func cancelledJobWithRetainedStateRemainsResettable() throws {

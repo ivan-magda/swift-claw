@@ -159,4 +159,11 @@ extension ScheduledLearningStoreGRDB {
       && SQLiteStoredValue.string(in: row, column: "source")
         == LessonSetSource.canonicalEmpty.rawValue
   }
+
+  static func isCanonicalDigest(_ value: String) -> Bool {
+    value.utf8.count == 64
+      && value.utf8.allSatisfy { byte in
+        (48...57).contains(byte) || (97...102).contains(byte)
+      }
+  }
 }

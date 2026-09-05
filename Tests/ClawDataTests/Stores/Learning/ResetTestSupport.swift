@@ -37,6 +37,19 @@ enum ResetReceiptCorruption: CaseIterable {
   case wrongStableRevision
 }
 
+enum ResetStartedOperationCorruption: CaseIterable {
+  case missingProviderCallID
+  case emptyProviderCallID
+  case missingRoute
+  case emptyRoute
+  case closedReservation
+  case missingReservedTokens
+  case negativeReservedTokens
+  case missingReservedCost
+  case negativeReservedCost
+  case nonFiniteReservedCost
+}
+
 struct ResetFixture {
   struct OperationProjection: Equatable {
     let state: LearningOperationState
@@ -87,6 +100,19 @@ struct ResetFixture {
     let decision: String
     let runId: Int64?
     let sessionId: Int64?
+  }
+
+  struct ProcessedUpdateProjection: Equatable {
+    let updateId: Int64
+    let claimedAt: Date
+  }
+
+  struct AbsenceProjection: Equatable {
+    let processedUpdates: [ProcessedUpdateProjection]
+    let learningStateCount: Int
+    let lessonSetCount: Int
+    let resetDecisionCount: Int
+    let resetAuditCount: Int
   }
 
   let env: BoundRunEnvironment
@@ -222,6 +248,66 @@ struct ResetFixture {
           """,
         arguments: [env.jobId]
       )
+    }
+  }
+
+  func corruptStartedOperation(
+    _ corruption: ResetStartedOperationCorruption,
+    id: String = "op-started"
+  ) throws {
+    try env.queue.write { db in
+      switch corruption {
+      case .missingProviderCallID:
+        try db.execute(
+          sql: "UPDATE learning_operations SET provider_call_id = NULL WHERE operation_id = ?",
+          arguments: [id]
+        )
+      case .emptyProviderCallID:
+        try db.execute(
+          sql: "UPDATE learning_operations SET provider_call_id = '' WHERE operation_id = ?",
+          arguments: [id]
+        )
+      case .missingRoute:
+        try db.execute(
+          sql: "UPDATE learning_operations SET route = NULL WHERE operation_id = ?",
+          arguments: [id]
+        )
+      case .emptyRoute:
+        try db.execute(
+          sql: "UPDATE learning_operations SET route = '' WHERE operation_id = ?",
+          arguments: [id]
+        )
+      case .closedReservation:
+        try db.execute(
+          sql: "UPDATE learning_operations SET reservation_state = ? WHERE operation_id = ?",
+          arguments: [LearningReservationState.closed.rawValue, id]
+        )
+      case .missingReservedTokens:
+        try db.execute(
+          sql: "UPDATE learning_operations SET reserved_tokens = NULL WHERE operation_id = ?",
+          arguments: [id]
+        )
+      case .negativeReservedTokens:
+        try db.execute(
+          sql: "UPDATE learning_operations SET reserved_tokens = -1 WHERE operation_id = ?",
+          arguments: [id]
+        )
+      case .missingReservedCost:
+        try db.execute(
+          sql: "UPDATE learning_operations SET reserved_cost_usd = NULL WHERE operation_id = ?",
+          arguments: [id]
+        )
+      case .negativeReservedCost:
+        try db.execute(
+          sql: "UPDATE learning_operations SET reserved_cost_usd = -0.5 WHERE operation_id = ?",
+          arguments: [id]
+        )
+      case .nonFiniteReservedCost:
+        try db.execute(
+          sql: "UPDATE learning_operations SET reserved_cost_usd = ? WHERE operation_id = ?",
+          arguments: [Double.infinity, id]
+        )
+      }
     }
   }
 
@@ -509,6 +595,31 @@ struct ResetFixture {
 
   func processed(updateId: Int64) throws -> Bool {
     try count("processed_updates", predicate: "update_id = ?", arguments: [updateId]) == 1
+  }
+
+  func absenceProjection() throws -> AbsenceProjection {
+    let processedUpdates = try env.queue.read { db in
+      let rows = try Row.fetchAll(
+        db,
+        sql: "SELECT update_id, claimed_at FROM processed_updates ORDER BY update_id"
+      )
+      return try rows.map { row in
+        guard
+          let updateId = SQLiteStoredValue.int64(in: row, column: "update_id"),
+          let claimedAt: Date = row["claimed_at"]
+        else {
+          throw StoreError.unexpected("fixture processed update is unreadable")
+        }
+        return ProcessedUpdateProjection(updateId: updateId, claimedAt: claimedAt)
+      }
+    }
+    return AbsenceProjection(
+      processedUpdates: processedUpdates,
+      learningStateCount: try learningStateCount(),
+      lessonSetCount: try lessonSetCount(),
+      resetDecisionCount: try resetDecisionCount(),
+      resetAuditCount: try resetAuditCount()
+    )
   }
 
   func resetDecisionCount() throws -> Int {
