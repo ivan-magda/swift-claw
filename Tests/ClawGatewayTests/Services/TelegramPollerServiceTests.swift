@@ -29,7 +29,9 @@ private actor BlockingTurnRunner: TurnDispatching {
   }
 
   func waitUntilStarted() async {
-    guard callCount == 0 else { return }
+    guard callCount == 0 else {
+      return
+    }
     await withCheckedContinuation { continuation in
       started = continuation
     }

@@ -92,7 +92,9 @@ private actor DeliverySpy: MessageDelivery {
     case .some(.unreachable):
       throw TelegramError.transport("chat \(chatId) down")
     case .some(.floodControl(let retryAfter, let times)):
-      guard times > 0 else { return }
+      guard times > 0 else {
+        return
+      }
       outcomes[chatId] = .floodControl(retryAfter: retryAfter, times: times - 1)
       throw TelegramError.floodControl(retryAfter: retryAfter)
     }
@@ -119,7 +121,9 @@ private final class RetryWaitHold: Sendable {
       requested.withLock { delays in
         delays.append(delay)
       }
-      guard delay == retryAfter else { return }
+      guard delay == retryAfter else {
+        return
+      }
       waitStarted.open()
       await released.wait()
     }
