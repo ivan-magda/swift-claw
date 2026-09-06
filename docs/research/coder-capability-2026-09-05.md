@@ -59,8 +59,8 @@ reference project.
 
 - **A Coder run cannot be a synchronous tool call, and the existing justification for the tool
   seam's failure mode explicitly does not extend to it.** `RunBudget.default.wallClockDeadlineSeconds`
-  is 180 (`Sources/ClawCore/LLM/RunBudget.swift:59`); the longest tool timeout in the codebase is
-  `execute_code`'s 50 s (`ExecuteCodeTool.swift:73`). An overrunning tool is cancelled and
+  is 180 (`Sources/ClawCore/LLM/RunBudget.swift:59`); `execute_code`'s default dispatcher
+  timeout is 50 s (`ExecuteCodeTool.swift:73`). An overrunning tool is cancelled and
   **abandoned detached** — and `ToolPolicyGate.swift:547-555` justifies that specifically because
   `file_write` commits through a single `rename(2)` and `execute_code` sits behind a sandbox
   enforcing its own shorter timeout. A Coder run has neither property: abandoning it orphans a
@@ -243,7 +243,7 @@ Four facts, each verified in source:
 
 - `RunBudget.default.wallClockDeadlineSeconds` is 180 s, re-checked before every tool dispatch
   (`AgentRuntime.swift:477`).
-- The longest tool timeout in the codebase is 50 s.
+- The default dispatcher timeout for `execute_code` is 50 s, not a fixed maximum.
 - The session lane is strict FIFO (`SessionLaneRegistry.swift:66-103`), so a ten-minute call
   freezes the owner's chat for ten minutes.
 - Graceful shutdown drains lanes in 30 s (`DaemonBuilder.swift:47`), and a drain timeout is a
