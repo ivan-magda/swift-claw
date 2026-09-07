@@ -343,7 +343,7 @@ import Testing
     // then — closing any open trial for the job fails the first assertion; exact joins close it
     #expect(afterUnrelated?.trialId == trial.trialId)
     #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
-    #expect(try env.trialCloseReason(trial.trialId) == "hard_veto")
+    #expect(try env.trialCloseReason(trial.trialId) == ScheduledLearningStoreGRDB.hardVetoReason)
   }
 
   @Test func candidateRejectionClosesAuthoritativeLiveTrialWithStalePointer() throws {
@@ -405,11 +405,14 @@ import Testing
   }
 
   @Test func exactRequiredTrialEvaluationDisputeClosesTheLiveTrial() throws {
-    // given — the current trial assignment explicitly records the disputed required evaluation
+    // given — the immutable candidate manifest marks the exact source evaluation as required
     let env = try FeedbackStoreEnvironment.make()
-    let trial = try env.seedOpenTrial()
     let evaluationDigest = "evaluation-required"
-    try env.seedAssignment(trial: trial, evaluationDigest: evaluationDigest)
+    let trial = try env.seedTypedOpenTrial(
+      evaluationDigest: evaluationDigest,
+      evaluationRequired: true,
+      state: .draining
+    )
     try env.setTrialPointer(.absent)
     let target = env.target(
       nonce: "evaluation-dispute",
@@ -424,27 +427,33 @@ import Testing
       env.tap(target: target, signal: .evaluationDispute)
     )
 
-    // then — dropping the exact assignment dependency leaves the trial incorrectly open
+    // then — consulting assignments or only open state leaves this source-bound trial live
     guard case .recorded = outcome else {
       Issue.record("expected an authenticated event")
       return
     }
     #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
-    #expect(try env.trialCloseReason(trial.trialId) == "hard_veto")
+    #expect(try env.trialCloseReason(trial.trialId) == ScheduledLearningStoreGRDB.hardVetoReason)
   }
 
-  @Test func unrelatedOrStaleTrialEvaluationDependencyDoesNotCloseTheTrial() throws {
-    // given — each database has one independently stale or unrelated assignment dependency
-    for mismatch in EvaluationDependencyMismatch.allCases {
+  @Test func onlyAnExactRequiredManifestEvaluationCanCloseTheTrial() throws {
+    // given — exact-but-independent, substring-only, and unrelated source edges are all non-vetoes
+    let cases: [(source: String, required: Bool, target: String)] = [
+      ("evaluation-independent", false, "evaluation-independent"),
+      ("prefix-evaluation-target-suffix", true, "evaluation-target"),
+      ("another-evaluation", true, "evaluation-target"),
+    ]
+    for (index, testCase) in cases.enumerated() {
       let env = try FeedbackStoreEnvironment.make()
-      let trial = try env.seedOpenTrial()
-      let targetDigest = "evaluation-target"
-      try env.seedAssignment(trial: trial, evaluationDigest: targetDigest)
-      try env.introduceAssignmentMismatch(mismatch, trial: trial)
+      let trial = try env.seedTypedOpenTrial(
+        evaluationDigest: testCase.source,
+        evaluationRequired: testCase.required,
+        state: .open
+      )
       let target = env.target(
-        nonce: "mismatch-\(mismatch)",
+        nonce: "typed-non-veto-\(index)",
         signal: .evaluationDispute,
-        subject: targetDigest,
+        subject: testCase.target,
         kind: .evaluation
       )
       try env.createTargets([target], chunks: [])
@@ -454,7 +463,7 @@ import Testing
         env.tap(target: target, signal: .evaluationDispute)
       )
 
-      // then — a digest substring or job-only trial close would fail this exact-dependency guard
+      // then — substring, job-wide, or evaluation-presence matching would close this trial
       guard case .recorded = outcome else {
         Issue.record("expected feedback to record despite a nonmatching trial dependency")
         continue
@@ -465,13 +474,17 @@ import Testing
     }
   }
 
-  @Test func evaluationDisputeRequiresEverySharedCandidateAndTrialPredicate() throws {
-    // given — an exact required assignment but one mismatched shared candidate/trial dependency
+  @Test func evaluationDisputeRequiresEverySharedCandidateAndTrialIdentity() throws {
+    // given — Task 10's shared identity gates remain mandatory after switching the dependency
+    // source from trial assignments to the candidate's typed manifest.
     for mismatch in CandidateTrialMismatch.allCases {
       let env = try FeedbackStoreEnvironment.make()
-      let trial = try env.seedOpenTrial()
-      let evaluationDigest = "shared-predicate-evaluation"
-      try env.seedAssignment(trial: trial, evaluationDigest: evaluationDigest)
+      let evaluationDigest = "evaluation-shared-\(mismatch)"
+      let trial = try env.seedTypedOpenTrial(
+        evaluationDigest: evaluationDigest,
+        evaluationRequired: true,
+        state: .open
+      )
       try env.introduceCandidateMismatch(mismatch, trial: trial)
       let target = env.target(
         nonce: "evaluation-shared-\(mismatch)",
@@ -482,16 +495,70 @@ import Testing
       try env.createTargets([target], chunks: [])
 
       // when
-      let outcome = try env.consume(env.tap(target: target, signal: .evaluationDispute))
-
-      // then — omitting this shared predicate would close an unrelated or stale trial
-      guard case .recorded = outcome else {
-        Issue.record("expected the authenticated event to record")
-        continue
+      do {
+        _ = try env.consume(env.tap(target: target, signal: .evaluationDispute))
+      } catch {
+        // Strict artifact corruption aborts the whole feedback transaction; a relational mismatch
+        // may still record the event. Both outcomes are fail-closed for the trial.
       }
+
+      // then — dropping any one shared predicate closes a trial whose frozen identity is corrupt.
       #expect(try env.trialState(trial.trialId) == mismatch.expectedState)
       #expect(try env.trialCloseReason(trial.trialId) == nil)
-      #expect(try env.feedbackRevision() == 1)
+    }
+  }
+
+  @Test func evaluationDisputeRejectsAnUnreadableCandidateArtifact() throws {
+    // given
+    let env = try FeedbackStoreEnvironment.make()
+    let evaluationDigest = "evaluation-unreadable-artifact"
+    let trial = try env.seedTypedOpenTrial(
+      evaluationDigest: evaluationDigest,
+      evaluationRequired: true,
+      state: .open
+    )
+    try env.corruptCandidateManifest(candidateDigest: trial.candidateDigest)
+    let target = env.target(
+      nonce: "evaluation-unreadable-artifact",
+      signal: .evaluationDispute,
+      subject: evaluationDigest,
+      kind: .evaluation
+    )
+    try env.createTargets([target], chunks: [])
+
+    // when / then — trusting only typed-looking substring bytes would close corrupt provenance.
+    #expect(throws: StoreError.self) {
+      _ = try env.consume(env.tap(target: target, signal: .evaluationDispute))
+    }
+    #expect(try env.trialState(trial.trialId) == .open)
+    #expect(try env.trialCloseReason(trial.trialId) == nil)
+  }
+
+  @Test func evaluationDisputeRequiresTheExactTrialSideIdentity() throws {
+    // given
+    for mismatch in EvaluationTrialMismatch.allCases {
+      let env = try FeedbackStoreEnvironment.make()
+      let evaluationDigest = "evaluation-trial-\(mismatch)"
+      let trial = try env.seedTypedOpenTrial(
+        evaluationDigest: evaluationDigest,
+        evaluationRequired: true,
+        state: .open
+      )
+      try env.introduceTrialMismatch(mismatch, trial: trial)
+      let target = env.target(
+        nonce: "evaluation-trial-\(mismatch)",
+        signal: .evaluationDispute,
+        subject: evaluationDigest,
+        kind: .evaluation
+      )
+      try env.createTargets([target], chunks: [])
+
+      // when
+      _ = try env.consume(env.tap(target: target, signal: .evaluationDispute))
+
+      // then — a candidate manifest cannot authorize a differently bound trial row.
+      #expect(try env.trialState(trial.trialId) == .open)
+      #expect(try env.trialCloseReason(trial.trialId) == nil)
     }
   }
 
@@ -811,15 +878,6 @@ private enum FeedbackFailureCase: CaseIterable {
   }
 }
 
-private enum EvaluationDependencyMismatch: CaseIterable {
-  case job
-  case epoch
-  case trial
-  case digest
-  case generation
-  case required
-}
-
 private enum CandidateTrialMismatch: CaseIterable {
   case job
   case epoch
@@ -832,6 +890,13 @@ private enum CandidateTrialMismatch: CaseIterable {
   var expectedState: LearningTrialState {
     self == .currentState ? .promoted : .open
   }
+}
+
+private enum EvaluationTrialMismatch: CaseIterable {
+  case job
+  case epoch
+  case base
+  case algorithm
 }
 
 private enum TrialPointerState: CaseIterable {
@@ -1281,6 +1346,85 @@ private struct FeedbackStoreEnvironment {
     }
   }
 
+  func seedTypedOpenTrial(
+    evaluationDigest: String,
+    evaluationRequired: Bool,
+    state trialState: LearningTrialState
+  ) throws -> Trial {
+    let replacement = try LessonSet.canonical(
+      jobId: jobId,
+      lessons: ["Prefer exact typed evidence."]
+    )
+    let evaluation = EvaluationDigest(rawValue: evaluationDigest)
+    let evidence = CandidateEvidenceSource(
+      runId: 91,
+      digest: EvidenceDigest(rawValue: "evidence-91"),
+      evaluationDigest: evaluation,
+      evaluationRequired: evaluationRequired
+    )
+    let manifest = CandidateSourceManifest(
+      origin: .reflection,
+      algorithm: .v1,
+      jobId: jobId,
+      epoch: state.epoch,
+      triggerDigest: TriggerDigest(rawValue: "typed-feedback-trigger"),
+      triggerReason: .recurringIssue,
+      qualifyingIssueCodes: ["typed.feedback"],
+      operationId: LearningOperationID(rawValue: "typed-feedback-operation"),
+      carrierDigest: CarrierDigest(rawValue: "typed-feedback-carrier"),
+      resultDigest: ReflectionResultDigest(rawValue: "typed-feedback-result"),
+      baseDigest: state.stableDigest,
+      baseRevision: state.stableRevision,
+      feedbackRevision: state.feedbackRevision,
+      evidence: [evidence],
+      evaluations: [CandidateEvaluationSource(runId: evidence.runId, digest: evaluation)],
+      feedback: [],
+      predecessorCandidate: nil,
+      predecessorFeedback: nil
+    )
+    let artifact = try CandidateArtifact(replacement: replacement, manifest: manifest)
+    let generation = 3
+    return try queue.write { db in
+      try ScheduledLearningStoreGRDB.recordCandidateArtifact(
+        db,
+        artifact: artifact,
+        now: now
+      )
+      try db.execute(
+        sql: """
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
+          """,
+        arguments: [
+          jobId,
+          state.epoch.value,
+          state.stableDigest.rawValue,
+          artifact.digest.rawValue,
+          generation,
+          EpochSecondCodec.epoch(now),
+          EpochSecondCodec.epoch(now.addingTimeInterval(30 * 86_400)),
+          EpochSecondCodec.epoch(now.addingTimeInterval(37 * 86_400)),
+          EpochSecondCodec.epoch(now),
+          trialState.rawValue,
+          LearningAlgorithm.v1.rawValue,
+        ]
+      )
+      let trialId = db.lastInsertedRowID
+      try db.execute(
+        sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
+        arguments: [trialId, jobId]
+      )
+      return Trial(
+        trialId: trialId,
+        candidateDigest: artifact.digest.rawValue,
+        replacementDigest: replacement.digest.rawValue,
+        generation: generation
+      )
+    }
+  }
+
   func setTrialPointer(_ state: TrialPointerState) throws {
     try queue.write { db in
       let pointer: Int64? = state == .absent ? nil : 999_999
@@ -1302,22 +1446,36 @@ private struct FeedbackStoreEnvironment {
     }
   }
 
-  func seedAssignment(
-    trial: Trial,
-    evaluationDigest: String,
-    generation: Int? = nil
-  ) throws {
-    let fired = try base.jobs.fireNow(jobId: jobId, now: now)
-    guard case .fired(let claimed) = fired else {
-      throw StoreError.unexpected("trial fixture failed to create an assignment")
+  func corruptCandidateManifest(candidateDigest: String) throws {
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE learning_candidates SET source_manifest = '{}' WHERE candidate_digest = ?",
+        arguments: [candidateDigest]
+      )
+    }
+  }
+
+  func introduceTrialMismatch(_ mismatch: EvaluationTrialMismatch, trial: Trial) throws {
+    let column: String
+    let value: any DatabaseValueConvertible
+    switch mismatch {
+    case .job:
+      column = "job_id"
+      value = jobId + 1_000
+    case .epoch:
+      column = "learning_epoch"
+      value = state.epoch.value + 1
+    case .base:
+      column = "base_digest"
+      value = trial.replacementDigest
+    case .algorithm:
+      column = "algorithm"
+      value = "stale-algorithm"
     }
     try queue.write { db in
       try db.execute(
-        sql: """
-          UPDATE trial_assignments SET evaluation_digest = ?, trial_generation = ?
-          WHERE run_id = ?
-          """,
-        arguments: [evaluationDigest, generation ?? trial.generation, claimed.runId]
+        sql: "UPDATE learning_trials SET \(column) = ? WHERE trial_id = ?",
+        arguments: [value, trial.trialId]
       )
     }
   }
@@ -1381,41 +1539,6 @@ private struct FeedbackStoreEnvironment {
     }
   }
 
-  func introduceAssignmentMismatch(
-    _ mismatch: EvaluationDependencyMismatch,
-    trial: Trial
-  ) throws {
-    switch mismatch {
-    case .job:
-      try updateAssignment(column: "job_id", value: jobId + 1, trialId: trial.trialId)
-    case .epoch:
-      try updateAssignment(
-        column: "learning_epoch",
-        value: state.epoch.value + 1,
-        trialId: trial.trialId
-      )
-    case .trial:
-      try updateWithForeignKeysDisabled(
-        sql: "UPDATE trial_assignments SET trial_id = ? WHERE trial_id = ?",
-        arguments: [trial.trialId + 999, trial.trialId]
-      )
-    case .digest:
-      try updateAssignment(
-        column: "evaluation_digest",
-        value: "another-evaluation",
-        trialId: trial.trialId
-      )
-    case .generation:
-      try updateAssignment(
-        column: "trial_generation",
-        value: trial.generation + 1,
-        trialId: trial.trialId
-      )
-    case .required:
-      try updateAssignment(column: "evaluation_required", value: false, trialId: trial.trialId)
-    }
-  }
-
   private func updateCandidate(
     column: String,
     value: (any DatabaseValueConvertible)?,
@@ -1425,19 +1548,6 @@ private struct FeedbackStoreEnvironment {
       try db.execute(
         sql: "UPDATE learning_candidates SET \(column) = ? WHERE candidate_digest = ?",
         arguments: [value, digest]
-      )
-    }
-  }
-
-  private func updateAssignment(
-    column: String,
-    value: (any DatabaseValueConvertible)?,
-    trialId: Int64
-  ) throws {
-    try queue.write { db in
-      try db.execute(
-        sql: "UPDATE trial_assignments SET \(column) = ? WHERE trial_id = ?",
-        arguments: [value, trialId]
       )
     }
   }

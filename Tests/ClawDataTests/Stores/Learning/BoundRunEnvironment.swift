@@ -16,8 +16,19 @@ struct BoundRunEnvironment {
   let sessionId: Int64
   let now: Date
 
-  static func make(learningEnabled: Bool = true) throws -> BoundRunEnvironment {
-    let queue = try ClawDatabase.makeInMemoryQueue()
+  static func make(
+    learningEnabled: Bool = true,
+    databasePath: String? = nil
+  ) throws -> BoundRunEnvironment {
+    let queue: DatabaseQueue
+    if let databasePath {
+      queue = try DatabaseQueue(
+        path: databasePath,
+        configuration: ClawDatabase.makeConfiguration()
+      )
+    } else {
+      queue = try ClawDatabase.makeInMemoryQueue()
+    }
     try ClawDatabase.migrate(queue)
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: learningEnabled)
     let now = Date(timeIntervalSince1970: 1_782_000_600)
@@ -98,14 +109,18 @@ struct BoundRunEnvironment {
     }
   }
 
-  func assistantTurn(runId: Int64, model: String = "m") -> AssistantTurn {
+  func assistantTurn(
+    runId: Int64,
+    model: String = "m",
+    content: String = "done"
+  ) -> AssistantTurn {
     AssistantTurn(
       runId: runId,
       sessionId: sessionId,
       chatId: 777,
-      content: "done",
+      content: content,
       usage: makeProviderUsage(runId: runId, sessionId: sessionId, model: model),
-      chunks: [chunk(payload: "done")]
+      chunks: [chunk(payload: content)]
     )
   }
 

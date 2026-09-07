@@ -1,5 +1,11 @@
 import Foundation
 
+public enum TrialAdmissionPolicy {
+  public static let assignmentWindow = EvidenceWindow.maximumAge
+  public static let decisionWindow: TimeInterval = 37 * 24 * 60 * 60
+  public static let maximumAssignments = 3
+}
+
 /// One live exposure of a candidate lesson set: how many of its bounded assignments are already
 /// out, and until when it may grant more. A trial stops granting assignments well before it is
 /// decided, so `state` and `consumedAssignments` answer different questions.
