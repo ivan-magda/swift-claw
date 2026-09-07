@@ -112,7 +112,8 @@ extension DaemonBuilder {
   func makeToolDispatcher(
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
-    mcpTools: [any Tool]
+    mcpTools: [any Tool],
+    coderTools: [any Tool] = []
   ) -> GatedToolDispatcher {
     let secretValues = redactionValues
     let redactor = SecretRedactor(secretValues: secretValues)
@@ -156,6 +157,7 @@ extension DaemonBuilder {
       )
     }
 
+    tools.append(contentsOf: coderTools)
     tools.append(contentsOf: mcpTools)
 
     let privateFileLoader: @Sendable () -> [String] = {
@@ -172,7 +174,10 @@ extension DaemonBuilder {
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: secretValues),
         privateFileLoader: privateFileLoader,
-        execEnabled: config.exec.enabled
+        enabledDangerousTools: Set(
+          (config.exec.enabled ? [ExecuteCodeTool.name] : [])
+            + coderTools.map(\.definition.name)
+        )
       )
     )
   }

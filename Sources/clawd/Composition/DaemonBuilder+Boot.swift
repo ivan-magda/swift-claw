@@ -22,15 +22,13 @@ extension DaemonBuilder {
     BotMenuCommand(command: "help", description: "Show commands and confirm rules."),
   ]
 
-  /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram
-  /// (`registerMenu`), sweep crash-orphaned runs (`reconcileRuns`), then re-park unresolved
-  /// approvals (`reconcileApprovals`). Each step is best-effort, but `reconcileApprovals` is
-  /// deliberately last: the run sweep must fail its orphans first so the approval sweep only sees
-  /// runs that are genuinely still parked. All three run before any update is served.
+  /// Reconciles runs and Coder before approval replay can start native work or restore parked lanes.
+  /// The graph starts after this boot hook; every resulting owner must also support fallback shutdown.
   func bootSequence(
     coordination: TurnCoordination,
     waiter: ApprovalWaiter,
-    heartbeatOwner: Int64?
+    heartbeatOwner: Int64?,
+    coder: CoderService? = nil
   ) -> @Sendable () async -> Void {
     let registerMenu = registerMenuCommands()
     let reconcileRuns = bootReconcile(heartbeatOwner: heartbeatOwner)
@@ -38,6 +36,12 @@ extension DaemonBuilder {
     return {
       await registerMenu()
       await reconcileRuns()
+      if let coder {
+        do { try await coder.start() } catch {
+          logger.error("Coder startup reconciliation failed; admission remains closed")
+          return
+        }
+      }
       await reconcileApprovals()
     }
   }

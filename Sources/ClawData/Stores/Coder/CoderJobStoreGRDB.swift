@@ -61,6 +61,22 @@ public struct CoderJobStoreGRDB: CoderJobStore {
     }
   }
 
+  public func lastFailedJob() throws(StoreError) -> CoderJob? {
+    try database.readMapping { db in
+      try Row.fetchOne(
+        db,
+        sql: """
+          SELECT * FROM coder_jobs WHERE state IN (?, ?, ?)
+          ORDER BY updated_ts DESC, id DESC LIMIT 1
+          """,
+        arguments: [
+          CoderJobState.failed.rawValue, CoderJobState.timedOut.rawValue,
+          CoderJobState.interrupted.rawValue,
+        ]
+      ).map(CoderJobRecord.decode)
+    }
+  }
+
   public func reservedJobs() throws(StoreError) -> [CoderJob] {
     try database.readMapping { db in
       try Self.reservedJobs(db)

@@ -24,12 +24,14 @@ extension DaemonBuilder {
     workspace: FileSystemWorkspace,
     costResolver: CostResolver,
     sandbox: SandboxStack,
-    mcpTools: [any Tool]
+    mcpTools: [any Tool],
+    coderTools: [any Tool] = []
   ) -> AgentStack {
     let toolDispatcher = makeToolDispatcher(
       workspace: workspace,
       sandbox: sandbox,
-      mcpTools: mcpTools
+      mcpTools: mcpTools,
+      coderTools: coderTools
     )
     let staticSubhash = policyStaticSubhash(toolDispatcher: toolDispatcher, workspace: workspace)
     let agent = makeAgent(

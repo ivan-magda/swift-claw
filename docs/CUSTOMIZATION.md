@@ -122,8 +122,8 @@ other context leaves less room; `fits_cap` does not predict that residual budget
 
 clawd shows an approval card for two reasons.
 
-**The tool's own risk tier.** File writes, memory writes, and code execution park the run
-every time, whatever else the session did.
+**The tool's own risk tier.** File writes, memory writes, code execution, and native Coder
+submissions park the run every time, whatever else the session did.
 
 **Exfiltration risk.** clawd holds an arbitrary-destination tool call, including `web_fetch`
 and MCP calls, for your approval once the session has done *both* of these:
@@ -281,6 +281,78 @@ VM per request, behind an exact-action approval. Resource limits
 (`CLAW_EXEC_MEMORY_MIB`, `CLAW_EXEC_CPUS`, `CLAW_EXEC_TIMEOUT`), the digest-pinned
 workload image, and the network opt-in (`CLAW_EXEC_ALLOW_EGRESS`) are documented in
 [`.env.example`](../.env.example) and [LOCAL_DEV.md](LOCAL_DEV.md).
+
+## Coder configuration
+
+Set `CLAW_CODER_ENABLED=true` to expose `coder_submit`, `coder_status` and `coder_cancel` in owner
+DMs. Submission always uses the durable Telegram approval path, then runs in the background through
+your native Codex installation and its configured integrations. v1 is owner DM only.
+`execute_code` keeps the VM sandbox described above.
+
+| Variable | Default / accepted value |
+|---|---|
+| `CLAW_CODER_ENABLED` | `false`; strict boolean (`true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`) |
+| `CLAW_CODER_MAX_CONCURRENT_JOBS` | `1`; any positive integer |
+| `CLAW_CODER_JOB_TIMEOUT_SECONDS` | `1800`; integer seconds from 1 through 86400 |
+| `CLAW_CODER_EXECUTABLE` | `codex`; program name or absolute executable path, without command arguments |
+| `CLAW_CODER_PROFILE` | Unset; optional existing Codex profile name |
+| `CLAW_CODER_CONFIG_HOME` | Unset; optional absolute directory for the child's `CODEX_HOME` |
+
+Omit optional settings to use defaults; explicit blank or invalid settings fail configuration even
+with Coder disabled. Parsing does not check the executable, credentials or directory. These settings
+apply after daemon restart. The backend child uses Codex-owned login/configuration, separately from
+`clawd auth`; its working directory and profile are not isolation boundaries. Coder's concurrency
+bound and timeout do not impose a hard dollar cap. Child-reported usage belongs to the Coder result,
+not ordinary provider accounting; missing usage means accounting is unavailable.
+
+The backend resolves the selected executable once against its child `PATH`; an explicit absolute
+path never falls back to another binary. It checks `--version` and `exec --help` before inference
+and refuses installations missing the required automatic-review/schema flags. The validated recipe
+uses `exec --approve-for-me` with `approval_policy="on-request"`; a refusal never triggers a broader
+permission mode. See the [backend recipe](LOCAL_DEV.md#codex-backend-development).
+
+The child receives basic OS/toolchain and locale settings plus `CODEX_HOME`, `GH_CONFIG_DIR`,
+`GH_HOST`, `GH_TOKEN`, `GITHUB_TOKEN`, and `SSH_AUTH_SOCK` when selected. Telegram tokens, ordinary
+LLM provider keys, and other `CLAW_*` values are excluded. The config-home override changes only
+the child's `CODEX_HOME`. Existing Codex integrations can use their own credentials and remain
+part of the trusted installation. swift-claw never imports that login state into `clawd auth`.
+Interactive-shell access is not proof that launchd/systemd has the same PATH or authorization.
+
+Local paths refer to the daemon machine. In-place accepts dirty work; a separate copy is ref-only,
+with no uncommitted overlay. PRs require your configured repository rights; local PR preparation
+refuses an origin whose fetch and push URLs name different repositories, including a preconfigured
+fork push URL. Use an explicit GitHub source or an unambiguous origin. There is no automatic
+apply-back or rollback, and no automatic dependency provisioning. N is configurable; full means busy,
+without a queue. Completion uses existing outbox retries and needs no new LLM turn. Ask to inspect or
+cancel a job by its UUID; `/stop` only stops the conversation turn. Child billing is separate from
+conversational `/cost`, and Coder's limit/timeout cannot enforce a hard dollar cap.
+
+Disabled Coder contributes no tools, admits no work and launches no probes. On restart it still
+reconciles jobs admitted while enabled: unfinished jobs become interrupted with one completion notice,
+and uncertain process ownership retains its reservation. Missing/incompatible Codex leaves the
+assistant available with a failed Coder health row and no submit tool. An unprofiled local login-status
+failure blocks submit; authenticate Codex under the daemon user and restart. `doctor --check-config`
+performs no Codex probe and labels enabled runtime availability/authentication unverified. While Coder
+is enabled, full doctor and startup run bounded local version/help/status checks without inference,
+credential refresh, repository creation or publication. CLI compatibility and a present local login
+do not prove runtime authorization.
+Codex CLI cannot inspect a selected profile's authentication through `login status`: that health row
+is explicitly unverified and fails doctor, while compatible operator-approved profile jobs remain
+available. A profile can still fail authentication during execution; clawd does not refresh/import
+credentials or retry with broader permissions. An owner who accepts that limitation can start `clawd run`
+directly even when doctor withholds its healthy-start hint.
+
+The running daemon reports live fatal service failures separately from the persisted reservation
+count, unresolved ownership and last terminal failure. An external doctor labels live-only observations
+unavailable and reads persisted reservations. These historical rows remain visible in full doctor and
+daemon health with Coder disabled; `--check-config` does not read job history.
+Unreadable storage is a failed row, never a healthy zero.
+`coder.last_failure` is the most recently updated failed/timed-out/interrupted record, including
+released jobs; recovery updates can reorder it. It is historical evidence, separate from current
+CLI/auth availability. Child-reported checks/usage remain in each job's result.
+
+Interrupted jobs are never automatically rerun. Unresolved process ownership retains its slot across
+daemon restarts; see the [operator recovery path](LOCAL_DEV.md#coder-background-lifecycle-and-recovery).
 
 ## MCP servers
 
