@@ -709,6 +709,11 @@ import Testing
     try seedProactiveSpend(harness, costUSD: 2.50)
     await harness.scheduler.tick()
     let payloads = try await harness.waitForOutbox(atLeast: 1)
+    let tripAudits = try await harness.waitForAudit(
+      action: AuditAction.budgetTripped.rawValue,
+      atLeast: 1
+    )
+    try #require(tripAudits >= 1)
 
     // then — denied offline with the named cap; the owner is DMed exactly once; audited
     #expect(payloads.contains(Degradation.budget(cap: BudgetGate.proactivePerDayCap)))
