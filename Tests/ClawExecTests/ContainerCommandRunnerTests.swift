@@ -1,4 +1,6 @@
+import ClawTestSupport
 import Foundation
+import Synchronization
 import Testing
 
 @testable import ClawExec
@@ -6,11 +8,11 @@ import Testing
 @Suite struct ContainerCommandRunnerTests {
   @Test func adapterPreservesRawBytesAndExitStatus() async {
     // given
-    let runner = SwiftSubprocessContainerCommandRunner(executablePath: "/bin/sh")
+    let runner = testRunner(executablePath: "/bin/sh")
     let command = testCommand(["-c", "printf '\\001out'; printf '\\377err' >&2; exit 7"])
 
     // when
-    let result = await runner.run(command)
+    let result = await runner.runWithWatchdog(command)
 
     // then
     #expect(result.termination == .exited(7))
@@ -23,7 +25,7 @@ import Testing
 
   @Test func adapterDrainsBothFloodedStreamsAndKeepsIndependentPrefixes() async {
     // given
-    let runner = SwiftSubprocessContainerCommandRunner(executablePath: "/bin/sh")
+    let runner = testRunner(executablePath: "/bin/sh")
     let script = """
       count=0
       while [ "$count" -lt 4096 ]; do
@@ -35,7 +37,7 @@ import Testing
     let command = testCommand(["-c", script], captureLimit: 1024, timeout: .seconds(5))
 
     // when
-    let result = await runner.run(command)
+    let result = await runner.runWithWatchdog(command)
 
     // then
     #expect(result.termination == .exited(0))
@@ -49,7 +51,7 @@ import Testing
 
   @Test func adapterDeletesAmbientSecuritySensitiveEnvironment() async {
     // given
-    let runner = SwiftSubprocessContainerCommandRunner(
+    let runner = testRunner(
       executablePath: "/bin/sh",
       environmentForTesting: [
         "SSH_AUTH_SOCK": "/tmp/agent.sock",
@@ -67,85 +69,105 @@ import Testing
       """
 
     // when
-    let result = await runner.run(testCommand(["-c", script]))
+    let result = await runner.runWithWatchdog(testCommand(["-c", script]))
 
     // then
     #expect(result.termination == .exited(0))
     #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "unset|unset|unset|present")
   }
 
-  @Test func programBudgetStartsAfterSpawnAndReturnsTypedTimeout() async throws {
+  @Test func deadlineAfterSpawnReturnsTypedTimeout() async throws {
     // given
-    let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
-    let runner = SwiftSubprocessContainerCommandRunner(
+    let spawned = ClawTestSupport.AsyncGate()
+    let deadline = ClawTestSupport.AsyncGate()
+    let launchedPID = Mutex<Int32?>(nil)
+    let runner = testRunner(
       executablePath: "/bin/sh",
       onSpawnForTesting: { processIdentifier in
-        continuation.yield(processIdentifier)
-      }
+        launchedPID.withLock { value in
+          value = processIdentifier
+        }
+        spawned.open()
+      },
+      deadline: deadline
     )
     let task = Task {
-      await runner.run(
-        testCommand(["-c", "trap '' TERM; while :; do :; done"], timeout: .milliseconds(50))
+      await runner.runWithWatchdog(
+        testCommand(["-c", "trap '' TERM; while :; do :; done"])
       )
     }
+    defer { task.cancel() }
+    let didSpawn = await spawned.waitUntilOpen()
 
     // when
-    let processIdentifier = try await firstValue(from: spawned)
+    deadline.open()
+    if !didSpawn { task.cancel() }
     let result = await task.value
-    continuation.finish()
 
     // then
-    #expect(processIdentifier > 0)
+    #expect(didSpawn)
     #expect(result.termination == .timedOut)
+    let processIdentifier = try #require(
+      launchedPID.withLock { value in
+        value
+      }
+    )
+    #expect(processIdentifier > 0)
     #expect(result.processIdentifier == processIdentifier)
   }
 
-  @Test func callerCancellationTearsDownTheCreatedProcessGroup() async throws {
+  @Test func callerCancellationTearsDownTheCreatedProcessGroup() async {
     // given
-    let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
-    let runner = SwiftSubprocessContainerCommandRunner(
+    let spawned = ClawTestSupport.AsyncGate()
+    let runner = testRunner(
       executablePath: "/bin/sh",
-      onSpawnForTesting: { processIdentifier in
-        continuation.yield(processIdentifier)
+      onSpawnForTesting: { _ in
+        spawned.open()
       }
     )
     let task = Task {
-      await runner.run(
+      await runner.runWithWatchdog(
         testCommand(
           ["-c", "trap '' TERM; (trap '' TERM; while :; do :; done) & wait"],
           timeout: .seconds(30)
         )
       )
     }
-    _ = try await firstValue(from: spawned)
+    defer { task.cancel() }
+    let didSpawn = await spawned.waitUntilOpen()
 
     // when
     task.cancel()
     let result = await task.value
-    continuation.finish()
 
     // then
+    #expect(didSpawn)
     #expect(result.termination == .cancelled)
   }
 
   @Test func childExitDoesNotWaitForGrandchildHoldingThePipe() async throws {
     // given
-    let runner = SwiftSubprocessContainerCommandRunner(executablePath: "/bin/sh")
-    // The backgrounded sleep inherits stdout (the asserted pipe); stderr only publishes its
-    // PID so the test can reap the grandchild instead of orphaning a real 30-second sleep.
-    let command = testCommand(["-c", "sleep 30 & echo $! >&2; printf child"], timeout: .seconds(2))
+    let root = try makeTemporaryRoot(prefix: "container-grandchild")
+    let pidFile = root.appendingPathComponent("pid")
+    defer {
+      let text = try? String(contentsOf: pidFile, encoding: .utf8)
+      let pid = text.flatMap { value in
+        Int32(value.trimmingCharacters(in: .whitespacesAndNewlines))
+      }
+      if let pid { _ = kill(pid, SIGKILL) }
+      try? FileManager.default.removeItem(at: root)
+    }
+    let runner = testRunner(executablePath: "/bin/sh")
+    let command = testCommand([
+      "-c", "sleep 600 & echo $! > \"$1\"; printf child", "fixture", pidFile.path,
+    ])
 
     // when
-    let result = await runner.run(command)
+    let result = await runner.runWithWatchdog(command)
 
     // then
     #expect(result.termination == .exited(0))
     #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "child")
-    let pidText = try #require(String(bytes: result.stderr.bytes, encoding: .utf8))
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    let grandchild = try #require(Int32(pidText))
-    // ESRCH just means the grandchild already exited; anything else is equally moot here.
-    _ = kill(grandchild, SIGKILL)
   }
 }
 
@@ -162,11 +184,34 @@ private func testCommand(
   )
 }
 
-private func firstValue(from stream: AsyncStream<Int32>) async throws -> Int32 {
-  for await value in stream {
-    return value
-  }
-  throw MissingSpawnError()
+private func testRunner(
+  executablePath: String,
+  environmentForTesting: [String: String] = [:],
+  onSpawnForTesting: @Sendable @escaping (Int32) -> Void = { _ in },
+  deadline: ClawTestSupport.AsyncGate = ClawTestSupport.AsyncGate()
+) -> SwiftSubprocessContainerCommandRunner {
+  SwiftSubprocessContainerCommandRunner(
+    executablePath: executablePath,
+    environmentForTesting: environmentForTesting,
+    onSpawnForTesting: onSpawnForTesting,
+    deadlineSleep: { _ in
+      await deadline.wait()
+      try Task.checkCancellation()
+    }
+  )
 }
 
-private struct MissingSpawnError: Error {}
+// MARK: - Completion watchdog
+
+private extension SwiftSubprocessContainerCommandRunner {
+  func runWithWatchdog(_ command: ContainerCommand) async -> ContainerCommandResult {
+    await withTestWatchdog(
+      onTimeout: {
+        Issue.record("Container command did not complete before its watchdog.")
+      },
+      {
+        await run(command)
+      }
+    )
+  }
+}

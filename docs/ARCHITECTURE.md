@@ -90,6 +90,7 @@ clawd
 | `ClawTools` | lib | Tool registry + read-only tools (v1); policy gate + approval orchestration arrive in the P-tools phase (Inc 5a). | `ToolRegistry`, `ToolContext`; `WebSearchTool`, `WebFetchTool`, `FileReadTool` (v1); `PolicyGate`, `ApprovalCoordinator` [Inc5a] |
 | `ClawMCP` | lib | MCP **client** (§10.3): the Streamable HTTP transport over the shared HTTP seam, one session per configured server, catalog resolution, metadata redaction, name/schema normalization, and the `Tool` adapter that puts a remote tool on the same seam as a built-in. Depends only on `ClawCore` + the official Swift SDK, so no MCP concept reaches the agent loop or the policy gate. | `MCPStreamableHTTPTransport`, `MCPServerSession`, `MCPCatalogResolver`, `ResolvedMCPCatalog`, `MCPMetadataSanitizer`, `MCPTool`, `MCPToolNamer`, `MCPSchemaNormalizer` |
 | `ClawExec` | lib | macOS 26 arm64 execution implementation: fixed-path swift-subprocess adapter, apple/container argv, disposable scratch, serialized VM lifecycle, probe/reap/canary maintenance. Linux supplies no backend until Inc 6. | `ContainerBackend`, `ExecSandboxSettings` |
+| `ClawCoder` | lib | Native Coder process ownership, Git workspaces, Codex protocol and artifact inspection on macOS and Linux; daemon composition follows in a later increment. Depends on Core, pinned Subprocess and platform System only. | `CoderCommandRunner`, `ManagedCoderProcessGroup`, `CoderProcessIdentity`, `CoderProcessInspector`, `CoderRequestPreparer`, `CoderWorkspace`, `RepositoryInventory`, `CodexBackend` |
 | `ClawAppleSpeech` | lib | macOS 26 on-device speech-to-text behind the `ClawCore` `VoiceTranscribing` seam (`SpeechAnalyzer`/`SpeechTranscriber`, idempotent model-asset provisioning). Compiles to an empty module on Linux (`#if canImport(Speech)`); the factory returns nil there, fail-closed to the canned reply. | `AppleSpeechTranscriber`, `SystemVoiceTranscriber` |
 | `ClawAgent` | lib | Agent runtime: context assembly, the run loop, budgets, cancellation, the per-session lane. | `AgentRuntime`, `ContextBuilder`, `RunBudget`, `SessionActor` |
 | `ClawGateway` | lib | Wiring: `ServiceGroup`, Services, routing, access control, session resolution, outbox dispatch, shutdown. | `Gateway`, `TelegramPollerService`, `SchedulerService` [Inc4], `Router`, `AccessControl`, `RateLimiter`, `OutboxDispatcher` |
@@ -99,6 +100,21 @@ clawd
 Each unit answers: *what does it do, how is it used, what does it depend on.* `ClawCore` depends on nothing, so the domain, protocols, and error taxonomy are trivially unit-testable.
 
 `SearchProviding` is a `ClawCore` protocol; the default backend is Exa (`https://api.exa.ai/search`, a pinned trusted endpoint and documented trust dependency like `base_url`, including Exa's right to use query input/output to provide/improve its services). `Secrets.searchApiKey` keys it; unconfigured means the tool is absent and doctor reports info, not an error.
+
+**Generic Coder** adds the pure `CoderRequest`/`CoderPreparedRequest`, `CoderJob`, `CoderResult`,
+`CoderBackend`, `CoderRequestPreparing`, `CoderProcessInspecting`, and `CoderServing` contracts
+in `ClawCore`. `ToolExecutionContext` carries trusted run/session/chat/requester/origin/mode and
+approval identity; those fields never come from model-authored arguments. `ClawCoder` owns
+native process supervision, workspace preparation, Codex execution and inspection;
+`ClawGateway` will own admission, persistence through Core store seams, background lifetime and
+reporting, composed only at `clawd`.
+The native foundation implements Core contracts, the real job store, process ownership, Git
+workspaces and the Codex backend. Opening the database now applies migration `v11`, and ordinary
+outbound writes use the shared `OutboxInsertion` helper. Runtime composition, tool registration
+and AppConfig integration remain pending; no Coder child is launched by the daemon. This stage
+registers no Coder tools. Once composed, the sole names are
+`CoderToolNames.submit` (`coder_submit`), `.status` (`coder_status`), and `.cancel` (`coder_cancel`).
+No provider registry, second backend, ACP session manager or generic process module is introduced.
 
 ### 3.1 Code map — where each section lives in the code
 
@@ -149,6 +165,19 @@ form `ARCHITECTURE.md §N` is used, sparingly.
 - **Dependent resources close in a fixed order *after* the graph, never underneath it.** `RunCommand` owns the concrete HTTP clients and runs the same sequence on success, signal, and service failure: (1) close lane admission and stop service intake; (2) cancel and await the service graph and every registered lane task; (3) await the credential source's throwing `shutdown()` commit rule (§8.2); (4) close the dedicated LLM client; (5) close the independent Telegram and tool clients. Refresh work therefore has a concrete owner and keeps its transport alive until a token rotation is either persisted or reported failed. A credential shutdown error becomes the run's cleanup failure when no earlier failure exists and is logged only after redaction; client shutdown still runs.
 - **A lane-drain timeout is a failure path, not a clean exit.** If the graceful-shutdown duration expires, the lane registry returns the still-active run IDs and a typed fatal cleanup failure. `RunCommand` then **does not** close credentials or clients underneath live tasks: it exits without orderly dependent-resource shutdown and lets process teardown own the remainder, leaving any `RUNNING` row to the boot reconciler (§19.1). Never report that timeout as a clean shutdown.
 - **Supervision with throttling:** launchd (`KeepAlive`, `RunAtLoad`, `ThrottleInterval`) on macOS; systemd (`Restart=on-failure`, `RestartSec`, `StartLimitIntervalSec`+`StartLimitBurst`, `TimeoutStopSec`) on Linux. Throttling is documented in the units so a deterministic failure backs off.
+- **Native Coder children have joined ownership.** `CoderCommandRunner` launches each command in a
+  new session with an argument vector, finite stdin and an explicit environment. Caller cancellation
+  synchronously latches a request in per-invocation control; an independently running task is always
+  awaited, so Subprocess's own leader-only cancellation cannot abandon surviving group members.
+  A scoped observer uses non-consuming `waitid(WEXITED | WNOHANG | WNOWAIT)` and bounded suspending
+  polling; EOF does not mean process exit. Readers, the observer and cleanup all finish inside the
+  `Execution` closure. Invocation callbacks/readers run with a structured stop watcher; cancellation,
+  deadline or failure cancels and awaits that work while the separate process owner joins cleanup.
+  Cancelling the losing watcher is not caller cancellation. Only the outer Subprocess return reaps
+  the child and yields its exit/signal status; only then may a stopped receipt be emitted or a job
+  reservation released. Post-reap stopped/unresolved persistence stays shielded as mandatory cleanup:
+  failure retains unresolved ownership, and a callback that does not return delays completion rather
+  than authorizing an unverified release.
 - **Logging:** `swift-log` to stdout/stderr; journald/newsyslog handle rotation.
 
 ## 5. Concurrency model
@@ -204,6 +233,16 @@ Concrete, config-overridable defaults for a single-owner daily-driver. These are
 | `dayTokenCeiling` | derived hard offline failsafe = `perDayUSD ÷ referenceUSDPerToken` | ≈ 666 667 |
 
 All overridable in config. The **hard offline failsafe is `dayTokenCeiling`** (a per-day token breaker checked before each call, so it trips even when no price is known); the USD caps ($0.50/run, $10/day) are the user-facing limits, enforced best-effort when a price is known. A **run in Inc 1 is exactly one LLM round-trip** — `maxTurns`/`maxToolCalls` exist but stay inert until tools land in Inc 3. `perToolOutputCap` is 25 000 tokens, enforced as its grapheme-domain equivalent 80 000 graphemes via the pinned estimator inverse (Inc 3b). Context assembly reserves the estimated size of the complete advertised tool array before filling message sections, so the final request can fit under `maxInputTokens`; provider-call preflight still estimates that complete request independently.
+
+**Coder has a separate child budget.** The native backend accepts an independent timeout;
+service admission and the operator settings below are pending runtime-integration contracts.
+The ordinary dialogue's token, dollar and 180-second
+limits do not meter a native Codex child. `CLAW_CODER_MAX_CONCURRENT_JOBS` bounds admitted work
+(default 1, any positive N); capacity returns an explicit busy response, with no unbounded queue.
+`CLAW_CODER_JOB_TIMEOUT_SECONDS` supplies an independent supervisor deadline (default 1800,
+maximum 86400 seconds). Record available child-reported usage on the Coder result; missing usage
+means unavailable accounting. Do not add it to ordinary `provider_usage` or claim a hard dollar
+cap on the child's provider calls. Completion reporting is deterministic and needs no new LLM turn.
 
 ## 6. Data flow
 
@@ -312,7 +351,8 @@ model proposes tool_call
                         └─ expire (approval-expiry ticker, default 1h) → DENY (terminal)
        • dangerous  → absent from the registry unless explicitly enabled in config; once
                         registered, ALWAYS suspend through ApprovalCoordinator (never auto-run),
-                        and execute only inside its declared sandbox after approval
+                        and honor its declared execution boundary after approval
+                        (execute_code: VM; Coder: native delegation, §13.2)
        • LETHAL-TRIFECTA GATE (§12): if session.tainted && privileged/egress action,
          FORCE the approval path in code regardless of the tool's own tier.
   └─ AuditLog.append(actor, tool, args-redacted, decision, result-size, ts, run_id, session_id)
@@ -366,6 +406,15 @@ OutboxDispatcher:
 
 **Ordering invariant:** the inbound message + the run row **COMMIT before** the outbound reply is sent. So a disk-full/crash stops the turn before an unrecoverable side effect.
 
+**Coder completion** commits the first terminal job result and its report chunks together in one
+transaction, without another LLM turn. Shared `OutboxInsertion` retains exact-step insertion for
+ordinary claims; append callers allocate after the maximum existing run-relative step, including
+approval prompts. Coder uses the persisted origin chat and the origin run's topic/reply metadata;
+report text cannot choose a destination. Completion compares the state used for rendering with the
+current job: a concurrent cancellation returns `stateChanged(currentJob)` without writes so the
+service can rerender and retry only the commit. A terminal replay returns `alreadyTerminal` and
+inserts nothing. An outbox failure rolls back the terminal transition and reservation release.
+
 ### 6.5 Callback (approval) path (Inc 5a)
 
 `callback_query` updates arrive through the **same untrusted `getUpdates` stream** as messages but bypass §6.1 message ordering (they are callbacks). They MUST:
@@ -399,6 +448,7 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 | `memory_items` | 3 | type, content, source/provenance, ts, importance, sensitivity (durable facts; `confidence` deferred, `visibility`→`sensitivity` — Inc 3a) | `session_id → sessions.id` (nullable) |
 | `scheduled_jobs` | 4 | `owner_chat_id` (set in code at arm time), `label`, `prompt` (owner-authored, trusted, frozen at confirm), `recurrence` (`{"schema_version":1,"rule":<RecurrenceRule JSON>}`; NULL ⇔ one-shot), `timezone` (IANA), materialized `next_occurrence` (advanced only inside the claim; NULL once terminal; partial index `(status, next_occurrence)`), `last_fired_at`, status FSM `ACTIVE\|PAUSED\|COMPLETED\|CANCELLED`, `session_id` (the job's dedicated session `sched:job:<id>`, NULL until first fire), `created_ts`/`updated_ts` | `session_id → sessions.id` |
 | `scheduler_state` | 4 | single row (`id = 1` CHECK): `last_tick_at`, `last_misfire_at`, `last_misfire_skipped_count`, `last_heartbeat_at`, `heartbeat_count_day` (day string in `CLAW_TIMEZONE` — the cap boundary aligns with quiet hours, not UTC), `heartbeat_count`; `due_count` is computed by query, never stored | — |
+| `coder_jobs` | Coder | migration `v11`: prepared request, origin/approval, state, reserved slot, canonical checkout/common-Git identities, process ownership/receipt, result, epoch-second timestamps; UNIQUE `(origin_run_id, tool_call_id)` | `origin_run_id → runs.id`, `origin_session_id → sessions.id`, `approval_id → approvals.id` |
 | `approvals` | 5a | PENDING/APPROVED/REJECTED/EXPIRED (EXPIRED resolves to a DENY outcome at execution), tool + canonical args, **canonical-args hash, policy_version, ownerUserId, random callback nonce**, expiry | `approvals.run_id → runs.id` |
 
 `runs.state = AWAITING_APPROVAL` references `approvals.id` as the **one** canonical source of truth for "blocked on approval" (no ambiguous dual flags).
@@ -455,6 +505,36 @@ func advanceCursor(to lastUpdateId: Int64) throws
 ```
 
 All write methods execute inside a single `db.write { }` closure so the dedup key and the side effect share one transaction.
+
+#### Coder job persistence
+
+`CoderJobStore` is a synchronous, typed `throws(StoreError)` Core seam implemented by a thin
+`CoderJobStoreGRDB` over the shared database writer and exposed through `ClawStores.coderJobs`.
+`admit(id:prepared:origin:maxConcurrentJobs:now:)` first resolves the trusted `(runID, toolCallID)`
+dedup key, then refuses unresolved process ownership deployment-wide, counts every reserved row
+(including terminal rows), checks in-place checkout/common-Git conflicts, and inserts a reserved
+`admitted` job in the same transaction. Outcomes are `admitted`, `existing`, `busy`, `workspaceBusy`,
+or `recoveryRequired`. Separate jobs do not lock their source checkout. Canonical identities come
+from trusted preparation; this store does not resolve paths or reinterpret approvals.
+
+`job(id:)` reads durable status and `reservedJobs()` supplies recovery's reservation inventory.
+`markRunning(id:now:)` is a compare-and-swap from `admitted` only. `requestCancellation(id:now:)`
+moves admitted/running jobs to `stopping`, preserves terminal state, and keeps the reservation.
+`CoderJobState.isTerminal` identifies succeeded, failed, cancelled, timedOut, and interrupted.
+
+`recordProcess(id:event:now:)` records `willLaunch` only for a running, reserved job whose ownership
+is none/stopped, otherwise throwing a typed store error. `didLaunch` only replaces the matching
+pending launch. Stopped/unresolved cleanup events must match the current receipt's `launchID`;
+nonmatching receipt events are ignored. Matching launch acknowledgement and cleanup remain legal
+while stopping or terminal, so an already spawned child can be recorded and drained. A subprocess
+stop never releases the workflow slot, and a delayed earlier command event cannot clear a later
+command receipt.
+
+`complete(id:expectedState:result:chunks:releaseReservation:now:)` requires a terminal result and
+owns the atomic report commit described in §6.4. Releasing a reservation requires ownership none
+or stopped; terminal state alone is insufficient. `releaseResolvedReservation(id:now:)` additionally
+requires a terminal job, releases only its slot, and never adds another notice. All store operations
+use the mapped read/write seams, including SQLite-full classification as `StoreError.diskFull`.
 
 ### 7.6 sqlite-vec — deferral honesty
 
@@ -688,7 +768,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 ## 12. Security & trust model
 
-**Defense in independent layers — none of which is "the model behaved."** Security rests on four layers that each hold even if the model is fully subverted by prompt injection: (1) the **numeric-ID default-deny boundary** — untrusted senders never reach the model; (2) **untrusted-data labeling + the in-code instruction hierarchy** — inbound/tool/retrieved content, remote tool metadata, and durable memory are treated as data and cannot claim authority; (3) the **in-code policy gate + risk tiers** — every side effect is authorized by deterministic code at the dispatch site, never by the prompt; (4) the **enforced lethal-trifecta gate + approvals + blast-radius caps + the VM sandbox** — consequential actions are gated and contained. A successful injection therefore yields, at most, what an *unprivileged* turn could already do.
+**The ordinary agent tool boundary uses four independent defenses:** (1) the **numeric-ID default-deny boundary** — untrusted senders never reach the model; (2) **untrusted-data labeling + the in-code instruction hierarchy** — inbound/tool/retrieved content, remote tool metadata, and durable memory are treated as data and cannot claim authority; (3) the **in-code policy gate + risk tiers** — every side effect is authorized by deterministic code at the dispatch site, never by the prompt; (4) the **enforced lethal-trifecta gate + approvals + blast-radius caps**, with the **VM sandbox for `execute_code`**. These defenses gate the ordinary tool surface even when the model is subverted. Opt-in Coder instead grants a concrete native delegation (§13.2): swift-claw authorizes admission and task scope, while the trusted Codex installation and its integrations determine child authority. Its automatic approval review is not deterministic authorization of every child action, and a working directory is not a security sandbox.
 
 - **Boundary:** numeric Telegram user ID, default-deny, enforced before any LLM/tool/expensive work; fail-closed on internal error. No username path anywhere (identity-rebinding CVE class).
 - **Instruction hierarchy (in code):** system/security policy > developer config > identity files (SOUL/AGENTS/TOOLS) > user task > tool observations > retrieved/inbound content > durable memory (MEMORY.md/USER.md — untrusted tier). Durable memory never sits at the system tier.
@@ -712,7 +792,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **Intake observes before it decides to answer.** `AddressingResolver` decides whether a message is talking to the bot — an `@handle` mention, a slash command this build recognizes, or a reply to something the bot itself said — **before** the content switch, so an unaddressed photo or voice note is never downloaded or transcribed. An addressed message takes the ordinary `claimAndPersistInbound` path. Unaddressed text takes `claimAndPersistObserved`: the same claim, the same session upsert, the same message insert, **no run**. The router skips unaddressed media without downloading, transcribing, or storing a transcript row. The addressed and observed text paths share the claim key, so Telegram stores one text update at most once whichever path it takes. The bot follows the topic's text and speaks only when called. Group mode makes the bot's own `@handle` load-bearing, so a daemon configured with group chats **refuses to boot** without a resolved bot username rather than sitting silently in every room.
 - **A stored group line names its speaker.** `TranscriptAuthor` renders `<display name>: <text>` at persist time, not at assembly time, so a recall hit pulled back out of history still says who said it and the name is in the FTS index. The separator and every line break are folded out of a display name first, so one line can never present itself as two speakers. A DM line is stored exactly as typed.
 - **Recall never leaves the topic.** `Retriever.searchRelevantMessages` takes a `restrictToSessionId`; a group topic passes its own session id, a DM passes `nil` and keeps its cross-session reach. Without that restriction one room's words would surface in another room's prompt, because a group line is stored trusted (below) and trusted rows are exactly what recall returns.
-- **There are no approvals in a shared room, so the gate refuses instead of asking.** Nobody in a group holds the owner's approval authority and no keyboard there could be trusted to resolve one, so `ToolPolicyGate` changes five decisions when `context.mode == .group`: the ask tier **allows on the gate-resolved target** rather than parking; a tool that only ever does its real work on the approval waiter (`memory_write`) is **refused** with a reason; a write whose canonical target is a **privileged prompt file** (`SOUL.md`/`AGENTS.md`/`TOOLS.md`/`USER.md`/`MEMORY.md`/`HEARTBEAT.md`, any `SKILL.md`) is **refused**, because in a DM the owner's ⚠ banner was the thing catching it and here there is no banner; the `.dangerous` arm **executes the prepared action** instead of parking it; and a held trifecta **allows**. Everything that is not an approval round-trip is untouched: `execEnabled`, `WorkspacePathContainment`, the SSRF classifier, the unconditional and conditional exfiltration argument scans, secret redaction, the tool-output cap, and the sandbox all run exactly as they do in a DM. The sandbox, not a prompt, is the containment for what a topic executes.
+- **There are no approvals in a shared room, so the gate refuses instead of asking.** Nobody in a group holds the owner's approval authority and no keyboard there could be trusted to resolve one, so `ToolPolicyGate` changes five decisions when `context.mode == .group`: the ask tier **allows on the gate-resolved target** rather than parking; a tool that only ever does its real work on the approval waiter (`memory_write`) is **refused** with a reason; a write whose canonical target is a **privileged prompt file** (`SOUL.md`/`AGENTS.md`/`TOOLS.md`/`USER.md`/`MEMORY.md`/`HEARTBEAT.md`, any `SKILL.md`) is **refused**, because in a DM the owner's ⚠ banner was the thing catching it and here there is no banner; the `.dangerous` arm **executes the prepared action** instead of parking it; and a held trifecta **allows**. Everything that is not an approval round-trip is untouched: `execEnabled`, `WorkspacePathContainment`, the SSRF classifier, the unconditional and conditional exfiltration argument scans, secret redaction, the tool-output cap, and the sandbox all run exactly as they do in a DM. The sandbox, not a prompt, is the containment for topic `execute_code` calls. Coder tools are not yet registered. Their runtime integration must remain owner-DM-only and refuse group and proactive submission; they must never inherit the group dangerous-tool auto-run exception.
 - **The owner-scoped command families are refused.** `Command.isDirectOnly` covers `/remember`, `/memory`, `/schedule`, `/pause`, `/resume`, `/run`, `/cancel`; a group invocation gets one refusal naming both families, so an attendee learns the rule rather than just this rejection. Two reasons, both structural: durable memory and the schedule table are single-owner state delivered to a chat id the arming message chose, and both park a confirmation that the **next plain message** resolves — in a shared room that message belongs to whoever typed fastest, so one attendee could commit a draft another one wrote. `/new` and `/stop` act on the topic's own session and stay available; the read-only reports name nothing private and stay available.
 - **A reply goes back into the topic that asked, as a reply.** Migration `v10` adds `runs.trigger_telegram_message_id` (Telegram's own message id, distinct from the `messages` row id `trigger_message_id` already carries) and nullable `outbound_deliveries.message_thread_id` / `reply_to_message_id`. The outbox target is stamped **at enqueue from the run's own session key**, so every path that enqueues — a turn reply, a command reply, a scheduled fire, a boot crash notice — lands in the right topic without a second lookup. The typing indicator carries the topic id. Telegram accepts streaming drafts only in private chats, so a group turn keeps reissuing the topic-scoped typing action until the final reply arrives.
 - **One throttled chat no longer stalls every other one.** The outbox drain is strictly ordered per chat and stops on a send failure, which in a DM meant one stalled conversation. With several topics live, a Telegram 429 is the one failure that says how long to wait, so the dispatcher puts a **per-chat hold** on the retry-after window, skips that chat's rows, and carries on with the others; order inside a run survives because a run answers exactly one chat. Every other failure keeps the existing stall-and-wait behavior.
@@ -731,7 +811,9 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
 - **`/new` clears the window, not the archive.** A reset moves `window_start_message_id` forward and clears taint and the private-data flag for that topic, so the visible conversation starts fresh. It does not delete rows, and topic-restricted recall still searches the topic's older messages — so a fact from before the reset can resurface. Making a reset unrecallable is a retention feature, not a windowing one.
 - **The daily `RunBudget` is one budget for the whole daemon.** It is per-day and per-run, never per-chat or per-person, so one busy topic can exhaust the day for every topic and for the owner's DM. Per-person rate limits and per-topic budgets are deliberately out of scope.
 
-## 13. Execution / sandbox architecture (Inc 5b macOS; Inc 6 Linux)
+## 13. Execution architecture
+
+### 13.1 `execute_code` VM sandbox (Inc 5b macOS; Inc 6 Linux)
 
 - **`ExecutionBackend` protocol** (`Sendable`), driven via `swiftlang/swift-subprocess`:
   - **macOS 26+ arm64 (Inc 5b):** `ContainerBackend` shells out to the fixed
@@ -786,6 +868,176 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
 - `sandbox-exec`/Seatbelt may wrap the launcher only as optional defense-in-depth; it is never the
   isolation boundary.
 
+### 13.2 Native Coder delegation
+
+The native foundation implements workspace selection, process lifetime, durable job storage and
+Codex execution/inspection. Daemon admission, background service ownership and reporting remain
+pending runtime integration. The complete Coder contract below assigns those responsibilities to
+Coder and keeps its native implementation behind Core seams.
+Codex investigates, edits, runs checks, and performs the requested Git/GitHub workflow. Coder uses
+the owner's trusted native Codex installation, existing configuration and integrations; no mandatory
+container or toolchain image is introduced. Codex automatic approval review does not provide the
+hardware-VM guarantees of `execute_code`, universal cwd confinement, or containment of every
+MCP/hook/plugin path. Child permissions and credentials determine effective authority.
+
+- **Opt-in and approved task scope (pending runtime integration):** owner DM only, through the existing durable task-approval
+  path, with `ApprovalReason.coderSubmit`. Approvals show the native delegation, source/workspace
+  and publication scope. Group and proactive submissions are refused. Bind Coder-controlled
+  execution policy and credential selectors in `executionPolicyID` and the approval fingerprint;
+  revalidate before launch. The controlled automatic approval mode is explicit and included in that
+  identity. Inherited integrations remain trusted dependencies, not a frozen profile snapshot.
+- **Request shape:** local absolute repository path, GitHub HTTPS repository URL
+  (`github.com/{owner}/{repo}`), or issue URL (`/issues/{positive integer}`). Refuse credentials,
+  ports, query/fragment, encoded or option-like components, and unrelated paths. Local/repository
+  sources require nonblank task text; an issue may supply it. Task and instructions remain arbitrary
+  data. Credentials, executable paths, sender IDs, delivery targets and permissions are deployment
+  or trusted-context values, never model-authored request fields.
+- **In place:** use the local checkout's current branch and working files, including uncommitted
+  changes. Reject `startRef`; `baseBranch` is a separate PR target and is allowed. A dirty checkout
+  is not a preflight failure. An unborn in-place branch has no starting commit: verify its HEAD
+  branch ref is absent, retain `startingCommit == nil`, and still inventory its files. Other Git or
+  supervision failures do not establish an unborn branch. Unless `publishExistingChanges` is true, Codex must leave unrelated
+  existing work out of its commit and report blocked if it cannot complete within that scope.
+  Coder's own checkout/common-Git-directory lock does not control external editors or agents.
+- **Separate copy:** start from committed Git history only; no dirty-state snapshot, overlay,
+  apply-back, stash or automatic rollback. Reject `publishExistingChanges`. An omitted `startRef`
+  means the local source's current HEAD or the GitHub remote's default branch, never an assumed
+  `main`. Local copies have independent objects without hardlinks/alternates or source hooks/config.
+  A GitHub source always uses a separate copy, never a matching host checkout discovered elsewhere.
+- **Prepared repository identity and publication:** before approval, resolve local checkout and
+  common Git directory to canonical paths with bounded, sanitized read-only Git queries. Do not
+  clone or contact GitHub. For a PR, freeze `publicationRepository` as lowercase GitHub owner/repo;
+  remote inputs derive it from the URL, local inputs resolve one `origin` including source-local
+  URL rewrites. Effective fetch and push URLs must name the same canonical GitHub repository;
+  multiple origins, non-GitHub URLs and conflicting push destinations are refused. Explicit
+  `baseBranch` versus the repository-default selector remains bound in the recorded request.
+  Recheck local checkout/common-directory identity and publication origin after admission, before
+  launching the worker; a changed destination requires fresh approval. This refusal also applies
+  to a legitimate preconfigured fork push URL; use an explicit remote source or an unambiguous
+  origin. Codex may still create a head fork after admission under its configured GitHub identity.
+- **Workspace preparation:** keep job metadata under owner-only
+  `<state-root>/coder/jobs/<UUID>/`, using `PrivateDirectory.ensure`; a separate repository lives
+  in its `repository/` child. Resolve the requested local ref (default HEAD) to a full commit SHA
+  in the source, clone with `--no-local --no-hardlinks` and an empty template, then explicitly
+  fetch that SHA from the same local source with `fetch --no-tags -- <source> <SHA>`. A remote-only
+  or custom ref may not transfer in an ordinary clone. Remove the local source remote, set the
+  frozen GitHub publication remote for a PR, then check out and verify the SHA. Never stash,
+  stage, commit, switch or reset the source. Remote inputs allocate an empty directory for Codex
+  to clone; their reported initial SHA remains worker evidence, with no invented observed baseline.
+  Failed preparation or inspection retains the job directory and partial work.
+- **Starting content evidence:** inventory tracked and nonignored untracked paths with actual
+  file contents, executable bits and symlink targets; compare path unions against the pre-run
+  inventory, independent of HEAD, the index or final status. An already absent tracked file is
+  absent evidence, so committing its pre-existing deletion does not create a new observed change.
+  Descriptor-relative reads never follow symlinks through repository children. Bound each inventory
+  to 10,000 listed paths, 1 MiB of Git path output and 32 MiB of file/target bytes. Oversized,
+  unreadable or unsupported entries (including submodule directories) make comparison unavailable,
+  never empty. This is observational evidence, not an atomic snapshot or a claim of authorship.
+  Internal `RepositoryInventory.capture(at:git:)` requires an explicit `CoderGit` context carrying
+  phase, process tracking and the backend's single absolute deadline. Workspace preparation accepts
+  that same deadline; every sequential command receives only the remaining budget. Inventory
+  unavailability may omit the baseline; cancellation, timeout or failed supervision aborts preparation.
+  Preapproval identity queries and fixed local CLI health/compatibility probes select
+  `.preApprovalReadOnly`; admitted preparation and inspection
+  select `.job`. Git receives an explicit minimal environment, disabled system/global configuration,
+  optional locks, fsmonitor, hooks and external diff helpers, and only local file transport. Inventory
+  does not run diff/textconv or follow submodules; source hooks/configuration are never copied.
+- **Process and recovery seam:** one `CoderInvocation` names job ID, prepared request, job directory
+  and timeout. `CoderBackend.run` owns sequential prepare/Codex/inspection children and records
+  will-launch/did-launch/stopped/unresolved receipts through the callback. Receipts carry launch UUID,
+  phase, boot ID and optional PID/PGID/birth identity. No process-library, database or Telegram type
+  crosses Core. Persist cancellation intent, cancel the service-owned Swift task, then join bounded
+  process-group teardown. Detached sessions/groups are an accepted v1 termination limitation.
+  Daemon interruption never automatically reruns work that may already have published changes.
+- **Native launch protocol:** establish the invocation deadline before `willLaunch`, so suspended
+  launch persistence is also bounded. Job commands persist `willLaunch` with launch UUID and host
+  boot ID, check cancellation immediately before spawn, then acquire PID/PGID/birth metadata and await
+  `didLaunch` persistence before draining stdout/stderr concurrently. The exit/deadline/cancellation
+  observer already runs while that callback is suspended. Callback failure terminates and joins the
+  child. Preapproval Git identity queries and fixed local CLI health/compatibility probes select
+  internal `.preApprovalReadOnly` before a job exists; these use the same joined runner with a fixed
+  ten-second timeout and no job reservation or durable process events. All admitted backend commands use `.job` tracking.
+- **Verified group cleanup:** cancellation/timeout is latched before TERM. Give owned live group
+  members two seconds, then KILL remaining members and observe for up to two more seconds, retaining
+  the unreaped session leader throughout. Exclude zombies from live-member checks. Darwin uses
+  `kern.bootsessionuuid` and `kern.proc.pid` birth/PGID/state metadata (including the zombie leader);
+  Linux uses boot ID and `/proc` start ticks/state. A PID or PGID's existence alone never authorizes
+  a signal. If group identity is unreadable or mismatched, only the current scoped `Execution`
+  proves direct-child ownership: kill that child alone through its execution handle and await the
+  outer reap, report unresolved group cleanup, and retain the slot for recovery. Never use this
+  exception for an old receipt or an unverified group. Descendants may survive this failure and
+  require operator recovery. `CoderProcessInspector` performs read-only checks and never signals;
+  a missing leader does not establish that its group has stopped.
+- **Bounded streaming:** stdout is consumed inside the invocation scope without logging raw output,
+  reasoning, prompts or environment. Retain at most 64 KiB of stderr diagnostics while continuing
+  to drain. Pinned Subprocess 1.0.0 stops its default teardown when the leader exits and cancels
+  pending stream IO then; its buffered bytes still drain. Consumer callback errors are handled
+  separately from that expected stream completion. Group ownership and joined readers, not the
+  default teardown or EOF, determine cleanup resolution. The internal command result retains the
+  real OS exit/signal alongside `supervisionFailed`: host launch, receipt, stream/consumer failures
+  and unresolved cleanup fail supervision even if the child exits zero. A callback interrupted by
+  delivered task cancellation is part of the selected stop outcome; an unsolicited callback error,
+  including CancellationError, remains supervision failure. Clean cancellation alone does not set
+  that flag. Backend callers reject supervision failure independently of OS status;
+  diagnostic wording is never a machine-readable failure discriminator.
+- **Codex setup and invocation:** the concrete backend resolves its configured executable once
+  against a deliberate child PATH (absolute entries; fallback `/usr/bin:/bin` when absent). An
+  explicit absolute executable never searches an alternative. It exposes only the resolved path,
+  profile, effective config home, fixed approval policy and non-secret credential-source identifiers
+  for composition/approval binding; selected token sources identify their environment key, never
+  token values. Fixed `--version` and `exec --help` probes require JSON, automatic review, config,
+  git-check bypass, ephemeral, color, directory, schema, final-message and profile flags. Health
+  probes perform no inference; admitted probes use the same tracked job deadline as workspace,
+  worker and inspection. CLI 0.153.4 is the compatibility baseline, not an exemption from probing.
+  Build argv as `exec --json --approve-for-me -c approval_policy="on-request"`
+  `--skip-git-repo-check --ephemeral --color never -C <directory>`
+  `--output-schema <private-schema> -o <private-result>`, optional `--profile <name>`, and `-`.
+  Supply the task as finite stdin with source, optional instructions, actual destination, initial
+  ref, deliverable/publication scope and a UUID-derived suggested head branch. Ask the worker to
+  reuse an existing matching PR; do not add a separate publisher or retry with broader permissions.
+- **Child environment and protocol:** allow basic OS/toolchain keys (`HOME`, `USER`, `LOGNAME`,
+  `PATH`, `SHELL`, `TMPDIR`, locale settings, `DEVELOPER_DIR`, `SDKROOT`) plus selected `CODEX_HOME`,
+  `GH_CONFIG_DIR`, `GH_HOST`, `GH_TOKEN`, `GITHUB_TOKEN`, `SSH_AUTH_SOCK`. Config-home overrides only
+  the child's `CODEX_HOME`. Exclude Telegram and unrelated provider credentials and all `CLAW_*`
+  values. Passed token values join `SecretRedactor`, never logs or policy identity; Codex-owned
+  integrations retain their existing credential authority. Do not read/import Codex auth caches.
+  Embed the exact `CodexResult.schema.json` in code with SwiftPM `.embedInCode`/`PackageResources`,
+  preserving the single relocatable binary distribution without a resource sidecar. Copy those bytes
+  into an owner-only per-job protocol directory with mode 0600. Require every schema key (nullable
+  keys must still be present), reject extra keys and invalid types; bound final JSON to 64 KiB using no-follow, nonblocking regular-file descriptor
+  reads. Incremental JSONL frames are bounded to 1 MiB; tolerate unknown event bodies, retain
+  reported usage and require `turn.completed`. Exit zero plus completion and a valid `succeeded`
+  report permits assessment; `blocked` is permission failure, `failed`/error events/nonzero exit
+  are execution failure, and absent/invalid reports or terminal evidence are protocol failure.
+  Cancellation/timeout retain their first selected outcome even if a success report exists or a
+  later caller cancellation arrives while mandatory final receipt persistence is still pending.
+  Remove raw protocol files after extraction; removal failure is an explicit cleanup failure with private files
+  retained for operator recovery. Keep repositories, including an existing job-owned destination
+  when preparation failed before returning complete workspace state; do not invent starting evidence.
+  Redact and cap owner-visible summaries and diagnostics; checks remain labeled as reported evidence.
+- **Artifact corroboration:** inspect the destination as a Git repository root using sanitized
+  tracked queries, independently record final branch/commit/author, and compare available local
+  content inventories. Reuse the verified unborn-HEAD rule for absent final commits. Remote reported
+  `starting_commit` remains worker evidence; an observed local starting commit (including null for
+  unborn HEAD) takes precedence. Unknown artifacts stay null. For a reported PR, validate its
+  GitHub URL against the frozen repository, then run bounded `gh pr view <number> --repo <repo>`
+  and verify the returned URL/repository, head name/commit and base. The observed Git head must
+  match the reported branch; the head may belong to a fork. Explicit base selectors compare
+  directly; default selectors additionally use read-only `gh repo view --json defaultBranchRef`
+  and compare the report's base to that repository default. Unavailable/mismatched evidence remains
+  inspection uncertainty. Record the confirmed PR author's login as GitHub actor, independently
+  of Git commit author. A requested PR with unknown publication fails inspection even when worker
+  completion succeeded. Missing report/PR URL after possible publishing execution, including a
+  stop, yields `.unknown(reportedURL: nil)`; `.absent` requires no possible publishing execution.
+- **Result evidence:** process completion and publication are independent: publication is absent,
+  confirmed with URL, or unknown with optional reported URL. `changedFiles == nil` means comparison
+  unavailable; `[]` means no observed changes. `baselineObserved == false` means starting evidence is
+  worker-reported rather than independently observed. A successfully prepared local starting commit
+  (including observed unborn absence) has `baselineObserved == true` even when content inventory is
+  unavailable; the flag does not promise complete changed-path comparison. Report commit author
+  separately from GitHub actor and child-reported checks/usage as reported. A terminal job can retain its reserved slot
+  while process ownership is unresolved. Persist terminal result and owner outbox delivery atomically.
+
 ## 14. Scheduler architecture (Inc 4)
 
 - **`Calendar.RecurrenceRule`** (in-toolchain, DST/TZ-correct, `Sendable`/`Codable`) + a ~150-line custom 60s ticker.
@@ -795,6 +1047,30 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
 - `getUpdates` recovery is pinned: socket read timeout = long-poll timeout + 10 s; backoff-reconnect on timeout/network error. Scheduler-side gap recovery is lateness-based (§6.3's catch-up table) — no wake detection. Doctor exposes `last_tick_at`.
 
 ## 15. Configuration & secrets
+
+**Coder configuration contract (pending runtime integration).** Standalone
+`CoderConfig.load(environment:)` parses the settings below for native callers and tests.
+`AppConfig` does not load or expose Coder configuration at this stage; these keys are not an
+active daemon configuration surface. Operator enablement and setup documentation arrive with
+the runtime that registers the tools and launches children.
+
+| Setting | Default | Contract |
+|---|---|---|
+| `CLAW_CODER_ENABLED` | `false` | Existing strict boolean parser; opt-in owner-DM capability |
+| `CLAW_CODER_MAX_CONCURRENT_JOBS` | `1` | Positive integer N; explicit busy at capacity |
+| `CLAW_CODER_JOB_TIMEOUT_SECONDS` | `1800` | Positive integer seconds, at most 86400 |
+| `CLAW_CODER_EXECUTABLE` | `codex` | Program name resolved against deliberate child PATH, or absolute executable path; never a command string |
+| `CLAW_CODER_PROFILE` | unset | Optional existing Codex profile name |
+| `CLAW_CODER_CONFIG_HOME` | unset | Optional absolute directory mapped to child `CODEX_HOME` |
+
+The standalone parser rejects explicit invalid or blank settings, even while disabled. It never resolves the
+executable, inspects credentials or accesses the selected config home. Coder has no separate model
+selector, arbitrary CLI flags or new credential store: Codex owns its login state and configuration;
+`clawd auth` continues to manage only the ordinary LLM route. Do not import Codex auth into
+swift-claw's provider credential envelope. Build the child environment deliberately from required
+OS/toolchain settings and selected coding credentials, excluding Telegram and unrelated provider
+secrets. Codex reads its configuration per child; swift-claw-owned settings apply after restart.
+The separate concurrency/deadline budget and unavailable-accounting rules are in §5.3.
 
 - **Environment variables are the active configuration surface; `config.toml` remains future work.** The typed `AppConfig` is loaded from the environment/`.env` today; the structured-file behavior described below is the intended shape once that file lands, not a shipped surface. **A provider-qualified `CLAW_LLM_MODEL` value (`openai-chatgpt/<model>`) is the only configuration selector the subscription route adds** — there is deliberately **no per-provider environment namespace**. The model value carries the route selector, provider-owned OAuth state lives in the credential store, and fixed protocol details are implementation constants (§8.3), so ad-hoc `CLAW_CHATGPT_*` variables would only duplicate the structure that structured configuration will supply; they are **deferred with `config.toml`**, not merely unimplemented. When it lands, the registry deserializes provider-specific blocks into the same resolved route (§8.1) without changing any downstream seam.
 - **`CLAW_LLM_FALLBACK_*` is the one deliberate exception to that rule, and stays a single prefix.** `CLAW_LLM_FALLBACK_MODEL`, `CLAW_LLM_FALLBACK_BASE_URL`, `CLAW_LLM_FALLBACK_API_KEY`, and `CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD` describe a **second route** (§8.6), which needs an endpoint and a key of its own rather than a provider's. Reusing the primary's would point the fallback at the endpoint that just failed, and would let a missing primary endpoint pass validation on the strength of one the fallback supplied. The exception buys a route, not a namespace: it adds no per-provider variable, and `CLAW_LLM_PRIMARY_COOLDOWN_SECONDS` (default 900) carries no prefix because it describes the daemon's own backoff. The fallback key is a runtime secret like the primary's: it seals into `secrets.enc` with the rest, and `clawd secrets seal` blanks its plaintext line alongside them. **One list names every sealed variable** (`EnvSecretStore.EnvKey.sealed`), read by both the env-file scrub and the message telling an owner what to remove when the scrub cannot run, so a secret can never reach the envelope while its plaintext line survives unmentioned.

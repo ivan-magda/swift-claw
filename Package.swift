@@ -106,6 +106,19 @@ let package = Package(
         ),
       ]
     ),
+    .target(
+      name: "ClawCoder",
+      dependencies: [
+        "ClawCore",
+        .product(name: "Subprocess", package: "swift-subprocess"),
+        .product(
+          name: "SystemPackage",
+          package: "swift-system",
+          condition: .when(platforms: [.linux])
+        ),
+      ],
+      resources: [.embedInCode("Codex/CodexResult.schema.json")]
+    ),
     .target(name: "ClawAuth", dependencies: ["ClawCore"]),
     .target(
       name: "ClawTestSupport",
@@ -188,7 +201,20 @@ let package = Package(
         .product(name: "MCP", package: "swift-sdk"),
       ]
     ),
-    .testTarget(name: "ClawExecTests", dependencies: ["ClawExec", "ClawCore"]),
+    .testTarget(
+      name: "ClawCoderTests",
+      dependencies: [
+        "ClawCoder", "ClawCore", "ClawTestSupport",
+        .product(name: "Subprocess", package: "swift-subprocess"),
+        .product(
+          name: "SystemPackage",
+          package: "swift-system",
+          condition: .when(platforms: [.linux])
+        ),
+      ],
+      exclude: ["Process/Fixtures"]
+    ),
+    .testTarget(name: "ClawExecTests", dependencies: ["ClawExec", "ClawCore", "ClawTestSupport"]),
     .testTarget(
       name: "ClawAppleSpeechTests",
       dependencies: ["ClawAppleSpeech", "ClawCore"],

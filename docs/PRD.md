@@ -45,7 +45,20 @@ Why Swift: one self-contained binary per platform with no runtime to install und
 - **NG7.** Cloud/SaaS hosting, account systems, billing.
 - **NG8.** Image *output* — generating, editing, or sending images — and every inbound image surface other than a photo message. **Photo messages are supported** (see FR-G6); an image sent as a **document** ("send as file"), a **sticker**, and an **animation** are not. Replying to a photo does not re-attach it: clawd never reads `reply_to_message`, so that photo reaches the model only if it is still inside the session's history window. An **album** is not one multi-image turn either: Telegram delivers one update per photo, so it becomes one turn per photo, and only the captioned one carries the caption.
 - **NG9.** A provider *pool* and per-call USD attribution dashboards. v1 routes over at most two owner-configured routes — a primary and one optional fallback (FR-R3) — with no credential pools, no weighted or model-aware routing, and no automatic provider discovery; and it has a USD spend **breaker**, not a dashboard.
-- **NG10.** *(bounds FR-P5)* **Sharing or importing another tool's credentials** — notably Codex CLI's `~/.codex/auth.json` — shelling out to or supervising a Codex subprocess, multiple accounts, credential pools, live credential mutation while the daemon runs, and subscription providers other than ChatGPT. Also out: **a per-provider environment-variable namespace** (`CLAW_CHATGPT_*` and the like) and a configurable subscription endpoint or client identity. Subscription auth adds exactly **one** configuration selector — a provider-qualified model value — and structured configuration (`config.toml`) stays deferred; it is the mechanism a future provider's own settings will use.
+- **NG10.** *(bounds FR-P5)* **Sharing or importing another tool's credentials** — notably Codex CLI's `~/.codex/auth.json` — or supervising Codex as the ordinary LLM provider route, multiple accounts, credential pools, live credential mutation while the daemon runs, and subscription providers other than ChatGPT. Also out: **a per-provider environment-variable namespace** (`CLAW_CHATGPT_*` and the like) and a configurable subscription endpoint or client identity. Subscription auth adds exactly **one** configuration selector — a provider-qualified model value — and structured configuration (`config.toml`) stays deferred; it is the mechanism a future provider's own settings will use.
+
+**Generic Coder is a separate opt-in capability under construction.** The native foundation
+implements contracts, durable jobs, process ownership, Git workspaces and the Codex backend.
+Daemon composition and operator enablement remain pending. Its complete product contract
+delegates an approved owner-DM task to the
+native personal Codex installation, which retains its own credentials and integrations. Coder
+supervises workspace selection, admission, child lifetime, persistence and reporting; Codex performs
+the coding and requested Git/GitHub workflow. In-place work accepts uncommitted changes; separate
+copies use committed history without a dirty-state snapshot or automatic rollback. A configurable
+positive concurrency limit returns busy at capacity. Child deadlines and reported usage are separate
+from ordinary conversation budgets, with no hard child dollar-cap claim. Group/proactive submission
+is excluded. The native trust boundary and request/result contracts are normative in
+[`ARCHITECTURE.md` §§5.3, 13.2, 15](ARCHITECTURE.md); `execute_code` retains FR-X1's VM contract.
 
 ## 4. Target user & operating context
 
@@ -210,7 +223,7 @@ Requirements tagged *(v1)* are part of the daily-driver milestone (§9); others 
 - **FR-C4.** Audit events for job create/execute/cancel/failure. Proactive runs have their own daily spend budget.
 
 ### 6.9 Execution / sandbox *(later phase)*
-- **FR-X1.** Shell/code execution runs behind an `ExecutionBackend` protocol. Inc 5b supplies
+- **FR-X1.** `execute_code` shell/code execution runs behind an `ExecutionBackend` protocol. Inc 5b supplies
   `apple/container` on macOS 26+ arm64: one untrusted execution = one disposable, never-reused
   hardware-virtualized VM. Linux gets a separately chosen backend in Inc 6; until a pinned
   Linux-host spike proves a microVM-conformant design, the Linux choice remains open.

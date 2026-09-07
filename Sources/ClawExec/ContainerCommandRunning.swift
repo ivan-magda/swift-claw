@@ -87,30 +87,37 @@ public struct SwiftSubprocessContainerCommandRunner: ContainerCommandRunning {
   private let executablePath: String
   private let environmentForTesting: [String: String]
   private let onSpawnForTesting: @Sendable (Int32) -> Void
+  private let deadlineSleep: @Sendable (Duration) async throws -> Void
 
   public init(executablePath: String = "/usr/local/bin/container") {
     self.executablePath = executablePath
     self.environmentForTesting = [:]
     self.onSpawnForTesting = { _ in }
+    self.deadlineSleep = { duration in
+      try await Task.sleep(for: duration)
+    }
   }
 
   init(
     executablePath: String,
     environmentForTesting: [String: String] = [:],
-    onSpawnForTesting: @escaping @Sendable (Int32) -> Void = { _ in }
+    onSpawnForTesting: @escaping @Sendable (Int32) -> Void = { _ in },
+    deadlineSleep: @Sendable @escaping (Duration) async throws -> Void = { duration in
+      try await Task.sleep(for: duration)
+    }
   ) {
     self.executablePath = executablePath
     self.environmentForTesting = environmentForTesting
     self.onSpawnForTesting = onSpawnForTesting
+    self.deadlineSleep = deadlineSleep
   }
 
   public func run(_ command: ContainerCommand) async -> ContainerCommandResult {
-    let clock = ContinuousClock()
     let spawnedProcessIdentifier = SpawnedProcessIdentifierBox()
 
     let outcome = await DeadlineRace.race(
       allowance: command.timeout,
-      sleep: { try await clock.sleep(for: $0) },
+      sleep: deadlineSleep,
       operation: {
         await self.spawnAndCapture(
           command,

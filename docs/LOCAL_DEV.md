@@ -554,3 +554,92 @@ container ls --all | grep clawd-exec- || echo "no leftover exec containers"
 A skipped Layer-B run (no `CLAW_REAL_SANDBOX_TESTS`) is fine for ordinary CI but is not acceptable
 completion evidence. Re-pinning the workload image on an advisory repeats the image verification
 section and this checklist before the new digest ships.
+
+## Coder workspace development
+
+The native process runner and Git workspace preparation are implemented internally; coding tools
+are not exposed in this increment; the native backend can be exercised by its CLI fixtures.
+Run the workspace fixtures with:
+
+```bash
+swift test --filter CoderWorkspaceTests
+```
+
+Workspace preparation uses `/usr/bin/git` with a minimal environment and disables global/system
+Git configuration, optional locks, fsmonitor and hooks. It does no network work before approval.
+In-place work keeps the checkout's current branch, staged changes and working files, including an
+unborn branch before its first commit (recorded without a starting SHA). A separate
+local copy starts at the requested committed ref (default: source HEAD), with independent objects
+and no source hooks or configuration; dirty files are not copied. No automatic stash, rollback or
+apply-back occurs. Job directories stay private under `<state-root>/coder/jobs/<UUID>/`; separate
+repositories use `repository/`. Failure preserves partial work for inspection.
+
+For PR requests, the intended GitHub owner/repository and explicit/default base selector are bound
+before approval. Local `origin` URL rewrites are resolved, and effective fetch/push destinations must
+name the same GitHub repository. Ambiguous origins, non-GitHub URLs and conflicting fork push URLs
+are refused. Use an explicit GitHub source or an unambiguous local origin for such configurations.
+A local origin change after approval is refused; Codex may create a head fork after admission.
+These publication checks do not affect local-changes-only requests.
+
+Observed changed paths compare actual starting file contents, executable bits and symlink targets,
+so a committed fix remains visible even with clean final status. Inventory limits are 10,000 paths,
+1 MiB of Git path output and 32 MiB of contents/targets. Oversized, unreadable or unsupported entries
+(including submodule directories) make comparison unavailable; they do not mean no changes.
+Symlinks are recorded without following them outside the repository. Concurrent editors can change
+files during a task, so this evidence does not establish authorship. For remote inputs, preparation
+allocates an empty destination for Codex to clone; a worker-reported initial SHA is not an independently
+observed starting inventory. All admitted Git work shares the backend's one deadline and process
+tracking, including preparation and inspection.
+
+## Codex backend development
+
+`ClawCoder.CodexBackend` implements one admitted task. Telegram tools and daemon composition arrive
+in later increments. Run the unmanaged CLI fixture against real temporary Git repositories with:
+
+```bash
+swift test --filter CodexBackendTests
+```
+
+The backend resolves the configured program once against a deliberate child PATH, preserving an
+explicit absolute executable. `compatibility()` performs only bounded local `--version` and
+`exec --help` probes. Jobs repeat the same validation under tracked process supervision and their
+single deadline. Codex CLI 0.153.4 is the successful compatibility baseline; another installed version
+must still expose all required flags. No inference, login, or GitHub publication is required by tests.
+
+The argument vector is:
+
+```text
+codex exec --json --approve-for-me -c approval_policy="on-request"
+  --skip-git-repo-check --ephemeral --color never -C <resolved-directory>
+  --output-schema <private-schema-path> -o <private-result-path> -
+```
+
+A configured profile adds `--profile <name>` before the final `-`. The prompt is finite stdin,
+not shell source. It names source, requested work, actual destination, initial ref, deliverable,
+publication scope and a UUID-derived suggested branch. Codex performs its own Git/GitHub workflow,
+including reusing an already-created matching PR. Repository/issue text cannot redefine that scope.
+
+The schema is embedded in the executable, then copied into a private per-job protocol directory
+with mode 0600; no schema resource sidecar is needed when relocating the binary. JSONL frames
+are limited to 1 MiB and final reports to 64 KiB; final-report inspection refuses symlinks and
+nonregular files. Unknown events are tolerated. Exit zero requires terminal completion and a valid
+succeeded report before success assessment; permission blocks, execution and protocol failures remain
+distinct. Summaries/diagnostics are redacted and capped, protocol files are removed after extraction,
+and repositories remain available, including an existing partial destination after preparation
+fails. If protocol-file removal fails, the result reports cleanup failure and those owner-only
+files remain for operator recovery.
+
+Local changed paths come from the independently captured initial content inventory. An unavailable
+inventory leaves changed paths unknown without changing the observed local starting-commit provenance.
+Remote initial
+commits are worker-reported and never imply an observed baseline. Final branch/commit and commit
+author come from sanitized Git queries. A PR needs read-only `gh` confirmation of the frozen
+repository, observed head/commit and selected base; the default selector also requires `gh repo view`
+to establish that repository's default. The GitHub actor is the confirmed PR's author, separate from
+the Git commit author. Missing or unverifiable publication after possible execution remains unknown;
+a requested PR with unknown publication cannot be an unqualified success.
+
+The child environment and inherited installation trust are specified in
+[ARCHITECTURE.md §13.2](ARCHITECTURE.md#132-native-coder-delegation). The daemon does not yet
+compose this backend or load Coder settings. Operator setup and live service validation arrive
+with that runtime integration.
