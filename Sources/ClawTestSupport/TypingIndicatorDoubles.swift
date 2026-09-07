@@ -49,6 +49,10 @@ public actor TypingReleaseGate {
     await gate.waitIgnoringCancellation()
   }
 
+  public func waitUntilReleased(timeout: Duration = .seconds(30)) async -> Bool {
+    await gate.waitUntilOpen(timeout: timeout)
+  }
+
   public func release() {
     gate.open()
   }

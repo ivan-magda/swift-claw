@@ -67,8 +67,10 @@ extension DaemonBuilder {
     return ApprovalCallbackHandler.make(
       processed: stores.processed,
       delivery: transport,
-      accessControl: AccessControl(allowlist: stores.allowlist, groupChats: []),
+      accessControl: AccessControl(allowlist: stores.allowlist, groupChats: config.groupChats),
       approvals: stores.approvals,
+      runs: stores.runs,
+      membership: transport,
       audit: stores.audit,
       coordinator: coordination.approvalCoordinator,
       callbacks: transport,

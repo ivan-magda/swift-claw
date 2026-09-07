@@ -179,6 +179,12 @@ To stop new Coder tasks, set `CLAW_CODER_ENABLED=false` and restart. Disabled st
 Codex probes and exposes no Coder tools, but still reconciles earlier jobs and reports retained
 reservations in full doctor and daemon health. Follow the recovery procedure for unresolved ownership.
 
+For Coder in an allowlisted Telegram group, make the bot a group administrator before enabling the
+room. Group Coder approvals perform a fresh `getChatMember` lookup for every Approve or Deny tap, and
+Telegram guarantees lookups for other users only when the bot is an administrator. A failed or
+uncertain lookup leaves the approval pending. Keep group mode on its required separate nonpersonal
+state root; see [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup).
+
 ### Staying on after logout
 
 - **Linux:** `sudo loginctl enable-linger $USER` lets the user manager run without a

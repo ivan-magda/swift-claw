@@ -18,7 +18,7 @@ public struct CoderStatusTool: Tool {
       metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .safe,
-      requiresInteractiveOwner: true
+      requiresInteractiveRequester: true
     )
   }
 

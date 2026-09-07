@@ -7,11 +7,11 @@ import Testing
 @testable import ClawGateway
 
 @Suite struct CoderToolPolicyTests {
-  enum MissingIdentity: CaseIterable { case context, requester, group }
+  enum MissingIdentity: CaseIterable { case context, requester, proactive, modeMismatch }
   enum OutboundScope: CaseIterable { case source, startRef, baseBranch }
 
   @Test(arguments: MissingIdentity.allCases)
-  func ownerRequiredToolsRefuseMissingIdentity(_ missing: MissingIdentity) async throws {
+  func requesterRequiredToolsRefuseInvalidIdentity(_ missing: MissingIdentity) async throws {
     // given
     let fixture = try CoderServiceFixture()
     try await fixture.withJoinedCleanup {
@@ -19,7 +19,6 @@ import Testing
         service: fixture.service,
         redactor: SecretRedactor(secretValues: [])
       )
-      let group = missing == .group
       let execution: ToolExecutionContext? =
         missing == .context
         ? nil
@@ -28,8 +27,8 @@ import Testing
           sessionId: 1,
           chatId: 7,
           requesterUserId: missing == .requester ? nil : 7,
-          origin: .interactive,
-          mode: group ? .group : .direct,
+          origin: missing == .proactive ? .scheduled : .interactive,
+          mode: missing == .modeMismatch ? .group : .direct,
           toolCallId: "status",
           approvalId: nil
         )
@@ -38,12 +37,12 @@ import Testing
       let verdict = await gate().evaluate(
         call: ToolCall(id: "status", name: tool.definition.name, argumentsJSON: "{}"),
         tool: tool,
-        context: context(execution, mode: group ? .group : .direct)
+        context: context(execution, mode: .direct)
       )
 
       // then
       guard case .block(let payload, _) = verdict else {
-        Issue.record("Owner-only safe tool passed admission")
+        Issue.record("Requester-required tool passed invalid identity admission")
         return
       }
       #expect(payload.status == .error)

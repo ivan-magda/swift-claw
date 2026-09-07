@@ -234,4 +234,49 @@ struct CoderServiceTests {
     #expect(try fixture.store.reservedJobs().isEmpty)
     #expect(await fixture.backend.startedJobIDs.isEmpty)
   }
+
+  @Test func groupJobControlRequiresOriginalRequesterAndTopic() async throws {
+    // given
+    let fixture = try CoderServiceFixture(groupChatID: -700, threadID: 19)
+    try await fixture.withJoinedCleanup {
+      try await fixture.service.start()
+      let job = try await fixture.submitFirst()
+      let otherScopes: [(Int64, Int64?, Int64?)] = [
+        (88, -700, 19),
+        (7, -700, 20),
+        (7, nil, nil),
+      ]
+
+      // when
+      for (offset, scope) in otherScopes.enumerated() {
+        let caller = try CoderServiceFixture.context(
+          queue: fixture.queue,
+          prepared: fixture.prepared,
+          index: Int64(offset + 2),
+          ownerID: scope.0,
+          groupChatID: scope.1,
+          threadID: scope.2
+        )
+        await #expect(throws: CoderError.forbidden) {
+          try await fixture.service.status(id: job.id, context: caller)
+        }
+        await #expect(throws: CoderError.forbidden) {
+          try await fixture.service.cancel(id: job.id, context: caller)
+        }
+      }
+      let requester = try CoderServiceFixture.context(
+        queue: fixture.queue,
+        prepared: fixture.prepared,
+        index: 6,
+        groupChatID: -700,
+        threadID: 19
+      )
+      let visible = try await fixture.service.status(id: job.id, context: requester)
+      let cancellation = try await fixture.service.cancel(id: job.id, context: requester)
+
+      // then
+      #expect(visible.id == job.id)
+      #expect(cancellation.state == .stopping)
+    }
+  }
 }

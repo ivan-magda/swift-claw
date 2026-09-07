@@ -18,7 +18,7 @@ public struct CoderCancelTool: Tool {
       metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .safe,
-      requiresInteractiveOwner: true
+      requiresInteractiveRequester: true
     )
   }
 

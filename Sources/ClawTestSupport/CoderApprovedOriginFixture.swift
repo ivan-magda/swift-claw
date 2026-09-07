@@ -9,8 +9,11 @@ public enum CoderApprovedOriginFixture {
     updateID: Int64,
     prepared: CoderPreparedRequest,
     now: Date,
-    ownerID: Int64 = 7
+    ownerID: Int64 = 7,
+    groupChatID: Int64? = nil,
+    threadID: Int64? = nil
   ) throws -> CoderOrigin {
+    let chatID = groupChatID ?? ownerID
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let runs = RunStoreGRDB(writer: queue)
     let approvals = ApprovalStoreGRDB(writer: queue)
@@ -20,7 +23,14 @@ public enum CoderApprovedOriginFixture {
       promptMaterials: ["Coder store fixture"]
     )
     let claim = try sessions.claimAndPersistInbound(
-      inbound(prepared: prepared, updateID: updateID, ownerID: ownerID, now: now)
+      inbound(
+        prepared: prepared,
+        updateID: updateID,
+        ownerID: ownerID,
+        groupChatID: groupChatID,
+        threadID: threadID,
+        now: now
+      )
     )
     let runID = try required(claim.runId)
     let sessionID = try required(claim.sessionId)
@@ -35,7 +45,7 @@ public enum CoderApprovedOriginFixture {
       sessionId: sessionID,
       commit: approvalCommit(
         prepared: prepared,
-        ownerID: ownerID,
+        chatID: chatID,
         toolCallID: toolCallID,
         now: now
       ),
@@ -44,6 +54,10 @@ public enum CoderApprovedOriginFixture {
     let resolution = try approvals.approve(
       id: receipt.approvalId,
       currentPolicyVersion: policyVersion,
+      actor: ApprovalResolutionActor(
+        actor: groupChatID == nil ? .owner : .groupMember,
+        userId: ownerID
+      ),
       now: now
     )
     guard case .approved(let approval) = resolution else {
@@ -61,8 +75,8 @@ public enum CoderApprovedOriginFixture {
     return CoderOrigin(
       runID: approval.runId,
       sessionID: approval.sessionId,
-      requesterUserID: approval.ownerUserId,
-      chatID: approval.ownerUserId,
+      requesterUserID: ownerID,
+      chatID: chatID,
       toolCallID: approval.toolCallId,
       approvalID: approval.id
     )
@@ -76,12 +90,18 @@ private extension CoderApprovedOriginFixture {
     prepared: CoderPreparedRequest,
     updateID: Int64,
     ownerID: Int64,
+    groupChatID: Int64?,
+    threadID: Int64?,
     now: Date
   ) -> InboundMessage {
-    InboundMessage(
+    let sessionKey =
+      groupChatID.map { chatID in
+        SessionKey.telegramTopic(chatId: chatID, threadId: threadID)
+      } ?? SessionKey.telegramDM(chatId: ownerID)
+    return InboundMessage(
       updateId: updateID,
-      sessionKey: SessionKey.telegramDM(chatId: ownerID),
-      chatId: ownerID,
+      sessionKey: sessionKey,
+      chatId: groupChatID ?? ownerID,
       userId: ownerID,
       text: "Use Coder for \(prepared.canonicalSource).",
       isEdited: false,
@@ -92,7 +112,7 @@ private extension CoderApprovedOriginFixture {
 
   static func approvalCommit(
     prepared: CoderPreparedRequest,
-    ownerID: Int64,
+    chatID: Int64,
     toolCallID: String,
     now: Date
   ) throws -> SuspendedTurnCommit {
@@ -119,12 +139,12 @@ private extension CoderApprovedOriginFixture {
       toolCallsJSON: try proposedToolCalls(prepared: prepared, toolCallID: toolCallID),
       completedObservations: [],
       pending: PendingToolAction(toolCallId: toolCallID, recorded: recorded),
-      ownerUserId: ownerID,
+      ownerUserId: chatID,
       nonce: ApprovalNonce.generate(),
       promptChunks: [
         OutboxChunk(
           stepIndex: 0,
-          chatId: ownerID,
+          chatId: chatID,
           payload: prompt,
           payloadHash: ContentHash.fnv1a(prompt)
         )

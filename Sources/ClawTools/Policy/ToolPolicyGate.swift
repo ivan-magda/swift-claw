@@ -40,7 +40,7 @@ public struct ToolPolicyGate: Sendable {
     tool: any Tool,
     context: ToolDispatchContext
   ) async -> Verdict {
-    if let refusal = ownerAdmissionRefusal(call: call, tool: tool, context: context) {
+    if let refusal = requesterAdmissionRefusal(call: call, tool: tool, context: context) {
       return refusal
     }
     // Total over RiskLevel. Ask-tier resolves before the egress fast-path so a `.none`-egress
@@ -170,23 +170,25 @@ public struct ToolPolicyGate: Sendable {
   }
 }
 
-// MARK: - Owner Admission
+// MARK: - Requester Admission
 
 private extension ToolPolicyGate {
-  func ownerAdmissionRefusal(
+  func requesterAdmissionRefusal(
     call: ToolCall,
     tool: any Tool,
     context: ToolDispatchContext
   ) -> Verdict? {
-    guard tool.definition.requiresInteractiveOwner else {
+    guard tool.definition.requiresInteractiveRequester else {
       return nil
     }
     guard let execution = context.executionContext,
-      context.mode == .direct, execution.mode == .direct,
-      execution.origin == .interactive, execution.requesterUserId != nil
+      context.mode == execution.mode,
+      execution.origin == .interactive,
+      let requester = execution.requesterUserId, requester > 0,
+      execution.mode == .group || requester == execution.chatId
     else {
       return dangerousBlock(
-        reason: "\(call.name) requires an interactive owner direct message.",
+        reason: "\(call.name) requires an interactive message with a known requester.",
         call: call
       )
     }
@@ -462,9 +464,8 @@ private extension ToolPolicyGate {
       }
     }
 
-    // Group mode runs the prepared action untapped — the sandbox is the containment, not a prompt.
-    // `enabledDangerousTools` and every scan above still apply; only the approval round-trip is gone.
-    guard context.mode == .direct else {
+    // Group auto-run applies only to tools that do not require an explicit task confirmation.
+    guard context.mode == .direct || tool.definition.requiresGroupApproval else {
       return .allow(
         argsRedacted: argGuard.renderRedacted(argsJSON: prepared.canonicalArgsJSON),
         action: ToolAction(tool: call.name, target: prepared.canonicalTarget),

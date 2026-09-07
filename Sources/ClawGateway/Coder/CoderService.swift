@@ -190,8 +190,9 @@ private extension CoderService {
   }
 
   func approvedOrigin(_ context: ToolExecutionContext) throws -> CoderOrigin {
-    guard context.origin == .interactive, context.mode == .direct,
-      let requester = context.requesterUserId, requester == context.chatId,
+    guard context.origin == .interactive,
+      let requester = context.requesterUserId, requester > 0,
+      context.mode == .group || requester == context.chatId,
       let approval = context.approvalId
     else {
       throw CoderError.forbidden
@@ -207,8 +208,9 @@ private extension CoderService {
   }
 
   func scopedJob(id: UUID, context: ToolExecutionContext) throws -> CoderJob {
-    guard context.origin == .interactive, context.mode == .direct,
-      let requester = context.requesterUserId, requester == context.chatId
+    guard context.origin == .interactive,
+      let requester = context.requesterUserId, requester > 0,
+      context.mode == .group || requester == context.chatId
     else {
       throw CoderError.forbidden
     }
@@ -216,7 +218,10 @@ private extension CoderService {
       guard let job = try store.job(id: id) else {
         throw CoderError.invalidRequest("Coder job was not found.")
       }
-      guard job.origin.requesterUserID == requester else {
+      guard job.origin.requesterUserID == requester,
+        job.origin.chatID == context.chatId,
+        context.mode == .direct || job.origin.sessionID == context.sessionId
+      else {
         throw CoderError.forbidden
       }
       return job

@@ -611,7 +611,7 @@ import Testing
         arguments: [env.observationMessageId]
       )
     }
-    #expect(observation == "The owner declined this action.")
+    #expect(observation == ApprovalWaiter.deniedObservationContent(for: .rejected))
     #expect(try runState(env) == RunState.failed.rawValue)
     #expect(await turns.resumeCalls.isEmpty)
     #expect(await delivery.texts.isEmpty == false)

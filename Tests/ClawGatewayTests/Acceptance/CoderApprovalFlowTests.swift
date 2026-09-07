@@ -9,20 +9,38 @@ import Testing
 @testable import ClawGateway
 
 @Suite struct CoderApprovalFlowTests {
-  @Test func approvalRestoresRecordedRequestAndAuthenticatedOrigin() async throws {
+  @Test(arguments: [ChatMode.direct, .group])
+  func approvalRestoresRecordedRequestAndAuthenticatedOrigin(mode: ChatMode) async throws {
     // given
+    let requester: Int64 = mode == .group ? 41 : 7
+    let participant: Int64 = mode == .group ? 42 : requester
+    let chat: Int64 = mode == .group ? -100_123 : requester
+    let thread: Int64? = mode == .group ? 77 : nil
+    let membership = GroupMembershipStub(chatId: chat, memberUserIds: [participant])
+    let groups: Set<Int64> = mode == .group ? [chat] : []
+    let identity = BotIdentity(id: 900, username: "claw_bot")
     let backend = ScriptedCoderBackend(invocations: [.init(result: CoderServiceFixture.result())])
     let first = try makeSC3Harness(
       scripts: [[toolCallResponse([proposal])]],
       httpResponses: [:],
-      coderBackend: backend
+      coderBackend: backend,
+      groupChats: groups,
+      groupMembership: membership,
+      botIdentity: identity
     )
     let storage = CoderToolStorageCleanup()
     try await first.withJoinedCleanup(backend: backend, storage: storage) {
       let firstService = try #require(first.coderService)
       try await firstService.start()
       _ = await first.router.handle(
-        rawUpdate: textUpdate(id: 1, from: 7, text: "Fix retry handling")
+        rawUpdate: textUpdate(
+          id: 1,
+          from: requester,
+          chat: chat,
+          text: "@claw_bot Fix retry handling",
+          chatKind: mode == .group ? .supergroup : .private,
+          messageThreadId: thread
+        )
       )
       let approval = try #require(
         try await pollUntil {
@@ -33,13 +51,26 @@ import Testing
       #expect(approval.state == ApprovalState.pending.rawValue)
       #expect(try first.stores.coderJobs.reservedJobs().isEmpty)
       #expect(await backend.startedJobIDs.isEmpty)
+      let prompt = try #require(
+        try first.stores.outbox.pendingOutbound().first { $0.approvalId == approval.id }
+      )
+      #expect(prompt.target.messageThreadId == thread)
+      try first.stores.outbox.markSent(
+        runId: prompt.runId,
+        stepIndex: prompt.stepIndex,
+        telegramMessageId: 900,
+        now: Date()
+      )
       try await first.stop()
       let restarted = try makeSC3Harness(
         scripts: [[okResponse(content: "Started")]],
         httpResponses: [:],
         databasePath: first.databasePath,
         workspaceRoot: first.workspaceRoot,
-        coderBackend: backend
+        coderBackend: backend,
+        groupChats: groups,
+        groupMembership: membership,
+        botIdentity: identity
       )
       try await restarted.withJoinedCleanup(
         backend: backend,
@@ -52,7 +83,13 @@ import Testing
 
         // when
         _ = await restarted.router.handle(
-          rawUpdate: callbackUpdate(id: 2, from: 7, data: approveData(approval.nonce))
+          rawUpdate: callbackUpdate(
+            id: 2,
+            from: participant,
+            chat: chat,
+            messageId: 900,
+            data: approveData(approval.nonce)
+          )
         )
         let started = await backend.started.waitUntilOpen()
 
@@ -62,12 +99,29 @@ import Testing
         let job = try #require(try restarted.stores.coderJobs.job(id: id))
         #expect(job.prepared == CoderServiceFixture.request())
         #expect(job.origin.runID == approval.runId)
-        #expect(job.origin.sessionID == (try restarted.sessionId()))
-        #expect(job.origin.requesterUserID == 7)
-        #expect(job.origin.chatID == 7)
+        let persistedApproval = try #require(
+          try restarted.stores.approvals.approval(id: approval.id)
+        )
+        #expect(job.origin.sessionID == persistedApproval.sessionId)
+        #expect(job.origin.requesterUserID == requester)
+        #expect(job.origin.chatID == chat)
         #expect(job.origin.approvalID == approval.id)
         #expect(job.origin.toolCallID == proposal.id)
         #expect(await backend.startedJobIDs == [job.id])
+        backend.allowCompletion.open()
+        let report = try #require(
+          try await pollUntil {
+            try restarted.stores.outbox.pendingOutbound().first { row in
+              row.payload.contains(job.id.uuidString)
+                && row.payload.contains(CoderJobState.succeeded.rawValue)
+            }
+          }
+        )
+        let expectedTarget =
+          mode == .group
+          ? DeliveryTarget(chatId: chat, messageThreadId: thread, replyToMessageId: 1)
+          : .chat(chat)
+        #expect(report.target == expectedTarget)
       }
     }
   }

@@ -41,9 +41,10 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   code and treats inbound content as data, never as instructions.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
-- **Coding tasks from chat.** Opt in to Coder to delegate an approved owner-DM task to your
-  native Codex installation, then receive its result when the background job finishes.
-  Local changes and GitHub pull requests use your installed tools and repository rights.
+- **Coding tasks from chat.** Opt in to Coder to delegate an approved task from your DM or a
+  configured group topic to your native Codex installation, then receive its result when the
+  background job finishes. Local changes and GitHub pull requests use your installed tools and
+  repository rights.
 - **Tools from MCP servers.** List a server, store its token encrypted, and its tools join
   the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
   named tool safe, but the exfiltration gate can still require approval. Only you can add a
@@ -104,7 +105,10 @@ in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
 ## Security model
 
-swift-claw assumes you are the only person it serves.
+swift-claw assumes you are the only person it serves in its normal personal deployment. Configured
+groups are a supervised exception: use a separate nonpersonal state root, trust the participants,
+and understand that their ordinary tool approvals are relaxed; see
+[group Coder configuration](docs/CUSTOMIZATION.md#coder-configuration).
 
 - **Default-deny.** Only allowlisted Telegram IDs get a conversation. clawd refuses
   everyone else, and answers `/start` with the sender's own numeric ID so you can
@@ -113,10 +117,13 @@ swift-claw assumes you are the only person it serves.
 - **Secrets encrypted at rest.** `clawd secrets seal` wraps the bot token and API keys in
   an AES-GCM envelope. Plaintext env secrets remain available as a dev fallback that
   warns on every boot.
-- **Approvals are durable and unforgeable.** File writes, memory writes, code execution,
-  and native Coder submissions suspend into a durable state machine until you tap Approve in
-  Telegram. A forged or third-party callback cannot approve, and pending approvals expire to deny.
-- **Prompt injection contained.** Messages, web content, tool output, and stored memory
+- **Approvals are durable and bound to their prompt.** In your DM, file writes, memory writes, code
+  execution, and native Coder submissions suspend into a durable state machine until you decide. In
+  a configured group, Coder submission is the one action that always asks: any current participant
+  can approve or deny from its original approval message, and clawd checks membership with Telegram
+  at the tap. Pending approvals expire to deny.
+- **Prompt injection contained in the personal deployment.** Messages, web content, tool output,
+  and stored memory
   enter the context as untrusted data. Once a session has both ingested untrusted content
   and pulled your private files into context, fetching an arbitrary URL also needs your
   approval. clawd pins your LLM and search providers in config, and the model cannot

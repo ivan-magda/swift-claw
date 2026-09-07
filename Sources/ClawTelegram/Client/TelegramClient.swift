@@ -34,6 +34,26 @@ public struct TelegramClient: TelegramTransport {
     return BotIdentity(id: user.id, username: user.username)
   }
 
+  public func isCurrentMember(chatId: Int64, userId: Int64) async throws -> Bool {
+    let request = GetChatMemberRequest(chatId: chatId, userId: userId)
+    let member: TChatMemberLookup = try await callMethod(
+      "getChatMember",
+      body: request,
+      httpTimeout: Timeout.shortRequestSeconds
+    )
+    guard member.user.id == userId else {
+      return false
+    }
+    switch ChatMembershipStatus(apiValue: member.status) {
+    case .creator, .administrator, .member:
+      return true
+    case .restricted:
+      return member.is_member == true
+    case .left, .kicked, .other:
+      return false
+    }
+  }
+
   public func getUpdates(
     offset: Int64?,
     timeout: Int,
@@ -300,6 +320,11 @@ private struct GetUpdatesRequest: Encodable {
 
 private struct GetFileRequest: Encodable {
   let fileId: String
+}
+
+private struct GetChatMemberRequest: Encodable {
+  let chatId: Int64
+  let userId: Int64
 }
 
 private struct SendMessageRequest: Encodable {

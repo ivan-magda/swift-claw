@@ -139,33 +139,46 @@ private extension ApprovedActionExecutor {
     }
     let context: ToolExecutionContext?
     do {
-      if let origin = try runs.runOrigin(runId: approval.runId) {
+      if let restored = try runs.executionContext(
+        runId: approval.runId,
+        fallbackChatId: approval.ownerUserId
+      ) {
+        guard
+          restored.sessionId == approval.sessionId,
+          restored.deliveryTarget.chatId == approval.ownerUserId
+        else {
+          return missingExecutionContext()
+        }
+
+        if restored.mode == .group {
+          guard
+            restored.origin == .interactive,
+            restored.requesterUserId != nil,
+            approval.reason == .coderSubmit,
+            approval.tool == CoderToolNames.submit
+          else {
+            return missingExecutionContext()
+          }
+        }
         context = ToolExecutionContext(
           runId: approval.runId,
-          sessionId: approval.sessionId,
-          chatId: approval.ownerUserId,
-          requesterUserId: origin == .interactive ? approval.ownerUserId : nil,
-          origin: origin,
-          mode: .direct,
+          sessionId: restored.sessionId,
+          chatId: restored.deliveryTarget.chatId,
+          requesterUserId: restored.requesterUserId,
+          origin: restored.origin,
+          mode: restored.mode,
           toolCallId: approval.toolCallId,
           approvalId: approval.id
         )
       } else {
-        context = nil
+        return missingExecutionContext()
       }
     } catch {
-      return ToolPayload(
-        content: "The approved action's origin could not be restored; nothing ran.",
-        status: .error,
-        ingestedUntrusted: false
-      )
+      return missingExecutionContext()
     }
-    if tool.definition.requiresInteractiveOwner, context == nil {
-      return ToolPayload(
-        content: "The approved action's origin is missing; nothing ran.",
-        status: .error,
-        ingestedUntrusted: false
-      )
+    let hasInteractiveRequester = context?.origin == .interactive && context?.requesterUserId != nil
+    if tool.definition.requiresInteractiveRequester && !hasInteractiveRequester {
+      return missingExecutionContext()
     }
     // Run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s
     // abandon-on-timeout race, so the observation is always truthful (file_write is atomic).
@@ -173,6 +186,14 @@ private extension ApprovedActionExecutor {
       arguments: arguments,
       canonicalTarget: approval.canonicalTarget,
       context: context
+    )
+  }
+
+  func missingExecutionContext() -> ToolPayload {
+    ToolPayload(
+      content: "The approved action's original request could not be restored; nothing ran.",
+      status: .error,
+      ingestedUntrusted: false
     )
   }
 

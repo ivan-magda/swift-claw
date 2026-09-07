@@ -367,6 +367,16 @@ The order matters — step 1 cannot be fixed later without removing and re-addin
 4. **Put the id in `CLAW_GROUP_CHATS`** in `~/.swift-claw/clawd.env`.
 5. **Restart the daemon.** The list is read at boot only.
 
+If Coder is enabled in the room, make the bot a group administrator. Telegram guarantees
+`getChatMember` checks for other users only for administrator bots, and group Coder performs that
+fresh lookup on every approval tap. The callback must come from the exact original approval message
+in the exact configured group and interactive run/session; a copied keyboard, removed member,
+unavailable lookup, or mismatched chat/message leaves the approval pending. Any current participant,
+including the requester, may approve or deny. The first successful decision wins and migration `v12`
+records the winner's Telegram user ID on the approval audit row. The same migration stores the
+original sender on the run: approval never transfers job identity, and only that requester can query
+or cancel the Coder job from the same topic. All non-Coder group tool behavior remains unchanged.
+
 Verify with `doctor` — the `group.mode` row reports `off`, or `on (1 chat)` / `on (N chats)`:
 
 ```bash
@@ -681,10 +691,11 @@ through its cleanup receipt. Retain sanitized argv, exit/outcome and publication
 credentials, prompts or raw protocol output. A prior foreground success is not proof of daemon auth.
 These live checks can incur child billing and are separate from the deterministic suite.
 
-Ask in the owner DM to cancel `Coder job <UUID>`; `/stop` cancels the conversational turn, not an
-already-admitted job. Completion uses existing outbox retries without another LLM turn. Child-reported
-usage is kept with that job, separate from `/cost`; missing usage is unavailable accounting. Coder's
-concurrency/timeout settings are not a hard dollar cap. v1 is owner DM only; full capacity returns busy.
+Ask in the originating DM or group topic to cancel `Coder job <UUID>`; in a group, only the original
+requester can inspect or cancel it. `/stop` cancels the conversational turn, not an already-admitted
+job. Completion uses existing outbox retries without another LLM turn. Child-reported usage is kept
+with that job, separate from `/cost`; missing usage is unavailable
+accounting. Coder's concurrency/timeout settings are not a hard dollar cap; full capacity returns busy.
 
 Full doctor and daemon health read persisted reservations and the most recently updated
 failed/timed-out/interrupted record, including released jobs and history from enabled runs when Coder

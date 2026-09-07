@@ -16,8 +16,11 @@ public protocol MessageDelivery: Sendable {
   /// it against the delivered row so a redelivered row maps back to a known sent message.
   /// `replyMarkup` is a Telegram `reply_markup` JSON string attaching an inline keyboard, or nil for
   /// no keyboard. The approval prompt's buttons ride this.
-  func sendMessage(to target: DeliveryTarget, text: String, replyMarkup: String?) async throws
-    -> Int64
+  func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64
   /// Sends a rich-markdown message (`sendRichMessage` / `InputRichMessage{ markdown }`, Bot API 10.1).
   /// The markdown string is passed verbatim — no escaper, no converter — and rendered server-side.
   /// Returns the assigned `message_id` like `sendMessage`, and takes the same optional keyboard. On
@@ -43,7 +46,13 @@ public protocol CallbackResponding: Sendable {
 /// The full Telegram surface: intake + delivery plus the Telegram-specific extras (identity,
 /// streaming drafts, chat actions, the command menu) that only `clawd` and the `ClawTelegram`
 /// wrappers consume.
-public protocol TelegramTransport: ChannelIntake, MessageDelivery, CallbackResponding {
+public protocol TelegramTransport:
+  ChannelIntake,
+  MessageDelivery,
+  CallbackResponding,
+  GroupMembershipChecking
+// swiftlint:disable:next opening_brace
+{
   func getMe() async throws -> BotIdentity
   func sendRichMessageDraft(chatId: Int64, draftId: Int64, markdown: String) async throws -> Bool
   /// Emits a Telegram chat action (e.g. `"typing"`). Fire-and-forget: the action auto-expires (~5s),
@@ -54,6 +63,10 @@ public protocol TelegramTransport: ChannelIntake, MessageDelivery, CallbackRespo
 }
 
 extension TelegramTransport {
+  public func isCurrentMember(chatId: Int64, userId: Int64) async throws -> Bool {
+    throw TelegramError.transport("isCurrentMember not implemented")
+  }
+
   public func sendRichMessageDraft(
     chatId: Int64,
     draftId: Int64,

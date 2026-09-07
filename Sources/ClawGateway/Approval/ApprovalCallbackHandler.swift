@@ -3,7 +3,7 @@ import Foundation
 import Logging
 
 /// The fail-closed callback auth chain. Every failure is audited (`messageIn`/`forbidden`) and
-/// answered with a neutral toast, and the approval row is left untouched. A valid owner tap CASes the
+/// answered with a neutral toast, and the approval row is left untouched. An authorized tap CASes the
 /// durable row and signals the coordinator — the waiter performs the resume/deny. The
 /// handler itself only claims, authorizes, CASes, signals, and toasts; it never touches the
 /// observation row, the run state, or the button keyboard.
@@ -12,6 +12,8 @@ public struct ApprovalCallbackHandler: Sendable {
   private let accessControl: AccessControl
 
   private let approvals: any ApprovalStore
+  private let runs: any RunStore
+  private let membership: any GroupMembershipChecking
   private let audit: any AuditLog
 
   private let coordinator: ApprovalCoordinator
@@ -31,6 +33,8 @@ public struct ApprovalCallbackHandler: Sendable {
     replies: ReplySender,
     accessControl: AccessControl,
     approvals: any ApprovalStore,
+    runs: any RunStore,
+    membership: any GroupMembershipChecking,
     audit: any AuditLog,
     coordinator: ApprovalCoordinator,
     callbacks: any CallbackResponding,
@@ -42,6 +46,8 @@ public struct ApprovalCallbackHandler: Sendable {
     self.accessControl = accessControl
 
     self.approvals = approvals
+    self.runs = runs
+    self.membership = membership
     self.audit = audit
 
     self.coordinator = coordinator
@@ -62,6 +68,8 @@ public struct ApprovalCallbackHandler: Sendable {
     delivery: any MessageDelivery,
     accessControl: AccessControl,
     approvals: any ApprovalStore,
+    runs: any RunStore,
+    membership: any GroupMembershipChecking,
     audit: any AuditLog,
     coordinator: ApprovalCoordinator,
     callbacks: any CallbackResponding,
@@ -73,6 +81,8 @@ public struct ApprovalCallbackHandler: Sendable {
       replies: ReplySender(processed: processed, delivery: delivery, logger: logger),
       accessControl: accessControl,
       approvals: approvals,
+      runs: runs,
+      membership: membership,
       audit: audit,
       coordinator: coordinator,
       callbacks: callbacks,
@@ -102,30 +112,92 @@ public struct ApprovalCallbackHandler: Sendable {
 
 private extension ApprovalCallbackHandler {
   func resolve(_ callback: RawCallback) async -> HandleOutcome {
-    // Step 2: allowlist default-deny, before any parsing.
-    guard accessControl.isAllowed(userId: callback.fromUserId) else {
-      return await denyAuth(callback, approval: nil)
-    }
-    // Step 3: parse callback_data strictly (apr:<nonce>:<verdict>).
+    // The nonce selects the durable conversation before its mode-specific access boundary runs.
     guard let parsed = callback.data.flatMap(ApprovalKeyboard.parse) else {
       return await denyAuth(callback, approval: nil)
     }
-    // Step 4: look up by nonce ONLY (unique index) — never by a guessable id.
+
     let found: Approval?
     do {
       found = try approvals.approval(nonce: parsed.nonce)
     } catch {
       return await storeFailure(callback, error)
     }
+
     guard let approval = found else {
       return await denyAuth(callback, approval: nil)
     }
-    // Step 5: owner binding.
-    guard callback.fromUserId == approval.ownerUserId else {
+
+    guard let actor = await authorizedActor(callback, approval: approval) else {
       return await denyAuth(callback, approval: approval)
     }
 
-    return await commitResolution(callback, approval: approval, approve: parsed.approve)
+    return await commitResolution(
+      callback,
+      approval: approval,
+      approve: parsed.approve,
+      actor: actor
+    )
+  }
+
+  func authorizedActor(
+    _ callback: RawCallback,
+    approval: Approval
+  ) async -> ApprovalResolutionActor? {
+    let context: RunExecutionContext?
+    do {
+      context = try runs.executionContext(
+        runId: approval.runId,
+        fallbackChatId: approval.ownerUserId
+      )
+    } catch {
+      return nil
+    }
+
+    if let context, context.mode == .group {
+      guard
+        context.origin == .interactive,
+        context.requesterUserId != nil,
+        context.sessionId == approval.sessionId,
+        context.deliveryTarget.chatId == approval.ownerUserId,
+        approval.reason == .coderSubmit,
+        approval.tool == CoderToolNames.submit,
+        callback.chatId == context.deliveryTarget.chatId,
+        let promptMessageId = approval.promptMessageId,
+        callback.messageId == promptMessageId,
+        accessControl.decide(
+          chatKind: .supergroup,
+          chatId: context.deliveryTarget.chatId,
+          userId: callback.fromUserId
+        ) == .allowed(.group)
+      else {
+        return nil
+      }
+
+      do {
+        guard
+          try await membership.isCurrentMember(
+            chatId: context.deliveryTarget.chatId,
+            userId: callback.fromUserId
+          )
+        else {
+          return nil
+        }
+      } catch {
+        return nil
+      }
+
+      return ApprovalResolutionActor(actor: .groupMember, userId: callback.fromUserId)
+    }
+
+    guard
+      accessControl.isAllowed(userId: callback.fromUserId),
+      callback.fromUserId == approval.ownerUserId
+    else {
+      return nil
+    }
+
+    return ApprovalResolutionActor(actor: .owner, userId: callback.fromUserId)
   }
 }
 
@@ -135,15 +207,20 @@ private extension ApprovalCallbackHandler {
   func commitResolution(
     _ callback: RawCallback,
     approval: Approval,
-    approve: Bool
+    approve: Bool,
+    actor: ApprovalResolutionActor
   ) async -> HandleOutcome {
     if approve {
-      return await commitApprove(callback, approval: approval)
+      return await commitApprove(callback, approval: approval, actor: actor)
     }
-    return await commitDeny(callback, approval: approval)
+    return await commitDeny(callback, approval: approval, actor: actor)
   }
 
-  func commitApprove(_ callback: RawCallback, approval: Approval) async -> HandleOutcome {
+  func commitApprove(
+    _ callback: RawCallback,
+    approval: Approval,
+    actor: ApprovalResolutionActor
+  ) async -> HandleOutcome {
     let policyVersion: String
     do {
       policyVersion = try currentPolicyVersion()
@@ -156,6 +233,7 @@ private extension ApprovalCallbackHandler {
       outcome = try approvals.approve(
         id: approval.id,
         currentPolicyVersion: policyVersion,
+        actor: actor,
         now: now()
       )
     } catch {
@@ -193,10 +271,19 @@ private extension ApprovalCallbackHandler {
     return await finish(callback, toast: Self.expiredToast)
   }
 
-  func commitDeny(_ callback: RawCallback, approval: Approval) async -> HandleOutcome {
+  func commitDeny(
+    _ callback: RawCallback,
+    approval: Approval,
+    actor: ApprovalResolutionActor
+  ) async -> HandleOutcome {
     let denied: Bool
     do {
-      denied = try approvals.deny(id: approval.id, decision: .rejected, now: now())
+      denied = try approvals.deny(
+        id: approval.id,
+        decision: .rejected,
+        actor: actor,
+        now: now()
+      )
     } catch {
       return await storeFailure(callback, error)
     }
@@ -221,6 +308,7 @@ private extension ApprovalCallbackHandler {
     let auditActor: AuditActor = approval?.ownerUserId == callback.fromUserId ? .owner : .system
     let event = AuditEvent(
       actor: auditActor,
+      actorUserId: callback.fromUserId,
       action: .messageIn,
       decision: Self.forbiddenDecision,
       runId: approval?.runId,

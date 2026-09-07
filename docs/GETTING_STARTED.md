@@ -275,10 +275,17 @@ automatic apply-back or rollback. Review the task approval; after admission, you
 while the job runs. Ask for status or cancellation using the returned UUID. `/stop` cancels the current
 conversation turn; cancel the Coder job explicitly to stop its native worker.
 
+Coder submission also works in a group configured through `CLAW_GROUP_CHATS`. Any current participant,
+including the requester, can approve or deny from that request's original approval message. clawd
+checks the participant's current membership with Telegram for every tap and fails closed if the check
+is unavailable. Make the bot a group administrator so Telegram guarantees `getChatMember` checks for
+other users. The person who asked remains the job owner; only that requester can inspect or cancel the
+job, from the same topic. Other group tool behavior is unchanged.
+
 N is configurable with `CLAW_CODER_MAX_CONCURRENT_JOBS` (default 1), and full means busy. Completion
 uses existing outbox retries, without another LLM turn. Child billing and child-reported usage are
-separate from conversational `/cost`. v1 is owner DM only. The settings, limits and authentication
-caveats are in [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration).
+separate from conversational `/cost`. The settings, limits, group opt-in and authentication caveats
+are in [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration).
 
 ## Troubleshooting
 

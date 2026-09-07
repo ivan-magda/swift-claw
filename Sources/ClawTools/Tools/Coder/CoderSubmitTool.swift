@@ -22,7 +22,8 @@ public struct CoderSubmitTool: Tool {
       egressClass: .none,
       riskLevel: .dangerous,
       invocationIdentity: executionPolicyID,
-      requiresInteractiveOwner: true
+      requiresInteractiveRequester: true,
+      requiresGroupApproval: true
     )
   }
 

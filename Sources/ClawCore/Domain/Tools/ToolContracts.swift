@@ -210,7 +210,8 @@ public struct ToolDefinition: Sendable, Equatable {
   /// not fully identify what will run (for example, an adapter backed by a configured endpoint).
   /// NOT advertised on the wire.
   public let invocationIdentity: String?
-  public let requiresInteractiveOwner: Bool
+  public let requiresInteractiveRequester: Bool
+  public let requiresGroupApproval: Bool
 
   public init(
     name: String,
@@ -221,7 +222,8 @@ public struct ToolDefinition: Sendable, Equatable {
     riskLevel: RiskLevel,
     fenceLabel: String? = nil,
     invocationIdentity: String? = nil,
-    requiresInteractiveOwner: Bool = false
+    requiresInteractiveRequester: Bool = false,
+    requiresGroupApproval: Bool = false
   ) {
     self.name = name
     self.description = description
@@ -232,7 +234,8 @@ public struct ToolDefinition: Sendable, Equatable {
     self.riskLevel = riskLevel
     self.fenceLabel = fenceLabel ?? name
     self.invocationIdentity = invocationIdentity
-    self.requiresInteractiveOwner = requiresInteractiveOwner
+    self.requiresInteractiveRequester = requiresInteractiveRequester
+    self.requiresGroupApproval = requiresGroupApproval
   }
 }
 

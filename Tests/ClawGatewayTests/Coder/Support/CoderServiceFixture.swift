@@ -24,6 +24,8 @@ struct CoderServiceFixture: Sendable {
     limit: Int = 1,
     scripts: [ScriptedCoderBackend.Invocation] = [],
     inspection: CoderRecoveryObservation = .stopped,
+    groupChatID: Int64? = nil,
+    threadID: Int64? = nil,
     redactor: @escaping @Sendable (String) -> String = { text in
       text
     }
@@ -39,7 +41,13 @@ struct CoderServiceFixture: Sendable {
       invocations: scripts.isEmpty ? [.init(result: Self.result())] : scripts
     )
     jobFinished = AsyncGate()
-    ownerContext = try Self.context(queue: queue, prepared: prepared, index: 1)
+    ownerContext = try Self.context(
+      queue: queue,
+      prepared: prepared,
+      index: 1,
+      groupChatID: groupChatID,
+      threadID: threadID
+    )
     service = Self.makeService(
       store: store,
       backend: backend,
@@ -131,14 +139,18 @@ struct CoderServiceFixture: Sendable {
     queue: DatabaseQueue,
     prepared: CoderPreparedRequest,
     index: Int64,
-    ownerID: Int64 = 7
+    ownerID: Int64 = 7,
+    groupChatID: Int64? = nil,
+    threadID: Int64? = nil
   ) throws -> ToolExecutionContext {
     let origin = try CoderApprovedOriginFixture.make(
       queue: queue,
       updateID: index,
       prepared: prepared,
       now: Date(timeIntervalSince1970: 1_800_000_000),
-      ownerID: ownerID
+      ownerID: ownerID,
+      groupChatID: groupChatID,
+      threadID: threadID
     )
     let outbox = OutboxStoreGRDB(writer: queue)
     for row in try outbox.pendingOutbound() where row.runId == origin.runID {
@@ -155,7 +167,7 @@ struct CoderServiceFixture: Sendable {
       chatId: origin.chatID,
       requesterUserId: origin.requesterUserID,
       origin: .interactive,
-      mode: .direct,
+      mode: groupChatID == nil ? .direct : .group,
       toolCallId: origin.toolCallID,
       approvalId: origin.approvalID
     )

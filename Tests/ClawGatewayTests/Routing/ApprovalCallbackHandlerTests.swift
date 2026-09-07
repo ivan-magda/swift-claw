@@ -198,6 +198,8 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
       replies: replies,
       accessControl: accessControl,
       approvals: approvals,
+      runs: RunStoreGRDB(writer: queue),
+      membership: RecordingTransport(),
       audit: audit,
       coordinator: coordinator,
       callbacks: callbacks,

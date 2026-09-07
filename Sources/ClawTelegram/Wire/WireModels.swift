@@ -201,6 +201,13 @@ struct TChatMember: Decodable {
   let status: String?
 }
 
+/// `getChatMember` must identify its subject and status before it can prove current membership.
+struct TChatMemberLookup: Decodable {
+  let user: TUser
+  let status: String
+  let is_member: Bool?
+}
+
 /// Bot API `ChatMemberUpdated`, delivered as `my_chat_member` when the subject is the bot itself.
 struct TChatMemberUpdated: Decodable {
   let chat: TChat

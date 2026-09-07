@@ -285,8 +285,8 @@ workload image, and the network opt-in (`CLAW_EXEC_ALLOW_EGRESS`) are documented
 ## Coder configuration
 
 Set `CLAW_CODER_ENABLED=true` to expose `coder_submit`, `coder_status` and `coder_cancel` in owner
-DMs. Submission always uses the durable Telegram approval path, then runs in the background through
-your native Codex installation and its configured integrations. v1 is owner DM only.
+DMs and configured group topics. Submission always uses the durable Telegram approval path, then runs
+in the background through your native Codex installation and its configured integrations.
 `execute_code` keeps the VM sandbox described above.
 
 | Variable                         | Default / accepted value                                                         |
@@ -354,6 +354,15 @@ apply-back or rollback, and no automatic dependency provisioning. N is configura
 without a queue. Completion uses existing outbox retries and needs no new LLM turn. Ask to inspect or
 cancel a job by its UUID; `/stop` only stops the conversation turn. Child billing is separate from
 conversational `/cost`, and Coder's limit/timeout cannot enforce a hard dollar cap.
+
+To use Coder in a group, add its Telegram chat ID to `CLAW_GROUP_CHATS` and keep that deployment on a
+separate nonpersonal state root, as described in [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup).
+Make the bot a group administrator: Telegram guarantees `getChatMember` checks for other users only
+for administrators. `coder_submit` is the one group tool that always parks an approval. Any current
+participant, including the requester, may approve or deny only from that original prompt; every tap performs a
+fresh membership check and failure leaves the approval pending. The requester remains the job
+identity, and only that person can use status or cancel from the same group topic. Existing group
+auto-run/refusal behavior for all other tools is unchanged.
 
 Disabled Coder contributes no tools, admits no work and launches no probes. On restart it still
 reconciles jobs admitted while enabled: unfinished jobs become interrupted with one completion notice,
@@ -475,6 +484,11 @@ longer uses fails `clawd doctor --check-config` the same way, with exit 10; `cla
   database in your state root (the `sqlite3` CLI is its own package on Linux:
   `sudo apt-get install -y sqlite3`):
   `sqlite3 "${CLAW_STATE_ROOT:-$HOME/.swift-claw}/claw.sqlite" "DELETE FROM allowlist WHERE user_id = <id>;"`
+- `CLAW_GROUP_CHATS`: comma-separated Telegram group/supergroup chat IDs served as shared rooms.
+  Keep this off for a personal state root. A group deployment trusts participant text in its topic
+  history and has relaxed tool approval behavior except for Coder submission, so run it under a
+  separate nonpersonal state root and review
+  [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup) before enabling it.
 - `CLAW_APPROVAL_EXPIRY`: seconds before a pending approval auto-denies (default 3600).
 - `CLAW_SEARCH_API_KEY`: Exa key; unset means the `web_search` tool is absent. Adding it
   after you have sealed does nothing on its own: once `secrets.enc` exists the daemon reads

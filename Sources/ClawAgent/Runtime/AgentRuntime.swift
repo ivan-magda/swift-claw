@@ -226,7 +226,8 @@ public struct AgentRuntime: Sendable {
     proactiveTodayUSD: Double = 0,
     carryOver: ResumeUsage? = nil,
     mode: ChatMode = .direct,
-    threadId: Int64? = nil
+    threadId: Int64? = nil,
+    requesterUserId: Int64? = nil
   ) async throws -> TurnOutcome {
     let deadline = ContinuousClock.now + .seconds(budget.wallClockDeadlineSeconds)
     let definitions = toolDefinitions
@@ -478,6 +479,19 @@ public struct AgentRuntime: Sendable {
           return outcome(deadlineDegradation(callID))
         }
 
+        let effectiveRequesterUserId: Int64?
+        if origin == .interactive {
+          if let requesterUserId {
+            effectiveRequesterUserId = requesterUserId
+          } else if mode == .direct {
+            effectiveRequesterUserId = chatId
+          } else {
+            effectiveRequesterUserId = nil
+          }
+        } else {
+          effectiveRequesterUserId = nil
+        }
+
         let context = ToolDispatchContext(
           sessionTainted: sessionTainted,
           runIngestedUntrusted: ingestedUntrusted,
@@ -490,7 +504,7 @@ public struct AgentRuntime: Sendable {
             runId: runId,
             sessionId: sessionId,
             chatId: chatId,
-            requesterUserId: origin == .interactive && mode == .direct ? chatId : nil,
+            requesterUserId: effectiveRequesterUserId,
             origin: origin,
             mode: mode,
             toolCallId: call.id,

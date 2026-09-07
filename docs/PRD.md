@@ -36,7 +36,9 @@ Why Swift: one self-contained binary per platform with no runtime to install und
 - **G8.** Portable: macOS-primary, but the same source builds and runs on Linux.
 
 ### 3.2 Non-goals (v1)
-- **NG1.** Multi-user / multi-tenant operation, groups, or supergroups. *(Single-owner only; the access model leaves room to add it later.)*
+- **NG1.** General multi-user / multi-tenant operation. The config-gated group mode is a supervised,
+  separate-state-root deployment exception; it does not create accounts, participant roles, private
+  per-user state, or a multi-tenant product.
 - **NG2.** Channels other than Telegram (no Slack/Discord/iMessage/WhatsApp). The channel layer stays abstractable, but only Telegram is implemented.
 - **NG3.** Speech *synthesis* (TTS) and an A2UI canvas or companion device "nodes." Inbound voice notes **are** transcribed, on-device, on macOS 26 (see FR-G6); on Linux and older macOS the feature is inert and they get the canned refusal.
 - **NG4.** A web UI / REST API surface (OpenAI-compatible `/v1` server, ACP server) — possible later, not v1. (Note: `status`/`doctor` and Telegram `/status` are **not** this; they are a CLI subcommand and a chat command, see FR-O2.)
@@ -47,22 +49,29 @@ Why Swift: one self-contained binary per platform with no runtime to install und
 - **NG9.** A provider *pool* and per-call USD attribution dashboards. v1 routes over at most two owner-configured routes — a primary and one optional fallback (FR-R3) — with no credential pools, no weighted or model-aware routing, and no automatic provider discovery; and it has a USD spend **breaker**, not a dashboard.
 - **NG10.** *(bounds FR-P5)* **Sharing or importing another tool's credentials** — notably Codex CLI's `~/.codex/auth.json` — or supervising Codex as the ordinary LLM provider route, multiple accounts, credential pools, live credential mutation while the daemon runs, and subscription providers other than ChatGPT. Also out: **a per-provider environment-variable namespace** (`CLAW_CHATGPT_*` and the like) and a configurable subscription endpoint or client identity. Subscription auth adds exactly **one** configuration selector — a provider-qualified model value — and structured configuration (`config.toml`) stays deferred; it is the mechanism a future provider's own settings will use.
 
-**Generic Coder is a separate opt-in capability.** It delegates an approved owner-DM task to the
-native personal Codex installation, which retains its own credentials and integrations. Coder
+**Generic Coder is a separate opt-in capability.** It delegates an approved task from the owner DM
+or a configured group topic to the native Codex installation, which retains its own credentials and
+integrations. In a group, any current participant may approve or deny the exact original prompt after
+a fresh membership check; the original requester remains the job identity and alone may inspect or
+cancel it from that topic. Coder
 supervises workspace selection, admission, child lifetime, persistence and reporting; Codex performs
 the coding and requested Git/GitHub workflow. In-place work accepts uncommitted changes; separate
 copies use committed history without a dirty-state snapshot or automatic rollback. A configurable
 positive concurrency limit returns busy at capacity. Child deadlines and reported usage are separate
-from ordinary conversation budgets, with no hard child dollar-cap claim. Group/proactive submission
-is excluded. The native trust boundary and request/result contracts are normative in
+from ordinary conversation budgets, with no hard child dollar-cap claim. Proactive submission is
+excluded. The native trust boundary and request/result contracts are normative in
 [`ARCHITECTURE.md` §§5.3, 13.2, 15](ARCHITECTURE.md); `execute_code` retains FR-X1's VM contract.
 
 ## 4. Target user & operating context
 
 - **Who:** the author (a single technical owner), self-hosting.
 - **Where:** primary deployment is the owner's Mac (Apple Silicon, macOS 26); secondary is any Linux box with a Swift toolchain (VPS / home server).
-- **How accessed:** a private Telegram bot, DMs only.
-- **Trust:** the *owner* is trusted; everything arriving over the wire (messages, web pages, tool output, attachments) is **untrusted data**, never instructions.
+- **How accessed:** a private Telegram bot, primarily through the owner's DM; configured groups are
+  a supervised separate-deployment exception.
+- **Trust:** the *owner* is trusted; group participants receive only the deployment-scoped authority
+  defined in `ARCHITECTURE.md` §12.1. Everything arriving over the wire (messages, web pages, tool
+  output, attachments) is **untrusted data**, never instructions, except for that section's explicit
+  group provenance tradeoff.
 
 ## 5. Use cases (capabilities)
 
@@ -304,8 +313,10 @@ Each criterion is backed by an **automated acceptance test** (per-requirement ve
   turn. Full `clawd doctor`, its JSON form, and `/status` report the same fresh accepted count,
   rejected count, and absolute-cap fit; warnings or overflow fail the headline row.
 
-- **SC11 (P-coder).** With Coder enabled and VM execution disabled, an approved owner-DM task reaches
-  the configured native Codex installation using its existing integrations. Local in-place tasks
+- **SC11 (P-coder).** With Coder enabled and VM execution disabled, an approved owner-DM or configured
+  group-topic task reaches the native Codex installation using its existing integrations. A group
+  callback must match the original prompt/chat and a current participant; its requester remains the
+  only person who can inspect or cancel that job from the topic. Local in-place tasks
   accept dirty work; separate copies start from refs. Configurable N capacity returns busy when full.
   Status/cancel use the job UUID; completion is durably delivered through existing outbox retries
   without another LLM turn. Shutdown joins owned work before dependent teardown, and restart reports
