@@ -50,8 +50,8 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
-    let bytes: Data = row["canonical_bytes"]
     guard
+      let bytes = SQLiteStoredValue.data(in: row, column: "canonical_bytes"),
       let set = LessonSet.decoded(jobId: jobId, canonicalBytes: bytes),
       set.digest == digest
     else {
@@ -66,7 +66,7 @@ extension ScheduledLearningStoreGRDB {
     // The empty set goes in first: the state row names a digest, and a state that pointed at a
     // lesson set no row holds would let a job fire against a binding it cannot resolve.
     let empty = LessonSet.empty(jobId: jobId)
-    try insertCanonicalEmptySet(db, empty, now: now)
+    try ensureCanonicalEmptySet(db, empty, now: now)
     try db.execute(
       sql: """
         INSERT OR IGNORE INTO job_learning_state(job_id, learning_epoch,
@@ -94,25 +94,50 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
+    guard
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      let stableDigest = SQLiteStoredValue.string(
+        in: row,
+        column: "stable_lesson_set_digest"
+      ),
+      let stableRevision = SQLiteStoredValue.int64(in: row, column: "stable_revision"),
+      let openTrial = SQLiteStoredValue.nullableInt64(in: row, column: "open_trial_id"),
+      let feedbackRevision = SQLiteStoredValue.int64(in: row, column: "feedback_revision")
+    else {
+      throw StoreError.unexpected("job \(jobId) has an unreadable learning state")
+    }
     return JobLearningState(
       jobId: jobId,
-      epoch: LearningEpoch(row["learning_epoch"]),
-      stableDigest: LessonSetDigest(rawValue: row["stable_lesson_set_digest"]),
-      stableRevision: StableRevision(row["stable_revision"]),
-      openTrialId: row["open_trial_id"],
-      feedbackRevision: FeedbackRevision(row["feedback_revision"])
+      epoch: LearningEpoch(epoch),
+      stableDigest: LessonSetDigest(rawValue: stableDigest),
+      stableRevision: StableRevision(stableRevision),
+      openTrialId: openTrial.value,
+      feedbackRevision: FeedbackRevision(feedbackRevision)
     )
   }
 }
 
-// MARK: - Rows
+// MARK: - Canonical Empty Row
 
-private extension ScheduledLearningStoreGRDB {
-  static func insertCanonicalEmptySet(_ db: Database, _ set: LessonSet, now: Date) throws {
+extension ScheduledLearningStoreGRDB {
+  static func ensureCanonicalEmptySet(_ db: Database, _ set: LessonSet, now: Date) throws {
+    let row = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT job_id, digest, schema_version, canonical_bytes, source
+        FROM lesson_sets WHERE job_id = ? AND digest = ?
+        """,
+      arguments: [set.jobId, set.digest.rawValue]
+    )
+    if let row {
+      guard canonicalEmptySetMatches(row, set: set) else {
+        throw StoreError.unexpected("canonical empty lesson set is unreadable")
+      }
+      return
+    }
     try db.execute(
       sql: """
-        INSERT OR IGNORE INTO lesson_sets(job_id, digest, schema_version, canonical_bytes,
-          source, created_at)
+        INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
       arguments: [
@@ -124,5 +149,21 @@ private extension ScheduledLearningStoreGRDB {
         EpochSecondCodec.epoch(now),
       ]
     )
+  }
+
+  static func canonicalEmptySetMatches(_ row: Row, set: LessonSet) -> Bool {
+    SQLiteStoredValue.int64(in: row, column: "job_id") == set.jobId
+      && SQLiteStoredValue.string(in: row, column: "digest") == set.digest.rawValue
+      && SQLiteStoredValue.int(in: row, column: "schema_version") == set.schemaVersion
+      && SQLiteStoredValue.data(in: row, column: "canonical_bytes") == set.canonicalBytes
+      && SQLiteStoredValue.string(in: row, column: "source")
+        == LessonSetSource.canonicalEmpty.rawValue
+  }
+
+  static func isCanonicalDigest(_ value: String) -> Bool {
+    value.utf8.count == 64
+      && value.utf8.allSatisfy { byte in
+        (48...57).contains(byte) || (97...102).contains(byte)
+      }
   }
 }

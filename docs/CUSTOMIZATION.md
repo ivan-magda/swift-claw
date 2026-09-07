@@ -258,6 +258,18 @@ exactly one allowlisted owner), then it works through `HEARTBEAT.md` up to
 `CLAW_HEARTBEAT_MAX_PER_DAY` times a day, every `CLAW_HEARTBEAT_INTERVAL_MINUTES`
 minutes, staying silent during `CLAW_HEARTBEAT_QUIET_HOURS` (default `22:00-09:00`).
 
+### Inspect scheduled learning
+
+Send `/learning` to list jobs with retained learning state, or `/learning <jobId>` to inspect
+lessons, trial assignments and the last decision. Promotion receipts show the runs that supplied
+support and distinguish heuristic activation from owner-confirmed evidence.
+
+A detail reply for a current promotion carries **Roll back promotion** on its final message.
+That button records an authenticated request for that exact promotion. The learning coordinator
+applies rollback only while the promotion remains current. Rollback restores its direct prior
+lesson set and keeps the learning epoch. `/learning reset <jobId>` asks you to confirm a new epoch
+with an empty set and invalidates pending feedback controls.
+
 ## Voice messages (macOS 26)
 
 On by default, on-device, off on other platforms. `CLAW_VOICE_LOCALES` takes a

@@ -242,6 +242,7 @@ import Testing
     let reply = try #require(await harness.transport.sent.last?.text)
     #expect(reply == CommandReplies.help)
     #expect(reply.contains("/skills"))
+    #expect(reply.contains("/learning"))
   }
 
   @Test func strangersGetNoHelp() async throws {

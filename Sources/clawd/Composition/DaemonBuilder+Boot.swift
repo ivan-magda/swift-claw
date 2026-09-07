@@ -12,6 +12,7 @@ extension DaemonBuilder {
     BotMenuCommand(command: "remember", description: "Save a memory."),
     BotMenuCommand(command: "memory", description: "Review saved memories."),
     BotMenuCommand(command: "schedule", description: "Create or list schedules."),
+    BotMenuCommand(command: "learning", description: "Inspect scheduled-job learning."),
     BotMenuCommand(command: "pause", description: "Pause a schedule."),
     BotMenuCommand(command: "resume", description: "Resume a paused schedule."),
     BotMenuCommand(command: "runnow", description: "Run a schedule now."),

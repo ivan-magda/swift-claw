@@ -6,8 +6,7 @@ import GRDB
 /// supplied it.
 private struct EffectiveSelection {
   let digest: LessonSetDigest
-  let trialId: Int64?
-  let generation: Int?
+  let trial: LearningTrial?
 }
 
 // MARK: - Fire Binding
@@ -30,7 +29,12 @@ extension ScheduledLearningStoreGRDB {
     now: Date
   ) throws -> RunLearningBinding {
     let state = try armState(db, jobId: jobId, now: now)
-    let selection = try selectEffectiveSet(db, state: state, now: now)
+    let selection = try selectEffectiveSet(
+      db,
+      state: state,
+      occurrenceAt: occurrenceAt,
+      now: now
+    )
     let binding = RunLearningBinding(
       runId: runId,
       jobId: jobId,
@@ -40,12 +44,12 @@ extension ScheduledLearningStoreGRDB {
       epoch: state.epoch,
       stableDigest: state.stableDigest,
       effectiveDigest: selection.digest,
-      trialId: selection.trialId,
-      trialGeneration: selection.generation
+      trialId: selection.trial?.trialId,
+      trialGeneration: selection.trial?.generation
     )
     try insertBinding(db, binding)
-    if let trialId = selection.trialId {
-      try consumeAssignment(db, binding: binding, trialId: trialId, now: now)
+    if let trial = selection.trial {
+      try consumeAssignment(db, binding: binding, trial: trial, now: now)
     }
     try AuditLogGRDB.insertAudit(
       db,
@@ -96,39 +100,42 @@ extension ScheduledLearningStoreGRDB {
   /// The job's trial while it still owns the job's learning position — open or draining. A decided
   /// trial is gone from this read, which is what makes the job admissible for a new candidate.
   static func liveTrial(_ db: Database, jobId: Int64) throws -> LearningTrial? {
-    let row = try Row.fetchOne(
+    let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT trial_id, learning_epoch, candidate_digest, generation, max_assignments,
-          consumed_assignments, assignment_deadline, state
+        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+          admitted_at, assignment_deadline, decision_deadline, max_assignments,
+          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
         FROM learning_trials
         WHERE job_id = ? AND state IN (?, ?)
-        ORDER BY trial_id DESC LIMIT 1
+        ORDER BY trial_id
         """,
       arguments: [
         jobId, LearningTrialState.open.rawValue, LearningTrialState.draining.rawValue,
       ]
     )
-    guard let row else {
+    guard rows.count <= 1 else {
+      throw StoreError.unexpected("job \(jobId) has multiple live trials")
+    }
+    guard let row = rows.first else {
       return nil
     }
-    guard
-      let state = LearningTrialState(rawValue: row["state"]),
-      let deadline = EpochSecondCodec.date(fromEpoch: row["assignment_deadline"])
-    else {
-      throw StoreError.unexpected("job \(jobId) has an unreadable trial row")
+    guard let state = try readState(db, jobId: jobId) else {
+      throw StoreError.unexpected("job \(jobId) has a live trial without learning state")
     }
-    return LearningTrial(
-      trialId: row["trial_id"],
-      jobId: jobId,
-      epoch: LearningEpoch(row["learning_epoch"]),
-      generation: row["generation"],
-      candidateDigest: CandidateDigest(rawValue: row["candidate_digest"]),
-      maxAssignments: row["max_assignments"],
-      consumedAssignments: row["consumed_assignments"],
-      assignmentDeadline: deadline,
-      state: state
-    )
+    return try decodeLiveTrial(db, row: row, currentState: state)
+  }
+
+  static func decodeLiveTrial(
+    _ db: Database,
+    row: Row,
+    currentState: JobLearningState
+  ) throws -> LearningTrial {
+    let trial = try strictTrial(db, row: row, currentState: currentState)
+    guard trial.state == .open || trial.state == .draining else {
+      throw StoreError.unexpected("job \(currentState.jobId) has a non-live trial in its live set")
+    }
+    return trial
   }
 }
 
@@ -141,48 +148,55 @@ private extension ScheduledLearningStoreGRDB {
   static func selectEffectiveSet(
     _ db: Database,
     state: JobLearningState,
+    occurrenceAt: Date,
     now: Date
   ) throws -> EffectiveSelection {
-    let stable = EffectiveSelection(digest: state.stableDigest, trialId: nil, generation: nil)
+    let stable = EffectiveSelection(digest: state.stableDigest, trial: nil)
     guard let trial = try liveTrial(db, jobId: state.jobId) else {
       return stable
     }
-    guard trial.acceptsAssignment(at: now) else {
-      if trial.state == .open {
-        try drain(db, trialId: trial.trialId)
-      }
+    if trial.state == .open,
+      trial.consumedAssignments >= trial.maxAssignments || now >= trial.assignmentDeadline
+    {
+      try drain(db, trial: trial)
       return stable
     }
-    guard let replacement = try replacementDigest(db, trial: trial) else {
-      throw StoreError.unexpected(
-        "trial \(trial.trialId) names candidate \(trial.candidateDigest.rawValue) with no set"
-      )
+    guard trial.state == .open else {
+      return stable
     }
-    return EffectiveSelection(
-      digest: replacement,
-      trialId: trial.trialId,
-      generation: trial.generation
-    )
-  }
-
-  static func replacementDigest(_ db: Database, trial: LearningTrial) throws -> LessonSetDigest? {
-    let digest = try String.fetchOne(
-      db,
-      sql: "SELECT replacement_digest FROM learning_candidates WHERE candidate_digest = ?",
-      arguments: [trial.candidateDigest.rawValue]
-    )
-    return digest.map { raw in
-      LessonSetDigest(rawValue: raw)
+    guard occurrenceAt >= trial.cohortCutoff else {
+      return stable
     }
+    guard trial.acceptsAssignment(occurrenceAt: occurrenceAt, now: now) else {
+      throw StoreError.unexpected("trial \(trial.trialId) changed during fire selection")
+    }
+    return EffectiveSelection(digest: trial.replacementDigest, trial: trial)
   }
+}
 
-  static func drain(_ db: Database, trialId: Int64) throws {
+extension ScheduledLearningStoreGRDB {
+  static func drain(_ db: Database, trial: LearningTrial) throws {
     try db.execute(
-      sql: "UPDATE learning_trials SET state = ? WHERE trial_id = ? AND state = ?",
+      sql: """
+        UPDATE learning_trials SET state = ?
+        WHERE trial_id = ? AND job_id = ? AND learning_epoch = ? AND generation = ?
+          AND base_digest = ? AND candidate_digest = ? AND algorithm = ? AND state = ?
+        """,
       arguments: [
-        LearningTrialState.draining.rawValue, trialId, LearningTrialState.open.rawValue,
+        LearningTrialState.draining.rawValue,
+        trial.trialId,
+        trial.jobId,
+        trial.epoch.value,
+        trial.generation,
+        trial.baseDigest.rawValue,
+        trial.candidateDigest.rawValue,
+        trial.algorithm.rawValue,
+        LearningTrialState.open.rawValue,
       ]
     )
+    guard db.changesCount == 1 else {
+      throw StoreError.unexpected("trial \(trial.trialId) could not drain exactly once")
+    }
   }
 }
 
@@ -217,16 +231,52 @@ private extension ScheduledLearningStoreGRDB {
   static func consumeAssignment(
     _ db: Database,
     binding: RunLearningBinding,
-    trialId: Int64,
+    trial: LearningTrial,
     now: Date
   ) throws {
-    try db.execute(
+    let consumed = try Int.fetchOne(
+      db,
       sql: """
-        UPDATE learning_trials SET consumed_assignments = consumed_assignments + 1
-        WHERE trial_id = ?
+        UPDATE learning_trials
+        SET consumed_assignments = consumed_assignments + 1,
+          state = CASE
+            WHEN consumed_assignments + 1 = max_assignments THEN ?
+            ELSE state
+          END
+        WHERE trial_id = ? AND job_id = ? AND learning_epoch = ? AND generation = ?
+          AND base_digest = ? AND candidate_digest = ? AND algorithm = ? AND state = ?
+          AND consumed_assignments < max_assignments
+          AND cohort_cutoff <= ? AND assignment_deadline > ?
+          AND EXISTS(
+            SELECT 1 FROM learning_candidates AS candidate
+            WHERE candidate.candidate_digest = learning_trials.candidate_digest
+              AND candidate.job_id = learning_trials.job_id
+              AND candidate.learning_epoch = learning_trials.learning_epoch
+              AND candidate.base_digest = learning_trials.base_digest
+              AND candidate.base_revision = ? AND candidate.replacement_digest = ?
+              AND candidate.algorithm = learning_trials.algorithm
+          )
+        RETURNING consumed_assignments
         """,
-      arguments: [trialId]
+      arguments: [
+        LearningTrialState.draining.rawValue,
+        trial.trialId,
+        trial.jobId,
+        trial.epoch.value,
+        trial.generation,
+        trial.baseDigest.rawValue,
+        trial.candidateDigest.rawValue,
+        trial.algorithm.rawValue,
+        LearningTrialState.open.rawValue,
+        EpochSecondCodec.epoch(binding.occurrenceAt),
+        EpochSecondCodec.epoch(now),
+        trial.baseRevision.value,
+        trial.replacementDigest.rawValue,
+      ]
     )
+    guard consumed != nil else {
+      throw StoreError.unexpected("trial \(trial.trialId) could not consume exact assignment")
+    }
     try db.execute(
       sql: """
         INSERT INTO trial_assignments(run_id, trial_id, job_id, learning_epoch, trial_generation,
@@ -235,7 +285,7 @@ private extension ScheduledLearningStoreGRDB {
         """,
       arguments: [
         binding.runId,
-        trialId,
+        trial.trialId,
         binding.jobId,
         binding.epoch.value,
         binding.trialGeneration,

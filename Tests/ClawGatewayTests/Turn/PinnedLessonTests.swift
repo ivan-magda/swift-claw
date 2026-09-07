@@ -442,6 +442,49 @@ private extension FeedbackTarget {
 private struct UnresolvableLessonSets: ScheduledLearningStore {
   let base: ScheduledLearningStoreGRDB
 
+  func applyTrialDecision(
+    _ decision: TrialDecision,
+    trial: LearningTrial,
+    feedbackRevision: FeedbackRevision,
+    now: Date
+  ) throws(StoreError) -> DecisionReceipt? {
+    try base.applyTrialDecision(
+      decision,
+      trial: trial,
+      feedbackRevision: feedbackRevision,
+      now: now
+    )
+  }
+
+  func rollback(_ trigger: RollbackTrigger, now: Date) throws(StoreError) -> DecisionReceipt? {
+    try base.rollback(trigger, now: now)
+  }
+
+  func commitPromotionReply(
+    updateId: Int64,
+    target: NewFeedbackTarget,
+    chunks: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> PromotionReplyOutcome {
+    try base.commitPromotionReply(updateId: updateId, target: target, chunks: chunks, now: now)
+  }
+
+  func currentPromotion(jobId: Int64) throws(StoreError) -> DecisionReceipt? {
+    try base.currentPromotion(jobId: jobId)
+  }
+
+  func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView] {
+    try base.learningView(jobId: jobId)
+  }
+
+  func applyReset(
+    updateId: Int64,
+    jobId: Int64,
+    now: Date
+  ) throws(StoreError) -> ConfirmedLearningResetResult {
+    try base.applyReset(updateId: updateId, jobId: jobId, now: now)
+  }
+
   func admitCandidate(
     digest: CandidateDigest,
     redactor: SecretRedactor,
@@ -529,6 +572,24 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
 
   func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial? {
     try base.openTrial(jobId: jobId)
+  }
+
+  func recomputeAssignment(
+    runId: Int64,
+    now: Date
+  ) throws(StoreError) -> AssignmentRecomputation {
+    try base.recomputeAssignment(runId: runId, now: now)
+  }
+
+  func liveTrialIdentities() throws(StoreError) -> [LearningTrialIdentity] {
+    try base.liveTrialIdentities()
+  }
+
+  func reconcileTrial(
+    _ identity: LearningTrialIdentity,
+    now: Date
+  ) throws(StoreError) -> TrialReconciliationResult {
+    try base.reconcileTrial(identity, now: now)
   }
 
   func settlement(runId: Int64) throws(StoreError) -> RunSettlement? {

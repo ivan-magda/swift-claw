@@ -59,19 +59,28 @@ extension ScheduledLearningStoreGRDB {
     guard let row = rows.first else {
       return nil
     }
-    guard let state = LearningTrialState(rawValue: row["state"]) else {
+    guard
+      let trialId = SQLiteStoredValue.int64(in: row, column: "trial_id"),
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
+      let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
+      let generation = SQLiteStoredValue.int(in: row, column: "generation"),
+      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+      let state = LearningTrialState(rawValue: stateRaw),
+      let algorithm = SQLiteStoredValue.string(in: row, column: "algorithm")
+    else {
       throw StoreError.unexpected("candidate admission trial is unreadable")
     }
-    let algorithm = LearningAlgorithm(rawValue: row["algorithm"])
     return TrialRow(
-      id: row["trial_id"],
-      jobId: row["job_id"],
-      epoch: LearningEpoch(row["learning_epoch"]),
-      baseDigest: LessonSetDigest(rawValue: row["base_digest"]),
-      candidateDigest: CandidateDigest(rawValue: row["candidate_digest"]),
-      generation: row["generation"],
+      id: trialId,
+      jobId: jobId,
+      epoch: LearningEpoch(epoch),
+      baseDigest: LessonSetDigest(rawValue: baseDigest),
+      candidateDigest: CandidateDigest(rawValue: candidateDigest),
+      generation: generation,
       state: state,
-      algorithm: algorithm
+      algorithm: LearningAlgorithm(rawValue: algorithm)
     )
   }
 
@@ -112,16 +121,6 @@ extension ScheduledLearningStoreGRDB {
   }
 }
 
-// MARK: - Decision Decoding
-
-private struct AdmissionInputs: Codable {
-  let candidateDigest: CandidateDigest
-
-  enum CodingKeys: String, CodingKey {
-    case candidateDigest = "candidate_digest"
-  }
-}
-
 private extension ScheduledLearningStoreGRDB {
   static func admissionReceipts(
     _ db: Database,
@@ -142,16 +141,17 @@ private extension ScheduledLearningStoreGRDB {
     )
     var matches: [AdmissionReceipt] = []
     for row in rows {
-      let inputsBytes = Data((row["inputs"] as String).utf8)
-      let resultBytes = Data((row["result"] as String).utf8)
       guard
-        (row["algorithm"] as String) == artifact.manifest.algorithm.rawValue,
-        let inputs = try? JSONDecoder().decode(AdmissionInputs.self, from: inputsBytes),
-        let receipt = try? JSONDecoder().decode(AdmissionReceipt.self, from: resultBytes),
-        let canonicalInputs = try? CanonicalJSON.data(encoding: inputs),
-        let canonicalResult = try? CanonicalJSON.data(encoding: receipt),
-        canonicalInputs == inputsBytes,
-        canonicalResult == resultBytes
+        let inputsJSON = SQLiteStoredValue.string(in: row, column: "inputs"),
+        let resultJSON = SQLiteStoredValue.string(in: row, column: "result"),
+        let algorithm = SQLiteStoredValue.string(in: row, column: "algorithm"),
+        algorithm == artifact.manifest.algorithm.rawValue
+      else {
+        throw StoreError.unexpected("candidate admission decision is unreadable")
+      }
+      guard
+        let inputs: AdmissionDecisionInputs = try? decodeCanonicalDecision(inputsJSON),
+        let receipt: AdmissionReceipt = try? decodeCanonicalDecision(resultJSON)
       else {
         throw StoreError.unexpected("candidate admission decision is unreadable")
       }

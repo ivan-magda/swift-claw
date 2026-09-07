@@ -27,6 +27,7 @@ public struct MessageRouter: Sendable {
 
   private let commandHandlers: CommandHandlers
   private let scheduleHandlers: ScheduleHandlers
+  private let learningHandlers: LearningHandlers?
   private let confirmations: ConfirmationResolver
   private let turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
@@ -56,6 +57,9 @@ public struct MessageRouter: Sendable {
     /// The lane tail's settle-and-seal port; nil leaves a bound run's deferred settlement to the
     /// boot backstop and seals nothing.
     learning: ScheduledLearningService? = nil,
+    learningStore: (any ScheduledLearningStore)? = nil,
+    learningRedactor: SecretRedactor? = nil,
+    learningOutboxSignal: OutboxSignal? = nil,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
     feedbackCallbacks: FeedbackCallbackHandler? = nil,
     feedbackChallenges: FeedbackChallengeHandler? = nil,
@@ -120,10 +124,20 @@ public struct MessageRouter: Sendable {
       now: now,
       logger: logger
     )
+    self.learningHandlers = Self.makeLearningHandlers(
+      store: learningStore,
+      outboxSignal: learningOutboxSignal,
+      redactor: learningRedactor,
+      sessionMessages: sessionMessages,
+      pendingConfirmations: pendingConfirmations,
+      replies: replies,
+      now: now
+    )
     self.confirmations = ConfirmationResolver(
       sessionMessages: sessionMessages,
       pendingConfirmations: pendingConfirmations,
       memoryCommands: memoryCommands,
+      learningReset: learningStore,
       schedule: schedule,
       replies: replies,
       now: now,
@@ -151,6 +165,29 @@ public struct MessageRouter: Sendable {
 // MARK: - Routing
 
 private extension MessageRouter {
+  static func makeLearningHandlers(
+    store: (any ScheduledLearningStore)?,
+    outboxSignal: OutboxSignal?,
+    redactor: SecretRedactor?,
+    sessionMessages: any SessionMessageStore,
+    pendingConfirmations: PendingConfirmationRegistry,
+    replies: ReplySender,
+    now: @escaping @Sendable () -> Date
+  ) -> LearningHandlers? {
+    guard let store, let redactor else {
+      return nil
+    }
+    return LearningHandlers(
+      learning: store,
+      redactor: redactor,
+      sessionMessages: sessionMessages,
+      pendingConfirmations: pendingConfirmations,
+      replies: replies,
+      now: now,
+      outboxSignal: outboxSignal
+    )
+  }
+
   func route(rawUpdate: RawUpdate) async throws(RoutingHalt) -> HandleOutcome {
     // A callback-only update normalizes to nil (no message/edited_message); without this branch it
     // would .skipped and the cursor would advance past it. The handler returns a real
@@ -546,6 +583,12 @@ private extension MessageRouter {
       )
     case .schedule(let scheduleCommand):
       return try await routeSchedule(scheduleCommand, rawUpdate: rawUpdate, message: message)
+    case .learning(let learningCommand):
+      return try await routeLearning(
+        learningCommand,
+        rawUpdate: rawUpdate,
+        message: message
+      )
     case .pause(let jobId):
       return try await scheduleHandlers.pause(rawUpdate: rawUpdate, message: message, jobId: jobId)
     case .resume(let jobId):
@@ -617,11 +660,26 @@ private extension MessageRouter {
     }
   }
 
+  func routeLearning(
+    _ command: LearningCommand,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    guard let learningHandlers else {
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        target: .chat(message.chatId),
+        text: CommandReplies.learningUnavailable
+      )
+    }
+    return try await learningHandlers.handle(command, rawUpdate: rawUpdate, message: message)
+  }
+
   /// Plain text first offers itself to any parked confirmation for the session; only an
   /// unclaimed message becomes a durable turn.
   ///
   /// A room skips the offer outright instead of being trusted to come up empty. Nothing can park
-  /// there — the two families that park are refused in `routeAllowed` — and skipping keeps it that
+  /// there — all families that park are refused in `routeAllowed` — and skipping keeps it that
   /// way even if a third one is ever added: a "yes" typed in a topic is just a word.
   func routePlain(
     _ text: String,

@@ -205,7 +205,7 @@ extension ScheduledLearningStoreGRDB {
       guard case .awaitingApproval = plan else {
         return Self.outcome(for: plan, artifact: successor)
       }
-      _ = try Self.closeCandidateTrial(db, candidate: context.predecessor)
+      _ = try Self.closeCandidateTrial(db, candidate: context.predecessor, now: now)
       try Self.recordCandidateArtifact(
         db,
         artifact: successor,
@@ -484,7 +484,7 @@ private extension ScheduledLearningStoreGRDB {
           JOIN learning_candidates AS candidate
             ON candidate.candidate_digest = trial.candidate_digest
           WHERE trial.job_id = ? AND trial.learning_epoch = ? AND trial.base_digest = ?
-            AND candidate.replacement_digest = ?
+            AND candidate.replacement_digest = ? AND trial.algorithm = ?
             AND trial.state NOT IN (?, ?)
         )
         """,
@@ -493,6 +493,7 @@ private extension ScheduledLearningStoreGRDB {
         artifact.manifest.epoch.value,
         artifact.manifest.baseDigest.rawValue,
         artifact.replacement.digest.rawValue,
+        artifact.manifest.algorithm.rawValue,
         LearningTrialState.open.rawValue,
         LearningTrialState.draining.rawValue,
       ]
@@ -505,33 +506,15 @@ private extension ScheduledLearningStoreGRDB {
     receipt: AdmissionReceipt,
     now: Date
   ) throws {
-    struct Inputs: Encodable {
-      let candidateDigest: CandidateDigest
-
-      enum CodingKeys: String, CodingKey {
-        case candidateDigest = "candidate_digest"
-      }
-    }
-    let inputs = try CanonicalJSON.data(encoding: Inputs(candidateDigest: artifact.digest))
-    let result = try CanonicalJSON.data(encoding: receipt)
-    // swiftlint:disable:next optional_data_string_conversion
-    let inputsJSON = String(decoding: inputs, as: UTF8.self)
-    // swiftlint:disable:next optional_data_string_conversion
-    let resultJSON = String(decoding: result, as: UTF8.self)
-    try db.execute(
-      sql: """
-        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
-          decided_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        AdmissionReceipt.kind,
-        artifact.manifest.jobId,
-        artifact.manifest.epoch.value,
-        inputsJSON,
-        resultJSON,
-        artifact.manifest.algorithm.rawValue,
-        EpochSecondCodec.epoch(now),
-      ]
+    try insertDecision(
+      db,
+      kind: AdmissionReceipt.kind,
+      jobId: artifact.manifest.jobId,
+      epoch: artifact.manifest.epoch,
+      inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
+      result: receipt,
+      algorithm: artifact.manifest.algorithm,
+      now: now
     )
   }
 }

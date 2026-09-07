@@ -40,12 +40,18 @@ extension ScheduledLearningStoreGRDB {
       return .superseded
     }
     guard authorization.carrier.isPermitted else {
-      return try closeWithoutCall(db, operation, failure: .carrierPolicyDenied)
+      let outcome = try closeWithoutCall(db, operation, failure: .carrierPolicyDenied)
+      try recomputeEvaluatorOperation(db, operation: operation, outcome: outcome, now: now)
+      return outcome
     }
     guard try budgetPermits(db, authorization, now: now) else {
-      return try closeWithoutCall(db, operation, failure: .budgetDenied)
+      let outcome = try closeWithoutCall(db, operation, failure: .budgetDenied)
+      try recomputeEvaluatorOperation(db, operation: operation, outcome: outcome, now: now)
+      return outcome
     }
-    return try start(db, operation, authorization)
+    let outcome = try start(db, operation, authorization)
+    try recomputeEvaluatorOperation(db, operation: operation, outcome: outcome, now: now)
+    return outcome
   }
 }
 
@@ -62,13 +68,9 @@ extension ScheduledLearningStoreGRDB {
       return false
     }
     // Deliberately throwing, not another `false`: `started` is written by the same statement that
-    // stamps the call id, so a row missing one is corrupt, and returning "duplicate" would let the
-    // caller discard a real result as one already committed.
-    guard let callID = operation.providerCallID else {
-      throw StoreError.unexpected(
-        "started operation \(operation.id.rawValue) has no provider call id to charge"
-      )
-    }
+    // stamps the call reservation, so a row missing any required part is corrupt. Returning
+    // "duplicate" would let the caller discard a real result as one already committed.
+    let reservation = try startedOperationReservation(operation)
     guard product(result.product, belongsTo: operation.phase) else {
       throw StoreError.unexpected(
         "operation \(operation.id.rawValue) received a product for another phase"
@@ -84,7 +86,7 @@ extension ScheduledLearningStoreGRDB {
     try chargeLearningUsage(
       db,
       operation: operation,
-      callID: callID,
+      callID: reservation.providerCallID,
       model: result.usage.model,
       promptTokens: result.usage.promptTokens,
       completionTokens: result.usage.completionTokens,
@@ -93,6 +95,9 @@ extension ScheduledLearningStoreGRDB {
       isEstimated: result.usage.isEstimated,
       now: now
     )
+    guard try readState(db, jobId: operation.jobId)?.epoch == operation.epoch else {
+      return true
+    }
     switch result.product {
     case .failure:
       break
@@ -112,6 +117,15 @@ extension ScheduledLearningStoreGRDB {
           now: now
         )
       }
+    }
+    if operation.phase == .evaluator {
+      try recomputeEvaluatorSource(
+        db,
+        jobId: operation.jobId,
+        epoch: operation.epoch,
+        evidenceDigest: operation.sourceDigest,
+        now: now
+      )
     }
     return true
   }
@@ -254,6 +268,7 @@ extension ScheduledLearningStoreGRDB {
   /// The daemon owns its database alone, so every row still `started` or `claimed` at boot belongs
   /// to a process that is gone.
   static func reconcile(_ db: Database, now: Date) throws -> OperationReconciliation {
+    let affectedEvaluatorRuns = try bootAffectedEvaluatorRuns(db)
     let interrupted = try operationIDs(db, state: .started)
     for id in interrupted {
       try chargeInterrupted(db, id: id, now: now)
@@ -265,9 +280,59 @@ extension ScheduledLearningStoreGRDB {
         LearningOperationState.claimed.rawValue,
       ]
     )
+    let returnedToClaimable = db.changesCount
+    for runId in affectedEvaluatorRuns {
+      _ = try recomputeAndReconcile(db, runId: runId, now: now)
+    }
     return OperationReconciliation(
       interrupted: interrupted.count,
-      returnedToClaimable: db.changesCount
+      returnedToClaimable: returnedToClaimable
+    )
+  }
+}
+
+// MARK: - Trial Projection Hooks
+
+private extension ScheduledLearningStoreGRDB {
+  static func recomputeEvaluatorOperation(
+    _ db: Database,
+    operation: OperationRow,
+    outcome: AuthorizeOutcome,
+    now: Date
+  ) throws {
+    guard operation.phase == .evaluator, outcome != .superseded else {
+      return
+    }
+    try recomputeEvaluatorSource(
+      db,
+      jobId: operation.jobId,
+      epoch: operation.epoch,
+      evidenceDigest: operation.sourceDigest,
+      now: now
+    )
+  }
+
+  static func bootAffectedEvaluatorRuns(_ db: Database) throws -> [Int64] {
+    try Int64.fetchAll(
+      db,
+      sql: """
+        SELECT DISTINCT evidence.run_id
+        FROM learning_operations AS operation
+        JOIN learning_evidence AS evidence
+          ON evidence.job_id = operation.job_id
+          AND evidence.learning_epoch = operation.learning_epoch
+          AND evidence.evidence_digest = operation.source_digest
+        JOIN trial_assignments AS assignment ON assignment.run_id = evidence.run_id
+        JOIN job_learning_state AS learning ON learning.job_id = assignment.job_id
+          AND learning.learning_epoch = assignment.learning_epoch
+        WHERE operation.phase = ? AND operation.state IN (?, ?)
+        ORDER BY evidence.run_id
+        """,
+      arguments: [
+        LearningPhase.evaluator.rawValue,
+        LearningOperationState.started.rawValue,
+        LearningOperationState.claimed.rawValue,
+      ]
     )
   }
 }
@@ -409,21 +474,17 @@ private extension ScheduledLearningStoreGRDB {
     guard let operation = try readOperation(db, id: id) else {
       return
     }
-    guard let callID = operation.providerCallID, let route = operation.route else {
-      throw StoreError.unexpected(
-        "started operation \(id.rawValue) has no provider call id or route to charge"
-      )
-    }
+    let reservation = try startedOperationReservation(operation)
     // Before the state change, so a failure to charge aborts the whole reconciliation rather than
     // leaving a closed reservation whose spend was never recorded.
     try chargeLearningUsage(
       db,
       operation: operation,
-      callID: callID,
-      model: route,
-      promptTokens: operation.reservedTokens,
+      callID: reservation.providerCallID,
+      model: reservation.route,
+      promptTokens: reservation.reservedTokens,
       completionTokens: 0,
-      costUSD: operation.reservedCostUSD,
+      costUSD: reservation.reservedCostUSD,
       costSource: .heuristic,
       isEstimated: true,
       now: now

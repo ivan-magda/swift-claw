@@ -62,15 +62,16 @@ public actor ScheduledLearningService {
     _ = kickDrain(now: now())
   }
 
-  /// Three duties: seal what settled, reconcile open trials against their deadlines, and age data
-  /// out. Trial reconciliation and retention join later; sealing is the one that ships here.
+  /// Seals settled runs, then reconciles live trials against their deadlines. Retention joins
+  /// later; errors remain isolated so one bad row cannot starve later work.
   public func sweep(now: Date) async {
     await sealSettled(now: now)
+    _ = await reconcileTrials(now: now)
   }
 
   /// Runs after boot reconciliation has settled what the last process left open, so this pass sees
-  /// those runs already frozen. It reads the durable queue and seals; it never settles a run
-  /// itself, so it cannot disturb the ordering the boot sweep and its approval backstop rely on.
+  /// those runs already frozen. It reconciles operations, seals, then reconciles trials; it never
+  /// settles a run itself, so it cannot disturb the boot sweep and approval-backstop ordering.
   ///
   /// The operation pass goes first, and no learning call may be dispatched before it returns: a
   /// prior process's `started` operation has to be charged and closed as unknown before anything
@@ -79,6 +80,34 @@ public actor ScheduledLearningService {
   public func reconcileAtBoot(now: Date) async {
     reconcileOperations(now: now)
     await sealSettled(now: now)
+    _ = await reconcileTrials(now: now)
+  }
+
+  @discardableResult
+  public func reconcileTrials(now: Date) async -> [TrialReconciliation] {
+    let identities: [LearningTrialIdentity]
+    do {
+      identities = try store.liveTrialIdentities()
+    } catch {
+      logger.error("learning sweep could not read live trials: \(error)")
+      return []
+    }
+
+    var reconciliations: [TrialReconciliation] = []
+    for identity in identities {
+      do {
+        switch try store.reconcileTrial(identity, now: now) {
+        case .stale:
+          break
+        case .reconciled(let reconciliation):
+          reconciliations.append(reconciliation)
+        }
+      } catch {
+        logger.error("trial \(identity.trialId) reconciliation failed: \(error)")
+      }
+      await Task.yield()
+    }
+    return reconciliations
   }
 }
 

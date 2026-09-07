@@ -302,28 +302,58 @@ private extension EvaluationRunEnvironment {
 /// `Sendable` wrappers that lean on GRDB's own serialization — and an actor cannot satisfy a
 /// synchronous requirement.
 final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable {
+  struct ServiceBehavior: Sendable {
+    let identities: [LearningTrialIdentity]?
+    let trialResults: [Int64: TrialReconciliationResult]
+    let failingTrialIds: Set<Int64>
+    let failEnumeration: Bool
+    let unsealedRunIds: [Int64]?
+    let handledSealRunIds: Set<Int64>
+
+    init(
+      identities: [LearningTrialIdentity]? = nil,
+      trialResults: [Int64: TrialReconciliationResult] = [:],
+      failingTrialIds: Set<Int64> = [],
+      failEnumeration: Bool = false,
+      unsealedRunIds: [Int64]? = nil,
+      handledSealRunIds: Set<Int64> = []
+    ) {
+      self.identities = identities
+      self.trialResults = trialResults
+      self.failingTrialIds = failingTrialIds
+      self.failEnumeration = failEnumeration
+      self.unsealedRunIds = unsealedRunIds
+      self.handledSealRunIds = handledSealRunIds
+    }
+  }
+
   private let lock = NSLock()
   private let base: ScheduledLearningStoreGRDB
   private let supersedes: Bool
   private let admissionFails: Bool
   private let recordsReviewCommits: Bool
   private let failingReviewCandidate: CandidateDigest?
+  private let serviceBehavior: ServiceBehavior
   private var presented: [LearningAuthorization] = []
   private var reviewSubjects: Set<String> = []
   private var admissions = 0
+  private var recordedServiceCalls: [String] = []
+  private var bootReconciliationFails = false
 
   init(
     base: ScheduledLearningStoreGRDB,
     supersedes: Bool = false,
     admissionFails: Bool = false,
     recordsReviewCommits: Bool = false,
-    failingReviewCandidate: CandidateDigest? = nil
+    failingReviewCandidate: CandidateDigest? = nil,
+    serviceBehavior: ServiceBehavior = ServiceBehavior()
   ) {
     self.base = base
     self.supersedes = supersedes
     self.admissionFails = admissionFails
     self.recordsReviewCommits = recordsReviewCommits
     self.failingReviewCandidate = failingReviewCandidate
+    self.serviceBehavior = serviceBehavior
   }
 
   /// Every authorization the runner presented, in order.
@@ -335,6 +365,62 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
 
   var admissionAttempts: Int {
     lock.withLock { admissions }
+  }
+
+  var serviceCalls: [String] {
+    lock.withLock { recordedServiceCalls }
+  }
+
+  var failBootReconciliation: Bool {
+    get { lock.withLock { bootReconciliationFails } }
+    set { lock.withLock { bootReconciliationFails = newValue } }
+  }
+
+  func clearServiceCalls() {
+    lock.withLock { recordedServiceCalls.removeAll() }
+  }
+
+  func applyTrialDecision(
+    _ decision: TrialDecision,
+    trial: LearningTrial,
+    feedbackRevision: FeedbackRevision,
+    now: Date
+  ) throws(StoreError) -> DecisionReceipt? {
+    try base.applyTrialDecision(
+      decision,
+      trial: trial,
+      feedbackRevision: feedbackRevision,
+      now: now
+    )
+  }
+
+  func rollback(_ trigger: RollbackTrigger, now: Date) throws(StoreError) -> DecisionReceipt? {
+    try base.rollback(trigger, now: now)
+  }
+
+  func commitPromotionReply(
+    updateId: Int64,
+    target: NewFeedbackTarget,
+    chunks: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> PromotionReplyOutcome {
+    try base.commitPromotionReply(updateId: updateId, target: target, chunks: chunks, now: now)
+  }
+
+  func currentPromotion(jobId: Int64) throws(StoreError) -> DecisionReceipt? {
+    try base.currentPromotion(jobId: jobId)
+  }
+
+  func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView] {
+    try base.learningView(jobId: jobId)
+  }
+
+  func applyReset(
+    updateId: Int64,
+    jobId: Int64,
+    now: Date
+  ) throws(StoreError) -> ConfirmedLearningResetResult {
+    try base.applyReset(updateId: updateId, jobId: jobId, now: now)
   }
 
   func createTargets(
@@ -452,6 +538,38 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     try base.openTrial(jobId: jobId)
   }
 
+  func recomputeAssignment(
+    runId: Int64,
+    now: Date
+  ) throws(StoreError) -> AssignmentRecomputation {
+    try base.recomputeAssignment(runId: runId, now: now)
+  }
+
+  func liveTrialIdentities() throws(StoreError) -> [LearningTrialIdentity] {
+    recordServiceCall("live")
+    if serviceBehavior.failEnumeration {
+      throw .unexpected("injected live-trial enumeration failure")
+    }
+    if let identities = serviceBehavior.identities {
+      return identities
+    }
+    return try base.liveTrialIdentities()
+  }
+
+  func reconcileTrial(
+    _ identity: LearningTrialIdentity,
+    now: Date
+  ) throws(StoreError) -> TrialReconciliationResult {
+    recordServiceCall("trial:\(identity.trialId)")
+    if serviceBehavior.failingTrialIds.contains(identity.trialId) {
+      throw .unexpected("injected trial reconciliation failure")
+    }
+    if let result = serviceBehavior.trialResults[identity.trialId] {
+      return result
+    }
+    return try base.reconcileTrial(identity, now: now)
+  }
+
   func settlement(runId: Int64) throws(StoreError) -> RunSettlement? {
     try base.settlement(runId: runId)
   }
@@ -470,12 +588,20 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   }
 
   func unsealed(limit: Int) throws(StoreError) -> [Int64] {
-    try base.unsealed(limit: limit)
+    recordServiceCall("unsealed")
+    if let runIds = serviceBehavior.unsealedRunIds {
+      return runIds
+    }
+    return try base.unsealed(limit: limit)
   }
 
   @discardableResult
   func sealEvidence(runId: Int64, now: Date) throws(StoreError) -> SealOutcome {
-    try base.sealEvidence(runId: runId, now: now)
+    recordServiceCall("seal:\(runId)")
+    if serviceBehavior.handledSealRunIds.contains(runId) {
+      return .alreadySealed
+    }
+    return try base.sealEvidence(runId: runId, now: now)
   }
 
   func evidence(runId: Int64) throws(StoreError) -> SealedEvidence? {
@@ -512,6 +638,16 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
 
   @discardableResult
   func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation {
-    try base.reconcileOperationsAtBoot(now: now)
+    recordServiceCall("operations")
+    if failBootReconciliation {
+      throw .unexpected("injected operation reconciliation failure")
+    }
+    return try base.reconcileOperationsAtBoot(now: now)
+  }
+}
+
+private extension RecordingLearningStore {
+  func recordServiceCall(_ call: String) {
+    lock.withLock { recordedServiceCalls.append(call) }
   }
 }

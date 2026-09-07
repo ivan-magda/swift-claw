@@ -471,34 +471,15 @@ extension ScheduledLearningStoreGRDB {
 
   static func closeCandidateTrial(
     _ db: Database,
-    candidate: CandidateArtifact
+    candidate: CandidateArtifact,
+    now: Date
   ) throws -> Int64? {
-    let trialId = try Int64.fetchOne(
-      db,
-      sql: """
-        UPDATE learning_trials SET state = ?, close_reason = ?
-        WHERE candidate_digest = ? AND job_id = ? AND learning_epoch = ? AND state IN (?, ?)
-        RETURNING trial_id
-        """,
-      arguments: [
-        LearningTrialState.fellBack.rawValue,
-        hardVetoReason,
-        candidate.digest.rawValue,
-        candidate.manifest.jobId,
-        candidate.manifest.epoch.value,
-        LearningTrialState.open.rawValue,
-        LearningTrialState.draining.rawValue,
-      ]
-    )
-    if let trialId {
-      try db.execute(
-        sql: """
-          UPDATE job_learning_state SET open_trial_id = NULL
-          WHERE job_id = ? AND learning_epoch = ? AND open_trial_id = ?
-          """,
-        arguments: [candidate.manifest.jobId, candidate.manifest.epoch.value, trialId]
-      )
+    guard let trial = try trialRow(db, candidate: candidate.digest),
+      trial.state == .open || trial.state == .draining
+    else {
+      return nil
     }
-    return trialId
+    try terminalFallback(db, trialId: trial.id, now: now)
+    return trial.id
   }
 }

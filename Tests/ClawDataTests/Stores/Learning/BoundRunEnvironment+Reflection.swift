@@ -232,7 +232,7 @@ extension BoundRunEnvironment {
           INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
             generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
             consumed_assignments, cohort_cutoff, state, algorithm)
-          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 5, 0, ?, ?, ?)
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
           """,
         arguments: [
           jobId,
@@ -240,12 +240,28 @@ extension BoundRunEnvironment {
           candidate.manifest.baseDigest.rawValue,
           candidate.digest.rawValue,
           EpochSecondCodec.epoch(now),
-          EpochSecondCodec.epoch(now.addingTimeInterval(3_600)),
-          EpochSecondCodec.epoch(now.addingTimeInterval(7_200)),
+          EpochSecondCodec.epoch(now.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow)),
+          EpochSecondCodec.epoch(now.addingTimeInterval(TrialAdmissionPolicy.decisionWindow)),
           EpochSecondCodec.epoch(now),
           LearningTrialState.open.rawValue,
           LearningAlgorithm.v1.rawValue,
         ]
+      )
+      let trialId = db.lastInsertedRowID
+      try ScheduledLearningStoreGRDB.insertDecision(
+        db,
+        kind: AdmissionReceipt.kind,
+        jobId: jobId,
+        epoch: candidate.manifest.epoch,
+        inputs: AdmissionDecisionInputs(candidateDigest: candidate.digest),
+        result: AdmissionReceipt(
+          candidateDigest: candidate.digest,
+          replacementDigest: candidate.replacement.digest,
+          trialId: trialId,
+          generation: 1
+        ),
+        algorithm: .v1,
+        now: now
       )
     }
   }

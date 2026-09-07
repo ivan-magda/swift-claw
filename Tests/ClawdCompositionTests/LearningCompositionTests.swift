@@ -13,7 +13,8 @@ import Testing
 /// `TurnRunner` hop is tested against a double, so without this suite the real closure never runs.
 @Suite struct LearningCompositionTests {
   @Test func theArmedRootFreezesTheSurfaceABoundRunRanOn() throws {
-    // given — a real builder over real stores, learning armed, and one bound run from its own fire
+    // given — a real builder over real stores, learning armed, and one bound run from its own
+    // fire
     let builder = try LearningComposition.makeBuilder(learningEnabled: true)
     let runId = try LearningComposition.fireBoundRun(builder)
     let freeze = builder.makeLearningSurfaceFreeze(
@@ -56,6 +57,111 @@ import Testing
     // The turn path must refuse the pinned read too: a binding written before the flag came off
     // outlives the flag, and an approval parked on it can resume under a disarmed daemon.
     #expect(builder.makePinnedLessonStore() == nil)
+  }
+
+  @Test func theDisarmedRootStillComposesTheRedactedLearningReaderAndReset() async throws {
+    // given — retained learning state exists although the optional worker service is disabled.
+    let response = HTTPResult(
+      statusCode: 200,
+      headers: [:],
+      body: Data(#"{"ok":true,"result":{"message_id":7,"chat":{"id":777}}}"#.utf8)
+    )
+    let http = ScriptedHTTPExecutor([.ok(response), .ok(response), .ok(response)])
+    let builder = try LearningComposition.makeBuilder(learningEnabled: false, http: http)
+    try builder.stores.allowlist.seedAllowlist(userIds: [777])
+    let now = Date(timeIntervalSince1970: 1_782_000_600)
+    let job = try LearningComposition.createJob(builder, now: now, label: "tg-token")
+    _ = try builder.stores.learning.armJob(jobId: job.id, now: now)
+    let router = builder.makeIntakeRouter(
+      coordination: DaemonBuilder.TurnCoordination(),
+      turnRunner: IdleCompositionTurns(),
+      imageCache: ImageCache(),
+      scheduleSurface: LearningComposition.scheduleSurface(builder),
+      approvalCallbacks: nil,
+      doctor: IdleCompositionDoctor(),
+      learning: nil
+    )
+
+    // when
+    let outcome = await router.handle(
+      rawUpdate: RawUpdate(
+        updateId: 70,
+        message: RawMessage(
+          messageId: 70,
+          fromUserId: 777,
+          chatId: 777,
+          text: "/learning \(job.id)",
+          caption: nil,
+          mediaKind: nil,
+          chatKind: .private,
+          chatTitle: nil,
+          messageThreadId: nil,
+          senderDisplayName: nil
+        ),
+        editedMessage: nil
+      )
+    )
+    let resetPrompt = await router.handle(
+      rawUpdate: RawUpdate(
+        updateId: 71,
+        message: RawMessage(
+          messageId: 71,
+          fromUserId: 777,
+          chatId: 777,
+          text: "/learning reset \(job.id)",
+          caption: nil,
+          mediaKind: nil,
+          chatKind: .private,
+          chatTitle: nil,
+          messageThreadId: nil,
+          senderDisplayName: nil
+        ),
+        editedMessage: nil
+      )
+    )
+    let reset = await router.handle(
+      rawUpdate: RawUpdate(
+        updateId: 72,
+        message: RawMessage(
+          messageId: 72,
+          fromUserId: 777,
+          chatId: 777,
+          text: "yes",
+          caption: nil,
+          mediaKind: nil,
+          chatKind: .private,
+          chatTitle: nil,
+          messageThreadId: nil,
+          senderDisplayName: nil
+        ),
+        editedMessage: nil
+      )
+    )
+
+    // then — omitting the independent store/redactor injection hides state or leaks root secrets.
+    #expect(outcome == .processed)
+    #expect(resetPrompt == .processed)
+    #expect(reset == .processed)
+    #expect(builder.makeLearningService() == nil)
+    let calls = await http.recorded
+    let call = try #require(calls.first)
+    let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+    let text = try #require(body["text"] as? String)
+    #expect(text.contains("Schedule \(job.id)"))
+    #expect(text.contains(SecretRedactor.replacement))
+    #expect(text.contains("tg-token") == false)
+    let promptBody = try #require(
+      JSONSerialization.jsonObject(with: calls[1].body) as? [String: Any]
+    )
+    let prompt = try #require(promptBody["text"] as? String)
+    #expect(prompt.contains(SecretRedactor.replacement))
+    #expect(prompt.contains("tg-token") == false)
+    let view = try #require(try builder.stores.learning.learningView(jobId: job.id).first)
+    guard case .readable(let readable) = view else {
+      Issue.record("expected reset learning state")
+      return
+    }
+    #expect(readable.epoch == LearningEpoch(2))
   }
 
   @Test func feedbackRouterIsComposedOnlyWhileLearningIsArmed() async throws {
@@ -277,7 +383,10 @@ private enum LearningComposition {
     tool(name: "web_fetch", risk: .ask),
   ]
 
-  static func makeBuilder(learningEnabled: Bool) throws -> DaemonBuilder {
+  static func makeBuilder(
+    learningEnabled: Bool,
+    http: ScriptedHTTPExecutor = ScriptedHTTPExecutor([])
+  ) throws -> DaemonBuilder {
     var environment = [
       AppConfig.EnvKey.stateRoot: NSTemporaryDirectory() + "clawd-learn-" + UUID().uuidString,
       AppConfig.EnvKey.llmModel: CompositionAcceptance.qualifiedModel,
@@ -286,7 +395,7 @@ private enum LearningComposition {
       environment[AppConfig.EnvKey.learningEnabled] = "true"
     }
     return try CompositionAcceptance.makeBuilder(
-      http: ScriptedHTTPExecutor([]),
+      http: http,
       config: try AppConfig.load(environment: environment)
     )
   }
@@ -303,11 +412,15 @@ private enum LearningComposition {
     return fired.runId
   }
 
-  static func createJob(_ builder: DaemonBuilder, now: Date) throws -> ScheduledJob {
+  static func createJob(
+    _ builder: DaemonBuilder,
+    now: Date,
+    label: String = "digest"
+  ) throws -> ScheduledJob {
     try builder.stores.scheduledJobs.create(
       NewScheduledJob(
         ownerChatId: 777,
-        label: "digest",
+        label: label,
         prompt: "Summarize my unread items",
         recurrence: nil,
         timezone: "Europe/Berlin",

@@ -38,6 +38,8 @@ import Testing
     #expect(outcome == .processed)
     let sent = try #require(await harness.transport.sent.first)
     #expect(sent.text == CommandReplies.help(mode: .group))
+    #expect(sent.text.contains("/learning") == false)
+    #expect(sent.text.contains("learning state live in my owner's direct chat"))
     #expect(
       sent.target
         == DeliveryTarget(

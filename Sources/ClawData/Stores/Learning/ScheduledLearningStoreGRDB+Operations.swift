@@ -62,26 +62,37 @@ private extension ScheduledLearningStoreGRDB {
     guard try sourceIsClaimable(db, key: key) else {
       return nil
     }
-    guard let latest = try latestAttempt(db, key: key.digest) else {
-      return try insertClaim(db, key: key, generation: 1, supersedes: nil, now: now)
+    let claimed: ClaimedOperation?
+    if let latest = try latestAttempt(db, key: key.digest) {
+      switch latest.state {
+      case .pending:
+        // A claim the last process took but never authorized. No call was ever made under this row,
+        // so the attempt is resumed where it stopped rather than replaced by a new generation.
+        claimed = try reclaim(db, latest, key: key)
+      case .interruptedUnknown:
+        claimed = try insertClaim(
+          db,
+          key: key,
+          generation: latest.attemptGeneration + 1,
+          supersedes: latest.id,
+          now: now
+        )
+      case .claimed, .started, .succeeded, .failed, .failedNoCall:
+        claimed = nil
+      }
+    } else {
+      claimed = try insertClaim(db, key: key, generation: 1, supersedes: nil, now: now)
     }
-
-    switch latest.state {
-    case .pending:
-      // A claim the last process took but never authorized. No call was ever made under this row,
-      // so the attempt is resumed where it stopped rather than replaced by a new generation.
-      return try reclaim(db, latest, key: key)
-    case .interruptedUnknown:
-      return try insertClaim(
+    if claimed != nil, key.phase == .evaluator {
+      try recomputeEvaluatorSource(
         db,
-        key: key,
-        generation: latest.attemptGeneration + 1,
-        supersedes: latest.id,
+        jobId: key.jobId,
+        epoch: key.epoch,
+        evidenceDigest: key.sourceDigest,
         now: now
       )
-    case .claimed, .started, .succeeded, .failed, .failedNoCall:
-      return nil
     }
+    return claimed
   }
 
   /// What the key's source has to be for the question to still be worth asking.
@@ -237,7 +248,8 @@ extension ScheduledLearningStoreGRDB {
       db,
       sql: """
         SELECT job_id, learning_epoch, phase, source_digest, key_digest, carrier_digest, state,
-          route, provider_call_id, reserved_tokens, reserved_cost_usd
+          failure_code, route, provider_call_id, reserved_tokens, reserved_cost_usd,
+          reservation_state
         FROM learning_operations WHERE operation_id = ?
         """,
       arguments: [id.rawValue]
@@ -245,19 +257,69 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
+    guard
+      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+      let phaseRaw = SQLiteStoredValue.string(in: row, column: "phase"),
+      let sourceDigest = SQLiteStoredValue.string(in: row, column: "source_digest"),
+      let keyDigest = SQLiteStoredValue.string(in: row, column: "key_digest"),
+      let carrier = SQLiteStoredValue.nullableString(in: row, column: "carrier_digest"),
+      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+      let failureRaw = SQLiteStoredValue.nullableString(in: row, column: "failure_code"),
+      let route = SQLiteStoredValue.nullableString(in: row, column: "route"),
+      let providerCall = SQLiteStoredValue.nullableString(in: row, column: "provider_call_id"),
+      let reservedTokens = SQLiteStoredValue.nullableInt(in: row, column: "reserved_tokens"),
+      let reservedCost = SQLiteStoredValue.nullableDouble(in: row, column: "reserved_cost_usd"),
+      let reservationState = SQLiteStoredValue.nullableString(in: row, column: "reservation_state")
+    else {
+      throw StoreError.unexpected("operation \(id.rawValue) holds unreadable stored values")
+    }
+    let failure = failureRaw.value.flatMap(LearningOperationFailure.init(rawValue:))
+    guard failureRaw.value == nil || failure != nil else {
+      throw StoreError.unexpected("operation \(id.rawValue) holds an unreadable failure")
+    }
     return OperationRow(
       id: id,
-      jobId: row["job_id"],
-      epoch: LearningEpoch(row["learning_epoch"]),
-      phase: try learningPhase(row["phase"], of: id),
-      sourceDigest: row["source_digest"],
-      keyDigest: LearningOperationKeyDigest(rawValue: row["key_digest"]),
-      carrierDigest: (row["carrier_digest"] as String?).map(CarrierDigest.init(rawValue:)),
-      state: try operationState(row["state"], of: id),
-      route: row["route"],
-      providerCallID: (row["provider_call_id"] as String?).map(ProviderCallID.init(rawValue:)),
-      reservedTokens: row["reserved_tokens"] ?? 0,
-      reservedCostUSD: row["reserved_cost_usd"] ?? 0
+      jobId: jobId,
+      epoch: LearningEpoch(epoch),
+      phase: try learningPhase(phaseRaw, of: id),
+      sourceDigest: sourceDigest,
+      keyDigest: LearningOperationKeyDigest(rawValue: keyDigest),
+      carrierDigest: carrier.value.map(CarrierDigest.init(rawValue:)),
+      state: try operationState(stateRaw, of: id),
+      failure: failure,
+      route: route.value,
+      providerCallID: providerCall.value.map(ProviderCallID.init(rawValue:)),
+      reservedTokens: reservedTokens.value,
+      reservedCostUSD: reservedCost.value,
+      reservationState: reservationState.value
+    )
+  }
+
+  static func startedOperationReservation(
+    _ operation: OperationRow
+  ) throws -> StartedOperationReservation {
+    guard
+      let providerCallID = operation.providerCallID,
+      providerCallID.rawValue.isEmpty == false,
+      let route = operation.route,
+      route.isEmpty == false,
+      let reservedTokens = operation.reservedTokens,
+      reservedTokens >= 0,
+      let reservedCostUSD = operation.reservedCostUSD,
+      reservedCostUSD.isFinite,
+      reservedCostUSD >= 0,
+      operation.reservationState == LearningReservationState.open.rawValue
+    else {
+      throw StoreError.unexpected(
+        "started operation \(operation.id.rawValue) has an unreadable call reservation"
+      )
+    }
+    return StartedOperationReservation(
+      providerCallID: providerCallID,
+      route: route,
+      reservedTokens: reservedTokens,
+      reservedCostUSD: reservedCostUSD
     )
   }
 
@@ -294,8 +356,17 @@ extension ScheduledLearningStoreGRDB {
     let keyDigest: LearningOperationKeyDigest
     let carrierDigest: CarrierDigest?
     let state: LearningOperationState
+    let failure: LearningOperationFailure?
     let route: String?
     let providerCallID: ProviderCallID?
+    let reservedTokens: Int?
+    let reservedCostUSD: Double?
+    let reservationState: String?
+  }
+
+  struct StartedOperationReservation {
+    let providerCallID: ProviderCallID
+    let route: String
     let reservedTokens: Int
     let reservedCostUSD: Double
   }

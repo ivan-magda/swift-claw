@@ -213,7 +213,11 @@ public struct JobLearningState: Sendable, Equatable {
   }
 }
 
-public protocol ScheduledLearningStore: Sendable {
+public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
+  /// One read snapshot for the complete owner-facing learning projection. nil lists armed jobs;
+  /// a positive id returns exactly one readable, unarmed, missing, or unreadable result.
+  func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView]
+
   /// Revalidates and admits one already-persisted immutable candidate.
   func admitCandidate(
     digest: CandidateDigest,
@@ -295,6 +299,42 @@ public protocol ScheduledLearningStore: Sendable {
   /// Every decision about whether a trial is still live goes through here, never through
   /// `JobLearningState.openTrialId`.
   func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial?
+
+  /// Rebuilds one assignment cache from its exact durable sources and current feedback.
+  func recomputeAssignment(
+    runId: Int64,
+    now: Date
+  ) throws(StoreError) -> AssignmentRecomputation
+
+  /// Every open-or-draining trial identity, sorted by job and trial id.
+  func liveTrialIdentities() throws(StoreError) -> [LearningTrialIdentity]
+
+  /// Reprojects one exact live cohort and applies only its open-to-draining edge.
+  func reconcileTrial(
+    _ identity: LearningTrialIdentity,
+    now: Date
+  ) throws(StoreError) -> TrialReconciliationResult
+
+  /// Revalidates the complete cohort and commits an exact terminal recommendation atomically.
+  func applyTrialDecision(
+    _ decision: TrialDecision,
+    trial: LearningTrial,
+    feedbackRevision: FeedbackRevision,
+    now: Date
+  ) throws(StoreError) -> DecisionReceipt?
+
+  /// Restores only the direct base of the named current promotion.
+  func rollback(_ trigger: RollbackTrigger, now: Date) throws(StoreError) -> DecisionReceipt?
+
+  /// Claims the command update and commits an exact current promotion target with all chunks.
+  func commitPromotionReply(
+    updateId: Int64,
+    target: NewFeedbackTarget,
+    chunks: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> PromotionReplyOutcome
+
+  func currentPromotion(jobId: Int64) throws(StoreError) -> DecisionReceipt?
 
   /// The terminal receipt the transaction that won the run's state wrote. Nil for a run that never
   /// bound, or one that is still live.
