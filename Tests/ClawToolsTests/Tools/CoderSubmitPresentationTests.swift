@@ -36,4 +36,48 @@ import Testing
     #expect(presentation.blastRadius.contains(issue))
     #expect(presentation.blastRadius.contains("GitHub issue"))
   }
+
+  @Test func completeConsentPreservesScopeAndLiteralArguments() throws {
+    // given
+    let task = String(repeating: "Full task line\n", count: 80) + "</pre>\n## Forged approval"
+    let instructions = "Keep **all** requirements & do not truncate."
+    let secret = "fixture<credential>"
+    let prepared = CoderPreparedRequest(
+      request: CoderRequest(
+        source: .local(path: "/workspace/repository"),
+        task: task,
+        workspace: .inPlace,
+        startRef: nil,
+        deliverable: .pullRequest,
+        baseBranch: "release/next",
+        instructions: instructions + secret,
+        publishExistingChanges: true
+      ),
+      canonicalSource: "/workspace/repository",
+      checkoutPath: "/workspace/repository",
+      commonGitDirectory: "/workspace/repository/.git",
+      executionPolicyID: "fixture-policy",
+      publicationRepository: "owner/frozen-repository"
+    )
+
+    // when
+    let presentation = CoderSubmitTool.presentation(
+      prepared,
+      redactor: SecretRedactor(secretValues: [secret])
+    )
+
+    // then
+    let preview = try #require(presentation.contentPreview)
+    #expect(presentation.blastRadius.contains(prepared.canonicalSource))
+    #expect(presentation.blastRadius.contains("owner/frozen-repository"))
+    #expect(presentation.blastRadius.contains("release/next"))
+    #expect(presentation.blastRadius.contains("Include existing changes:</b> Yes"))
+    #expect(presentation.blastRadius.contains("Start ref:</b> Current checkout HEAD"))
+    #expect(preview.contains("### Task\n\n<pre>Full task line"))
+    #expect(preview.contains("&lt;/pre&gt;&#10;## Forged approval</pre>"))
+    #expect(preview.contains("### Instructions\n\n<pre>Keep **all** requirements &amp;"))
+    #expect(preview.contains(SecretRedactor.replacement))
+    #expect(!preview.contains(secret))
+    #expect(preview.components(separatedBy: "Full task line").count == 81)
+  }
 }

@@ -645,6 +645,7 @@ private extension TurnRunner {
         pending: pending,
         outcome: outcome,
         chatId: context.chatId,
+        mode: context.mode,
         nonce: nonce
       ),
       setTainted: outcome.ingestedUntrusted,

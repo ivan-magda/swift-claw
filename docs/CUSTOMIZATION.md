@@ -358,11 +358,15 @@ conversational `/cost`, and Coder's limit/timeout cannot enforce a hard dollar c
 To use Coder in a group, add its Telegram chat ID to `CLAW_GROUP_CHATS` and keep that deployment on a
 separate nonpersonal state root, as described in [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup).
 Make the bot a group administrator: Telegram guarantees `getChatMember` checks for other users only
-for administrators. `coder_submit` is the one group tool that always parks an approval. Any current
-participant, including the requester, may approve or deny only from that original prompt; every tap performs a
+for administrators. `coder_submit` is the one group tool that always parks an approval. Its Rich
+Markdown card shows the complete source, workspace, start ref, deliverable, PR target/base,
+existing-change scope, and exact secret-redacted task/instructions. Any current participant,
+including the requester, may approve or deny only from that original prompt; every tap performs a
 fresh membership check and failure leaves the approval pending. The requester remains the job
 identity, and only that person can use status or cancel from the same group topic. Existing group
-auto-run/refusal behavior for all other tools is unchanged.
+auto-run/refusal behavior for all other tools is unchanged. Completion returns to the original topic
+as a result card with state, summary, failure/publication/checks and changed files first, followed by
+compact job, commit, actor and usage details.
 
 Disabled Coder contributes no tools, admits no work and launches no probes. On restart it still
 reconciles jobs admitted while enabled: unfinished jobs become interrupted with one completion notice,

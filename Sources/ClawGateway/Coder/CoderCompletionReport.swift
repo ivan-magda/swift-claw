@@ -8,16 +8,25 @@ public struct CoderCompletionReport: Sendable {
   }
 
   public func chunks(job: CoderJob, result: CoderResult) -> [OutboxChunk] {
-    var lines = ["Coder \(job.id.uuidString): \(result.state.rawValue)", result.summary]
-    lines += workspaceEvidence(result)
-    lines += publicationEvidence(result.publication)
-    lines += executionEvidence(result)
+    var blocks = ["## Coder · \(redact(result.state.rawValue))", field("Summary", result.summary)]
+
     if job.ownership != .none && job.ownership != .stopped {
-      lines.append(
-        "Process ownership unresolved; reservation retained. Operator recovery required."
+      blocks.append(
+        "⚠ Process ownership unresolved; reservation retained. Operator recovery required."
       )
     }
-    return ReplySplitter.split(text: redact(lines.joined(separator: "\n")))
+
+    if let failure = result.failure {
+      blocks.append(field("Failure (\(failure.stage.rawValue))", failure.message))
+    }
+
+    blocks += publicationEvidence(result.publication)
+    blocks += checkEvidence(result.reportedChecks)
+    blocks += workspaceEvidence(result)
+    blocks += ["### Details", field("Job ID", job.id.uuidString)]
+    blocks += executionEvidence(result)
+
+    return CoderCardMarkdown.split(text: blocks.joined(separator: "\n\n"))
       .enumerated().map { index, payload in
         OutboxChunk(
           stepIndex: index,
@@ -32,61 +41,70 @@ public struct CoderCompletionReport: Sendable {
 // MARK: - Result Evidence
 
 private extension CoderCompletionReport {
+  func field(_ label: String, _ value: String) -> String {
+    CoderCardMarkdown.field(label, redact(value))
+  }
+
   func workspaceEvidence(_ result: CoderResult) -> [String] {
-    var lines: [String] = []
-    if let path = result.workspacePath { lines.append("Workspace: \(path)") }
-    if let start = result.startingCommit {
-      let evidence = result.baselineObserved ? "observed" : "worker-reported"
-      lines.append("Starting commit (\(evidence)): \(start)")
-    }
+    var blocks = ["### Changes and workspace"]
+
     if let files = result.changedFiles {
-      lines.append(
-        "Observed changed files: \(files.isEmpty ? "none" : files.joined(separator: ", "))"
-      )
+      blocks.append(field("Observed changed files", files.isEmpty ? "none" : "\(files.count)"))
+      if !files.isEmpty {
+        blocks.append(CoderCardMarkdown.literal(redact(files.joined(separator: "\n"))))
+      }
     } else {
-      lines.append("Changed-file comparison: unavailable")
+      blocks.append(field("Changed-file comparison", "unavailable"))
     }
-    if let branch = result.branch { lines.append("Branch: \(branch)") }
-    if let commit = result.commit { lines.append("Commit: \(commit)") }
-    return lines
+
+    blocks.append(field("Workspace", result.workspacePath ?? "unavailable"))
+    if let branch = result.branch {
+      blocks.append(field("Branch (observed)", branch))
+    }
+
+    return blocks
   }
 
   func publicationEvidence(_ publication: CoderPublication) -> [String] {
-    var lines: [String] = []
     switch publication {
-    case .absent: lines.append("Publication: absent")
-    case .confirmed(let url): lines.append("Publication confirmed: \(url)")
+    case .absent:
+      [field("Publication", "absent")]
+    case .confirmed(let url):
+      [field("Pull request (confirmed)", url)]
     case .unknown(let url):
-      lines.append(
-        "Publication: unknown"
-          + (url.map {
-            "; worker reported \($0)"
-          } ?? "")
-      )
+      [field("Publication", "unknown")]
+        + (url.map { value in
+          [field("Pull request (worker-reported, unconfirmed)", value)]
+        } ?? [])
     }
-    return lines
+  }
+
+  func checkEvidence(_ checks: [String]) -> [String] {
+    ["### Checks (worker-reported)"]
+      + (checks.isEmpty
+        ? [field("Checks", "not reported")]
+        : [CoderCardMarkdown.literal(redact(checks.joined(separator: "\n")))])
   }
 
   func executionEvidence(_ result: CoderResult) -> [String] {
-    var lines: [String] = []
-    if !result.reportedChecks.isEmpty {
-      lines.append("Worker-reported checks: \(result.reportedChecks.joined(separator: "; "))")
-    }
+    let baseline = result.baselineObserved ? "observed" : "worker-reported"
+    let startingCommit =
+      result.startingCommit
+      ?? (result.baselineObserved ? "none (unborn HEAD)" : "unavailable")
+    var blocks = [field("Starting commit (\(baseline))", startingCommit)]
+    if let commit = result.commit { blocks.append(field("Commit (observed)", commit)) }
+    if let author = result.commitAuthor { blocks.append(field("Commit author (observed)", author)) }
+    if let actor = result.githubActor { blocks.append(field("GitHub actor (confirmed PR)", actor)) }
     if let usage = result.reportedUsage {
-      let fields = usage.sorted {
+      let values = usage.sorted {
         $0.key < $1.key
       }.map {
         "\($0.key)=\($0.value)"
       }
-      lines.append("Worker-reported usage: \(fields.joined(separator: ", "))")
+      blocks.append(field("Usage (worker-reported)", values.joined(separator: "; ")))
     } else {
-      lines.append("Worker-reported usage: unavailable")
+      blocks.append(field("Usage (worker-reported)", "unavailable"))
     }
-    if let author = result.commitAuthor { lines.append("Commit author: \(author)") }
-    if let actor = result.githubActor { lines.append("GitHub actor: \(actor)") }
-    if let failure = result.failure {
-      lines.append("Failure (\(failure.stage.rawValue)): \(failure.message)")
-    }
-    return lines
+    return blocks
   }
 }

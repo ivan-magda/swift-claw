@@ -892,7 +892,9 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   symlink/`..` resolution; full URL incl. query/body, **never model-truncated**), a **TAINT banner**
   when the originating turn ingested untrusted content, and human-meaningful **blast radius** (create
   vs overwrite; egress yes/no). Redaction hides **secrets**, not the destination fields needed to
-  judge risk. Workspace-contained
+  judge risk. A Coder approval uses a Rich Markdown card that shows the complete source, workspace,
+  start ref, deliverable, frozen PR repository/base, existing-change scope, and the exact redacted
+  task and instructions; group cards state that any current member may decide. Workspace-contained
   **privileged files** are **writable via `file_write` behind an explicit ⚠ privileged-file banner**
   in the prompt (owner decision, 2026-07-09) — flagged, not refused in code, because they steer a
   later turn. The set is every fixed prompt file (`SOUL.md`/`AGENTS.md`/`TOOLS.md`/`USER.md`/
@@ -1034,8 +1036,9 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
 
 - **Opt-in and approved task scope:** interactive owner DMs and configured group topics use the
   durable task-approval path with `ApprovalReason.coderSubmit`; proactive submission is refused.
-  Approvals show native delegation, source/workspace and publication scope. A DM requires the owner.
-  In an allowlisted group, any current participant may approve or deny from the exact original
+  The Rich Markdown consent card shows native delegation, complete source/workspace/start and
+  publication scope, plus the exact task and instructions after secret redaction. A DM requires the
+  owner. In an allowlisted group, any current participant may approve or deny from the exact original
   prompt; a fresh fail-closed `getChatMember` check establishes membership. The original requester
   remains job owner and is the only participant allowed to inspect or cancel it, from the same group
   topic. Bind Coder-controlled execution policy and credential selectors in `executionPolicyID` and
@@ -1105,9 +1108,11 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   crosses Core. Persist cancellation intent, cancel the service-owned Swift task, then join bounded
   process-group teardown. Detached sessions/groups are an accepted v1 termination limitation.
   Daemon interruption never automatically reruns work that may already have published changes.
-  `CoderCompletionReport` renders owner-addressed, redacted chunks using `ReplySplitter` and
-  `ContentHash`, retaining publication confirmed/absent/unknown and observed/worker-reported evidence
-  distinctions. The durable result and report commit together against the rendered state. A cleanup
+  `CoderCompletionReport` renders a redacted Rich Markdown result card to the original conversation.
+  It leads with state, summary, failure/publication/checks and changed files, then keeps job ID,
+  commits, actors and usage in compact technical details. It retains publication
+  confirmed/absent/unknown and observed/worker-reported evidence distinctions. The durable result and
+  report commit together against the rendered state. A cleanup
   failure can describe protocol-file removal with processes already stopped: persisted ownership,
   rather than the failure-stage label, determines reservation release and fatal process-cleanup health.
 - **Native launch protocol:** establish the invocation deadline before `willLaunch`, so suspended

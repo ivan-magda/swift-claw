@@ -120,26 +120,45 @@ extension CoderSubmitTool {
     } else {
       source = prepared.canonicalSource
     }
-    let publication =
-      request.deliverable == .pullRequest
-      ? "pull request to \(prepared.publicationRepository ?? prepared.canonicalSource)"
-      : "local changes"
-    let base = request.baseBranch ?? "repository default"
-    let scope =
-      request.publishExistingChanges
-      ? "may publish existing changes" : "exclude unrelated existing changes from publication"
-    let effect = """
-      Native Codex; source: \(source); workspace: \(request.workspace.rawValue); \
-      start: \(request.startRef ?? "current/default HEAD"); deliverable: \(publication); \
-      base: \(base); \(scope).
-      """
-    return ToolApprovalPresentation(
-      blastRadius: redactor.redact(effect),
-      contentPreview: redactor.redact(
-        [request.task, request.instructions].compactMap { text in
-          text
-        }.joined(separator: "\n")
+    let workspace =
+      request.workspace == .inPlace
+      ? "In place — existing branch and working files"
+      : "Separate copy — committed history only"
+    let start =
+      request.workspace == .inPlace
+      ? "Current checkout HEAD"
+      : request.startRef ?? "Source HEAD / remote default branch"
+    let fields = [
+      ("Source", source),
+      ("Workspace", workspace),
+      ("Start ref", start),
+      ("Deliverable", request.deliverable == .pullRequest ? "Pull request" : "Local changes"),
+      (
+        "PR repository",
+        request.deliverable == .pullRequest
+          ? prepared.publicationRepository ?? prepared.canonicalSource : "Not requested"
       ),
+      (
+        "PR base",
+        request.baseBranch
+          ?? (request.deliverable == .pullRequest ? "Repository default branch" : "Not applicable")
+      ),
+      ("Include existing changes", request.publishExistingChanges ? "Yes" : "No"),
+    ]
+    let scope = fields.map { label, value in
+      CoderCardMarkdown.field(label, redactor.redact(value))
+    }.joined(separator: "\n\n")
+    let task =
+      request.task.map { value in
+        CoderCardMarkdown.literal(redactor.redact(value))
+      } ?? "Use the selected GitHub issue as the task; no additional task text supplied."
+    let instructions =
+      request.instructions.map { value in
+        CoderCardMarkdown.literal(redactor.redact(value))
+      } ?? "None supplied."
+    return ToolApprovalPresentation(
+      blastRadius: scope,
+      contentPreview: "### Task\n\n\(task)\n\n### Instructions\n\n\(instructions)",
       warnings: [
         "Uses your trusted native Codex installation, credentials and configured integrations. Inference leaves this machine; the working directory is not a security sandbox."
       ]

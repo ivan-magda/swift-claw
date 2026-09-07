@@ -693,8 +693,10 @@ These live checks can incur child billing and are separate from the deterministi
 
 Ask in the originating DM or group topic to cancel `Coder job <UUID>`; in a group, only the original
 requester can inspect or cancel it. `/stop` cancels the conversational turn, not an already-admitted
-job. Completion uses existing outbox retries without another LLM turn. Child-reported usage is kept
-with that job, separate from `/cost`; missing usage is unavailable
+job. Completion uses existing outbox retries without another LLM turn. Coder consent cards retain the
+complete secret-redacted task, instructions and publication scope. Result cards lead with outcome,
+publication, checks and changed files, then compact the job, commit, actor and usage evidence.
+Child-reported usage is kept with that job, separate from `/cost`; missing usage is unavailable
 accounting. Coder's concurrency/timeout settings are not a hard dollar cap; full capacity returns busy.
 
 Full doctor and daemon health read persisted reservations and the most recently updated

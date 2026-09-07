@@ -42,9 +42,9 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
 - **Coding tasks from chat.** Opt in to Coder to delegate an approved task from your DM or a
-  configured group topic to your native Codex installation, then receive its result when the
-  background job finishes. Local changes and GitHub pull requests use your installed tools and
-  repository rights.
+  configured group topic to your native Codex installation, then receive a structured result card
+  when the background job finishes. Local changes and GitHub pull requests use your installed tools
+  and repository rights.
 - **Tools from MCP servers.** List a server, store its token encrypted, and its tools join
   the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
   named tool safe, but the exfiltration gate can still require approval. Only you can add a
@@ -64,7 +64,9 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 
 A file write suspends the run until you answer. Every field on the card comes from the daemon's own
 record of the action: the target path after symlink and `..` resolution, the size, and a preview of
-the content. Tap Deny and clawd writes nothing.
+the content. Coder uses a dedicated card with the complete source, workspace, publication scope,
+task, and instructions; its completion card puts the outcome first and keeps technical evidence
+compact. Tap Deny and clawd writes nothing.
 
 ## Install
 

@@ -84,13 +84,15 @@ extension TurnRunner {
     pending: PendingToolAction,
     outcome: TurnOutcome,
     chatId: Int64,
+    mode: ChatMode,
     nonce: String
   ) -> [OutboxChunk] {
     ToolApprovalPrompt.chunks(
       for: ToolApprovalPrompt.Input(
         recorded: pending.recorded,
         taintBanner: outcome.ingestedUntrusted,
-        privilegedFileBanner: Self.isPrivilegedFile(pending.recorded.canonicalTarget)
+        privilegedFileBanner: Self.isPrivilegedFile(pending.recorded.canonicalTarget),
+        isGroup: mode == .group
       ),
       chatId: chatId,
       nonce: nonce

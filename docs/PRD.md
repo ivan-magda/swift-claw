@@ -56,7 +56,8 @@ a fresh membership check; the original requester remains the job identity and al
 cancel it from that topic. Coder
 supervises workspace selection, admission, child lifetime, persistence and reporting; Codex performs
 the coding and requested Git/GitHub workflow. In-place work accepts uncommitted changes; separate
-copies use committed history without a dirty-state snapshot or automatic rollback. A configurable
+copies use committed history without a dirty-state snapshot or automatic rollback. Consent and result
+cards preserve the full decision scope while keeping technical evidence compact. A configurable
 positive concurrency limit returns busy at capacity. Child deadlines and reported usage are separate
 from ordinary conversation budgets, with no hard child dollar-cap claim. Proactive submission is
 excluded. The native trust boundary and request/result contracts are normative in
