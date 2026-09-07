@@ -102,21 +102,6 @@ sudo install -m755 .build/release/clawd /usr/local/bin/clawd
 The full walkthrough, including the ChatGPT-subscription route and troubleshooting, is
 in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
-## Delegate a coding task
-
-With Codex and Git installed and authenticated as the daemon user (plus `gh` for GitHub work),
-set `CLAW_CODER_ENABLED=true` in `clawd.env`, load it and restart. In your private bot DM, try:
-
-> Use Coder in `/Users/me/Developer/my-app` to fix the failing parser test in place. Leave local changes.
-
-> Use Coder to resolve `https://github.com/my-org/my-app/issues/42` in a separate copy and open a pull request.
-
-Paths refer to the daemon machine. In-place work accepts dirty files; a separate copy starts from a
-committed ref. Review the Telegram approval before submission. Ask for a job's status or cancellation
-by its UUID. Capacity N is configurable (default 1); full means busy. Completion uses the existing
-outbox retries. There is no automatic apply-back or rollback, and child billing is separate from
-conversational `/cost`. v1 is owner DM only. See [Coder configuration](docs/CUSTOMIZATION.md#coder-configuration).
-
 ## Security model
 
 swift-claw assumes you are the only person it serves.
