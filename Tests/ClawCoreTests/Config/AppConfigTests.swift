@@ -655,6 +655,22 @@ import Testing
     #expect(config.allowlist == [42])
   }
 
+  @Test func learningIsOffUnlessTheFlagArmsIt() throws {
+    // given — learning must never arm itself: an unset flag has to leave the daemon as it was
+    var armed = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    armed[EnvKey.learningEnabled] = "true"
+
+    // when
+    let byDefault = try AppConfig.load(
+      environment: envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
+    )
+    let explicit = try AppConfig.load(environment: armed)
+
+    // then
+    #expect(byDefault.learningEnabled == false)
+    #expect(explicit.learningEnabled)
+  }
+
   @Test func heartbeatDisabledToleratesAnyAllowlist() throws {
     // given — the default-OFF path must not constrain onboarding (empty allowlist still boots)
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])

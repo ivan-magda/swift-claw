@@ -37,7 +37,8 @@ extension RunStoreGRDB {
           runId: runId,
           event: .pickUp,
           now: now,
-          policyVersion: policyVersion
+          policyVersion: policyVersion,
+          terminal: nil
         ) != nil
       else {
         return nil
@@ -69,12 +70,16 @@ extension RunStoreGRDB {
         return nil
       }
 
-      let event: RunEvent =
-        switch reason {
-        case .cancelled: .cancel
-        case .superseded: .supersede
-        }
-      guard try Self.transitionRun(db, runId: runId, event: event, now: now) != nil else {
+      // Deferred, not settled: the round the command interrupted may still record its usage.
+      guard
+        try Self.transitionRun(
+          db,
+          runId: runId,
+          event: reason.runEvent,
+          now: now,
+          terminal: .deferred(reason.terminalCause)
+        ) != nil
+      else {
         return nil
       }
 
@@ -88,9 +93,17 @@ extension RunStoreGRDB {
     }
   }
 
-  public func failRun(runId: Int64, now: Date) throws(StoreError) {
+  public func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
     try database.writeMapping { db in
-      guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
+      guard
+        try Self.transitionRun(
+          db,
+          runId: runId,
+          event: .fail,
+          now: now,
+          terminal: .settled(cause)
+        ) != nil
+      else {
         return
       }
       try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
@@ -115,15 +128,24 @@ extension RunStoreGRDB {
         arguments: [content, observationMessageId]
       )
 
-      let event: RunEvent =
-        switch cancel {
-        case .none: .resolveDenied
-        case .cancelled: .cancel
-        case .superseded: .supersede
-        }
+      // The owner-deny arm settles: the placeholder above was this run's last owed fact. The
+      // command arm defers like every other `/stop`//`new` termination.
+      let event = cancel?.runEvent ?? .resolveDenied
+      let terminal =
+        cancel.map { reason in
+          TerminalDisposition.deferred(reason.terminalCause)
+        } ?? .settled(.approvalDenied)
       // For the command path the run is already CANCELLED/SUPERSEDED, so the FSM returns nil and we
       // report `.ignored`: the observation fix above was the only remaining work.
-      guard let nextState = try Self.transitionRun(db, runId: runId, event: event, now: now) else {
+      guard
+        let nextState = try Self.transitionRun(
+          db,
+          runId: runId,
+          event: event,
+          now: now,
+          terminal: terminal
+        )
+      else {
         return .ignored
       }
       if nextState == .failed {

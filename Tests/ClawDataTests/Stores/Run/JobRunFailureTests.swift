@@ -90,7 +90,8 @@ import Testing
           chatId: 4242,
           payload: "degraded",
           payloadHash: ContentHash.fnv1a("degraded")
-        )
+        ),
+        cause: .providerFailure
       ),
       now: Date()
     )
@@ -106,7 +107,7 @@ import Testing
     #expect(try fixture.runs.pickUp(runId: fixture.runId, now: Date()) == .scheduled)
 
     // when
-    try fixture.runs.failRun(runId: fixture.runId, now: Date())
+    try fixture.runs.failRun(runId: fixture.runId, cause: .providerFailure, now: Date())
 
     // then
     #expect(try jobFailedCount(fixture.queue, runId: fixture.runId) == 1)
@@ -160,7 +161,7 @@ import Testing
     #expect(try runs.pickUp(runId: runId, now: Date()) == .interactive)
 
     // when
-    try runs.failRun(runId: runId, now: Date())
+    try runs.failRun(runId: runId, cause: .providerFailure, now: Date())
 
     // then
     let count = try queue.read { db in

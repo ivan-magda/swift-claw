@@ -58,8 +58,8 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.commitDegradedTurn(turn, now: now)
   }
 
-  func failRun(runId: Int64, now: Date) throws(StoreError) {
-    try base.failRun(runId: runId, now: now)
+  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
+    try base.failRun(runId: runId, cause: cause, now: now)
   }
 
   func commitSuspendedTurn(
@@ -169,6 +169,10 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
 
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     try base.runOrigin(runId: runId)
+  }
+
+  func jobId(runId: Int64) throws(StoreError) -> Int64? {
+    try base.jobId(runId: runId)
   }
 
   func failRunStalePolicy(
@@ -223,8 +227,8 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     return try base.commitDegradedTurn(turn, now: now)
   }
 
-  func failRun(runId: Int64, now: Date) throws(StoreError) {
-    try base.failRun(runId: runId, now: now)
+  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
+    try base.failRun(runId: runId, cause: cause, now: now)
   }
 
   func commitSuspendedTurn(
@@ -336,6 +340,10 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.runOrigin(runId: runId)
   }
 
+  func jobId(runId: Int64) throws(StoreError) -> Int64? {
+    try base.jobId(runId: runId)
+  }
+
   func failRunStalePolicy(
     runId: Int64,
     sessionId: Int64,
@@ -380,7 +388,7 @@ struct DiskFullRuns: RunStore {
   func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
     .ignored
   }
-  func failRun(runId: Int64, now: Date) throws(StoreError) {}
+  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
   func commitSuspendedTurn(
     runId: Int64,
     sessionId: Int64,
@@ -449,6 +457,9 @@ struct DiskFullRuns: RunStore {
     throw StoreError.diskFull
   }
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
+    throw StoreError.diskFull
+  }
+  func jobId(runId: Int64) throws(StoreError) -> Int64? {
     throw StoreError.diskFull
   }
   func failRunStalePolicy(
@@ -542,7 +553,9 @@ func makeEnv(
   sessionKey: String? = nil,
   typing: any TypingIndicator = NoopTyping(),
   ownerChatId: Int64? = nil,
-  now: @escaping @Sendable () -> Date = { Date() }
+  now: @escaping @Sendable () -> Date = { Date() },
+  freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void = { _, _ in
+  }
 ) throws -> Env {
   let queue = try ClawDatabase.makeInMemoryQueue()
   try ClawDatabase.migrate(queue)
@@ -606,6 +619,7 @@ func makeEnv(
     delivery: transport,
     ownerChatId: ownerChatId,
     now: now,
+    freezeLearningSurface: freezeLearningSurface,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     approvalExpirySeconds: testApprovalExpirySeconds,

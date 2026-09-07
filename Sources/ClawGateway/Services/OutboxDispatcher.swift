@@ -75,9 +75,10 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
 
   // MARK: - Load-bearing
 
-  /// Drains every PENDING row in `(run_id, step_index)` order, delivering each and recording its
-  /// `telegram_message_id` via `markSent`. **Non-throwing by contract** — the dispatcher must
-  /// survive every store/transport failure rather than crash and strand the remaining rows.
+  /// Drains every PENDING row in the store's order — a run's rows first, then any runless learning
+  /// notice — delivering each and recording its `telegram_message_id` via `markSent`.
+  /// **Non-throwing by contract** — the dispatcher must survive every store/transport failure
+  /// rather than crash and strand the remaining rows.
   func drainOnce() async {
     let pendingRows: [OutboxRow]
     do {
@@ -114,26 +115,25 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
         // is the one failure that does not stall the drain, because it is the one failure Telegram
         // tells us how long to wait out.
         logger.warning(
-          "outbox send failed for run \(row.runId) step \(row.stepIndex); leaving it and later rows for the next drain: \(error)"
+          "outbox send failed for \(row.originLabel) step \(row.stepIndex); leaving it and later rows for the next drain: \(error)"
         )
         break
       }
 
       do {
         try outbox.markSent(
-          runId: row.runId,
-          stepIndex: row.stepIndex,
+          deliveryKey: row.deliveryKey,
           telegramMessageId: messageId,
           now: Date()
         )
         logger.debug(
-          "outbox delivered run \(row.runId) step \(row.stepIndex) as message \(messageId)"
+          "outbox delivered \(row.originLabel) step \(row.stepIndex) as message \(messageId)"
         )
       } catch {
         // The send already went out; we just couldn't record it, so the row stays PENDING and
         // re-sends next drain — an accepted at-least-once duplicate.
         logger.error(
-          "outbox delivered run \(row.runId) step \(row.stepIndex) (message \(messageId)) but recording it failed; expect a duplicate: \(error)"
+          "outbox delivered \(row.originLabel) step \(row.stepIndex) (message \(messageId)) but recording it failed; expect a duplicate: \(error)"
         )
       }
     }
@@ -158,7 +158,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
     } catch {
       if Self.floodControlRetryAfter(error) != nil { throw error }
       logger.warning(
-        "rich send failed for run \(row.runId) step \(row.stepIndex), falling back to plain: \(error)"
+        "rich send failed for \(row.originLabel) step \(row.stepIndex), falling back to plain: \(error)"
       )
       return try await delivery.sendMessage(
         to: row.target,

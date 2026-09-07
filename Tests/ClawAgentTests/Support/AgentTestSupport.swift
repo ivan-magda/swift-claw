@@ -290,3 +290,74 @@ func buildResultCarryingState(bytes: Int) -> BuildResult {
     hasPrivateDataAccess: false
   )
 }
+
+// MARK: - Context collaborator doubles
+
+/// A workspace whose files are scripted per `WorkspaceFile`, including the over-cap outcome the
+/// builder turns into an owner notice. Shared across the context suites — `ClawTestSupport`'s
+/// `EmptyWorkspace` covers the "nothing on disk" case this one generalizes.
+final class FakeWorkspace: WorkspaceReading, @unchecked Sendable {
+  enum FileState {
+    case present(String)
+    case overCap(count: Int)
+
+    var loadedFile: LoadedFile {
+      switch self {
+      case .present(let text):
+        LoadedFile(outcome: .present, text: text, graphemeCount: text.count)
+      case .overCap(let count):
+        LoadedFile(outcome: .overCap, text: "", graphemeCount: count)
+      }
+    }
+  }
+
+  private let files: [WorkspaceFile: FileState]
+  private let skills: [SkillDescriptor]
+  private let skillWarnings: [WorkspaceWarning]
+
+  init(
+    files: [WorkspaceFile: FileState] = [:],
+    skills: [SkillDescriptor] = [],
+    skillWarnings: [WorkspaceWarning] = []
+  ) {
+    self.files = files
+    self.skills = skills
+    self.skillWarnings = skillWarnings
+  }
+
+  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
+    files[file]?.loadedFile ?? .missing
+  }
+
+  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
+    .missing
+  }
+
+  func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: skills, warnings: skillWarnings)
+  }
+}
+
+/// Serves a fixed item list and records the `excludeSensitive` argument of every fetch — the one
+/// input the assembly's memory taint travels through.
+final class FakeMemoryStore: MemoryStore, @unchecked Sendable {
+  private let items: [MemoryItem]
+  private(set) var fetchRankedCalls: [Bool] = []
+
+  init(items: [MemoryItem] = []) {
+    self.items = items
+  }
+
+  func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem {
+    throw StoreError.unexpected("not used")
+  }
+
+  func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
+  func get(id: Int64) throws(StoreError) -> MemoryItem? { nil }
+  func delete(id: Int64) throws(StoreError) -> Bool { false }
+
+  func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem] {
+    fetchRankedCalls.append(excludeSensitive)
+    return Array(items.prefix(limit))
+  }
+}

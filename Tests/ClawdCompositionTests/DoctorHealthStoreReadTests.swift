@@ -113,7 +113,8 @@ private extension DoctorHealthStoreReadTests {
       retriever: RetrieverGRDB(writer: writer),
       scheduledJobs: ScheduledJobStoreGRDB(writer: writer),
       scheduleCommands: ScheduleCommandStoreGRDB(writer: writer),
-      approvals: ApprovalStoreGRDB(writer: writer)
+      approvals: ApprovalStoreGRDB(writer: writer),
+      learning: ScheduledLearningStoreGRDB(writer: writer)
     )
   }
 

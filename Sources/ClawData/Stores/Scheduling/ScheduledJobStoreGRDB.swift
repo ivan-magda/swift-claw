@@ -14,9 +14,12 @@ import GRDB
 /// one type with one stored property.
 public struct ScheduledJobStoreGRDB: Sendable {
   private let database: MappedDatabase
+  /// `CLAW_LEARNING_ENABLED`. Disarmed, a fire binds nothing and the learning tables stay empty.
+  private let learningEnabled: Bool
 
-  public init(writer: any DatabaseWriter) {
+  public init(writer: any DatabaseWriter, learningEnabled: Bool = false) {
     database = MappedDatabase(writer: writer)
+    self.learningEnabled = learningEnabled
   }
 }
 
@@ -234,18 +237,26 @@ extension ScheduledJobStoreGRDB {
       else {
         return nil
       }
-      return try Self.insertFireRows(db, jobId: jobId, fireAt: fireAt, now: now)
+      return try insertFireRows(
+        db,
+        jobId: jobId,
+        fireAt: fireAt,
+        fireKind: .scheduledOccurrence,
+        now: now
+      )
     }
   }
 
-  /// Steps 3-6 of the fire transaction: lazy session, trigger message, PENDING run, audit, and the
-  /// `last_fired_at` stamp. Shared by `claimAndFire` (which advances the schedule first) and
+  /// Steps 3-6 of the fire transaction: lazy session, trigger message, PENDING run, the learning
+  /// binding when the daemon is armed, audit, and the `last_fired_at` stamp. Shared by
+  /// `claimAndFire` (which advances the schedule first) and
   /// `fireNow` (which doesn't). `fireAt` is the fire's logical instant — `claimAndFire`'s T_fire,
   /// `now` for `fireNow` — recorded to `last_fired_at` only if the overlap guard lets the fire run.
-  static func insertFireRows(  // swiftlint:disable:this function_body_length
+  func insertFireRows(  // swiftlint:disable:this function_body_length
     _ db: Database,
     jobId: Int64,
     fireAt: Date,
+    fireKind: ScheduledFireKind,
     now: Date
   ) throws -> ClaimedFire? {
     guard
@@ -260,7 +271,7 @@ extension ScheduledJobStoreGRDB {
     let ownerChatId: Int64 = jobRow["owner_chat_id"]
     let prompt: String = jobRow["prompt"]
 
-    let sessionId = try ensureJobSession(
+    let sessionId = try Self.ensureJobSession(
       db,
       jobId: jobId,
       existingSessionId: jobRow["session_id"],
@@ -269,7 +280,7 @@ extension ScheduledJobStoreGRDB {
 
     // Skip this occurrence when the prior run on this job's session is still live; the schedule
     // already advanced, so it drops like a misfire rather than resetting the shared window.
-    if try shouldSkipOverlappingFire(
+    if try Self.shouldSkipOverlappingFire(
       db,
       sessionId: sessionId,
       action: .jobOverlapSkipped,
@@ -308,13 +319,29 @@ extension ScheduledJobStoreGRDB {
     )
     let triggerMessageId = db.lastInsertedRowID
 
-    let runId = try insertPendingJobRun(
+    let runId = try Self.insertPendingJobRun(
       db,
       sessionId: sessionId,
       triggerMessageId: triggerMessageId,
       jobId: jobId,
       now: now
     )
+
+    // The run now exists, so this fire has granted exposure and may consume a trial assignment.
+    // Every path above returns before here, which is what keeps a compare-and-swap loss and an
+    // overlap skip from consuming one. Riding this transaction means neither the run nor the
+    // lessons it ran against can exist without the other.
+    var binding: RunLearningBinding?
+    if learningEnabled {
+      binding = try ScheduledLearningStoreGRDB.bindFire(
+        db,
+        jobId: jobId,
+        runId: runId,
+        fireKind: fireKind,
+        occurrenceAt: fireAt,
+        now: now
+      )
+    }
 
     // Step 6: the audit row rides the same transaction as its side effect (house rule).
     try AuditLogGRDB.insertAudit(
@@ -333,7 +360,8 @@ extension ScheduledJobStoreGRDB {
       runId: runId,
       sessionId: sessionId,
       triggerMessageId: triggerMessageId,
-      ownerChatId: ownerChatId
+      ownerChatId: ownerChatId,
+      binding: binding
     )
   }
 }
@@ -360,7 +388,16 @@ extension ScheduledJobStoreGRDB {
       // unmuting it. insertFireRows stamps last_fired_at (fireAt = now) only if a run is created;
       // a nil means the overlap guard skipped this fire (a prior run on the session is still
       // live) — distinct from an absent job, so the owner ack can differ.
-      guard let fire = try Self.insertFireRows(db, jobId: jobId, fireAt: now, now: now) else {
+      // `.ownerRunNow`, not `.scheduledOccurrence`: both consume exposure identically, but the
+      // binding has to freeze which one happened, and `RunOrigin` collapses them into `.scheduled`.
+      let fire = try insertFireRows(
+        db,
+        jobId: jobId,
+        fireAt: now,
+        fireKind: .ownerRunNow,
+        now: now
+      )
+      guard let fire else {
         return .skippedActiveRun
       }
       return .fired(fire)

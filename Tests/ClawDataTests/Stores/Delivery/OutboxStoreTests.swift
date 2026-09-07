@@ -92,8 +92,7 @@ import Testing
 
     // when
     try env.outbox.markSent(
-      runId: env.runId,
-      stepIndex: 0,
+      deliveryKey: OutboxDedupKey.make(runId: env.runId, stepIndex: 0),
       telegramMessageId: 555,
       now: Date()
     )
@@ -155,7 +154,11 @@ import Testing
     )
 
     // when — the dispatcher records the delivered Telegram message id
-    try env.outbox.markSent(runId: env.runId, stepIndex: 0, telegramMessageId: 999, now: Date())
+    try env.outbox.markSent(
+      deliveryKey: OutboxDedupKey.make(runId: env.runId, stepIndex: 0),
+      telegramMessageId: 999,
+      now: Date()
+    )
 
     // then — the linked approval got prompt_message_id in the same transaction
     let approval = try #require(try env.approvals.approval(id: approvalId))
@@ -181,7 +184,11 @@ import Testing
     #expect(plainRow.replyMarkup == nil)
 
     // when — marking the plain row sent must not touch any approval
-    try env.outbox.markSent(runId: env.runId, stepIndex: 0, telegramMessageId: 111, now: Date())
+    try env.outbox.markSent(
+      deliveryKey: OutboxDedupKey.make(runId: env.runId, stepIndex: 0),
+      telegramMessageId: 111,
+      now: Date()
+    )
 
     // then — the unrelated approval keeps its NULL prompt_message_id
     let approval = try #require(try env.approvals.approval(id: approvalId))

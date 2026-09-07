@@ -138,6 +138,7 @@ struct EvaluationAttemptRunner: Sendable {
       chatId: 1,
       buildResult: buildResult,
       sessionTainted: initialTainted,
+      hasPinnedLessons: buildResult.hasPinnedLessons,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0,

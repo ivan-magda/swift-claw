@@ -506,7 +506,8 @@ private extension MCPCompositionAcceptanceTests {
         database,
         runId: runId,
         event: .suspendForApproval,
-        now: Date()
+        now: Date(),
+        terminal: nil
       )
       return messageId
     }

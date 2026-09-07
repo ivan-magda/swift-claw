@@ -21,6 +21,22 @@ public enum DegradationKind: Sendable, Equatable {
   /// The configured route cannot process image input.
   case visionUnsupported
 
+  /// The terminal cause a degraded commit records for a bound run.
+  ///
+  /// There is no task-evidence case here, and that is the point: the degraded path delivers a
+  /// canned owner-facing failure notice in place of an answer, so nothing the model did about the
+  /// task is observable. Letting two provider outages read as task evidence would synthesize a
+  /// behavioral lesson about the model from infrastructure noise.
+  public var terminalCause: TerminalCause {
+    switch self {
+    case .providerUnavailable, .authenticationRequired, .accessDenied, .quotaLimited,
+      .invalidProviderState, .accountingFailed:
+      .providerFailure
+    case .outputTruncated, .contextUnavailable, .visionUnsupported:
+      .incomplete
+    }
+  }
+
   /// The stable string recorded by the audit log. Categorical cases deliberately omit payloads.
   public var auditDecision: String {
     switch self {

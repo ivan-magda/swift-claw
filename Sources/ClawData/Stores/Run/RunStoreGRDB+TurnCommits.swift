@@ -23,13 +23,24 @@ extension RunStoreGRDB {
         }
         return try Self.recordTerminalUsageIfNeeded(
           db,
+          runId: turn.runId,
           usage: turn.usage,
           state: currentState,
           now: now
         )
       }
 
-      guard try Self.transitionRun(db, runId: turn.runId, event: .complete, now: now) != nil else {
+      // Settled with the terminal row: every primary fact of a DONE turn — the assistant message,
+      // its usage and its outbox chunks — commits inside this same transaction.
+      guard
+        try Self.transitionRun(
+          db,
+          runId: turn.runId,
+          event: .complete,
+          now: now,
+          terminal: .settled(.taskCompleted)
+        ) != nil
+      else {
         return .ignored
       }
 
@@ -58,6 +69,7 @@ extension RunStoreGRDB {
         if let usage = turn.usage {
           return try Self.recordTerminalUsageIfNeeded(
             db,
+            runId: turn.runId,
             usage: usage,
             state: currentState,
             now: now
@@ -66,7 +78,15 @@ extension RunStoreGRDB {
         return .ignored
       }
 
-      guard try Self.transitionRun(db, runId: turn.runId, event: .fail, now: now) != nil else {
+      guard
+        try Self.transitionRun(
+          db,
+          runId: turn.runId,
+          event: .fail,
+          now: now,
+          terminal: .settled(turn.cause)
+        ) != nil
+      else {
         return .ignored
       }
       try Self.appendJobFailedIfJobRun(db, runId: turn.runId, now: now)
@@ -173,11 +193,19 @@ private extension RunStoreGRDB {
 
   static func recordTerminalUsageIfNeeded(
     _ db: Database,
+    runId: Int64,
     usage: ProviderUsage,
     state: RunState,
     now: Date
   ) throws -> RunCommitResult {
     guard state == .cancelled || state == .superseded else {
+      return .ignored
+    }
+
+    // Usage is a primary fact, and no primary fact may land once the run's evidence is frozen.
+    // Deferring settlement on the cancel/supersede paths is what leaves this window open at all;
+    // once the lane tail (or the boot backstop) has closed it, the spend has nowhere truthful to go.
+    guard try !ScheduledLearningStoreGRDB.isSettled(db, runId: runId) else {
       return .ignored
     }
 

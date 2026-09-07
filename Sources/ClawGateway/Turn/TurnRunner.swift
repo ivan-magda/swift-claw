@@ -53,6 +53,18 @@ public struct TurnRunner: TurnDispatching {
 
   private let logger: Logger
 
+  /// Freezes the learning compatibility surface of a bound run, at pickup, while every value in it
+  /// is still current. Injected rather than assembled here: the tool catalog, the skills root and
+  /// the resolved route all live at the composition root, and a run that is not bound freezes
+  /// nothing. Inert when learning is disarmed.
+  private let freezeLearningSurface: @Sendable (_ runId: Int64, _ policyVersion: String) -> Void
+
+  /// Reads the lesson set a bound run froze at its fire. Nil while learning is disarmed, which is
+  /// the same turn a run with no binding gets: no lesson row, no lesson taint. Disarming has to
+  /// reach this seam, not only the fire path — a run bound before the flag came off can still be
+  /// parked on an approval and resume afterwards.
+  private let learning: (any ScheduledLearningStore)?
+
   /// The lane-hold seam: after the suspend commit, `park` awaits the durable approval's
   /// resolution.
   private let parker: any ApprovalParking
@@ -77,6 +89,8 @@ public struct TurnRunner: TurnDispatching {
     delivery: (any MessageDelivery)? = nil,
     ownerChatId: Int64? = nil,
     now: @escaping @Sendable () -> Date = { Date() },
+    freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void = { _, _ in },
+    learning: (any ScheduledLearningStore)? = nil,
     // No default: an ask-tier suspend parks the lane on this seam, and a composition site that
     // silently fell back to an inert parker (whose private coordinator no resolver ever signals)
     // would hold that lane forever. Every caller chooses its parker explicitly.
@@ -100,12 +114,14 @@ public struct TurnRunner: TurnDispatching {
     self.ownerChatId = ownerChatId
 
     self.now = now
+    self.freezeLearningSurface = freezeLearningSurface
+    self.learning = learning
     self.parker = parker
     self.approvalExpirySeconds = approvalExpirySeconds
     self.logger = logger
   }
 
-  public func run(
+  public func run(  // swiftlint:disable:this function_body_length
     runId: Int64,
     sessionId: Int64,
     chatId: Int64,
@@ -124,6 +140,10 @@ public struct TurnRunner: TurnDispatching {
       logger.debug("run \(runId) was not pending at pickup; skipping turn")
       return
     }
+    // Frozen here rather than read back at sealing: this run's evidence has to be filed under the
+    // surface it actually ran on, and the skills, the tool catalog and the route can all move
+    // before the sealer reaches it.
+    freezeLearningSurface(runId, policyVersion)
 
     guard !Task.isCancelled else {
       return
@@ -132,6 +152,7 @@ public struct TurnRunner: TurnDispatching {
     let inputs: TurnInputs
     do {
       inputs = try loadTurnInputs(
+        runId: runId,
         sessionId: sessionId,
         boundMessageId: triggerMessageId,
         origin: origin,
@@ -161,6 +182,7 @@ public struct TurnRunner: TurnDispatching {
       chatId: chatId,
       buildResult: inputs.buildResult,
       sessionTainted: inputs.snapshot.isTainted,
+      hasPinnedLessons: inputs.buildResult.hasPinnedLessons,
       sessionHasPrivateData: inputs.snapshot.hasPrivateData,
       todayTokens: inputs.todayTokens,
       todayUSD: inputs.todayUSD,
@@ -207,6 +229,7 @@ public struct TurnRunner: TurnDispatching {
     do {
       carryOver = try runs.resumeUsage(runId: runId)
       inputs = try loadTurnInputs(
+        runId: runId,
         sessionId: sessionId,
         boundMessageId: contextBoundMessageId,
         origin: origin,
@@ -214,7 +237,7 @@ public struct TurnRunner: TurnDispatching {
         images: await cachedImages(sessionId: sessionId)
       )
     } catch {
-      failResume(runId: runId, stage: "context build", error: error)
+      failResume(runId: runId, stage: .contextBuild, error: error)
       return
     }
 
@@ -227,6 +250,7 @@ public struct TurnRunner: TurnDispatching {
         chatId: chatId,
         buildResult: inputs.buildResult,
         sessionTainted: inputs.snapshot.isTainted,
+        hasPinnedLessons: inputs.buildResult.hasPinnedLessons,
         sessionHasPrivateData: inputs.snapshot.hasPrivateData,
         todayTokens: inputs.todayTokens,
         todayUSD: inputs.todayUSD,
@@ -237,7 +261,7 @@ public struct TurnRunner: TurnDispatching {
         threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey)
       )
     } catch {
-      failResume(runId: runId, stage: "turn", error: error)
+      failResume(runId: runId, stage: .turn, error: error)
       return
     }
 
@@ -253,6 +277,34 @@ public struct TurnRunner: TurnDispatching {
       )
     } catch {
       logger.error("resume commit failed for run \(runId): \(error)")
+    }
+  }
+}
+
+/// Where a resume gave up. A failed assembly leaves the turn unfinished; a failed `runTurn` is the
+/// provider round-trip itself.
+enum ResumeStage: String {
+  case contextBuild = "context build"
+  case turn
+
+  /// The run's terminal cause for a resume that gave up at this stage with this error.
+  ///
+  /// A `StoreError` wins over the stage: the resume path reads `resumeUsage` and the context
+  /// snapshot from SQLite, so a full or unreadable disk surfaces here and is knowable. Recording a
+  /// knowable storage failure as the stage's generic cause would file it under the wrong bucket for
+  /// everything downstream that reads this column. The stage-only cause is deliberately not
+  /// reachable on its own, so no caller can record less than what is known.
+  func terminalCause(for error: any Error) -> TerminalCause {
+    guard error is StoreError else {
+      return stageCause
+    }
+    return .storageFailure
+  }
+
+  private var stageCause: TerminalCause {
+    switch self {
+    case .contextBuild: .incomplete
+    case .turn: .providerFailure
     }
   }
 }
@@ -277,7 +329,8 @@ private extension TurnRunner {
 
   /// Loads the bounded snapshot, today's budget totals, and the assembled context in one place —
   /// `run` and `resume` share it; only the bounding message id and the clock differ.
-  func loadTurnInputs(
+  func loadTurnInputs(  // swiftlint:disable:this function_parameter_count
+    runId: Int64,
     sessionId: Int64,
     boundMessageId: Int64,
     origin: RunOrigin,
@@ -300,10 +353,14 @@ private extension TurnRunner {
       proactiveTodayUSD =
         try usageStore.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: clock).costUSD
     }
+    // Before assembly, and before any provider call: a bound run whose pinned set cannot be
+    // resolved must fail rather than answer against a set its binding never froze.
+    let lessons = try pinnedLessons(runId: runId)
     let buildResult = try contextBuilder.assemble(
       snapshot: snapshot,
       sessionId: sessionId,
-      origin: origin
+      origin: origin,
+      lessons: lessons
     )
     return TurnInputs(
       snapshot: snapshot,
@@ -314,11 +371,33 @@ private extension TurnRunner {
     )
   }
 
+  /// The lesson set this run's fire froze, or nil when it carries no binding. Every identity is
+  /// re-checked here rather than trusted from the read: `(job_id, digest)` is what names a lesson
+  /// set, so two jobs holding the same rules share a digest and a digest-only match would silently
+  /// run one job's evidence against another's lessons.
+  func pinnedLessons(runId: Int64) throws -> LessonSet? {
+    guard let learning, let binding = try learning.binding(runId: runId) else {
+      return nil
+    }
+    guard try runs.jobId(runId: runId) == binding.jobId else {
+      throw PinnedLessonFailure.identityMismatch(runId: runId)
+    }
+    guard
+      let set = try learning.lessonSet(jobId: binding.jobId, digest: binding.effectiveDigest)
+    else {
+      throw PinnedLessonFailure.missingSet(runId: runId, digest: binding.effectiveDigest)
+    }
+    guard set.jobId == binding.jobId, set.digest == binding.effectiveDigest else {
+      throw PinnedLessonFailure.identityMismatch(runId: runId)
+    }
+    return set
+  }
+
   /// `resume`'s shared failure tail: every pre-commit failure fails the run in-band (best-effort)
   /// so the lane frees — `resume` is non-throwing by contract.
-  func failResume(runId: Int64, stage: String, error: any Error) {
-    logger.error("resume \(stage) failed for run \(runId): \(error)")
-    try? runs.failRun(runId: runId, now: now())
+  func failResume(runId: Int64, stage: ResumeStage, error: any Error) {
+    logger.error("resume \(stage.rawValue) failed for run \(runId): \(error)")
+    try? runs.failRun(runId: runId, cause: stage.terminalCause(for: error), now: now())
   }
 }
 
@@ -478,6 +557,7 @@ private extension TurnRunner {
       ),
       action: .turnDegraded,
       decision: kind.auditDecision,
+      cause: kind.terminalCause,
       at: context.committedAt
     )
     if commitResult != .ignored {
@@ -508,6 +588,7 @@ private extension TurnRunner {
       ),
       action: .turnBudgetStopped,
       decision: cap,
+      cause: .budgetStopped,
       at: context.committedAt
     )
     if context.origin != .interactive, cap == BudgetGate.proactivePerDayCap {
@@ -528,6 +609,7 @@ private extension TurnRunner {
     message: String,
     action: AuditAction,
     decision: String,
+    cause: TerminalCause,
     at committedAt: Date
   ) throws -> RunCommitResult {
     let chunk = OutboxChunk(
@@ -546,7 +628,8 @@ private extension TurnRunner {
         chunk: chunk,
         exchanges: exchanges,
         setTainted: setTainted,
-        setPrivateData: setPrivateData
+        setPrivateData: setPrivateData,
+        cause: cause
       ),
       now: committedAt
     )
@@ -589,6 +672,7 @@ private extension TurnRunner {
       message: ownerVisiblePayload(reply: Degradation.contextUnavailable, ownerNotices: []),
       action: .turnDegraded,
       decision: DegradationKind.contextUnavailable.auditDecision,
+      cause: DegradationKind.contextUnavailable.terminalCause,
       at: committedAt
     )
   }

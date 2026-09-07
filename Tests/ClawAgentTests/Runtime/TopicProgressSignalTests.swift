@@ -57,6 +57,7 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
       chatId: -1_001,
       buildResult: buildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0,
@@ -111,6 +112,7 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
       chatId: -1_001,
       buildResult: buildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0,
@@ -143,6 +145,7 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
       chatId: 42,
       buildResult: buildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -201,6 +204,7 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
       chatId: 42,
       buildResult: buildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0

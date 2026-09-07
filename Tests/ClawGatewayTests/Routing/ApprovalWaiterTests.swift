@@ -177,7 +177,13 @@ import Testing
         arguments: [sessionId, runId, Date()]
       )
       let messageId = db.lastInsertedRowID
-      _ = try RunStoreGRDB.transitionRun(db, runId: runId, event: .suspendForApproval, now: Date())
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .suspendForApproval,
+        now: Date(),
+        terminal: nil
+      )
       try db.execute(
         sql: """
           INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,

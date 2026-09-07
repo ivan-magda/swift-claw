@@ -1,6 +1,6 @@
 import Foundation
 
-public enum RunState: String, Sendable, Equatable {
+public enum RunState: String, Sendable, Equatable, CaseIterable {
   /// Persisted after the inbound message and run are created atomically, before lane execution.
   case pending = "PENDING"
   /// Persisted when the session lane successfully picks up the turn.
@@ -23,6 +23,16 @@ public enum RunState: String, Sendable, Equatable {
   /// live triple is never duplicated. `pending` is included because a claimed-but-not-yet-picked-up
   /// run loads the current window at pickup.
   public static let liveStates: [RunState] = [.pending, .running, .awaitingApproval]
+
+  /// The absorbing states: `RunFSM` returns nil for every event once a run reaches one, which is
+  /// what makes a terminal transition win exactly once and lets its receipt be written there.
+  public var isTerminal: Bool {
+    !Self.liveStates.contains(self)
+  }
+
+  /// The complement of `liveStates`, derived rather than listed so a new state joins exactly one
+  /// of the two sets.
+  public static let terminalStates: [RunState] = allCases.filter(\.isTerminal)
 }
 
 /// The two command-owned reasons for terminating a live run.
@@ -377,8 +387,48 @@ public struct OutboxChunk: Sendable, Equatable {
   }
 }
 
+/// Which producer enqueued an outbound row. A run's chunks carry its id; a learning notice belongs
+/// to no run, so the source column is what tells the two apart in storage.
+public enum DeliverySource: String, Sendable, Equatable, CaseIterable {
+  case run
+  case learning
+}
+
+/// One chunk of an owner-facing learning notice. It belongs to no run, so its delivery identity is
+/// the subject it speaks about plus its position in that subject's message — which makes a resend
+/// idempotent exactly as a run's chunks are.
+public struct LearningNoticeChunk: Sendable, Equatable {
+  /// The polymorphic digest of whatever the notice addresses — a candidate, an evaluation, a
+  /// promotion — matching the `subject_digest` the feedback tables key on.
+  public let subjectDigest: String
+  public let ordinal: Int
+  public let chatId: Int64
+  public let payload: String
+  public let payloadHash: String
+  public let replyMarkup: String?
+
+  public init(
+    subjectDigest: String,
+    ordinal: Int,
+    chatId: Int64,
+    payload: String,
+    payloadHash: String,
+    replyMarkup: String? = nil
+  ) {
+    self.subjectDigest = subjectDigest
+    self.ordinal = ordinal
+    self.chatId = chatId
+    self.payload = payload
+    self.payloadHash = payloadHash
+    self.replyMarkup = replyMarkup
+  }
+}
+
 public struct OutboxRow: Sendable, Equatable {
-  public let runId: Int64
+  /// The row's identity, from the table's existing unique `dedup_key`. A learning notice has no
+  /// run, so the run cannot be the identity; it stays as provenance.
+  public let deliveryKey: String
+  public let runId: Int64?
   public let stepIndex: Int
   public let chatId: Int64
   public let payload: String
@@ -398,8 +448,14 @@ public struct OutboxRow: Sendable, Equatable {
     )
   }
 
+  /// What a log line calls this row's origin: its run, or the learning source when it has none.
+  public var originLabel: String {
+    runId.map(String.init) ?? DeliverySource.learning.rawValue
+  }
+
   public init(
-    runId: Int64,
+    deliveryKey: String,
+    runId: Int64?,
     stepIndex: Int,
     chatId: Int64,
     payload: String,
@@ -408,6 +464,7 @@ public struct OutboxRow: Sendable, Equatable {
     messageThreadId: Int64? = nil,
     replyToMessageId: Int64? = nil
   ) {
+    self.deliveryKey = deliveryKey
     self.runId = runId
     self.stepIndex = stepIndex
     self.chatId = chatId
@@ -469,6 +526,10 @@ public struct DegradedTurn: Sendable, Equatable {
   public let setTainted: Bool
   /// Sticky private-data flag — persisted like `setTainted`, incl. on the failure path.
   public let setPrivateData: Bool
+  /// Why this turn ended, supplied by the caller that knows. FAILED alone cannot tell a provider
+  /// outage from a budget stop, a context failure or a policy block, and this commit writes the
+  /// run's terminal receipt.
+  public let cause: TerminalCause
 
   public init(
     runId: Int64,
@@ -478,7 +539,8 @@ public struct DegradedTurn: Sendable, Equatable {
     chunk: OutboxChunk,
     exchanges: [ToolExchange] = [],
     setTainted: Bool = false,
-    setPrivateData: Bool = false
+    setPrivateData: Bool = false,
+    cause: TerminalCause
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -488,6 +550,7 @@ public struct DegradedTurn: Sendable, Equatable {
     self.exchanges = exchanges
     self.setTainted = setTainted
     self.setPrivateData = setPrivateData
+    self.cause = cause
   }
 }
 
@@ -529,6 +592,7 @@ public enum AuditAction: String, Sendable, Equatable {
   case approvalRequested = "approval_requested"
   case approvalGranted = "approval_granted"
   case approvalDenied = "approval_denied"
+  case learningBound = "learning_bound"
 }
 
 public struct AuditEvent: Sendable, Equatable {

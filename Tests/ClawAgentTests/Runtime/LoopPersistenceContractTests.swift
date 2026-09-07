@@ -15,6 +15,7 @@ import Testing
       chatId: 1,
       buildResult: makeBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
