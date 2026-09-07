@@ -43,7 +43,7 @@ struct CoderWorkspace: Sendable {
     let startingCommit: String?
     let directory: String
     if prepared.request.workspace == .inPlace {
-      startingCommit = try await inPlaceCommit(at: source, git: git)
+      startingCommit = try await git.headCommit(at: source)
       directory = source
     } else {
       let resolved = try await git.commit(prepared.request.startRef ?? "HEAD", at: source)
@@ -105,27 +105,6 @@ private extension CoderWorkspace {
     try await git.run(["checkout", "--detach", commit, "--"], at: directory)
     guard try await git.commit("HEAD", at: directory) == commit else {
       throw CoderError.unavailable("Separate Coder checkout does not match its resolved commit.")
-    }
-  }
-}
-
-// MARK: - Starting commit evidence
-
-private extension CoderWorkspace {
-  func inPlaceCommit(at directory: String, git: CoderGit) async throws -> String? {
-    do {
-      return try await git.commit("HEAD", at: directory)
-    } catch CoderGitFailure.command(let failedHead) {
-      let ref = try await git.text(["symbolic-ref", "--quiet", "HEAD"], at: directory)
-      guard ref.hasPrefix("refs/heads/") else {
-        throw CoderGitFailure.command(failedHead)
-      }
-      do {
-        try await git.run(["show-ref", "--verify", "--quiet", "--", ref], at: directory)
-      } catch CoderGitFailure.command(let absentRef) where absentRef.exitCode == 1 {
-        return nil
-      }
-      throw CoderGitFailure.command(failedHead)
     }
   }
 }

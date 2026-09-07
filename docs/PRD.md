@@ -47,7 +47,9 @@ Why Swift: one self-contained binary per platform with no runtime to install und
 - **NG9.** A provider *pool* and per-call USD attribution dashboards. v1 routes over at most two owner-configured routes — a primary and one optional fallback (FR-R3) — with no credential pools, no weighted or model-aware routing, and no automatic provider discovery; and it has a USD spend **breaker**, not a dashboard.
 - **NG10.** *(bounds FR-P5)* **Sharing or importing another tool's credentials** — notably Codex CLI's `~/.codex/auth.json` — or supervising Codex as the ordinary LLM provider route, multiple accounts, credential pools, live credential mutation while the daemon runs, and subscription providers other than ChatGPT. Also out: **a per-provider environment-variable namespace** (`CLAW_CHATGPT_*` and the like) and a configurable subscription endpoint or client identity. Subscription auth adds exactly **one** configuration selector — a provider-qualified model value — and structured configuration (`config.toml`) stays deferred; it is the mechanism a future provider's own settings will use.
 
-**Generic Coder is a separate opt-in capability under construction.** Its product contract
+**Generic Coder is a separate opt-in capability under construction.** The native foundation
+implements contracts, durable jobs, process ownership, Git workspaces and the Codex backend.
+Daemon composition and operator enablement remain pending. Its complete product contract
 delegates an approved owner-DM task to the
 native personal Codex installation, which retains its own credentials and integrations. Coder
 supervises workspace selection, admission, child lifetime, persistence and reporting; Codex performs

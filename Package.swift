@@ -116,7 +116,8 @@ let package = Package(
           package: "swift-system",
           condition: .when(platforms: [.linux])
         ),
-      ]
+      ],
+      resources: [.embedInCode("Codex/CodexResult.schema.json")]
     ),
     .target(name: "ClawAuth", dependencies: ["ClawCore"]),
     .target(

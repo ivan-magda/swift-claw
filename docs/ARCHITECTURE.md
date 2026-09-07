@@ -90,7 +90,7 @@ clawd
 | `ClawTools` | lib | Tool registry + read-only tools (v1); policy gate + approval orchestration arrive in the P-tools phase (Inc 5a). | `ToolRegistry`, `ToolContext`; `WebSearchTool`, `WebFetchTool`, `FileReadTool` (v1); `PolicyGate`, `ApprovalCoordinator` [Inc5a] |
 | `ClawMCP` | lib | MCP **client** (§10.3): the Streamable HTTP transport over the shared HTTP seam, one session per configured server, catalog resolution, metadata redaction, name/schema normalization, and the `Tool` adapter that puts a remote tool on the same seam as a built-in. Depends only on `ClawCore` + the official Swift SDK, so no MCP concept reaches the agent loop or the policy gate. | `MCPStreamableHTTPTransport`, `MCPServerSession`, `MCPCatalogResolver`, `ResolvedMCPCatalog`, `MCPMetadataSanitizer`, `MCPTool`, `MCPToolNamer`, `MCPSchemaNormalizer` |
 | `ClawExec` | lib | macOS 26 arm64 execution implementation: fixed-path swift-subprocess adapter, apple/container argv, disposable scratch, serialized VM lifecycle, probe/reap/canary maintenance. Linux supplies no backend until Inc 6. | `ContainerBackend`, `ExecSandboxSettings` |
-| `ClawCoder` | lib | Native Coder process ownership and Git workspace preparation on macOS and Linux; the Codex adapter is composed in a later increment. Depends on Core, pinned Subprocess and platform System only. | `CoderCommandRunner`, `ManagedCoderProcessGroup`, `CoderProcessIdentity`, `CoderProcessInspector`, `CoderRequestPreparer`, `CoderWorkspace`, `RepositoryInventory` |
+| `ClawCoder` | lib | Native Coder process ownership, Git workspaces, Codex protocol and artifact inspection on macOS and Linux; daemon composition follows in a later increment. Depends on Core, pinned Subprocess and platform System only. | `CoderCommandRunner`, `ManagedCoderProcessGroup`, `CoderProcessIdentity`, `CoderProcessInspector`, `CoderRequestPreparer`, `CoderWorkspace`, `RepositoryInventory`, `CodexBackend` |
 | `ClawAppleSpeech` | lib | macOS 26 on-device speech-to-text behind the `ClawCore` `VoiceTranscribing` seam (`SpeechAnalyzer`/`SpeechTranscriber`, idempotent model-asset provisioning). Compiles to an empty module on Linux (`#if canImport(Speech)`); the factory returns nil there, fail-closed to the canned reply. | `AppleSpeechTranscriber`, `SystemVoiceTranscriber` |
 | `ClawAgent` | lib | Agent runtime: context assembly, the run loop, budgets, cancellation, the per-session lane. | `AgentRuntime`, `ContextBuilder`, `RunBudget`, `SessionActor` |
 | `ClawGateway` | lib | Wiring: `ServiceGroup`, Services, routing, access control, session resolution, outbox dispatch, shutdown. | `Gateway`, `TelegramPollerService`, `SchedulerService` [Inc4], `Router`, `AccessControl`, `RateLimiter`, `OutboxDispatcher` |
@@ -105,11 +105,14 @@ Each unit answers: *what does it do, how is it used, what does it depend on.* `C
 `CoderBackend`, `CoderRequestPreparing`, `CoderProcessInspecting`, and `CoderServing` contracts
 in `ClawCore`. `ToolExecutionContext` carries trusted run/session/chat/requester/origin/mode and
 approval identity; those fields never come from model-authored arguments. `ClawCoder` owns
-native process supervision and will add workspace preparation, Codex execution and inspection;
+native process supervision, workspace preparation, Codex execution and inspection;
 `ClawGateway` will own admission, persistence through Core store seams, background lifetime and
-reporting, composed only at `clawd`. Runtime composition, tool registration and AppConfig
-integration remain pending; no Coder child is launched by the daemon.
-The contract/config increment registers no tools. Once composed, the sole names are
+reporting, composed only at `clawd`.
+The native foundation implements Core contracts, the real job store, process ownership, Git
+workspaces and the Codex backend. Opening the database now applies migration `v11`, and ordinary
+outbound writes use the shared `OutboxInsertion` helper. Runtime composition, tool registration
+and AppConfig integration remain pending; no Coder child is launched by the daemon. This stage
+registers no Coder tools. Once composed, the sole names are
 `CoderToolNames.submit` (`coder_submit`), `.status` (`coder_status`), and `.cancel` (`coder_cancel`).
 No provider registry, second backend, ACP session manager or generic process module is introduced.
 
@@ -231,7 +234,9 @@ Concrete, config-overridable defaults for a single-owner daily-driver. These are
 
 All overridable in config. The **hard offline failsafe is `dayTokenCeiling`** (a per-day token breaker checked before each call, so it trips even when no price is known); the USD caps ($0.50/run, $10/day) are the user-facing limits, enforced best-effort when a price is known. A **run in Inc 1 is exactly one LLM round-trip** — `maxTurns`/`maxToolCalls` exist but stay inert until tools land in Inc 3. `perToolOutputCap` is 25 000 tokens, enforced as its grapheme-domain equivalent 80 000 graphemes via the pinned estimator inverse (Inc 3b). Context assembly reserves the estimated size of the complete advertised tool array before filling message sections, so the final request can fit under `maxInputTokens`; provider-call preflight still estimates that complete request independently.
 
-**Coder has a separate child budget.** The ordinary dialogue's token, dollar and 180-second
+**Coder has a separate child budget.** The native backend accepts an independent timeout;
+service admission and the operator settings below are pending runtime-integration contracts.
+The ordinary dialogue's token, dollar and 180-second
 limits do not meter a native Codex child. `CLAW_CODER_MAX_CONCURRENT_JOBS` bounds admitted work
 (default 1, any positive N); capacity returns an explicit busy response, with no unbounded queue.
 `CLAW_CODER_JOB_TIMEOUT_SECONDS` supplies an independent supervisor deadline (default 1800,
@@ -865,14 +870,17 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
 
 ### 13.2 Native Coder delegation
 
-Coder orchestrates admission, workspace selection, process lifetime, persistence, and reporting.
+The native foundation implements workspace selection, process lifetime, durable job storage and
+Codex execution/inspection. Daemon admission, background service ownership and reporting remain
+pending runtime integration. The complete Coder contract below assigns those responsibilities to
+Coder and keeps its native implementation behind Core seams.
 Codex investigates, edits, runs checks, and performs the requested Git/GitHub workflow. Coder uses
 the owner's trusted native Codex installation, existing configuration and integrations; no mandatory
 container or toolchain image is introduced. Codex automatic approval review does not provide the
 hardware-VM guarantees of `execute_code`, universal cwd confinement, or containment of every
 MCP/hook/plugin path. Child permissions and credentials determine effective authority.
 
-- **Opt-in and approved task scope:** owner DM only, through the existing durable task-approval
+- **Opt-in and approved task scope (pending runtime integration):** owner DM only, through the existing durable task-approval
   path, with `ApprovalReason.coderSubmit`. Approvals show the native delegation, source/workspace
   and publication scope. Group and proactive submissions are refused. Bind Coder-controlled
   execution policy and credential selectors in `executionPolicyID` and the approval fingerprint;
@@ -929,7 +937,8 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   phase, process tracking and the backend's single absolute deadline. Workspace preparation accepts
   that same deadline; every sequential command receives only the remaining budget. Inventory
   unavailability may omit the baseline; cancellation, timeout or failed supervision aborts preparation.
-  Only preapproval identity queries select `.preApprovalReadOnly`; admitted preparation and inspection
+  Preapproval identity queries and fixed local CLI health/compatibility probes select
+  `.preApprovalReadOnly`; admitted preparation and inspection
   select `.job`. Git receives an explicit minimal environment, disabled system/global configuration,
   optional locks, fsmonitor, hooks and external diff helpers, and only local file transport. Inventory
   does not run diff/textconv or follow submodules; source hooks/configuration are never copied.
@@ -945,9 +954,9 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   boot ID, check cancellation immediately before spawn, then acquire PID/PGID/birth metadata and await
   `didLaunch` persistence before draining stdout/stderr concurrently. The exit/deadline/cancellation
   observer already runs while that callback is suspended. Callback failure terminates and joins the
-  child. Only the preparer selects internal `.preApprovalReadOnly`, for fixed sanitized identity
-  queries before a job exists; it uses the same joined runner with a fixed ten-second timeout and
-  no job reservation or durable process events. All admitted backend commands use `.job` tracking.
+  child. Preapproval Git identity queries and fixed local CLI health/compatibility probes select
+  internal `.preApprovalReadOnly` before a job exists; these use the same joined runner with a fixed
+  ten-second timeout and no job reservation or durable process events. All admitted backend commands use `.job` tracking.
 - **Verified group cleanup:** cancellation/timeout is latched before TERM. Give owned live group
   members two seconds, then KILL remaining members and observe for up to two more seconds, retaining
   the unreaped session leader throughout. Exclude zombies from live-member checks. Darwin uses
@@ -971,11 +980,62 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   including CancellationError, remains supervision failure. Clean cancellation alone does not set
   that flag. Backend callers reject supervision failure independently of OS status;
   diagnostic wording is never a machine-readable failure discriminator.
+- **Codex setup and invocation:** the concrete backend resolves its configured executable once
+  against a deliberate child PATH (absolute entries; fallback `/usr/bin:/bin` when absent). An
+  explicit absolute executable never searches an alternative. It exposes only the resolved path,
+  profile, effective config home, fixed approval policy and non-secret credential-source identifiers
+  for composition/approval binding; selected token sources identify their environment key, never
+  token values. Fixed `--version` and `exec --help` probes require JSON, automatic review, config,
+  git-check bypass, ephemeral, color, directory, schema, final-message and profile flags. Health
+  probes perform no inference; admitted probes use the same tracked job deadline as workspace,
+  worker and inspection. CLI 0.153.4 is the compatibility baseline, not an exemption from probing.
+  Build argv as `exec --json --approve-for-me -c approval_policy="on-request"`
+  `--skip-git-repo-check --ephemeral --color never -C <directory>`
+  `--output-schema <private-schema> -o <private-result>`, optional `--profile <name>`, and `-`.
+  Supply the task as finite stdin with source, optional instructions, actual destination, initial
+  ref, deliverable/publication scope and a UUID-derived suggested head branch. Ask the worker to
+  reuse an existing matching PR; do not add a separate publisher or retry with broader permissions.
+- **Child environment and protocol:** allow basic OS/toolchain keys (`HOME`, `USER`, `LOGNAME`,
+  `PATH`, `SHELL`, `TMPDIR`, locale settings, `DEVELOPER_DIR`, `SDKROOT`) plus selected `CODEX_HOME`,
+  `GH_CONFIG_DIR`, `GH_HOST`, `GH_TOKEN`, `GITHUB_TOKEN`, `SSH_AUTH_SOCK`. Config-home overrides only
+  the child's `CODEX_HOME`. Exclude Telegram and unrelated provider credentials and all `CLAW_*`
+  values. Passed token values join `SecretRedactor`, never logs or policy identity; Codex-owned
+  integrations retain their existing credential authority. Do not read/import Codex auth caches.
+  Embed the exact `CodexResult.schema.json` in code with SwiftPM `.embedInCode`/`PackageResources`,
+  preserving the single relocatable binary distribution without a resource sidecar. Copy those bytes
+  into an owner-only per-job protocol directory with mode 0600. Require every schema key (nullable
+  keys must still be present), reject extra keys and invalid types; bound final JSON to 64 KiB using no-follow, nonblocking regular-file descriptor
+  reads. Incremental JSONL frames are bounded to 1 MiB; tolerate unknown event bodies, retain
+  reported usage and require `turn.completed`. Exit zero plus completion and a valid `succeeded`
+  report permits assessment; `blocked` is permission failure, `failed`/error events/nonzero exit
+  are execution failure, and absent/invalid reports or terminal evidence are protocol failure.
+  Cancellation/timeout retain their first selected outcome even if a success report exists or a
+  later caller cancellation arrives while mandatory final receipt persistence is still pending.
+  Remove raw protocol files after extraction; removal failure is an explicit cleanup failure with private files
+  retained for operator recovery. Keep repositories, including an existing job-owned destination
+  when preparation failed before returning complete workspace state; do not invent starting evidence.
+  Redact and cap owner-visible summaries and diagnostics; checks remain labeled as reported evidence.
+- **Artifact corroboration:** inspect the destination as a Git repository root using sanitized
+  tracked queries, independently record final branch/commit/author, and compare available local
+  content inventories. Reuse the verified unborn-HEAD rule for absent final commits. Remote reported
+  `starting_commit` remains worker evidence; an observed local starting commit (including null for
+  unborn HEAD) takes precedence. Unknown artifacts stay null. For a reported PR, validate its
+  GitHub URL against the frozen repository, then run bounded `gh pr view <number> --repo <repo>`
+  and verify the returned URL/repository, head name/commit and base. The observed Git head must
+  match the reported branch; the head may belong to a fork. Explicit base selectors compare
+  directly; default selectors additionally use read-only `gh repo view --json defaultBranchRef`
+  and compare the report's base to that repository default. Unavailable/mismatched evidence remains
+  inspection uncertainty. Record the confirmed PR author's login as GitHub actor, independently
+  of Git commit author. A requested PR with unknown publication fails inspection even when worker
+  completion succeeded. Missing report/PR URL after possible publishing execution, including a
+  stop, yields `.unknown(reportedURL: nil)`; `.absent` requires no possible publishing execution.
 - **Result evidence:** process completion and publication are independent: publication is absent,
   confirmed with URL, or unknown with optional reported URL. `changedFiles == nil` means comparison
-  unavailable; `[]` means no observed changes. `baselineObserved == false` means a starting SHA is
-  worker evidence rather than independent observation. Report commit author separately from GitHub
-  actor and child-reported checks/usage as reported. A terminal job can retain its reserved slot
+  unavailable; `[]` means no observed changes. `baselineObserved == false` means starting evidence is
+  worker-reported rather than independently observed. A successfully prepared local starting commit
+  (including observed unborn absence) has `baselineObserved == true` even when content inventory is
+  unavailable; the flag does not promise complete changed-path comparison. Report commit author
+  separately from GitHub actor and child-reported checks/usage as reported. A terminal job can retain its reserved slot
   while process ownership is unresolved. Persist terminal result and owner outbox delivery atomically.
 
 ## 14. Scheduler architecture (Inc 4)

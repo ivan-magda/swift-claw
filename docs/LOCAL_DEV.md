@@ -558,7 +558,8 @@ section and this checklist before the new digest ships.
 ## Coder workspace development
 
 The native process runner and Git workspace preparation are implemented internally; coding tools
-and the Codex backend are not exposed in this increment. Run their real-Git fixtures with:
+are not exposed in this increment; the native backend can be exercised by its CLI fixtures.
+Run the workspace fixtures with:
 
 ```bash
 swift test --filter CoderWorkspaceTests
@@ -589,3 +590,56 @@ files during a task, so this evidence does not establish authorship. For remote 
 allocates an empty destination for Codex to clone; a worker-reported initial SHA is not an independently
 observed starting inventory. All admitted Git work shares the backend's one deadline and process
 tracking, including preparation and inspection.
+
+## Codex backend development
+
+`ClawCoder.CodexBackend` implements one admitted task. Telegram tools and daemon composition arrive
+in later increments. Run the unmanaged CLI fixture against real temporary Git repositories with:
+
+```bash
+swift test --filter CodexBackendTests
+```
+
+The backend resolves the configured program once against a deliberate child PATH, preserving an
+explicit absolute executable. `compatibility()` performs only bounded local `--version` and
+`exec --help` probes. Jobs repeat the same validation under tracked process supervision and their
+single deadline. Codex CLI 0.153.4 is the successful compatibility baseline; another installed version
+must still expose all required flags. No inference, login, or GitHub publication is required by tests.
+
+The argument vector is:
+
+```text
+codex exec --json --approve-for-me -c approval_policy="on-request"
+  --skip-git-repo-check --ephemeral --color never -C <resolved-directory>
+  --output-schema <private-schema-path> -o <private-result-path> -
+```
+
+A configured profile adds `--profile <name>` before the final `-`. The prompt is finite stdin,
+not shell source. It names source, requested work, actual destination, initial ref, deliverable,
+publication scope and a UUID-derived suggested branch. Codex performs its own Git/GitHub workflow,
+including reusing an already-created matching PR. Repository/issue text cannot redefine that scope.
+
+The schema is embedded in the executable, then copied into a private per-job protocol directory
+with mode 0600; no schema resource sidecar is needed when relocating the binary. JSONL frames
+are limited to 1 MiB and final reports to 64 KiB; final-report inspection refuses symlinks and
+nonregular files. Unknown events are tolerated. Exit zero requires terminal completion and a valid
+succeeded report before success assessment; permission blocks, execution and protocol failures remain
+distinct. Summaries/diagnostics are redacted and capped, protocol files are removed after extraction,
+and repositories remain available, including an existing partial destination after preparation
+fails. If protocol-file removal fails, the result reports cleanup failure and those owner-only
+files remain for operator recovery.
+
+Local changed paths come from the independently captured initial content inventory. An unavailable
+inventory leaves changed paths unknown without changing the observed local starting-commit provenance.
+Remote initial
+commits are worker-reported and never imply an observed baseline. Final branch/commit and commit
+author come from sanitized Git queries. A PR needs read-only `gh` confirmation of the frozen
+repository, observed head/commit and selected base; the default selector also requires `gh repo view`
+to establish that repository's default. The GitHub actor is the confirmed PR's author, separate from
+the Git commit author. Missing or unverifiable publication after possible execution remains unknown;
+a requested PR with unknown publication cannot be an unqualified success.
+
+The child environment and inherited installation trust are specified in
+[ARCHITECTURE.md §13.2](ARCHITECTURE.md#132-native-coder-delegation). The daemon does not yet
+compose this backend or load Coder settings. Operator setup and live service validation arrive
+with that runtime integration.
