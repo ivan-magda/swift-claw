@@ -79,45 +79,54 @@ class AggregateCliTests(unittest.TestCase):
         )
         from tools.page_change_freeze.contract import (  # type: ignore[import-not-found]  # noqa: PLC0415
             EXECUTABLE_PATH,
+            MANIFEST_DESCRIPTOR_PATH,
             PROTOCOL_PATH,
             canonical_json_bytes,
             load_json,
         )
 
         descriptor, _ = load_json(PAGE_ROOT / "freeze/page-manifest-descriptor.json")
-        manifest_root = REPOSITORY_ROOT
-        if not (PAGE_ROOT / "artifacts/claw-eval-macos-arm64").is_file():
-            manifest_root = cls.temporary / "manifest-root"
-            protected_paths = {PROTOCOL_PATH}
-            protected_paths.update(
-                item["path"]
-                for category in descriptor["categories"].values()
-                for item in category["artifacts"]
-            )
-            for relative_path in sorted(protected_paths - {EXECUTABLE_PATH}):
-                destination = manifest_root / relative_path
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(REPOSITORY_ROOT / relative_path, destination)
-            executable = manifest_root / EXECUTABLE_PATH
-            executable.parent.mkdir(parents=True, exist_ok=True)
-            executable.write_bytes(
-                struct.pack(
-                    "<II",
-                    freeze_artifacts.MACHO_MAGIC_64,
-                    freeze_artifacts.MACHO_CPU_TYPE_ARM64,
-                )
-            )
-            executable.chmod(0o755)
         package_description = freeze_artifacts.run_swift_package_describe(REPOSITORY_ROOT)
-        if manifest_root != REPOSITORY_ROOT:
-            package_description["path"] = str(manifest_root)
-            for target in package_description["targets"]:
-                for resource in target.get("resources", []):
-                    resource_path = Path(resource["path"])
-                    if resource_path.is_absolute():
-                        resource["path"] = str(
-                            manifest_root / resource_path.relative_to(REPOSITORY_ROOT)
-                        )
+        runtime, harness, _ = freeze_artifacts.swift_package_closure(
+            REPOSITORY_ROOT,
+            package_description,
+        )
+        for name, closure in (("runtime_sources", runtime), ("harness_sources", harness)):
+            descriptor["categories"][name]["artifacts"] = [
+                {"path": path, "role": role} for path, role in sorted(closure.items())
+            ]
+        manifest_root = cls.temporary / "manifest-root"
+        protected_paths = {PROTOCOL_PATH}
+        protected_paths.update(
+            item["path"]
+            for category in descriptor["categories"].values()
+            for item in category["artifacts"]
+        )
+        for relative_path in sorted(protected_paths - {EXECUTABLE_PATH}):
+            destination = manifest_root / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPOSITORY_ROOT / relative_path, destination)
+        (manifest_root / MANIFEST_DESCRIPTOR_PATH).write_bytes(
+            canonical_json_bytes(descriptor) + b"\n",
+        )
+        executable = manifest_root / EXECUTABLE_PATH
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        executable.write_bytes(
+            struct.pack(
+                "<II",
+                freeze_artifacts.MACHO_MAGIC_64,
+                freeze_artifacts.MACHO_CPU_TYPE_ARM64,
+            )
+        )
+        executable.chmod(0o755)
+        package_description["path"] = str(manifest_root)
+        for target in package_description["targets"]:
+            for resource in target.get("resources", []):
+                resource_path = Path(resource["path"])
+                if resource_path.is_absolute():
+                    resource["path"] = str(
+                        manifest_root / resource_path.relative_to(REPOSITORY_ROOT)
+                    )
         generated_manifest = freeze_manifest.build(
             manifest_root,
             descriptor,

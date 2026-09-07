@@ -33,10 +33,11 @@ struct ScriptedAskTool: Tool {
   }
 }
 
-@Suite(.serialized) struct SuspendLaneHoldTests {
-  private func approvals(_ path: String) throws -> [Row] {
-    let pool = try ClawDatabase.makePool(path: path)
-    return try pool.read { db in try Row.fetchAll(db, sql: "SELECT * FROM approvals ORDER BY id") }
+@Suite(.serialized, .timeLimit(.minutes(1))) struct SuspendLaneHoldTests {
+  private func approvals(_ pool: DatabasePool) throws -> [Row] {
+    try pool.read { db in
+      try Row.fetchAll(db, sql: "SELECT * FROM approvals ORDER BY id")
+    }
   }
 
   private func runState(_ path: String, _ runId: Int64) throws -> String? {
@@ -66,11 +67,9 @@ struct ScriptedAskTool: Tool {
 
     // when — the proposal suspends the run to a persisted checkpoint
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "write the plan"))
-    let approval = try #require(
-      try await pollUntil {
-        try approvals(harness.databasePath).first
-      }
-    )
+    var notifications = harness.outboxSignal.notifications.makeAsyncIterator()
+    _ = await notifications.next()
+    let approval = try #require(try approvals(harness.readPool).first)
     let approvalId: Int64 = approval["id"]
     let runId: Int64 = approval["run_id"]
 
@@ -94,16 +93,24 @@ struct ScriptedAskTool: Tool {
 
     // then — it must NOT have produced a reply yet (FIFO behind the held lane); the suspended run
     // counts toward in-flight (Task 05 widened `runsHealth` to include AWAITING_APPROVAL).
-    try? await Task.sleep(for: .milliseconds(20))
+    await Task.yield()
     #expect(try harness.stores.runs.runsHealth(now: Date()).inFlight >= 1)
 
     // when — release the lane; the queued plain message now runs to completion. The reply lands in
     // the durable OUTBOX — this harness wires no `OutboxDispatcher`, so nothing is sent over the
     // `RecordingTransport`; existing SC3 assertions read `stores.outbox.pendingOutbound()` too.
     await coordinator.signal(approvalId: approvalId, .denied(.cancelled))
-    _ = try await pollUntilTrue {
+    while true {
       let payloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
-      return payloads.contains { payload in payload.contains("second turn done") }
+      if payloads.contains(where: { payload in
+        payload.contains("second turn done")
+      }) {
+        break
+      }
+      guard await notifications.next() != nil else {
+        Issue.record("outbox notifications ended before the queued reply committed")
+        return
+      }
     }
 
     // then — the parked exchange is still assembly-visible: the anchor + its (placeholder) tool row
