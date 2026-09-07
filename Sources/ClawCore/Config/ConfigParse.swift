@@ -6,7 +6,7 @@ enum ConfigParse {
     default fallback: Int,
     range: ClosedRange<Int>,
     onInvalid: (String) -> ConfigError
-  ) throws -> Int {
+  ) throws(ConfigError) -> Int {
     try boundedIntOrNil(raw, range: range, onInvalid: onInvalid) ?? fallback
   }
 
@@ -16,7 +16,7 @@ enum ConfigParse {
     _ raw: String?,
     range: ClosedRange<Int>,
     onInvalid: (String) -> ConfigError
-  ) throws -> Int? {
+  ) throws(ConfigError) -> Int? {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !trimmed.isEmpty else {
       return nil

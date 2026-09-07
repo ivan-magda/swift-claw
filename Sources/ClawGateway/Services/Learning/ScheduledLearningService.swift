@@ -83,14 +83,18 @@ public actor ScheduledLearningService {
     guard !stopping, ensureOperations(now: now()) else {
       return
     }
-    if let workflow { await workflow.advance(runId: runId, now: now()) }
+    if let workflow {
+      await workflow.advance(runId: runId, now: now())
+    }
   }
 
   public func advance(jobId: Int64) async {
     guard !stopping, ensureOperations(now: now()) else {
       return
     }
-    if let workflow { await workflow.advance(jobId: jobId, now: now()) }
+    if let workflow {
+      await workflow.advance(jobId: jobId, now: now())
+    }
   }
 
   /// Recovers settled work and trial deadlines, then collects unreferenced learning history.
@@ -117,7 +121,9 @@ public actor ScheduledLearningService {
         let jobs = try workflow.store.workflowJobs(after: sweepCursor, limit: Self.sweepBatchLimit)
         sweepCursor = jobs.last ?? 0
         for jobId in jobs {
-          if Task.isCancelled { break }
+          if Task.isCancelled {
+            break
+          }
           do {
             let runs = try workflow.store.workflowRuns(
               jobId: jobId,
@@ -125,7 +131,9 @@ public actor ScheduledLearningService {
               limit: Self.sweepBatchLimit
             )
             for runId in runs {
-              if Task.isCancelled { break }
+              if Task.isCancelled {
+                break
+              }
               await workflow.advance(runId: runId, now: now)
             }
             if !Task.isCancelled {
@@ -184,7 +192,9 @@ private extension ScheduledLearningService {
   /// A failure here is logged and not thrown: the sealing pass and ordinary scheduled execution
   /// must still run when the learning tables cannot be reconciled.
   func ensureOperations(now: Date) -> Bool {
-    if operationsReconciled { return true }
+    if operationsReconciled {
+      return true
+    }
     operationsReconciled = reconcileOperations(now: now)
     return operationsReconciled
   }
@@ -263,7 +273,9 @@ private extension ScheduledLearningService {
     let batch = pending.sorted()
     pending.removeAll()
     for runId in batch {
-      if Task.isCancelled { break }
+      if Task.isCancelled {
+        break
+      }
       do {
         if let workflow {
           await workflow.advance(runId: runId, now: now)
@@ -276,7 +288,9 @@ private extension ScheduledLearningService {
       await Task.yield()
     }
     for jobId in jobs {
-      if Task.isCancelled { break }
+      if Task.isCancelled {
+        break
+      }
       await workflow?.advance(jobId: jobId, now: now)
     }
   }

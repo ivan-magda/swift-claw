@@ -37,7 +37,7 @@ swift build -c release
 ## Lint
 
 ```bash
-scripts/lint.sh --fix   # auto-apply layout, multiline guard bodies, and SwiftLint fixes
+scripts/lint.sh --fix   # auto-apply layout, multiline conditional bodies, and SwiftLint fixes
 scripts/lint.sh         # verify; must pass before committing
 ```
 
@@ -345,8 +345,8 @@ a DM.
 
 The order matters — step 1 cannot be fixed later without removing and re-adding the bot.
 
-1. **Turn privacy mode OFF at BotFather** — `/mybots` → your bot → *Bot Settings* → *Group Privacy*
-   → *Turn off*. With privacy mode on, Telegram delivers only commands and replies, so the bot
+1. **Turn privacy mode OFF at BotFather** — `/mybots` → your bot → _Bot Settings_ → _Group Privacy_
+   → _Turn off_. With privacy mode on, Telegram delivers only commands and replies, so the bot
    cannot follow a conversation. Changing this **after** the bot has joined does not take effect
    until it is removed and added again. (Making the bot a group administrator is the alternative,
    and grants far more than reading.)
@@ -366,6 +366,16 @@ The order matters — step 1 cannot be fixed later without removing and re-addin
 
 4. **Put the id in `CLAW_GROUP_CHATS`** in `~/.swift-claw/clawd.env`.
 5. **Restart the daemon.** The list is read at boot only.
+
+If Coder is enabled in the room, make the bot a group administrator. Telegram guarantees
+`getChatMember` checks for other users only for administrator bots, and group Coder performs that
+fresh lookup on every approval tap. The callback must come from the exact original approval message
+in the exact configured group and interactive run/session; a copied keyboard, removed member,
+unavailable lookup, or mismatched chat/message leaves the approval pending. Any current participant,
+including the requester, may approve or deny. The first successful decision wins and migration `v12`
+records the winner's Telegram user ID on the approval audit row. The same migration stores the
+original sender on the run: approval never transfers job identity, and only that requester can query
+or cancel the Coder job from the same topic. All non-Coder group tool behavior remains unchanged.
 
 Verify with `doctor` — the `group.mode` row reports `off`, or `on (1 chat)` / `on (N chats)`:
 
@@ -512,16 +522,16 @@ directly is the way past that while you work on something else.
 
 Default: `~/.swift-claw/`. Contents:
 
-| File          | Purpose                       |
-| ------------- | ----------------------------- |
-| `claw.sqlite` | Main database (WAL mode)      |
-| `clawd.env`   | Non-secret config             |
-| `clawd.lock`  | Single-instance lock          |
-| `secrets.enc` | Encrypted secrets envelope    |
-| `secret.key`  | AES key (keep out of backups) |
+| File                  | Purpose                                                  |
+| --------------------- | -------------------------------------------------------- |
+| `claw.sqlite`         | Main database (WAL mode)                                 |
+| `clawd.env`           | Non-secret config                                        |
+| `clawd.lock`          | Single-instance lock                                     |
+| `secrets.enc`         | Encrypted secrets envelope                               |
+| `secret.key`          | AES key (keep out of backups)                            |
 | `llm-credentials.enc` | ChatGPT OAuth credential (encrypted; only on that route) |
-| `mcp.yaml`    | MCP server catalog (optional; absent = no MCP tools) |
-| `mcp-credentials.enc` | MCP server tokens (encrypted; only once you set one) |
+| `mcp.yaml`            | MCP server catalog (optional; absent = no MCP tools)     |
+| `mcp-credentials.enc` | MCP server tokens (encrypted; only once you set one)     |
 
 Override the state root with `CLAW_STATE_ROOT` for isolated test setups.
 
@@ -554,3 +564,229 @@ container ls --all | grep clawd-exec- || echo "no leftover exec containers"
 A skipped Layer-B run (no `CLAW_REAL_SANDBOX_TESTS`) is fine for ordinary CI but is not acceptable
 completion evidence. Re-pinning the workload image on an advisory repeats the image verification
 section and this checklist before the new digest ships.
+
+## Coder workspace development
+
+The native process runner and Git workspace preparation back the opt-in Coder tools. Local paths
+refer to the daemon machine; native tools and their dependencies must already be installed.
+The backend can be exercised without inference through its CLI fixtures.
+Run the workspace fixtures with:
+
+```bash
+swift test --filter CoderWorkspaceTests
+```
+
+Workspace preparation uses `/usr/bin/git` with a minimal environment and disables global/system
+Git configuration, optional locks, fsmonitor and hooks. It does no network work before approval.
+In-place work keeps the checkout's current branch, staged changes and working files, including an
+unborn branch before its first commit (recorded without a starting SHA). A separate
+local copy starts at the requested committed ref (default: source HEAD), with independent objects
+and no source hooks or configuration; dirty files are not copied. No automatic stash, rollback or
+apply-back occurs. Job directories stay private under `<state-root>/coder/jobs/<UUID>/`; separate
+repositories use `repository/`. Failure preserves partial work for inspection.
+
+For PR requests, the intended GitHub owner/repository and explicit/default base selector are bound
+before approval. Local `origin` URL rewrites are resolved, and effective fetch/push destinations must
+name the same GitHub repository. Ambiguous origins, non-GitHub URLs and conflicting fork push URLs
+are refused. Use an explicit GitHub source or an unambiguous local origin for such configurations.
+A local origin change after approval is refused; Codex may create a head fork after admission.
+These publication checks do not affect local-changes-only requests.
+
+Observed changed paths compare actual starting file contents, executable bits and symlink targets,
+so a committed fix remains visible even with clean final status. Inventory limits are 10,000 paths,
+1 MiB of Git path output and 32 MiB of contents/targets. Oversized, unreadable or unsupported entries
+(including submodule directories) make comparison unavailable; they do not mean no changes.
+Symlinks are recorded without following them outside the repository. Concurrent editors can change
+files during a task, so this evidence does not establish authorship. For remote inputs, preparation
+allocates an empty destination for Codex to clone; a worker-reported initial SHA is not an independently
+observed starting inventory. All admitted Git work shares the backend's one deadline and process
+tracking, including preparation and inspection.
+
+## Codex backend development
+
+`ClawCoder.CodexBackend` implements one admitted task, composed at the daemon root with the Coder
+service and its three Telegram-facing tools. Run the unmanaged CLI fixture against real temporary Git repositories with:
+
+```bash
+swift test --filter CodexBackendTests
+```
+
+The backend resolves the configured program once against the effective Coder child PATH, preserving
+an explicit absolute executable. `CLAW_CODER_PATH` overrides that child only; when unset, the existing
+process-PATH then `/usr/bin:/bin` fallback remains. `compatibility()` performs only bounded local
+`--version` and `exec --help` probes. Jobs repeat the same validation under tracked process
+supervision and their single deadline. Codex CLI 0.153.4 is the successful compatibility baseline; another installed version
+must still expose all required flags. No inference, login, or GitHub publication is required by tests.
+
+The argument vector is:
+
+```text
+codex exec --json --approve-for-me -c approval_policy="on-request"
+  --skip-git-repo-check --ephemeral --color never -C <resolved-directory>
+  --output-schema <private-schema-path> -o <private-result-path> -
+```
+
+A configured profile adds `--profile <name>` before the final `-`. The prompt is finite stdin,
+not shell source. It names source, requested work, actual destination, initial ref, deliverable,
+publication scope and a UUID-derived suggested branch. Codex performs its own Git/GitHub workflow,
+including reusing an already-created matching PR. Repository/issue text cannot redefine that scope.
+
+The schema is embedded in the executable, then copied into a private per-job protocol directory
+with mode 0600; no schema resource sidecar is needed when relocating the binary. JSONL frames
+are limited to 1 MiB and final reports to 64 KiB; final-report inspection refuses symlinks and
+nonregular files. Unknown events are tolerated. Exit zero requires terminal completion and a valid
+succeeded report before success assessment; permission blocks, execution and protocol failures remain
+distinct. Summaries/diagnostics are redacted and capped, protocol files are removed after extraction,
+and repositories remain available, including an existing partial destination after preparation
+fails. If protocol-file removal fails, the result reports cleanup failure and those owner-only
+files remain for operator recovery.
+
+Local changed paths come from the independently captured initial content inventory. An unavailable
+inventory leaves changed paths unknown without changing the observed local starting-commit provenance.
+Remote initial
+commits are worker-reported and never imply an observed baseline. Final branch/commit and commit
+author come from sanitized Git queries. A PR needs read-only `gh` confirmation of the frozen
+repository, observed head/commit and selected base; the default selector also requires `gh repo view`
+to establish that repository's default. The GitHub actor is the confirmed PR's author, separate from
+the Git commit author. Missing or unverifiable publication after possible execution remains unknown;
+a requested PR with unknown publication cannot be an unqualified success.
+
+The child environment and inherited installation trust are documented in
+[CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration). Run `clawd coder setup` from a terminal whose
+PATH includes Codex and any interpreter used by it, then restart and inspect Telegram `/status` to
+verify the effective service path's directory count and resolved Codex and `gh` executables, plus Node when present.
+Configure existing Codex/gh authorization under the actual service account before live validation.
+CLI presence and a foreground login are insufficient proof. Keep
+paid probes, denied-action checks and cancellation probes in a dedicated temporary state root; the
+scripted suite does not use or validate your personal daemon credentials.
+
+## Coder background lifecycle and recovery
+
+`ClawGateway.CoderService` supplies background task ownership over the Core seams. The daemon root
+injects the same instance into the tools, boot reconciliation, service graph and fallback shutdown.
+Its `start()` finishes before approval replay or new admission; `run()` participates in the service
+graph and `shutdown()` closes admission, persists cancellation and joins all owned backend work
+before outbox/database close. Approval replay can start work before ServiceGroup starts, so command
+fallback joins that same service and checks its cleanup failure. The current lifecycle graph still
+starts its registered services when the parent was cancelled during boot. Unresolved cleanup exits
+without closing dependent clients underneath owned work.
+Run the real-store, scripted-backend tests without inference or GitHub access:
+
+```bash
+swift test --filter 'CoderServiceTests|CoderRecoveryTests|CoderCompositionTests|RuntimeShutdownAcceptanceTests'
+```
+
+Enable Coder in the already-sourced `clawd.env`; no additional loader is used. `clawd doctor
+--check-config` launches no Codex process. Full doctor and daemon startup use bounded local
+`--version`, `exec --help` and unprofiled `login status` checks. These do not run inference, refresh
+credentials, clone a repository or create a PR. Missing base login blocks unprofiled submission.
+The CLI rejects `--profile <name> login status`; selected-profile authentication is explicitly
+unverified in health while compatible approved jobs remain available. Profile-specific auth may fail
+at execution. Do not infer profile readiness from the base login or import/merge authentication state.
+
+For supervised live validation, use a dedicated temporary state root and an already-authorized
+repository under the actual service user, HOME, PATH and selected Codex/GitHub auth context. Check the
+local health facts first, then verify an approved daemon task, a denied native action and cancellation
+through its cleanup receipt. Retain sanitized argv, exit/outcome and publication evidence; never dump
+credentials, prompts or raw protocol output. A prior foreground success is not proof of daemon auth.
+These live checks can incur child billing and are separate from the deterministic suite.
+
+Ask in the originating DM or group topic to cancel `Coder job <UUID>`; in a group, only the original
+requester can inspect or cancel it. `/stop` cancels the conversational turn, not an already-admitted
+job. Completion uses existing outbox retries without another LLM turn. Coder consent cards retain the
+complete secret-redacted task, instructions and publication scope. Result cards lead with outcome,
+publication, checks and changed files, then compact the job, commit, actor and usage evidence.
+Child-reported usage is kept with that job, separate from `/cost`; missing usage is unavailable
+accounting. Coder's concurrency/timeout settings are not a hard dollar cap; full capacity returns busy.
+
+Full doctor and daemon health read persisted reservations and the most recently updated
+failed/timed-out/interrupted record, including released jobs and history from enabled runs when Coder
+is now disabled. `doctor --check-config` does not read job history. Recovery can update the record
+ordering; the timestamp is not immutable failure time. The CLI labels live service observations
+unavailable, and failed storage reads as unreadable rather than zero/none. Current CLI/auth health
+is separate from historical failure.
+
+Cancellation returns a stopping job promptly, while its slot remains reserved through joined cleanup
+and terminal persistence. The configured N slots allow independent jobs to run concurrently; a full
+service returns busy. In-place checkout/common-Git identity conflicts return workspace busy even if
+capacity remains. These locks coordinate only Coder's own jobs, not external editors or agents.
+
+On daemon restart, unfinished tasks become interrupted and produce one durable completion notice,
+even when `CLAW_CODER_ENABLED=false`. Disabling removes the tools and prevents admission and native
+probes; read-only ownership inspection and durable recovery still run for previous reservations.
+They are never rerun automatically: a task may already have pushed commits or opened a PR. Review its
+workspace and publication evidence before submitting a fresh approval. None/stopped process ownership
+releases its slot. A read-only inspection that proves the recorded group stopped also permits release;
+a missing leader by itself is insufficient. Pending launch without PID/birth metadata, live owned
+members, PID reuse or unreadable process state retains the reservation and blocks new Coder admission.
+The rest of the assistant can remain available. A second daemon restart does not clear uncertainty.
+
+For operator recovery:
+
+1. Stop the daemon using the service commands in [INSTALL.md](INSTALL.md#4-running-as-a-service).
+   Inspect the retained job and its `process_receipt_json` in `coder_jobs` under the selected state
+   root's `claw.sqlite`; record the job UUID, phase, host boot ID, PID/PGID and birth identity.
+   Preserve the job's private directory at `<state-root>/coder/jobs/<UUID>/` and inspect its work.
+2. Compare the receipt with current host/process evidence. Terminate only processes whose ownership
+   you have identified; a matching numeric PID or PGID alone is insufficient because IDs are reused.
+   Do not signal an unrelated process or assume an absent leader means its group is empty.
+3. Once the recorded group is verified empty, start the daemon again; Coder may remain disabled.
+   Read-only startup reconciliation records stopped ownership and releases the existing terminal
+   reservation without a second notice.
+   If a crash happened between spawn and receipt persistence and ownership cannot be established,
+   restart the host: a changed boot ID proves that the old-boot processes cannot survive.
+
+Do not delete/forget job rows or manually reset reservations to bypass recovery. If the pending launch
+receipt itself is missing or storage is unreadable, retain the state root and diagnose the storage
+failure; no process identity can safely be invented. Process-event or terminal/outbox write failures
+are unhealthy service outcomes and retain reservations without claiming a completion was delivered.
+A failed protocol-file deletion can coexist with proved stopped processes: it remains a visible job
+cleanup diagnostic, while process ownership determines whether a reservation can be released.
+
+### Background completion acceptance
+
+Run the complete owner-DM path without native inference or publication:
+
+```bash
+swift test --filter CoderDoneWhenTests
+```
+
+This scenario uses the real router, durable approval, Coder service, SQLite stores and outbox
+dispatcher with scripted LLM, native backend and Telegram boundaries. After approval it holds the
+backend, observes an ordinary reply in the same conversation, then releases the backend and verifies
+the saved result and automatic completion delivery to the authenticated origin without another LLM
+turn. Replaying the outbox wake keeps one completion row; failed network delivery retains the
+existing at-least-once retry semantics.
+
+### Live validation recorded on 2026-09-07
+
+**The required native-denial evidence gap (V1) is closed.** The first supervised attempt on
+2026-09-06 at 22:00 UTC remains historically inconclusive: its retained evidence lacked a refusal
+tied to the requested command. One later authorized native job at 23:09:51–23:10:26 UTC supplied
+the exact touch-command rejection from native `codex_core::tools::router` stderr. This establishes
+native execpolicy denial; the worker's wording does not establish a separate Guardian decision.
+Both attempts occurred on September 7 in Europe/Istanbul.
+
+The later run used actual CoderService, CodexBackend and GRDB under a temporary `gui/502`
+LaunchAgent on macOS 26.6.2 as `jetbrains` (UID 502), with Codex CLI 0.153.4, default
+`/Users/jetbrains/.codex` and no named profile. The unchanged installed `run-clawd.sh` loaded a
+separate `CLAW_ENV_FILE` containing the explicit PATH candidate recorded in the audit. That concrete
+recipe passed local Codex login, native execution, and `gh` keyring/authenticated API checks.
+The first service's default PATH could not resolve Codex, `gh` or Node; the tested candidate was
+never installed into production configuration. Production enablement and deployment were excluded,
+so this is no claim that the current installed service configuration is ready.
+
+The job persisted failed/permission with one new completion outbox row at its fixture-approved
+origin, retained the exact file contents, and released its reservation after owned work stopped.
+A transparent observer was the selected executable and approval identity; it forwarded the real
+CLI's production argv, schema, environment and finite stdin in the same process group. No Telegram
+network delivery ran in the live probe; the deterministic acceptance above owns that boundary.
+Independent evidence review passed. The unique rule, LaunchAgent and private controls/protocol files
+were removed, all recorded owned groups were empty, and service shutdown joined.
+
+The original foreground cancellation harness passed through the actual service, native backend,
+process group and SQLite store with a harmless long-running external CLI fixture: its descendant
+stopped, work remained, and both the N=1 capacity slot and checkout reservation were reused.
+This was not paid inference cancellation. Historical draft PR #182 remains the publication baseline;
+the service checks created no new push or PR. Exact recipes, evidence and review/validation closure
+are in the [resumed evidence append](research/coder-capability-audit-2026-09-06.md#11-resumed-validation-and-final-review-closure).

@@ -66,7 +66,7 @@ public struct ApprovalWaiter: ApprovalParking {
     approvalId: Int64,
     runId: Int64,
     sessionId: Int64,
-    chatId: Int64,
+    chatId _: Int64,
     revalidatePolicyOnApprove: Bool
   ) async {
     guard let signal = await coordinator.awaitResolution(approvalId: approvalId) else {
@@ -81,7 +81,6 @@ public struct ApprovalWaiter: ApprovalParking {
         approvalId: approvalId,
         runId: runId,
         sessionId: sessionId,
-        chatId: chatId,
         revalidatePolicyOnApprove: revalidatePolicyOnApprove
       )
     case .denied(let decision):
@@ -91,7 +90,7 @@ public struct ApprovalWaiter: ApprovalParking {
         logger.debug("approval \(approvalId) absent at deny resume; nothing to finalize")
         return
       }
-      await resolveDenied(approval: approval, decision: decision, chatId: chatId)
+      await resolveDenied(approval: approval, decision: decision)
     }
   }
 }
@@ -103,7 +102,6 @@ private extension ApprovalWaiter {
     approvalId: Int64,
     runId: Int64,
     sessionId: Int64,
-    chatId: Int64,
     revalidatePolicyOnApprove: Bool
   ) async {
     guard let approval = loadApproval(approvalId), approval.state == .approved else {
@@ -113,14 +111,23 @@ private extension ApprovalWaiter {
 
     // Disarm on decision, not after execution: the approve CAS already made re-taps no-ops, and
     // a keyboard that outlives a tens-of-seconds run reads as an unacknowledged tap.
-    await disarm(approval, chatId: chatId)
+    await disarm(approval)
 
-    if revalidatePolicyOnApprove, policyStillMatches(approval) == false {
-      await failOnStalePolicy(approval, chatId: chatId)
+    guard let target = deliveryTarget(for: approval) else {
       return
     }
 
-    let commit = await withTypingPulse(chatId: chatId, indicator: typing, clock: clock) {
+    if revalidatePolicyOnApprove, policyStillMatches(approval) == false {
+      await failOnStalePolicy(approval, target: target)
+      return
+    }
+
+    let commit = await withTypingPulse(
+      chatId: target.chatId,
+      messageThreadId: target.messageThreadId,
+      indicator: typing,
+      clock: clock
+    ) {
       await executor.executeApproved(approval)
     }
     switch commit {
@@ -140,7 +147,7 @@ private extension ApprovalWaiter {
       logger.error(
         "approved claim store-failed (tool \(approval.tool), approval \(approval.id)); run left AWAITING_APPROVAL for boot recovery"
       )
-      await notifyOwner(chatId: chatId, text: Self.storeFailureNotice)
+      await notifyParticipant(target: target, text: Self.storeFailureNotice)
       return
     case .recordFailed:
       // The action EXECUTED but its result could not be recorded. Never promise a retry — the
@@ -148,7 +155,7 @@ private extension ApprovalWaiter {
       logger.error(
         "approved result record-failed (tool \(approval.tool), approval \(approval.id)); run left RUNNING for the boot orphan sweep"
       )
-      await notifyOwner(chatId: chatId, text: Self.recordFailureNotice)
+      await notifyParticipant(target: target, text: Self.recordFailureNotice)
       return
     case .committed:
       break
@@ -157,7 +164,7 @@ private extension ApprovalWaiter {
     await turns.resume(
       runId: runId,
       sessionId: sessionId,
-      chatId: chatId,
+      chatId: target.chatId,
       contextBoundMessageId: approval.observationMessageId
     )
   }
@@ -171,7 +178,7 @@ private extension ApprovalWaiter {
     }
   }
 
-  func failOnStalePolicy(_ approval: Approval, chatId: Int64) async {
+  func failOnStalePolicy(_ approval: Approval, target: DeliveryTarget) async {
     do {
       _ = try runs.failRunStalePolicy(
         runId: approval.runId,
@@ -183,7 +190,7 @@ private extension ApprovalWaiter {
     } catch {
       logger.error("failRunStalePolicy failed for run \(approval.runId): \(error)")
     }
-    await notifyOwner(chatId: chatId, text: Self.stalePolicyNotice)
+    await notifyParticipant(target: target, text: Self.stalePolicyNotice)
   }
 }
 
@@ -199,8 +206,7 @@ extension ApprovalWaiter {
   /// transport over already-committed durable state — a transport failure must not strand the lane.
   func resolveDenied(
     approval: Approval,
-    decision: ApprovalDecision,
-    chatId: Int64
+    decision: ApprovalDecision
   ) async {
     let cancel: CancelReason? =
       switch decision {
@@ -221,32 +227,23 @@ extension ApprovalWaiter {
       logger.error("approval \(approval.id) deny-observation commit failed: \(error)")
     }
 
-    if cancel == nil {
-      _ = try? await delivery.sendMessage(
-        chatId: chatId,
-        text: Self.ownerNotice(for: decision)
-      )
+    if cancel == nil, let target = deliveryTarget(for: approval) {
+      await notifyParticipant(target: target, text: Self.ownerNotice(for: decision))
     }
 
-    if let promptMessageId = approval.promptMessageId {
-      try? await callbacks.editMessageReplyMarkup(
-        chatId: chatId,
-        messageId: promptMessageId,
-        replyMarkup: nil
-      )
-    }
+    await disarm(approval)
   }
 }
 
 // MARK: - Deny Copy
 
-private extension ApprovalWaiter {
+extension ApprovalWaiter {
   /// The synthetic tool-observation content — what the model sees for the un-run call, so
   /// the next assembly explains the missing result instead of exposing a dangling proposal.
   static func deniedObservationContent(for decision: ApprovalDecision) -> String {
     switch decision {
-    case .rejected: "The owner declined this action."
-    case .expired: "The approval expired before the owner responded."
+    case .rejected: "This action was declined."
+    case .expired: "The approval expired before anyone responded."
     case .cancelled: "Cancelled by /stop."
     case .superseded: "Superseded by /new."
     case .stalePolicy: "The approval was voided because the policy changed before it ran."
@@ -285,16 +282,36 @@ private extension ApprovalWaiter {
     }
   }
 
-  func notifyOwner(chatId: Int64, text: String) async {
-    _ = try? await delivery.sendMessage(chatId: chatId, text: text)
+  func deliveryTarget(for approval: Approval) -> DeliveryTarget? {
+    do {
+      guard
+        let context = try runs.executionContext(
+          runId: approval.runId,
+          fallbackChatId: approval.ownerUserId
+        ),
+        context.sessionId == approval.sessionId,
+        context.deliveryTarget.chatId == approval.ownerUserId
+      else {
+        logger.error("approval \(approval.id) has no matching durable destination")
+        return nil
+      }
+      return context.deliveryTarget
+    } catch {
+      logger.error("approval \(approval.id) destination could not be restored")
+      return nil
+    }
   }
 
-  func disarm(_ approval: Approval, chatId: Int64) async {
+  func notifyParticipant(target: DeliveryTarget, text: String) async {
+    _ = try? await delivery.sendMessage(to: target, text: text)
+  }
+
+  func disarm(_ approval: Approval) async {
     guard let promptMessageId = approval.promptMessageId else {
       return
     }
     try? await callbacks.editMessageReplyMarkup(
-      chatId: chatId,
+      chatId: approval.ownerUserId,
       messageId: promptMessageId,
       replyMarkup: nil
     )

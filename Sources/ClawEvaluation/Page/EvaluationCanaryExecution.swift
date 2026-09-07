@@ -395,7 +395,9 @@ extension EvaluationController {
     let present = configurations.map {
       FileManager.default.fileExists(atPath: $0.resultURL.path)
     }
-    if present.allSatisfy({ $0 == false }) { return .none }
+    if present.allSatisfy({ $0 == false }) {
+      return .none
+    }
     guard present.allSatisfy({ $0 }) else {
       return .partial
     }

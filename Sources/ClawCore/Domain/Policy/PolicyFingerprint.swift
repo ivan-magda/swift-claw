@@ -68,15 +68,14 @@ public enum PolicyFingerprint {
     encoder.outputFormatting = [.sortedKeys]
 
     var parts: [String] = []
-    for tool in inputs.tools.sorted(by: { lhs, rhs in lhs.name < rhs.name }) {
-      // JSONValue encoding cannot realistically fail for the finite case set; tool name still
-      // distinguishes entries. JSONEncoder output is always valid UTF-8, so the failable decode
-      // preserves the byte-exact contribution and folds to "" only on the same encode failure.
-      let canonicalParameters =
-        (try? encoder.encode(tool.parameters))
-        .flatMap { data in
-          String(data: data, encoding: .utf8)
-        } ?? ""
+    for tool in inputs.tools.sorted(by: { $0.name < $1.name }) {
+      let canonicalParameters: String
+      if let data = try? encoder.encode(tool.parameters) {
+        canonicalParameters = String(data: data, encoding: .utf8) ?? ""
+      } else {
+        canonicalParameters = ""
+      }
+
       parts.append(tool.name)
       parts.append(canonicalParameters)
       parts.append(tool.metadataProvenance.rawValue)
@@ -84,12 +83,17 @@ public enum PolicyFingerprint {
       parts.append(tool.fenceLabel)
       parts.append(egressLabel(tool.egressClass))
       parts.append(tool.invocationIdentity ?? "")
+      parts.append("requires_interactive_requester:\(tool.requiresInteractiveRequester)")
+      parts.append("requires_group_approval:\(tool.requiresGroupApproval)")
     }
+
     parts.append(egressIdentityLabel(inputs.llmEgress))
     parts.append(inputs.searchEndpointPresent ? "search:present" : "search:absent")
     parts.append(inputs.workspaceRoot)
+
     let exemptLabel = inputs.webFetchExemptCIDRs.map(\.description).sorted().joined(separator: ",")
     parts.append("webfetch_exempt:" + exemptLabel)
+
     let exec = inputs.exec
     parts.append("exec.enabled:\(exec.enabled)")
     parts.append("exec.image:\(exec.image?.description ?? "absent")")

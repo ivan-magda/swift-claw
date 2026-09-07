@@ -319,7 +319,9 @@ private struct RealSandboxHost {
   func pollUntilTrue(timeout: Duration, _ predicate: () async -> Bool) async -> Bool {
     let deadline = ContinuousClock.now.advanced(by: timeout)
     while ContinuousClock.now < deadline {
-      if await predicate() { return true }
+      if await predicate() {
+        return true
+      }
       await Task.yield()
     }
     return false

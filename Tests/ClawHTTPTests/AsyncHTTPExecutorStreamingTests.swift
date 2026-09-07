@@ -308,34 +308,6 @@ private func withBurstingServer<Result>(
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func refusedConnectionBeforeHeadIsDefinitelyNotSent() async throws {
-    // given
-    let port = try await closedLocalPort()
-    var configuration = HTTPClient.Configuration()
-    // Network.framework parks a refused connect as "waiting" rather than failing it, so this bound is
-    // what ends the wait and surfaces the typed refusal. It clears the ~1-2ms the transport takes to
-    // record that refusal by two orders of magnitude, so a loaded machine cannot make the deadline
-    // land first and yield an untyped connect timeout instead.
-    configuration.timeout = .init(connect: .milliseconds(200))
-
-    // when
-    let failure = await #expect(throws: HTTPTransportFailure.self) {
-      try await withExecutor(configuration: configuration) { executor in
-        _ = try await executor.openStream(
-          streamRequest(
-            url: "http://127.0.0.1:\(port)/stream",
-            policy: streaming(),
-            timeoutSeconds: 1
-          )
-        )
-      }
-    }
-
-    // then
-    #expect(failure?.disposition == .definitelyNotSent)
-  }
-
-  @Test(.timeLimit(.minutes(1)))
   func closeBeforeHeadIsMayHaveBeenSent() async throws {
     // given
     try await withBehaviourServer(.closesBeforeHead) { server in

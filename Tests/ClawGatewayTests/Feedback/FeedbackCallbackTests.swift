@@ -428,6 +428,8 @@ private struct FeedbackCallbackEnvironment {
       replies: ReplySender(processed: processed, delivery: delivery, logger: TestLog.silent),
       accessControl: access,
       approvals: approvals,
+      runs: RunStoreGRDB(writer: queue),
+      membership: delivery,
       audit: handlerAudit,
       coordinator: coordinator,
       callbacks: callbacks,

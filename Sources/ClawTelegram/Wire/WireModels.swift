@@ -126,12 +126,24 @@ struct TMessage: Decodable {
   let audio: TPresence?
 
   var mediaKind: String? {
-    if photo != nil { return PhotoAttachment.mediaKindDescription }
-    if voice != nil { return VoiceAttachment.mediaKindDescription }
-    if document != nil { return "documents" }
-    if sticker != nil { return "stickers" }
-    if video != nil { return "videos" }
-    if audio != nil { return "audio" }
+    if photo != nil {
+      return PhotoAttachment.mediaKindDescription
+    }
+    if voice != nil {
+      return VoiceAttachment.mediaKindDescription
+    }
+    if document != nil {
+      return "documents"
+    }
+    if sticker != nil {
+      return "stickers"
+    }
+    if video != nil {
+      return "videos"
+    }
+    if audio != nil {
+      return "audio"
+    }
     return nil
   }
 
@@ -199,6 +211,13 @@ struct TCallbackQuery: Decodable {
 /// this feeds says what changed, not what the bot may now do.
 struct TChatMember: Decodable {
   let status: String?
+}
+
+/// `getChatMember` must identify its subject and status before it can prove current membership.
+struct TChatMemberLookup: Decodable {
+  let user: TUser
+  let status: String
+  let is_member: Bool?
 }
 
 /// Bot API `ChatMemberUpdated`, delivered as `my_chat_member` when the subject is the bot itself.

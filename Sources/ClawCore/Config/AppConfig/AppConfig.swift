@@ -60,6 +60,14 @@ public struct AppConfig: Sendable, Equatable {
     static let execTimeout = "CLAW_EXEC_TIMEOUT"
     static let execAllowEgress = "CLAW_EXEC_ALLOW_EGRESS"
 
+    public static let coderEnabled = "CLAW_CODER_ENABLED"
+    public static let coderMaxConcurrentJobs = "CLAW_CODER_MAX_CONCURRENT_JOBS"
+    public static let coderJobTimeoutSeconds = "CLAW_CODER_JOB_TIMEOUT_SECONDS"
+    public static let coderExecutable = "CLAW_CODER_EXECUTABLE"
+    public static let coderPath = "CLAW_CODER_PATH"
+    public static let coderProfile = "CLAW_CODER_PROFILE"
+    public static let coderConfigHome = "CLAW_CODER_CONFIG_HOME"
+
     static let mcpConfigPath = "CLAW_MCP_CONFIG"
   }
 
@@ -126,6 +134,7 @@ public struct AppConfig: Sendable, Equatable {
 
   public let approvalExpirySeconds: Int
   public let webFetchExemptCIDRs: [CIDR]
+  public let coder: CoderConfig
   public let exec: ExecConfig
   public let voice: VoiceConfig
   public let image: ImageConfig
@@ -149,6 +158,7 @@ public struct AppConfig: Sendable, Equatable {
     learningEnabled: Bool,
     approvalExpirySeconds: Int,
     webFetchExemptCIDRs: [CIDR],
+    coder: CoderConfig,
     exec: ExecConfig,
     voice: VoiceConfig,
     image: ImageConfig,
@@ -176,6 +186,7 @@ public struct AppConfig: Sendable, Equatable {
 
     self.approvalExpirySeconds = approvalExpirySeconds
     self.webFetchExemptCIDRs = webFetchExemptCIDRs
+    self.coder = coder
     self.exec = exec
     self.voice = voice
     self.image = image
@@ -244,6 +255,7 @@ public struct AppConfig: Sendable, Equatable {
       learningEnabled: try parseLearningEnabled(from: env),
       approvalExpirySeconds: approvalExpirySeconds,
       webFetchExemptCIDRs: webFetchExemptCIDRs,
+      coder: try CoderConfig.load(environment: env),
       exec: exec,
       voice: voice,
       image: image,
@@ -289,7 +301,7 @@ extension AppConfig {
     _ raw: String?,
     key: String,
     default fallback: Bool
-  ) throws -> Bool {
+  ) throws(ConfigError) -> Bool {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !trimmed.isEmpty else {
       return fallback

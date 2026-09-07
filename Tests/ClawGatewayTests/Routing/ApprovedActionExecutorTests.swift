@@ -227,7 +227,7 @@ import Testing
       runs: runs ?? env.runs,
       redactArguments: redactArguments,
       now: { Date() },
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
   }
 
@@ -275,6 +275,31 @@ import Testing
         )
       )
     }
+  }
+
+  @Test func corruptPersistedOriginRefusesBeforeExternalExecution() async throws {
+    // given
+    let env = try makeSuspendedFixture()
+    let probe = ExecutionProbe()
+    let tool = RecordingWriteTool(toolName: "file_write", result: "written", probe: probe)
+    let executor = makeExecutor(env, tools: [tool])
+    try await env.queue.write { database in
+      try database.execute(
+        sql: "UPDATE runs SET origin = ? WHERE id = ?",
+        arguments: ["unrecognized-origin", env.runId]
+      )
+    }
+
+    // when
+    let outcome = await executor.executeApproved(
+      approval(env, tool: tool.definition.name, argsJSON: "{}")
+    )
+
+    // then
+    #expect(outcome == .committed)
+    #expect(await probe.executed == false)
+    let status: String = try lastToolAudit(env)["decision"]
+    #expect(status == ToolObservationStatus.error.rawValue)
   }
 
   @Test func executesRecordedArgsAndFillsTheObservation() async throws {
@@ -680,7 +705,17 @@ import Testing
     func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
       throw StoreError.unexpected("unused in this fixture")
     }
-    func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? { nil }
+    func executionContext(
+      runId: Int64,
+      fallbackChatId: Int64
+    ) throws(StoreError) -> RunExecutionContext? {
+      try base.executionContext(runId: runId, fallbackChatId: fallbackChatId)
+    }
+
+    func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
+      try base.runOrigin(runId: runId)
+    }
+
     func jobId(runId: Int64) throws(StoreError) -> Int64? { nil }
     func failRunStalePolicy(
       runId: Int64,

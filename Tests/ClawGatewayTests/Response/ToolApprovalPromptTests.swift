@@ -307,4 +307,46 @@ import Testing
       #expect(text.contains("/w/target-\(reason.rawValue).md"))
     }
   }
+
+  @Test func coderConsentChunksKeepKeyboardAfterAllArguments() {
+    // given
+    let task = String(repeating: "Complete task 👨‍👩‍👧‍👦\n", count: 3_000)
+    let preview =
+      "### Task\n\n" + CoderCardMarkdown.literal(task)
+      + "\n\n### Instructions\n\n" + CoderCardMarkdown.literal("Last instruction <keep>")
+    let input = ToolApprovalPrompt.Input(
+      recorded: recorded(
+        tool: CoderToolNames.submit,
+        target: "/workspace/repository",
+        reason: .coderSubmit,
+        blastRadius: CoderCardMarkdown.field("Source", "/workspace/repository"),
+        preview: preview
+      ),
+      taintBanner: false,
+      privilegedFileBanner: false,
+      isGroup: true
+    )
+
+    // when
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "coder-nonce")
+
+    // then
+    #expect(chunks.count > 1)
+    #expect(
+      chunks.allSatisfy { chunk in
+        chunk.payload.count <= ReplySplitter.limit
+          && chunk.payloadHash == ContentHash.fnv1a(chunk.payload)
+      }
+    )
+    #expect(chunks.map(\.payload).joined(separator: "\n\n") == ToolApprovalPrompt.text(for: input))
+    #expect(chunks.map(\.stepIndex) == Array(0..<chunks.count))
+    #expect(
+      chunks.dropLast().allSatisfy { chunk in
+        chunk.replyMarkup == nil
+      }
+    )
+    #expect(chunks.last?.payload.contains("Last instruction &lt;keep&gt;") == true)
+    #expect(chunks.last?.payload.contains("Any member of this group") == true)
+    #expect(chunks.last?.replyMarkup != nil)
+  }
 }

@@ -167,6 +167,13 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.resumeUsage(runId: runId)
   }
 
+  func executionContext(
+    runId: Int64,
+    fallbackChatId: Int64
+  ) throws(StoreError) -> RunExecutionContext? {
+    try base.executionContext(runId: runId, fallbackChatId: fallbackChatId)
+  }
+
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     try base.runOrigin(runId: runId)
   }
@@ -336,6 +343,13 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.resumeUsage(runId: runId)
   }
 
+  func executionContext(
+    runId: Int64,
+    fallbackChatId: Int64
+  ) throws(StoreError) -> RunExecutionContext? {
+    try base.executionContext(runId: runId, fallbackChatId: fallbackChatId)
+  }
+
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     try base.runOrigin(runId: runId)
   }
@@ -456,6 +470,13 @@ struct DiskFullRuns: RunStore {
   func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
     throw StoreError.diskFull
   }
+  func executionContext(
+    runId: Int64,
+    fallbackChatId: Int64
+  ) throws(StoreError) -> RunExecutionContext? {
+    nil
+  }
+
   func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
     throw StoreError.diskFull
   }

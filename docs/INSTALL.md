@@ -145,6 +145,46 @@ mkdir -p ~/.config/systemd/user && cp swift-claw.service ~/.config/systemd/user/
 systemctl --user enable --now swift-claw.service
 ```
 
+### Coder prerequisites
+
+Coder is optional and off by default. Install a compatible native Codex CLI and Git separately;
+GitHub sources and PRs also require the GitHub CLI (`gh`) and the account's repository rights.
+The installer does not provision these tools, their dependencies, repository access or credentials.
+The result schema is embedded in `clawd`; there is no extra schema resource to install.
+
+Both service units run under your user account, but do not inherit an interactive shell's PATH or
+login environment. The existing `run-clawd.sh` sources `~/.swift-claw/clawd.env` (or `CLAW_ENV_FILE`);
+`clawd` itself does not load `.env` files. From a terminal where Codex and any interpreter it needs
+work, run `clawd coder setup`. The command captures that terminal's absolute PATH entries for Coder
+children, checks Codex locally, and writes only `CLAW_CODER_PATH` and `CLAW_CODER_ENABLED=true` to the
+existing env file. `--dry-run` performs the checks without writing; `--env-file PATH` selects another
+file. The daemon's global PATH is unchanged. Native preparation still uses `/usr/bin/git`.
+
+Setup preserves an existing `CLAW_CODER_EXECUTABLE`, `CLAW_CODER_PROFILE` and
+`CLAW_CODER_CONFIG_HOME`. It does not install tools, import authentication, edit shell startup files
+or restart the service. Authenticate Codex and GitHub under the actual daemon account, with its HOME,
+selected `CODEX_HOME`, profile and `GH_CONFIG_DIR`. Then restart the real launchd/systemd service and
+send `/status` in the private bot chat. Check the effective directory count in `coder.path`, the
+resolved `coder.executable`, `coder.node` when present, `coder.gh` for GitHub work, and authentication.
+A successful setup probe in a terminal does not prove that the service can read the same auth source or
+keyring. Rerun setup after an nvm or other tool-path change. `clawd auth` is independent.
+
+`clawd doctor --check-config` stays offline and does not check Codex authentication. Full doctor uses
+local CLI checks, not inference or credential refresh. Selected-profile authentication can remain
+explicitly unverified; see
+[CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration). The supervised daemon auth/denial/cancellation
+validation procedure is in [LOCAL_DEV.md](LOCAL_DEV.md#coder-background-lifecycle-and-recovery).
+
+To stop new Coder tasks, set `CLAW_CODER_ENABLED=false` and restart. Disabled startup performs no
+Codex probes and exposes no Coder tools, but still reconciles earlier jobs and reports retained
+reservations in full doctor and daemon health. Follow the recovery procedure for unresolved ownership.
+
+For Coder in an allowlisted Telegram group, make the bot a group administrator before enabling the
+room. Group Coder approvals perform a fresh `getChatMember` lookup for every Approve or Deny tap, and
+Telegram guarantees lookups for other users only when the bot is an administrator. A failed or
+uncertain lookup leaves the approval pending. Keep group mode on its required separate nonpersonal
+state root; see [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup).
+
 ### Staying on after logout
 
 - **Linux:** `sudo loginctl enable-linger $USER` lets the user manager run without a
@@ -168,12 +208,12 @@ same lock — `clawd secrets seal`, `clawd auth login` / `logout`, and `clawd mc
 (`clawd doctor`, `clawd auth status`, `clawd mcp list` / `probe`) are safe against a
 running daemon. Exit codes are diagnostic:
 
-| Code | Meaning |
-|---|---|
-| 10 | invalid config |
-| 11 | secret loading failed |
-| 12 | another instance holds the state-root lock |
-| 13 | storage error |
+| Code | Meaning                                    |
+| ---- | ------------------------------------------ |
+| 10   | invalid config                             |
+| 11   | secret loading failed                      |
+| 12   | another instance holds the state-root lock |
+| 13   | storage error                              |
 
 ## 5. Updating
 

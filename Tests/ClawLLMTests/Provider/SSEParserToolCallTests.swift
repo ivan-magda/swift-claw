@@ -44,7 +44,9 @@ import Testing
       ]
     )
     let sawDelta = events.contains { event in
-      if case .delta = event { return true }
+      if case .delta = event {
+        return true
+      }
       return false
     }
 

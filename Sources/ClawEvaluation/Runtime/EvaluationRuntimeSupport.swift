@@ -76,7 +76,7 @@ struct EvaluationToolDispatcher: ToolDispatching {
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: []),
         privateFileLoader: { [] },
-        execEnabled: false
+        enabledDangerousTools: []
       )
     )
     self.allowedFileName = allowedFileName

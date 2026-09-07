@@ -264,6 +264,17 @@ public enum ClawDatabase {
       }
     }
     migrator.registerMigration("v11") { db in
+      try createCoderJobs(db)
+    }
+    migrator.registerMigration("v12") { db in
+      try db.alter(table: "runs") { table in
+        table.add(column: "requester_user_id", .integer)
+      }
+      try db.alter(table: "audit_events") { table in
+        table.add(column: "actor_user_id", .integer)
+      }
+    }
+    migrator.registerMigration("v13") { db in
       try createLearningStateTables(db)
       try createLearningRunTables(db)
       try createLearningOperationTables(db)
@@ -273,10 +284,10 @@ public enum ClawDatabase {
       try addLearningUsageScope(db)
       try rebuildOutboundDeliveriesWithoutRunOwnership(db)
     }
-    migrator.registerMigration("v12") { db in
+    migrator.registerMigration("v14") { db in
       try addLearningOperationClaimKey(db)
     }
-    migrator.registerMigration("v13") { db in
+    migrator.registerMigration("v15") { db in
       try replaceOpenTrialIndexWithLiveTrialIndex(db)
     }
     return migrator

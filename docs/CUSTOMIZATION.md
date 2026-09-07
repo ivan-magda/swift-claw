@@ -10,15 +10,15 @@ The workspace lives at `<state root>/workspace/` (default `~/.swift-claw/workspa
 Create any of these files and the daemon loads them on the next turn; it skips the ones
 you leave out.
 
-| File | What it shapes | Trust tier |
-|---|---|---|
-| `SOUL.md` | Personality and tone. The place to say "answer tersely", "be playful", "reply in Russian". | System prompt |
-| `AGENTS.md` | Behavior rules: how to act, what to prioritize, standing instructions. | System prompt |
-| `TOOLS.md` | Guidance on when and how to use tools. | System prompt |
-| `USER.md` | Your profile: who you are, context the agent should know. | Untrusted, labeled |
-| `MEMORY.md` | Long-lived memory the agent maintains. | Untrusted, labeled |
-| `HEARTBEAT.md` | A checklist the proactive heartbeat reads, never ordinary turns. | Heartbeat runs only |
-| `skills/<name>/SKILL.md` | A procedure the agent loads when the task calls for it. See [Skills](#skills). | Untrusted, labeled |
+| File                     | What it shapes                                                                             | Trust tier          |
+| ------------------------ | ------------------------------------------------------------------------------------------ | ------------------- |
+| `SOUL.md`                | Personality and tone. The place to say "answer tersely", "be playful", "reply in Russian". | System prompt       |
+| `AGENTS.md`              | Behavior rules: how to act, what to prioritize, standing instructions.                     | System prompt       |
+| `TOOLS.md`               | Guidance on when and how to use tools.                                                     | System prompt       |
+| `USER.md`                | Your profile: who you are, context the agent should know.                                  | Untrusted, labeled  |
+| `MEMORY.md`              | Long-lived memory the agent maintains.                                                     | Untrusted, labeled  |
+| `HEARTBEAT.md`           | A checklist the proactive heartbeat reads, never ordinary turns.                           | Heartbeat runs only |
+| `skills/<name>/SKILL.md` | A procedure the agent loads when the task calls for it. See [Skills](#skills).             | Untrusted, labeled  |
 
 The trust tier decides how much authority the text carries:
 
@@ -103,10 +103,10 @@ in every reply. The scan runs again on the next turn, so unresolved notices recu
   — and sibling notices for a missing frontmatter block, a name that breaks the shape
   rules, or a duplicated name.
 - `⚠ Skill research: its SKILL.md resolves outside the workspace, which I can't load from;
-  skipped.` A skill directory has to live under `skills/`, not be symlinked in from
+skipped.` A skill directory has to live under `skills/`, not be symlinked in from
   elsewhere — clawd reads nothing outside the workspace. Copy the folder in instead.
 - `⚠ The skills directory resolves outside the workspace, which I can't load from; all
-  skills skipped.` The same rule applied to `skills/` itself: linking the whole directory
+skills skipped.` The same rule applied to `skills/` itself: linking the whole directory
   to a folder elsewhere on disk turns every skill under it off. Move it in.
 - `⚠ Skills index over budget; left out this turn: research, weekly-review.` The index has
   its own slice of the context budget. Skills are indexed in alphabetical order and the
@@ -122,11 +122,11 @@ other context leaves less room; `fits_cap` does not predict that residual budget
 
 clawd shows an approval card for two reasons.
 
-**The tool's own risk tier.** File writes, memory writes, and code execution park the run
-every time, whatever else the session did.
+**The tool's own risk tier.** File writes, memory writes, code execution, and native Coder
+submissions park the run every time, whatever else the session did.
 
 **Exfiltration risk.** clawd holds an arbitrary-destination tool call, including `web_fetch`
-and MCP calls, for your approval once the session has done *both* of these:
+and MCP calls, for your approval once the session has done _both_ of these:
 
 - **Ingested untrusted content.** A web page, a file read, tool output, a voice transcript,
   a photo, or non-empty pinned job lessons. Durable memory and a skill you loaded do not count: both are labeled
@@ -140,7 +140,7 @@ session runs unprompted. `/new` clears both legs.
 
 Your LLM provider and the search backend are pinned destinations, so they never park for
 approval: no injected instruction can aim clawd at an attacker's URL instead. clawd also
-scans outbound *tool* arguments for secret-shaped values, and, under the trifecta, for
+scans outbound _tool_ arguments for secret-shaped values, and, under the trifecta, for
 substrings of your private files. The prompt sent to your LLM
 carries `USER.md` and `MEMORY.md` verbatim by design, so treat your model provider as a
 party you trust with that content.
@@ -166,13 +166,13 @@ Name a second model and clawd finishes the turn there when the first route canno
 the plan quota ran out, the credential was refused or the account denied, or the endpoint
 would not connect. Leave `CLAW_LLM_FALLBACK_MODEL` unset and none of this is in play.
 
-| Variable | Controls |
-|---|---|
-| `CLAW_LLM_FALLBACK_MODEL` | The second route's model, chosen the same way `CLAW_LLM_MODEL` is. Unset means no fallback. |
-| `CLAW_LLM_FALLBACK_BASE_URL` | Its endpoint. Required when the model resolves to the OpenAI-compatible route, unused on `openai-chatgpt/`. |
-| `CLAW_LLM_FALLBACK_API_KEY` | Its key, sealed alongside `CLAW_LLM_API_KEY`. |
-| `CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD` | The fallback's own `CLAW_LLM_MAX_TOKENS_FIELD` (default `max_completion_tokens`). |
-| `CLAW_LLM_PRIMARY_COOLDOWN_SECONDS` | How long a walled-off primary is left alone before clawd tries it again (default 900). |
+| Variable                             | Controls                                                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `CLAW_LLM_FALLBACK_MODEL`            | The second route's model, chosen the same way `CLAW_LLM_MODEL` is. Unset means no fallback.                 |
+| `CLAW_LLM_FALLBACK_BASE_URL`         | Its endpoint. Required when the model resolves to the OpenAI-compatible route, unused on `openai-chatgpt/`. |
+| `CLAW_LLM_FALLBACK_API_KEY`          | Its key, sealed alongside `CLAW_LLM_API_KEY`.                                                               |
+| `CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD` | The fallback's own `CLAW_LLM_MAX_TOKENS_FIELD` (default `max_completion_tokens`).                           |
+| `CLAW_LLM_PRIMARY_COOLDOWN_SECONDS`  | How long a walled-off primary is left alone before clawd tries it again (default 900).                      |
 
 A ChatGPT subscription in front, a metered API key behind it:
 
@@ -223,12 +223,12 @@ the running daemon, and a separate process will not guess at them.
 
 All optional; unset means the built-in defaults.
 
-| Variable | Controls |
-|---|---|
-| `CLAW_PER_RUN_USD` | Cap per single run |
-| `CLAW_PER_DAY_USD` | Daily spend kill-switch |
-| `CLAW_PROACTIVE_PER_DAY_USD` | Nested daily cap for scheduled + heartbeat runs and learning calls (default 2.00) |
-| `CLAW_MAX_TURNS` / `CLAW_MAX_TOOL_CALLS` | Bounds on the agentic loop per run |
+| Variable                                 | Controls                                                                          |
+| ---------------------------------------- | --------------------------------------------------------------------------------- |
+| `CLAW_PER_RUN_USD`                       | Cap per single run                                                                |
+| `CLAW_PER_DAY_USD`                       | Daily spend kill-switch                                                           |
+| `CLAW_PROACTIVE_PER_DAY_USD`             | Nested daily cap for scheduled + heartbeat runs and learning calls (default 2.00) |
+| `CLAW_MAX_TURNS` / `CLAW_MAX_TOOL_CALLS` | Bounds on the agentic loop per run                                                |
 
 **On the ChatGPT subscription route these dollar caps do not gate.** A plan-included call
 has no metered cost to compare against, so `CLAW_PER_RUN_USD` and
@@ -336,6 +336,127 @@ VM per request, behind an exact-action approval. Resource limits
 workload image, and the network opt-in (`CLAW_EXEC_ALLOW_EGRESS`) are documented in
 [`.env.example`](../.env.example) and [LOCAL_DEV.md](LOCAL_DEV.md).
 
+## Coder configuration
+
+Set `CLAW_CODER_ENABLED=true` to expose `coder_submit`, `coder_status` and `coder_cancel` in owner
+DMs and configured group topics. Submission always uses the durable Telegram approval path, then runs
+in the background through your native Codex installation and its configured integrations.
+`execute_code` keeps the VM sandbox described above.
+
+In `coder_submit`, `task` describes the requested work and expected outcome with enough context for
+Coder to work without the chat. `instructions` adds optional user requirements or preferences, such
+as preserving a public API; requirements already in `task` need not be repeated. Both are task data,
+without higher authority. A GitHub issue may supply the task. The approval card shows the provided
+task after secret redaction, or the selected issue when no task text was supplied. Nonblank
+`instructions` appear in full under **Additional requirements**, also after secret redaction;
+absent or whitespace-only input hides that section.
+
+| Variable                         | Default / accepted value                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------- |
+| `CLAW_CODER_ENABLED`             | `false`; strict boolean (`true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`)        |
+| `CLAW_CODER_MAX_CONCURRENT_JOBS` | `1`; any positive integer                                                        |
+| `CLAW_CODER_JOB_TIMEOUT_SECONDS` | `1800`; integer seconds from 1 through 86400                                     |
+| `CLAW_CODER_EXECUTABLE`          | `codex`; program name or absolute executable path, without command arguments     |
+| `CLAW_CODER_PATH`                | Unset; optional colon-separated absolute directories used only by Coder children |
+| `CLAW_CODER_PROFILE`             | Unset; optional existing Codex profile name                                      |
+| `CLAW_CODER_CONFIG_HOME`         | Unset; optional absolute directory for the child's `CODEX_HOME`                  |
+
+Omit optional settings to use defaults; explicit blank or invalid settings fail configuration even
+with Coder disabled. Parsing does not check the executable, credentials or directory. These settings
+apply after daemon restart. The backend child uses Codex-owned login/configuration, separately from
+`clawd auth`; its working directory and profile are not isolation boundaries. Coder's concurrency
+bound and timeout do not impose a hard dollar cap. Child-reported usage belongs to the Coder result,
+not ordinary provider accounting; missing usage means accounting is unavailable.
+
+The recommended setup is `clawd coder setup`, run from a terminal where Codex and its dependencies
+already work. It keeps the invoking terminal's absolute PATH entries, removes duplicates without
+changing their order, and proposes `CLAW_CODER_PATH` plus `CLAW_CODER_ENABLED=true`. Existing literal
+env-file assignments take precedence over the terminal for local checks, so a configured executable,
+profile or config home is preserved. Setup then overrides only the proposed Coder path and enabled
+flag. Use `--dry-run` to inspect the checks and proposed settings without writing, or
+`--env-file PATH` to select a file other than `$CLAW_ENV_FILE` / `~/.swift-claw/clawd.env`.
+
+The console keeps the diagnostic checks and resolved Codex, optional `gh`, and optional `node` paths.
+It summarizes `coder.path` as the number of captured directories and describes the settings it will
+save without printing the full path assignment. `--dry-run` uses the same summary and explicitly says
+that it did not change the configuration file.
+
+Setup reads the env file as data; it never sources or executes it. It accepts one-line literal
+`KEY=value` assignments, optionally prefixed by `export`, optionally quoted, with comments. Shell
+expansion and multiline values are rejected before mutation. A successful write atomically replaces
+the resolved file target at mode `0600`, preserving unrelated contents and the symlink at the path the
+operator supplied. It changes no secret, dependency, credential, shell startup file or service state.
+
+The backend resolves the selected executable once against its effective child `PATH`; an explicit
+absolute path never falls back to another binary. `CLAW_CODER_PATH` overrides only Coder children;
+when unset, the existing process-PATH then `/usr/bin:/bin` fallback remains. Explicit blank values,
+relative directories and empty path segments fail config validation. The effective path participates
+in the execution-policy identity, so a path change cannot reuse an approval for another toolchain.
+The backend checks `--version` and `exec --help` before inference
+and refuses installations missing the required automatic-review/schema flags. The validated recipe
+uses `exec --approve-for-me` with `approval_policy="on-request"`; a refusal never triggers a broader
+permission mode. See the [backend recipe](LOCAL_DEV.md#codex-backend-development).
+
+The child receives basic OS/toolchain and locale settings plus `CODEX_HOME`, `GH_CONFIG_DIR`,
+`GH_HOST`, `GH_TOKEN`, `GITHUB_TOKEN`, and `SSH_AUTH_SOCK` when selected. Telegram tokens, ordinary
+LLM provider keys, and other `CLAW_*` values are excluded. The config-home override changes only
+the child's `CODEX_HOME`. Existing Codex integrations can use their own credentials and remain
+part of the trusted installation. swift-claw never imports that login state into `clawd auth`.
+Interactive-shell access is not proof that launchd/systemd has the same authorization. Setup reports
+resolved Codex, optional `gh` and optional `node` paths for its local checks. Restart the real service,
+then inspect `/status`: the Coder headline includes the effective path's directory count and resolved
+Codex and `gh` executables, plus `node` when resolved. This verifies the loaded service configuration, while
+authentication remains a separate runtime fact. Rerun setup after nvm or other tool-path changes.
+
+Local paths refer to the daemon machine. In-place accepts dirty work; a separate copy is ref-only,
+with no uncommitted overlay. PRs require your configured repository rights; local PR preparation
+refuses an origin whose fetch and push URLs name different repositories, including a preconfigured
+fork push URL. Use an explicit GitHub source or an unambiguous origin. There is no automatic
+apply-back or rollback, and no automatic dependency provisioning. N is configurable; full means busy,
+without a queue. Completion uses existing outbox retries and needs no new LLM turn. Ask to inspect or
+cancel a job by its UUID; `/stop` only stops the conversation turn. Child billing is separate from
+conversational `/cost`, and Coder's limit/timeout cannot enforce a hard dollar cap.
+
+To use Coder in a group, add its Telegram chat ID to `CLAW_GROUP_CHATS` and keep that deployment on a
+separate nonpersonal state root, as described in [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup).
+Make the bot a group administrator: Telegram guarantees `getChatMember` checks for other users only
+for administrators. `coder_submit` is the one group tool that always parks an approval. Its Rich
+Markdown card shows the complete source, workspace, start ref, deliverable, PR target/base,
+existing-change scope, exact secret-redacted task and any **Additional requirements**. Any current
+participant, including the requester, may approve or deny only from that original prompt; every tap
+performs a fresh membership check and failure leaves the approval pending. The requester remains the
+job identity, and only that person can use status or cancel from the same group topic. Existing group
+auto-run/refusal behavior for all other tools is unchanged. Completion returns to the original topic
+as a result card with state, summary, failure/publication/checks and changed files first, followed by
+compact job, commit, actor and usage details.
+
+Disabled Coder contributes no tools, admits no work and launches no probes. On restart it still
+reconciles jobs admitted while enabled: unfinished jobs become interrupted with one completion notice,
+and uncertain process ownership retains its reservation. Missing/incompatible Codex leaves the
+assistant available with a failed Coder health row and no submit tool. An unprofiled local login-status
+failure blocks submit; authenticate Codex under the daemon user and restart. `doctor --check-config`
+performs no Codex probe and labels enabled runtime availability/authentication unverified. While Coder
+is enabled, full doctor and startup run bounded local version/help/status checks without inference,
+credential refresh, repository creation or publication. CLI compatibility and a present local login
+do not prove runtime authorization.
+Codex CLI cannot inspect a selected profile's authentication through `login status`: that health row
+is explicitly unverified and fails doctor, while compatible operator-approved profile jobs remain
+available. A profile can still fail authentication during execution; clawd does not refresh/import
+credentials or retry with broader permissions. An owner who accepts that limitation can start `clawd run`
+directly even when doctor withholds its healthy-start hint.
+
+The running daemon reports live fatal service failures separately from the persisted reservation
+count, unresolved ownership and last terminal failure. An external doctor labels live-only observations
+unavailable and reads persisted reservations. These historical rows remain visible in full doctor and
+daemon health with Coder disabled; `--check-config` does not read job history.
+Unreadable storage is a failed row, never a healthy zero.
+`coder.last_failure` is the most recently updated failed/timed-out/interrupted record, including
+released jobs; recovery updates can reorder it. It is historical evidence, separate from current
+CLI/auth availability. Child-reported checks/usage remain in each job's result.
+
+Interrupted jobs are never automatically rerun. Unresolved process ownership retains its slot across
+daemon restarts; see the [operator recovery path](LOCAL_DEV.md#coder-background-lifecycle-and-recovery).
+
 ## MCP servers
 
 clawd can borrow tools from [MCP](https://modelcontextprotocol.io) servers you already use — an
@@ -352,17 +473,17 @@ servers:
     # authHeader: Authorization      # default; the token goes out as "Bearer <token>"
     # connectTimeoutSeconds: 10      # default
     # requestTimeoutSeconds: 30      # default
-    headers:                         # non-secret extras sent on every request; never a token
+    headers: # non-secret extras sent on every request; never a token
       X-Workspace: acme
     tools:
-      include: [list_issues, create_issue]   # server's own names; with include set, exclude is ignored
+      include: [list_issues, create_issue] # server's own names; with include set, exclude is ignored
       risk:
-        list_issues: safe                    # skip the approval tap for this one tool
+        list_issues: safe # skip the approval tap for this one tool
   - name: notes
     url: http://127.0.0.1:8080/mcp
     enabled: false
     tools:
-      exclude: [delete_note]                 # used only when include is absent
+      exclude: [delete_note] # used only when include is absent
 ```
 
 clawd refuses a `headers` entry named the same as `authHeader`. It also rejects malformed names and
@@ -414,7 +535,7 @@ waiting from before. Changing a server endpoint, its static request headers or a
 the remote operation behind a normalized name also voids the approval. Approval cards show the
 complete configured endpoint.
 
-A skipped server is not a boot failure, but it *is* a doctor failure: `clawd doctor` reports the
+A skipped server is not a boot failure, but it _is_ a doctor failure: `clawd doctor` reports the
 skip, exits 1, and withholds the start command it normally ends with. The daemon itself comes up
 fine — start it directly if you know that server is down. A token bound to a URL the config no
 longer uses fails `clawd doctor --check-config` the same way, with exit 10; `clawd mcp set-token
@@ -429,6 +550,11 @@ longer uses fails `clawd doctor --check-config` the same way, with exit 10; `cla
   database in your state root (the `sqlite3` CLI is its own package on Linux:
   `sudo apt-get install -y sqlite3`):
   `sqlite3 "${CLAW_STATE_ROOT:-$HOME/.swift-claw}/claw.sqlite" "DELETE FROM allowlist WHERE user_id = <id>;"`
+- `CLAW_GROUP_CHATS`: comma-separated Telegram group/supergroup chat IDs served as shared rooms.
+  Keep this off for a personal state root. A group deployment trusts participant text in its topic
+  history and has relaxed tool approval behavior except for Coder submission, so run it under a
+  separate nonpersonal state root and review
+  [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup) before enabling it.
 - `CLAW_APPROVAL_EXPIRY`: seconds before a pending approval auto-denies (default 3600).
 - `CLAW_SEARCH_API_KEY`: Exa key; unset means the `web_search` tool is absent. Adding it
   after you have sealed does nothing on its own: once `secrets.enc` exists the daemon reads

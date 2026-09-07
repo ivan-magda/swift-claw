@@ -121,7 +121,9 @@ import Testing
     #expect(outcomes.count == signals.count)
     #expect(
       outcomes.allSatisfy { outcome in
-        if case .recorded = outcome { return true }
+        if case .recorded = outcome {
+          return true
+        }
         return false
       }
     )

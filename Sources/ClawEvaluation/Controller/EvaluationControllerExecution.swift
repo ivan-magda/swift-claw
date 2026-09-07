@@ -733,7 +733,9 @@ extension EvaluationController {
     let plaintextExists = FileManager.default.fileExists(atPath: configuration.resultURL.path)
     let envelopeExists = FileManager.default.fileExists(atPath: envelopeURL.path)
     let receiptExists = FileManager.default.fileExists(atPath: receiptURL.path)
-    if plaintextExists == false, envelopeExists == false, receiptExists == false { return nil }
+    if plaintextExists == false, envelopeExists == false, receiptExists == false {
+      return nil
+    }
     guard
       plaintextExists == false,
       envelopeExists,

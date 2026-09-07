@@ -171,7 +171,9 @@ private func client(status: Int, json: String) -> TelegramClient {
       guard let telegramErr = error as? TelegramError else {
         return false
       }
-      if case .decoding = telegramErr { return true }
+      if case .decoding = telegramErr {
+        return true
+      }
       return false
     }
   }

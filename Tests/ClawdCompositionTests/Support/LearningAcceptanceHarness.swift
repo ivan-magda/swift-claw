@@ -143,7 +143,9 @@ struct LearningAcceptanceHarness {
         do {
           try await poller.run()
         } catch {
-          if !Task.isCancelled { Issue.record(error) }
+          if !Task.isCancelled {
+            Issue.record(error)
+          }
         }
       },
       jobId: jobId
@@ -302,7 +304,9 @@ actor LearningAcceptanceUpdates {
       try Task.checkCancellation()
     }
     let bytes = queued.removeFirst()
-    if queued.isEmpty { ready = AsyncGate() }
+    if queued.isEmpty {
+      ready = AsyncGate()
+    }
     return HTTPResult(statusCode: 200, headers: [:], body: bytes)
   }
 }

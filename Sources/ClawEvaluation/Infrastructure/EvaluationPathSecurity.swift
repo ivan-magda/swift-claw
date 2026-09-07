@@ -116,7 +116,9 @@ enum EvaluationPathSecurity {
           buffer.baseAddress?.advanced(by: offset),
           data.count - offset
         )
-        if count < 0, errno == EINTR { continue }
+        if count < 0, errno == EINTR {
+          continue
+        }
         guard count > 0 else {
           throw EvaluationPathSecurityError.insecureFile(file.lastPathComponent)
         }
@@ -158,7 +160,9 @@ enum EvaluationPathSecurity {
       }
       while offset < byteCount {
         let count = read(descriptor, buffer.baseAddress?.advanced(by: offset), byteCount - offset)
-        if count < 0, errno == EINTR { continue }
+        if count < 0, errno == EINTR {
+          continue
+        }
         guard count > 0 else {
           throw EvaluationPathSecurityError.insecureFile(file.lastPathComponent)
         }
@@ -272,7 +276,9 @@ private extension EvaluationPathSecurity {
   static func rejectSymlink(at candidate: URL) throws {
     var status = stat()
     if lstat(candidate.path, &status) != 0 {
-      if errno == ENOENT { return }
+      if errno == ENOENT {
+        return
+      }
       throw EvaluationPathSecurityError.unavailable(candidate.lastPathComponent)
     }
     guard (status.st_mode & S_IFMT) != S_IFLNK else {

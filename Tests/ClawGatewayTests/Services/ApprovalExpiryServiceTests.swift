@@ -40,12 +40,18 @@ private final class RecordingApprovalStore: ApprovalStore, @unchecked Sendable {
   func approve(
     id: Int64,
     currentPolicyVersion: String,
+    actor: ApprovalResolutionActor?,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 
-  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool {
+  func deny(
+    id: Int64,
+    decision: ApprovalDecision,
+    actor: ApprovalResolutionActor?,
+    now: Date
+  ) throws(StoreError) -> Bool {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 

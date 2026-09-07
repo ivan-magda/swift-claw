@@ -251,6 +251,60 @@ fails config validation with exit 10. Then:
 This route is unofficial and vendor-dependent; details and caveats in
 [LOCAL_DEV.md](LOCAL_DEV.md#chatgpt-subscription-auth).
 
+## 9. Optional coding tasks
+
+Install a compatible native Codex CLI and Git on the daemon machine. GitHub work also needs `gh`
+and repository rights to clone, push and create the requested PR. Authenticate those tools as the
+service account. `clawd auth login` manages the conversation model, not Coder's login.
+
+From a terminal where `codex` and its dependencies work, run:
+
+```bash
+clawd coder setup
+```
+
+Setup reads the existing `~/.swift-claw/clawd.env`, checks the selected Codex executable and local
+login, then saves `CLAW_CODER_ENABLED=true` and a Coder-only `CLAW_CODER_PATH`. A selected profile's
+login remains explicitly unverified, as in the existing health behavior. Setup preserves the other
+settings, including a configured executable, profile or config home. Use `--dry-run` to check the
+proposed settings without writing, or `--env-file PATH` for another env file. It does not install
+dependencies, import credentials, edit shell startup files or restart the service.
+
+Restart the real service, then send `/status` in your private bot chat. Check the directory count in
+`coder.path`, the resolved Codex executable, Node when present, `coder.gh` for GitHub work, and
+authentication there. Setup's terminal checks do not prove that the running service can use the same
+authorization. Rerun setup after changing an nvm installation or otherwise moving tools. See
+[INSTALL.md](INSTALL.md#coder-prerequisites) for the service context.
+
+In your private bot DM:
+
+> Use Coder in `/home/me/projects/my-app` to fix the parser test in place and leave local changes.
+
+> Use Coder to resolve `https://github.com/my-org/my-app/issues/42` in a separate copy and open a pull request.
+
+Local paths refer to the daemon machine. In-place accepts dirty work; a separate copy is ref-only
+and does not copy uncommitted changes. A PR requires configured repository rights. There is no
+automatic apply-back or rollback. The approval card shows the full source/workspace/publication scope
+and the provided task after secret redaction, or the selected issue when the issue defines the work.
+Optional extra requirements or preferences appear under **Additional requirements** after secret
+redaction; leave them out when the task already says everything. After admission, you can continue
+chatting while the job runs.
+Ask for status or cancellation using the returned UUID. `/stop` cancels the current conversation turn;
+cancel the Coder job explicitly to stop its native worker. The result card leads with the outcome,
+publication, checks and changed files, with identifiers and observed evidence under compact details.
+
+Coder submission also works in a group configured through `CLAW_GROUP_CHATS`. Any current participant,
+including the requester, can approve or deny from that request's original approval message. clawd
+checks the participant's current membership with Telegram for every tap and fails closed if the check
+is unavailable. Make the bot a group administrator so Telegram guarantees `getChatMember` checks for
+other users. The person who asked remains the job owner; only that requester can inspect or cancel the
+job, from the same topic. Other group tool behavior is unchanged.
+
+N is configurable with `CLAW_CODER_MAX_CONCURRENT_JOBS` (default 1), and full means busy. Completion
+uses existing outbox retries, without another LLM turn. Child billing and child-reported usage are
+separate from conversational `/cost`. The settings, limits, group opt-in and authentication caveats
+are in [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration).
+
 ## Troubleshooting
 
 - **Exit codes are diagnostic:** 10 invalid config, 11 secret loading failed, 12 another

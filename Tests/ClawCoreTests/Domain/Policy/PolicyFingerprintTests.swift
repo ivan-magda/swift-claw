@@ -41,7 +41,9 @@ import Testing
     risk: RiskLevel = .safe,
     egress: ToolEgressClass = .none,
     fenceLabel: String? = nil,
-    invocationIdentity: String? = nil
+    invocationIdentity: String? = nil,
+    requiresInteractiveRequester: Bool = false,
+    requiresGroupApproval: Bool = false
   ) -> ToolDefinition {
     ToolDefinition(
       name: name,
@@ -51,7 +53,9 @@ import Testing
       egressClass: egress,
       riskLevel: risk,
       fenceLabel: fenceLabel,
-      invocationIdentity: invocationIdentity
+      invocationIdentity: invocationIdentity,
+      requiresInteractiveRequester: requiresInteractiveRequester,
+      requiresGroupApproval: requiresGroupApproval
     )
   }
 
@@ -147,6 +151,28 @@ import Testing
       subhash(tools: [tool(name: "t", egress: .none)])
         != subhash(tools: [tool(name: "t", egress: .arbitraryDestination)])
     )
+  }
+
+  @Test func interactiveRequesterRequirementIsAnInputClass() {
+    // given
+    let ordinary = tool(name: "t")
+    let interactive = tool(name: "t", requiresInteractiveRequester: true)
+
+    // when / then
+    #expect(subhash(tools: [ordinary]) != subhash(tools: [interactive]))
+  }
+
+  @Test func groupApprovalRequirementIsAnInputClass() {
+    // given
+    let automatic = tool(name: "t")
+    let confirmed = tool(name: "t", requiresGroupApproval: true)
+
+    // when
+    let automaticHash = subhash(tools: [automatic])
+    let confirmedHash = subhash(tools: [confirmed])
+
+    // then
+    #expect(automaticHash != confirmedHash)
   }
 
   @Test func invocationIdentityIsAnInputClass() {

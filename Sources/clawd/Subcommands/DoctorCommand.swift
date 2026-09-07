@@ -47,6 +47,8 @@ struct DoctorCommand: AsyncParsableCommand {
       report.add(contentsOf: await sandboxRows(config: config, live: false))
     }
 
+    report.add(contentsOf: await coderRows(config: config.coder))
+
     let secretsRow = SecretStoreResolver.doctorRow(
       stateRoot: config.stateRoot,
       environment: ProcessInfo.processInfo.environment
@@ -418,6 +420,13 @@ private extension DoctorCommand {
     )
     report.add(contentsOf: DoctorHealth.schedulerChecks(stores: stores, config: config, now: now))
     report.add(contentsOf: DoctorHealth.approvalChecks(stores: stores, config: config, now: now))
+    let secrets = try? EnvironmentLoader.loadSecrets(config: config)
+    report.add(
+      contentsOf: CoderHealthRows.persisted(
+        store: stores.coderJobs,
+        redactor: SecretRedactor(secretValues: secrets?.redactionValues ?? [])
+      )
+    )
   }
 }
 
@@ -494,5 +503,24 @@ private extension DoctorCommand {
   func emit(_ report: DoctorReport) {
     // swiftlint:disable:next no_print_in_production
     print(json ? report.renderJSON() : report.renderText())
+  }
+}
+
+// MARK: - Coder Diagnostics
+
+extension DoctorCommand {
+  func coderRows(
+    config: CoderConfig,
+    resolve: @Sendable (CoderConfig) async throws -> CoderBackendSetup = CoderBackendSetup.live
+  ) async -> [DoctorReport.Check] {
+    let rows = await CoderHealthRows.configuration(
+      config: config,
+      live: !checkConfig,
+      resolve: resolve
+    )
+    guard !checkConfig else {
+      return rows
+    }
+    return rows + (await CoderHealthRows.service(nil))
   }
 }

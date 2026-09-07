@@ -5,6 +5,10 @@ import NIOCore
 import NIOFoundationCompat
 import NIOPosix
 
+#if canImport(Network)
+  import Network
+#endif
+
 #if canImport(Glibc)
   import Glibc
 #elseif canImport(Darwin)
@@ -251,6 +255,9 @@ extension AsyncHTTPExecutor {
     }
 
     #if canImport(Network)
+      if let networkError = error as? NWError, case .posix(.ECONNREFUSED) = networkError {
+        return true
+      }
       if let posixError = error as? HTTPClient.NWPOSIXError {
         return posixError.errorCode == .ECONNREFUSED
       }

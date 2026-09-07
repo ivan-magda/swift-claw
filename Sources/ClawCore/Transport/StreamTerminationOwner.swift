@@ -160,7 +160,9 @@ private extension StreamTerminationOwner {
   /// while the lock is still held.
   func park(_ continuation: CheckedContinuation<Termination, Never>) {
     let cached = state.withLock { current -> Termination? in
-      if let terminal = current.terminal { return terminal }
+      if let terminal = current.terminal {
+        return terminal
+      }
       current.joiners.append(continuation)
       return nil
     }

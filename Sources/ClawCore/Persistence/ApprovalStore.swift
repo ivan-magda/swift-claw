@@ -34,11 +34,17 @@ public protocol ApprovalStore: Sendable {
   func approve(
     id: Int64,
     currentPolicyVersion: String,
+    actor: ApprovalResolutionActor?,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome
   /// CAS PENDING→(EXPIRED when decision is `.expired`, else REJECTED) + `approvalDenied` audit in
   /// the same txn. false when the row is no longer PENDING (a racing resolver won).
-  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool
+  func deny(
+    id: Int64,
+    decision: ApprovalDecision,
+    actor: ApprovalResolutionActor?,
+    now: Date
+  ) throws(StoreError) -> Bool
   /// Ticker/boot sweep: CAS every PENDING row with `expires_ts <= now` → EXPIRED (+ `approvalDenied`
   /// audit, decision `expired`) and return the swept rows for the waiter signals.
   func sweepExpired(now: Date) throws(StoreError) -> [Approval]
@@ -51,4 +57,18 @@ public protocol ApprovalStore: Sendable {
   func resolveOrphans(now: Date) throws(StoreError) -> Int
   /// Doctor: outstanding PENDING count + the oldest pending row's age.
   func approvalsHealth(now: Date) throws(StoreError) -> ApprovalsHealth
+}
+
+public extension ApprovalStore {
+  func approve(
+    id: Int64,
+    currentPolicyVersion: String,
+    now: Date
+  ) throws(StoreError) -> ApprovalApproveOutcome {
+    try approve(id: id, currentPolicyVersion: currentPolicyVersion, actor: nil, now: now)
+  }
+
+  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool {
+    try deny(id: id, decision: decision, actor: nil, now: now)
+  }
 }

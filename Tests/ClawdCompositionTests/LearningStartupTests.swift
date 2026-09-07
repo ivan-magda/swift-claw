@@ -21,7 +21,9 @@ import Testing
     let telegramStep: ScriptedHTTPExecutor.Step = .responding { request in
       if request.url.hasSuffix("/getUpdates") {
         let body = try JSONSerialization.jsonObject(with: request.body ?? Data()) as? [String: Any]
-        if (body?["offset"] as? Int ?? 0) > 1 { commandHandled.open() }
+        if (body?["offset"] as? Int ?? 0) > 1 {
+          commandHandled.open()
+        }
         return try await updates.next()
       }
       if request.url.hasSuffix("/sendMessage") {

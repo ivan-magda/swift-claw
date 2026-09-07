@@ -23,6 +23,7 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 
 ## Features
 
+- **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
 - **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
   turn, `/new` starts a fresh session, clawd transcribes voice notes on-device
   (macOS 26), and it looks at photos you send if your model can see them.
@@ -43,13 +44,16 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   code and treats inbound content as data, never as instructions.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
+- **Coding tasks from chat.** Opt in to Coder to delegate an approved task from your DM or a
+  configured group topic to your native Codex installation, then receive a structured result card
+  when the background job finishes. Local changes and GitHub pull requests use your installed tools
+  and repository rights.
 - **Tools from MCP servers.** List a server, store its token encrypted, and its tools join
   the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
   named tool safe, but the exfiltration gate can still require approval. Only you can add a
   server or change what it exposes.
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
   can run an eligible model on a ChatGPT subscription.
-- **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
 
 ## The approval card
 
@@ -63,7 +67,9 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 
 A file write suspends the run until you answer. Every field on the card comes from the daemon's own
 record of the action: the target path after symlink and `..` resolution, the size, and a preview of
-the content. Tap Deny and clawd writes nothing.
+the content. Coder uses a dedicated card with the complete source, workspace, publication scope,
+provided task or selected issue, and optional additional requirements; its completion card puts the
+outcome first and keeps technical evidence compact. Tap Deny and clawd writes nothing.
 
 ## Install
 
@@ -109,7 +115,10 @@ commands and confirmation rules.
 
 ## Security model
 
-swift-claw assumes you are the only person it serves.
+swift-claw assumes you are the only person it serves in its normal personal deployment. Configured
+groups are a supervised exception: use a separate nonpersonal state root, trust the participants,
+and understand that their ordinary tool approvals are relaxed; see
+[group Coder configuration](docs/CUSTOMIZATION.md#coder-configuration).
 
 - **Default-deny.** Only allowlisted Telegram IDs get a conversation. clawd refuses
   everyone else, and answers `/start` with the sender's own numeric ID so you can
@@ -118,10 +127,13 @@ swift-claw assumes you are the only person it serves.
 - **Secrets encrypted at rest.** `clawd secrets seal` wraps the bot token and API keys in
   an AES-GCM envelope. Plaintext env secrets remain available as a dev fallback that
   warns on every boot.
-- **Approvals are durable and unforgeable.** File writes, memory writes, and code
-  execution suspend into a durable state machine until you tap Approve in Telegram. A
-  forged or third-party callback cannot approve, and pending approvals expire to deny.
-- **Prompt injection contained.** Messages, web content, tool output, and stored memory
+- **Approvals are durable and bound to their prompt.** In your DM, file writes, memory writes, code
+  execution, and native Coder submissions suspend into a durable state machine until you decide. In
+  a configured group, Coder submission is the one action that always asks: any current participant
+  can approve or deny from its original approval message, and clawd checks membership with Telegram
+  at the tap. Pending approvals expire to deny.
+- **Prompt injection contained in the personal deployment.** Messages, web content, tool output,
+  and stored memory
   enter the context as untrusted data. Once a session has both ingested untrusted content
   and pulled your private files into context, fetching an arbitrary URL also needs your
   approval. clawd pins your LLM and search providers in config, and the model cannot

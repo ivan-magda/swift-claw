@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status", "summary", "starting_commit", "base_branch", "changed_files",
+    "branch", "commit", "pr_url", "checks", "error"
+  ],
+  "properties": {
+    "status": { "type": "string", "enum": ["succeeded", "blocked", "failed"] },
+    "summary": { "type": "string" },
+    "starting_commit": { "type": ["string", "null"] },
+    "base_branch": { "type": ["string", "null"] },
+    "changed_files": { "type": ["array", "null"], "items": { "type": "string" } },
+    "branch": { "type": ["string", "null"] },
+    "commit": { "type": ["string", "null"] },
+    "pr_url": { "type": ["string", "null"] },
+    "checks": { "type": "array", "items": { "type": "string" } },
+    "error": { "type": ["string", "null"] }
+  }
+}

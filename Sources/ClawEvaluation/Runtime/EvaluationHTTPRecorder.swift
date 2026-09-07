@@ -274,9 +274,15 @@ actor EvaluationHTTPRecorder: HTTPExecuting, HTTPStreaming {
   }
 
   private static func strings(in value: Any) -> [String] {
-    if let string = value as? String { return [string] }
-    if let array = value as? [Any] { return array.flatMap(strings) }
-    if let object = value as? [String: Any] { return object.values.flatMap(strings) }
+    if let string = value as? String {
+      return [string]
+    }
+    if let array = value as? [Any] {
+      return array.flatMap(strings)
+    }
+    if let object = value as? [String: Any] {
+      return object.values.flatMap(strings)
+    }
     return []
   }
 

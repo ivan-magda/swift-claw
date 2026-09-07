@@ -149,7 +149,9 @@ public struct TurnRunner: TurnDispatching {
     }
 
     let inputs: TurnInputs
+    let execution: RunExecutionContext?
     do {
+      execution = try runs.executionContext(runId: runId, fallbackChatId: chatId)
       inputs = try loadTurnInputs(
         runId: runId,
         sessionId: sessionId,
@@ -188,7 +190,8 @@ public struct TurnRunner: TurnDispatching {
       origin: origin,
       proactiveTodayUSD: inputs.proactiveTodayUSD,
       mode: mode,
-      threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey)
+      threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey),
+      requesterUserId: execution?.requesterUserId
     )
 
     try await commit(
@@ -225,7 +228,9 @@ public struct TurnRunner: TurnDispatching {
 
     let inputs: TurnInputs
     let carryOver: ResumeUsage
+    let execution: RunExecutionContext?
     do {
+      execution = try runs.executionContext(runId: runId, fallbackChatId: chatId)
       carryOver = try runs.resumeUsage(runId: runId)
       inputs = try loadTurnInputs(
         runId: runId,
@@ -257,7 +262,8 @@ public struct TurnRunner: TurnDispatching {
         proactiveTodayUSD: inputs.proactiveTodayUSD,
         carryOver: carryOver,
         mode: mode,
-        threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey)
+        threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey),
+        requesterUserId: execution?.requesterUserId
       )
     } catch {
       failResume(runId: runId, stage: .turn, error: error)

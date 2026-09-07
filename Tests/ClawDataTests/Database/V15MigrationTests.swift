@@ -5,7 +5,7 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct V13MigrationTests {
+@Suite struct V15MigrationTests {
   @Test func freshLatestMigrationInstallsOnlyTheLiveTrialIndexAndIsIdempotent() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -20,12 +20,12 @@ import Testing
     let sql = try #require(indexes["idx_learning_trials_live_job"])
     #expect(sql.contains("UNIQUE INDEX"))
     #expect(sql.contains("state IN ('open', 'draining')"))
-    #expect(try migrations(queue).last == "v13")
+    #expect(try migrations(queue).last == "v15")
   }
 
-  @Test func v13PreservesSeededV12LiveAndTerminalRows() throws {
+  @Test func v15PreservesSeededV14LiveAndTerminalRows() throws {
     // given
-    let queue = try v12Queue()
+    let queue = try v14Queue()
     try seedJob(queue, jobId: 1)
     try insertTrial(queue, jobId: 1, trialId: 1, state: .draining, candidateByte: "b")
     try insertTrial(queue, jobId: 1, trialId: 2, state: .promoted, candidateByte: "c")
@@ -95,9 +95,9 @@ import Testing
     #expect(try trialCount(queue) == 4)
   }
 
-  @Test func conflictingV12UpgradeRollsBackAndRetriesAfterRepair() throws {
+  @Test func conflictingV14UpgradeRollsBackAndRetriesAfterRepair() throws {
     // given
-    let queue = try v12Queue()
+    let queue = try v14Queue()
     try seedJob(queue, jobId: 1)
     try insertTrial(queue, jobId: 1, trialId: 1, state: .open, candidateByte: "b")
     try insertTrial(queue, jobId: 1, trialId: 2, state: .draining, candidateByte: "c")
@@ -116,7 +116,7 @@ import Testing
     var indexes = try indexSQL(queue)
     #expect(indexes["idx_learning_trials_open_job"] != nil)
     #expect(indexes["idx_learning_trials_live_job"] == nil)
-    #expect(try migrations(queue).contains("v13") == false)
+    #expect(try migrations(queue).contains("v15") == false)
     #expect(try trialCount(queue) == 2)
 
     try queue.write { db in
@@ -129,7 +129,7 @@ import Testing
     indexes = try indexSQL(queue)
     #expect(indexes["idx_learning_trials_open_job"] == nil)
     #expect(indexes["idx_learning_trials_live_job"] != nil)
-    #expect(try migrations(queue).last == "v13")
+    #expect(try migrations(queue).last == "v15")
   }
 }
 
@@ -160,9 +160,9 @@ enum LiveTrialPair: CaseIterable {
 
 // MARK: - Schema Fixtures
 
-private func v12Queue() throws -> DatabaseQueue {
+private func v14Queue() throws -> DatabaseQueue {
   let queue = try ClawDatabase.makeInMemoryQueue()
-  try ClawDatabase.migrator.migrate(queue, upTo: "v12")
+  try ClawDatabase.migrator.migrate(queue, upTo: "v14")
   return queue
 }
 

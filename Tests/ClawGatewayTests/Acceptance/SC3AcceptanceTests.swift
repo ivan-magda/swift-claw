@@ -253,23 +253,31 @@ actor ReleaseGate {
 
   func markEntered() {
     entered = true
-    for waiter in enterWaiters { waiter.resume() }
+    for waiter in enterWaiters {
+      waiter.resume()
+    }
     enterWaiters = []
   }
 
   func awaitEntered() async {
-    if entered { return }
+    if entered {
+      return
+    }
     await withCheckedContinuation { continuation in enterWaiters.append(continuation) }
   }
 
   func release() {
     released = true
-    for waiter in releaseWaiters { waiter.resume() }
+    for waiter in releaseWaiters {
+      waiter.resume()
+    }
     releaseWaiters = []
   }
 
   func awaitRelease() async {
-    if released { return }
+    if released {
+      return
+    }
     await withCheckedContinuation { continuation in releaseWaiters.append(continuation) }
   }
 }

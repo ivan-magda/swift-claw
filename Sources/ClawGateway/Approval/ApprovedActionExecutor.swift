@@ -137,11 +137,63 @@ private extension ApprovedActionExecutor {
         ingestedUntrusted: false
       )
     }
+    let context: ToolExecutionContext?
+    do {
+      if let restored = try runs.executionContext(
+        runId: approval.runId,
+        fallbackChatId: approval.ownerUserId
+      ) {
+        guard
+          restored.sessionId == approval.sessionId,
+          restored.deliveryTarget.chatId == approval.ownerUserId
+        else {
+          return missingExecutionContext()
+        }
+
+        if restored.mode == .group {
+          guard
+            restored.origin == .interactive,
+            restored.requesterUserId != nil,
+            approval.reason == .coderSubmit,
+            approval.tool == CoderToolNames.submit
+          else {
+            return missingExecutionContext()
+          }
+        }
+        context = ToolExecutionContext(
+          runId: approval.runId,
+          sessionId: restored.sessionId,
+          chatId: restored.deliveryTarget.chatId,
+          requesterUserId: restored.requesterUserId,
+          origin: restored.origin,
+          mode: restored.mode,
+          toolCallId: approval.toolCallId,
+          approvalId: approval.id
+        )
+      } else {
+        return missingExecutionContext()
+      }
+    } catch {
+      return missingExecutionContext()
+    }
+    let hasInteractiveRequester = context?.origin == .interactive && context?.requesterUserId != nil
+    if tool.definition.requiresInteractiveRequester && !hasInteractiveRequester {
+      return missingExecutionContext()
+    }
     // Run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s
     // abandon-on-timeout race, so the observation is always truthful (file_write is atomic).
     return await tool.execute(
       arguments: arguments,
-      canonicalTarget: approval.canonicalTarget
+      canonicalTarget: approval.canonicalTarget,
+      context: context
+    )
+  }
+
+  func missingExecutionContext() -> ToolPayload {
+    ToolPayload(
+      content: "The approved action's original request could not be restored; nothing ran.",
+      status: .error,
+      ingestedUntrusted: false
     )
   }
 

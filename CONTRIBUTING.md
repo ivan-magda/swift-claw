@@ -52,7 +52,7 @@ Then:
 ```bash
 swift build            # build
 swift test             # run the suite
-scripts/lint.sh --fix  # auto-apply layout, multiline guard bodies, and SwiftLint fixes
+scripts/lint.sh --fix  # auto-apply layout, multiline conditional bodies, and SwiftLint fixes
 scripts/lint.sh        # verify; must pass before committing
 ```
 

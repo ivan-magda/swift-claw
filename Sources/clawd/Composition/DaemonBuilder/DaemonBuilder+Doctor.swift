@@ -11,7 +11,8 @@ extension DaemonBuilder {
   func makeDoctorReporter(
     sandbox: SandboxStack,
     cooldown: any PrimaryRouteCooldownTracking,
-    mcpOutcomes: [MCPServerOutcome]
+    mcpOutcomes: [MCPServerOutcome],
+    coder: CoderComposition? = nil
   ) -> DaemonDoctorReporter {
     DaemonDoctorReporter(
       stores: stores,
@@ -21,7 +22,9 @@ extension DaemonBuilder {
       staticAPIKey: secrets.llmApiKey,
       makeManagedStore: makeManagedStore,
       mcp: mcp,
-      mcpOutcomes: mcpOutcomes
+      mcpOutcomes: mcpOutcomes,
+      coder: coder,
+      redactor: SecretRedactor(secretValues: redactionValues)
     )
   }
 }
@@ -37,6 +40,8 @@ struct DaemonDoctorReporter: DoctorReporting {
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
   let mcp: MCPBootInputs
   let mcpOutcomes: [MCPServerOutcome]
+  let coder: CoderComposition?
+  let redactor: SecretRedactor
 
   func scanSkills() async -> SkillScanResult {
     DoctorHealth.skillScan(config: config)
@@ -89,6 +94,13 @@ struct DaemonDoctorReporter: DoctorReporting {
       report.add(contentsOf: [SandboxHealthRows.admittingRow(await maintenance.isAdmitting())])
     }
 
+    if config.coder.enabled {
+      report.add(contentsOf: coder?.checks ?? [])
+    } else {
+      report.add(contentsOf: CoderHealthRows.disabled)
+    }
+    report.add(contentsOf: CoderHealthRows.persisted(store: stores.coderJobs, redactor: redactor))
+    report.add(contentsOf: await CoderHealthRows.service(coder?.service))
     return report
   }
 }

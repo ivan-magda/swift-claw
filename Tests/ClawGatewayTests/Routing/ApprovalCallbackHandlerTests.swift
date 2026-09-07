@@ -88,17 +88,27 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
   func approve(
     id: Int64,
     currentPolicyVersion: String,
+    actor: ApprovalResolutionActor?,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome {
-    if throwOnResolve { throw StoreError.unexpected("scripted store failure") }
+    if throwOnResolve {
+      throw StoreError.unexpected("scripted store failure")
+    }
     lock.lock()
     defer { lock.unlock() }
     recordedApproveCalls.append((id, currentPolicyVersion))
     return approveOutcome
   }
 
-  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool {
-    if throwOnResolve { throw StoreError.unexpected("scripted store failure") }
+  func deny(
+    id: Int64,
+    decision: ApprovalDecision,
+    actor: ApprovalResolutionActor?,
+    now: Date
+  ) throws(StoreError) -> Bool {
+    if throwOnResolve {
+      throw StoreError.unexpected("scripted store failure")
+    }
     lock.lock()
     defer { lock.unlock() }
     recordedDenyCalls.append((id, decision))
@@ -192,6 +202,8 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
       replies: replies,
       accessControl: accessControl,
       approvals: approvals,
+      runs: RunStoreGRDB(writer: queue),
+      membership: RecordingTransport(),
       audit: audit,
       coordinator: coordinator,
       callbacks: callbacks,

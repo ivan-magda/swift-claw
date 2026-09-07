@@ -37,6 +37,10 @@ struct DaemonBuilder: Sendable {
   /// real one; the current route never invokes it.
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
 
+  /// Resolves native CLI readiness once; injectable at the unmanaged process boundary.
+  var resolveCoder: @Sendable (CoderConfig) async throws -> CoderBackendSetup = CoderBackendSetup
+    .live
+
   /// The one redaction set for this process — secret-store values plus MCP tokens. Every redactor
   /// and arg guard the builder makes reads this instead of `secrets.redactionValues`, so none of
   /// them can be built from a narrower list than the log backend was. Derived rather than passed in:
@@ -76,6 +80,7 @@ struct DaemonBuilder: Sendable {
   ) async throws -> DaemonRuntimeBundle {
     let sandbox = await prepareSandbox()
     let coordination = TurnCoordination()
+    let coder = await prepareCoder(coordination: coordination)
 
     // Hoisted so the agent and the /schedule parse share one offline-first cost resolver — both
     // meter spend against the same price snapshot and reference rate.
@@ -97,7 +102,8 @@ struct DaemonBuilder: Sendable {
       workspace: workspace,
       costResolver: costResolver,
       sandbox: sandbox,
-      mcpTools: mcpStack.tools
+      mcpTools: mcpStack.tools,
+      coderTools: coder.tools
     )
 
     let learning = makeLearningService(
@@ -115,6 +121,7 @@ struct DaemonBuilder: Sendable {
       workspace: workspace,
       sandbox: sandbox,
       mcpCatalog: mcpStack.catalog,
+      coder: coder,
       learning: learning
     )
 
@@ -144,8 +151,10 @@ struct DaemonBuilder: Sendable {
         coordination: coordination,
         waiter: consumers.approvals.waiter,
         heartbeatOwner: consumers.heartbeatOwner,
+        coder: coder.service,
         learning: learning
-      )
+      ),
+      coder: coder.service
     )
   }
 
@@ -170,6 +179,7 @@ struct DaemonBuilder: Sendable {
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
     mcpCatalog: ResolvedMCPCatalog,
+    coder: CoderComposition,
     learning: ScheduledLearningService?
   ) -> RunnerConsumers {
     let turnRunner = makeTurnRunner(
@@ -197,7 +207,8 @@ struct DaemonBuilder: Sendable {
       doctor: makeDoctorReporter(
         sandbox: sandbox,
         cooldown: cooldown,
-        mcpOutcomes: mcpCatalog.outcomes
+        mcpOutcomes: mcpCatalog.outcomes,
+        coder: coder
       ),
       learning: learning
     )
@@ -230,6 +241,7 @@ struct DaemonBuilder: Sendable {
     coordination: TurnCoordination,
     credentialSources: [any LLMCredentialSource],
     boot: @escaping @Sendable () async -> Void,
+    coder: CoderService? = nil,
     laneDrainClock: any Clock<Duration> = ContinuousClock(),
     gracefulShutdownSignals: [UnixSignal] = [.sigterm, .sigint]
   ) -> DaemonRuntimeBundle {
@@ -243,7 +255,13 @@ struct DaemonBuilder: Sendable {
     )
 
     let daemon = Daemon(
-      services: Self.servicesWithLaneAdmissionLast(base: services, laneAdmission: laneAdmission),
+      services: Self.servicesWithLaneAdmissionLast(
+        base: services
+          + (coder.map {
+            [$0 as any Service]
+          } ?? []),
+        laneAdmission: laneAdmission
+      ),
       boot: boot,
       logger: logger,
       gracefulShutdownSignals: gracefulShutdownSignals,
@@ -254,7 +272,8 @@ struct DaemonBuilder: Sendable {
       daemon: daemon,
       lanes: coordination.lanes,
       credentialSources: credentialSources,
-      laneShutdownOutcome: laneShutdownOutcome
+      laneShutdownOutcome: laneShutdownOutcome,
+      coder: coder
     )
   }
 

@@ -144,7 +144,8 @@ extension AgentRuntime {
     proactiveTodayUSD: Double = 0,
     carryOver: ResumeUsage? = nil,
     mode: ChatMode = .direct,
-    threadId: Int64? = nil
+    threadId: Int64? = nil,
+    requesterUserId: Int64? = nil
   ) async throws -> TurnOutcome {
     let deadline = now() + .seconds(budget.wallClockDeadlineSeconds)
     var attemptState = AttemptRuntimeState(policy: attemptPolicy)
@@ -484,6 +485,19 @@ extension AgentRuntime {
           )
         }
 
+        let effectiveRequesterUserId: Int64?
+        if origin == .interactive {
+          if let requesterUserId {
+            effectiveRequesterUserId = requesterUserId
+          } else if mode == .direct {
+            effectiveRequesterUserId = chatId
+          } else {
+            effectiveRequesterUserId = nil
+          }
+        } else {
+          effectiveRequesterUserId = nil
+        }
+
         let context = ToolDispatchContext(
           sessionTainted: sessionTainted,
           runIngestedUntrusted: ingestedUntrusted,
@@ -491,7 +505,17 @@ extension AgentRuntime {
           runPrivateData: runPrivateData,
           sessionHasPrivateData: sessionHasPrivateData,
           approvalAlreadyPending: pendingSuspension != nil,
-          mode: mode
+          mode: mode,
+          executionContext: ToolExecutionContext(
+            runId: runId,
+            sessionId: sessionId,
+            chatId: chatId,
+            requesterUserId: effectiveRequesterUserId,
+            origin: origin,
+            mode: mode,
+            toolCallId: call.id,
+            approvalId: nil
+          )
         )
 
         guard let toolDispatcher else {

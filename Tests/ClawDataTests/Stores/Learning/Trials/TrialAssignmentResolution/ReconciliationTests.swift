@@ -100,7 +100,7 @@ extension TrialAssignmentResolutionTests {
     // then
     #expect(identities == [first, second])
 
-    // given — v13 normally prevents this; removing the index exposes the defensive scan.
+    // given — v15 normally prevents this; removing the index exposes the defensive scan.
     try env.insertDuplicateLiveTrial(jobId: env.jobId)
 
     // when / then — choosing the first row would starve one live trial indefinitely.

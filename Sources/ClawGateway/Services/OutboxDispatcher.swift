@@ -91,11 +91,15 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
     for row in pendingRows {
       // Stop promptly on graceful shutdown: leave the rest PENDING for boot recovery rather
       // than starting new sends while the task is unwinding.
-      if Task.isCancelled { break }
+      if Task.isCancelled {
+        break
+      }
 
       // A chat Telegram is throttling waits out its hold; the rows of every other chat carry on.
       // Order inside a run survives because a run answers exactly one chat.
-      if holds.isHeld(row.chatId, now: clock.now) { continue }
+      if holds.isHeld(row.chatId, now: clock.now) {
+        continue
+      }
 
       let messageId: Int64
       do {
@@ -103,7 +107,9 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
       } catch {
         // A send interrupted by shutdown is not a fault — the row stays PENDING and boot recovery
         // redelivers it; only a genuine failure is worth a warning.
-        if Task.isCancelled { break }
+        if Task.isCancelled {
+          break
+        }
         if let retryAfter = Self.floodControlRetryAfter(error) {
           hold(chat: row.chatId, forSeconds: retryAfter)
           continue
@@ -156,7 +162,9 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
         replyMarkup: row.replyMarkup
       )
     } catch {
-      if Self.floodControlRetryAfter(error) != nil { throw error }
+      if Self.floodControlRetryAfter(error) != nil {
+        throw error
+      }
       logger.warning(
         "rich send failed for \(row.originLabel) step \(row.stepIndex), falling back to plain: \(error)"
       )
@@ -206,7 +214,9 @@ private final class FloodControlHolds<Instant: InstantProtocol>: Sendable {
       guard let deadline = held[chatId] else {
         return false
       }
-      if now < deadline { return true }
+      if now < deadline {
+        return true
+      }
       held[chatId] = nil
       return false
     }

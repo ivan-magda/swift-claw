@@ -22,6 +22,7 @@ public enum ApprovalReason: String, Sendable, Equatable {
   case exfilTrifecta = "exfil_trifecta"
   case askTier = "ask_tier"
   case codeExec = "code_exec"
+  case coderSubmit = "coder_submit"
 }
 
 /// The tool-specific prompt inputs, produced at gate time by the tool that will act. The gate
@@ -51,19 +52,22 @@ public struct PreparedToolAction: Sendable, Equatable {
   public let presentation: ToolApprovalPresentation
   public let guardTexts: [String]
   public let canExfiltrate: Bool
+  public let approvalReason: ApprovalReason
 
   public init(
     canonicalTarget: String,
     canonicalArgsJSON: String,
     presentation: ToolApprovalPresentation,
     guardTexts: [String],
-    canExfiltrate: Bool
+    canExfiltrate: Bool,
+    approvalReason: ApprovalReason
   ) {
     self.canonicalTarget = canonicalTarget
     self.canonicalArgsJSON = canonicalArgsJSON
     self.presentation = presentation
     self.guardTexts = guardTexts
     self.canExfiltrate = canExfiltrate
+    self.approvalReason = approvalReason
   }
 }
 

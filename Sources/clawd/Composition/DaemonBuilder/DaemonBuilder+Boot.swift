@@ -23,15 +23,13 @@ extension DaemonBuilder {
     BotMenuCommand(command: "help", description: "Show commands and confirm rules."),
   ]
 
-  /// Composes the daemon's one-shot boot reconciliation: register the command menu with Telegram
-  /// (`registerMenu`), sweep crash-orphaned runs (`reconcileRuns`), then re-park unresolved
-  /// approvals (`reconcileApprovals`). Each step is best-effort, but `reconcileApprovals` is
-  /// deliberately last: the run sweep must fail its orphans first so the approval sweep only sees
-  /// runs that are genuinely still parked. All three run before any update is served.
+  /// Reconciles runs and Coder before approval replay can start native work or restore parked lanes.
+  /// The graph starts after this boot hook; every resulting owner must also support fallback shutdown.
   func bootSequence(
     coordination: TurnCoordination,
     waiter: ApprovalWaiter,
     heartbeatOwner: Int64?,
+    coder: CoderService? = nil,
     learning: ScheduledLearningService?
   ) -> @Sendable () async -> Void {
     let registerMenu = registerMenuCommands()
@@ -44,7 +42,21 @@ extension DaemonBuilder {
     return {
       await registerMenu()
       await reconcileRuns()
-      await reconcileApprovals()
+      // Approval replay can launch a Coder job before the service graph starts, so a Coder that
+      // could not reconcile keeps replay closed. Learning owns no native process and is reconciled
+      // either way rather than inheriting a guard that was never about it.
+      var coderReconciled = true
+      if let coder {
+        do {
+          try await coder.start()
+        } catch {
+          logger.error("Coder startup reconciliation failed; admission remains closed")
+          coderReconciled = false
+        }
+      }
+      if coderReconciled {
+        await reconcileApprovals()
+      }
       // Prior-process accounting is attempted before serving; network recovery starts with the
       // learning service so a stalled inference cannot hold the poller or primary outbox.
       await learning?.reconcileAtBoot(now: now())

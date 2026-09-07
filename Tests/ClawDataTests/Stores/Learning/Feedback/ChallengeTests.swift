@@ -101,7 +101,7 @@ extension FeedbackStoreTests {
   }
 
   @Test func challengeSubjectKindsMapToOnlyTheirLegalSignals() throws {
-    // given — v11 has no signal column; subject kind is the closed discriminator
+    // given — v13 has no signal column; subject kind is the closed discriminator
     let cases: [(FeedbackSubjectKind, OwnerSignal)] = [
       (.run, .resultCorrection), (.candidate, .candidateEdit),
     ]
@@ -159,7 +159,7 @@ extension FeedbackStoreTests {
   }
 
   @Test func unsupportedDurableChallengeKindFailsClosedOnRead() throws {
-    // given — v11 can physically hold a kind with no payload signal mapping
+    // given — v13 can physically hold a kind with no payload signal mapping
     let env = try FeedbackStoreEnvironment.make()
     try env.insertChallengeDirectly(kind: .evaluation)
 
@@ -271,7 +271,7 @@ extension FeedbackStoreTests {
       failure = error
     }
 
-    // then — application supersession cannot make this pass; the v11 partial index must fire
+    // then — application supersession cannot make this pass; the v13 partial index must fire
     guard case .unexpected = failure else {
       Issue.record("expected the mapped live-challenge unique-index failure")
       return

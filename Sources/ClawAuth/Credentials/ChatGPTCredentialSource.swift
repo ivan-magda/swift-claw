@@ -330,7 +330,9 @@ private extension ChatGPTCredentialSource {
   }
 
   var isStopping: Bool {
-    if case .stopping = state { return true }
+    if case .stopping = state {
+      return true
+    }
     return false
   }
 

@@ -42,7 +42,9 @@ extension ScheduledLearningStoreGRDB {
       )
       for priorRow in priorRows {
         let prior = try Self.decodeTerminalReceipt(priorRow)
-        if prior.record.rollbackTrigger == trigger { return prior }
+        if prior.record.rollbackTrigger == trigger {
+          return prior
+        }
       }
       let state = try Self.readState(db, jobId: inputs.identity.jobId)
       let current =

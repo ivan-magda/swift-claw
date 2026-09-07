@@ -98,6 +98,7 @@ extension RunCommand {
     let outcome = await coordinator.shutDown(
       daemonError: runFailure,
       laneDrain: laneDrain,
+      coder: bundle.coder,
       dependent: RuntimeShutdownCoordinator.DependentCleanup(
         commitCredentials: { try await Self.commitCredentials(bundle.credentialSources) },
         // The dedicated redirect-disabled LLM client, now its own resource rather than the Telegram
@@ -114,6 +115,8 @@ extension RunCommand {
       logger.info("clawd stopped")
     case .failed(let error):
       throw error
+    case .fatalCoderCleanup:
+      try terminator.fatalCoderCleanup(logger: logger)
     case .fatalLaneTimeout(let activeRunIDs):
       try terminator.fatalLaneDrainTimeout(
         activeRunIDs: activeRunIDs,

@@ -23,7 +23,9 @@ extension LearningRetentionSnapshot {
       let settled = settlements.contains { row in
         (row["run_id"] as Int64) == runId && (row["settled_at"] as Int64?) != nil
       }
-      if !settled { retained.runs.insert(runId) }
+      if !settled {
+        retained.runs.insert(runId)
+      }
     }
     for trial in trials where isLiveTrial(trial) {
       retained.trials.insert(trial["trial_id"])
@@ -182,7 +184,9 @@ extension LearningRetentionSnapshot {
         }
         if retained.feedback.contains(event["event_id"]) {
           retainSubject(event, in: &retained)
-          if let prior: Int64 = event["supersedes"] { retained.feedback.insert(prior) }
+          if let prior: Int64 = event["supersedes"] {
+            retained.feedback.insert(prior)
+          }
         }
       }
     } while previous != retained
@@ -231,7 +235,9 @@ private extension LearningRetentionSnapshot {
       if let predecessor = manifest.predecessorCandidate {
         retained.candidates.insert(predecessor.rawValue)
       }
-      if let control = manifest.predecessorFeedback { retained.feedback.insert(control.eventId) }
+      if let control = manifest.predecessorFeedback {
+        retained.feedback.insert(control.eventId)
+      }
       // A successor and notice target are also durable completion markers for the predecessor.
       for successor in candidates
       where (successor["predecessor_digest"] as String?) == (row["candidate_digest"] as String) {
@@ -273,7 +279,9 @@ private extension LearningRetentionSnapshot {
         let receipt: AdmissionReceipt = try ScheduledLearningStoreGRDB.decodeCanonicalDecision(
           row["result"]
         )
-        if retained.trials.contains(receipt.trialId) { retained.decisions.insert(id) }
+        if retained.trials.contains(receipt.trialId) {
+          retained.decisions.insert(id)
+        }
         if retained.decisions.contains(id) {
           retained.trials.insert(receipt.trialId)
           retained.candidates.insert(receipt.candidateDigest.rawValue)
@@ -371,7 +379,9 @@ private extension LearningRetentionSnapshot {
     let digest: String = row["subject_digest"]
     switch FeedbackSubjectKind(rawValue: row["subject_kind"]) {
     case .run:
-      if let runId = Int64(digest) { retained.runs.insert(runId) }
+      if let runId = Int64(digest) {
+        retained.runs.insert(runId)
+      }
     case .evaluation:
       for evaluation in evaluations
       where sameJobEpoch(row, evaluation)
@@ -382,7 +392,9 @@ private extension LearningRetentionSnapshot {
     case .candidate:
       retained.candidates.insert(digest)
     case .promotion:
-      if let id = Int64(digest) { retained.decisions.insert(id) }
+      if let id = Int64(digest) {
+        retained.decisions.insert(id)
+      }
     case nil:
       break
     }

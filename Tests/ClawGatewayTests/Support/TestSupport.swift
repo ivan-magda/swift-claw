@@ -51,7 +51,9 @@ actor FakeTurnRunner: TurnDispatching {
       continuation.resume()
     }
     continuations.removeAll()
-    if let error { throw error }
+    if let error {
+      throw error
+    }
   }
 
   func waitForCalls(atLeast count: Int) async {

@@ -711,4 +711,75 @@ extension ApprovalStoreGRDBTests {
     // when / then — the protocol-typed store is reachable and functional
     #expect(try stores.approvals.approvalsHealth(now: Date()).pendingCount == 0)
   }
+
+  @Test(arguments: [nil, ApprovalDecision.rejected, .stalePolicy])
+  func winningParticipantIsAuditedOnce(resolution: ApprovalDecision?) throws {
+    // given
+    let env = try makeFixture()
+    let runId = try seedRun(env.queue)
+    let now = Date()
+    let id = try insert(
+      env.queue,
+      makeNewApproval(runId: runId, createdTs: now, expiresTs: now.addingTimeInterval(3600))
+    )
+    let winner = ApprovalResolutionActor(actor: .groupMember, userId: 42)
+    let loser = ApprovalResolutionActor(actor: .groupMember, userId: 99)
+
+    // when
+    if resolution == .rejected {
+      #expect(try env.store.deny(id: id, decision: .rejected, actor: winner, now: now))
+    } else {
+      let policyVersion = resolution == .stalePolicy ? "changed-policy" : "pv16"
+      _ = try env.store.approve(
+        id: id,
+        currentPolicyVersion: policyVersion,
+        actor: winner,
+        now: now
+      )
+    }
+    #expect(try env.store.deny(id: id, decision: .rejected, actor: loser, now: now) == false)
+
+    // then
+    let rows = try env.queue.read { db in
+      try Row.fetchAll(db, sql: "SELECT actor, actor_user_id FROM audit_events")
+    }
+    #expect(rows.count == 1)
+    let row = try #require(rows.first)
+    #expect(row["actor"] == AuditActor.groupMember.rawValue)
+    #expect(row["actor_user_id"] == winner.userId)
+  }
+
+  @Test func actorAuditFailureRollsBackGrant() throws {
+    // given
+    let env = try makeFixture()
+    let runId = try seedRun(env.queue)
+    let now = Date()
+    let id = try insert(
+      env.queue,
+      makeNewApproval(runId: runId, createdTs: now, expiresTs: now.addingTimeInterval(3600))
+    )
+    try env.queue.write { db in
+      try db.execute(
+        sql: """
+          CREATE TRIGGER fail_actor_audit BEFORE INSERT ON audit_events
+          WHEN NEW.actor_user_id IS NOT NULL
+          BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END
+          """
+      )
+    }
+
+    // when
+    #expect(throws: StoreError.self) {
+      try env.store.approve(
+        id: id,
+        currentPolicyVersion: "pv16",
+        actor: ApprovalResolutionActor(actor: .groupMember, userId: 42),
+        now: now
+      )
+    }
+
+    // then
+    #expect(try env.store.approval(id: id)?.state == .pending)
+    #expect(try audits(env.queue).isEmpty)
+  }
 }

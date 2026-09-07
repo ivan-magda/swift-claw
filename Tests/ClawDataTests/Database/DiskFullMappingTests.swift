@@ -1,4 +1,5 @@
 import ClawCore
+import Foundation
 import GRDB
 import Testing
 
@@ -72,5 +73,48 @@ import Testing
 
     // then
     #expect(classified == .unexpected("already typed"))
+  }
+}
+
+// MARK: - Coder Writer
+
+extension DiskFullMappingTests {
+  @Test func coderWriterMapsDiskFull() throws {
+    // given
+    let fixture = try CoderStoreFixture()
+    let id = try fixture.admittedID()
+    let result = CoderResult(
+      state: .succeeded,
+      summary: String(repeating: "x", count: 1_000_000),
+      workspacePath: nil,
+      startingCommit: nil,
+      baselineObserved: false,
+      changedFiles: nil,
+      branch: nil,
+      commit: nil,
+      publication: .absent,
+      reportedChecks: [],
+      reportedUsage: nil,
+      commitAuthor: nil,
+      githubActor: nil,
+      failure: nil
+    )
+    try fixture.queue.writeWithoutTransaction { db in
+      let pages = try #require(try Int.fetchOne(db, sql: "PRAGMA page_count"))
+      try db.execute(sql: "PRAGMA max_page_count = \(pages)")
+    }
+    // when
+    #expect(throws: StoreError.diskFull) {
+      try fixture.store.complete(
+        id: id,
+        expectedState: .admitted,
+        result: result,
+        chunks: [],
+        releaseReservation: true,
+        now: fixture.now
+      )
+    }
+    // then
+    #expect(try fixture.store.job(id: id)?.state == .admitted)
   }
 }

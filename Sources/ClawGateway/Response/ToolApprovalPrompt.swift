@@ -15,11 +15,18 @@ public enum ToolApprovalPrompt {
     public let taintBanner: Bool
     /// The canonical target is a file that steers a later turn (privileged-file banner).
     public let privilegedFileBanner: Bool
+    public let isGroup: Bool
 
-    public init(recorded: RecordedToolAction, taintBanner: Bool, privilegedFileBanner: Bool) {
+    public init(
+      recorded: RecordedToolAction,
+      taintBanner: Bool,
+      privilegedFileBanner: Bool,
+      isGroup: Bool = false
+    ) {
       self.recorded = recorded
       self.taintBanner = taintBanner
       self.privilegedFileBanner = privilegedFileBanner
+      self.isGroup = isGroup
     }
   }
 
@@ -28,6 +35,9 @@ public enum ToolApprovalPrompt {
   /// secret-redacted preview, and scan warnings — assembled in a fixed order so the owner can
   /// judge risk at a glance.
   public static func text(for input: Input) -> String {
+    if input.recorded.reason == .coderSubmit {
+      return coderText(for: input)
+    }
     let recorded = input.recorded
     var lines: [String] = [headline(tool: recorded.tool, reason: recorded.reason)]
 
@@ -64,7 +74,10 @@ public enum ToolApprovalPrompt {
   /// and the suspend commit stamps `approval_id` onto exactly that keyboard-carrying chunk
   /// (`enqueuePromptChunks`), so button disarm keeps working across a split.
   public static func chunks(for input: Input, chatId: Int64, nonce: String) -> [OutboxChunk] {
-    let parts = ReplySplitter.split(text: text(for: input))
+    let prompt = text(for: input)
+    let parts =
+      input.recorded.reason == .coderSubmit
+      ? CoderCardMarkdown.split(text: prompt) : ReplySplitter.split(text: prompt)
     return parts.enumerated().map { index, payload in
       OutboxChunk(
         stepIndex: index,
@@ -81,6 +94,32 @@ public enum ToolApprovalPrompt {
 // MARK: - Prompt Composition
 
 private extension ToolApprovalPrompt {
+  static func coderText(for input: Input) -> String {
+    let recorded = input.recorded
+    var blocks = [
+      "## Coder approval",
+      "Delegate this task to native Codex. Review the complete task and publication scope.",
+    ]
+    if input.taintBanner {
+      blocks.append(taintBannerText)
+    }
+    if input.privilegedFileBanner {
+      blocks.append(privilegedFileBannerText)
+    }
+    blocks.append(recorded.presentation.blastRadius)
+    if let preview = recorded.presentation.contentPreview {
+      blocks.append(preview)
+    }
+    for warning in recorded.presentation.warnings {
+      blocks.append(CoderCardMarkdown.field("⚠ Native access", warning))
+    }
+    if input.isGroup {
+      blocks.append("Any member of this group can approve or deny this one action.")
+    }
+    blocks.append("Tap Approve to allow this one action, or Deny to cancel.")
+    return blocks.joined(separator: "\n\n")
+  }
+
   static let taintBannerText =
     "⚠ TAINT: this turn read external/untrusted content — inspect the target before approving."
   static let privilegedFileBannerText =
@@ -92,6 +131,8 @@ private extension ToolApprovalPrompt {
       "⚠ I want to run \(tool). This changes state and needs your explicit approval."
     case .exfilTrifecta:
       "⚠ I want to run \(tool) while this session holds private data after reading external content."
+    case .coderSubmit:
+      "⚠ I want to delegate \(tool) to your native Codex installation and its configured integrations. Review the workspace and publication scope before approving."
     case .codeExec:
       "⚠ I want to run \(tool) in a disposable sandbox. Review the complete script and staged inputs before approving."
     }

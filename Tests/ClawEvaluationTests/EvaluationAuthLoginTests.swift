@@ -272,7 +272,9 @@ private actor ModeRecordingFreezeVerifier: EvaluationFreezeVerifying {
 
   func verifyLocal(_ inputs: EvaluationFreezeInputs) async throws -> EvaluationFreezeContext {
     localCalls += 1
-    if refuseLocal { throw AuthFreezeTestError.refused }
+    if refuseLocal {
+      throw AuthFreezeTestError.refused
+    }
     return context
   }
 }

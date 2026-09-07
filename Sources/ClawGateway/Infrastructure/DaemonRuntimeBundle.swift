@@ -18,26 +18,26 @@ public actor LaneShutdownOutcome {
   }
 }
 
-/// What composition hands `RunCommand` in place of a bare `Daemon`: the service graph plus the two
-/// live pieces the shutdown sequence must own — the exact lane registry it drains and the exact
-/// credential sources whose rotation it commits — and the outcome the lane-admission service records.
-/// Carrying these here is what lets `RunCommand` sequence credential and client teardown after the
-/// lanes quiesce without composition having to leak its internals one accessor at a time.
+/// Carries the exact live owners into command shutdown, including Coder work admitted by boot replay.
+/// Coder remains available for the final joined-cleanup check before dependent teardown.
 public struct DaemonRuntimeBundle: Sendable {
   public let daemon: Daemon
   public let lanes: SessionLaneRegistry
   public let credentialSources: [any LLMCredentialSource]
   public let laneShutdownOutcome: LaneShutdownOutcome
+  public let coder: CoderService?
 
   public init(
     daemon: Daemon,
     lanes: SessionLaneRegistry,
     credentialSources: [any LLMCredentialSource],
-    laneShutdownOutcome: LaneShutdownOutcome
+    laneShutdownOutcome: LaneShutdownOutcome,
+    coder: CoderService? = nil
   ) {
     self.daemon = daemon
     self.lanes = lanes
     self.credentialSources = credentialSources
     self.laneShutdownOutcome = laneShutdownOutcome
+    self.coder = coder
   }
 }
