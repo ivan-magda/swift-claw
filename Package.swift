@@ -123,7 +123,7 @@ let package = Package(
     .target(
       name: "ClawTestSupport",
       dependencies: [
-        "ClawCore", "ClawTools",
+        "ClawCore", "ClawTools", "ClawData",
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
