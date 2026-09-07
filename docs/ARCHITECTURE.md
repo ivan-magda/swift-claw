@@ -90,6 +90,7 @@ clawd
 | `ClawTools` | lib | Tool registry + read-only tools (v1); policy gate + approval orchestration arrive in the P-tools phase (Inc 5a). | `ToolRegistry`, `ToolContext`; `WebSearchTool`, `WebFetchTool`, `FileReadTool` (v1); `PolicyGate`, `ApprovalCoordinator` [Inc5a] |
 | `ClawMCP` | lib | MCP **client** (§10.3): the Streamable HTTP transport over the shared HTTP seam, one session per configured server, catalog resolution, metadata redaction, name/schema normalization, and the `Tool` adapter that puts a remote tool on the same seam as a built-in. Depends only on `ClawCore` + the official Swift SDK, so no MCP concept reaches the agent loop or the policy gate. | `MCPStreamableHTTPTransport`, `MCPServerSession`, `MCPCatalogResolver`, `ResolvedMCPCatalog`, `MCPMetadataSanitizer`, `MCPTool`, `MCPToolNamer`, `MCPSchemaNormalizer` |
 | `ClawExec` | lib | macOS 26 arm64 execution implementation: fixed-path swift-subprocess adapter, apple/container argv, disposable scratch, serialized VM lifecycle, probe/reap/canary maintenance. Linux supplies no backend until Inc 6. | `ContainerBackend`, `ExecSandboxSettings` |
+| `ClawCoder` | lib | Native Coder process ownership on macOS and Linux, with workspace preparation and Codex protocol adapters composed in later increments. Depends on Core, pinned Subprocess and platform System only. | `CoderCommandRunner`, `ManagedCoderProcessGroup`, `CoderProcessIdentity`, `CoderProcessInspector` |
 | `ClawAppleSpeech` | lib | macOS 26 on-device speech-to-text behind the `ClawCore` `VoiceTranscribing` seam (`SpeechAnalyzer`/`SpeechTranscriber`, idempotent model-asset provisioning). Compiles to an empty module on Linux (`#if canImport(Speech)`); the factory returns nil there, fail-closed to the canned reply. | `AppleSpeechTranscriber`, `SystemVoiceTranscriber` |
 | `ClawAgent` | lib | Agent runtime: context assembly, the run loop, budgets, cancellation, the per-session lane. | `AgentRuntime`, `ContextBuilder`, `RunBudget`, `SessionActor` |
 | `ClawGateway` | lib | Wiring: `ServiceGroup`, Services, routing, access control, session resolution, outbox dispatch, shutdown. | `Gateway`, `TelegramPollerService`, `SchedulerService` [Inc4], `Router`, `AccessControl`, `RateLimiter`, `OutboxDispatcher` |
@@ -103,9 +104,11 @@ Each unit answers: *what does it do, how is it used, what does it depend on.* `C
 **Generic Coder** adds the pure `CoderRequest`/`CoderPreparedRequest`, `CoderJob`, `CoderResult`,
 `CoderBackend`, `CoderRequestPreparing`, `CoderProcessInspecting`, and `CoderServing` contracts
 in `ClawCore`. `ToolExecutionContext` carries trusted run/session/chat/requester/origin/mode and
-approval identity; those fields never come from model-authored arguments. `ClawCoder` will own
-workspace preparation, native Codex execution and inspection; `ClawGateway` owns admission,
-persistence through Core store seams, background lifetime and reporting, composed only at `clawd`.
+approval identity; those fields never come from model-authored arguments. `ClawCoder` owns
+native process supervision and will add workspace preparation, Codex execution and inspection;
+`ClawGateway` will own admission, persistence through Core store seams, background lifetime and
+reporting, composed only at `clawd`. Runtime composition, tool registration and AppConfig
+integration remain pending; no Coder child is launched by the daemon.
 The contract/config increment registers no tools. Once composed, the sole names are
 `CoderToolNames.submit` (`coder_submit`), `.status` (`coder_status`), and `.cancel` (`coder_cancel`).
 No provider registry, second backend, ACP session manager or generic process module is introduced.
@@ -159,6 +162,19 @@ form `ARCHITECTURE.md §N` is used, sparingly.
 - **Dependent resources close in a fixed order *after* the graph, never underneath it.** `RunCommand` owns the concrete HTTP clients and runs the same sequence on success, signal, and service failure: (1) close lane admission and stop service intake; (2) cancel and await the service graph and every registered lane task; (3) await the credential source's throwing `shutdown()` commit rule (§8.2); (4) close the dedicated LLM client; (5) close the independent Telegram and tool clients. Refresh work therefore has a concrete owner and keeps its transport alive until a token rotation is either persisted or reported failed. A credential shutdown error becomes the run's cleanup failure when no earlier failure exists and is logged only after redaction; client shutdown still runs.
 - **A lane-drain timeout is a failure path, not a clean exit.** If the graceful-shutdown duration expires, the lane registry returns the still-active run IDs and a typed fatal cleanup failure. `RunCommand` then **does not** close credentials or clients underneath live tasks: it exits without orderly dependent-resource shutdown and lets process teardown own the remainder, leaving any `RUNNING` row to the boot reconciler (§19.1). Never report that timeout as a clean shutdown.
 - **Supervision with throttling:** launchd (`KeepAlive`, `RunAtLoad`, `ThrottleInterval`) on macOS; systemd (`Restart=on-failure`, `RestartSec`, `StartLimitIntervalSec`+`StartLimitBurst`, `TimeoutStopSec`) on Linux. Throttling is documented in the units so a deterministic failure backs off.
+- **Native Coder children have joined ownership.** `CoderCommandRunner` launches each command in a
+  new session with an argument vector, finite stdin and an explicit environment. Caller cancellation
+  synchronously latches a request in per-invocation control; an independently running task is always
+  awaited, so Subprocess's own leader-only cancellation cannot abandon surviving group members.
+  A scoped observer uses non-consuming `waitid(WEXITED | WNOHANG | WNOWAIT)` and bounded suspending
+  polling; EOF does not mean process exit. Readers, the observer and cleanup all finish inside the
+  `Execution` closure. Invocation callbacks/readers run with a structured stop watcher; cancellation,
+  deadline or failure cancels and awaits that work while the separate process owner joins cleanup.
+  Cancelling the losing watcher is not caller cancellation. Only the outer Subprocess return reaps
+  the child and yields its exit/signal status; only then may a stopped receipt be emitted or a job
+  reservation released. Post-reap stopped/unresolved persistence stays shielded as mandatory cleanup:
+  failure retains unresolved ownership, and a callback that does not return delays completion rather
+  than authorizing an unverified release.
 - **Logging:** `swift-log` to stdout/stderr; journald/newsyslog handle rotation.
 
 ## 5. Concurrency model
@@ -885,6 +901,37 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   crosses Core. Persist cancellation intent, cancel the service-owned Swift task, then join bounded
   process-group teardown. Detached sessions/groups are an accepted v1 termination limitation.
   Daemon interruption never automatically reruns work that may already have published changes.
+- **Native launch protocol:** establish the invocation deadline before `willLaunch`, so suspended
+  launch persistence is also bounded. Job commands persist `willLaunch` with launch UUID and host
+  boot ID, check cancellation immediately before spawn, then acquire PID/PGID/birth metadata and await
+  `didLaunch` persistence before draining stdout/stderr concurrently. The exit/deadline/cancellation
+  observer already runs while that callback is suspended. Callback failure terminates and joins the
+  child. Only the preparer selects internal `.preApprovalReadOnly`, for fixed sanitized identity
+  queries before a job exists; it uses the same joined runner with a fixed ten-second timeout and
+  no job reservation or durable process events. All admitted backend commands use `.job` tracking.
+- **Verified group cleanup:** cancellation/timeout is latched before TERM. Give owned live group
+  members two seconds, then KILL remaining members and observe for up to two more seconds, retaining
+  the unreaped session leader throughout. Exclude zombies from live-member checks. Darwin uses
+  `kern.bootsessionuuid` and `kern.proc.pid` birth/PGID/state metadata (including the zombie leader);
+  Linux uses boot ID and `/proc` start ticks/state. A PID or PGID's existence alone never authorizes
+  a signal. If group identity is unreadable or mismatched, only the current scoped `Execution`
+  proves direct-child ownership: kill that child alone through its execution handle and await the
+  outer reap, report unresolved group cleanup, and retain the slot for recovery. Never use this
+  exception for an old receipt or an unverified group. Descendants may survive this failure and
+  require operator recovery. `CoderProcessInspector` performs read-only checks and never signals;
+  a missing leader does not establish that its group has stopped.
+- **Bounded streaming:** stdout is consumed inside the invocation scope without logging raw output,
+  reasoning, prompts or environment. Retain at most 64 KiB of stderr diagnostics while continuing
+  to drain. Pinned Subprocess 1.0.0 stops its default teardown when the leader exits and cancels
+  pending stream IO then; its buffered bytes still drain. Consumer callback errors are handled
+  separately from that expected stream completion. Group ownership and joined readers, not the
+  default teardown or EOF, determine cleanup resolution. The internal command result retains the
+  real OS exit/signal alongside `supervisionFailed`: host launch, receipt, stream/consumer failures
+  and unresolved cleanup fail supervision even if the child exits zero. A callback interrupted by
+  delivered task cancellation is part of the selected stop outcome; an unsolicited callback error,
+  including CancellationError, remains supervision failure. Clean cancellation alone does not set
+  that flag. Backend callers reject supervision failure independently of OS status;
+  diagnostic wording is never a machine-readable failure discriminator.
 - **Result evidence:** process completion and publication are independent: publication is absent,
   confirmed with URL, or unknown with optional reported URL. `changedFiles == nil` means comparison
   unavailable; `[]` means no observed changes. `baselineObserved == false` means a starting SHA is
