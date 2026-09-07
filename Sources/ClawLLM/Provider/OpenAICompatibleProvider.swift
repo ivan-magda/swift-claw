@@ -451,7 +451,9 @@ private extension OpenAICompatibleProvider {
   /// A transport failure already carries its own diagnostic; interpolating the struct would bury it
   /// in synthesized field syntax.
   static func describe(_ error: any Error) -> String {
-    guard let failure = error as? HTTPTransportFailure else { return "\(error)" }
+    guard let failure = error as? HTTPTransportFailure else {
+      return "\(error)"
+    }
     return failure.safeMessage
   }
 }

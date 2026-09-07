@@ -249,7 +249,9 @@ import Testing
     } throws: { error in
       // The buffered path wraps its cause in a ProviderFailure that carries the accounting: a clean
       // 4xx head generated nothing, so the failure is notStarted.
-      guard case .terminal(let status, _)? = ProviderError.cause(of: error) else { return false }
+      guard case .terminal(let status, _)? = ProviderError.cause(of: error) else {
+        return false
+      }
       return status == 400 && ProviderFailureAccounting.classify(error) == .notStarted
     }
     let attempts = await exec.recorded.count
@@ -290,7 +292,9 @@ import Testing
     } throws: { error in
       // Each 500 was proven clean before the exhausting throw, so the wrapped failure charges no
       // phantom usage — it is notStarted, not the case-guessed mayHaveStarted.
-      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else { return false }
+      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else {
+        return false
+      }
       return status == 500 && ProviderFailureAccounting.classify(error) == .notStarted
     }
     let attempts = await exec.recorded.count
@@ -314,7 +318,9 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else { return false }
+      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else {
+        return false
+      }
       return status == 500
     }
 
@@ -345,7 +351,9 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case .retryable(_, let message)? = ProviderError.cause(of: error) else { return false }
+      guard case .retryable(_, let message)? = ProviderError.cause(of: error) else {
+        return false
+      }
       thrownMessage = message
       return true
     }
@@ -397,7 +405,9 @@ import Testing
     } throws: { error in
       // The attempt reached the transport and cannot be proven clean, so the failure carries
       // conservative accounting rather than being replayed.
-      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else { return false }
+      guard case .retryable(let status, _)? = ProviderError.cause(of: error) else {
+        return false
+      }
       return status == nil
         && ProviderFailureAccounting.classify(error) == .mayHaveStarted(observing: 0)
     }
@@ -663,7 +673,9 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case .retryable(_, let message)? = ProviderError.cause(of: error) else { return false }
+      guard case .retryable(_, let message)? = ProviderError.cause(of: error) else {
+        return false
+      }
       thrownMessage = message
       return true
     }
@@ -691,7 +703,9 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.terminal(let status, let message) = error else { return false }
+      guard case ProviderError.terminal(let status, let message) = error else {
+        return false
+      }
       return status == nil && message.contains("Host")
     }
 
@@ -712,7 +726,9 @@ import Testing
     await #expect {
       _ = try await provider.complete(request: sampleRequest)
     } throws: { error in
-      guard case ProviderError.terminal(_, let message) = error else { return false }
+      guard case ProviderError.terminal(_, let message) = error else {
+        return false
+      }
       return message.contains("content-type")
     }
     #expect(await exec.recorded.isEmpty)

@@ -176,7 +176,9 @@ extension RunStoreGRDB {
       )
       var consecutiveFailures = 0
       for state in recentStates {
-        guard state == RunState.failed.rawValue else { break }
+        guard state == RunState.failed.rawValue else {
+          break
+        }
         consecutiveFailures += 1
       }
 

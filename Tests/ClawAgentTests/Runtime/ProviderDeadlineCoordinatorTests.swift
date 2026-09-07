@@ -88,7 +88,9 @@ private actor OutcomeBox {
   private var waiters: [CheckedContinuation<ProviderDeadlineOutcome, Never>] = []
 
   func resolve(_ resolved: ProviderDeadlineOutcome) {
-    guard outcome == nil else { return }
+    guard outcome == nil else {
+      return
+    }
     outcome = resolved
     for waiter in waiters {
       waiter.resume(returning: resolved)
