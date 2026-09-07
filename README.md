@@ -23,6 +23,7 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 
 ## Features
 
+- **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
 - **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
   turn, `/new` starts a fresh session, clawd transcribes voice notes on-device
   (macOS 26), and it looks at photos you send if your model can see them.
@@ -49,7 +50,6 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   server or change what it exposes.
 - **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
   can run an eligible model on a ChatGPT subscription.
-- **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
 
 ## The approval card
 
