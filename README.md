@@ -40,6 +40,9 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   code and treats inbound content as data, never as instructions.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
+- **Coding tasks from chat.** Opt in to Coder to delegate an approved owner-DM task to your
+  native Codex installation, then receive its result when the background job finishes.
+  Local changes and GitHub pull requests use your installed tools and repository rights.
 - **Tools from MCP servers.** List a server, store its token encrypted, and its tools join
   the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
   named tool safe, but the exfiltration gate can still require approval. Only you can add a
@@ -99,6 +102,21 @@ sudo install -m755 .build/release/clawd /usr/local/bin/clawd
 The full walkthrough, including the ChatGPT-subscription route and troubleshooting, is
 in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
+## Delegate a coding task
+
+With Codex and Git installed and authenticated as the daemon user (plus `gh` for GitHub work),
+set `CLAW_CODER_ENABLED=true` in `clawd.env`, load it and restart. In your private bot DM, try:
+
+> Use Coder in `/Users/me/Developer/my-app` to fix the failing parser test in place. Leave local changes.
+
+> Use Coder to resolve `https://github.com/my-org/my-app/issues/42` in a separate copy and open a pull request.
+
+Paths refer to the daemon machine. In-place work accepts dirty files; a separate copy starts from a
+committed ref. Review the Telegram approval before submission. Ask for a job's status or cancellation
+by its UUID. Capacity N is configurable (default 1); full means busy. Completion uses the existing
+outbox retries. There is no automatic apply-back or rollback, and child billing is separate from
+conversational `/cost`. v1 is owner DM only. See [Coder configuration](docs/CUSTOMIZATION.md#coder-configuration).
+
 ## Security model
 
 swift-claw assumes you are the only person it serves.
@@ -110,9 +128,9 @@ swift-claw assumes you are the only person it serves.
 - **Secrets encrypted at rest.** `clawd secrets seal` wraps the bot token and API keys in
   an AES-GCM envelope. Plaintext env secrets remain available as a dev fallback that
   warns on every boot.
-- **Approvals are durable and unforgeable.** File writes, memory writes, and code
-  execution suspend into a durable state machine until you tap Approve in Telegram. A
-  forged or third-party callback cannot approve, and pending approvals expire to deny.
+- **Approvals are durable and unforgeable.** File writes, memory writes, code execution,
+  and native Coder submissions suspend into a durable state machine until you tap Approve in
+  Telegram. A forged or third-party callback cannot approve, and pending approvals expire to deny.
 - **Prompt injection contained.** Messages, web content, tool output, and stored memory
   enter the context as untrusted data. Once a session has both ingested untrusted content
   and pulled your private files into context, fetching an arbitrary URL also needs your

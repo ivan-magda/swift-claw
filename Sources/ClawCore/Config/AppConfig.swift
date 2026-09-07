@@ -127,6 +127,7 @@ public struct AppConfig: Sendable, Equatable {
 
   public let approvalExpirySeconds: Int
   public let webFetchExemptCIDRs: [CIDR]
+  public let coder: CoderConfig
   public let exec: ExecConfig
   public let voice: VoiceConfig
   public let image: ImageConfig
@@ -149,6 +150,7 @@ public struct AppConfig: Sendable, Equatable {
     heartbeatMaxPerDay: Int,
     approvalExpirySeconds: Int,
     webFetchExemptCIDRs: [CIDR],
+    coder: CoderConfig,
     exec: ExecConfig,
     voice: VoiceConfig,
     image: ImageConfig,
@@ -174,6 +176,7 @@ public struct AppConfig: Sendable, Equatable {
 
     self.approvalExpirySeconds = approvalExpirySeconds
     self.webFetchExemptCIDRs = webFetchExemptCIDRs
+    self.coder = coder
     self.exec = exec
     self.voice = voice
     self.image = image
@@ -241,6 +244,7 @@ public struct AppConfig: Sendable, Equatable {
       heartbeatMaxPerDay: heartbeat.maxPerDay,
       approvalExpirySeconds: approvalExpirySeconds,
       webFetchExemptCIDRs: webFetchExemptCIDRs,
+      coder: try CoderConfig.load(environment: env),
       exec: exec,
       voice: voice,
       image: image,

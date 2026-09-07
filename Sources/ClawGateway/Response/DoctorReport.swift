@@ -12,6 +12,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
   case connectivity
   case mcp
   case sandbox
+  case coder
 
   public var title: String {
     switch self {
@@ -26,6 +27,7 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
     case .connectivity: "Connectivity"
     case .mcp: "MCP"
     case .sandbox: "Sandbox"
+    case .coder: "Coder"
     }
   }
 }

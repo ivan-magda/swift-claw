@@ -24,6 +24,12 @@ struct FatalProcessTerminator: Sendable {
     _exit(code)
   }
 
+  /// Keeps dependent resources owned until process exit when Coder cleanup cannot be proved.
+  func fatalCoderCleanup(logger: Logger) throws -> Never {
+    logger.critical("Coder cleanup unresolved; exiting without dependent-resource teardown")
+    try terminate(1)
+  }
+
   /// Logs the runs still in flight, then terminates with a nonzero code BEFORE any scope unwinds, so
   /// no dependent resource is torn down underneath a still-running turn. The boot reconciler sweeps
   /// any run left `RUNNING` on the next start. Never returns normally.

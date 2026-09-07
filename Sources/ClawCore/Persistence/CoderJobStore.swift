@@ -18,6 +18,8 @@ public protocol CoderJobStore: Sendable {
     now: Date
   ) throws(StoreError) -> CoderAdmission
   func job(id: UUID) throws(StoreError) -> CoderJob?
+  /// The latest updated failed, timed-out or interrupted job, including released reservations.
+  func lastFailedJob() throws(StoreError) -> CoderJob?
   func reservedJobs() throws(StoreError) -> [CoderJob]
   func markRunning(id: UUID, now: Date) throws(StoreError) -> Bool
   func requestCancellation(id: UUID, now: Date) throws(StoreError) -> CoderJob?

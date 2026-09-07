@@ -41,7 +41,8 @@ import Testing
     risk: RiskLevel = .safe,
     egress: ToolEgressClass = .none,
     fenceLabel: String? = nil,
-    invocationIdentity: String? = nil
+    invocationIdentity: String? = nil,
+    requiresInteractiveOwner: Bool = false
   ) -> ToolDefinition {
     ToolDefinition(
       name: name,
@@ -51,7 +52,8 @@ import Testing
       egressClass: egress,
       riskLevel: risk,
       fenceLabel: fenceLabel,
-      invocationIdentity: invocationIdentity
+      invocationIdentity: invocationIdentity,
+      requiresInteractiveOwner: requiresInteractiveOwner
     )
   }
 
@@ -147,6 +149,15 @@ import Testing
       subhash(tools: [tool(name: "t", egress: .none)])
         != subhash(tools: [tool(name: "t", egress: .arbitraryDestination)])
     )
+  }
+
+  @Test func interactiveOwnerRequirementIsAnInputClass() {
+    // given
+    let ordinary = tool(name: "t")
+    let ownerOnly = tool(name: "t", requiresInteractiveOwner: true)
+
+    // when / then
+    #expect(subhash(tools: [ordinary]) != subhash(tools: [ownerOnly]))
   }
 
   @Test func invocationIdentityIsAnInputClass() {

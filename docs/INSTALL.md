@@ -145,6 +145,32 @@ mkdir -p ~/.config/systemd/user && cp swift-claw.service ~/.config/systemd/user/
 systemctl --user enable --now swift-claw.service
 ```
 
+### Coder prerequisites
+
+Coder is optional and off by default. Install a compatible native Codex CLI and Git separately;
+GitHub sources and PRs also require the GitHub CLI (`gh`) and the account's repository rights.
+The installer does not provision these tools, their dependencies, repository access or credentials.
+The result schema is embedded in `clawd`; there is no extra schema resource to install.
+
+Both service units run under your user account, but do not inherit an interactive shell's PATH or
+login environment. The existing `run-clawd.sh` sources `~/.swift-claw/clawd.env` (or `CLAW_ENV_FILE`);
+`clawd` itself does not load `.env` files. Put a deliberate PATH with Codex, Git, `gh`, and any CLI
+interpreter/toolchain in that file, or use an absolute `CLAW_CODER_EXECUTABLE`. Native preparation
+requires `/usr/bin/git`. Authenticate Codex and GitHub under the actual daemon account, with its HOME,
+selected `CODEX_HOME` (`CLAW_CODER_CONFIG_HOME`), profile and `GH_CONFIG_DIR`. A terminal login does not
+prove that launchd/systemd can read the same auth source or keyring. `clawd auth` is independent.
+
+Set `CLAW_CODER_ENABLED=true` and run `clawd doctor` under those same settings before starting the
+daemon; `--check-config` stays offline
+and does not check Codex authentication. Full doctor uses local CLI checks, not inference or credential
+refresh. Selected-profile authentication can remain explicitly unverified; see
+[CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration). The supervised daemon auth/denial/cancellation
+validation procedure is in [LOCAL_DEV.md](LOCAL_DEV.md#coder-background-lifecycle-and-recovery).
+
+To stop new Coder tasks, set `CLAW_CODER_ENABLED=false` and restart. Disabled startup performs no
+Codex probes and exposes no Coder tools, but still reconciles earlier jobs and reports retained
+reservations in full doctor and daemon health. Follow the recovery procedure for unresolved ownership.
+
 ### Staying on after logout
 
 - **Linux:** `sudo loginctl enable-linger $USER` lets the user manager run without a

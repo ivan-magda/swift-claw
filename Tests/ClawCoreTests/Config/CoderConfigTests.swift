@@ -27,6 +27,28 @@ import Testing
     }
   }
 
+  @Test func explicitSettingsReachAppConfig() throws {
+    // given
+    let environment = [
+      EnvKey.llmModel: "test-model", EnvKey.llmBaseURL: "http://localhost:1234/v1",
+      EnvKey.stateRoot: NSTemporaryDirectory(),
+      EnvKey.coderEnabled: "yes", EnvKey.coderMaxConcurrentJobs: "3",
+      EnvKey.coderJobTimeoutSeconds: "86400", EnvKey.coderExecutable: "/absent/bin/codex",
+      EnvKey.coderProfile: "personal", EnvKey.coderConfigHome: "/absent/codex-config",
+    ]
+
+    // when
+    let config = try AppConfig.load(environment: environment).coder
+
+    // then
+    #expect(config.enabled)
+    #expect(config.maxConcurrentJobs == 3)
+    #expect(config.jobTimeoutSeconds == 86_400)
+    #expect(config.executable == environment[EnvKey.coderExecutable])
+    #expect(config.profile == environment[EnvKey.coderProfile])
+    #expect(config.configHome == environment[EnvKey.coderConfigHome])
+  }
+
   @Test(arguments: [
     (EnvKey.coderMaxConcurrentJobs, "many"),
     (EnvKey.coderJobTimeoutSeconds, "86401"),

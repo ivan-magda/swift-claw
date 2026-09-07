@@ -23,16 +23,16 @@ public struct ToolPolicyGate: Sendable {
 
   private let argGuard: ExfilArgGuard
   private let privateFileLoader: @Sendable () -> [String]
-  private let execEnabled: Bool
+  private let enabledDangerousTools: Set<String>
 
   public init(
     argGuard: ExfilArgGuard,
     privateFileLoader: @escaping @Sendable () -> [String],
-    execEnabled: Bool
+    enabledDangerousTools: Set<String>
   ) {
     self.argGuard = argGuard
     self.privateFileLoader = privateFileLoader
-    self.execEnabled = execEnabled
+    self.enabledDangerousTools = enabledDangerousTools
   }
 
   public func evaluate(
@@ -40,6 +40,9 @@ public struct ToolPolicyGate: Sendable {
     tool: any Tool,
     context: ToolDispatchContext
   ) async -> Verdict {
+    if let refusal = ownerAdmissionRefusal(call: call, tool: tool, context: context) {
+      return refusal
+    }
     // Total over RiskLevel. Ask-tier resolves before the egress fast-path so a `.none`-egress
     // ask tool (file_write) still parks; dangerous consumes only a tool-prepared action; safe
     // egress falls through to the unconditional/trifecta tiers below.
@@ -164,6 +167,30 @@ public struct ToolPolicyGate: Sendable {
       ),
       argsRedacted: argsRedacted
     )
+  }
+}
+
+// MARK: - Owner Admission
+
+private extension ToolPolicyGate {
+  func ownerAdmissionRefusal(
+    call: ToolCall,
+    tool: any Tool,
+    context: ToolDispatchContext
+  ) -> Verdict? {
+    guard tool.definition.requiresInteractiveOwner else {
+      return nil
+    }
+    guard let execution = context.executionContext,
+      context.mode == .direct, execution.mode == .direct,
+      execution.origin == .interactive, execution.requesterUserId != nil
+    else {
+      return dangerousBlock(
+        reason: "\(call.name) requires an interactive owner direct message.",
+        call: call
+      )
+    }
+    return nil
   }
 }
 
@@ -376,7 +403,7 @@ private extension ToolPolicyGate {
 // MARK: - Dangerous-tier Approval
 
 private extension ToolPolicyGate {
-  /// Dangerous tools park ONLY over a tool-prepared canonical action. The `execEnabled` backstop
+  /// Dangerous tools park ONLY over a tool-prepared canonical action. The `enabledDangerousTools` backstop
   /// fails closed; the arg-guard scans run over the prepared `guardTexts` (never the model's raw
   /// arguments), and the recorded action binds the prepared canonical JSON verbatim.
   func evaluateDangerousTier(
@@ -384,8 +411,8 @@ private extension ToolPolicyGate {
     tool: any Tool,
     context: ToolDispatchContext
   ) async -> Verdict {
-    guard execEnabled else {
-      return dangerousBlock(reason: "Code execution is disabled.", call: call)
+    guard enabledDangerousTools.contains(tool.definition.name) else {
+      return dangerousBlock(reason: "\(tool.definition.name) is disabled.", call: call)
     }
     // A dangerous action can never take the second approval slot, and it cannot park or execute
     // while one is pending, so refuse here before the expensive staging and content scans run.
@@ -436,7 +463,7 @@ private extension ToolPolicyGate {
     }
 
     // Group mode runs the prepared action untapped — the sandbox is the containment, not a prompt.
-    // `execEnabled` and every scan above still apply; only the approval round-trip is gone.
+    // `enabledDangerousTools` and every scan above still apply; only the approval round-trip is gone.
     guard context.mode == .direct else {
       return .allow(
         argsRedacted: argGuard.renderRedacted(argsJSON: prepared.canonicalArgsJSON),
@@ -450,7 +477,7 @@ private extension ToolPolicyGate {
       canonicalArgsJSON: prepared.canonicalArgsJSON,
       argsHash: ApprovalArgsHash.sha256Hex(prepared.canonicalArgsJSON),
       canonicalTarget: prepared.canonicalTarget,
-      reason: .codeExec,
+      reason: prepared.approvalReason,
       presentation: prepared.presentation
     )
     return .requireApproval(recorded: recorded)
@@ -529,7 +556,8 @@ public struct GatedToolDispatcher: ToolDispatching {
         tool: tool,
         arguments: arguments,
         preparedArgsJSON: preparedArgsJSON,
-        canonicalTarget: action?.target
+        canonicalTarget: action?.target,
+        context: context.executionContext
       )
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
@@ -556,7 +584,8 @@ public struct GatedToolDispatcher: ToolDispatching {
     tool: any Tool,
     arguments: JSONValue,
     preparedArgsJSON: String?,
-    canonicalTarget: String?
+    canonicalTarget: String?,
+    context: ToolExecutionContext?
   ) async -> ToolPayload {
     let executedArguments: JSONValue
     if let preparedArgsJSON {
@@ -578,7 +607,11 @@ public struct GatedToolDispatcher: ToolDispatching {
         try await clock.sleep(for: duration)
       },
       operation: {
-        await tool.execute(arguments: executedArguments, canonicalTarget: canonicalTarget)
+        await tool.execute(
+          arguments: executedArguments,
+          canonicalTarget: canonicalTarget,
+          context: context
+        )
       }
     )
 

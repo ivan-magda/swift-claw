@@ -47,10 +47,7 @@ Why Swift: one self-contained binary per platform with no runtime to install und
 - **NG9.** A provider *pool* and per-call USD attribution dashboards. v1 routes over at most two owner-configured routes — a primary and one optional fallback (FR-R3) — with no credential pools, no weighted or model-aware routing, and no automatic provider discovery; and it has a USD spend **breaker**, not a dashboard.
 - **NG10.** *(bounds FR-P5)* **Sharing or importing another tool's credentials** — notably Codex CLI's `~/.codex/auth.json` — or supervising Codex as the ordinary LLM provider route, multiple accounts, credential pools, live credential mutation while the daemon runs, and subscription providers other than ChatGPT. Also out: **a per-provider environment-variable namespace** (`CLAW_CHATGPT_*` and the like) and a configurable subscription endpoint or client identity. Subscription auth adds exactly **one** configuration selector — a provider-qualified model value — and structured configuration (`config.toml`) stays deferred; it is the mechanism a future provider's own settings will use.
 
-**Generic Coder is a separate opt-in capability under construction.** The native foundation
-implements contracts, durable jobs, process ownership, Git workspaces and the Codex backend.
-Daemon composition and operator enablement remain pending. Its complete product contract
-delegates an approved owner-DM task to the
+**Generic Coder is a separate opt-in capability.** It delegates an approved owner-DM task to the
 native personal Codex installation, which retains its own credentials and integrations. Coder
 supervises workspace selection, admission, child lifetime, persistence and reporting; Codex performs
 the coding and requested Git/GitHub workflow. In-place work accepts uncommitted changes; separate
@@ -306,6 +303,16 @@ Each criterion is backed by an **automated acceptance test** (per-requirement ve
   `/skills` returns every accepted descriptor and rejection from a fresh scan without starting a
   turn. Full `clawd doctor`, its JSON form, and `/status` report the same fresh accepted count,
   rejected count, and absolute-cap fit; warnings or overflow fail the headline row.
+
+- **SC11 (P-coder).** With Coder enabled and VM execution disabled, an approved owner-DM task reaches
+  the configured native Codex installation using its existing integrations. Local in-place tasks
+  accept dirty work; separate copies start from refs. Configurable N capacity returns busy when full.
+  Status/cancel use the job UUID; completion is durably delivered through existing outbox retries
+  without another LLM turn. Shutdown joins owned work before dependent teardown, and restart reports
+  interruption without automatic rerun. Missing/incompatible CLI preserves ordinary chat and durable
+  recovery without submit. Doctor distinguishes compatibility, auth uncertainty, persisted reservations
+  and unreadable storage; child billing remains separate from conversational `/cost`. No automatic
+  apply-back/rollback, queue, conference admission or dependency provisioning is implied.
 
 ## 11. Constraints & assumptions
 

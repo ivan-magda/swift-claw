@@ -1,6 +1,10 @@
 import ClawCore
 import Foundation
 
+public enum CodexAuthenticationStatus: Sendable, Equatable {
+  case authenticated, missing, unavailable, profileUnverified
+}
+
 public struct CodexBackend: CoderBackend {
   public static let approvalPolicy = CodexInvocation.approvalPolicy
   public let executable: String
@@ -61,6 +65,33 @@ public struct CodexBackend: CoderBackend {
       throw error
     } catch {
       throw CoderError.unavailable("Codex CLI compatibility probe failed.")
+    }
+  }
+
+  /// Local status never refreshes credentials or proves model entitlement; profiles are CLI-unobservable.
+  public func authenticationStatus() async -> CodexAuthenticationStatus {
+    if profile != nil { return .profileUnverified }
+    let command = CoderCommand(
+      executable: executable,
+      arguments: ["login", "status"],
+      environment: environment,
+      workingDirectory: "/",
+      input: "",
+      phase: .prepare,
+      timeout: CoderCommandRunner.readOnlyTimeout
+    )
+    let result = await CoderCommandRunner().run(command, tracking: .preApprovalReadOnly) { _ in }
+    guard !result.supervisionFailed, result.cleanupResolved, !result.cancelled,
+      !result.timedOut, result.signal == nil
+    else {
+      return .unavailable
+    }
+    switch result.exitCode {
+    case 0: return .authenticated
+    case 1:
+      return result.diagnostics.trimmingCharacters(in: .whitespacesAndNewlines) == "Not logged in"
+        ? .missing : .unavailable
+    default: return .unavailable
     }
   }
 

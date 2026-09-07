@@ -123,7 +123,7 @@ let package = Package(
     .target(
       name: "ClawTestSupport",
       dependencies: [
-        "ClawCore", "ClawTools",
+        "ClawCore", "ClawTools", "ClawData",
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
@@ -142,7 +142,7 @@ let package = Package(
       dependencies: [
         "ClawCore", "ClawData", "ClawSecrets", "ClawTelegram", "ClawGateway", "ClawLLM",
         "ClawAgent", "ClawWorkspace", "ClawTools", "ClawExec", "ClawAuth", "ClawAppleSpeech",
-        "ClawMCP",
+        "ClawMCP", "ClawCoder",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
@@ -234,7 +234,7 @@ let package = Package(
       dependencies: [
         "clawd", "ClawGateway", "ClawAgent", "ClawTestSupport",
         "ClawCore", "ClawAuth", "ClawSecrets", "ClawLLM", "ClawData", "ClawTelegram",
-        "ClawWorkspace", "ClawMCP", "ClawTools",
+        "ClawWorkspace", "ClawMCP", "ClawTools", "ClawCoder",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),

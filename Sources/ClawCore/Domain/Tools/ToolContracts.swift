@@ -210,6 +210,7 @@ public struct ToolDefinition: Sendable, Equatable {
   /// not fully identify what will run (for example, an adapter backed by a configured endpoint).
   /// NOT advertised on the wire.
   public let invocationIdentity: String?
+  public let requiresInteractiveOwner: Bool
 
   public init(
     name: String,
@@ -219,7 +220,8 @@ public struct ToolDefinition: Sendable, Equatable {
     egressClass: ToolEgressClass,
     riskLevel: RiskLevel,
     fenceLabel: String? = nil,
-    invocationIdentity: String? = nil
+    invocationIdentity: String? = nil,
+    requiresInteractiveOwner: Bool = false
   ) {
     self.name = name
     self.description = description
@@ -230,6 +232,7 @@ public struct ToolDefinition: Sendable, Equatable {
     self.riskLevel = riskLevel
     self.fenceLabel = fenceLabel ?? name
     self.invocationIdentity = invocationIdentity
+    self.requiresInteractiveOwner = requiresInteractiveOwner
   }
 }
 
@@ -328,6 +331,12 @@ public protocol Tool: Sendable {
   /// exactly what was authorized, never re-derive it; `nil` for the other classes.
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload
 
+  func execute(
+    arguments: JSONValue,
+    canonicalTarget: String?,
+    context: ToolExecutionContext?
+  ) async -> ToolPayload
+
   /// The prompt inputs for an ask-tier or trifecta approval, produced at gate time on the
   /// gate-resolved `canonicalTarget`. The default is a generic egress presentation; write tools
   /// override with blast radius, a redacted preview, and any scan warnings.
@@ -338,6 +347,14 @@ public protocol Tool: Sendable {
 }
 
 extension Tool {
+  public func execute(
+    arguments: JSONValue,
+    canonicalTarget: String?,
+    context: ToolExecutionContext?
+  ) async -> ToolPayload {
+    await execute(arguments: arguments, canonicalTarget: canonicalTarget)
+  }
+
   public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
     nil
   }

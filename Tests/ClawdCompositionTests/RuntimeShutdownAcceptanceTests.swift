@@ -143,6 +143,155 @@ import Testing
     )
   }
 
+  @Test func coderBootWorkJoinsBeforeDependentCleanup() async throws {
+    // given
+    let fixture = try CoderCompositionFixture(holdCleanup: true)
+    defer { fixture.cleanup() }
+    let coordination = DaemonBuilder.TurnCoordination()
+    let coder = await fixture.builder.prepareCoder(coordination: coordination)
+    let service = try #require(coder.service)
+    let bootEntered = AsyncGate()
+    let releaseBoot = AsyncGate()
+    let laneCancelled = AsyncGate()
+    let releaseLane = AsyncGate()
+    let laneJoined = AsyncGate()
+    defer {
+      releaseBoot.open()
+      releaseLane.open()
+    }
+    let closed = AsyncGate()
+    let bundle = fixture.builder.runtimeBundle(
+      services: [],
+      coordination: coordination,
+      credentialSources: [],
+      boot: {
+        do {
+          try await service.start()
+          let prepared = try await service.prepare(CoderCompositionFixture.request)
+          let context = try fixture.approvedContext(prepared)
+          _ = await coordination.lanes.enqueue(sessionID: context.sessionId, runID: context.runId) {
+            do { _ = try await service.submit(prepared, context: context) } catch {
+              Issue.record(error)
+            }
+            await withTaskCancellationHandler {
+              await releaseLane.waitIgnoringCancellation()
+            } onCancel: {
+              laneCancelled.open()
+            }
+            laneJoined.open()
+          }
+          _ = await fixture.backend.started.waitUntilOpen()
+        } catch { Issue.record(error) }
+        bootEntered.open()
+        await releaseBoot.waitIgnoringCancellation()
+      },
+      coder: service,
+      gracefulShutdownSignals: []
+    )
+    let composed = RunComposition.Composed(
+      bundle: bundle,
+      clients: RuntimeHTTPClients { _ in
+        RuntimeHTTPClient(
+          executor: AsyncHTTPExecutor(client: .shared),
+          close: {
+            #expect(laneJoined.isOpen)
+            #expect(fixture.backend.allowCleanup.isOpen)
+            #expect((try? fixture.builder.stores.coderJobs.reservedJobs().isEmpty) == true)
+            closed.open()
+          }
+        )
+      }
+    )
+
+    // when
+    let command = Task {
+      try await RunCommand.serveThenShutDown(
+        composed: composed,
+        redactionValues: [],
+        logger: Self.silent
+      )
+    }
+    #expect(await bootEntered.waitUntilOpen())
+    command.cancel()
+    releaseBoot.open()
+    let cancelled = await laneCancelled.waitUntilOpen()
+    releaseLane.open()
+    let cleanupEntered = await fixture.backend.invocations[0].cleanupEntered.waitUntilOpen()
+    fixture.backend.allowCleanup.open()
+    let result = await command.result
+    fixture.backend.releaseAll()
+    try? await service.shutdown()
+    await coordination.lanes.stopAcceptingAndCancel()
+    _ = await coordination.lanes.drain(timeout: .seconds(5), clock: ContinuousClock())
+    try result.get()
+
+    // then
+    #expect(cancelled)
+    #expect(cleanupEntered)
+    #expect(closed.isOpen)
+  }
+
+  @Test func coderUnresolvedCleanupRefusesDependentTeardown() async throws {
+    // given
+    let fixture = try CoderCompositionFixture(unresolvedCleanup: true)
+    defer { fixture.cleanup() }
+    let coordination = DaemonBuilder.TurnCoordination()
+    let coder = await fixture.builder.prepareCoder(coordination: coordination)
+    let service = try #require(coder.service)
+    try await service.start()
+    let prepared = try await service.prepare(CoderCompositionFixture.request)
+    _ = try await service.submit(prepared, context: fixture.approvedContext(prepared))
+    #expect(await fixture.backend.started.waitUntilOpen())
+    let code = ExitCodeBox()
+    let bundle = fixture.builder.runtimeBundle(
+      services: [],
+      coordination: coordination,
+      credentialSources: [],
+      boot: {},
+      coder: service,
+      gracefulShutdownSignals: []
+    )
+    let composed = RunComposition.Composed(
+      bundle: bundle,
+      clients: RuntimeHTTPClients { _ in
+        RuntimeHTTPClient(
+          executor: AsyncHTTPExecutor(client: .shared),
+          close: {
+            Issue.record("Unresolved Coder ownership closed a dependent client")
+          }
+        )
+      }
+    )
+
+    // when
+    let finished = AsyncGate()
+    let command = Task {
+      defer { finished.open() }
+      try await RunCommand.serveThenShutDown(
+        composed: composed,
+        redactionValues: [],
+        logger: Self.silent,
+        terminator: FatalProcessTerminator { value in
+          code.set(value)
+          throw FatalExitSentinel()
+        }
+      )
+    }
+    fixture.backend.allowCompletion.open()
+    let failedFromService = await finished.waitUntilOpen()
+    if !failedFromService { command.cancel() }
+    await #expect(throws: FatalExitSentinel.self) {
+      try await command.value
+    }
+    fixture.backend.releaseAll()
+    try? await service.shutdown()
+
+    // then
+    #expect(failedFromService)
+    #expect(code.value == 1)
+    #expect(try fixture.builder.stores.coderJobs.reservedJobs().count == 1)
+  }
+
   // MARK: - Helpers
 
   private static let silent = Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })

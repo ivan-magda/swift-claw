@@ -238,6 +238,34 @@ fails config validation with exit 10. Then:
 This route is unofficial and vendor-dependent; details and caveats in
 [LOCAL_DEV.md](LOCAL_DEV.md#chatgpt-subscription-auth).
 
+## 9. Optional coding tasks
+
+Install a compatible native Codex CLI and Git on the daemon machine. GitHub work also needs `gh`
+and repository rights to clone, push and create the requested PR. Authenticate those tools as the
+service account and configure its PATH; [INSTALL.md](INSTALL.md#coder-prerequisites) explains the
+service context. `clawd auth login` manages the conversation model, not Coder's login.
+
+Set `CLAW_CODER_ENABLED=true` in `~/.swift-claw/clawd.env`, source it as in step 2, and run
+`clawd doctor`. The Coder rows distinguish CLI compatibility, local login and profile authentication
+that cannot be verified without running a task. Restart the daemon to expose the three Coder tools.
+
+In your private bot DM:
+
+> Use Coder in `/home/me/projects/my-app` to fix the parser test in place and leave local changes.
+
+> Use Coder to resolve `https://github.com/my-org/my-app/issues/42` in a separate copy and open a pull request.
+
+Local paths refer to the daemon machine. In-place accepts dirty work; a separate copy is ref-only
+and does not copy uncommitted changes. A PR requires configured repository rights. There is no
+automatic apply-back or rollback. Review the task approval; after admission, you can continue chatting
+while the job runs. Ask for status or cancellation using the returned UUID. `/stop` cancels the current
+conversation turn; cancel the Coder job explicitly to stop its native worker.
+
+N is configurable with `CLAW_CODER_MAX_CONCURRENT_JOBS` (default 1), and full means busy. Completion
+uses existing outbox retries, without another LLM turn. Child billing and child-reported usage are
+separate from conversational `/cost`. v1 is owner DM only. The six settings, limits and authentication
+caveats are in [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration).
+
 ## Troubleshooting
 
 - **Exit codes are diagnostic:** 10 invalid config, 11 secret loading failed, 12 another

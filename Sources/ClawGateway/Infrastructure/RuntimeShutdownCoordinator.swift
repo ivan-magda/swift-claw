@@ -2,7 +2,7 @@ import ClawAgent
 import ClawCore
 import Logging
 
-/// Sequences dependent-resource teardown after the lanes have quiesced, in the one mandated order.
+/// Sequences dependent-resource teardown after lanes and Coder work have quiesced.
 /// It is library-testable: composition injects the credential-commit and client-close closures, so
 /// the ordering, the credential-error precedence rule, and the fatal-timeout refusal are all proven
 /// without a real HTTP client or provider.
@@ -14,6 +14,7 @@ public struct RuntimeShutdownCoordinator: Sendable {
     case clean
     case failed(any Error)
     case fatalLaneTimeout(activeRunIDs: [Int64])
+    case fatalCoderCleanup
   }
 
   public typealias CleanupStep = @Sendable () async throws -> Void
@@ -48,17 +49,23 @@ public struct RuntimeShutdownCoordinator: Sendable {
     self.redactor = redactor
   }
 
-  /// Runs credential commit, then the LLM, Telegram, and tool client closes — each exactly once,
-  /// even when an earlier step throws — but only after a clean lane drain. On a lane timeout it
-  /// refuses all of that and returns the active run IDs for the fatal boundary: tearing credentials
-  /// or clients down under still-running turns is the exact hazard that path exists to avoid.
+  /// Joins Coder before credential/client teardown; lane timeout or Coder cleanup failure refuses
+  /// dependent cleanup so the caller can terminate without unwinding resources under owned work.
   public func shutDown(
     daemonError: (any Error)?,
     laneDrain: SessionLaneDrainResult,
+    coder: CoderService? = nil,
     dependent: DependentCleanup
   ) async -> Outcome {
     if case .timedOut(let activeRunIDs) = laneDrain {
       return .fatalLaneTimeout(activeRunIDs: activeRunIDs)
+    }
+
+    if let coder {
+      do { try await coder.shutdown() } catch {
+        logger.critical("Coder shutdown could not prove persisted, joined cleanup")
+        return .fatalCoderCleanup
+      }
     }
 
     // A daemon failure already owns the exit; the credential error only fills a vacant slot.

@@ -485,7 +485,17 @@ public struct AgentRuntime: Sendable {
           runPrivateData: runPrivateData,
           sessionHasPrivateData: sessionHasPrivateData,
           approvalAlreadyPending: pendingSuspension != nil,
-          mode: mode
+          mode: mode,
+          executionContext: ToolExecutionContext(
+            runId: runId,
+            sessionId: sessionId,
+            chatId: chatId,
+            requesterUserId: origin == .interactive && mode == .direct ? chatId : nil,
+            origin: origin,
+            mode: mode,
+            toolCallId: call.id,
+            approvalId: nil
+          )
         )
 
         guard let toolDispatcher else {

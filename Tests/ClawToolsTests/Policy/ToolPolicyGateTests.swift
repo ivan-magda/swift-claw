@@ -210,7 +210,7 @@ private struct ProbedDangerousTool: Tool {
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: ["s3cret-value-1"]),
       privateFileLoader: { privateFiles },
-      execEnabled: execEnabled
+      enabledDangerousTools: execEnabled ? [ExecuteCodeTool.name] : []
     )
   }
 
@@ -230,7 +230,8 @@ private struct ProbedDangerousTool: Tool {
         warnings: []
       ),
       guardTexts: guardTexts,
-      canExfiltrate: canExfiltrate
+      canExfiltrate: canExfiltrate,
+      approvalReason: .codeExec
     )
   }
 
@@ -936,7 +937,7 @@ private struct ProbedDangerousTool: Tool {
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: []),
         privateFileLoader: { privateFiles },
-        execEnabled: false
+        enabledDangerousTools: []
       ),
       clock: clock
     )

@@ -164,7 +164,8 @@ private struct DefaultPrepareTool: Tool {
       canonicalArgsJSON: #"{"code":"print('hello')"}"#,
       presentation: presentation,
       guardTexts: ["print('hello')", "staged text"],
-      canExfiltrate: true
+      canExfiltrate: true,
+      approvalReason: .codeExec
     )
 
     // then

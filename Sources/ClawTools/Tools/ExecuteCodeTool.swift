@@ -16,6 +16,7 @@ public struct ExecuteCodeSettings: Sendable, Equatable {
 }
 
 public struct ExecuteCodeTool: Tool {
+  public static let name = "execute_code"
   public static let maxCodeBytes = ExecStagingLimits.standard.maxCodeBytes
   public static let maxStagedFileBytes = ExecStagingLimits.standard.maxStagedFileBytes
   public static let maxStagedTotalBytes = ExecStagingLimits.standard.maxStagedTotalBytes
@@ -42,7 +43,7 @@ public struct ExecuteCodeTool: Tool {
 
   public var definition: ToolDefinition {
     ToolDefinition(
-      name: "execute_code",
+      name: Self.name,
       description:
         "Run a short Python or shell script in a locked-down, throwaway sandbox (owner approval required; no network unless explicitly requested).",
       parameters: .object([
@@ -121,7 +122,8 @@ public struct ExecuteCodeTool: Tool {
           canonicalArgsJSON: canonicalArgsJSON,
           presentation: approvalPresentation(raw: raw, recorded: recorded),
           guardTexts: [raw.code] + loaded.map(\.guardText),
-          canExfiltrate: network
+          canExfiltrate: network,
+          approvalReason: .codeExec
         )
       )
     }
