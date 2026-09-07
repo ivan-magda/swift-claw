@@ -9,6 +9,10 @@ import Testing
 
 @testable import ClawTelegram
 
+#if canImport(Network)
+  import Network
+#endif
+
 // MARK: - Loopback harness
 
 /// A scripted response for one request path.
@@ -257,21 +261,6 @@ func withBehaviourServer<Result>(
     try? await server.close()
     throw error
   }
-}
-
-/// A port nothing listens on, so a connect to it is refused rather than merely unanswered.
-func closedLocalPort() async throws -> Int {
-  let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-  let bootstrap = ServerBootstrap(group: group)
-    .serverChannelOption(ChannelOptions.backlog, value: 1)
-    .childChannelInitializer { channel in
-      channel.eventLoop.makeSucceededFuture(())
-    }
-  let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
-  let port = channel.localAddress?.port ?? 0
-  try await channel.close().get()
-  try await group.shutdownGracefully()
-  return port
 }
 
 /// `HTTPClient.syncShutdown()` is unavailable from async contexts and a `defer` cannot `await`; this
@@ -697,38 +686,6 @@ final class HandoffCounter: Sendable {
   }
 
   @Test(.timeLimit(.minutes(1)))
-  func refusedConnectionIsDefinitelyNotSent() async throws {
-    // given — nothing is listening, so no channel to write a request on ever exists
-    let port = try await closedLocalPort()
-    var configuration = HTTPClient.Configuration()
-    // Network.framework does not fail a refused connect; it parks it as "waiting" holding the typed
-    // refusal, and only a deadline ends that wait and surfaces it. This bound is therefore what makes
-    // the refusal observable at all, and it clears the ~1-2ms the transport takes to record it by two
-    // orders of magnitude so a loaded machine cannot make the deadline land first — which would
-    // surface an untyped connect timeout, a failure this test would then read as a real regression.
-    configuration.timeout = .init(connect: .milliseconds(200))
-
-    // when
-    let failure = await #expect(throws: HTTPTransportFailure.self) {
-      try await withExecutor(configuration: configuration) { executor in
-        try await executor.execute(
-          HTTPRequest(
-            method: .post,
-            url: "http://127.0.0.1:\(port)/rpc",
-            headers: [:],
-            body: Data("{}".utf8),
-            timeout: .seconds(1),
-            responseBodyPolicy: buffered()
-          )
-        )
-      }
-    }
-
-    // then
-    #expect(failure?.disposition == .definitelyNotSent)
-  }
-
-  @Test(.timeLimit(.minutes(1)))
   func closeBeforeHeadIsMayHaveBeenSent() async throws {
     // given — the peer took the request and hung up; whether it acted on it is unknowable
     try await withBehaviourServer(.closesBeforeHead) { server in
@@ -792,10 +749,9 @@ final class HandoffCounter: Sendable {
 /// no loopback peer can raise a connection-refused while a body is already arriving — the one error
 /// that would prove the distinction — so the functions themselves are the honest witness here.
 @Suite struct AsyncHTTPExecutorClassificationTests {
-  @Test
-  func connectionRefusedBeforeAnyHeadIsTheSoleProofOfACleanRequest() {
+  @Test(arguments: connectionRefusals)
+  func connectionRefusedBeforeAnyHeadIsTheSoleProofOfACleanRequest(_ refused: any Error) {
     // given — the transport typed the failure as a refusal: no channel to write a request on existed
-    let refused = IOError(errnoCode: ECONNREFUSED, reason: "connection refused")
 
     // when
     let failure = AsyncHTTPExecutor.classify(refused)
@@ -819,6 +775,20 @@ final class HandoffCounter: Sendable {
     #expect(afterHead.disposition == .mayHaveBeenSent)
   }
 
+  #if canImport(Network)
+    @Test
+    func networkConnectionResetIsNeverCleanSoItCannotBeReplayed() {
+      // given
+      let reset = NWError.posix(.ECONNRESET)
+
+      // when
+      let failure = AsyncHTTPExecutor.classify(reset)
+
+      // then
+      #expect(failure.disposition == .mayHaveBeenSent)
+    }
+  #endif
+
   @Test
   func connectTimeoutIsNeverCleanSoItCannotBeReplayed() {
     // given — a connect that timed out: the SYN may have landed and only its answer been lost
@@ -830,5 +800,22 @@ final class HandoffCounter: Sendable {
     // then — narrowing the allowlist to a typed refusal is what costs this its clean claim, and with
     // it the stream-to-buffered replay a `definitelyNotSent` would have licensed
     #expect(failure.disposition == .mayHaveBeenSent)
+  }
+}
+
+// MARK: - Classification cases
+
+private extension AsyncHTTPExecutorClassificationTests {
+  static var connectionRefusals: [any Error] {
+    let ioError = IOError(errnoCode: ECONNREFUSED, reason: "connection refused")
+    #if canImport(Network)
+      return [
+        ioError,
+        HTTPClient.NWPOSIXError(.ECONNREFUSED, reason: "connection refused"),
+        NWError.posix(.ECONNREFUSED),
+      ]
+    #else
+      return [ioError]
+    #endif
   }
 }
