@@ -1187,6 +1187,11 @@ executable, profile and config home remain selected. Probes are bounded local ve
 checks and resolution of optional `gh`/`node`; they do not install dependencies, execute inference,
 import credentials, edit shell startup files or restart a service.
 
+Human-readable setup output retains those diagnostic checks and resolved executable paths, while
+rendering `coder.path` as the captured directory count. Its settings summary identifies the full
+captured PATH without emitting the full assignment value. Dry-run uses the same summary and
+states explicitly that it did not change the configuration file.
+
 Setup parses the file without sourcing it. It accepts single-line literal `KEY=value` assignments,
 with optional `export`, quotes and comments, and rejects expansion, command syntax and multiline
 values before mutation. A non-dry run atomically publishes only `CLAW_CODER_ENABLED=true` and
@@ -1250,11 +1255,11 @@ fallback is performed by composition. Codex owns its selected configuration and 
   informational, separate from current readiness and live fatal service failure. Mapped store-read
   failures render `unreadable`, never healthy zero/none. Child-reported usage is kept per job,
   separately from conversational `/cost`; missing child usage is unavailable accounting.
-  Setup health also shows resolved optional `gh` and `node` paths. Full startup health and Telegram
-  `/status` expose the effective `coder.path` and resolved `coder.executable` and `coder.gh` as
-  headline facts. Setup checks describe the invoking command's environment; only a real service
-  restart followed by `/status` verifies the configuration that the daemon loaded, and neither
-  proves task-time authorization.
+  Setup health also shows resolved optional `gh` and `node` paths. Setup, full doctor, startup health
+  and Telegram `/status` expose the effective path's directory count as `coder.path`; resolved
+  `coder.executable`, `coder.node` and `coder.gh` remain headline facts. Setup checks describe the
+  invoking command's environment; only a real service restart followed by `/status` verifies the
+  configuration that the daemon loaded, and neither proves task-time authorization.
 
 ### 16.1 Health table (doctor / status)
 
@@ -1273,7 +1278,7 @@ empty healthy state.
 | runs           | `in_flight`, `oldest_run_age`, `last_FAILED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | spend          | `today_usd`, `remaining_budget` (per-run + per-day)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | sandbox        | `available`, `os_ok`, `engine_version`, `version_ok`, `image_digest_ok`, `caps_empty`, `net_isolated`, `caps_match`, `reaper_ok`, `rootfs_ro`, `staging_ro`, `interpreters_ok`, `last_error`                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Coder          | `enabled`, `available`, effective child `path`, resolved `executable`, optional resolved `gh`/`node`, `version`, selected `config_home`/`profile`, `authentication`, configured `capacity`, persisted `reserved`, `unresolved_ownership`, historical `last_failure`, live-only `service_failure`, and separate child `usage`; `path`, `executable`, and `gh` are headline facts when resolved                                                                                                                                                                                                                       |
+| Coder          | `enabled`, `available`, effective child `path` directory count, resolved `executable`, optional resolved `gh`/`node`, `version`, selected `config_home`/`profile`, `authentication`, configured `capacity`, persisted `reserved`, `unresolved_ownership`, historical `last_failure`, live-only `service_failure`, and separate child `usage`; `path`, `executable`, `node`, and `gh` are headline facts when resolved                                                                                                                                                                                               |
 | MCP            | per server: `enabled`, `token` (`set` \| `absent` \| `bound-to-a-different-url`), effective include/exclude, and — where the boot snapshot or a live probe is available — `tool_count` or the recorded `skip_reason`; never a token value                                                                                                                                                                                                                                                                                                                                                                           |
 | context skills | `accepted`, `rejected`, `fits_cap`; headline row from a fresh scan in full doctor and `/status`; unhealthy when `rejected > 0` or `fits_cap = false`                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | config/secret  | validation result — **printed first** if it errored                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |

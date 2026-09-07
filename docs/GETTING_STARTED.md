@@ -257,10 +257,10 @@ settings, including a configured executable, profile or config home. Use `--dry-
 proposed settings without writing, or `--env-file PATH` for another env file. It does not install
 dependencies, import credentials, edit shell startup files or restart the service.
 
-Restart the real service, then send `/status` in your private bot chat. Confirm `coder.path`, the
-resolved Codex executable, `coder.gh` when GitHub work is needed, and authentication there. Setup's
-terminal checks do not prove that the running service can use the same authorization. Rerun setup
-after changing an nvm installation or otherwise moving tools. See
+Restart the real service, then send `/status` in your private bot chat. Check the directory count in
+`coder.path`, the resolved Codex executable, Node when present, `coder.gh` for GitHub work, and
+authentication there. Setup's terminal checks do not prove that the running service can use the same
+authorization. Rerun setup after changing an nvm installation or otherwise moving tools. See
 [INSTALL.md](INSTALL.md#coder-prerequisites) for the service context.
 
 In your private bot DM:

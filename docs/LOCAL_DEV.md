@@ -644,9 +644,9 @@ a requested PR with unknown publication cannot be an unqualified success.
 The child environment and inherited installation trust are documented in
 [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration). Run `clawd coder setup` from a terminal whose
 PATH includes Codex and any interpreter used by it, then restart and inspect Telegram `/status` to
-verify the effective service path and resolved Codex/gh executables. Configure existing Codex/gh
-authorization under the actual service account before live validation. CLI presence and a foreground
-login are insufficient proof. Keep
+verify the effective service path's directory count and resolved Codex and `gh` executables, plus Node when present.
+Configure existing Codex/gh authorization under the actual service account before live validation.
+CLI presence and a foreground login are insufficient proof. Keep
 paid probes, denied-action checks and cancellation probes in a dedicated temporary state root; the
 scripted suite does not use or validate your personal daemon credentials.
 

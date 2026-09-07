@@ -31,11 +31,12 @@ selection, then records that terminal's absolute path entries in the Coder-only 
 enables Coder. It does not install dependencies, import credentials, edit shell startup files or
 restart the service. The daemon's global PATH is unchanged.
 
-Restart the real service and inspect Telegram `/status`. Verify `coder.path`, the resolved Codex and
-`gh` executables, and authentication under the launchd/systemd account. Also validate HOME,
-`CODEX_HOME`/`CLAW_CODER_CONFIG_HOME`, selected profile, `GH_CONFIG_DIR` and keyring access. Setup's
-terminal checks are not proof of service authorization. Rerun it after an nvm or other tool-path
-change. Codex owns its auth; `clawd auth` manages only the conversational route.
+Restart the real service and inspect Telegram `/status`. Verify the effective directory count in
+`coder.path`, the resolved Codex and `gh` executables, Node when present, and authentication
+under the launchd/systemd account. Also validate HOME, `CODEX_HOME`/`CLAW_CODER_CONFIG_HOME`, selected profile,
+`GH_CONFIG_DIR` and keyring access. Setup's terminal checks are not proof of service authorization.
+Rerun it after an nvm or other tool-path change. Codex owns its auth; `clawd auth` manages only the
+conversational route.
 
 `clawd doctor --check-config` runs no Codex probes. With Coder enabled, full doctor adds bounded local
 compatibility/status checks; selected-profile auth remains explicitly unverified when the CLI cannot

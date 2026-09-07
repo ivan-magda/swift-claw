@@ -35,7 +35,7 @@ enum CoderHealthRows {
     }
 
     return configurationRows(config) + [
-      row(Key.path, CodexBackend.effectivePath(config: config), headline: true),
+      pathRow(CodexBackend.effectivePath(config: config)),
       row(Key.available, "false (\(reason))", ok: false),
       row(Key.version, "unavailable"),
       row(Key.authentication, "unverified (CLI unavailable)", ok: false),
@@ -78,8 +78,12 @@ enum CoderHealthRows {
 
     if let path = setup.searchPath {
       rows += [
-        row(Key.path, path, headline: true),
-        row(Key.nodeExecutable, setup.nodeExecutable ?? "not found (needed by npm installations)"),
+        pathRow(path),
+        row(
+          Key.nodeExecutable,
+          setup.nodeExecutable ?? "not found (needed by npm installations)",
+          headline: setup.nodeExecutable != nil
+        ),
         row(
           Key.githubExecutable,
           setup.githubExecutable ?? "not found (needed for GitHub tasks)",
@@ -176,6 +180,13 @@ enum CoderHealthRows {
 // MARK: - Row Construction
 
 private extension CoderHealthRows {
+  static func pathRow(_ path: String) -> DoctorReport.Check {
+    let count = path.split(separator: ":").count
+    let unit = count == 1 ? "directory" : "directories"
+
+    return row(Key.path, "\(count) \(unit)", headline: true)
+  }
+
   static func configurationRows(_ config: CoderConfig) -> [DoctorReport.Check] {
     [
       row(Key.enabled, "true"), row(Key.executable, "\(config.executable) (configured)"),

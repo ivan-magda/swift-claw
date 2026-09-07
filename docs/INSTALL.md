@@ -164,10 +164,10 @@ Setup preserves an existing `CLAW_CODER_EXECUTABLE`, `CLAW_CODER_PROFILE` and
 `CLAW_CODER_CONFIG_HOME`. It does not install tools, import authentication, edit shell startup files
 or restart the service. Authenticate Codex and GitHub under the actual daemon account, with its HOME,
 selected `CODEX_HOME`, profile and `GH_CONFIG_DIR`. Then restart the real launchd/systemd service and
-send `/status` in the private bot chat. Check `coder.path`, the resolved `coder.executable`, `coder.gh`
-for GitHub work, and authentication. A successful setup probe in a terminal does not prove that the
-service can read the same auth source or keyring. Rerun setup after an nvm or other tool-path change.
-`clawd auth` is independent.
+send `/status` in the private bot chat. Check the effective directory count in `coder.path`, the
+resolved `coder.executable`, `coder.node` when present, `coder.gh` for GitHub work, and authentication.
+A successful setup probe in a terminal does not prove that the service can read the same auth source or
+keyring. Rerun setup after an nvm or other tool-path change. `clawd auth` is independent.
 
 `clawd doctor --check-config` stays offline and does not check Codex authentication. Full doctor uses
 local CLI checks, not inference or credential refresh. Selected-profile authentication can remain

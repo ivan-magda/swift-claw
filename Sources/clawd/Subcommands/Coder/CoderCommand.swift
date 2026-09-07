@@ -65,7 +65,13 @@ struct CoderCommand: ParsableCommand {
         AppConfig.EnvKey.coderEnabled: "true",
         AppConfig.EnvKey.coderPath: path,
       ]
-      Self.emit("\nSettings for \(file.url.path):\n" + CoderSetupFile.assignments(updates))
+      Self.emit(
+        """
+        \nSettings for \(file.url.path):
+        \(AppConfig.EnvKey.coderEnabled)=true
+        \(AppConfig.EnvKey.coderPath): full captured PATH
+        """
+      )
 
       if dryRun {
         Self.emit("Dry run: configuration was not changed.")

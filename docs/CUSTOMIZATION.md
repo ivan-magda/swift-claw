@@ -311,8 +311,13 @@ already work. It keeps the invoking terminal's absolute PATH entries, removes du
 changing their order, and proposes `CLAW_CODER_PATH` plus `CLAW_CODER_ENABLED=true`. Existing literal
 env-file assignments take precedence over the terminal for local checks, so a configured executable,
 profile or config home is preserved. Setup then overrides only the proposed Coder path and enabled
-flag. Use `--dry-run` to inspect the checks and assignments without writing, or `--env-file PATH` to
-select a file other than `$CLAW_ENV_FILE` / `~/.swift-claw/clawd.env`.
+flag. Use `--dry-run` to inspect the checks and proposed settings without writing, or
+`--env-file PATH` to select a file other than `$CLAW_ENV_FILE` / `~/.swift-claw/clawd.env`.
+
+The console keeps the diagnostic checks and resolved Codex, optional `gh`, and optional `node` paths.
+It summarizes `coder.path` as the number of captured directories and describes the settings it will
+save without printing the full path assignment. `--dry-run` uses the same summary and explicitly says
+that it did not change the configuration file.
 
 Setup reads the env file as data; it never sources or executes it. It accepts one-line literal
 `KEY=value` assignments, optionally prefixed by `export`, optionally quoted, with comments. Shell
@@ -337,9 +342,9 @@ the child's `CODEX_HOME`. Existing Codex integrations can use their own credenti
 part of the trusted installation. swift-claw never imports that login state into `clawd auth`.
 Interactive-shell access is not proof that launchd/systemd has the same authorization. Setup reports
 resolved Codex, optional `gh` and optional `node` paths for its local checks. Restart the real service,
-then inspect `/status`: the Coder headline includes its effective path and resolved Codex and `gh`
-executables. This verifies the loaded service configuration, while authentication remains a separate
-runtime fact. Rerun setup after nvm or other tool-path changes.
+then inspect `/status`: the Coder headline includes the effective path's directory count and resolved
+Codex and `gh` executables, plus `node` when resolved. This verifies the loaded service configuration, while
+authentication remains a separate runtime fact. Rerun setup after nvm or other tool-path changes.
 
 Local paths refer to the daemon machine. In-place accepts dirty work; a separate copy is ref-only,
 with no uncommitted overlay. PRs require your configured repository rights; local PR preparation
