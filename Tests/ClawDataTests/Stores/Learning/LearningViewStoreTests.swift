@@ -113,7 +113,6 @@ import Testing
   ) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,
@@ -305,7 +304,6 @@ import Testing
   ) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,
@@ -378,7 +376,6 @@ import Testing
   ) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,
@@ -406,7 +403,6 @@ import Testing
   ) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,
@@ -446,7 +442,6 @@ import Testing
   @Test func outOfDomainAssignmentBooleanIsPerJobUnreadable() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
-    defer { fixture.remove() }
     let artifact = try fixture.persistedCandidate()
     let admitted = try fixture.env.learning.admitCandidate(
       digest: artifact.digest,

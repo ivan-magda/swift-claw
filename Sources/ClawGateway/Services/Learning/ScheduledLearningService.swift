@@ -3,13 +3,8 @@ import Foundation
 import Logging
 import ServiceLifecycle
 
-/// Drives learning work off the owner delivery path. The lane tail notifies it after settlement;
-/// the sweep and the boot pass are backstops for anything a crash lost between a settlement commit
-/// and its notification. Every step it drives is idempotent, so a duplicate notification is free.
-///
-/// The sweep is the guarantee and the notification is the optimization, not the other way round: a
-/// bound run reaches its terminal state on paths a lane closure can miss, and the queue read is
-/// what makes those runs rejoin the loop without waiting for the next daemon start.
+/// Drives settled learning work off owner delivery paths, with an initial and periodic recovery
+/// sweep backing up lane and feedback notifications lost across a crash.
 public actor ScheduledLearningService {
   /// A backstop cadence, not a latency budget — the lane tail already notifies on the ordinary
   /// path, so this only has to be faster than an owner notices a missing evaluation.
@@ -18,23 +13,30 @@ public actor ScheduledLearningService {
   /// built; the next tick takes the rest.
   private static let sweepBatchLimit = 64
 
+  nonisolated private let workflow: LearningWorkflow?
   nonisolated private let store: any ScheduledLearningStore
   nonisolated private let clock: any Clock<Duration>
   nonisolated private let now: @Sendable () -> Date
   nonisolated private let logger: Logger
 
   private var pending: Set<Int64> = []
+  private var pendingJobs: Set<Int64> = []
+  private var operationsReconciled = false
+  private var stopping = false
+  private var sweepCursor: Int64 = 0
   /// The per-session lane's own pattern: a Swift actor does not serialize across `await`, so
   /// ordering between one drain and the next comes from chaining this task, not from isolation.
   private var drain: Task<Void, Never>?
 
   public init(
     store: any ScheduledLearningStore,
+    workflow: LearningWorkflow? = nil,
     clock: any Clock<Duration> = ContinuousClock(),
     now: @escaping @Sendable () -> Date = { Date() },
     logger: Logger
   ) {
     self.store = store
+    self.workflow = workflow
     self.clock = clock
     self.now = now
     self.logger = logger
@@ -58,29 +60,94 @@ public actor ScheduledLearningService {
   }
 
   public func notifySettled(runId: Int64) {
+    guard !stopping else {
+      return
+    }
     pending.insert(runId)
     _ = kickDrain(now: now())
   }
 
-  /// Seals settled runs, then reconciles live trials against their deadlines. Retention joins
-  /// later; errors remain isolated so one bad row cannot starve later work.
-  public func sweep(now: Date) async {
-    await sealSettled(now: now)
-    _ = await reconcileTrials(now: now)
+  func waitForPendingWork() async {
+    await drain?.value
   }
 
-  /// Runs after boot reconciliation has settled what the last process left open, so this pass sees
-  /// those runs already frozen. It reconciles operations, seals, then reconciles trials; it never
-  /// settles a run itself, so it cannot disturb the boot sweep and approval-backstop ordering.
-  ///
-  /// The operation pass goes first, and no learning call may be dispatched before it returns: a
-  /// prior process's `started` operation has to be charged and closed as unknown before anything
-  /// re-reads headroom, and its claimed-but-never-authorized siblings have to become claimable
-  /// again or the runs behind them are never evaluated.
-  public func reconcileAtBoot(now: Date) async {
-    reconcileOperations(now: now)
-    await sealSettled(now: now)
-    _ = await reconcileTrials(now: now)
+  public func notifyChanged(jobId: Int64) {
+    guard !stopping else {
+      return
+    }
+    pendingJobs.insert(jobId)
+    _ = kickDrain(now: now())
+  }
+
+  public func advance(runId: Int64) async {
+    guard !stopping, ensureOperations(now: now()) else {
+      return
+    }
+    if let workflow { await workflow.advance(runId: runId, now: now()) }
+  }
+
+  public func advance(jobId: Int64) async {
+    guard !stopping, ensureOperations(now: now()) else {
+      return
+    }
+    if let workflow { await workflow.advance(jobId: jobId, now: now()) }
+  }
+
+  /// Recovers settled work and trial deadlines, then collects unreferenced learning history.
+  public func sweep(now: Date) async {
+    guard !stopping else {
+      return
+    }
+    defer {
+      do {
+        _ = try store.sweepRetention(now: now)
+      } catch {
+        logger.error("learning retention deferred: \(error)")
+      }
+    }
+    if let workflow {
+      guard ensureOperations(now: now) else {
+        return
+      }
+      await sealSettled(now: now)
+      guard !Task.isCancelled else {
+        return
+      }
+      do {
+        let jobs = try workflow.store.workflowJobs(after: sweepCursor, limit: Self.sweepBatchLimit)
+        sweepCursor = jobs.last ?? 0
+        for jobId in jobs {
+          if Task.isCancelled { break }
+          do {
+            let runs = try workflow.store.workflowRuns(
+              jobId: jobId,
+              after: 0,
+              limit: Self.sweepBatchLimit
+            )
+            for runId in runs {
+              if Task.isCancelled { break }
+              await workflow.advance(runId: runId, now: now)
+            }
+            if !Task.isCancelled {
+              await workflow.advance(jobId: jobId, now: now)
+            }
+          } catch {
+            logger.error("job \(jobId) learning recovery deferred: \(error)")
+          }
+        }
+      } catch {
+        logger.error("learning workflow sweep deferred: \(error)")
+      }
+    } else {
+      await sealSettled(now: now)
+      _ = await reconcileTrials(now: now)
+    }
+  }
+
+  /// Attempts prior-process operation accounting before ordinary services start. Network recovery
+  /// belongs to the runtime sweep; a failed attempt leaves learning dispatch guarded and retryable.
+  public func reconcileAtBoot(now: Date) {
+    _ = ensureOperations(now: now)
   }
 
   @discardableResult
@@ -116,17 +183,25 @@ public actor ScheduledLearningService {
 private extension ScheduledLearningService {
   /// A failure here is logged and not thrown: the sealing pass and ordinary scheduled execution
   /// must still run when the learning tables cannot be reconciled.
-  func reconcileOperations(now: Date) {
+  func ensureOperations(now: Date) -> Bool {
+    if operationsReconciled { return true }
+    operationsReconciled = reconcileOperations(now: now)
+    return operationsReconciled
+  }
+
+  func reconcileOperations(now: Date) -> Bool {
     do {
       let result = try store.reconcileOperationsAtBoot(now: now)
       guard result.interrupted > 0 || result.returnedToClaimable > 0 else {
-        return
+        return true
       }
       let closed = result.interrupted
       let requeued = result.returnedToClaimable
       logger.info("learning boot closed \(closed) interrupted, requeued \(requeued) unstarted")
+      return true
     } catch {
       logger.error("learning operations could not be reconciled at boot: \(error)")
+      return false
     }
   }
 }
@@ -140,14 +215,32 @@ private extension ScheduledLearningService {
     } catch {
       logger.error("learning sweep could not read the unsealed queue: \(error)")
     }
-    await kickDrain(now: now).value
+    let task = kickDrain(now: now)
+    await withTaskCancellationHandler {
+      await task.value
+    } onCancel: {
+      task.cancel()
+    }
+  }
+
+  func stopDrain() async {
+    stopping = true
+    drain?.cancel()
+    await drain?.value
   }
 
   func kickDrain(now: Date) -> Task<Void, Never> {
     let previous = drain
     let task = Task {
-      await previous?.value
-      await self.sealBatch(now: now)
+      await withTaskCancellationHandler {
+        await previous?.value
+        guard !Task.isCancelled else {
+          return
+        }
+        await self.sealBatch(now: now)
+      } onCancel: {
+        previous?.cancel()
+      }
     }
     drain = task
     return task
@@ -162,15 +255,29 @@ private extension ScheduledLearningService {
   /// with no suspension between them, so a notification that arrives mid-batch survives into the
   /// next drain rather than being dropped by the clear.
   func sealBatch(now: Date) async {
+    guard workflow == nil || ensureOperations(now: now) else {
+      return
+    }
+    let jobs = pendingJobs.sorted()
+    pendingJobs.removeAll()
     let batch = pending.sorted()
     pending.removeAll()
     for runId in batch {
+      if Task.isCancelled { break }
       do {
-        try store.sealEvidence(runId: runId, now: now)
+        if let workflow {
+          await workflow.advance(runId: runId, now: now)
+        } else {
+          try store.sealEvidence(runId: runId, now: now)
+        }
       } catch {
         logger.error("run \(runId) evidence sealing failed: \(error)")
       }
       await Task.yield()
+    }
+    for jobId in jobs {
+      if Task.isCancelled { break }
+      await workflow?.advance(jobId: jobId, now: now)
     }
   }
 }
@@ -190,6 +297,7 @@ extension ScheduledLearningService: Service {
         }
       }
     }
+    await stopDrain()
     logger.info("learning sweep stopped")
   }
 }

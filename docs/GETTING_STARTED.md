@@ -189,6 +189,19 @@ authoring rules, the environment knobs for budgets, schedules, voice locales, an
 code sandbox, and how to [connect MCP servers](CUSTOMIZATION.md#mcp-servers) so their
 tools show up in chat.
 
+### Let scheduled jobs learn from feedback
+
+Set `CLAW_LEARNING_ENABLED=true` in `clawd.env`, reload the file and restart the daemon.
+Learning is off by default. Once enabled, clawd evaluates eligible completed scheduled
+runs and offers feedback buttons on their results. Tap **Correct it** and answer the prompt
+to describe what should change; one correction can produce a candidate lesson set and start
+a trial. Two positive trial runs can promote it; one negative run ends the trial.
+
+These extra model calls use your configured route and count toward the global and proactive
+budgets. Send `/learning` to inspect the state, or `/learning <jobId>` for a job's lessons
+and rollback control. [Scheduled learning](CUSTOMIZATION.md#scheduled-learning) covers
+candidate edits, reset, fixed trial limits and retention.
+
 ## 7. Keep it running
 
 To restart `clawd` after a crash and start it on login, run it under launchd (macOS) or

@@ -38,6 +38,8 @@ public struct ScriptedStreamHold: Sendable {
 public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
   public enum Step: Sendable {
     case ok(HTTPResult)
+    /// Answers a buffered request at its transport boundary, including gated long-poll replies.
+    case responding(@Sendable (HTTPRequest) async throws -> HTTPResult)
     case fail(ScriptedTransportFailure)
     case stream(HTTPStreamHead, [Data])
     case streamFailure(HTTPStreamHead, [Data], ScriptedTransportFailure)
@@ -87,6 +89,7 @@ public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
     }
     switch steps.removeFirst() {
     case .ok(let result): return result
+    case .responding(let response): return try await response(request)
     case .fail(let error): throw error
     case .transportFailure(let failure): throw failure
     case .stream, .streamFailure, .respondingStream, .blockedStream, .streamThenBlock:
@@ -172,7 +175,7 @@ private extension ScriptedHTTPExecutor {
         error: errorBytes,
         trailingHold: hold
       )
-    case .ok, .fail:
+    case .ok, .fail, .responding:
       throw HTTPTransportFailure(
         disposition: .mayHaveBeenSent,
         safeMessage: "expected streaming step, got buffered step"
