@@ -133,6 +133,12 @@ public struct ClaimedObservationFill: Sendable, Equatable {
 }
 
 public protocol RunStore: Sendable {
+  /// Restores the original requester and conversation target without treating a group chat as a user.
+  func executionContext(
+    runId: Int64,
+    fallbackChatId: Int64
+  ) throws(StoreError) -> RunExecutionContext?
+
   /// PENDING → RUNNING through `RunFSM`, returning the run's origin in the same write; nil means
   /// the run is absent or no longer pending (one query, no separate origin read). `policyVersion`
   /// is stamped onto `runs.policy_version` in the SAME UPDATE as the flip; nil records no

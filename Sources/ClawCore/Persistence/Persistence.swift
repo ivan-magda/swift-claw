@@ -532,6 +532,7 @@ public enum AuditAction: String, Sendable, Equatable {
 }
 
 public struct AuditEvent: Sendable, Equatable {
+  public let actorUserId: Int64?
   public let actor: AuditActor
   public let action: AuditAction
   public let tool: String?
@@ -544,6 +545,7 @@ public struct AuditEvent: Sendable, Equatable {
 
   public init(
     actor: AuditActor,
+    actorUserId: Int64? = nil,
     action: AuditAction,
     tool: String? = nil,
     argsRedacted: String = "",
@@ -554,6 +556,7 @@ public struct AuditEvent: Sendable, Equatable {
     ts: Date
   ) {
     self.actor = actor
+    self.actorUserId = actorUserId
     self.action = action
     self.tool = tool
     self.argsRedacted = argsRedacted

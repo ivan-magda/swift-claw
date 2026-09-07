@@ -167,3 +167,14 @@ public struct ResumeUsage: Sendable, Equatable {
     self.costUSD = costUSD
   }
 }
+
+/// The person whose successful callback resolved an approval; expiry has no person actor.
+public struct ApprovalResolutionActor: Sendable, Equatable {
+  public let actor: AuditActor
+  public let userId: Int64
+
+  public init(actor: AuditActor, userId: Int64) {
+    self.actor = actor
+    self.userId = userId
+  }
+}

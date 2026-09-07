@@ -88,6 +88,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
   func approve(
     id: Int64,
     currentPolicyVersion: String,
+    actor: ApprovalResolutionActor?,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome {
     if throwOnResolve { throw StoreError.unexpected("scripted store failure") }
@@ -97,7 +98,12 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     return approveOutcome
   }
 
-  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool {
+  func deny(
+    id: Int64,
+    decision: ApprovalDecision,
+    actor: ApprovalResolutionActor?,
+    now: Date
+  ) throws(StoreError) -> Bool {
     if throwOnResolve { throw StoreError.unexpected("scripted store failure") }
     lock.lock()
     defer { lock.unlock() }

@@ -693,6 +693,13 @@ import Testing
     func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
       throw StoreError.unexpected("unused in this fixture")
     }
+    func executionContext(
+      runId: Int64,
+      fallbackChatId: Int64
+    ) throws(StoreError) -> RunExecutionContext? {
+      try base.executionContext(runId: runId, fallbackChatId: fallbackChatId)
+    }
+
     func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
       try base.runOrigin(runId: runId)
     }

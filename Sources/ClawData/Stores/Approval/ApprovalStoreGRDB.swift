@@ -31,6 +31,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
   public func approve(
     id: Int64,
     currentPolicyVersion: String,
+    actor: ApprovalResolutionActor?,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome {
     try database.writeMapping { db in
@@ -52,7 +53,8 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         try Self.insertApprovalAudit(
           db,
           approval: approval,
-          actor: .owner,
+          actor: actor?.actor ?? .owner,
+          actorUserId: actor?.userId,
           action: .approvalDenied,
           decision: .stalePolicy,
           now: now
@@ -72,7 +74,8 @@ public struct ApprovalStoreGRDB: ApprovalStore {
       try Self.insertApprovalAudit(
         db,
         approval: approval,
-        actor: .owner,
+        actor: actor?.actor ?? .owner,
+        actorUserId: actor?.userId,
         action: .approvalGranted,
         decision: nil,
         now: now
@@ -86,7 +89,12 @@ public struct ApprovalStoreGRDB: ApprovalStore {
     }
   }
 
-  public func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool {
+  public func deny(
+    id: Int64,
+    decision: ApprovalDecision,
+    actor: ApprovalResolutionActor?,
+    now: Date
+  ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       guard let approval = try Self.fetchApproval(db, id: id), approval.state == .pending else {
         return false
@@ -106,7 +114,8 @@ public struct ApprovalStoreGRDB: ApprovalStore {
       try Self.insertApprovalAudit(
         db,
         approval: approval,
-        actor: auditActor,
+        actor: actor?.actor ?? auditActor,
+        actorUserId: actor?.userId,
         action: .approvalDenied,
         decision: decision,
         now: now
@@ -457,6 +466,7 @@ private extension ApprovalStoreGRDB {
     _ db: Database,
     approval: Approval,
     actor: AuditActor,
+    actorUserId: Int64? = nil,
     action: AuditAction,
     decision: ApprovalDecision?,
     now: Date
@@ -465,6 +475,7 @@ private extension ApprovalStoreGRDB {
       db,
       AuditEvent(
         actor: actor,
+        actorUserId: actorUserId,
         action: action,
         tool: approval.tool,
         decision: decision?.rawValue ?? "ok",

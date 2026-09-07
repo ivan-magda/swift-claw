@@ -266,6 +266,14 @@ public enum ClawDatabase {
     migrator.registerMigration("v11") { db in
       try createCoderJobs(db)
     }
+    migrator.registerMigration("v12") { db in
+      try db.alter(table: "runs") { table in
+        table.add(column: "requester_user_id", .integer)
+      }
+      try db.alter(table: "audit_events") { table in
+        table.add(column: "actor_user_id", .integer)
+      }
+    }
     return migrator
   }
 

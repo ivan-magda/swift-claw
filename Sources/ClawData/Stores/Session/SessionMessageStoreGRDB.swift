@@ -57,8 +57,8 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
       try db.execute(
         sql: """
           INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
-            trigger_telegram_message_id)
-          VALUES (?, ?, ?, ?, ?, ?)
+            trigger_telegram_message_id, requester_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           """,
         arguments: [
           sessionId,
@@ -67,6 +67,7 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
           inbound.ts,
           messageId,
           inbound.telegramMessageId,
+          inbound.userId,
         ]
       )
       let runId = db.lastInsertedRowID
