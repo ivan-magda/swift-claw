@@ -15,6 +15,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
   /// How the conversation is served. A group topic has no approval keyboard and no single owner
   /// to press it, so the gate resolves consent itself instead of parking a prompt nobody owns.
   public let mode: ChatMode
+  public let executionContext: ToolExecutionContext?
 
   public init(
     sessionTainted: Bool,
@@ -23,7 +24,8 @@ public struct ToolDispatchContext: Sendable, Equatable {
     runPrivateData: Bool,
     sessionHasPrivateData: Bool,
     approvalAlreadyPending: Bool,
-    mode: ChatMode = .direct
+    mode: ChatMode = .direct,
+    executionContext: ToolExecutionContext? = nil
   ) {
     self.sessionTainted = sessionTainted
     self.runIngestedUntrusted = runIngestedUntrusted
@@ -32,6 +34,7 @@ public struct ToolDispatchContext: Sendable, Equatable {
     self.sessionHasPrivateData = sessionHasPrivateData
     self.approvalAlreadyPending = approvalAlreadyPending
     self.mode = mode
+    self.executionContext = executionContext
   }
 }
 

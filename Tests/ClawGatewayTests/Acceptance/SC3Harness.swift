@@ -51,6 +51,25 @@ struct SC3Harness {
 
   let waiter: ApprovalWaiter
   let lanes: SessionLaneRegistry
+  let agent: AgentRuntime
+  let coderService: CoderService?
+
+  func stop() async throws {
+    await lanes.stopAcceptingAndCancel()
+    let drain = await lanes.drain(timeout: .seconds(30), clock: ContinuousClock())
+    #expect(drain == .drained)
+    try await coderService?.shutdown()
+    guard drain == .drained else {
+      throw CoderToolCleanupError.lanesNotDrained
+    }
+  }
+
+  func removeFiles() {
+    try? FileManager.default.removeItem(at: workspaceRoot)
+    for suffix in ["", "-wal", "-shm"] {
+      try? FileManager.default.removeItem(atPath: databasePath + suffix)
+    }
+  }
 
   /// Re-establishes the fabric against the SAME DB after a "restart" (a second harness over one
   /// `databasePath`): cleans terminal-run PENDING rows, re-parks unexpired approvals on their
@@ -167,6 +186,9 @@ func makeSC3Harness(
   extraTools: [any Tool] = [],
   execEnabled: Bool = false,
   executionBackend: (any ExecutionBackend)? = nil,
+  coderBackend: ScriptedCoderBackend? = nil,
+  coderPolicyID: String = CoderServiceFixture.executionPolicyID,
+  notifyOutbox: @escaping @Sendable () -> Void = {},
   execSettings: ExecuteCodeSettings = ExecuteCodeSettings(
     memoryMiB: 1024,
     cpus: 4,
@@ -232,6 +254,35 @@ func makeSC3Harness(
       )
     )
   }
+  let coderService = coderBackend.map { backend in
+    CoderService(
+      store: stores.coderJobs,
+      backend: backend,
+      preparer: CoderPreparationStub(),
+      inspector: CoderInspectionStub(observation: .stopped),
+      config: CoderConfig(
+        enabled: true,
+        maxConcurrentJobs: 1,
+        jobTimeoutSeconds: 600,
+        executable: CoderConfig.Defaults.executable,
+        profile: nil,
+        configHome: nil
+      ),
+      jobRoot: workspaceRoot.appendingPathComponent("coder-jobs").path,
+      executionPolicyID: coderPolicyID,
+      redact: { text in
+        redactor.redact(text)
+      },
+      notifyOutbox: notifyOutbox
+    )
+  }
+  if let coderService {
+    tools += [
+      CoderSubmitTool(service: coderService, executionPolicyID: coderPolicyID, redactor: redactor),
+      CoderStatusTool(service: coderService, redactor: redactor),
+      CoderCancelTool(service: coderService, redactor: redactor),
+    ]
+  }
   tools.append(contentsOf: extraTools)
 
   // 5. GatedToolDispatcher: tier-3 private files load from DISK at gate-evaluation time (rev.1 H1).
@@ -245,7 +296,12 @@ func makeSC3Harness(
     gate: ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: secretValues),
       privateFileLoader: privateFileLoader,
-      execEnabled: execEnabled
+      enabledDangerousTools: Set(
+        tools.filter { tool in
+          (execEnabled && tool.definition.name == ExecuteCodeTool.name)
+            || (coderService != nil && tool.definition.name == CoderToolNames.submit)
+        }.map(\.definition.name)
+      )
     )
   )
 
@@ -257,7 +313,17 @@ func makeSC3Harness(
     memoryStore: stores.memory,
     retriever: stores.retriever,
     budget: .default,
-    fenceLabels: ToolFenceLabels(definitions: dispatcher.definitions)
+    fenceLabels: ToolFenceLabels(definitions: dispatcher.definitions),
+    policyStaticSubhash: PolicyFingerprint.staticSubhash(
+      inputs: .init(
+        tools: dispatcher.definitions,
+        llmEgress: .configuredEndpoint("https://llm.example"),
+        searchEndpointPresent: true,
+        workspaceRoot: workspaceRoot.path,
+        webFetchExemptCIDRs: [],
+        exec: .disabledDefault
+      )
+    )
   )
 
   // 6. AgentRuntime over the per-turn scripted provider and the real gated dispatcher.
@@ -295,7 +361,7 @@ func makeSC3Harness(
     budget: .default,
     contextBuilder: contextBuilder,
     imageCache: imageCache,
-    notifyOutbox: {},
+    notifyOutbox: notifyOutbox,
     parker: deferredParker,
     approvalExpirySeconds: testApprovalExpirySeconds,
     logger: logger
@@ -380,6 +446,8 @@ func makeSC3Harness(
     workspaceRoot: workspaceRoot,
     sessionKey: SessionKey.telegramDM(chatId: 7),
     waiter: waiter,
-    lanes: lanes
+    lanes: lanes,
+    agent: agent,
+    coderService: coderService
   )
 }

@@ -84,6 +84,7 @@ public enum PolicyFingerprint {
       parts.append(tool.fenceLabel)
       parts.append(egressLabel(tool.egressClass))
       parts.append(tool.invocationIdentity ?? "")
+      parts.append("requires_interactive_owner:\(tool.requiresInteractiveOwner)")
     }
     parts.append(egressIdentityLabel(inputs.llmEgress))
     parts.append(inputs.searchEndpointPresent ? "search:present" : "search:absent")

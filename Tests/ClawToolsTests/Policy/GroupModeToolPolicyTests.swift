@@ -25,7 +25,7 @@ import Testing
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: ["s3cret-value-1"]),
       privateFileLoader: { [Self.memoryText] },
-      execEnabled: true
+      enabledDangerousTools: [ExecuteCodeTool.name]
     )
   }
 

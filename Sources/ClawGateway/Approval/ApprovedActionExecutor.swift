@@ -137,11 +137,42 @@ private extension ApprovedActionExecutor {
         ingestedUntrusted: false
       )
     }
+    let context: ToolExecutionContext?
+    do {
+      if let origin = try runs.runOrigin(runId: approval.runId) {
+        context = ToolExecutionContext(
+          runId: approval.runId,
+          sessionId: approval.sessionId,
+          chatId: approval.ownerUserId,
+          requesterUserId: origin == .interactive ? approval.ownerUserId : nil,
+          origin: origin,
+          mode: .direct,
+          toolCallId: approval.toolCallId,
+          approvalId: approval.id
+        )
+      } else {
+        context = nil
+      }
+    } catch {
+      return ToolPayload(
+        content: "The approved action's origin could not be restored; nothing ran.",
+        status: .error,
+        ingestedUntrusted: false
+      )
+    }
+    if tool.definition.requiresInteractiveOwner, context == nil {
+      return ToolPayload(
+        content: "The approved action's origin is missing; nothing ran.",
+        status: .error,
+        ingestedUntrusted: false
+      )
+    }
     // Run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s
     // abandon-on-timeout race, so the observation is always truthful (file_write is atomic).
     return await tool.execute(
       arguments: arguments,
-      canonicalTarget: approval.canonicalTarget
+      canonicalTarget: approval.canonicalTarget,
+      context: context
     )
   }
 
