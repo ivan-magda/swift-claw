@@ -2,6 +2,13 @@ import Foundation
 
 public enum CoderJobState: String, Sendable, Codable {
   case admitted, running, stopping, succeeded, failed, cancelled, timedOut, interrupted
+
+  public var isTerminal: Bool {
+    switch self {
+    case .admitted, .running, .stopping: false
+    case .succeeded, .failed, .cancelled, .timedOut, .interrupted: true
+    }
+  }
 }
 
 public struct CoderOrigin: Sendable, Equatable, Codable {

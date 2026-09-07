@@ -263,6 +263,9 @@ public enum ClawDatabase {
         table.add(column: "reply_to_message_id", .integer)
       }
     }
+    migrator.registerMigration("v11") { db in
+      try createCoderJobs(db)
+    }
     return migrator
   }
 

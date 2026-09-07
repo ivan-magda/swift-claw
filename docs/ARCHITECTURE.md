@@ -385,6 +385,15 @@ OutboxDispatcher:
 
 **Ordering invariant:** the inbound message + the run row **COMMIT before** the outbound reply is sent. So a disk-full/crash stops the turn before an unrecoverable side effect.
 
+**Coder completion** commits the first terminal job result and its report chunks together in one
+transaction, without another LLM turn. Shared `OutboxInsertion` retains exact-step insertion for
+ordinary claims; append callers allocate after the maximum existing run-relative step, including
+approval prompts. Coder uses the persisted origin chat and the origin run's topic/reply metadata;
+report text cannot choose a destination. Completion compares the state used for rendering with the
+current job: a concurrent cancellation returns `stateChanged(currentJob)` without writes so the
+service can rerender and retry only the commit. A terminal replay returns `alreadyTerminal` and
+inserts nothing. An outbox failure rolls back the terminal transition and reservation release.
+
 ### 6.5 Callback (approval) path (Inc 5a)
 
 `callback_query` updates arrive through the **same untrusted `getUpdates` stream** as messages but bypass §6.1 message ordering (they are callbacks). They MUST:
@@ -418,6 +427,7 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 | `memory_items` | 3 | type, content, source/provenance, ts, importance, sensitivity (durable facts; `confidence` deferred, `visibility`→`sensitivity` — Inc 3a) | `session_id → sessions.id` (nullable) |
 | `scheduled_jobs` | 4 | `owner_chat_id` (set in code at arm time), `label`, `prompt` (owner-authored, trusted, frozen at confirm), `recurrence` (`{"schema_version":1,"rule":<RecurrenceRule JSON>}`; NULL ⇔ one-shot), `timezone` (IANA), materialized `next_occurrence` (advanced only inside the claim; NULL once terminal; partial index `(status, next_occurrence)`), `last_fired_at`, status FSM `ACTIVE\|PAUSED\|COMPLETED\|CANCELLED`, `session_id` (the job's dedicated session `sched:job:<id>`, NULL until first fire), `created_ts`/`updated_ts` | `session_id → sessions.id` |
 | `scheduler_state` | 4 | single row (`id = 1` CHECK): `last_tick_at`, `last_misfire_at`, `last_misfire_skipped_count`, `last_heartbeat_at`, `heartbeat_count_day` (day string in `CLAW_TIMEZONE` — the cap boundary aligns with quiet hours, not UTC), `heartbeat_count`; `due_count` is computed by query, never stored | — |
+| `coder_jobs` | Coder | migration `v11`: prepared request, origin/approval, state, reserved slot, canonical checkout/common-Git identities, process ownership/receipt, result, epoch-second timestamps; UNIQUE `(origin_run_id, tool_call_id)` | `origin_run_id → runs.id`, `origin_session_id → sessions.id`, `approval_id → approvals.id` |
 | `approvals` | 5a | PENDING/APPROVED/REJECTED/EXPIRED (EXPIRED resolves to a DENY outcome at execution), tool + canonical args, **canonical-args hash, policy_version, ownerUserId, random callback nonce**, expiry | `approvals.run_id → runs.id` |
 
 `runs.state = AWAITING_APPROVAL` references `approvals.id` as the **one** canonical source of truth for "blocked on approval" (no ambiguous dual flags).
@@ -474,6 +484,36 @@ func advanceCursor(to lastUpdateId: Int64) throws
 ```
 
 All write methods execute inside a single `db.write { }` closure so the dedup key and the side effect share one transaction.
+
+#### Coder job persistence
+
+`CoderJobStore` is a synchronous, typed `throws(StoreError)` Core seam implemented by a thin
+`CoderJobStoreGRDB` over the shared database writer and exposed through `ClawStores.coderJobs`.
+`admit(id:prepared:origin:maxConcurrentJobs:now:)` first resolves the trusted `(runID, toolCallID)`
+dedup key, then refuses unresolved process ownership deployment-wide, counts every reserved row
+(including terminal rows), checks in-place checkout/common-Git conflicts, and inserts a reserved
+`admitted` job in the same transaction. Outcomes are `admitted`, `existing`, `busy`, `workspaceBusy`,
+or `recoveryRequired`. Separate jobs do not lock their source checkout. Canonical identities come
+from trusted preparation; this store does not resolve paths or reinterpret approvals.
+
+`job(id:)` reads durable status and `reservedJobs()` supplies recovery's reservation inventory.
+`markRunning(id:now:)` is a compare-and-swap from `admitted` only. `requestCancellation(id:now:)`
+moves admitted/running jobs to `stopping`, preserves terminal state, and keeps the reservation.
+`CoderJobState.isTerminal` identifies succeeded, failed, cancelled, timedOut, and interrupted.
+
+`recordProcess(id:event:now:)` records `willLaunch` only for a running, reserved job whose ownership
+is none/stopped, otherwise throwing a typed store error. `didLaunch` only replaces the matching
+pending launch. Stopped/unresolved cleanup events must match the current receipt's `launchID`;
+nonmatching receipt events are ignored. Matching launch acknowledgement and cleanup remain legal
+while stopping or terminal, so an already spawned child can be recorded and drained. A subprocess
+stop never releases the workflow slot, and a delayed earlier command event cannot clear a later
+command receipt.
+
+`complete(id:expectedState:result:chunks:releaseReservation:now:)` requires a terminal result and
+owns the atomic report commit described in §6.4. Releasing a reservation requires ownership none
+or stopped; terminal state alone is insufficient. `releaseResolvedReservation(id:now:)` additionally
+requires a terminal job, releases only its slot, and never adds another notice. All store operations
+use the mapped read/write seams, including SQLite-full classification as `StoreError.diskFull`.
 
 ### 7.6 sqlite-vec — deferral honesty
 
