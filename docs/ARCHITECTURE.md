@@ -90,7 +90,7 @@ clawd
 | `ClawTools` | lib | Tool registry + read-only tools (v1); policy gate + approval orchestration arrive in the P-tools phase (Inc 5a). | `ToolRegistry`, `ToolContext`; `WebSearchTool`, `WebFetchTool`, `FileReadTool` (v1); `PolicyGate`, `ApprovalCoordinator` [Inc5a] |
 | `ClawMCP` | lib | MCP **client** (§10.3): the Streamable HTTP transport over the shared HTTP seam, one session per configured server, catalog resolution, metadata redaction, name/schema normalization, and the `Tool` adapter that puts a remote tool on the same seam as a built-in. Depends only on `ClawCore` + the official Swift SDK, so no MCP concept reaches the agent loop or the policy gate. | `MCPStreamableHTTPTransport`, `MCPServerSession`, `MCPCatalogResolver`, `ResolvedMCPCatalog`, `MCPMetadataSanitizer`, `MCPTool`, `MCPToolNamer`, `MCPSchemaNormalizer` |
 | `ClawExec` | lib | macOS 26 arm64 execution implementation: fixed-path swift-subprocess adapter, apple/container argv, disposable scratch, serialized VM lifecycle, probe/reap/canary maintenance. Linux supplies no backend until Inc 6. | `ContainerBackend`, `ExecSandboxSettings` |
-| `ClawCoder` | lib | Native Coder process ownership on macOS and Linux, with workspace preparation and Codex protocol adapters composed in later increments. Depends on Core, pinned Subprocess and platform System only. | `CoderCommandRunner`, `ManagedCoderProcessGroup`, `CoderProcessIdentity`, `CoderProcessInspector` |
+| `ClawCoder` | lib | Native Coder process ownership and Git workspace preparation on macOS and Linux; the Codex adapter is composed in a later increment. Depends on Core, pinned Subprocess and platform System only. | `CoderCommandRunner`, `ManagedCoderProcessGroup`, `CoderProcessIdentity`, `CoderProcessInspector`, `CoderRequestPreparer`, `CoderWorkspace`, `RepositoryInventory` |
 | `ClawAppleSpeech` | lib | macOS 26 on-device speech-to-text behind the `ClawCore` `VoiceTranscribing` seam (`SpeechAnalyzer`/`SpeechTranscriber`, idempotent model-asset provisioning). Compiles to an empty module on Linux (`#if canImport(Speech)`); the factory returns nil there, fail-closed to the canned reply. | `AppleSpeechTranscriber`, `SystemVoiceTranscriber` |
 | `ClawAgent` | lib | Agent runtime: context assembly, the run loop, budgets, cancellation, the per-session lane. | `AgentRuntime`, `ContextBuilder`, `RunBudget`, `SessionActor` |
 | `ClawGateway` | lib | Wiring: `ServiceGroup`, Services, routing, access control, session resolution, outbox dispatch, shutdown. | `Gateway`, `TelegramPollerService`, `SchedulerService` [Inc4], `Router`, `AccessControl`, `RateLimiter`, `OutboxDispatcher` |
@@ -886,7 +886,9 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   or trusted-context values, never model-authored request fields.
 - **In place:** use the local checkout's current branch and working files, including uncommitted
   changes. Reject `startRef`; `baseBranch` is a separate PR target and is allowed. A dirty checkout
-  is not a preflight failure. Unless `publishExistingChanges` is true, Codex must leave unrelated
+  is not a preflight failure. An unborn in-place branch has no starting commit: verify its HEAD
+  branch ref is absent, retain `startingCommit == nil`, and still inventory its files. Other Git or
+  supervision failures do not establish an unborn branch. Unless `publishExistingChanges` is true, Codex must leave unrelated
   existing work out of its commit and report blocked if it cannot complete within that scope.
   Coder's own checkout/common-Git-directory lock does not control external editors or agents.
 - **Separate copy:** start from committed Git history only; no dirty-state snapshot, overlay,
@@ -894,6 +896,43 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   means the local source's current HEAD or the GitHub remote's default branch, never an assumed
   `main`. Local copies have independent objects without hardlinks/alternates or source hooks/config.
   A GitHub source always uses a separate copy, never a matching host checkout discovered elsewhere.
+- **Prepared repository identity and publication:** before approval, resolve local checkout and
+  common Git directory to canonical paths with bounded, sanitized read-only Git queries. Do not
+  clone or contact GitHub. For a PR, freeze `publicationRepository` as lowercase GitHub owner/repo;
+  remote inputs derive it from the URL, local inputs resolve one `origin` including source-local
+  URL rewrites. Effective fetch and push URLs must name the same canonical GitHub repository;
+  multiple origins, non-GitHub URLs and conflicting push destinations are refused. Explicit
+  `baseBranch` versus the repository-default selector remains bound in the recorded request.
+  Recheck local checkout/common-directory identity and publication origin after admission, before
+  launching the worker; a changed destination requires fresh approval. This refusal also applies
+  to a legitimate preconfigured fork push URL; use an explicit remote source or an unambiguous
+  origin. Codex may still create a head fork after admission under its configured GitHub identity.
+- **Workspace preparation:** keep job metadata under owner-only
+  `<state-root>/coder/jobs/<UUID>/`, using `PrivateDirectory.ensure`; a separate repository lives
+  in its `repository/` child. Resolve the requested local ref (default HEAD) to a full commit SHA
+  in the source, clone with `--no-local --no-hardlinks` and an empty template, then explicitly
+  fetch that SHA from the same local source with `fetch --no-tags -- <source> <SHA>`. A remote-only
+  or custom ref may not transfer in an ordinary clone. Remove the local source remote, set the
+  frozen GitHub publication remote for a PR, then check out and verify the SHA. Never stash,
+  stage, commit, switch or reset the source. Remote inputs allocate an empty directory for Codex
+  to clone; their reported initial SHA remains worker evidence, with no invented observed baseline.
+  Failed preparation or inspection retains the job directory and partial work.
+- **Starting content evidence:** inventory tracked and nonignored untracked paths with actual
+  file contents, executable bits and symlink targets; compare path unions against the pre-run
+  inventory, independent of HEAD, the index or final status. An already absent tracked file is
+  absent evidence, so committing its pre-existing deletion does not create a new observed change.
+  Descriptor-relative reads never follow symlinks through repository children. Bound each inventory
+  to 10,000 listed paths, 1 MiB of Git path output and 32 MiB of file/target bytes. Oversized,
+  unreadable or unsupported entries (including submodule directories) make comparison unavailable,
+  never empty. This is observational evidence, not an atomic snapshot or a claim of authorship.
+  Internal `RepositoryInventory.capture(at:git:)` requires an explicit `CoderGit` context carrying
+  phase, process tracking and the backend's single absolute deadline. Workspace preparation accepts
+  that same deadline; every sequential command receives only the remaining budget. Inventory
+  unavailability may omit the baseline; cancellation, timeout or failed supervision aborts preparation.
+  Only preapproval identity queries select `.preApprovalReadOnly`; admitted preparation and inspection
+  select `.job`. Git receives an explicit minimal environment, disabled system/global configuration,
+  optional locks, fsmonitor, hooks and external diff helpers, and only local file transport. Inventory
+  does not run diff/textconv or follow submodules; source hooks/configuration are never copied.
 - **Process and recovery seam:** one `CoderInvocation` names job ID, prepared request, job directory
   and timeout. `CoderBackend.run` owns sequential prepare/Codex/inspection children and records
   will-launch/did-launch/stopped/unresolved receipts through the callback. Receipts carry launch UUID,

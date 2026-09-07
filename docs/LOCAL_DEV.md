@@ -554,3 +554,38 @@ container ls --all | grep clawd-exec- || echo "no leftover exec containers"
 A skipped Layer-B run (no `CLAW_REAL_SANDBOX_TESTS`) is fine for ordinary CI but is not acceptable
 completion evidence. Re-pinning the workload image on an advisory repeats the image verification
 section and this checklist before the new digest ships.
+
+## Coder workspace development
+
+The native process runner and Git workspace preparation are implemented internally; coding tools
+and the Codex backend are not exposed in this increment. Run their real-Git fixtures with:
+
+```bash
+swift test --filter CoderWorkspaceTests
+```
+
+Workspace preparation uses `/usr/bin/git` with a minimal environment and disables global/system
+Git configuration, optional locks, fsmonitor and hooks. It does no network work before approval.
+In-place work keeps the checkout's current branch, staged changes and working files, including an
+unborn branch before its first commit (recorded without a starting SHA). A separate
+local copy starts at the requested committed ref (default: source HEAD), with independent objects
+and no source hooks or configuration; dirty files are not copied. No automatic stash, rollback or
+apply-back occurs. Job directories stay private under `<state-root>/coder/jobs/<UUID>/`; separate
+repositories use `repository/`. Failure preserves partial work for inspection.
+
+For PR requests, the intended GitHub owner/repository and explicit/default base selector are bound
+before approval. Local `origin` URL rewrites are resolved, and effective fetch/push destinations must
+name the same GitHub repository. Ambiguous origins, non-GitHub URLs and conflicting fork push URLs
+are refused. Use an explicit GitHub source or an unambiguous local origin for such configurations.
+A local origin change after approval is refused; Codex may create a head fork after admission.
+These publication checks do not affect local-changes-only requests.
+
+Observed changed paths compare actual starting file contents, executable bits and symlink targets,
+so a committed fix remains visible even with clean final status. Inventory limits are 10,000 paths,
+1 MiB of Git path output and 32 MiB of contents/targets. Oversized, unreadable or unsupported entries
+(including submodule directories) make comparison unavailable; they do not mean no changes.
+Symlinks are recorded without following them outside the repository. Concurrent editors can change
+files during a task, so this evidence does not establish authorship. For remote inputs, preparation
+allocates an empty destination for Codex to clone; a worker-reported initial SHA is not an independently
+observed starting inventory. All admitted Git work shares the backend's one deadline and process
+tracking, including preparation and inspection.
