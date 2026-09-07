@@ -101,6 +101,15 @@ A flaky test — one that passes and fails with no change to code — is worse t
 - A bounded poll (loop-until-signal with a ceiling) is a last resort; if used, factor it into one shared helper so the ceiling is tunable in a single place — set generously enough to survive a CPU-starved CI runner — and prefer awaiting the emitted signal over polling state.
 - **Never block a Swift-concurrency cooperative thread.** A parked cooperative thread can't run other tasks; on a low-core CI runner enough parked threads deadlock the whole suite, though a many-core dev box hides it entirely (it presents as a CI-only "freeze"). Two traps seen here: a loopback server bound or torn down with NIO's blocking `EventLoopFuture.wait()` / `EventLoopGroup.syncShutdownGracefully()` (use async `bind(...).get()` and `shutdownGracefully` instead — a `defer` can't `await`, so wrap setup/teardown in a `withServer { }` helper), and an injected `sleep` double that returns without ever suspending (`{ _ in }` turns a throttled probe loop into a thread-hog — make it `try? await Task.sleep(for: .milliseconds(1))`). Reproduce a suspected pool deadlock deterministically in a one-core container (`docker run --cpuset-cpus=0 swift:6.3-noble … swift test`); an lldb `thread backtrace all` on the hung process names the blocking frame.
 
+### 6.2 Native integration workload in macOS CI
+
+macOS CI runs `ClawCoderTests` in a separate test process from the remaining suite. Its real native
+process and Git fixtures add enough concurrent workload to delay unrelated acceptance waits on the
+CI runner. The complementary `--skip ClawCoderTests` and `--filter ClawCoderTests` invocations run
+every test; both retain Swift Testing's normal parallel execution. Keep both invocations together.
+A plain local `swift test` still runs the complete suite in one process and can be more sensitive to
+constrained host capacity.
+
 ## 7. Readability: DAMP and DRY are not opposites
 
 "DRY for production, DAMP for tests" is a misreading. DRY forbids duplicating **domain knowledge**, not duplicated lines. Apply both, to different parts of a test:

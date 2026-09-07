@@ -59,8 +59,10 @@ jobs:
           path: .build
           key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
           restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
-      - name: Build and run tests
-        run: swift test
+      - name: Build and run tests outside native Coder integration
+        run: swift test --skip ClawCoderTests
+      - name: Run native Coder integration in a separate test process
+        run: swift test --skip-build --filter ClawCoderTests
 
   install-script:
     strategy:
