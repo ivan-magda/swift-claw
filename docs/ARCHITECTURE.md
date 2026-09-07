@@ -100,6 +100,16 @@ Each unit answers: *what does it do, how is it used, what does it depend on.* `C
 
 `SearchProviding` is a `ClawCore` protocol; the default backend is Exa (`https://api.exa.ai/search`, a pinned trusted endpoint and documented trust dependency like `base_url`, including Exa's right to use query input/output to provide/improve its services). `Secrets.searchApiKey` keys it; unconfigured means the tool is absent and doctor reports info, not an error.
 
+**Generic Coder** adds the pure `CoderRequest`/`CoderPreparedRequest`, `CoderJob`, `CoderResult`,
+`CoderBackend`, `CoderRequestPreparing`, `CoderProcessInspecting`, and `CoderServing` contracts
+in `ClawCore`. `ToolExecutionContext` carries trusted run/session/chat/requester/origin/mode and
+approval identity; those fields never come from model-authored arguments. `ClawCoder` will own
+workspace preparation, native Codex execution and inspection; `ClawGateway` owns admission,
+persistence through Core store seams, background lifetime and reporting, composed only at `clawd`.
+The contract/config increment registers no tools. Once composed, the sole names are
+`CoderToolNames.submit` (`coder_submit`), `.status` (`coder_status`), and `.cancel` (`coder_cancel`).
+No provider registry, second backend, ACP session manager or generic process module is introduced.
+
 ### 3.1 Code map — where each section lives in the code
 
 The durable spec→code link runs **from this document to the code**, by stable symbol name (symbol
@@ -204,6 +214,14 @@ Concrete, config-overridable defaults for a single-owner daily-driver. These are
 | `dayTokenCeiling` | derived hard offline failsafe = `perDayUSD ÷ referenceUSDPerToken` | ≈ 666 667 |
 
 All overridable in config. The **hard offline failsafe is `dayTokenCeiling`** (a per-day token breaker checked before each call, so it trips even when no price is known); the USD caps ($0.50/run, $10/day) are the user-facing limits, enforced best-effort when a price is known. A **run in Inc 1 is exactly one LLM round-trip** — `maxTurns`/`maxToolCalls` exist but stay inert until tools land in Inc 3. `perToolOutputCap` is 25 000 tokens, enforced as its grapheme-domain equivalent 80 000 graphemes via the pinned estimator inverse (Inc 3b). Context assembly reserves the estimated size of the complete advertised tool array before filling message sections, so the final request can fit under `maxInputTokens`; provider-call preflight still estimates that complete request independently.
+
+**Coder has a separate child budget.** The ordinary dialogue's token, dollar and 180-second
+limits do not meter a native Codex child. `CLAW_CODER_MAX_CONCURRENT_JOBS` bounds admitted work
+(default 1, any positive N); capacity returns an explicit busy response, with no unbounded queue.
+`CLAW_CODER_JOB_TIMEOUT_SECONDS` supplies an independent supervisor deadline (default 1800,
+maximum 86400 seconds). Record available child-reported usage on the Coder result; missing usage
+means unavailable accounting. Do not add it to ordinary `provider_usage` or claim a hard dollar
+cap on the child's provider calls. Completion reporting is deterministic and needs no new LLM turn.
 
 ## 6. Data flow
 
@@ -312,7 +330,8 @@ model proposes tool_call
                         └─ expire (approval-expiry ticker, default 1h) → DENY (terminal)
        • dangerous  → absent from the registry unless explicitly enabled in config; once
                         registered, ALWAYS suspend through ApprovalCoordinator (never auto-run),
-                        and execute only inside its declared sandbox after approval
+                        and honor its declared execution boundary after approval
+                        (execute_code: VM; Coder: native delegation, §13.2)
        • LETHAL-TRIFECTA GATE (§12): if session.tainted && privileged/egress action,
          FORCE the approval path in code regardless of the tool's own tier.
   └─ AuditLog.append(actor, tool, args-redacted, decision, result-size, ts, run_id, session_id)
@@ -688,7 +707,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 ## 12. Security & trust model
 
-**Defense in independent layers — none of which is "the model behaved."** Security rests on four layers that each hold even if the model is fully subverted by prompt injection: (1) the **numeric-ID default-deny boundary** — untrusted senders never reach the model; (2) **untrusted-data labeling + the in-code instruction hierarchy** — inbound/tool/retrieved content, remote tool metadata, and durable memory are treated as data and cannot claim authority; (3) the **in-code policy gate + risk tiers** — every side effect is authorized by deterministic code at the dispatch site, never by the prompt; (4) the **enforced lethal-trifecta gate + approvals + blast-radius caps + the VM sandbox** — consequential actions are gated and contained. A successful injection therefore yields, at most, what an *unprivileged* turn could already do.
+**The ordinary agent tool boundary uses four independent defenses:** (1) the **numeric-ID default-deny boundary** — untrusted senders never reach the model; (2) **untrusted-data labeling + the in-code instruction hierarchy** — inbound/tool/retrieved content, remote tool metadata, and durable memory are treated as data and cannot claim authority; (3) the **in-code policy gate + risk tiers** — every side effect is authorized by deterministic code at the dispatch site, never by the prompt; (4) the **enforced lethal-trifecta gate + approvals + blast-radius caps**, with the **VM sandbox for `execute_code`**. These defenses gate the ordinary tool surface even when the model is subverted. Opt-in Coder instead grants a concrete native delegation (§13.2): swift-claw authorizes admission and task scope, while the trusted Codex installation and its integrations determine child authority. Its automatic approval review is not deterministic authorization of every child action, and a working directory is not a security sandbox.
 
 - **Boundary:** numeric Telegram user ID, default-deny, enforced before any LLM/tool/expensive work; fail-closed on internal error. No username path anywhere (identity-rebinding CVE class).
 - **Instruction hierarchy (in code):** system/security policy > developer config > identity files (SOUL/AGENTS/TOOLS) > user task > tool observations > retrieved/inbound content > durable memory (MEMORY.md/USER.md — untrusted tier). Durable memory never sits at the system tier.
@@ -712,7 +731,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **Intake observes before it decides to answer.** `AddressingResolver` decides whether a message is talking to the bot — an `@handle` mention, a slash command this build recognizes, or a reply to something the bot itself said — **before** the content switch, so an unaddressed photo or voice note is never downloaded or transcribed. An addressed message takes the ordinary `claimAndPersistInbound` path. Unaddressed text takes `claimAndPersistObserved`: the same claim, the same session upsert, the same message insert, **no run**. The router skips unaddressed media without downloading, transcribing, or storing a transcript row. The addressed and observed text paths share the claim key, so Telegram stores one text update at most once whichever path it takes. The bot follows the topic's text and speaks only when called. Group mode makes the bot's own `@handle` load-bearing, so a daemon configured with group chats **refuses to boot** without a resolved bot username rather than sitting silently in every room.
 - **A stored group line names its speaker.** `TranscriptAuthor` renders `<display name>: <text>` at persist time, not at assembly time, so a recall hit pulled back out of history still says who said it and the name is in the FTS index. The separator and every line break are folded out of a display name first, so one line can never present itself as two speakers. A DM line is stored exactly as typed.
 - **Recall never leaves the topic.** `Retriever.searchRelevantMessages` takes a `restrictToSessionId`; a group topic passes its own session id, a DM passes `nil` and keeps its cross-session reach. Without that restriction one room's words would surface in another room's prompt, because a group line is stored trusted (below) and trusted rows are exactly what recall returns.
-- **There are no approvals in a shared room, so the gate refuses instead of asking.** Nobody in a group holds the owner's approval authority and no keyboard there could be trusted to resolve one, so `ToolPolicyGate` changes five decisions when `context.mode == .group`: the ask tier **allows on the gate-resolved target** rather than parking; a tool that only ever does its real work on the approval waiter (`memory_write`) is **refused** with a reason; a write whose canonical target is a **privileged prompt file** (`SOUL.md`/`AGENTS.md`/`TOOLS.md`/`USER.md`/`MEMORY.md`/`HEARTBEAT.md`, any `SKILL.md`) is **refused**, because in a DM the owner's ⚠ banner was the thing catching it and here there is no banner; the `.dangerous` arm **executes the prepared action** instead of parking it; and a held trifecta **allows**. Everything that is not an approval round-trip is untouched: `execEnabled`, `WorkspacePathContainment`, the SSRF classifier, the unconditional and conditional exfiltration argument scans, secret redaction, the tool-output cap, and the sandbox all run exactly as they do in a DM. The sandbox, not a prompt, is the containment for what a topic executes.
+- **There are no approvals in a shared room, so the gate refuses instead of asking.** Nobody in a group holds the owner's approval authority and no keyboard there could be trusted to resolve one, so `ToolPolicyGate` changes five decisions when `context.mode == .group`: the ask tier **allows on the gate-resolved target** rather than parking; a tool that only ever does its real work on the approval waiter (`memory_write`) is **refused** with a reason; a write whose canonical target is a **privileged prompt file** (`SOUL.md`/`AGENTS.md`/`TOOLS.md`/`USER.md`/`MEMORY.md`/`HEARTBEAT.md`, any `SKILL.md`) is **refused**, because in a DM the owner's ⚠ banner was the thing catching it and here there is no banner; the `.dangerous` arm **executes the prepared action** instead of parking it; and a held trifecta **allows**. Everything that is not an approval round-trip is untouched: `execEnabled`, `WorkspacePathContainment`, the SSRF classifier, the unconditional and conditional exfiltration argument scans, secret redaction, the tool-output cap, and the sandbox all run exactly as they do in a DM. The sandbox, not a prompt, is the containment for topic `execute_code` calls. Coder tools are not yet registered. Their runtime integration must remain owner-DM-only and refuse group and proactive submission; they must never inherit the group dangerous-tool auto-run exception.
 - **The owner-scoped command families are refused.** `Command.isDirectOnly` covers `/remember`, `/memory`, `/schedule`, `/pause`, `/resume`, `/run`, `/cancel`; a group invocation gets one refusal naming both families, so an attendee learns the rule rather than just this rejection. Two reasons, both structural: durable memory and the schedule table are single-owner state delivered to a chat id the arming message chose, and both park a confirmation that the **next plain message** resolves — in a shared room that message belongs to whoever typed fastest, so one attendee could commit a draft another one wrote. `/new` and `/stop` act on the topic's own session and stay available; the read-only reports name nothing private and stay available.
 - **A reply goes back into the topic that asked, as a reply.** Migration `v10` adds `runs.trigger_telegram_message_id` (Telegram's own message id, distinct from the `messages` row id `trigger_message_id` already carries) and nullable `outbound_deliveries.message_thread_id` / `reply_to_message_id`. The outbox target is stamped **at enqueue from the run's own session key**, so every path that enqueues — a turn reply, a command reply, a scheduled fire, a boot crash notice — lands in the right topic without a second lookup. The typing indicator carries the topic id. Telegram accepts streaming drafts only in private chats, so a group turn keeps reissuing the topic-scoped typing action until the final reply arrives.
 - **One throttled chat no longer stalls every other one.** The outbox drain is strictly ordered per chat and stops on a send failure, which in a DM meant one stalled conversation. With several topics live, a Telegram 429 is the one failure that says how long to wait, so the dispatcher puts a **per-chat hold** on the retry-after window, skips that chat's rows, and carries on with the others; order inside a run survives because a run answers exactly one chat. Every other failure keeps the existing stall-and-wait behavior.
@@ -731,7 +750,9 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
 - **`/new` clears the window, not the archive.** A reset moves `window_start_message_id` forward and clears taint and the private-data flag for that topic, so the visible conversation starts fresh. It does not delete rows, and topic-restricted recall still searches the topic's older messages — so a fact from before the reset can resurface. Making a reset unrecallable is a retention feature, not a windowing one.
 - **The daily `RunBudget` is one budget for the whole daemon.** It is per-day and per-run, never per-chat or per-person, so one busy topic can exhaust the day for every topic and for the owner's DM. Per-person rate limits and per-topic budgets are deliberately out of scope.
 
-## 13. Execution / sandbox architecture (Inc 5b macOS; Inc 6 Linux)
+## 13. Execution architecture
+
+### 13.1 `execute_code` VM sandbox (Inc 5b macOS; Inc 6 Linux)
 
 - **`ExecutionBackend` protocol** (`Sendable`), driven via `swiftlang/swift-subprocess`:
   - **macOS 26+ arm64 (Inc 5b):** `ContainerBackend` shells out to the fixed
@@ -786,6 +807,51 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
 - `sandbox-exec`/Seatbelt may wrap the launcher only as optional defense-in-depth; it is never the
   isolation boundary.
 
+### 13.2 Native Coder delegation
+
+Coder orchestrates admission, workspace selection, process lifetime, persistence, and reporting.
+Codex investigates, edits, runs checks, and performs the requested Git/GitHub workflow. Coder uses
+the owner's trusted native Codex installation, existing configuration and integrations; no mandatory
+container or toolchain image is introduced. Codex automatic approval review does not provide the
+hardware-VM guarantees of `execute_code`, universal cwd confinement, or containment of every
+MCP/hook/plugin path. Child permissions and credentials determine effective authority.
+
+- **Opt-in and approved task scope:** owner DM only, through the existing durable task-approval
+  path, with `ApprovalReason.coderSubmit`. Approvals show the native delegation, source/workspace
+  and publication scope. Group and proactive submissions are refused. Bind Coder-controlled
+  execution policy and credential selectors in `executionPolicyID` and the approval fingerprint;
+  revalidate before launch. The controlled automatic approval mode is explicit and included in that
+  identity. Inherited integrations remain trusted dependencies, not a frozen profile snapshot.
+- **Request shape:** local absolute repository path, GitHub HTTPS repository URL
+  (`github.com/{owner}/{repo}`), or issue URL (`/issues/{positive integer}`). Refuse credentials,
+  ports, query/fragment, encoded or option-like components, and unrelated paths. Local/repository
+  sources require nonblank task text; an issue may supply it. Task and instructions remain arbitrary
+  data. Credentials, executable paths, sender IDs, delivery targets and permissions are deployment
+  or trusted-context values, never model-authored request fields.
+- **In place:** use the local checkout's current branch and working files, including uncommitted
+  changes. Reject `startRef`; `baseBranch` is a separate PR target and is allowed. A dirty checkout
+  is not a preflight failure. Unless `publishExistingChanges` is true, Codex must leave unrelated
+  existing work out of its commit and report blocked if it cannot complete within that scope.
+  Coder's own checkout/common-Git-directory lock does not control external editors or agents.
+- **Separate copy:** start from committed Git history only; no dirty-state snapshot, overlay,
+  apply-back, stash or automatic rollback. Reject `publishExistingChanges`. An omitted `startRef`
+  means the local source's current HEAD or the GitHub remote's default branch, never an assumed
+  `main`. Local copies have independent objects without hardlinks/alternates or source hooks/config.
+  A GitHub source always uses a separate copy, never a matching host checkout discovered elsewhere.
+- **Process and recovery seam:** one `CoderInvocation` names job ID, prepared request, job directory
+  and timeout. `CoderBackend.run` owns sequential prepare/Codex/inspection children and records
+  will-launch/did-launch/stopped/unresolved receipts through the callback. Receipts carry launch UUID,
+  phase, boot ID and optional PID/PGID/birth identity. No process-library, database or Telegram type
+  crosses Core. Persist cancellation intent, cancel the service-owned Swift task, then join bounded
+  process-group teardown. Detached sessions/groups are an accepted v1 termination limitation.
+  Daemon interruption never automatically reruns work that may already have published changes.
+- **Result evidence:** process completion and publication are independent: publication is absent,
+  confirmed with URL, or unknown with optional reported URL. `changedFiles == nil` means comparison
+  unavailable; `[]` means no observed changes. `baselineObserved == false` means a starting SHA is
+  worker evidence rather than independent observation. Report commit author separately from GitHub
+  actor and child-reported checks/usage as reported. A terminal job can retain its reserved slot
+  while process ownership is unresolved. Persist terminal result and owner outbox delivery atomically.
+
 ## 14. Scheduler architecture (Inc 4)
 
 - **`Calendar.RecurrenceRule`** (in-toolchain, DST/TZ-correct, `Sendable`/`Codable`) + a ~150-line custom 60s ticker.
@@ -795,6 +861,30 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
 - `getUpdates` recovery is pinned: socket read timeout = long-poll timeout + 10 s; backoff-reconnect on timeout/network error. Scheduler-side gap recovery is lateness-based (§6.3's catch-up table) — no wake detection. Doctor exposes `last_tick_at`.
 
 ## 15. Configuration & secrets
+
+**Coder configuration contract (pending runtime integration).** Standalone
+`CoderConfig.load(environment:)` parses the settings below for native callers and tests.
+`AppConfig` does not load or expose Coder configuration at this stage; these keys are not an
+active daemon configuration surface. Operator enablement and setup documentation arrive with
+the runtime that registers the tools and launches children.
+
+| Setting | Default | Contract |
+|---|---|---|
+| `CLAW_CODER_ENABLED` | `false` | Existing strict boolean parser; opt-in owner-DM capability |
+| `CLAW_CODER_MAX_CONCURRENT_JOBS` | `1` | Positive integer N; explicit busy at capacity |
+| `CLAW_CODER_JOB_TIMEOUT_SECONDS` | `1800` | Positive integer seconds, at most 86400 |
+| `CLAW_CODER_EXECUTABLE` | `codex` | Program name resolved against deliberate child PATH, or absolute executable path; never a command string |
+| `CLAW_CODER_PROFILE` | unset | Optional existing Codex profile name |
+| `CLAW_CODER_CONFIG_HOME` | unset | Optional absolute directory mapped to child `CODEX_HOME` |
+
+The standalone parser rejects explicit invalid or blank settings, even while disabled. It never resolves the
+executable, inspects credentials or accesses the selected config home. Coder has no separate model
+selector, arbitrary CLI flags or new credential store: Codex owns its login state and configuration;
+`clawd auth` continues to manage only the ordinary LLM route. Do not import Codex auth into
+swift-claw's provider credential envelope. Build the child environment deliberately from required
+OS/toolchain settings and selected coding credentials, excluding Telegram and unrelated provider
+secrets. Codex reads its configuration per child; swift-claw-owned settings apply after restart.
+The separate concurrency/deadline budget and unavailable-accounting rules are in §5.3.
 
 - **Environment variables are the active configuration surface; `config.toml` remains future work.** The typed `AppConfig` is loaded from the environment/`.env` today; the structured-file behavior described below is the intended shape once that file lands, not a shipped surface. **A provider-qualified `CLAW_LLM_MODEL` value (`openai-chatgpt/<model>`) is the only configuration selector the subscription route adds** — there is deliberately **no per-provider environment namespace**. The model value carries the route selector, provider-owned OAuth state lives in the credential store, and fixed protocol details are implementation constants (§8.3), so ad-hoc `CLAW_CHATGPT_*` variables would only duplicate the structure that structured configuration will supply; they are **deferred with `config.toml`**, not merely unimplemented. When it lands, the registry deserializes provider-specific blocks into the same resolved route (§8.1) without changing any downstream seam.
 - **`CLAW_LLM_FALLBACK_*` is the one deliberate exception to that rule, and stays a single prefix.** `CLAW_LLM_FALLBACK_MODEL`, `CLAW_LLM_FALLBACK_BASE_URL`, `CLAW_LLM_FALLBACK_API_KEY`, and `CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD` describe a **second route** (§8.6), which needs an endpoint and a key of its own rather than a provider's. Reusing the primary's would point the fallback at the endpoint that just failed, and would let a missing primary endpoint pass validation on the strength of one the fallback supplied. The exception buys a route, not a namespace: it adds no per-provider variable, and `CLAW_LLM_PRIMARY_COOLDOWN_SECONDS` (default 900) carries no prefix because it describes the daemon's own backoff. The fallback key is a runtime secret like the primary's: it seals into `secrets.enc` with the rest, and `clawd secrets seal` blanks its plaintext line alongside them. **One list names every sealed variable** (`EnvSecretStore.EnvKey.sealed`), read by both the env-file scrub and the message telling an owner what to remove when the scrub cannot run, so a secret can never reach the envelope while its plaintext line survives unmentioned.

@@ -58,6 +58,13 @@ public struct AppConfig: Sendable, Equatable {
     static let execTimeout = "CLAW_EXEC_TIMEOUT"
     static let execAllowEgress = "CLAW_EXEC_ALLOW_EGRESS"
 
+    public static let coderEnabled = "CLAW_CODER_ENABLED"
+    public static let coderMaxConcurrentJobs = "CLAW_CODER_MAX_CONCURRENT_JOBS"
+    public static let coderJobTimeoutSeconds = "CLAW_CODER_JOB_TIMEOUT_SECONDS"
+    public static let coderExecutable = "CLAW_CODER_EXECUTABLE"
+    public static let coderProfile = "CLAW_CODER_PROFILE"
+    public static let coderConfigHome = "CLAW_CODER_CONFIG_HOME"
+
     static let mcpConfigPath = "CLAW_MCP_CONFIG"
   }
 
@@ -614,7 +621,7 @@ extension AppConfig {
     _ raw: String?,
     key: String,
     default fallback: Bool
-  ) throws -> Bool {
+  ) throws(ConfigError) -> Bool {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !trimmed.isEmpty else {
       return fallback

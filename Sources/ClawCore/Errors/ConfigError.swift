@@ -28,6 +28,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidExecMemoryMiB(String)
   case invalidExecCPUs(String)
   case invalidExecTimeout(String)
+  case invalidCoderSetting(key: String)
 
   public var exitCode: Int32 {
     ClawExitCode.configInvalid.rawValue
