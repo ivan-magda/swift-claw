@@ -310,6 +310,10 @@ public struct ProviderUsage: Sendable, Equatable {
   public let costSource: CostSource
   public let isEstimated: Bool
   public let ts: Date
+  /// Set only for a learning call, which belongs to no run. It is what carries that spend into the
+  /// origin-filtered proactive total: the plain day total sums every row, but the proactive one
+  /// resolves an origin through `runs`, and a null `run_id` has nothing there to resolve.
+  public let learningScope: LearningUsageScope?
 
   public init(
     providerCallID: ProviderCallID,
@@ -321,7 +325,8 @@ public struct ProviderUsage: Sendable, Equatable {
     costUSD: Double,
     costSource: CostSource,
     isEstimated: Bool,
-    ts: Date
+    ts: Date,
+    learningScope: LearningUsageScope? = nil
   ) {
     self.providerCallID = providerCallID
     self.runId = runId
@@ -333,6 +338,7 @@ public struct ProviderUsage: Sendable, Equatable {
     self.costSource = costSource
     self.isEstimated = isEstimated
     self.ts = ts
+    self.learningScope = learningScope
   }
 
   /// Builds the row from its two independent provenances — resolved tokens and resolved cost. This
@@ -490,6 +496,8 @@ public struct AssistantTurn: Sendable, Equatable {
   /// The final assistant message's replay state, committed in the same transaction as the message
   /// it belongs to so an anchor and its state can never be persisted apart.
   public let providerState: ProviderExchangeState?
+  /// Optional result feedback address. The run-store validates and inserts it with final delivery.
+  public let feedbackTarget: NewFeedbackTarget?
 
   public init(
     runId: Int64,
@@ -501,7 +509,8 @@ public struct AssistantTurn: Sendable, Equatable {
     exchanges: [ToolExchange] = [],
     setTainted: Bool = false,
     setPrivateData: Bool = false,
-    providerState: ProviderExchangeState? = nil
+    providerState: ProviderExchangeState? = nil,
+    feedbackTarget: NewFeedbackTarget? = nil
   ) {
     self.runId = runId
     self.sessionId = sessionId
@@ -513,6 +522,7 @@ public struct AssistantTurn: Sendable, Equatable {
     self.setTainted = setTainted
     self.setPrivateData = setPrivateData
     self.providerState = providerState
+    self.feedbackTarget = feedbackTarget
   }
 }
 
@@ -593,6 +603,7 @@ public enum AuditAction: String, Sendable, Equatable {
   case approvalGranted = "approval_granted"
   case approvalDenied = "approval_denied"
   case learningBound = "learning_bound"
+  case learningFeedback = "learning_feedback"
 }
 
 public struct AuditEvent: Sendable, Equatable {

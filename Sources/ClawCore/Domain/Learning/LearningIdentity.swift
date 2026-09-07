@@ -144,3 +144,61 @@ public struct FeedbackRevision: Sendable, Hashable, Comparable, Codable {
     FeedbackRevision(value + 1)
   }
 }
+
+/// Digest of the whole surface two runs must share before their verdicts may be counted as
+/// evidence about the same question: the surface the run was picked up on, the versions the sealer
+/// stamped, and the evaluator's own route and versions. Frozen onto every evaluation, so a later
+/// change to any of them opens a new comparison window instead of silently reinterpreting old
+/// verdicts.
+public struct CompatibilityDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+}
+
+/// SHA-256 identity of one frozen reflection question.
+public struct TriggerDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+}
+
+/// Digest of one `LearningOperationKey`. The stored claim key: `learning_operations` has no
+/// columns for the prompt, schema and rubric versions the key covers, so this is the only value a
+/// unique index can hold the "one live attempt per key" rule on.
+public struct LearningOperationKeyDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+}
+
+/// One durable `learning_operations` row. Its shape is the key digest and the attempt generation,
+/// so a superseding attempt is visibly the same question asked again rather than a new one.
+public struct LearningOperationID: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+
+  public init(key: LearningOperationKeyDigest, attemptGeneration: Int) {
+    rawValue = "\(key.rawValue):\(attemptGeneration)"
+  }
+}
+
+/// Digest of the exact carrier bytes one learning call sends. Stays distinct from the source digest
+/// beside it in an authorization: one names what the carrier was built from, the other what it
+/// became after fencing and scrubbing.
+public struct CarrierDigest: RawRepresentable, Sendable, Hashable, Codable {
+  public let rawValue: String
+
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
+}

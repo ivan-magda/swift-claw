@@ -1,5 +1,188 @@
 import Foundation
 
+/// A single-use authenticated address for one exact feedback subject.
+public struct NewFeedbackTarget: Sendable, Equatable {
+  public let nonce: String
+  public let jobId: Int64
+  public let epoch: LearningEpoch
+  public let subjectKind: FeedbackSubjectKind
+  public let subjectDigest: String
+  public let allowedActions: [OwnerSignal]
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let expiresAt: Date
+
+  public init(
+    nonce: String,
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String,
+    allowedActions: [OwnerSignal],
+    ownerUserId: Int64,
+    chatId: Int64,
+    expiresAt: Date
+  ) {
+    self.nonce = nonce
+    self.jobId = jobId
+    self.epoch = epoch
+    self.subjectKind = subjectKind
+    self.subjectDigest = subjectDigest
+    self.allowedActions = allowedActions
+    self.ownerUserId = ownerUserId
+    self.chatId = chatId
+    self.expiresAt = expiresAt
+  }
+}
+
+/// The durable target returned by nonce lookup. `targetId` never crosses the transport boundary.
+public struct FeedbackTarget: Sendable, Equatable {
+  public let targetId: Int64
+  public let nonce: String
+  public let jobId: Int64
+  public let epoch: LearningEpoch
+  public let subjectKind: FeedbackSubjectKind
+  public let subjectDigest: String
+  public let allowedActions: [OwnerSignal]
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let expiresAt: Date
+  public let consumedAt: Date?
+
+  public init(
+    targetId: Int64,
+    nonce: String,
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String,
+    allowedActions: [OwnerSignal],
+    ownerUserId: Int64,
+    chatId: Int64,
+    expiresAt: Date,
+    consumedAt: Date?
+  ) {
+    self.targetId = targetId
+    self.nonce = nonce
+    self.jobId = jobId
+    self.epoch = epoch
+    self.subjectKind = subjectKind
+    self.subjectDigest = subjectDigest
+    self.allowedActions = allowedActions
+    self.ownerUserId = ownerUserId
+    self.chatId = chatId
+    self.expiresAt = expiresAt
+    self.consumedAt = consumedAt
+  }
+}
+
+/// The row inserted after a feedback target has passed its authenticated single-use CAS.
+public struct NewFeedbackChallenge: Sendable, Equatable {
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let jobId: Int64
+  public let epoch: LearningEpoch
+  public let subjectKind: FeedbackSubjectKind
+  public let subjectDigest: String
+  public let promptDigest: String
+  public let expiresAt: Date
+
+  public init(target: FeedbackTarget) {
+    ownerUserId = target.ownerUserId
+    chatId = target.chatId
+    jobId = target.jobId
+    epoch = target.epoch
+    subjectKind = target.subjectKind
+    subjectDigest = target.subjectDigest
+    promptDigest = FeedbackChallengeDeliveryIdentity.digest(targetNonce: target.nonce)
+    expiresAt = target.expiresAt
+  }
+}
+
+/// The durable one-shot owner input slot. Only an unsuperseded, unconsumed row is live.
+public struct FeedbackChallenge: Sendable, Equatable {
+  public let id: Int64
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let jobId: Int64
+  public let epoch: LearningEpoch
+  public let subjectKind: FeedbackSubjectKind
+  public let subjectDigest: String
+  public let supersededBy: Int64?
+  public let consumedAt: Date?
+  public let expiresAt: Date
+
+  public init(
+    id: Int64,
+    ownerUserId: Int64,
+    chatId: Int64,
+    jobId: Int64,
+    epoch: LearningEpoch,
+    subjectKind: FeedbackSubjectKind,
+    subjectDigest: String,
+    supersededBy: Int64?,
+    consumedAt: Date?,
+    expiresAt: Date
+  ) {
+    self.id = id
+    self.ownerUserId = ownerUserId
+    self.chatId = chatId
+    self.jobId = jobId
+    self.epoch = epoch
+    self.subjectKind = subjectKind
+    self.subjectDigest = subjectDigest
+    self.supersededBy = supersededBy
+    self.consumedAt = consumedAt
+    self.expiresAt = expiresAt
+  }
+}
+
+/// A prompt gets its own opaque delivery identity, separate from both subject and target nonce.
+public enum FeedbackChallengeDeliveryIdentity {
+  private static let domain = "feedback-challenge-prompt/v1"
+
+  public static func digest(targetNonce: String) -> String {
+    SHA256Digest.hex(CanonicalDigestInput.joined([domain, targetNonce]))
+  }
+}
+
+/// The already transport-claimed owner action the store revalidates and commits atomically.
+public struct FeedbackTap: Sendable, Equatable {
+  public let nonce: String
+  public let signal: OwnerSignal
+  public let ownerUserId: Int64
+  public let chatId: Int64
+  public let transportUpdateId: Int64
+
+  public init(
+    nonce: String,
+    signal: OwnerSignal,
+    ownerUserId: Int64,
+    chatId: Int64,
+    transportUpdateId: Int64
+  ) {
+    self.nonce = nonce
+    self.signal = signal
+    self.ownerUserId = ownerUserId
+    self.chatId = chatId
+    self.transportUpdateId = transportUpdateId
+  }
+}
+
+/// Every result of the target CAS. Only `recorded` appended a semantic event and revision.
+public enum FeedbackOutcome: Sendable, Equatable {
+  case recorded(FeedbackEvent)
+  case challengeOpened(FeedbackChallenge)
+  case targetMissing
+  case ownerMismatch
+  case chatMismatch
+  case expired
+  case actionMismatch
+  case staleEpoch
+  case alreadyConsumed
+  case requiresPayloadChallenge
+}
+
 /// One job's learning position: which epoch it is in, which lesson set is currently stable, and
 /// which revisions the frozen work under it was computed against.
 public struct JobLearningState: Sendable, Equatable {
@@ -31,6 +214,43 @@ public struct JobLearningState: Sendable, Equatable {
 }
 
 public protocol ScheduledLearningStore: Sendable {
+  /// Commits every runless notice chunk and every nonce it exposes in one transaction.
+  func createTargets(
+    _ targets: [NewFeedbackTarget],
+    chunks: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError)
+
+  /// Exact opaque lookup. No row-id lookup exists on the feedback seam.
+  func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget?
+
+  /// Revalidates and consumes one target, appends its event, advances the job feedback revision,
+  /// applies an immediately provable exact veto, and audits the outcome in one transaction.
+  func consumeAndAppendEvent(
+    _ tap: FeedbackTap,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome
+
+  /// Consumes one payload-bearing target and commits its one-shot challenge plus prompt chunks.
+  func consumeAndOpenChallenge(
+    _ tap: FeedbackTap,
+    prompt: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome
+
+  /// Consumes the one live challenge and appends its exact UTF-8 payload as untrusted feedback.
+  func consumeChallenge(
+    id: Int64,
+    payload: String,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome
+
+  /// Returns the physically live row. Callers apply their captured clock before claiming input.
+  func liveChallenge(
+    ownerUserId: Int64,
+    chatId: Int64
+  ) throws(StoreError) -> FeedbackChallenge?
+
   /// Idempotent. Inserts this job's learning state and its canonical empty lesson set together,
   /// or returns the state already there. The fire transaction calls it, so a job never fires with
   /// a binding that points at a lesson set that does not exist.
@@ -85,4 +305,45 @@ public protocol ScheduledLearningStore: Sendable {
 
   /// The sealed receipt, payload included while retention still holds it.
   func evidence(runId: Int64) throws(StoreError) -> SealedEvidence?
+
+  /// Takes the durable claim on one logical hypothesis, or returns nil when the key is not work
+  /// this daemon may do: the job has moved to another epoch, the evidence is not something the
+  /// evaluator may read, it already has a verdict, or another attempt at this key is live or
+  /// already finished. A claim authorizes nothing — it only reserves the identity a later
+  /// authorization can start.
+  func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation?
+
+  /// Everything between the claim and the network, in one transaction. Checking the breakers
+  /// outside the store and starting inside it lets two workers both read headroom and both
+  /// dispatch. This re-reads the durable totals, verifies the job's epoch and the carrier
+  /// authorization, records the reservation and the provider-call id, and compare-and-swaps
+  /// `claimed → started`. Nothing may reach the network before it returns `.started`.
+  func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome
+
+  /// Commits one network boundary crossing: the actual usage row under the reserved call id and
+  /// the operation's terminal state, under the predicate `state == started`.
+  ///
+  /// - Returns: whether this call is the one that committed the result. `false` for a duplicate,
+  ///   which writes nothing and cannot close the reservation a second time.
+  func finishOperation(
+    _ result: LearningOperationResult,
+    now: Date
+  ) throws(StoreError) -> Bool
+
+  /// The frozen verdict on one run's evidence, written by the same transaction that committed the
+  /// operation that produced it. Nil for a run nothing has evaluated.
+  func evaluation(runId: Int64) throws(StoreError) -> LearningEvaluation?
+
+  /// The boot pass over what a prior process left open. A `started` operation may have reached the
+  /// provider, so it is charged conservatively under its saved call id and closed as
+  /// `interrupted_unknown` — never resent as the same inference. A `claimed` one provably never
+  /// called, so it returns to `pending` and is claimable again.
+  @discardableResult
+  func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation
 }

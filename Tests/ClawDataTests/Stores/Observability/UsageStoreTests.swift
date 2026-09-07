@@ -116,6 +116,23 @@ import Testing
       )
     )
 
+    // A schedule parse: runless, and belonging to no learning operation either. Now that a
+    // runless learning row does reach the proactive pool, this is the row that must not.
+    try usage.recordUsage(
+      ProviderUsage(
+        providerCallID: ProviderCallID(rawValue: "call-runless"),
+        runId: nil,
+        sessionId: try #require(interactiveClaim.sessionId),
+        model: "m",
+        promptTokens: 6,
+        completionTokens: 3,
+        costUSD: 0.02,
+        costSource: .providerReturned,
+        isEstimated: false,
+        ts: now
+      )
+    )
+
     // when — one query, one UTC-day-boundary evaluation (preamble deviation 2)
     let proactive = try usage.todayTokensAndCost(origins: [.scheduled, .heartbeat], now: now)
     let everything = try usage.todayTokensAndCost(now: now)
@@ -124,7 +141,7 @@ import Testing
     // then — only the joined-origin usage is summed; the global total is untouched
     #expect(proactive.tokens == 15)
     #expect(abs(proactive.costUSD - 1.25) < 1e-9)
-    #expect(everything.tokens == 165)
+    #expect(everything.tokens == 174)
     #expect(none.tokens == 0)
     #expect(none.costUSD == 0)
   }

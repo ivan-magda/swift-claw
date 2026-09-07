@@ -30,6 +30,8 @@ public struct MessageRouter: Sendable {
   private let confirmations: ConfirmationResolver
   private let turnDispatch: TurnDispatch
   private let approvalCallbacks: ApprovalCallbackHandler?
+  private let feedbackCallbacks: FeedbackCallbackHandler?
+  private let feedbackChallenges: FeedbackChallengeHandler?
   private let voice: (any VoiceMessageTranscribing)?
   private let images: (any ImageMessageHandling)?
   private let typing: (any TypingIndicator)?
@@ -55,6 +57,8 @@ public struct MessageRouter: Sendable {
     /// boot backstop and seals nothing.
     learning: ScheduledLearningService? = nil,
     approvalCallbacks: ApprovalCallbackHandler? = nil,
+    feedbackCallbacks: FeedbackCallbackHandler? = nil,
+    feedbackChallenges: FeedbackChallengeHandler? = nil,
     voice: (any VoiceMessageTranscribing)? = nil,
     images: (any ImageMessageHandling)? = nil,
     typing: (any TypingIndicator)? = nil,
@@ -68,6 +72,8 @@ public struct MessageRouter: Sendable {
 
     self.accessControl = accessControl
     self.approvalCallbacks = approvalCallbacks
+    self.feedbackCallbacks = feedbackCallbacks
+    self.feedbackChallenges = feedbackChallenges
     self.voice = voice
     self.images = images
     self.typing = typing
@@ -150,11 +156,7 @@ private extension MessageRouter {
     // would .skipped and the cursor would advance past it. The handler returns a real
     // HandleOutcome, so cursor semantics are unchanged.
     if let callback = rawUpdate.callback {
-      guard let approvalCallbacks else {
-        logger.debug("callback update \(rawUpdate.updateId) with no approval handler, skipping")
-        return .skipped
-      }
-      return await approvalCallbacks.handle(callback, updateId: rawUpdate.updateId)
+      return await routeCallback(callback, updateId: rawUpdate.updateId)
     }
 
     if let observed = noteObservedEvent(in: rawUpdate) {
@@ -208,9 +210,43 @@ private extension MessageRouter {
     case .voice(let attachment):
       return try await routeVoice(attachment, rawUpdate: rawUpdate, message: message, mode: mode)
     case .text(let text):
-      let command = Command.parse(text, botUsername: botUsername)
-      return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
+      return try await routeText(text, rawUpdate: rawUpdate, message: message, mode: mode)
     }
+  }
+
+  func routeText(
+    _ text: String,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    if mode == .direct, let feedbackChallenges {
+      let consumed = try await feedbackChallenges.consumeIfOpen(
+        text: text,
+        rawUpdate: rawUpdate,
+        message: message
+      )
+      if let consumed {
+        return consumed
+      }
+    }
+    let command = Command.parse(text, botUsername: botUsername)
+    return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
+  }
+
+  func routeCallback(_ callback: RawCallback, updateId: Int64) async -> HandleOutcome {
+    if FeedbackKeyboard.belongsToDomain(callback.data) {
+      guard let feedbackCallbacks else {
+        logger.debug("feedback callback update \(updateId) with no handler, skipping")
+        return .skipped
+      }
+      return await feedbackCallbacks.handle(callback, updateId: updateId)
+    }
+    guard let approvalCallbacks else {
+      logger.debug("callback update \(updateId) with no approval handler, skipping")
+      return .skipped
+    }
+    return await approvalCallbacks.handle(callback, updateId: updateId)
   }
 
   /// The two updates the daemon can only take note of: its own membership changing, and Telegram

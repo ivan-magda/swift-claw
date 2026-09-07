@@ -22,33 +22,15 @@ extension DaemonBuilder {
     doctor: any DoctorReporting,
     learning: ScheduledLearningService?
   ) -> IntakeStack {
-    let voiceService = makeVoiceService()
-    let imageService = makeImageService()
-
-    let router = MessageRouter(
-      processed: stores.processed,
-      sessionMessages: stores.sessionMessages,
-      commands: stores.commands,
-      memory: stores.memory,
-      memoryCommands: stores.memoryCommands,
-      pendingConfirmations: coordination.pendingConfirmations,
-      botIdentity: botIdentity,
-      accessControl: AccessControl(allowlist: stores.allowlist, groupChats: config.groupChats),
-      delivery: transport,
+    let router = makeIntakeRouter(
+      coordination: coordination,
       turnRunner: turnRunner,
       imageCache: turnRunner.imageCache,
-      lanes: coordination.lanes,
-      schedule: scheduleSurface,
-      learning: learning,
+      scheduleSurface: scheduleSurface,
       approvalCallbacks: approvalCallbacks,
-      voice: voiceService,
-      images: imageService,
-      typing: TelegramTypingIndicator(transport: transport),
-      coordinator: coordination.approvalCoordinator,
       doctor: doctor,
-      logger: logger
+      learning: learning
     )
-
     let poller = TelegramPollerService(
       intake: transport,
       router: router,
@@ -63,6 +45,46 @@ extension DaemonBuilder {
       logger: logger
     )
     return IntakeStack(poller: poller, outbox: dispatcher)
+  }
+
+  func makeIntakeRouter(  // swiftlint:disable:this function_parameter_count
+    coordination: TurnCoordination,
+    turnRunner: any TurnDispatching,
+    imageCache: ImageCache,
+    scheduleSurface: ScheduleSurface,
+    approvalCallbacks: ApprovalCallbackHandler?,
+    doctor: any DoctorReporting,
+    learning: ScheduledLearningService?
+  ) -> MessageRouter {
+    let voiceService = makeVoiceService()
+    let imageService = makeImageService()
+    let feedbackChallenges = makeFeedbackChallengeHandler(coordination: coordination)
+
+    return MessageRouter(
+      processed: stores.processed,
+      sessionMessages: stores.sessionMessages,
+      commands: stores.commands,
+      memory: stores.memory,
+      memoryCommands: stores.memoryCommands,
+      pendingConfirmations: coordination.pendingConfirmations,
+      botIdentity: botIdentity,
+      accessControl: AccessControl(allowlist: stores.allowlist, groupChats: config.groupChats),
+      delivery: transport,
+      turnRunner: turnRunner,
+      imageCache: imageCache,
+      lanes: coordination.lanes,
+      schedule: scheduleSurface,
+      learning: learning,
+      approvalCallbacks: approvalCallbacks,
+      feedbackCallbacks: makeFeedbackCallbackHandler(challenges: feedbackChallenges),
+      feedbackChallenges: feedbackChallenges,
+      voice: voiceService,
+      images: imageService,
+      typing: TelegramTypingIndicator(transport: transport),
+      coordinator: coordination.approvalCoordinator,
+      doctor: doctor,
+      logger: logger
+    )
   }
 
   /// Nil when the owner opted out, which is what makes the photo path fail closed: the router's only

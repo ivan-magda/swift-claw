@@ -77,6 +77,32 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
+  /// The evaluator's own route and versions, stamped by the transaction that commits its verdict
+  /// so a verdict and the surface it was reached on can never disagree. The pickup-time columns
+  /// beside them are left alone: `configured_route` describes the run being judged, not the call
+  /// judging it.
+  static func stampEvaluatorSurface(
+    _ db: Database,
+    runId: Int64,
+    surface: EvaluatorSurface
+  ) throws {
+    try db.execute(
+      sql: """
+        UPDATE run_compatibility
+        SET evaluator_route = ?, evaluator_prompt_version = ?, evaluator_schema_version = ?,
+          rubric_version = ?
+        WHERE run_id = ?
+        """,
+      arguments: [
+        surface.route,
+        String(surface.promptVersion),
+        String(surface.schemaVersion),
+        String(surface.rubricVersion),
+        runId,
+      ]
+    )
+  }
+
   /// The two versions the sealer itself applied, stamped in the sealing transaction so a receipt
   /// and the compatibility row that describes it can never disagree about which rules produced it.
   static func stampSealingVersions(_ db: Database, runId: Int64) throws {

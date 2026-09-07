@@ -159,6 +159,40 @@ import Testing
     let sent = try #require(await env.provider.requests.first).renderedContext
     #expect(sent.contains(pinned.lessons[0]))
   }
+
+  @Test func aCompletedBoundScheduledRunCommitsOneTargetAndOnlyFinalChunkKeyboard() async throws {
+    // given — enough content to force multiple result chunks, with a deterministic opaque address
+    let answer = String(repeating: "a", count: ReplySplitter.limit + 64)
+    let env = try PinnedLessonEnvironment.make(
+      responseContent: answer,
+      makeFeedbackNonce: { "scheduled-feedback-nonce" }
+    )
+    _ = try env.pinStableSet(["Report only price changes."])
+    let fired = try env.fireBoundRun()
+
+    // when
+    try await env.runner.run(
+      runId: fired.runId,
+      sessionId: fired.sessionId,
+      chatId: env.chatId,
+      triggerMessageId: fired.triggerMessageId
+    )
+
+    // then — the runner derives the exact run target and attaches its keyboard only at the end
+    let target = try #require(try env.learning.feedbackTarget(nonce: "scheduled-feedback-nonce"))
+    #expect(target.jobId == env.jobId)
+    #expect(target.epoch == LearningEpoch(1))
+    #expect(target.subjectKind == .run)
+    #expect(target.subjectDigest == String(fired.runId))
+    #expect(target.allowedActions == [.resultUseful, .resultNotUseful, .resultCorrection])
+    #expect(target.ownerUserId == env.chatId)
+    #expect(target.chatId == env.chatId)
+    #expect(target.expiresAt == env.now.addingTimeInterval(EvidenceWindow.maximumAge))
+    let chunks = try OutboxStoreGRDB(writer: env.queue).pendingOutbound()
+    #expect(chunks.count > 1)
+    #expect(chunks.dropLast().allSatisfy { $0.replyMarkup == nil })
+    #expect(chunks.last?.replyMarkup == LearningNotices.resultKeyboard(target: target.newTarget))
+  }
 }
 
 // MARK: - Fixture
@@ -188,6 +222,8 @@ private struct PinnedLessonEnvironment {
   ///   Returning nil is a disarmed daemon; wrapping it is how a test reaches a state the schema's
   ///   own foreign key keeps out of the database.
   static func make(
+    responseContent: String = "done",
+    makeFeedbackNonce: @escaping @Sendable () -> String = { OpaqueNonce.generate() },
     learning wiring: (ScheduledLearningStoreGRDB) -> (any ScheduledLearningStore)? = { store in
       store
     }
@@ -218,7 +254,7 @@ private struct PinnedLessonEnvironment {
     let provider = StubLLMProvider(
       .respond(
         ChatResponse(
-          content: "done",
+          content: responseContent,
           finishReason: "stop",
           usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
           costFromProvider: 0.0021
@@ -258,6 +294,7 @@ private struct PinnedLessonEnvironment {
       notifyOutbox: {},
       now: { now },
       learning: wiring(learning),
+      makeFeedbackNonce: makeFeedbackNonce,
       parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
       approvalExpirySeconds: testApprovalExpirySeconds,
       logger: TestLog.silent
@@ -384,10 +421,68 @@ private struct PinnedLessonEnvironment {
   }
 }
 
+private extension FeedbackTarget {
+  var newTarget: NewFeedbackTarget {
+    NewFeedbackTarget(
+      nonce: nonce,
+      jobId: jobId,
+      epoch: epoch,
+      subjectKind: subjectKind,
+      subjectDigest: subjectDigest,
+      allowedActions: allowedActions,
+      ownerUserId: ownerUserId,
+      chatId: chatId,
+      expiresAt: expiresAt
+    )
+  }
+}
+
 /// The real learning store with one fact removed: no lesson set ever resolves. Everything else
 /// — the binding above all — stays the real row the fire wrote.
 private struct UnresolvableLessonSets: ScheduledLearningStore {
   let base: ScheduledLearningStoreGRDB
+
+  func createTargets(
+    _ targets: [NewFeedbackTarget],
+    chunks: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) {
+    try base.createTargets(targets, chunks: chunks, now: now)
+  }
+
+  func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget? {
+    try base.feedbackTarget(nonce: nonce)
+  }
+
+  func consumeAndAppendEvent(
+    _ tap: FeedbackTap,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
+    try base.consumeAndAppendEvent(tap, now: now)
+  }
+
+  func consumeAndOpenChallenge(
+    _ tap: FeedbackTap,
+    prompt: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
+    try base.consumeAndOpenChallenge(tap, prompt: prompt, now: now)
+  }
+
+  func consumeChallenge(
+    id: Int64,
+    payload: String,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
+    try base.consumeChallenge(id: id, payload: payload, now: now)
+  }
+
+  func liveChallenge(
+    ownerUserId: Int64,
+    chatId: Int64
+  ) throws(StoreError) -> FeedbackChallenge? {
+    try base.liveChallenge(ownerUserId: ownerUserId, chatId: chatId)
+  }
 
   func lessonSet(jobId: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
     nil
@@ -433,5 +528,35 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
 
   func evidence(runId: Int64) throws(StoreError) -> SealedEvidence? {
     try base.evidence(runId: runId)
+  }
+
+  func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation? {
+    try base.claimOperation(key, now: now)
+  }
+
+  func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome {
+    try base.authorizeAndStartOperation(authorization, now: now)
+  }
+
+  func finishOperation(
+    _ result: LearningOperationResult,
+    now: Date
+  ) throws(StoreError) -> Bool {
+    try base.finishOperation(result, now: now)
+  }
+
+  func evaluation(runId: Int64) throws(StoreError) -> LearningEvaluation? {
+    try base.evaluation(runId: runId)
+  }
+
+  @discardableResult
+  func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation {
+    try base.reconcileOperationsAtBoot(now: now)
   }
 }

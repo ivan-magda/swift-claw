@@ -76,3 +76,69 @@ public struct RunCompatibility: Sendable, Equatable {
     self.classifierVersion = classifierVersion
   }
 }
+
+/// The evaluator's own half of a run's compatibility surface, stamped when the evaluation is
+/// committed. Held apart from `RunSurface`, which froze at the run's pickup: these four values
+/// describe the call that judged the run, not the call the run itself made.
+public struct EvaluatorSurface: Sendable, Equatable {
+  /// The route that actually served the evaluation, which is not necessarily the one it was
+  /// authorized to start on.
+  public let route: String
+  public let promptVersion: Int
+  public let schemaVersion: Int
+  public let rubricVersion: Int
+
+  public init(route: String, promptVersion: Int, schemaVersion: Int, rubricVersion: Int) {
+    self.route = route
+    self.promptVersion = promptVersion
+    self.schemaVersion = schemaVersion
+    self.rubricVersion = rubricVersion
+  }
+}
+
+extension RunCompatibility {
+  /// Frozen into every compatibility digest. A change to the field list below must change this
+  /// value too, so verdicts frozen under the old list keep answering the question they were
+  /// computed for.
+  private static let canonicalPrefix = "run-compatibility/v1"
+  /// The algorithm reserves a slot for an adapter id/version and a task-input schema version.
+  /// `scheduled-learning/v1` has neither, and the canonical `none` keeps the slot positionally
+  /// present — so the day one arrives it opens a new window instead of colliding with every
+  /// verdict reached without it.
+  private static let adapterSlot = "none"
+
+  /// Every input two runs must match on before their verdicts may be counted as evidence about the
+  /// same question, in the order the accepted algorithm lists them.
+  ///
+  /// Deliberately absent, because they are provenance rather than compatibility: run ids,
+  /// timestamps, the task input, the final output, the model-visible carrier bytes and the evidence
+  /// digests. `stableDigest` is hashed rather than `effectiveDigest` — a trial run answers against a
+  /// candidate set and never enters a stable evidence window at all.
+  public func digest(
+    binding: RunLearningBinding,
+    terminalRoute: String?,
+    evaluator: EvaluatorSurface
+  ) -> CompatibilityDigest {
+    let fields = [
+      Self.canonicalPrefix,
+      String(jobId),
+      String(epoch.value),
+      binding.jobDefinitionDigest.rawValue,
+      binding.stableDigest.rawValue,
+      evidenceSchemaVersion ?? CanonicalDigestInput.absentField,
+      classifierVersion ?? CanonicalDigestInput.absentField,
+      String(evaluator.promptVersion),
+      String(evaluator.schemaVersion),
+      String(evaluator.rubricVersion),
+      contextSchemaVersion,
+      toolCatalogDigest,
+      policyVersion,
+      skillSetDigest,
+      configuredRoute,
+      terminalRoute ?? CanonicalDigestInput.absentField,
+      evaluator.route,
+      Self.adapterSlot,
+    ]
+    return CompatibilityDigest(rawValue: SHA256Digest.hex(CanonicalDigestInput.joined(fields)))
+  }
+}
