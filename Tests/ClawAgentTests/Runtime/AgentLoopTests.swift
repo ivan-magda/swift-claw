@@ -213,7 +213,7 @@ import Testing
     let outcome = try await run(runtime)
 
     // then — no bonus round-trip: exactly maxTurns provider calls (§6.4)
-    #expect(outcome.result == .budgetStopped(cap: "per-run turn"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunTurnCap))
     #expect(await provider.requests.count == 2)
     #expect(outcome.ingestedUntrusted)  // executed observations still taint
   }

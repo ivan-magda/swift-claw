@@ -44,8 +44,8 @@ public struct RetrieverGRDB: Retriever {
       }
 
       if let windowStart = windowStartMessageId {
-        // Dedup against the current session's in-window range.
-        sql += "\n  AND NOT (m.session_id = ? AND m.id >= ?)"
+        // The reset boundary is the last archived row; the current window starts AFTER it.
+        sql += "\n  AND NOT (m.session_id = ? AND m.id > ?)"
         arguments += [currentSessionId, windowStart]
       }
 

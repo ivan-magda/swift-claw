@@ -39,20 +39,21 @@ import Testing
     }
   }
 
-  /// Inserts an observation row for the run: placeholder content models a crash-window row
-  /// (waiter commit never landed); any other content models an already-executed approval.
+  /// Seeds the reserved observation with its independently persisted resolution state.
   private func seedObservation(
     _ queue: DatabaseQueue,
     runId: Int64,
-    content: String = "awaiting owner approval"
+    content: String = RunStoreGRDB.placeholderObservationContent,
+    resolved: Bool = false
   ) throws -> Int64 {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id,
+            approval_resolved)
+          VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1', ?)
           """,
-        arguments: [runId, content, Date()]
+        arguments: [runId, content, Date(), resolved]
       )
       return db.lastInsertedRowID
     }
@@ -60,8 +61,10 @@ import Testing
 
   private func makeNewApproval(
     runId: Int64,
+    tool: String = "file_write",
     nonce: String = "nonce-a",
     canonicalArgsJSON: String = #"{"path":"/w/plan.md"}"#,
+    canonicalTarget: String = "/w/plan.md",
     policyVersion: String = "pv16",
     observationMessageId: Int64 = 1,
     createdTs: Date,
@@ -70,9 +73,9 @@ import Testing
     NewApproval(
       runId: runId,
       sessionId: 1,
-      tool: "file_write",
+      tool: tool,
       canonicalArgsJSON: canonicalArgsJSON,
-      canonicalTarget: "/w/plan.md",
+      canonicalTarget: canonicalTarget,
       argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
       policyVersion: policyVersion,
       ownerUserId: 7,
@@ -477,7 +480,8 @@ extension ApprovalStoreGRDBTests {
         observationMessageId: try seedObservation(
           env.queue,
           runId: recordedRun,
-          content: "Wrote 12 B to /w/plan.md (created)."
+          content: "Wrote 12 B to /w/plan.md (created).",
+          resolved: true
         ),
         createdTs: now,
         expiresTs: now.addingTimeInterval(3600)
@@ -497,50 +501,102 @@ extension ApprovalStoreGRDBTests {
     #expect(unresolved.map(\.id) == [claimedId])
   }
 
-  @Test func unresolvedAtBootExcludesResolvedRowsWhoseObservationIsFilled() throws {
-    // given — the multi-suspend shape: ONE run, approval #1 APPROVED with its observation already
-    // filled (executed before the restart), approval #2 PENDING on a fresh placeholder. Re-parking
-    // #1 would re-execute its recorded action and steal #2's park (§6.5 is for crash windows only).
+  @Test func resolvedObservationTextCannotReplayAnApproval() throws {
+    // given
     let env = try makeFixture()
+    let runs = RunStoreGRDB(writer: env.queue)
     let run = try seedRun(env.queue, state: .awaitingApproval)
-    let now = Date()
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let tool = "mcp__service__write"
+    let observationId = try seedObservation(env.queue, runId: run)
     let executedId = try insert(
       env.queue,
       makeNewApproval(
         runId: run,
+        tool: tool,
         nonce: "n-executed",
-        observationMessageId: try seedObservation(
-          env.queue,
-          runId: run,
-          content: "Wrote 12 B to /w/plan.md (created)."
-        ),
+        canonicalTarget: "service (https://example.com/mcp)",
+        observationMessageId: observationId,
         createdTs: now,
         expiresTs: now.addingTimeInterval(3600)
       )
     )
-    // Resolve #1 BEFORE inserting #2 — the UNIQUE partial index allows one PENDING row per run.
-    try env.queue.write { db in
-      try db.execute(
-        sql: "UPDATE approvals SET state = 'APPROVED' WHERE id = ?",
-        arguments: [executedId]
+    _ = try env.store.approve(id: executedId, currentPolicyVersion: "pv16", now: now)
+    let firstClaim = try runs.claimApprovedExecution(
+      runId: run,
+      observationMessageId: observationId,
+      notResumableObservationContent: "stopped",
+      now: now
+    )
+    try #require(firstClaim == .committed)
+    try runs.fillClaimedObservation(
+      runId: run,
+      observationMessageId: observationId,
+      fill: ClaimedObservationFill(
+        content: RunStoreGRDB.placeholderObservationContent,
+        status: .ok,
+        setTainted: true,
+        setPrivateData: false,
+        audit: ApprovedExecutionAudit(tool: tool, argsRedacted: "{}"),
+        now: now
       )
-    }
-    let parkedId = try insert(
-      env.queue,
-      makeNewApproval(
-        runId: run,
+    )
+    let nextArgs = #"{"content":"next","path":"next.md"}"#
+    let nextAction = RecordedToolAction(
+      tool: "file_write",
+      canonicalArgsJSON: nextArgs,
+      argsHash: ApprovalArgsHash.sha256Hex(nextArgs),
+      canonicalTarget: "/w/next.md",
+      reason: .askTier,
+      presentation: ToolApprovalPresentation(
+        blastRadius: "create",
+        contentPreview: nil,
+        warnings: []
+      )
+    )
+    let toolCallsJSON = try #require(
+      ToolCallCoding.encode([
+        ToolCall(id: "c2", name: nextAction.tool, argumentsJSON: nextAction.canonicalArgsJSON)
+      ])
+    )
+    let parked = try runs.commitSuspendedTurn(
+      runId: run,
+      sessionId: 1,
+      commit: SuspendedTurnCommit(
+        assistantContent: "",
+        toolCallsJSON: toolCallsJSON,
+        completedObservations: [],
+        pending: PendingToolAction(toolCallId: "c2", recorded: nextAction),
+        ownerUserId: 7,
         nonce: "n-parked",
-        observationMessageId: try seedObservation(env.queue, runId: run),
-        createdTs: now,
+        promptChunks: [],
+        setTainted: false,
+        setPrivateData: false,
         expiresTs: now.addingTimeInterval(3600)
-      )
+      ),
+      now: now
     )
 
     // when
     let unresolved = try env.store.unresolvedAtBoot()
+    let replay = try runs.claimApprovedExecution(
+      runId: run,
+      observationMessageId: observationId,
+      notResumableObservationContent: "stopped",
+      now: now
+    )
 
-    // then — only the still-parked placeholder approval comes back
-    #expect(unresolved.map(\.id) == [parkedId])
+    // then
+    #expect(unresolved.map(\.id) == [parked.approvalId])
+    #expect(replay == .alreadyResumed)
+    let content = try env.queue.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT content FROM messages WHERE id = ?",
+        arguments: [observationId]
+      )
+    }
+    #expect(content == RunStoreGRDB.placeholderObservationContent)
   }
 
   @Test func unresolvedAtBootReturnsDeniedRowsOnlyOnAwaitingRuns() throws {

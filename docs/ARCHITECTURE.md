@@ -517,6 +517,12 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 
 The `approvals` row (Inc 5a) additionally carries `session_id`, `observation_message_id`, `tool_call_id`, `reason` (`ask_tier | exfil_trifecta`), `prompt_message_id`, and `resolved_ts`, and enforces a **UNIQUE partial index `WHERE state = 'PENDING'`** — at most one live approval per run. `outbound_deliveries` gains nullable `approval_id` + `reply_markup` (additive, so pre-upgrade PENDING rows stay valid; the envelope is not smuggled into `payload`): the button prompt travels through the transactional outbox, and when `approval_id` is set `markSent` writes the resulting `telegram_message_id` onto the linked approval's `prompt_message_id` **in the same transaction**.
 
+Migration `v13` adds `messages.approval_resolved` (non-null boolean, default false). A reserved
+approval observation starts unresolved. Every resolution writes its content and sets this flag true
+in the same transaction, including approved results, denials, cancellation and boot settlement.
+The flag records observation completion separately from `approvals.state`, which records the owner's
+decision. Tool-authored content remains verbatim and never determines whether an action may replay.
+
 Synthetic session keys (Inc 4): `sched:job:<id>` (one dedicated session per scheduled job, created lazily at first fire) and `sched:heartbeat`. `sessions` carries no chat id — a job run's delivery/notice target is `scheduled_jobs.owner_chat_id`; the heartbeat's is the config-resolved owner DM. `SessionKey.chatId(from:)` returns nil for both by design, so boot reconciliation resolves crashed-run owner notices for job runs via `scheduled_jobs.owner_chat_id` and for heartbeat runs via the config-derived target passed in at boot (§6.3, spec §5.2/§12).
 
 ### 7.2 Audit (Inc 1) — ordinary append-only, NOT tamper-evident
@@ -859,6 +865,15 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 - **Bound to the exact action** (tool + fully-resolved target + canonical args); executes the **recorded** args (never a fresh model turn); a past approval is **never** cached into a future auto-run.
 - **Durable checkpoint = persist-the-partial-exchange**, not a serialized wire checkpoint: the assistant proposal + every completed observation + a **placeholder observation row updated in place** (the v5 `messages` columns) pin rowid adjacency at suspend; the approved action runs the recorded args; the run then continues as an ordinary assembly round-trip whose context bound is the filled observation's message id, with **carried-over turn/tool-call/token/USD counters** and a **fresh per-segment wall-clock** (suspension time never counts against any budget).
+- **Execution recovery uses durable observation state.** Both the per-approval execution claim and
+  the resolved-decision boot scan require `messages.approval_resolved = false`, scoped to the
+  reserved tool observation and its run. A tool returning the placeholder's exact text cannot make
+  an already-filled observation eligible again. Migration `v13` marks legacy observations resolved
+  when their text differs from the former placeholder, their run is `DONE`, or a later approval
+  exists for the same run: reaching another approval proves the earlier result was recorded.
+  Legacy placeholder-text collisions on claimed runs without that progress evidence cannot be
+  distinguished from missing results; boot conservatively reports their outcome as unknown and
+  never re-executes them.
 - **Callback auth** (§6.5): a DM requires its allowlisted owner; a group Coder submission requires
   the exact original prompt/chat/run binding plus a fresh current-participant check. Both use the
   ≥128-bit single-use random nonce and re-validate args-hash + `policy_version`. Args-hash +

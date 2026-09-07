@@ -314,7 +314,10 @@ public struct AgentRuntime: Sendable {
     // The wall-clock deadline is left per-segment by construction — it is recomputed at each
     // `runTurn` entry above; only the round count needs to account for rounds already consumed.
     let priorRounds = carryOver?.rounds ?? 0
-    for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
+    guard priorRounds < budget.maxTurns else {
+      return outcome(.budgetStopped(cap: BudgetGate.perRunTurnCap))
+    }
+    for roundTripIndex in 1...(budget.maxTurns - priorRounds) {
       let callID = providerCallIDGenerator.next()
       // Scoped to this round-trip: when a re-issue on the next route also fails, the reported kind is
       // the one the round-trip started with, because "your plan quota is out" is the actionable fact
@@ -583,7 +586,7 @@ public struct AgentRuntime: Sendable {
       }
     }
 
-    return outcome(.budgetStopped(cap: "per-run turn"))
+    return outcome(.budgetStopped(cap: BudgetGate.perRunTurnCap))
   }
   // swiftlint:enable function_parameter_count function_body_length cyclomatic_complexity
 }

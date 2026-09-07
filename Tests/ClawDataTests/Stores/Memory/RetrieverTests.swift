@@ -151,20 +151,36 @@ import Testing
     #expect(hits[0].role == .user)
   }
 
-  @Test func excludesInWindowMessagesOfTheCurrentSession() throws {
-    // given - one in-window message (current session, id >= windowStart) and one older out-of-window.
+  @Test func recallsThroughResetBoundaryAndExcludesCurrentWindow() throws {
+    // given
     let corpus = try makeCorpus()
+    let sessions = SessionMessageStoreGRDB(writer: corpus.queue)
     let oldId = try insertMessage(
       corpus,
       sessionId: corpus.sessionTwo,
       content: "swift earlier note",
       at: 10
     )
-    let inWindowId = try insertMessage(
+    try sessions.resetWindowAndDetaint(
+      sessionId: corpus.sessionTwo,
+      now: Date(timeIntervalSince1970: 15)
+    )
+    try insertMessage(
       corpus,
       sessionId: corpus.sessionTwo,
       content: "swift current note",
       at: 20
+    )
+    let latestId = try insertMessage(
+      corpus,
+      sessionId: corpus.sessionTwo,
+      content: "swift latest note",
+      at: 30
+    )
+    let snapshot = try sessions.loadContextSnapshot(
+      sessionId: corpus.sessionTwo,
+      throughMessageId: latestId,
+      limit: 1
     )
 
     // when
@@ -172,23 +188,22 @@ import Testing
       query: "swift",
       currentSessionId: corpus.sessionTwo,
       restrictToSessionId: nil,
-      windowStartMessageId: inWindowId,
-      excludedMessageIds: [],
+      windowStartMessageId: snapshot.windowStartMessageId,
+      excludedMessageIds: snapshot.historyMessageIds,
       limit: 10
     )
 
-    // then - the in-window message is excluded; the older one remains recallable.
+    // then
     #expect(hits.map(\.id) == [oldId])
   }
 
-  @Test func includesOtherSessionMessagesAtOrAboveWindowStart() throws {
-    // given - one in-window current-session message sets the windowStart; a second
-    // message belongs to a DIFFERENT session and has id >= windowStart.
+  @Test func includesOtherSessionMessagesAfterWindowResetBoundary() throws {
+    // given
     let corpus = try makeCorpus()
     let windowAnchorId = try insertMessage(
       corpus,
       sessionId: corpus.sessionTwo,
-      content: "swift in-window current session",
+      content: "current session reset boundary",
       at: 10
     )
     let otherSessionMsgId = try insertMessage(
@@ -198,7 +213,7 @@ import Testing
       at: 20
     )
 
-    // when - the exclusion clause is `session_id = sessionTwo AND id >= windowAnchorId`.
+    // when
     let hits = try corpus.retriever.searchRelevantMessages(
       query: "swift",
       currentSessionId: corpus.sessionTwo,
@@ -208,8 +223,7 @@ import Testing
       limit: 10
     )
 
-    // then - the other-session message survives: its id >= windowStart but its
-    // session_id != currentSessionId, so the session-scoped guard does not exclude it.
+    // then
     #expect(hits.map(\.id) == [otherSessionMsgId])
   }
 

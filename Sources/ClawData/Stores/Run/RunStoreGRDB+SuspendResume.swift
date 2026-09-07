@@ -74,10 +74,10 @@ extension RunStoreGRDB {
 // MARK: - Approved Resume
 
 extension RunStoreGRDB {
-  /// The shared claim body: exactly-once needs BOTH guards. The placeholder check is
+  /// The shared claim body: exactly-once needs BOTH guards. The unresolved-observation check is
   /// per-approval — once the run suspends a second time it is AWAITING_APPROVAL again, so the
   /// state flip alone would let a replay of an already-executed approval commit and steal the new
-  /// approval's park. A failed state flip with the placeholder intact means `/stop`//`new` drove
+  /// approval's park. A failed state flip with the observation unresolved means `/stop`//`new` drove
   /// the run terminal after the approve CAS: resolve the placeholder in the SAME txn (history
   /// never dangles) and tell the caller nothing may execute.
   static func claimResume(
@@ -87,7 +87,7 @@ extension RunStoreGRDB {
     notResumableObservationContent: String,
     now: Date
   ) throws -> ApprovedExecutionClaim {
-    guard try observationIsPlaceholder(db, runId: runId, messageId: observationMessageId) else {
+    guard try observationIsUnresolved(db, runId: runId, messageId: observationMessageId) else {
       return .alreadyResumed
     }
     guard try transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
@@ -264,10 +264,9 @@ extension RunStoreGRDB {
     }
   }
 
-  /// The per-approval half of the exactly-once guard: true while the approval's reserved
-  /// observation row still carries the placeholder content, i.e. no resume commit has landed for
-  /// THIS approval. Same row scoping as `fillApprovedObservation`.
-  static func observationIsPlaceholder(
+  /// Resolution is persisted separately from tool-authored content, which may equal any prompt.
+  /// The reserved observation must belong to this run and remain unresolved before it can resume.
+  static func observationIsUnresolved(
     _ db: Database,
     runId: Int64,
     messageId: Int64
@@ -277,10 +276,11 @@ extension RunStoreGRDB {
       sql: """
         SELECT EXISTS(
           SELECT 1 FROM messages
-          WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)' AND content = ?
+          WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'
+            AND approval_resolved = 0
         )
         """,
-      arguments: [messageId, runId, placeholderObservationContent]
+      arguments: [messageId, runId]
     ) ?? false
   }
 
@@ -294,8 +294,10 @@ extension RunStoreGRDB {
     content: String
   ) throws {
     try db.execute(
-      sql:
-        "UPDATE messages SET content = ? WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'",
+      sql: """
+        UPDATE messages SET content = ?, approval_resolved = 1
+        WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'
+        """,
       arguments: [content, messageId, runId]
     )
   }

@@ -108,11 +108,13 @@ extension RunStoreGRDB {
       // Fill the placeholder observation in place: both `ContextBuilder.historyGroups` and
       // `HistoryHygiene` require every anchor's tool rows to be answered, so a dangling
       // "awaiting owner approval" row would drop the whole exchange from the next assembly. The
-      // UPDATE is by message id — idempotent on a boot re-park, and correct for the /stop//new
+      // UPDATE is scoped to the run — idempotent on a boot re-park, and correct for the /stop//new
       // path where the command transaction moved the run but never touched this row.
-      try db.execute(
-        sql: "UPDATE messages SET content = ? WHERE id = ?",
-        arguments: [content, observationMessageId]
+      try Self.fillApprovedObservation(
+        db,
+        runId: runId,
+        messageId: observationMessageId,
+        content: content
       )
 
       let event: RunEvent =

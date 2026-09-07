@@ -101,7 +101,7 @@ extension RunStoreGRDB {
   ) throws(StoreError) -> ClaimedApprovalBootOutcome {
     try database.writeMapping { db in
       guard
-        try Self.observationIsPlaceholder(db, runId: runId, messageId: observationMessageId)
+        try Self.observationIsUnresolved(db, runId: runId, messageId: observationMessageId)
       else {
         return .alreadyResolved
       }

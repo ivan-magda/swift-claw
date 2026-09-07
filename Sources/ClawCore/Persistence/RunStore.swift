@@ -199,7 +199,7 @@ public protocol RunStore: Sendable {
     now: Date
   ) throws(StoreError) -> SuspendedCommitReceipt
   /// Approve resume, pre-execution half (file_write / web_fetch): one txn, guarded on the
-  /// placeholder check (per-approval exactly-once) and the AWAITING_APPROVAL → RUNNING flip. The
+  /// durable unresolved flag (per-approval exactly-once) and the AWAITING_APPROVAL → RUNNING flip. The
   /// caller executes the recorded action ONLY on `.committed` — claiming BEFORE the external
   /// effect is what stops a write from landing after `/stop`//`new` drove the run terminal. On
   /// `.runNotResumable` the placeholder is resolved with `notResumableObservationContent` in the
@@ -211,7 +211,7 @@ public protocol RunStore: Sendable {
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim
   /// Approve resume, post-execution half: UPDATE the claimed placeholder observation in place with
-  /// the tool's real result, apply the state-guarded taint/private-data provenance, and append the
+  /// the tool's real result and resolved flag, apply the taint/private-data provenance, and append the
   /// `.toolCall` audit — all in ONE transaction, so a fault rolls back content, flags, and audit
   /// together. Only ever called after `claimApprovedExecution` returned `.committed` for the same
   /// ids.
@@ -222,7 +222,7 @@ public protocol RunStore: Sendable {
   ) throws(StoreError)
   /// memory_write fused path (exactly-once): the memory item insert (via
   /// `MemoryStoreGRDB.insertItem`), the observation UPDATE, and the `.toolCall` audit share ONE
-  /// txn, gated by the SAME placeholder + AWAITING_APPROVAL → RUNNING guards as
+  /// txn, gated by the SAME unresolved flag + AWAITING_APPROVAL → RUNNING guards as
   /// `claimApprovedExecution` — the side effect is in-DB, so claim and effect fuse instead of
   /// splitting.
   func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
@@ -235,7 +235,7 @@ public protocol RunStore: Sendable {
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim
   /// Boot settlement of the claimed crash window: an APPROVED approval whose observation
-  /// is still the placeholder but whose run left AWAITING_APPROVAL means the pre-execution claim
+  /// is still unresolved but whose run left AWAITING_APPROVAL means the pre-execution claim
   /// committed and the process died before the result record — whether the external effect landed
   /// is unknowable, so no replay. One txn: fail the run if it is not already terminal, resolve the
   /// placeholder with `observationContent`, and enqueue `noticeText` for the owner UNCONDITIONALLY

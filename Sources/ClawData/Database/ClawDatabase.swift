@@ -274,6 +274,9 @@ public enum ClawDatabase {
         table.add(column: "actor_user_id", .integer)
       }
     }
+    migrator.registerMigration("v13") { db in
+      try addApprovalResolutionState(db)
+    }
     return migrator
   }
 
@@ -299,5 +302,34 @@ public enum ClawDatabase {
     default:
       return StoreError.unexpected("\(databaseError)")
     }
+  }
+}
+
+// MARK: - Approval Resolution Migration
+
+private extension ClawDatabase {
+  static func addApprovalResolutionState(_ db: Database) throws {
+    try db.alter(table: "messages") { table in
+      table.add(column: "approval_resolved", .boolean).notNull().defaults(to: false)
+    }
+    // A later approval or completed run proves the earlier result was filled even when its
+    // text collided with the legacy placeholder. Other collisions retain conservative recovery.
+    try db.execute(
+      sql: """
+        UPDATE messages SET approval_resolved = 1
+        WHERE role = ? AND EXISTS (
+          SELECT 1 FROM approvals a JOIN runs r ON r.id = a.run_id
+          WHERE a.observation_message_id = messages.id AND a.run_id = messages.run_id
+            AND (messages.content != ? OR r.state = ? OR EXISTS (
+              SELECT 1 FROM approvals later WHERE later.run_id = a.run_id AND later.id > a.id
+            ))
+        )
+        """,
+      arguments: [
+        MessageRole.tool.rawValue,
+        RunStoreGRDB.placeholderObservationContent,
+        RunState.done.rawValue,
+      ]
+    )
   }
 }

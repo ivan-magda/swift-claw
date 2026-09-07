@@ -160,7 +160,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
   public func unresolvedAtBoot() throws(StoreError) -> [Approval] {
     try database.readMapping { db in
       // The resolved-states arms are the crash-window belts, recognizable by the observation
-      // row STILL being the placeholder — without that condition, a run parked on its SECOND
+      // row STILL being unresolved — without that condition, a run parked on its SECOND
       // approval would return its first, already-executed row too, and boot would replay the
       // recorded action. REJECTED/EXPIRED rows additionally require the run to still be
       // AWAITING_APPROVAL (their deny finalization never moves the run first). APPROVED rows are
@@ -181,7 +181,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
               WHERE messages.id = approvals.observation_message_id
                 AND messages.run_id = approvals.run_id
                 AND messages.role = '\(MessageRole.tool.rawValue)'
-                AND messages.content = ?
+                AND messages.approval_resolved = 0
             ))
           """,
         arguments: [
@@ -190,7 +190,6 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           ApprovalState.rejected.rawValue,
           ApprovalState.expired.rawValue,
           RunState.awaitingApproval.rawValue,
-          RunStoreGRDB.placeholderObservationContent,
         ]
       )
     }

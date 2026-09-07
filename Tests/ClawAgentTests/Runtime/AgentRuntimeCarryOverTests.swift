@@ -5,6 +5,31 @@ import Testing
 @testable import ClawAgent
 
 @Suite struct AgentRuntimeCarryOverTests {
+  @Test func carriedOverRoundsStopBeforeAnyProviderCall() async throws {
+    // given
+    let provider = StubProvider(.respond(okResponse(content: "should never send")))
+    let budget = makeBudget(maxTurns: 1)
+    let runtime = makeRuntime(provider: provider, budget: budget)
+    let carryOver = ResumeUsage(rounds: budget.maxTurns, toolCalls: 1, tokens: 1, costUSD: 0)
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runId: 1,
+      sessionId: 1,
+      chatId: 7,
+      buildResult: makeBuildResult(),
+      sessionTainted: false,
+      sessionHasPrivateData: false,
+      todayTokens: 1,
+      todayUSD: 0,
+      carryOver: carryOver
+    )
+
+    // then
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunTurnCap))
+    #expect(await provider.calls == 0)
+  }
+
   @Test func carriedOverSpendStopsBeforeAnyProviderCall() async throws {
     // given — a run that already spent its entire per-run USD budget before it suspended; the
     // resume must inherit that spend so a suspend cycle can't reset the cap (§6.3 no cap evasion)
