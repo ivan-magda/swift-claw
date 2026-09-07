@@ -38,11 +38,14 @@ public struct CoderSubmitTool: Tool {
     do {
       let request = try CoderSubmitArguments.decode(arguments)
       let prepared = try await service.prepare(request)
-      guard prepared.executionPolicyID == executionPolicyID,
+
+      guard
+        prepared.executionPolicyID == executionPolicyID,
         let canonical = CanonicalJSON.encode(prepared)
       else {
         return .refused(reason: "The Coder execution policy changed; request fresh approval.")
       }
+
       return .prepared(
         PreparedToolAction(
           canonicalTarget: prepared.canonicalSource,
@@ -58,7 +61,10 @@ public struct CoderSubmitTool: Tool {
     }
   }
 
-  public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+  public func execute(
+    arguments: JSONValue,
+    canonicalTarget: String?
+  ) async -> ToolPayload {
     CoderToolOutput.missingContext
   }
 
@@ -70,6 +76,7 @@ public struct CoderSubmitTool: Tool {
     guard let context, context.approvalId != nil else {
       return CoderToolOutput.missingContext
     }
+
     guard let canonical = CanonicalJSON.encode(arguments),
       let prepared = try? JSONDecoder().decode(
         CoderPreparedRequest.self,
@@ -80,6 +87,7 @@ public struct CoderSubmitTool: Tool {
     else {
       return CoderToolOutput.failure(CoderError.staleApproval, redactor: redactor)
     }
+
     do {
       let job = try await service.submit(prepared, context: context)
       return CoderToolOutput.job(job, redactor: redactor)
@@ -94,10 +102,15 @@ public struct CoderSubmitTool: Tool {
 private extension CoderSubmitTool {
   static func guardTexts(_ prepared: CoderPreparedRequest) -> [String] {
     let request = prepared.request
+
     let source: String
     switch request.source {
-    case .local(let value), .githubRepository(let value), .githubIssue(let value): source = value
+    case .local(let value),
+      .githubRepository(let value),
+      .githubIssue(let value):
+      source = value
     }
+
     var texts = [source, request.task, request.instructions, request.startRef]
     if request.workspace == .inPlace {
       texts.append(prepared.checkoutPath)
@@ -105,6 +118,7 @@ private extension CoderSubmitTool {
     if request.deliverable == .pullRequest {
       texts += [request.baseBranch, prepared.publicationRepository]
     }
+
     return texts.compactMap { text in
       text
     }
@@ -119,20 +133,24 @@ extension CoderSubmitTool {
     redactor: SecretRedactor
   ) -> ToolApprovalPresentation {
     let request = prepared.request
+
     let source: String
     if case .githubIssue(let url) = request.source {
       source = "GitHub issue \(url) (repository: \(prepared.canonicalSource))"
     } else {
       source = prepared.canonicalSource
     }
+
     let workspace =
       request.workspace == .inPlace
       ? "In place — existing branch and working files"
       : "Separate copy — committed history only"
+
     let start =
       request.workspace == .inPlace
       ? "Current checkout HEAD"
       : request.startRef ?? "Source HEAD / remote default branch"
+
     let fields = [
       ("Source", source),
       ("Workspace", workspace),
@@ -150,24 +168,31 @@ extension CoderSubmitTool {
       ),
       ("Include existing changes", request.publishExistingChanges ? "Yes" : "No"),
     ]
+
     let scope = fields.map { label, value in
       CoderCardMarkdown.field(label, redactor.redact(value))
     }.joined(separator: "\n\n")
+
     let task =
       request.task.map { value in
         CoderCardMarkdown.literal(redactor.redact(value))
       } ?? "Use the selected GitHub issue as the task; no additional task text supplied."
+
     var preview = "### Task\n\n\(task)"
     let instructions = request.instructions ?? ""
     if !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       let requirements = CoderCardMarkdown.literal(redactor.redact(instructions))
       preview += "\n\n### Additional requirements\n\n\(requirements)"
     }
+
     return ToolApprovalPresentation(
       blastRadius: scope,
       contentPreview: preview,
       warnings: [
-        "Uses your trusted native Codex installation, credentials and configured integrations. Inference leaves this machine; the working directory is not a security sandbox."
+        """
+        Uses your trusted native Codex installation, credentials and configured integrations. \
+        Inference leaves this machine; the working directory is not a security sandbox.
+        """
       ]
     )
   }
