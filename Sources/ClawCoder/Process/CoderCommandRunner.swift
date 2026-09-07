@@ -25,7 +25,9 @@ struct CoderCommandRunner: Sendable {
     onStandardOutput: @Sendable @escaping (Data) async throws -> Void
   ) async -> CoderCommandResult {
     let control = CoderCommandControl(now: now)
-    if Task.isCancelled { control.requestCancellation() }
+    if Task.isCancelled {
+      control.requestCancellation()
+    }
     let timeout: Duration
     switch tracking {
     case .preApprovalReadOnly: timeout = Self.readOnlyTimeout
@@ -67,7 +69,9 @@ private struct CoderCommandOperation: Sendable {
         birthIdentity: nil
       )
       await recordLaunchIntent(receipt, tracking: tracking)
-      if await control.stopping { throw CancellationError() }
+      if await control.stopping {
+        throw CancellationError()
+      }
       await control.setReceipt(receipt)
       let result = try await spawn(
         command,
@@ -80,27 +84,15 @@ private struct CoderCommandOperation: Sendable {
         resolved: result.closureResult.cleanupResolved
       )
       let capture = await control.capture(resolved: resolved)
-      let exitCode: Int32?
-      let signal: Int32?
-      switch result.terminationStatus {
-      case .exited(let code):
-        exitCode = code
-        signal = nil
-      case .signaled(let code):
-        exitCode = nil
-        signal = code
-      }
-      return CoderCommandResult(
-        exitCode: exitCode,
-        signal: signal,
-        cancelled: capture.cancelled,
-        timedOut: capture.timedOut,
-        cleanupResolved: resolved,
-        supervisionFailed: capture.supervisionFailed || !resolved,
-        diagnostics: capture.diagnostics
+      return .completed(
+        result.terminationStatus,
+        capture: capture,
+        cleanupResolved: resolved
       )
     } catch {
-      if !(await control.stopping) { await control.fail("Coder process launch failed.") }
+      if !(await control.stopping) {
+        await control.fail("Coder process launch failed.")
+      }
       let spawned = await control.spawned
       let resolved = await finish(tracking, launchID: launchID, resolved: !spawned)
       let capture = await control.capture(resolved: resolved)
@@ -114,6 +106,36 @@ private struct CoderCommandOperation: Sendable {
         diagnostics: capture.diagnostics
       )
     }
+  }
+}
+
+// MARK: - Result assembly
+
+private extension CoderCommandResult {
+  static func completed(
+    _ terminationStatus: TerminationStatus,
+    capture: CoderScopedCapture,
+    cleanupResolved: Bool
+  ) -> CoderCommandResult {
+    let exitCode: Int32?
+    let signal: Int32?
+    switch terminationStatus {
+    case .exited(let code):
+      exitCode = code
+      signal = nil
+    case .signaled(let code):
+      exitCode = nil
+      signal = code
+    }
+    return CoderCommandResult(
+      exitCode: exitCode,
+      signal: signal,
+      cancelled: capture.cancelled,
+      timedOut: capture.timedOut,
+      cleanupResolved: cleanupResolved,
+      supervisionFailed: capture.supervisionFailed || !cleanupResolved,
+      diagnostics: capture.diagnostics
+    )
   }
 }
 
@@ -232,10 +254,14 @@ private extension CoderCommandOperation {
     deadline: ContinuousClock.Instant
   ) async -> Bool {
     while true {
-      if await control.callbackStopNeeded(deadline: deadline) { return await group.terminate() }
+      if await control.callbackStopNeeded(deadline: deadline) {
+        return await group.terminate()
+      }
       do {
         if try CoderProcessIdentity.childExited(pid) {
-          if try group.liveMembers().isEmpty { return true }
+          if try group.liveMembers().isEmpty {
+            return true
+          }
           return await group.terminate()
         }
       } catch { return false }
@@ -277,7 +303,9 @@ private extension CoderCommandOperation {
         await control.appendDiagnostics(data)
       }
     } catch {
-      if !(error is CancellationError), !Task.isCancelled { await control.noteStreamError() }
+      if !(error is CancellationError), !Task.isCancelled {
+        await control.noteStreamError()
+      }
     }
   }
 
@@ -288,7 +316,9 @@ private extension CoderCommandOperation {
       }
       group.addTask {
         while !Task.isCancelled {
-          if await control.callbackStopNeeded(deadline: deadline) { return }
+          if await control.callbackStopNeeded(deadline: deadline) {
+            return
+          }
           try? await Task.sleep(for: ManagedCoderProcessGroup.pollInterval)
         }
       }
@@ -331,19 +361,29 @@ private actor CoderCommandControl {
   func markSpawned() { spawned = true }
 
   func latchCancelled() {
-    if !timedOut { cancelled = true }
+    if !timedOut {
+      cancelled = true
+    }
   }
   func callbackStopNeeded(deadline: ContinuousClock.Instant) -> Bool {
     guard !Task.isCancelled else {
       return false
     }
-    if stopping { return true }
-    if cancellationRequested { latchCancelled() }
-    if !cancelled, now() >= deadline { timedOut = true }
+    if stopping {
+      return true
+    }
+    if cancellationRequested {
+      latchCancelled()
+    }
+    if !cancelled, now() >= deadline {
+      timedOut = true
+    }
     return stopping
   }
   func recordCallbackFailure(_ error: any Error, message: String) {
-    if error is CancellationError, Task.isCancelled, stopping { return }
+    if error is CancellationError, Task.isCancelled, stopping {
+      return
+    }
     fail(message)
   }
 
@@ -377,7 +417,9 @@ private extension CoderCommandControl {
     var prefix = String(decoding: diagnostics, as: UTF8.self).utf8
       .prefix(CoderCommandRunner.diagnosticByteLimit)
     while true {
-      if let text = String(bytes: prefix, encoding: .utf8) { return text }
+      if let text = String(bytes: prefix, encoding: .utf8) {
+        return text
+      }
       prefix = prefix.dropLast()
     }
   }

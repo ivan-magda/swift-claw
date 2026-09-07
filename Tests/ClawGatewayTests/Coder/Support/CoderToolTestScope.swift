@@ -36,7 +36,9 @@ extension SC3Harness {
         await storage.retainFiles()
         throw error
       }
-      if removeFilesOnExit, await storage.deletionAllowed { removeFiles() }
+      if removeFilesOnExit, await storage.deletionAllowed {
+        removeFiles()
+      }
     }
   }
 }

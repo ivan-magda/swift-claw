@@ -9,7 +9,9 @@ public struct CoderProcessInspector: CoderProcessInspecting {
       guard !receipt.hostBootID.isEmpty else {
         return .unresolved
       }
-      if boot != receipt.hostBootID { return .stopped }
+      if boot != receipt.hostBootID {
+        return .stopped
+      }
       guard let pid = receipt.pid, let pgid = receipt.pgid,
         let birth = receipt.birthIdentity, pid > 0, pid == pgid
       else {

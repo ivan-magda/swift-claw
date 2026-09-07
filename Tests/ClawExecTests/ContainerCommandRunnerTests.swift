@@ -101,7 +101,9 @@ import Testing
 
     // when
     deadline.open()
-    if !didSpawn { task.cancel() }
+    if !didSpawn {
+      task.cancel()
+    }
     let result = await task.value
 
     // then
@@ -154,7 +156,9 @@ import Testing
       let pid = text.flatMap { value in
         Int32(value.trimmingCharacters(in: .whitespacesAndNewlines))
       }
-      if let pid { _ = kill(pid, SIGKILL) }
+      if let pid {
+        _ = kill(pid, SIGKILL)
+      }
       try? FileManager.default.removeItem(at: root)
     }
     let runner = testRunner(executablePath: "/bin/sh")

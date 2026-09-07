@@ -20,8 +20,12 @@ public actor ScriptedCoderBackend: CoderBackend {
     ) {
       self.result = result
       self.unresolvedCleanup = unresolvedCleanup
-      if !holdLaunch { allowLaunch.open() }
-      if !holdCleanup { allowCleanup.open() }
+      if !holdLaunch {
+        allowLaunch.open()
+      }
+      if !holdCleanup {
+        allowCleanup.open()
+      }
     }
 
     public func release() {
@@ -45,7 +49,9 @@ public actor ScriptedCoderBackend: CoderBackend {
   }
 
   nonisolated public func releaseAll() {
-    for invocation in invocations { invocation.release() }
+    for invocation in invocations {
+      invocation.release()
+    }
   }
 
   public func run(

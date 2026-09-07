@@ -35,7 +35,9 @@ public enum ToolApprovalPrompt {
   /// secret-redacted preview, and scan warnings — assembled in a fixed order so the owner can
   /// judge risk at a glance.
   public static func text(for input: Input) -> String {
-    if input.recorded.reason == .coderSubmit { return coderText(for: input) }
+    if input.recorded.reason == .coderSubmit {
+      return coderText(for: input)
+    }
     let recorded = input.recorded
     var lines: [String] = [headline(tool: recorded.tool, reason: recorded.reason)]
 
@@ -98,10 +100,16 @@ private extension ToolApprovalPrompt {
       "## Coder approval",
       "Delegate this task to native Codex. Review the complete task and publication scope.",
     ]
-    if input.taintBanner { blocks.append(taintBannerText) }
-    if input.privilegedFileBanner { blocks.append(privilegedFileBannerText) }
+    if input.taintBanner {
+      blocks.append(taintBannerText)
+    }
+    if input.privilegedFileBanner {
+      blocks.append(privilegedFileBannerText)
+    }
     blocks.append(recorded.presentation.blastRadius)
-    if let preview = recorded.presentation.contentPreview { blocks.append(preview) }
+    if let preview = recorded.presentation.contentPreview {
+      blocks.append(preview)
+    }
     for warning in recorded.presentation.warnings {
       blocks.append(CoderCardMarkdown.field("⚠ Native access", warning))
     }

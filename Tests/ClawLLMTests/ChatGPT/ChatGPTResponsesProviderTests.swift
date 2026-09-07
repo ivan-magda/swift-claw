@@ -209,7 +209,9 @@ import Testing
     // and — the stream publishes the visible delta and exactly one terminal event, then closes
     #expect(drained.events.contains(.delta("Hello")))
     let finishes = drained.events.filter { event in
-      if case .finished = event { return true }
+      if case .finished = event {
+        return true
+      }
       return false
     }
     #expect(finishes.count == 1)

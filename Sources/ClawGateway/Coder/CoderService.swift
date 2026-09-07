@@ -52,7 +52,9 @@ public actor CoderService: CoderServing, Service {
 
   /// Reconciles old reservations once, before approval replay or new submission can admit work.
   public func start() async throws {
-    if let failure { throw failure }
+    if let failure {
+      throw failure
+    }
     switch lifecycle {
     case .accepting: return
     case .stopping, .stopped: throw CoderError.unavailable("Coder is stopping.")
@@ -80,7 +82,9 @@ public actor CoderService: CoderServing, Service {
         try? await gracefulShutdown()
       }
       group.addTask { [failures] in
-        for await _ in failures { break }
+        for await _ in failures {
+          break
+        }
       }
       await group.next()
       group.cancelAll()
@@ -99,9 +103,13 @@ public actor CoderService: CoderServing, Service {
     }
     let owned = Array(tasks.values)
     _ = await startup?.result
-    for task in owned { await task.value }
+    for task in owned {
+      await task.value
+    }
     lifecycle = .stopped
-    if let failure { throw failure }
+    if let failure {
+      throw failure
+    }
   }
 
   public func prepare(_ request: CoderRequest) async throws -> CoderPreparedRequest {

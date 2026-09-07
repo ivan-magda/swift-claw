@@ -43,13 +43,17 @@ extension CoderJobStoreTests {
       }
       gate.open()
       var results: [CoderAdmission] = []
-      for try await result in group { results.append(result) }
+      for try await result in group {
+        results.append(result)
+      }
       return results
     }
     // then
     #expect(
       outcomes.filter {
-        if case .admitted = $0 { return true }
+        if case .admitted = $0 {
+          return true
+        }
         return false
       }.count == 1
     )

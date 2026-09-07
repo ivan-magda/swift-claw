@@ -91,7 +91,9 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     actor: ApprovalResolutionActor?,
     now: Date
   ) throws(StoreError) -> ApprovalApproveOutcome {
-    if throwOnResolve { throw StoreError.unexpected("scripted store failure") }
+    if throwOnResolve {
+      throw StoreError.unexpected("scripted store failure")
+    }
     lock.lock()
     defer { lock.unlock() }
     recordedApproveCalls.append((id, currentPolicyVersion))
@@ -104,7 +106,9 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     actor: ApprovalResolutionActor?,
     now: Date
   ) throws(StoreError) -> Bool {
-    if throwOnResolve { throw StoreError.unexpected("scripted store failure") }
+    if throwOnResolve {
+      throw StoreError.unexpected("scripted store failure")
+    }
     lock.lock()
     defer { lock.unlock() }
     recordedDenyCalls.append((id, decision))

@@ -11,7 +11,9 @@ public func withTestWatchdog<Result: Sendable>(
   return await withTaskCancellationHandler {
     if !(await completed.waitUntilOpen()) {
       task.cancel()
-      if !Task.isCancelled { onTimeout() }
+      if !Task.isCancelled {
+        onTimeout()
+      }
     }
     return await task.value
   } onCancel: {

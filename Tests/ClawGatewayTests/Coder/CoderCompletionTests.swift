@@ -92,7 +92,9 @@ extension CoderServiceTests {
     // when
     fixture.backend.releaseAll()
     let finishedWithoutCancellation = await finished.waitUntilOpen()
-    if !finishedWithoutCancellation { running.cancel() }
+    if !finishedWithoutCancellation {
+      running.cancel()
+    }
     let outcome = await running.result
     // then
     #expect(finishedWithoutCancellation)

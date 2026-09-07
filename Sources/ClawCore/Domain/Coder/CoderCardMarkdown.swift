@@ -26,7 +26,9 @@ public enum CoderCardMarkdown {
         }
       }
     }
-    if !current.isEmpty { chunks.append(current) }
+    if !current.isEmpty {
+      chunks.append(current)
+    }
     return chunks
   }
 }

@@ -96,11 +96,15 @@ final class ProcessFixture: Sendable {
 
   func output(_ data: Data) async {
     await capture.append(data)
-    if await capture.pids.count >= 2 { ready.open() }
+    if await capture.pids.count >= 2 {
+      ready.open()
+    }
   }
 
   func cleanup() {
-    if let pid = launchedPID { _ = kill(-pid, SIGKILL) }
+    if let pid = launchedPID {
+      _ = kill(-pid, SIGKILL)
+    }
     ready.open()
   }
 

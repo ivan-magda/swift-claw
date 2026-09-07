@@ -38,7 +38,11 @@ public struct CoderRequestPreparer: CoderRequestPreparing {
       }
     case .githubRepository(let url), .githubIssue(let url):
       let isIssue: Bool
-      if case .githubIssue = request.source { isIssue = true } else { isIssue = false }
+      if case .githubIssue = request.source {
+        isIssue = true
+      } else {
+        isIssue = false
+      }
       let repository = try Self.githubRepository(url, issue: isIssue)
       source = "https://github.com/\(repository)"
       checkout = nil
@@ -123,7 +127,9 @@ extension CoderRequestPreparer {
     )
     _ = try validation.validated()
     var repository = String(parts[2])
-    if repository.hasSuffix(".git") { repository.removeLast(4) }
+    if repository.hasSuffix(".git") {
+      repository.removeLast(4)
+    }
     guard !repository.isEmpty, repository != ".", repository != ".." else {
       throw CoderError.invalidRequest("Publication requires a GitHub repository name.")
     }

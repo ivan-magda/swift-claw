@@ -80,7 +80,9 @@ private extension RepositoryInventory {
     for part in parts.dropLast() {
       let child = openat(directory, String(part), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
       guard child >= 0 else {
-        if errno == ENOENT { return nil }
+        if errno == ENOENT {
+          return nil
+        }
         throw Failure.unavailable
       }
       close(directory)
@@ -91,7 +93,9 @@ private extension RepositoryInventory {
     }
     var metadata = stat()
     guard fstatat(directory, String(name), &metadata, AT_SYMLINK_NOFOLLOW) == 0 else {
-      if errno == ENOENT { return nil }
+      if errno == ENOENT {
+        return nil
+      }
       throw Failure.unavailable
     }
     if metadata.st_mode & S_IFMT == S_IFLNK {
@@ -131,8 +135,12 @@ private extension RepositoryInventory {
     while true {
       try Task.checkCancellation()
       let count = read(file, &buffer, buffer.count)
-      if count == 0 { return contents }
-      if count < 0, errno == EINTR { continue }
+      if count == 0 {
+        return contents
+      }
+      if count < 0, errno == EINTR {
+        continue
+      }
       guard count > 0, count <= remaining else {
         throw Failure.unavailable
       }

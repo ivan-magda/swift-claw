@@ -83,7 +83,9 @@ private actor GitOutput {
 
   func append(_ data: Data) {
     let available = max(0, CoderGit.outputByteLimit - bytes.count)
-    if data.count > available { oversized = true }
+    if data.count > available {
+      oversized = true
+    }
     bytes.append(data.prefix(available))
   }
 

@@ -231,7 +231,9 @@ import Testing
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
-    for url in urls { try await fixture.git(["config", "--add", "remote.origin.url", url]) }
+    for url in urls {
+      try await fixture.git(["config", "--add", "remote.origin.url", url])
+    }
 
     // when
     let failure = await #expect(throws: CoderError.self) {

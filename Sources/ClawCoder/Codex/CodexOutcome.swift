@@ -18,7 +18,9 @@ struct CodexOutcome {
 
   mutating func fail(_ stage: CoderFailureStage, _ message: String) {
     failure = CoderFailure(stage: stage, message: message)
-    if state != .cancelled && state != .timedOut { state = .failed }
+    if state != .cancelled && state != .timedOut {
+      state = .failed
+    }
   }
 
   mutating func stopIfNeeded(deadline: ContinuousClock.Instant) {

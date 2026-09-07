@@ -119,7 +119,9 @@ struct CodexBackendTests {
     // then
     #expect(result.state == .failed)
     #expect(result.failure != nil)
-    if mode == "blocked" { #expect(result.failure?.stage == .permission) }
+    if mode == "blocked" {
+      #expect(result.failure?.stage == .permission)
+    }
     if ["failed", "exit", "eventFailed"].contains(mode) {
       #expect(result.failure?.stage == .execution)
     }

@@ -238,7 +238,9 @@ import Testing
     let runner = ScriptedCommandRunner { command, _ in
       if command.arguments.first == "run" {
         writeCidfile(from: command.arguments)
-        while !Task.isCancelled { await Task.yield() }
+        while !Task.isCancelled {
+          await Task.yield()
+        }
         return commandResult(.cancelled)
       }
       return command.arguments.first == "list"

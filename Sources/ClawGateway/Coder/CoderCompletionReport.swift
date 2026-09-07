@@ -92,9 +92,15 @@ private extension CoderCompletionReport {
       result.startingCommit
       ?? (result.baselineObserved ? "none (unborn HEAD)" : "unavailable")
     var blocks = [field("Starting commit (\(baseline))", startingCommit)]
-    if let commit = result.commit { blocks.append(field("Commit (observed)", commit)) }
-    if let author = result.commitAuthor { blocks.append(field("Commit author (observed)", author)) }
-    if let actor = result.githubActor { blocks.append(field("GitHub actor (confirmed PR)", actor)) }
+    if let commit = result.commit {
+      blocks.append(field("Commit (observed)", commit))
+    }
+    if let author = result.commitAuthor {
+      blocks.append(field("Commit author (observed)", author))
+    }
+    if let actor = result.githubActor {
+      blocks.append(field("GitHub actor (confirmed PR)", actor))
+    }
     if let usage = result.reportedUsage {
       let values = usage.sorted {
         $0.key < $1.key

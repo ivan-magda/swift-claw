@@ -126,12 +126,24 @@ struct TMessage: Decodable {
   let audio: TPresence?
 
   var mediaKind: String? {
-    if photo != nil { return PhotoAttachment.mediaKindDescription }
-    if voice != nil { return VoiceAttachment.mediaKindDescription }
-    if document != nil { return "documents" }
-    if sticker != nil { return "stickers" }
-    if video != nil { return "videos" }
-    if audio != nil { return "audio" }
+    if photo != nil {
+      return PhotoAttachment.mediaKindDescription
+    }
+    if voice != nil {
+      return VoiceAttachment.mediaKindDescription
+    }
+    if document != nil {
+      return "documents"
+    }
+    if sticker != nil {
+      return "stickers"
+    }
+    if video != nil {
+      return "videos"
+    }
+    if audio != nil {
+      return "audio"
+    }
     return nil
   }
 

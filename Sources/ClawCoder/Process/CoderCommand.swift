@@ -34,6 +34,8 @@ enum CoderCommandTracking: Sendable {
   case job(record: @Sendable (CoderProcessEvent) async throws -> Void)
 
   func record(_ event: CoderProcessEvent) async throws {
-    if case .job(let record) = self { try await record(event) }
+    if case .job(let record) = self {
+      try await record(event)
+    }
   }
 }

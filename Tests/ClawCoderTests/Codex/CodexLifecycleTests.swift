@@ -88,7 +88,9 @@ extension CodexBackendTests {
         if case .didLaunch(let receipt) = event, receipt.phase == .codex {
           let pid = try #require(receipt.pid)
           #expect(await process.waitForExit(pid))
-          if mode == "supervision" { throw FixtureFailure.rejected }
+          if mode == "supervision" {
+            throw FixtureFailure.rejected
+          }
           try await callback.suspend()
         }
         if case .stopped = event, mode == "timeout", callback.entered.isOpen {
@@ -103,7 +105,9 @@ extension CodexBackendTests {
     // when
     if mode != "supervision" {
       await callback.entered.wait()
-      if mode == "cancel" { operation.cancel() }
+      if mode == "cancel" {
+        operation.cancel()
+      }
     }
     if mode == "timeout" {
       await finalReceiptEntered.wait()

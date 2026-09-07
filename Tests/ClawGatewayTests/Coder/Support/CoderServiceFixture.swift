@@ -233,7 +233,9 @@ actor CoderPreparationStub: CoderRequestPreparing {
 
   func prepare(_ request: CoderRequest) async throws -> CoderPreparedRequest {
     entered.open()
-    if hold { await proceed.waitIgnoringCancellation() }
+    if hold {
+      await proceed.waitIgnoringCancellation()
+    }
     guard case .local(let path) = request.source else {
       throw CoderError.invalidRequest("Fixture requires a local source")
     }
@@ -263,7 +265,9 @@ actor CoderInspectionStub: CoderProcessInspecting {
 
   func inspect(_ receipt: CoderProcessReceipt) async -> CoderRecoveryObservation {
     entered.open()
-    if hold { await proceed.waitIgnoringCancellation() }
+    if hold {
+      await proceed.waitIgnoringCancellation()
+    }
     return observation
   }
 }

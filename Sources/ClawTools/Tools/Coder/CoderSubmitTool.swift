@@ -96,7 +96,9 @@ private extension CoderSubmitTool {
     case .local(let value), .githubRepository(let value), .githubIssue(let value): source = value
     }
     var texts = [source, request.task, request.instructions, request.startRef]
-    if request.workspace == .inPlace { texts.append(prepared.checkoutPath) }
+    if request.workspace == .inPlace {
+      texts.append(prepared.checkoutPath)
+    }
     if request.deliverable == .pullRequest {
       texts += [request.baseBranch, prepared.publicationRepository]
     }

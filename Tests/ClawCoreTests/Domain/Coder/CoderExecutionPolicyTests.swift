@@ -14,7 +14,9 @@ import Testing
     ]
 
     // when / then
-    for changed in changes { #expect(changed.id != original.id) }
+    for changed in changes {
+      #expect(changed.id != original.id)
+    }
   }
 
   @Test func credentialSourceOrderDoesNotChangeIdentity() {

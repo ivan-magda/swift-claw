@@ -13,7 +13,9 @@ import Testing
       if command.arguments.first == "run" {
         writeCidfile(from: command.arguments)
         // A wedged foreground CLI: never returns until the watchdog cancels the losing racer.
-        while !Task.isCancelled { await Task.yield() }
+        while !Task.isCancelled {
+          await Task.yield()
+        }
         return commandResult(.cancelled)
       }
       return command.arguments.first == "list"

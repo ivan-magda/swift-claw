@@ -32,7 +32,9 @@ extension CoderService {
 
 private extension CoderService {
   func reconcileOwnership(_ job: CoderJob) async throws {
-    if job.ownership == .none || job.ownership == .stopped { return }
+    if job.ownership == .none || job.ownership == .stopped {
+      return
+    }
     guard let receipt = job.processReceipt else {
       throw StoreError.unexpected("Coder active ownership has no pending launch receipt")
     }

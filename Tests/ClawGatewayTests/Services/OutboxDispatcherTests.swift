@@ -539,7 +539,9 @@ private final class RetryWaitHold: Sendable {
     // then — it waits exactly the window Telegram named, then wakes the dispatcher up again
     #expect(hold.requestedDelays == [.seconds(30)])
     hold.release()
-    for await _ in signal.notifications { break }
+    for await _ in signal.notifications {
+      break
+    }
   }
 
   @Test func aNonFloodControlFailureStillStopsTheWholeDrain() async throws {

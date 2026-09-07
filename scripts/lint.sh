@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Lint gate: swift-format + targeted SwiftFormat rules + SwiftLint.
-# Config: .swift-format, BuildTools/guard-bodies.swiftformat, and .swiftlint.yml.
+# Config: .swift-format, BuildTools/conditional-bodies.swiftformat, and .swiftlint.yml.
 #   scripts/lint.sh        check only (CI / pre-commit)
 #   scripts/lint.sh --fix  auto-apply all formatter and linter fixes
 #   STRICT=1 scripts/lint.sh   promote SwiftLint warnings to failures
@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 
 paths=(Sources Tests Package.swift BuildTools/Package.swift BuildTools/Sources)
 repository_root=$PWD
-guard_format_paths=(
+wrap_format_paths=(
   "$repository_root/Sources"
   "$repository_root/Tests"
   "$repository_root/Package.swift"
@@ -17,24 +17,24 @@ guard_format_paths=(
   "$repository_root/BuildTools/Sources"
 )
 
-run_guard_formatter() {
+run_wrap_formatter() {
   swift run --package-path BuildTools swiftformat \
-    --config "$repository_root/BuildTools/guard-bodies.swiftformat" \
+    --config "$repository_root/BuildTools/conditional-bodies.swiftformat" \
     "$@" \
-    "${guard_format_paths[@]}"
+    "${wrap_format_paths[@]}"
 }
 
 if [[ "${1:-}" == "--fix" ]]; then
-  run_guard_formatter
+  run_wrap_formatter
   swift format -i -r "${paths[@]}"
   command -v swiftlint >/dev/null 2>&1 && swiftlint --fix --quiet
   echo "lint: applied fixes"
   exit 0
 fi
 
-# Apple swift-format owns general layout; the targeted pass fills its guard-body gap.
+# Apple swift-format owns general layout; the targeted pass fills its body-wrapping gaps.
 swift format lint --strict -r "${paths[@]}"
-run_guard_formatter --lint
+run_wrap_formatter --lint
 
 if ! command -v swiftlint >/dev/null 2>&1; then
   echo "lint: swiftlint not found — install with 'brew install swiftlint'" >&2

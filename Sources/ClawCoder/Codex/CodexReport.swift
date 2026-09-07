@@ -48,8 +48,12 @@ struct CodexReport: Sendable, Decodable {
     var buffer = [UInt8](repeating: 0, count: 8192)
     while true {
       let count = read(descriptor, &buffer, buffer.count)
-      if count == 0 { break }
-      if count < 0, errno == EINTR { continue }
+      if count == 0 {
+        break
+      }
+      if count < 0, errno == EINTR {
+        continue
+      }
       guard count > 0, data.count + count <= byteLimit else {
         throw CodexProtocolFailure.invalidReport
       }

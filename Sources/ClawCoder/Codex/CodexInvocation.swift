@@ -42,7 +42,9 @@ struct CodexInvocation: Sendable {
       "--skip-git-repo-check", "--ephemeral", "--color", "never", "-C", workspace.directory,
       "--output-schema", schemaPath, "-o", reportPath,
     ]
-    if let profile { arguments += ["--profile", profile] }
+    if let profile {
+      arguments += ["--profile", profile]
+    }
     arguments += ["-"]
     self.arguments = arguments
     input = Self.prompt(job: job, workspace: workspace)

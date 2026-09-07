@@ -49,7 +49,9 @@ struct CoderServiceTests {
     }
     let outcome = await shutdown.result
     // then
-    if case .failure(let error) = outcome { Issue.record(error) }
+    if case .failure(let error) = outcome {
+      Issue.record(error)
+    }
     #expect(await fixture.service.failure == nil)
     #expect(try fixture.store.job(id: job.id)?.state == .cancelled)
     #expect(try fixture.store.job(id: job.id)?.slotReserved == false)
@@ -202,7 +204,10 @@ struct CoderServiceTests {
       try fixture.store.job(id: job.id)
     }
     // then
-    if case .failure(.unavailable) = another {} else { Issue.record("Admission remained open") }
+    if case .failure(.unavailable) = another {
+    } else {
+      Issue.record("Admission remained open")
+    }
     script.allowCleanup.open()
     let atReturn = try await shutdown.value
     #expect(atReturn?.state == .cancelled)

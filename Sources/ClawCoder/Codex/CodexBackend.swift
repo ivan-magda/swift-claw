@@ -98,7 +98,9 @@ public struct CodexBackend: CoderBackend {
 
   /// Local status never refreshes credentials or proves model entitlement; profiles are CLI-unobservable.
   public func authenticationStatus() async -> CodexAuthenticationStatus {
-    if profile != nil { return .profileUnverified }
+    if profile != nil {
+      return .profileUnverified
+    }
     let command = CoderCommand(
       executable: executable,
       arguments: ["login", "status"],
@@ -290,7 +292,9 @@ private extension CodexBackend {
   }
 
   func diagnostic(_ error: any Error) -> String {
-    if case CoderError.unavailable(let message) = error { return message }
+    if case CoderError.unavailable(let message) = error {
+      return message
+    }
     if case CoderError.staleApproval = error {
       return "Coder workspace identity changed after approval."
     }

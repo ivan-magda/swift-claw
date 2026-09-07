@@ -33,7 +33,9 @@ actor ScriptedCommandRunner: ContainerCommandRunning {
   func recorded() -> [ContainerCommand] { commands }
 
   func waitForCount(_ count: Int) async {
-    if commands.count >= count { return }
+    if commands.count >= count {
+      return
+    }
     await withCheckedContinuation { continuation in
       waiters.append((count, continuation))
     }
@@ -254,7 +256,9 @@ actor AsyncGate {
   private var waiters: [CheckedContinuation<Void, Never>] = []
 
   func wait() async {
-    if isOpen { return }
+    if isOpen {
+      return
+    }
     await withCheckedContinuation { continuation in
       waiters.append(continuation)
     }

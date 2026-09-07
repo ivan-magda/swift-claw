@@ -1142,7 +1142,9 @@ actor WedgeRelease {
   private var released = false
 
   func wait() async {
-    if released { return }
+    if released {
+      return
+    }
     await withCheckedContinuation { waiters.append($0) }
   }
 

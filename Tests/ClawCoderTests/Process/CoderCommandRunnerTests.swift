@@ -209,7 +209,9 @@ import Testing
 
     // when
     fixture.advanceClock(by: timeout)
-    if !entered { task.cancel() }
+    if !entered {
+      task.cancel()
+    }
     let result = await task.value
 
     // then
@@ -236,7 +238,9 @@ import Testing
       fixture.command(),
       tracking: .job { event in
         try await fixture.record(event)
-        if case .didLaunch = event { throw FixtureFailure.rejected }
+        if case .didLaunch = event {
+          throw FixtureFailure.rejected
+        }
       },
       onStandardOutput: { _ in }
     )
@@ -260,7 +264,9 @@ import Testing
       tracking: .job(record: fixture.record)
     ) { data in
       await fixture.output(data)
-      if fixture.ready.isOpen { throw FixtureFailure.rejected }
+      if fixture.ready.isOpen {
+        throw FixtureFailure.rejected
+      }
     }
 
     // then

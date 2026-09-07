@@ -154,8 +154,12 @@ enum SealScrubOutcome: Equatable {
 
 extension SecretsCommand.Seal {
   func resolvedEnvFilePath(environment: [String: String]) -> String {
-    if let explicit = envFile { return explicit }
-    if let fromEnv = environment["CLAW_ENV_FILE"] { return fromEnv }
+    if let explicit = envFile {
+      return explicit
+    }
+    if let fromEnv = environment["CLAW_ENV_FILE"] {
+      return fromEnv
+    }
     return NSHomeDirectory() + "/.swift-claw/clawd.env"
   }
 

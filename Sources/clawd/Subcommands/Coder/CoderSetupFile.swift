@@ -108,7 +108,9 @@ private extension CoderSetupFile {
 
   static func assignment(_ key: String, _ value: String) -> String {
     let escaped = value.reduce(into: "") { result, character in
-      if "\\\"$`".contains(character) { result.append("\\") }
+      if "\\\"$`".contains(character) {
+        result.append("\\")
+      }
       result.append(character)
     }
     return "\(key)=\"\(escaped)\""

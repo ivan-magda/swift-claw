@@ -109,11 +109,15 @@ extension AsyncGate {
         current.cancelledTickets.remove(ticket)
         return true
       }
-      if honorsCancellation, current.cancelledTickets.remove(ticket) != nil { return true }
+      if honorsCancellation, current.cancelledTickets.remove(ticket) != nil {
+        return true
+      }
       current.waiters[ticket] = continuation
       return false
     }
-    if isReleased { continuation.resume() }
+    if isReleased {
+      continuation.resume()
+    }
   }
 
   /// Resumes a parked waiter on cancellation, or leaves a marker for a `wait` that has not reached

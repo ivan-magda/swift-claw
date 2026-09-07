@@ -20,7 +20,9 @@ extension CoderService {
       } else {
         result = Self.unfinishedResult(state: .cancelled)
       }
-      if case .persistence = failure { return }
+      if case .persistence = failure {
+        return
+      }
       try await complete(id: admitted.id, result: result, recovering: false)
     } catch let error as StoreError {
       fail(.persistence(error))
@@ -51,7 +53,9 @@ extension CoderService {
       case .committed:
         if !resolved {
           recoveryRequiredJobIDs.insert(id)
-          if !recovering { fail(.cleanup(jobID: id)) }
+          if !recovering {
+            fail(.cleanup(jobID: id))
+          }
         }
         await notifyOutbox()
         return

@@ -30,7 +30,9 @@ struct ManagedCoderProcessGroup: Sendable {
   func terminate() async -> Bool {
     do {
       try signal(SIGTERM)
-      if try await waitUntilEmpty(for: Self.terminationGrace) { return true }
+      if try await waitUntilEmpty(for: Self.terminationGrace) {
+        return true
+      }
       try signal(SIGKILL)
       return try await waitUntilEmpty(for: Self.killGrace)
     } catch { return false }
@@ -54,7 +56,9 @@ private extension ManagedCoderProcessGroup {
   func waitUntilEmpty(for duration: Duration) async throws -> Bool {
     let deadline = ContinuousClock.now.advanced(by: duration)
     repeat {
-      if try liveMembers().isEmpty { return true }
+      if try liveMembers().isEmpty {
+        return true
+      }
       try await Task.sleep(for: Self.pollInterval)
     } while ContinuousClock.now < deadline
     return try liveMembers().isEmpty

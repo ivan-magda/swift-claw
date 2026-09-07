@@ -96,7 +96,9 @@ extension CodexBackendTests {
 
     // then
     #expect(result.state == (cloned ? .succeeded : .failed))
-    if !cloned { #expect(result.failure?.stage == .inspection) }
+    if !cloned {
+      #expect(result.failure?.stage == .inspection)
+    }
     #expect(result.startingCommit == starting)
     #expect(!result.baselineObserved)
     #expect(result.changedFiles == nil)

@@ -279,7 +279,9 @@ import Testing
     }
     fixture.backend.allowCompletion.open()
     let failedFromService = await finished.waitUntilOpen()
-    if !failedFromService { command.cancel() }
+    if !failedFromService {
+      command.cancel()
+    }
     await #expect(throws: FatalExitSentinel.self) {
       try await command.value
     }

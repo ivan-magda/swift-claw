@@ -13,7 +13,11 @@ import Testing
   func wireRequestPreservesSourceAndScope(_ source: CoderSource) throws {
     // given
     let inPlace: Bool
-    if case .local = source { inPlace = true } else { inPlace = false }
+    if case .local = source {
+      inPlace = true
+    } else {
+      inPlace = false
+    }
     let workspace: CoderWorkspaceMode = inPlace ? .inPlace : .separate
     let startRef: String? = inPlace ? nil : "retry-base"
     let sourceJSON = try #require(CanonicalJSON.encode(source))

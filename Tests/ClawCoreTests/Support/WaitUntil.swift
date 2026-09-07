@@ -14,7 +14,9 @@ func waitUntil(
   _ predicate: @Sendable () -> Bool
 ) async {
   for _ in 0..<yieldCeiling {
-    if predicate() { return }
+    if predicate() {
+      return
+    }
     await Task.yield()
   }
   Issue.record("timed out waiting until \(description)", sourceLocation: sourceLocation)

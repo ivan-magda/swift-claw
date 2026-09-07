@@ -61,7 +61,9 @@ struct CoderProcessIdentity: Sendable {
       do {
         text = try String(contentsOfFile: path, encoding: .utf8)
       } catch {
-        if kill(pid, 0) == -1 && errno == ESRCH { return nil }
+        if kill(pid, 0) == -1 && errno == ESRCH {
+          return nil
+        }
         throw IdentityError.unreadable
       }
       guard let end = text.lastIndex(of: ")") else {
