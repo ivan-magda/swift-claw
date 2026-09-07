@@ -108,8 +108,9 @@ swift-claw assumes you are the only person it serves.
 
 - **Default-deny.** Only allowlisted Telegram IDs get a conversation. clawd refuses
   everyone else, and answers `/start` with the sender's own numeric ID so you can
-  allowlist them. `CLAW_ALLOWLIST` only ever adds, so revoking an ID means deleting its
-  row from the database ([details](docs/CUSTOMIZATION.md#everything-else)).
+  allowlist them. `CLAW_ALLOWLIST` only ever adds, so revoking an ID means stopping the
+  daemon, removing the ID from `CLAW_ALLOWLIST`, and deleting its row from the database
+  ([details](docs/CUSTOMIZATION.md#everything-else)).
 - **Secrets encrypted at rest.** `clawd secrets seal` wraps the bot token and API keys in
   an AES-GCM envelope. Plaintext env secrets remain available as a dev fallback that
   warns on every boot.
