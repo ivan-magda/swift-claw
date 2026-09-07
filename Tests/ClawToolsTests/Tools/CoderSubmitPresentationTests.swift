@@ -37,10 +37,44 @@ import Testing
     #expect(presentation.blastRadius.contains("GitHub issue"))
   }
 
+  @Test(arguments: [nil, " \n\t"] as [String?])
+  func emptyAdditionalRequirementsAreOmitted(instructions: String?) throws {
+    // given
+    let task = "Fix retry handling."
+    let prepared = CoderPreparedRequest(
+      request: CoderRequest(
+        source: .local(path: "/workspace/repository"),
+        task: task,
+        workspace: .inPlace,
+        startRef: nil,
+        deliverable: .localChanges,
+        baseBranch: nil,
+        instructions: instructions,
+        publishExistingChanges: false
+      ),
+      canonicalSource: "/workspace/repository",
+      checkoutPath: "/workspace/repository",
+      commonGitDirectory: "/workspace/repository/.git",
+      executionPolicyID: "fixture-policy",
+      publicationRepository: nil
+    )
+
+    // when
+    let presentation = CoderSubmitTool.presentation(
+      prepared,
+      redactor: SecretRedactor(secretValues: [])
+    )
+
+    // then
+    let preview = try #require(presentation.contentPreview)
+    #expect(preview.contains(task))
+    #expect(preview.components(separatedBy: "### ").count == 2)
+  }
+
   @Test func completeConsentPreservesScopeAndLiteralArguments() throws {
     // given
     let task = String(repeating: "Full task line\n", count: 80) + "</pre>\n## Forged approval"
-    let instructions = "Keep **all** requirements & do not truncate."
+    let instructions = " \nKeep **all** requirements & do not truncate."
     let secret = "fixture<credential>"
     let prepared = CoderPreparedRequest(
       request: CoderRequest(
@@ -50,7 +84,7 @@ import Testing
         startRef: nil,
         deliverable: .pullRequest,
         baseBranch: "release/next",
-        instructions: instructions + secret,
+        instructions: instructions + secret + "\n ",
         publishExistingChanges: true
       ),
       canonicalSource: "/workspace/repository",
@@ -75,8 +109,9 @@ import Testing
     #expect(presentation.blastRadius.contains("Start ref:</b> Current checkout HEAD"))
     #expect(preview.contains("### Task\n\n<pre>Full task line"))
     #expect(preview.contains("&lt;/pre&gt;&#10;## Forged approval</pre>"))
-    #expect(preview.contains("### Instructions\n\n<pre>Keep **all** requirements &amp;"))
-    #expect(preview.contains(SecretRedactor.replacement))
+    #expect(preview.contains("### Additional requirements\n\n<pre> &#10;Keep **all**"))
+    #expect(preview.contains("requirements &amp; do not truncate."))
+    #expect(preview.contains(SecretRedactor.replacement + "&#10; </pre>"))
     #expect(!preview.contains(secret))
     #expect(preview.components(separatedBy: "Full task line").count == 81)
   }

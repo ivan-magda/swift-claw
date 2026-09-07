@@ -65,8 +65,8 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 A file write suspends the run until you answer. Every field on the card comes from the daemon's own
 record of the action: the target path after symlink and `..` resolution, the size, and a preview of
 the content. Coder uses a dedicated card with the complete source, workspace, publication scope,
-task, and instructions; its completion card puts the outcome first and keeps technical evidence
-compact. Tap Deny and clawd writes nothing.
+provided task or selected issue, and optional additional requirements; its completion card puts the
+outcome first and keeps technical evidence compact. Tap Deny and clawd writes nothing.
 
 ## Install
 

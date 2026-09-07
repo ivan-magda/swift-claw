@@ -289,6 +289,14 @@ DMs and configured group topics. Submission always uses the durable Telegram app
 in the background through your native Codex installation and its configured integrations.
 `execute_code` keeps the VM sandbox described above.
 
+In `coder_submit`, `task` describes the requested work and expected outcome with enough context for
+Coder to work without the chat. `instructions` adds optional user requirements or preferences, such
+as preserving a public API; requirements already in `task` need not be repeated. Both are task data,
+without higher authority. A GitHub issue may supply the task. The approval card shows the provided
+task after secret redaction, or the selected issue when no task text was supplied. Nonblank
+`instructions` appear in full under **Additional requirements**, also after secret redaction;
+absent or whitespace-only input hides that section.
+
 | Variable                         | Default / accepted value                                                         |
 | -------------------------------- | -------------------------------------------------------------------------------- |
 | `CLAW_CODER_ENABLED`             | `false`; strict boolean (`true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`)        |
@@ -360,10 +368,10 @@ separate nonpersonal state root, as described in [LOCAL_DEV.md](LOCAL_DEV.md#gro
 Make the bot a group administrator: Telegram guarantees `getChatMember` checks for other users only
 for administrators. `coder_submit` is the one group tool that always parks an approval. Its Rich
 Markdown card shows the complete source, workspace, start ref, deliverable, PR target/base,
-existing-change scope, and exact secret-redacted task/instructions. Any current participant,
-including the requester, may approve or deny only from that original prompt; every tap performs a
-fresh membership check and failure leaves the approval pending. The requester remains the job
-identity, and only that person can use status or cancel from the same group topic. Existing group
+existing-change scope, exact secret-redacted task and any **Additional requirements**. Any current
+participant, including the requester, may approve or deny only from that original prompt; every tap
+performs a fresh membership check and failure leaves the approval pending. The requester remains the
+job identity, and only that person can use status or cancel from the same group topic. Existing group
 auto-run/refusal behavior for all other tools is unchanged. Completion returns to the original topic
 as a result card with state, summary, failure/publication/checks and changed files first, followed by
 compact job, commit, actor and usage details.

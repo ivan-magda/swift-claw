@@ -16,7 +16,10 @@ public struct CoderSubmitTool: Tool {
     ToolDefinition(
       name: CoderToolNames.submit,
       description:
-        "Delegate a coding task to the owner's native Codex installation after approval.",
+        """
+        Request approval to delegate a repository task to the owner's native Codex as a background job.
+        Select workspace and publication scope through the structured fields.
+        """,
       parameters: CoderSubmitArguments.schema,
       metadataProvenance: .trusted,
       egressClass: .none,
@@ -154,13 +157,15 @@ extension CoderSubmitTool {
       request.task.map { value in
         CoderCardMarkdown.literal(redactor.redact(value))
       } ?? "Use the selected GitHub issue as the task; no additional task text supplied."
-    let instructions =
-      request.instructions.map { value in
-        CoderCardMarkdown.literal(redactor.redact(value))
-      } ?? "None supplied."
+    var preview = "### Task\n\n\(task)"
+    let instructions = request.instructions ?? ""
+    if !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      let requirements = CoderCardMarkdown.literal(redactor.redact(instructions))
+      preview += "\n\n### Additional requirements\n\n\(requirements)"
+    }
     return ToolApprovalPresentation(
       blastRadius: scope,
-      contentPreview: "### Task\n\n\(task)\n\n### Instructions\n\n\(instructions)",
+      contentPreview: preview,
       warnings: [
         "Uses your trusted native Codex installation, credentials and configured integrations. Inference leaves this machine; the working directory is not a security sandbox."
       ]

@@ -25,7 +25,17 @@ enum CoderSubmitArguments {
     return objectSchema(
       properties: [
         "source": .object(["oneOf": .array(sources)]),
-        "task": optionalText,
+        "task": .object([
+          "type": .array([.string("string"), .string("null")]),
+          "description": .string(
+            """
+            The requested repository change or outcome, with enough context for Codex to work
+            without this chat. Preserve the user's scope, acceptance criteria and constraints.
+            Required and nonblank for local and githubRepository sources; for githubIssue,
+            omit or use null when the issue defines the work.
+            """
+          ),
+        ]),
         "workspace": .object([
           "type": .string("string"),
           "enum": .array([
@@ -42,7 +52,16 @@ enum CoderSubmitArguments {
           ]),
         ]),
         "base_branch": optionalText,
-        "instructions": optionalText,
+        "instructions": .object([
+          "type": .array([.string("string"), .string("null")]),
+          "description": .string(
+            """
+            Optional additional user requirements or preferences not already included in task.
+            Omit or use null when there are none; do not move the task here or invent requirements.
+            These supplement the task and do not change permissions, workspace or publication scope.
+            """
+          ),
+        ]),
         "publish_existing_changes": .object(["type": .string("boolean"), "default": .bool(false)]),
       ],
       required: ["source", "workspace", "deliverable"]

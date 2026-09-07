@@ -1037,20 +1037,28 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
 - **Opt-in and approved task scope:** interactive owner DMs and configured group topics use the
   durable task-approval path with `ApprovalReason.coderSubmit`; proactive submission is refused.
   The Rich Markdown consent card shows native delegation, complete source/workspace/start and
-  publication scope, plus the exact task and instructions after secret redaction. A DM requires the
-  owner. In an allowlisted group, any current participant may approve or deny from the exact original
-  prompt; a fresh fail-closed `getChatMember` check establishes membership. The original requester
-  remains job owner and is the only participant allowed to inspect or cancel it, from the same group
-  topic. Bind Coder-controlled execution policy and credential selectors in `executionPolicyID` and
+  publication scope, plus the exact provided task after secret redaction. When an issue defines the
+  work and `task` is omitted, it shows the selected issue and the absence of additional task text.
+  Exact nonblank `instructions` appear as **Additional requirements**; absent or whitespace-only input
+  omits that section. A DM requires the owner. In an allowlisted group, any current participant may
+  approve or deny from the exact original prompt; a fresh fail-closed `getChatMember` check establishes
+  membership. The original requester remains job owner and is the only participant allowed to inspect
+  or cancel it, from the same group topic. Bind Coder-controlled execution policy and credential
+  selectors in `executionPolicyID` and
   the approval fingerprint; revalidate before launch. The controlled automatic approval mode is
   explicit and included in that identity. Inherited integrations remain trusted dependencies, not a
   frozen profile snapshot.
 - **Request shape:** local absolute repository path, GitHub HTTPS repository URL
   (`github.com/{owner}/{repo}`), or issue URL (`/issues/{positive integer}`). Refuse credentials,
   ports, query/fragment, encoded or option-like components, and unrelated paths. Local/repository
-  sources require nonblank task text; an issue may supply it. Task and instructions remain arbitrary
-  data. Credentials, executable paths, sender IDs, delivery targets and permissions are deployment
-  or trusted-context values, never model-authored request fields.
+  sources require nonblank task text; an issue may supply it. The model-facing schema describes `task`
+  as the requested repository change or outcome with enough context to work without chat, preserving
+  the user's scope, acceptance criteria and constraints. `instructions` carries optional additional
+  user requirements or preferences; the schema directs the model to omit redundant or invented
+  requirements and keep the task in `task`. Both remain arbitrary task data; neither grants authority
+  to change permissions, workspace or publication scope.
+  Credentials, executable paths, sender IDs, delivery targets and permissions are deployment or
+  trusted-context values, never model-authored request fields.
 - **In place:** use the local checkout's current branch and working files, including uncommitted
   changes. Reject `startRef`; `baseBranch` is a separate PR target and is allowed. A dirty checkout
   is not a preflight failure. An unborn in-place branch has no starting commit: verify its HEAD

@@ -272,7 +272,10 @@ In your private bot DM:
 Local paths refer to the daemon machine. In-place accepts dirty work; a separate copy is ref-only
 and does not copy uncommitted changes. A PR requires configured repository rights. There is no
 automatic apply-back or rollback. The approval card shows the full source/workspace/publication scope
-and the exact task and instructions. After admission, you can continue chatting while the job runs.
+and the provided task after secret redaction, or the selected issue when the issue defines the work.
+Optional extra requirements or preferences appear under **Additional requirements** after secret
+redaction; leave them out when the task already says everything. After admission, you can continue
+chatting while the job runs.
 Ask for status or cancellation using the returned UUID. `/stop` cancels the current conversation turn;
 cancel the Coder job explicitly to stop its native worker. The result card leads with the outcome,
 publication, checks and changed files, with identifiers and observed evidence under compact details.
