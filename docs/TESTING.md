@@ -89,7 +89,15 @@ A flaky test — one that passes and fails with no change to code — is worse t
 
 - Use **Swift Testing** (`@Test`, `#expect`, `#require`, `@Suite`). Prefer `#require` to unwrap a precondition so a failure stops the test at the right line rather than trapping later.
 - To observe an intermediate async state deterministically, insert **`await Task.yield()`** before the assertion to force the suspension point, instead of sleeping.
-- When a test needs deterministic task ordering, pin execution with **`withMainSerialExecutor`** (Swift Concurrency Extras) so intermediate state is observable without a race.
+- Prefer **explicit emitted signals** to control async timing points. `withMainSerialExecutor` (Swift
+  Concurrency Extras) changes a process-global executor hook and is safe only when the entire test
+  process is isolated from unrelated tests. `.serialized` on one suite does **not** provide that
+  isolation; it only serializes tests within that suite. Do not introduce a global executor override
+  into this package's ordinary parallel test run.
+- A **cancellable missing-signal watchdog** may bound a failing test so it can release held work and
+  join its tasks. Success must come from the emitted signal itself. A deadline or elapsed quiet period
+  never proves readiness, successful joining, or the correct absence of progress. Reuse
+  `AsyncGate.waitUntilOpen` for this failure bound.
 - A bounded poll (loop-until-signal with a ceiling) is a last resort; if used, factor it into one shared helper so the ceiling is tunable in a single place — set generously enough to survive a CPU-starved CI runner — and prefer awaiting the emitted signal over polling state.
 - **Never block a Swift-concurrency cooperative thread.** A parked cooperative thread can't run other tasks; on a low-core CI runner enough parked threads deadlock the whole suite, though a many-core dev box hides it entirely (it presents as a CI-only "freeze"). Two traps seen here: a loopback server bound or torn down with NIO's blocking `EventLoopFuture.wait()` / `EventLoopGroup.syncShutdownGracefully()` (use async `bind(...).get()` and `shutdownGracefully` instead — a `defer` can't `await`, so wrap setup/teardown in a `withServer { }` helper), and an injected `sleep` double that returns without ever suspending (`{ _ in }` turns a throttled probe loop into a thread-hog — make it `try? await Task.sleep(for: .milliseconds(1))`). Reproduce a suspected pool deadlock deterministically in a one-core container (`docker run --cpuset-cpus=0 swift:6.3-noble … swift test`); an lldb `thread backtrace all` on the hung process names the blocking frame.
 

@@ -13,19 +13,25 @@ struct CoderCommandRunner: Sendable {
   static let diagnosticByteLimit = 64 * 1024
   static let readOnlyTimeout: Duration = .seconds(10)
 
+  private let now: @Sendable () -> ContinuousClock.Instant
+
+  init(now: @Sendable @escaping () -> ContinuousClock.Instant = { ContinuousClock.now }) {
+    self.now = now
+  }
+
   func run(
     _ command: CoderCommand,
     tracking: CoderCommandTracking,
     onStandardOutput: @Sendable @escaping (Data) async throws -> Void
   ) async -> CoderCommandResult {
-    let control = CoderCommandControl()
+    let control = CoderCommandControl(now: now)
     if Task.isCancelled { control.requestCancellation() }
     let timeout: Duration
     switch tracking {
     case .preApprovalReadOnly: timeout = Self.readOnlyTimeout
     case .job: timeout = command.timeout
     }
-    let deadline = ContinuousClock.now.advanced(by: timeout)
+    let deadline = now().advanced(by: timeout)
     let operation = Task {
       await CoderCommandOperation(control: control, deadline: deadline).run(
         command,
@@ -310,6 +316,11 @@ private actor CoderCommandControl {
   private var cancelled = false
   private var timedOut = false
   private var diagnostics = Data()
+  private let now: @Sendable () -> ContinuousClock.Instant
+
+  init(now: @Sendable @escaping () -> ContinuousClock.Instant) {
+    self.now = now
+  }
 
   var stopping: Bool { cancelled || timedOut || failed }
 
@@ -328,7 +339,7 @@ private actor CoderCommandControl {
     }
     if stopping { return true }
     if cancellationRequested { latchCancelled() }
-    if !cancelled, ContinuousClock.now >= deadline { timedOut = true }
+    if !cancelled, now() >= deadline { timedOut = true }
     return stopping
   }
   func recordCallbackFailure(_ error: any Error, message: String) {

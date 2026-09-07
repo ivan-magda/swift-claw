@@ -21,7 +21,7 @@ import Testing
     defer { release.open() }
     let task = Task {
       defer { launched.open() }
-      return await CoderCommandRunner().run(
+      return await fixture.run(
         fixture.command(arguments: ["-c", "exec /bin/sleep 600"]),
         tracking: .job { event in
           try await fixture.record(event)

@@ -2,6 +2,7 @@ import ClawCore
 import ClawTestSupport
 import Foundation
 import Synchronization
+import Testing
 
 @testable import ClawCoder
 
@@ -17,6 +18,7 @@ final class ProcessFixture: Sendable {
   let ready = AsyncGate()
   private let state = Mutex((receipt: CoderProcessReceipt?.none, stoppedAfterReap: false))
   private let capture = FixtureCapture()
+  private let clock = Mutex(ContinuousClock.now)
 
   var launchedPID: Int32? {
     state.withLock { state in
@@ -35,6 +37,31 @@ final class ProcessFixture: Sendable {
   }
   var pids: [Int32] { get async { await capture.pids } }
   var text: String { get async { await capture.text } }
+
+  func advanceClock(by duration: Duration) {
+    clock.withLock { instant in
+      instant = instant.advanced(by: duration)
+    }
+  }
+
+  func run(
+    _ command: CoderCommand,
+    tracking: CoderCommandTracking,
+    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+  ) async -> CoderCommandResult {
+    await withTestWatchdog(
+      onTimeout: {
+        Issue.record("Coder command did not complete before its watchdog.")
+      },
+      {
+        await CoderCommandRunner(now: {
+          self.clock.withLock { instant in
+            instant
+          }
+        }).run(command, tracking: tracking, onStandardOutput: onStandardOutput)
+      }
+    )
+  }
 
   func command(arguments: [String] = [], timeout: Duration = .seconds(10)) -> CoderCommand {
     let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

@@ -19,7 +19,7 @@ import Testing
     defer { fixture.cleanup() }
     let task = Task {
       defer { fixture.ready.open() }
-      return await CoderCommandRunner().run(
+      return await fixture.run(
         fixture.command(),
         tracking: .job(record: fixture.record)
       ) {
@@ -54,7 +54,7 @@ import Testing
     let script = signaled ? "kill -TERM $$" : "exit 7"
 
     // when
-    let result = await CoderCommandRunner().run(
+    let result = await fixture.run(
       fixture.command(arguments: ["-c", script]),
       tracking: .preApprovalReadOnly,
       onStandardOutput: { _ in }
@@ -77,7 +77,7 @@ import Testing
     defer { release.open() }
     let task = Task {
       defer { entered.open() }
-      return await CoderCommandRunner().run(
+      return await fixture.run(
         fixture.command(),
         tracking: .job { event in
           try await fixture.record(event)
@@ -114,7 +114,7 @@ import Testing
     defer { release.open() }
     let task = Task {
       defer { entered.open() }
-      return await CoderCommandRunner().run(
+      return await fixture.run(
         fixture.command(arguments: ["-c", "exec /bin/sleep 600"]),
         tracking: .job { event in
           try await fixture.record(event)
@@ -152,7 +152,7 @@ import Testing
     let callback = CooperativeCallback()
     let task = Task {
       defer { callback.entered.open() }
-      return await CoderCommandRunner().run(
+      return await fixture.run(
         fixture.command(),
         tracking: .job { event in
           try await fixture.record(event)
@@ -183,30 +183,47 @@ import Testing
     #expect(result.cleanupResolved)
   }
 
-  @Test func deadlineReachesCooperativeCallback() async {
+  @Test(arguments: [CooperativeCallbackBoundary.willLaunch, .didLaunch])
+  func deadlineReachesCooperativeCallback(boundary: CooperativeCallbackBoundary) async {
     // given
     let fixture = ProcessFixture()
     defer { fixture.cleanup() }
     let callback = CooperativeCallback()
+    let timeout = Duration.seconds(5)
+    let task = Task {
+      await fixture.run(
+        fixture.command(arguments: ["-c", "exec /bin/sleep 600"], timeout: timeout),
+        tracking: .job { event in
+          try await fixture.record(event)
+          switch (event, boundary) {
+          case (.willLaunch, .willLaunch), (.didLaunch, .didLaunch):
+            try await callback.suspend()
+          default: break
+          }
+        },
+        onStandardOutput: { _ in }
+      )
+    }
+    defer { task.cancel() }
+    let entered = await callback.entered.waitUntilOpen()
 
     // when
-    let result = await CoderCommandRunner().run(
-      fixture.command(arguments: ["-c", "exec /bin/sleep 600"], timeout: .seconds(5)),
-      tracking: .job { event in
-        try await fixture.record(event)
-        if case .didLaunch = event { try await callback.suspend() }
-      },
-      onStandardOutput: { _ in }
-    )
+    fixture.advanceClock(by: timeout)
+    if !entered { task.cancel() }
+    let result = await task.value
 
     // then
-    #expect(callback.entered.isOpen)
+    #expect(entered)
     #expect(callback.cancelled.isOpen)
     #expect(result.timedOut)
     #expect(!result.cancelled)
     #expect(!result.supervisionFailed)
     #expect(result.cleanupResolved)
-    #expect(fixture.stoppedAfterReap)
+    if boundary == .willLaunch {
+      #expect(fixture.launchedPID == nil)
+    } else {
+      #expect(fixture.stoppedAfterReap)
+    }
   }
 
   @Test func failedLaunchReceiptCleansUp() async {
@@ -215,7 +232,7 @@ import Testing
     defer { fixture.cleanup() }
 
     // when
-    let result = await CoderCommandRunner().run(
+    let result = await fixture.run(
       fixture.command(),
       tracking: .job { event in
         try await fixture.record(event)
@@ -238,7 +255,7 @@ import Testing
     defer { fixture.cleanup() }
 
     // when
-    let result = await CoderCommandRunner().run(
+    let result = await fixture.run(
       fixture.command(),
       tracking: .job(record: fixture.record)
     ) { data in
@@ -269,7 +286,7 @@ import Testing
     let script = "head -c \(count) /dev/zero | tr '\\000' '\\377' >&2; printf done"
 
     // when
-    let result = await CoderCommandRunner().run(
+    let result = await fixture.run(
       fixture.command(arguments: ["-c", script]),
       tracking: .preApprovalReadOnly
     ) { data in

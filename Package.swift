@@ -214,7 +214,7 @@ let package = Package(
       ],
       exclude: ["Process/Fixtures"]
     ),
-    .testTarget(name: "ClawExecTests", dependencies: ["ClawExec", "ClawCore"]),
+    .testTarget(name: "ClawExecTests", dependencies: ["ClawExec", "ClawCore", "ClawTestSupport"]),
     .testTarget(
       name: "ClawAppleSpeechTests",
       dependencies: ["ClawAppleSpeech", "ClawCore"],

@@ -1,5 +1,6 @@
 import ClawTestSupport
 import Foundation
+import Testing
 
 final class CooperativeCallback: Sendable {
   let entered = AsyncGate()
@@ -8,7 +9,9 @@ final class CooperativeCallback: Sendable {
   func suspend() async throws {
     try await withTaskCancellationHandler {
       entered.open()
-      try await Task.sleep(for: .seconds(30))
+      _ = await AsyncGate().waitUntilOpen()
+      try Task.checkCancellation()
+      Issue.record("Coder callback did not receive cancellation before its watchdog.")
     } onCancel: {
       cancelled.open()
     }

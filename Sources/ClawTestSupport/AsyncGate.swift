@@ -44,6 +44,24 @@ public final class AsyncGate: Sendable {
     }
   }
 
+  /// True requires an opened gate. The watchdog only bounds a missing-signal test failure;
+  /// a timeout must never be used as evidence that an operation correctly remained suspended.
+  public func waitUntilOpen(timeout: Duration = .seconds(30)) async -> Bool {
+    await withTaskGroup(of: Bool.self) { group in
+      group.addTask {
+        await self.wait()
+        return self.isOpen
+      }
+      group.addTask {
+        do { try await Task.sleep(for: timeout) } catch { return false }
+        return false
+      }
+      let opened = await group.next() ?? false
+      group.cancelAll()
+      return opened
+    }
+  }
+
   /// Suspends until `open()` and ignores cancellation, wedging the caller until the gate is opened.
   /// Use it to hold a task past its own cancellation — so the code under test, not the gate, is what
   /// observes it. Always pair it with a `defer { gate.open() }` so teardown cannot strand the task.
