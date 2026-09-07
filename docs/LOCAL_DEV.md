@@ -345,8 +345,8 @@ a DM.
 
 The order matters — step 1 cannot be fixed later without removing and re-adding the bot.
 
-1. **Turn privacy mode OFF at BotFather** — `/mybots` → your bot → *Bot Settings* → *Group Privacy*
-   → *Turn off*. With privacy mode on, Telegram delivers only commands and replies, so the bot
+1. **Turn privacy mode OFF at BotFather** — `/mybots` → your bot → _Bot Settings_ → _Group Privacy_
+   → _Turn off_. With privacy mode on, Telegram delivers only commands and replies, so the bot
    cannot follow a conversation. Changing this **after** the bot has joined does not take effect
    until it is removed and added again. (Making the bot a group administrator is the alternative,
    and grants far more than reading.)
@@ -512,16 +512,16 @@ directly is the way past that while you work on something else.
 
 Default: `~/.swift-claw/`. Contents:
 
-| File          | Purpose                       |
-| ------------- | ----------------------------- |
-| `claw.sqlite` | Main database (WAL mode)      |
-| `clawd.env`   | Non-secret config             |
-| `clawd.lock`  | Single-instance lock          |
-| `secrets.enc` | Encrypted secrets envelope    |
-| `secret.key`  | AES key (keep out of backups) |
+| File                  | Purpose                                                  |
+| --------------------- | -------------------------------------------------------- |
+| `claw.sqlite`         | Main database (WAL mode)                                 |
+| `clawd.env`           | Non-secret config                                        |
+| `clawd.lock`          | Single-instance lock                                     |
+| `secrets.enc`         | Encrypted secrets envelope                               |
+| `secret.key`          | AES key (keep out of backups)                            |
 | `llm-credentials.enc` | ChatGPT OAuth credential (encrypted; only on that route) |
-| `mcp.yaml`    | MCP server catalog (optional; absent = no MCP tools) |
-| `mcp-credentials.enc` | MCP server tokens (encrypted; only once you set one) |
+| `mcp.yaml`            | MCP server catalog (optional; absent = no MCP tools)     |
+| `mcp-credentials.enc` | MCP server tokens (encrypted; only once you set one)     |
 
 Override the state root with `CLAW_STATE_ROOT` for isolated test setups.
 
@@ -601,10 +601,11 @@ service and its three Telegram-facing tools. Run the unmanaged CLI fixture again
 swift test --filter CodexBackendTests
 ```
 
-The backend resolves the configured program once against a deliberate child PATH, preserving an
-explicit absolute executable. `compatibility()` performs only bounded local `--version` and
-`exec --help` probes. Jobs repeat the same validation under tracked process supervision and their
-single deadline. Codex CLI 0.153.4 is the successful compatibility baseline; another installed version
+The backend resolves the configured program once against the effective Coder child PATH, preserving
+an explicit absolute executable. `CLAW_CODER_PATH` overrides that child only; when unset, the existing
+process-PATH then `/usr/bin:/bin` fallback remains. `compatibility()` performs only bounded local
+`--version` and `exec --help` probes. Jobs repeat the same validation under tracked process
+supervision and their single deadline. Codex CLI 0.153.4 is the successful compatibility baseline; another installed version
 must still expose all required flags. No inference, login, or GitHub publication is required by tests.
 
 The argument vector is:
@@ -641,9 +642,11 @@ the Git commit author. Missing or unverifiable publication after possible execut
 a requested PR with unknown publication cannot be an unqualified success.
 
 The child environment and inherited installation trust are documented in
-[CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration). Configure a service-visible PATH (including
-any interpreter used by the selected CLI) and existing Codex/gh authorization under the actual service
-account before live validation. CLI presence and a foreground login are insufficient proof. Keep
+[CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration). Run `clawd coder setup` from a terminal whose
+PATH includes Codex and any interpreter used by it, then restart and inspect Telegram `/status` to
+verify the effective service path and resolved Codex/gh executables. Configure existing Codex/gh
+authorization under the actual service account before live validation. CLI presence and a foreground
+login are insufficient proof. Keep
 paid probes, denied-action checks and cancellation probes in a dedicated temporary state root; the
 scripted suite does not use or validate your personal daemon credentials.
 

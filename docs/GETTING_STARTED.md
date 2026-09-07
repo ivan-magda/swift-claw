@@ -242,12 +242,26 @@ This route is unofficial and vendor-dependent; details and caveats in
 
 Install a compatible native Codex CLI and Git on the daemon machine. GitHub work also needs `gh`
 and repository rights to clone, push and create the requested PR. Authenticate those tools as the
-service account and configure its PATH; [INSTALL.md](INSTALL.md#coder-prerequisites) explains the
-service context. `clawd auth login` manages the conversation model, not Coder's login.
+service account. `clawd auth login` manages the conversation model, not Coder's login.
 
-Set `CLAW_CODER_ENABLED=true` in `~/.swift-claw/clawd.env`, source it as in step 2, and run
-`clawd doctor`. The Coder rows distinguish CLI compatibility, local login and profile authentication
-that cannot be verified without running a task. Restart the daemon to expose the three Coder tools.
+From a terminal where `codex` and its dependencies work, run:
+
+```bash
+clawd coder setup
+```
+
+Setup reads the existing `~/.swift-claw/clawd.env`, checks the selected Codex executable and local
+login, then saves `CLAW_CODER_ENABLED=true` and a Coder-only `CLAW_CODER_PATH`. A selected profile's
+login remains explicitly unverified, as in the existing health behavior. Setup preserves the other
+settings, including a configured executable, profile or config home. Use `--dry-run` to check the
+proposed settings without writing, or `--env-file PATH` for another env file. It does not install
+dependencies, import credentials, edit shell startup files or restart the service.
+
+Restart the real service, then send `/status` in your private bot chat. Confirm `coder.path`, the
+resolved Codex executable, `coder.gh` when GitHub work is needed, and authentication there. Setup's
+terminal checks do not prove that the running service can use the same authorization. Rerun setup
+after changing an nvm installation or otherwise moving tools. See
+[INSTALL.md](INSTALL.md#coder-prerequisites) for the service context.
 
 In your private bot DM:
 
@@ -263,7 +277,7 @@ conversation turn; cancel the Coder job explicitly to stop its native worker.
 
 N is configurable with `CLAW_CODER_MAX_CONCURRENT_JOBS` (default 1), and full means busy. Completion
 uses existing outbox retries, without another LLM turn. Child billing and child-reported usage are
-separate from conversational `/cost`. v1 is owner DM only. The six settings, limits and authentication
+separate from conversational `/cost`. v1 is owner DM only. The settings, limits and authentication
 caveats are in [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration).
 
 ## Troubleshooting

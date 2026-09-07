@@ -7,10 +7,14 @@ public enum CodexAuthenticationStatus: Sendable, Equatable {
 
 public struct CodexBackend: CoderBackend {
   public static let approvalPolicy = CodexInvocation.approvalPolicy
+
   public let executable: String
   public let profile: String?
   public let configHome: String?
   public let credentialSources: [String: String]
+  public let searchPath: String
+  public let githubExecutable: String?
+  public let nodeExecutable: String?
   private let environment: [String: String]
   private let redactor: SecretRedactor
 
@@ -22,16 +26,24 @@ public struct CodexBackend: CoderBackend {
       CodexInvocation.environmentKeys.contains($0.key)
     }
     child["HOME"] = child["HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.path
-    child["PATH"] = child["PATH"] ?? "/usr/bin:/bin"
-    if let home = config.configHome { child["CODEX_HOME"] = home }
+    searchPath = Self.effectivePath(config: config, environment: environment)
+    child["PATH"] = searchPath
+
+    if let home = config.configHome {
+      child["CODEX_HOME"] = home
+    }
     self.environment = child
+
     executable = try CodexInvocation.resolve(config.executable, environment: child)
+    githubExecutable = try? CodexInvocation.resolve("gh", environment: child)
+    nodeExecutable = try? CodexInvocation.resolve("node", environment: child)
     profile = config.profile
     configHome =
       child["CODEX_HOME"]
       ?? child["HOME"].map {
         URL(fileURLWithPath: $0).appendingPathComponent(".codex").path
       }
+
     var sources = child.filter {
       ["GH_CONFIG_DIR", "GH_HOST", "SSH_AUTH_SOCK"].contains($0.key)
     }
@@ -42,12 +54,23 @@ public struct CodexBackend: CoderBackend {
         URL(fileURLWithPath: $0).appendingPathComponent(".config/gh").path
       }
     sources["GH_HOST"] = sources["GH_HOST"] ?? "github.com"
-    for key in CodexInvocation.credentialKeys where child[key] != nil { sources[key] = key }
+
+    for key in CodexInvocation.credentialKeys where child[key] != nil {
+      sources[key] = key
+    }
     credentialSources = sources
+
     let secretValues = CodexInvocation.credentialKeys.compactMap {
       child[$0]
     }
     redactor = SecretRedactor(secretValues: secretValues)
+  }
+
+  public static func effectivePath(
+    config: CoderConfig,
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) -> String {
+    config.searchPath ?? environment["PATH"] ?? "/usr/bin:/bin"
   }
 
   /// Checks fixed local CLI capabilities without inference or reading its authentication cache.
@@ -64,7 +87,12 @@ public struct CodexBackend: CoderBackend {
     } catch let error as CoderError {
       throw error
     } catch {
-      throw CoderError.unavailable("Codex CLI compatibility probe failed.")
+      throw CoderError.unavailable(
+        """
+        Codex CLI could not complete its compatibility checks. \
+        Check its interpreter (npm installations need node in PATH), then run clawd coder setup.
+        """
+      )
     }
   }
 

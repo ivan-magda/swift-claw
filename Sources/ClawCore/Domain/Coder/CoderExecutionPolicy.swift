@@ -7,9 +7,11 @@ public struct CoderExecutionPolicy: Sendable, Equatable {
     profile: String?,
     configHome: String?,
     approvalPolicy: String,
-    credentialSources: [String: String]
+    credentialSources: [String: String],
+    searchPath: String? = nil
   ) {
     var parts = [executable]
+
     for optional in [profile, configHome] {
       if let optional {
         parts += ["present", optional]
@@ -17,10 +19,17 @@ public struct CoderExecutionPolicy: Sendable, Equatable {
         parts.append("absent")
       }
     }
+
     parts.append(approvalPolicy)
+
     for key in credentialSources.keys.sorted() {
       parts += [key, credentialSources[key] ?? ""]
     }
+
+    if let searchPath {
+      parts += ["PATH", searchPath]
+    }
+
     id = PolicyFingerprint.hash(parts: parts)
   }
 }

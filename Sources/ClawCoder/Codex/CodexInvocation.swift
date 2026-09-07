@@ -50,28 +50,39 @@ struct CodexInvocation: Sendable {
 
   static func resolve(_ executable: String, environment: [String: String]) throws -> String {
     let candidates: [String]
+
     if executable.hasPrefix("/") {
       candidates = [executable]
     } else {
       guard !executable.contains("/"), !executable.hasPrefix("-") else {
         throw CoderError.unavailable("Coder executable must be a program name or absolute path.")
       }
+
       candidates = (environment["PATH"] ?? "").split(separator: ":").filter {
         $0.hasPrefix("/")
       }.map {
         URL(fileURLWithPath: String($0)).appendingPathComponent(executable).path
       }
     }
+
     for path in candidates {
       var directory: ObjCBool = false
+
       guard FileManager.default.fileExists(atPath: path, isDirectory: &directory),
         !directory.boolValue, FileManager.default.isExecutableFile(atPath: path)
       else {
         continue
       }
+
       return path
     }
-    throw CoderError.unavailable("Coder executable is unavailable in the selected child PATH.")
+
+    throw CoderError.unavailable(
+      """
+      Cannot find \(executable) in the selected Coder PATH. Run clawd coder setup \
+      from a terminal where the tool works; check an explicitly configured executable path.
+      """
+    )
   }
 }
 

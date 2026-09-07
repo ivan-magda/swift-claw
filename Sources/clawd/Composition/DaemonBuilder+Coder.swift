@@ -18,13 +18,20 @@ struct CoderBackendSetup: Sendable {
   let credentialSources: [String: String]
   let version: String
   let authentication: CodexAuthenticationStatus
+  var searchPath: String?
+  var githubExecutable: String?
+  var nodeExecutable: String?
 
   var permitsSubmission: Bool {
     authentication == .authenticated || authentication == .profileUnverified
   }
 
   static func live(_ config: CoderConfig) async throws -> Self {
-    let backend = try CodexBackend(config: config)
+    try await inspect(config, environment: ProcessInfo.processInfo.environment)
+  }
+
+  static func inspect(_ config: CoderConfig, environment: [String: String]) async throws -> Self {
+    let backend = try CodexBackend(config: config, environment: environment)
     let version = try await backend.compatibility()
     return Self(
       backend: backend,
@@ -33,7 +40,10 @@ struct CoderBackendSetup: Sendable {
       configHome: backend.configHome,
       credentialSources: backend.credentialSources,
       version: version,
-      authentication: await backend.authenticationStatus()
+      authentication: await backend.authenticationStatus(),
+      searchPath: backend.searchPath,
+      githubExecutable: backend.githubExecutable,
+      nodeExecutable: backend.nodeExecutable
     )
   }
 }
@@ -52,6 +62,7 @@ extension DaemonBuilder {
         )
       return CoderComposition(service: service, tools: [], checks: CoderHealthRows.disabled)
     }
+
     do {
       let setup = try await resolveCoder(config.coder)
       let checks = CoderHealthRows.rows(config: config.coder, setup: setup)
@@ -60,24 +71,29 @@ extension DaemonBuilder {
         profile: setup.profile,
         configHome: setup.configHome,
         approvalPolicy: CodexBackend.approvalPolicy,
-        credentialSources: setup.credentialSources
+        credentialSources: setup.credentialSources,
+        searchPath: setup.searchPath
       )
+
       let service = makeCoderService(
         backend: setup.permitsSubmission ? setup.backend : nil,
         policyID: policy.id,
         coordination: coordination
       )
+
       let redactor = SecretRedactor(secretValues: redactionValues)
       var tools: [any Tool] = [
         CoderStatusTool(service: service, redactor: redactor),
         CoderCancelTool(service: service, redactor: redactor),
       ]
+
       if setup.permitsSubmission {
         tools.insert(
           CoderSubmitTool(service: service, executionPolicyID: policy.id, redactor: redactor),
           at: 0
         )
       }
+
       return CoderComposition(service: service, tools: tools, checks: checks)
     } catch {
       let service = makeCoderService(
@@ -86,13 +102,14 @@ extension DaemonBuilder {
         coordination: coordination
       )
       let redactor = SecretRedactor(secretValues: redactionValues)
+
       return CoderComposition(
         service: service,
         tools: [
           CoderStatusTool(service: service, redactor: redactor),
           CoderCancelTool(service: service, redactor: redactor),
         ],
-        checks: CoderHealthRows.unavailable(config: config.coder)
+        checks: CoderHealthRows.unavailable(config: config.coder, error: error)
       )
     }
   }

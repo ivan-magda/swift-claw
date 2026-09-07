@@ -62,6 +62,7 @@ public struct AppConfig: Sendable, Equatable {
     public static let coderMaxConcurrentJobs = "CLAW_CODER_MAX_CONCURRENT_JOBS"
     public static let coderJobTimeoutSeconds = "CLAW_CODER_JOB_TIMEOUT_SECONDS"
     public static let coderExecutable = "CLAW_CODER_EXECUTABLE"
+    public static let coderPath = "CLAW_CODER_PATH"
     public static let coderProfile = "CLAW_CODER_PROFILE"
     public static let coderConfigHome = "CLAW_CODER_CONFIG_HOME"
 

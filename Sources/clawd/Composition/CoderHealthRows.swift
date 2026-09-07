@@ -1,3 +1,4 @@
+import ClawCoder
 import ClawCore
 import ClawGateway
 
@@ -7,6 +8,9 @@ enum CoderHealthRows {
     static let enabled = "coder.enabled"
     static let available = "coder.available"
     static let executable = "coder.executable"
+    static let path = "coder.path"
+    static let githubExecutable = "coder.gh"
+    static let nodeExecutable = "coder.node"
     static let version = "coder.version"
     static let configHome = "coder.config_home"
     static let profile = "coder.profile"
@@ -21,9 +25,18 @@ enum CoderHealthRows {
 
   static var disabled: [DoctorReport.Check] { [row(Key.enabled, "false")] }
 
-  static func unavailable(config: CoderConfig) -> [DoctorReport.Check] {
-    configurationRows(config) + [
-      row(Key.available, "false (Codex executable missing or incompatible)", ok: false),
+  static func unavailable(config: CoderConfig, error: (any Error)? = nil) -> [DoctorReport.Check] {
+    let reason: String
+
+    if let error = error as? CoderError, case .unavailable(let message) = error {
+      reason = message
+    } else {
+      reason = "Codex executable missing or incompatible; run clawd coder setup"
+    }
+
+    return configurationRows(config) + [
+      row(Key.path, CodexBackend.effectivePath(config: config), headline: true),
+      row(Key.available, "false (\(reason))", ok: false),
       row(Key.version, "unavailable"),
       row(Key.authentication, "unverified (CLI unavailable)", ok: false),
     ]
@@ -32,6 +45,7 @@ enum CoderHealthRows {
   static func rows(config: CoderConfig, setup: CoderBackendSetup) -> [DoctorReport.Check] {
     let authentication: String
     let authOK: Bool
+
     switch setup.authentication {
     case .authenticated:
       authentication = "local login present; runtime authorization not verified"
@@ -46,20 +60,35 @@ enum CoderHealthRows {
       authentication = "unverified: CLI status cannot inspect selected profile authentication"
       authOK = false
     }
-    return [
+
+    var rows = [
       row(Key.enabled, "true"),
       row(
         Key.available,
         setup.permitsSubmission ? "true (compatible CLI)" : "false",
         ok: setup.permitsSubmission
       ),
-      row(Key.executable, setup.executable), row(Key.version, setup.version),
+      row(Key.executable, setup.executable, headline: true), row(Key.version, setup.version),
       row(Key.configHome, setup.configHome ?? "default"),
       row(Key.profile, setup.profile ?? "default"),
       row(Key.authentication, authentication, ok: authOK),
       row(Key.capacity, String(config.maxConcurrentJobs)),
       row(Key.usage, "child-reported per job; separate from conversational /cost"),
     ]
+
+    if let path = setup.searchPath {
+      rows += [
+        row(Key.path, path, headline: true),
+        row(Key.nodeExecutable, setup.nodeExecutable ?? "not found (needed by npm installations)"),
+        row(
+          Key.githubExecutable,
+          setup.githubExecutable ?? "not found (needed for GitHub tasks)",
+          headline: true
+        ),
+      ]
+    }
+
+    return rows
   }
 
   static func configuration(
@@ -70,6 +99,7 @@ enum CoderHealthRows {
     guard config.enabled else {
       return disabled
     }
+
     guard live else {
       return configurationRows(config) + [
         row(Key.available, "unverified (offline config check)"),
@@ -77,8 +107,11 @@ enum CoderHealthRows {
         row(Key.authentication, "unverified (no CLI probe)"),
       ]
     }
-    do { return rows(config: config, setup: try await resolve(config)) } catch {
-      return unavailable(config: config)
+
+    do {
+      return rows(config: config, setup: try await resolve(config))
+    } catch {
+      return unavailable(config: config, error: error)
     }
   }
 
@@ -87,6 +120,7 @@ enum CoderHealthRows {
     redactor: SecretRedactor
   ) -> [DoctorReport.Check] {
     var rows: [DoctorReport.Check] = []
+
     do {
       let jobs = try store.reservedJobs()
       let unresolved = jobs.filter {
@@ -107,6 +141,7 @@ enum CoderHealthRows {
     } catch {
       rows += [unreadable(Key.reserved), unreadable(Key.ownership)]
     }
+
     do {
       let job = try store.lastFailedJob()
       let value =
@@ -114,7 +149,10 @@ enum CoderHealthRows {
           "\($0.id): \($0.state.rawValue); \($0.result?.failure?.message ?? "no diagnostic") (most recently updated failure record)"
         } ?? "none"
       rows.append(row(Key.lastFailure, redactor.redact(value)))
-    } catch { rows.append(unreadable(Key.lastFailure)) }
+    } catch {
+      rows.append(unreadable(Key.lastFailure))
+    }
+
     return rows
   }
 
@@ -122,7 +160,9 @@ enum CoderHealthRows {
     guard let service else {
       return [row(Key.serviceFailure, "unavailable (live daemon observation only)")]
     }
+
     let failure = await service.failure
+
     return [
       row(
         Key.serviceFailure,
@@ -146,8 +186,19 @@ private extension CoderHealthRows {
     ]
   }
 
-  static func row(_ key: String, _ value: String, ok: Bool = true) -> DoctorReport.Check {
-    DoctorReport.Check(key: key, value: value, ok: ok, group: .coder)
+  static func row(
+    _ key: String,
+    _ value: String,
+    ok: Bool = true,
+    headline: Bool = false
+  ) -> DoctorReport.Check {
+    DoctorReport.Check(
+      key: key,
+      value: value,
+      ok: ok,
+      group: .coder,
+      isHeadline: headline
+    )
   }
 
   static func unreadable(_ key: String) -> DoctorReport.Check {

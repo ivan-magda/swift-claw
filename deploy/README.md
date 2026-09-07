@@ -12,12 +12,12 @@ Install, start, update, and uninstall instructions — for both the scripted
 
 Exit codes are diagnostic:
 
-| Code | Meaning |
-|---|---|
-| 10 | invalid config |
-| 11 | secret loading failed |
-| 12 | another instance holds the state-root lock |
-| 13 | storage error |
+| Code | Meaning                                    |
+| ---- | ------------------------------------------ |
+| 10   | invalid config                             |
+| 11   | secret loading failed                      |
+| 12   | another instance holds the state-root lock |
+| 13   | storage error                              |
 
 ## Optional Coder in the service account
 
@@ -25,11 +25,17 @@ Enabling `CLAW_CODER_ENABLED=true` adds native Codex background jobs in owner DM
 Git (`/usr/bin/git` for preparation) and, for GitHub tasks, `gh` separately. PRs require that account's
 configured clone/push/PR rights. The installer does not provision dependencies or credentials.
 
-The wrapper already sources `clawd.env`; put the deliberate PATH and six Coder settings there.
-`clawd` does not automatically load `.env`. Include any Codex interpreter/toolchain in PATH and
-validate HOME, `CODEX_HOME`/`CLAW_CODER_CONFIG_HOME`, selected profile, `GH_CONFIG_DIR` and login/keyring
-access under the actual launchd/systemd user. Shell access is not proof of service authorization.
-Codex owns its auth; `clawd auth` manages only the conversational route.
+The wrapper already sources `clawd.env`; `clawd` does not automatically load `.env`. Run `clawd coder
+setup` from a terminal where Codex and its interpreter/toolchain work. It checks the existing Coder
+selection, then records that terminal's absolute path entries in the Coder-only `CLAW_CODER_PATH` and
+enables Coder. It does not install dependencies, import credentials, edit shell startup files or
+restart the service. The daemon's global PATH is unchanged.
+
+Restart the real service and inspect Telegram `/status`. Verify `coder.path`, the resolved Codex and
+`gh` executables, and authentication under the launchd/systemd account. Also validate HOME,
+`CODEX_HOME`/`CLAW_CODER_CONFIG_HOME`, selected profile, `GH_CONFIG_DIR` and keyring access. Setup's
+terminal checks are not proof of service authorization. Rerun it after an nvm or other tool-path
+change. Codex owns its auth; `clawd auth` manages only the conversational route.
 
 `clawd doctor --check-config` runs no Codex probes. With Coder enabled, full doctor adds bounded local
 compatibility/status checks; selected-profile auth remains explicitly unverified when the CLI cannot
