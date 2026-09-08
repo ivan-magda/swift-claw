@@ -165,7 +165,8 @@ extension ContainerBackend {
     )
     interpreters_ok = all(
         os.path.isfile(path) and os.access(path, os.X_OK)
-        for path in ('\(ExecSandboxSettings.pythonInterpreter)', '\(ExecSandboxSettings.shellInterpreter)')
+        for path in ('\(ExecSandboxSettings.pythonInterpreter)', \
+    '\(ExecSandboxSettings.shellInterpreter)')
     )
     print(json.dumps({
         'capsEmpty': caps_empty,

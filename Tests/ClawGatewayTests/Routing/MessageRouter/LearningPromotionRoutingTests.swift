@@ -102,7 +102,8 @@ private extension LearningRoutingTests.Harness {
   ) throws {
     try db.execute(
       sql: """
-        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm, decided_at)
+        INSERT INTO learning_decisions(kind, job_id, learning_epoch, \
+        inputs, result, algorithm, decided_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [

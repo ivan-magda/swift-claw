@@ -197,7 +197,8 @@ extension BoundRunEnvironment {
             SELECT ?, lesson_sets.digest, lesson_sets.schema_version, lesson_sets.canonical_bytes,
               lesson_sets.source, lesson_sets.created_at
             FROM lesson_sets
-            JOIN run_learning_bindings ON run_learning_bindings.effective_digest = lesson_sets.digest
+            JOIN run_learning_bindings \
+            ON run_learning_bindings.effective_digest = lesson_sets.digest
               AND run_learning_bindings.job_id = lesson_sets.job_id
             WHERE run_learning_bindings.run_id = ?
             """,

@@ -60,13 +60,16 @@ import Testing
     let createdAt = Date(timeIntervalSince1970: 1_000)
     try queue.write { db in
       try db.execute(
-        sql:
-          "INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) VALUES ('k', ?, ?, 0)",
+        sql: """
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) \
+          VALUES ('k', ?, ?, 0)
+          """,
         arguments: [createdAt, createdAt]
       )
       try db.execute(
         sql: """
-          INSERT INTO memory_items(text, kind, sensitivity, importance, source, session_id, created_at)
+          INSERT INTO memory_items(text, kind, sensitivity, importance, \
+          source, session_id, created_at)
           VALUES ('owner fact', 'user', 'normal', 1, 'owner', 1, ?)
           """,
         arguments: [createdAt]

@@ -42,7 +42,10 @@ private extension LearningSurface {
         } ?? "no live trial"
       let decision =
         readable.lastDecision.map { value in
-          "last \(decisionKind(value.detail)) \(value.decidedAt.wallClockMinute(in: zone(readable)))"
+          """
+          last \(decisionKind(value.detail)) \
+          \(value.decidedAt.wallClockMinute(in: zone(readable)))
+          """
         } ?? "no decision"
       let warning = readable.warnings.isEmpty ? "" : " · warning"
       return """

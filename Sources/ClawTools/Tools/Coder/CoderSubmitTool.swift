@@ -17,7 +17,8 @@ public struct CoderSubmitTool: Tool {
       name: CoderToolNames.submit,
       description:
         """
-        Request approval to delegate a repository task to the owner's native Codex as a background job.
+        Request approval to delegate a repository task to the owner's native Codex \
+        as a background job.
         Select workspace and publication scope through the structured fields.
         """,
       parameters: CoderSubmitArguments.schema,

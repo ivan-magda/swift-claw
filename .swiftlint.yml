@@ -1,5 +1,5 @@
 # swift-format owns layout/cosmetic style;
-# SwiftLint owns complexity, correctness smells, and idiom rules.
+# SwiftLint owns complexity, correctness smells, idiom rules, and the hard line-length limit.
 # Formatting rules both tools would touch are disabled below so they never disagree.
 
 included:
@@ -9,7 +9,6 @@ excluded:
   - .build
 
 disabled_rules:
-  - line_length
   - opening_brace
   - trailing_comma # swift-format adds multi-element trailing commas;
   - trailing_whitespace
@@ -63,6 +62,14 @@ force_try: error
 force_unwrapping: error
 trailing_semicolon: error
 duplicate_imports: error
+
+line_length:
+  warning: 100
+  error: 100
+  ignores_urls: true
+  ignores_comments: true
+  ignores_interpolated_strings: false
+  ignores_multiline_strings: false
 
 identifier_name:
   excluded: [id, db, ts, ok, sh]

@@ -168,24 +168,51 @@ import Testing
   /// than being sent somewhere it does not belong.
   @Test(arguments: [
     // Another provider entirely.
-    "openai-chat-completions-v1:11e594f481958c10e3015d0bf0447a22:b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111",
+    """
+    openai-chat-completions-v1:11e594f481958c10e3015d0bf0447a22:\
+    b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111
+    """,
     // A future version of this route.
-    "openai-chatgpt-responses-v2:11e594f481958c10e3015d0bf0447a22:b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111",
+    """
+    openai-chatgpt-responses-v2:11e594f481958c10e3015d0bf0447a22:\
+    b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111
+    """,
     // Too few fields.
-    "openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:11111111-1111-4111-8111-111111111111",
+    """
+    openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:\
+    11111111-1111-4111-8111-111111111111
+    """,
     // Too many fields.
-    "openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111:extra",
+    """
+    openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:\
+    b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111:extra
+    """,
     // A hash that is not hex.
-    "openai-chatgpt-responses-v1:zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz:b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111",
+    """
+    openai-chatgpt-responses-v1:zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz:\
+    b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111
+    """,
     // A hash of the wrong width.
-    "openai-chatgpt-responses-v1:11e594f4:b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111",
+    """
+    openai-chatgpt-responses-v1:11e594f4:\
+    b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111
+    """,
     // Uppercase hex, which the canonical rendering never produces.
-    "openai-chatgpt-responses-v1:11E594F481958C10E3015D0BF0447A22:b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111",
+    """
+    openai-chatgpt-responses-v1:11E594F481958C10E3015D0BF0447A22:\
+    b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111
+    """,
     // An uppercase epoch, likewise not the canonical form.
-    "openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111"
-      .uppercased(),
+    """
+    openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:\
+    b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111
+    """
+    .uppercased(),
     // An epoch that is not a UUID.
-    "openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:b0a9d642d12f553129c39513f7ce2605:not-a-uuid",
+    """
+    openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:\
+    b0a9d642d12f553129c39513f7ce2605:not-a-uuid
+    """,
     // Empty.
     "",
   ])

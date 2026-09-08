@@ -48,6 +48,7 @@ import Testing
     // given
     let image = try #require(
       PinnedImageReference.parse(
+        // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       )
     )
@@ -117,6 +118,7 @@ import Testing
     ExecSandboxSettings(
       workloadImage: try #require(
         PinnedImageReference.parse(
+          // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
           "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         )
       ),
@@ -149,8 +151,12 @@ import Testing
         "--cap-drop", "ALL", "--init", "--init-image",
         "ghcr.io/apple/containerization/vminit:1.1.0", "--read-only", "--tmpfs", "/tmp",
         "--cpus", "4", "--memory", "1024M", "--mount",
-        "type=bind,source=/state/exec-scratch/11111111-2222-3333-4444-555555555555,target=/work,readonly",
+        """
+        type=bind,source=/state/exec-scratch/11111111-2222-3333-4444-555555555555,\
+        target=/work,readonly
+        """,
         "--network", "none", "--no-dns", "--entrypoint", "/usr/bin/python",
+        // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "/work/.clawd-entrypoint.py",
       ]

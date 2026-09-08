@@ -217,8 +217,10 @@ extension BoundRunEnvironment {
   func advanceFeedbackRevision() throws {
     try queue.write { db in
       try db.execute(
-        sql:
-          "UPDATE job_learning_state SET feedback_revision = feedback_revision + 1 WHERE job_id = ?",
+        sql: """
+          UPDATE job_learning_state SET feedback_revision = feedback_revision + 1 \
+          WHERE job_id = ?
+          """,
         arguments: [jobId]
       )
     }

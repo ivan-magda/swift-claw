@@ -392,7 +392,10 @@ extension ExecuteCodeToolTests {
     #expect(preview.contains(String(twoHash)))
     #expect(
       action.presentation.blastRadius
-        == "run python · egress: no · 4 CPU / 1024 MiB · code \(code.utf8.count) B · 2 staged file(s), 6 B"
+        == """
+        run python · egress: no · 4 CPU / 1024 MiB · \
+        code \(code.utf8.count) B · 2 staged file(s), 6 B
+        """
     )
   }
 

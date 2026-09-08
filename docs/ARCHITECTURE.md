@@ -1685,6 +1685,24 @@ A cancelled/superseded run resolves its PENDING approval to **`REJECTED`** — t
 
 **Boot reconciliation sweep:** any `RUNNING` at boot → `FAILED` (or re-enqueue if idempotent via the outbox); any expired `AWAITING_APPROVAL` → DENY; an `updated_ts` **lease** on `RUNNING` rows distinguishes stuck from in-flight; the expiry ticker (default 1h window, `approval_expiry`) enforces approval expiry `PENDING → EXPIRED → DENY`.
 
+### 19.2 Source formatting and lint
+
+Run `scripts/lint.sh` for the complete lint gate. Apple swift-format owns general layout;
+SwiftFormat supplies the conditional- and loop-body rules in
+`BuildTools/conditional-bodies.swiftformat`. SwiftLint checks correctness, idiom, and the hard
+line-length limit configured in `.swiftlint.yml`.
+
+Keep Swift source lines in `Sources` and `Tests` within 100 characters. SwiftLint reports longer
+lines as errors without requiring `STRICT=1`. Its URL and comment exemptions apply; interpolated
+and multiline string literals remain subject to the limit. Wrap long literals at logical boundaries
+with multiline continuations, preserving runtime whitespace, escapes, and interpolation evaluation.
+Use a named local for a complex expression when formatting alone cannot fit it. `--fix` does not
+choose these changes for you.
+
+For an opaque value that needs to remain intact for review, such as a pinned image digest, use
+`swiftlint:disable:next line_length` with a reason after ` // `. Do not exempt a whole file or test
+suite to accommodate individual literals.
+
 ## 20. Roadmap (technical increments)
 
 Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**: conversational + durable memory + read-only tools + streaming. Each increment lands a working, supervised slice, and each **"Done when" is an automated acceptance test** (per-requirement verified-by-test), not a manual check.

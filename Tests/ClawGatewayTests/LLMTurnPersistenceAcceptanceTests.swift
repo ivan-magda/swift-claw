@@ -1069,8 +1069,10 @@ func makeStopNewStack(
     let storedStateHasMarker = try await queue.read { db -> Bool in
       let blob = try Data.fetchOne(
         db,
-        sql:
-          "SELECT provider_state FROM messages WHERE role = 'assistant' AND provider_state IS NOT NULL"
+        sql: """
+          SELECT provider_state FROM messages WHERE role = 'assistant' \
+          AND provider_state IS NOT NULL
+          """
       )
       return blob.map { (String(bytes: $0, encoding: .utf8) ?? "").contains(marker) } ?? false
     }

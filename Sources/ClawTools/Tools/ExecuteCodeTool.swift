@@ -321,7 +321,10 @@ private extension ExecuteCodeTool {
       switch Self.validateBasename(of: path, claimed: &normalizedNames) {
       case .reservedNamespace:
         return .failure(
-          "Staged files may not use the reserved \(ExecLanguage.reservedEntrypointPrefix)* namespace."
+          """
+          Staged files may not use the reserved \
+          \(ExecLanguage.reservedEntrypointPrefix)* namespace.
+          """
         )
       case .duplicate:
         return .failure("Staged files must have unique flat basenames.")

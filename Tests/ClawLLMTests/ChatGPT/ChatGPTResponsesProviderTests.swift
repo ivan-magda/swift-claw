@@ -240,7 +240,10 @@ import Testing
     let body =
       Fixtures.basicSuccess() + [
         Fixtures.event(
-          #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"gpt-5.6-sol"}}"#
+          #"""
+          {"type":"response.done","response":{"id":"resp_1","status":"completed",\#
+          "model":"gpt-5.6-sol"}}
+          """#
         )
       ]
     let harness = ProviderHarness(steps: [.stream(okHead, body)])

@@ -23,8 +23,10 @@ public enum Degradation {
   /// The credential is gone or refused. The sentence names the exact recovery — the daemon must be
   /// stopped, re-authenticated, and started again, because a running daemon holds the process lock.
   /// Pinned verbatim: it is the one degradation reply that tells the owner to log in.
-  public static let authenticationRequired =
-    "ChatGPT authentication is required. Stop clawd, run `clawd auth login`, then start clawd again."
+  public static let authenticationRequired = """
+    ChatGPT authentication is required. Stop clawd, run `clawd auth login`, \
+    then start clawd again.
+    """
 
   /// The subscription/account cannot use the requested route or model. It deliberately does NOT tell
   /// the owner to log in: the credential is valid, so re-authenticating would change nothing.
@@ -69,8 +71,10 @@ public enum Degradation {
   }
 
   /// The once-per-UTC-day owner DM fired by the post-commit kill-switch (`BudgetBreaker`).
-  public static let dailyCapTripped =
-    "Heads up — the daily spend cap was reached, so I've paused new requests until the next UTC day."
+  public static let dailyCapTripped = """
+    Heads up — the daily spend cap was reached, \
+    so I've paused new requests until the next UTC day.
+    """
 
   /// The once-per-UTC-day owner DM for a proactive-cap trip. Names the cap explicitly and
   /// says interactive use is unaffected, so the owner knows the household kill-switch did NOT trip.

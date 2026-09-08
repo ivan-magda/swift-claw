@@ -262,7 +262,8 @@ extension ReflectionRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source, created_at)
+          INSERT INTO lesson_sets(job_id, digest, schema_version, \
+          canonical_bytes, source, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
           """,
         arguments: [

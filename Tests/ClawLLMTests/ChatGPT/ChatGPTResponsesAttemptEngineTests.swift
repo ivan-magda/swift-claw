@@ -368,7 +368,10 @@ import Testing
     let body =
       Fixtures.basicSuccess() + [
         Fixtures.event(
-          #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"gpt-5.6-sol"}}"#
+          #"""
+          {"type":"response.done","response":{"id":"resp_1","status":"completed",\#
+          "model":"gpt-5.6-sol"}}
+          """#
         )
       ]
     let harness = Harness(
@@ -395,10 +398,16 @@ import Testing
       Array(Fixtures.basicSuccess().dropLast()) + [
         Fixtures.completedTerminal(),
         Fixtures.event(
-          #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"gpt-5.6-sol"}}"#
+          #"""
+          {"type":"response.done","response":{"id":"resp_1","status":"completed",\#
+          "model":"gpt-5.6-sol"}}
+          """#
         ),
         Fixtures.event(
-          #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"different-model"}}"#
+          #"""
+          {"type":"response.done","response":{"id":"resp_1","status":"completed",\#
+          "model":"different-model"}}
+          """#
         ),
       ]
     let harness = Harness(

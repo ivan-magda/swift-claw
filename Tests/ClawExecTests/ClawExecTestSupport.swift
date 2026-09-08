@@ -191,6 +191,7 @@ struct BackendFixture {
     settings = ExecSandboxSettings(
       workloadImage: try #require(
         PinnedImageReference.parse(
+          // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
           "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         )
       ),

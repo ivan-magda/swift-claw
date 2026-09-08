@@ -22,8 +22,10 @@ struct SecretsCommand: AsyncParsableCommand {
 
     @Option(
       name: .customLong("env-file"),
-      help:
-        "Env file to scrub sealed secrets from (default: $CLAW_ENV_FILE or ~/.swift-claw/clawd.env)."
+      help: """
+        Env file to scrub sealed secrets from \
+        (default: $CLAW_ENV_FILE or ~/.swift-claw/clawd.env).
+        """
     )
     var envFile: String?
 

@@ -38,8 +38,10 @@ import Testing
     let markup = try env.queue.read { db in
       try Row.fetchAll(
         db,
-        sql:
-          "SELECT reply_markup FROM outbound_deliveries WHERE dedup_key IN (?, ?) ORDER BY step_index",
+        sql: """
+          SELECT reply_markup FROM outbound_deliveries \
+          WHERE dedup_key IN (?, ?) ORDER BY step_index
+          """,
         arguments: StatementArguments(
           chunks.map { chunk in
             OutboxDedupKey.make(subjectDigest: chunk.subjectDigest, ordinal: chunk.ordinal)

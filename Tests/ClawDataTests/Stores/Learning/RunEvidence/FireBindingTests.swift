@@ -536,8 +536,10 @@ private struct FireBindingEnvironment {
         )
       case .assignmentDeadline:
         try db.execute(
-          sql:
-            "UPDATE learning_trials SET assignment_deadline = assignment_deadline + 1 WHERE job_id = ?",
+          sql: """
+            UPDATE learning_trials SET assignment_deadline = assignment_deadline + 1 \
+            WHERE job_id = ?
+            """,
           arguments: [jobId]
         )
       case .decisionDeadline:

@@ -34,7 +34,8 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
           LEFT JOIN learning_evidence AS evidence ON evidence.run_id = binding.run_id
           WHERE binding.job_id = ? AND binding.run_id > ?
             AND binding.learning_epoch = state.learning_epoch AND settlement.settled_at IS NOT NULL
-            AND (evidence.run_id IS NULL OR (evidence.eligibility = ? AND evidence.payload IS NOT NULL))
+            AND (evidence.run_id IS NULL OR (evidence.eligibility = ? \
+          AND evidence.payload IS NOT NULL))
             AND NOT EXISTS (SELECT 1 FROM learning_evaluations AS evaluation
               WHERE evaluation.run_id = binding.run_id)
             AND NOT EXISTS (SELECT 1 FROM learning_operations AS operation
@@ -72,7 +73,8 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
             AND NOT EXISTS (SELECT 1 FROM feedback_targets AS target
               WHERE target.subject_kind = ? AND target.subject_digest = candidate.candidate_digest)
             AND NOT EXISTS (SELECT 1 FROM learning_trials AS trial
-              WHERE trial.candidate_digest = candidate.candidate_digest AND trial.state NOT IN (?, ?))
+              WHERE trial.candidate_digest = candidate.candidate_digest \
+          AND trial.state NOT IN (?, ?))
             AND NOT EXISTS (SELECT 1 FROM learning_candidates AS successor
               WHERE successor.predecessor_digest = candidate.candidate_digest)
           ORDER BY candidate.created_at, candidate.candidate_digest
@@ -145,8 +147,10 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
       )
       let receipts = try Row.fetchAll(
         db,
-        sql:
-          "SELECT decision_id, inputs, result FROM learning_decisions WHERE job_id = ? AND kind = ?",
+        sql: """
+          SELECT decision_id, inputs, result FROM learning_decisions \
+          WHERE job_id = ? AND kind = ?
+          """,
         arguments: [jobId, LearningDecisionKind.rollback.rawValue]
       )
       .map(Self.decodeTerminalReceipt)

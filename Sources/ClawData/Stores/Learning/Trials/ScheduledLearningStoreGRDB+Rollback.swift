@@ -22,8 +22,10 @@ extension ScheduledLearningStoreGRDB {
       guard
         let row = try Row.fetchOne(
           db,
-          sql:
-            "SELECT decision_id, inputs, result FROM learning_decisions WHERE decision_id = ? AND kind = ?",
+          sql: """
+            SELECT decision_id, inputs, result FROM learning_decisions \
+            WHERE decision_id = ? AND kind = ?
+            """,
           arguments: [trigger.promotionId, LearningDecisionKind.trial.rawValue]
         )
       else {
@@ -36,8 +38,10 @@ extension ScheduledLearningStoreGRDB {
       let inputs = promotion.inputs
       let priorRows = try Row.fetchAll(
         db,
-        sql:
-          "SELECT decision_id, inputs, result FROM learning_decisions WHERE job_id = ? AND kind = ?",
+        sql: """
+          SELECT decision_id, inputs, result FROM learning_decisions \
+          WHERE job_id = ? AND kind = ?
+          """,
         arguments: [inputs.identity.jobId, LearningDecisionKind.rollback.rawValue]
       )
       for priorRow in priorRows {

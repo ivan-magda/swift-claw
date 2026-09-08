@@ -129,7 +129,10 @@ import Testing
     )
     #expect(
       MemoryReplies.memoryUsage
-        == "Usage: /memory [user|feedback|project|reference] | /memory show <id> | /memory delete <id>"
+        == """
+        Usage: /memory [user|feedback|project|reference] | \
+        /memory show <id> | /memory delete <id>
+        """
     )
     #expect(MemoryReplies.nothingToSave == "No savable text.")
     #expect(MemoryReplies.cancelled == "Cancelled.")

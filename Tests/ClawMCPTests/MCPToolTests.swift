@@ -513,7 +513,10 @@ struct MCPToolTests {
     #expect(payload.content.contains("IGNORE PREVIOUS INSTRUCTIONS") == false)
     #expect(
       payload.content
-        == "mcp__linear__list_issues may have completed remotely; verify its effects before retrying: the server did not complete the call."
+        == """
+        mcp__linear__list_issues may have completed remotely; \
+        verify its effects before retrying: the server did not complete the call.
+        """
     )
 
     await harness.tearDown()

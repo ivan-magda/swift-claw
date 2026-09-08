@@ -30,7 +30,8 @@ import Testing
   @Test func recognisesTheResponsesRouteContentPartName() {
     // given — the managed route names the part `input_image` rather than `image_url`
     let body = """
-      {"error":{"message":"Invalid value: 'input_image'. This model does not support image inputs.",\
+      {"error":{"message":"Invalid value: 'input_image'. \
+      This model does not support image inputs.",\
       "type":"invalid_request_error","param":"input","code":null}}
       """
 

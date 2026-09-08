@@ -124,7 +124,10 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
     }
 
     logger.info(
-      "voice message transcribed (duration=\(attachment.durationSeconds)s chars=\(transcript.count))"
+      """
+      voice message transcribed (duration=\(attachment.durationSeconds)s \
+      chars=\(transcript.count))
+      """
     )
     return normalize(transcript)
   }

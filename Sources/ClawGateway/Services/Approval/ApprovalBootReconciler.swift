@@ -93,8 +93,10 @@ public struct ApprovalBootReconciler: Sendable {
 extension ApprovalBootReconciler {
   /// The synthetic observation for an action claimed before a crash — the honest answer is that
   /// the outcome is unknowable, never "it ran" or "it didn't".
-  static let claimedCrashObservation =
-    "The daemon restarted while this approved action was executing; whether it completed is unknown."
+  static let claimedCrashObservation = """
+    The daemon restarted while this approved action was executing; \
+    whether it completed is unknown.
+    """
 
   /// The owner DM for the same window. Tool name only — the canonical target can be arbitrarily
   /// long and this notice is a single outbox row.

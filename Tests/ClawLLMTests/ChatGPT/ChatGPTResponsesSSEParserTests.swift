@@ -496,7 +496,10 @@ private typealias Support = ChatGPTProviderTestSupport
       Self.addedMessageEvent(index: 0, phase: "final")
       + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
       + Self.event(
-        #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","model":"gpt-a"}}"#
+        #"""
+        {"type":"response.completed","response":{"id":"resp_1","status":"completed",\#
+        "model":"gpt-a"}}
+        """#
       )
       + Self.event(
         #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"gpt-b"}}"#
@@ -590,7 +593,10 @@ private typealias Support = ChatGPTProviderTestSupport
       Self.addedMessageEvent(index: 0, phase: "final")
       + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
       + Self.event(
-        #"{"type":"response.completed","response":{"id":"r","status":"completed","usage":\#(usage)}}"#
+        #"""
+        {"type":"response.completed","response":{"id":"r","status":"completed",\#
+        "usage":\#(usage)}}
+        """#
       )
 
     // then
