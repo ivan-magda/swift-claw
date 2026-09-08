@@ -1,0 +1,29 @@
+name: Documentation improvement
+description: Report missing, confusing, or incorrect documentation.
+labels: [documentation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing issues first. Small typo or broken-link fixes can go straight to a pull request.
+        For exploitable behavior or exposed secrets, follow [SECURITY.md](https://github.com/ivan-magda/swift-claw/blob/main/SECURITY.md) instead of posting publicly.
+        Keep examples free of credentials and private data. Our [Code of Conduct](https://github.com/ivan-magda/swift-claw/blob/main/CODE_OF_CONDUCT.md) applies here.
+  - type: textarea
+    id: location
+    attributes:
+      label: Affected documentation
+      description: Link to the page and section, or describe where you expected to find the information. Include the release or commit if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What needs improvement?
+      description: Explain what is missing, confusing, or incorrect and what you were trying to do.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested correction
+      description: Optional wording, examples, or references that would help.

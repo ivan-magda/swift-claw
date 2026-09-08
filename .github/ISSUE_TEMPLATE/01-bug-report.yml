@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible problem with swift-claw.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please search existing issues first.
+        For suspected vulnerabilities, use [private vulnerability reporting](https://github.com/ivan-magda/swift-claw/security/advisories/new) as described in [SECURITY.md](https://github.com/ivan-magda/swift-claw/blob/main/SECURITY.md).
+        Review everything before posting: remove credentials, tokens, private messages, personal identifiers, and sensitive paths. Do not attach your environment file or state directory.
+        Our [Code of Conduct](https://github.com/ivan-magda/swift-claw/blob/main/CODE_OF_CONDUCT.md) applies here.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release tag or source commit. If available, include the output of clawd --version.
+      placeholder: Release tag or git commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS version, CPU architecture, and install method. Include Swift version if building from source.
+      placeholder: macOS or Linux version; arm64 or x86_64; install script, release binary, or source build
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest example that triggers the problem, including relevant commands or Telegram actions.
+      placeholder: |
+        1. Configure ...
+        2. Run or send ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include error text and how often it occurs.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Doctor output
+      description: Paste clawd doctor --json output after reviewing it for private information. It redacts secrets. If doctor cannot run, explain why.
+      render: text
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Optional redacted log excerpts, screenshots, relevant provider/model or feature settings, and the last working version.
