@@ -176,6 +176,7 @@ import Testing
       chatId: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -219,6 +220,7 @@ import Testing
       chatId: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -327,6 +329,7 @@ import Testing
       chatId: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -383,6 +386,7 @@ import Testing
       chatId: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0

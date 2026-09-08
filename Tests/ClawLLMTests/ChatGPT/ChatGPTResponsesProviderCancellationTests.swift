@@ -107,6 +107,128 @@ import Testing
     // then
     #expect(first == second)
   }
+
+  @Test(.timeLimit(.minutes(1)))
+  func localOutputLimitCancelsAndJoinsTheHeldHTTPProducer() async throws {
+    // given — the first visible delta crosses the evaluation cap, while the HTTP producer remains
+    // held after sending it and deliberately ignores cancellation until the test releases it
+    let hold = ScriptedStreamHold()
+    let harness = ProviderHarness(
+      steps: [.streamThenBlock(okHead, Fixtures.slowSuccess(), hold)],
+      retryBudget: 1
+    )
+    let limiter = AttemptOutputLimiter(
+      limits: AttemptOutputLimits(maximumUTF8Bytes: 4, maximumGraphemes: 4)
+    )
+    let request = ChatRequest(
+      model: "gpt-5",
+      messages: [ChatMessage(role: .user, content: "hello")],
+      maxOutputTokens: 256,
+      outputScope: limiter.beginRound()
+    )
+    let completion = CompletionFlag()
+
+    // when
+    let task = Task {
+      do {
+        _ = try await harness.provider.complete(request: request)
+        Issue.record("expected local output limit")
+        return ProviderFailure(
+          cause: .terminal(status: nil, message: "test"),
+          accounting: .notStarted
+        )
+      } catch let failure as ProviderFailure {
+        await completion.markDone()
+        return failure
+      } catch {
+        Issue.record("expected ProviderFailure, got \(error)")
+        return ProviderFailure(
+          cause: .terminal(status: nil, message: "test"),
+          accounting: .notStarted
+        )
+      }
+    }
+    await hold.started.wait()
+    await Task.yield()
+    let returnedBeforeJoin = await completion.done
+    hold.release.open()
+    let failure = await task.value
+
+    // then
+    #expect(returnedBeforeJoin == false)
+    #expect(failure.cause == .localOutputLimit)
+    // "Hello" is five graphemes; the production conservative double-ceil estimator records 3.
+    #expect(failure.accounting == .mayHaveStarted(observing: 3))
+    #expect(limiter.counts.limitExceeded)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func streamedToolArgumentsCrossingTheLocalLimitCancelAndJoinTheHTTPProducer() async throws {
+    // given — there is no owner-visible text. The streamed function arguments alone exceed the
+    // cap while the HTTP producer remains live and cancellation-noncooperative behind the hold.
+    let hold = ScriptedStreamHold()
+    let argumentEvents = [
+      Fixtures.event(
+        #"{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock"}}"#
+      ),
+      Fixtures.event(
+        #"{"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_1","call_id":"call_a","delta":"{\"abcdef\":1}"}"#
+      ),
+    ]
+    let harness = ProviderHarness(
+      steps: [.streamThenBlock(okHead, argumentEvents, hold)],
+      retryBudget: 1
+    )
+    let limiter = AttemptOutputLimiter(
+      limits: AttemptOutputLimits(maximumUTF8Bytes: 4, maximumGraphemes: 4)
+    )
+    let request = ChatRequest(
+      model: "gpt-5",
+      messages: [ChatMessage(role: .user, content: "hello")],
+      maxOutputTokens: 256,
+      tools: [Support.clockTool],
+      outputScope: limiter.beginRound()
+    )
+    let completion = CompletionFlag()
+
+    // when
+    let task = Task {
+      do {
+        _ = try await harness.provider.complete(request: request)
+        Issue.record("expected local output limit")
+        return ProviderFailure(
+          cause: .terminal(status: nil, message: "test"),
+          accounting: .notStarted
+        )
+      } catch let failure as ProviderFailure {
+        await completion.markDone()
+        return failure
+      } catch {
+        Issue.record("expected ProviderFailure, got \(error)")
+        return ProviderFailure(
+          cause: .terminal(status: nil, message: "test"),
+          accounting: .notStarted
+        )
+      }
+    }
+    await hold.started.wait()
+    await Task.yield()
+    let returnedBeforeJoin = await completion.done
+    hold.release.open()
+    let failure = await task.value
+
+    // then — a provider that only charges visible text would not fail; a provider that cancels but
+    // does not join would return while the deliberately held producer is still alive.
+    #expect(returnedBeforeJoin == false)
+    #expect(failure.cause == .localOutputLimit)
+    guard case .mayHaveStarted(let observedTokens) = failure.accounting else {
+      Issue.record("expected conservative accounting after streamed arguments")
+      return
+    }
+    #expect(observedTokens > 0)
+    #expect(limiter.counts.utf8Bytes == 12)
+    #expect(limiter.counts.limitExceeded)
+  }
 }
 
 private func readOneDeltaAndAbandon(

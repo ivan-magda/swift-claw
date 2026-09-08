@@ -1,4 +1,5 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 
 // MARK: - Serialized Execution
@@ -128,8 +129,8 @@ extension ContainerBackend {
     identity: ExecutionIdentity,
     workspace: ScratchWorkspace,
     initImage: String
-  ) -> ContainerCommand {
-    ContainerCommand(
+  ) -> SubprocessCommand {
+    SubprocessCommand(
       arguments: ContainerInvocation.run(
         context: ContainerLaunchContext(
           identity: identity,
@@ -143,7 +144,8 @@ extension ContainerBackend {
       ),
       timeout: request.timeout,
       captureLimit: Self.maxRawStreamBytes,
-      teardownGracePeriod: Self.commandTeardownGrace
+      teardownGracePeriod: Self.commandTeardownGrace,
+      environmentKeysToRemove: Self.environmentKeysToRemove
     )
   }
 
@@ -152,9 +154,9 @@ extension ContainerBackend {
   // runner is cancelled and abandoned after the deadline; the shielded teardown ladder plus the
   // prepared-image disarm own containment.
   func boundedForegroundRun(
-    _ command: ContainerCommand,
+    _ command: SubprocessCommand,
     deadline: ContinuousClock.Instant
-  ) async -> DeadlineRaceOutcome<ContainerCommandResult> {
+  ) async -> DeadlineRaceOutcome<SubprocessResult> {
     let commands = commands
     let remaining = now().duration(to: deadline)
 
@@ -167,7 +169,7 @@ extension ContainerBackend {
   }
 
   func classify(
-    _ commandResult: ContainerCommandResult,
+    _ commandResult: SubprocessResult,
     identity: ExecutionIdentity,
     cidFile: URL,
     deadline: ContinuousClock.Instant

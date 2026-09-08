@@ -91,6 +91,33 @@ struct ReplySender: Sendable {
     return .processed
   }
 
+  /// One claimed canned response delivered in stable chunk order.
+  func sendCannedChunks(
+    updateId: Int64,
+    target: DeliveryTarget,
+    texts: [String]
+  ) async -> HandleOutcome {
+    guard Task.isCancelled == false, texts.isEmpty == false else {
+      return .transientFailure
+    }
+
+    do {
+      try await claimUpdate(updateId: updateId, target: target)
+    } catch {
+      return error.outcome
+    }
+
+    do {
+      for text in texts {
+        _ = try await delivery.sendMessage(to: target, text: text)
+      }
+    } catch {
+      logger.error("chunked send failed for update \(updateId): \(error)")
+      return .transientFailure
+    }
+    return .processed
+  }
+
   /// Ack for a command whose effect already claimed the update; the send is best-effort — a lost
   /// ack must not re-run the effect.
   func sendCommandAck(

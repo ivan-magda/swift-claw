@@ -16,6 +16,8 @@ struct ChatGPTResponsesAccumulator: Sendable {
   private let identity: ChatGPTReplayIdentity
   private let redactionValues: [String]
   private let bounds: ChatGPTResponsesBounds
+  private let outputScope: AttemptOutputScope?
+  private let terminalValidationPolicy: StreamingTerminalValidationPolicy
 
   private var items: [Int: OutputItem] = [:]
   private var order: [Int] = []
@@ -24,6 +26,7 @@ struct ChatGPTResponsesAccumulator: Sendable {
   private var replayBytes = 0
   private var replayOverflowed = false
   private var isDecided = false
+  private var pendingTerminal: ChatGPTResponsesTerminal?
 
   /// The redaction set is injected because this type has no credential to derive one from: the
   /// values travel with the authorization the provider used, and only the provider knows them.
@@ -31,12 +34,16 @@ struct ChatGPTResponsesAccumulator: Sendable {
     codec: ChatGPTProviderStateCodec = ChatGPTProviderStateCodec(),
     identity: ChatGPTReplayIdentity,
     redactionValues: [String] = [],
-    bounds: ChatGPTResponsesBounds = .standard
+    bounds: ChatGPTResponsesBounds = .standard,
+    outputScope: AttemptOutputScope? = nil,
+    terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal
   ) {
     self.codec = codec
     self.identity = identity
     self.redactionValues = redactionValues
     self.bounds = bounds
+    self.outputScope = outputScope
+    self.terminalValidationPolicy = terminalValidationPolicy
   }
 
   /// A lower bound on the completion tokens this attempt may already be billed for, derived only
@@ -79,11 +86,20 @@ struct ChatGPTResponsesAccumulator: Sendable {
       return []
     }
 
+    if let pendingTerminal {
+      self.pendingTerminal = try reconciledTerminal(with: pendingTerminal, in: events[...])
+      return []
+    }
+
     var emitted: [StreamEvent] = []
     for (offset, event) in events.enumerated() {
       switch event {
       case .terminal(let terminal):
-        try validateNoConflict(with: terminal, after: offset, in: events)
+        let terminal = try reconciledTerminal(with: terminal, after: offset, in: events)
+        guard terminalValidationPolicy == .firstTerminal else {
+          pendingTerminal = terminal
+          return emitted
+        }
         isDecided = true
         emitted.append(.finished(try response(for: terminal)))
         return emitted
@@ -107,6 +123,9 @@ struct ChatGPTResponsesAccumulator: Sendable {
       return nil
     }
     isDecided = true
+    if let pendingTerminal {
+      return .finished(try response(for: pendingTerminal))
+    }
     throw Self.ambiguousEnd
   }
 }
@@ -334,6 +353,31 @@ private extension ChatGPTResponsesAccumulator {
     accumulatedOutputBytes = total
     observedTokens = SaturatingArithmetic.sum(releasedTokens, item.tokenEstimate)
     items[index] = item
+    try outputScope?.observe(fields: currentOutputFields)
+  }
+
+  var currentOutputFields: [AttemptOutputField] {
+    order.sorted().flatMap { index -> [AttemptOutputField] in
+      guard let item = items[index] else {
+        return []
+      }
+      var fields: [AttemptOutputField] = []
+      let visible = item.visibleText
+      if visible.isEmpty == false {
+        fields.append(
+          AttemptOutputField(key: "responses-visible:\(index)", value: visible)
+        )
+      }
+      if item.retainsArguments {
+        fields.append(
+          AttemptOutputField(
+            key: "responses-tool-arguments:\(index)",
+            value: item.argumentText
+          )
+        )
+      }
+      return fields
+    }
   }
 }
 
@@ -415,16 +459,38 @@ private extension ChatGPTResponsesAccumulator {
   static let assistantRole = "assistant"
   static let completedStatus = "completed"
 
-  func validateNoConflict(
+  func reconciledTerminal(
     with terminal: ChatGPTResponsesTerminal,
     after offset: Int,
     in events: [ChatGPTResponsesEvent]
-  ) throws {
-    for later in events.dropFirst(offset + 1) {
+  ) throws -> ChatGPTResponsesTerminal {
+    try reconciledTerminal(with: terminal, in: events.dropFirst(offset + 1))
+  }
+
+  func reconciledTerminal(
+    with terminal: ChatGPTResponsesTerminal,
+    in events: ArraySlice<ChatGPTResponsesEvent>
+  ) throws -> ChatGPTResponsesTerminal {
+    var reconciled = terminal
+    for later in events {
       switch later {
       case .terminal(let other):
-        guard other.restates(terminal) else {
+        let modelsConflict: Bool
+        if let expected = reconciled.reportedModel, let observed = other.reportedModel {
+          modelsConflict = expected != observed
+        } else {
+          modelsConflict = false
+        }
+        if terminalValidationPolicy == .throughStreamEnd && modelsConflict {
+          throw ProviderError.modelIdentityMismatch
+        }
+        guard other.restates(reconciled) else {
           throw Self.conflictingTerminals
+        }
+        if terminalValidationPolicy == .throughStreamEnd {
+          reconciled = reconciled.withReportedModel(
+            reconciled.reportedModel ?? other.reportedModel
+          )
         }
       case .streamError:
         throw Self.conflictingTerminals
@@ -432,6 +498,7 @@ private extension ChatGPTResponsesAccumulator {
         continue
       }
     }
+    return reconciled
   }
 
   /// The whole reply, or the failure the terminal states.
@@ -463,7 +530,8 @@ private extension ChatGPTResponsesAccumulator {
       // A dollar cost the route reports would be about an API plan this one is not billed under.
       costFromProvider: nil,
       toolCalls: calls,
-      providerState: try codec.encodeResponseState(items: replayItems, identity: identity)
+      providerState: try codec.encodeResponseState(items: replayItems, identity: identity),
+      reportedModel: terminal.reportedModel
     )
   }
 
@@ -530,12 +598,13 @@ private extension ChatGPTResponsesAccumulator {
     ProviderError.terminal(status: nil, message: message)
   }
 
-  static let ambiguousEnd = terminal(
-    "the ChatGPT reply ended without stating an outcome, so it may have been generated and billed"
-  )
+  /// EOF without an in-band terminal is the protocol's one specifically named partial-stream
+  /// carrier failure. It remains conservative and is never retried by this provider; the opt-in
+  /// evaluation harness may use the payload-free cause to replace the whole attempt once.
+  static let ambiguousEnd = ProviderError.partialStreamWithoutCompletedTerminal
 
   static let conflictingTerminals = terminal(
-    "the ChatGPT reply stated two different outcomes in one delivery"
+    "the ChatGPT reply stated conflicting outcomes"
   )
 
   static let conflictingCallID = terminal(

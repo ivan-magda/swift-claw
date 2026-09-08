@@ -59,7 +59,8 @@ import Testing
         db,
         runId: runId,
         event: .suspendForApproval,
-        now: Date()
+        now: Date(),
+        terminal: nil
       )
       return placeholderId
     }

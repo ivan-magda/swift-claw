@@ -241,14 +241,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   /// {"unparseable": true} — honored before the typed decode; anything else that fails the decode
   /// is `.unparseable`, never a guess.
   static func decode(_ content: String) -> ScheduleDraftParseResult {
-    var text = content.trimmingCharacters(in: .whitespacesAndNewlines)
-    if text.hasPrefix("```") {
-      text =
-        text
-        .replacingOccurrences(of: "```json", with: "")
-        .replacingOccurrences(of: "```", with: "")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    let text = FencedJSONReply.unfenced(content)
 
     guard text.hasPrefix("{"), text.hasSuffix("}") else {
       return .unparseable
@@ -426,8 +419,10 @@ private extension ScheduleDraftParser {
       return .accessDenied
     case .quotaLimited(let retryAfterSeconds):
       return .quotaLimited(retryAfterSeconds: retryAfterSeconds)
-    case .terminal, .cleanRejection, .retryable, .connectFailed, .rejected, .invalidProviderState,
-      .visionUnsupported, .none:
+    case .terminal, .cleanRejection, .transportFailure, .retryable, .connectFailed, .rejected,
+      .credentialRefreshCompleted, .credentialRefreshExhausted, .credentialStateUnavailable,
+      .invalidProviderState, .visionUnsupported,
+      .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch, .none:
       // A draft parse sends no images, so a vision refusal here could only be a mislabelled
       // rejection; it stays generic rather than telling the owner to change models over a schedule.
       return .providerUnavailable

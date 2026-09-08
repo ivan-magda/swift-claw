@@ -36,6 +36,7 @@ struct SC3Harness {
   let coordinator: ApprovalCoordinator
   let registry: PendingConfirmationRegistry
   let transport: RecordingTransport
+  let outboxSignal: OutboxSignal
 
   let stores: ClawStores
 
@@ -355,6 +356,7 @@ func makeSC3Harness(
   let logger = TestLog.silent
   let deferredParker = DeferredApprovalParker()
   let imageCache = ImageCache()
+  let outboxSignal = OutboxSignal()
   let runner = TurnRunner(
     sessionMessages: stores.sessionMessages,
     runs: stores.runs,
@@ -364,7 +366,10 @@ func makeSC3Harness(
     budget: .default,
     contextBuilder: contextBuilder,
     imageCache: imageCache,
-    notifyOutbox: notifyOutbox,
+    notifyOutbox: {
+      outboxSignal.poke()
+      notifyOutbox()
+    },
     parker: deferredParker,
     approvalExpirySeconds: testApprovalExpirySeconds,
     logger: logger
@@ -443,6 +448,7 @@ func makeSC3Harness(
     coordinator: coordinator,
     registry: registry,
     transport: transport,
+    outboxSignal: outboxSignal,
     stores: stores,
     http: http,
     provider: provider,

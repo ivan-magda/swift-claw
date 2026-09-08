@@ -121,6 +121,44 @@ import Testing
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
 
+  /// The runner deletes whatever keys its command names, so the ambient sanitization is only ever
+  /// as good as the list this backend attaches: an agent-forwarding socket or a `container` debug
+  /// flag inherited into `container run` would reach the guest launch.
+  @Test func everyContainerCommandDeletesTheAmbientSensitiveEnvironment() async throws {
+    // given
+    let fixture = try BackendFixture()
+    defer { fixture.remove() }
+    let runner = ScriptedCommandRunner { command, _ in
+      switch command.arguments.first {
+      case "run":
+        writeCidfile(from: command.arguments)
+        return commandResult(.exited(0))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
+      }
+    }
+    let backend = fixture.backend(commands: runner)
+    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
+
+    // when
+    _ = await backend.run(executionRequest())
+
+    // then
+    let removals = await runner.recorded().map { command in
+      Set(command.environmentKeysToRemove)
+    }
+    #expect(removals.isEmpty == false)
+    #expect(
+      removals.allSatisfy { keys in
+        keys.isSuperset(of: ["SSH_AUTH_SOCK", "CONTAINER_DEBUG", "CONTAINER_DEFAULT_PLATFORM"])
+      }
+    )
+  }
+
   @Test func nonzeroExitWithoutCidfileIsStartFailureAndHidesGuestStreams() async throws {
     // given
     let fixture = try BackendFixture()
@@ -223,6 +261,11 @@ import Testing
     #expect(commands[0].timeout == .seconds(3))
     #expect(
       commands.dropFirst().allSatisfy { $0.timeout <= ContainerBackend.lifecycleCommandTimeout }
+    )
+    #expect(
+      commands.allSatisfy {
+        $0.environmentKeysToRemove == ContainerBackend.environmentKeysToRemove
+      }
     )
     let name = try #require(value(after: "--name", in: commands[0].arguments))
     #expect(commands.map(\.arguments).contains(ContainerInvocation.stop(name)))

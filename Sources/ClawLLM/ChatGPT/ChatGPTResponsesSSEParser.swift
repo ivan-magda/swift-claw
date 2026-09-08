@@ -278,7 +278,8 @@ private extension ChatGPTResponsesSSEParser {
       status: response.status.flatMap(ChatGPTResponsesTerminal.Status.init(rawValue:)),
       incompleteReason: response.incompleteDetails?.reason,
       usage: try response.usage?.toChatUsage(),
-      failure: response.error.map(ChatGPTRemoteFailure.init)
+      failure: response.error.map(ChatGPTRemoteFailure.init),
+      reportedModel: response.model
     )
   }
 }
@@ -366,6 +367,7 @@ struct ChatGPTResponsesTerminal: Sendable, Equatable {
   let incompleteReason: String?
   let usage: ChatUsage?
   let failure: ChatGPTRemoteFailure?
+  let reportedModel: String?
 
   /// What the response ended as. The nested status is the meaning; the event name is the fallback
   /// for a backend that omits it or names a state this build has never heard of.
@@ -389,6 +391,18 @@ struct ChatGPTResponsesTerminal: Sendable, Equatable {
     responseID == other.responseID
       && effectiveStatus == other.effectiveStatus
       && incompleteReason == other.incompleteReason
+  }
+
+  func withReportedModel(_ model: String?) -> Self {
+    Self(
+      name: name,
+      responseID: responseID,
+      status: status,
+      incompleteReason: incompleteReason,
+      usage: usage,
+      failure: failure,
+      reportedModel: model
+    )
   }
 }
 
@@ -518,6 +532,7 @@ private struct ChatGPTWireResponse: Decodable {
   let incompleteDetails: ChatGPTWireIncompleteDetails?
   let usage: ChatGPTWireResponsesUsage?
   let error: ChatGPTWireError?
+  let model: String?
 
   private enum CodingKeys: String, CodingKey {
     case id
@@ -525,6 +540,7 @@ private struct ChatGPTWireResponse: Decodable {
     case incompleteDetails = "incomplete_details"
     case usage
     case error
+    case model
   }
 }
 

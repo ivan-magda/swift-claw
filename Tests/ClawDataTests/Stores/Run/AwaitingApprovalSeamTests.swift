@@ -35,7 +35,13 @@ import Testing
     let runs = RunStoreGRDB(writer: queue)
     _ = try #require(try runs.pickUp(runId: runId, now: Date()))
     try queue.write { db in
-      _ = try RunStoreGRDB.transitionRun(db, runId: runId, event: .suspendForApproval, now: Date())
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .suspendForApproval,
+        now: Date(),
+        terminal: nil
+      )
     }
     return Fixture(
       queue: queue,
@@ -139,7 +145,8 @@ import Testing
       sessionId: env.sessionId,
       chatId: 7,
       usage: nil,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h")
+      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
+      cause: .providerFailure
     )
 
     // when

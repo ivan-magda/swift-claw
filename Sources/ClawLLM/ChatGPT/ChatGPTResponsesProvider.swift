@@ -150,7 +150,9 @@ private extension ChatGPTResponsesProvider {
   /// per-attempt encoder — everything an attempt needs except the credential, which the engine
   /// resolves per wire attempt. A refusal here is a `Result` rather than a throw so both entry points
   /// can report it their own way without duplicating the assembly.
-  func makePlan(for request: ChatRequest) -> Result<ChatGPTResponsesAttemptPlan, ProviderError> {
+  func makePlan(  // swiftlint:disable:this function_body_length
+    for request: ChatRequest
+  ) -> Result<ChatGPTResponsesAttemptPlan, ProviderError> {
     // A stop string this route cannot honor, or a structured-output shape it does not accept, fails
     // before any network I/O rather than changing what the model was asked for.
     guard request.stop == nil else {
@@ -190,6 +192,8 @@ private extension ChatGPTResponsesProvider {
       identity: selection.identity,
       profileID: profileID,
       wireModel: wireModel,
+      outputScope: request.outputScope,
+      terminalValidationPolicy: request.terminalValidationPolicy,
       encodeRequest: { authorization, includePriorState, beginHandoff in
         let headers = try Self.headers(
           for: authorization,

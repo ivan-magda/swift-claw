@@ -22,7 +22,7 @@ enum StartReadiness {
 /// The line a healthy `clawd doctor` ends with: the exact command that keeps the daemon
 /// running, so a passing check never dead-ends. Silent while unhealthy or already running.
 enum ServiceStartHint {
-  static func text(
+  static func text(  // swiftlint:disable:this function_parameter_count
     readiness: StartReadiness,
     daemonRunning: Bool,
     unitInstalled: Bool,

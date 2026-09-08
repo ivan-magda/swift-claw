@@ -83,9 +83,12 @@ struct GroupApprovalFixture {
       ),
       now: Self.now
     )
-    try OutboxStoreGRDB(writer: queue).markSent(
-      runId: runId,
-      stepIndex: 0,
+    let outbox = OutboxStoreGRDB(writer: queue)
+    let promptRow = try #require(
+      try outbox.pendingOutbound().first { $0.runId == runId && $0.stepIndex == 0 }
+    )
+    try outbox.markSent(
+      deliveryKey: promptRow.deliveryKey,
       telegramMessageId: Self.promptMessageId,
       now: Self.now
     )

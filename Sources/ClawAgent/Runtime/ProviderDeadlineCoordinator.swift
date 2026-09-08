@@ -26,19 +26,6 @@ public enum ProviderDeadlineOutcome: @unchecked Sendable {
   case timedOut(ProviderDeadlineAccounting)
 }
 
-/// Thrown by a turn runtime when a real response landed alongside a won deadline. The owner still
-/// sees a timeout, but the response rides the throw so the runtime books its usage through the
-/// authoritative completed-call route — real counts, provider cost — rather than the estimate a bare
-/// timeout would force. It is the error form of `.timedOut(.completed)`, kept distinct from
-/// `ProviderInferenceCancellation` precisely because it carries the response, not just a token bound.
-public struct RacedDeadlineSuccess: Error, Sendable {
-  public let response: ChatResponse
-
-  public init(response: ChatResponse) {
-    self.response = response
-  }
-}
-
 // MARK: - Lock-backed winner
 
 /// The one participant a race settles on first.
@@ -71,12 +58,6 @@ final class ProviderRaceBox: Sendable {
     }
   }
 }
-
-// MARK: - Shared errors
-
-/// Raised when a streamed reply's accumulated content overruns the local byte cap. Owned here so the
-/// coordinator's drain and the streaming runtime read one type rather than two copies.
-struct AccumulatedStreamContentTooLarge: Error {}
 
 // MARK: - Child results
 

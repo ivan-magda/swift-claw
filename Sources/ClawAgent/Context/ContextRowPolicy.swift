@@ -3,10 +3,12 @@ import Foundation
 
 extension ContextRowID {
   /// The grapheme cap this row is assembled under, or nil when it is uncapped. The four system rows
-  /// carry no cap; the four truncatable rows are scaled against whatever the fixed sections left.
+  /// carry no cap, and neither does the lessons row — its content is already capped at three
+  /// lessons and 1536 bytes when the set is built. The four truncatable rows are scaled against
+  /// whatever the fixed sections left.
   public func resolve(in budget: ContextBudget, residualGraphemes: Int?) -> Int? {
     switch self {
-    case .policy, .systemWorkspace, .tools, .metadata:
+    case .policy, .systemWorkspace, .tools, .metadata, .lessons:
       nil
     case .userFile:
       budget.userFileCap
@@ -101,6 +103,12 @@ public enum ContextRowPolicy {
       id: .metadata,
       tier: .system,
       priority: ContextPriority(30),
+      truncatable: false
+    ),
+    RowSpec(
+      id: .lessons,
+      tier: .untrustedLabeled,
+      priority: ContextPriority(35),
       truncatable: false
     ),
     RowSpec(
