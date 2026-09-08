@@ -89,6 +89,8 @@ public struct RawMessage: Sendable, Equatable {
   /// The message was sent on behalf of a chat (anonymous admin, channel post): the sender id
   /// identifies no human.
   public let hasSenderChat: Bool
+  /// Telegram marked this message as forwarded; its sender did not author the content here.
+  public let isForwarded: Bool
   public let migratedToChatId: Int64?
 
   public init(
@@ -107,6 +109,7 @@ public struct RawMessage: Sendable, Equatable {
     replyToUserId: Int64? = nil,
     senderDisplayName: String? = nil,
     hasSenderChat: Bool = false,
+    isForwarded: Bool = false,
     migratedToChatId: Int64? = nil
   ) {
     self.messageId = messageId
@@ -124,6 +127,7 @@ public struct RawMessage: Sendable, Equatable {
     self.replyToUserId = replyToUserId
     self.senderDisplayName = senderDisplayName
     self.hasSenderChat = hasSenderChat
+    self.isForwarded = isForwarded
     self.migratedToChatId = migratedToChatId
   }
 }

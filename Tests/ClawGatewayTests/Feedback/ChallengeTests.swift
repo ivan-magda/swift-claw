@@ -7,6 +7,7 @@ import GRDB
 import Testing
 
 @testable import ClawGateway
+@testable import ClawTelegram
 
 @Suite struct ChallengeTests {
   @Test func tappingCorrectionDefersTheEventAndConsumesTheNextOwnerMessageExactlyOnce() async throws
@@ -83,6 +84,63 @@ import Testing
     #expect(outcome == .processed)
     #expect(try env.eventPayloads() == ["/new"])
     #expect(await env.turns.calls.isEmpty)
+  }
+
+  @Test(arguments: [
+    """
+    "forward_origin": {
+      "type": "hidden_user", "date": 1900000000, "sender_user_name": "Original sender"
+    },
+    "text": "Third-party content"
+    """,
+    """
+    "document": {"file_id": "document-id"},
+    "caption": "Media caption"
+    """,
+  ])
+  func forwardedTextAndCaptionsLeaveTheChallengeForOriginalOwnerText(messageFields: String)
+    async throws
+  {
+    // given
+    let env = try ChallengeEnvironment.make()
+    try await env.openChallenge(nonce: "original-text-only")
+    let challenge = try #require(
+      try env.learning.liveChallenge(ownerUserId: env.ownerId, chatId: env.chatId)
+    )
+    let json = """
+      {
+        "update_id": 2,
+        "message": {
+          "message_id": 200,
+          "from": {"id": \(env.ownerId)},
+          "chat": {"id": \(env.chatId), "type": "private"},
+          \(messageFields)
+        }
+      }
+      """
+    let update = try JSONDecoder().decode(TUpdate.self, from: Data(json.utf8)).toRawUpdate()
+
+    // when
+    let outcome = await env.router.handle(rawUpdate: update)
+
+    // then
+    #expect(outcome == .processed)
+    #expect(try env.eventCount() == 0)
+    #expect(try env.feedbackRevision() == 0)
+    let remaining = try env.learning.liveChallenge(ownerUserId: env.ownerId, chatId: env.chatId)
+    #expect(remaining?.id == challenge.id)
+
+    // when
+    let correction = "Report the price change."
+    let original = await env.router.handle(
+      rawUpdate: textUpdate(id: 3, from: env.ownerId, text: correction)
+    )
+
+    // then
+    #expect(original == .processed)
+    #expect(try env.eventPayloads() == [correction])
+    #expect(try env.feedbackRevision() == 1)
+    #expect(try env.learning.liveChallenge(ownerUserId: env.ownerId, chatId: env.chatId) == nil)
   }
 
   @Test func challengeOpenedBeforeEpochAdvanceCannotAppendFeedback() async throws {

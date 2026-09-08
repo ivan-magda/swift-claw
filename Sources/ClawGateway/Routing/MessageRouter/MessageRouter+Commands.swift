@@ -11,7 +11,6 @@ extension MessageRouter {
   ) async throws(RoutingHalt) -> HandleOutcome {
     if mode == .direct, let feedbackChallenges {
       let consumed = try await feedbackChallenges.consumeIfOpen(
-        text: text,
         rawUpdate: rawUpdate,
         message: message
       )

@@ -2,7 +2,7 @@ import ClawCore
 import Foundation
 import Logging
 
-/// Opens a durable payload challenge and intercepts exactly the next owner DM while it is live.
+/// Opens a durable payload challenge and intercepts the next original plain-text owner DM.
 public struct FeedbackChallengeHandler: Sendable {
   private let replies: ReplySender
   private let learning: any ScheduledLearningStore
@@ -55,10 +55,15 @@ public struct FeedbackChallengeHandler: Sendable {
   }
 
   func consumeIfOpen(
-    text: String,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome? {
+    guard
+      let rawMessage = rawUpdate.message ?? rawUpdate.editedMessage,
+      !rawMessage.isForwarded, let text = rawMessage.text
+    else {
+      return nil
+    }
     let capturedNow = now()
     let target = DeliveryTarget.chat(message.chatId)
     let challenge = try await replies.perform(

@@ -39,9 +39,8 @@ extension MessageRouter {
 
   /// Mirrors `routeVoice`: access first, then availability, then the download — all before any
   /// update claim, so a cancellation mid-download leaves the update redeliverable. The caption
-  /// dispatches directly and is never command-parsed nor offered to a parked confirmation: a photo
-  /// carries no forward metadata, so an owner's own image and a forwarded one are indistinguishable
-  /// and neither may steer a control path.
+  /// dispatches directly and is never command-parsed nor offered to a parked confirmation: image
+  /// content remains untrusted regardless of the forward marker and cannot steer a control path.
   ///
   /// A caption survives every arm that reaches a turn, including the opted-out one — see
   /// `routeImageWithoutService`. Only a failed download discards it, because there the reply names a
