@@ -74,7 +74,10 @@ public struct OpenAICompatibleProvider: LLMProvider {
     let headers = try headers(for: authorization)
 
     logger.debug(
-      "chat request model=\(request.model) messages=\(request.messages.count) tools=\(request.tools.count)"
+      """
+      chat request model=\(request.model) \
+      messages=\(request.messages.count) tools=\(request.tools.count)
+      """
     )
 
     var attempt = 0
@@ -104,7 +107,10 @@ public struct OpenAICompatibleProvider: LLMProvider {
           throw exposure.failure(.retryable(status: nil, message: message))
         }
         logger.notice(
-          "chat transport error (attempt \(attempt)/\(config.retryBudget)); retrying: \(message)"
+          """
+          chat transport error (attempt \(attempt)/\(config.retryBudget)); \
+          retrying: \(message)
+          """
         )
         try await backoff.wait(retryAfter: nil, attempt: attempt)
         continue
@@ -134,7 +140,10 @@ public struct OpenAICompatibleProvider: LLMProvider {
       }
 
       logger.notice(
-        "chat retryable status \(result.statusCode) (attempt \(attempt)/\(config.retryBudget)); retrying"
+        """
+        chat retryable status \(result.statusCode) \
+        (attempt \(attempt)/\(config.retryBudget)); retrying
+        """
       )
       try await backoff.wait(retryAfter: retryAfterDelay(from: result), attempt: attempt)
     }
@@ -276,7 +285,10 @@ private extension OpenAICompatibleProvider {
       let body = try encode(request: request, streaming: true)
       let headers = try headers(for: authorization)
       logger.debug(
-        "chat stream request model=\(request.model) messages=\(request.messages.count) tools=\(request.tools.count)"
+        """
+        chat stream request model=\(request.model) \
+        messages=\(request.messages.count) tools=\(request.tools.count)
+        """
       )
       let exchange = try await http.openStream(
         streamRequest(headers: headers, body: body, exposure: exposure)

@@ -190,15 +190,19 @@ extension RunStoreGRDB {
       let rounds =
         try Int.fetchOne(
           db,
-          sql:
-            "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = '\(MessageRole.assistant.rawValue)'",
+          sql: """
+            SELECT COUNT(*) FROM messages \
+            WHERE run_id = ? AND role = '\(MessageRole.assistant.rawValue)'
+            """,
           arguments: [runId]
         ) ?? 0
       let toolCalls =
         try Int.fetchOne(
           db,
-          sql:
-            "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = '\(MessageRole.tool.rawValue)'",
+          sql: """
+            SELECT COUNT(*) FROM messages \
+            WHERE run_id = ? AND role = '\(MessageRole.tool.rawValue)'
+            """,
           arguments: [runId]
         ) ?? 0
       let tokens =
@@ -316,8 +320,10 @@ extension RunStoreGRDB {
     content: String
   ) throws {
     try db.execute(
-      sql:
-        "UPDATE messages SET content = ? WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'",
+      sql: """
+        UPDATE messages SET content = ? \
+        WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'
+        """,
       arguments: [content, messageId, runId]
     )
   }

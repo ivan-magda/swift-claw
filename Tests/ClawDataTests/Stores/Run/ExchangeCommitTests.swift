@@ -91,8 +91,10 @@ import Testing
     let rows = try fixture.queue.read { db in
       try Row.fetchAll(
         db,
-        sql:
-          "SELECT id, role, content, provenance, tool_calls, tool_call_id, run_id FROM messages ORDER BY id ASC"
+        sql: """
+          SELECT id, role, content, provenance, tool_calls, tool_call_id, run_id \
+          FROM messages ORDER BY id ASC
+          """
       )
     }
     // user inbound, exchange anchor, tool observation, final reply — count guards spurious rows

@@ -24,7 +24,10 @@ struct InertApprovalParker: ApprovalParking {
   ) async {
     let signal = await coordinator.awaitResolution(approvalId: approvalId)
     logger.debug(
-      "approval \(approvalId) resolved as \(String(describing: signal)); the waiter completes the run"
+      """
+      approval \(approvalId) resolved as \(String(describing: signal)); \
+      the waiter completes the run
+      """
     )
   }
 }

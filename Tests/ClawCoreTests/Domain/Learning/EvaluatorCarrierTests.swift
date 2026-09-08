@@ -26,8 +26,10 @@ private func reply(issueCodes: [String]) -> String {
   let codes = issueCodes.map { code in
     "\"\(code)\""
   }
-  return
-    "{\"schema_version\":1,\"outcome\":\"reusable_issue\",\"issue_codes\":[\(codes.joined(separator: ","))]}"
+  return """
+    {"schema_version":1,"outcome":"reusable_issue",\
+    "issue_codes":[\(codes.joined(separator: ","))]}
+    """
 }
 
 /// The evaluator is blind by construction, not by convention: `EvaluatorCarrier` is the whole

@@ -48,7 +48,8 @@ import Testing
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-          VALUES (?, ?, 'assistant', '', 'trusted', ?, '[{"id":"c1","name":"file_write","arguments":"{}"}]')
+          VALUES (?, ?, 'assistant', '', 'trusted', ?, \
+          '[{"id":"c1","name":"file_write","arguments":"{}"}]')
           """,
         arguments: [sessionId, runId, Date()]
       )

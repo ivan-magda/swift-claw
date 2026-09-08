@@ -145,7 +145,10 @@ private extension ApprovalWaiter {
       // AWAITING_APPROVAL so the boot crash-window path (APPROVED row + AWAITING run)
       // recovers it, and tell the owner instead of going silent. Never args/content in this log.
       logger.error(
-        "approved claim store-failed (tool \(approval.tool), approval \(approval.id)); run left AWAITING_APPROVAL for boot recovery"
+        """
+        approved claim store-failed (tool \(approval.tool), approval \(approval.id)); \
+        run left AWAITING_APPROVAL for boot recovery
+        """
       )
       await notifyParticipant(target: target, text: Self.storeFailureNotice)
       return
@@ -153,7 +156,10 @@ private extension ApprovalWaiter {
       // The action EXECUTED but its result could not be recorded. Never promise a retry — the
       // side effect already happened; the claimed RUNNING run settles via the boot orphan sweep.
       logger.error(
-        "approved result record-failed (tool \(approval.tool), approval \(approval.id)); run left RUNNING for the boot orphan sweep"
+        """
+        approved result record-failed (tool \(approval.tool), approval \(approval.id)); \
+        run left RUNNING for the boot orphan sweep
+        """
       )
       await notifyParticipant(target: target, text: Self.recordFailureNotice)
       return

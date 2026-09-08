@@ -37,13 +37,17 @@ enum ServiceStartHint {
 
     let opener =
       readiness == .readyAwaitingOwner
-      ? "Checks passed (no owner allowlisted yet — start the daemon, then send /start to your bot to get your ID)."
+      ? """
+      Checks passed (no owner allowlisted yet — start the daemon, \
+      then send /start to your bot to get your ID).
+      """
       : "All checks passed."
 
     guard unitInstalled else {
       return """
         \(opener)
-        To keep clawd running as a service, see https://github.com/ivan-magda/swift-claw/blob/main/docs/INSTALL.md
+        To keep clawd running as a service, see \
+        https://github.com/ivan-magda/swift-claw/blob/main/docs/INSTALL.md
         """
     }
 

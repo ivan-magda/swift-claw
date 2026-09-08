@@ -17,8 +17,10 @@ import Testing
       Set(
         try String.fetchAll(
           db,
-          sql:
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'"
+          sql: """
+            SELECT name FROM sqlite_master WHERE type='table' \
+            AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
+            """
         )
       )
     }
@@ -38,8 +40,10 @@ import Testing
     #expect {
       try queue.write { db in
         try db.execute(
-          sql:
-            "INSERT INTO messages(session_id, role, content, provenance, ts) VALUES (9999,'user','x','trusted',?)",
+          sql: """
+            INSERT INTO messages(session_id, role, content, provenance, ts) \
+            VALUES (9999,'user','x','trusted',?)
+            """,
           arguments: [Date()]
         )
       }

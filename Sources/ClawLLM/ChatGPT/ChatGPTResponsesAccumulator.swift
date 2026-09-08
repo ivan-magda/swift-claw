@@ -629,7 +629,10 @@ private extension ChatGPTResponsesAccumulator {
 
   var accumulatedOutputTooLarge: ProviderError {
     Self.terminal(
-      "the ChatGPT reply exceeded \(bounds.maximumAccumulatedOutputBytes) bytes of text and tool arguments"
+      """
+      the ChatGPT reply exceeded \(bounds.maximumAccumulatedOutputBytes) bytes \
+      of text and tool arguments
+      """
     )
   }
 

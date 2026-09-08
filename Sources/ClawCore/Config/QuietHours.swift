@@ -62,7 +62,11 @@ public struct QuietHours: Sendable, Equatable {
       pieces.count == 2,
       pieces[0].count == 2,
       pieces[1].count == 2,
-      pieces.allSatisfy({ piece in piece.allSatisfy { char in char.isASCII && char.isNumber } }),
+      pieces.allSatisfy({ piece in
+        piece.allSatisfy { char in
+          char.isASCII && char.isNumber
+        }
+      }),
       let hour = Int(pieces[0]),
       let minute = Int(pieces[1]),
       (0...23).contains(hour),

@@ -20,11 +20,12 @@ public enum ApprovalKeyboard {
   public static func markup(nonce: String) -> String {
     let approve = callbackData(nonce: nonce, verdict: approveVerdict)
     let deny = callbackData(nonce: nonce, verdict: denyVerdict)
-    return
-      #"{"inline_keyboard":[["#
-      + #"{"callback_data":"\#(approve)","text":"Approve"},"#
-      + #"{"callback_data":"\#(deny)","text":"Deny"}"#
-      + "]]}"
+    return #"""
+      {"inline_keyboard":[[\#
+      {"callback_data":"\#(approve)","text":"Approve"},\#
+      {"callback_data":"\#(deny)","text":"Deny"}\#
+      ]]}
+      """#
   }
 
   public static func parse(_ callbackData: String) -> (nonce: String, approve: Bool)? {

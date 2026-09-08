@@ -132,9 +132,15 @@ private extension ToolApprovalPrompt {
     case .exfilTrifecta:
       "⚠ I want to run \(tool) while this session holds private data after reading external content."
     case .coderSubmit:
-      "⚠ I want to delegate \(tool) to your native Codex installation and its configured integrations. Review the workspace and publication scope before approving."
+      """
+      ⚠ I want to delegate \(tool) to your native Codex installation and its configured integrations. \
+      Review the workspace and publication scope before approving.
+      """
     case .codeExec:
-      "⚠ I want to run \(tool) in a disposable sandbox. Review the complete script and staged inputs before approving."
+      """
+      ⚠ I want to run \(tool) in a disposable sandbox. \
+      Review the complete script and staged inputs before approving.
+      """
     }
   }
 }

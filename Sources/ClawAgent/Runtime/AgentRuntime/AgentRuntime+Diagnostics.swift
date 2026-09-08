@@ -32,10 +32,17 @@ extension AgentRuntime {
     switch result {
     case .completed(let content, let usage, _):
       log.info(
-        "turn finished completed chars=\(content.count) tokens=\(usage.promptTokens + usage.completionTokens) usd=\(USD.precise(usage.costUSD)) ms=\(elapsedMillis)"
+        """
+        turn finished completed chars=\(content.count) \
+        tokens=\(usage.promptTokens + usage.completionTokens) \
+        usd=\(USD.precise(usage.costUSD)) ms=\(elapsedMillis)
+        """
       )
     case .degraded(let kind, let usage):
-      let tokens = usage.map { "\($0.promptTokens + $0.completionTokens)" } ?? "n/a"
+      let tokens =
+        usage.map {
+          "\($0.promptTokens + $0.completionTokens)"
+        } ?? "n/a"
       log.warning(
         "turn finished degraded kind=\(kind.auditDecision) tokens=\(tokens) ms=\(elapsedMillis)"
       )
@@ -43,7 +50,10 @@ extension AgentRuntime {
       log.notice("turn finished budget-stopped cap=\(cap) ms=\(elapsedMillis)")
     case .suspended(let pending, let usage):
       log.info(
-        "turn finished suspended tool=\(pending.recorded.tool) tokens=\(usage.promptTokens + usage.completionTokens) ms=\(elapsedMillis)"
+        """
+        turn finished suspended tool=\(pending.recorded.tool) \
+        tokens=\(usage.promptTokens + usage.completionTokens) ms=\(elapsedMillis)
+        """
       )
     }
   }

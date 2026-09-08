@@ -278,7 +278,9 @@ private struct GuestProbeFixture: Sendable {
 
   var json: String {
     """
-    {"capsEmpty":\(capsEmpty),"netIsolated":\(netIsolated),"reaperOK":\(reaperOK),"rootfsRO":\(rootfsRO),"stagingRO":\(stagingRO),"interpretersOK":\(interpretersOK)}
+    {"capsEmpty":\(capsEmpty),"netIsolated":\(netIsolated),\
+    "reaperOK":\(reaperOK),"rootfsRO":\(rootfsRO),\
+    "stagingRO":\(stagingRO),"interpretersOK":\(interpretersOK)}
     """
   }
 }
@@ -349,7 +351,8 @@ private final class MaintenanceFixture: @unchecked Sendable {
     if arguments == ContainerInvocation.inspectImage(settings.workloadImage.description) {
       return jsonCommandResult(
         """
-        [{"configuration":{"name":"\(settings.workloadImage.description)","descriptor":{"digest":"\(inspectedDigest)"}}}]
+        [{"configuration":{"name":"\(settings.workloadImage.description)",\
+        "descriptor":{"digest":"\(inspectedDigest)"}}}]
         """
       )
     }
@@ -360,7 +363,12 @@ private final class MaintenanceFixture: @unchecked Sendable {
       let name = arguments[1]
       return jsonCommandResult(
         """
-        [{"configuration":{"id":"\(name)","image":{"reference":"\(settings.workloadImage.description)","descriptor":{"digest":"\(inspectedDigest)"}},"labels":{"clawd.exec":"1"},"resources":{"cpus":4,"memoryInBytes":1073741824},"readOnly":true,"useInit":true,"capAdd":[],"capDrop":["ALL"]},"status":{"state":"running"}}]
+        [{"configuration":{"id":"\(name)",\
+        "image":{"reference":"\(settings.workloadImage.description)",\
+        "descriptor":{"digest":"\(inspectedDigest)"}},\
+        "labels":{"clawd.exec":"1"},"resources":{"cpus":4,"memoryInBytes":1073741824},\
+        "readOnly":true,"useInit":true,"capAdd":[],"capDrop":["ALL"]},\
+        "status":{"state":"running"}}]
         """
       )
     }

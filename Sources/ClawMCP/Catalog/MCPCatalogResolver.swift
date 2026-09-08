@@ -120,7 +120,10 @@ public enum MCPCatalogResolver {
 
 private extension MCPCatalogResolver {
   static var providerDefinitionBudgetReason: String {
-    "MCP tool definitions exceed the \(MCPDiscoveryLimits.maxProviderDefinitionTokens)-token provider-input limit"
+    """
+    MCP tool definitions exceed the \
+    \(MCPDiscoveryLimits.maxProviderDefinitionTokens)-token provider-input limit
+    """
   }
 
   static func resolve(_ candidates: [Candidate]) -> [ResolvedMCPTool] {

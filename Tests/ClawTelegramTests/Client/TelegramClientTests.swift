@@ -131,16 +131,20 @@ private func client(status: Int, json: String) -> TelegramClient {
     arguments: [
       HTTPErrorCase(
         status: 409,
-        json:
-          #"{"ok":false,"error_code":409,"description":"Conflict: terminated by other getUpdates request"}"#,
+        json: #"""
+          {"ok":false,"error_code":409,\#
+          "description":"Conflict: terminated by other getUpdates request"}
+          """#,
         expected: TelegramError.conflict409(
           description: "Conflict: terminated by other getUpdates request"
         )
       ),
       HTTPErrorCase(
         status: 429,
-        json:
-          #"{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}"#,
+        json: #"""
+          {"ok":false,"error_code":429,"description":"Too Many Requests",\#
+          "parameters":{"retry_after":7}}
+          """#,
         expected: TelegramError.floodControl(retryAfter: 7)
       ),
       HTTPErrorCase(

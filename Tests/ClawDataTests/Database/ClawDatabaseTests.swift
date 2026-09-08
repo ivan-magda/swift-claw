@@ -16,8 +16,10 @@ import Testing
     let tables = try queue.read { db -> Set<String> in
       let names = try String.fetchAll(
         db,
-        sql:
-          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'"
+        sql: """
+          SELECT name FROM sqlite_master WHERE type='table' \
+          AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
+          """
       )
       return Set(names)
     }

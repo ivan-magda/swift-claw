@@ -42,7 +42,10 @@ import Testing
               id: "exec-1",
               name: "execute_code",
               argumentsJSON:
-                #"{"language":"python","code":"print('first line')\nprint('last line')","stage":["MEMORY.md"],"network":false}"#
+                #"""
+                {"language":"python","code":"print('first line')\nprint('last line')",\#
+                "stage":["MEMORY.md"],"network":false}
+                """#
             )
           ]),
           toolCallResponse([fetchProposal(id: "follow-up", url: "https://example.com/b")]),

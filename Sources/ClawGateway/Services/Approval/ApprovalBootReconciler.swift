@@ -99,7 +99,10 @@ extension ApprovalBootReconciler {
   /// The owner DM for the same window. Tool name only — the canonical target can be arbitrarily
   /// long and this notice is a single outbox row.
   static func claimedCrashNotice(tool: String) -> String {
-    "I restarted while running the approved \(tool) action and can't confirm whether it completed — please check before asking again."
+    """
+    I restarted while running the approved \(tool) action and can't confirm whether it completed — \
+    please check before asking again.
+    """
   }
 }
 

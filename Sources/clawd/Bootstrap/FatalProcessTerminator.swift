@@ -35,7 +35,10 @@ struct FatalProcessTerminator: Sendable {
   /// any run left `RUNNING` on the next start. Never returns normally.
   func fatalLaneDrainTimeout(activeRunIDs: [Int64], logger: Logger) throws -> Never {
     logger.critical(
-      "lane drain timed out during shutdown; exiting without dependent-resource teardown so process termination owns the remaining work. runs still in flight: \(activeRunIDs)"
+      """
+      lane drain timed out during shutdown; exiting without dependent-resource teardown \
+      so process termination owns the remaining work. runs still in flight: \(activeRunIDs)
+      """
     )
     try terminate(1)
   }

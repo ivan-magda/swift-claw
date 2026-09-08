@@ -169,10 +169,16 @@ import Testing
     let hold = ScriptedStreamHold()
     let argumentEvents = [
       Fixtures.event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock"}}"#
+        #"""
+        {"type":"response.output_item.added","output_index":0,\#
+        "item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock"}}
+        """#
       ),
       Fixtures.event(
-        #"{"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_1","call_id":"call_a","delta":"{\"abcdef\":1}"}"#
+        #"""
+        {"type":"response.function_call_arguments.delta","output_index":0,\#
+        "item_id":"fc_1","call_id":"call_a","delta":"{\"abcdef\":1}"}
+        """#
       ),
     ]
     let harness = ProviderHarness(

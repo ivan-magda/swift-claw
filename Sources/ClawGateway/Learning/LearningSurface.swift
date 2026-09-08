@@ -35,8 +35,10 @@ private extension LearningSurface {
     case .readable(let readable):
       let trial =
         readable.liveTrial.map { value in
-          "trial \(value.state.rawValue) \(value.counts.consumed)/\(value.counts.maximum)"
-            + " · \(assignmentOutcomes(value.counts))"
+          """
+          trial \(value.state.rawValue) \(value.counts.consumed)/\(value.counts.maximum) \
+          · \(assignmentOutcomes(value.counts))
+          """
         } ?? "no live trial"
       let decision =
         readable.lastDecision.map { value in
@@ -210,8 +212,10 @@ private extension LearningSurface {
   }
 
   static func assignmentOutcomes(_ counts: LearningTrialCounts) -> String {
-    "assignment outcomes: \(counts.positive) positive, \(counts.negative) negative, "
-      + "\(counts.neutral) neutral, \(counts.unresolved) unresolved"
+    """
+    assignment outcomes: \(counts.positive) positive, \(counts.negative) negative, \
+    \(counts.neutral) neutral, \(counts.unresolved) unresolved
+    """
   }
 
   static func warningText(_ warning: LearningViewWarning) -> String {

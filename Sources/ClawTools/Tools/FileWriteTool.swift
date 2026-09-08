@@ -210,7 +210,7 @@ private extension FileWriteTool {
   static func stageTemporary(content: Data, target: String) throws -> String {
     let parent = (target as NSString).deletingLastPathComponent
     let leaf = (target as NSString).lastPathComponent
-    let tempPath = parent + "/." + leaf + ".claw-tmp-" + UUID().uuidString
+    let tempPath = "\(parent)/.\(leaf).claw-tmp-\(UUID().uuidString)"
     try content.write(to: URL(fileURLWithPath: tempPath))
     return tempPath
   }

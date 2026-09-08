@@ -175,11 +175,18 @@ enum ChatGPTProviderTestSupport {
     static func basicSuccess() -> [Data] {
       [
         event(
-          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+          #"""
+          {"type":"response.output_item.added","output_index":0,\#
+          "item":{"type":"message","role":"assistant","status":"in_progress"}}
+          """#
         ),
         event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
         event(
-          #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
+          #"""
+          {"type":"response.output_item.done","output_index":0,\#
+          "item":{"type":"message","role":"assistant","status":"completed",\#
+          "content":[{"type":"output_text","text":"Hello"}]}}
+          """#
         ),
         completedTerminal(),
       ]
@@ -190,23 +197,43 @@ enum ChatGPTProviderTestSupport {
     static func richSuccess() -> [Data] {
       [
         event(
-          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+          #"""
+          {"type":"response.output_item.added","output_index":0,\#
+          "item":{"type":"message","role":"assistant","status":"in_progress"}}
+          """#
         ),
         event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
         event(
-          #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
+          #"""
+          {"type":"response.output_item.done","output_index":0,\#
+          "item":{"type":"message","role":"assistant","status":"completed",\#
+          "content":[{"type":"output_text","text":"Hello"}]}}
+          """#
         ),
         event(
-          #"{"type":"response.output_item.added","output_index":1,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC"}}"#
+          #"""
+          {"type":"response.output_item.added","output_index":1,\#
+          "item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC"}}
+          """#
         ),
         event(
-          #"{"type":"response.output_item.done","output_index":1,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC"}}"#
+          #"""
+          {"type":"response.output_item.done","output_index":1,\#
+          "item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC"}}
+          """#
         ),
         event(
-          #"{"type":"response.output_item.added","output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock"}}"#
+          #"""
+          {"type":"response.output_item.added","output_index":2,\#
+          "item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock"}}
+          """#
         ),
         event(
-          #"{"type":"response.output_item.done","output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"call_a","name":"clock","arguments":"{}"}}"#
+          #"""
+          {"type":"response.output_item.done","output_index":2,\#
+          "item":{"id":"fc_1","type":"function_call",\#
+          "call_id":"call_a","name":"clock","arguments":"{}"}}
+          """#
         ),
         completedTerminal(),
       ]
@@ -216,11 +243,18 @@ enum ChatGPTProviderTestSupport {
     static func deltaAfterDone() -> [Data] {
       [
         event(
-          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+          #"""
+          {"type":"response.output_item.added","output_index":0,\#
+          "item":{"type":"message","role":"assistant","status":"in_progress"}}
+          """#
         ),
         event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
         event(
-          #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Hello"}]}}"#
+          #"""
+          {"type":"response.output_item.done","output_index":0,\#
+          "item":{"type":"message","role":"assistant","status":"completed",\#
+          "content":[{"type":"output_text","text":"Hello"}]}}
+          """#
         ),
         event(#"{"type":"response.output_text.delta","output_index":0,"delta":"EXTRA"}"#),
         completedTerminal(),
@@ -232,7 +266,10 @@ enum ChatGPTProviderTestSupport {
     static func slowSuccess() -> [Data] {
       [
         event(
-          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+          #"""
+          {"type":"response.output_item.added","output_index":0,\#
+          "item":{"type":"message","role":"assistant","status":"in_progress"}}
+          """#
         ),
         event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
       ]
@@ -249,7 +286,10 @@ enum ChatGPTProviderTestSupport {
     static func dataThenError(code: String) -> [Data] {
       [
         event(
-          #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+          #"""
+          {"type":"response.output_item.added","output_index":0,\#
+          "item":{"type":"message","role":"assistant","status":"in_progress"}}
+          """#
         ),
         event(#"{"type":"response.output_text.delta","output_index":0,"delta":"Hello"}"#),
         event(#"{"type":"error","error":{"code":"\#(code)","message":"poisoned"}}"#),
@@ -262,7 +302,10 @@ enum ChatGPTProviderTestSupport {
           ",\"model\":\"\(value)\""
         } ?? ""
       return event(
-        #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}\#(modelField)}}"#
+        #"""
+        {"type":"response.completed","response":{"id":"resp_1","status":"completed",\#
+        "usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}\#(modelField)}}
+        """#
       )
     }
   }

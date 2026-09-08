@@ -121,7 +121,10 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
         // is the one failure that does not stall the drain, because it is the one failure Telegram
         // tells us how long to wait out.
         logger.warning(
-          "outbox send failed for \(row.originLabel) step \(row.stepIndex); leaving it and later rows for the next drain: \(error)"
+          """
+          outbox send failed for \(row.originLabel) step \(row.stepIndex); \
+          leaving it and later rows for the next drain: \(error)
+          """
         )
         break
       }
@@ -139,7 +142,10 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
         // The send already went out; we just couldn't record it, so the row stays PENDING and
         // re-sends next drain — an accepted at-least-once duplicate.
         logger.error(
-          "outbox delivered \(row.originLabel) step \(row.stepIndex) (message \(messageId)) but recording it failed; expect a duplicate: \(error)"
+          """
+          outbox delivered \(row.originLabel) step \(row.stepIndex) (message \(messageId)) \
+          but recording it failed; expect a duplicate: \(error)
+          """
         )
       }
     }
@@ -166,7 +172,10 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
         throw error
       }
       logger.warning(
-        "rich send failed for \(row.originLabel) step \(row.stepIndex), falling back to plain: \(error)"
+        """
+        rich send failed for \(row.originLabel) step \(row.stepIndex), \
+        falling back to plain: \(error)
+        """
       )
       return try await delivery.sendMessage(
         to: row.target,

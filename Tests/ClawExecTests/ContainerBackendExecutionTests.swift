@@ -205,7 +205,10 @@ import Testing
       case "list" where history.count < 5:
         let name = value(after: "--name", in: history[0].arguments) ?? "missing-name"
         return jsonCommandResult(
-          "[{\"id\":\"\(name)\",\"configuration\":{\"id\":\"\(name)\",\"labels\":{\"clawd.exec\":\"1\"}}}]"
+          """
+          [{"id":"\(name)","configuration":{"id":"\(name)",\
+          "labels":{"clawd.exec":"1"}}}]
+          """
         )
       case "list":
         return jsonCommandResult("[]")

@@ -142,12 +142,13 @@ public struct LearningNotices: Sendable {
     let useful = FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultUseful)
     let notUseful = FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultNotUseful)
     let correction = FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultCorrection)
-    return
-      #"{"inline_keyboard":[["#
-      + #"{"callback_data":"\#(useful)","text":"Useful"},"#
-      + #"{"callback_data":"\#(notUseful)","text":"Not useful"},"#
-      + #"{"callback_data":"\#(correction)","text":"Correct it"}"#
-      + "]]}"
+    return #"""
+      {"inline_keyboard":[[\#
+      {"callback_data":"\#(useful)","text":"Useful"},\#
+      {"callback_data":"\#(notUseful)","text":"Not useful"},\#
+      {"callback_data":"\#(correction)","text":"Correct it"}\#
+      ]]}
+      """#
   }
 
   static func challengePrompt(for tap: FeedbackTap) -> [LearningNoticeChunk] {

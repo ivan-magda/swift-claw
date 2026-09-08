@@ -290,7 +290,10 @@ extension AgentRuntime {
       }
 
       turnLog.debug(
-        "round-trip \(roundTripIndex) inputTokens~=\(preflight.inputTokens) estCostUSD=\(USD.precise(preflight.costUSD))"
+        """
+        round-trip \(roundTripIndex) inputTokens~=\(preflight.inputTokens) \
+        estCostUSD=\(USD.precise(preflight.costUSD))
+        """
       )
       if let admission = await attemptState.admission(
         roundTripIndex: roundTripIndex,
@@ -541,7 +544,11 @@ extension AgentRuntime {
         let toolStart = now()
         let dispatched = await toolDispatcher.dispatch(call: call, context: context)
         turnLog.debug(
-          "tool \(call.name) done decision=\(dispatched.observation.status.rawValue) bytes=\(dispatched.observation.content.utf8.count) ms=\(Self.millis(now() - toolStart))"
+          """
+          tool \(call.name) done decision=\(dispatched.observation.status.rawValue) \
+          bytes=\(dispatched.observation.content.utf8.count) \
+          ms=\(Self.millis(now() - toolStart))
+          """
         )
 
         if pendingSuspension == nil, let recordedAction = dispatched.requiresApproval {
