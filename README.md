@@ -185,6 +185,8 @@ Contributions are welcome. Open an issue to discuss what you have in mind before
 sending a pull request; [CONTRIBUTING.md](CONTRIBUTING.md) has the details and the
 lint/test gate.
 
+Please follow our [Code of Conduct](CODE_OF_CONDUCT.md) when participating in the project.
+
 ## License
 
 [MIT](LICENSE) © Ivan Magda

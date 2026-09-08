@@ -2,6 +2,9 @@
 
 Thanks for your interest in swift-claw.
 
+Please follow our [Code of Conduct](CODE_OF_CONDUCT.md) in project spaces. It also
+explains how to report unacceptable behavior privately.
+
 ## Open an issue first
 
 Please open an issue and agree on the approach before sending a pull request.
@@ -9,8 +12,14 @@ swift-claw is a single-maintainer project with a normative spec; a short issue
 discussion saves you from building something that can't merge. Small fixes
 (typos, broken links, obvious one-liners) can skip straight to a PR.
 
-For bug reports, include your platform, the output of `clawd doctor --json`
-(it redacts secrets), and steps to reproduce.
+Use the [issue chooser](https://github.com/ivan-magda/swift-claw/issues/new/choose)
+for bug reports, feature requests, and documentation improvements. Blank issues remain
+available for questions and other project work.
+
+For bug reports, include your version, platform, steps to reproduce, and the output of
+`clawd doctor --json` when available (or explain why it cannot run). Doctor redacts
+secrets, but review diagnostics and log excerpts for private information before posting.
+Never attach credentials, environment files, private conversations, or your state directory.
 
 For vulnerabilities, never open a public issue. Follow [SECURITY.md](SECURITY.md).
 
@@ -62,8 +71,9 @@ Day-to-day commands, including how to run the daemon locally, live in
 ## What a pull request needs
 
 - A linked issue with an agreed approach (except trivial fixes).
-- `scripts/lint.sh` and `swift test` green. CI runs the tests on macOS and Linux, and the
-  lint gate on Linux.
+- For Swift changes, `scripts/lint.sh`, then `swift build`, then `swift test` green.
+  CI runs the tests on macOS and Linux, and the lint gate on Linux. For documentation-only
+  changes, check affected links, examples, and template syntax as applicable.
 - Tests for behavior changes, structured as Given-When-Then
   (`// given` / `// when` / `// then`). [docs/TESTING.md](docs/TESTING.md) is
   the rubric for what earns a test.
