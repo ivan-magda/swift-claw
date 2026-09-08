@@ -21,8 +21,7 @@ struct GroupApprovalFixture {
   let approval: Approval
 
   init(reason: ApprovalReason = .coderSubmit, tool: String = CoderToolNames.submit) throws {
-    queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    queue = try TestDatabase.make()
     runs = RunStoreGRDB(writer: queue)
     approvals = ApprovalStoreGRDB(writer: queue)
     let sessions = SessionMessageStoreGRDB(writer: queue)

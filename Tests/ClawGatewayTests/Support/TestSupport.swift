@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -292,8 +293,7 @@ func makeSeededFixture(
   sessionKey: String? = nil,
   telegramMessageId: Int64? = nil
 ) throws -> SeededFixture {
-  let queue = try ClawDatabase.makeInMemoryQueue()
-  try ClawDatabase.migrate(queue)
+  let queue = try TestDatabase.make()
 
   let runId = try seedRun(
     in: queue,
@@ -348,8 +348,7 @@ struct HealthyRunsFixture {
 }
 
 func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
-  let queue = try ClawDatabase.makeInMemoryQueue()
-  try ClawDatabase.migrate(queue)
+  let queue = try TestDatabase.make()
 
   let messages = SessionMessageStoreGRDB(writer: queue)
   let runs = RunStoreGRDB(writer: queue)

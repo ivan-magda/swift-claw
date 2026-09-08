@@ -36,8 +36,7 @@ import Testing
     costPolicy: LLMCostPolicy = .metered,
     clock: any Clock<Duration> = ContinuousClock()
   ) throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(

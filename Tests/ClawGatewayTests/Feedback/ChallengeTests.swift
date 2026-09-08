@@ -268,8 +268,7 @@ private struct ChallengeEnvironment {
   var now: Date { clock.now }
 
   static func make() throws -> ChallengeEnvironment {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let now = Date(timeIntervalSince1970: 1_900_000_000)
     let ownerId: Int64 = 42
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)

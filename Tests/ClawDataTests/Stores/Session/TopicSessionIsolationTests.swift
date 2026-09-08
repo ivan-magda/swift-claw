@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -8,8 +9,7 @@ import Testing
 /// One forum supergroup uses an independent session for each topic, including General.
 @Suite struct TopicSessionIsolationTests {
   private func freshStore() throws -> SessionMessageStoreGRDB {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return SessionMessageStoreGRDB(writer: queue)
   }
 

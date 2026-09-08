@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import GRDB
 import Testing
 
@@ -6,8 +7,7 @@ import Testing
 
 @Suite struct AllowlistStoreTests {
   private func freshStore() throws -> AllowlistStoreGRDB {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return AllowlistStoreGRDB(writer: queue)
   }
 

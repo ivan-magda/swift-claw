@@ -34,8 +34,7 @@ import Testing
   private func makeHarness(
     parseResults: [ScheduleDraftParseResult] = [.draft(Self.weekdayDraft)]
   ) throws -> Harness {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     try AllowlistStoreGRDB(writer: queue).seedAllowlist(userIds: [42])
     let transport = RecordingTransport()
     let dispatcher = FakeTurnRunner()

@@ -99,8 +99,7 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
   /// coordinator so the tick() tests assert on persisted rows AND the buffered coordinator signal.
   /// The sleep double is never reached in a tick() test but still SUSPENDS before throwing.
   private func makeTickFixture(now: Date) throws -> TickFixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     try queue.write { db in
       try db.execute(
         sql: """

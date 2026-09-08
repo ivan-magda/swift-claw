@@ -62,8 +62,7 @@ private func photoUpdate(
     fetcher: any MediaFetching = StubMediaFetcher(result: .success(ImageFixtures.jpeg)),
     typing: any TypingIndicator = NoopTyping()
   ) throws -> Harness {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: allowed)
 
@@ -383,8 +382,7 @@ private func photoUpdate(
 
   @Test func onePhotoCrossesFromTheRouterThatDepositedItToTheRunnerThatReplaysIt() async throws {
     // given — a stack wired the way the composition root wires it: one cache, both ends
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStack(
       writer: queue,
       outcome: .respond("a cat"),

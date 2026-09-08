@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -16,8 +17,7 @@ import Testing
   /// Seeds job 7 (owner chat 4242), its synthetic session, the trusted trigger message, and a
   /// PENDING scheduled run — the exact §5.2 fused-claim output shape, by hand.
   private func makeJobRunFixture() throws -> JobFixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let now = Date()
     let seeded: (runId: Int64, sessionId: Int64) = try queue.write { db in
       try db.execute(
@@ -143,8 +143,7 @@ import Testing
 
   @Test func nonJobRunsNeverEmitJobFailed() throws {
     // given — an ordinary interactive run (no job_id), failed the same way
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(
         updateId: 1,
@@ -174,8 +173,7 @@ import Testing
   /// Seeds the sched:heartbeat session, its untrusted trigger, and a heartbeat run left RUNNING
   /// by a crash — the §12 shape reconciliation must route via the config-derived owner target.
   private func makeHeartbeatRunFixture() throws -> (queue: DatabaseQueue, runId: Int64) {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let now = Date()
     let runId: Int64 = try queue.write { db in
       try db.execute(

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -73,8 +74,7 @@ import Testing
 private extension LessonSetStoreTests {
   /// `job_learning_state.job_id` is a foreign key, so a job row has to exist before it can arm.
   static func makeArmedDatabase(jobIds: [Int64]) throws -> DatabaseQueue {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     try queue.write { db in
       for jobId in jobIds {
         try db.execute(

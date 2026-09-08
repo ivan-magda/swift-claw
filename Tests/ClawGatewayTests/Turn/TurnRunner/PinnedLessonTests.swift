@@ -228,8 +228,7 @@ private struct PinnedLessonEnvironment {
       store
     }
   ) throws -> PinnedLessonEnvironment {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let chatId: Int64 = 777
     let now = Date(timeIntervalSince1970: 1_782_000_600)
 

@@ -38,6 +38,14 @@ final class ProcessFixture: Sendable {
   var pids: [Int32] { get async { await capture.pids } }
   var text: String { get async { await capture.text } }
 
+  var commandRunner: CoderCommandRunner {
+    CoderCommandRunner(now: {
+      self.clock.withLock { instant in
+        instant
+      }
+    })
+  }
+
   func advanceClock(by duration: Duration) {
     clock.withLock { instant in
       instant = instant.advanced(by: duration)
@@ -54,11 +62,11 @@ final class ProcessFixture: Sendable {
         Issue.record("Coder command did not complete before its watchdog.")
       },
       {
-        await CoderCommandRunner(now: {
-          self.clock.withLock { instant in
-            instant
-          }
-        }).run(command, tracking: tracking, onStandardOutput: onStandardOutput)
+        await self.commandRunner.run(
+          command,
+          tracking: tracking,
+          onStandardOutput: onStandardOutput
+        )
       }
     )
   }

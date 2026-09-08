@@ -177,8 +177,7 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     wireHandler: Bool = true,
     resolveThrows: Bool = false
   ) throws -> Harness {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: allowed)
 

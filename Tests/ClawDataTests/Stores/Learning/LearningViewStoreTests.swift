@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -537,8 +538,7 @@ private struct LearningViewFixture {
   let now = Date(timeIntervalSince1970: 1_782_000_600)
 
   static func make() throws -> LearningViewFixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return LearningViewFixture(
       queue: queue,
       jobs: ScheduledJobStoreGRDB(writer: queue, learningEnabled: false),

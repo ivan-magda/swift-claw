@@ -84,7 +84,7 @@ extension CodexBackendTests {
         callback.entered.open()
         finalReceiptEntered.open()
       }
-      let result = await backend.run(invocation) { event in
+      let result = await backend.run(invocation, workerRunner: process.commandRunner) { event in
         if case .didLaunch(let receipt) = event, receipt.phase == .codex {
           let pid = try #require(receipt.pid)
           #expect(await process.waitForExit(pid))
@@ -110,6 +110,7 @@ extension CodexBackendTests {
       }
     }
     if mode == "timeout" {
+      process.advanceClock(by: invocation.timeout)
       await finalReceiptEntered.wait()
       #expect(await executionFinished.done == false)
       #expect(callback.cancelled.isOpen)

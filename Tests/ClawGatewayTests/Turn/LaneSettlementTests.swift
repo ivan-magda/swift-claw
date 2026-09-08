@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -144,8 +145,7 @@ private struct LaneSettlementEnvironment {
   let now: Date
 
   static func make() throws -> LaneSettlementEnvironment {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let now = Date(timeIntervalSince1970: 1_782_000_600)
     let job = try jobs.create(

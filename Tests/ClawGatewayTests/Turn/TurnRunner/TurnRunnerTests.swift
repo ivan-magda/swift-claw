@@ -546,8 +546,7 @@ private func makeContextBuilder(
   workspace: TurnRunnerWorkspace = TurnRunnerWorkspace(),
   budget: ContextBudget = .default
 ) throws -> ContextBuilder {
-  let queue = try ClawDatabase.makeInMemoryQueue()
-  try ClawDatabase.migrate(queue)
+  let queue = try TestDatabase.make()
   let memory = MemoryStoreGRDB(writer: queue)
   let retriever = RetrieverGRDB(writer: queue)
   return ContextBuilder(
@@ -578,8 +577,7 @@ func makeEnv(
   freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void = { _, _ in
   }
 ) throws -> Env {
-  let queue = try ClawDatabase.makeInMemoryQueue()
-  try ClawDatabase.migrate(queue)
+  let queue = try TestDatabase.make()
 
   let sessionMessages = SessionMessageStoreGRDB(writer: queue)
   let usage = UsageStoreGRDB(writer: queue)

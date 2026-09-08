@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Crypto
 import Foundation
 import GRDB
@@ -13,8 +14,7 @@ import Testing
 
   @Test func rerunningTheFusedWriteIsANoOpOnceTheObservationIsFilled() throws {
     // given — a real suspended run holding a memory_write approval
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
     let runs = RunStoreGRDB(writer: queue)
     let now = Date(timeIntervalSince1970: 1_750_000_000)

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -362,8 +363,7 @@ private struct FireBindingEnvironment {
     consumedAssignments: Int,
     learningEnabled: Bool = true
   ) throws -> FireBindingEnvironment {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: learningEnabled)
     let learning = ScheduledLearningStoreGRDB(writer: queue)
     let due = Date(timeIntervalSince1970: 1_782_000_600)

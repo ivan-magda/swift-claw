@@ -299,8 +299,7 @@ extension LearningRoutingTests {
       secretValues: [String] = [],
       outboxSignal: OutboxSignal? = nil
     ) throws -> Harness {
-      let queue = try ClawDatabase.makeInMemoryQueue()
-      try ClawDatabase.migrate(queue)
+      let queue = try TestDatabase.make()
       let allowlist = AllowlistStoreGRDB(writer: queue)
       try allowlist.seedAllowlist(userIds: [42])
       let transport = RecordingTransport()

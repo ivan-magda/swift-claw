@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -190,8 +191,7 @@ import Testing
 
   @Test func enqueuePokesExactlyOnceAfterNewCommitAndNeverOnReplayOrFailure() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let learning = ScheduledLearningStoreGRDB(writer: queue)
     let jobId = try ReviewFixture.armJob(queue: queue)
     let candidate = try ReviewFixture.candidate(jobId: jobId, evaluationCount: 2)
@@ -325,8 +325,7 @@ private enum ReviewFixture {
   static let now = Date(timeIntervalSince1970: 1_782_000_600)
 
   static func inMemoryStore() throws -> ScheduledLearningStoreGRDB {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return ScheduledLearningStoreGRDB(writer: queue)
   }
 

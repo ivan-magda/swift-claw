@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -14,8 +15,7 @@ import Testing
   /// Fresh in-memory DB with one session (id 1). Runs are seeded per-test so their state is
   /// exactly what each boot/orphan scenario needs.
   private func makeFixture() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     try queue.write { db in
       try db.execute(
         sql: """

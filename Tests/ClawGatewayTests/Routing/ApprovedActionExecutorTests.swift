@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
@@ -143,8 +144,7 @@ import Testing
   }
 
   private func makeSuspendedFixture() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(

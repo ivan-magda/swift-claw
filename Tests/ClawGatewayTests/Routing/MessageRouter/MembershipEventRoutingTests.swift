@@ -27,8 +27,7 @@ import Testing
   private static let migratedChatId: Int64 = -1_001_999
 
   private func makeHarness() throws -> Harness {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: [42])
 

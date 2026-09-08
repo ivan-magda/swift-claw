@@ -81,6 +81,10 @@ Do not manufacture solitary unit tests for glue whose only real behavior is the 
 A flaky test — one that passes and fails with no change to code — is worse than no test: it erodes trust in every other result. The three causes and our rules:
 
 - **Order dependency.** Every test builds its own environment and cleans up; none depends on another's residue or on execution order. Use a fresh database per test.
+- Shared store fixtures can use `ClawTestSupport.TestDatabase.make()`: it copies an empty database
+  migrated by the production migrator into a fresh in-memory queue. Each caller owns its rows and
+  schema; only the immutable template is shared. Migration, file-backed/WAL, and database-opening
+  tests continue to construct the database they exercise directly.
 - **Concurrency.** Never synchronize a test with `sleep`/`Task.sleep`. Drive the timing point with an explicit gate/continuation and assert on the **signal** the system already emits (a completion, an outbox row, a published draft), not on a stopwatch. Reuse the existing gate primitives rather than inventing wall-clock windows.
 - **Environment.** Keep real time, the real network, and unmanaged third parties out of the deterministic path. Real loopback HTTP servers are acceptable only when the transport itself is under test, marked `.serialized`, and torn down deterministically.
 - **Log output.** A component under test emits developer logs by design; inject a **no-op log sink** (`TestLog.silent`) wherever it takes a `Logger`. A bare `Logger(label:)` is _not_ silent — no test bootstraps `LoggingSystem`, so swift-log falls back to `StreamLogHandler` at `info` and leaks those lines to the suite console.
@@ -109,6 +113,17 @@ CI runner. The complementary `--skip ClawCoderTests` and `--filter ClawCoderTest
 every test; both retain Swift Testing's normal parallel execution. Keep both invocations together.
 A plain local `swift test` still runs the complete suite in one process and can be more sensitive to
 constrained host capacity.
+
+### 6.3 Build caching and timing in CI
+
+Measure compilation and test execution separately: `Build complete!` and the Swift Testing summary
+report different phases. CI enables Swift 6.3's `-enable-incremental-file-hashing` so checkout
+timestamp changes do not force compilation of otherwise unchanged source files. Build planning and
+module emission can still run. Subsequent test invocations in the same job use `--skip-build`.
+
+The `.build` cache key includes the revision so successful builds refresh compiled artifacts. Restore
+prefixes match the toolchain, package manifest, dependency lockfile, and workflow configuration;
+changing one of these starts a new compatible cache. The first such build is cold.
 
 ## 7. Readability: DAMP and DRY are not opposites
 

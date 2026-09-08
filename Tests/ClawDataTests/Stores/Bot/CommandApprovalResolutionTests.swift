@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -20,8 +21,7 @@ import Testing
   /// One session, one run parked at AWAITING_APPROVAL through the real reducer, and one PENDING
   /// approval inserted through the store's own seam — the exact shape `/stop`//`new` must resolve.
   private func makeParkedFixture() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
@@ -140,8 +140,7 @@ import Testing
 
   @Test func stopWithNoParkedApprovalResolvesNothing() throws {
     // given — a session with no runs at all
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let commands = CommandStoreGRDB(writer: queue)
 
     // when

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -7,8 +8,7 @@ import Testing
 
 @Suite struct AuditLogTests {
   private func freshLog() throws -> (AuditLogGRDB, DatabaseQueue) {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return (AuditLogGRDB(writer: queue), queue)
   }
 

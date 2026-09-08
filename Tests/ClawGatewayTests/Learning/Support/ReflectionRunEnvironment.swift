@@ -36,8 +36,7 @@ struct ReflectionRunEnvironment {
     admissionFails: Bool = false,
     logger: Logger = TestLog.silent
   ) throws -> ReflectionRunEnvironment {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let now = Date(timeIntervalSince1970: 1_782_000_600)
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let recurrence =

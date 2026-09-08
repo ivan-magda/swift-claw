@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -24,8 +25,7 @@ import Testing
     chatId: Int64,
     telegramMessageId: Int64?
   ) throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(
         updateId: 1,

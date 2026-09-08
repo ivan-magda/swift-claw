@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -8,8 +9,7 @@ import Testing
 @Suite struct UsageStoreTests {
   @Test func todayTotalsSumTokensAndCostInTheUtcDay() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
@@ -51,8 +51,7 @@ import Testing
 
   @Test func originFilteredTotalsSumOnlyJoinedOriginUsage() throws {
     // given — one interactive run and one scheduled run, each with usage recorded today
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let interactiveClaim = try sessions.claimAndPersistInbound(
       InboundMessage(
@@ -156,8 +155,7 @@ import Testing
     let dayStart = now.startOfUTCDay
     let previousDay = now.addingTimeInterval(-25 * 3600)
 
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
@@ -380,8 +378,7 @@ private extension UsageStoreTests {
   static let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
 
   static func fixture() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(
         updateId: 1,

@@ -7,8 +7,7 @@ import Testing
 
 @Suite struct UpdateCursorStoreTests {
   private func freshStore() throws -> UpdateCursorStoreGRDB {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return UpdateCursorStoreGRDB(writer: queue)
   }
 

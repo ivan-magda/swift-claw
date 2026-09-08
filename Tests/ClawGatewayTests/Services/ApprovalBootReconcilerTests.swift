@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawGateway
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -210,8 +211,7 @@ import Testing
   }
 
   private func makeFixture() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     try queue.write { db in
       try db.execute(
         sql: """

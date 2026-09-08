@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -7,8 +8,7 @@ import Testing
 
 @Suite struct SessionMessageStoreTests {
   private func freshStore() throws -> SessionMessageStoreGRDB {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return SessionMessageStoreGRDB(writer: queue)
   }
 
@@ -75,8 +75,7 @@ import Testing
 
   @Test func claimAndPersistCreatesPendingRunBoundToTriggerMessage() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
 
     // when
@@ -129,8 +128,7 @@ import Testing
 
   @Test func claimCommandUpdateResolvesTheSessionInOneWriteAndDedups() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let sessionKey = SessionKey.telegramDM(chatId: 42)
 
@@ -168,8 +166,7 @@ import Testing
 
   @Test func findSessionIsReadOnlyAndNilForAnUnknownChat() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
 
     // when
@@ -210,8 +207,7 @@ import Testing
 
   @Test func resetWindowAndDetaintExcludesEarlierHistory() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let first = try store.claimAndPersistInbound(inbound(updateId: 1, text: "before"))
     let sessionId = try #require(first.sessionId)
@@ -245,8 +241,7 @@ import Testing
 
   @Test func claimAndPersistRollsBackEntirelyWhenTheMessageInsertAborts() throws {
     // given — a trigger that aborts the message INSERT mid-transaction
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     try queue.write { db in
       try db.execute(
         sql: "CREATE TRIGGER boom BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT, 'boom'); END"
@@ -274,8 +269,7 @@ import Testing
 
   @Test func loadContextSnapshotIncludesHistoryIdsWindowStartAndTaint() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let first = try store.claimAndPersistInbound(inbound(updateId: 1, text: "before"))
     let second = try store.claimAndPersistInbound(inbound(updateId: 2, text: "after"))
@@ -306,8 +300,7 @@ import Testing
 
   @Test func claimAndPersistRollsBackEntirelyWhenTheRunInsertAborts() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     try queue.write { db in
       try db.execute(
         sql: "CREATE TRIGGER boom BEFORE INSERT ON runs BEGIN SELECT RAISE(ABORT, 'boom'); END"
@@ -335,8 +328,7 @@ import Testing
 
   @Test func corruptProvenanceFailsClosedInsteadOfDecodingTrusted() throws {
     // given — a persisted message whose provenance left the vocabulary (rollback / hand-edit)
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let claim = try store.claimAndPersistInbound(inbound(updateId: 1, text: "hello"))
     let sessionId = try #require(claim.sessionId)
@@ -360,8 +352,7 @@ import Testing
 
   @Test func corruptRoleFailsClosedInsteadOfDecodingUser() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let claim = try store.claimAndPersistInbound(inbound(updateId: 1, text: "hello"))
     let sessionId = try #require(claim.sessionId)
@@ -386,8 +377,7 @@ import Testing
   @Test func snapshotSurfacesThePersistedPrivateDataFlag() throws {
     // given — a session with the persisted private-data flag armed (the §12 over-cap case: the
     // flag outlives the assembly that set it)
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let now = Date(timeIntervalSince1970: 1_750_000_000)
     let claim = try store.claimAndPersistInbound(
@@ -422,8 +412,7 @@ import Testing
 
   @Test func resetWindowAndDetaintClearsThePrivateDataFlag() throws {
     // given — both sticky flags armed
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let now = Date(timeIntervalSince1970: 1_750_000_000)
     let claim = try store.claimAndPersistInbound(
@@ -536,8 +525,7 @@ extension SessionMessageStoreTests {
   }
 
   private func stateFixture() throws -> StateFixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let claim = try store.claimAndPersistInbound(inbound(updateId: 1, text: "summarise it"))
     return StateFixture(

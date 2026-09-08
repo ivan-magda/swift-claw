@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -16,8 +17,7 @@ import Testing
 
   /// One run suspended to AWAITING_APPROVAL through the real reducer (pickUp → suspend).
   private func makeSuspendedFixture() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(

@@ -17,8 +17,7 @@ import Testing
   private let dueThird = Date(timeIntervalSince1970: 1_782_173_400)
 
   private func makeStore() throws -> (store: ScheduledJobStoreGRDB, queue: DatabaseQueue) {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return (ScheduledJobStoreGRDB(writer: queue), queue)
   }
 

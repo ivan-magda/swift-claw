@@ -474,8 +474,7 @@ private struct SuspendedRun {
 
 private extension MCPCompositionAcceptanceTests {
   func makeSuspendedRun() throws -> SuspendedRun {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
 
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(

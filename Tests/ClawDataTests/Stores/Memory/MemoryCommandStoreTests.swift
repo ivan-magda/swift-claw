@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -9,8 +10,7 @@ import Testing
   private struct InjectedCrash: Error {}
 
   private func freshStore() throws -> (MemoryCommandStoreGRDB, MemoryStoreGRDB, DatabaseQueue) {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return (MemoryCommandStoreGRDB(writer: queue), MemoryStoreGRDB(writer: queue), queue)
   }
 
@@ -128,8 +128,7 @@ import Testing
 
   @Test func crashAfterClaimRollsBackClaimAndAllowsRetry() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let crashing = MemoryCommandStoreGRDB(
       writer: queue,
       afterClaimForTesting: { throw InjectedCrash() }
@@ -157,8 +156,7 @@ import Testing
 
   @Test func crashAfterClaimInForgetRollsBackClaimAndAllowsRetry() throws {
     // given - seed one item so there is a row for applyForget to delete.
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let reads = MemoryStoreGRDB(writer: queue)
     let stored = try reads.append(
       NewMemoryItem(text: "to be forgotten", kind: .user, sessionId: nil),

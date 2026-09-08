@@ -121,8 +121,7 @@ import Testing
 
 private extension TrialSweepTests {
   func emptyStore() throws -> ScheduledLearningStoreGRDB {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return ScheduledLearningStoreGRDB(writer: queue)
   }
 
@@ -143,8 +142,7 @@ private struct TrialSweepFixture {
   let assignmentDeadline: Date
 
   static func make() throws -> TrialSweepFixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let deadline = Date(timeIntervalSince1970: 1_782_086_400)
     let admittedAt = deadline.addingTimeInterval(-TrialAdmissionPolicy.assignmentWindow)

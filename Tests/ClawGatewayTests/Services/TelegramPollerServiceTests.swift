@@ -59,8 +59,7 @@ private actor BlockingTurnRunner: TurnDispatching {
     logger: Logger = TestLog.silent,
     clock: any Clock<Duration> = ContinuousClock()
   ) throws -> Stack {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
 
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: allowed)
@@ -155,8 +154,7 @@ private actor BlockingTurnRunner: TurnDispatching {
 
   @Test func cursorAdvancesAfterEnqueueWithoutWaitingForTurnCompletion() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: [42])
     let transport = RecordingTransport(batches: [[textUpdate(id: 100, from: 42, text: "hi")]])

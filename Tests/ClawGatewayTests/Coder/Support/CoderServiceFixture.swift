@@ -30,8 +30,7 @@ struct CoderServiceFixture: Sendable {
       text
     }
   ) throws {
-    queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    queue = try TestDatabase.make()
     store = CoderJobStoreGRDB(writer: queue)
     root = try makeTemporaryRoot(prefix: "coder-service")
     prepared = Self.request(index: 1)

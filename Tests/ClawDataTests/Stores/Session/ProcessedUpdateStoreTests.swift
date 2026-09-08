@@ -1,12 +1,12 @@
 import ClawCore
+import ClawTestSupport
 import Testing
 
 @testable import ClawData
 
 @Suite struct ProcessedUpdateStoreTests {
   private func freshStore() throws -> ProcessedUpdateStoreGRDB {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return ProcessedUpdateStoreGRDB(writer: queue)
   }
 

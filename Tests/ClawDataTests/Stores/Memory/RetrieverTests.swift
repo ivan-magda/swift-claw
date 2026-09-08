@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -14,8 +15,7 @@ import Testing
   }
 
   private func makeCorpus() throws -> Corpus {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let (sessionOne, sessionTwo) = try queue.write { db -> (Int64, Int64) in
       let one = try insertSession(db, key: "s1")
       let two = try insertSession(db, key: "s2")

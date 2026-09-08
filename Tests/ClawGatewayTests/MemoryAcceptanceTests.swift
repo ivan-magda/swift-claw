@@ -185,8 +185,7 @@ import Testing
       encoding: .utf8
     )
 
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStack(
       writer: queue,
       outcome: .respond("stub answer"),
@@ -221,8 +220,7 @@ import Testing
   /// the real snapshot → fetchRanked seam excludes them.
   @Test func taintReadGuardExcludesHighSensitivityItemsThroughTheRealStores() async throws {
     // given — one normal and one high-sensitivity fact in the real GRDB store
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
     let memoryStore = MemoryStoreGRDB(writer: queue)
     _ = try memoryStore.append(
@@ -270,8 +268,7 @@ import Testing
   /// true the moment any memory_item is injected, false again after it is deleted.
   @Test func hasPrivateDataAccessTracksMemoryInjectionOverTheRealStores() throws {
     // given — a builder over the real stores and an empty workspace
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let memoryStore = MemoryStoreGRDB(writer: queue)
     let builder = makeAcceptanceContextBuilder(writer: queue)
     let snapshot = SessionContextSnapshot(

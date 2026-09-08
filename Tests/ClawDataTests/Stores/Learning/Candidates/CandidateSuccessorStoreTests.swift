@@ -324,9 +324,7 @@ import Testing
     // given
     let fixture = try AdmissionStoreFixture.make()
     var current = try fixture.persistedCandidate()
-
-    // when
-    for index in 0..<24 {
+    for index in 0..<47 {
       let lesson = "Keep exact owner revision \(index)."
       let payload = #"{"lessons":["\#(lesson)"]}"#
       let editControl = try fixture.env.appendFeedback(
@@ -335,40 +333,51 @@ import Testing
         signal: .candidateEdit,
         payload: payload
       )
-      let edit = try fixture.env.learning.editCandidate(
-        CandidateEdit(
-          predecessorDigest: current.digest,
-          feedbackEventId: editControl.eventId,
-          payload: Data(payload.utf8)
+      let edited = try CandidateSuccessorRules.edit(
+        predecessor: current,
+        replacement: LessonSet.canonical(
+          jobId: fixture.env.jobId,
+          lessons: [lesson]
         ),
-        redactor: SecretRedactor(secretValues: []),
-        now: fixture.env.now
+        control: editControl,
+        feedbackRevision: editControl.revision,
+        effectiveFeedback: current.manifest.feedback
       )
-      let edited = try #require(edit.awaitingArtifact)
-      let approvalControl = try fixture.env.appendFeedback(
-        subjectKind: .candidate,
-        subjectDigest: edited.digest.rawValue,
-        signal: .candidateApprove
-      )
-      let approval = try fixture.env.learning.approveCandidate(
-        CandidateApproval(
-          predecessorDigest: edited.digest,
-          feedbackEventId: approvalControl.eventId
-        ),
-        redactor: SecretRedactor(secretValues: []),
-        now: fixture.env.now
-      )
-      let receipt = try #require(approval.admissionReceipt)
-      current = try #require(try fixture.candidate(for: receipt.candidateDigest))
+      try fixture.env.queue.write { db in
+        try ScheduledLearningStoreGRDB.recordCandidateArtifact(
+          db,
+          artifact: edited,
+          lessonSource: .ownerEdit,
+          now: fixture.env.now
+        )
+      }
+      current = edited
     }
+    let approvalControl = try fixture.env.appendFeedback(
+      subjectKind: .candidate,
+      subjectDigest: current.digest.rawValue,
+      signal: .candidateApprove
+    )
+
+    // when
+    let approval = try fixture.env.learning.approveCandidate(
+      CandidateApproval(
+        predecessorDigest: current.digest,
+        feedbackEventId: approvalControl.eventId
+      ),
+      redactor: SecretRedactor(secretValues: []),
+      now: fixture.env.now
+    )
 
     // then — recursive validation or a defensive ancestry cap can reject a valid durable tip;
     // every hop must instead be gathered once and validated root-to-tip with cycle detection.
+    let receipt = try #require(approval.admissionReceipt)
+    let admitted = try #require(try fixture.candidate(for: receipt.candidateDigest))
     #expect(try fixture.env.countRows(in: "learning_candidates") == 49)
-    #expect(try fixture.successorCount(of: current.digest) == 0)
+    #expect(try fixture.successorCount(of: admitted.digest) == 0)
     #expect(
       try fixture.env.learning.openTrial(jobId: fixture.env.jobId)?.candidateDigest
-        == current.digest
+        == admitted.digest
     )
   }
 

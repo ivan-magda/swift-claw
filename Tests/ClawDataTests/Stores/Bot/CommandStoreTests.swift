@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -19,8 +20,7 @@ import Testing
   private struct InjectedCrash: Error {}
 
   private func fixture() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
 
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let sessionKey = SessionKey.telegramDM(chatId: 42)
@@ -260,8 +260,7 @@ import Testing
 
   @Test func groupCommandsAttributeTheirAuditsToAGroupMember() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let commands = CommandStoreGRDB(writer: queue)
     let sessionKey = SessionKey.telegramTopic(chatId: -1_001, threadId: 77)
 

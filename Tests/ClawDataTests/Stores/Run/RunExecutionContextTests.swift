@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -8,8 +9,7 @@ import Testing
 @Suite struct RunExecutionContextTests {
   @Test func groupRequesterAndOriginalTopicSurviveReload() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(
         updateId: 17,
@@ -42,8 +42,7 @@ import Testing
 
   @Test func legacyAndScheduledRequesterRules() throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let scenarios: [(String, RunOrigin)] = [
       (SessionKey.telegramDM(chatId: 42), .interactive),
       (SessionKey.telegramTopic(chatId: -700, threadId: nil), .interactive),
@@ -89,8 +88,7 @@ import Testing
   @Test(arguments: [true, false])
   func malformedInteractiveRoutingFailsClosed(groupPrefixPreserved: Bool) throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let key = SessionKey.telegramTopic(chatId: -700, threadId: 19)
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(

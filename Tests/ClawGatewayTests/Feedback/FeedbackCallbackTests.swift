@@ -365,8 +365,7 @@ private struct FeedbackCallbackEnvironment {
     wireFeedbackRouter: Bool = false,
     wireApprovalRouter: Bool = false
   ) throws -> FeedbackCallbackEnvironment {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let now = Date(timeIntervalSince1970: 1_900_000_000)
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let job = try jobs.create(

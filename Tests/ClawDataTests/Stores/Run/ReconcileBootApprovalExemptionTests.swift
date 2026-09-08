@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -8,8 +9,7 @@ import Testing
 @Suite struct ReconcileBootApprovalExemptionTests {
   @Test func reconcileFailsRunningOrphansButLeavesSuspendedRunsParked() throws {
     // given — a crashed RUNNING run and a suspended AWAITING_APPROVAL run in the reopened DB
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     try queue.write { db in
       try db.execute(
         sql: """
@@ -110,8 +110,7 @@ import Testing
     // given — the recorded-but-continuation-lost window: the approval prompt was delivered (its
     // keyboard chunk is the newest SENT row), the owner approved, the action ran and recorded,
     // and the daemon died during the continuation — the run is a RUNNING orphan at boot
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let runId = try makeRunningOrphan(queue, sentRowIsApprovalPrompt: true)
     let runs = RunStoreGRDB(writer: queue)
 
@@ -130,8 +129,7 @@ import Testing
 
   @Test func reconcileStaysSilentWhenTheOwnerAlreadySawAReply() throws {
     // given — a RUNNING orphan whose newest SENT row is a genuine reply chunk (no approval link)
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     _ = try makeRunningOrphan(queue, sentRowIsApprovalPrompt: false)
     let runs = RunStoreGRDB(writer: queue)
 

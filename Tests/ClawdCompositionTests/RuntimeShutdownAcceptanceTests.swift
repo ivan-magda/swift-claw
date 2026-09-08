@@ -339,8 +339,7 @@ import Testing
   private static func makeRunningRun() throws -> (
     writer: any DatabaseWriter, sessionId: Int64, runId: Int64
   ) {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let runs = RunStoreGRDB(writer: queue)
     let now = Date(timeIntervalSince1970: 1_800_000_000)

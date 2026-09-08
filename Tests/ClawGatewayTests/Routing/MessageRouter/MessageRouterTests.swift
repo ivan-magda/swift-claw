@@ -50,8 +50,7 @@ import Testing
     doctor: any DoctorReporting = StubDoctorReporter(),
     logger: Logger = TestLog.silent
   ) throws -> Harness {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: allowed)
 
@@ -352,8 +351,7 @@ import Testing
 
   @Test func aFullDiskWhileObservingStaysSilentAndBacksThePollerOff() async throws {
     // given — the observe write reports a full disk in a room the bot was not talking to
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: [42])
     let transport = RecordingTransport()
@@ -571,8 +569,7 @@ import Testing
 
   @Test func commandAckFailureStillProcessesAndKeepsDurableStopEffect() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: [42])
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
@@ -623,8 +620,7 @@ import Testing
 
   @Test func failedNewAckDoesNotUndoCommittedEffect() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: [42])
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
@@ -856,8 +852,7 @@ import Testing
 
   @Test func diskFullOnPersistSendsNoticeAndSignalsStorageFull() async throws {
     // given — the fused persist reports a full disk
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: [42])
     let transport = RecordingTransport()

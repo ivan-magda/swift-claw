@@ -129,8 +129,16 @@ public struct CodexBackend: CoderBackend {
     _ invocation: CoderInvocation,
     recordProcess: @Sendable (CoderProcessEvent) async throws -> Void
   ) async -> CoderResult {
+    await run(invocation, workerRunner: CoderCommandRunner(), recordProcess: recordProcess)
+  }
+
+  func run(
+    _ invocation: CoderInvocation,
+    workerRunner: CoderCommandRunner,
+    recordProcess: @Sendable (CoderProcessEvent) async throws -> Void
+  ) async -> CoderResult {
     await withoutActuallyEscaping(recordProcess) { recordProcess in
-      await execute(invocation, recordProcess: recordProcess)
+      await execute(invocation, workerRunner: workerRunner, recordProcess: recordProcess)
     }
   }
 }
@@ -140,6 +148,7 @@ public struct CodexBackend: CoderBackend {
 private extension CodexBackend {
   func execute(
     _ invocation: CoderInvocation,
+    workerRunner: CoderCommandRunner,
     recordProcess: @Sendable @escaping (CoderProcessEvent) async throws -> Void
   ) async -> CoderResult {
     let deadline = ContinuousClock.now.advanced(by: invocation.timeout)
@@ -180,7 +189,13 @@ private extension CodexBackend {
         deadline: deadline
       )
       stage = .launch
-      await runWorker(wire, invocation: invocation, context: context, outcome: &outcome)
+      await runWorker(
+        wire,
+        invocation: invocation,
+        context: context,
+        runner: workerRunner,
+        outcome: &outcome
+      )
     } catch {
       outcome.retainWorkspaceIfPresent(invocation)
       outcome.fail(stage, diagnostic(error))
@@ -198,6 +213,7 @@ private extension CodexBackend {
     _ wire: CodexInvocation,
     invocation: CoderInvocation,
     context: CodexCommandContext,
+    runner: CoderCommandRunner,
     outcome: inout CodexOutcome
   ) async {
     do {
@@ -210,7 +226,7 @@ private extension CodexBackend {
         outcome.publication = .unknown(reportedURL: nil)
       }
       let events = CodexEvents()
-      let process = await CoderCommandRunner().run(command, tracking: context.tracking) { bytes in
+      let process = await runner.run(command, tracking: context.tracking) { bytes in
         try await events.consume(bytes)
       }
       try? await events.finish()

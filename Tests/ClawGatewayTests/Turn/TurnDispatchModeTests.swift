@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
@@ -37,8 +38,7 @@ import Testing
   }
 
   private func makeHarness() throws -> Harness {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
     let runner = FakeTurnRunner()
     let logger = TestLog.silent

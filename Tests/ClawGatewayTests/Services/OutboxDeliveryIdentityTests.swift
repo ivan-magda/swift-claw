@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -11,8 +12,7 @@ import Testing
 @Suite struct OutboxDeliveryIdentityTests {
   @Test func aLearningNoticeSurvivesInsertSendAndRestartWithoutDuplicating() async throws {
     // given — a notice row with no run
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let outbox = OutboxStoreGRDB(writer: queue)
     _ = try outbox.claimNotice(Self.notice(subjectDigest: "abc", ordinal: 0))
     let transport = RecordingTransport()

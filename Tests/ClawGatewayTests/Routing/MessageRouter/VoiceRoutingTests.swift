@@ -59,8 +59,7 @@ private func voiceUpdate(
     transcriber: any VoiceTranscribing = StubVoiceTranscriber(),
     serviceOverride: (any VoiceMessageTranscribing)? = nil
   ) throws -> Harness {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: allowed)
 

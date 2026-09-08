@@ -651,8 +651,7 @@ func makeStopNewStack(
 
   @Test func streamedTurnPublishesDraftsThenFinalizesViaOutbox() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStreamingStack(writer: queue)
 
     // when
@@ -683,8 +682,7 @@ func makeStopNewStack(
 
   @Test func streamingConnectFailureFallsBackToBlockingPath() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStreamingStack(writer: queue)
     await stack.provider.setStreamFailure(.connectFailed(message: "refused"))
 
@@ -704,8 +702,7 @@ func makeStopNewStack(
 
   @Test func postSendStreamingFailureDoesNotIssueBlockingFallback() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStreamingStack(writer: queue)
     await stack.provider.setPostDraftFailure(.retryable(status: nil, message: "drop"))
 
@@ -730,8 +727,7 @@ func makeStopNewStack(
   /// transport stays silent; only the dispatcher's drain delivers it (richly).
   @Test func turnPersistsEverythingThenDelivers() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
 
     // when — route one allowlisted message, then wait for the queued turn to commit
@@ -763,8 +759,7 @@ func makeStopNewStack(
   /// user₂), proving recent history is threaded back within the context budget.
   @Test func secondTurnSeesPriorHistory() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
 
     // when — two sequential turns from the same chat (distinct update ids)
@@ -792,8 +787,7 @@ func makeStopNewStack(
   /// reply through the outbox.
   @Test func providerOutageDegradesGracefully() async throws {
     // given — every attempt fails retryably, so the agent exhausts retries and degrades
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStack(
       writer: queue,
       outcome: .fail(.retryable(status: 503, message: "down"))
@@ -816,8 +810,7 @@ func makeStopNewStack(
   @Test func dailyCapStopsTheTurnWithAMessage() async throws {
     // given — seed today's usage at the daily USD cap against a throwaway run, so the FK holds and
     // the running total (global per UTC day) already sits at the limit
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStack(writer: queue, outcome: .respond("should never be produced"))
 
     let seedClaim = try stack.sessionMessages.claimAndPersistInbound(
@@ -907,8 +900,7 @@ func makeStopNewStack(
 
   @Test func twoQuickMessagesRunFifoAndFirstContextExcludesSecond() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStack(
       writer: queue,
       outcome: .respond("stub answer"),
@@ -967,8 +959,7 @@ func makeStopNewStack(
 
   @Test func stopMidTurnCancelsRunAndNextPlainMessageStillReplies() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStopNewStack(writer: queue)
 
     // when
@@ -1001,8 +992,7 @@ func makeStopNewStack(
 
   @Test func newSupersedesRunningAndQueuedRunsAndClearsContextWindow() async throws {
     // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let stack = try makeStopNewStack(writer: queue)
 
     // when
@@ -1051,8 +1041,7 @@ func makeStopNewStack(
   /// replay marker is in none of FTS, message content, the outbox, or the audit trail.
   @Test func providerReplayStateRoundTripsButStaysOutOfFTSOutboxAndAudit() async throws {
     // given — a reply carrying a distinctive replay-state payload
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let marker = "REPLAYSTATESECRETMARKER7f3c"
     let state = ProviderExchangeState(
       issuer: "openai-chatgpt-responses-v1:acc",

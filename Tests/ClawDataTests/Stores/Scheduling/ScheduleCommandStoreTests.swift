@@ -10,9 +10,7 @@ import Testing
   private let fixedNow = SchedulingTestClock.mondayNoonBerlin
 
   private func makeQueue() throws -> DatabaseQueue {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    return queue
+    return try TestDatabase.make()
   }
 
   private func makeNewJob() throws -> NewScheduledJob {

@@ -147,8 +147,7 @@ import Testing
   /// A suspended run with a placeholder observation and an APPROVED approvals row (seeded raw so
   /// the test does not depend on the Task-06 CAS internals; the waiter reads it via the real store).
   private func makeApprovedFixture(policyVersion: String = "pv") throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(

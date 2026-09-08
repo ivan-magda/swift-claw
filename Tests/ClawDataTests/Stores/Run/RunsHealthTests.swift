@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -13,8 +14,7 @@ import Testing
   }
 
   private func makeFixture() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let sessionId = try sessions.loadOrCreateSession(
       sessionKey: SessionKey.telegramDM(chatId: 1),
@@ -231,8 +231,7 @@ import Testing
 
   @Test func emptyTableReportsAllZeroAndNil() throws {
     // given — fresh DB, no runs inserted
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = RunStoreGRDB(writer: queue)
 
     // when

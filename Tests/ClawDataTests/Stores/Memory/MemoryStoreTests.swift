@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -7,8 +8,7 @@ import Testing
 
 @Suite struct MemoryStoreTests {
   private func freshStore() throws -> (MemoryStoreGRDB, DatabaseQueue) {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return (MemoryStoreGRDB(writer: queue), queue)
   }
 

@@ -220,8 +220,7 @@ enum CompositionAcceptance {
     runs: RunStoreGRDB,
     usage: UsageStoreGRDB
   ) {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return (
       queue,
       SessionMessageStoreGRDB(writer: queue),

@@ -138,9 +138,7 @@ import Testing
   }
 
   private func inMemoryQueue() throws -> DatabaseQueue {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    return queue
+    return try TestDatabase.make()
   }
 
   private func usageRowCount(_ queue: DatabaseQueue) throws -> Int {

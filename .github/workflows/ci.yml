@@ -30,21 +30,25 @@ jobs:
               ca-certificates \
               tzdata
       - name: Show toolchain
-        run: swift --version
+        id: toolchain
+        run: |
+          swift --version
+          toolchain_key=$(swift --version | sha256sum | cut -d ' ' -f 1)
+          echo "cache-key=$toolchain_key" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         with:
           path: .build
-          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/ci.yml') }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/ci.yml') }}-
       - name: Build and run tests
-        run: swift test
+        run: swift test -Xswiftc -enable-incremental-file-hashing
         env:
           SWIFT_BACKTRACE: enable=yes
       - name: Re-run the concurrency-sensitive suites on one cooperative thread
         env:
           LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
         run: |
-          swift test \
+          swift test --skip-build \
             --filter CommandApprovalCancelSignalRaceTests \
             --filter ApprovalExpiryServiceTests \
             --filter ApprovalWaiterTests \
@@ -59,6 +63,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Select Swift 6.3 toolchain
+        id: toolchain
         run: |
           ls -d /Applications/Xcode*.app 2>/dev/null || true
           sudo xcode-select -s /Applications/Xcode_26.6.app
@@ -67,13 +72,21 @@ jobs:
             echo "::error::Expected a Swift 6.3.x toolchain on this runner"
             exit 1
           }
+          toolchain_key=$(
+            {
+              swift --version
+              xcodebuild -version
+              xcrun --show-sdk-version
+            } | shasum -a 256 | cut -d ' ' -f 1
+          )
+          echo "cache-key=$toolchain_key" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         with:
           path: .build
-          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ hashFiles('Package.resolved') }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-
+          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/ci.yml') }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/ci.yml') }}-
       - name: Build and run tests outside native Coder integration
-        run: swift test --skip ClawCoderTests
+        run: swift test -Xswiftc -enable-incremental-file-hashing --skip ClawCoderTests
       - name: Run native Coder integration in a separate test process
         run: swift test --skip-build --filter ClawCoderTests
 

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -11,8 +12,7 @@ import Testing
   private func makeFixture() throws -> (
     store: SessionMessageStoreGRDB, sessionId: Int64, queue: DatabaseQueue
   ) {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
     let sessionId = try store.loadOrCreateSession(sessionKey: "tg:dm:1", now: Date())
     return (store, sessionId, queue)

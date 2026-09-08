@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -15,8 +16,7 @@ import Testing
   }
 
   private func freshStore() throws -> Fixture {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     return Fixture(store: SessionMessageStoreGRDB(writer: queue), queue: queue)
   }
 

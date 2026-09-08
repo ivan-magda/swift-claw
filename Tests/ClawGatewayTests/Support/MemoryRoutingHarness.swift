@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
@@ -27,8 +28,7 @@ struct MemoryRoutingHarness {
     memoryCommands: (any MemoryCommandStore)? = nil,
     routerSessionMessages: ((SessionMessageStoreGRDB) -> any SessionMessageStore)? = nil
   ) throws -> MemoryRoutingHarness {
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
 
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: allowed)

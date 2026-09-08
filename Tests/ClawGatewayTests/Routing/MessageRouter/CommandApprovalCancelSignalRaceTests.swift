@@ -139,8 +139,7 @@ private extension CommandApprovalCancelSignalRaceTests {
 private extension CommandApprovalCancelSignalRaceTests {
   private func makeHarness() throws -> Harness {
     let chatId: Int64 = 42
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
+    let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: [chatId])
 
