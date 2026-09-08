@@ -177,7 +177,13 @@ extension AgentRuntime {
     }
     let turnStart = now()
     turnLog.info(
-      "turn started model=\(active.binding.configuredReference) origin=\(origin) contextMessages=\(buildResult.messages.count) streaming=\(streamingEnabled) tools=\(definitions.count)"
+      """
+      turn started model=\(active.binding.configuredReference) \
+      origin=\(origin) \
+      contextMessages=\(buildResult.messages.count) \
+      streaming=\(streamingEnabled) \
+      tools=\(definitions.count)
+      """
     )
 
     var wire = buildResult.messages
