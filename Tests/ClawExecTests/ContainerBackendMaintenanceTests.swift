@@ -1,4 +1,5 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 import Testing
 
@@ -277,7 +278,9 @@ private struct GuestProbeFixture: Sendable {
 
   var json: String {
     """
-    {"capsEmpty":\(capsEmpty),"netIsolated":\(netIsolated),"reaperOK":\(reaperOK),"rootfsRO":\(rootfsRO),"stagingRO":\(stagingRO),"interpretersOK":\(interpretersOK)}
+    {"capsEmpty":\(capsEmpty),"netIsolated":\(netIsolated),\
+    "reaperOK":\(reaperOK),"rootfsRO":\(rootfsRO),\
+    "stagingRO":\(stagingRO),"interpretersOK":\(interpretersOK)}
     """
   }
 }
@@ -300,6 +303,7 @@ private final class MaintenanceFixture: @unchecked Sendable {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
     guard
       let workloadImage = PinnedImageReference.parse(
+        // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       )
     else {
@@ -315,7 +319,7 @@ private final class MaintenanceFixture: @unchecked Sendable {
     self.guestProbe = guestProbe
   }
 
-  func backend(commands: any ContainerCommandRunning) -> ContainerBackend {
+  func backend(commands: any SubprocessRunning) -> ContainerBackend {
     ContainerBackend(
       settings: settings,
       stateRoot: root,
@@ -327,9 +331,9 @@ private final class MaintenanceFixture: @unchecked Sendable {
   }
 
   func response(
-    for command: ContainerCommand,
-    history _: [ContainerCommand]
-  ) -> ContainerCommandResult {
+    for command: SubprocessCommand,
+    history _: [SubprocessCommand]
+  ) -> SubprocessResult {
     let arguments = command.arguments
     if arguments == ContainerInvocation.systemStatus() {
       return jsonCommandResult(#"{"status":"running"}"#)
@@ -348,7 +352,8 @@ private final class MaintenanceFixture: @unchecked Sendable {
     if arguments == ContainerInvocation.inspectImage(settings.workloadImage.description) {
       return jsonCommandResult(
         """
-        [{"configuration":{"name":"\(settings.workloadImage.description)","descriptor":{"digest":"\(inspectedDigest)"}}}]
+        [{"configuration":{"name":"\(settings.workloadImage.description)",\
+        "descriptor":{"digest":"\(inspectedDigest)"}}}]
         """
       )
     }
@@ -359,7 +364,12 @@ private final class MaintenanceFixture: @unchecked Sendable {
       let name = arguments[1]
       return jsonCommandResult(
         """
-        [{"configuration":{"id":"\(name)","image":{"reference":"\(settings.workloadImage.description)","descriptor":{"digest":"\(inspectedDigest)"}},"labels":{"clawd.exec":"1"},"resources":{"cpus":4,"memoryInBytes":1073741824},"readOnly":true,"useInit":true,"capAdd":[],"capDrop":["ALL"]},"status":{"state":"running"}}]
+        [{"configuration":{"id":"\(name)",\
+        "image":{"reference":"\(settings.workloadImage.description)",\
+        "descriptor":{"digest":"\(inspectedDigest)"}},\
+        "labels":{"clawd.exec":"1"},"resources":{"cpus":4,"memoryInBytes":1073741824},\
+        "readOnly":true,"useInit":true,"capAdd":[],"capDrop":["ALL"]},\
+        "status":{"state":"running"}}]
         """
       )
     }

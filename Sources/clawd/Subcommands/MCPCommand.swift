@@ -3,6 +3,7 @@ import AsyncHTTPClient
 import ClawAuth
 import ClawCore
 import ClawGateway
+import ClawHTTP
 import ClawSecrets
 import ClawTelegram
 import ClawWorkspace
@@ -29,7 +30,8 @@ struct MCPCommand: ParsableCommand {
       commandName: "list",
       abstract: "Show the configured MCP servers and their token state.",
       discussion: """
-        A static check: it reads the catalog and the token store and contacts nothing, so it answers \
+        A static check: it reads the catalog and the token store and contacts nothing, \
+        so it answers \
         the same way whether the daemon is up, down, or the servers are unreachable. Use probe for \
         live proof.
         """
@@ -47,8 +49,9 @@ struct MCPCommand: ParsableCommand {
       commandName: "probe",
       abstract: "Contact each MCP server and report what it answers.",
       discussion: """
-        Connects, runs the initialize handshake, and counts the tools the server would contribute — \
-        the same path the daemon takes at boot, so a server that probes clean is a server that will \
+        Connects, runs the initialize handshake, and counts the tools the server would \
+        contribute — the same path the daemon takes at boot, so a server that probes clean \
+        is a server that will \
         load. Exits non-zero when any probed server fails.
         """
     )
@@ -79,7 +82,8 @@ struct MCPCommand: ParsableCommand {
       commandName: "set-token",
       abstract: "Store the access token for a configured MCP server.",
       discussion: """
-        The token is read from stdin — piped, or typed at the prompt — never from the command line, \
+        The token is read from stdin — piped, or typed at the prompt — \
+        never from the command line, \
         where it would land in the shell history and the process table. Stop the daemon first: the \
         token is read once at boot.
         """

@@ -56,8 +56,7 @@ import Testing
       )
       #expect(prompt.target.messageThreadId == thread)
       try first.stores.outbox.markSent(
-        runId: prompt.runId,
-        stepIndex: prompt.stepIndex,
+        deliveryKey: prompt.deliveryKey,
         telegramMessageId: 900,
         now: Date()
       )
@@ -198,6 +197,7 @@ import Testing
         chatId: fire.ownerChatId,
         buildResult: BuildResult(messages: [], ownerNotices: [], hasPrivateDataAccess: false),
         sessionTainted: false,
+        hasPinnedLessons: false,
         sessionHasPrivateData: false,
         todayTokens: 0,
         todayUSD: 0,

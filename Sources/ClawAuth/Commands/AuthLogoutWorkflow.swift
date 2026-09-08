@@ -43,7 +43,10 @@ private extension AuthLogoutWorkflow {
           exit: .success,
           events: [
             .output(
-              "No stored \(ChatGPTProviderMetadata.providerID.rawValue) credential — already logged out."
+              """
+              No stored \(ChatGPTProviderMetadata.providerID.rawValue) credential — \
+              already logged out.
+              """
             )
           ]
         )

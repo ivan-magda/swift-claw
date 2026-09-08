@@ -52,7 +52,7 @@ struct TReplyTarget: Decodable {
   let from: TUser?
 }
 
-/// Media markers — presence is all that's needed to classify an unsupported kind.
+/// A wire object whose presence is enough; its fields carry no behavior here.
 struct TPresence: Decodable {}
 
 /// Bot API `Voice`: the download handle plus the metadata the pipeline guards on before fetching.
@@ -113,6 +113,7 @@ struct TMessage: Decodable {
   let from: TUser?
   let chat: TChat
   let sender_chat: TChat?
+  let forward_origin: TPresence?
   let message_thread_id: Int64?
   let reply_to_message: TReplyTarget?
   let migrate_to_chat_id: Int64?
@@ -172,6 +173,7 @@ struct TMessage: Decodable {
       replyToUserId: reply_to_message?.from?.id,
       senderDisplayName: from?.displayName,
       hasSenderChat: sender_chat != nil,
+      isForwarded: forward_origin != nil,
       migratedToChatId: migrate_to_chat_id
     )
   }

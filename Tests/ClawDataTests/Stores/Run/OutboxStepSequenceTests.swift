@@ -246,7 +246,8 @@ import Testing
         sessionId: fixture.sessionId,
         chatId: 7,
         usage: nil,
-        chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded reply", payloadHash: "d1")
+        chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded reply", payloadHash: "d1"),
+        cause: .providerFailure
       ),
       now: Date()
     )

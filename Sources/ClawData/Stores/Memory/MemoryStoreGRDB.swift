@@ -85,7 +85,8 @@ public struct MemoryStoreGRDB: MemoryStore {
   static func insertItem(_ db: Database, item: NewMemoryItem, now: Date) throws -> MemoryItem {
     try db.execute(
       sql: """
-        INSERT INTO memory_items(text, kind, sensitivity, importance, source, session_id, created_at)
+        INSERT INTO memory_items(text, kind, sensitivity, importance, \
+        source, session_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [

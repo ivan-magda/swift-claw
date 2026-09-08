@@ -28,8 +28,10 @@ extension CredentialStoreError: CustomStringConvertible {
     case .insecureStorage:
       return "the credential file or the runtime key has unsafe ownership or permissions"
     case .malformedStorage:
-      return "the credential file failed authentication; it is truncated, tampered with, or sealed "
-        + "under another key"
+      return """
+        the credential file failed authentication; \
+        it is truncated, tampered with, or sealed under another key
+        """
     case .unsupportedVersion:
       return "the credential file was written by a newer clawd"
     case .oversizedStorage:

@@ -23,7 +23,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Install system dependencies
-        run: apt-get update && apt-get install -y --no-install-recommends libsqlite3-dev ca-certificates tzdata
+        run: |
+          apt-get update &&
+            apt-get install -y --no-install-recommends \
+              libsqlite3-dev \
+              ca-certificates \
+              tzdata
       - name: Show toolchain
         run: swift --version
       - uses: actions/cache@v6
@@ -38,7 +43,13 @@ jobs:
       - name: Re-run the concurrency-sensitive suites on one cooperative thread
         env:
           LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
-        run: swift test --filter 'CommandApprovalCancelSignalRaceTests|ApprovalExpiryServiceTests|ApprovalWaiterTests|ApprovalBootReconcilerTests'
+        run: |
+          swift test \
+            --filter CommandApprovalCancelSignalRaceTests \
+            --filter ApprovalExpiryServiceTests \
+            --filter ApprovalWaiterTests \
+            --filter ApprovalBootReconcilerTests \
+            --filter TrialSerializationTests
 
   test-macos:
     runs-on: macos-26
@@ -52,8 +63,10 @@ jobs:
           ls -d /Applications/Xcode*.app 2>/dev/null || true
           sudo xcode-select -s /Applications/Xcode_26.6.app
           swift --version
-          swift --version 2>&1 | grep -qF "Swift version 6.3" \
-            || { echo "::error::Expected a Swift 6.3.x toolchain on this runner"; exit 1; }
+          swift --version 2>&1 | grep -qF "Swift version 6.3" || {
+            echo "::error::Expected a Swift 6.3.x toolchain on this runner"
+            exit 1
+          }
       - uses: actions/cache@v6
         with:
           path: .build
@@ -93,6 +106,10 @@ jobs:
         with:
           persist-credentials: false
       - name: actionlint
-        run: docker run --rm -v "${{ github.workspace }}:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            rhysd/actionlint:1.7.12 -color
       - name: zizmor
         run: pipx run zizmor==1.26.1 .

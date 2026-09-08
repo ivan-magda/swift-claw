@@ -163,7 +163,7 @@ import Testing
 
     // when
     let result = try env.runs.commitAssistantTurn(turn, now: Date())
-    try env.runs.failRun(runId: env.seedRunId, now: Date())
+    try env.runs.failRun(runId: env.seedRunId, cause: .providerFailure, now: Date())
 
     // then
     let state = try #require(
@@ -275,7 +275,11 @@ import Testing
       runId: runId,
       chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "x", payloadHash: "h")
     )
-    try env.outbox.markSent(runId: runId, stepIndex: 0, telegramMessageId: 1001, now: Date())
+    try env.outbox.markSent(
+      deliveryKey: OutboxDedupKey.make(runId: runId, stepIndex: 0),
+      telegramMessageId: 1001,
+      now: Date()
+    )
 
     // when
     let replies = try env.runs.reconcileRunsAtBoot(
@@ -301,8 +305,10 @@ import Testing
     _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
     try env.queue.write { db in
       try db.execute(
-        sql:
-          "CREATE TRIGGER boom BEFORE INSERT ON outbound_deliveries BEGIN SELECT RAISE(ABORT, 'boom'); END"
+        sql: """
+          CREATE TRIGGER boom BEFORE INSERT ON outbound_deliveries \
+          BEGIN SELECT RAISE(ABORT, 'boom'); END
+          """
       )
     }
     let turn = AssistantTurn(
@@ -659,7 +665,8 @@ private extension RunStoreTests {
         completionTokens: completionTokens,
         costUSD: costUSD
       ),
-      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "degraded", payloadHash: "h")
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "degraded", payloadHash: "h"),
+      cause: .providerFailure
     )
   }
 

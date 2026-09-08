@@ -150,7 +150,10 @@ enum CoderHealthRows {
       let job = try store.lastFailedJob()
       let value =
         job.map {
-          "\($0.id): \($0.state.rawValue); \($0.result?.failure?.message ?? "no diagnostic") (most recently updated failure record)"
+          """
+          \($0.id): \($0.state.rawValue); \($0.result?.failure?.message ?? "no diagnostic") \
+          (most recently updated failure record)
+          """
         } ?? "none"
       rows.append(row(Key.lastFailure, redactor.redact(value)))
     } catch {

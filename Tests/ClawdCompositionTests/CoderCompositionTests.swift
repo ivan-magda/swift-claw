@@ -100,7 +100,11 @@ import Testing
       coordination: coordination,
       agentStack: restartedAgent,
       costPolicy: stack.roster.primary.costPolicy,
-      imageCache: ImageCache()
+      imageCache: ImageCache(),
+      freezeLearningSurface: fixture.builder.makeLearningSurfaceFreeze(
+        toolDefinitions: restartedAgent.toolDispatcher.definitions,
+        workspace: workspace
+      )
     )
     let restartedFabric = fixture.builder.makeApprovalFabric(
       coordination: coordination,
@@ -113,7 +117,8 @@ import Testing
       coordination: coordination,
       waiter: restartedFabric.waiter,
       heartbeatOwner: nil,
-      coder: restartedService
+      coder: restartedService,
+      learning: nil
     )()
     let started = await fixture.backend.started.waitUntilOpen()
     fixture.backend.releaseAll()

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawSubprocess
 import Foundation
 import Testing
 
@@ -47,6 +48,7 @@ import Testing
     // given
     let image = try #require(
       PinnedImageReference.parse(
+        // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       )
     )
@@ -71,7 +73,7 @@ import Testing
       totalBytes: 9,
       truncated: true
     )
-    let command = ContainerCommand(
+    let command = SubprocessCommand(
       arguments: ["system", "status"],
       timeout: .seconds(5),
       captureLimit: 1024,
@@ -79,7 +81,7 @@ import Testing
     )
 
     // when
-    let result = ContainerCommandResult(
+    let result = SubprocessResult(
       termination: .exited(7),
       stdout: output,
       stderr: CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false),
@@ -116,6 +118,7 @@ import Testing
     ExecSandboxSettings(
       workloadImage: try #require(
         PinnedImageReference.parse(
+          // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
           "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         )
       ),
@@ -148,8 +151,12 @@ import Testing
         "--cap-drop", "ALL", "--init", "--init-image",
         "ghcr.io/apple/containerization/vminit:1.1.0", "--read-only", "--tmpfs", "/tmp",
         "--cpus", "4", "--memory", "1024M", "--mount",
-        "type=bind,source=/state/exec-scratch/11111111-2222-3333-4444-555555555555,target=/work,readonly",
+        """
+        type=bind,source=/state/exec-scratch/11111111-2222-3333-4444-555555555555,\
+        target=/work,readonly
+        """,
         "--network", "none", "--no-dns", "--entrypoint", "/usr/bin/python",
+        // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "/work/.clawd-entrypoint.py",
       ]

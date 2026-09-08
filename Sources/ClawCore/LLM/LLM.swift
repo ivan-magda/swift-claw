@@ -62,6 +62,14 @@ public enum ResponseFormat: Sendable, Equatable {
   case jsonSchema(name: String, schema: JSONValue)
 }
 
+/// How a streaming adapter establishes terminal metadata. Production answers from the first
+/// terminal so a provider-held connection cannot delay completion; controlled evaluations may
+/// require every terminal alias through transport EOF to agree.
+package enum StreamingTerminalValidationPolicy: Sendable, Equatable {
+  case firstTerminal
+  case throughStreamEnd
+}
+
 /// A blocking chat-completions request.
 public struct ChatRequest: Sendable, Equatable {
   public let model: String
@@ -72,6 +80,11 @@ public struct ChatRequest: Sendable, Equatable {
   public let tools: [ToolDefinition]
   public let responseFormat: ResponseFormat?
   public let sessionId: String?
+  /// Optional, attempt-owned local guard. Providers that can observe streamed tool arguments update
+  /// it incrementally; every runtime still reconciles the terminal response. Nil preserves the
+  /// production surface and limits.
+  package let outputScope: AttemptOutputScope?
+  package let terminalValidationPolicy: StreamingTerminalValidationPolicy
 
   public init(
     model: String,
@@ -83,6 +96,31 @@ public struct ChatRequest: Sendable, Equatable {
     responseFormat: ResponseFormat? = nil,
     sessionId: String? = nil
   ) {
+    self.init(
+      model: model,
+      messages: messages,
+      maxOutputTokens: maxOutputTokens,
+      stop: stop,
+      tools: tools,
+      responseFormat: responseFormat,
+      sessionId: sessionId,
+      outputScope: nil,
+      terminalValidationPolicy: .firstTerminal
+    )
+  }
+
+  package init(
+    model: String,
+    messages: [ChatMessage],
+    maxOutputTokens: Int,
+    // swiftlint:disable:next discouraged_optional_collection
+    stop: [String]? = nil,
+    tools: [ToolDefinition] = [],
+    responseFormat: ResponseFormat? = nil,
+    sessionId: String? = nil,
+    outputScope: AttemptOutputScope?,
+    terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal
+  ) {
     self.model = model
     self.messages = messages
     self.maxOutputTokens = maxOutputTokens
@@ -90,6 +128,8 @@ public struct ChatRequest: Sendable, Equatable {
     self.tools = tools
     self.responseFormat = responseFormat
     self.sessionId = sessionId
+    self.outputScope = outputScope
+    self.terminalValidationPolicy = terminalValidationPolicy
   }
 }
 
@@ -119,6 +159,9 @@ public struct ChatResponse: Sendable, Equatable {
   public let costFromProvider: Double?
   public let toolCalls: [ToolCall]
   public let providerState: ProviderExchangeState?
+  /// The optional model identity echoed by the terminal provider event. Absence is distinct from a
+  /// mismatch and is valid for providers or backends that do not report it.
+  package let reportedModel: String?
 
   public init(
     content: String,
@@ -128,12 +171,33 @@ public struct ChatResponse: Sendable, Equatable {
     toolCalls: [ToolCall] = [],
     providerState: ProviderExchangeState? = nil
   ) {
+    self.init(
+      content: content,
+      finishReason: finishReason,
+      usage: usage,
+      costFromProvider: costFromProvider,
+      toolCalls: toolCalls,
+      providerState: providerState,
+      reportedModel: nil
+    )
+  }
+
+  package init(
+    content: String,
+    finishReason: String?,
+    usage: ChatUsage?,
+    costFromProvider: Double?,
+    toolCalls: [ToolCall] = [],
+    providerState: ProviderExchangeState? = nil,
+    reportedModel: String?
+  ) {
     self.content = content
     self.finishReason = finishReason
     self.usage = usage
     self.costFromProvider = costFromProvider
     self.toolCalls = toolCalls
     self.providerState = providerState
+    self.reportedModel = reportedModel
   }
 }
 

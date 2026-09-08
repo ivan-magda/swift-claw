@@ -394,7 +394,10 @@ private extension RecordedHTTPRequest {
       OAuthFixture.result(
         200,
         OAuthFixture.json(
-          #""access_token":"\#(OAuthFixture.accessToken)","refresh_token":"\#(rotated)","expires_in":60"#
+          #"""
+          "access_token":"\#(OAuthFixture.accessToken)",\#
+          "refresh_token":"\#(rotated)","expires_in":60
+          """#
         )
       )
     )

@@ -136,6 +136,7 @@ struct FallbackCompositionAcceptanceTests {
         hasPrivateDataAccess: false
       ),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0

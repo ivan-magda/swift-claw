@@ -2,6 +2,7 @@ import AsyncHTTPClient
 import ClawCore
 import ClawData
 import ClawGateway
+import ClawHTTP
 import ClawLLM
 import ClawTelegram
 import ClawTestSupport
@@ -140,22 +141,42 @@ enum CompositionAcceptance {
   static func toolRound(callID: String, tokens: (input: Int, output: Int)) -> [Data] {
     [
       event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+        #"""
+        {"type":"response.output_item.added","output_index":0,\#
+        "item":{"type":"message","role":"assistant","status":"in_progress"}}
+        """#
       ),
       event(
-        #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Let me check."}]}}"#
+        #"""
+        {"type":"response.output_item.done","output_index":0,\#
+        "item":{"type":"message","role":"assistant","status":"completed",\#
+        "content":[{"type":"output_text","text":"Let me check."}]}}
+        """#
       ),
       event(
-        #"{"type":"response.output_item.added","output_index":1,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC-A"}}"#
+        #"""
+        {"type":"response.output_item.added","output_index":1,\#
+        "item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC-A"}}
+        """#
       ),
       event(
-        #"{"type":"response.output_item.done","output_index":1,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC-A"}}"#
+        #"""
+        {"type":"response.output_item.done","output_index":1,\#
+        "item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC-A"}}
+        """#
       ),
       event(
-        #"{"type":"response.output_item.added","output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"\#(callID)","name":"clock"}}"#
+        #"""
+        {"type":"response.output_item.added","output_index":2,\#
+        "item":{"id":"fc_1","type":"function_call","call_id":"\#(callID)","name":"clock"}}
+        """#
       ),
       event(
-        #"{"type":"response.output_item.done","output_index":2,"item":{"id":"fc_1","type":"function_call","call_id":"\#(callID)","name":"clock","arguments":"{}"}}"#
+        #"""
+        {"type":"response.output_item.done","output_index":2,\#
+        "item":{"id":"fc_1","type":"function_call",\#
+        "call_id":"\#(callID)","name":"clock","arguments":"{}"}}
+        """#
       ),
       completed(tokens: tokens),
     ]
@@ -165,10 +186,17 @@ enum CompositionAcceptance {
   static func terminalRound(tokens: (input: Int, output: Int)) -> [Data] {
     [
       event(
-        #"{"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","status":"in_progress"}}"#
+        #"""
+        {"type":"response.output_item.added","output_index":0,\#
+        "item":{"type":"message","role":"assistant","status":"in_progress"}}
+        """#
       ),
       event(
-        #"{"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"It is noon."}]}}"#
+        #"""
+        {"type":"response.output_item.done","output_index":0,\#
+        "item":{"type":"message","role":"assistant","status":"completed",\#
+        "content":[{"type":"output_text","text":"It is noon."}]}}
+        """#
       ),
       completed(tokens: tokens),
     ]
@@ -176,7 +204,11 @@ enum CompositionAcceptance {
 
   static func completed(tokens: (input: Int, output: Int)) -> Data {
     event(
-      #"{"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":\#(tokens.input),"output_tokens":\#(tokens.output),"total_tokens":\#(tokens.input + tokens.output)}}}"#
+      #"""
+      {"type":"response.completed","response":{"id":"resp_1","status":"completed",\#
+      "usage":{"input_tokens":\#(tokens.input),"output_tokens":\#(tokens.output),\#
+      "total_tokens":\#(tokens.input + tokens.output)}}}
+      """#
     )
   }
 

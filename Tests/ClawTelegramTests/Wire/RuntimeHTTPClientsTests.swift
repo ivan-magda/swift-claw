@@ -30,10 +30,13 @@ private struct RecordingClient: Sendable {
   }
 
   @Test func telegramFollowsRedirectsWhileLLMAndToolAreProtected() {
-    // given / when / then — the three distinct client identities: Telegram on its redirect-following
-    // profile, LLM and tool on the protected redirect-disabled one so no bearer can follow a hop
-    #expect(RuntimeHTTPClientRole.telegram.egressProfile == .telegram)
-    #expect(RuntimeHTTPClientRole.llm.egressProfile == .protectedEgress)
-    #expect(RuntimeHTTPClientRole.tool.egressProfile == .protectedEgress)
+    // given
+    let roles: [RuntimeHTTPClientRole] = [.telegram, .llm, .tool]
+
+    // when
+    let profiles = roles.map(\.egressProfile)
+
+    // then
+    #expect(profiles == [.redirectFollowing, .protectedEgress, .protectedEgress])
   }
 }

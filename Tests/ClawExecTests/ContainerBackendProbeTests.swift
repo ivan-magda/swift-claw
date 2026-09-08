@@ -68,7 +68,8 @@ import Testing
     defer { fixture.remove() }
     let json = """
       [
-        {"version":"99.0.0","buildType":"release","commit":"server","appName":"container-apiserver"},
+        {"version":"99.0.0","buildType":"release","commit":"server",\
+      "appName":"container-apiserver"},
         {"version":"1.0.0","buildType":"release","commit":"cli","appName":"container"}
       ]
       """

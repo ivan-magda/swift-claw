@@ -155,8 +155,7 @@ struct CoderServiceFixture: Sendable {
     let outbox = OutboxStoreGRDB(writer: queue)
     for row in try outbox.pendingOutbound() where row.runId == origin.runID {
       try outbox.markSent(
-        runId: row.runId,
-        stepIndex: row.stepIndex,
+        deliveryKey: row.deliveryKey,
         telegramMessageId: 12,
         now: Date(timeIntervalSince1970: 1_800_000_000)
       )

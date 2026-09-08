@@ -21,6 +21,8 @@ struct ChatGPTResponsesAttemptPlan: Sendable {
   /// so the recovery identity lands on the same origin as the normal one, differing only in epoch.
   let profileID: UUID
   let wireModel: String
+  let outputScope: AttemptOutputScope?
+  let terminalValidationPolicy: StreamingTerminalValidationPolicy
 
   /// Encodes one wire request. `includePriorState` is false only on the single state-free recovery
   /// attempt, where the poisoned replay state must be dropped. The engine supplies the handoff that
@@ -112,14 +114,6 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
 // MARK: - Attempt loop
 
 private extension ChatGPTResponsesAttemptEngine {
-  /// The transient cause a first 401 surfaces when its refresh cannot be retried this turn. The
-  /// credential is intact and now marked for refresh, so the next turn heals on its own — this reads
-  /// as "try again", never as "log in again".
-  static let credentialRefreshing = ProviderError.retryable(
-    status: nil,
-    message: "the ChatGPT credential is being refreshed"
-  )
-
   /// What one wire attempt asks the loop to do next.
   enum LoopControl {
     case stop(LLMStreamTermination)
@@ -173,7 +167,9 @@ private extension ChatGPTResponsesAttemptEngine {
     let context = ResponseContext(
       codec: plan.codec,
       identity: state.replayMode.identity,
-      redactionValues: authorization.redactionValues
+      redactionValues: authorization.redactionValues,
+      outputScope: plan.outputScope,
+      terminalValidationPolicy: plan.terminalValidationPolicy
     )
     let request: HTTPRequest
     do {
@@ -231,11 +227,12 @@ private extension ChatGPTResponsesAttemptEngine {
       return .retryImmediately
 
     case .refreshWithoutRetry:
-      // The budget is spent, but a first 401 still refreshes: mark the credential for refresh so the
-      // next turn carries the fresh token, and surface a transient failure rather than a login prompt.
+      // The Responses budget is spent, but the credential policy is not. First make the rejection
+      // durable, then await the source's existing acquisition policy without issuing another
+      // inference request. A caller may replace the whole attempt only after this policy settles.
       await credentials.reject(generation: authorization.generation, disposition: .refresh)
       state.refreshRequested = true
-      return .stop(.failed(exposure.failure(Self.credentialRefreshing)))
+      return await finishRefreshWithoutInferenceRetry(exposure: exposure)
 
     case .latchAuthenticationRequired:
       await credentials.reject(
@@ -255,6 +252,26 @@ private extension ChatGPTResponsesAttemptEngine {
       return .retryAfter(delay)
     }
   }
+
+  /// Drives credential acquisition after a clean 401 without re-entering the Responses attempt
+  /// loop. A successful rotation is intentionally discarded here: it is durable for use in a later
+  /// planned attempt, while this logical attempt terminates without a second inference send.
+  func finishRefreshWithoutInferenceRetry(
+    exposure: ProviderAttemptExposure
+  ) async -> LoopControl {
+    do {
+      _ = try await credentials.authorization()
+      return .stop(.failed(exposure.failure(.credentialRefreshCompleted)))
+    } catch is CancellationError {
+      return .stop(.cancelled(.notStarted))
+    } catch let credentialError as ChatGPTCredentialError {
+      return .stop(
+        .failed(exposure.failure(Self.cause(for: credentialError)))
+      )
+    } catch {
+      return .stop(.failed(exposure.failure(.authenticationRequired)))
+    }
+  }
 }
 
 // MARK: - Credential failure mapping
@@ -271,10 +288,14 @@ private extension ChatGPTResponsesAttemptEngine {
       return .authenticationRequired
     case .throttled(let retryAfter):
       return .quotaLimited(retryAfterSeconds: Self.wholeSeconds(retryAfter))
-    case .temporarilyUnavailable, .persistenceFailed, .shuttingDown:
-      // The credential is intact; the token endpoint is briefly unhealthy or the daemon is stopping.
-      // A retry heals it, so this is a transient outage rather than a login failure.
-      return .retryable(status: nil, message: "the ChatGPT credential was temporarily unavailable")
+    case .temporarilyUnavailable:
+      // The credential is intact; the token endpoint is briefly unhealthy. A later attempt can heal
+      // it, so this is a transient outage rather than a login failure.
+      return .credentialRefreshExhausted
+    case .persistenceFailed, .shuttingDown:
+      // A replacement worker could otherwise reload the rejected on-disk token, or race teardown.
+      // Neither condition is evidence that the managed OAuth policy reached a usable conclusion.
+      return .credentialStateUnavailable
     }
   }
 
@@ -298,16 +319,22 @@ private extension ChatGPTResponsesAttemptEngine {
     let identity: ChatGPTReplayIdentity
     let redactionValues: [String]
     let redactor: SecretRedactor
+    let outputScope: AttemptOutputScope?
+    let terminalValidationPolicy: StreamingTerminalValidationPolicy
 
     init(
       codec: ChatGPTProviderStateCodec,
       identity: ChatGPTReplayIdentity,
-      redactionValues: [String]
+      redactionValues: [String],
+      outputScope: AttemptOutputScope?,
+      terminalValidationPolicy: StreamingTerminalValidationPolicy
     ) {
       self.codec = codec
       self.identity = identity
       self.redactionValues = redactionValues
       self.redactor = SecretRedactor(secretValues: redactionValues)
+      self.outputScope = outputScope
+      self.terminalValidationPolicy = terminalValidationPolicy
     }
 
     /// A natural error's provider cause, redacted. A transport failure already carries a sanitized
@@ -315,7 +342,7 @@ private extension ChatGPTResponsesAttemptEngine {
     /// transient with its description.
     func redactedCause(for error: any Error) -> ProviderError {
       if let transport = error as? HTTPTransportFailure {
-        return .retryable(status: nil, message: redactor.redact(transport.safeMessage))
+        return ChatGPTResponsesAttemptEngine.providerError(from: transport, redactor: redactor)
       }
       if let providerError = error as? ProviderError {
         return providerError.redacted(with: redactor)
@@ -405,9 +432,22 @@ private extension ChatGPTResponsesAttemptEngine {
     switch transport.disposition {
     case .definitelyNotSent:
       exposure.noteProvenClean()
-      return .transportRetryable(.retryable(status: nil, message: message))
+      return .transportRetryable(.connectFailed(message: message))
     case .mayHaveBeenSent:
-      return .terminal(.failed(exposure.failure(.retryable(status: nil, message: message))))
+      return .terminal(.failed(exposure.failure(.transportFailure(message: message))))
+    }
+  }
+
+  static func providerError(
+    from transport: HTTPTransportFailure,
+    redactor: SecretRedactor
+  ) -> ProviderError {
+    let message = redactor.redact(transport.safeMessage)
+    switch transport.disposition {
+    case .definitelyNotSent:
+      return .connectFailed(message: message)
+    case .mayHaveBeenSent:
+      return .transportFailure(message: message)
     }
   }
 }
@@ -415,10 +455,11 @@ private extension ChatGPTResponsesAttemptEngine {
 // MARK: - Stream consumption
 
 private extension ChatGPTResponsesAttemptEngine {
-  /// Reads a 2xx stream, emitting owner-visible deltas and joining the exchange on every exit. Once a
-  /// terminal is decided the exchange is cancelled and joined promptly rather than waiting for the
-  /// server's EOF. Nothing here is ever retried: a 2xx head has already moved exposure past the point
-  /// a replay would be safe, and the first data byte has closed the retry boundary.
+  /// Reads a 2xx stream, emitting owner-visible deltas and joining the exchange on every exit. The
+  /// production policy cancels and joins promptly after its first terminal; strict evaluation drains
+  /// terminal aliases through transport EOF. Nothing here is ever retried: a 2xx head has already
+  /// moved exposure past the point a replay would be safe, and the first data byte has closed the
+  /// retry boundary.
   func consume(
     _ exchange: HTTPStreamExchange,
     exposure: ProviderAttemptExposure,
@@ -429,12 +470,20 @@ private extension ChatGPTResponsesAttemptEngine {
     var accumulator = ChatGPTResponsesAccumulator(
       codec: context.codec,
       identity: context.identity,
-      redactionValues: context.redactionValues
+      redactionValues: context.redactionValues,
+      outputScope: context.outputScope,
+      terminalValidationPolicy: context.terminalValidationPolicy
     )
     var terminal: ChatResponse?
 
     do {
       for try await chunk in exchange.body {
+        // `accumulator.consume` may first observe tokens and then throw (for example when the
+        // evaluation output cap is crossed). Debit that observation before the error leaves this
+        // chunk so cancellation cannot turn known provider work into a zero-token exposure.
+        defer {
+          exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens)
+        }
         for streamEvent in try accumulator.consume(try parser.push(chunk)) {
           switch streamEvent {
           case .delta(let text):
@@ -443,7 +492,6 @@ private extension ChatGPTResponsesAttemptEngine {
             terminal = response
           }
         }
-        exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens)
         if terminal != nil {
           break
         }
@@ -460,7 +508,9 @@ private extension ChatGPTResponsesAttemptEngine {
       if let transferError = Self.transferError(await exchange.awaitTermination()) {
         throw transferError
       }
-      _ = try accumulator.finish()
+      if let finalEvent = try accumulator.finish(), case .finished(let response) = finalEvent {
+        return .completed(response)
+      }
       return .failed(exposure.failure(.terminal(status: nil, message: "the ChatGPT reply ended")))
     } catch is CancellationError {
       _ = await exchange.cancelAndAwait()

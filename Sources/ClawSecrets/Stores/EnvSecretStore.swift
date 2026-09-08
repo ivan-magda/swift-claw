@@ -33,7 +33,10 @@ public struct EnvSecretStore: SecretStore {
     }
 
     warn(
-      "secrets are PLAINTEXT in environment variables — run `clawd secrets seal` for encrypted-at-rest storage"
+      """
+      secrets are PLAINTEXT in environment variables — \
+      run `clawd secrets seal` for encrypted-at-rest storage
+      """
     )
 
     let apiKey = environment[EnvKey.llmApiKey].flatMap { $0.isEmpty ? nil : $0 }
@@ -51,6 +54,6 @@ public struct EnvSecretStore: SecretStore {
   /// Writes to stderr — used as the default warn so the daemon always emits the warning
   /// even when no custom handler is injected.
   public static let defaultWarn: @Sendable (String) -> Void = { message in
-    FileHandle.standardError.write(Data(("WARN: " + message + "\n").utf8))
+    FileHandle.standardError.write(Data("WARN: \(message)\n".utf8))
   }
 }

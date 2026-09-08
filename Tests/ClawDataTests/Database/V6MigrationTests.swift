@@ -96,13 +96,17 @@ import Testing
     try ClawDatabase.migrator.migrate(queue, upTo: "v5")
     try queue.write { db in
       try db.execute(
-        sql:
-          "INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) VALUES ('tg:dm:1', ?, ?, 0)",
+        sql: """
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) \
+          VALUES ('tg:dm:1', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
       try db.execute(
-        sql:
-          "INSERT INTO messages(session_id, role, content, provenance, ts) VALUES (1, 'user', 'old row', 'trusted', ?)",
+        sql: """
+          INSERT INTO messages(session_id, role, content, provenance, ts) \
+          VALUES (1, 'user', 'old row', 'trusted', ?)
+          """,
         arguments: [Date()]
       )
       try db.execute(

@@ -28,9 +28,18 @@ import Testing
     let events = try pushAll(
       &parser,
       [
-        #"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"web_fetch","arguments":""}}]}}]}"#,
-        #"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"url\":"}}]}}]}"#,
-        #"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"https://e.example/\"}"}}]}}],"usage":null}"#,
+        #"""
+        {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1",\#
+        "function":{"name":"web_fetch","arguments":""}}]}}]}
+        """#,
+        #"""
+        {"choices":[{"delta":{"tool_calls":[{"index":0,\#
+        "function":{"arguments":"{\"url\":"}}]}}]}
+        """#,
+        #"""
+        {"choices":[{"delta":{"tool_calls":[{"index":0,\#
+        "function":{"arguments":"\"https://e.example/\"}"}}]}}],"usage":null}
+        """#,
         #"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#,
         "[DONE]",
       ]
@@ -59,7 +68,11 @@ import Testing
     let events = try pushAll(
       &parser,
       [
-        #"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"web_search","arguments":"{}"}},{"index":1,"id":"b","function":{"name":"file_read","arguments":"{}"}}]}}]}"#,
+        #"""
+        {"choices":[{"delta":{"tool_calls":[\#
+        {"index":0,"id":"a","function":{"name":"web_search","arguments":"{}"}},\#
+        {"index":1,"id":"b","function":{"name":"file_read","arguments":"{}"}}]}}]}
+        """#,
         "[DONE]",
       ]
     )
@@ -78,7 +91,10 @@ import Testing
       _ = try parser.push(
         Data(
           ("data: "
-            + #"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"n","arguments":"\#(hugeArguments)"}}]}}]}"#
+            + #"""
+            {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a",\#
+            "function":{"name":"n","arguments":"\#(hugeArguments)"}}]}}]}
+            """#
             + "\n\n").utf8
         )
       )
@@ -92,7 +108,10 @@ import Testing
       &parser,
       [
         #"{"choices":[{"delta":{"content":"Let me check."}}]}"#,
-        #"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"web_fetch","arguments":"{}"}}]}}]}"#,
+        #"""
+        {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a",\#
+        "function":{"name":"web_fetch","arguments":"{}"}}]}}]}
+        """#,
         "[DONE]",
       ]
     )
@@ -126,7 +145,10 @@ import Testing
     let events = try pushAll(
       &parser,
       [
-        #"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"url\":\"x\"}"}}]}}]}"#,
+        #"""
+        {"choices":[{"delta":{"tool_calls":[{"index":0,\#
+        "function":{"arguments":"{\"url\":\"x\"}"}}]}}]}
+        """#,
         "[DONE]",
       ]
     )
@@ -142,7 +164,10 @@ import Testing
     let events = try pushAll(
       &parser,
       [
-        #"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_2","function":{"name":"web_fetch"}}]}}]}"#,
+        #"""
+        {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_2",\#
+        "function":{"name":"web_fetch"}}]}}]}
+        """#,
         "[DONE]",
       ]
     )

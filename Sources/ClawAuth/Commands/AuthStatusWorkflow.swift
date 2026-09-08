@@ -43,8 +43,10 @@ public struct AuthStatusWorkflow: Sendable {
     events.append(.output("credential: present"))
     events.append(
       .output(
-        "expires: \(Self.expiry(stored.expiresAt)) "
-          + "(\(Self.label(for: freshness(of: stored))))"
+        """
+        expires: \(Self.expiry(stored.expiresAt)) \
+        (\(Self.label(for: freshness(of: stored))))
+        """
       )
     )
 

@@ -44,7 +44,10 @@ enum EnvironmentLoader {
 
   /// Opens the store bundle at the state root's database path (runs pending migrations).
   static func openStores(config: AppConfig) throws -> ClawStores {
-    try ClawDatabase.openStores(path: databasePath(config: config))
+    try ClawDatabase.openStores(
+      path: databasePath(config: config),
+      learningEnabled: config.learningEnabled
+    )
   }
 
   /// Creates the workspace directory (0700) if missing.

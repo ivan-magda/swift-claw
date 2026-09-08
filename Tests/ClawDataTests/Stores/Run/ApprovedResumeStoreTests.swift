@@ -48,7 +48,8 @@ import Testing
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-          VALUES (?, ?, 'assistant', '', 'trusted', ?, '[{"id":"c1","name":"file_write","arguments":"{}"}]')
+          VALUES (?, ?, 'assistant', '', 'trusted', ?, \
+          '[{"id":"c1","name":"file_write","arguments":"{}"}]')
           """,
         arguments: [sessionId, runId, Date()]
       )
@@ -60,7 +61,13 @@ import Testing
         arguments: [sessionId, runId, Self.placeholder, Date()]
       )
       let messageId = db.lastInsertedRowID
-      _ = try RunStoreGRDB.transitionRun(db, runId: runId, event: .suspendForApproval, now: Date())
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .suspendForApproval,
+        now: Date(),
+        terminal: nil
+      )
       return messageId
     }
 
@@ -165,7 +172,13 @@ import Testing
     // given — /stop cancelled the run after the Approve callback CAS'd the row APPROVED
     let env = try makeSuspendedFixture()
     try env.queue.write { db in
-      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .cancel, now: Date())
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: env.runId,
+        event: .cancel,
+        now: Date(),
+        terminal: .deferred(.ownerCancelled)
+      )
     }
 
     // when
@@ -265,7 +278,13 @@ import Testing
       now: Date()
     )
     try env.queue.write { db in
-      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .fail, now: Date())
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: env.runId,
+        event: .fail,
+        now: Date(),
+        terminal: .settled(.unknown)
+      )
     }
 
     // when
@@ -405,7 +424,13 @@ import Testing
     // given — /stop drove the run terminal after the approve CAS
     let env = try makeSuspendedFixture()
     try env.queue.write { db in
-      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .cancel, now: Date())
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: env.runId,
+        event: .cancel,
+        now: Date(),
+        terminal: .deferred(.ownerCancelled)
+      )
     }
     let item = NewMemoryItem(text: "never stored", kind: .user, sessionId: env.sessionId)
 
@@ -449,7 +474,8 @@ import Testing
         db,
         runId: env.runId,
         event: .suspendForApproval,
-        now: Date()
+        now: Date(),
+        terminal: nil
       )
       return messageId
     }

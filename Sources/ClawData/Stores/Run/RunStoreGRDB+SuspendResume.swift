@@ -16,7 +16,13 @@ extension RunStoreGRDB {
   ) throws(StoreError) -> SuspendedCommitReceipt {
     try database.writeMapping { db in
       guard
-        try Self.transitionRun(db, runId: runId, event: .suspendForApproval, now: now) != nil
+        try Self.transitionRun(
+          db,
+          runId: runId,
+          event: .suspendForApproval,
+          now: now,
+          terminal: nil
+        ) != nil
       else {
         throw StoreError.unexpected("run \(runId) was not RUNNING at suspend commit")
       }
@@ -90,7 +96,9 @@ extension RunStoreGRDB {
     guard try observationIsPlaceholder(db, runId: runId, messageId: observationMessageId) else {
       return .alreadyResumed
     }
-    guard try transitionRun(db, runId: runId, event: .resumeApproved, now: now) != nil else {
+    guard
+      try transitionRun(db, runId: runId, event: .resumeApproved, now: now, terminal: nil) != nil
+    else {
       try fillApprovedObservation(
         db,
         runId: runId,
@@ -182,15 +190,19 @@ extension RunStoreGRDB {
       let rounds =
         try Int.fetchOne(
           db,
-          sql:
-            "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = '\(MessageRole.assistant.rawValue)'",
+          sql: """
+            SELECT COUNT(*) FROM messages \
+            WHERE run_id = ? AND role = '\(MessageRole.assistant.rawValue)'
+            """,
           arguments: [runId]
         ) ?? 0
       let toolCalls =
         try Int.fetchOne(
           db,
-          sql:
-            "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = '\(MessageRole.tool.rawValue)'",
+          sql: """
+            SELECT COUNT(*) FROM messages \
+            WHERE run_id = ? AND role = '\(MessageRole.tool.rawValue)'
+            """,
           arguments: [runId]
         ) ?? 0
       let tokens =
@@ -209,6 +221,12 @@ extension RunStoreGRDB {
           arguments: [runId]
         ) ?? 0
       return ResumeUsage(rounds: rounds, toolCalls: toolCalls, tokens: tokens, costUSD: costUSD)
+    }
+  }
+
+  public func jobId(runId: Int64) throws(StoreError) -> Int64? {
+    try database.readMapping { db in
+      try Int64.fetchOne(db, sql: "SELECT job_id FROM runs WHERE id = ?", arguments: [runId])
     }
   }
 
@@ -239,7 +257,15 @@ extension RunStoreGRDB {
     now: Date
   ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
-      guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
+      guard
+        try Self.transitionRun(
+          db,
+          runId: runId,
+          event: .fail,
+          now: now,
+          terminal: .settled(.policyBlocked)
+        ) != nil
+      else {
         return false
       }
       try Self.fillApprovedObservation(
@@ -294,8 +320,10 @@ extension RunStoreGRDB {
     content: String
   ) throws {
     try db.execute(
-      sql:
-        "UPDATE messages SET content = ? WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'",
+      sql: """
+        UPDATE messages SET content = ? \
+        WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'
+        """,
       arguments: [content, messageId, runId]
     )
   }

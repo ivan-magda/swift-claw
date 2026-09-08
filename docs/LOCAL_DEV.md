@@ -37,11 +37,14 @@ swift build -c release
 ## Lint
 
 ```bash
-scripts/lint.sh --fix   # auto-apply swift-format + swiftlint fixes
+scripts/lint.sh --fix   # auto-apply layout, multiline conditional bodies, and SwiftLint fixes
 scripts/lint.sh         # verify; must pass before committing
 ```
 
-CI runs the check step. Fix before pushing.
+CI runs the check step. Fix before pushing. SwiftLint rejects source lines over 100 characters,
+including interpolated and multiline strings; it exempts comments and URLs. Wrap long literals
+with continuations that preserve their runtime text. `--fix` does not perform that conversion.
+See [the formatting contract](ARCHITECTURE.md#192-source-formatting-and-lint) for exceptions.
 
 ---
 

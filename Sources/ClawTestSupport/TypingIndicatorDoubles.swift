@@ -1,11 +1,8 @@
+import ClawAgent
 import ClawCore
 
-/// Shared `TypingIndicator` doubles for any seam that pulses "typing…" during a long operation.
-public struct NoopTyping: TypingIndicator {
-  public init() {}
-
-  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {}
-}
+/// Shared spelling retained for tests that predate the production no-op collaborator.
+package typealias NoopTyping = ClawAgent.NoopTypingIndicator
 
 /// Records every typing pulse so "issued at least once", "never issued", and "issued into the
 /// calling topic" are all observable.

@@ -33,7 +33,7 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
 
     let repository = String(rawValue[..<separator.lowerBound])
     let digest = String(rawValue[separator.upperBound...])
-    guard digest.count == 64, digest.allSatisfy({ "0123456789abcdef".contains($0) }) else {
+    guard SHA256Digest.isCanonicalHex(digest) else {
       return nil
     }
 

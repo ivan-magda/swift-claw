@@ -203,8 +203,10 @@ private extension MCPTool {
     case .definitelyNotExecuted:
       return "\(resolved.localName) failed: \(detail)."
     case .mayHaveExecuted:
-      return
-        "\(resolved.localName) may have completed remotely; verify its effects before retrying: \(detail)."
+      return """
+        \(resolved.localName) may have completed remotely; \
+        verify its effects before retrying: \(detail).
+        """
     }
   }
 }

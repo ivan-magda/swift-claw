@@ -128,8 +128,10 @@ public enum HealthRowsBuilder {
   static func skillsCheck(_ diagnostics: SkillDiagnostics) -> DoctorReport.Check {
     DoctorReport.Check(
       key: "context.skills",
-      value: "accepted=\(diagnostics.acceptedCount) rejected=\(diagnostics.rejectedCount) "
-        + "fits_cap=\(diagnostics.fitsSkillsCap)",
+      value: """
+        accepted=\(diagnostics.acceptedCount) rejected=\(diagnostics.rejectedCount) \
+        fits_cap=\(diagnostics.fitsSkillsCap)
+        """,
       ok: diagnostics.rejectedCount == 0 && diagnostics.fitsSkillsCap,
       group: .context,
       isHeadline: true

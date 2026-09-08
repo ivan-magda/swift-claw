@@ -2,6 +2,7 @@ import ArgumentParser
 import ClawCore
 import ClawGateway
 import ClawSecrets
+import ClawSubprocess
 import Foundation
 
 struct SecretsCommand: AsyncParsableCommand {
@@ -21,8 +22,10 @@ struct SecretsCommand: AsyncParsableCommand {
 
     @Option(
       name: .customLong("env-file"),
-      help:
-        "Env file to scrub sealed secrets from (default: $CLAW_ENV_FILE or ~/.swift-claw/clawd.env)."
+      help: """
+        Env file to scrub sealed secrets from \
+        (default: $CLAW_ENV_FILE or ~/.swift-claw/clawd.env).
+        """
     )
     var envFile: String?
 
@@ -216,8 +219,10 @@ extension SecretsCommand.Seal {
     switch scrubOutcome {
     case .scrubbed(let keys, let path):
       summary += "\nBlanked \(keys.joined(separator: ", ")) in \(path)."
-      summary += "\nYour current shell still holds the old values; open a fresh shell "
-      summary += "before running the daemon."
+      summary += """
+        \nYour current shell still holds the old values; open a fresh shell \
+        before running the daemon.
+        """
     case .alreadyClean(let path):
       summary += "\nNo plaintext secret values found in \(path)."
     case .fileAbsent(let path):

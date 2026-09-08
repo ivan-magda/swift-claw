@@ -178,8 +178,10 @@ import Testing
     let outboundRow = try queue.read { db in
       try Row.fetchOne(
         db,
-        sql:
-          "SELECT status, approval_id, reply_markup FROM outbound_deliveries WHERE dedup_key = '1:0'"
+        sql: """
+          SELECT status, approval_id, reply_markup FROM outbound_deliveries \
+          WHERE dedup_key = '1:0'
+          """
       )
     }
     #expect(outboundRow?["status"] == "PENDING")

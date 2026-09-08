@@ -111,7 +111,10 @@ private extension ContainerInvocation {
       "--cap-drop", "ALL", "--init", "--init-image", context.initImage, "--read-only", "--tmpfs",
       "/tmp", "--cpus", String(context.settings.cpus), "--memory",
       "\(context.settings.memoryMiB)M", "--mount",
-      "type=bind,source=\(context.scratchPath),target=\(ExecEntrypoint.guestWorkDirectory),readonly",
+      """
+      type=bind,source=\(context.scratchPath),\
+      target=\(ExecEntrypoint.guestWorkDirectory),readonly
+      """,
     ]
 
     return arguments

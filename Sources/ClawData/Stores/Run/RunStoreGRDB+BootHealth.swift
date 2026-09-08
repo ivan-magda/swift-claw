@@ -30,65 +30,121 @@ extension RunStoreGRDB {
       var replies: [DegradationReply] = []
       for row in stale {
         let runId: Int64 = row["run_id"]
-        guard try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil else {
+        let disposition = try Self.orphanDisposition(db, runId: runId)
+        guard
+          try Self.transitionRun(
+            db,
+            runId: runId,
+            event: .fail,
+            now: now,
+            terminal: disposition
+          ) != nil
+        else {
           continue
         }
 
         try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
 
-        let jobId: Int64? = row["job_id"]
-        let sessionKey: String = row["session_key"]
-        let noticeChatId: Int64?
-        if let jobId {
-          noticeChatId = try Int64.fetchOne(
-            db,
-            sql: "SELECT owner_chat_id FROM scheduled_jobs WHERE id = ?",
-            arguments: [jobId]
-          )
-        } else if sessionKey == SessionKey.heartbeat {
-          // The heartbeat session has no chat id anywhere in the DB — the notice rides the
-          // config-derived owner target the boot caller resolved.
-          noticeChatId = heartbeatNoticeChatId
-        } else {
-          noticeChatId = SessionKey.chatId(from: sessionKey)
-        }
-
-        // Suppress the notice only when the owner already saw a genuine REPLY. The newest SENT
-        // row decides: an approval-prompt keyboard chunk (approval_id set) means the run
-        // suspended, was approved, and died before its continuation replied — the owner has
-        // heard nothing since tapping Approve, so the notice must still fire. (A RUNNING orphan
-        // can never trail a delivered reply mid-prompt: the keyboard chunk is the prompt's final
-        // step and must be SENT before the owner can approve at all.)
-        let newestSent = try Row.fetchOne(
+        let reply = try Self.enqueueOrphanNotice(
           db,
-          sql: """
-            SELECT approval_id FROM outbound_deliveries
-            WHERE run_id = ? AND status = 'SENT'
-            ORDER BY step_index DESC LIMIT 1
-            """,
-          arguments: [runId]
+          orphan: row,
+          degradationText: degradationText,
+          heartbeatNoticeChatId: heartbeatNoticeChatId,
+          now: now
         )
-        let ownerSawAReply = newestSent != nil && (newestSent?["approval_id"] as Int64?) == nil
-        guard ownerSawAReply == false, let chatId = noticeChatId else {
-          continue
-        }
-
-        // Re-based like every commit-time enqueue: a run that suspended before the crash already
-        // holds its approval prompt at step 0, and a raw step-0 notice would be dropped silently
-        // by the dedup key.
-        let chunk = OutboxChunk(
-          stepIndex: try Self.nextOutboxStepBase(db, runId: runId),
-          chatId: chatId,
-          payload: degradationText,
-          payloadHash: ContentHash.fnv1a(degradationText)
-        )
-        if try Self.insertOutbox(db, runId: runId, chunk: chunk, now: now) {
-          replies.append(DegradationReply(chatId: chatId, runId: runId, text: degradationText))
+        if let reply {
+          replies.append(reply)
         }
       }
 
+      // The crash backstop for settlement, not for state: a run that reached its terminal state in
+      // a previous process — `/stop` won, then the daemon died before the lane tail returned — has
+      // a receipt but no `settled_at`, and would otherwise stay out of the learning loop forever.
+      try ScheduledLearningStoreGRDB.settleAbandonedRuns(
+        db,
+        unresolvedObservationContent: Self.placeholderObservationContent,
+        now: now
+      )
+
       return replies
     }
+  }
+
+  /// The owner-facing half of failing one orphan: resolve where the notice goes, decide whether it
+  /// is owed at all, and enqueue it. Returns the reply the caller should hand the boot dispatcher,
+  /// or nil when the notice is suppressed or has no target.
+  static func enqueueOrphanNotice(
+    _ db: Database,
+    orphan row: Row,
+    degradationText: String,
+    heartbeatNoticeChatId: Int64?,
+    now: Date
+  ) throws -> DegradationReply? {
+    let runId: Int64 = row["run_id"]
+    let jobId: Int64? = row["job_id"]
+    let sessionKey: String = row["session_key"]
+    let noticeChatId: Int64?
+    if let jobId {
+      noticeChatId = try Int64.fetchOne(
+        db,
+        sql: "SELECT owner_chat_id FROM scheduled_jobs WHERE id = ?",
+        arguments: [jobId]
+      )
+    } else if sessionKey == SessionKey.heartbeat {
+      // The heartbeat session has no chat id anywhere in the DB — the notice rides the
+      // config-derived owner target the boot caller resolved.
+      noticeChatId = heartbeatNoticeChatId
+    } else {
+      noticeChatId = SessionKey.chatId(from: sessionKey)
+    }
+
+    // Suppress the notice only when the owner already saw a genuine REPLY. The newest SENT
+    // row decides: an approval-prompt keyboard chunk (approval_id set) means the run
+    // suspended, was approved, and died before its continuation replied — the owner has
+    // heard nothing since tapping Approve, so the notice must still fire. (A RUNNING orphan
+    // can never trail a delivered reply mid-prompt: the keyboard chunk is the prompt's final
+    // step and must be SENT before the owner can approve at all.)
+    let newestSent = try Row.fetchOne(
+      db,
+      sql: """
+        SELECT approval_id FROM outbound_deliveries
+        WHERE run_id = ? AND status = 'SENT'
+        ORDER BY step_index DESC LIMIT 1
+        """,
+      arguments: [runId]
+    )
+    let ownerSawAReply = newestSent != nil && (newestSent?["approval_id"] as Int64?) == nil
+    guard ownerSawAReply == false, let chatId = noticeChatId else {
+      return nil
+    }
+
+    // Re-based like every commit-time enqueue: a run that suspended before the crash already
+    // holds its approval prompt at step 0, and a raw step-0 notice would be dropped silently
+    // by the dedup key.
+    let chunk = OutboxChunk(
+      stepIndex: try nextOutboxStepBase(db, runId: runId),
+      chatId: chatId,
+      payload: degradationText,
+      payloadHash: ContentHash.fnv1a(degradationText)
+    )
+    guard try insertOutbox(db, runId: runId, chunk: chunk, now: now) else {
+      return nil
+    }
+    return DegradationReply(chatId: chatId, runId: runId, text: degradationText)
+  }
+
+  /// A crashed orphan is `incomplete`: the turn stopped mid-flight and `RunState` alone cannot say
+  /// more. One holding an unresolved approval placeholder is the claimed crash window instead — its
+  /// approval was granted and claimed, and `settleClaimedApprovalAtBoot` still owes it the
+  /// observation, so its evidence must not freeze here. The predicate is shared with the backstop
+  /// sweep below, which must exclude exactly the same runs.
+  static func orphanDisposition(_ db: Database, runId: Int64) throws -> TerminalDisposition {
+    let owed = try ScheduledLearningStoreGRDB.owesUnresolvedFact(
+      db,
+      runId: runId,
+      unresolvedObservationContent: Self.placeholderObservationContent
+    )
+    return owed ? .deferred(.approvalUnresolved) : .settled(.incomplete)
   }
 
   public func settleClaimedApprovalAtBoot(  // swiftlint:disable:this function_parameter_count
@@ -117,7 +173,14 @@ extension RunStoreGRDB {
       // Claimed, outcome unknown — settle in place. The run is normally already FAILED (the
       // orphan sweep runs first); the transition covers a sweep that missed it and no-ops on any
       // terminal state.
-      if try Self.transitionRun(db, runId: runId, event: .fail, now: now) != nil {
+      let transitioned = try Self.transitionRun(
+        db,
+        runId: runId,
+        event: .fail,
+        now: now,
+        terminal: .deferred(.approvalUnresolved)
+      )
+      if transitioned != nil {
         try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
       }
       try Self.fillApprovedObservation(
@@ -126,6 +189,12 @@ extension RunStoreGRDB {
         messageId: observationMessageId,
         content: observationContent
       )
+      // The placeholder was the last fact this run was owed; resolving it is what earns the right
+      // to freeze its evidence, which is why neither the orphan sweep nor the transition above did.
+      // The fill above must stay ahead of this line: `fillClaimedObservation` and
+      // `fillApprovedObservation` carry no settled-run predicate of their own, so ordering — not a
+      // guard — is what keeps an observation from landing against frozen evidence.
+      _ = try ScheduledLearningStoreGRDB.freezeEvidence(db, runId: runId, now: now)
       let chunk = OutboxChunk(
         stepIndex: try Self.nextOutboxStepBase(db, runId: runId),
         chatId: noticeChatId,

@@ -4,7 +4,9 @@ import ClawCore
 import ClawData
 import ClawExec
 import ClawGateway
+import ClawHTTP
 import ClawSecrets
+import ClawSubprocess
 import ClawTelegram
 import ClawTools
 import Foundation
@@ -299,8 +301,10 @@ private extension DoctorCommand {
     case .active(let sample):
       report.add(
         key: "dns.fake_ip",
-        value: "detected (public hosts resolve into \(SSRFGuard.benchmarkRange), e.g. \(sample); "
-          + "web_fetch allows probe-confirmed answers in that range)",
+        value: """
+          detected (public hosts resolve into \(SSRFGuard.benchmarkRange), e.g. \(sample); \
+          web_fetch allows probe-confirmed answers in that range)
+          """,
         group: .connectivity
       )
     case .inactive:

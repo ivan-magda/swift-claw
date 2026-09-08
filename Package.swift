@@ -59,13 +59,20 @@ let package = Package(
       ]
     ),
     .target(
-      name: "ClawTelegram",
+      name: "ClawHTTP",
       dependencies: [
         "ClawCore",
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "NIOCore", package: "swift-nio"),
         .product(name: "NIOFoundationCompat", package: "swift-nio"),
         .product(name: "NIOPosix", package: "swift-nio"),
+      ]
+    ),
+    .target(
+      name: "ClawTelegram",
+      dependencies: [
+        "ClawCore", "ClawHTTP",
+        .product(name: "AsyncHTTPClient", package: "async-http-client"),
       ]
     ),
     .target(
@@ -95,7 +102,7 @@ let package = Package(
     ),
     .target(name: "ClawAppleSpeech", dependencies: ["ClawCore"]),
     .target(
-      name: "ClawExec",
+      name: "ClawSubprocess",
       dependencies: [
         "ClawCore",
         .product(name: "Subprocess", package: "swift-subprocess"),
@@ -104,6 +111,12 @@ let package = Package(
           package: "swift-system",
           condition: .when(platforms: [.linux])
         ),
+      ]
+    ),
+    .target(
+      name: "ClawExec",
+      dependencies: [
+        "ClawCore", "ClawSubprocess",
       ]
     ),
     .target(
@@ -123,7 +136,7 @@ let package = Package(
     .target(
       name: "ClawTestSupport",
       dependencies: [
-        "ClawCore", "ClawTools", "ClawData",
+        "ClawAgent", "ClawAuth", "ClawCore", "ClawData", "ClawTools",
         .product(name: "Logging", package: "swift-log"),
       ]
     ),
@@ -140,8 +153,9 @@ let package = Package(
     .executableTarget(
       name: "clawd",
       dependencies: [
-        "ClawCore", "ClawData", "ClawSecrets", "ClawTelegram", "ClawGateway", "ClawLLM",
-        "ClawAgent", "ClawWorkspace", "ClawTools", "ClawExec", "ClawAuth", "ClawAppleSpeech",
+        "ClawCore", "ClawData", "ClawSecrets", "ClawHTTP", "ClawTelegram", "ClawGateway", "ClawLLM",
+        "ClawAgent", "ClawWorkspace", "ClawTools", "ClawExec", "ClawSubprocess", "ClawAuth",
+        "ClawAppleSpeech",
         "ClawMCP", "ClawCoder",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
@@ -152,7 +166,9 @@ let package = Package(
     .testTarget(name: "ClawCoreTests", dependencies: ["ClawCore", "ClawTestSupport"]),
     .testTarget(
       name: "ClawAuthTests",
-      dependencies: ["ClawAuth", "ClawCore", "ClawSecrets", "ClawGateway", "ClawTestSupport"]
+      dependencies: [
+        "ClawAuth", "ClawCore", "ClawSecrets", "ClawGateway", "ClawSubprocess", "ClawTestSupport",
+      ]
     ),
     .testTarget(
       name: "ClawSecretsTests",
@@ -164,15 +180,21 @@ let package = Package(
     .testTarget(name: "ClawDataTests", dependencies: ["ClawData", "ClawCore", "ClawTestSupport"]),
     .testTarget(name: "ClawWorkspaceTests", dependencies: ["ClawWorkspace", "ClawCore"]),
     .testTarget(
-      name: "ClawTelegramTests",
+      name: "ClawHTTPTests",
       dependencies: [
-        "ClawTelegram",
-        "ClawCore",
-        "ClawTestSupport",
+        "ClawHTTP", "ClawCore", "ClawTestSupport",
         .product(name: "AsyncHTTPClient", package: "async-http-client"),
         .product(name: "NIOCore", package: "swift-nio"),
         .product(name: "NIOHTTP1", package: "swift-nio"),
         .product(name: "NIOPosix", package: "swift-nio"),
+      ]
+    ),
+    .testTarget(
+      name: "ClawTelegramTests",
+      dependencies: [
+        "ClawTelegram", "ClawHTTP",
+        "ClawCore",
+        "ClawTestSupport",
       ]
     ),
     .testTarget(
@@ -202,6 +224,14 @@ let package = Package(
       ]
     ),
     .testTarget(
+      name: "ClawExecTests",
+      dependencies: ["ClawExec", "ClawCore", "ClawSubprocess", "ClawTestSupport"]
+    ),
+    .testTarget(
+      name: "ClawSubprocessTests",
+      dependencies: ["ClawSubprocess", "ClawTestSupport"]
+    ),
+    .testTarget(
       name: "ClawCoderTests",
       dependencies: [
         "ClawCoder", "ClawCore", "ClawTestSupport",
@@ -214,7 +244,6 @@ let package = Package(
       ],
       exclude: ["Process/Fixtures"]
     ),
-    .testTarget(name: "ClawExecTests", dependencies: ["ClawExec", "ClawCore", "ClawTestSupport"]),
     .testTarget(
       name: "ClawAppleSpeechTests",
       dependencies: ["ClawAppleSpeech", "ClawCore"],
@@ -232,9 +261,9 @@ let package = Package(
     .testTarget(
       name: "ClawdCompositionTests",
       dependencies: [
-        "clawd", "ClawGateway", "ClawAgent", "ClawTestSupport",
+        "clawd", "ClawGateway", "ClawAgent", "ClawHTTP", "ClawTestSupport",
         "ClawCore", "ClawAuth", "ClawSecrets", "ClawLLM", "ClawData", "ClawTelegram",
-        "ClawWorkspace", "ClawMCP", "ClawTools", "ClawCoder",
+        "ClawWorkspace", "ClawMCP", "ClawSubprocess", "ClawTools", "ClawCoder",
         .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
         .product(name: "ServiceLifecycleTestKit", package: "swift-service-lifecycle"),
         .product(name: "AsyncHTTPClient", package: "async-http-client"),

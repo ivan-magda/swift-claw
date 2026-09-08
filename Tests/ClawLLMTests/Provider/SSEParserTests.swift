@@ -87,8 +87,10 @@ import Testing
 
     // when
     let usageChunk = Data(
-      "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10,\"cost\":0.0042}}\n\n"
-        .utf8
+      """
+      data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3,\
+      "total_tokens":10,"cost":0.0042}}\n\n
+      """.utf8
     )
     let events = try parser.push(usageChunk)
     let finished = try parser.push(Data("data: [DONE]\n\n".utf8))
@@ -116,8 +118,10 @@ import Testing
     // when
     _ = try parser.push(
       Data(
-        "data: {\"choices\":[{\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}\n\n"
-          .utf8
+        """
+        data: {"choices":[{"finish_reason":"stop"}],\
+        "usage":{"prompt_tokens":7,"completion_tokens":3,"total_tokens":10}}\n\n
+        """.utf8
       )
     )
     let finished = try parser.push(Data("data: [DONE]\n\n".utf8))
@@ -144,8 +148,11 @@ import Testing
     // when
     _ = try parser.push(
       Data(
-        "data: {\"choices\":[{\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10,\"cost\":0.0042}}\n\n"
-          .utf8
+        """
+        data: {"choices":[{"finish_reason":"stop"}],\
+        "usage":{"prompt_tokens":7,"completion_tokens":3,\
+        "total_tokens":10,"cost":0.0042}}\n\n
+        """.utf8
       )
     )
     let finished = try parser.push(Data("data: [DONE]\n\n".utf8))
@@ -170,16 +177,20 @@ import Testing
     var parser = SSEParser()
     _ = try parser.push(
       Data(
-        "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10,\"cost\":0.0042}}\n\n"
-          .utf8
+        """
+        data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3,\
+        "total_tokens":10,"cost":0.0042}}\n\n
+        """.utf8
       )
     )
 
     // when
     _ = try parser.push(
       Data(
-        "data: {\"choices\":[{\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":4,\"total_tokens\":12}}\n\n"
-          .utf8
+        """
+        data: {"choices":[{"finish_reason":"stop"}],\
+        "usage":{"prompt_tokens":8,"completion_tokens":4,"total_tokens":12}}\n\n
+        """.utf8
       )
     )
     let finished = try parser.push(Data("data: [DONE]\n\n".utf8))

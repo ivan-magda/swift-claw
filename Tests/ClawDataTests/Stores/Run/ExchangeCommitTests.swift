@@ -91,8 +91,10 @@ import Testing
     let rows = try fixture.queue.read { db in
       try Row.fetchAll(
         db,
-        sql:
-          "SELECT id, role, content, provenance, tool_calls, tool_call_id, run_id FROM messages ORDER BY id ASC"
+        sql: """
+          SELECT id, role, content, provenance, tool_calls, tool_call_id, run_id \
+          FROM messages ORDER BY id ASC
+          """
       )
     }
     // user inbound, exchange anchor, tool observation, final reply — count guards spurious rows
@@ -158,7 +160,8 @@ import Testing
       chatId: 7,
       usage: makeUsage(fixture),
       chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
-      setTainted: true
+      setTainted: true,
+      cause: .providerFailure
     )
 
     // when
@@ -183,7 +186,8 @@ import Testing
       usage: makeUsage(fixture),
       chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
       exchanges: [makeExchange()],
-      setTainted: true
+      setTainted: true,
+      cause: .providerFailure
     )
 
     // when
@@ -283,7 +287,8 @@ import Testing
       chatId: 7,
       usage: nil,
       chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "late", payloadHash: "h"),
-      setTainted: true
+      setTainted: true,
+      cause: .providerFailure
     )
 
     // when
@@ -404,7 +409,8 @@ extension ExchangeCommitTests {
       chatId: 7,
       usage: makeUsage(fixture),
       chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
-      exchanges: [statefulExchange()]
+      exchanges: [statefulExchange()],
+      cause: .providerFailure
     )
 
     // when

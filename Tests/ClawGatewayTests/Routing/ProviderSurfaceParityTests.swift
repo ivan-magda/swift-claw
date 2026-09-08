@@ -27,8 +27,10 @@ import Testing
 
   /// The spec's exact recovery sentence, copied here as an independent literal so a reword of the
   /// constant that still contains `clawd auth login` is caught rather than mirrored.
-  private static let specAuthSentence =
-    "ChatGPT authentication is required. Stop clawd, run `clawd auth login`, then start clawd again."
+  private static let specAuthSentence = """
+    ChatGPT authentication is required. Stop clawd, run `clawd auth login`, \
+    then start clawd again.
+    """
 
   private func userBuildResult() -> BuildResult {
     BuildResult(
@@ -176,6 +178,7 @@ import Testing
       chatId: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -219,6 +222,7 @@ import Testing
       chatId: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -327,6 +331,7 @@ import Testing
       chatId: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0
@@ -383,6 +388,7 @@ import Testing
       chatId: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
+      hasPinnedLessons: false,
       sessionHasPrivateData: false,
       todayTokens: 0,
       todayUSD: 0

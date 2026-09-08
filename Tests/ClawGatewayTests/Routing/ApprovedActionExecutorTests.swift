@@ -170,7 +170,13 @@ import Testing
         arguments: [sessionId, runId, Date()]
       )
       let messageId = db.lastInsertedRowID
-      _ = try RunStoreGRDB.transitionRun(db, runId: runId, event: .suspendForApproval, now: Date())
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .suspendForApproval,
+        now: Date(),
+        terminal: nil
+      )
       return messageId
     }
     return Fixture(
@@ -492,7 +498,13 @@ import Testing
     // waiter reached the executor (the §6.6 cancel race)
     let env = try makeSuspendedFixture()
     try await env.queue.write { db in
-      _ = try RunStoreGRDB.transitionRun(db, runId: env.runId, event: .cancel, now: Date())
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: env.runId,
+        event: .cancel,
+        now: Date(),
+        terminal: .deferred(.ownerCancelled)
+      )
     }
     let probe = ExecutionProbe()
     let executor = makeExecutor(
@@ -649,7 +661,7 @@ import Testing
     func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
       .ignored
     }
-    func failRun(runId: Int64, now: Date) throws(StoreError) {}
+    func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
     func cancelActiveRun(
       sessionId: Int64,
       reason: CancelReason,
@@ -703,6 +715,8 @@ import Testing
     func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
       try base.runOrigin(runId: runId)
     }
+
+    func jobId(runId: Int64) throws(StoreError) -> Int64? { nil }
     func failRunStalePolicy(
       runId: Int64,
       sessionId: Int64,

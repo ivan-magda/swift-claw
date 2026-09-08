@@ -44,8 +44,10 @@ public struct ExecuteCodeTool: Tool {
   public var definition: ToolDefinition {
     ToolDefinition(
       name: Self.name,
-      description:
-        "Run a short Python or shell script in a locked-down, throwaway sandbox (owner approval required; no network unless explicitly requested).",
+      description: """
+        Run a short Python or shell script in a locked-down, throwaway sandbox \
+        (owner approval required; no network unless explicitly requested).
+        """,
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
@@ -319,7 +321,10 @@ private extension ExecuteCodeTool {
       switch Self.validateBasename(of: path, claimed: &normalizedNames) {
       case .reservedNamespace:
         return .failure(
-          "Staged files may not use the reserved \(ExecLanguage.reservedEntrypointPrefix)* namespace."
+          """
+          Staged files may not use the reserved \
+          \(ExecLanguage.reservedEntrypointPrefix)* namespace.
+          """
         )
       case .duplicate:
         return .failure("Staged files must have unique flat basenames.")
@@ -497,8 +502,11 @@ private extension ExecuteCodeTool {
       """
 
     return ToolApprovalPresentation(
-      blastRadius:
-        "run \(recorded.language.rawValue) · egress: \(recorded.network ? "yes" : "no") · \(settings.cpus) CPU / \(settings.memoryMiB) MiB · code \(codeBytes) B · \(recorded.stage.count) staged file(s), \(totalBytes) B",
+      blastRadius: """
+        run \(recorded.language.rawValue) · egress: \(recorded.network ? "yes" : "no") · \
+        \(settings.cpus) CPU / \(settings.memoryMiB) MiB · code \(codeBytes) B · \
+        \(recorded.stage.count) staged file(s), \(totalBytes) B
+        """,
       contentPreview: preview,
       warnings: recorded.network
         ? ["network egress is enabled — this run can send data out"] : []
