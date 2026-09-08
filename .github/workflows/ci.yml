@@ -28,7 +28,8 @@ jobs:
             apt-get install -y --no-install-recommends \
               libsqlite3-dev \
               ca-certificates \
-              tzdata
+              tzdata \
+              zstd
       - name: Show toolchain
         id: toolchain
         run: |
