@@ -1296,9 +1296,8 @@ service cannot delay the owner's primary delivery while it evaluates settled wor
 
 ### 14.1 Scheduled learning terminal decisions
 
-The generic learning loop follows the accepted
-[production design](superpowers/specs/2026-09-02-generic-production-learning-loop-design.md)
-and the fixed `scheduled-learning/v1`
+This section defines the generic learning loop's production contract, using the fixed
+`scheduled-learning/v1`
 [algorithm](research/170-generic-scheduled-task-learning-algorithm.md). `ClawCore` owns its
 protocols and value types; `ScheduledLearningStoreGRDB` commits its transitions through
 `writeMapping`. The workflow coordinator consumes store recommendations separately from the
