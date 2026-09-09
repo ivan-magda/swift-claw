@@ -1,5 +1,11 @@
 import Foundation
 
+public enum ConferenceToolNames {
+  public static let current = "challenge_current"
+  public static let submit = "challenge_submit"
+  public static let status = "challenge_status"
+}
+
 public enum ConferenceSubmissionState: String, Sendable, Codable, CaseIterable {
   case queued
   case running
