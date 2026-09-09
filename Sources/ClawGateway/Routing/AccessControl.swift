@@ -14,17 +14,27 @@ public enum AccessDecision: Sendable, Equatable {
   case denied(AccessDenial)
 }
 
-/// The numeric-ID default-deny boundary. Fails CLOSED on any store error.
+/// The numeric-ID default-deny boundary. `allowUnlistedPrivateUsers` exists only for the isolated
+/// conference profile, whose composition exposes no personal/general-purpose tools or memory.
 public struct AccessControl: Sendable {
   private let allowlist: any AllowlistStore
   private let groupChats: Set<Int64>
+  private let allowUnlistedPrivateUsers: Bool
 
-  public init(allowlist: any AllowlistStore, groupChats: Set<Int64>) {
+  public init(
+    allowlist: any AllowlistStore,
+    groupChats: Set<Int64>,
+    allowUnlistedPrivateUsers: Bool = false
+  ) {
     self.allowlist = allowlist
     self.groupChats = groupChats
+    self.allowUnlistedPrivateUsers = allowUnlistedPrivateUsers
   }
 
   public func isAllowed(userId: Int64) -> Bool {
+    if allowUnlistedPrivateUsers {
+      return true
+    }
     do {
       return try allowlist.allowlistContains(userId: userId)
     } catch {
@@ -32,10 +42,9 @@ public struct AccessControl: Sendable {
     }
   }
 
-  /// A DM is the owner's, keyed on the sender. A group is the season's, keyed on the chat: being
-  /// in an allowlisted room is itself the membership proof, so no per-user check runs there and an
-  /// attendee needs no allowlist entry. Every other shape — a channel, a chat kind this build has
-  /// never seen — is refused, so a new Telegram surface can never inherit either grant.
+  /// A normal DM remains owner-only. In the conference profile an unlisted numeric sender may use
+  /// the deliberately restricted conference surface. Groups keep their existing configured-room
+  /// semantics; no new Telegram surface inherits either grant.
   public func decide(chatKind: ChatKind, chatId: Int64, userId: Int64) -> AccessDecision {
     switch chatKind {
     case .private:
