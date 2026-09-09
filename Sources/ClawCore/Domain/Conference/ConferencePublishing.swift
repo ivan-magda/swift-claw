@@ -5,6 +5,7 @@ public struct ConferencePublicationRequest: Sendable, Equatable {
   public let repositoryURL: String
   public let baseBranch: String
   public let workspacePath: String
+  public let startingCommit: String
   public let commit: String
 
   public init(
@@ -12,12 +13,14 @@ public struct ConferencePublicationRequest: Sendable, Equatable {
     repositoryURL: String,
     baseBranch: String,
     workspacePath: String,
+    startingCommit: String,
     commit: String
   ) {
     self.submissionID = submissionID
     self.repositoryURL = repositoryURL
     self.baseBranch = baseBranch
     self.workspacePath = workspacePath
+    self.startingCommit = startingCommit
     self.commit = commit
   }
 }
