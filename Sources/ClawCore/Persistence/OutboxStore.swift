@@ -25,19 +25,13 @@ public struct OutboxChunk: Sendable, Equatable {
   }
 }
 
-/// Which producer enqueued an outbound row. A run's chunks carry its id; a learning notice belongs
-/// to no run, so the source column is what tells the two apart in storage.
 public enum DeliverySource: String, Sendable, Equatable, CaseIterable {
   case run
   case learning
+  case conference
 }
 
-/// One chunk of an owner-facing learning notice. It belongs to no run, so its delivery identity is
-/// the subject it speaks about plus its position in that subject's message — which makes a resend
-/// idempotent exactly as a run's chunks are.
 public struct LearningNoticeChunk: Sendable, Equatable {
-  /// The polymorphic digest of whatever the notice addresses — a candidate, an evaluation, a
-  /// promotion — matching the `subject_digest` the feedback tables key on.
   public let subjectDigest: String
   public let ordinal: Int
   public let chatId: Int64
@@ -62,9 +56,31 @@ public struct LearningNoticeChunk: Sendable, Equatable {
   }
 }
 
+/// Runless completion notice for one immutable conference submission. The UUID-derived subject key
+/// makes replay idempotent across daemon restarts.
+public struct ConferenceNoticeChunk: Sendable, Equatable {
+  public let submissionID: UUID
+  public let ordinal: Int
+  public let chatId: Int64
+  public let payload: String
+  public let payloadHash: String
+
+  public init(
+    submissionID: UUID,
+    ordinal: Int,
+    chatId: Int64,
+    payload: String,
+    payloadHash: String
+  ) {
+    self.submissionID = submissionID
+    self.ordinal = ordinal
+    self.chatId = chatId
+    self.payload = payload
+    self.payloadHash = payloadHash
+  }
+}
+
 public struct OutboxRow: Sendable, Equatable {
-  /// The row's identity, from the table's existing unique `dedup_key`. A learning notice has no
-  /// run, so the run cannot be the identity; it stays as provenance.
   public let deliveryKey: String
   public let runId: Int64?
   public let stepIndex: Int
@@ -72,12 +88,9 @@ public struct OutboxRow: Sendable, Equatable {
   public let payload: String
   public let approvalId: Int64?
   public let replyMarkup: String?
-  /// Stamped at enqueue from the run itself, so a row delivers into the topic that asked even
-  /// after a restart, when no router is left to say where the answer belongs. Both nil in a DM.
   public let messageThreadId: Int64?
   public let replyToMessageId: Int64?
 
-  /// Where this row goes, as the delivery seam takes it.
   public var target: DeliveryTarget {
     DeliveryTarget(
       chatId: chatId,
@@ -86,9 +99,8 @@ public struct OutboxRow: Sendable, Equatable {
     )
   }
 
-  /// What a log line calls this row's origin: its run, or the learning source when it has none.
   public var originLabel: String {
-    runId.map(String.init) ?? DeliverySource.learning.rawValue
+    runId.map(String.init) ?? "notice"
   }
 
   public init(
@@ -116,9 +128,15 @@ public struct OutboxRow: Sendable, Equatable {
 
 public protocol OutboxStore: Sendable {
   func claimOutbound(runId: Int64, chunk: OutboxChunk) throws(StoreError) -> Bool
-  /// Enqueues one chunk of an owner-facing learning notice, which belongs to no run. Idempotent on
-  /// the chunk's own delivery key, so a retried enqueue never duplicates the message.
   func claimNotice(_ chunk: LearningNoticeChunk) throws(StoreError) -> Bool
+  func claimConferenceNotice(_ chunk: ConferenceNoticeChunk) throws(StoreError) -> Bool
   func markSent(deliveryKey: String, telegramMessageId: Int64, now: Date) throws(StoreError)
   func pendingOutbound() throws(StoreError) -> [OutboxRow]
+}
+
+/// Source-compatible fallback for existing test doubles that never exercise conference delivery.
+public extension OutboxStore {
+  func claimConferenceNotice(_ chunk: ConferenceNoticeChunk) throws(StoreError) -> Bool {
+    throw StoreError.unexpected("Conference notices are not supported by this outbox")
+  }
 }
