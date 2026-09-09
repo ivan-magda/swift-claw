@@ -61,9 +61,21 @@ extension DaemonBuilder {
   ) -> MessageRouter {
     let voiceService = conferenceProfile ? nil : makeVoiceService()
     let imageService = conferenceProfile ? nil : makeImageService()
-    let feedbackChallenges = conferenceProfile
-      ? nil
-      : makeFeedbackChallengeHandler(coordination: coordination, learning: learning)
+    let feedbackChallenges: FeedbackChallengeHandler?
+    let feedbackCallbacks: FeedbackCallbackHandler?
+    if conferenceProfile {
+      feedbackChallenges = nil
+      feedbackCallbacks = nil
+    } else {
+      feedbackChallenges = makeFeedbackChallengeHandler(
+        coordination: coordination,
+        learning: learning
+      )
+      feedbackCallbacks = makeFeedbackCallbackHandler(
+        challenges: feedbackChallenges,
+        learning: learning
+      )
+    }
 
     return MessageRouter(
       processed: stores.processed,
@@ -88,9 +100,7 @@ extension DaemonBuilder {
       learningRedactor: conferenceProfile ? nil : SecretRedactor(secretValues: redactionValues),
       learningOutboxSignal: conferenceProfile ? nil : coordination.outboxSignal,
       approvalCallbacks: approvalCallbacks,
-      feedbackCallbacks: conferenceProfile
-        ? nil
-        : makeFeedbackCallbackHandler(challenges: feedbackChallenges, learning: learning),
+      feedbackCallbacks: feedbackCallbacks,
       feedbackChallenges: feedbackChallenges,
       voice: voiceService,
       images: imageService,
