@@ -27,6 +27,9 @@ struct DaemonBuilder: Sendable {
 
   var resolveCoder: @Sendable (CoderConfig) async throws -> CoderBackendSetup = CoderBackendSetup
     .live
+  var resolveConferenceCoder:
+    @Sendable (CoderConfig, [String: String]) async throws -> CoderBackendSetup =
+      CoderBackendSetup.inspect
 
   var redactionValues: [String] { mcp.redactionValues(with: secrets) }
 
@@ -49,7 +52,15 @@ struct DaemonBuilder: Sendable {
     rosterStack: RosterStack,
     cooldown: any PrimaryRouteCooldownTracking
   ) async throws -> DaemonRuntimeBundle {
+    let environment = ProcessInfo.processInfo.environment
     let conferenceConfig = try loadConferenceConfig()
+    if conferenceConfig.enabled {
+      try await verifyConferenceGitHubActor(
+        config: conferenceConfig,
+        environment: environment
+      )
+    }
+
     let sandbox: SandboxStack
     if conferenceConfig.enabled {
       sandbox = SandboxBootstrapResult(
@@ -63,7 +74,15 @@ struct DaemonBuilder: Sendable {
     }
 
     let coordination = TurnCoordination()
-    let coder = await prepareCoder(coordination: coordination)
+    let coder: CoderComposition
+    if conferenceConfig.enabled {
+      coder = try await prepareConferenceCoder(
+        coordination: coordination,
+        environment: environment
+      )
+    } else {
+      coder = await prepareCoder(coordination: coordination)
+    }
     let conference = try prepareConference(
       config: conferenceConfig,
       coder: coder,
