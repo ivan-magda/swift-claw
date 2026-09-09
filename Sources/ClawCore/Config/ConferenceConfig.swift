@@ -139,8 +139,7 @@ private extension ConferenceConfig {
       item.title.count <= 200,
       !item.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
       item.prompt.count <= 20_000,
-      !item.baselineRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-      item.baselineRef.count <= 200,
+      validCommit(item.baselineRef),
       !item.baseBranch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
       item.baseBranch.count <= 200
     else {
@@ -162,6 +161,10 @@ private extension ConferenceConfig {
     } catch {
       throw ConferenceConfigError.invalidCaseFile
     }
+  }
+
+  static func validCommit(_ value: String) -> Bool {
+    (value.count == 40 || value.count == 64) && value.allSatisfy(\.isHexDigit)
   }
 
   static func validGitHubLogin(_ value: String) -> Bool {
