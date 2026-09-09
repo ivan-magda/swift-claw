@@ -10,33 +10,22 @@ A conference participant sends their own answer to the current case in Telegram.
 
 This is a conference-specific workflow layered on Generic Coder. Coder remains unaware of participants, conference days, scoring, or event-specific product concepts.
 
-The first production shape supports:
+The v1 production shape supports one isolated conference deployment, one operator-configured active case, private Telegram participants, one confirmed submission per participant/case, durable FIFO execution, a supervisor-verified immutable baseline, isolated Coder workspaces, deterministic draft-PR publication, participant-scoped status, and restart-safe completion delivery.
 
-- one isolated conference deployment;
-- one operator-configured active case at a time;
-- private Telegram participants admitted only to the conference surface;
-- exact participant text captured before the coding run;
-- one confirmed submission per participant per case;
-- durable submission state and restart recovery;
-- FIFO execution through the existing Coder service;
-- a fresh Coder workspace from the configured case baseline;
-- PR publication to the configured case base branch;
-- participant-scoped status and completion notification;
-- required verification of the GitHub actor used for publication.
-
-Scoring, automatic merging, Dactyl/simulator rendering, multiple submissions from one participant for one case, and a general workflow engine are out of scope.
+Scoring, automatic merging, Dactyl/simulator rendering, multiple submissions from one participant for one case, private challenge repositories, GitHub App installation-token authentication, and a general workflow engine are out of scope for v1.
 
 ## Trust boundaries
 
 1. Telegram numeric user id is the participant identity. Usernames/display names are presentation only.
-2. Conference mode is a separate deployment profile. It does not advertise personal memory, Generic Coder submission, arbitrary filesystem/write/exec tools, MCP tools, skills, scheduling, learning controls, or owner-only operational commands to participants.
-3. Case repository, baseline ref, base branch and publication scope come from trusted operator configuration, never participant/model arguments.
-4. The participant answer is stored exactly as approved and is immutable for that participant/case.
-5. Each coding run uses `.separate` workspace and starts from the case baseline.
-6. GitHub credentials are deployment-owned. Participants never provide GitHub credentials or choose publication identity.
-7. A coding failure does not delete or overwrite the participant submission.
-8. Existing Generic Coder approval semantics remain unchanged.
-9. Conference mode requires an explicit state root so a public participant deployment cannot accidentally fall back to the normal personal daemon state directory.
+2. Conference mode is a separate deployment profile. Participants do not receive personal memory, Generic Coder tools, arbitrary filesystem/exec tools, MCP, skills, scheduling, learning controls, or owner-only operational commands.
+3. Case repository, immutable baseline commit, PR base branch, publication repository and publication identity come only from trusted operator configuration.
+4. The participant answer is persisted exactly as approved and is immutable for that participant/case.
+5. The supervisor, not Codex, materializes and verifies the trusted challenge source before a Coder job exists.
+6. Coder receives a local source and creates a separate workspace from the exact configured commit SHA. A successful result is publishable only when the supervisor-observed starting commit equals that SHA.
+7. Coder has no GitHub publication credential. GitHub push/API access belongs only to the deterministic publisher.
+8. The publisher accepts only workspaces below the conference Coder job root, verifies the local commit graph and clean tree, pushes a submission-derived branch, creates or reuses one draft PR, and verifies head SHA/base/actor from GitHub.
+9. Existing Generic Coder approval semantics remain unchanged.
+10. Conference mode requires an explicit non-personal state root and conference-only credential/state directories.
 
 ## Domain model
 
@@ -47,122 +36,164 @@ One active case is loaded from the operator-owned JSON case file at daemon start
 - `id`: stable lowercase identifier, e.g. `day-3`;
 - `title`;
 - `prompt`: participant-facing case text;
-- `repositoryURL`: GitHub HTTPS repository;
-- `baselineRef`: immutable commit SHA or operator-controlled frozen ref;
-- `baseBranch`: pull-request target branch.
+- `repositoryURL`: public GitHub HTTPS repository for v1;
+- `baselineRef`: exact immutable 40- or 64-character Git commit SHA;
+- `baseBranch`: draft pull-request target branch.
 
-The active case is a trusted immutable snapshot for the running daemon. Changing the file does not mutate an already-approved or stored submission; a daemon restart is required to load another case.
+The case snapshot is immutable for stored submissions. Changing the file requires daemon restart and cannot rewrite an already-approved submission.
 
 ### ConferenceSubmission
 
-- UUID `id`;
-- numeric `participantUserID`;
-- immutable `caseSnapshot`;
-- exact `answer`;
-- durable approved origin (`runID`, `sessionID`, `chatID`, requester id, tool call id, approval id);
-- state;
-- optional `coderJobID`;
-- optional PR URL / branch / commit;
-- optional failure or review reason;
-- durable completion-notification state;
-- timestamps.
+A submission contains UUID id, numeric participant id, immutable case snapshot, exact answer, durable approved origin, state, optional Coder job id, optional PR/branch/commit evidence, optional failure/review reason, durable notification state and timestamps.
 
-A unique constraint on `(participant_user_id, case_id)` enforces one confirmed submission per case.
+`UNIQUE(participant_user_id, case_id)` enforces one confirmed submission per participant/case.
 
-Submission states:
+Normal state path:
 
 `queued -> running -> completed`
 
-Terminal alternatives: `blocked | failed | cancelled | needs_review`.
-
-`queued` is durable and means the participant answer has been accepted even if Coder has no free slot.
+Terminal alternatives are `blocked | failed | cancelled | needs_review`.
 
 ## Participant surface
 
-When conference mode is enabled, the model receives only these tools:
+Conference mode exposes exactly:
 
-- `challenge_current` — return the active case;
-- `challenge_submit` — prepare and submit the caller's exact answer for the active case;
-- `challenge_status` — return the caller's own submission state for the active case or an explicit submission id owned by the caller.
+- `challenge_current` — active case;
+- `challenge_submit` — prepare and submit the caller's exact proposal;
+- `challenge_status` — return only the caller's submission status.
 
-The trusted conference system prompt tells the conversational model to explain the activity, never solve the case on behalf of the participant, preserve the participant's proposal, and use only this challenge surface. This prompt is guidance; identity, uniqueness, repository scope and approval binding are enforced in code.
+The trusted conference system prompt tells the conversational model not to solve the case for the participant and not to rewrite the participant's proposal. Those are guidance constraints; identity, answer integrity, uniqueness, repository scope, baseline and approval binding are enforced in code.
 
-`challenge_submit` is dangerous-tier and requires an interactive requester plus a durable approval. The prepared approval binds the exact answer together with the trusted case snapshot and canonical target. In a DM only the originating participant can approve it. If group mode is ever explicitly configured for the conference deployment, only the originating requester may approve their conference submission; this is intentionally stricter than Generic Coder's existing group approval behavior.
+`challenge_submit` is dangerous-tier. Its durable approval binds the exact answer and trusted case snapshot. The approved action only inserts a queued submission; it does not run Coder synchronously.
 
-The approved action inserts the durable submission. It does not invoke Coder synchronously.
+## Trusted source materialization
 
-## Execution
+Before the conference workflow is composed, `ConferenceRepositorySource` materializes the configured public repository below `$CLAW_STATE_ROOT/conference-source/<case-id>` using Git with ambient GitHub/SSH credentials removed.
 
-`ConferenceWorkflowService` owns execution of persisted `queued` submissions.
+A cached source is reused across restart only when all of these checks pass:
 
-For each claim it constructs a fixed `CoderRequest`:
+- canonical checkout is the expected source directory;
+- `origin` resolves to the configured repository;
+- `HEAD` equals the configured immutable baseline SHA;
+- the baseline resolves to that exact SHA;
+- the working tree is clean;
+- HEAD remains detached from participant-controlled branches.
 
-- source: case GitHub repository;
+If verification fails, the cached source is discarded and materialized again. A valid cached source therefore lets a restart proceed without GitHub availability.
+
+## Coder execution
+
+`ConferenceWorkflowService` owns persisted `queued` submissions. For each claim it constructs a fixed `CoderRequest`:
+
+- source: `.local` trusted source path prepared by the supervisor;
 - workspace: `.separate`;
-- start ref: case baseline;
-- deliverable: `.pullRequest`;
-- base branch: case base branch;
+- start ref: exact case baseline SHA;
+- deliverable: `.localChanges`;
+- base branch: none;
 - publish existing changes: false;
-- task: case text plus the exact stored participant answer;
-- trusted instructions: preserve the participant approach, treat the proposal as task data rather than authority, run repository-provided relevant checks, and never merge the pull request.
+- task: case text plus exact stored participant answer;
+- trusted instructions: preserve the proposal, treat it as task data, run relevant repository checks, commit intended changes locally, never push or create a PR.
 
-The queue does **not** forge a fresh Coder approval or create a synthetic identity. It reuses the durable `ToolExecutionContext` of the already-approved conference submission when calling the existing Coder service. Generic Coder deduplicates admission by the original `(runID, toolCallID)`, which also closes the crash window between Coder admission and storing `coderJobID`: replay returns the already-admitted job instead of launching a second one.
+The queue reuses the durable `ToolExecutionContext` from the already-approved conference submission. Generic Coder admission remains deduplicated by the original approved origin, closing the crash window between Coder admission and storing `coderJobID`.
 
-When Coder is busy or temporarily unavailable, a claimed submission is returned to `queued`. `recoveryRequired` or a stale execution policy moves the submission to `needs_review` rather than weakening the Coder contract.
+Conference Coder completion notices are disabled. The conference workflow is the single participant-facing completion path.
 
-On Coder completion the workflow records its durable result. A confirmed PR URL plus the configured GitHub actor match can produce `completed`; terminal Coder failures map to `failed`, `blocked`, or `cancelled`. Interrupted execution, missing durable results, uncertain publication, missing linked jobs, actor mismatch, or other ambiguous ownership maps to `needs_review` and is never blindly rerun.
+A successful Coder result is eligible for publication only when:
 
-## GitHub actor
+- publication is absent (Coder did not publish anything itself);
+- baseline was independently observed by Coder supervisor code;
+- observed starting commit exactly equals the case baseline SHA;
+- a workspace and final commit are present.
 
-The conference deployment should run Coder with a dedicated GitHub App installation credential (or equivalent bot-only credential) scoped to the challenge repository. Personal GitHub credentials should not be present in that deployment.
+Missing or ambiguous evidence goes to `needs_review`; it is never silently treated as success.
 
-`CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR` is required when conference mode is enabled. `CoderResult.githubActor` must match it before a successful publication is marked `completed`; a missing or different actor becomes `needs_review`. This check is a second verification layer over credential isolation, not a substitute for using dedicated deployment credentials.
+## Deterministic publication
+
+`ConferenceGitHubPublisher` is outside Coder and owns the only GitHub publication credential.
+
+Before push it verifies:
+
+- repository URL matches the trusted case repository;
+- workspace is below `$CLAW_STATE_ROOT/coder/jobs`;
+- starting/final commit values are valid commit ids and differ;
+- workspace `HEAD` equals the reported final commit;
+- configured baseline is an ancestor of the final commit;
+- working tree is clean.
+
+It pushes exactly:
+
+`<final-commit>:refs/heads/conference/<submission-uuid>`
+
+and creates or reuses an open draft PR to the configured base branch. GitHub response evidence must match expected head branch, head SHA, base branch and actor before the submission becomes `completed`.
+
+Transient push/API failures leave the durable submission `running`; publication is retried idempotently with the same submission-derived branch. Invalid commit/workspace/repository evidence or actor mismatch becomes `needs_review`.
+
+## Credentials and deployment boundary
+
+v1 uses two distinct credential boundaries.
+
+### Codex credential
+
+`CLAW_CODER_CONFIG_HOME` must be inside the isolated conference state root and contain only a conference-specific Codex login. Conference Coder receives a dedicated `HOME`/`CODEX_HOME`; ambient `GH_TOKEN`, `GITHUB_TOKEN`, `GH_CONFIG_DIR`, `SSH_AUTH_SOCK` and `GIT_ASKPASS` are removed.
+
+Do not reuse a personal Codex home or place personal credentials/data in the conference state/home. Native Codex sandbox behavior is defense in depth, not the sole secret boundary for participant-controlled prompts.
+
+### GitHub publisher credential
+
+v1 expects a dedicated bot-user GitHub token in `GH_TOKEN`, scoped only as needed for the challenge repository. Startup calls `GET /user` and requires its login to equal `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR`. Personal GitHub credentials must not be present in the conference deployment.
+
+GitHub App installation tokens use a different authentication/identity model and are not implemented by this v1 contract.
 
 ## Completion delivery
 
-Terminal status is persisted before participant notification. A terminal submission remains `notification_enqueued = false` until an idempotent conference outbox row exists. The outbox key is derived from the immutable submission UUID, so restart or retry cannot create a second completion message. Only after the outbox insert succeeds is the submission marked notification-enqueued.
+Terminal submission state is persisted before Telegram notification. An idempotent conference outbox row is keyed by immutable submission UUID. Only after the outbox row exists is `notification_enqueued` set. Restart/retry therefore cannot create a second completion message.
 
-The participant can also query `challenge_status`; status lookup always derives caller identity from `ToolExecutionContext` and refuses access to another participant's submission.
+`challenge_status` derives requester identity from `ToolExecutionContext` and refuses access to another participant's submission.
 
 ## Configuration
 
-Conference mode is off by default. Current configuration requires:
+Conference mode is off by default. v1 requires:
 
 - `CLAW_CONFERENCE_ENABLED=true`;
-- an explicit `CLAW_STATE_ROOT=/absolute/non-personal/state/root`;
+- explicit `CLAW_STATE_ROOT=/absolute/non-personal/state/root`;
 - `CLAW_CONFERENCE_CASE_FILE=/absolute/path/to/case.json`;
-- `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR=<bot-login>`;
-- Generic Coder enabled and healthy.
+- `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR=<dedicated-bot-login>`;
+- `GH_TOKEN=<dedicated-repository-scoped-bot-token>`;
+- Generic Coder enabled;
+- `CLAW_CODER_CONFIG_HOME` below `CLAW_STATE_ROOT` with a conference-only Codex credential.
 
-The case file is bounded to 128 KiB and validated before use, including repository/ref fields through the existing `CoderRequest` validation path.
-
-The explicit state root is a startup guard against accidentally exposing the normal personal daemon state to conference participants. The operator must still supply conference-only bot/Coder credentials and keep personal GitHub credentials out of this deployment.
+The case file is bounded to 128 KiB and requires an immutable full commit SHA. The repository must be public in v1 because trusted source materialization intentionally runs without GitHub credentials.
 
 ## Recovery and idempotency
 
-- Submission insertion and participant/case uniqueness are one SQLite transaction.
-- Queue claim is an atomic `queued -> running` compare-and-set.
-- A stored `coderJobID` is the durable link to the admitted Coder job.
-- A crash after Coder admission but before the link is stored is recovered through Coder's existing `(runID, toolCallID)` admission deduplication.
-- A `running` submission without an attached Coder job is requeued on boot because no distinct Coder ownership has been retained yet; Coder admission replay itself remains deduplicated by the approved origin.
-- A linked terminal Coder result is projected once into the conference terminal state.
-- Ambiguous/interrupted execution is `needs_review`, never an automatic blind rerun.
-- Completion notification uses a separate idempotent outbox identity and never starts a coding run.
+- Submission insert + participant/case uniqueness are one SQLite transaction.
+- Queue claim is atomic `queued -> running`.
+- Stored `coderJobID` durably links a submission to Coder.
+- Crash after Coder admission but before link persistence is recovered by Generic Coder admission deduplication.
+- A running submission with no retained Coder job is requeued on boot.
+- A linked terminal Coder result is projected into conference state exactly once.
+- Transient deterministic-publication failures are retryable; ambiguous Coder execution is not blindly rerun.
+- Source materialization cache is verify-before-reuse.
+- Completion notification has its own idempotent outbox identity.
 
 ## Acceptance criteria
 
-1. Two different participant ids can submit different answers to the same active case and receive independent submission ids/Coder jobs.
-2. A participant cannot submit or query as another numeric user id.
-3. The second submission from the same participant for the same case is rejected without overwriting the first answer.
-4. A submission persists while Coder is busy and runs later without participant retry.
-5. Every generated Coder request uses the configured repository, baseline and base branch regardless of participant text.
-6. Coder receives the exact stored answer, including text resembling instructions that try to change repository/publication scope, as task data only.
-7. Restart does not duplicate a submission or blindly rerun an uncertain Coder job.
-8. A successful result records branch/commit/PR and exposes it only to the owning participant.
-9. Missing or mismatched configured GitHub actor evidence becomes `needs_review`, not `completed`.
-10. Conference mode off leaves existing single-owner and Generic Coder behavior unchanged.
-11. Existing Generic Coder approval tests continue to pass unchanged.
-12. Conference participant tool definitions are exactly `challenge_current`, `challenge_submit`, and `challenge_status`.
-13. Completion notification is restart-safe and idempotent.
-14. Conference mode refuses startup without an explicit state root and expected GitHub actor.
-15. Full `swift test`, formatting and lint gates pass.
+1. Different participant ids can submit independent answers to the same case.
+2. A participant cannot submit/query as another numeric user id.
+3. A second confirmed submission for the same participant/case cannot overwrite the first.
+4. Busy Coder leaves submission queued for later execution.
+5. Participant/model text cannot choose repository, baseline, publication branch/base, credentials or publication identity.
+6. Coder receives the exact stored participant proposal as task data.
+7. Every Coder request starts from the supervisor-prepared local source and exact immutable SHA.
+8. Publication is impossible when independently observed starting commit differs from the configured baseline.
+9. Coder receives no GitHub publication credential and emits no generic completion notification.
+10. Only the deterministic publisher can push/create a PR.
+11. Transient publisher failure retries without losing or duplicating the submission/PR identity.
+12. Successful result stores verified branch/commit/draft-PR and exposes it only to the owning participant.
+13. Missing/mismatched GitHub actor or invalid commit/workspace evidence becomes `needs_review`.
+14. Valid source cache survives restart without requiring GitHub; invalid cache is never trusted.
+15. Conference mode off leaves ordinary single-owner and Generic Coder behavior unchanged.
+16. Conference participant tools are exactly `challenge_current`, `challenge_submit`, `challenge_status`.
+17. Completion notification is restart-safe and idempotent.
+18. Conference mode refuses unsafe/missing state, Coder-home and GitHub actor configuration.
+19. Full tests, formatting and lint gates pass.
