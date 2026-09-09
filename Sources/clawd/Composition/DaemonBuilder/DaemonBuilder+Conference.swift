@@ -26,7 +26,9 @@ extension DaemonBuilder {
     config conference: ConferenceConfig,
     environment: [String: String]
   ) async throws {
-    guard conference.enabled else { return }
+    guard conference.enabled else {
+      return
+    }
     guard let expected = conference.expectedGitHubActor else {
       throw ConferenceConfigError.githubActorVerificationFailed
     }
