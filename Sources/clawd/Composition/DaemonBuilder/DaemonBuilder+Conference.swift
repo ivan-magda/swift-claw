@@ -71,7 +71,7 @@ extension DaemonBuilder {
     coder: CoderComposition,
     coordination: TurnCoordination,
     environment: [String: String]
-  ) throws -> ConferenceComposition {
+  ) async throws -> ConferenceComposition {
     guard conference.enabled else {
       return .disabled
     }
@@ -88,6 +88,8 @@ extension DaemonBuilder {
       throw ConferenceConfigError.githubTokenRequired
     }
 
+    let sourcePath = try await ConferenceRepositorySource(stateRoot: config.stateRoot)
+      .prepare(activeCase)
     let publisher = try ConferenceGitHubPublisher(
       stateRoot: config.stateRoot,
       token: token,
@@ -97,6 +99,7 @@ extension DaemonBuilder {
     let signal = coordination.outboxSignal
     let service = ConferenceWorkflowService(
       config: conference,
+      sourcePath: sourcePath,
       store: stores.conference,
       coder: coderService,
       coderJobs: stores.coderJobs,
