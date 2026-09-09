@@ -143,8 +143,10 @@ public struct MessageRouter: Sendable {
   }
 
   static let welcomeText = "Hi! I'm online. Send me a message and I'll do my best to help."
-  static let conferenceWelcomeText =
-    "Conference Coding Challenge is online. Ask for today's case, send your own proposal, or ask for your submission status."
+  static let conferenceWelcomeText = """
+    Conference Coding Challenge is online. Ask for today's case, send your own proposal, \
+    or ask for your submission status.
+    """
   static let privateBotText = "Sorry, this is a private bot."
 
   static func unsupportedMediaText(kind: String) -> String {
