@@ -18,7 +18,10 @@ extension DaemonBuilder {
     )
   }
 
-  func prepareConference(coder: CoderComposition) throws -> ConferenceComposition {
+  func prepareConference(
+    coder: CoderComposition,
+    coordination: TurnCoordination
+  ) throws -> ConferenceComposition {
     let conference = try ConferenceConfig.load(
       environment: ProcessInfo.processInfo.environment
     )
@@ -32,11 +35,14 @@ extension DaemonBuilder {
       throw ConferenceConfigError.invalidCaseFile
     }
 
+    let signal = coordination.outboxSignal
     let service = ConferenceWorkflowService(
       config: conference,
       store: stores.conference,
       coder: coderService,
       coderJobs: stores.coderJobs,
+      outbox: stores.outbox,
+      notifyOutbox: { signal.poke() },
       logger: logger,
       now: now
     )
