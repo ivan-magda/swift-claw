@@ -50,11 +50,11 @@ import Testing
 
   @Test func queueClaimIsFIFOAndCannotClaimSameRowTwice() throws {
     let fixture = try Fixture()
-    let first = try fixture.insert(userID: 101, answer: "First", at: fixture.now)
+    let first = try fixture.insert(userID: 101, answer: "First", date: fixture.now)
     let second = try fixture.insert(
       userID: 202,
       answer: "Second",
-      at: fixture.now.addingTimeInterval(10)
+      date: fixture.now.addingTimeInterval(10)
     )
 
     let claimedFirst = try fixture.store.claimNextQueued(now: fixture.now.addingTimeInterval(20))
@@ -161,13 +161,13 @@ private extension ConferenceStoreTests {
     func insert(
       userID: Int64,
       answer: String,
-      at: Date? = nil
+      date: Date? = nil
     ) throws -> ConferenceSubmission {
       let result = try store.insertSubmission(
         id: UUID(),
         prepared: prepared(answer: answer),
         origin: origin(userID: userID),
-        now: at ?? now
+        now: date ?? now
       )
       guard case .inserted(let item) = result else {
         throw StoreError.unexpected("Fixture expected a fresh submission")
