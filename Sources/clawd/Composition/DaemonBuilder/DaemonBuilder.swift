@@ -49,17 +49,33 @@ struct DaemonBuilder: Sendable {
     rosterStack: RosterStack,
     cooldown: any PrimaryRouteCooldownTracking
   ) async throws -> DaemonRuntimeBundle {
-    let sandbox = await prepareSandbox()
+    let conferenceConfig = try loadConferenceConfig()
+    let sandbox: SandboxStack
+    if conferenceConfig.enabled {
+      sandbox = SandboxBootstrapResult(
+        backend: nil,
+        maintenance: nil,
+        health: nil,
+        unavailableReason: "code execution is disabled in conference mode"
+      )
+    } else {
+      sandbox = await prepareSandbox()
+    }
+
     let coordination = TurnCoordination()
     let coder = await prepareCoder(coordination: coordination)
-    let conference = try prepareConference(coder: coder, coordination: coordination)
+    let conference = try prepareConference(
+      config: conferenceConfig,
+      coder: coder,
+      coordination: coordination
+    )
 
     let costResolver = CostResolver(
       priceTable: PriceFileLoader.load(),
       referenceUSDPerToken: config.budget.referenceUSDPerToken
     )
 
-    let mcpStack = await resolveMCPStack()
+    let mcpStack = conference.enabled ? MCPStack.empty : await resolveMCPStack()
 
     let workspace = FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config))
     let roster = rosterStack.roster
@@ -112,7 +128,7 @@ struct DaemonBuilder: Sendable {
     if let maintenance = sandbox.maintenance {
       services.append(SandboxLifecycleService(maintenance: maintenance))
     }
-    if mcpStack.sessions.isEmpty == false, !conference.enabled {
+    if mcpStack.sessions.isEmpty == false {
       services.append(MCPSessionLifecycleService(sessions: mcpStack.sessions))
     }
 
