@@ -23,7 +23,6 @@ public enum ConferenceSubmissionState: String, Sendable, Codable, CaseIterable {
   }
 }
 
-/// One operator-controlled active case. It is configuration, not participant input.
 public struct ConferenceCase: Sendable, Equatable, Codable {
   public let id: String
   public let title: String
@@ -49,8 +48,6 @@ public struct ConferenceCase: Sendable, Equatable, Codable {
   }
 }
 
-/// The durable identity of the approved Telegram action that admitted a submission.
-/// Queue replay reconstructs exactly this context; it never invents an approval.
 public struct ConferenceApprovedOrigin: Sendable, Equatable, Codable {
   public let runID: Int64
   public let sessionID: Int64
@@ -110,8 +107,6 @@ public struct ConferenceApprovedOrigin: Sendable, Equatable, Codable {
   }
 }
 
-/// Canonical action recorded by the approval. The participant supplies only `answer`; the case
-/// snapshot is injected by trusted conference configuration before approval and is replayed verbatim.
 public struct PreparedConferenceSubmission: Sendable, Equatable, Codable {
   public let caseSnapshot: ConferenceCase
   public let answer: String
@@ -134,6 +129,7 @@ public struct ConferenceSubmission: Sendable, Equatable, Codable {
   public let branch: String?
   public let commit: String?
   public let failureReason: String?
+  public let notificationEnqueued: Bool
   public let createdAt: Date
   public let updatedAt: Date
 
@@ -149,6 +145,7 @@ public struct ConferenceSubmission: Sendable, Equatable, Codable {
     branch: String?,
     commit: String?,
     failureReason: String?,
+    notificationEnqueued: Bool = false,
     createdAt: Date,
     updatedAt: Date
   ) {
@@ -163,6 +160,7 @@ public struct ConferenceSubmission: Sendable, Equatable, Codable {
     self.branch = branch
     self.commit = commit
     self.failureReason = failureReason
+    self.notificationEnqueued = notificationEnqueued
     self.createdAt = createdAt
     self.updatedAt = updatedAt
   }
