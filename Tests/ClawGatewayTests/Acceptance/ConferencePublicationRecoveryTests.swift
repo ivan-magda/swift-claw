@@ -13,6 +13,7 @@ import Testing
     try ClawDatabase.migrate(queue)
     let submissions = ConferenceStoreGRDB(writer: queue)
     let coderJobs = CoderJobStoreGRDB(writer: queue)
+    let sourcePath = "/conference/source/day-1"
     let item = ConferenceCase(
       id: "day-1",
       title: "Accessibility regression",
@@ -43,7 +44,7 @@ import Testing
     _ = try submissions.claimNextQueued(now: Date())
 
     let request = CoderRequest(
-      source: .githubRepository(url: item.repositoryURL),
+      source: .local(path: sourcePath),
       task: "test",
       workspace: .separate,
       startRef: item.baselineRef,
@@ -54,9 +55,9 @@ import Testing
     )
     let prepared = CoderPreparedRequest(
       request: request,
-      canonicalSource: item.repositoryURL,
-      checkoutPath: nil,
-      commonGitDirectory: nil,
+      canonicalSource: sourcePath,
+      checkoutPath: sourcePath,
+      commonGitDirectory: "\(sourcePath)/.git",
       executionPolicyID: "conference-test-policy",
       publicationRepository: nil
     )
@@ -116,6 +117,7 @@ import Testing
         activeCase: item,
         expectedGitHubActor: "crew18-bot"
       ),
+      sourcePath: sourcePath,
       store: submissions,
       coder: UnusedConferenceCoder(),
       coderJobs: coderJobs,
