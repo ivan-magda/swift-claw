@@ -105,6 +105,48 @@ public struct ConferenceApprovedOrigin: Sendable, Equatable, Codable {
       approvalId: approvalID
     )
   }
+
+  private enum CodingKeys: String, CodingKey {
+    case runID
+    case sessionID
+    case chatID
+    case requesterUserID
+    case mode
+    case toolCallID
+    case approvalID
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    let modeValue = try values.decode(String.self, forKey: .mode)
+    guard let mode = ChatMode(rawValue: modeValue) else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .mode,
+        in: values,
+        debugDescription: "Unknown conference chat mode"
+      )
+    }
+    self.init(
+      runID: try values.decode(Int64.self, forKey: .runID),
+      sessionID: try values.decode(Int64.self, forKey: .sessionID),
+      chatID: try values.decode(Int64.self, forKey: .chatID),
+      requesterUserID: try values.decode(Int64.self, forKey: .requesterUserID),
+      mode: mode,
+      toolCallID: try values.decode(String.self, forKey: .toolCallID),
+      approvalID: try values.decode(Int64.self, forKey: .approvalID)
+    )
+  }
+
+  public func encode(to encoder: any Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(runID, forKey: .runID)
+    try values.encode(sessionID, forKey: .sessionID)
+    try values.encode(chatID, forKey: .chatID)
+    try values.encode(requesterUserID, forKey: .requesterUserID)
+    try values.encode(mode.rawValue, forKey: .mode)
+    try values.encode(toolCallID, forKey: .toolCallID)
+    try values.encode(approvalID, forKey: .approvalID)
+  }
 }
 
 public struct PreparedConferenceSubmission: Sendable, Equatable, Codable {
