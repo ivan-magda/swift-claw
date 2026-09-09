@@ -24,6 +24,7 @@ public struct ConferenceCurrentTool: Tool {
   }
 
   public var timeout: Duration { .seconds(5) }
+
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
@@ -64,8 +65,8 @@ public struct ConferenceSubmitTool: Tool {
       name: ConferenceToolNames.submit,
       description: """
         Submit the participant's own exact proposal for the active conference case. Do not invent \
-        or improve the proposal before submitting it. The action requires explicit confirmation and \
-        queues an isolated background Coder run.
+        or improve the proposal before submitting it. The action requires explicit confirmation \
+        and queues an isolated background Coder run.
         """,
       parameters: .object([
         "type": .string("object"),
@@ -90,12 +91,14 @@ public struct ConferenceSubmitTool: Tool {
 
   public var timeout: Duration { .seconds(10) }
   public var executesOnlyViaApproval: Bool { true }
+
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
 
   public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
     guard let answer = arguments.objectValue?["answer"]?.stringValue else {
       return .refused(reason: "challenge_submit requires an answer string.")
     }
+
     do {
       let prepared = try await service.prepareSubmission(answer: answer)
       guard let canonical = CanonicalJSON.encode(prepared) else {
@@ -104,23 +107,15 @@ public struct ConferenceSubmitTool: Tool {
       let item = prepared.caseSnapshot
       return .prepared(
         PreparedToolAction(
-          canonicalTarget: "conference:\(item.id):\(item.repositoryURL)@\(item.baselineRef)",
+          canonicalTarget: Self.target(for: item),
           canonicalArgsJSON: canonical,
-          presentation: ToolApprovalPresentation(
-            blastRadius: """
-              Case: \(redactor.redact(item.id)) — \(redactor.redact(item.title))
-              Repository: \(redactor.redact(item.repositoryURL))
-              Baseline: \(redactor.redact(item.baselineRef))
-              PR base: \(redactor.redact(item.baseBranch))
-              Result: queued Coder run + pull request; never auto-merged
-              """,
-            contentPreview: redactor.redact(prepared.answer),
-            warnings: [
-              "The coding agent must preserve your proposal; generated code can still require human review."
-            ]
-          ),
+          presentation: presentation(for: prepared),
           guardTexts: [
-            item.repositoryURL, item.baselineRef, item.baseBranch, item.prompt, prepared.answer,
+            item.repositoryURL,
+            item.baselineRef,
+            item.baseBranch,
+            item.prompt,
+            prepared.answer,
           ],
           canExfiltrate: true,
           approvalReason: .conferenceSubmit
@@ -140,7 +135,9 @@ public struct ConferenceSubmitTool: Tool {
     canonicalTarget: String?,
     context: ToolExecutionContext?
   ) async -> ToolPayload {
-    guard let context, context.approvalId != nil else { return Self.missingApproval }
+    guard let context, context.approvalId != nil else {
+      return Self.missingApproval
+    }
     guard let canonical = CanonicalJSON.encode(arguments),
       let prepared = try? JSONDecoder().decode(
         PreparedConferenceSubmission.self,
@@ -149,16 +146,15 @@ public struct ConferenceSubmitTool: Tool {
     else {
       return Self.failure(ConferenceError.staleCase)
     }
-    let expectedTarget =
-      "conference:\(prepared.caseSnapshot.id):\(prepared.caseSnapshot.repositoryURL)@\(prepared.caseSnapshot.baselineRef)"
-    guard canonicalTarget == expectedTarget else {
+    guard canonicalTarget == Self.target(for: prepared.caseSnapshot) else {
       return Self.failure(ConferenceError.staleCase)
     }
 
     do {
       let submission = try await service.submit(prepared, context: context)
+      let identifier = submission.id.uuidString.lowercased()
       return .init(
-        content: "Submission \(submission.id.uuidString.lowercased()) is \(submission.state.rawValue).",
+        content: "Submission \(identifier) is \(submission.state.rawValue).",
         status: .ok,
         ingestedUntrusted: false
       )
@@ -178,8 +174,10 @@ public struct ConferenceStatusTool: Tool {
   public var definition: ToolDefinition {
     ToolDefinition(
       name: ConferenceToolNames.status,
-      description:
-        "Return the current participant's conference submission status and pull request when available.",
+      description: """
+        Return the current participant's conference submission status and pull request \
+        when available.
+        """,
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
@@ -198,6 +196,7 @@ public struct ConferenceStatusTool: Tool {
   }
 
   public var timeout: Duration { .seconds(5) }
+
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
@@ -209,7 +208,10 @@ public struct ConferenceStatusTool: Tool {
     canonicalTarget: String?,
     context: ToolExecutionContext?
   ) async -> ToolPayload {
-    guard let context else { return Self.missingContext }
+    guard let context else {
+      return Self.missingContext
+    }
+
     let idText = arguments.objectValue?["submission_id"]?.stringValue
     let id: UUID?
     if let idText {
@@ -234,12 +236,50 @@ public struct ConferenceStatusTool: Tool {
         "Case: \(submission.caseSnapshot.id)",
         "State: \(submission.state.rawValue)",
       ]
-      if let url = submission.pullRequestURL { lines.append("Pull request: \(url)") }
-      if let reason = submission.failureReason { lines.append("Note: \(reason)") }
-      return .init(content: lines.joined(separator: "\n"), status: .ok, ingestedUntrusted: false)
+      if let url = submission.pullRequestURL {
+        lines.append("Pull request: \(url)")
+      }
+      if let reason = submission.failureReason {
+        lines.append("Note: \(reason)")
+      }
+      return .init(
+        content: lines.joined(separator: "\n"),
+        status: .ok,
+        ingestedUntrusted: false
+      )
     } catch {
       return Self.failure(error)
     }
+  }
+}
+
+// MARK: - Submission Presentation
+
+private extension ConferenceSubmitTool {
+  static func target(for item: ConferenceCase) -> String {
+    "conference:\(item.id):\(item.repositoryURL)@\(item.baselineRef)"
+  }
+
+  func presentation(
+    for prepared: PreparedConferenceSubmission
+  ) -> ToolApprovalPresentation {
+    let item = prepared.caseSnapshot
+    return ToolApprovalPresentation(
+      blastRadius: """
+        Case: \(redactor.redact(item.id)) — \(redactor.redact(item.title))
+        Repository: \(redactor.redact(item.repositoryURL))
+        Baseline: \(redactor.redact(item.baselineRef))
+        PR base: \(redactor.redact(item.baseBranch))
+        Result: queued Coder run + pull request; never auto-merged
+        """,
+      contentPreview: redactor.redact(prepared.answer),
+      warnings: [
+        """
+        The coding agent must preserve your proposal; generated code can still require \
+        human review.
+        """
+      ]
+    )
   }
 }
 
@@ -258,8 +298,13 @@ private extension ConferenceSubmitTool {
     ingestedUntrusted: false
   )
 
-  static func failure(_ error: any Error) -> ToolPayload { ConferenceToolOutput.failure(error) }
-  static func failureMessage(_ error: any Error) -> String { ConferenceToolOutput.message(error) }
+  static func failure(_ error: any Error) -> ToolPayload {
+    ConferenceToolOutput.failure(error)
+  }
+
+  static func failureMessage(_ error: any Error) -> String {
+    ConferenceToolOutput.message(error)
+  }
 }
 
 private extension ConferenceStatusTool {
@@ -269,7 +314,9 @@ private extension ConferenceStatusTool {
     ingestedUntrusted: false
   )
 
-  static func failure(_ error: any Error) -> ToolPayload { ConferenceToolOutput.failure(error) }
+  static func failure(_ error: any Error) -> ToolPayload {
+    ConferenceToolOutput.failure(error)
+  }
 }
 
 private enum ConferenceToolOutput {
@@ -279,18 +326,28 @@ private enum ConferenceToolOutput {
 
   static func message(_ error: any Error) -> String {
     switch error {
-    case ConferenceError.disabled: return "Conference challenge is disabled."
-    case ConferenceError.noActiveCase: return "There is no active conference case."
-    case ConferenceError.invalidContext: return "A verified participant identity is required."
-    case ConferenceError.forbidden: return "That submission belongs to another participant."
-    case ConferenceError.notFound: return "Submission not found."
-    case ConferenceError.staleCase: return "The active case changed; request the current case again."
-    case ConferenceError.invalidAnswer(let reason): return reason
+    case ConferenceError.disabled:
+      return "Conference challenge is disabled."
+    case ConferenceError.noActiveCase:
+      return "There is no active conference case."
+    case ConferenceError.invalidContext:
+      return "A verified participant identity is required."
+    case ConferenceError.forbidden:
+      return "That submission belongs to another participant."
+    case ConferenceError.notFound:
+      return "Submission not found."
+    case ConferenceError.staleCase:
+      return "The active case changed; request the current case again."
+    case ConferenceError.invalidAnswer(let reason):
+      return reason
     case ConferenceError.duplicateSubmission(let id):
       return "You already submitted this case as \(id.uuidString.lowercased())."
-    case ConferenceError.coderUnavailable(_): return "The conference Coder is unavailable."
-    case is StoreError: return "Conference storage is unavailable."
-    default: return "Conference workflow failed."
+    case ConferenceError.coderUnavailable(_):
+      return "The conference Coder is unavailable."
+    case is StoreError:
+      return "Conference storage is unavailable."
+    default:
+      return "Conference workflow failed."
     }
   }
 }
