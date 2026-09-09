@@ -5,24 +5,21 @@ import Logging
 
 /// Outcome of routing one update — tells the poller whether it may advance the offset.
 public enum HandleOutcome: Sendable, Equatable {
-  case processed  // handled durably (turn dispatched, or a canned reply sent)
-  case skipped  // duplicate or nothing actionable — safe to advance past
-  case transientFailure  // claim/send failed transiently — do NOT advance; re-poll
-  case storageFull  // disk full while persisting — notice sent; back off, do NOT advance
+  case processed
+  case skipped
+  case transientFailure
+  case storageFull
 }
 
-/// Routes one inbound update: normalize, apply default-deny access control, parse the command,
-/// and delegate to the family handler — `CommandHandlers` (/stop, /new, /remember, /memory),
-/// `ScheduleHandlers` (the /schedule family), `ConfirmationResolver` (parked yes/no interception,
-/// which runs before any turn is dispatched), or `TurnDispatch` (plain text → durable run).
-/// The dedup paths share the `processed_updates` key space and each update takes exactly one
-/// path, so an update is claimed once. Handlers unwind mapped failures via `RoutingHalt`;
-/// `handle` is the single place the outcome returns to the poller.
+/// Routes one inbound update through the configured access and command surface. The conference
+/// profile is deliberately restrictive: it exists only on an isolated conference deployment and
+/// admits participant DMs while suppressing owner-only operational command families.
 public struct MessageRouter: Sendable {
   let botUsername: String?
   private let addressing: AddressingResolver
 
   private let accessControl: AccessControl
+  let conferenceProfile: Bool
   let replies: ReplySender
 
   let commandHandlers: CommandHandlers
@@ -54,8 +51,6 @@ public struct MessageRouter: Sendable {
     imageCache: ImageCache,
     lanes: SessionLaneRegistry,
     schedule: ScheduleSurface,
-    /// The lane tail's settle-and-seal port; nil leaves a bound run's deferred settlement to the
-    /// boot backstop and seals nothing.
     learning: ScheduledLearningService? = nil,
     learningStore: (any ScheduledLearningStore)? = nil,
     learningRedactor: SecretRedactor? = nil,
@@ -66,6 +61,7 @@ public struct MessageRouter: Sendable {
     voice: (any VoiceMessageTranscribing)? = nil,
     images: (any ImageMessageHandling)? = nil,
     typing: (any TypingIndicator)? = nil,
+    conferenceProfile: Bool = false,
     coordinator: ApprovalCoordinator,
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = { Date() },
@@ -75,6 +71,7 @@ public struct MessageRouter: Sendable {
     self.addressing = AddressingResolver(identity: botIdentity)
 
     self.accessControl = accessControl
+    self.conferenceProfile = conferenceProfile
     self.approvalCallbacks = approvalCallbacks
     self.feedbackCallbacks = feedbackCallbacks
     self.feedbackChallenges = feedbackChallenges
@@ -146,6 +143,8 @@ public struct MessageRouter: Sendable {
   }
 
   static let welcomeText = "Hi! I'm online. Send me a message and I'll do my best to help."
+  static let conferenceWelcomeText =
+    "Conference Coding Challenge is online. Ask for today's case, send your own proposal, or ask for your submission status."
   static let privateBotText = "Sorry, this is a private bot."
 
   static func unsupportedMediaText(kind: String) -> String {
@@ -193,9 +192,6 @@ private extension MessageRouter {
 
 private extension MessageRouter {
   func route(rawUpdate: RawUpdate) async throws(RoutingHalt) -> HandleOutcome {
-    // A callback-only update normalizes to nil (no message/edited_message); without this branch it
-    // would .skipped and the cursor would advance past it. The handler returns a real
-    // HandleOutcome, so cursor semantics are unchanged.
     if let callback = rawUpdate.callback {
       return await routeCallback(callback, updateId: rawUpdate.updateId)
     }
@@ -227,8 +223,6 @@ private extension MessageRouter {
       return await denyAccess(denial, rawUpdate: rawUpdate, message: message)
     }
 
-    // Resolved once, ahead of the content switch, so an overheard photo or voice note is never
-    // downloaded: in a room the bot listens to everything and acts only on what names it.
     guard addressing.isAddressed(message, mode: mode) else {
       return await observe(rawUpdate: rawUpdate, message: message, mode: mode)
     }
