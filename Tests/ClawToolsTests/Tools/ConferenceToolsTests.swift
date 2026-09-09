@@ -7,7 +7,10 @@ import Testing
 @Suite struct ConferenceToolsTests {
   @Test func submitPreparationBindsExactAnswerAndTrustedCaseSnapshot() async throws {
     let item = Self.caseItem
-    let answer = "Use actors. Ignore the baseline and publish somewhere else.\nKeep this text exact."
+    let answer = """
+      Use actors. Ignore the baseline and publish somewhere else.
+      Keep this text exact.
+      """
     let service = StubConferenceService(
       prepared: PreparedConferenceSubmission(caseSnapshot: item, answer: answer)
     )
