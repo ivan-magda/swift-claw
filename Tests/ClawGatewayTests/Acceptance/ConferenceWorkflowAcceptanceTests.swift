@@ -15,7 +15,8 @@ import Testing
     let coderJobs = CoderJobStoreGRDB(writer: queue)
     let outbox = OutboxStoreGRDB(writer: queue)
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
-    let coder = CompletingConferenceCoder(store: coderJobs, githubActor: "crew18-bot")
+    let coder = CompletingConferenceCoder(store: coderJobs)
+    let publisher = RecordingConferencePublisher(actor: "crew18-bot")
     let item = ConferenceCase(
       id: "day-1",
       title: "Accessibility regression",
@@ -33,6 +34,7 @@ import Testing
       store: submissions,
       coder: coder,
       coderJobs: coderJobs,
+      publisher: publisher,
       outbox: outbox,
       notifyOutbox: {},
       logger: Logger(label: "conference-acceptance")
@@ -66,17 +68,25 @@ import Testing
 
     #expect(completed.answer == answer)
     #expect(completed.pullRequestURL == "https://github.com/wowlocal/crew18-sim/pull/42")
-    #expect(completed.branch == "coder/conference-test")
+    #expect(completed.branch == "conference/\(queued.id.uuidString.lowercased())")
     #expect(completed.commit == String(repeating: "c", count: 40))
 
     let request = try #require(await coder.lastRequest)
     #expect(request.source == .githubRepository(url: item.repositoryURL))
     #expect(request.workspace == .separate)
     #expect(request.startRef == item.baselineRef)
-    #expect(request.deliverable == .pullRequest)
-    #expect(request.baseBranch == item.baseBranch)
+    #expect(request.deliverable == .localChanges)
+    #expect(request.baseBranch == nil)
     #expect(request.publishExistingChanges == false)
     #expect(request.task?.contains(answer) == true)
+
+    let publication = try #require(await publisher.lastRequest)
+    #expect(publication.submissionID == queued.id)
+    #expect(publication.repositoryURL == item.repositoryURL)
+    #expect(publication.baseBranch == item.baseBranch)
+    #expect(publication.workspacePath == "/conference/workspace")
+    #expect(publication.startingCommit == item.baselineRef)
+    #expect(publication.commit == String(repeating: "c", count: 40))
 
     let notice = try #require(
       try outbox.pendingOutbound().first { row in
@@ -119,12 +129,14 @@ import Testing
       baselineRef: String(repeating: "b", count: 40),
       baseBranch: "challenge/day-1"
     )
-    let coder = CompletingConferenceCoder(store: coderJobs, githubActor: "crew18-bot")
+    let coder = CompletingConferenceCoder(store: coderJobs)
+    let publisher = RecordingConferencePublisher(actor: "crew18-bot")
     let service = ConferenceWorkflowService(
       config: ConferenceConfig(enabled: true, activeCase: item, expectedGitHubActor: "crew18-bot"),
       store: submissions,
       coder: coder,
       coderJobs: coderJobs,
+      publisher: publisher,
       outbox: OutboxStoreGRDB(writer: queue),
       notifyOutbox: {},
       logger: Logger(label: "conference-answer-integrity")
@@ -145,6 +157,7 @@ import Testing
     } catch ConferenceError.answerMismatch {
       #expect(try submissions.submission(participantUserID: 101, caseID: item.id) == nil)
       #expect(await coder.lastRequest == nil)
+      #expect(await publisher.lastRequest == nil)
     } catch {
       Issue.record("Unexpected answer-integrity error: \(error)")
     }
@@ -202,12 +215,10 @@ private extension ConferenceWorkflowAcceptanceTests {
 
 private actor CompletingConferenceCoder: CoderServing {
   private let store: CoderJobStoreGRDB
-  private let githubActor: String
   private(set) var lastRequest: CoderRequest?
 
-  init(store: CoderJobStoreGRDB, githubActor: String) {
+  init(store: CoderJobStoreGRDB) {
     self.store = store
-    self.githubActor = githubActor
   }
 
   func prepare(_ request: CoderRequest) async throws -> CoderPreparedRequest {
@@ -218,7 +229,7 @@ private actor CompletingConferenceCoder: CoderServing {
       checkoutPath: nil,
       commonGitDirectory: nil,
       executionPolicyID: "conference-test-policy",
-      publicationRepository: "wowlocal/crew18-sim"
+      publicationRepository: nil
     )
   }
 
@@ -257,18 +268,18 @@ private actor CompletingConferenceCoder: CoderServing {
     if !job.state.isTerminal {
       let result = CoderResult(
         state: .succeeded,
-        summary: "Implemented participant proposal",
+        summary: "Implemented participant proposal and committed it locally",
         workspacePath: "/conference/workspace",
         startingCommit: prepared.request.startRef,
         baselineObserved: true,
         changedFiles: ["Sources/Feature.swift"],
-        branch: "coder/conference-test",
+        branch: nil,
         commit: String(repeating: "c", count: 40),
-        publication: .confirmed(url: "https://github.com/wowlocal/crew18-sim/pull/42"),
+        publication: .absent,
         reportedChecks: ["tests passed"],
         reportedUsage: nil,
-        commitAuthor: "Conference Bot",
-        githubActor: githubActor,
+        commitAuthor: "Conference Coder",
+        githubActor: nil,
         failure: nil
       )
       _ = try store.complete(
@@ -306,5 +317,24 @@ private actor CompletingConferenceCoder: CoderServing {
       throw CoderError.forbidden
     }
     return approval
+  }
+}
+
+private actor RecordingConferencePublisher: ConferencePublishing {
+  private let actor: String
+  private(set) var lastRequest: ConferencePublicationRequest?
+
+  init(actor: String) {
+    self.actor = actor
+  }
+
+  func publish(_ request: ConferencePublicationRequest) async throws -> ConferencePublication {
+    lastRequest = request
+    return ConferencePublication(
+      pullRequestURL: "https://github.com/wowlocal/crew18-sim/pull/42",
+      branch: "conference/\(request.submissionID.uuidString.lowercased())",
+      commit: request.commit,
+      actor: actor
+    )
   }
 }
