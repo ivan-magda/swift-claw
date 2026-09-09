@@ -21,12 +21,15 @@ extension ClawDatabase {
           branch TEXT,
           commit_sha TEXT,
           failure_reason TEXT,
+          notification_enqueued INTEGER NOT NULL DEFAULT 0,
           created_ts INTEGER NOT NULL,
           updated_ts INTEGER NOT NULL,
           UNIQUE(participant_user_id, case_id)
         );
         CREATE INDEX conference_submission_queue
           ON conference_submissions(state, created_ts, id);
+        CREATE INDEX conference_submission_notifications
+          ON conference_submissions(notification_enqueued, updated_ts, id);
         CREATE UNIQUE INDEX conference_submission_coder_job
           ON conference_submissions(coder_job_id)
           WHERE coder_job_id IS NOT NULL;
