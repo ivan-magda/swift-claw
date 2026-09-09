@@ -14,30 +14,16 @@ public protocol ApprovedActionExecuting: Sendable {
 /// THROWN store error is not a duplicate signal, and "did the action run?" changes what the
 /// waiter may truthfully tell the owner.
 public enum ApprovedCommitOutcome: Sendable, Equatable {
-  /// This call performed the resume commit.
   case committed
-  /// A duplicate signal already resumed the run; nothing left to do.
   case ignored
-  /// The pre-execution claim threw at the store seam — nothing ran. The run is still
-  /// `AWAITING_APPROVAL`, so the boot crash-window path (APPROVED row + AWAITING run)
-  /// retries it after a restart.
   case storeFailed
-  /// The action EXECUTED, then recording its result threw. The run stays claimed RUNNING for the
-  /// boot orphan sweep — the waiter must never promise a retry: the side effect already happened.
   case recordFailed
-  /// The run reached a terminal state (`/stop`, `/new`) after the approve CAS but before the
-  /// claim: nothing executed, and the claim transaction resolved the placeholder observation.
   case runNotResumable
 }
 
 public struct ApprovedActionExecutor: ApprovedActionExecuting {
-  /// `memory_write`'s side effect is a DB insert that must FUSE with the observation update for
-  /// exactly-once, so it never runs the tool's `execute`; every other write tool claims the
-  /// run first, executes its recorded args, then records the result.
   private static let memoryWriteToolName = "memory_write"
 
-  /// Synthetic observation for an approval whose run `/stop`//`new` drove terminal before the
-  /// claim — written by the claim transaction so history explains the un-run call.
   static let notResumableObservationContent =
     "The run was stopped before this approved action executed; nothing ran."
 
@@ -58,10 +44,8 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
   ) {
     self.tools = tools
     self.runs = runs
-
     self.redactArguments = redactArguments
     self.now = now
-
     self.logger = logger
   }
 
@@ -77,9 +61,6 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
 
 private extension ApprovedActionExecutor {
   func executeGenericWrite(_ approval: Approval) async -> ApprovedCommitOutcome {
-    // Claim BEFORE the external effect: the AWAITING→RUNNING flip and a `/stop`//`new`
-    // cancellation contend on the same run row, so exactly one side wins — an approved write can
-    // never land after the owner cancelled the run.
     let claim: ApprovedExecutionClaim
     do {
       claim = try runs.claimApprovedExecution(
@@ -123,8 +104,6 @@ private extension ApprovedActionExecutor {
     return .committed
   }
 
-  /// Runs the claimed action and returns its full payload — a truthful error payload when the
-  /// recorded tool vanished or its args no longer parse.
   func executedPayload(for approval: Approval) async -> ToolPayload {
     guard
       let tool = tools[approval.tool],
@@ -151,11 +130,14 @@ private extension ApprovedActionExecutor {
         }
 
         if restored.mode == .group {
+          let genericCoder =
+            approval.reason == .coderSubmit && approval.tool == CoderToolNames.submit
+          let conferenceSubmission =
+            approval.reason == .conferenceSubmit && approval.tool == ConferenceToolNames.submit
           guard
             restored.origin == .interactive,
             restored.requesterUserId != nil,
-            approval.reason == .coderSubmit,
-            approval.tool == CoderToolNames.submit
+            genericCoder || conferenceSubmission
           else {
             return missingExecutionContext()
           }
@@ -180,8 +162,6 @@ private extension ApprovedActionExecutor {
     if tool.definition.requiresInteractiveRequester && !hasInteractiveRequester {
       return missingExecutionContext()
     }
-    // Run to completion on the waiter task — direct await, NEVER `executeWithTimeout`'s
-    // abandon-on-timeout race, so the observation is always truthful (file_write is atomic).
     return await tool.execute(
       arguments: arguments,
       canonicalTarget: approval.canonicalTarget,
@@ -197,8 +177,6 @@ private extension ApprovedActionExecutor {
     )
   }
 
-  /// Renders the recorded args through the injected exact-secret redactor so raw canonical
-  /// arguments never enter the audit log.
   func audit(for approval: Approval) -> ApprovedExecutionAudit {
     ApprovedExecutionAudit(
       tool: approval.tool,
@@ -225,9 +203,6 @@ private extension ApprovedActionExecutor {
       )
     }
 
-    // Exactly-once: the item rebuilt with the SAME decoder the gate used, then insert +
-    // observation update in ONE fused transaction; the placeholder guard inside
-    // applyApprovedMemoryWrite makes a crash-window re-run a no-op.
     let content = """
       Saved memory item (kind \(request.item.kind.rawValue), \
       \(MemoryWriteArguments.canonicalTarget(for: request))).
@@ -256,8 +231,6 @@ private extension ApprovedActionExecutor {
     }
   }
 
-  /// Resumes the run with a synthetic (no side effect performed) observation: same claim-first
-  /// discipline as a real execution, so a cancelled run is never resumed by an error path either.
   func resumeWithSyntheticObservation(
     _ approval: Approval,
     content: String
