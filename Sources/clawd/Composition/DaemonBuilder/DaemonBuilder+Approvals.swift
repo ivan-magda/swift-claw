@@ -8,10 +8,6 @@ import Foundation
 // MARK: - Coordination Fixtures & Approve-Resume Fabric
 
 extension DaemonBuilder {
-  /// The shared in-process coordination fixtures, created before any service so every consumer
-  /// references the SAME instances: the outbox signal is created before the `TurnRunner` so its
-  /// `notifyOutbox` closure can capture it (each commit pokes the dispatcher to drain the rows it
-  /// just enqueued), and the parker/coordinator pair closes the approve-resume loop.
   struct TurnCoordination: Sendable {
     let outboxSignal = OutboxSignal()
     let lanes = SessionLaneRegistry()
@@ -21,9 +17,6 @@ extension DaemonBuilder {
     let deferredParker = DeferredApprovalParker()
   }
 
-  /// The approve-resume fabric: the waiter (the single execution locus) and the expiry sweeper.
-  /// The callback handler is built separately because it needs no `TurnRunner` while the router
-  /// does, so it has to exist before the router that carries it.
   struct ApprovalFabric {
     let waiter: ApprovalWaiter
     let expiry: ApprovalExpiryService
@@ -47,8 +40,6 @@ extension DaemonBuilder {
       contextBuilder: agentStack.contextBuilder,
       imageCache: imageCache,
       notifyOutbox: { outboxSignal.poke() },
-      // The resolved route's billing, not the init default: a subscription route must not fire a
-      // daily USD-cap DM against dollars earlier metered usage rang up.
       breaker: BudgetBreaker(budget: config.budget, costPolicy: costPolicy),
       delivery: transport,
       ownerChatId: config.heartbeatOwnerChatId,
@@ -61,17 +52,20 @@ extension DaemonBuilder {
     )
   }
 
-  /// The handler that answers an owner's approve/deny tap. It reaches the router, so it is built
-  /// ahead of the router it answers into.
   func makeApprovalCallbackHandler(
     coordination: TurnCoordination,
-    agentStack: AgentStack
+    agentStack: AgentStack,
+    conferenceProfile: Bool = false
   ) -> ApprovalCallbackHandler {
     let contextBuilder = agentStack.contextBuilder
     return ApprovalCallbackHandler.make(
       processed: stores.processed,
       delivery: transport,
-      accessControl: AccessControl(allowlist: stores.allowlist, groupChats: config.groupChats),
+      accessControl: AccessControl(
+        allowlist: stores.allowlist,
+        groupChats: config.groupChats,
+        allowUnlistedPrivateUsers: conferenceProfile
+      ),
       approvals: stores.approvals,
       runs: stores.runs,
       membership: transport,
@@ -84,8 +78,6 @@ extension DaemonBuilder {
     )
   }
 
-  /// Builds the executor (recorded-args execution) and the waiter, adopted into the deferred
-  /// parker to close the `turnRunner` ⇄ `approvalWaiter` construction cycle.
   func makeApprovalFabric(
     coordination: TurnCoordination,
     agentStack: AgentStack,
@@ -125,8 +117,6 @@ extension DaemonBuilder {
       clock: ContinuousClock(),
       logger: logger
     )
-    // The real waiter is returned so boot re-park parks the SAME instance the callback
-    // path resumes — one execution locus across suspend, callback, and restart.
     return ApprovalFabric(waiter: approvalWaiter, expiry: expiry)
   }
 }
