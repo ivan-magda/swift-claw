@@ -9,6 +9,32 @@ public struct ConferenceStoreGRDB: ConferenceStore {
     database = MappedDatabase(writer: writer)
   }
 
+  public func sourceAnswer(for origin: ConferenceApprovedOrigin) throws(StoreError) -> String? {
+    try database.readMapping { db in
+      try String.fetchOne(
+        db,
+        sql: """
+          SELECT messages.content
+          FROM runs
+          JOIN messages ON messages.id = runs.trigger_message_id
+          WHERE runs.id = ?
+            AND runs.session_id = ?
+            AND runs.origin = ?
+            AND runs.requester_user_id = ?
+            AND messages.session_id = runs.session_id
+            AND messages.role = ?
+          """,
+        arguments: [
+          origin.runID,
+          origin.sessionID,
+          RunOrigin.interactive.rawValue,
+          origin.requesterUserID,
+          MessageRole.user.rawValue,
+        ]
+      )
+    }
+  }
+
   public func insertSubmission(
     id: UUID,
     prepared: PreparedConferenceSubmission,
