@@ -46,7 +46,8 @@ extension DaemonBuilder {
       workspace: workspace,
       fenceLabels: ToolFenceLabels(definitions: toolDispatcher.definitions),
       policyStaticSubhash: staticSubhash,
-      toolDefinitions: toolDispatcher.definitions
+      toolDefinitions: toolDispatcher.definitions,
+      systemPrompt: conferenceProfile ? SystemPrompt.conference : SystemPrompt.minimal
     )
     return AgentStack(toolDispatcher: toolDispatcher, agent: agent, contextBuilder: contextBuilder)
   }
@@ -55,7 +56,8 @@ extension DaemonBuilder {
     workspace: FileSystemWorkspace,
     fenceLabels: ToolFenceLabels,
     policyStaticSubhash: String,
-    toolDefinitions: [ToolDefinition]
+    toolDefinitions: [ToolDefinition],
+    systemPrompt: String = SystemPrompt.minimal
   ) -> ContextBuilder {
     let messageInputTokens = TokenEstimator.messageInputBudget(
       maxInputTokens: config.budget.maxInputTokens,
@@ -74,7 +76,7 @@ extension DaemonBuilder {
       recallHitCap: ContextBudget.default.recallHitCap
     )
     return ContextBuilder(
-      systemPrompt: SystemPrompt.minimal,
+      systemPrompt: systemPrompt,
       proactiveSystemPrompt: SystemPrompt.proactive,
       workspace: workspace,
       memoryStore: stores.memory,
