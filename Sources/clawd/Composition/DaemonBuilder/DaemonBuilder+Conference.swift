@@ -67,7 +67,8 @@ extension DaemonBuilder {
   func prepareConference(
     config conference: ConferenceConfig,
     coder: CoderComposition,
-    coordination: TurnCoordination
+    coordination: TurnCoordination,
+    environment: [String: String]
   ) throws -> ConferenceComposition {
     guard conference.enabled else {
       return .disabled
@@ -78,13 +79,26 @@ extension DaemonBuilder {
     guard let activeCase = conference.activeCase else {
       throw ConferenceConfigError.invalidCaseFile
     }
+    guard let expectedActor = conference.expectedGitHubActor,
+      let token = environment["GH_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !token.isEmpty
+    else {
+      throw ConferenceConfigError.githubTokenRequired
+    }
 
+    let publisher = try ConferenceGitHubPublisher(
+      stateRoot: config.stateRoot,
+      token: token,
+      expectedActor: expectedActor,
+      http: toolExecutor
+    )
     let signal = coordination.outboxSignal
     let service = ConferenceWorkflowService(
       config: conference,
       store: stores.conference,
       coder: coderService,
       coderJobs: stores.coderJobs,
+      publisher: publisher,
       outbox: stores.outbox,
       notifyOutbox: { signal.poke() },
       logger: logger,
@@ -96,7 +110,7 @@ extension DaemonBuilder {
       activeCase.repositoryURL,
       activeCase.baselineRef,
       activeCase.baseBranch,
-      conference.expectedGitHubActor ?? "missing",
+      expectedActor,
     ])
     let redactor = SecretRedactor(secretValues: redactionValues)
     let tools: [any Tool] = [
