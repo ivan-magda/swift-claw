@@ -4,14 +4,16 @@ import Foundation
 
 struct ConferenceRepositorySource: Sendable {
   private let stateRoot: URL
+  private let sourceHome: URL
   private let git: SwiftSubprocessRunner
 
   init(stateRoot: URL) {
     self.stateRoot = stateRoot.resolvingSymlinksInPath().standardizedFileURL
+    sourceHome = stateRoot.appendingPathComponent("conference-source-home", isDirectory: true)
     git = SwiftSubprocessRunner(
       executablePath: "/usr/bin/git",
       environmentForTesting: [
-        "HOME": stateRoot.appendingPathComponent("conference-source-home").path,
+        "HOME": sourceHome.path,
         "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_TERMINAL_PROMPT": "0",
@@ -26,15 +28,57 @@ struct ConferenceRepositorySource: Sendable {
       withIntermediateDirectories: true,
       attributes: [.posixPermissions: 0o700]
     )
+    try FileManager.default.createDirectory(
+      at: sourceHome,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
     let destination = root.appendingPathComponent(item.id, isDirectory: true)
+
     if FileManager.default.fileExists(atPath: destination.path) {
-      try FileManager.default.removeItem(at: destination)
+      do {
+        try await validateCachedSource(item, at: destination)
+        return destination.path
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        try FileManager.default.removeItem(at: destination)
+      }
     }
 
     try await run([
       "clone", "--no-checkout", "--no-tags", "--template=", "--",
       item.repositoryURL, destination.path,
     ])
+    try await validateCachedSource(item, at: destination)
+    return destination.path
+  }
+}
+
+enum ConferenceSourceError: Error, Sendable, Equatable {
+  case gitFailed
+  case baselineMismatch
+  case sourceMismatch
+}
+
+private extension ConferenceRepositorySource {
+  func validateCachedSource(_ item: ConferenceCase, at destination: URL) async throws {
+    let checkout = try await output([
+      "-C", destination.path, "rev-parse", "--show-toplevel",
+    ])
+    let canonicalCheckout = URL(fileURLWithPath: checkout)
+      .resolvingSymlinksInPath().standardizedFileURL.path
+    guard canonicalCheckout == destination.resolvingSymlinksInPath().standardizedFileURL.path else {
+      throw ConferenceSourceError.sourceMismatch
+    }
+
+    let origin = try await output([
+      "-C", destination.path, "remote", "get-url", "--all", "origin",
+    ])
+    guard origin == item.repositoryURL else {
+      throw ConferenceSourceError.sourceMismatch
+    }
+
     let resolved = try await output([
       "-C", destination.path,
       "rev-parse", "--verify", "--end-of-options", "\(item.baselineRef)^{commit}",
@@ -52,16 +96,14 @@ struct ConferenceRepositorySource: Sendable {
     guard head.caseInsensitiveCompare(item.baselineRef) == .orderedSame else {
       throw ConferenceSourceError.baselineMismatch
     }
-    return destination.path
+    let status = try await output([
+      "-C", destination.path, "status", "--porcelain=v1",
+    ])
+    guard status.isEmpty else {
+      throw ConferenceSourceError.sourceMismatch
+    }
   }
-}
 
-enum ConferenceSourceError: Error, Sendable, Equatable {
-  case gitFailed
-  case baselineMismatch
-}
-
-private extension ConferenceRepositorySource {
   func run(_ arguments: [String]) async throws {
     let result = await git.run(command(arguments))
     if Task.isCancelled || result.termination == .cancelled {
