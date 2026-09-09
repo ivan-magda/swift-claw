@@ -114,7 +114,9 @@ public struct ConferenceStoreGRDB: ConferenceStore {
           ConferenceSubmissionState.queued.rawValue,
         ]
       )
-      guard db.changesCount == 1, let uuid = UUID(uuidString: id) else { return nil }
+      guard db.changesCount == 1, let uuid = UUID(uuidString: id) else {
+        return nil
+      }
       return try Self.fetch(db, id: uuid)
     }
   }
