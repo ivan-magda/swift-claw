@@ -18,13 +18,15 @@ extension DaemonBuilder {
     )
   }
 
+  func loadConferenceConfig() throws -> ConferenceConfig {
+    try ConferenceConfig.load(environment: ProcessInfo.processInfo.environment)
+  }
+
   func prepareConference(
+    config conference: ConferenceConfig,
     coder: CoderComposition,
     coordination: TurnCoordination
   ) throws -> ConferenceComposition {
-    let conference = try ConferenceConfig.load(
-      environment: ProcessInfo.processInfo.environment
-    )
     guard conference.enabled else {
       return .disabled
     }
