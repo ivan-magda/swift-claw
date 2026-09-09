@@ -15,7 +15,8 @@ import Testing
     let coderJobs = CoderJobStoreGRDB(writer: queue)
     let outbox = OutboxStoreGRDB(writer: queue)
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
-    let coder = CompletingConferenceCoder(store: coderJobs)
+    let sourcePath = "/conference/source/day-1"
+    let coder = CompletingConferenceCoder(store: coderJobs, sourcePath: sourcePath)
     let publisher = RecordingConferencePublisher(actor: "crew18-bot")
     let item = ConferenceCase(
       id: "day-1",
@@ -31,6 +32,7 @@ import Testing
         activeCase: item,
         expectedGitHubActor: "crew18-bot"
       ),
+      sourcePath: sourcePath,
       store: submissions,
       coder: coder,
       coderJobs: coderJobs,
@@ -72,7 +74,7 @@ import Testing
     #expect(completed.commit == String(repeating: "c", count: 40))
 
     let request = try #require(await coder.lastRequest)
-    #expect(request.source == .githubRepository(url: item.repositoryURL))
+    #expect(request.source == .local(path: sourcePath))
     #expect(request.workspace == .separate)
     #expect(request.startRef == item.baselineRef)
     #expect(request.deliverable == .localChanges)
@@ -121,6 +123,7 @@ import Testing
     let submissions = ConferenceStoreGRDB(writer: queue)
     let coderJobs = CoderJobStoreGRDB(writer: queue)
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
+    let sourcePath = "/conference/source/day-1"
     let item = ConferenceCase(
       id: "day-1",
       title: "Accessibility regression",
@@ -129,10 +132,11 @@ import Testing
       baselineRef: String(repeating: "b", count: 40),
       baseBranch: "challenge/day-1"
     )
-    let coder = CompletingConferenceCoder(store: coderJobs)
+    let coder = CompletingConferenceCoder(store: coderJobs, sourcePath: sourcePath)
     let publisher = RecordingConferencePublisher(actor: "crew18-bot")
     let service = ConferenceWorkflowService(
       config: ConferenceConfig(enabled: true, activeCase: item, expectedGitHubActor: "crew18-bot"),
+      sourcePath: sourcePath,
       store: submissions,
       coder: coder,
       coderJobs: coderJobs,
@@ -215,19 +219,21 @@ private extension ConferenceWorkflowAcceptanceTests {
 
 private actor CompletingConferenceCoder: CoderServing {
   private let store: CoderJobStoreGRDB
+  private let sourcePath: String
   private(set) var lastRequest: CoderRequest?
 
-  init(store: CoderJobStoreGRDB) {
+  init(store: CoderJobStoreGRDB, sourcePath: String) {
     self.store = store
+    self.sourcePath = sourcePath
   }
 
   func prepare(_ request: CoderRequest) async throws -> CoderPreparedRequest {
     lastRequest = request
     return CoderPreparedRequest(
       request: request,
-      canonicalSource: "https://github.com/wowlocal/crew18-sim",
-      checkoutPath: nil,
-      commonGitDirectory: nil,
+      canonicalSource: sourcePath,
+      checkoutPath: sourcePath,
+      commonGitDirectory: "\(sourcePath)/.git",
       executionPolicyID: "conference-test-policy",
       publicationRepository: nil
     )
