@@ -62,16 +62,18 @@ public struct ConferenceStoreGRDB: ConferenceStore {
 
   public func claimNextQueued(now: Date) throws(StoreError) -> ConferenceSubmission? {
     try database.writeMapping { db in
-      guard let row = try Row.fetchOne(
-        db,
-        sql: """
-          SELECT * FROM conference_submissions
-          WHERE state = ?
-          ORDER BY created_ts ASC, id ASC
-          LIMIT 1
-          """,
-        arguments: [ConferenceSubmissionState.queued.rawValue]
-      ) else {
+      guard
+        let row = try Row.fetchOne(
+          db,
+          sql: """
+            SELECT * FROM conference_submissions
+            WHERE state = ?
+            ORDER BY created_ts ASC, id ASC
+            LIMIT 1
+            """,
+          arguments: [ConferenceSubmissionState.queued.rawValue]
+        )
+      else {
         return nil
       }
       let id: String = row["id"]
