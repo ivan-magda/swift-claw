@@ -22,6 +22,48 @@ extension DaemonBuilder {
     try ConferenceConfig.load(environment: ProcessInfo.processInfo.environment)
   }
 
+  func verifyConferenceGitHubActor(
+    config conference: ConferenceConfig,
+    environment: [String: String]
+  ) async throws {
+    guard conference.enabled else { return }
+    guard let expected = conference.expectedGitHubActor else {
+      throw ConferenceConfigError.githubActorVerificationFailed
+    }
+    guard let token = environment["GH_TOKEN"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !token.isEmpty
+    else {
+      throw ConferenceConfigError.githubTokenRequired
+    }
+
+    let result: HTTPResult
+    do {
+      result = try await toolExecutor.get(
+        url: "https://api.github.com/user",
+        headers: [
+          "Accept": "application/vnd.github+json",
+          "Authorization": "Bearer \(token)",
+          "X-GitHub-Api-Version": "2022-11-28",
+        ],
+        timeoutSeconds: 10,
+        maxBodyBytes: 16 * 1024
+      )
+    } catch {
+      throw ConferenceConfigError.githubActorVerificationFailed
+    }
+    guard HTTPResponseBodyPolicy.isSuccess(result.statusCode) else {
+      throw ConferenceConfigError.githubActorVerificationFailed
+    }
+
+    struct Actor: Decodable { let login: String }
+    guard let actor = try? JSONDecoder().decode(Actor.self, from: result.body) else {
+      throw ConferenceConfigError.githubActorVerificationFailed
+    }
+    guard actor.login.caseInsensitiveCompare(expected) == .orderedSame else {
+      throw ConferenceConfigError.githubActorMismatch(expected: expected, actual: actor.login)
+    }
+  }
+
   func prepareConference(
     config conference: ConferenceConfig,
     coder: CoderComposition,
