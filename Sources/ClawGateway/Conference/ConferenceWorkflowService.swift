@@ -261,9 +261,7 @@ private extension ConferenceWorkflowService {
       if prURL == nil {
         state = .needsReview
         reason = "Coder succeeded but pull-request publication was not independently confirmed."
-      } else if let expected = config.expectedGitHubActor,
-        result.githubActor?.lowercased() != expected.lowercased()
-      {
+      } else if !publicationActorMatches(result) {
         state = .needsReview
         reason = "Pull request was not created by the configured conference bot actor."
       } else {
@@ -294,6 +292,13 @@ private extension ConferenceWorkflowService {
       failureReason: reason,
       now: now()
     )
+  }
+
+  func publicationActorMatches(_ result: CoderResult) -> Bool {
+    guard let expected = config.expectedGitHubActor else {
+      return false
+    }
+    return result.githubActor?.lowercased() == expected.lowercased()
   }
 }
 
