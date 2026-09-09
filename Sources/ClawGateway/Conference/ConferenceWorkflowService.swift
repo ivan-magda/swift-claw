@@ -273,7 +273,9 @@ private extension ConferenceWorkflowService {
       state = .cancelled
     case .interrupted:
       state = .needsReview
-      reason = reason ?? "Coder execution was interrupted; automatic rerun is intentionally disabled."
+      reason = reason ?? """
+        Coder execution was interrupted; automatic rerun is intentionally disabled.
+        """
     case .failed:
       state = result.failure?.stage == .permission ? .blocked : .failed
     case .timedOut:
