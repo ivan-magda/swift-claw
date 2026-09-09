@@ -5,6 +5,7 @@ import ServiceLifecycle
 
 public actor ConferenceWorkflowService: ConferenceServing, Service {
   private let config: ConferenceConfig
+  private let sourcePath: String
   private let store: any ConferenceStore
   private let coder: any CoderServing
   private let coderJobs: any CoderJobStore
@@ -17,6 +18,7 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
 
   public init(
     config: ConferenceConfig,
+    sourcePath: String,
     store: any ConferenceStore,
     coder: any CoderServing,
     coderJobs: any CoderJobStore,
@@ -27,6 +29,7 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.config = config
+    self.sourcePath = sourcePath
     self.store = store
     self.coder = coder
     self.coderJobs = coderJobs
@@ -195,7 +198,7 @@ private extension ConferenceWorkflowService {
   func coderRequest(for submission: ConferenceSubmission) -> CoderRequest {
     let item = submission.caseSnapshot
     return CoderRequest(
-      source: .githubRepository(url: item.repositoryURL),
+      source: .local(path: sourcePath),
       task: """
         Conference coding challenge case:
         \(item.prompt)
@@ -308,6 +311,7 @@ private extension ConferenceWorkflowService {
       result.baselineObserved,
       let workspace = result.workspacePath,
       let startingCommit = result.startingCommit,
+      startingCommit.caseInsensitiveCompare(submission.caseSnapshot.baselineRef) == .orderedSame,
       let commit = result.commit
     else {
       try finishWithoutCoderResult(
