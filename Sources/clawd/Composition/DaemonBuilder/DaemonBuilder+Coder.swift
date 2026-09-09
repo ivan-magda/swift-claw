@@ -65,53 +65,131 @@ extension DaemonBuilder {
 
     do {
       let setup = try await resolveCoder(config.coder)
-      let checks = CoderHealthRows.rows(config: config.coder, setup: setup)
-      let policy = CoderExecutionPolicy(
-        executable: setup.executable,
-        profile: setup.profile,
-        configHome: setup.configHome,
-        approvalPolicy: CodexBackend.approvalPolicy,
-        credentialSources: setup.credentialSources,
-        searchPath: setup.searchPath
-      )
-
-      let service = makeCoderService(
-        backend: setup.permitsSubmission ? setup.backend : nil,
-        policyID: policy.id,
-        coordination: coordination
-      )
-
-      let redactor = SecretRedactor(secretValues: redactionValues)
-      var tools: [any Tool] = [
-        CoderStatusTool(service: service, redactor: redactor),
-        CoderCancelTool(service: service, redactor: redactor),
-      ]
-
-      if setup.permitsSubmission {
-        tools.insert(
-          CoderSubmitTool(service: service, executionPolicyID: policy.id, redactor: redactor),
-          at: 0
-        )
-      }
-
-      return CoderComposition(service: service, tools: tools, checks: checks)
+      return composeCoder(setup: setup, coordination: coordination)
     } catch {
-      let service = makeCoderService(
-        backend: nil,
-        policyID: Self.unavailableCoderPolicyID,
-        coordination: coordination
-      )
-      let redactor = SecretRedactor(secretValues: redactionValues)
+      return unavailableCoder(error: error, coordination: coordination)
+    }
+  }
 
-      return CoderComposition(
-        service: service,
-        tools: [
-          CoderStatusTool(service: service, redactor: redactor),
-          CoderCancelTool(service: service, redactor: redactor),
-        ],
-        checks: CoderHealthRows.unavailable(config: config.coder, error: error)
+  func prepareConferenceCoder(
+    coordination: TurnCoordination,
+    environment: [String: String]
+  ) async throws -> CoderComposition {
+    guard config.coder.enabled else {
+      throw ConferenceConfigError.coderRequired
+    }
+
+    let isolated = try conferenceCoderEnvironment(environment: environment)
+    let setup = try await resolveConferenceCoder(config.coder, isolated)
+    guard setup.permitsSubmission else {
+      throw ConferenceConfigError.coderRequired
+    }
+    return composeCoder(setup: setup, coordination: coordination)
+  }
+
+  func conferenceCoderEnvironment(environment: [String: String]) throws -> [String: String] {
+    guard let configHome = config.coder.configHome,
+      isDescendant(configHome, of: config.stateRoot.path)
+    else {
+      throw ConferenceConfigError.isolatedCoderHomeRequired
+    }
+    guard let token = cleanEnvironmentValue(environment["GH_TOKEN"]) else {
+      throw ConferenceConfigError.githubTokenRequired
+    }
+
+    let home = config.stateRoot.appendingPathComponent("conference-home", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: home,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+
+    var isolated = environment
+    isolated["HOME"] = home.path
+    isolated["CODEX_HOME"] = configHome
+    isolated["GH_TOKEN"] = token
+    isolated.removeValue(forKey: "GITHUB_TOKEN")
+    isolated.removeValue(forKey: "GH_CONFIG_DIR")
+    isolated.removeValue(forKey: "SSH_AUTH_SOCK")
+    return isolated
+  }
+}
+
+// MARK: - Composition
+
+private extension DaemonBuilder {
+  func composeCoder(
+    setup: CoderBackendSetup,
+    coordination: TurnCoordination
+  ) -> CoderComposition {
+    let checks = CoderHealthRows.rows(config: config.coder, setup: setup)
+    let policy = CoderExecutionPolicy(
+      executable: setup.executable,
+      profile: setup.profile,
+      configHome: setup.configHome,
+      approvalPolicy: CodexBackend.approvalPolicy,
+      credentialSources: setup.credentialSources,
+      searchPath: setup.searchPath
+    )
+
+    let service = makeCoderService(
+      backend: setup.permitsSubmission ? setup.backend : nil,
+      policyID: policy.id,
+      coordination: coordination
+    )
+
+    let redactor = SecretRedactor(secretValues: redactionValues)
+    var tools: [any Tool] = [
+      CoderStatusTool(service: service, redactor: redactor),
+      CoderCancelTool(service: service, redactor: redactor),
+    ]
+
+    if setup.permitsSubmission {
+      tools.insert(
+        CoderSubmitTool(service: service, executionPolicyID: policy.id, redactor: redactor),
+        at: 0
       )
     }
+
+    return CoderComposition(service: service, tools: tools, checks: checks)
+  }
+
+  func unavailableCoder(
+    error: any Error,
+    coordination: TurnCoordination
+  ) -> CoderComposition {
+    let service = makeCoderService(
+      backend: nil,
+      policyID: Self.unavailableCoderPolicyID,
+      coordination: coordination
+    )
+    let redactor = SecretRedactor(secretValues: redactionValues)
+
+    return CoderComposition(
+      service: service,
+      tools: [
+        CoderStatusTool(service: service, redactor: redactor),
+        CoderCancelTool(service: service, redactor: redactor),
+      ],
+      checks: CoderHealthRows.unavailable(config: config.coder, error: error)
+    )
+  }
+
+  func isDescendant(_ childPath: String, of rootPath: String) -> Bool {
+    let child = URL(fileURLWithPath: childPath).standardizedFileURL.path
+    let root = URL(fileURLWithPath: rootPath).standardizedFileURL.path
+    return child == root || child.hasPrefix(root.hasSuffix("/") ? root : root + "/")
+  }
+
+  func cleanEnvironmentValue(_ raw: String?) -> String? {
+    guard let raw else { return nil }
+    let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !value.isEmpty,
+      !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+    else {
+      return nil
+    }
+    return value
   }
 }
 
