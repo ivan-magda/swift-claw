@@ -23,21 +23,25 @@ public struct ConferenceConfig: Sendable, Equatable {
     expectedGitHubActor: nil
   )
 
-  /// Conference configuration intentionally stays outside AppConfig: it is an optional deployment
-  /// overlay, so the normal single-owner daemon does not grow conference-only product state.
+  /// Conference mode is an isolated deployment profile. Enabling it requires an explicit state
+  /// root, one operator-authored active-case file, and the GitHub bot actor the result must prove.
+  /// The ordinary single-owner daemon stays unchanged while this flag is absent.
   public static func load(environment: [String: String]) throws -> ConferenceConfig {
     let enabled = try bool(environment[EnvKey.enabled])
     guard enabled else {
       return .disabled
     }
 
+    guard clean(environment[AppConfig.EnvKey.stateRoot]) != nil else {
+      throw ConferenceConfigError.explicitStateRootRequired
+    }
+
     guard let rawPath = clean(environment[EnvKey.caseFile]), rawPath.hasPrefix("/") else {
       throw ConferenceConfigError.invalidSetting(EnvKey.caseFile)
     }
-    let url = URL(fileURLWithPath: rawPath)
     let data: Data
     do {
-      data = try Data(contentsOf: url)
+      data = try Data(contentsOf: URL(fileURLWithPath: rawPath))
     } catch {
       throw ConferenceConfigError.unreadableCaseFile
     }
@@ -53,8 +57,7 @@ public struct ConferenceConfig: Sendable, Equatable {
     }
     try validate(activeCase)
 
-    let actor = clean(environment[EnvKey.expectedGitHubActor])
-    if let actor, !validGitHubLogin(actor) {
+    guard let actor = clean(environment[EnvKey.expectedGitHubActor]), validGitHubLogin(actor) else {
       throw ConferenceConfigError.invalidSetting(EnvKey.expectedGitHubActor)
     }
 
@@ -64,6 +67,7 @@ public struct ConferenceConfig: Sendable, Equatable {
 
 public enum ConferenceConfigError: Error, Sendable, Equatable, CustomStringConvertible {
   case invalidSetting(String)
+  case explicitStateRootRequired
   case unreadableCaseFile
   case caseFileTooLarge
   case invalidCaseFile
@@ -72,6 +76,8 @@ public enum ConferenceConfigError: Error, Sendable, Equatable, CustomStringConve
   public var description: String {
     switch self {
     case .invalidSetting(let key): return "Invalid conference setting: \(key)"
+    case .explicitStateRootRequired:
+      return "Conference workflow requires an explicit CLAW_STATE_ROOT for an isolated deployment"
     case .unreadableCaseFile: return "Conference case file cannot be read"
     case .caseFileTooLarge: return "Conference case file exceeds 128 KiB"
     case .invalidCaseFile: return "Conference case file is invalid"
