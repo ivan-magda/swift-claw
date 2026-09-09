@@ -23,17 +23,7 @@ public struct OutboxStoreGRDB: OutboxStore {
 
   public func claimConferenceNotice(_ chunk: ConferenceNoticeChunk) throws(StoreError) -> Bool {
     try database.writeMapping { db in
-      try Self.insertRunlessNotice(
-        db,
-        subjectDigest: "conference:\(chunk.submissionID.uuidString.lowercased())",
-        ordinal: chunk.ordinal,
-        chatId: chunk.chatId,
-        payload: chunk.payload,
-        payloadHash: chunk.payloadHash,
-        replyMarkup: nil,
-        source: .conference,
-        now: Date()
-      )
+      try Self.insertConferenceNotice(db, chunk: chunk, now: Date())
     }
   }
 
@@ -96,28 +86,48 @@ extension OutboxStoreGRDB {
     chunk: LearningNoticeChunk,
     now: Date
   ) throws -> Bool {
-    try insertRunlessNotice(
-      db,
+    let notice = RunlessNotice(
       subjectDigest: chunk.subjectDigest,
       ordinal: chunk.ordinal,
       chatId: chunk.chatId,
       payload: chunk.payload,
       payloadHash: chunk.payloadHash,
       replyMarkup: chunk.replyMarkup,
-      source: .learning,
-      now: now
+      source: .learning
     )
+    return try insertRunlessNotice(db, notice: notice, now: now)
   }
 
-  static func insertRunlessNotice(
+  static func insertConferenceNotice(
     _ db: Database,
-    subjectDigest: String,
-    ordinal: Int,
-    chatId: Int64,
-    payload: String,
-    payloadHash: String,
-    replyMarkup: String?,
-    source: DeliverySource,
+    chunk: ConferenceNoticeChunk,
+    now: Date
+  ) throws -> Bool {
+    let notice = RunlessNotice(
+      subjectDigest: "conference:\(chunk.submissionID.uuidString.lowercased())",
+      ordinal: chunk.ordinal,
+      chatId: chunk.chatId,
+      payload: chunk.payload,
+      payloadHash: chunk.payloadHash,
+      replyMarkup: nil,
+      source: .conference
+    )
+    return try insertRunlessNotice(db, notice: notice, now: now)
+  }
+
+  private struct RunlessNotice {
+    let subjectDigest: String
+    let ordinal: Int
+    let chatId: Int64
+    let payload: String
+    let payloadHash: String
+    let replyMarkup: String?
+    let source: DeliverySource
+  }
+
+  private static func insertRunlessNotice(
+    _ db: Database,
+    notice: RunlessNotice,
     now: Date
   ) throws -> Bool {
     try db.execute(
@@ -127,14 +137,14 @@ extension OutboxStoreGRDB {
         VALUES (NULL, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
         """,
       arguments: [
-        ordinal,
-        chatId,
-        OutboxDedupKey.make(subjectDigest: subjectDigest, ordinal: ordinal),
-        payload,
-        payloadHash,
-        replyMarkup,
+        notice.ordinal,
+        notice.chatId,
+        OutboxDedupKey.make(subjectDigest: notice.subjectDigest, ordinal: notice.ordinal),
+        notice.payload,
+        notice.payloadHash,
+        notice.replyMarkup,
         now,
-        source.rawValue,
+        notice.source.rawValue,
       ]
     )
     return db.changesCount > 0
