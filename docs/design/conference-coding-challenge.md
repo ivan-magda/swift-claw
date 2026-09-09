@@ -22,7 +22,7 @@ The first production shape supports:
 - a fresh Coder workspace from the configured case baseline;
 - PR publication to the configured case base branch;
 - participant-scoped status and completion notification;
-- optional verification of the GitHub actor used for publication.
+- required verification of the GitHub actor used for publication.
 
 Scoring, automatic merging, Dactyl/simulator rendering, multiple submissions from one participant for one case, and a general workflow engine are out of scope.
 
@@ -36,6 +36,7 @@ Scoring, automatic merging, Dactyl/simulator rendering, multiple submissions fro
 6. GitHub credentials are deployment-owned. Participants never provide GitHub credentials or choose publication identity.
 7. A coding failure does not delete or overwrite the participant submission.
 8. Existing Generic Coder approval semantics remain unchanged.
+9. Conference mode requires an explicit state root so a public participant deployment cannot accidentally fall back to the normal personal daemon state directory.
 
 ## Domain model
 
@@ -109,13 +110,13 @@ The queue does **not** forge a fresh Coder approval or create a synthetic identi
 
 When Coder is busy or temporarily unavailable, a claimed submission is returned to `queued`. `recoveryRequired` or a stale execution policy moves the submission to `needs_review` rather than weakening the Coder contract.
 
-On Coder completion the workflow records its durable result. A confirmed PR URL can produce `completed`; terminal Coder failures map to `failed`, `blocked`, or `cancelled`. Interrupted execution, missing durable results, uncertain publication, missing linked jobs, or other ambiguous ownership maps to `needs_review` and is never blindly rerun.
+On Coder completion the workflow records its durable result. A confirmed PR URL plus the configured GitHub actor match can produce `completed`; terminal Coder failures map to `failed`, `blocked`, or `cancelled`. Interrupted execution, missing durable results, uncertain publication, missing linked jobs, actor mismatch, or other ambiguous ownership maps to `needs_review` and is never blindly rerun.
 
 ## GitHub actor
 
 The conference deployment should run Coder with a dedicated GitHub App installation credential (or equivalent bot-only credential) scoped to the challenge repository. Personal GitHub credentials should not be present in that deployment.
 
-If `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR` is configured, `CoderResult.githubActor` must match it before a successful publication is marked `completed`. A mismatch becomes `needs_review`. This check is an additional verification layer; the credential isolation itself remains an operator/deployment responsibility.
+`CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR` is required when conference mode is enabled. `CoderResult.githubActor` must match it before a successful publication is marked `completed`; a missing or different actor becomes `needs_review`. This check is a second verification layer over credential isolation, not a substitute for using dedicated deployment credentials.
 
 ## Completion delivery
 
@@ -125,16 +126,17 @@ The participant can also query `challenge_status`; status lookup always derives 
 
 ## Configuration
 
-Conference mode is off by default. Current configuration:
+Conference mode is off by default. Current configuration requires:
 
 - `CLAW_CONFERENCE_ENABLED=true`;
+- an explicit `CLAW_STATE_ROOT=/absolute/non-personal/state/root`;
 - `CLAW_CONFERENCE_CASE_FILE=/absolute/path/to/case.json`;
-- `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR=<bot-login>` — optional verification layer;
-- Generic Coder must also be enabled and healthy.
+- `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR=<bot-login>`;
+- Generic Coder enabled and healthy.
 
 The case file is bounded to 128 KiB and validated before use, including repository/ref fields through the existing `CoderRequest` validation path.
 
-Conference mode should run with a separate non-personal state root and bot/Coder credentials. The restricted conference capability profile is enforced in composition; deployment separation of credentials/state remains an operational prerequisite and should be part of the runbook.
+The explicit state root is a startup guard against accidentally exposing the normal personal daemon state to conference participants. The operator must still supply conference-only bot/Coder credentials and keep personal GitHub credentials out of this deployment.
 
 ## Recovery and idempotency
 
@@ -157,9 +159,10 @@ Conference mode should run with a separate non-personal state root and bot/Coder
 6. Coder receives the exact stored answer, including text resembling instructions that try to change repository/publication scope, as task data only.
 7. Restart does not duplicate a submission or blindly rerun an uncertain Coder job.
 8. A successful result records branch/commit/PR and exposes it only to the owning participant.
-9. A configured expected GitHub actor mismatch becomes `needs_review`, not `completed`.
+9. Missing or mismatched configured GitHub actor evidence becomes `needs_review`, not `completed`.
 10. Conference mode off leaves existing single-owner and Generic Coder behavior unchanged.
 11. Existing Generic Coder approval tests continue to pass unchanged.
 12. Conference participant tool definitions are exactly `challenge_current`, `challenge_submit`, and `challenge_status`.
 13. Completion notification is restart-safe and idempotent.
-14. Full `swift test`, formatting and lint gates pass.
+14. Conference mode refuses startup without an explicit state root and expected GitHub actor.
+15. Full `swift test`, formatting and lint gates pass.
