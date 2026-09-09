@@ -52,7 +52,7 @@ struct DaemonBuilder: Sendable {
     let sandbox = await prepareSandbox()
     let coordination = TurnCoordination()
     let coder = await prepareCoder(coordination: coordination)
-    let conference = try prepareConference(coder: coder)
+    let conference = try prepareConference(coder: coder, coordination: coordination)
 
     let costResolver = CostResolver(
       priceTable: PriceFileLoader.load(),
@@ -204,8 +204,6 @@ struct DaemonBuilder: Sendable {
     )
   }
 
-  /// Services in `afterCoderServices` depend on Coder. They are registered after it so reverse
-  /// graceful shutdown stops their admission/loops before Coder begins teardown.
   func runtimeBundle(
     services: [any Service],
     coordination: TurnCoordination,
