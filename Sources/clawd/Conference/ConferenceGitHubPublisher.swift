@@ -186,6 +186,8 @@ private extension ConferenceGitHubPublisher {
         repository.pushURL,
         "\(commit):refs/heads/\(branch)",
       ])
+    } catch is CancellationError {
+      throw CancellationError()
     } catch {
       throw ConferencePublicationError.pushFailed
     }
@@ -193,6 +195,9 @@ private extension ConferenceGitHubPublisher {
 
   func gitSuccess(_ arguments: [String]) async throws {
     let result = await git.run(command(arguments))
+    if Task.isCancelled || result.termination == .cancelled {
+      throw CancellationError()
+    }
     guard result.termination == .exited(0), !result.stderr.truncated else {
       throw ConferencePublicationError.invalidCommit
     }
@@ -200,6 +205,9 @@ private extension ConferenceGitHubPublisher {
 
   func gitOutput(_ arguments: [String]) async throws -> String {
     let result = await git.run(command(arguments))
+    if Task.isCancelled || result.termination == .cancelled {
+      throw CancellationError()
+    }
     guard result.termination == .exited(0),
       !result.stdout.truncated,
       let output = String(data: result.stdout.bytes, encoding: .utf8)
@@ -320,6 +328,8 @@ private extension ConferenceGitHubPublisher {
           responseBodyPolicy: .buffered(successBytes: 128 * 1024, errorBytes: 16 * 1024)
         )
       )
+    } catch is CancellationError {
+      throw CancellationError()
     } catch {
       throw ConferencePublicationError.apiFailed
     }
