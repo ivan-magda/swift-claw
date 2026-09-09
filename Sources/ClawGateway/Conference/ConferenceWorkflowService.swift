@@ -63,6 +63,9 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     guard let origin = ConferenceApprovedOrigin(context: context) else {
       throw ConferenceError.invalidContext
     }
+    guard let sourceAnswer = try store.sourceAnswer(for: origin), sourceAnswer == prepared.answer else {
+      throw ConferenceError.answerMismatch
+    }
 
     switch try store.insertSubmission(id: UUID(), prepared: prepared, origin: origin, now: now()) {
     case .inserted(let submission):
