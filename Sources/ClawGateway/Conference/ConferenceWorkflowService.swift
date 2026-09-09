@@ -66,7 +66,10 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     guard let origin = ConferenceApprovedOrigin(context: context) else {
       throw ConferenceError.invalidContext
     }
-    guard let sourceAnswer = try store.sourceAnswer(for: origin), sourceAnswer == prepared.answer else {
+    guard
+      let sourceAnswer = try store.sourceAnswer(for: origin),
+      sourceAnswer == prepared.answer
+    else {
       throw ConferenceError.answerMismatch
     }
 
