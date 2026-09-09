@@ -72,6 +72,10 @@ public enum ConferenceConfigError: Error, Sendable, Equatable, CustomStringConve
   case caseFileTooLarge
   case invalidCaseFile
   case coderRequired
+  case isolatedCoderHomeRequired
+  case githubTokenRequired
+  case githubActorVerificationFailed
+  case githubActorMismatch(expected: String, actual: String)
 
   public var description: String {
     switch self {
@@ -82,6 +86,14 @@ public enum ConferenceConfigError: Error, Sendable, Equatable, CustomStringConve
     case .caseFileTooLarge: return "Conference case file exceeds 128 KiB"
     case .invalidCaseFile: return "Conference case file is invalid"
     case .coderRequired: return "Conference workflow requires CLAW_CODER_ENABLED=true"
+    case .isolatedCoderHomeRequired:
+      return "Conference workflow requires CLAW_CODER_CONFIG_HOME inside CLAW_STATE_ROOT"
+    case .githubTokenRequired:
+      return "Conference workflow requires a dedicated GH_TOKEN for the configured bot actor"
+    case .githubActorVerificationFailed:
+      return "Conference workflow could not verify the dedicated GitHub bot credential"
+    case .githubActorMismatch(let expected, let actual):
+      return "Conference GitHub credential belongs to \(actual), expected \(expected)"
     }
   }
 }
