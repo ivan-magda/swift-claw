@@ -86,7 +86,8 @@ struct DaemonBuilder: Sendable {
     let conference = try prepareConference(
       config: conferenceConfig,
       coder: coder,
-      coordination: coordination
+      coordination: coordination,
+      environment: environment
     )
 
     let costResolver = CostResolver(
