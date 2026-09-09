@@ -140,6 +140,11 @@ private extension ToolApprovalPrompt {
       and its configured integrations. \
       Review the workspace and publication scope before approving.
       """
+    case .conferenceSubmit:
+      """
+      ⚠ Submit your conference answer and queue an isolated coding run. \
+      Review the exact answer and fixed repository scope before approving.
+      """
     case .codeExec:
       """
       ⚠ I want to run \(tool) in a disposable sandbox. \
