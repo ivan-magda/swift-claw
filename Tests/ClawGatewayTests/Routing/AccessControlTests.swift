@@ -87,4 +87,24 @@ import Testing
     // then — chat membership is the proof; no per-user check happens
     #expect(access.decide(chatKind: .supergroup, chatId: -100, userId: 7) == .allowed(.group))
   }
+
+  @Test func conferenceProfileAdmitsUnlistedPrivateParticipant() {
+    let access = AccessControl(
+      allowlist: ThrowingAllowlist(),
+      groupChats: [],
+      allowUnlistedPrivateUsers: true
+    )
+
+    #expect(access.decide(chatKind: .private, chatId: 7, userId: 7) == .allowed(.direct))
+  }
+
+  @Test func conferenceProfileDoesNotOpenUnconfiguredGroups() {
+    let access = AccessControl(
+      allowlist: ThrowingAllowlist(),
+      groupChats: [],
+      allowUnlistedPrivateUsers: true
+    )
+
+    #expect(access.decide(chatKind: .supergroup, chatId: -100, userId: 7) == .denied(.unlistedChat))
+  }
 }
