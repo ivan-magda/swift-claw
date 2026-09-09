@@ -65,8 +65,8 @@ public struct ConferenceSubmitTool: Tool {
       name: ConferenceToolNames.submit,
       description: """
         Submit the participant's own exact proposal for the active conference case. Do not invent \
-        or improve the proposal before submitting it. The action requires explicit confirmation \
-        and queues an isolated background Coder run.
+        or improve the proposal before submitting it. The action requires explicit confirmation, \
+        runs a safety precheck and queues an isolated background Coder run.
         """,
       parameters: .object([
         "type": .string("object"),
@@ -89,7 +89,7 @@ public struct ConferenceSubmitTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(10) }
+  public var timeout: Duration { .seconds(45) }
   public var executesOnlyViaApproval: Bool { true }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
@@ -270,14 +270,12 @@ private extension ConferenceSubmitTool {
         Repository: \(redactor.redact(item.repositoryURL))
         Baseline: \(redactor.redact(item.baselineRef))
         PR base: \(redactor.redact(item.baseBranch))
-        Result: queued Coder run + pull request; never auto-merged
+        Result: queued Coder run + draft pull request; never auto-merged
         """,
       contentPreview: redactor.redact(prepared.answer),
       warnings: [
-        """
-        The coding agent must preserve your proposal; generated code can still require \
-        human review.
-        """
+        "Your exact proposal and generated code will be published to GitHub.",
+        "Generated code can still require human review; the safety precheck is not a score.",
       ]
     )
   }

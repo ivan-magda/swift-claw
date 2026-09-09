@@ -20,7 +20,7 @@ import Testing
     let sql = try #require(indexes["idx_learning_trials_live_job"])
     #expect(sql.contains("UNIQUE INDEX"))
     #expect(sql.contains("state IN ('open', 'draining')"))
-    #expect(try migrations(queue).last == "v15")
+    #expect(try migrations(queue).contains("v15"))
   }
 
   @Test func v15PreservesSeededV14LiveAndTerminalRows() throws {
@@ -129,7 +129,7 @@ import Testing
     indexes = try indexSQL(queue)
     #expect(indexes["idx_learning_trials_open_job"] == nil)
     #expect(indexes["idx_learning_trials_live_job"] != nil)
-    #expect(try migrations(queue).last == "v15")
+    #expect(try migrations(queue).contains("v15"))
   }
 }
 

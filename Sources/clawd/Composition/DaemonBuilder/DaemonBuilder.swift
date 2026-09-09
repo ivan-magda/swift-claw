@@ -87,7 +87,8 @@ struct DaemonBuilder: Sendable {
       config: conferenceConfig,
       coder: coder,
       coordination: coordination,
-      environment: environment
+      environment: environment,
+      judgeRoute: rosterStack.roster.primary
     )
 
     let costResolver = CostResolver(

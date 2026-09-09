@@ -56,8 +56,7 @@ public struct LearningNoticeChunk: Sendable, Equatable {
   }
 }
 
-/// Runless completion notice for one immutable conference submission. The UUID-derived subject key
-/// makes replay idempotent across daemon restarts.
+/// Runless completion notice for one immutable conference submission.
 public struct ConferenceNoticeChunk: Sendable, Equatable {
   public let submissionID: UUID
   public let ordinal: Int
@@ -100,7 +99,12 @@ public struct OutboxRow: Sendable, Equatable {
   }
 
   public var originLabel: String {
-    runId.map(String.init) ?? "notice"
+    if let runId {
+      return String(runId)
+    }
+    // Keep existing learning diagnostics while recognizing the namespaced conference subject.
+    return deliveryKey.hasPrefix("learning:conference:")
+      ? DeliverySource.conference.rawValue : DeliverySource.learning.rawValue
   }
 
   public init(

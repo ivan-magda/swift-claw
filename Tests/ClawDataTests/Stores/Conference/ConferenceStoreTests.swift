@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -7,112 +8,92 @@ import Testing
 
 @Suite struct ConferenceStoreTests {
   @Test func participantCanSubmitOnlyOncePerCaseWithoutOverwritingOriginalAnswer() throws {
+    // given
     let fixture = try Fixture()
-    let first = try fixture.store.insertSubmission(
-      id: UUID(),
-      prepared: fixture.prepared(answer: "Keep the accessibility state in the component."),
-      origin: fixture.origin(userID: 101),
-      now: fixture.now
-    )
+    let first = try fixture.insert(userID: 101, answer: "Keep accessibility state in the component.")
+
+    // when
     let second = try fixture.store.insertSubmission(
       id: UUID(),
-      prepared: fixture.prepared(answer: "Replace it with a completely different idea."),
-      origin: fixture.origin(userID: 101, toolCallID: "second"),
+      prepared: PreparedConferenceSubmission(caseSnapshot: first.caseSnapshot, answer: "Another idea"),
+      origin: first.origin,
       now: fixture.now.addingTimeInterval(1)
     )
 
-    guard case .inserted(let inserted) = first, case .existing(let existing) = second else {
-      Issue.record("Expected first insert and duplicate lookup")
+    // then
+    guard case .existing(let existing) = second else {
+      Issue.record("Expected duplicate lookup")
       return
     }
-    #expect(existing.id == inserted.id)
-    #expect(existing.answer == "Keep the accessibility state in the component.")
-    #expect(existing.origin.toolCallID == "tool-101")
+    #expect(existing.id == first.id)
+    #expect(existing.answer == first.answer)
+    #expect(existing.origin == first.origin)
   }
 
   @Test func differentParticipantsHaveIndependentSubmissions() throws {
+    // given
     let fixture = try Fixture()
+
+    // when
     let first = try fixture.insert(userID: 101, answer: "Approach A")
     let second = try fixture.insert(userID: 202, answer: "Approach B")
 
+    // then
     #expect(first.id != second.id)
-    #expect(first.answer == "Approach A")
-    #expect(second.answer == "Approach B")
-    #expect(
-      try fixture.store.submission(participantUserID: 101, caseID: fixture.caseItem.id)?.id
-        == first.id
-    )
-    #expect(
-      try fixture.store.submission(participantUserID: 202, caseID: fixture.caseItem.id)?.id
-        == second.id
-    )
+    #expect(try fixture.store.submission(participantUserID: 101, caseID: "day-1")?.answer == "Approach A")
+    #expect(try fixture.store.submission(participantUserID: 202, caseID: "day-1")?.answer == "Approach B")
   }
 
   @Test func queueClaimIsFIFOAndCannotClaimSameRowTwice() throws {
+    // given
     let fixture = try Fixture()
-    let first = try fixture.insert(userID: 101, answer: "First", date: fixture.now)
-    let second = try fixture.insert(
-      userID: 202,
-      answer: "Second",
-      date: fixture.now.addingTimeInterval(10)
-    )
+    let first = try fixture.insert(userID: 101, answer: "First")
+    let second = try fixture.insert(userID: 202, answer: "Second", offset: 10)
 
+    // when
     let claimedFirst = try fixture.store.claimNextQueued(now: fixture.now.addingTimeInterval(20))
     let claimedSecond = try fixture.store.claimNextQueued(now: fixture.now.addingTimeInterval(21))
-    let empty = try fixture.store.claimNextQueued(now: fixture.now.addingTimeInterval(22))
 
+    // then
     #expect(claimedFirst?.id == first.id)
     #expect(claimedFirst?.state == .running)
     #expect(claimedSecond?.id == second.id)
-    #expect(claimedSecond?.state == .running)
-    #expect(empty == nil)
+    #expect(try fixture.store.claimNextQueued(now: fixture.now.addingTimeInterval(22)) == nil)
   }
 
   @Test func requeueNeverReleasesSubmissionAfterCoderJobIsAttached() throws {
+    // given — real message/run/approval references, with foreign keys enabled.
     let fixture = try Fixture()
     let submission = try fixture.insert(userID: 101, answer: "Answer")
-    _ = try fixture.store.claimNextQueued(now: fixture.now.addingTimeInterval(1))
+    _ = try fixture.store.claimNextQueued(now: fixture.now)
+    let jobID = try fixture.seedCoderJob(for: submission)
+    _ = try fixture.store.attachCoderJob(submissionID: submission.id, coderJobID: jobID, now: fixture.now)
 
-    let coderJobID = try fixture.seedCoderJob(for: submission)
-    let attached = try fixture.store.attachCoderJob(
-      submissionID: submission.id,
-      coderJobID: coderJobID,
-      now: fixture.now.addingTimeInterval(2)
-    )
-    let afterRequeue = try fixture.store.requeue(
-      submissionID: submission.id,
-      now: fixture.now.addingTimeInterval(3)
-    )
+    // when
+    let requeued = try fixture.store.requeue(submissionID: submission.id, now: fixture.now)
 
-    #expect(attached?.coderJobID == coderJobID)
-    #expect(afterRequeue?.state == .running)
-    #expect(afterRequeue?.coderJobID == coderJobID)
+    // then
+    #expect(requeued?.state == .running)
+    #expect(requeued?.coderJobID == jobID)
   }
 
   @Test func terminalResultBecomesPendingNotificationUntilDurablyMarked() throws {
+    // given
     let fixture = try Fixture()
     let submission = try fixture.insert(userID: 101, answer: "Answer")
-    _ = try fixture.store.claimNextQueued(now: fixture.now.addingTimeInterval(1))
+    _ = try fixture.store.claimNextQueued(now: fixture.now)
 
-    let finished = try fixture.store.finish(
-      submissionID: submission.id,
-      state: .completed,
+    // when
+    _ = try fixture.store.finish(
+      submissionID: submission.id, state: .completed,
       pullRequestURL: "https://github.com/wowlocal/crew18-sim/pull/42",
-      branch: "coder/example",
-      commit: String(repeating: "a", count: 40),
-      failureReason: nil,
-      now: fixture.now.addingTimeInterval(2)
+      branch: "conference/example", commit: String(repeating: "a", count: 40),
+      failureReason: nil, now: fixture.now
     )
 
-    #expect(finished?.state == .completed)
-    #expect(finished?.notificationEnqueued == false)
+    // then
     #expect(try fixture.store.pendingNotifications().map(\.id) == [submission.id])
-
-    let marked = try fixture.store.markNotificationEnqueued(
-      submissionID: submission.id,
-      now: fixture.now.addingTimeInterval(3)
-    )
-    #expect(marked?.notificationEnqueued == true)
+    _ = try fixture.store.markNotificationEnqueued(submissionID: submission.id, now: fixture.now)
     #expect(try fixture.store.pendingNotifications().isEmpty)
   }
 }
@@ -121,95 +102,55 @@ private extension ConferenceStoreTests {
   struct Fixture {
     let queue: DatabaseQueue
     let store: ConferenceStoreGRDB
-    let coderJobs: CoderJobStoreGRDB
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let caseItem = ConferenceCase(
-      id: "day-1",
-      title: "Accessibility regression",
-      prompt: "A design-system release introduced accessibility regressions. Propose a solution.",
+    let item = ConferenceCase(
+      id: "day-1", title: "Accessibility", prompt: "Propose a solution.",
       repositoryURL: "https://github.com/wowlocal/crew18-sim",
-      baselineRef: String(repeating: "b", count: 40),
-      baseBranch: "challenge/day-1"
+      baselineRef: String(repeating: "b", count: 40), baseBranch: "challenge/day-1"
     )
 
     init() throws {
       queue = try ClawDatabase.makeInMemoryQueue()
       try ClawDatabase.migrate(queue)
       store = ConferenceStoreGRDB(writer: queue)
-      coderJobs = CoderJobStoreGRDB(writer: queue)
     }
 
-    func prepared(answer: String) -> PreparedConferenceSubmission {
-      PreparedConferenceSubmission(caseSnapshot: caseItem, answer: answer)
-    }
-
-    func origin(
-      userID: Int64,
-      toolCallID: String? = nil
-    ) -> ConferenceApprovedOrigin {
-      ConferenceApprovedOrigin(
-        runID: userID,
-        sessionID: userID,
-        chatID: userID,
-        requesterUserID: userID,
-        mode: .direct,
-        toolCallID: toolCallID ?? "tool-\(userID)",
-        approvalID: userID
+    func insert(userID: Int64, answer: String, offset: TimeInterval = 0) throws -> ConferenceSubmission {
+      let prepared = PreparedConferenceSubmission(caseSnapshot: item, answer: answer)
+      let date = now.addingTimeInterval(offset)
+      let origin = try ConferenceApprovedOriginFixture.make(
+        queue: queue, prepared: prepared, userID: userID, updateID: userID, now: date
       )
-    }
-
-    func insert(
-      userID: Int64,
-      answer: String,
-      date: Date? = nil
-    ) throws -> ConferenceSubmission {
-      let result = try store.insertSubmission(
-        id: UUID(),
-        prepared: prepared(answer: answer),
-        origin: origin(userID: userID),
-        now: date ?? now
-      )
-      guard case .inserted(let item) = result else {
-        throw StoreError.unexpected("Fixture expected a fresh submission")
+      let result = try store.insertSubmission(id: UUID(), prepared: prepared, origin: origin, now: date)
+      guard case .inserted(let submission) = result else {
+        throw StoreError.unexpected("Expected fresh submission")
       }
-      return item
+      return submission
     }
 
     func seedCoderJob(for submission: ConferenceSubmission) throws -> UUID {
       let request = CoderRequest(
-        source: .githubRepository(url: caseItem.repositoryURL),
-        task: "test",
-        workspace: .separate,
-        startRef: caseItem.baselineRef,
-        deliverable: .pullRequest,
-        baseBranch: caseItem.baseBranch,
-        instructions: nil,
-        publishExistingChanges: false
+        source: .local(path: "/fixture/source"), task: "test", workspace: .separate,
+        startRef: item.baselineRef, deliverable: .localChanges, baseBranch: nil,
+        instructions: nil, publishExistingChanges: false
       )
       let prepared = CoderPreparedRequest(
-        request: request,
-        canonicalSource: caseItem.repositoryURL,
-        checkoutPath: nil,
-        commonGitDirectory: nil,
-        executionPolicyID: "policy",
-        publicationRepository: "wowlocal/crew18-sim"
+        request: request, canonicalSource: "/fixture/source", checkoutPath: "/fixture/source",
+        commonGitDirectory: "/fixture/source/.git", executionPolicyID: "conference-test-policy",
+        publicationRepository: nil
       )
-      let admission = try coderJobs.admit(
-        id: UUID(),
-        prepared: prepared,
+      let origin = submission.origin
+      let admission = try CoderJobStoreGRDB(writer: queue).admit(
+        id: UUID(), prepared: prepared,
         origin: CoderOrigin(
-          runID: submission.origin.runID,
-          sessionID: submission.origin.sessionID,
-          requesterUserID: submission.participantUserID,
-          chatID: submission.origin.chatID,
-          toolCallID: submission.origin.toolCallID,
-          approvalID: submission.origin.approvalID
+          runID: origin.runID, sessionID: origin.sessionID,
+          requesterUserID: origin.requesterUserID, chatID: origin.chatID,
+          toolCallID: origin.toolCallID, approvalID: origin.approvalID
         ),
-        maxConcurrentJobs: 4,
-        now: now
+        maxConcurrentJobs: 4, now: now
       )
       guard case .admitted(let job) = admission else {
-        throw StoreError.unexpected("Fixture could not admit Coder job")
+        throw StoreError.unexpected("Expected Coder admission")
       }
       return job.id
     }

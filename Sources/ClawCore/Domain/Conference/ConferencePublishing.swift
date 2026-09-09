@@ -2,26 +2,29 @@ import Foundation
 
 public struct ConferencePublicationRequest: Sendable, Equatable {
   public let submissionID: UUID
-  public let repositoryURL: String
-  public let baseBranch: String
+  public let proposal: PreparedConferenceSubmission
   public let workspacePath: String
   public let startingCommit: String
   public let commit: String
+  public let reportedChecks: [String]
+
+  public var repositoryURL: String { proposal.caseSnapshot.repositoryURL }
+  public var baseBranch: String { proposal.caseSnapshot.baseBranch }
 
   public init(
     submissionID: UUID,
-    repositoryURL: String,
-    baseBranch: String,
+    proposal: PreparedConferenceSubmission,
     workspacePath: String,
     startingCommit: String,
-    commit: String
+    commit: String,
+    reportedChecks: [String]
   ) {
     self.submissionID = submissionID
-    self.repositoryURL = repositoryURL
-    self.baseBranch = baseBranch
+    self.proposal = proposal
     self.workspacePath = workspacePath
     self.startingCommit = startingCommit
     self.commit = commit
+    self.reportedChecks = reportedChecks
   }
 }
 
@@ -47,6 +50,7 @@ public enum ConferencePublicationError: Error, Sendable, Equatable {
   case invalidRepository
   case invalidWorkspace
   case invalidCommit
+  case invalidPublication
   case pushFailed
   case apiFailed
   case actorMismatch(expected: String, actual: String)

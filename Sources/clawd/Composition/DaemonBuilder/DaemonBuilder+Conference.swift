@@ -70,7 +70,8 @@ extension DaemonBuilder {
     config conference: ConferenceConfig,
     coder: CoderComposition,
     coordination: TurnCoordination,
-    environment: [String: String]
+    environment: [String: String],
+    judgeRoute: LLMRouteBinding
   ) async throws -> ConferenceComposition {
     guard conference.enabled else {
       return .disabled
@@ -88,18 +89,20 @@ extension DaemonBuilder {
       throw ConferenceConfigError.githubTokenRequired
     }
 
-    let sourcePath = try await ConferenceRepositorySource(stateRoot: config.stateRoot)
-      .prepare(activeCase)
+    let source = ConferenceRepositorySource(stateRoot: config.stateRoot)
+    _ = try await source.prepare(activeCase)
     let publisher = try ConferenceGitHubPublisher(
       stateRoot: config.stateRoot,
       token: token,
       expectedActor: expectedActor,
       http: toolExecutor
     )
+    let judge = ConferenceSubmissionJudge(provider: judgeRoute.provider, model: judgeRoute.wireModel)
     let signal = coordination.outboxSignal
     let service = ConferenceWorkflowService(
       config: conference,
-      sourcePath: sourcePath,
+      prepareSource: { try await source.prepare($0) },
+      validateSubmission: { try await judge.check($0) },
       store: stores.conference,
       coder: coderService,
       coderJobs: stores.coderJobs,
@@ -110,7 +113,7 @@ extension DaemonBuilder {
       now: now
     )
     let identity = PolicyFingerprint.hash(parts: [
-      "conference-coding-challenge-v1",
+      "conference-coding-challenge-v2-judge",
       activeCase.id,
       activeCase.repositoryURL,
       activeCase.baselineRef,
