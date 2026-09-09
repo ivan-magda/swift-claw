@@ -8,6 +8,8 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
   private let store: any ConferenceStore
   private let coder: any CoderServing
   private let coderJobs: any CoderJobStore
+  private let outbox: any OutboxStore
+  private let notifyOutbox: @Sendable () -> Void
   private let logger: Logger
   private let now: @Sendable () -> Date
   private let clock = ContinuousClock()
@@ -17,6 +19,8 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     store: any ConferenceStore,
     coder: any CoderServing,
     coderJobs: any CoderJobStore,
+    outbox: any OutboxStore,
+    notifyOutbox: @escaping @Sendable () -> Void,
     logger: Logger,
     now: @escaping @Sendable () -> Date = { Date() }
   ) {
@@ -24,6 +28,8 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     self.store = store
     self.coder = coder
     self.coderJobs = coderJobs
+    self.outbox = outbox
+    self.notifyOutbox = notifyOutbox
     self.logger = logger
     self.now = now
   }
@@ -43,7 +49,6 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     guard answer.count <= 12_000 else {
       throw ConferenceError.invalidAnswer("Answer must be at most 12,000 characters.")
     }
-    // Store the exact provided string, not the trimmed variant used only for validation.
     return PreparedConferenceSubmission(caseSnapshot: activeCase, answer: answer)
   }
 
@@ -70,7 +75,6 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
       )
       return submission
     case .existing(let existing):
-      // Durable approval replay is the same action, not a second participant attempt.
       if existing.origin == origin,
         existing.answer == prepared.answer,
         existing.caseSnapshot == prepared.caseSnapshot
@@ -106,6 +110,7 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     try recoverInterruptedClaims()
     while !Task.isCancelled {
       try reconcileRunning()
+      try enqueuePendingNotifications()
       try await admitOneQueued()
       do {
         try await clock.sleep(for: .seconds(2))
@@ -144,37 +149,25 @@ private extension ConferenceWorkflowService {
     } catch CoderError.busy, CoderError.workspaceBusy {
       _ = try store.requeue(submissionID: submission.id, now: now())
     } catch CoderError.recoveryRequired {
-      _ = try store.finish(
-        submissionID: submission.id,
+      try finishWithoutCoderResult(
+        submission,
         state: .needsReview,
-        pullRequestURL: nil,
-        branch: nil,
-        commit: nil,
-        failureReason: "Coder recovery is required before this submission can run.",
-        now: now()
+        reason: "Coder recovery is required before this submission can run."
       )
     } catch CoderError.staleApproval {
-      _ = try store.finish(
-        submissionID: submission.id,
+      try finishWithoutCoderResult(
+        submission,
         state: .needsReview,
-        pullRequestURL: nil,
-        branch: nil,
-        commit: nil,
-        failureReason: "Coder execution policy changed after the submission was approved.",
-        now: now()
+        reason: "Coder execution policy changed after the submission was approved."
       )
     } catch CoderError.unavailable(let reason) {
       logger.warning("conference Coder temporarily unavailable: \(reason)")
       _ = try store.requeue(submissionID: submission.id, now: now())
     } catch {
-      _ = try store.finish(
-        submissionID: submission.id,
+      try finishWithoutCoderResult(
+        submission,
         state: .failed,
-        pullRequestURL: nil,
-        branch: nil,
-        commit: nil,
-        failureReason: safeFailure(error),
-        now: now()
+        reason: safeFailure(error)
       )
     }
   }
@@ -205,6 +198,22 @@ private extension ConferenceWorkflowService {
       publishExistingChanges: false
     )
   }
+
+  func finishWithoutCoderResult(
+    _ submission: ConferenceSubmission,
+    state: ConferenceSubmissionState,
+    reason: String
+  ) throws {
+    _ = try store.finish(
+      submissionID: submission.id,
+      state: state,
+      pullRequestURL: nil,
+      branch: nil,
+      commit: nil,
+      failureReason: reason,
+      now: now()
+    )
+  }
 }
 
 // MARK: - Coder completion projection
@@ -217,14 +226,10 @@ private extension ConferenceWorkflowService {
         continue
       }
       guard let job = try coderJobs.job(id: coderJobID) else {
-        _ = try store.finish(
-          submissionID: submission.id,
+        try finishWithoutCoderResult(
+          submission,
           state: .needsReview,
-          pullRequestURL: nil,
-          branch: nil,
-          commit: nil,
-          failureReason: "Linked Coder job is missing.",
-          now: now()
+          reason: "Linked Coder job is missing."
         )
         continue
       }
@@ -235,14 +240,10 @@ private extension ConferenceWorkflowService {
 
   func finish(submission: ConferenceSubmission, job: CoderJob) throws {
     guard let result = job.result else {
-      _ = try store.finish(
-        submissionID: submission.id,
+      try finishWithoutCoderResult(
+        submission,
         state: .needsReview,
-        pullRequestURL: nil,
-        branch: nil,
-        commit: nil,
-        failureReason: "Coder finished without a durable result.",
-        now: now()
+        reason: "Coder finished without a durable result."
       )
       return
     }
@@ -291,6 +292,51 @@ private extension ConferenceWorkflowService {
       failureReason: reason,
       now: now()
     )
+  }
+}
+
+// MARK: - Completion delivery
+
+private extension ConferenceWorkflowService {
+  func enqueuePendingNotifications() throws {
+    var poked = false
+    for submission in try store.pendingNotifications() {
+      let payload = notificationText(for: submission)
+      let chunk = ConferenceNoticeChunk(
+        submissionID: submission.id,
+        ordinal: 0,
+        chatId: submission.origin.chatID,
+        payload: payload,
+        payloadHash: ContentHash.fnv1a(payload)
+      )
+      _ = try outbox.claimConferenceNotice(chunk)
+      guard
+        let marked = try store.markNotificationEnqueued(
+          submissionID: submission.id,
+          now: now()
+        ), marked.notificationEnqueued
+      else {
+        throw StoreError.unexpected("Conference notification could not be marked enqueued")
+      }
+      poked = true
+    }
+    if poked { notifyOutbox() }
+  }
+
+  func notificationText(for submission: ConferenceSubmission) -> String {
+    var lines = [
+      "Conference Coding Challenge",
+      "Submission: \(submission.id.uuidString.lowercased())",
+      "Case: \(submission.caseSnapshot.id)",
+      "State: \(submission.state.rawValue)",
+    ]
+    if let url = submission.pullRequestURL {
+      lines.append("Pull request: \(url)")
+    }
+    if let reason = submission.failureReason {
+      lines.append("Note: \(reason)")
+    }
+    return lines.joined(separator: "\n")
   }
 
   func safeFailure(_ error: any Error) -> String {
