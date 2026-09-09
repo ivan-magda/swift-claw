@@ -47,7 +47,8 @@ extension DaemonBuilder {
       fenceLabels: ToolFenceLabels(definitions: toolDispatcher.definitions),
       policyStaticSubhash: staticSubhash,
       toolDefinitions: toolDispatcher.definitions,
-      systemPrompt: conferenceProfile ? SystemPrompt.conference : SystemPrompt.minimal
+      systemPrompt: conferenceProfile ? SystemPrompt.conference : SystemPrompt.minimal,
+      conferenceProfile: conferenceProfile
     )
     return AgentStack(toolDispatcher: toolDispatcher, agent: agent, contextBuilder: contextBuilder)
   }
@@ -57,7 +58,8 @@ extension DaemonBuilder {
     fenceLabels: ToolFenceLabels,
     policyStaticSubhash: String,
     toolDefinitions: [ToolDefinition],
-    systemPrompt: String = SystemPrompt.minimal
+    systemPrompt: String = SystemPrompt.minimal,
+    conferenceProfile: Bool = false
   ) -> ContextBuilder {
     let messageInputTokens = TokenEstimator.messageInputBudget(
       maxInputTokens: config.budget.maxInputTokens,
@@ -75,12 +77,25 @@ extension DaemonBuilder {
       skillsCap: ContextBudget.default.skillsCap,
       recallHitCap: ContextBudget.default.recallHitCap
     )
+    // Ordinary DM recall spans one owner's sessions; conference DMs belong to different people.
+    let contextWorkspace: any WorkspaceReading
+    let contextMemory: any MemoryStore
+    let contextRetriever: any Retriever
+    if conferenceProfile {
+      contextWorkspace = ClawAgent.EmptyWorkspace()
+      contextMemory = ClawAgent.EmptyMemoryStore()
+      contextRetriever = ClawAgent.EmptyRetriever()
+    } else {
+      contextWorkspace = workspace
+      contextMemory = stores.memory
+      contextRetriever = stores.retriever
+    }
     return ContextBuilder(
       systemPrompt: systemPrompt,
       proactiveSystemPrompt: SystemPrompt.proactive,
-      workspace: workspace,
-      memoryStore: stores.memory,
-      retriever: stores.retriever,
+      workspace: contextWorkspace,
+      memoryStore: contextMemory,
+      retriever: contextRetriever,
       budget: contextBudget,
       fenceLabels: fenceLabels,
       policyStaticSubhash: policyStaticSubhash,

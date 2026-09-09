@@ -219,23 +219,6 @@ public final class RecordingAuditLog: AuditLog, @unchecked Sendable {
 
 // MARK: - Empty context collaborators
 
-/// A workspace with nothing on disk: every file load is `.missing`, no skills. Stands in for
-/// `ContextBuilder` collaborators in tests that only care about history rendering.
-public struct EmptyWorkspace: WorkspaceReading {
-  public init() {}
-
-  public func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
-    .missing
-  }
-
-  public func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
-    .missing
-  }
-
-  public func scanSkills() -> SkillScanResult {
-    SkillScanResult(descriptors: [], warnings: [])
-  }
-}
-
+public typealias EmptyWorkspace = ClawAgent.EmptyWorkspace
 package typealias EmptyMemoryStore = ClawAgent.EmptyMemoryStore
 package typealias EmptyRetriever = ClawAgent.EmptyRetriever

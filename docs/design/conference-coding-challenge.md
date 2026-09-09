@@ -29,6 +29,11 @@ contest submissions for the same participant/case, and GitHub App installation t
 - Conference participants receive only `challenge_current`, `challenge_submit` and
   `challenge_status`. No personal memory, ordinary Coder tools, filesystem/exec tools,
   workspace skills, MCP sessions or owner operational commands are exposed.
+- Conference context assembly uses empty workspace, memory and recall collaborators. Only the
+  current participant's session history and the built-in conference policy are available to the
+  conversational model (along with ordinary runtime metadata and conference tool results).
+  Hiding tools alone is insufficient: ordinary DM recall spans the single owner's sessions.
+  Ordinary mode retains its existing workspace, memory and cross-session recall behavior.
 - Trusted operator configuration chooses repository, baseline, PR base and bot identity.
   Participant text cannot select those workflow parameters.
 - The exact persisted triggering message is checked against the prepared answer. A model
@@ -167,6 +172,8 @@ budget subsystem.
    `ConferencePublicationRecoveryTests` verify reuse without a second Coder job or PR identity.
 8. **Credentials and participant surface:** `ConferenceSecurityBoundaryTests`, access-control
    tests and the native CLI sentinel cover bot-token removal, fixed tools and startup identity.
+   `ConferenceContextIsolationTests` assembles real DM/FTS, memory and workspace fixtures through
+   production composition: conference mode excludes all shared data, ordinary mode retains it.
 9. **One completion producer:** `CoderSilentCompletionTests` plus native/acceptance outbox
    assertions; ordinary Generic Coder completion behavior remains unchanged by default.
 10. **Schema compatibility:** existing migration/outbox suites plus conference store tests;
@@ -184,6 +191,12 @@ foreign-key approval fixtures hiding admission errors; the current day's source 
 queued case's baseline; a successful report without baseline evidence; another inference or
 push after a lost publication response; a generic and conference completion both firing; and
 a failed/malformed judge response being treated as approval.
+
+The context-isolation test targets a separate composition mutant: passing the real shared
+retriever, memory store or workspace to the conference model even with all ordinary tools
+hidden. Existing status/workspace isolation tests do not assemble conversational context.
+Its ordinary-mode positive control proves the fixture contains reachable data, rather than
+passing vacuously on an empty database or missing files.
 
 Nearest existing coverage is Generic Coder's native process/workspace tests, approval callback
 and persistence tests. The new native test supplies the cross-component proof those isolated
