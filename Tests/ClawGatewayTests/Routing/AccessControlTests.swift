@@ -98,13 +98,15 @@ import Testing
     #expect(access.decide(chatKind: .private, chatId: 7, userId: 7) == .allowed(.direct))
   }
 
-  @Test func conferenceProfileDoesNotOpenUnconfiguredGroups() {
+  @Test func conferenceProfileDeniesEvenConfiguredGroups() {
+    // given — a configured group must not create a shared participant conversation in DM-only v1.
     let access = AccessControl(
       allowlist: ThrowingAllowlist(),
-      groupChats: [],
+      groupChats: [-100],
       allowUnlistedPrivateUsers: true
     )
 
+    // when / then
     #expect(access.decide(chatKind: .supergroup, chatId: -100, userId: 7) == .denied(.unlistedChat))
   }
 }

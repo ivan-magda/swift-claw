@@ -42,14 +42,16 @@ public struct AccessControl: Sendable {
     }
   }
 
-  /// A normal DM remains owner-only. In the conference profile an unlisted numeric sender may use
-  /// the deliberately restricted conference surface. Groups keep their existing configured-room
-  /// semantics; no new Telegram surface inherits either grant.
+  /// Conference participants use private chats only: a group topic shares conversational history
+  /// between senders. Ordinary mode retains its owner-DM and configured-group behavior.
   public func decide(chatKind: ChatKind, chatId: Int64, userId: Int64) -> AccessDecision {
     switch chatKind {
     case .private:
       return isAllowed(userId: userId) ? .allowed(.direct) : .denied(.privateStranger)
     case .group, .supergroup:
+      guard !allowUnlistedPrivateUsers else {
+        return .denied(.unlistedChat)
+      }
       return groupChats.contains(chatId) ? .allowed(.group) : .denied(.unlistedChat)
     case .channel, .other:
       return .denied(.unlistedChat)
