@@ -11,7 +11,7 @@ struct CodexInvocation: Sendable {
     "HOME", "USER", "LOGNAME", "PATH", "SHELL", "TMPDIR", "LANG", "LANGUAGE", "LC_ALL",
     "LC_CTYPE", "LC_MESSAGES", "LC_COLLATE", "LC_NUMERIC", "LC_TIME", "LC_MONETARY",
     "DEVELOPER_DIR", "SDKROOT", "CODEX_HOME", "GH_CONFIG_DIR", "GH_HOST", "GH_TOKEN",
-    "GITHUB_TOKEN", "SSH_AUTH_SOCK",
+    "GITHUB_TOKEN", "SSH_AUTH_SOCK", "GIT_ASKPASS", "GIT_TERMINAL_PROMPT", "GIT_CONFIG_GLOBAL",
   ]
   static let credentialKeys = ["GH_TOKEN", "GITHUB_TOKEN"]
   let schemaPath: String
