@@ -79,13 +79,18 @@ public enum ConferenceConfigError: Error, Sendable, Equatable, CustomStringConve
 
   public var description: String {
     switch self {
-    case .invalidSetting(let key): return "Invalid conference setting: \(key)"
+    case .invalidSetting(let key):
+      return "Invalid conference setting: \(key)"
     case .explicitStateRootRequired:
       return "Conference workflow requires an explicit CLAW_STATE_ROOT for an isolated deployment"
-    case .unreadableCaseFile: return "Conference case file cannot be read"
-    case .caseFileTooLarge: return "Conference case file exceeds 128 KiB"
-    case .invalidCaseFile: return "Conference case file is invalid"
-    case .coderRequired: return "Conference workflow requires CLAW_CODER_ENABLED=true"
+    case .unreadableCaseFile:
+      return "Conference case file cannot be read"
+    case .caseFileTooLarge:
+      return "Conference case file exceeds 128 KiB"
+    case .invalidCaseFile:
+      return "Conference case file is invalid"
+    case .coderRequired:
+      return "Conference workflow requires CLAW_CODER_ENABLED=true"
     case .isolatedCoderHomeRequired:
       return "Conference workflow requires CLAW_CODER_CONFIG_HOME inside CLAW_STATE_ROOT"
     case .githubTokenRequired:
@@ -104,14 +109,19 @@ private extension ConferenceConfig {
       return false
     }
     switch value {
-    case "true", "yes", "on", "1": return true
-    case "false", "no", "off", "0": return false
-    default: throw ConferenceConfigError.invalidSetting(EnvKey.enabled)
+    case "true", "yes", "on", "1":
+      return true
+    case "false", "no", "off", "0":
+      return false
+    default:
+      throw ConferenceConfigError.invalidSetting(EnvKey.enabled)
     }
   }
 
   static func clean(_ raw: String?) -> String? {
-    guard let raw else { return nil }
+    guard let raw else {
+      return nil
+    }
     let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !value.isEmpty,
       !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
@@ -155,7 +165,9 @@ private extension ConferenceConfig {
   }
 
   static func validGitHubLogin(_ value: String) -> Bool {
-    guard value.count <= 100, value.first != "-", value.last != "-" else { return false }
+    guard value.count <= 100, value.first != "-", value.last != "-" else {
+      return false
+    }
     return value.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
   }
 }
