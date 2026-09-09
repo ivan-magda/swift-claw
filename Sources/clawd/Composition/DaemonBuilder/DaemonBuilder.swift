@@ -83,7 +83,7 @@ struct DaemonBuilder: Sendable {
     } else {
       coder = await prepareCoder(coordination: coordination)
     }
-    let conference = try prepareConference(
+    let conference = try await prepareConference(
       config: conferenceConfig,
       coder: coder,
       coordination: coordination,
