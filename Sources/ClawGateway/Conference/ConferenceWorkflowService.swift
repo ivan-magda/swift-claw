@@ -38,8 +38,12 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
   }
 
   public func currentCase() throws -> ConferenceCase {
-    guard config.enabled else { throw ConferenceError.disabled }
-    guard let activeCase = config.activeCase else { throw ConferenceError.noActiveCase }
+    guard config.enabled else {
+      throw ConferenceError.disabled
+    }
+    guard let activeCase = config.activeCase else {
+      throw ConferenceError.noActiveCase
+    }
     return activeCase
   }
 
@@ -111,8 +115,12 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     } else {
       item = try store.submission(participantUserID: requester, caseID: try currentCase().id)
     }
-    guard let item else { return nil }
-    guard item.participantUserID == requester else { throw ConferenceError.forbidden }
+    guard let item else {
+      return nil
+    }
+    guard item.participantUserID == requester else {
+      throw ConferenceError.forbidden
+    }
     return item
   }
 
@@ -141,7 +149,9 @@ private extension ConferenceWorkflowService {
   }
 
   func admitOneQueued() async throws {
-    guard let submission = try store.claimNextQueued(now: now()) else { return }
+    guard let submission = try store.claimNextQueued(now: now()) else {
+      return
+    }
 
     let request = coderRequest(for: submission)
     do {
@@ -244,7 +254,9 @@ private extension ConferenceWorkflowService {
         )
         continue
       }
-      guard job.state.isTerminal else { continue }
+      guard job.state.isTerminal else {
+        continue
+      }
       try await finish(submission: submission, job: job)
     }
   }
@@ -400,7 +412,9 @@ private extension ConferenceWorkflowService {
       }
       poked = true
     }
-    if poked { notifyOutbox() }
+    if poked {
+      notifyOutbox()
+    }
   }
 
   func notificationText(for submission: ConferenceSubmission) -> String {
