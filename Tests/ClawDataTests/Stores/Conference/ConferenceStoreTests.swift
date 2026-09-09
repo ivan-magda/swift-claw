@@ -10,12 +10,18 @@ import Testing
   @Test func participantCanSubmitOnlyOncePerCaseWithoutOverwritingOriginalAnswer() throws {
     // given
     let fixture = try Fixture()
-    let first = try fixture.insert(userID: 101, answer: "Keep accessibility state in the component.")
+    let first = try fixture.insert(
+      userID: 101,
+      answer: "Keep accessibility state in the component."
+    )
 
     // when
     let second = try fixture.store.insertSubmission(
       id: UUID(),
-      prepared: PreparedConferenceSubmission(caseSnapshot: first.caseSnapshot, answer: "Another idea"),
+      prepared: PreparedConferenceSubmission(
+        caseSnapshot: first.caseSnapshot,
+        answer: "Another idea"
+      ),
       origin: first.origin,
       now: fixture.now.addingTimeInterval(1)
     )
@@ -40,8 +46,12 @@ import Testing
 
     // then
     #expect(first.id != second.id)
-    #expect(try fixture.store.submission(participantUserID: 101, caseID: "day-1")?.answer == "Approach A")
-    #expect(try fixture.store.submission(participantUserID: 202, caseID: "day-1")?.answer == "Approach B")
+    #expect(
+      try fixture.store.submission(participantUserID: 101, caseID: "day-1")?.answer == "Approach A"
+    )
+    #expect(
+      try fixture.store.submission(participantUserID: 202, caseID: "day-1")?.answer == "Approach B"
+    )
   }
 
   @Test func queueClaimIsFIFOAndCannotClaimSameRowTwice() throws {
@@ -67,7 +77,11 @@ import Testing
     let submission = try fixture.insert(userID: 101, answer: "Answer")
     _ = try fixture.store.claimNextQueued(now: fixture.now)
     let jobID = try fixture.seedCoderJob(for: submission)
-    _ = try fixture.store.attachCoderJob(submissionID: submission.id, coderJobID: jobID, now: fixture.now)
+    _ = try fixture.store.attachCoderJob(
+      submissionID: submission.id,
+      coderJobID: jobID,
+      now: fixture.now
+    )
 
     // when
     let requeued = try fixture.store.requeue(submissionID: submission.id, now: fixture.now)
@@ -85,10 +99,13 @@ import Testing
 
     // when
     _ = try fixture.store.finish(
-      submissionID: submission.id, state: .completed,
+      submissionID: submission.id,
+      state: .completed,
       pullRequestURL: "https://github.com/wowlocal/crew18-sim/pull/42",
-      branch: "conference/example", commit: String(repeating: "a", count: 40),
-      failureReason: nil, now: fixture.now
+      branch: "conference/example",
+      commit: String(repeating: "a", count: 40),
+      failureReason: nil,
+      now: fixture.now
     )
 
     // then
@@ -104,9 +121,12 @@ private extension ConferenceStoreTests {
     let store: ConferenceStoreGRDB
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let item = ConferenceCase(
-      id: "day-1", title: "Accessibility", prompt: "Propose a solution.",
+      id: "day-1",
+      title: "Accessibility",
+      prompt: "Propose a solution.",
       repositoryURL: "https://github.com/wowlocal/crew18-sim",
-      baselineRef: String(repeating: "b", count: 40), baseBranch: "challenge/day-1"
+      baselineRef: String(repeating: "b", count: 40),
+      baseBranch: "challenge/day-1"
     )
 
     init() throws {
@@ -115,13 +135,26 @@ private extension ConferenceStoreTests {
       store = ConferenceStoreGRDB(writer: queue)
     }
 
-    func insert(userID: Int64, answer: String, offset: TimeInterval = 0) throws -> ConferenceSubmission {
+    func insert(
+      userID: Int64,
+      answer: String,
+      offset: TimeInterval = 0
+    ) throws -> ConferenceSubmission {
       let prepared = PreparedConferenceSubmission(caseSnapshot: item, answer: answer)
       let date = now.addingTimeInterval(offset)
       let origin = try ConferenceApprovedOriginFixture.make(
-        queue: queue, prepared: prepared, userID: userID, updateID: userID, now: date
+        queue: queue,
+        prepared: prepared,
+        userID: userID,
+        updateID: userID,
+        now: date
       )
-      let result = try store.insertSubmission(id: UUID(), prepared: prepared, origin: origin, now: date)
+      let result = try store.insertSubmission(
+        id: UUID(),
+        prepared: prepared,
+        origin: origin,
+        now: date
+      )
       guard case .inserted(let submission) = result else {
         throw StoreError.unexpected("Expected fresh submission")
       }
@@ -130,24 +163,37 @@ private extension ConferenceStoreTests {
 
     func seedCoderJob(for submission: ConferenceSubmission) throws -> UUID {
       let request = CoderRequest(
-        source: .local(path: "/fixture/source"), task: "test", workspace: .separate,
-        startRef: item.baselineRef, deliverable: .localChanges, baseBranch: nil,
-        instructions: nil, publishExistingChanges: false
+        source: .local(path: "/fixture/source"),
+        task: "test",
+        workspace: .separate,
+        startRef: item.baselineRef,
+        deliverable: .localChanges,
+        baseBranch: nil,
+        instructions: nil,
+        publishExistingChanges: false
       )
       let prepared = CoderPreparedRequest(
-        request: request, canonicalSource: "/fixture/source", checkoutPath: "/fixture/source",
-        commonGitDirectory: "/fixture/source/.git", executionPolicyID: "conference-test-policy",
+        request: request,
+        canonicalSource: "/fixture/source",
+        checkoutPath: "/fixture/source",
+        commonGitDirectory: "/fixture/source/.git",
+        executionPolicyID: "conference-test-policy",
         publicationRepository: nil
       )
       let origin = submission.origin
       let admission = try CoderJobStoreGRDB(writer: queue).admit(
-        id: UUID(), prepared: prepared,
+        id: UUID(),
+        prepared: prepared,
         origin: CoderOrigin(
-          runID: origin.runID, sessionID: origin.sessionID,
-          requesterUserID: origin.requesterUserID, chatID: origin.chatID,
-          toolCallID: origin.toolCallID, approvalID: origin.approvalID
+          runID: origin.runID,
+          sessionID: origin.sessionID,
+          requesterUserID: origin.requesterUserID,
+          chatID: origin.chatID,
+          toolCallID: origin.toolCallID,
+          approvalID: origin.approvalID
         ),
-        maxConcurrentJobs: 4, now: now
+        maxConcurrentJobs: 4,
+        now: now
       )
       guard case .admitted(let job) = admission else {
         throw StoreError.unexpected("Expected Coder admission")

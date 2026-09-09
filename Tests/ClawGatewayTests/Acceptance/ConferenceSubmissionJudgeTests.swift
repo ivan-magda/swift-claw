@@ -37,14 +37,18 @@ import Testing
   @Test func providerFailureDoesNotAdmitOrExposeDiagnostics() async throws {
     // given
     let judge = ConferenceSubmissionJudge(
-      provider: ConferenceJudgeProvider(verdict: "SAFE", fail: true), model: "fixture-model"
+      provider: ConferenceJudgeProvider(verdict: "SAFE", fail: true),
+      model: "fixture-model"
     )
 
     // when / then
     do {
-      try await judge.check(PreparedConferenceSubmission(
-        caseSnapshot: ConferenceWorkflowFixture.item, answer: "Use an actor."
-      ))
+      try await judge.check(
+        PreparedConferenceSubmission(
+          caseSnapshot: ConferenceWorkflowFixture.item,
+          answer: "Use an actor."
+        )
+      )
       Issue.record("A failed judge request was accepted")
     } catch ConferenceError.invalidAnswer(let message) {
       #expect(message.contains("unavailable"))
@@ -56,14 +60,19 @@ import Testing
     // given
     let provider = ConferenceJudgeProvider(verdict: "SAFE", delay: .seconds(3_600))
     let judge = ConferenceSubmissionJudge(
-      provider: provider, model: "fixture-model", timeout: .milliseconds(10)
+      provider: provider,
+      model: "fixture-model",
+      timeout: .milliseconds(10)
     )
 
     // when / then
     do {
-      try await judge.check(PreparedConferenceSubmission(
-        caseSnapshot: ConferenceWorkflowFixture.item, answer: "Use an actor."
-      ))
+      try await judge.check(
+        PreparedConferenceSubmission(
+          caseSnapshot: ConferenceWorkflowFixture.item,
+          answer: "Use an actor."
+        )
+      )
       Issue.record("A timed-out judge request was accepted")
     } catch ConferenceError.invalidAnswer {
       #expect(await provider.finished)

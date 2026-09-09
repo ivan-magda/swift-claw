@@ -1,199 +1,191 @@
 # Conference Coding Challenge workflow
 
-Status: implementation contract for the Podlodka iOS Crew #18 conference deployment.
-
-## Goal
-
-A conference participant sends their own answer to the current case in Telegram. swift-claw preserves that exact answer, asks the participant to approve the bounded submission action, stores it durably, and delegates implementation to the existing Generic Coder capability. The participant supplies the idea; the coding agent may translate it into code, but must not silently replace it with a materially different solution.
-
-## Scope
-
-This is a conference-specific workflow layered on Generic Coder. Coder remains unaware of participants, conference days, scoring, or event-specific product concepts.
-
-The v1 production shape supports one isolated conference deployment, one operator-configured active case, private Telegram participants, one confirmed submission per participant/case, durable FIFO execution, a supervisor-verified immutable baseline, isolated Coder workspaces, deterministic draft-PR publication, participant-scoped status, and restart-safe completion delivery.
-
-Scoring, automatic merging, Dactyl/simulator rendering, multiple submissions from one participant for one case, private challenge repositories, GitHub App installation-token authentication, and a general workflow engine are out of scope for v1.
-
-## Trust boundaries
-
-1. Telegram numeric user id is the participant identity. Usernames/display names are presentation only.
-2. Conference mode is a separate deployment profile. Participants do not receive personal memory, Generic Coder tools, arbitrary filesystem/exec tools, MCP, skills, scheduling, learning controls, or owner-only operational commands.
-3. Case repository, immutable baseline commit, PR base branch, publication repository and publication identity come only from trusted operator configuration.
-4. The participant answer is persisted exactly as approved and is immutable for that participant/case.
-5. The supervisor, not Codex, materializes and verifies the trusted challenge source before a Coder job exists.
-6. Coder receives a local source and creates a separate workspace from the exact configured commit SHA. A successful result is publishable only when the supervisor-observed starting commit equals that SHA.
-7. Coder has no GitHub publication credential. GitHub push/API access belongs only to the deterministic publisher.
-8. The publisher accepts only workspaces below the conference Coder job root, verifies the local commit graph and clean tree, pushes a submission-derived branch, creates or reuses one draft PR, and verifies head SHA/base/actor from GitHub.
-9. Existing Generic Coder approval semantics remain unchanged.
-10. Conference mode requires an explicit non-personal state root and conference-only credential/state directories.
-
-## Domain model
-
-### ConferenceCase
-
-One active case is loaded from the operator-owned JSON case file at daemon start:
-
-- `id`: stable lowercase identifier, e.g. `day-3`;
-- `title`;
-- `prompt`: participant-facing case text;
-- `repositoryURL`: public GitHub HTTPS repository for v1;
-- `baselineRef`: exact immutable 40- or 64-character Git commit SHA;
-- `baseBranch`: draft pull-request target branch.
-
-The case snapshot is immutable for stored submissions. Changing the file requires daemon restart and cannot rewrite an already-approved submission.
-
-### ConferenceSubmission
-
-A submission contains UUID id, numeric participant id, immutable case snapshot, exact answer, durable approved origin, state, optional Coder job id, optional PR/branch/commit evidence, optional failure/review reason, durable notification state and timestamps.
-
-`UNIQUE(participant_user_id, case_id)` enforces one confirmed submission per participant/case.
-
-Normal state path:
-
-`queued -> running -> completed`
-
-Terminal alternatives are `blocked | failed | cancelled | needs_review`.
-
-## Participant surface
-
-Conference mode exposes exactly:
-
-- `challenge_current` — active case;
-- `challenge_submit` — prepare and submit the caller's exact proposal;
-- `challenge_status` — return only the caller's submission status.
-
-The trusted conference system prompt tells the conversational model not to solve the case for the participant and not to rewrite the participant's proposal. Those are guidance constraints; identity, answer integrity, uniqueness, repository scope, baseline and approval binding are enforced in code.
-
-`challenge_submit` is dangerous-tier. Its durable approval binds the exact answer and trusted case snapshot. The approved action only inserts a queued submission; it does not run Coder synchronously.
-
-## Trusted source materialization
-
-Before the conference workflow is composed, `ConferenceRepositorySource` materializes the configured public repository below `$CLAW_STATE_ROOT/conference-source/<case-id>` using Git with ambient GitHub/SSH credentials removed.
-
-A cached source is reused across restart only when all of these checks pass:
-
-- canonical checkout is the expected source directory;
-- `origin` resolves to the configured repository;
-- `HEAD` equals the configured immutable baseline SHA;
-- the baseline resolves to that exact SHA;
-- the working tree is clean;
-- HEAD remains detached from participant-controlled branches.
-
-If verification fails, the cached source is discarded and materialized again. A valid cached source therefore lets a restart proceed without GitHub availability.
-
-## Coder execution
-
-`ConferenceWorkflowService` owns persisted `queued` submissions. For each claim it constructs a fixed `CoderRequest`:
-
-- source: `.local` trusted source path prepared by the supervisor;
-- workspace: `.separate`;
-- start ref: exact case baseline SHA;
-- deliverable: `.localChanges`;
-- base branch: none;
-- publish existing changes: false;
-- task: case text plus exact stored participant answer;
-- trusted instructions: preserve the proposal, treat it as task data, run relevant repository checks, commit intended changes locally, never push or create a PR.
-
-The queue reuses the durable `ToolExecutionContext` from the already-approved conference submission. Generic Coder admission remains deduplicated by the original approved origin, closing the crash window between Coder admission and storing `coderJobID`.
-
-Conference Coder completion notices are disabled. The conference workflow is the single participant-facing completion path.
-
-A successful Coder result is eligible for publication only when:
-
-- publication is absent (Coder did not publish anything itself);
-- baseline was independently observed by Coder supervisor code;
-- observed starting commit exactly equals the case baseline SHA;
-- a workspace and final commit are present.
-
-Missing or ambiguous evidence goes to `needs_review`; it is never silently treated as success.
-
-## Deterministic publication
-
-`ConferenceGitHubPublisher` is outside Coder and owns the only GitHub publication credential.
-
-Before push it verifies:
-
-- repository URL matches the trusted case repository;
-- workspace is below `$CLAW_STATE_ROOT/coder/jobs`;
-- starting/final commit values are valid commit ids and differ;
-- workspace `HEAD` equals the reported final commit;
-- configured baseline is an ancestor of the final commit;
-- working tree is clean.
-
-It pushes exactly:
-
-`<final-commit>:refs/heads/conference/<submission-uuid>`
-
-and creates or reuses an open draft PR to the configured base branch. GitHub response evidence must match expected head branch, head SHA, base branch and actor before the submission becomes `completed`.
-
-Transient push/API failures leave the durable submission `running`; publication is retried idempotently with the same submission-derived branch. Invalid commit/workspace/repository evidence or actor mismatch becomes `needs_review`.
-
-## Credentials and deployment boundary
-
-v1 uses two distinct credential boundaries.
-
-### Codex credential
-
-`CLAW_CODER_CONFIG_HOME` must be inside the isolated conference state root and contain only a conference-specific Codex login. Conference Coder receives a dedicated `HOME`/`CODEX_HOME`; ambient `GH_TOKEN`, `GITHUB_TOKEN`, `GH_CONFIG_DIR`, `SSH_AUTH_SOCK` and `GIT_ASKPASS` are removed.
-
-Do not reuse a personal Codex home or place personal credentials/data in the conference state/home. Native Codex sandbox behavior is defense in depth, not the sole secret boundary for participant-controlled prompts.
-
-### GitHub publisher credential
-
-v1 expects a dedicated bot-user GitHub token in `GH_TOKEN`, scoped only as needed for the challenge repository. Startup calls `GET /user` and requires its login to equal `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR`. Personal GitHub credentials must not be present in the conference deployment.
-
-GitHub App installation tokens use a different authentication/identity model and are not implemented by this v1 contract.
-
-## Completion delivery
-
-Terminal submission state is persisted before Telegram notification. An idempotent conference outbox row is keyed by immutable submission UUID. Only after the outbox row exists is `notification_enqueued` set. Restart/retry therefore cannot create a second completion message.
-
-`challenge_status` derives requester identity from `ToolExecutionContext` and refuses access to another participant's submission.
-
-## Configuration
-
-Conference mode is off by default. v1 requires:
-
-- `CLAW_CONFERENCE_ENABLED=true`;
-- explicit `CLAW_STATE_ROOT=/absolute/non-personal/state/root`;
-- `CLAW_CONFERENCE_CASE_FILE=/absolute/path/to/case.json`;
-- `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR=<dedicated-bot-login>`;
-- `GH_TOKEN=<dedicated-repository-scoped-bot-token>`;
-- Generic Coder enabled;
-- `CLAW_CODER_CONFIG_HOME` below `CLAW_STATE_ROOT` with a conference-only Codex credential.
-
-The case file is bounded to 128 KiB and requires an immutable full commit SHA. The repository must be public in v1 because trusted source materialization intentionally runs without GitHub credentials.
-
-## Recovery and idempotency
-
-- Submission insert + participant/case uniqueness are one SQLite transaction.
-- Queue claim is atomic `queued -> running`.
-- Stored `coderJobID` durably links a submission to Coder.
-- Crash after Coder admission but before link persistence is recovered by Generic Coder admission deduplication.
-- A running submission with no retained Coder job is requeued on boot.
-- A linked terminal Coder result is projected into conference state exactly once.
-- Transient deterministic-publication failures are retryable; ambiguous Coder execution is not blindly rerun.
-- Source materialization cache is verify-before-reuse.
-- Completion notification has its own idempotent outbox identity.
-
-## Acceptance criteria
-
-1. Different participant ids can submit independent answers to the same case.
-2. A participant cannot submit/query as another numeric user id.
-3. A second confirmed submission for the same participant/case cannot overwrite the first.
-4. Busy Coder leaves submission queued for later execution.
-5. Participant/model text cannot choose repository, baseline, publication branch/base, credentials or publication identity.
-6. Coder receives the exact stored participant proposal as task data.
-7. Every Coder request starts from the supervisor-prepared local source and exact immutable SHA.
-8. Publication is impossible when independently observed starting commit differs from the configured baseline.
-9. Coder receives no GitHub publication credential and emits no generic completion notification.
-10. Only the deterministic publisher can push/create a PR.
-11. Transient publisher failure retries without losing or duplicating the submission/PR identity.
-12. Successful result stores verified branch/commit/draft-PR and exposes it only to the owning participant.
-13. Missing/mismatched GitHub actor or invalid commit/workspace evidence becomes `needs_review`.
-14. Valid source cache survives restart without requiring GitHub; invalid cache is never trusted.
-15. Conference mode off leaves ordinary single-owner and Generic Coder behavior unchanged.
-16. Conference participant tools are exactly `challenge_current`, `challenge_submit`, `challenge_status`.
-17. Completion notification is restart-safe and idempotent.
-18. Conference mode refuses unsafe/missing state, Coder-home and GitHub actor configuration.
-19. Full tests, formatting and lint gates pass.
+Implementation contract for the Podlodka iOS Crew #18 deployment. This is an explicit,
+opt-in conference profile; the ordinary single-owner daemon and Generic Coder contracts
+remain unchanged. Deployment and live verification: [conference runbook](../CONFERENCE.md).
+
+## Goal and scope
+
+Participant idea → exact confirmed answer → tool-free AI precheck → durable queue →
+Generic Coder → locally committed prototype → deterministic bot-authored draft PR →
+private completion notification.
+
+The participant supplies the idea. The coding agent translates it into code and must
+report blocking constraints rather than silently substitute a materially different approach.
+The judge is an admission filter, not a correctness proof, sandbox, or competition score.
+
+v1 has one operator-configured active case, private Telegram conversations, one confirmed
+submission per participant/case, a durable FIFO queue and separate Coder working copies.
+Case format is a small JSON file. Switching the file and restarting activates the next case;
+queued submissions retain their original case, repository and immutable baseline.
+
+Out of scope: a general workflow engine, a new Codex runtime policy, internal OS sandbox,
+scoring, automatic merging, simulator/Dactyl rendering, private source repositories, repeated
+contest submissions for the same participant/case, and GitHub App installation tokens.
+
+## Responsibilities and boundaries
+
+- Telegram numeric sender ID, not model arguments or display names, identifies a participant.
+- Conference participants receive only `challenge_current`, `challenge_submit` and
+  `challenge_status`. No personal memory, ordinary Coder tools, filesystem/exec tools,
+  workspace skills, MCP sessions or owner operational commands are exposed.
+- Trusted operator configuration chooses repository, baseline, PR base and bot identity.
+  Participant text cannot select those workflow parameters.
+- The exact persisted triggering message is checked against the prepared answer. A model
+  rewrite is refused before the judge, queue or Coder. The participant confirms an immutable
+  case/answer snapshot through the existing approval machinery.
+- Only the publisher is passed the configured GitHub publication credential. Coder gets a
+  separate HOME/CODEX_HOME and no ambient GitHub token, GitHub CLI config or SSH agent socket.
+  These are application boundaries, not a claim that native code execution is OS-isolated.
+- A dedicated conference host/account with no personal secrets is a deployment prerequisite.
+  No new permission framework or nonstandard Codex CLI mode is introduced.
+
+## Domain and storage
+
+`ConferenceCase`: `id`, `title`, `prompt`, public `repositoryURL`, immutable full 40/64-digit
+`baselineRef` commit SHA, and `baseBranch`. The existing target base branch must be frozen at
+that SHA. Case IDs must not be reused for different cases during a deployment.
+
+`ConferenceSubmission`: UUID, numeric participant ID, exact answer, immutable case snapshot,
+durable approved origin, state, optional Coder job ID, PR/branch/commit evidence, failure
+reason, notification marker and timestamps. `UNIQUE(participant_user_id, case_id)` prevents
+one participant's new answer from replacing their confirmed answer.
+
+Normal states: `queued → running → completed`. Terminal alternatives: `blocked`, `failed`,
+`cancelled`, `needs_review`. During retryable publication, state remains `running`; no new
+inference attempt is started. Original submissions survive unsuccessful code generation.
+
+## Admission and judge
+
+The participant sends the entire proposal as one message. `challenge_submit` prepares an
+approval card containing that exact text, case, repository, baseline, base branch and consent
+to publish the proposal/code to GitHub. It is an approval-only dangerous-tier tool.
+
+After confirmation, the workflow verifies the originating message and checks for an existing
+submission before invoking the judge. Replaying the same approved submission returns its
+existing UUID without another judge or Coder call. Competing inserts remain protected by
+SQLite uniqueness.
+
+`ConferenceSubmissionJudge` uses the configured primary LLM provider and model, without
+conversation history or tools. The system instruction classifies the JSON-encoded case and
+exact answer; it does not solve the case or assess the quality/novelty of the idea. Only an
+explicit `SAFE` response admits work. `UNSAFE`, malformed output, tool calls, transport error
+or timeout queues nothing and returns a participant-readable error. A rejected participant
+can revise their message and confirm a new attempt because no submission was inserted.
+
+The request has a 2,048-output-token allowance and a 30-second deadline; the enclosing tool
+allows 45 seconds. Cancellation joins the provider operation. These side calls are not
+currently included in ordinary conversational `/cost`; neither this limit nor the existing
+Coder concurrency/time limit is a monetary budget.
+
+## Source and Coder execution
+
+`ConferenceRepositorySource` prepares `$CLAW_STATE_ROOT/conference-source/<case-id>` with
+ambient GitHub/SSH credentials removed. It verifies canonical checkout and origin, resolves
+the immutable baseline, checks it out detached and requires a clean tree. Valid cache reuse
+requires no GitHub request. Invalid cache is replaced. The active source is preflighted at
+boot; each queue claim resolves the source for its own stored case snapshot, not the newly
+active case.
+
+The fixed Coder request uses `.local`, `.separate`, exact `startRef`, `.localChanges`, no PR
+base and `publishExistingChanges=false`. The task contains the case and unchanged proposal.
+Instructions require preserving the approach, reporting actual checks/assumptions, committing
+locally and not pushing. A local fixture identity is supplied as a fallback for clean Git
+configuration; that commit author is distinct from the GitHub PR actor.
+
+The existing Generic Coder prepares an independent copy and independently observes its
+starting commit. Its approval/admission/policy checks are not weakened. A busy Coder leaves
+the submission queued. Durable origin deduplication recovers the gap between Coder admission
+and storing `coderJobID`. Interrupted/ambiguous inference requires review rather than replay.
+Generic Coder completion notifications are disabled only for this conference composition.
+
+## Publication
+
+A successful Coder result must have absent publication, an independently observed baseline
+matching the approved SHA, a workspace and a final commit. Otherwise it becomes `needs_review`.
+
+The publisher first looks up the submission-derived branch across all PR states. A matching
+open draft PR is reused before inspecting local state or pushing, which recovers a lost POST
+response even if the old workspace is no longer available. Closed/merged, non-draft, foreign
+actor, mismatched head/base/repository/commit evidence requires organizer review; it does not
+cause a new competing PR.
+
+For new publication, the publisher verifies the workspace lies below the Coder job root,
+HEAD is the claimed final SHA, baseline is an ancestor, final differs from baseline and the
+working tree is clean. It fetches the exact commit into a fresh, supervisor-owned bare Git
+repository without publication credentials and checks ancestry there. Only the push from
+this clean repository gets the bot token. No build, agent Git hook or agent-controlled Git
+configuration is executed with that credential. The transfer directory is removed afterward.
+
+Push refspec: `<final-sha>:refs/heads/conference/<submission-uuid>`, without force or merge.
+The API creates a draft PR. The result is checked against the target repository, head branch,
+head SHA, base branch, frozen baseline SHA, draft/open state, canonical PR URL and expected bot
+login before storing `completed`.
+
+The PR contains the case, original proposal, public submission UUID, baseline and explicitly
+labelled Coder-reported checks. It does not publish private Telegram IDs. The organizer keeps
+the participant-to-submission mapping in SQLite. All PRs in a public challenge repository are
+public; conversation/status isolation is not confidentiality of published solutions.
+
+Transient Git/network failures retain the same submission for publication retry. Permanent
+invalid evidence requires review. If the database write after a successful publication fails,
+the running submission remains recoverable through the existing-PR lookup.
+
+## Completion and recovery
+
+Terminal state is persisted before claiming one UUID-keyed conference outbox row. The row is
+claimed idempotently before `notification_enqueued` is set. This yields one durable completion
+notice per submission, not a claim of exactly-once Telegram network delivery: the inherited
+outbox is at-least-once when a send acknowledgment is lost.
+
+`challenge_status` derives identity from the trusted execution context and returns only the
+requester's submission. A known UUID lets its owner query a previous day's submission.
+
+Source/queue/publication/notification recovery reuse existing state; they do not introduce a
+second workflow scheduler or an automatic retry of interrupted inference. Persistent remote
+permission/push failures require operator intervention; v1 has no retry dashboard or retry
+budget subsystem.
+
+## Acceptance criteria and primary coverage
+
+1. **Current case and exact human proposal:** `ConferenceWorkflowAcceptanceTests` and
+   `ConferenceToolsTests`; reject rewritten answers before judge or queue.
+2. **Confirmed identity, ownership and uniqueness:** real message/run/approval fixture,
+   `ConferenceStoreTests`, `GroupApprovalCallbackTests` and workflow ownership/replay tests.
+3. **Busy executor and original case after day switch:** workflow acceptance tests preserve
+   FIFO work and use the queued case's own source/baseline.
+4. **Judge admission:** `ConferenceSubmissionJudgeTests` covers exact safe/unsafe/malformed
+   output, provider failure and joined timeout; workflow tests prove rejection queues nothing.
+   Scripted verdicts test the contract, not the real model's detection accuracy.
+5. **Actual Coder/Git/publication composition:** `ConferenceNativeWorkflowTests` exercises
+   real Coder supervisor/backend, independent Git copies, source verification, publisher,
+   SQLite and outbox for two participants. CLI inference and GitHub transport are local test
+   doubles; no real model, GitHub mutation, Telegram delivery or iOS build is claimed.
+6. **Baseline evidence:** `ConferenceBaselineVerificationTests` prevents publication on a
+   mismatched observed SHA, regardless of a successful Coder report.
+7. **Lost responses and restart:** native publication test and
+   `ConferencePublicationRecoveryTests` verify reuse without a second Coder job or PR identity.
+8. **Credentials and participant surface:** `ConferenceSecurityBoundaryTests`, access-control
+   tests and the native CLI sentinel cover bot-token removal, fixed tools and startup identity.
+9. **One completion producer:** `CoderSilentCompletionTests` plus native/acceptance outbox
+   assertions; ordinary Generic Coder completion behavior remains unchanged by default.
+10. **Schema compatibility:** existing migration/outbox suites plus conference store tests;
+    pre-existing v15 tests assert their own migration, not that it is forever the latest.
+11. **All build/test/lint gates:** required on the final PR SHA. Passing an earlier SHA is not
+    evidence that a later revision passed.
+12. **Deployment smoke test:** the live two-participant checklist in the runbook is required
+    before opening the bot to the conference. CI cannot verify credentials, actual Codex model
+    entitlement, Xcode or the external bot's authorship without that deployment.
+
+## Test-intent review
+
+Unique regressions targeted by the new tests: model-rewritten answers entering Coder; fake
+foreign-key approval fixtures hiding admission errors; the current day's source replacing a
+queued case's baseline; a successful report without baseline evidence; another inference or
+push after a lost publication response; a generic and conference completion both firing; and
+a failed/malformed judge response being treated as approval.
+
+Nearest existing coverage is Generic Coder's native process/workspace tests, approval callback
+and persistence tests. The new native test supplies the cross-component proof those isolated
+tests do not provide. No tests assert that an LLM reliably detects all attacks or faithfully
+implements every human proposal. Those are not deterministic harness guarantees.

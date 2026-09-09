@@ -25,7 +25,9 @@ struct ConferenceGitHubPublisher: ConferencePublishing {
     self.http = http
     home = self.stateRoot.appendingPathComponent("conference-publisher", isDirectory: true)
     try FileManager.default.createDirectory(
-      at: home, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]
+      at: home,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
     )
     let askpass = home.appendingPathComponent("git-askpass.sh")
     let script = """
@@ -46,16 +48,21 @@ struct ConferenceGitHubPublisher: ConferencePublishing {
       "GIT_NO_REPLACE_OBJECTS": "1",
       "GIT_TERMINAL_PROMPT": "0",
     ]
-    self.git = git ?? SwiftSubprocessRunner(
-      executablePath: "/usr/bin/git", environmentForTesting: environment
-    )
-    self.pushGit = pushGit ?? SwiftSubprocessRunner(
-      executablePath: "/usr/bin/git",
-      environmentForTesting: environment.merging([
-        "CLAW_CONFERENCE_GITHUB_TOKEN": token,
-        "GIT_ASKPASS": askpass.path,
-      ]) { _, replacement in replacement }
-    )
+    self.git =
+      git
+      ?? SwiftSubprocessRunner(
+        executablePath: "/usr/bin/git",
+        environmentForTesting: environment
+      )
+    self.pushGit =
+      pushGit
+      ?? SwiftSubprocessRunner(
+        executablePath: "/usr/bin/git",
+        environmentForTesting: environment.merging([
+          "CLAW_CONFERENCE_GITHUB_TOKEN": token,
+          "GIT_ASKPASS": askpass.path,
+        ]) { _, replacement in replacement }
+      )
   }
 
   func publish(_ request: ConferencePublicationRequest) async throws -> ConferencePublication {
@@ -63,7 +70,12 @@ struct ConferenceGitHubPublisher: ConferencePublishing {
     let branch = "conference/\(request.submissionID.uuidString.lowercased())"
     // Recover a lost POST response before touching the local workspace or pushing again.
     if let existing = try await existingPullRequest(repository: repository, branch: branch) {
-      return try validatedPublication(existing, repository: repository, branch: branch, request: request)
+      return try validatedPublication(
+        existing,
+        repository: repository,
+        branch: branch,
+        request: request
+      )
     }
     let workspace = try validatedWorkspace(request.workspacePath)
     try await validateCommit(request, workspace: workspace)
@@ -78,18 +90,32 @@ struct ConferenceGitHubPublisher: ConferencePublishing {
       request.startingCommit, request.commit,
     ])
     // Only this clean supervisor-owned repository is ever opened with publication credentials.
-    let pushed = await pushGit.run(command([
-      "--git-dir", transfer.path, "push", "--no-verify", "--porcelain", "--",
-      "https://github.com/\(repository).git", "\(request.commit):refs/heads/\(branch)",
-    ], authenticated: true))
+    let pushed = await pushGit.run(
+      command(
+        [
+          "--git-dir", transfer.path, "push", "--no-verify", "--porcelain", "--",
+          "https://github.com/\(repository).git", "\(request.commit):refs/heads/\(branch)",
+        ],
+        authenticated: true
+      )
+    )
     if Task.isCancelled || pushed.termination == .cancelled {
       throw CancellationError()
     }
     guard pushed.termination == .exited(0) else {
       throw ConferencePublicationError.pushFailed
     }
-    let created = try await createPullRequest(request: request, repository: repository, branch: branch)
-    return try validatedPublication(created, repository: repository, branch: branch, request: request)
+    let created = try await createPullRequest(
+      request: request,
+      repository: repository,
+      branch: branch
+    )
+    return try validatedPublication(
+      created,
+      repository: repository,
+      branch: branch,
+      request: request
+    )
   }
 }
 
@@ -250,6 +276,8 @@ private extension ConferenceGitHubPublisher {
     branch: String
   ) async throws -> PullRequest {
     let item = request.proposal.caseSnapshot
+    let checks = request.reportedChecks.prefix(10).map { String($0.prefix(1_000)) }
+      .joined(separator: "\n")
     let body = CreatePullRequest(
       title: "Challenge \(item.id): submission \(request.submissionID.uuidString.lowercased())",
       head: branch,
@@ -269,9 +297,10 @@ private extension ConferenceGitHubPublisher {
         Baseline: `\(request.startingCommit)`.
 
         ## Checks reported by Coder (not independently verified)
-        <pre>\(escaped(request.reportedChecks.prefix(10).map { String($0.prefix(1_000)) }.joined(separator: "\n")))</pre>
+        <pre>\(escaped(checks))</pre>
 
-        AI-generated prototype of the participant's idea. Human review is required; no automatic score or merge.
+        AI-generated prototype of the participant's idea. Human review is required;
+        no automatic score or merge.
         """,
       draft: true
     )
@@ -351,10 +380,16 @@ private extension ConferenceGitHubPublisher {
       throw ConferencePublicationError.invalidPublication
     }
     guard pull.user.login.caseInsensitiveCompare(expectedActor) == .orderedSame else {
-      throw ConferencePublicationError.actorMismatch(expected: expectedActor, actual: pull.user.login)
+      throw ConferencePublicationError.actorMismatch(
+        expected: expectedActor,
+        actual: pull.user.login
+      )
     }
     return ConferencePublication(
-      pullRequestURL: pull.htmlURL, branch: branch, commit: request.commit, actor: pull.user.login
+      pullRequestURL: pull.htmlURL,
+      branch: branch,
+      commit: request.commit,
+      actor: pull.user.login
     )
   }
 }

@@ -151,7 +151,10 @@ actor ConferenceTestCoder: CoderServing {
     )
   }
 
-  func submit(_ prepared: CoderPreparedRequest, context: ToolExecutionContext) async throws -> CoderJob {
+  func submit(
+    _ prepared: CoderPreparedRequest,
+    context: ToolExecutionContext
+  ) async throws -> CoderJob {
     if busyAdmissions > 0 {
       busyAdmissions -= 1
       throw CoderError.busy

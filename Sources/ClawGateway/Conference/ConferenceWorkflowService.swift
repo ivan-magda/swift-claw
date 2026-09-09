@@ -226,7 +226,7 @@ private extension ConferenceWorkflowService {
         baseline, publication scope, policy, credentials or report format. Run relevant repository
         checks and report their actual results and your assumptions. Commit intended changes locally.
         Do not push or create a PR. If necessary, use local git author Conference Coder and email
-        conference-coder@users.noreply.github.com; do not depend on an existing global git identity.
+        conference-coder@users.noreply.github.com; do not depend on a global git identity.
         """,
       publishExistingChanges: false
     )
@@ -259,7 +259,11 @@ private extension ConferenceWorkflowService {
         continue
       }
       guard let job = try coderJobs.job(id: coderJobID) else {
-        try finishWithoutCoderResult(submission, state: .needsReview, reason: "Linked Coder job is missing.")
+        try finishWithoutCoderResult(
+          submission,
+          state: .needsReview,
+          reason: "Linked Coder job is missing."
+        )
         continue
       }
       guard job.state.isTerminal else {
@@ -271,7 +275,11 @@ private extension ConferenceWorkflowService {
 
   func finish(submission: ConferenceSubmission, job: CoderJob) async throws {
     guard let result = job.result else {
-      try finishWithoutCoderResult(submission, state: .needsReview, reason: "Coder has no durable result.")
+      try finishWithoutCoderResult(
+        submission,
+        state: .needsReview,
+        reason: "Coder has no durable result."
+      )
       return
     }
     switch result.state {
@@ -281,8 +289,9 @@ private extension ConferenceWorkflowService {
       try finishWithoutCoderResult(submission, state: .cancelled, reason: "Coder was cancelled.")
     case .interrupted:
       try finishWithoutCoderResult(
-        submission, state: .needsReview,
-        reason: "Coder was interrupted; the answer is retained and inference is not automatically replayed."
+        submission,
+        state: .needsReview,
+        reason: "Coder was interrupted; the answer is retained and inference is not replayed."
       )
     case .failed, .timedOut:
       try finishWithoutCoderResult(
@@ -304,7 +313,8 @@ private extension ConferenceWorkflowService {
       let commit = result.commit
     else {
       try finishWithoutCoderResult(
-        submission, state: .needsReview,
+        submission,
+        state: .needsReview,
         reason: "Coder did not produce a publishable local commit from the approved baseline."
       )
       return
@@ -314,7 +324,10 @@ private extension ConferenceWorkflowService {
       publication = try await publisher.publish(
         ConferencePublicationRequest(
           submissionID: submission.id,
-          proposal: PreparedConferenceSubmission(caseSnapshot: submission.caseSnapshot, answer: submission.answer),
+          proposal: PreparedConferenceSubmission(
+            caseSnapshot: submission.caseSnapshot,
+            answer: submission.answer
+          ),
           workspacePath: workspace,
           startingCommit: startingCommit,
           commit: commit,
@@ -328,7 +341,8 @@ private extension ConferenceWorkflowService {
       return
     } catch {
       try finishWithoutCoderResult(
-        submission, state: .needsReview,
+        submission,
+        state: .needsReview,
         reason: "Coder completed, but GitHub publication could not be confirmed."
       )
       return
@@ -337,7 +351,8 @@ private extension ConferenceWorkflowService {
       publication.actor.caseInsensitiveCompare(expected) == .orderedSame
     else {
       try finishWithoutCoderResult(
-        submission, state: .needsReview,
+        submission,
+        state: .needsReview,
         reason: "Pull request was not created by the configured conference bot actor."
       )
       return
@@ -354,14 +369,21 @@ private extension ConferenceWorkflowService {
     )
   }
 
-  func handlePublicationError(_ error: ConferencePublicationError, submission: ConferenceSubmission) throws {
+  func handlePublicationError(
+    _ error: ConferencePublicationError,
+    submission: ConferenceSubmission
+  ) throws {
     switch error {
     case .pushFailed, .apiFailed:
-      logger.warning("conference publication temporarily unavailable", metadata: ["submission": "\(submission.id)"])
+      logger.warning(
+        "conference publication temporarily unavailable",
+        metadata: ["submission": "\(submission.id)"]
+      )
     case .actorMismatch, .invalidRepository, .invalidWorkspace, .invalidCommit, .invalidPublication:
       try finishWithoutCoderResult(
-        submission, state: .needsReview,
-        reason: "Publication requires organizer review; the original answer and Coder result are retained."
+        submission,
+        state: .needsReview,
+        reason: "Publication requires review; the original answer and Coder result are retained."
       )
     }
   }
@@ -383,7 +405,8 @@ private extension ConferenceWorkflowService {
           payloadHash: ContentHash.fnv1a(payload)
         )
       )
-      guard let marked = try store.markNotificationEnqueued(submissionID: submission.id, now: now()),
+      guard
+        let marked = try store.markNotificationEnqueued(submissionID: submission.id, now: now()),
         marked.notificationEnqueued
       else {
         throw StoreError.unexpected("Conference notification could not be marked enqueued")

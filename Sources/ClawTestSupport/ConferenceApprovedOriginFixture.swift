@@ -49,12 +49,18 @@ public enum ConferenceApprovedOriginFixture {
         warnings: []
       )
     )
-    let arguments = try required(CanonicalJSON.encode(JSONValue.object([
-      "answer": .string(prepared.answer)
-    ])))
-    let calls = try required(ToolCallCoding.encode([
-      ToolCall(id: toolCallID, name: ConferenceToolNames.submit, argumentsJSON: arguments)
-    ]))
+    let arguments = try required(
+      CanonicalJSON.encode(
+        JSONValue.object([
+          "answer": .string(prepared.answer)
+        ])
+      )
+    )
+    let calls = try required(
+      ToolCallCoding.encode([
+        ToolCall(id: toolCallID, name: ConferenceToolNames.submit, argumentsJSON: arguments)
+      ])
+    )
     let receipt = try runs.commitSuspendedTurn(
       runId: runID,
       sessionId: sessionID,

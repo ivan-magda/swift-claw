@@ -97,7 +97,10 @@ extension DaemonBuilder {
       expectedActor: expectedActor,
       http: toolExecutor
     )
-    let judge = ConferenceSubmissionJudge(provider: judgeRoute.provider, model: judgeRoute.wireModel)
+    let judge = ConferenceSubmissionJudge(
+      provider: judgeRoute.provider,
+      model: judgeRoute.wireModel
+    )
     let signal = coordination.outboxSignal
     let service = ConferenceWorkflowService(
       config: conference,

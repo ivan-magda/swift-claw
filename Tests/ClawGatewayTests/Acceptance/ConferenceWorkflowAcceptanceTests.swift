@@ -46,7 +46,10 @@ import Testing
     #expect(notices.first?.payload.contains("/pull/42") == true)
     let other = try fixture.origin(answer: "Another idea", userID: 202)
     do {
-      _ = try await fixture.service.status(submissionID: completed.id, context: other.executionContext)
+      _ = try await fixture.service.status(
+        submissionID: completed.id,
+        context: other.executionContext
+      )
       Issue.record("Another participant read a submission they do not own")
     } catch ConferenceError.forbidden {
       // Expected ownership boundary.
@@ -59,7 +62,9 @@ import Testing
       Issue.record("Rewritten text must be refused before paying for a judge call")
     })
     let origin = try fixture.origin(answer: "Use an actor to own accessibility state.")
-    let rewritten = try await fixture.service.prepareSubmission(answer: "A paraphrase by the model.")
+    let rewritten = try await fixture.service.prepareSubmission(
+      answer: "A paraphrase by the model."
+    )
 
     // when / then
     do {
@@ -99,13 +104,19 @@ import Testing
     let prepared = try await fixture.service.prepareSubmission(answer: answer)
     let queued = try await fixture.service.submit(prepared, context: origin.executionContext)
     let dayTwo = ConferenceCase(
-      id: "day-2", title: "Second case", prompt: "A different case.",
+      id: "day-2",
+      title: "Second case",
+      prompt: "A different case.",
       repositoryURL: "https://github.com/example/other",
-      baselineRef: String(repeating: "d", count: 40), baseBranch: "challenge/day-2"
+      baselineRef: String(repeating: "d", count: 40),
+      baseBranch: "challenge/day-2"
     )
 
     // when
-    let completed = try await fixture.finish(queued.id, using: fixture.restarted(activeCase: dayTwo))
+    let completed = try await fixture.finish(
+      queued.id,
+      using: fixture.restarted(activeCase: dayTwo)
+    )
 
     // then — neither the new repository nor its baseline may leak into the old submission.
     #expect(completed.state == .completed)
