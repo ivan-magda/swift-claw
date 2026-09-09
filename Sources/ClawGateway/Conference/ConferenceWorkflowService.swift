@@ -349,10 +349,14 @@ private extension ConferenceWorkflowService {
 
   func safeFailure(_ error: any Error) -> String {
     switch error {
-    case let error as ConferenceError: return "\(error)"
-    case let error as CoderError: return "\(error)"
-    case let error as StoreError: return "\(error)"
-    default: return "Conference workflow failed before the Coder job could be admitted."
+    case let error as ConferenceError:
+      return "\(error)"
+    case let error as CoderError:
+      return "\(error)"
+    case let error as StoreError:
+      return "\(error)"
+    default:
+      return "Conference workflow failed before the Coder job could be admitted."
     }
   }
 }
