@@ -36,13 +36,11 @@ extension CoderServiceTests {
 
     fixture.backend.releaseAll()
 
-    let completed = try await pollUntil {
-      guard let current = try fixture.store.job(id: job.id), current.state.isTerminal else {
-        return nil
-      }
-      return current
+    let finished = try await pollUntilTrue {
+      try fixture.store.job(id: job.id)?.state.isTerminal == true
     }
-    #expect(completed?.result?.state == .succeeded)
+    #expect(finished)
+    #expect(try fixture.store.job(id: job.id)?.result?.state == .succeeded)
     #expect(try fixture.reports().isEmpty)
 
     try await service.shutdown()
