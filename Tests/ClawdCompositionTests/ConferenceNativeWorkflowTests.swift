@@ -16,7 +16,7 @@ import Testing
     let fixture = try await ConferenceNativeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     let composition = try await fixture.builder.prepareConferenceCoder(
-      coordination: TurnCoordination(),
+      coordination: .init(),
       environment: fixture.environment
     )
     let coder = try #require(composition.service)
