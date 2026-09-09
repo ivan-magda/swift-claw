@@ -41,6 +41,14 @@ extension MessageRouter {
 // MARK: - Command Dispatch
 
 private extension MessageRouter {
+  static let conferenceCommandRefusal = """
+    This conference bot only accepts challenge messages plus /start, /help, /new and /stop.
+    """
+
+  static let conferenceHelp = """
+    Ask for today's case, send your own proposed solution, or ask for your submission status.
+    """
+
   // swiftlint:disable:next cyclomatic_complexity function_body_length
   func routeAllowed(
     _ command: Command,
@@ -52,7 +60,7 @@ private extension MessageRouter {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
         target: .reply(to: message, mode: mode),
-        text: "This conference bot only accepts challenge messages plus /start, /help, /new and /stop."
+        text: Self.conferenceCommandRefusal
       )
     }
 
@@ -75,9 +83,7 @@ private extension MessageRouter {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
         target: .reply(to: message, mode: mode),
-        text: conferenceProfile
-          ? "Ask for today's case, send your own proposed solution, or ask for your submission status."
-          : CommandReplies.help(mode: mode)
+        text: conferenceProfile ? Self.conferenceHelp : CommandReplies.help(mode: mode)
       )
     case .doctor:
       return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: nil)
