@@ -75,14 +75,17 @@ struct DaemonBuilder: Sendable {
       conferenceTools: conference.tools
     )
 
-    let learning = conference.enabled
-      ? nil
-      : makeLearningService(
+    let learning: ScheduledLearningService?
+    if conference.enabled {
+      learning = nil
+    } else {
+      learning = makeLearningService(
         roster: roster,
         cooldown: cooldown,
         costResolver: costResolver,
         signal: coordination.outboxSignal
       )
+    }
     let consumers = makeRunnerConsumers(
       coordination: coordination,
       agentStack: agentStack,
