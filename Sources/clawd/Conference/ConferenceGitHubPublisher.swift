@@ -57,7 +57,7 @@ struct ConferenceGitHubPublisher: ConferencePublishing {
   func publish(_ request: ConferencePublicationRequest) async throws -> ConferencePublication {
     let repository = try repositoryIdentity(request.repositoryURL)
     let workspace = try validatedWorkspace(request.workspacePath)
-    try validateCommit(request, workspace: workspace)
+    try await validateCommit(request, workspace: workspace)
 
     let branch = "conference/\(request.submissionID.uuidString.lowercased())"
     try await push(
@@ -116,7 +116,8 @@ private extension ConferenceGitHubPublisher {
     guard components.count == 2 else {
       throw ConferencePublicationError.invalidRepository
     }
-    let name = components[1].hasSuffix(".git")
+    let name =
+      components[1].hasSuffix(".git")
       ? String(components[1].dropLast(4))
       : components[1]
     guard validRepositoryPart(components[0]), validRepositoryPart(name) else {
@@ -126,9 +127,10 @@ private extension ConferenceGitHubPublisher {
   }
 
   func validRepositoryPart(_ value: String) -> Bool {
-    !value.isEmpty && value.count <= 100 && value.allSatisfy {
-      $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "."
-    }
+    !value.isEmpty && value.count <= 100
+      && value.allSatisfy {
+        $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "."
+      }
   }
 
   func validatedWorkspace(_ raw: String) throws -> String {
@@ -282,7 +284,9 @@ private extension ConferenceGitHubPublisher {
     branch: String
   ) async throws -> PullRequest {
     let body = CreatePullRequest(
-      title: "Conference Coding Challenge submission \(request.submissionID.uuidString.lowercased())",
+      title: """
+        Conference Coding Challenge submission \(request.submissionID.uuidString.lowercased())
+        """,
       head: branch,
       base: request.baseBranch,
       body: "Generated implementation of the participant's submitted proposal.",
