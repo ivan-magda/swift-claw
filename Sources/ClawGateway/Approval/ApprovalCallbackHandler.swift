@@ -159,7 +159,7 @@ private extension ApprovalCallbackHandler {
         approval.reason == .coderSubmit && approval.tool == CoderToolNames.submit
       let conferenceSubmission =
         approval.reason == .conferenceSubmit && approval.tool == ConferenceToolNames.submit
-          && callback.fromUserId == requester
+        && callback.fromUserId == requester
       guard genericCoder || conferenceSubmission else {
         return nil
       }
