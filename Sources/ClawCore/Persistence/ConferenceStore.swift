@@ -6,6 +6,10 @@ public enum ConferenceSubmissionInsert: Sendable, Equatable {
 }
 
 public protocol ConferenceStore: Sendable {
+  /// Returns the exact user-message text that created `runID`, but only when the persisted run,
+  /// session and requester match the approved conference origin.
+  func sourceAnswer(for origin: ConferenceApprovedOrigin) throws(StoreError) -> String?
+
   func insertSubmission(
     id: UUID,
     prepared: PreparedConferenceSubmission,
@@ -51,6 +55,8 @@ public protocol ConferenceStore: Sendable {
 
 public struct DisabledConferenceStore: ConferenceStore {
   public init() {}
+
+  public func sourceAnswer(for origin: ConferenceApprovedOrigin) throws(StoreError) -> String? { nil }
 
   public func insertSubmission(
     id: UUID,
