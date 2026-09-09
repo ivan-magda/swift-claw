@@ -5,8 +5,6 @@ public enum ConferenceSubmissionInsert: Sendable, Equatable {
   case existing(ConferenceSubmission)
 }
 
-/// Persistence seam for the conference workflow. Every state transition is a compare-and-set so a
-/// restart or a second service loop cannot duplicate a coding run.
 public protocol ConferenceStore: Sendable {
   func insertSubmission(
     id: UUID,
@@ -20,23 +18,18 @@ public protocol ConferenceStore: Sendable {
   func submission(participantUserID: Int64, caseID: String) throws(StoreError)
     -> ConferenceSubmission?
 
-  /// Atomically claims the oldest queued submission. Nil means the queue is empty.
   func claimNextQueued(now: Date) throws(StoreError) -> ConferenceSubmission?
 
-  /// Attaches the single admitted Coder job to the claimed submission.
   func attachCoderJob(
     submissionID: UUID,
     coderJobID: UUID,
     now: Date
   ) throws(StoreError) -> ConferenceSubmission?
 
-  /// A busy/unavailable Coder releases a claim back to the durable FIFO without changing the answer.
   func requeue(submissionID: UUID, now: Date) throws(StoreError) -> ConferenceSubmission?
 
   func runningSubmissions() throws(StoreError) -> [ConferenceSubmission]
 
-  /// Commits a terminal projection of the linked Coder result. Replaying the same terminal result is
-  /// idempotent; a different terminal state after completion is refused by returning the stored row.
   func finish(
     submissionID: UUID,
     state: ConferenceSubmissionState,
@@ -46,10 +39,16 @@ public protocol ConferenceStore: Sendable {
     failureReason: String?,
     now: Date
   ) throws(StoreError) -> ConferenceSubmission?
+
+  /// Terminal rows remain here until their idempotent outbox notice is durably claimed.
+  func pendingNotifications() throws(StoreError) -> [ConferenceSubmission]
+
+  func markNotificationEnqueued(
+    submissionID: UUID,
+    now: Date
+  ) throws(StoreError) -> ConferenceSubmission?
 }
 
-/// Keeps existing composition/test fixtures source-compatible when conference mode is absent.
-/// Production always wires the GRDB store after the conference migration has run.
 public struct DisabledConferenceStore: ConferenceStore {
   public init() {}
 
@@ -91,6 +90,13 @@ public struct DisabledConferenceStore: ConferenceStore {
     branch: String?,
     commit: String?,
     failureReason: String?,
+    now: Date
+  ) throws(StoreError) -> ConferenceSubmission? { nil }
+
+  public func pendingNotifications() throws(StoreError) -> [ConferenceSubmission] { [] }
+
+  public func markNotificationEnqueued(
+    submissionID: UUID,
     now: Date
   ) throws(StoreError) -> ConferenceSubmission? { nil }
 }
