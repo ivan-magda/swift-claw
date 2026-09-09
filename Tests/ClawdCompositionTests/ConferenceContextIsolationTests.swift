@@ -47,7 +47,10 @@ import Testing
         roster: providerStack.roster,
         cooldown: cooldown,
         workspace: workspace,
-        costResolver: CostResolver(priceTable: PriceFileLoader.load(), referenceUSDPerToken: 0.00001),
+        costResolver: CostResolver(
+          priceTable: PriceFileLoader.load(),
+          referenceUSDPerToken: 0.00001
+        ),
         sandbox: sandbox,
         mcpTools: [],
         conferenceProfile: conferenceProfile
