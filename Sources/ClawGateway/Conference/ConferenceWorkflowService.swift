@@ -56,7 +56,8 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     _ prepared: PreparedConferenceSubmission,
     context: ToolExecutionContext
   ) throws -> ConferenceSubmission {
-    guard prepared.caseSnapshot == try currentCase() else {
+    let activeCase = try currentCase()
+    guard prepared.caseSnapshot == activeCase else {
       throw ConferenceError.staleCase
     }
     guard let origin = ConferenceApprovedOrigin(context: context) else {
