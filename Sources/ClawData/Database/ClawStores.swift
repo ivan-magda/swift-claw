@@ -43,7 +43,7 @@ public struct ClawStores: Sendable {
     scheduleCommands: any ScheduleCommandStore,
     approvals: any ApprovalStore,
     coderJobs: any CoderJobStore,
-    conference: any ConferenceStore,
+    conference: any ConferenceStore = DisabledConferenceStore(),
     learning: any LearningWorkflowStore
   ) {
     self.allowlist = allowlist
