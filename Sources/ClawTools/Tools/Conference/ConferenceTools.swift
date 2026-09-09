@@ -1,12 +1,6 @@
 import ClawCore
 import Foundation
 
-public enum ConferenceToolNames {
-  public static let current = "challenge_current"
-  public static let submit = "challenge_submit"
-  public static let status = "challenge_status"
-}
-
 public struct ConferenceCurrentTool: Tool {
   private let service: any ConferenceServing
 
@@ -294,7 +288,7 @@ private enum ConferenceToolOutput {
     case ConferenceError.invalidAnswer(let reason): return reason
     case ConferenceError.duplicateSubmission(let id):
       return "You already submitted this case as \(id.uuidString.lowercased())."
-    case ConferenceError.coderUnavailable: return "The conference Coder is unavailable."
+    case ConferenceError.coderUnavailable(_): return "The conference Coder is unavailable."
     case is StoreError: return "Conference storage is unavailable."
     default: return "Conference workflow failed."
     }
