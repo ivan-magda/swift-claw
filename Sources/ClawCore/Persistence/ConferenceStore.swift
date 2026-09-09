@@ -56,7 +56,9 @@ public protocol ConferenceStore: Sendable {
 public struct DisabledConferenceStore: ConferenceStore {
   public init() {}
 
-  public func sourceAnswer(for origin: ConferenceApprovedOrigin) throws(StoreError) -> String? { nil }
+  public func sourceAnswer(
+    for origin: ConferenceApprovedOrigin
+  ) throws(StoreError) -> String? { nil }
 
   public func insertSubmission(
     id: UUID,
