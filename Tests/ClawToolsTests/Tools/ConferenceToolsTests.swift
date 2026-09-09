@@ -26,8 +26,9 @@ import Testing
       return
     }
 
+    let expectedTarget = "conference:day-1:https://github.com/wowlocal/crew18-sim@abc123"
     #expect(action.approvalReason == .conferenceSubmit)
-    #expect(action.canonicalTarget == "conference:day-1:https://github.com/wowlocal/crew18-sim@abc123")
+    #expect(action.canonicalTarget == expectedTarget)
     #expect(action.guardTexts.contains(answer))
 
     let decoded = try JSONDecoder().decode(
