@@ -212,6 +212,7 @@ public enum ConferenceError: Error, Sendable, Equatable {
   case disabled
   case noActiveCase
   case invalidAnswer(String)
+  case answerMismatch
   case invalidContext
   case duplicateSubmission(UUID)
   case notFound
