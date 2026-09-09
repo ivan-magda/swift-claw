@@ -6,7 +6,7 @@ import Testing
 @testable import clawd
 
 @Suite struct ConferenceSecurityBoundaryTests {
-  @Test func coderUsesDedicatedHomeAndDropsAmbientGitHubAndSSHCredentials() async throws {
+  @Test func coderUsesDedicatedHomeAndDropsAllGitHubPublicationCredentials() async throws {
     let root = try makeTemporaryRoot(prefix: "conference-coder-boundary")
     defer { try? FileManager.default.removeItem(at: root) }
     let coderHome = root.appendingPathComponent("coder-home", isDirectory: true)
@@ -26,14 +26,16 @@ import Testing
       "GITHUB_TOKEN": "personal-github-token",
       "GH_CONFIG_DIR": "/Users/ivan/.config/gh",
       "SSH_AUTH_SOCK": "/tmp/personal-ssh-agent",
+      "GIT_ASKPASS": "/Users/ivan/bin/askpass",
     ])
 
     #expect(isolated["HOME"] == root.appendingPathComponent("conference-home").path)
     #expect(isolated["CODEX_HOME"] == coderHome.path)
-    #expect(isolated["GH_TOKEN"] == "conference-bot-token")
+    #expect(isolated["GH_TOKEN"] == nil)
     #expect(isolated["GITHUB_TOKEN"] == nil)
     #expect(isolated["GH_CONFIG_DIR"] == nil)
     #expect(isolated["SSH_AUTH_SOCK"] == nil)
+    #expect(isolated["GIT_ASKPASS"] == nil)
   }
 
   @Test func startupRejectsGitHubCredentialForWrongActor() async throws {
