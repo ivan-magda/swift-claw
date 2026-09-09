@@ -332,6 +332,8 @@ private enum ConferenceToolOutput {
       return "There is no active conference case."
     case ConferenceError.invalidContext:
       return "A verified participant identity is required."
+    case ConferenceError.answerMismatch:
+      return "The submitted answer must exactly match your message; nothing was queued."
     case ConferenceError.forbidden:
       return "That submission belongs to another participant."
     case ConferenceError.notFound:
