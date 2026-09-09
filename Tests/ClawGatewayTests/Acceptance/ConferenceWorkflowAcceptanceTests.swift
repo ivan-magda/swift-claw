@@ -56,17 +56,14 @@ import Testing
     let runner = Task { try await service.run() }
     defer { runner.cancel() }
 
-    let completed = try #require(
-      try await pollUntil {
-        guard let current = try submissions.submission(id: queued.id),
-          current.state == .completed,
-          current.notificationEnqueued
-        else {
-          return nil
-        }
-        return current
+    let finished = try await pollUntilTrue {
+      guard let current = try submissions.submission(id: queued.id) else {
+        return false
       }
-    )
+      return current.state == .completed && current.notificationEnqueued
+    }
+    #expect(finished)
+    let completed = try #require(try submissions.submission(id: queued.id))
 
     #expect(completed.answer == answer)
     #expect(completed.pullRequestURL == "https://github.com/wowlocal/crew18-sim/pull/42")
