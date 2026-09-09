@@ -336,17 +336,40 @@ private extension ConferenceWorkflowService {
         failureReason: nil,
         now: now()
       )
-    } catch ConferencePublicationError.actorMismatch {
-      try finishWithoutCoderResult(
-        submission,
-        state: .needsReview,
-        reason: "Pull request was not created by the configured conference bot actor."
-      )
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch let error as ConferencePublicationError {
+      try handlePublicationError(error, submission: submission)
     } catch {
       try finishWithoutCoderResult(
         submission,
         state: .needsReview,
         reason: "Coder completed, but deterministic GitHub publication could not be confirmed."
+      )
+    }
+  }
+
+  func handlePublicationError(
+    _ error: ConferencePublicationError,
+    submission: ConferenceSubmission
+  ) throws {
+    switch error {
+    case .pushFailed, .apiFailed:
+      logger.warning(
+        "conference publication temporarily unavailable",
+        metadata: ["submission": "\(submission.id.uuidString)"]
+      )
+    case .actorMismatch:
+      try finishWithoutCoderResult(
+        submission,
+        state: .needsReview,
+        reason: "Pull request was not created by the configured conference bot actor."
+      )
+    case .invalidRepository, .invalidWorkspace, .invalidCommit:
+      try finishWithoutCoderResult(
+        submission,
+        state: .needsReview,
+        reason: "Coder result did not satisfy the deterministic publication boundary."
       )
     }
   }
