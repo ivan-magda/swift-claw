@@ -48,9 +48,7 @@ public struct ConferenceStoreGRDB: ConferenceStore {
   }
 
   public func submission(id: UUID) throws(StoreError) -> ConferenceSubmission? {
-    try database.readMapping { db in
-      try Self.fetch(db, id: id)
-    }
+    try database.readMapping { db in try Self.fetch(db, id: id) }
   }
 
   public func submission(
@@ -88,11 +86,7 @@ public struct ConferenceStoreGRDB: ConferenceStore {
           ConferenceSubmissionState.queued.rawValue,
         ]
       )
-      guard db.changesCount == 1,
-        let uuid = UUID(uuidString: id)
-      else {
-        return nil
-      }
+      guard db.changesCount == 1, let uuid = UUID(uuidString: id) else { return nil }
       return try Self.fetch(db, id: uuid)
     }
   }
@@ -172,12 +166,52 @@ public struct ConferenceStoreGRDB: ConferenceStore {
         sql: """
           UPDATE conference_submissions
           SET state = ?, pull_request_url = ?, branch = ?, commit_sha = ?, failure_reason = ?,
-              updated_ts = ?
+              notification_enqueued = 0, updated_ts = ?
           WHERE id = ? AND state = ?
           """,
         arguments: [
           state.rawValue, pullRequestURL, branch, commit, failureReason,
           EpochSecondCodec.epoch(now), submissionID.uuidString,
+          ConferenceSubmissionState.running.rawValue,
+        ]
+      )
+      return try Self.fetch(db, id: submissionID)
+    }
+  }
+
+  public func pendingNotifications() throws(StoreError) -> [ConferenceSubmission] {
+    try database.readMapping { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+          SELECT * FROM conference_submissions
+          WHERE notification_enqueued = 0
+            AND state NOT IN (?, ?)
+          ORDER BY updated_ts ASC, id ASC
+          """,
+        arguments: [
+          ConferenceSubmissionState.queued.rawValue,
+          ConferenceSubmissionState.running.rawValue,
+        ]
+      ).map(Self.decode)
+    }
+  }
+
+  public func markNotificationEnqueued(
+    submissionID: UUID,
+    now: Date
+  ) throws(StoreError) -> ConferenceSubmission? {
+    try database.writeMapping { db in
+      try db.execute(
+        sql: """
+          UPDATE conference_submissions
+          SET notification_enqueued = 1, updated_ts = ?
+          WHERE id = ? AND notification_enqueued = 0
+            AND state NOT IN (?, ?)
+          """,
+        arguments: [
+          EpochSecondCodec.epoch(now), submissionID.uuidString,
+          ConferenceSubmissionState.queued.rawValue,
           ConferenceSubmissionState.running.rawValue,
         ]
       )
@@ -238,6 +272,7 @@ private extension ConferenceStoreGRDB {
       coderJobID = nil
     }
 
+    let notificationEnqueued: Bool = row["notification_enqueued"]
     return ConferenceSubmission(
       id: id,
       participantUserID: row["participant_user_id"],
@@ -250,6 +285,7 @@ private extension ConferenceStoreGRDB {
       branch: row["branch"],
       commit: row["commit_sha"],
       failureReason: row["failure_reason"],
+      notificationEnqueued: notificationEnqueued,
       createdAt: createdAt,
       updatedAt: updatedAt
     )
