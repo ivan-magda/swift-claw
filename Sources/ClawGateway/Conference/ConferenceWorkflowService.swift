@@ -5,6 +5,7 @@ import ServiceLifecycle
 
 public actor ConferenceWorkflowService: ConferenceServing, Service {
   private let config: ConferenceConfig
+  private let executionPolicyID: String
   private let prepareSource: @Sendable (ConferenceCase) async throws -> String
   private let validateSubmission: @Sendable (PreparedConferenceSubmission) async throws -> Void
   private let store: any ConferenceStore
@@ -19,6 +20,7 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
 
   public init(
     config: ConferenceConfig,
+    executionPolicyID: String,
     prepareSource: @escaping @Sendable (ConferenceCase) async throws -> String,
     validateSubmission: @escaping @Sendable (PreparedConferenceSubmission) async throws -> Void,
     store: any ConferenceStore,
@@ -31,6 +33,7 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.config = config
+    self.executionPolicyID = executionPolicyID
     self.prepareSource = prepareSource
     self.validateSubmission = validateSubmission
     self.store = store
@@ -61,13 +64,20 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     guard answer.count <= 12_000 else {
       throw ConferenceError.invalidAnswer("Answer must be at most 12,000 characters.")
     }
-    return PreparedConferenceSubmission(caseSnapshot: activeCase, answer: answer)
+    return PreparedConferenceSubmission(
+      caseSnapshot: activeCase,
+      answer: answer,
+      executionPolicyID: executionPolicyID
+    )
   }
 
   public func submit(
     _ prepared: PreparedConferenceSubmission,
     context: ToolExecutionContext
   ) async throws -> ConferenceSubmission {
+    guard prepared.executionPolicyID == executionPolicyID else {
+      throw ConferenceError.staleApproval
+    }
     guard prepared == (try prepareSubmission(answer: prepared.answer)) else {
       throw ConferenceError.staleCase
     }
@@ -156,7 +166,8 @@ private extension ConferenceWorkflowService {
   ) throws -> ConferenceSubmission {
     guard existing.origin == origin,
       existing.answer == prepared.answer,
-      existing.caseSnapshot == prepared.caseSnapshot
+      existing.caseSnapshot == prepared.caseSnapshot,
+      existing.executionPolicyID == prepared.executionPolicyID
     else {
       throw ConferenceError.duplicateSubmission(existing.id)
     }
@@ -175,10 +186,16 @@ private extension ConferenceWorkflowService {
       return
     }
     do {
+      guard submission.executionPolicyID == executionPolicyID else {
+        throw CoderError.staleApproval
+      }
       // Old queued cases retain their own repository and baseline after the question changes.
       let sourcePath = try await prepareSource(submission.caseSnapshot)
       try Task.checkCancellation()
       let prepared = try await coder.prepare(coderRequest(for: submission, sourcePath: sourcePath))
+      guard prepared.executionPolicyID == submission.executionPolicyID else {
+        throw CoderError.staleApproval
+      }
       let job = try await coder.submit(prepared, context: submission.origin.executionContext)
       guard
         let attached = try store.attachCoderJob(
@@ -200,6 +217,8 @@ private extension ConferenceWorkflowService {
         reason: "Coder recovery or renewed approval is required before this submission can run."
       )
     } catch CoderError.unavailable {
+      _ = try store.requeue(submissionID: submission.id, now: now())
+    } catch ConferenceSourceError.gitFailed {
       _ = try store.requeue(submissionID: submission.id, now: now())
     } catch let error as StoreError {
       logger.error("conference Coder linkage unavailable: \(error)")
@@ -336,7 +355,8 @@ private extension ConferenceWorkflowService {
           submissionID: submission.id,
           proposal: PreparedConferenceSubmission(
             caseSnapshot: submission.caseSnapshot,
-            answer: submission.answer
+            answer: submission.answer,
+            executionPolicyID: submission.executionPolicyID
           ),
           workspacePath: workspace,
           startingCommit: startingCommit,

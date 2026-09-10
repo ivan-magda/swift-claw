@@ -6,6 +6,7 @@ import Foundation
 
 struct CoderComposition: Sendable {
   let service: CoderService?
+  let executionPolicyID: String
   let tools: [any Tool]
   let checks: [DoctorReport.Check]
 }
@@ -60,7 +61,12 @@ extension DaemonBuilder {
           policyID: Self.unavailableCoderPolicyID,
           coordination: coordination
         )
-      return CoderComposition(service: service, tools: [], checks: CoderHealthRows.disabled)
+      return CoderComposition(
+        service: service,
+        executionPolicyID: Self.unavailableCoderPolicyID,
+        tools: [],
+        checks: CoderHealthRows.disabled
+      )
     }
 
     do {
@@ -155,7 +161,12 @@ private extension DaemonBuilder {
       )
     }
 
-    return CoderComposition(service: service, tools: tools, checks: checks)
+    return CoderComposition(
+      service: service,
+      executionPolicyID: policy.id,
+      tools: tools,
+      checks: checks
+    )
   }
 
   func unavailableCoder(
@@ -171,6 +182,7 @@ private extension DaemonBuilder {
 
     return CoderComposition(
       service: service,
+      executionPolicyID: Self.unavailableCoderPolicyID,
       tools: [
         CoderStatusTool(service: service, redactor: redactor),
         CoderCancelTool(service: service, redactor: redactor),
@@ -180,8 +192,10 @@ private extension DaemonBuilder {
   }
 
   func isDescendant(_ childPath: String, of rootPath: String) -> Bool {
-    let child = URL(fileURLWithPath: childPath).standardizedFileURL.path
-    let root = URL(fileURLWithPath: rootPath).standardizedFileURL.path
+    let child = URL(fileURLWithPath: childPath)
+      .resolvingSymlinksInPath().standardizedFileURL.path
+    let root = URL(fileURLWithPath: rootPath)
+      .resolvingSymlinksInPath().standardizedFileURL.path
     return child == root || child.hasPrefix(root.hasSuffix("/") ? root : root + "/")
   }
 }

@@ -185,6 +185,11 @@ Telegram guarantees lookups for other users only when the bot is an administrato
 uncertain lookup leaves the approval pending. Keep group mode on its required separate nonpersonal
 state root; see [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup).
 
+The separate [conference challenge profile](CONFERENCE.md) requires a dedicated nonpersonal
+host/account and state root. Its supervisor publishes with a dedicated GitHub bot-user token;
+that token is removed from Coder's child environment. Configure and authenticate the conference
+Codex home within the state root, including after symlink resolution, before starting the service.
+
 ### Staying on after logout
 
 - **Linux:** `sudo loginctl enable-linger $USER` lets the user manager run without a

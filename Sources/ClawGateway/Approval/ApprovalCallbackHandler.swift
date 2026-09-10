@@ -157,7 +157,9 @@ private extension ApprovalCallbackHandler {
     if let context, context.mode == .group {
       guard
         context.origin == .interactive,
-        let requester = context.requesterUserId,
+        context.requesterUserId != nil,
+        approval.reason == .coderSubmit,
+        approval.tool == CoderToolNames.submit,
         context.sessionId == approval.sessionId,
         context.deliveryTarget.chatId == approval.ownerUserId,
         callback.chatId == context.deliveryTarget.chatId,
@@ -169,15 +171,6 @@ private extension ApprovalCallbackHandler {
           userId: callback.fromUserId
         ) == .allowed(.group)
       else {
-        return nil
-      }
-
-      let genericCoder =
-        approval.reason == .coderSubmit && approval.tool == CoderToolNames.submit
-      let conferenceSubmission =
-        approval.reason == .conferenceSubmit && approval.tool == ConferenceToolNames.submit
-        && callback.fromUserId == requester
-      guard genericCoder || conferenceSubmission else {
         return nil
       }
 

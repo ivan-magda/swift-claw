@@ -38,6 +38,7 @@ import Testing
         activeCase: fixture.item,
         expectedGitHubActor: "crew18-bot"
       ),
+      executionPolicyID: composition.executionPolicyID,
       prepareSource: { try await source.prepare($0) },
       validateSubmission: { try await judge.check($0) },
       store: fixture.builder.stores.conference,
@@ -234,7 +235,7 @@ private struct ConferencePassingJudge: LLMProvider {
   }
 }
 
-private func conferenceGit(_ arguments: [String]) async throws -> String {
+func conferenceGit(_ arguments: [String]) async throws -> String {
   let runner = SwiftSubprocessRunner(
     executablePath: "/usr/bin/git",
     environmentForTesting: ["GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"]
@@ -292,6 +293,7 @@ private actor ConferenceLocalGitHub: HTTPExecuting {
 
   func execute(_ request: HTTPRequest) async throws -> HTTPResult {
     #expect(request.headers["Authorization"] == "Bearer fixture-bot-token")
+    #expect(request.headers["User-Agent"] == "crew18-bot")
     let url = try #require(URLComponents(string: request.url))
     #expect(url.path == "/repos/wowlocal/crew18-sim/pulls")
     if request.method == .get {

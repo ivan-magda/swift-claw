@@ -17,6 +17,8 @@ struct ConferenceWorkflowFixture {
   let publisher: ConferenceTestPublisher
   let service: ConferenceWorkflowService
 
+  static let executionPolicyID = "conference-test-policy"
+
   static let item = ConferenceCase(
     id: "day-1",
     title: "Accessibility regression",
@@ -30,7 +32,11 @@ struct ConferenceWorkflowFixture {
     judge: @escaping @Sendable (PreparedConferenceSubmission) async throws -> Void = { _ in },
     busyAdmissions: Int = 0,
     publicationFailures: Int = 0,
-    observedBaseline: String? = nil
+    observedBaseline: String? = nil,
+    prepareSource: @escaping @Sendable (ConferenceCase) async throws -> String = {
+      "/conference/source/\($0.id)"
+    },
+    notifyOutbox: @escaping @Sendable () -> Void = {}
   ) throws {
     queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -50,28 +56,43 @@ struct ConferenceWorkflowFixture {
       outbox: outbox,
       coder: coder,
       publisher: publisher,
-      judge: judge
+      judge: judge,
+      prepareSource: prepareSource,
+      notifyOutbox: notifyOutbox
     )
   }
 
   func origin(answer: String, userID: Int64 = 101) throws -> ConferenceApprovedOrigin {
     try ConferenceApprovedOriginFixture.make(
       queue: queue,
-      prepared: PreparedConferenceSubmission(caseSnapshot: Self.item, answer: answer),
+      prepared: PreparedConferenceSubmission(
+        caseSnapshot: Self.item,
+        answer: answer,
+        executionPolicyID: Self.executionPolicyID
+      ),
       userID: userID,
       updateID: userID
     )
   }
 
-  func restarted(activeCase: ConferenceCase = Self.item) -> ConferenceWorkflowService {
+  func restarted(
+    activeCase: ConferenceCase = Self.item,
+    executionPolicyID: String = Self.executionPolicyID,
+    coder: ConferenceTestCoder? = nil,
+    notifyOutbox: @escaping @Sendable () -> Void = {}
+  ) -> ConferenceWorkflowService {
     Self.service(
       item: activeCase,
       store: store,
       jobs: jobs,
       outbox: outbox,
-      coder: coder,
+      coder: coder ?? self.coder,
       publisher: publisher,
-      judge: { _ in Issue.record("A queued submission must not be judged again after restart") }
+      judge: { _ in
+        Issue.record("A queued submission must not be judged again after restart")
+      },
+      executionPolicyID: executionPolicyID,
+      notifyOutbox: notifyOutbox
     )
   }
 
@@ -82,19 +103,25 @@ struct ConferenceWorkflowFixture {
     outbox: OutboxStoreGRDB,
     coder: ConferenceTestCoder,
     publisher: ConferenceTestPublisher,
-    judge: @escaping @Sendable (PreparedConferenceSubmission) async throws -> Void
+    judge: @escaping @Sendable (PreparedConferenceSubmission) async throws -> Void,
+    executionPolicyID: String = Self.executionPolicyID,
+    prepareSource: @escaping @Sendable (ConferenceCase) async throws -> String = {
+      "/conference/source/\($0.id)"
+    },
+    notifyOutbox: @escaping @Sendable () -> Void = {}
   ) -> ConferenceWorkflowService {
     ConferenceWorkflowService(
       config: ConferenceConfig(enabled: true, activeCase: item, expectedGitHubActor: "crew18-bot"),
-      prepareSource: { "/conference/source/\($0.id)" },
+      executionPolicyID: executionPolicyID,
+      prepareSource: prepareSource,
       validateSubmission: judge,
       store: store,
       coder: coder,
       coderJobs: jobs,
       publisher: publisher,
       outbox: outbox,
-      notifyOutbox: {},
-      logger: Logger(label: "conference-acceptance")
+      notifyOutbox: notifyOutbox,
+      logger: TestLog.silent
     )
   }
 
@@ -125,13 +152,20 @@ struct ConferenceWorkflowFixture {
 
 actor ConferenceTestCoder: CoderServing {
   private let store: CoderJobStoreGRDB
+  private let executionPolicyID: String
   private var busyAdmissions: Int
   private let observedBaseline: String?
   private(set) var admissions = 0
   private(set) var requests: [CoderRequest] = []
 
-  init(store: CoderJobStoreGRDB, busyAdmissions: Int, observedBaseline: String?) {
+  init(
+    store: CoderJobStoreGRDB,
+    busyAdmissions: Int = 0,
+    observedBaseline: String? = nil,
+    executionPolicyID: String = ConferenceWorkflowFixture.executionPolicyID
+  ) {
     self.store = store
+    self.executionPolicyID = executionPolicyID
     self.busyAdmissions = busyAdmissions
     self.observedBaseline = observedBaseline
   }
@@ -146,7 +180,7 @@ actor ConferenceTestCoder: CoderServing {
       canonicalSource: path,
       checkoutPath: path,
       commonGitDirectory: "\(path)/.git",
-      executionPolicyID: "conference-test-policy",
+      executionPolicyID: executionPolicyID,
       publicationRepository: nil
     )
   }

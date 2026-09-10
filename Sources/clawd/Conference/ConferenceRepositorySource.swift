@@ -5,20 +5,22 @@ import Foundation
 struct ConferenceRepositorySource: Sendable {
   private let stateRoot: URL
   private let sourceHome: URL
-  private let git: SwiftSubprocessRunner
+  private let git: any SubprocessRunning
 
-  init(stateRoot: URL) {
+  init(stateRoot: URL, git: (any SubprocessRunning)? = nil) {
     self.stateRoot = stateRoot.resolvingSymlinksInPath().standardizedFileURL
     sourceHome = stateRoot.appendingPathComponent("conference-source-home", isDirectory: true)
-    git = SwiftSubprocessRunner(
-      executablePath: "/usr/bin/git",
-      environmentForTesting: [
-        "HOME": sourceHome.path,
-        "GIT_CONFIG_GLOBAL": "/dev/null",
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_TERMINAL_PROMPT": "0",
-      ]
-    )
+    self.git =
+      git
+      ?? SwiftSubprocessRunner(
+        executablePath: "/usr/bin/git",
+        environmentForTesting: [
+          "HOME": sourceHome.path,
+          "GIT_CONFIG_GLOBAL": "/dev/null",
+          "GIT_CONFIG_NOSYSTEM": "1",
+          "GIT_TERMINAL_PROMPT": "0",
+        ]
+      )
   }
 
   func prepare(_ item: ConferenceCase) async throws -> String {
@@ -39,50 +41,52 @@ struct ConferenceRepositorySource: Sendable {
       do {
         try await validateCachedSource(item, at: destination)
         return destination.path
-      } catch is CancellationError {
-        throw CancellationError()
-      } catch {
+      } catch ConferenceSourceError.baselineMismatch, ConferenceSourceError.sourceMismatch {
         try FileManager.default.removeItem(at: destination)
       }
     }
 
-    try await run([
-      "clone", "--no-checkout", "--no-tags", "--template=", "--",
-      item.repositoryURL, destination.path,
-    ])
-    try await validateCachedSource(item, at: destination)
-    return destination.path
+    do {
+      try await run([
+        "clone", "--no-checkout", "--no-tags", "--template=", "--",
+        item.repositoryURL, destination.path,
+      ])
+      try await validateCachedSource(item, at: destination)
+      return destination.path
+    } catch {
+      try? FileManager.default.removeItem(at: destination)
+      throw error
+    }
   }
-}
-
-enum ConferenceSourceError: Error, Sendable, Equatable {
-  case gitFailed
-  case baselineMismatch
-  case sourceMismatch
 }
 
 private extension ConferenceRepositorySource {
   func validateCachedSource(_ item: ConferenceCase, at destination: URL) async throws {
-    let checkout = try await output([
-      "-C", destination.path, "rev-parse", "--show-toplevel",
-    ])
+    let checkout = try await output(
+      ["-C", destination.path, "rev-parse", "--show-toplevel"],
+      failure: .sourceMismatch
+    )
     let canonicalCheckout = URL(fileURLWithPath: checkout)
       .resolvingSymlinksInPath().standardizedFileURL.path
     guard canonicalCheckout == destination.resolvingSymlinksInPath().standardizedFileURL.path else {
       throw ConferenceSourceError.sourceMismatch
     }
 
-    let origin = try await output([
-      "-C", destination.path, "remote", "get-url", "--all", "origin",
-    ])
+    let origin = try await output(
+      ["-C", destination.path, "remote", "get-url", "--all", "origin"],
+      failure: .sourceMismatch
+    )
     guard origin == item.repositoryURL else {
       throw ConferenceSourceError.sourceMismatch
     }
 
-    let resolved = try await output([
-      "-C", destination.path,
-      "rev-parse", "--verify", "--end-of-options", "\(item.baselineRef)^{commit}",
-    ])
+    let resolved = try await output(
+      [
+        "-C", destination.path,
+        "rev-parse", "--verify", "--end-of-options", "\(item.baselineRef)^{commit}",
+      ],
+      failure: .baselineMismatch
+    )
     guard resolved.caseInsensitiveCompare(item.baselineRef) == .orderedSame else {
       throw ConferenceSourceError.baselineMismatch
     }
@@ -114,13 +118,21 @@ private extension ConferenceRepositorySource {
     }
   }
 
-  func output(_ arguments: [String]) async throws -> String {
+  func output(
+    _ arguments: [String],
+    failure: ConferenceSourceError = .gitFailed
+  ) async throws -> String {
     let result = await git.run(command(arguments))
     if Task.isCancelled || result.termination == .cancelled {
       throw CancellationError()
     }
-    guard result.termination == .exited(0),
-      !result.stdout.truncated,
+    guard result.termination == .exited(0) else {
+      if case .exited = result.termination {
+        throw failure
+      }
+      throw ConferenceSourceError.gitFailed
+    }
+    guard !result.stdout.truncated,
       let text = String(data: result.stdout.bytes, encoding: .utf8)
     else {
       throw ConferenceSourceError.gitFailed

@@ -7,6 +7,7 @@ import Testing
 
 @Suite struct ConferenceSecurityBoundaryTests {
   @Test func coderUsesDedicatedHomeAndDropsAllGitHubPublicationCredentials() async throws {
+    // given
     let root = try makeTemporaryRoot(prefix: "conference-coder-boundary")
     defer { try? FileManager.default.removeItem(at: root) }
     let coderHome = root.appendingPathComponent("coder-home", isDirectory: true)
@@ -19,6 +20,7 @@ import Testing
     let http = ScriptedHTTPExecutor([])
     let builder = try CompositionAcceptance.makeBuilder(http: http, config: config)
 
+    // when
     let isolated = try builder.conferenceCoderEnvironment(environment: [
       "HOME": "/Users/ivan",
       "PATH": "/usr/bin:/bin",
@@ -29,6 +31,7 @@ import Testing
       "GIT_ASKPASS": "/Users/ivan/bin/askpass",
     ])
 
+    // then
     #expect(isolated["HOME"] == root.appendingPathComponent("conference-home").path)
     #expect(isolated["CODEX_HOME"] == coderHome.path)
     #expect(isolated["GH_TOKEN"] == nil)
@@ -38,7 +41,33 @@ import Testing
     #expect(isolated["GIT_ASKPASS"] == nil)
   }
 
+  @Test func coderRejectsConfigHomeSymlinkEscapingStateRoot() async throws {
+    // given
+    let root = try makeTemporaryRoot(prefix: "conference-coder-symlink")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let externalHome = try makeTemporaryRoot(prefix: "conference-external-coder-home")
+    defer { try? FileManager.default.removeItem(at: externalHome) }
+    let coderHome = root.appendingPathComponent("coder-home", isDirectory: true)
+    try FileManager.default.createSymbolicLink(at: coderHome, withDestinationURL: externalHome)
+    let config = try AppConfig.load(environment: [
+      AppConfig.EnvKey.stateRoot: root.path,
+      AppConfig.EnvKey.llmModel: CompositionAcceptance.qualifiedModel,
+      AppConfig.EnvKey.coderEnabled: "true",
+      AppConfig.EnvKey.coderConfigHome: coderHome.path,
+    ])
+    let builder = try CompositionAcceptance.makeBuilder(
+      http: ScriptedHTTPExecutor([]),
+      config: config
+    )
+
+    // when / then
+    #expect(throws: ConferenceConfigError.isolatedCoderHomeRequired) {
+      _ = try builder.conferenceCoderEnvironment(environment: [:])
+    }
+  }
+
   @Test func startupRejectsGitHubCredentialForWrongActor() async throws {
+    // given
     let root = try makeTemporaryRoot(prefix: "conference-github-actor")
     defer { try? FileManager.default.removeItem(at: root) }
     let config = try AppConfig.load(environment: [
@@ -61,6 +90,7 @@ import Testing
       expectedGitHubActor: "crew18-bot"
     )
 
+    // when
     do {
       try await builder.verifyConferenceGitHubActor(
         config: conference,
@@ -74,8 +104,10 @@ import Testing
       Issue.record("Unexpected GitHub actor verification error: \(error)")
     }
 
+    // then
     let recorded = try #require(await http.recorded.first)
     #expect(recorded.url == "https://api.github.com/user")
     #expect(recorded.headers["Authorization"] == "Bearer dedicated-token")
+    #expect(recorded.headers["User-Agent"] == conference.expectedGitHubActor)
   }
 }

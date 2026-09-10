@@ -16,6 +16,7 @@ SwiftPM package, executable `clawd`. The dependency graph is a layered DAG: **se
 - **Cross-cutting test diffs get an independent review of test value and redundancy alone** — a subagent where one is available, otherwise a separate pass with the diff re-read from scratch.
 - Changing a user-visible surface (command, flag, env var, default, secret, install/release step) → re-read the whole public set (`README.md`, `docs/GETTING_STARTED.md`, `docs/INSTALL.md`, `docs/CUSTOMIZATION.md`, `deploy/README.md`) and update every document the change actually reaches. They describe each other's state, so one edit usually invalidates a sibling — but do not edit unaffected siblings just to touch all five.
 - Touching `ClawMCP`, the LLM adapters and credential seam, or group/forum mode → read `docs/ARCHITECTURE.md` §10.3, §8, and §12.1 respectively before changing behavior.
+- Conference workflow → `docs/ARCHITECTURE.md` §13.3; deployment and live acceptance → `docs/CONFERENCE.md`.
 - **New normative detail belongs in `docs/ARCHITECTURE.md`; this file gets the pointer.** Add a rule here only when its absence would cause a mistake in a session that never opens the spec.
 
 ## Architectural invariants

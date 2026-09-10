@@ -12,3 +12,9 @@ public protocol ConferenceServing: Sendable {
     context: ToolExecutionContext
   ) async throws -> ConferenceSubmission?
 }
+
+public enum ConferenceSourceError: Error, Sendable, Equatable {
+  case gitFailed
+  case baselineMismatch
+  case sourceMismatch
+}

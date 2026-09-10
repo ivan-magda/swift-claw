@@ -1,7 +1,8 @@
 # Running the conference coding challenge
 
-The [implementation contract](design/conference-coding-challenge.md) defines scope and
-acceptance criteria. This guide covers deployment, daily operation and the live smoke test.
+The [architecture contract](ARCHITECTURE.md#133-conference-coding-challenge) defines the workflow;
+[acceptance notes](design/conference-coding-challenge.md) map automated coverage. This guide covers
+deployment, daily operation and the live smoke test.
 
 ## Deployment prerequisites
 
@@ -57,6 +58,8 @@ Do not paste credentials into case files, chat, PR descriptions or committed scr
 to Codex using the conference-only `CODEX_HOME` matching `CLAW_CODER_CONFIG_HOME`; do not copy a
 personal configuration directory with unrelated integrations. Keep the installed CLI and its
 required flags compatible with the existing Generic Coder configuration.
+The config home must remain within the state root after resolving symlinks; a path that only
+appears to be inside it is refused at startup.
 
 Startup refuses a missing token, wrong expected bot login, absent Coder, invalid case or
 invalid conference configuration. It also materializes and verifies the active public source
@@ -90,6 +93,12 @@ stored case snapshots; switching the active case does not change their answers o
 An old unconfirmed approval may be rejected as stale and require a fresh current-case request.
 Do not reuse a day ID with materially different conditions.
 
+Changing the selected Coder executable, PATH, profile or config home also invalidates pending
+approvals. Queued submissions keep the execution policy originally approved; if it differs at
+admission, or an older stored submission has no policy binding, the submission becomes
+`needs_review` without launching new Coder work. Arrange organizer review and renewed authorization;
+there is no automatic reapproval or participant resubmission path for an already queued answer.
+
 ## Live acceptance checklist
 
 Run this against the dedicated deployment before inviting participants. Keep a short receipt
@@ -120,6 +129,10 @@ submission, Coder result, branch and PR identities remain linked in the conferen
 state. Review `needs_review` manually; do not delete rows to force an automatic rerun. Keep
 retained Coder workspaces until their publication/review is settled.
 
+Transient source Git failures keep the submission queued at its original FIFO position, including
+same-second submissions, and preserve an existing source cache. Only known-invalid caches are
+replaced; a failed new clone or its validation removes the partial source for the next attempt.
+A source identity or baseline mismatch that persists after preparation requires review.
 Transient publication failures retry the same branch and look for an existing PR first.
 Persistent authentication, permission or push failures need operator repair. A closed,
 merged, non-draft or mismatched existing PR is not automatically replaced or modified.

@@ -53,3 +53,8 @@ for conservative recovery. Disabling Coder removes its tools and native probes b
 earlier jobs on restart; full doctor and daemon health keep their reservations and uncertainty visible.
 See [INSTALL.md](../docs/INSTALL.md#coder-prerequisites) and
 [LOCAL_DEV.md](../docs/LOCAL_DEV.md#coder-background-lifecycle-and-recovery).
+
+For the separate [conference challenge profile](../docs/CONFERENCE.md), use a dedicated
+nonpersonal service account, state root and GitHub bot-user token. Its Coder config home must
+resolve within that state root; the supervisor publishes draft PRs and removes the publication
+credential from Coder's environment. Follow the conference runbook before opening participant access.

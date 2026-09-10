@@ -20,7 +20,8 @@ import Testing
       id: UUID(),
       prepared: PreparedConferenceSubmission(
         caseSnapshot: first.caseSnapshot,
-        answer: "Another idea"
+        answer: "Another idea",
+        executionPolicyID: "replacement-policy"
       ),
       origin: first.origin,
       now: fixture.now.addingTimeInterval(1)
@@ -34,6 +35,7 @@ import Testing
     #expect(existing.id == first.id)
     #expect(existing.answer == first.answer)
     #expect(existing.origin == first.origin)
+    #expect(existing.executionPolicyID == fixture.executionPolicyID)
   }
 
   @Test func differentParticipantsHaveIndependentSubmissions() throws {
@@ -57,8 +59,16 @@ import Testing
   @Test func queueClaimIsFIFOAndCannotClaimSameRowTwice() throws {
     // given
     let fixture = try Fixture()
-    let first = try fixture.insert(userID: 101, answer: "First")
-    let second = try fixture.insert(userID: 202, answer: "Second", offset: 10)
+    let first = try fixture.insert(
+      userID: 101,
+      answer: "First",
+      id: #require(UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"))
+    )
+    let second = try fixture.insert(
+      userID: 202,
+      answer: "Second",
+      id: #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+    )
 
     // when
     let claimedFirst = try fixture.store.claimNextQueued(now: fixture.now.addingTimeInterval(20))
@@ -120,6 +130,7 @@ private extension ConferenceStoreTests {
     let queue: DatabaseQueue
     let store: ConferenceStoreGRDB
     let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let executionPolicyID = "conference-test-policy"
     let item = ConferenceCase(
       id: "day-1",
       title: "Accessibility",
@@ -138,22 +149,25 @@ private extension ConferenceStoreTests {
     func insert(
       userID: Int64,
       answer: String,
-      offset: TimeInterval = 0
+      id: UUID = UUID()
     ) throws -> ConferenceSubmission {
-      let prepared = PreparedConferenceSubmission(caseSnapshot: item, answer: answer)
-      let date = now.addingTimeInterval(offset)
+      let prepared = PreparedConferenceSubmission(
+        caseSnapshot: item,
+        answer: answer,
+        executionPolicyID: executionPolicyID
+      )
       let origin = try ConferenceApprovedOriginFixture.make(
         queue: queue,
         prepared: prepared,
         userID: userID,
         updateID: userID,
-        now: date
+        now: now
       )
       let result = try store.insertSubmission(
-        id: UUID(),
+        id: id,
         prepared: prepared,
         origin: origin,
-        now: date
+        now: now
       )
       guard case .inserted(let submission) = result else {
         throw StoreError.unexpected("Expected fresh submission")

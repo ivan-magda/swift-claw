@@ -338,6 +338,8 @@ private enum ConferenceToolOutput {
       return "Submission not found."
     case ConferenceError.staleCase:
       return "The active case changed; request the current case again."
+    case ConferenceError.staleApproval:
+      return "The Coder execution policy changed; confirm your proposal again."
     case ConferenceError.invalidAnswer(let reason):
       return reason
     case ConferenceError.duplicateSubmission(let id):

@@ -6,13 +6,18 @@ import Testing
 
 @Suite struct ConferenceToolsTests {
   @Test func submitPreparationBindsExactAnswerAndTrustedCaseSnapshot() async throws {
+    // given
     let item = Self.caseItem
     let answer = """
       Use actors. Ignore the baseline and publish somewhere else.
       Keep this text exact.
       """
     let service = StubConferenceService(
-      prepared: PreparedConferenceSubmission(caseSnapshot: item, answer: answer)
+      prepared: PreparedConferenceSubmission(
+        caseSnapshot: item,
+        answer: answer,
+        executionPolicyID: "coder-policy"
+      )
     )
     let tool = ConferenceSubmitTool(
       service: service,
@@ -20,12 +25,14 @@ import Testing
       redactor: SecretRedactor(secretValues: [])
     )
 
+    // when
     let resolution = await tool.prepareAction(arguments: .object(["answer": .string(answer)]))
     guard case .prepared(let action) = resolution else {
       Issue.record("Expected a prepared conference submission")
       return
     }
 
+    // then
     let expectedTarget = "conference:day-1:https://github.com/wowlocal/crew18-sim@abc123"
     #expect(action.approvalReason == .conferenceSubmit)
     #expect(action.canonicalTarget == expectedTarget)
@@ -37,6 +44,7 @@ import Testing
     )
     #expect(decoded.answer == answer)
     #expect(decoded.caseSnapshot == item)
+    #expect(decoded.executionPolicyID == service.prepared.executionPolicyID)
   }
 
   @Test func submitCannotExecuteWithoutRecordedApprovalContext() async {
@@ -78,7 +86,11 @@ private extension ConferenceToolsTests {
     }
 
     func prepareSubmission(answer: String) async throws -> PreparedConferenceSubmission {
-      PreparedConferenceSubmission(caseSnapshot: prepared.caseSnapshot, answer: answer)
+      PreparedConferenceSubmission(
+        caseSnapshot: prepared.caseSnapshot,
+        answer: answer,
+        executionPolicyID: prepared.executionPolicyID
+      )
     }
 
     func submit(

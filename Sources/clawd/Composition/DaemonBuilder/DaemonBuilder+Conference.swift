@@ -45,6 +45,7 @@ extension DaemonBuilder {
         headers: [
           "Accept": "application/vnd.github+json",
           "Authorization": "Bearer \(token)",
+          "User-Agent": expected,
           "X-GitHub-Api-Version": "2022-11-28",
         ],
         timeoutSeconds: 10,
@@ -104,6 +105,7 @@ extension DaemonBuilder {
     let signal = coordination.outboxSignal
     let service = ConferenceWorkflowService(
       config: conference,
+      executionPolicyID: coder.executionPolicyID,
       prepareSource: { try await source.prepare($0) },
       validateSubmission: { try await judge.check($0) },
       store: stores.conference,
@@ -122,6 +124,7 @@ extension DaemonBuilder {
       activeCase.baselineRef,
       activeCase.baseBranch,
       expectedActor,
+      coder.executionPolicyID,
     ])
     let redactor = SecretRedactor(secretValues: redactionValues)
     let tools: [any Tool] = [

@@ -58,36 +58,6 @@ import Testing
     #expect(grant["actor_user_id"] as Int64 == GroupApprovalFixture.participantId)
   }
 
-  @Test func conferenceSubmissionCanBeApprovedByOriginatingRequester() async throws {
-    let fixture = try GroupApprovalFixture(
-      reason: .conferenceSubmit,
-      tool: ConferenceToolNames.submit
-    )
-    let callbackHandler = handler(fixture)
-
-    _ = await callbackHandler.handle(
-      fixture.callback(from: GroupApprovalFixture.requesterId),
-      updateId: 2
-    )
-
-    #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == .approved)
-  }
-
-  @Test func conferenceSubmissionRejectsAnotherCurrentGroupMember() async throws {
-    let fixture = try GroupApprovalFixture(
-      reason: .conferenceSubmit,
-      tool: ConferenceToolNames.submit
-    )
-    let callbackHandler = handler(fixture)
-
-    _ = await callbackHandler.handle(
-      fixture.callback(from: GroupApprovalFixture.participantId),
-      updateId: 2
-    )
-
-    #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == .pending)
-  }
-
   enum Refusal: CaseIterable {
     case removedMember, unavailableMembership, unlistedGroup, copiedChat, copiedMessage
     case undeliveredPrompt, missingRequester, wrongSession, mismatchedChat, wrongReason, wrongTool

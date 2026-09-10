@@ -305,6 +305,10 @@ uses existing outbox retries, without another LLM turn. Child billing and child-
 separate from conversational `/cost`. The settings, limits, group opt-in and authentication caveats
 are in [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration).
 
+For the separate conference deployment, follow [CONFERENCE.md](CONFERENCE.md). That profile
+accepts private participant proposals, queues them after confirmation and publishes draft PRs
+through a dedicated bot account; it replaces the ordinary personal tool and context surface.
+
 ## Troubleshooting
 
 - **Exit codes are diagnostic:** 10 invalid config, 11 secret loading failed, 12 another

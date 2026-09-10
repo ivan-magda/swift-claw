@@ -115,6 +115,12 @@ Enabled compatible Coder contributes tools at the daemon root; the sole names ar
 `CoderToolNames.submit` (`coder_submit`), `.status` (`coder_status`), and `.cancel` (`coder_cancel`).
 No provider registry, second backend, ACP session manager or generic process module is introduced.
 
+**Conference coding challenge** is an opt-in composition of Generic Coder (§13.3).
+`ClawCore` owns conference values and store/service/publication seams; `ClawData` owns the durable
+queue; `ClawGateway` owns admission, the tool-free submission judge, reconciliation and completion;
+`ClawTools` owns the three participant tools. `clawd` supplies public repository preparation,
+GitHub publication and the isolated deployment composition.
+
 The experimental laboratory lives in the separate
 [`swift-claw-evals`](https://github.com/ivan-magda/swift-claw-evals) repository. It owns
 `ClawEvaluation`, `claw-eval`, benchmark corpora, Python reference implementations, freeze tooling
@@ -168,6 +174,7 @@ form `ARCHITECTURE.md §N` is used, sparingly.
 | §12.1 Group mode                | `ChatMode`, `ChatKind`, `TranscriptAuthor`, `ChatMembershipStatus`, `RawChatMemberUpdate`, `SessionKey.telegramTopic`, `SessionMessageStore.claimAndPersistObserved` (ClawCore); `AccessControl`, `AddressingResolver`, `MessageRouter.noteObservedEvent`, `OutboxDispatcher` flood-control holds (ClawGateway); `ToolPolicyGate.groupAskTierVerdict` (ClawTools); `RetrieverGRDB` session restriction (ClawData)                                                                                                                                                                                                                                                                                     |
 | §13 Execution / sandbox         | `ExecutionBackend`, `SandboxMaintenance`, execution value types, `PreparedToolAction` (ClawCore); `ExecuteCodeTool`, `ExfilArgGuard`, `ToolPolicyGate` dangerous arm (ClawTools); `SubprocessRunning`, `SwiftSubprocessRunner` (ClawSubprocess); `ContainerBackend`, `ExecSandboxSettings` (ClawExec); `SandboxBootstrapper`, `SandboxLifecycleService`, `SandboxHealthRows`, `ApprovedActionExecutor` fill (ClawGateway); `DaemonBuilder.prepareSandbox` (clawd)                                                                                                                                                                                                                                     |
 | §13.2 Native Coder              | `CoderExecutionPolicy`, `CoderServing`, `CoderJobStore` (ClawCore); `CodexBackend`, `CodexAuthenticationStatus`, `CoderRequestPreparer`, `CoderProcessInspector` (ClawCoder); `CoderService`, `CoderCompletionReport` (ClawGateway); `CoderSubmitTool`, `CoderStatusTool`, `CoderCancelTool` (ClawTools); `DaemonBuilder.prepareCoder`, `CoderComposition`, `CoderBackendSetup`, `CoderHealthRows` (clawd)                                                                                                                                                                                                                                                                                            |
+| §13.3 Conference challenge | `ConferenceConfig`, `PreparedConferenceSubmission`, `ConferenceStore`, `ConferenceServing`, `ConferencePublishing` (ClawCore); `ConferenceStoreGRDB` (ClawData); `ConferenceWorkflowService`, `ConferenceSubmissionJudge` (ClawGateway); `ConferenceCurrentTool`, `ConferenceSubmitTool`, `ConferenceStatusTool` (ClawTools); `ConferenceRepositorySource`, `ConferenceGitHubPublisher`, `DaemonBuilder.prepareConference` (clawd) |
 | §15 Config & secrets            | `AppConfig`, `MCPConfigSource`, `MCPServerConfig`, `QuietHours`, `StateRootResolver`, `SecretStore` + `LLMCredentialStore` seams (ClawCore); `MCPConfigLoader` (ClawWorkspace); `EncryptedFileSecretStore`, `EnvSecretStore`, `SecretStoreResolver`, `EncryptedLLMCredentialStore`, `EncryptedMCPCredentialStore`, `SecretStatePaths`, `SecureFilePublisher`, `RuntimeSecretPreparer` (ClawSecrets); `AuthBootstrap` (ClawAuth)                                                                                                                                                                                                                                                                       |
 | §16 Observability               | `DoctorReport`, `DoctorReporting`, `HealthValue`, `HealthRowsBuilder`, `SkillDiagnostics`, `SchedulerHealth`, `ApprovalsHealthRows` (ClawGateway); `ApprovalsHealth`, `RunsHealth`, `AuditLog` (ClawCore); `AuditLogGRDB` (ClawData); `LLMAuthDoctor` (ClawSecrets); `DoctorHealth`, `MCPDoctorRows`, `MCPProbe` (clawd)                                                                                                                                                                                                                                                                                                                                                                              |
 | §19 Error taxonomy              | `ClawCore/Errors/` (`ClawExitCode`, `ConfigError`, `TelegramError`, `StoreError`, `ProviderError`, `ProviderFailure`, `CredentialStoreError` — aliased `LLMCredentialStoreError`); `ClawDatabase.classifyError` → `throws(StoreError)` seam (ClawData); `AuthCommandResultMapper` (ClawAuth)                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -900,7 +907,8 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 - **Bound to the exact action** (tool + fully-resolved target + canonical args); executes the **recorded** args (never a fresh model turn); a past approval is **never** cached into a future auto-run.
 - **Durable checkpoint = persist-the-partial-exchange**, not a serialized wire checkpoint: the assistant proposal + every completed observation + a **placeholder observation row updated in place** (the v5 `messages` columns) pin rowid adjacency at suspend; the approved action runs the recorded args; the run then continues as an ordinary assembly round-trip whose context bound is the filled observation's message id, with **carried-over turn/tool-call/token/USD counters** and a **fresh per-segment wall-clock** (suspension time never counts against any budget).
-- **Callback auth** (§6.5): a DM requires its allowlisted owner; a group Coder submission requires
+- **Callback auth** (§6.5): an ordinary DM requires its allowlisted owner; a conference DM requires
+  its original participant under the private-chat access boundary (§13.3). A group Coder submission requires
   the exact original prompt/chat/run binding plus a fresh current-participant check. Both use the
   ≥128-bit single-use random nonce and re-validate args-hash + `policy_version`. Args-hash +
   `policy_version` validation happens **inside the callback resolution CAS** as the §19.1 approve
@@ -916,6 +924,8 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   it once from the native backend's resolved facts and shares the same ID with preparer, service and
   `coder_submit.invocationIdentity`. Secret values never enter the hash. This binds selected authority
   inputs, not a frozen snapshot of inherited Codex integrations.
+  Conference mode binds the same resolved ID through `challenge_submit.invocationIdentity`, its
+  prepared approval action and the durable queued submission, and revalidates it at admission (§13.3).
 - **Expiry → DENY** (terminal). Expiry is a **liveness / bounded-state control**: its job is to
   guarantee a parked approval **self-resolves** instead of pinning a run (and its session lane)
   forever, with DENY as the fail-closed default direction. It is not the authority check; DM ownership
@@ -947,6 +957,10 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 ## 12. Security & trust model
 
+The dedicated conference profile (§13.3) is a second deployment-scoped exception to the ordinary
+single-owner access boundary. It accepts private participant conversations with a fixed challenge
+tool surface and no shared personal context; it never enables the group-mode rules in §12.1.
+
 **The ordinary agent tool boundary uses four independent defenses:** (1) the **numeric-ID default-deny boundary** — untrusted senders never reach the model; (2) **untrusted-data labeling + the in-code instruction hierarchy** — inbound/tool/retrieved content, remote tool metadata, and durable memory are treated as data and cannot claim authority; (3) the **in-code policy gate + risk tiers** — every side effect is authorized by deterministic code at the dispatch site, never by the prompt; (4) the **enforced lethal-trifecta gate + approvals + blast-radius caps**, with the **VM sandbox for `execute_code`**. These defenses gate the ordinary tool surface even when the model is subverted. Opt-in Coder instead grants a concrete native delegation (§13.2): swift-claw authorizes admission and task scope, while the trusted Codex installation and its integrations determine child authority. Its automatic approval review is not deterministic authorization of every child action, and a working directory is not a security sandbox.
 
 - **Boundary:** numeric Telegram user ID, default-deny, enforced before any LLM/tool/expensive work; fail-closed on internal error. No username path anywhere (identity-rebinding CVE class).
@@ -971,7 +985,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 ### 12.1 Group mode (config-gated, off by default)
 
-`CLAW_GROUP_CHATS` is a comma-separated list of Telegram chat ids `clawd` serves as a **shared room** instead of the owner's DM. Empty is the default, and with it empty nothing in this subsection exists: every claim in §1–§12 above is the DM's, unqualified. Group mode remains a deployment-scoped exception to `docs/PRD.md` NG1 rather than a general multi-user product. It exists for a supervised, time-boxed event on a separate installation, and the trade it makes below is only defensible under exactly those conditions. Public operating docs describe the opt-in and its Coder approval requirement so an operator can deploy it safely.
+`CLAW_GROUP_CHATS` is a comma-separated list of Telegram chat ids `clawd` serves as a **shared room** instead of the owner's DM. Empty is the default, and with it empty nothing in this subsection exists; conference mode (§13.3) also refuses all group chats regardless of this setting. Group mode remains a deployment-scoped exception to `docs/PRD.md` NG1 rather than a general multi-user product. It exists for a supervised, time-boxed event on a separate installation, and the trade it makes below is only defensible under exactly those conditions. Public operating docs describe the opt-in and its Coder approval requirement so an operator can deploy it safely.
 
 - **The mode is derived from the session key, never re-read from config.** `SessionKey` mints `tg:dm:<chatId>` for a DM and `tg:topic:<chatId>:<threadId|general>` for one forum topic; `SessionKey.mode(from:)`, `chatId(from:)` and `threadId(from:)` recover the three facts every consumer needs from the key alone. That matters because most consumers hold only a session id: `TurnRunner.resume`, a scheduled fire, and boot reconciliation all read the mode off the row they already loaded. **`AppConfig.groupChats` has exactly one reader** — the access decision — so no second component can drift about which conversation is which. The General topic carries no `message_thread_id` on the wire, so its key takes a `general` suffix that no numeric thread id can collide with; a non-forum group has one conversation and lands on that same key correctly.
 - **Conversation access is an allowlist of chats, not of users.** `AccessControl.decide` keeps the numeric-ID default-deny boundary for `.private` (the owner's allowlist, unchanged) and adds a **chat-id** grant for `.group`/`.supergroup`: being in an allowlisted room admits ordinary conversation without a per-attendee allowlist entry. Group Coder approval is the narrow exception: every button tap also needs a fresh Telegram `getChatMember` result for that user and group. The check is fail-closed and uncached; Telegram guarantees lookups for other users only when the bot is a group administrator, so that status is an operating prerequisite for reliable group Coder approval. `.channel` and any chat kind this build has never seen are refused, so a new Telegram surface can never inherit either grant. A refused DM is answered (the stranger can ask the owner for access); a refused chat is answered with **silence**, so the bot never announces itself to a room it was added to uninvited.
@@ -1256,6 +1270,131 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   unavailable; the flag does not promise complete changed-path comparison. Report commit author
   separately from GitHub actor and child-reported checks/usage as reported. A terminal job can retain its reserved slot
   while process ownership is unresolved. Persist terminal result and owner outbox delivery atomically.
+
+### 13.3 Conference coding challenge
+
+This opt-in deployment profile admits a participant's exact confirmed proposal, checks it with a
+tool-free judge, queues a Generic Coder implementation and publishes a bot-authored draft PR.
+It is a bounded conference workflow, not a general multi-user assistant or a new native permission
+framework. Deployment and live acceptance: [CONFERENCE.md](CONFERENCE.md). Automated acceptance
+coverage: [conference acceptance notes](design/conference-coding-challenge.md).
+
+**Deployment and participant boundary.** `CLAW_CONFERENCE_ENABLED` defaults to false. Enabling it
+requires an explicit non-personal state root, an operator-authored case file, compatible enabled
+Coder, a conference-only Codex config home and a dedicated GitHub bot-user token. Startup verifies
+the token's `/user` login against `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR` and preflights the public
+source. Both startup and publication REST requests include the required GitHub `User-Agent`.
+GitHub App installation tokens and private source repositories are outside v1 scope.
+
+Use a dedicated host/OS account with no personal secrets or integrations. Coder receives a separate
+HOME and CODEX_HOME, with ambient GitHub tokens, GitHub CLI config, SSH agent socket and Git askpass
+removed. The selected `CLAW_CODER_CONFIG_HOME` must be within `CLAW_STATE_ROOT` after resolving
+symlinks and normalizing both paths. The supervisor retains the token for actor verification and
+publication; Coder never receives it.
+These application boundaries do not provide an OS sandbox: native Codex permissions and inherited
+integrations retain the authority described in §13.2.
+
+Conference access admits private Telegram participants without an owner allowlist entry and refuses
+groups, supergroups and channels. Numeric sender IDs from trusted context establish ownership;
+model arguments and display names never do. Participants receive only `challenge_current`,
+`challenge_submit` and `challenge_status`, plus `/start`, `/help`, `/new` and `/stop`. No ordinary
+Coder tools, filesystem/exec tools, workspace skills, MCP sessions or owner operational commands are
+exposed. Context assembly injects empty workspace, memory and recall collaborators, so only the
+participant's own session history, built-in conference policy and ordinary runtime metadata enter
+the conversation. Tool hiding alone cannot establish this boundary because ordinary DM recall spans
+the owner's sessions. Ordinary mode retains its existing context behavior.
+
+**Case, consent and admission.** One operator-selected JSON case is active per daemon boot:
+`id`, `title`, `prompt`, public GitHub `repositoryURL`, a full immutable 40/64-digit `baselineRef`
+commit SHA and `baseBranch`. The target branch must exist at that SHA and remain frozen for the
+case; do not merge participant solutions into it or reuse case IDs for different conditions.
+Restarting with another case affects new requests; queued work retains its original case snapshot.
+
+The participant sends the complete proposal in one message. `challenge_submit` is dangerous and
+approval-only; its card binds the exact answer, case, repository, baseline, base branch and consent
+to publish the proposal and generated code. The recorded action also carries the resolved Coder
+`executionPolicyID` from §11. Composition includes that same ID in the conference tool's invocation
+identity even though `coder_submit` is absent from its catalog. Changed executable, effective PATH,
+profile, config home or controlled credential selectors therefore invalidate pending consent.
+
+After approval, the workflow verifies the prepared case/policy and exact persisted triggering
+message before the judge or queue. A model rewrite is refused. It checks for an existing submission
+first: replaying the same approved origin and snapshot returns the existing UUID, without another
+judge or Coder call. `UNIQUE(participant_user_id, case_id)` prevents a new answer from replacing a
+confirmed one even under competing inserts.
+
+The judge uses the configured primary LLM provider/model with no conversation history or tools.
+Its system instruction classifies the JSON-encoded case and exact answer, without solving or scoring
+the proposal. Only explicit `SAFE` admits work. `UNSAFE`, malformed output, tool calls, transport
+failure or timeout queue nothing and return a participant-readable error; no row prevents a revised
+proposal from being submitted and confirmed. The call has a 2,048-output-token allowance and a
+30-second deadline within the tool's 45-second limit; cancellation joins the provider operation.
+The judge is probabilistic, not a correctness proof or execution sandbox. Its side calls and native
+Coder billing are not included in conversational `/cost`; concurrency/time limits are not a monetary
+budget. Registration, scoring, automatic merging, rendering and repeated contest submissions are
+outside v1 scope.
+
+**Durable queue and native execution.** A submission stores its UUID, numeric participant ID, exact
+answer, immutable case, approved origin and execution-policy ID, state, optional Coder job ID,
+publication evidence, failure reason, notification marker and timestamps. FIFO uses a durable
+monotonic insertion sequence, including submissions within the same epoch second; random UUIDs
+and timestamp ties cannot reorder work. Migration preserves existing rows' insertion order.
+
+Normal transitions are `queued → running → completed`; terminal alternatives are `blocked`,
+`failed`, `cancelled` and `needs_review`. Before starting queued native work, compare the persisted
+approved execution-policy ID with the currently resolved policy and with Coder's prepared request.
+A mismatch or a legacy submission without a policy ID requires organizer review and renewed
+authorization; it becomes `needs_review` and launches no new Coder job. Never replace an old ID
+with the current one to make a stale approval appear valid.
+
+`ConferenceRepositorySource` prepares `<state-root>/conference-source/<case-id>` without ambient
+GitHub/SSH credentials, verifies canonical checkout and origin, resolves the baseline, checks it
+out detached and requires a clean tree. Valid cache reuse requires no GitHub request. Only a known
+source or baseline mismatch replaces an existing cache; transient Git failures and cancellation
+preserve it. Failed new clones or their validation remove the partial destination so retry starts
+cleanly. Each queue claim prepares its own stored case, not the active day's case. Transient source
+Git failures requeue the same submission at its original position; source identity or baseline
+mismatches that remain after preparation require review. Busy or unavailable Coder also leaves work
+queued.
+
+The fixed Coder request uses local source, a separate copy, the exact baseline as `startRef`, local
+changes as deliverable, no PR base and `publishExistingChanges=false`. Its task contains the case
+and unchanged proposal; instructions require preserving the participant's approach, reporting
+actual checks/assumptions, committing locally and not pushing. A fallback local Git author is
+distinct from the publication bot. Generic Coder prepares independent Git objects and independently
+observes the starting SHA under §13.2. Durable origin deduplication recovers the gap between Coder
+admission and retaining `coderJobID`. Interrupted or ambiguous inference requires review rather
+than automatic replay. Only conference composition disables generic Coder completion notices.
+
+**Publication and recovery.** Success requires absent Coder publication, an independently observed
+starting SHA matching the approved baseline, a workspace and final commit. Otherwise the original
+submission becomes `needs_review`. Publication always uses
+`refs/heads/conference/<submission-uuid>`, without force or merge.
+
+The publisher looks up that branch across all PR states first. A matching open draft PR is reused
+before inspecting local state or pushing, recovering a lost POST response even if the workspace
+is gone. Closed/merged, non-draft, foreign-actor or mismatched repository/head/base/commit evidence
+requires review and never creates a competing PR. For new publication, require a canonical workspace
+within the Coder job root, clean tree, HEAD equal to the final SHA, baseline ancestry and a nonempty
+commit range. Fetch the exact commit without publication credentials into a fresh supervisor-owned
+bare repository, verify ancestry there, and pass the token only to its push. No agent Git hook,
+build or agent-controlled Git configuration executes with that credential. Remove the transfer
+directory afterward.
+
+Create a draft PR and validate its canonical URL, target repository, head branch/SHA, base branch,
+frozen baseline SHA, draft/open state and expected GitHub actor before storing `completed`. The PR
+contains the case, original proposal, public submission UUID, baseline and explicitly labelled
+Coder-reported checks; private Telegram IDs remain in SQLite. Public solutions are visible to all,
+so private conversation/status isolation does not make published proposals confidential.
+
+Retryable publication failures retain `running` and reuse the same branch/PR identity without new
+inference. A failed database write after publication recovers through the existing-PR lookup.
+Terminal state is persisted before claiming a UUID-keyed conference outbox row and recording its
+notification marker. This gives one durable completion notice; inherited Telegram delivery remains
+at-least-once if an acknowledgment is lost. `challenge_status` uses trusted requester context and
+returns only that participant's submission, including an older case queried by UUID. Persistent
+remote permission/push failures and `needs_review` require operator intervention; v1 has no retry
+dashboard or automatic reapproval path.
 
 ## 14. Scheduler architecture (Inc 4)
 

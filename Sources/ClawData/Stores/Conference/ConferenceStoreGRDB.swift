@@ -57,13 +57,13 @@ public struct ConferenceStoreGRDB: ConferenceStore {
         sql: """
           INSERT INTO conference_submissions(
             id, participant_user_id, case_id, case_json, answer, origin_json, state,
-            created_ts, updated_ts
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            execution_policy_id, created_ts, updated_ts
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           """,
         arguments: [
           id.uuidString, origin.requesterUserID, prepared.caseSnapshot.id, caseJSON,
           prepared.answer, originJSON, ConferenceSubmissionState.queued.rawValue,
-          timestamp, timestamp,
+          prepared.executionPolicyID, timestamp, timestamp,
         ]
       )
       guard let inserted = try Self.fetch(db, id: id) else {
@@ -94,7 +94,7 @@ public struct ConferenceStoreGRDB: ConferenceStore {
           sql: """
             SELECT * FROM conference_submissions
             WHERE state = ?
-            ORDER BY created_ts ASC, id ASC
+            ORDER BY queue_sequence ASC
             LIMIT 1
             """,
           arguments: [ConferenceSubmissionState.queued.rawValue]
@@ -169,7 +169,7 @@ public struct ConferenceStoreGRDB: ConferenceStore {
         sql: """
           SELECT * FROM conference_submissions
           WHERE state = ?
-          ORDER BY created_ts ASC, id ASC
+          ORDER BY queue_sequence ASC
           """,
         arguments: [ConferenceSubmissionState.running.rawValue]
       ).map(Self.decode)
@@ -309,6 +309,7 @@ private extension ConferenceStoreGRDB {
       caseSnapshot: try decode(ConferenceCase.self, json: caseJSON),
       answer: row["answer"],
       origin: try decode(ConferenceApprovedOrigin.self, json: originJSON),
+      executionPolicyID: row["execution_policy_id"],
       state: state,
       coderJobID: coderJobID,
       pullRequestURL: row["pull_request_url"],

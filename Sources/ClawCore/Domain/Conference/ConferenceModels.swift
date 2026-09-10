@@ -152,10 +152,12 @@ public struct ConferenceApprovedOrigin: Sendable, Equatable, Codable {
 public struct PreparedConferenceSubmission: Sendable, Equatable, Codable {
   public let caseSnapshot: ConferenceCase
   public let answer: String
+  public let executionPolicyID: String?
 
-  public init(caseSnapshot: ConferenceCase, answer: String) {
+  public init(caseSnapshot: ConferenceCase, answer: String, executionPolicyID: String? = nil) {
     self.caseSnapshot = caseSnapshot
     self.answer = answer
+    self.executionPolicyID = executionPolicyID
   }
 }
 
@@ -165,6 +167,7 @@ public struct ConferenceSubmission: Sendable, Equatable, Codable {
   public let caseSnapshot: ConferenceCase
   public let answer: String
   public let origin: ConferenceApprovedOrigin
+  public let executionPolicyID: String?
   public let state: ConferenceSubmissionState
   public let coderJobID: UUID?
   public let pullRequestURL: String?
@@ -181,6 +184,7 @@ public struct ConferenceSubmission: Sendable, Equatable, Codable {
     caseSnapshot: ConferenceCase,
     answer: String,
     origin: ConferenceApprovedOrigin,
+    executionPolicyID: String? = nil,
     state: ConferenceSubmissionState,
     coderJobID: UUID?,
     pullRequestURL: String?,
@@ -196,6 +200,7 @@ public struct ConferenceSubmission: Sendable, Equatable, Codable {
     self.caseSnapshot = caseSnapshot
     self.answer = answer
     self.origin = origin
+    self.executionPolicyID = executionPolicyID
     self.state = state
     self.coderJobID = coderJobID
     self.pullRequestURL = pullRequestURL
@@ -218,5 +223,6 @@ public enum ConferenceError: Error, Sendable, Equatable {
   case notFound
   case forbidden
   case staleCase
+  case staleApproval
   case coderUnavailable(String)
 }

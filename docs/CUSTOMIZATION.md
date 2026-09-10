@@ -457,6 +457,20 @@ CLI/auth availability. Child-reported checks/usage remain in each job's result.
 Interrupted jobs are never automatically rerun. Unresolved process ownership retains its slot across
 daemon restarts; see the [operator recovery path](LOCAL_DEV.md#coder-background-lifecycle-and-recovery).
 
+## Conference coding challenge
+
+`CLAW_CONFERENCE_ENABLED=true` selects a separate conference deployment with private participant
+conversations, a fixed challenge tool surface and no shared personal context. It requires an
+explicit nonpersonal `CLAW_STATE_ROOT`, `CLAW_CONFERENCE_CASE_FILE`,
+`CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR`, enabled Coder and a dedicated GitHub bot-user `GH_TOKEN`.
+The Coder config home must resolve within the state root; Coder receives no publication token.
+Groups and ordinary owner commands are refused in this profile.
+
+Participants confirm their exact proposal before the judge and durable queue. Pending approvals
+and queued admission bind the resolved Coder policy, so changing the executable, PATH, profile or
+config home requires renewed authorization before native work can start. See
+[CONFERENCE.md](CONFERENCE.md) for deployment, policy-change handling and the live smoke test.
+
 ## MCP servers
 
 clawd can borrow tools from [MCP](https://modelcontextprotocol.io) servers you already use — an
