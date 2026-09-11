@@ -23,37 +23,38 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 
 ## Features
 
-- **One binary.** Swift 6 with strict concurrency, from the Telegram long-poll down to SQLite.
-- **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
-  turn, `/new` starts a fresh session, clawd transcribes voice notes on-device
-  (macOS 26), and it looks at photos you send if your model can see them.
-- **Durable memory.** Facts you confirm persist in SQLite, and clawd recalls them by
-  importance and recency. Workspace Markdown files hold your profile, notes, and daily
-  logs, and conversation history is full-text searchable.
-- **Skills you write once.** A `skills/<name>/SKILL.md` file shows up in context as its name
-  and one line about when to use it; when a task matches, clawd loads the body and follows
-  your procedure instead of asking you to paste it again. Send `/skills` to see every
-  accepted skill and each file the scanner rejected.
-- **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
-  occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
-- **Scheduled tasks that learn from feedback.** Opt in with `CLAW_LEARNING_ENABLED=true`.
-  Correct one result to start a bounded lesson trial; two positive runs can promote it.
-  Inspect lessons and roll back a promotion with `/learning`.
-- **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
-  execution wait for an explicit tap-to-approve in Telegram. clawd enforces policy in
-  code and treats inbound content as data, never as instructions.
-- **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
-  (macOS 26 arm64, off by default).
+- **One binary. Your machine.** Run your always-on personal assistant as a single Swift
+  daemon, with persistent state stored on hardware you own.
 - **Coding tasks from chat.** Opt in to Coder to delegate an approved task from your DM or a
   configured group topic to your native Codex installation, then receive a structured result card
   when the background job finishes. Local changes and GitHub pull requests use your installed tools
   and repository rights.
+- **Scheduled tasks that learn from feedback.** Opt in with `CLAW_LEARNING_ENABLED=true`.
+  Correct one result to start a bounded lesson trial; two positive runs can promote it.
+  Inspect lessons and roll back a promotion with `/learning`.
+- **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
+  occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
+- **Durable memory.** Facts you confirm persist in SQLite, and clawd recalls them by
+  importance and recency. Workspace Markdown files hold your profile, notes, and daily
+  logs, and conversation history is full-text searchable.
+- **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
+  execution wait for an explicit tap-to-approve in Telegram. clawd enforces policy in
+  code and treats inbound content as data, never as instructions.
+- **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
+  can run an eligible model on a ChatGPT subscription.
+- **Skills you write once.** A `skills/<name>/SKILL.md` file shows up in context as its name
+  and one line about when to use it; when a task matches, clawd loads the body and follows
+  your procedure instead of asking you to paste it again. Send `/skills` to see every
+  accepted skill and each file the scanner rejected.
 - **Tools from MCP servers.** List a server, store its token encrypted, and its tools join
   the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
   named tool safe, but the exfiltration gate can still require approval. Only you can add a
   server or change what it exposes.
-- **Bring your own model.** Any OpenAI-compatible endpoint works, and `clawd auth login`
-  can run an eligible model on a ChatGPT subscription.
+- **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
+  turn, `/new` starts a fresh session, clawd transcribes voice notes on-device
+  (macOS 26), and it looks at photos you send if your model can see them.
+- **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
+  (macOS 26 arm64, off by default).
 
 ## The approval card
 
