@@ -1,5 +1,10 @@
 # deploy/
 
+**Conference deployment:** start with the standalone Russian
+[CONFERENCE.md](../docs/CONFERENCE.md). It builds `feature/conference-coding-challenge` /
+PR #199 on a fresh Mac without merging into `main`, then creates a dedicated binary,
+state root and LaunchAgent. Use its service setup and update commands for the conference branch.
+
 Service files shipped with every release:
 
 - `run-clawd.sh` — wrapper that sources `clawd.env` and execs `clawd run`.

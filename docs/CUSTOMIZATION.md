@@ -4,6 +4,11 @@ You shape your agent in two places: Markdown files in the workspace (persona, ru
 profile) and environment variables (wiring, budgets, features).
 [`.env.example`](../.env.example) stays the complete variable reference.
 
+**Conference organizers:** begin with the standalone Russian [CONFERENCE.md](CONFERENCE.md).
+It covers a fresh Mac, building `feature/conference-coding-challenge` / PR #199 without
+merging into `main`, authentication, and a dedicated binary, state root and LaunchAgent.
+The [conference settings summary](#conference-coding-challenge) below is a reference for that deployment.
+
 ## Workspace files
 
 The workspace lives at `<state root>/workspace/` (default `~/.swift-claw/workspace/`).

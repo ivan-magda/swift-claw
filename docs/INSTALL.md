@@ -4,6 +4,12 @@ Everything about getting the `clawd` binary on and off a machine. For first-run
 configuration (bot token, secrets, allowlist), continue with
 [GETTING_STARTED.md](GETTING_STARTED.md).
 
+**Conference deployment:** follow the standalone Russian [CONFERENCE.md](CONFERENCE.md)
+first. It builds `feature/conference-coding-challenge` / PR #199 directly on a fresh Mac,
+without merging into `main`, and installs a dedicated binary, state root and LaunchAgent.
+Use that guide's install and update commands for the conference branch. The release installer
+below uses published assets and the personal assistant's layout.
+
 ## 1. Install
 
 ```bash

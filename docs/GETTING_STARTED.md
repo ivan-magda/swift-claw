@@ -2,6 +2,11 @@
 
 From nothing to a running assistant that answers you in Telegram.
 
+**Conference setup:** start with the standalone Russian
+[CONFERENCE.md](CONFERENCE.md). It covers a fresh Mac and builds
+`feature/conference-coding-challenge` / PR #199 without a merge to `main`, with its own
+binary, state root and LaunchAgent. The steps below configure the personal assistant.
+
 ## What you need
 
 - **A machine that stays on.** A Mac on macOS 15 or newer, or a Linux box with

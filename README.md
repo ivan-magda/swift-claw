@@ -73,6 +73,11 @@ outcome first and keeps technical evidence compact. Tap Deny and clawd writes no
 
 ## Install
 
+**Conference organizers:** start with the standalone Russian
+[conference setup guide](docs/CONFERENCE.md). It covers a fresh Mac, builds
+`feature/conference-coding-challenge` / PR #199 without merging into `main`, and installs
+a dedicated binary, state root and LaunchAgent. The release installer below targets `~/.swift-claw`.
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/install.sh | sh
 ```
@@ -174,7 +179,7 @@ set it), USD budgets, schedules and quiet hours, voice locales, sandbox limits.
 | Install, update, or uninstall | [docs/INSTALL.md](docs/INSTALL.md) |
 | Make it yours | [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) |
 | Run it as a service | [docs/INSTALL.md](docs/INSTALL.md#4-running-as-a-service) |
-| Run a conference coding challenge | [docs/CONFERENCE.md](docs/CONFERENCE.md) |
+| Set up a conference from a fresh Mac (PR #199 branch, Russian) | [docs/CONFERENCE.md](docs/CONFERENCE.md) |
 | Develop and test locally | [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) |
 | Understand the design | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Report a vulnerability | [SECURITY.md](SECURITY.md) |
