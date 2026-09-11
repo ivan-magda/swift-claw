@@ -182,7 +182,7 @@ private struct ConferenceNativeFixture {
         $0.payload.contains(row.id.uuidString.lowercased())
       }
       #expect(notices.count == 1)
-      #expect(notices.first?.chatId == submitted.participantUserID)
+      #expect(notices.first?.chatId == submitted.origin.chatID)
       #expect(await github.bodies[branch]?.contains(submitted.answer) == true)
     }
     #expect(workspaces.count == 2)

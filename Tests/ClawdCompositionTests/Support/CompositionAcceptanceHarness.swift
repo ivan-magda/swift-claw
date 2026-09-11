@@ -102,6 +102,7 @@ enum CompositionAcceptance {
   static func makeBuilder(
     http: any HTTPExecuting & HTTPStreaming,
     config: AppConfig? = nil,
+    botIdentity: BotIdentity? = nil,
     secrets: Secrets = Secrets(
       telegramBotToken: "tg-token",
       llmApiKey: nil,
@@ -116,7 +117,7 @@ enum CompositionAcceptance {
       stores: try EnvironmentLoader.openStores(config: config),
       toolExecutor: http,
       transport: TelegramClient(token: secrets.telegramBotToken, http: http),
-      botIdentity: nil,
+      botIdentity: botIdentity,
       mcp: mcp,
       logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() }),
       makeManagedStore: { FreshCredentialStore(present: false) }

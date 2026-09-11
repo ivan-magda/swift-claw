@@ -64,7 +64,7 @@ extension DaemonBuilder {
       accessControl: AccessControl(
         allowlist: stores.allowlist,
         groupChats: config.groupChats,
-        allowUnlistedPrivateUsers: conferenceProfile
+        conferenceProfile: conferenceProfile
       ),
       approvals: stores.approvals,
       runs: stores.runs,

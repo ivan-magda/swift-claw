@@ -64,16 +64,22 @@ public struct ConferenceSubmitTool: Tool {
     ToolDefinition(
       name: ConferenceToolNames.submit,
       description: """
-        Submit the participant's own exact proposal for the active conference case. Do not invent \
-        or improve the proposal before submitting it. The action requires explicit confirmation, \
-        runs a safety precheck and queues an isolated background Coder run.
+        Open the mandatory approval card for the participant's own exact proposal for the active \
+        case. Call when they present their solution; do not ask a preliminary chat confirmation. \
+        Do not invent or improve their proposal. Only after the author approves the card does a \
+        safety precheck run and queue an isolated background Coder run.
         """,
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
           "answer": .object([
             "type": .string("string"),
-            "description": .string("The participant's exact proposal, preserved verbatim."),
+            "description": .string(
+              """
+              The entire current participant message, verbatim, including mentions and request \
+              prefixes. Exclude only the transcript's speaker label.
+              """
+            ),
             "maxLength": .integer(12_000),
           ])
         ]),
@@ -265,17 +271,20 @@ private extension ConferenceSubmitTool {
   ) -> ToolApprovalPresentation {
     let item = prepared.caseSnapshot
     return ToolApprovalPresentation(
-      blastRadius: """
-        Case: \(redactor.redact(item.id)) — \(redactor.redact(item.title))
-        Repository: \(redactor.redact(item.repositoryURL))
-        Baseline: \(redactor.redact(item.baselineRef))
-        PR base: \(redactor.redact(item.baseBranch))
-        Result: queued Coder run + draft pull request; never auto-merged
-        """,
-      contentPreview: redactor.redact(prepared.answer),
+      blastRadius: [
+        CoderCardMarkdown.field("Репозиторий", redactor.redact(item.repositoryURL)),
+        CoderCardMarkdown.field("Ветка для PR", redactor.redact(item.baseBranch)),
+        CoderCardMarkdown.field("Исходная версия", redactor.redact(item.baselineRef)),
+      ].joined(separator: "\n\n"),
+      contentPreview: [
+        CoderCardMarkdown.field("Кейс", redactor.redact(item.title)),
+        CoderCardMarkdown.field("Твоё решение", redactor.redact(prepared.answer)),
+      ].joined(separator: "\n\n"),
       warnings: [
-        "Your exact proposal and generated code will be published to GitHub.",
-        "Generated code can still require human review; the safety precheck is not a score.",
+        """
+        Твоё решение и сгенерированный код будут опубликованы на GitHub и доступны всем. \
+        Изменения не попадут в основную ветку автоматически.
+        """
       ]
     )
   }
@@ -333,7 +342,7 @@ private enum ConferenceToolOutput {
     case ConferenceError.answerMismatch:
       return "The submitted answer must exactly match your message; nothing was queued."
     case ConferenceError.forbidden:
-      return "That submission belongs to another participant."
+      return "That submission belongs to another participant or conversation."
     case ConferenceError.notFound:
       return "Submission not found."
     case ConferenceError.staleCase:

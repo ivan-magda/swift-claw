@@ -151,11 +151,14 @@ private extension ApprovedActionExecutor {
         }
 
         if restored.mode == .group {
+          let isCoderSubmission =
+            approval.reason == .coderSubmit && approval.tool == CoderToolNames.submit
+          let isConferenceSubmission =
+            approval.reason == .conferenceSubmit && approval.tool == ConferenceToolNames.submit
           guard
             restored.origin == .interactive,
             restored.requesterUserId != nil,
-            approval.reason == .coderSubmit,
-            approval.tool == CoderToolNames.submit
+            isCoderSubmission || isConferenceSubmission
           else {
             return missingExecutionContext()
           }

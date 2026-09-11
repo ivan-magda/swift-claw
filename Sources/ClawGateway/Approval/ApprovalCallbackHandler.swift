@@ -158,8 +158,7 @@ private extension ApprovalCallbackHandler {
       guard
         context.origin == .interactive,
         context.requesterUserId != nil,
-        approval.reason == .coderSubmit,
-        approval.tool == CoderToolNames.submit,
+        permitsGroupResolution(callback, approval: approval, context: context),
         context.sessionId == approval.sessionId,
         context.deliveryTarget.chatId == approval.ownerUserId,
         callback.chatId == context.deliveryTarget.chatId,
@@ -198,6 +197,22 @@ private extension ApprovalCallbackHandler {
     }
 
     return ApprovalResolutionActor(actor: .owner, userId: callback.fromUserId)
+  }
+
+  func permitsGroupResolution(
+    _ callback: RawCallback,
+    approval: Approval,
+    context: RunExecutionContext
+  ) -> Bool {
+    switch approval.reason {
+    case .coderSubmit:
+      return approval.tool == CoderToolNames.submit
+    case .conferenceSubmit:
+      return approval.tool == ConferenceToolNames.submit
+        && callback.fromUserId == context.requesterUserId
+    default:
+      return false
+    }
   }
 }
 

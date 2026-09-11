@@ -11,27 +11,41 @@ public struct ConferenceStoreGRDB: ConferenceStore {
 
   public func sourceAnswer(for origin: ConferenceApprovedOrigin) throws(StoreError) -> String? {
     try database.readMapping { db in
-      try String.fetchOne(
-        db,
-        sql: """
-          SELECT messages.content
-          FROM runs
-          JOIN messages ON messages.id = runs.trigger_message_id
-          WHERE runs.id = ?
-            AND runs.session_id = ?
-            AND runs.origin = ?
-            AND runs.requester_user_id = ?
-            AND messages.session_id = runs.session_id
-            AND messages.role = ?
-          """,
-        arguments: [
-          origin.runID,
-          origin.sessionID,
-          RunOrigin.interactive.rawValue,
-          origin.requesterUserID,
-          MessageRole.user.rawValue,
-        ]
-      )
+      guard
+        let row = try Row.fetchOne(
+          db,
+          sql: """
+            SELECT messages.content, sessions.session_key
+            FROM runs
+            JOIN messages ON messages.id = runs.trigger_message_id
+            JOIN sessions ON sessions.id = runs.session_id
+            WHERE runs.id = ?
+              AND runs.session_id = ?
+              AND runs.origin = ?
+              AND runs.requester_user_id = ?
+              AND messages.session_id = runs.session_id
+              AND messages.role = ?
+            """,
+          arguments: [
+            origin.runID,
+            origin.sessionID,
+            RunOrigin.interactive.rawValue,
+            origin.requesterUserID,
+            MessageRole.user.rawValue,
+          ]
+        )
+      else {
+        return nil
+      }
+
+      let sessionKey: String = row["session_key"]
+      guard SessionKey.mode(from: sessionKey) == origin.mode,
+        SessionKey.chatId(from: sessionKey) == origin.chatID
+      else {
+        return nil
+      }
+
+      return origin.mode.messageText(fromTranscript: row["content"])
     }
   }
 

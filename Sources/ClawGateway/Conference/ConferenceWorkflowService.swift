@@ -118,18 +118,26 @@ public actor ConferenceWorkflowService: ConferenceServing, Service {
     else {
       throw ConferenceError.invalidContext
     }
+
     let item: ConferenceSubmission?
     if let submissionID {
       item = try store.submission(id: submissionID)
     } else {
       item = try store.submission(participantUserID: requester, caseID: try currentCase().id)
     }
+
     guard let item else {
       return nil
     }
-    guard item.participantUserID == requester else {
+
+    guard item.participantUserID == requester,
+      item.origin.sessionID == context.sessionId,
+      item.origin.chatID == context.chatId,
+      item.origin.mode == context.mode
+    else {
       throw ConferenceError.forbidden
     }
+
     return item
   }
 
@@ -425,16 +433,19 @@ private extension ConferenceWorkflowService {
   func enqueuePendingNotifications() throws {
     var poked = false
     for submission in try store.pendingNotifications() {
-      let payload = notificationText(for: submission)
-      _ = try outbox.claimConferenceNotice(
-        ConferenceNoticeChunk(
-          submissionID: submission.id,
-          ordinal: 0,
-          chatId: submission.origin.chatID,
-          payload: payload,
-          payloadHash: ContentHash.fnv1a(payload)
+      let parts = CoderCardMarkdown.split(text: notificationText(for: submission))
+      for (ordinal, payload) in parts.enumerated() {
+        _ = try outbox.claimConferenceNotice(
+          ConferenceNoticeChunk(
+            submissionID: submission.id,
+            originRunID: submission.origin.runID,
+            ordinal: ordinal,
+            chatId: submission.origin.chatID,
+            payload: payload,
+            payloadHash: ContentHash.fnv1a(payload)
+          )
         )
-      )
+      }
       guard
         let marked = try store.markNotificationEnqueued(submissionID: submission.id, now: now()),
         marked.notificationEnqueued
@@ -449,18 +460,38 @@ private extension ConferenceWorkflowService {
   }
 
   func notificationText(for submission: ConferenceSubmission) -> String {
-    var lines = [
-      "Conference Coding Challenge",
-      "Submission: \(submission.id.uuidString.lowercased())",
-      "Case: \(submission.caseSnapshot.id)",
-      "State: \(submission.state.rawValue)",
+    var blocks = [
+      "## \(notificationHeading(for: submission.state))",
+      CoderCardMarkdown.field("Кейс", submission.caseSnapshot.title),
     ]
     if let url = submission.pullRequestURL {
-      lines.append("Pull request: \(url)")
+      blocks.append(CoderCardMarkdown.field("Черновик PR", url))
     }
     if let reason = submission.failureReason {
-      lines.append("Note: \(reason)")
+      blocks.append(CoderCardMarkdown.field("Причина", reason))
     }
-    return lines.joined(separator: "\n")
+    if submission.state == .completed {
+      blocks.append(
+        "<p><br>Можно посмотреть изменения по ссылке. В основную ветку они не добавлены.</p>"
+      )
+    } else if submission.state.isTerminal {
+      blocks.append(
+        "<p><br>Твоё решение сохранено. За помощью можно обратиться к организатору.</p>"
+      )
+    }
+    blocks.append(CoderCardMarkdown.field("Заявка", submission.id.uuidString.lowercased()))
+    return blocks.joined(separator: "\n\n")
+  }
+
+  func notificationHeading(for state: ConferenceSubmissionState) -> String {
+    switch state {
+    case .queued: "Решение в очереди"
+    case .running: "Реализация выполняется"
+    case .completed: "Решение готово"
+    case .blocked: "Реализация заблокирована"
+    case .failed: "Не удалось завершить реализацию"
+    case .cancelled: "Реализация отменена"
+    case .needsReview: "Нужна проверка организатора"
+    }
   }
 }

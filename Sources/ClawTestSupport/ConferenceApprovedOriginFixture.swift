@@ -4,11 +4,15 @@ import GRDB
 
 /// A real participant message and approved conference action, not invented foreign-key IDs.
 public enum ConferenceApprovedOriginFixture {
+  public static let chatID: Int64 = -100_123
+  public static let threadID: Int64 = 77
+
   public static func make(
     queue: DatabaseQueue,
     prepared: PreparedConferenceSubmission,
     userID: Int64 = 101,
     updateID: Int64 = 1,
+    threadID: Int64 = Self.threadID,
     now: Date = Date()
   ) throws -> ConferenceApprovedOrigin {
     let policy = PolicyFingerprint.combined(
@@ -46,10 +50,13 @@ public enum ConferenceApprovedOriginFixture {
       queue: queue,
       inbound: InboundMessage(
         updateId: updateID,
-        sessionKey: SessionKey.telegramDM(chatId: userID),
-        chatId: userID,
+        sessionKey: SessionKey.telegramTopic(chatId: chatID, threadId: threadID),
+        chatId: chatID,
         userId: userID,
-        text: prepared.answer,
+        text: ChatMode.group.transcriptText(
+          prepared.answer,
+          author: TranscriptAuthor(displayName: "Participant: \nName", userId: userID)
+        ),
         isEdited: false,
         telegramMessageId: updateID,
         ts: now
@@ -60,12 +67,12 @@ public enum ConferenceApprovedOriginFixture {
         toolCallsJSON: calls,
         completedObservations: [],
         pending: PendingToolAction(toolCallId: toolCallID, recorded: recorded),
-        ownerUserId: userID,
+        ownerUserId: chatID,
         nonce: ApprovalNonce.generate(),
         promptChunks: [
           OutboxChunk(
             stepIndex: 0,
-            chatId: userID,
+            chatId: chatID,
             payload: prepared.answer,
             payloadHash: ContentHash.fnv1a(prepared.answer)
           )
@@ -74,15 +81,15 @@ public enum ConferenceApprovedOriginFixture {
         setPrivateData: false,
         expiresTs: now.addingTimeInterval(3_600)
       ),
-      actor: ApprovalResolutionActor(actor: .owner, userId: userID),
+      actor: ApprovalResolutionActor(actor: .groupMember, userId: userID),
       now: now
     )
     return ConferenceApprovedOrigin(
       runID: approval.runId,
       sessionID: approval.sessionId,
-      chatID: userID,
+      chatID: chatID,
       requesterUserID: userID,
-      mode: .direct,
+      mode: .group,
       toolCallID: approval.toolCallId,
       approvalID: approval.id
     )

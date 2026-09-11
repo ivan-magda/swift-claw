@@ -14,26 +14,25 @@ public enum AccessDecision: Sendable, Equatable {
   case denied(AccessDenial)
 }
 
-/// The numeric-ID default-deny boundary. `allowUnlistedPrivateUsers` exists only for the isolated
-/// conference profile, whose composition exposes no personal/general-purpose tools or memory.
+/// The numeric-ID default-deny boundary. The conference profile serves configured groups only.
 public struct AccessControl: Sendable {
   private let allowlist: any AllowlistStore
   private let groupChats: Set<Int64>
-  private let allowUnlistedPrivateUsers: Bool
+  private let conferenceProfile: Bool
 
   public init(
     allowlist: any AllowlistStore,
     groupChats: Set<Int64>,
-    allowUnlistedPrivateUsers: Bool = false
+    conferenceProfile: Bool = false
   ) {
     self.allowlist = allowlist
     self.groupChats = groupChats
-    self.allowUnlistedPrivateUsers = allowUnlistedPrivateUsers
+    self.conferenceProfile = conferenceProfile
   }
 
   public func isAllowed(userId: Int64) -> Bool {
-    if allowUnlistedPrivateUsers {
-      return true
+    if conferenceProfile {
+      return false
     }
     do {
       return try allowlist.allowlistContains(userId: userId)
@@ -42,16 +41,14 @@ public struct AccessControl: Sendable {
     }
   }
 
-  /// Conference participants use private chats only: a group topic shares conversational history
-  /// between senders. Ordinary mode retains its owner-DM and configured-group behavior.
   public func decide(chatKind: ChatKind, chatId: Int64, userId: Int64) -> AccessDecision {
     switch chatKind {
     case .private:
-      return isAllowed(userId: userId) ? .allowed(.direct) : .denied(.privateStranger)
-    case .group, .supergroup:
-      guard !allowUnlistedPrivateUsers else {
+      guard !conferenceProfile else {
         return .denied(.unlistedChat)
       }
+      return isAllowed(userId: userId) ? .allowed(.direct) : .denied(.privateStranger)
+    case .group, .supergroup:
       return groupChats.contains(chatId) ? .allowed(.group) : .denied(.unlistedChat)
     case .channel, .other:
       return .denied(.unlistedChat)

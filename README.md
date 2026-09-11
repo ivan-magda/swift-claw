@@ -119,8 +119,9 @@ swift-claw assumes you are the only person it serves in its normal personal depl
 groups are a supervised exception: use a separate nonpersonal state root, trust the participants,
 and understand that their ordinary tool approvals are relaxed; see
 [group Coder configuration](docs/CUSTOMIZATION.md#coder-configuration).
-The separate [conference challenge profile](docs/CONFERENCE.md) accepts private participant
-proposals through a fixed tool surface, with no personal memory or ordinary tools. It requires
+The separate [conference challenge profile](docs/CONFERENCE.md) accepts participant proposals in
+configured groups and forum topics through a fixed tool surface, with no personal memory or ordinary
+tools. Only the proposal's author can confirm it; private messages are ignored. It requires
 a dedicated nonpersonal host/account, state root and publication bot credential.
 
 - **Default-deny.** Only allowlisted Telegram IDs get a conversation. clawd refuses

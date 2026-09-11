@@ -12,7 +12,8 @@ verification: [conference runbook](../CONFERENCE.md).
    `ConferenceToolsTests`; reject rewritten answers before judge or queue.
 2. **Confirmed identity, ownership and uniqueness:** real message/run/approval fixture,
    `ConferenceStoreTests` and workflow ownership/replay tests. Conference admission and approvals
-   use private chats only; group Coder approval tests cover the separate group profile.
+   use configured groups/topics only; `ConferenceIntakeTests` exercises production routing and
+   `GroupApprovalCallbackTests` verifies that only the original conference requester may resolve consent.
 3. **Busy executor and original case after day switch:** workflow acceptance tests preserve
    queued work and use the queued case's own source/baseline. Store coverage proves insertion
    order for same-second submissions and after migration/restart; source retry coverage distinguishes
@@ -62,3 +63,16 @@ Nearest existing coverage is Generic Coder's native process/workspace tests, app
 and persistence tests. The new native test supplies the cross-component proof those isolated
 tests do not provide. No tests assert that an LLM reliably detects all attacks or faithfully
 implements every human proposal. Those are not deterministic harness guarantees.
+
+### Group workflow test intent
+
+| Risk | Production seam | Nearest previous test | Unique mutant | Primary coverage |
+| --- | --- | --- | --- | --- |
+| Conference group routing / ignored owner DM | Intake composition + access control | Private-only access tests | Conference flag wrongly wired or groups denied | `ConferenceIntakeTests`, revised `AccessControlTests` |
+| Consent by proposal author | Callback group authorization | Generic Coder participant callback | Another member resolves conference consent, or author cannot resolve it | `onlyConferenceRequesterCanResolve` |
+| Exact group proposal / completion topic | Transcript recovery + runless outbox | Private workflow acceptance | Author prefix prevents admission, answer truncates at its own separator, or notice loses thread/reply | Converted `participantAnswerFlowsToBotPullRequestAndTopicCompletion` |
+| Status restricted to original topic | Workflow status authorization | Different-user status refusal | Same user reads a different topic's record | Same workflow acceptance, real second topic |
+
+The successful workflow fixture now uses a group transcript, retaining one primary pipeline test.
+The callback test exercises one resolution verdict: generic callback tests already cover both CAS
+branches, and the new requester authorization does not branch on approve versus deny.

@@ -77,7 +77,7 @@ extension DaemonBuilder {
       skillsCap: ContextBudget.default.skillsCap,
       recallHitCap: ContextBudget.default.recallHitCap
     )
-    // Ordinary DM recall spans one owner's sessions; conference DMs belong to different people.
+    // Conference topics share only their transcript, without personal workspace or recall data.
     let contextWorkspace: any WorkspaceReading
     let contextMemory: any MemoryStore
     let contextRetriever: any Retriever

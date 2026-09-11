@@ -6,11 +6,13 @@ import Testing
 @testable import ClawGateway
 
 @Suite struct ConferenceWorkflowAcceptanceTests {
-  @Test func participantAnswerFlowsToBotPullRequestAndPrivateCompletion() async throws {
+  @Test func participantAnswerFlowsToBotPullRequestAndTopicCompletion() async throws {
     // given — real persisted human message, approval, queue and outbox; external work is scripted.
     let fixture = try ConferenceWorkflowFixture(busyAdmissions: 1)
-    let answer = "Keep accessibility state in an actor-backed component model."
-    let origin = try fixture.origin(answer: answer)
+    let answer =
+      "@ConferenceBot Implement this: keep accessibility state in an actor.\n  Preserve labels.  "
+    let messageID: Int64 = 88
+    let origin = try fixture.origin(answer: answer, updateID: messageID)
     let prepared = try await fixture.service.prepareSubmission(answer: answer)
     #expect(try await fixture.service.currentCase() == prepared.caseSnapshot)
 
@@ -43,7 +45,29 @@ import Testing
     }
     #expect(notices.count == 1)
     #expect(notices.first?.chatId == origin.chatID)
+    #expect(notices.first?.messageThreadId == ConferenceApprovedOriginFixture.threadID)
+    #expect(notices.first?.replyToMessageId == messageID)
     #expect(notices.first?.payload.contains("/pull/42") == true)
+    #expect(
+      try await fixture.service.status(
+        submissionID: completed.id,
+        context: origin.executionContext
+      )?
+      .id == completed.id
+    )
+    let otherTopic = try ConferenceApprovedOriginFixture.make(
+      queue: fixture.queue,
+      prepared: prepared,
+      userID: origin.requesterUserID,
+      updateID: 303,
+      threadID: ConferenceApprovedOriginFixture.threadID + 1
+    )
+    await #expect(throws: ConferenceError.forbidden) {
+      try await fixture.service.status(
+        submissionID: completed.id,
+        context: otherTopic.executionContext
+      )
+    }
     let other = try fixture.origin(answer: "Another idea", userID: 202)
     do {
       _ = try await fixture.service.status(

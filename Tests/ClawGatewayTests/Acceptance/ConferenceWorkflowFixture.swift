@@ -62,7 +62,11 @@ struct ConferenceWorkflowFixture {
     )
   }
 
-  func origin(answer: String, userID: Int64 = 101) throws -> ConferenceApprovedOrigin {
+  func origin(
+    answer: String,
+    userID: Int64 = 101,
+    updateID: Int64? = nil
+  ) throws -> ConferenceApprovedOrigin {
     try ConferenceApprovedOriginFixture.make(
       queue: queue,
       prepared: PreparedConferenceSubmission(
@@ -71,7 +75,7 @@ struct ConferenceWorkflowFixture {
         executionPolicyID: Self.executionPolicyID
       ),
       userID: userID,
-      updateID: userID
+      updateID: updateID ?? userID
     )
   }
 

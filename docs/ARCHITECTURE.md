@@ -907,15 +907,19 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 - **Bound to the exact action** (tool + fully-resolved target + canonical args); executes the **recorded** args (never a fresh model turn); a past approval is **never** cached into a future auto-run.
 - **Durable checkpoint = persist-the-partial-exchange**, not a serialized wire checkpoint: the assistant proposal + every completed observation + a **placeholder observation row updated in place** (the v5 `messages` columns) pin rowid adjacency at suspend; the approved action runs the recorded args; the run then continues as an ordinary assembly round-trip whose context bound is the filled observation's message id, with **carried-over turn/tool-call/token/USD counters** and a **fresh per-segment wall-clock** (suspension time never counts against any budget).
-- **Callback auth** (§6.5): an ordinary DM requires its allowlisted owner; a conference DM requires
-  its original participant under the private-chat access boundary (§13.3). A group Coder submission requires
-  the exact original prompt/chat/run binding plus a fresh current-participant check. Both use the
+- **Callback auth** (§6.5): an ordinary DM requires its allowlisted owner. Group Coder and conference
+  submissions require the exact original prompt/chat/run binding plus a fresh current-participant
+  check. Conference consent additionally requires the original requester (§13.3). Both use the
   ≥128-bit single-use random nonce and re-validate args-hash + `policy_version`. Args-hash +
   `policy_version` validation happens **inside the callback resolution CAS** as the §19.1 approve
   guard (a mismatch commits `PENDING → REJECTED`, `decision = stale_policy`, and never reaches
   `APPROVED`); the at-execution recheck survives only as the boot crash-window belt (§6.5), whose
   granted-then-denied audit pair is documented — a mismatch there fails the **run** while the row
   stays `APPROVED`.
+- **Group execution after consent** restores the original interactive requester, session and
+  delivery chat from the persisted run. Both `coder_submit`/`coderSubmit` and
+  `challenge_submit`/`conferenceSubmit` are allowed tool/reason pairs; other group actions remain
+  refused. The approver and delivery chat are never used as substitutes for a missing requester.
 - **`policy_version`** (Inc 5a) is the first 16 hex chars of a **length-prefixed SHA-256** over the policy-relevant inputs at run start: **system-tier prompt materials** (the system/security prompt text + the loaded contents of `SOUL.md`/`AGENTS.md`/`TOOLS.md`, a missing/unreadable file hashing as empty), the **tool registry surface** (sorted tool names, each with its canonical parameter JSON, declared `RiskLevel`, metadata provenance, optional credential-free invocation identity, `requiresInteractiveRequester`, `requiresGroupApproval`, declared **fence label** — a trust declaration on par with risk, since it selects the prompt carve-out the tool's output renders under, so changing it voids an outstanding approval as `stale_policy` — and `ToolEgressClass`), and the **pinned egress + policy config** (the resolved **LLM egress identity** — the canonical configured endpoint on the current route, or the provider ID plus fixed endpoint on a managed one, so the sink is fingerprinted even when no base URL is configured (§8.1); **that identity is the configured primary's, resolved once at composition, so a runtime failover to the fallback route does not move it and the sink an approval binds to is not guaranteed to be the sink that serves the resumed run** — search-endpoint presence, canonical workspace root). **Secret values are never hashed, and an egress identity never contains a credential.** It is computed in two parts — a static sub-hash over the tool/config inputs at the composition root, folded into `ContextBuilder`'s prompt-material hash — persisted to `runs.policy_version` at pick-up and copied onto every approval; a **strict-inequality** mismatch at resolution denies with `stale_policy`.
 - **Coder execution identity** is `CoderExecutionPolicy.id`: deterministic length-prefixed hashing
   of the resolved executable and effective child PATH, explicitly present/absent profile and
@@ -945,7 +949,11 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   vs overwrite; egress yes/no). Redaction hides **secrets**, not the destination fields needed to
   judge risk. A Coder approval uses a Rich Markdown card that shows the complete source, workspace,
   start ref, deliverable, frozen PR repository/base, existing-change scope, and the exact redacted
-  task and instructions; group cards state that any current member may decide. Workspace-contained
+  task and instructions; group cards state that any current member may decide. A conference
+  approval (§13.3) presents its canonical destination as separate complete repository, base branch
+  and baseline fields, without repeating the internal `conference:<case>:<repository>@<baseline>`
+  target string. Both cards escape dynamic values and preserve paragraph boundaries when chunked;
+  the approval keyboard appears only on the final chunk. Workspace-contained
   **privileged files** are **writable via `file_write` behind an explicit ⚠ privileged-file banner**
   in the prompt (owner decision, 2026-07-09) — flagged, not refused in code, because they steer a
   later turn. The set is every fixed prompt file (`SOUL.md`/`AGENTS.md`/`TOOLS.md`/`USER.md`/
@@ -958,8 +966,8 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 ## 12. Security & trust model
 
 The dedicated conference profile (§13.3) is a second deployment-scoped exception to the ordinary
-single-owner access boundary. It accepts private participant conversations with a fixed challenge
-tool surface and no shared personal context; it never enables the group-mode rules in §12.1.
+single-owner access boundary. It serves configured groups/topics using §12.1 routing, with a fixed
+challenge tool surface, requester-only consent and no personal workspace, memory or recall context.
 
 **The ordinary agent tool boundary uses four independent defenses:** (1) the **numeric-ID default-deny boundary** — untrusted senders never reach the model; (2) **untrusted-data labeling + the in-code instruction hierarchy** — inbound/tool/retrieved content, remote tool metadata, and durable memory are treated as data and cannot claim authority; (3) the **in-code policy gate + risk tiers** — every side effect is authorized by deterministic code at the dispatch site, never by the prompt; (4) the **enforced lethal-trifecta gate + approvals + blast-radius caps**, with the **VM sandbox for `execute_code`**. These defenses gate the ordinary tool surface even when the model is subverted. Opt-in Coder instead grants a concrete native delegation (§13.2): swift-claw authorizes admission and task scope, while the trusted Codex installation and its integrations determine child authority. Its automatic approval review is not deterministic authorization of every child action, and a working directory is not a security sandbox.
 
@@ -985,17 +993,17 @@ tool surface and no shared personal context; it never enables the group-mode rul
 
 ### 12.1 Group mode (config-gated, off by default)
 
-`CLAW_GROUP_CHATS` is a comma-separated list of Telegram chat ids `clawd` serves as a **shared room** instead of the owner's DM. Empty is the default, and with it empty nothing in this subsection exists; conference mode (§13.3) also refuses all group chats regardless of this setting. Group mode remains a deployment-scoped exception to `docs/PRD.md` NG1 rather than a general multi-user product. It exists for a supervised, time-boxed event on a separate installation, and the trade it makes below is only defensible under exactly those conditions. Public operating docs describe the opt-in and its Coder approval requirement so an operator can deploy it safely.
+`CLAW_GROUP_CHATS` is a comma-separated list of Telegram chat ids `clawd` serves as a **shared room** instead of the owner's DM. Empty is the default, and with it empty nothing in this subsection exists; conference mode (§13.3) uses the same chat allowlist and refuses private messages. Group mode remains a deployment-scoped exception to `docs/PRD.md` NG1 rather than a general multi-user product. It exists for a supervised, time-boxed event on a separate installation, and the trade it makes below is only defensible under exactly those conditions. Public operating docs describe the opt-in and its Coder approval requirement so an operator can deploy it safely.
 
 - **The mode is derived from the session key, never re-read from config.** `SessionKey` mints `tg:dm:<chatId>` for a DM and `tg:topic:<chatId>:<threadId|general>` for one forum topic; `SessionKey.mode(from:)`, `chatId(from:)` and `threadId(from:)` recover the three facts every consumer needs from the key alone. That matters because most consumers hold only a session id: `TurnRunner.resume`, a scheduled fire, and boot reconciliation all read the mode off the row they already loaded. **`AppConfig.groupChats` has exactly one reader** — the access decision — so no second component can drift about which conversation is which. The General topic carries no `message_thread_id` on the wire, so its key takes a `general` suffix that no numeric thread id can collide with; a non-forum group has one conversation and lands on that same key correctly.
 - **Conversation access is an allowlist of chats, not of users.** `AccessControl.decide` keeps the numeric-ID default-deny boundary for `.private` (the owner's allowlist, unchanged) and adds a **chat-id** grant for `.group`/`.supergroup`: being in an allowlisted room admits ordinary conversation without a per-attendee allowlist entry. Group Coder approval is the narrow exception: every button tap also needs a fresh Telegram `getChatMember` result for that user and group. The check is fail-closed and uncached; Telegram guarantees lookups for other users only when the bot is a group administrator, so that status is an operating prerequisite for reliable group Coder approval. `.channel` and any chat kind this build has never seen are refused, so a new Telegram surface can never inherit either grant. A refused DM is answered (the stranger can ask the owner for access); a refused chat is answered with **silence**, so the bot never announces itself to a room it was added to uninvited.
 - **Intake observes before it decides to answer.** `AddressingResolver` decides whether a message is talking to the bot — an `@handle` mention, a slash command this build recognizes, or a reply to something the bot itself said — **before** the content switch, so an unaddressed photo or voice note is never downloaded or transcribed. An addressed message takes the ordinary `claimAndPersistInbound` path. Unaddressed text takes `claimAndPersistObserved`: the same claim, the same session upsert, the same message insert, **no run**. The router skips unaddressed media without downloading, transcribing, or storing a transcript row. The addressed and observed text paths share the claim key, so Telegram stores one text update at most once whichever path it takes. The bot follows the topic's text and speaks only when called. Group mode makes the bot's own `@handle` load-bearing, so a daemon configured with group chats **refuses to boot** without a resolved bot username rather than sitting silently in every room.
 - **A stored group line names its speaker.** `TranscriptAuthor` renders `<display name>: <text>` at persist time, not at assembly time, so a recall hit pulled back out of history still says who said it and the name is in the FTS index. The separator and every line break are folded out of a display name first, so one line can never present itself as two speakers. A DM line is stored exactly as typed.
 - **Recall never leaves the topic.** `Retriever.searchRelevantMessages` takes a `restrictToSessionId`; a group topic passes its own session id, a DM passes `nil` and keeps its cross-session reach. Without that restriction one room's words would surface in another room's prompt, because a group line is stored trusted (below) and trusted rows are exactly what recall returns.
-- **Coder submission is the one group approval.** Existing group behavior is unchanged for every
+- **Generic Coder submission always requires group approval.** Existing group behavior is unchanged for every
   other tool: the ask tier allows on the gate-resolved target rather than parking; `memory_write` is
   refused; writes to privileged prompt files are refused; ordinary dangerous tools execute their
-  prepared action; and a held trifecta allows. `coder_submit` alone declares that its dangerous action
+  prepared action; and a held trifecta allows. `coder_submit` declares that its dangerous action
   must park. Its keyboard is accepted only on the exact original prompt in the original allowlisted
   group, for the original interactive run/session, after a fresh fail-closed membership check. Any
   current participant, including the requester, may approve or deny; the first successful CAS wins
@@ -1005,6 +1013,7 @@ tool surface and no shared personal context; it never enables the group-mode rul
   remains unchanged: `enabledDangerousTools`, `WorkspacePathContainment`, the SSRF classifier, the
   unconditional and conditional exfiltration argument scans, secret redaction, the tool-output cap,
   and the sandbox. Topic `execute_code` continues to use the existing group auto-run rule.
+  The separate conference catalog instead requires author-only approval for `challenge_submit` (§13.3).
 - **The owner-scoped command families are refused.** `Command.isDirectOnly` covers `/remember`, `/memory`, `/schedule`, `/pause`, `/resume`, `/run`, `/cancel`; a group invocation gets one refusal naming both families, so an attendee learns the rule rather than just this rejection. Two reasons, both structural: durable memory and the schedule table are single-owner state delivered to a chat id the arming message chose, and both park a confirmation that the **next plain message** resolves — in a shared room that message belongs to whoever typed fastest, so one attendee could commit a draft another one wrote. `/new` and `/stop` act on the topic's own session and stay available; the read-only reports name nothing private and stay available.
 - **A reply goes back into the topic that asked, as a reply.** Migration `v10` adds `runs.trigger_telegram_message_id` (Telegram's own message id, distinct from the `messages` row id `trigger_message_id` already carries) and nullable `outbound_deliveries.message_thread_id` / `reply_to_message_id`. The outbox target is stamped **at enqueue from the run's own session key**, so every path that enqueues — a turn reply, a command reply, a scheduled fire, a boot crash notice — lands in the right topic without a second lookup. The typing indicator carries the topic id. Telegram accepts streaming drafts only in private chats, so a group turn keeps reissuing the topic-scoped typing action until the final reply arrives.
 - **One throttled chat no longer stalls every other one.** The outbox drain is strictly ordered per chat and stops on a send failure, which in a DM meant one stalled conversation. With several topics live, a Telegram 429 is the one failure that says how long to wait, so the dispatcher puts a **per-chat hold** on the retry-after window, skips that chat's rows, and carries on with the others; order inside a run survives because a run answers exactly one chat. Every other failure keeps the existing stall-and-wait behavior.
@@ -1294,15 +1303,18 @@ publication; Coder never receives it.
 These application boundaries do not provide an OS sandbox: native Codex permissions and inherited
 integrations retain the authority described in §13.2.
 
-Conference access admits private Telegram participants without an owner allowlist entry and refuses
-groups, supergroups and channels. Numeric sender IDs from trusted context establish ownership;
-model arguments and display names never do. Participants receive only `challenge_current`,
-`challenge_submit` and `challenge_status`, plus `/start`, `/help`, `/new` and `/stop`. No ordinary
+Conference access admits messages only from groups/supergroups listed in `CLAW_GROUP_CHATS`,
+including forum topics and General, without per-participant owner allowlist entries. Private messages
+(including the owner's), channels and unlisted groups are ignored. Mention, reply-to-bot and command
+addressing follows §12.1; unaddressed text is observed without a run. Numeric sender IDs from trusted
+context establish ownership; model arguments and display names never do. Participants receive only
+`challenge_current`, `challenge_submit` and `challenge_status`, plus `/start`, `/help`, `/new` and `/stop`. No ordinary
 Coder tools, filesystem/exec tools, workspace skills, MCP sessions or owner operational commands are
 exposed. Context assembly injects empty workspace, memory and recall collaborators, so only the
-participant's own session history, built-in conference policy and ordinary runtime metadata enter
-the conversation. Tool hiding alone cannot establish this boundary because ordinary DM recall spans
-the owner's sessions. Ordinary mode retains its existing context behavior.
+current topic's shared session history, built-in conference policy and ordinary runtime metadata enter
+the conversation. Participants in a topic can see one another's proposals and results; no history
+from another topic or private conversation is injected. `/new` and `/stop` act on the shared topic.
+Ordinary mode retains its existing context behavior.
 
 **Case, consent and admission.** One operator-selected JSON case is active per daemon boot:
 `id`, `title`, `prompt`, public GitHub `repositoryURL`, a full immutable 40/64-digit `baselineRef`
@@ -1310,16 +1322,33 @@ commit SHA and `baseBranch`. The target branch must exist at that SHA and remain
 case; do not merge participant solutions into it or reuse case IDs for different conditions.
 Restarting with another case affects new requests; queued work retains its original case snapshot.
 
-The participant sends the complete proposal in one message. `challenge_submit` is dangerous and
-approval-only; its card binds the exact answer, case, repository, baseline, base branch and consent
-to publish the proposal and generated code. The recorded action also carries the resolved Coder
-`executionPolicyID` from §11. Composition includes that same ID in the conference tool's invocation
+The participant sends the complete proposal in one message. Presenting it as their solution opens
+the approval card immediately, without a preliminary conversational confirmation or a separate
+submission command. A bare “yes” cannot replace the complete message; the bot asks for the full
+proposal again. An explicit request to discuss a draft without submitting it does not open a card.
+`challenge_submit` is dangerous and approval-only; its card binds the exact answer, case,
+repository, baseline, base branch and consent to publish the proposal and generated code. The
+Russian Rich Markdown card opens with **«Отправить решение?»**, shows the case title under
+**«Кейс»** and the complete secret-redacted, escaped proposal under **«Твоё решение»**. It briefly
+explains the safety check, implementation and draft PR result delivered to the original topic.
+The **«Публикация»** section shows the full repository URL, base branch and baseline SHA once each;
+the internal canonical target stays bound to the recorded action without being repeated in the card.
+The card explicitly states that the proposal and code will be public and will not be automatically
+merged. Conference buttons are **«Отправить решение»** and **«Отмена»**; their existing nonce/verdict
+callback binding is unchanged, and only the final chunk carries the keyboard.
+
+Only the original requester can approve or deny from that original prompt in the same configured
+group, with a fresh fail-closed Telegram membership
+check. Another member's tap leaves it pending. The bot must be a group administrator for reliable
+membership checks. The recorded action also carries the resolved Coder `executionPolicyID` from §11. Composition includes that same ID in the conference tool's invocation
 identity even though `coder_submit` is absent from its catalog. Changed executable, effective PATH,
 profile, config home or controlled credential selectors therefore invalidate pending consent.
 
 After approval, the workflow verifies the prepared case/policy and exact persisted triggering
-message before the judge or queue. A model rewrite is refused. It checks for an existing submission
-first: replaying the same approved origin and snapshot returns the existing UUID, without another
+message before the judge or queue. Group transcript decoding removes only the daemon-added speaker
+label (through the first `TranscriptAuthor.separator`); sanitized labels cannot contain that separator.
+The remaining message, including mentions, whitespace and further separators, must match verbatim.
+A model rewrite is refused. It checks for an existing submission first: replaying the same approved origin and snapshot returns the existing UUID, without another
 judge or Coder call. `UNIQUE(participant_user_id, case_id)` prevents a new answer from replacing a
 confirmed one even under competing inserts.
 
@@ -1385,14 +1414,22 @@ Create a draft PR and validate its canonical URL, target repository, head branch
 frozen baseline SHA, draft/open state and expected GitHub actor before storing `completed`. The PR
 contains the case, original proposal, public submission UUID, baseline and explicitly labelled
 Coder-reported checks; private Telegram IDs remain in SQLite. Public solutions are visible to all,
-so private conversation/status isolation does not make published proposals confidential.
+and the topic itself is shared; submission ownership does not make proposals confidential.
 
 Retryable publication failures retain `running` and reuse the same branch/PR identity without new
 inference. A failed database write after publication recovers through the existing-PR lookup.
-Terminal state is persisted before claiming a UUID-keyed conference outbox row and recording its
-notification marker. This gives one durable completion notice; inherited Telegram delivery remains
-at-least-once if an acknowledgment is lost. `challenge_status` uses trusted requester context and
-returns only that participant's submission, including an older case queried by UUID. Persistent
+The completion notice uses a Russian outcome heading derived from the typed submission state,
+followed by separate Rich Markdown blocks for the case title, any PR URL, submission UUID and
+failure reason when present. Dynamic fields are escaped and retained in full. A long notice is
+split at complete block boundaries into independently deliverable chunks rather than truncated.
+Terminal state is persisted before claiming conference outbox chunks keyed by submission UUID
+and chunk ordinal. The notification marker is recorded only after all chunks are claimed;
+retrying an interrupted enqueue reuses the existing chunks. Each runless chunk derives its topic
+and reply-to message from the original run using the same outbox target resolver as conversational
+replies. This gives one durable logical completion notice; inherited Telegram delivery remains
+at-least-once if an acknowledgment is lost.
+`challenge_status` uses trusted requester context and returns only that participant's submission
+from the same chat/topic session, including an older case queried by UUID. Persistent
 remote permission/push failures and `needs_review` require operator intervention; v1 has no retry
 dashboard or automatic reapproval path.
 

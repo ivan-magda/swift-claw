@@ -459,15 +459,23 @@ daemon restarts; see the [operator recovery path](LOCAL_DEV.md#coder-background-
 
 ## Conference coding challenge
 
-`CLAW_CONFERENCE_ENABLED=true` selects a separate conference deployment with private participant
-conversations, a fixed challenge tool surface and no shared personal context. It requires an
+`CLAW_CONFERENCE_ENABLED=true` selects a separate conference deployment in the groups configured
+by `CLAW_GROUP_CHATS`, including forum topics and General. It has a fixed challenge tool surface
+and no personal workspace, memory or recall context. It requires an
 explicit nonpersonal `CLAW_STATE_ROOT`, `CLAW_CONFERENCE_CASE_FILE`,
 `CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR`, enabled Coder and a dedicated GitHub bot-user `GH_TOKEN`.
 The Coder config home must resolve within the state root; Coder receives no publication token.
-Groups and ordinary owner commands are refused in this profile.
+Private messages and ordinary owner commands are refused in this profile. Make the bot a group
+administrator for approval membership checks. Address it with a mention or reply in the topic.
+Topic history is shared; other topics' history is excluded.
 
-Participants confirm their exact proposal before the judge and durable queue. Pending approvals
-and queued admission bind the resolved Coder policy, so changing the executable, PATH, profile or
+Presenting a complete solution opens its approval card without an extra conversational confirmation.
+The Russian card shows the case, complete proposal and publication destination: repository, base
+branch and baseline commit. It explains that the text and code become public in a draft PR, with
+no automatic merge, and offers **«Отправить решение»** / **«Отмена»**. Only the proposal's author can
+confirm or deny it before the judge and durable queue. Status is restricted to that author in the
+same topic; completion replies to the original proposal there. Pending approvals and queued
+admission bind the resolved Coder policy, so changing the executable, PATH, profile or
 config home requires renewed authorization before native work can start. See
 [CONFERENCE.md](CONFERENCE.md) for deployment, policy-change handling and the live smoke test.
 

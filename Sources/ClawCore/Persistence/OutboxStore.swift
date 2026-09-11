@@ -59,6 +59,7 @@ public struct LearningNoticeChunk: Sendable, Equatable {
 /// Runless completion notice for one immutable conference submission.
 public struct ConferenceNoticeChunk: Sendable, Equatable {
   public let submissionID: UUID
+  public let originRunID: Int64
   public let ordinal: Int
   public let chatId: Int64
   public let payload: String
@@ -66,12 +67,14 @@ public struct ConferenceNoticeChunk: Sendable, Equatable {
 
   public init(
     submissionID: UUID,
+    originRunID: Int64,
     ordinal: Int,
     chatId: Int64,
     payload: String,
     payloadHash: String
   ) {
     self.submissionID = submissionID
+    self.originRunID = originRunID
     self.ordinal = ordinal
     self.chatId = chatId
     self.payload = payload

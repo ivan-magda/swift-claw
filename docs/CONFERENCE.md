@@ -47,6 +47,7 @@ Set the conference-specific environment in the same environment loaded by the da
 ```sh
 export CLAW_CONFERENCE_ENABLED=true
 export CLAW_STATE_ROOT=/absolute/path/to/conference-state
+export CLAW_GROUP_CHATS=-1001234567890
 export CLAW_CONFERENCE_CASE_FILE=/absolute/path/to/cases/day-1.json
 export CLAW_CONFERENCE_EXPECTED_GITHUB_ACTOR=your-conference-bot-login
 export CLAW_CODER_ENABLED=true
@@ -70,15 +71,30 @@ monetary budget or conference-registration system.
 
 ## Participant interaction
 
-1. Ask the bot for the current challenge in a private message.
-2. Send your **entire proposed solution in one message**. Sending only “submit my previous
+Configure the real group ID in `CLAW_GROUP_CHATS` and make the bot a group administrator so
+Telegram membership checks work. The profile serves that group and its topics (including General);
+private messages are ignored. Topic history, proposals and results are visible to its participants.
+
+1. In the desired topic, mention the bot: `@YourBot покажи текущий кейс`. You can also reply
+   to the bot's message. Keep subsequent requests in that topic.
+2. Send your **entire proposed solution in one message**, for example `@YourBot вот моё решение: ...`.
+   The bot opens the approval card directly; there is no preliminary yes/no question. Sending only “submit my previous
    answer” does not select an earlier message in v1; resend the proposal itself.
-3. Check and confirm the approval card. It binds the exact text and case, including consent
-   to publish the proposal and generated code.
+3. Check and confirm the approval card from the same Telegram account that sent the proposal.
+   The Russian card **«Отправить решение?»** shows the case and your complete proposal, followed
+   by a **«Публикация»** section with the full repository URL, target branch and baseline commit.
+   It explains the check, implementation and draft PR result in this topic, and asks for consent
+   to publish your text and generated code without automatic merging. Press **«Отправить решение»**
+   to proceed or **«Отмена»** to decline. Declining does not use your one submission for the case;
+   resend the complete proposal to try again. Another participant cannot decide it; every accepted
+   tap checks current membership. If the card spans several messages, its buttons are on the last one.
 4. After the tool-free safety check, the bot returns a queued submission UUID. An unsafe or
    unavailable precheck queues nothing; the participant may correct/resend and confirm again.
-5. Ask for status or use the eventual completion message. A successful result includes a draft
-   PR URL. A failed/blocked/review-required implementation retains the submitted human answer.
+5. Ask for status in the same topic or use the eventual completion reply there. A successful result
+   has a Russian outcome heading, the case title, a separate draft PR link and the submission UUID.
+   An unsuccessful result also shows the reason; failed, blocked and review-required implementations
+   retain the submitted human answer. Long completion replies use several readable messages with
+   the full fields preserved, all replying to the original proposal in this topic.
 
 The bot publishes the PR; the participant remains the author of the idea. The public PR
 contains the proposal and submission UUID, while the private database retains the numeric
@@ -106,12 +122,15 @@ with swift-claw commit, Codex version, baseline SHA and the two resulting PR URL
 credentials or private identifiers in public receipts.
 
 - Use two real Telegram accounts. Both see the published case; each submits a different short
-  proposal and confirms it. A participant cannot approve or query the other's private submission.
+  proposal in the configured group and confirms it. A participant cannot approve, deny or query
+  the other's submission. Verify another topic cannot query even the same author's submission;
+  private messages and unlisted groups produce no response.
 - Verify each proposal is reproduced unchanged in its own PR and each branch starts from the
   same baseline. PRs are **draft**, target the configured case branch and have the configured
   bot account as GitHub author, not the operator's account. Baseline/main remain unchanged.
-- Verify each participant receives their own result, not a generic Coder completion followed
-  by a second conference completion. Repeating confirmation must not create another submission.
+- Verify each result replies to its original proposal in the correct topic. There must be only
+  one logical conference completion, which may span several messages, without a generic Coder
+  completion as well. Repeating confirmation must not create another submission.
 - Inspect actual reported checks and the generated diff. “PR created” does not mean “iOS build
   succeeded”, “tests passed” or “the proposal was faithfully implemented”. Run the repository's
   checks independently when those claims matter for the event.
@@ -124,8 +143,8 @@ credentials or private identifiers in public receipts.
 
 ## Operations and failure handling
 
-Use `challenge_status` with a known submission UUID to query a previous day's answer. Durable
-submission, Coder result, branch and PR identities remain linked in the conference SQLite
+Ask for status with a known submission UUID in its original topic to query a previous day's answer.
+Durable submission, Coder result, branch and PR identities remain linked in the conference SQLite
 state. Review `needs_review` manually; do not delete rows to force an automatic rerun. Keep
 retained Coder workspaces until their publication/review is settled.
 
@@ -136,8 +155,11 @@ A source identity or baseline mismatch that persists after preparation requires 
 Transient publication failures retry the same branch and look for an existing PR first.
 Persistent authentication, permission or push failures need operator repair. A closed,
 merged, non-draft or mismatched existing PR is not automatically replaced or modified.
-Completion delivery uses the existing at-least-once Telegram outbox, so a lost network
-acknowledgment may still duplicate a send even though there is only one durable notice.
+Completion delivery records each message under the submission UUID and its chunk number, and
+marks the notice enqueued only after all chunks are recorded. Retrying an interrupted enqueue
+reuses those chunks and preserves their original topic and reply target. Delivery uses the existing
+at-least-once Telegram outbox, so a lost network acknowledgment may still duplicate a send even
+though there is only one durable logical notice.
 
 The safety judge and coding-agent inference are probabilistic. The judge is not an execution
 sandbox, and its extra request is not currently included in conversational `/cost`. A dedicated

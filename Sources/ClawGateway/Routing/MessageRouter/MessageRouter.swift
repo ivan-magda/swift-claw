@@ -13,7 +13,7 @@ public enum HandleOutcome: Sendable, Equatable {
 
 /// Routes one inbound update through the configured access and command surface. The conference
 /// profile is deliberately restrictive: it exists only on an isolated conference deployment and
-/// admits participant DMs while suppressing owner-only operational command families.
+/// serves configured group topics while suppressing owner-only operational command families.
 public struct MessageRouter: Sendable {
   let botUsername: String?
   private let addressing: AddressingResolver

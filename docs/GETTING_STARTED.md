@@ -306,8 +306,9 @@ separate from conversational `/cost`. The settings, limits, group opt-in and aut
 are in [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration).
 
 For the separate conference deployment, follow [CONFERENCE.md](CONFERENCE.md). That profile
-accepts private participant proposals, queues them after confirmation and publishes draft PRs
-through a dedicated bot account; it replaces the ordinary personal tool and context surface.
+accepts proposals in configured groups/topics, queues them after their author's confirmation and
+publishes draft PRs through a dedicated bot account. Results return to the original topic; private
+messages are ignored. It replaces the ordinary personal tool and context surface.
 
 ## Troubleshooting
 

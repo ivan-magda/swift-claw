@@ -1,3 +1,5 @@
+import Foundation
+
 /// Who said a line, as a shared transcript records it.
 ///
 /// One topic interleaves many speakers, so a stored group line names its author; a DM has exactly
@@ -45,6 +47,20 @@ extension ChatMode {
     switch self {
     case .direct: text
     case .group: author.prefixing(text)
+    }
+  }
+
+  /// Recovers the message verbatim from our stored transcript format. Sanitized author labels
+  /// cannot contain the separator, so only the first separator belongs to the label.
+  public func messageText(fromTranscript text: String) -> String? {
+    switch self {
+    case .direct:
+      return text
+    case .group:
+      guard let separator = text.range(of: TranscriptAuthor.separator) else {
+        return nil
+      }
+      return String(text[separator.upperBound...])
     }
   }
 }

@@ -36,6 +36,26 @@ import Testing
     )
   }
 
+  @Test func onlyConferenceRequesterCanResolve() async throws {
+    // given
+    let fixture = try GroupApprovalFixture(
+      reason: .conferenceSubmit,
+      tool: ConferenceToolNames.submit
+    )
+    let callbackHandler = handler(fixture)
+
+    // when — another current member taps the original prompt.
+    _ = await callbackHandler.handle(fixture.callback(), updateId: 2)
+
+    // then — their decision cannot replace the participant's consent.
+    #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == .pending)
+    _ = await callbackHandler.handle(
+      fixture.callback(from: GroupApprovalFixture.requesterId),
+      updateId: 3
+    )
+    #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == .approved)
+  }
+
   @Test(arguments: [true, false])
   func currentParticipantCanResolveWithoutOwnerAllowlist(approve: Bool) async throws {
     let fixture = try GroupApprovalFixture()

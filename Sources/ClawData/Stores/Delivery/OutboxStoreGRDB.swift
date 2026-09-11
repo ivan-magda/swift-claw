@@ -89,7 +89,7 @@ extension OutboxStoreGRDB {
     let notice = RunlessNotice(
       subjectDigest: chunk.subjectDigest,
       ordinal: chunk.ordinal,
-      chatId: chunk.chatId,
+      target: .chat(chunk.chatId),
       payload: chunk.payload,
       payloadHash: chunk.payloadHash,
       replyMarkup: chunk.replyMarkup,
@@ -106,7 +106,11 @@ extension OutboxStoreGRDB {
     let notice = RunlessNotice(
       subjectDigest: "conference:\(chunk.submissionID.uuidString.lowercased())",
       ordinal: chunk.ordinal,
-      chatId: chunk.chatId,
+      target: try OutboxInsertion.outboxTarget(
+        db,
+        runId: chunk.originRunID,
+        chatId: chunk.chatId
+      ),
       payload: chunk.payload,
       payloadHash: chunk.payloadHash,
       replyMarkup: nil,
@@ -118,7 +122,7 @@ extension OutboxStoreGRDB {
   private struct RunlessNotice {
     let subjectDigest: String
     let ordinal: Int
-    let chatId: Int64
+    let target: DeliveryTarget
     let payload: String
     let payloadHash: String
     let replyMarkup: String?
@@ -133,18 +137,21 @@ extension OutboxStoreGRDB {
     try db.execute(
       sql: """
         INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
-          payload, payload_hash, reply_markup, status, created_ts, delivery_source)
-        VALUES (NULL, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+          payload, payload_hash, reply_markup, status, created_ts, delivery_source,
+          message_thread_id, reply_to_message_id)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?)
         """,
       arguments: [
         notice.ordinal,
-        notice.chatId,
+        notice.target.chatId,
         OutboxDedupKey.make(subjectDigest: notice.subjectDigest, ordinal: notice.ordinal),
         notice.payload,
         notice.payloadHash,
         notice.replyMarkup,
         now,
         notice.source.rawValue,
+        notice.target.messageThreadId,
+        notice.target.replyToMessageId,
       ]
     )
     return db.changesCount > 0

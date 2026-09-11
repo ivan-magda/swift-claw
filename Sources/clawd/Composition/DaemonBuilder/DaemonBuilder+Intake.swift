@@ -88,7 +88,7 @@ extension DaemonBuilder {
       accessControl: AccessControl(
         allowlist: stores.allowlist,
         groupChats: config.groupChats,
-        allowUnlistedPrivateUsers: conferenceProfile
+        conferenceProfile: conferenceProfile
       ),
       delivery: transport,
       turnRunner: turnRunner,
@@ -155,8 +155,7 @@ extension DaemonBuilder {
   }
 
   /// In the conference profile this is an allowlist, not an additive catalog: only the three
-  /// conference tools exist. That property is what makes admitting previously-unlisted private
-  /// participants safe on the dedicated state root.
+  /// conference tools exist, without ordinary tools or personal context in the shared room.
   func makeToolDispatcher(
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
