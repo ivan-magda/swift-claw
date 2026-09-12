@@ -279,7 +279,6 @@ private struct PinnedLessonEnvironment {
         auditLog: audit,
         clock: ContinuousClock()
       ),
-      budget: .default,
       contextBuilder: ContextBuilder(
         systemPrompt: SystemPrompt.minimal,
         proactiveSystemPrompt: "proactive policy",

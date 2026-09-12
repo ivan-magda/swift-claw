@@ -15,7 +15,6 @@ struct ScheduleHandlers: Sendable {
   let enqueuer: TurnEnqueuer
 
   let now: @Sendable () -> Date
-  let logger: Logger
 
   /// `/schedule <text>`: claim the update, run the ONE parse call, validate
   /// deterministically, park the validated draft, and send the gateway-authored confirm prompt.

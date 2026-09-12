@@ -34,7 +34,6 @@ public struct TurnRunner: TurnDispatching {
 
   let audit: any AuditLog
   private let agent: AgentRuntime
-  private let budget: RunBudget
   let contextBuilder: ContextBuilder
   package let imageCache: ImageCache
   /// Pokes the outbox dispatcher to drain after a commit. A no-op until the dispatcher is wired.
@@ -78,7 +77,6 @@ public struct TurnRunner: TurnDispatching {
     usageStore: any UsageStore,
     audit: any AuditLog,
     agent: AgentRuntime,
-    budget: RunBudget,
     contextBuilder: ContextBuilder,
     imageCache: ImageCache,
     notifyOutbox: @escaping @Sendable () -> Void,
@@ -102,7 +100,6 @@ public struct TurnRunner: TurnDispatching {
 
     self.audit = audit
     self.agent = agent
-    self.budget = budget
     self.contextBuilder = contextBuilder
     self.imageCache = imageCache
 

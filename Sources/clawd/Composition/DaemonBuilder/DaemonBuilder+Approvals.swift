@@ -43,7 +43,6 @@ extension DaemonBuilder {
       usageStore: stores.usage,
       audit: stores.audit,
       agent: agentStack.agent,
-      budget: config.budget,
       contextBuilder: agentStack.contextBuilder,
       imageCache: imageCache,
       notifyOutbox: { outboxSignal.poke() },

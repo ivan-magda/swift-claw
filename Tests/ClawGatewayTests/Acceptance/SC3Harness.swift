@@ -363,7 +363,6 @@ func makeSC3Harness(
     usageStore: stores.usage,
     audit: stores.audit,
     agent: agent,
-    budget: .default,
     contextBuilder: contextBuilder,
     imageCache: imageCache,
     notifyOutbox: {
