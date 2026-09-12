@@ -58,8 +58,8 @@ extension RunStoreGRDB {
     try terminateActiveRuns(db, sessionId: sessionId, reason: .superseded, now: now)
   }
 
-  /// `/stop`'s plural arm: every PENDING and RUNNING run for the session → CANCELLED. Mirrors
-  /// `supersedeRuns` so `/stop` and `/new` share one definition of "active".
+  /// `/stop`'s plural arm: every live (PENDING, RUNNING, AWAITING_APPROVAL) run → CANCELLED.
+  /// Mirrors `supersedeRuns` so `/stop` and `/new` share one definition of "active".
   static func cancelRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
     try terminateActiveRuns(db, sessionId: sessionId, reason: .cancelled, now: now)
   }
