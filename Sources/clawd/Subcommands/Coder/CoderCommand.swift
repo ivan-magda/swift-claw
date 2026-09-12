@@ -1,5 +1,4 @@
 import ArgumentParser
-import ClawCoder
 import ClawCore
 import ClawGateway
 import Foundation

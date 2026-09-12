@@ -1,4 +1,3 @@
-import ClawCore
 import Foundation
 
 struct SystemStatusDocument: Decodable {

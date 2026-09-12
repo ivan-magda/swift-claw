@@ -4,7 +4,6 @@ import ClawData
 import ClawGateway
 import ClawSubprocess
 import ClawTelegram
-import ClawTools
 import Foundation
 import Logging
 

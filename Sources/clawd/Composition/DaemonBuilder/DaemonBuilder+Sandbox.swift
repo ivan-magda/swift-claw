@@ -2,7 +2,6 @@ import ClawCore
 import ClawExec
 import ClawGateway
 import ClawSubprocess
-import ClawTools
 import Foundation
 
 // MARK: - Sandbox Bootstrap
