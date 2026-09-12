@@ -18,6 +18,7 @@ public actor CoderService: CoderServing, Service {
   let jobRoot: String
   let executionPolicyID: String
   let report: CoderCompletionReport
+  let completionNoticesEnabled: Bool
   let notifyOutbox: @Sendable () async -> Void
   let failures: AsyncStream<Void>
   let failureSignal: AsyncStream<Void>.Continuation
@@ -35,6 +36,7 @@ public actor CoderService: CoderServing, Service {
     config: CoderConfig,
     jobRoot: String,
     executionPolicyID: String,
+    completionNoticesEnabled: Bool = true,
     redact: @escaping @Sendable (String) -> String,
     notifyOutbox: @escaping @Sendable () async -> Void
   ) {
@@ -45,6 +47,7 @@ public actor CoderService: CoderServing, Service {
     self.config = config
     self.jobRoot = jobRoot
     self.executionPolicyID = executionPolicyID
+    self.completionNoticesEnabled = completionNoticesEnabled
     report = CoderCompletionReport(redact: redact)
     self.notifyOutbox = notifyOutbox
     (failures, failureSignal) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))

@@ -37,7 +37,7 @@ extension CoderService {
     }
     while !job.state.isTerminal {
       let selected = Self.selectedResult(result, persistedState: job.state)
-      let chunks = report.chunks(job: job, result: selected)
+      let chunks = completionNoticesEnabled ? report.chunks(job: job, result: selected) : []
       let resolved = job.ownership == .none || job.ownership == .stopped
       let outcome = try store.complete(
         id: id,
@@ -57,7 +57,9 @@ extension CoderService {
             fail(.cleanup(jobID: id))
           }
         }
-        await notifyOutbox()
+        if completionNoticesEnabled {
+          await notifyOutbox()
+        }
         return
       }
     }

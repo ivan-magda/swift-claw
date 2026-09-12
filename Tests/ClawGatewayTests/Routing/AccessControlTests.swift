@@ -87,4 +87,19 @@ import Testing
     // then — chat membership is the proof; no per-user check happens
     #expect(access.decide(chatKind: .supergroup, chatId: -100, userId: 7) == .allowed(.group))
   }
+
+  @Test func conferenceProfileServesOnlyConfiguredGroups() {
+    // given
+    let access = AccessControl(
+      allowlist: StubAllowlist(allowed: [42]),
+      groupChats: [-100],
+      conferenceProfile: true
+    )
+
+    // when / then
+    #expect(access.decide(chatKind: .supergroup, chatId: -100, userId: 7) == .allowed(.group))
+    #expect(access.decide(chatKind: .supergroup, chatId: -200, userId: 7) == .denied(.unlistedChat))
+    #expect(access.decide(chatKind: .private, chatId: 42, userId: 42) == .denied(.unlistedChat))
+    #expect(access.isAllowed(userId: 42) == false)
+  }
 }

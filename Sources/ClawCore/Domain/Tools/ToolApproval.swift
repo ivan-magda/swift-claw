@@ -23,6 +23,7 @@ public enum ApprovalReason: String, Sendable, Equatable {
   case askTier = "ask_tier"
   case codeExec = "code_exec"
   case coderSubmit = "coder_submit"
+  case conferenceSubmit = "conference_submit"
 }
 
 /// The tool-specific prompt inputs, produced at gate time by the tool that will act. The gate

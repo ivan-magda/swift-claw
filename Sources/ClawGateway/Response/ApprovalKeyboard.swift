@@ -1,3 +1,5 @@
+import ClawCore
+
 /// The inline-keyboard envelope for a durable approval. `callback_data` is the only
 /// state Telegram echoes back on a tap, so it carries just the single-use nonce and the verdict —
 /// never the approval `id` (opaque and unguessable). `markup` is a DETERMINISTIC JSON string (no
@@ -15,15 +17,17 @@ public enum ApprovalKeyboard {
   }
 
   /// Deterministic by construction: a fixed (sorted) key order, no whitespace, no Date or random.
-  /// The nonce is base64url (`[A-Za-z0-9-_]`) and the verdicts/labels are ASCII, so nothing here
-  /// needs JSON escaping. The client decodes this String to an object for the request body.
-  public static func markup(nonce: String) -> String {
+  /// The nonce is base64url (`[A-Za-z0-9-_]`); verdicts and fixed labels need no JSON escaping.
+  /// The client decodes this String to an object for the request body.
+  public static func markup(nonce: String, reason: ApprovalReason? = nil) -> String {
     let approve = callbackData(nonce: nonce, verdict: approveVerdict)
     let deny = callbackData(nonce: nonce, verdict: denyVerdict)
+    let approveLabel = reason == .conferenceSubmit ? "Отправить решение" : "Approve"
+    let denyLabel = reason == .conferenceSubmit ? "Отмена" : "Deny"
     return #"""
       {"inline_keyboard":[[\#
-      {"callback_data":"\#(approve)","text":"Approve"},\#
-      {"callback_data":"\#(deny)","text":"Deny"}\#
+      {"callback_data":"\#(approve)","text":"\#(approveLabel)"},\#
+      {"callback_data":"\#(deny)","text":"\#(denyLabel)"}\#
       ]]}
       """#
   }

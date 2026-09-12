@@ -290,6 +290,12 @@ public enum ClawDatabase {
     migrator.registerMigration("v15") { db in
       try replaceOpenTrialIndexWithLiveTrialIndex(db)
     }
+    migrator.registerMigration("v16") { db in
+      try createConferenceSubmissions(db)
+    }
+    migrator.registerMigration("v17") { db in
+      try addConferenceAdmissionIdentity(db)
+    }
     return migrator
   }
 

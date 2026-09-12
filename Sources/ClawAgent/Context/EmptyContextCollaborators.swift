@@ -1,6 +1,22 @@
 import ClawCore
 import Foundation
 
+public struct EmptyWorkspace: WorkspaceReading {
+  public init() {}
+
+  public func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
+    .missing
+  }
+
+  public func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
+    .missing
+  }
+
+  public func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
+}
+
 package struct EmptyMemoryStore: MemoryStore {
   package init() {}
 

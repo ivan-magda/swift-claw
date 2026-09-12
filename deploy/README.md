@@ -1,5 +1,10 @@
 # deploy/
 
+**Conference deployment:** start with the standalone Russian
+[CONFERENCE.md](../docs/CONFERENCE.md). It builds `feature/conference-coding-challenge` /
+PR #199 on a fresh Mac without merging into `main`, then creates a dedicated binary,
+state root and LaunchAgent. Use its service setup and update commands for the conference branch.
+
 Service files shipped with every release:
 
 - `run-clawd.sh` — wrapper that sources `clawd.env` and execs `clawd run`.
@@ -53,3 +58,10 @@ for conservative recovery. Disabling Coder removes its tools and native probes b
 earlier jobs on restart; full doctor and daemon health keep their reservations and uncertainty visible.
 See [INSTALL.md](../docs/INSTALL.md#coder-prerequisites) and
 [LOCAL_DEV.md](../docs/LOCAL_DEV.md#coder-background-lifecycle-and-recovery).
+
+For the separate [conference challenge profile](../docs/CONFERENCE.md), use a dedicated
+nonpersonal service account, state root and GitHub bot-user token. Configure `CLAW_GROUP_CHATS`
+and make the bot a group administrator. The profile serves those groups/topics only; private messages
+are ignored and each proposal requires its author's confirmation. Its Coder config home must
+resolve within that state root; the supervisor publishes draft PRs and removes the publication
+credential from Coder's environment. Follow the conference runbook before opening participant access.

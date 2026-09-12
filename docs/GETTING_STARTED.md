@@ -2,6 +2,11 @@
 
 From nothing to a running assistant that answers you in Telegram.
 
+**Conference setup:** start with the standalone Russian
+[CONFERENCE.md](CONFERENCE.md). It covers a fresh Mac and builds
+`feature/conference-coding-challenge` / PR #199 without a merge to `main`, with its own
+binary, state root and LaunchAgent. The steps below configure the personal assistant.
+
 ## What you need
 
 - **A machine that stays on.** A Mac on macOS 15 or newer, or a Linux box with
@@ -304,6 +309,11 @@ N is configurable with `CLAW_CODER_MAX_CONCURRENT_JOBS` (default 1), and full me
 uses existing outbox retries, without another LLM turn. Child billing and child-reported usage are
 separate from conversational `/cost`. The settings, limits, group opt-in and authentication caveats
 are in [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration).
+
+For the separate conference deployment, follow [CONFERENCE.md](CONFERENCE.md). That profile
+accepts proposals in configured groups/topics, queues them after their author's confirmation and
+publishes draft PRs through a dedicated bot account. Results return to the original topic; private
+messages are ignored. It replaces the ordinary personal tool and context surface.
 
 ## Troubleshooting
 

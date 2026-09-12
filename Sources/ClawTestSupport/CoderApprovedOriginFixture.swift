@@ -1,5 +1,4 @@
 import ClawCore
-import ClawData
 import Foundation
 import GRDB
 
@@ -14,64 +13,34 @@ public enum CoderApprovedOriginFixture {
     threadID: Int64? = nil
   ) throws -> CoderOrigin {
     let chatID = groupChatID ?? ownerID
-    let sessions = SessionMessageStoreGRDB(writer: queue)
-    let runs = RunStoreGRDB(writer: queue)
-    let approvals = ApprovalStoreGRDB(writer: queue)
     let toolCallID = "coder-submit-fixture-call-\(updateID)"
     let policyVersion = PolicyFingerprint.combined(
       staticSubhash: prepared.executionPolicyID,
       promptMaterials: ["Coder store fixture"]
     )
-    let claim = try sessions.claimAndPersistInbound(
-      inbound(
+    let approval = try ApprovedExecutionFixture.claim(
+      queue: queue,
+      inbound: inbound(
         prepared: prepared,
         updateID: updateID,
         ownerID: ownerID,
         groupChatID: groupChatID,
         threadID: threadID,
         now: now
-      )
-    )
-    let runID = try required(claim.runId)
-    let sessionID = try required(claim.sessionId)
-    let pickedUpOrigin = try required(
-      try runs.pickUp(runId: runID, policyVersion: policyVersion, now: now)
-    )
-    guard pickedUpOrigin == .interactive else {
-      throw StoreError.unexpected("Coder fixture did not create an interactive run")
-    }
-    let receipt = try runs.commitSuspendedTurn(
-      runId: runID,
-      sessionId: sessionID,
+      ),
+      policyVersion: policyVersion,
       commit: approvalCommit(
         prepared: prepared,
         chatID: chatID,
         toolCallID: toolCallID,
         now: now
       ),
-      now: now
-    )
-    let resolution = try approvals.approve(
-      id: receipt.approvalId,
-      currentPolicyVersion: policyVersion,
       actor: ApprovalResolutionActor(
         actor: groupChatID == nil ? .owner : .groupMember,
         userId: ownerID
       ),
       now: now
     )
-    guard case .approved(let approval) = resolution else {
-      throw StoreError.unexpected("Coder fixture approval was not granted")
-    }
-    let executionClaim = try runs.claimApprovedExecution(
-      runId: approval.runId,
-      observationMessageId: approval.observationMessageId,
-      notResumableObservationContent: "The task was stopped before admission.",
-      now: now
-    )
-    guard executionClaim == .committed else {
-      throw StoreError.unexpected("Coder fixture could not claim its approved execution")
-    }
     return CoderOrigin(
       runID: approval.runId,
       sessionID: approval.sessionId,
@@ -116,7 +85,7 @@ private extension CoderApprovedOriginFixture {
     toolCallID: String,
     now: Date
   ) throws -> SuspendedTurnCommit {
-    let canonicalArgsJSON = try required(CanonicalJSON.encode(prepared))
+    let canonicalArgsJSON = try ApprovedExecutionFixture.required(CanonicalJSON.encode(prepared))
     let task = prepared.request.task ?? "Resolve the issue"
     let blastRadius =
       "\(prepared.request.workspace.rawValue); local changes; "
@@ -160,8 +129,8 @@ private extension CoderApprovedOriginFixture {
     toolCallID: String
   ) throws -> String {
     let request = prepared.request
-    let sourceJSON = try required(CanonicalJSON.encode(request.source))
-    let sourceArgument = try required(JSONValue.parse(sourceJSON))
+    let sourceJSON = try ApprovedExecutionFixture.required(CanonicalJSON.encode(request.source))
+    let sourceArgument = try ApprovedExecutionFixture.required(JSONValue.parse(sourceJSON))
     let proposedArguments = JSONValue.object([
       "source": sourceArgument,
       "task": .string(request.task ?? "Resolve the issue"),
@@ -169,18 +138,13 @@ private extension CoderApprovedOriginFixture {
       "deliverable": .string(request.deliverable.rawValue),
       "publish_existing_changes": .bool(request.publishExistingChanges),
     ])
-    let proposedArgsJSON = try required(CanonicalJSON.encode(proposedArguments))
-    return try required(
+    let proposedArgsJSON = try ApprovedExecutionFixture.required(
+      CanonicalJSON.encode(proposedArguments)
+    )
+    return try ApprovedExecutionFixture.required(
       ToolCallCoding.encode([
         ToolCall(id: toolCallID, name: CoderToolNames.submit, argumentsJSON: proposedArgsJSON)
       ])
     )
-  }
-
-  static func required<T>(_ value: T?) throws -> T {
-    guard let value else {
-      throw StoreError.unexpected("Coder approval fixture is missing a required value")
-    }
-    return value
   }
 }

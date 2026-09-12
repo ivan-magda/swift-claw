@@ -4,6 +4,12 @@ Everything about getting the `clawd` binary on and off a machine. For first-run
 configuration (bot token, secrets, allowlist), continue with
 [GETTING_STARTED.md](GETTING_STARTED.md).
 
+**Conference deployment:** follow the standalone Russian [CONFERENCE.md](CONFERENCE.md)
+first. It builds `feature/conference-coding-challenge` / PR #199 directly on a fresh Mac,
+without merging into `main`, and installs a dedicated binary, state root and LaunchAgent.
+Use that guide's install and update commands for the conference branch. The release installer
+below uses published assets and the personal assistant's layout.
+
 ## 1. Install
 
 ```bash
@@ -184,6 +190,13 @@ room. Group Coder approvals perform a fresh `getChatMember` lookup for every App
 Telegram guarantees lookups for other users only when the bot is an administrator. A failed or
 uncertain lookup leaves the approval pending. Keep group mode on its required separate nonpersonal
 state root; see [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup).
+
+The separate [conference challenge profile](CONFERENCE.md) requires a dedicated nonpersonal
+host/account and state root. Set `CLAW_GROUP_CHATS` to the conference group ID and make the bot a
+group administrator. Participants use mentions or replies in that group's topics; private messages
+are ignored. Only a proposal's author can confirm it. Its supervisor publishes with a dedicated
+GitHub bot-user token; that token is removed from Coder's child environment. Configure and authenticate the conference
+Codex home within the state root, including after symlink resolution, before starting the service.
 
 ### Staying on after logout
 

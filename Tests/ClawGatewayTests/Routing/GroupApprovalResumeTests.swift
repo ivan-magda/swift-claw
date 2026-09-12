@@ -9,15 +9,19 @@ import Testing
 
 @Suite struct GroupApprovalResumeTests {
   private struct ContextEchoTool: Tool {
-    let definition = ToolDefinition(
-      name: CoderToolNames.submit,
-      description: "Returns the trusted execution identity.",
-      parameters: .object([:]),
-      metadataProvenance: .trusted,
-      egressClass: .none,
-      riskLevel: .dangerous,
-      requiresInteractiveRequester: true
-    )
+    let toolName: String
+
+    var definition: ToolDefinition {
+      ToolDefinition(
+        name: toolName,
+        description: "Returns the trusted execution identity.",
+        parameters: .object([:]),
+        metadataProvenance: .trusted,
+        egressClass: .none,
+        riskLevel: .dangerous,
+        requiresInteractiveRequester: true
+      )
+    }
     let timeout: Duration = .seconds(1)
 
     func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
@@ -58,7 +62,7 @@ import Testing
 
   private func executor(_ fixture: GroupApprovalFixture) -> ApprovedActionExecutor {
     ApprovedActionExecutor(
-      tools: [CoderToolNames.submit: ContextEchoTool()],
+      tools: [fixture.approval.tool: ContextEchoTool(toolName: fixture.approval.tool)],
       runs: fixture.runs,
       redactArguments: { value in
         value
@@ -102,6 +106,44 @@ import Testing
       )
     }
     #expect(status == ToolObservationStatus.error.rawValue)
+  }
+
+  @Test func approvedConferenceActionRestoresOriginalRequest() async throws {
+    // given
+    let fixture = try GroupApprovalFixture(
+      reason: .conferenceSubmit,
+      tool: ConferenceToolNames.submit
+    )
+    _ = try fixture.approvals.approve(
+      id: fixture.approval.id,
+      currentPolicyVersion: GroupApprovalFixture.policyVersion,
+      actor: ApprovalResolutionActor(
+        actor: .groupMember,
+        userId: GroupApprovalFixture.requesterId
+      ),
+      now: GroupApprovalFixture.now
+    )
+    let approval = try #require(try fixture.approvals.approval(id: fixture.approval.id))
+
+    // when
+    let outcome = await executor(fixture).executeApproved(approval)
+
+    // then
+    #expect(outcome == .committed)
+    let content = try await fixture.queue.read { database in
+      try String.fetchOne(
+        database,
+        sql: "SELECT content FROM messages WHERE id = ?",
+        arguments: [approval.observationMessageId]
+      )
+    }
+    let observation = try #require(content)
+    let result = try #require(JSONValue.parse(observation)?.objectValue)
+    #expect(result["requester"] == .string(String(GroupApprovalFixture.requesterId)))
+    #expect(result["chat"] == .string(String(GroupApprovalFixture.chatId)))
+    #expect(result["mode"] == .string(ChatMode.group.rawValue))
+    #expect(result["args"] == JSONValue.parse(approval.canonicalArgsJSON))
+    #expect(result["target"] == .string(approval.canonicalTarget))
   }
 
   @Test func deniedGroupNoticeRepliesInOriginalTopicAndDisarmsOriginalPrompt() async throws {

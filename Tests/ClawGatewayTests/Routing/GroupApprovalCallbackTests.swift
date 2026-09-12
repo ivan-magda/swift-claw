@@ -36,16 +36,33 @@ import Testing
     )
   }
 
+  @Test func onlyConferenceRequesterCanResolve() async throws {
+    // given
+    let fixture = try GroupApprovalFixture(
+      reason: .conferenceSubmit,
+      tool: ConferenceToolNames.submit
+    )
+    let callbackHandler = handler(fixture)
+
+    // when — another current member taps the original prompt.
+    _ = await callbackHandler.handle(fixture.callback(), updateId: 2)
+
+    // then — their decision cannot replace the participant's consent.
+    #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == .pending)
+    _ = await callbackHandler.handle(
+      fixture.callback(from: GroupApprovalFixture.requesterId),
+      updateId: 3
+    )
+    #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == .approved)
+  }
+
   @Test(arguments: [true, false])
   func currentParticipantCanResolveWithoutOwnerAllowlist(approve: Bool) async throws {
-    // given
     let fixture = try GroupApprovalFixture()
     let callbackHandler = handler(fixture)
 
-    // when
     _ = await callbackHandler.handle(fixture.callback(approve: approve), updateId: 2)
 
-    // then
     let expectedState: ApprovalState = approve ? .approved : .rejected
     let expectedAction: AuditAction = approve ? .approvalGranted : .approvalDenied
     #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == expectedState)
@@ -68,7 +85,6 @@ import Testing
 
   @Test(arguments: Refusal.allCases)
   func invalidGroupAuthorityLeavesApprovalPending(refusal: Refusal) async throws {
-    // given
     let fixture = try GroupApprovalFixture(
       reason: refusal == .wrongReason ? .codeExec : .coderSubmit,
       tool: refusal == .wrongTool ? "execute_code" : CoderToolNames.submit
@@ -112,10 +128,8 @@ import Testing
         ? nil : (refusal == .copiedMessage ? 901 : GroupApprovalFixture.promptMessageId)
     )
 
-    // when
     _ = await callbackHandler.handle(callback, updateId: 2)
 
-    // then
     #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == .pending)
     let decisions = try await fixture.queue.read { database in
       try Int.fetchOne(

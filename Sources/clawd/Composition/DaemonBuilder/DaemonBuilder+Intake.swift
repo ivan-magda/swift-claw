@@ -20,7 +20,8 @@ extension DaemonBuilder {
     scheduleSurface: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler,
     doctor: any DoctorReporting,
-    learning: ScheduledLearningService?
+    learning: ScheduledLearningService?,
+    conferenceProfile: Bool = false
   ) -> IntakeStack {
     let router = makeIntakeRouter(
       coordination: coordination,
@@ -29,7 +30,8 @@ extension DaemonBuilder {
       scheduleSurface: scheduleSurface,
       approvalCallbacks: approvalCallbacks,
       doctor: doctor,
-      learning: learning
+      learning: learning,
+      conferenceProfile: conferenceProfile
     )
     let poller = TelegramPollerService(
       intake: transport,
@@ -54,14 +56,26 @@ extension DaemonBuilder {
     scheduleSurface: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler?,
     doctor: any DoctorReporting,
-    learning: ScheduledLearningService?
+    learning: ScheduledLearningService?,
+    conferenceProfile: Bool = false
   ) -> MessageRouter {
-    let voiceService = makeVoiceService()
-    let imageService = makeImageService()
-    let feedbackChallenges = makeFeedbackChallengeHandler(
-      coordination: coordination,
-      learning: learning
-    )
+    let voiceService = conferenceProfile ? nil : makeVoiceService()
+    let imageService = conferenceProfile ? nil : makeImageService()
+    let feedbackChallenges: FeedbackChallengeHandler?
+    let feedbackCallbacks: FeedbackCallbackHandler?
+    if conferenceProfile {
+      feedbackChallenges = nil
+      feedbackCallbacks = nil
+    } else {
+      feedbackChallenges = makeFeedbackChallengeHandler(
+        coordination: coordination,
+        learning: learning
+      )
+      feedbackCallbacks = makeFeedbackCallbackHandler(
+        challenges: feedbackChallenges,
+        learning: learning
+      )
+    }
 
     return MessageRouter(
       processed: stores.processed,
@@ -71,25 +85,27 @@ extension DaemonBuilder {
       memoryCommands: stores.memoryCommands,
       pendingConfirmations: coordination.pendingConfirmations,
       botIdentity: botIdentity,
-      accessControl: AccessControl(allowlist: stores.allowlist, groupChats: config.groupChats),
+      accessControl: AccessControl(
+        allowlist: stores.allowlist,
+        groupChats: config.groupChats,
+        conferenceProfile: conferenceProfile
+      ),
       delivery: transport,
       turnRunner: turnRunner,
       imageCache: imageCache,
       lanes: coordination.lanes,
       schedule: scheduleSurface,
-      learning: learning,
-      learningStore: stores.learning,
-      learningRedactor: SecretRedactor(secretValues: redactionValues),
-      learningOutboxSignal: coordination.outboxSignal,
+      learning: conferenceProfile ? nil : learning,
+      learningStore: conferenceProfile ? nil : stores.learning,
+      learningRedactor: conferenceProfile ? nil : SecretRedactor(secretValues: redactionValues),
+      learningOutboxSignal: conferenceProfile ? nil : coordination.outboxSignal,
       approvalCallbacks: approvalCallbacks,
-      feedbackCallbacks: makeFeedbackCallbackHandler(
-        challenges: feedbackChallenges,
-        learning: learning
-      ),
+      feedbackCallbacks: feedbackCallbacks,
       feedbackChallenges: feedbackChallenges,
       voice: voiceService,
       images: imageService,
       typing: TelegramTypingIndicator(transport: transport),
+      conferenceProfile: conferenceProfile,
       coordinator: coordination.approvalCoordinator,
       doctor: doctor,
       now: now,
@@ -97,8 +113,6 @@ extension DaemonBuilder {
     )
   }
 
-  /// Nil when the owner opted out, which is what makes the photo path fail closed: the router's only
-  /// other branch is the canned "can't read photos yet" reply.
   private func makeImageService() -> ImageMessageService? {
     guard config.image.enabled else {
       return nil
@@ -140,59 +154,74 @@ extension DaemonBuilder {
     )
   }
 
-  /// The tool catalog the registry advertises: the built-ins, then whatever the pinned MCP catalog
-  /// resolved. Remote tools go last so adding a server cannot reorder the built-ins, and the
-  /// `mcp__` prefix is what makes a name collision between the two structurally impossible.
+  /// In the conference profile this is an allowlist, not an additive catalog: only the three
+  /// conference tools exist, without ordinary tools or personal context in the shared room.
   func makeToolDispatcher(
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
     mcpTools: [any Tool],
-    coderTools: [any Tool] = []
+    coderTools: [any Tool] = [],
+    conferenceProfile: Bool = false,
+    conferenceTools: [any Tool] = []
   ) -> GatedToolDispatcher {
     let secretValues = redactionValues
     let redactor = SecretRedactor(secretValues: secretValues)
 
-    var tools: [any Tool] = [
-      FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
-      FileWriteTool(workspaceRoot: workspace.root, redactor: redactor),
-      MemoryWriteTool(redactor: redactor),
-      SkillLoadTool(
-        workspaceRoot: workspace.root,
-        scanSkills: { workspace.scanSkills() },
-        redactor: redactor
-      ),
-      WebFetchTool(
-        http: toolExecutor,
-        resolver: SystemAddressResolver(),
-        redactor: redactor,
-        exemptCIDRs: config.webFetchExemptCIDRs
-      ),
-    ]
-
-    if let searchApiKey = secrets.searchApiKey {
-      tools.append(
-        WebSearchTool(search: ExaSearchProvider(apiKey: searchApiKey, http: toolExecutor))
+    let tools: [any Tool]
+    let enabledDangerousTools: Set<String>
+    if conferenceProfile {
+      tools = conferenceTools
+      enabledDangerousTools = Set(
+        conferenceTools.filter { $0.definition.riskLevel == .dangerous }.map(\.definition.name)
       )
-    }
-
-    if let backend = sandbox.backend, sandbox.health?.isReady == true {
-      tools.append(
-        ExecuteCodeTool(
+    } else {
+      var ordinary: [any Tool] = [
+        FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
+        FileWriteTool(workspaceRoot: workspace.root, redactor: redactor),
+        MemoryWriteTool(redactor: redactor),
+        SkillLoadTool(
           workspaceRoot: workspace.root,
-          backend: backend,
-          settings: ExecuteCodeSettings(
-            memoryMiB: config.exec.memoryMiB,
-            cpus: config.exec.cpus,
-            timeout: .seconds(config.exec.timeoutSeconds),
-            allowEgress: config.exec.allowEgress
-          ),
+          scanSkills: { workspace.scanSkills() },
           redactor: redactor
+        ),
+        WebFetchTool(
+          http: toolExecutor,
+          resolver: SystemAddressResolver(),
+          redactor: redactor,
+          exemptCIDRs: config.webFetchExemptCIDRs
+        ),
+      ]
+
+      if let searchApiKey = secrets.searchApiKey {
+        ordinary.append(
+          WebSearchTool(search: ExaSearchProvider(apiKey: searchApiKey, http: toolExecutor))
         )
+      }
+
+      if let backend = sandbox.backend, sandbox.health?.isReady == true {
+        ordinary.append(
+          ExecuteCodeTool(
+            workspaceRoot: workspace.root,
+            backend: backend,
+            settings: ExecuteCodeSettings(
+              memoryMiB: config.exec.memoryMiB,
+              cpus: config.exec.cpus,
+              timeout: .seconds(config.exec.timeoutSeconds),
+              allowEgress: config.exec.allowEgress
+            ),
+            redactor: redactor
+          )
+        )
+      }
+
+      ordinary.append(contentsOf: coderTools)
+      ordinary.append(contentsOf: mcpTools)
+      tools = ordinary
+      enabledDangerousTools = Set(
+        (config.exec.enabled ? [ExecuteCodeTool.name] : [])
+          + coderTools.map(\.definition.name)
       )
     }
-
-    tools.append(contentsOf: coderTools)
-    tools.append(contentsOf: mcpTools)
 
     let privateFileLoader: @Sendable () -> [String] = {
       [WorkspaceFile.memory, WorkspaceFile.user].compactMap { file in
@@ -208,10 +237,7 @@ extension DaemonBuilder {
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: secretValues),
         privateFileLoader: privateFileLoader,
-        enabledDangerousTools: Set(
-          (config.exec.enabled ? [ExecuteCodeTool.name] : [])
-            + coderTools.map(\.definition.name)
-        )
+        enabledDangerousTools: enabledDangerousTools
       )
     )
   }

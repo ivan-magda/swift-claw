@@ -9,7 +9,7 @@ extension MessageRouter {
     message: IncomingMessage,
     mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
-    if mode == .direct, let feedbackChallenges {
+    if !conferenceProfile, mode == .direct, let feedbackChallenges {
       let consumed = try await feedbackChallenges.consumeIfOpen(
         rawUpdate: rawUpdate,
         message: message
@@ -23,7 +23,7 @@ extension MessageRouter {
   }
 
   func routeCallback(_ callback: RawCallback, updateId: Int64) async -> HandleOutcome {
-    if FeedbackKeyboard.belongsToDomain(callback.data) {
+    if !conferenceProfile, FeedbackKeyboard.belongsToDomain(callback.data) {
       guard let feedbackCallbacks else {
         logger.debug("feedback callback update \(updateId) with no handler, skipping")
         return .skipped
@@ -41,8 +41,14 @@ extension MessageRouter {
 // MARK: - Command Dispatch
 
 private extension MessageRouter {
-  // A flat dispatch table: one case per command, each delegating in a line or two. Splitting it
-  // would only hide half the table behind a name.
+  static let conferenceCommandRefusal = """
+    This conference bot only accepts challenge messages plus /start, /help, /new and /stop.
+    """
+
+  static let conferenceHelp = """
+    Ask for today's case, send your own proposed solution, or ask for your submission status.
+    """
+
   // swiftlint:disable:next cyclomatic_complexity function_body_length
   func routeAllowed(
     _ command: Command,
@@ -50,8 +56,14 @@ private extension MessageRouter {
     message: IncomingMessage,
     mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
-    // Refused here rather than inside each handler, so a room never reaches the code that parks a
-    // confirmation: with nothing parked, the next plain line in the topic is only ever a message.
+    if conferenceProfile, !conferenceCommandAllowed(command) {
+      return await replies.sendCanned(
+        updateId: rawUpdate.updateId,
+        target: .reply(to: message, mode: mode),
+        text: Self.conferenceCommandRefusal
+      )
+    }
+
     if mode == .group, command.isDirectOnly {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
@@ -65,13 +77,13 @@ private extension MessageRouter {
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
         target: .reply(to: message, mode: mode),
-        text: Self.welcomeText
+        text: conferenceProfile ? Self.conferenceWelcomeText : Self.welcomeText
       )
     case .help:
       return await replies.sendCanned(
         updateId: rawUpdate.updateId,
         target: .reply(to: message, mode: mode),
-        text: CommandReplies.help(mode: mode)
+        text: conferenceProfile ? Self.conferenceHelp : CommandReplies.help(mode: mode)
       )
     case .doctor:
       return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: nil)
@@ -130,9 +142,15 @@ private extension MessageRouter {
     }
   }
 
-  /// The health reply — the whole report, or one section of it. `/mcp` is status-only, and routing
-  /// it through this same report is what keeps it that way: the router has no MCP surface beyond
-  /// rendering what the daemon already holds.
+  func conferenceCommandAllowed(_ command: Command) -> Bool {
+    switch command {
+    case .start, .help, .stop, .new, .plain:
+      return true
+    default:
+      return false
+    }
+  }
+
   func sendHealth(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
@@ -147,8 +165,6 @@ private extension MessageRouter {
     )
   }
 
-  /// A fresh scan on every request keeps the owner view aligned with the workspace on disk. The
-  /// router only renders it; scanning and presentation remain owned by their existing seams.
   func sendSkills(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
@@ -191,19 +207,13 @@ private extension MessageRouter {
     return try await learningHandlers.handle(command, rawUpdate: rawUpdate, message: message)
   }
 
-  /// Plain text first offers itself to any parked confirmation for the session; only an
-  /// unclaimed message becomes a durable turn.
-  ///
-  /// A room skips the offer outright instead of being trusted to come up empty. Nothing can park
-  /// there — all families that park are refused in `routeAllowed` — and skipping keeps it that
-  /// way even if a third one is ever added: a "yes" typed in a topic is just a word.
   func routePlain(
     _ text: String,
     rawUpdate: RawUpdate,
     message: IncomingMessage,
     mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
-    if mode == .direct {
+    if mode == .direct, !conferenceProfile {
       let resolved = try await confirmations.resolve(
         rawUpdate: rawUpdate,
         message: message,

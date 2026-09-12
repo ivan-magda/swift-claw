@@ -2,8 +2,8 @@ import ClawCore
 import Foundation
 
 /// The deterministic, gateway-authored approval prompt. Every owner-visible field is
-/// authored HERE, never by the model, and the fully-resolved canonical target is never
-/// truncated. Delivery-only: joined into the outbox payload, never stored as assistant history.
+/// authored HERE, never by the model. Specialized cards show the complete target as scope fields.
+/// Delivery-only: joined into the outbox payload, never stored as assistant history.
 /// Exhaustive over `ApprovalReason` — a new approval kind cannot compile without owner-facing copy.
 public enum ToolApprovalPrompt {
   /// Everything the durable-approval prompt renders. The banners are decided by the suspend
@@ -37,6 +37,9 @@ public enum ToolApprovalPrompt {
   public static func text(for input: Input) -> String {
     if input.recorded.reason == .coderSubmit {
       return coderText(for: input)
+    }
+    if input.recorded.reason == .conferenceSubmit {
+      return conferenceText(for: input)
     }
     let recorded = input.recorded
     var lines: [String] = [headline(tool: recorded.tool, reason: recorded.reason)]
@@ -76,7 +79,7 @@ public enum ToolApprovalPrompt {
   public static func chunks(for input: Input, chatId: Int64, nonce: String) -> [OutboxChunk] {
     let prompt = text(for: input)
     let parts =
-      input.recorded.reason == .coderSubmit
+      input.recorded.reason == .coderSubmit || input.recorded.reason == .conferenceSubmit
       ? CoderCardMarkdown.split(text: prompt) : ReplySplitter.split(text: prompt)
     return parts.enumerated().map { index, payload in
       OutboxChunk(
@@ -85,7 +88,8 @@ public enum ToolApprovalPrompt {
         payload: payload,
         payloadHash: ContentHash.fnv1a(payload),
         approvalId: nil,
-        replyMarkup: index == parts.count - 1 ? ApprovalKeyboard.markup(nonce: nonce) : nil
+        replyMarkup: index == parts.count - 1
+          ? ApprovalKeyboard.markup(nonce: nonce, reason: input.recorded.reason) : nil
       )
     }
   }
@@ -94,6 +98,32 @@ public enum ToolApprovalPrompt {
 // MARK: - Prompt Composition
 
 private extension ToolApprovalPrompt {
+  static func conferenceText(for input: Input) -> String {
+    let recorded = input.recorded
+    var blocks = ["## Отправить решение?"]
+    if input.taintBanner {
+      blocks.append(
+        "Этот разговор содержит внешние данные. Проверь текст решения перед отправкой."
+      )
+    }
+    if let preview = recorded.presentation.contentPreview {
+      blocks.append(preview)
+    }
+    blocks.append(
+      """
+      <p><br>После подтверждения бот проверит предложение, реализует его и создаст черновик PR. \
+      Ссылка на результат придёт в этот топик.</p>
+      """
+    )
+    blocks.append("### Публикация")
+    blocks.append(recorded.presentation.blastRadius)
+    for warning in recorded.presentation.warnings {
+      blocks.append(CoderCardMarkdown.field("Важно", warning))
+    }
+    blocks.append("Отправить решение может только автор сообщения.")
+    return blocks.joined(separator: "\n\n")
+  }
+
   static func coderText(for input: Input) -> String {
     let recorded = input.recorded
     var blocks = [
@@ -140,6 +170,8 @@ private extension ToolApprovalPrompt {
       and its configured integrations. \
       Review the workspace and publication scope before approving.
       """
+    case .conferenceSubmit:
+      "Отправить решение?"
     case .codeExec:
       """
       ⚠ I want to run \(tool) in a disposable sandbox. \
