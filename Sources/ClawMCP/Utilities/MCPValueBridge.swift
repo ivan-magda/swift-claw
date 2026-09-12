@@ -7,8 +7,8 @@ import MCP
 /// Both describe the same JSON, but the SDK splits integers from doubles and folds data-URL strings
 /// into a case of their own. Bridging structurally rather than round-tripping through an encoder
 /// keeps the pass total — nothing here can throw on a schema we are about to advertise.
-public enum MCPValueBridge {
-  public static func jsonValue(_ value: Value) -> JSONValue {
+enum MCPValueBridge {
+  static func jsonValue(_ value: Value) -> JSONValue {
     switch value {
     case .null:
       return .null
@@ -30,7 +30,7 @@ public enum MCPValueBridge {
     }
   }
 
-  public static func value(_ json: JSONValue) -> Value {
+  static func value(_ json: JSONValue) -> Value {
     switch json {
     case .null:
       return .null

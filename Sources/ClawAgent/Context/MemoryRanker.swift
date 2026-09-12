@@ -1,8 +1,8 @@
 import ClawCore
 import Foundation
 
-public enum MemoryRanker {
-  public static func rank(
+enum MemoryRanker {
+  static func rank(
     items: [MemoryItem],
     excludeSensitive: Bool,
     cap: Int

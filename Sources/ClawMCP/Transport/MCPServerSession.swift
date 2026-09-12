@@ -5,15 +5,15 @@ import MCP
 
 /// Pinned bounds on what one server may contribute at discovery, sized for a personal daemon.
 /// An implementer changing one changes it here.
-public enum MCPDiscoveryLimits {
-  public static let maxPages = 16
-  public static let maxTools = 512
-  public static let maxCatalogBytes = 2 * 1024 * 1024
+enum MCPDiscoveryLimits {
+  static let maxPages = 16
+  static let maxTools = 512
+  static let maxCatalogBytes = 2 * 1024 * 1024
   /// Aggregate provider-input allowance for MCP definitions across all admitted servers. The rest of
   /// the run's input cap remains available to built-ins and messages.
-  public static let maxProviderDefinitionTokens = 25_000
+  static let maxProviderDefinitionTokens = 25_000
   /// How many servers are contacted at once. Discovery order stays config order regardless.
-  public static let connectConcurrency = 4
+  static let connectConcurrency = 4
 }
 
 /// Builds the transport a session speaks over.

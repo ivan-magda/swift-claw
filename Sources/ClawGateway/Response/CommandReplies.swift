@@ -1,24 +1,24 @@
 import ClawCore
 
-public enum CommandReplies {
-  public static let stopped = "Stopped."
-  public static let nothingToStop = "Nothing to stop."
-  public static let freshConversation =
+enum CommandReplies {
+  static let stopped = "Stopped."
+  static let nothingToStop = "Nothing to stop."
+  static let freshConversation =
     "Started a fresh conversation — earlier context cleared."
 
   /// Refusal for the owner-scoped command families in a shared room. It names the private state so
   /// the attendee learns the rule, not just this one rejection.
-  public static let directOnly =
+  static let directOnly =
     "Not here — memory, schedules, and learning state live in my owner's direct chat."
 
-  public static let learningUsage = "Usage: /learning reset <id>. See /learning"
-  public static let learningUnavailable = "Learning status is unavailable. Try again."
+  static let learningUsage = "Usage: /learning reset <id>. See /learning"
+  static let learningUnavailable = "Learning status is unavailable. Try again."
 
   /// The owner manual, including the parked-entry interaction rules (stated verbatim as
   /// owner-visible text): slash commands bypass confirmation resolution entirely; only the
   /// next plain text resolves a parked entry; /new clears it; another gated command displaces it;
   /// /stop and /new act on the interactive session only.
-  public static let help = """
+  static let help = """
     Commands:
     /schedule <text>: create a schedule (I confirm before it arms)
     /schedule list: list schedules

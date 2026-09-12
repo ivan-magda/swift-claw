@@ -25,7 +25,7 @@ public struct ChatGPTCatalogModel: Sendable, Equatable {
 /// print the assignment for the owner to set by hand — so the type names one outcome rather than a
 /// taxonomy nobody branches on. What it must never be is a login failure: the credential is already
 /// stored and valid by the time anything asks what models exist.
-public enum ChatGPTCatalogFailure: Error, Sendable, Equatable {
+enum ChatGPTCatalogFailure: Error, Sendable, Equatable {
   case unavailable(detail: String)
 }
 

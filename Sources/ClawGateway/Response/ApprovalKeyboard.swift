@@ -4,20 +4,20 @@
 /// clock, no randomness) so the outbox row it lands in is reproducible; `parse` is STRICT — only
 /// "apr:<nonce>:y" / "apr:<nonce>:n" survive, so a malformed or forged shape is dropped before the
 /// auth chain ever runs.
-public enum ApprovalKeyboard {
-  public static let approveVerdict = "y"
-  public static let denyVerdict = "n"
+enum ApprovalKeyboard {
+  static let approveVerdict = "y"
+  static let denyVerdict = "n"
 
   private static let prefix = "apr"
 
-  public static func callbackData(nonce: String, verdict: String) -> String {
+  static func callbackData(nonce: String, verdict: String) -> String {
     "\(prefix):\(nonce):\(verdict)"
   }
 
   /// Deterministic by construction: a fixed (sorted) key order, no whitespace, no Date or random.
   /// The nonce is base64url (`[A-Za-z0-9-_]`) and the verdicts/labels are ASCII, so nothing here
   /// needs JSON escaping. The client decodes this String to an object for the request body.
-  public static func markup(nonce: String) -> String {
+  static func markup(nonce: String) -> String {
     let approve = callbackData(nonce: nonce, verdict: approveVerdict)
     let deny = callbackData(nonce: nonce, verdict: denyVerdict)
     return #"""
@@ -28,7 +28,7 @@ public enum ApprovalKeyboard {
       """#
   }
 
-  public static func parse(_ callbackData: String) -> (nonce: String, approve: Bool)? {
+  static func parse(_ callbackData: String) -> (nonce: String, approve: Bool)? {
     let parts =
       callbackData
       .split(separator: ":", omittingEmptySubsequences: false)

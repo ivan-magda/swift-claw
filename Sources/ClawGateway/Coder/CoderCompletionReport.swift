@@ -1,13 +1,13 @@
 import ClawCore
 
-public struct CoderCompletionReport: Sendable {
+struct CoderCompletionReport: Sendable {
   private let redact: @Sendable (String) -> String
 
-  public init(redact: @escaping @Sendable (String) -> String) {
+  init(redact: @escaping @Sendable (String) -> String) {
     self.redact = redact
   }
 
-  public func chunks(job: CoderJob, result: CoderResult) -> [OutboxChunk] {
+  func chunks(job: CoderJob, result: CoderResult) -> [OutboxChunk] {
     var blocks = ["## Coder · \(redact(result.state.rawValue))", field("Summary", result.summary)]
 
     if job.ownership != .none && job.ownership != .stopped {

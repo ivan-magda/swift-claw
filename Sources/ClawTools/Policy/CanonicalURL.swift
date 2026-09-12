@@ -1,6 +1,6 @@
 import Foundation
 
-public enum CanonicalURLError: Error, Sendable, Equatable {
+enum CanonicalURLError: Error, Sendable, Equatable {
   case unparseable
   case unsupportedScheme(String)
   case nonASCIIHost
@@ -11,8 +11,8 @@ public enum CanonicalURLError: Error, Sendable, Equatable {
 /// The canonical form — ONE algorithm serving both the owner's approval display and the
 /// approval's exact-match target, plus the full pre-dispatch URL policy (scheme/port/userinfo/
 /// IDN), so a URL can never win approval at gate time and then be refused at dispatch time.
-public enum CanonicalURL {
-  public static func canonicalize(_ raw: String) -> Result<String, CanonicalURLError> {
+enum CanonicalURL {
+  static func canonicalize(_ raw: String) -> Result<String, CanonicalURLError> {
     guard
       let components = URLComponents(string: raw),
       let rawScheme = components.scheme

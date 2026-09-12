@@ -1,9 +1,9 @@
 import Foundation
 
-public enum LessonSetLimits {
-  public static let maxLessons = 3
-  public static let maxLessonBytes = 512
-  public static let maxSetBytes = 1_536
+enum LessonSetLimits {
+  static let maxLessons = 3
+  static let maxLessonBytes = 512
+  static let maxSetBytes = 1_536
 }
 
 public enum LessonSetError: Error, Sendable, Equatable {

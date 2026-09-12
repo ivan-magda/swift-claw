@@ -13,7 +13,7 @@ import Logging
 /// this adapter owns. `complete` and `stream` differ only in where visible deltas go: they build the
 /// same plan and run the same engine, so their terminal reply, usage, tool calls, replay state, and
 /// retry count are identical on the same wire.
-public struct ChatGPTResponsesProvider: LLMProvider, Sendable {
+struct ChatGPTResponsesProvider: LLMProvider, Sendable {
   private let engine: ChatGPTResponsesAttemptEngine
   private let codec: ChatGPTProviderStateCodec
   private let encoder = ChatGPTResponsesRequestEncoder()
@@ -31,7 +31,7 @@ public struct ChatGPTResponsesProvider: LLMProvider, Sendable {
   ///   derives instead of matching against randomness.
   /// - Parameter treatsQuotaAsTerminal: set only when a fallback route exists, so a 429 fails onto it
   ///   immediately instead of burning the turn deadline retrying a subscription quota wall.
-  public init(
+  init(
     http: any HTTPStreaming,
     credentials: any LLMCredentialSource,
     credentialProfileID: UUID?,
@@ -61,8 +61,7 @@ public struct ChatGPTResponsesProvider: LLMProvider, Sendable {
     )
   }
 
-  /// The designated init, internal so a test can silence or capture logs without widening the
-  /// public surface past the pinned signature above.
+  /// Accepts a logger so tests can silence or capture diagnostics.
   init(
     http: any HTTPStreaming,
     credentials: any LLMCredentialSource,
@@ -95,7 +94,7 @@ public struct ChatGPTResponsesProvider: LLMProvider, Sendable {
     )
   }
 
-  public func complete(request: ChatRequest) async throws -> ChatResponse {
+  func complete(request: ChatRequest) async throws -> ChatResponse {
     switch makePlan(for: request) {
     case .failure(let cause):
       // Nothing reached the wire, so the accounting is `notStarted` — carried on the failure rather
@@ -116,7 +115,7 @@ public struct ChatGPTResponsesProvider: LLMProvider, Sendable {
     }
   }
 
-  public func stream(request: ChatRequest) -> LLMEventStream {
+  func stream(request: ChatRequest) -> LLMEventStream {
     let planResult = makePlan(for: request)
     let engine = engine
     return LLMEventStream.make { sink in

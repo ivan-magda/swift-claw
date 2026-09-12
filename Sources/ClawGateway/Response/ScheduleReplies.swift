@@ -4,14 +4,14 @@ import Foundation
 /// Owner-facing copy for the scheduling surface: the confirm prompt shows the parked draft
 /// VERBATIM and never model-truncated, and every fire time is rendered in the job's own
 /// timezone. Pure rendering — no store or transport knowledge.
-public enum ScheduleReplies {
+enum ScheduleReplies {
   /// The confirm prompt previews the next 3 fire times.
-  public static let confirmPreviewCount = 3
+  static let confirmPreviewCount = 3
 
   static let exampleLine =
     "Example: /schedule every weekday at 07:00, summarize my unread items"
 
-  public static var parseFailed: String {
+  static var parseFailed: String {
     "I couldn't turn that into a schedule. \(exampleLine)"
   }
 
@@ -20,23 +20,23 @@ public enum ScheduleReplies {
   // auth sentence names the exact recovery command, while access and quota deliberately do not.
 
   /// A `/schedule` parse that could not reach a usable model (terminal reject, brownout, deadline).
-  public static var providerUnavailable: String { Degradation.providerUnavailable }
+  static var providerUnavailable: String { Degradation.providerUnavailable }
 
   /// The credential is gone or refused; names `clawd auth login` as the exact recovery.
-  public static var authenticationRequired: String { Degradation.authenticationRequired }
+  static var authenticationRequired: String { Degradation.authenticationRequired }
 
   /// The plan/account cannot use the requested route or model; does not tell the owner to log in.
-  public static var accessDenied: String { Degradation.accessDenied }
+  static var accessDenied: String { Degradation.accessDenied }
 
   /// A clean throttle; says to retry after the provider's hint or the plan reset, never to log in.
-  public static func quotaLimited(retryAfterSeconds: Int?) -> String {
+  static func quotaLimited(retryAfterSeconds: Int?) -> String {
     Degradation.quotaLimited(retryAfterSeconds: retryAfterSeconds)
   }
 
   /// The owner reply for a `/schedule` parse that failed at the provider. Typed failures earn their
   /// own actionable guidance; every other result falls back to the generic unavailable copy (the
   /// router only routes provider-failure results here, so the fallback is never reached in practice).
-  public static func providerFailure(_ result: ScheduleDraftParseResult) -> String {
+  static func providerFailure(_ result: ScheduleDraftParseResult) -> String {
     switch result {
     case .authenticationRequired:
       return authenticationRequired
@@ -49,19 +49,19 @@ public enum ScheduleReplies {
     }
   }
 
-  public static var emptyList: String {
+  static var emptyList: String {
     "No schedules yet. \(exampleLine)"
   }
 
   /// Terminal arm failure: the pending intent was cleared; re-issue.
-  public static let armFailed =
+  static let armFailed =
     "Couldn't arm the schedule. Nothing was created. Run /schedule again."
 
   /// A parked one-shot confirmed after its instant already passed — nothing left to arm.
-  public static let armExpired =
+  static let armExpired =
     "That schedule's time has already passed. Send /schedule again to set a new one."
 
-  public static func confirmPrompt(schedule: ValidatedSchedule, nextFires: [Date]) -> String {
+  static func confirmPrompt(schedule: ValidatedSchedule, nextFires: [Date]) -> String {
     var lines = [
       "Arm this schedule?",
       "label: «\(schedule.label)»",
@@ -81,7 +81,7 @@ public enum ScheduleReplies {
 
   /// `job` is nil only if a `ScheduleCommandStore` violates its newlyClaimed-implies-job
   /// contract; the ack degrades instead of crashing the router (the MemoryReplies.saved pattern).
-  public static func armed(job: ScheduledJob?) -> String {
+  static func armed(job: ScheduledJob?) -> String {
     guard let job else {
       return "Armed."
     }
@@ -95,7 +95,7 @@ public enum ScheduleReplies {
   }
 
   /// One `/schedule list` row: `id · label · status · recurrence-in-words · tz · next fire`.
-  public static func listLines(_ rows: [(job: ScheduledJob, nextFire: Date?)]) -> String {
+  static func listLines(_ rows: [(job: ScheduledJob, nextFire: Date?)]) -> String {
     rows.map { row in
       let fire =
         row.nextFire.map { date in
@@ -108,23 +108,23 @@ public enum ScheduleReplies {
     }.joined(separator: "\n")
   }
 
-  public static func notFound(id: Int64) -> String {
+  static func notFound(id: Int64) -> String {
     "No schedule with id \(id). See /schedule list."
   }
 
   /// Terminal verb failure after the update was already claimed: nothing changed; re-issue.
-  public static let verbFailed = "Couldn't update the schedule. Nothing changed. Try again."
+  static let verbFailed = "Couldn't update the schedule. Nothing changed. Try again."
 
-  public static let pauseUsage = "Usage: /pause <id>. See /schedule list"
-  public static let resumeUsage = "Usage: /resume <id>. See /schedule list"
-  public static let runNowUsage = "Usage: /runnow <id>. See /schedule list"
-  public static let cancelUsage = "Usage: /cancel <id>. See /schedule list"
+  static let pauseUsage = "Usage: /pause <id>. See /schedule list"
+  static let resumeUsage = "Usage: /resume <id>. See /schedule list"
+  static let runNowUsage = "Usage: /runnow <id>. See /schedule list"
+  static let cancelUsage = "Usage: /cancel <id>. See /schedule list"
 
-  public static func paused(job: ScheduledJob) -> String {
+  static func paused(job: ScheduledJob) -> String {
     "Paused schedule \(job.id) · «\(job.label)». Resume with /resume \(job.id)."
   }
 
-  public static func resumed(job: ScheduledJob) -> String {
+  static func resumed(job: ScheduledJob) -> String {
     guard let next = job.nextOccurrence else {
       return "Resumed schedule \(job.id) · «\(job.label)». Nothing left to fire."
     }
@@ -134,19 +134,19 @@ public enum ScheduleReplies {
       """
   }
 
-  public static func cancelled(job: ScheduledJob) -> String {
+  static func cancelled(job: ScheduledJob) -> String {
     """
     Cancelled schedule \(job.id) · «\(job.label)». It will not fire again; \
     an in-flight run finishes on its own.
     """
   }
 
-  public static func runningNow(id: Int64) -> String {
+  static func runningNow(id: Int64) -> String {
     "Running schedule \(id) now. You'll get the result like any scheduled delivery."
   }
 
   /// `/runnow` on a job whose previous run hasn't finished: the fire is skipped, not failed.
-  public static func alreadyRunning(id: Int64) -> String {
+  static func alreadyRunning(id: Int64) -> String {
     "Schedule \(id) already has a run in progress. Wait for it to finish, then try again."
   }
 

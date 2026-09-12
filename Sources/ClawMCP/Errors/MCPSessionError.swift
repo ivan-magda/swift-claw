@@ -2,7 +2,7 @@
 ///
 /// Like `MCPTransportError`, every case is safe to render — none quotes the server's body — so a
 /// doctor row or a skip reason built from one carries our words, not a third party's.
-public enum MCPSessionError: Error, Sendable, Equatable {
+enum MCPSessionError: Error, Sendable, Equatable {
   /// The call outlived the whole budget a tool call is allowed (connect plus request).
   case callTimedOut(seconds: Int)
   /// A handshake or tool-list exchange outlived its phase-specific connect/request budget. The HTTP
@@ -19,7 +19,7 @@ public enum MCPSessionError: Error, Sendable, Equatable {
 extension MCPSessionError {
   /// Discovery failures precede a tool invocation. A call deadline can expire after handoff, so the
   /// remote side effect remains unknown.
-  public var callExecutionDisposition: MCPCallExecutionDisposition {
+  var callExecutionDisposition: MCPCallExecutionDisposition {
     switch self {
     case .callTimedOut:
       return .mayHaveExecuted
@@ -30,7 +30,7 @@ extension MCPSessionError {
 }
 
 extension MCPSessionError: CustomStringConvertible {
-  public var description: String {
+  var description: String {
     switch self {
     case .callTimedOut(let seconds):
       return "MCP call exceeded its \(seconds)s budget"

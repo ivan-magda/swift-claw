@@ -58,13 +58,13 @@ public struct AuthCommandResult: Sendable, Equatable {
 /// It exists so the table is in one place and can be read as a table. Scattering these decisions
 /// through the workflow would make "does a broken envelope really exit 11?" a question answered by
 /// tracing control flow.
-public enum AuthCommandResultMapper {
-  public static let cancelled = AuthCommandResult(
+enum AuthCommandResultMapper {
+  static let cancelled = AuthCommandResult(
     exit: .cancelled,
     events: [.error("Cancelled. The stored credential is unchanged.")]
   )
 
-  public static func result(for failure: AuthMutationLockFailure) -> AuthCommandResult {
+  static func result(for failure: AuthMutationLockFailure) -> AuthCommandResult {
     switch failure {
     case .held:
       return AuthCommandResult(
@@ -90,7 +90,7 @@ public enum AuthCommandResultMapper {
   /// ordinary command failure on an error no case happens to name would be the one mistake that
   /// matters here: it would tell a supervisor to try again on a condition that will never fix
   /// itself.
-  public static func runtimeSecretResult(for error: any Error) -> AuthCommandResult {
+  static func runtimeSecretResult(for error: any Error) -> AuthCommandResult {
     let named = error as? SecretStoreError
     let cause =
       if let named {
@@ -110,21 +110,21 @@ public enum AuthCommandResultMapper {
 
   /// Worded for a read and a write alike: login saves through this seam, status and logout read
   /// through it, and a lead that named one of those would be wrong for the other two.
-  public static func result(for error: LLMCredentialStoreError) -> AuthCommandResult {
+  static func result(for error: LLMCredentialStoreError) -> AuthCommandResult {
     AuthCommandResult(
       exit: .secretLoadFailure,
       events: [.error("The stored credential could not be accessed: \(describe(error)).")]
     )
   }
 
-  public static func credentialStoreResult(for error: any Error) -> AuthCommandResult {
+  static func credentialStoreResult(for error: any Error) -> AuthCommandResult {
     guard let named = error as? LLMCredentialStoreError else {
       return unexpected()
     }
     return result(for: named)
   }
 
-  public static func result(for failure: ChatGPTOAuthFailure) -> AuthCommandResult {
+  static func result(for failure: ChatGPTOAuthFailure) -> AuthCommandResult {
     AuthCommandResult(
       exit: .commandFailure,
       events: [.error("Login failed: \(describe(failure)).")]
@@ -134,7 +134,7 @@ public enum AuthCommandResultMapper {
   /// A failure no seam named. It is an ordinary command failure, and it says nothing about the error
   /// it came from: an unrecognized value is exactly the one whose description nobody has checked for
   /// a token. Every command shares it, so it names none of them.
-  public static func unexpected() -> AuthCommandResult {
+  static func unexpected() -> AuthCommandResult {
     AuthCommandResult(
       exit: .commandFailure,
       events: [.error("The command failed for an unexpected reason.")]

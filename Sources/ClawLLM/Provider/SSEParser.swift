@@ -1,7 +1,7 @@
 import ClawCore
 import Foundation
 
-public enum SSEParserError: Error, Sendable, Equatable {
+enum SSEParserError: Error, Sendable, Equatable {
   case eventTooLarge
   case bufferedStreamTooLarge
   case accumulatedContentTooLarge
@@ -9,7 +9,7 @@ public enum SSEParserError: Error, Sendable, Equatable {
   case malformedJSON(String)
 }
 
-public struct SSEParser: Sendable {
+struct SSEParser: Sendable {
   private let maxEventBytes: Int
   private let maxBufferedBytes: Int
   private let maxAccumulatedContentBytes: Int
@@ -30,7 +30,7 @@ public struct SSEParser: Sendable {
 
   private var toolCallAccumulators: [Int: ToolCallAccumulator] = [:]
 
-  public init(
+  init(
     maxEventBytes: Int = LLMStreamLimits.maxEventBytes,
     maxBufferedBytes: Int = LLMStreamLimits.maxBufferedBytes,
     maxAccumulatedContentBytes: Int = LLMStreamLimits.maxAccumulatedContentBytes,
@@ -43,7 +43,7 @@ public struct SSEParser: Sendable {
     self.providerCost = fallbackProviderCost
   }
 
-  public mutating func push(_ data: Data) throws -> [StreamEvent] {
+  mutating func push(_ data: Data) throws -> [StreamEvent] {
     guard !finished else {
       return []
     }
@@ -76,7 +76,7 @@ public struct SSEParser: Sendable {
     return events
   }
 
-  public mutating func finish() throws -> StreamEvent? {
+  mutating func finish() throws -> StreamEvent? {
     guard !finished else {
       return nil
     }

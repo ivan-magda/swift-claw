@@ -6,7 +6,7 @@ extension ContextRowID {
   /// carry no cap, and neither does the lessons row — its content is already capped at three
   /// lessons and 1536 bytes when the set is built. The four truncatable rows are scaled against
   /// whatever the fixed sections left.
-  public func resolve(in budget: ContextBudget, residualGraphemes: Int?) -> Int? {
+  func resolve(in budget: ContextBudget, residualGraphemes: Int?) -> Int? {
     switch self {
     case .policy, .systemWorkspace, .tools, .metadata, .lessons:
       nil
@@ -60,27 +60,15 @@ extension ContextRowID {
   }
 }
 
-public struct RowSpec: Sendable, Equatable, Identifiable {
-  public let id: ContextRowID
-  public let tier: ContextTier
-  public let priority: ContextPriority
-  public let truncatable: Bool
-
-  public init(
-    id: ContextRowID,
-    tier: ContextTier,
-    priority: ContextPriority,
-    truncatable: Bool
-  ) {
-    self.id = id
-    self.tier = tier
-    self.priority = priority
-    self.truncatable = truncatable
-  }
+struct RowSpec: Sendable, Equatable, Identifiable {
+  let id: ContextRowID
+  let tier: ContextTier
+  let priority: ContextPriority
+  let truncatable: Bool
 }
 
-public enum ContextRowPolicy {
-  public static let specs: [RowSpec] = [
+enum ContextRowPolicy {
+  static let specs: [RowSpec] = [
     RowSpec(
       id: .policy,
       tier: .system,

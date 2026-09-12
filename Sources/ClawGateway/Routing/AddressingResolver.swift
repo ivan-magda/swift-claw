@@ -8,14 +8,14 @@ import Foundation
 /// the text or a photo caption, a slash command it recognizes, or a reply to something it said
 /// itself. Everything else is overheard, not asked. Without a known identity nothing in a group is
 /// addressed, so a daemon that somehow ran without one stays quiet instead of answering everyone.
-public struct AddressingResolver: Sendable {
+struct AddressingResolver: Sendable {
   private let identity: BotIdentity?
 
-  public init(identity: BotIdentity?) {
+  init(identity: BotIdentity?) {
     self.identity = identity
   }
 
-  public func isAddressed(_ message: IncomingMessage, mode: ChatMode) -> Bool {
+  func isAddressed(_ message: IncomingMessage, mode: ChatMode) -> Bool {
     switch mode {
     case .direct:
       return true

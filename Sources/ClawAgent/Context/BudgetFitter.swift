@@ -1,12 +1,12 @@
 import ClawCore
 import Foundation
 
-public struct SectionUnit: Sendable, Equatable {
-  public let id: String
-  public let content: String
-  public let canTruncate: Bool
+struct SectionUnit: Sendable, Equatable {
+  let id: String
+  let content: String
+  let canTruncate: Bool
 
-  public init(id: String = "", content: String, canTruncate: Bool) {
+  init(id: String = "", content: String, canTruncate: Bool) {
     self.id = id
     self.content = content
     self.canTruncate = canTruncate
@@ -15,7 +15,7 @@ public struct SectionUnit: Sendable, Equatable {
 
 /// How a row announces the units the budget dropped. The row owns the wording so the fitter stays
 /// row-agnostic, and the rendered line is cost-accounted inside the row's cap like any other unit.
-public enum DropMarker: Sendable, Equatable {
+enum DropMarker: Sendable, Equatable {
   case none
   case showingCount(noun: String)
 
@@ -29,16 +29,16 @@ public enum DropMarker: Sendable, Equatable {
   }
 }
 
-public struct FittableSection: Sendable, Equatable, Identifiable {
-  public let id: ContextRowID
-  public let tier: ContextTier
-  public let priority: ContextPriority
-  public let truncatable: Bool
-  public let cap: Int?
-  public let dropMarker: DropMarker
-  public let units: [SectionUnit]
+struct FittableSection: Sendable, Equatable, Identifiable {
+  let id: ContextRowID
+  let tier: ContextTier
+  let priority: ContextPriority
+  let truncatable: Bool
+  let cap: Int?
+  let dropMarker: DropMarker
+  let units: [SectionUnit]
 
-  public init(
+  init(
     id: ContextRowID,
     tier: ContextTier,
     priority: ContextPriority,
@@ -57,16 +57,16 @@ public struct FittableSection: Sendable, Equatable, Identifiable {
   }
 }
 
-public struct FittedSection: Sendable, Equatable, Identifiable {
-  public let id: ContextRowID
-  public let tier: ContextTier
-  public let priority: ContextPriority
-  public let truncatable: Bool
-  public let cap: Int?
-  public let units: [SectionUnit]
-  public let droppedUnitIDs: [String]
+struct FittedSection: Sendable, Equatable, Identifiable {
+  let id: ContextRowID
+  let tier: ContextTier
+  let priority: ContextPriority
+  let truncatable: Bool
+  let cap: Int?
+  let units: [SectionUnit]
+  let droppedUnitIDs: [String]
 
-  public var content: String {
+  var content: String {
     renderUnits(units)
   }
 
@@ -81,15 +81,15 @@ public struct FittedSection: Sendable, Equatable, Identifiable {
   }
 }
 
-public enum BudgetFitterError: Error, Equatable {
+enum BudgetFitterError: Error, Equatable {
   case nonTruncatableRowsExceedInputCap(required: Int, cap: Int)
 }
 
-public enum BudgetFitter {
-  public static let truncationMarker = TextTruncation.marker
-  public static let dropMarkerUnitID = "drop-marker"
+enum BudgetFitter {
+  static let truncationMarker = TextTruncation.marker
+  static let dropMarkerUnitID = "drop-marker"
 
-  public static func fitWithUnits(
+  static func fitWithUnits(
     _ sections: [FittableSection],
     budget: ContextBudget
   ) throws -> [FittedSection] {
@@ -254,7 +254,7 @@ public enum BudgetFitter {
   /// What the truncatable rows have left to share: the input cap less whatever the fixed rows
   /// render to. The assembler pre-scales each truncatable cap against this before handing the
   /// sections over, so both sides have to read one formula or the caps stop matching the squeeze.
-  public static func residual(for sections: [FittableSection], budget: ContextBudget) -> Int {
+  static func residual(for sections: [FittableSection], budget: ContextBudget) -> Int {
     residual(required: requiredGraphemes(sections), budget: budget)
   }
 

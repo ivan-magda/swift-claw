@@ -13,17 +13,17 @@ import Foundation
   /// `SpeechTranscriber` model where the locale is supported and falls back to
   /// `DictationTranscriber` (the older system-dictation model, e.g. for `ru-RU`) elsewhere.
   @available(macOS 26.0, *)
-  public actor AppleSpeechTranscriber: VoiceTranscribing {
+  actor AppleSpeechTranscriber: VoiceTranscribing {
     private let localeIdentifiers: [String]
 
     private let maxAudioDurationSeconds: Int?
 
-    public init(localeIdentifiers: [String], maxAudioDurationSeconds: Int? = nil) {
+    init(localeIdentifiers: [String], maxAudioDurationSeconds: Int? = nil) {
       self.localeIdentifiers = localeIdentifiers
       self.maxAudioDurationSeconds = maxAudioDurationSeconds
     }
 
-    public func transcribe(
+    func transcribe(
       audioFileAt url: URL
     ) async throws(VoiceTranscriptionError) -> String {
       let lanes = await Self.resolveLanes(for: localeIdentifiers)

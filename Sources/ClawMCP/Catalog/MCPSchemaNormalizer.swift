@@ -11,7 +11,7 @@ import ClawCore
 /// The pass is pure and position-aware: it recurses only into values that are schemas, so a property
 /// literally named `definitions` keeps its name — rewriting a user-facing property into a meta
 /// keyword is worse than the malformed schema it was meant to fix.
-public enum MCPSchemaNormalizer {
+enum MCPSchemaNormalizer {
   /// The parameter schema a tool gets when the server's is not one. Object with no properties is
   /// what "this tool takes no arguments" looks like, which is the only reading left.
   static let emptyObjectSchema = JSONValue.object([
@@ -19,7 +19,7 @@ public enum MCPSchemaNormalizer {
     Keyword.properties: .object([:]),
   ])
 
-  public static func normalize(_ schema: JSONValue) -> JSONValue {
+  static func normalize(_ schema: JSONValue) -> JSONValue {
     var promotions: [ReferencePromotion] = []
     let normalized = normalizeSchema(schema, path: [], promotions: &promotions)
     let referenced = rewriteReferences(normalized, promotions: promotions)
