@@ -159,9 +159,7 @@ public enum TrialPolicy {
     if hasHardVeto {
       return .fallback(reason: .hardVeto)
     }
-    if resolved.contains(where: { evidence in
-      evidence.outcome == .negative
-    }) {
+    if resolved.contains(where: { $0.outcome == .negative }) {
       return .fallback(reason: .negativeOutcome)
     }
 
@@ -170,9 +168,7 @@ public enum TrialPolicy {
       return .fallback(reason: .decisionDeadlineIncomplete)
     }
 
-    let positiveCount = resolved.count { evidence in
-      evidence.outcome == .positive
-    }
+    let positiveCount = resolved.count { $0.outcome == .positive }
     let limitReached = trial.consumedAssignments >= trial.maxAssignments
     let deadlineReached = now >= trial.assignmentDeadline
     let positiveCohortComplete = positiveCount >= 2 && hasUnresolved == false

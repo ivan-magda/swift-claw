@@ -96,9 +96,7 @@ public enum BudgetFitter {
     let ordered = sections.sorted { first, second in
       first.priority < second.priority
     }
-    let nonTruncatable = ordered.filter { section in
-      !section.truncatable
-    }
+    let nonTruncatable = ordered.filter { !$0.truncatable }
     let truncatable = ordered.filter(\.truncatable)
     let required = requiredGraphemes(nonTruncatable)
 
@@ -113,9 +111,7 @@ public enum BudgetFitter {
     // The newest history unit is kept even when it alone exceeds the residual (see `fittedRow`),
     // so the squeezed total can legitimately overshoot the residual by this floor.
     let historyFloorCount =
-      ordered.first { section in
-        section.id == .history
-      }?.units.first?.content.count ?? 0
+      ordered.first { $0.id == .history }?.units.first?.content.count ?? 0
     let cappedRows = truncatable.compactMap { section -> FittedRow? in
       let maxCount = min(section.cap ?? Int.max, renderedCount(section))
       return fittedRow(for: section, maxCount: maxCount)
@@ -271,9 +267,7 @@ public enum BudgetFitter {
   /// itself measures, separator included.
   private static func requiredGraphemes(_ sections: [FittableSection]) -> Int {
     sections
-      .filter { section in
-        !section.truncatable
-      }
+      .filter { !$0.truncatable }
       .map(renderedCount)
       .reduce(0, +)
   }
