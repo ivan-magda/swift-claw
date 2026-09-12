@@ -48,9 +48,10 @@ public protocol ApprovalStore: Sendable {
   /// Ticker/boot sweep: CAS every PENDING row with `expires_ts <= now` → EXPIRED (+ `approvalDenied`
   /// audit, decision `expired`) and return the swept rows for the waiter signals.
   func sweepExpired(now: Date) throws(StoreError) -> [Approval]
-  /// Boot: PENDING rows (any expiry), plus resolved rows whose run is still AWAITING_APPROVAL —
-  /// APPROVED (the grant crash window) and REJECTED/EXPIRED (the deny-side twin: the deny CAS +
-  /// audit committed but the waiter's run-fail commit did not). Terminal-run rows never return.
+  /// Boot: PENDING rows (any expiry), plus resolved rows whose observation is still the placeholder
+  /// — APPROVED for any run state (the grant crash window, or a claimed window if the run left
+  /// AWAITING_APPROVAL) and REJECTED/EXPIRED only while the run is still AWAITING_APPROVAL (the
+  /// deny-side twin: the deny CAS + audit committed but the waiter's run-fail commit did not).
   func unresolvedAtBoot() throws(StoreError) -> [Approval]
   /// Boot hygiene: a terminal run holding a PENDING approval → REJECTED + `approvalDenied`
   /// (decision `cancelled`). Returns the count cleaned.

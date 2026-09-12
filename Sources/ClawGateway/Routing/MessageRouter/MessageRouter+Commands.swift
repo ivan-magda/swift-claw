@@ -196,7 +196,7 @@ private extension MessageRouter {
   ///
   /// A room skips the offer outright instead of being trusted to come up empty. Nothing can park
   /// there — all families that park are refused in `routeAllowed` — and skipping keeps it that
-  /// way even if a third one is ever added: a "yes" typed in a topic is just a word.
+  /// way even if another one is ever added: a "yes" typed in a topic is just a word.
   func routePlain(
     _ text: String,
     rawUpdate: RawUpdate,

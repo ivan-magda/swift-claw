@@ -426,8 +426,8 @@ public protocol RunStore: Sendable {
   /// committed and the process died before the result record — whether the external effect landed
   /// is unknowable, so no replay. One txn: fail the run if it is not already terminal, resolve the
   /// placeholder with `observationContent`, and enqueue `noticeText` for the owner UNCONDITIONALLY
-  /// (the generic boot degradation notice is suppressed for runs that already delivered their
-  /// approval prompt, so this is the owner's only signal).
+  /// (the generic boot degradation notice is suppressed only when the newest delivered chunk is a
+  /// genuine reply rather than an approval prompt).
   func settleClaimedApprovalAtBoot(  // swiftlint:disable:this function_parameter_count
     runId: Int64,
     observationMessageId: Int64,
