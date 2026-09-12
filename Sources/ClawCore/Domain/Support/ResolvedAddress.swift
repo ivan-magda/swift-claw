@@ -21,7 +21,7 @@ public enum ResolvedAddress: Sendable, Equatable {
 
     var v6Address = in6_addr()
     if inet_pton(AF_INET6, text, &v6Address) == 1 {
-      let bytes = withUnsafeBytes(of: &v6Address) { raw in Array(raw) }
+      let bytes = withUnsafeBytes(of: &v6Address) { Array($0) }
       return .ipv6(bytes)
     }
 

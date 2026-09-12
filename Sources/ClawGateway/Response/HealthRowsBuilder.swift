@@ -43,7 +43,9 @@ public struct LLMRouteHealth: Sendable, Equatable {
     return LLMRouteHealth(
       primaryReference: primaryReference,
       fallbackReference: fallbackReference,
-      cooldown: remaining.map { seconds in .cooling(remainingSeconds: seconds) } ?? .clear
+      cooldown: remaining.map { seconds in
+        .cooling(remainingSeconds: seconds)
+      } ?? .clear
     )
   }
 }
@@ -120,7 +122,9 @@ public enum HealthRowsBuilder {
   public static func fallbackConfiguredCheck(fallbackReference: String?) -> DoctorReport.Check {
     check(
       "llm.fallback_configured",
-      fallbackReference.map { reference in "yes (\(reference))" } ?? "no",
+      fallbackReference.map { reference in
+        "yes (\(reference))"
+      } ?? "no",
       .llmRuns
     )
   }

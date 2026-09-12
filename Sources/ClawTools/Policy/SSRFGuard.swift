@@ -87,20 +87,20 @@ private extension SSRFGuard {
     }
 
     // IPv4-mapped (::ffff:a.b.c.d): unwrap and re-check the embedded v4.
-    if bytes[0...9].allSatisfy({ byte in byte == 0 }), bytes[10] == 0xFF, bytes[11] == 0xFF {
+    if bytes[0...9].allSatisfy({ $0 == 0 }), bytes[10] == 0xFF, bytes[11] == 0xFF {
       return isPublicV4(embeddedV4(bytes))
     }
     // NAT64 well-known prefix 64:ff9b::/96 (RFC 6052): a DNS64/NAT64 translator forwards to the
     // embedded v4, so classify by that v4 — else 64:ff9b::7f00:1 reaches 127.0.0.1 on such a network.
     let isNAT64 =
       bytes[0] == 0x00 && bytes[1] == 0x64 && bytes[2] == 0xFF && bytes[3] == 0x9B
-      && bytes[4...11].allSatisfy { byte in byte == 0 }
+      && bytes[4...11].allSatisfy { $0 == 0 }
     if isNAT64 {
       return isPublicV4(embeddedV4(bytes))
     }
     // IPv4-compatible ::a.b.c.d (::/96, deprecated): unwrap the embedded v4. This also subsumes the
     // unspecified :: (→ 0.0.0.0) and loopback ::1 (→ 0.0.0.1), both refused by the v4 blocklist.
-    if bytes[0...11].allSatisfy({ byte in byte == 0 }) {
+    if bytes[0...11].allSatisfy({ $0 == 0 }) {
       return isPublicV4(embeddedV4(bytes))
     }
     // link-local fe80::/10
@@ -185,7 +185,7 @@ public struct SystemAddressResolver: AddressResolving {
       } else if info.pointee.ai_family == AF_INET6, let rawAddress = info.pointee.ai_addr {
         rawAddress.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { pointer in
           var v6Address = pointer.pointee.sin6_addr
-          let bytes = withUnsafeBytes(of: &v6Address) { raw in Array(raw) }
+          let bytes = withUnsafeBytes(of: &v6Address) { Array($0) }
           addresses.append(.ipv6(bytes))
         }
       }

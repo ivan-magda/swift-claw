@@ -197,7 +197,9 @@ private extension RecurrenceWords {
       return "custom schedule"
     }
 
-    let names = days.map { day in fullName(day) }.joined(separator: ", ")
+    let names = days.map { day in
+      fullName(day)
+    }.joined(separator: ", ")
     return "every \(names) at \(clock(rule))"
   }
 

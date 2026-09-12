@@ -252,7 +252,9 @@ private extension ScheduledLearningStoreGRDB {
       review.subjectDigest == CandidateReviewIdentity.digest(candidateDigest: artifact.digest),
       review.targets.count == artifact.manifest.evaluations.count + 1,
       review.chunks.isEmpty == false,
-      review.targets.allSatisfy({ target in target.nonce.isEmpty == false }),
+      review.targets.allSatisfy({ target in
+        target.nonce.isEmpty == false
+      }),
       Set(review.targets.map(\.nonce)).count == review.targets.count,
       try reviewState(db, artifact: artifact) == review.state,
       targetsMatch(
@@ -262,7 +264,9 @@ private extension ScheduledLearningStoreGRDB {
         ownerChatId: job.ownerChatId,
         expiry: now.addingTimeInterval(EvidenceWindow.maximumAge)
       ),
-      review.chunks.allSatisfy({ chunk in chunk.chatId == job.ownerChatId }),
+      review.chunks.allSatisfy({ chunk in
+        chunk.chatId == job.ownerChatId
+      }),
       chunksHaveValidShape(review.chunks, subjectDigest: review.subjectDigest),
       FeedbackKeyboard.candidateReviewMarkup(
         targets: review.targets,
