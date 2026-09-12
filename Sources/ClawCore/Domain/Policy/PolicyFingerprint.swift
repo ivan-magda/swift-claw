@@ -109,8 +109,8 @@ public enum PolicyFingerprint {
   }
 
   /// The combined fingerprint stored as `policy_version`: first 16 hex of the digest over the
-  /// static sub-hash followed by the prompt materials in the pinned order
-  /// [systemPrompt, soulText, agentsText, toolsText]. A missing/unreadable file folds in as "".
+  /// static sub-hash followed by the prompt materials in the pinned order [systemPrompt,
+  /// proactiveSystemPrompt, soul, agents, tools]. A missing/unreadable file folds in as "".
   public static func combined(staticSubhash: String, promptMaterials: [String]) -> String {
     String(hash(parts: [staticSubhash] + promptMaterials).prefix(16))
   }

@@ -61,8 +61,9 @@ public enum RouteNotice: Sendable, Equatable {
   case restored(route: String)
 }
 
-/// The outcome of one orchestrated turn. `runTurn` never throws — every failure becomes one of
-/// these so the gateway always has something to persist and send (never silence).
+/// The outcome of one orchestrated turn. `runTurn` throws only `StoreError.diskFull` — every
+/// other failure becomes one of these so the gateway always has something to persist and send
+/// (never silence).
 public enum TurnResult: Sendable, Equatable {
   /// A usable answer plus provider-truth usage and any opaque replay state it produced.
   case completed(content: String, usage: ProviderUsage, providerState: ProviderExchangeState?)
