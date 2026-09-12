@@ -153,7 +153,8 @@ The installer does not provision these tools, their dependencies, repository acc
 The result schema is embedded in `clawd`; there is no extra schema resource to install.
 
 Both service units run under your user account, but do not inherit an interactive shell's PATH or
-login environment. The existing `run-clawd.sh` sources `~/.swift-claw/clawd.env` (or `CLAW_ENV_FILE`);
+login environment. On macOS the LaunchAgent's `run-clawd.sh` sources `~/.swift-claw/clawd.env` (or
+`CLAW_ENV_FILE`); on Linux the systemd unit reads `~/.swift-claw/clawd.env` through `EnvironmentFile=`.
 `clawd` itself does not load `.env` files. From a terminal where Codex and any interpreter it needs
 work, run `clawd coder setup`. The command captures that terminal's absolute PATH entries for Coder
 children, checks Codex locally, and writes only `CLAW_CODER_PATH` and `CLAW_CODER_ENABLED=true` to the

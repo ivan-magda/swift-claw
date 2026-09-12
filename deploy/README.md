@@ -26,7 +26,8 @@ group topics. Install Codex, Git (`/usr/bin/git` for preparation) and, for GitHu
 separately. PRs require that account's configured clone/push/PR rights. The installer does not
 provision dependencies or credentials.
 
-The wrapper already sources `clawd.env`; `clawd` does not automatically load `.env`. Run `clawd coder
+The service already loads `clawd.env` (the wrapper sources it on macOS; the systemd unit uses
+`EnvironmentFile=` on Linux); `clawd` does not automatically load `.env`. Run `clawd coder
 setup` from a terminal where Codex and its interpreter/toolchain work. It checks the existing Coder
 selection, then records that terminal's absolute path entries in the Coder-only `CLAW_CODER_PATH` and
 enables Coder. It does not install dependencies, import credentials, edit shell startup files or
