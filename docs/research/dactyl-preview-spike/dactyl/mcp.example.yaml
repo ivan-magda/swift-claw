@@ -1,0 +1,11 @@
+servers:
+  - name: dactyl_preview
+    url: http://127.0.0.1:8787/projects/PROJECT_ID/mcp
+    requestTimeoutSeconds: 120
+    tools:
+      include:
+        - project_list_files
+        - project_read_file
+        - project_apply_files
+        - preview_build
+        - preview_snapshot

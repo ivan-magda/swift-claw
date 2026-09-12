@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Dactyl multi-file preview probe</title>
+<style>
+  html,
+  body {
+    margin: 0;
+    background: #fff;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  pre {
+    font: 12px monospace;
+    white-space: pre-wrap;
+  }
+</style>
+<canvas id="stage"></canvas>
+<pre id="log">starting</pre>
+<script type="module">
+  import { mount } from "https://builder1.dactyl.dev/src/sdk/src/index.mjs";
+
+  const builderOrigin = "https://builder1.dactyl.dev";
+  const params = new URLSearchParams(window.location.search);
+  const wasmParam = params.get("wasm");
+  const log = document.querySelector("#log");
+
+  window.previewProbe = { status: "starting", logs: [] };
+
+  try {
+    if (!wasmParam) {
+      throw new Error("missing ?wasm= URL");
+    }
+
+    const wasmURL = new URL(wasmParam);
+    if (wasmURL.origin !== builderOrigin || !wasmURL.pathname.endsWith(".wasm")) {
+      throw new Error("the probe accepts Dactyl builder Wasm URLs only");
+    }
+
+    window.preview = await mount("#stage", wasmURL.href, {
+      scale: 1,
+      atlasUrl: `${builderOrigin}/src/host/symbols/index.json`,
+      builderOrigin,
+      onReady: ({ width, height }) => {
+        window.previewProbe.status = "ready";
+        window.previewProbe.size = { width, height };
+        document.body.dataset.previewStatus = "ready";
+        log.textContent = `ready ${width}x${height}`;
+      },
+      onLog: ({ level, text }) => {
+        window.previewProbe.logs.push({ level, text });
+        log.textContent += `\n${level}: ${text}`;
+      },
+    });
+  } catch (error) {
+    window.previewProbe.status = "fatal";
+    window.previewProbe.error = String(error);
+    document.body.dataset.previewStatus = "fatal";
+    log.textContent = `fatal: ${error}`;
+  }
+</script>
