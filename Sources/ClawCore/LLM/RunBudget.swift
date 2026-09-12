@@ -100,8 +100,9 @@ public struct BudgetGate: Sendable {
 
   /// Deny when any spend bound is met. The offline-guaranteed token failsafe is checked before
   /// the per-run and projected per-day USD caps (only the already-spent daily cap precedes it), so
-  /// it still trips when no price is known (`estimatedCostUSD` defaults to 0). Global checks run first, unchanged order — then, iff the run is proactive
-  /// (`origin != .interactive`), the nested proactive pool is consulted.
+  /// it still trips when no price is known (`estimatedCostUSD` defaults to 0). Global checks run
+  /// first, unchanged order — then, iff the run is proactive (`origin != .interactive`), the nested
+  /// proactive pool is consulted.
   ///
   /// Under `includedPlan` every USD comparison is skipped — a subscription dollar figure is not a
   /// gate — but the daily token ceiling still binds, so a subscription call cannot outrun the hard
