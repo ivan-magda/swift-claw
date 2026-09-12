@@ -41,7 +41,7 @@ if ! command -v swiftlint >/dev/null 2>&1; then
   exit 1
 fi
 
-# STRICT=1 fails on warnings too. Off by default while the intentional force-unwrap
+# STRICT=1 fails on warnings too. Off by default while the existing SwiftLint
 # warnings stand; flip it once those are resolved.
 if [[ "${STRICT:-0}" == "1" ]]; then
   swiftlint lint --strict --quiet
