@@ -2,14 +2,6 @@
 
 Final selected visual identity for the swift-claw README and public release.
 
-## Recommended repository placement
-
-Copy this directory to:
-
-`docs/assets/branding/`
-
-Then paste the contents of `README-hero-snippet.md` at the top of `README.md`, above the badges.
-
 ## Files
 
 - `swift-claw-hero-dark.png` — original 1774×887 master.
@@ -23,7 +15,6 @@ Then paste the contents of `README-hero-snippet.md` at the top of `README.md`, a
 - `swift-claw-icon-transparent-256.png` — transparent compact icon.
 - `swift-claw-wordmark-transparent.png` — wordmark only.
 - `swift-claw-lockup-transparent.png` — complete transparent lockup.
-- `README-hero-snippet.md` — ready-to-paste README markup.
 
 ## Notes
 
