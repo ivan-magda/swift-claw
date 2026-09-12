@@ -181,7 +181,9 @@ public enum ClawDatabase {
         table.add(column: "job_id", .integer).references("scheduled_jobs")
       }
       try db.create(table: "scheduler_state") { table in
-        table.primaryKey("id", .integer).check { id in id == 1 }
+        table.primaryKey("id", .integer).check { id in
+          id == 1
+        }
         table.column("last_tick_at", .integer)
         table.column("last_misfire_at", .integer)
         table.column("last_misfire_skipped_count", .integer).notNull().defaults(to: 0)

@@ -236,18 +236,16 @@ private extension ContextBuilder {
   func label(for id: ContextRowID) -> String {
     switch id {
     case .userFile:
-      "USER.md"
+      WorkspaceFile.user.relativePath
     case .memoryFile:
-      "MEMORY.md"
+      WorkspaceFile.memory.relativePath
     case .memoryItems:
       "memory_items"
-    case .recall:
-      "recall"
     case .skills:
       WorkspaceSkills.fenceLabel
     case .lessons:
       Self.lessonsLabel
-    case .policy, .systemWorkspace, .tools, .metadata, .history:
+    case .policy, .systemWorkspace, .tools, .metadata, .history, .recall:
       id.rawValue
     }
   }

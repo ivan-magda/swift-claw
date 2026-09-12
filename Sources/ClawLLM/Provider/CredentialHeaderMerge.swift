@@ -20,7 +20,11 @@ enum CredentialHeaderMerge {
     from authorization: LLMRequestAuthorization
   ) throws -> [String: String] {
     var merged = adapterHeaders
-    let owned = Set(adapterHeaders.keys.map { name in name.lowercased() })
+    let owned = Set(
+      adapterHeaders.keys.map { name in
+        name.lowercased()
+      }
+    )
 
     // Sorted so a source offering several bad headers always names the same one first.
     for name in authorization.headers.keys.sorted() {

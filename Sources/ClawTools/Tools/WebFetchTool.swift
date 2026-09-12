@@ -179,7 +179,9 @@ private extension WebFetchTool {
 
     let refusable = addresses.filter { address in
       SSRFGuard.isPublic(address) == false
-        && exemptCIDRs.contains { cidr in cidr.contains(address) } == false
+        && exemptCIDRs.contains { cidr in
+          cidr.contains(address)
+        } == false
     }
     guard let firstRefusable = refusable.first else {
       return nil
@@ -246,7 +248,9 @@ private extension WebFetchTool {
     let mediaType = contentType.split(separator: ";").first.map(String.init) ?? ""
 
     let allowed =
-      Self.contentTypeAllowlistPrefixes.contains { prefix in mediaType.hasPrefix(prefix) }
+      Self.contentTypeAllowlistPrefixes.contains { prefix in
+        mediaType.hasPrefix(prefix)
+      }
       || Self.contentTypeAllowlistExact.contains(mediaType)
       || mediaType.hasSuffix("+xml") || mediaType.hasSuffix("+json")
 

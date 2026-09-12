@@ -110,7 +110,9 @@ public struct ExfilArgGuard: Sendable {
   private let secretValues: [String]
 
   public init(secretValues: [String]) {
-    self.secretValues = secretValues.filter { value in value.isEmpty == false }
+    self.secretValues = secretValues.filter { value in
+      value.isEmpty == false
+    }
   }
 
   // MARK: - Tiers 1 + 2 (always)
@@ -402,7 +404,9 @@ public struct ExfilArgGuard: Sendable {
     }
     // A span present only in a decoded candidate isn't in `raw`, so neither the sweep nor the
     // loop above could remove its still-one-decode-away encoded form — nuke the whole string.
-    if spans.contains(where: { span in raw.contains(span) == false }) {
+    if spans.contains(where: { span in
+      raw.contains(span) == false
+    }) {
       return Verdict(blockedRule: rule, redactedArgs: "[REDACTED:\(rule)]")
     }
 

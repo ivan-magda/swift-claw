@@ -70,7 +70,9 @@ public struct ExaSearchProvider: SearchProviding {
         url: entry.url,
         snippet: entry.highlights?.first
           ?? entry.summary
-          ?? entry.text.map { text in String(text.prefix(Self.snippetTextPrefixGraphemes)) }
+          ?? entry.text.map { text in
+            String(text.prefix(Self.snippetTextPrefixGraphemes))
+          }
           ?? ""
       )
     }

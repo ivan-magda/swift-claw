@@ -31,7 +31,7 @@ public struct Secrets: Sendable, Equatable {
   /// (`SecretRedactor`) and from developer logs (the log-handler redactor). One source of truth so
   /// the two call sites can never drift on what counts as a secret.
   public var redactionValues: [String] {
-    [telegramBotToken, llmApiKey, searchApiKey, llmFallbackApiKey].compactMap { value in value }
+    [telegramBotToken, llmApiKey, searchApiKey, llmFallbackApiKey].compactMap { $0 }
   }
 }
 
