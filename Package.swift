@@ -13,15 +13,6 @@ let package = Package(
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.0"),
     .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.2"),
     .package(url: "https://github.com/modelcontextprotocol/swift-sdk", from: "0.12.1"),
-    // Transitive through the MCP SDK. Declared here only to switch its "AsyncHTTPClient"
-    // trait on: the trait is off by default, yet the module is visible in our build (we
-    // depend on AsyncHTTPClient directly), so its `canImport` guard compiles code against
-    // a dependency the target never declared and the module search path breaks.
-    .package(
-      url: "https://github.com/mattt/eventsource.git",
-      from: "1.4.1",
-      traits: ["AsyncHTTPClient"]
-    ),
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
