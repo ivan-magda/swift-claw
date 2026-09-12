@@ -245,7 +245,7 @@ private struct PinnedLessonEnvironment {
       now: now
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    _ = try learning.armJob(jobId: job.id, now: now)
+    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
 
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
     let usage = UsageStoreGRDB(writer: queue)
@@ -340,7 +340,7 @@ private struct PinnedLessonEnvironment {
       ),
       now: now
     )
-    _ = try learning.armJob(jobId: other.id, now: now)
+    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: other.id, now: now)
     try insert(try LessonSet.canonical(jobId: other.id, lessons: set.lessons))
     return other.id
   }
@@ -518,14 +518,6 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     try base.commitCandidateReview(review, now: now)
   }
 
-  func createTargets(
-    _ targets: [NewFeedbackTarget],
-    chunks: [LearningNoticeChunk],
-    now: Date
-  ) throws(StoreError) {
-    try base.createTargets(targets, chunks: chunks, now: now)
-  }
-
   func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget? {
     try base.feedbackTarget(nonce: nonce)
   }
@@ -564,10 +556,6 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     nil
   }
 
-  func armJob(jobId: Int64, now: Date) throws(StoreError) -> JobLearningState {
-    try base.armJob(jobId: jobId, now: now)
-  }
-
   func binding(runId: Int64) throws(StoreError) -> RunLearningBinding? {
     try base.binding(runId: runId)
   }
@@ -592,10 +580,6 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     now: Date
   ) throws(StoreError) -> TrialReconciliationResult {
     try base.reconcileTrial(identity, now: now)
-  }
-
-  func settlement(runId: Int64) throws(StoreError) -> RunSettlement? {
-    try base.settlement(runId: runId)
   }
 
   @discardableResult

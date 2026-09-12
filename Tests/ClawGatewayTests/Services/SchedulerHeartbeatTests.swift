@@ -15,10 +15,6 @@ private struct HeartbeatWorkspace: WorkspaceReading {
     file == .heartbeat ? heartbeatFile : .missing
   }
 
-  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
-    .missing
-  }
-
   func scanSkills() -> SkillScanResult {
     SkillScanResult(descriptors: [], warnings: [])
   }

@@ -2,6 +2,7 @@ import ClawCore
 import ClawData
 import ClawTestSupport
 import Foundation
+import GRDB
 import Logging
 import Synchronization
 import Testing
@@ -12,14 +13,6 @@ import Testing
 /// send-succeeded-but-record-failed path, where the row must stay PENDING for re-send.
 private struct MarkSentFailingOutbox: OutboxStore {
   let base: OutboxStoreGRDB
-
-  func claimOutbound(runId: Int64, chunk: OutboxChunk) throws(StoreError) -> Bool {
-    try base.claimOutbound(runId: runId, chunk: chunk)
-  }
-
-  func claimNotice(_ chunk: LearningNoticeChunk) throws(StoreError) -> Bool {
-    try base.claimNotice(chunk)
-  }
 
   func markSent(
     deliveryKey: String,
@@ -145,6 +138,7 @@ private final class RetryWaitHold: Sendable {
 
 @Suite struct OutboxDispatcherTests {
   private struct Fixture {
+    let writer: any DatabaseWriter
     let outbox: OutboxStoreGRDB
     let runId: Int64
     let chatId: Int64
@@ -152,35 +146,51 @@ private final class RetryWaitHold: Sendable {
 
   private func makeFixture() throws -> Fixture {
     let seeded = try makeSeededFixture()
-    return Fixture(outbox: seeded.outbox, runId: seeded.runId, chatId: seeded.chatId)
-  }
-
-  /// Enqueues a PENDING outbound row via the real claim path (as a committed turn would).
-  private func seedPending(_ fixture: Fixture, stepIndex: Int = 0, payload: String) throws {
-    try seedPending(
-      fixture.outbox,
-      runId: fixture.runId,
-      chatId: fixture.chatId,
-      stepIndex: stepIndex,
-      payload: payload
+    return Fixture(
+      writer: seeded.writer,
+      outbox: seeded.outbox,
+      runId: seeded.runId,
+      chatId: seeded.chatId
     )
   }
 
   private func seedPending(
-    _ outbox: OutboxStoreGRDB,
+    _ fixture: Fixture,
+    payloads: [String],
+    replyMarkup: String? = nil
+  ) throws {
+    try seedPending(
+      in: fixture.writer,
+      runId: fixture.runId,
+      chatId: fixture.chatId,
+      payloads: payloads,
+      replyMarkup: replyMarkup
+    )
+  }
+
+  private func seedPending(_ fixture: Fixture, payload: String) throws {
+    try seedPending(fixture, payloads: [payload])
+  }
+
+  private func seedPending(
+    in writer: any DatabaseWriter,
     runId: Int64,
     chatId: Int64,
-    stepIndex: Int = 0,
-    payload: String
+    payloads: [String],
+    replyMarkup: String? = nil
   ) throws {
-    _ = try outbox.claimOutbound(
+    try OutboxFixture.commitReply(
+      in: writer,
       runId: runId,
-      chunk: OutboxChunk(
-        stepIndex: stepIndex,
-        chatId: chatId,
-        payload: payload,
-        payloadHash: "hash"
-      )
+      chunks: payloads.enumerated().map { index, payload in
+        OutboxChunk(
+          stepIndex: index,
+          chatId: chatId,
+          payload: payload,
+          payloadHash: ContentHash.fnv1a(payload),
+          replyMarkup: replyMarkup
+        )
+      }
     )
   }
 
@@ -201,16 +211,16 @@ private final class RetryWaitHold: Sendable {
     let seeded = try makeSeededFixture(chatId: firstChatId)
     let secondRunId = try seedRun(in: seeded.writer, chatId: secondChatId, updateId: 2)
     try seedPending(
-      seeded.outbox,
+      in: seeded.writer,
       runId: seeded.runId,
       chatId: firstChatId,
-      payload: firstPayload
+      payloads: [firstPayload]
     )
     try seedPending(
-      seeded.outbox,
+      in: seeded.writer,
       runId: secondRunId,
       chatId: secondChatId,
-      payload: secondPayload
+      payloads: [secondPayload]
     )
     return TwoChatFixture(
       outbox: seeded.outbox,
@@ -288,9 +298,7 @@ private final class RetryWaitHold: Sendable {
   @Test func midBatchSendFailureStopsAndLeavesLaterRowsPendingInOrder() async throws {
     // given — three ordered chunks; the transport fails the second send
     let fixture = try makeFixture()
-    try seedPending(fixture, stepIndex: 0, payload: "first")
-    try seedPending(fixture, stepIndex: 1, payload: "second")
-    try seedPending(fixture, stepIndex: 2, payload: "third")
+    try seedPending(fixture, payloads: ["first", "second", "third"])
     let transport = RecordingTransport(failSendAtAttempt: 2)
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
@@ -336,16 +344,7 @@ private final class RetryWaitHold: Sendable {
     // given — a PENDING row carrying an inline keyboard
     let fixture = try makeFixture()
     let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
-    _ = try fixture.outbox.claimOutbound(
-      runId: fixture.runId,
-      chunk: OutboxChunk(
-        stepIndex: 0,
-        chatId: fixture.chatId,
-        payload: "prompt",
-        payloadHash: "h",
-        replyMarkup: markup
-      )
-    )
+    try seedPending(fixture, payloads: ["prompt"], replyMarkup: markup)
     let spy = DeliverySpy()
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
@@ -365,16 +364,7 @@ private final class RetryWaitHold: Sendable {
     // given — the rich send fails, forcing the plain fallback
     let fixture = try makeFixture()
     let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
-    _ = try fixture.outbox.claimOutbound(
-      runId: fixture.runId,
-      chunk: OutboxChunk(
-        stepIndex: 0,
-        chatId: fixture.chatId,
-        payload: "prompt",
-        payloadHash: "h",
-        replyMarkup: markup
-      )
-    )
+    try seedPending(fixture, payloads: ["prompt"], replyMarkup: markup)
     let spy = DeliverySpy(failRich: true)
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
@@ -398,7 +388,12 @@ private final class RetryWaitHold: Sendable {
       sessionKey: SessionKey.telegramTopic(chatId: groupChatId, threadId: 5),
       telegramMessageId: 88
     )
-    let fixture = Fixture(outbox: seeded.outbox, runId: seeded.runId, chatId: seeded.chatId)
+    let fixture = Fixture(
+      writer: seeded.writer,
+      outbox: seeded.outbox,
+      runId: seeded.runId,
+      chatId: seeded.chatId
+    )
     try seedPending(fixture, payload: "in the room")
     let spy = DeliverySpy()
     let dispatcher = OutboxDispatcher(

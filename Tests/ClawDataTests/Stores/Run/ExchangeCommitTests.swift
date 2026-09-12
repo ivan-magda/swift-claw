@@ -217,9 +217,9 @@ import Testing
   @Test func cancelledArbitrationArmStillTaints() throws {
     // given — /stop won the race (rev.1 M1: CANCELLED taints)
     let fixture = try makeRunningFixture()
-    _ = try fixture.runs.cancelActiveRun(
-      sessionId: fixture.sessionId,
-      reason: .cancelled,
+    _ = try CommandStoreGRDB(writer: fixture.queue).applyStop(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 7),
       now: Date()
     )
     let turn = AssistantTurn(
@@ -248,13 +248,11 @@ import Testing
   @Test func supersededArbitrationArmNeverRetaints() throws {
     // given — /new won the race; detaint already ran (rev.1 M1: SUPERSEDED skips)
     let fixture = try makeRunningFixture()
-    _ = try fixture.runs.cancelActiveRun(
-      sessionId: fixture.sessionId,
-      reason: .superseded,
+    _ = try CommandStoreGRDB(writer: fixture.queue).applyNew(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 7),
       now: Date()
     )
-    let sessions = SessionMessageStoreGRDB(writer: fixture.queue)
-    try sessions.resetWindowAndDetaint(sessionId: fixture.sessionId, now: Date())
     let turn = AssistantTurn(
       runId: fixture.runId,
       sessionId: fixture.sessionId,
@@ -276,9 +274,9 @@ import Testing
   @Test func cancelledNilUsageDegradedCommitStillTaints() throws {
     // given — cancellation raced a degraded turn that has no usage row to record
     let fixture = try makeRunningFixture()
-    _ = try fixture.runs.cancelActiveRun(
-      sessionId: fixture.sessionId,
-      reason: .cancelled,
+    _ = try CommandStoreGRDB(writer: fixture.queue).applyStop(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 7),
       now: Date()
     )
     let turn = DegradedTurn(

@@ -275,9 +275,7 @@ func textUpdate(
 }
 
 /// A seeded in-memory database: a session, an inbound message, and a RUNNING run with no outbox row.
-/// The outbox and runs stores share the same writer, so a row claimed through one is visible to the
-/// other. The RUNNING-with-no-outbox shape doubles as the crash-mid-turn state boot-reconcile tests
-/// need.
+/// The RUNNING-with-no-outbox shape also represents a crash midway through a turn.
 struct SeededFixture {
   let writer: any DatabaseWriter
   let outbox: OutboxStoreGRDB
@@ -286,8 +284,7 @@ struct SeededFixture {
   let chatId: Int64
 }
 
-/// Seeds the durable spine so that the `outbound_deliveries.run_id` FK is satisfied — ready for
-/// callers to claim outbound rows or run a boot-reconcile sweep against a RUNNING run.
+/// Seeds a RUNNING turn for reply commits or boot reconciliation.
 func makeSeededFixture(
   chatId: Int64 = 42,
   sessionKey: String? = nil,
@@ -412,7 +409,8 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
   )
   let deliveredRunId = try #require(deliveredClaim.runId)
   _ = try #require(try runs.pickUp(runId: deliveredRunId, now: seededAt))
-  _ = try outbox.claimOutbound(
+  try OutboxFixture.seedLegacyRunDelivery(
+    in: queue,
     runId: deliveredRunId,
     chunk: OutboxChunk(
       stepIndex: 0,

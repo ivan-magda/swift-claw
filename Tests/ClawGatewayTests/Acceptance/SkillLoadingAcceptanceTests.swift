@@ -41,8 +41,14 @@ import Testing
       httpResponses: [:],
       workspaceFiles: ["skills/summarize/SKILL.md": Self.manifest]
     )
-    _ = try harness.stores.memory.append(
-      NewMemoryItem(text: "vault code omega", kind: .user, sensitivity: .high, sessionId: nil),
+    _ = try harness.stores.memoryCommands.applyRemember(
+      updateId: -1,
+      item: NewMemoryItem(
+        text: "vault code omega",
+        kind: .user,
+        sensitivity: .high,
+        sessionId: nil
+      ),
       now: Date(timeIntervalSince1970: 86_400)
     )
 

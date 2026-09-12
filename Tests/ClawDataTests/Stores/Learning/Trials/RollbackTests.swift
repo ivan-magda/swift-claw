@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -212,7 +213,7 @@ extension BoundRunEnvironment {
       chatId: 777,
       expiresAt: now.addingTimeInterval(3_600)
     )
-    try learning.createTargets([target], chunks: [], now: now)
+    try TestLearningFixtures(writer: queue).seedTargets([target])
     guard
       case .recorded(let event) = try learning.consumeAndAppendEvent(
         feedbackTap(target, updateId: 900),
@@ -235,7 +236,7 @@ extension BoundRunEnvironment {
     } else {
       target = runFeedbackTarget(runId: runId, signal: signal)
     }
-    try learning.createTargets([target], chunks: [], now: now)
+    try TestLearningFixtures(writer: queue).seedTargets([target])
     let outcome: FeedbackOutcome
     if signal.opensFeedbackChallenge {
       let opened = try learning.consumeAndOpenChallenge(

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 
@@ -12,7 +13,7 @@ struct ResetFixture {
   }
 
   func installStableLessons(_ lessons: [String]) throws -> LessonSet {
-    _ = try env.learning.armJob(jobId: env.jobId, now: env.now)
+    _ = try TestLearningFixtures(writer: env.queue).seedArmedJob(jobId: env.jobId, now: env.now)
     let set = try LessonSet.canonical(jobId: env.jobId, lessons: lessons)
     try env.queue.write { db in
       try db.execute(

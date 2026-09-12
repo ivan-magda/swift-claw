@@ -258,13 +258,6 @@ public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
     now: Date
   ) throws(StoreError) -> Bool
 
-  /// Commits every runless notice chunk and every nonce it exposes in one transaction.
-  func createTargets(
-    _ targets: [NewFeedbackTarget],
-    chunks: [LearningNoticeChunk],
-    now: Date
-  ) throws(StoreError)
-
   /// Exact opaque lookup. No row-id lookup exists on the feedback seam.
   func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget?
 
@@ -294,11 +287,6 @@ public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
     ownerUserId: Int64,
     chatId: Int64
   ) throws(StoreError) -> FeedbackChallenge?
-
-  /// Idempotent. Inserts this job's learning state and its canonical empty lesson set together,
-  /// or returns the state already there. The fire transaction calls it, so a job never fires with
-  /// a binding that points at a lesson set that does not exist.
-  func armJob(jobId: Int64, now: Date) throws(StoreError) -> JobLearningState
 
   /// Exact identity. Returns nil when the digest belongs to another job.
   func lessonSet(jobId: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet?
@@ -348,10 +336,6 @@ public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
   ) throws(StoreError) -> PromotionReplyOutcome
 
   func currentPromotion(jobId: Int64) throws(StoreError) -> DecisionReceipt?
-
-  /// The terminal receipt the transaction that won the run's state wrote. Nil for a run that never
-  /// bound, or one that is still live.
-  func settlement(runId: Int64) throws(StoreError) -> RunSettlement?
 
   /// The lane tail's deferred settlement: freezes a bound run's evidence once every primary fact
   /// has unwound. Idempotent and inert for an unbound, still-live or already-settled run, so the

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 
@@ -72,7 +73,7 @@ extension BoundRunEnvironment {
     updateId: Int64
   ) throws {
     let target = runFeedbackTarget(runId: runId, signal: signal)
-    try learning.createTargets([target], chunks: [], now: now)
+    try TestLearningFixtures(writer: queue).seedTargets([target])
     guard
       case .recorded = try learning.consumeAndAppendEvent(
         feedbackTap(target, updateId: updateId),

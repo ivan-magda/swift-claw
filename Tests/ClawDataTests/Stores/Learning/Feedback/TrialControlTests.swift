@@ -22,7 +22,7 @@ extension FeedbackStoreTests {
       subject: trial.candidateDigest,
       kind: .candidate
     )
-    try env.createTargets([unrelated, exact], chunks: [])
+    try env.seedTargets([unrelated, exact], chunks: [])
 
     // when
     _ = try env.consume(
@@ -51,7 +51,7 @@ extension FeedbackStoreTests {
         subject: trial.candidateDigest,
         kind: .candidate
       )
-      try env.createTargets([target], chunks: [])
+      try env.seedTargets([target], chunks: [])
 
       // when
       let outcome = try env.consume(
@@ -82,7 +82,7 @@ extension FeedbackStoreTests {
         subject: trial.candidateDigest,
         kind: .candidate
       )
-      try env.createTargets([target], chunks: [])
+      try env.seedTargets([target], chunks: [])
 
       // when
       let outcome = try env.consume(env.tap(target: target, signal: .candidateReject))
@@ -114,7 +114,7 @@ extension FeedbackStoreTests {
       subject: evaluationDigest,
       kind: .evaluation
     )
-    try env.createTargets([target], chunks: [])
+    try env.seedTargets([target], chunks: [])
 
     // when
     let outcome = try env.consume(
@@ -151,7 +151,7 @@ extension FeedbackStoreTests {
         subject: testCase.target,
         kind: .evaluation
       )
-      try env.createTargets([target], chunks: [])
+      try env.seedTargets([target], chunks: [])
 
       // when
       let outcome = try env.consume(
@@ -187,7 +187,7 @@ extension FeedbackStoreTests {
         subject: evaluationDigest,
         kind: .evaluation
       )
-      try env.createTargets([target], chunks: [])
+      try env.seedTargets([target], chunks: [])
 
       // when
       do {
@@ -219,7 +219,7 @@ extension FeedbackStoreTests {
       subject: evaluationDigest,
       kind: .evaluation
     )
-    try env.createTargets([target], chunks: [])
+    try env.seedTargets([target], chunks: [])
 
     // when / then — trusting only typed-looking substring bytes would close corrupt provenance.
     #expect(throws: StoreError.self) {
@@ -246,7 +246,7 @@ extension FeedbackStoreTests {
         subject: evaluationDigest,
         kind: .evaluation
       )
-      try env.createTargets([target], chunks: [])
+      try env.seedTargets([target], chunks: [])
 
       // when
       _ = try env.consume(env.tap(target: target, signal: .evaluationDispute))

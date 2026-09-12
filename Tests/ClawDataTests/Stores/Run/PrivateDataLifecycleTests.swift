@@ -144,7 +144,11 @@ import Testing
     let fixture = try fixture()
     let now = Date(timeIntervalSince1970: 1_750_000_000)
     _ = try fixture.runs.pickUp(runId: fixture.runId, policyVersion: "0123456789abcdef", now: now)
-    _ = try fixture.runs.cancelActiveRun(sessionId: fixture.sessionId, reason: .cancelled, now: now)
+    _ = try CommandStoreGRDB(writer: fixture.queue).applyStop(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 7),
+      now: now
+    )
 
     // when — the model reply lands after /stop already cancelled the run
     let result = try fixture.runs.commitAssistantTurn(

@@ -59,7 +59,7 @@ import Testing
         signal: .resultUseful,
         subject: "subject-digest"
       )
-      try env.createTargets([target], chunks: [])
+      try TestLearningFixtures(writer: env.queue).seedTargets([target])
       let callback = failure.callback(target: target)
 
       // when
@@ -90,7 +90,7 @@ import Testing
       subject: "candidate-digest",
       kind: .candidate
     )
-    try env.createTargets([target], chunks: [])
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let callback = env.callback(
       data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .candidateReject),
       from: 43,
@@ -115,7 +115,7 @@ import Testing
     // given
     let env = try FeedbackCallbackEnvironment.make()
     let target = env.target(nonce: "single-use", signal: .resultUseful, subject: "41")
-    try env.createTargets([target], chunks: [])
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let callback = env.callback(
       data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultUseful)
     )
@@ -148,7 +148,7 @@ import Testing
       subject: "41",
       expiresAt: env.now
     )
-    try env.createTargets([target], chunks: [])
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let callback = env.callback(
       data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultUseful)
     )
@@ -181,7 +181,7 @@ import Testing
         subject: "subject-\(offset)",
         kind: entry.1
       )
-      try env.createTargets([target], chunks: [])
+      try TestLearningFixtures(writer: env.queue).seedTargets([target])
       let callback = env.callback(
         data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: entry.0)
       )
@@ -380,7 +380,7 @@ private struct FeedbackCallbackEnvironment {
       now: now
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    let state = try learning.armJob(jobId: job.id, now: now)
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: allowed)
     let access = AccessControl(allowlist: allowlist, groupChats: [])
@@ -502,13 +502,6 @@ private struct FeedbackCallbackEnvironment {
 
   func eventCount() throws -> Int {
     try count(table: "feedback_events")
-  }
-
-  func createTargets(
-    _ targets: [NewFeedbackTarget],
-    chunks: [LearningNoticeChunk]
-  ) throws {
-    try learning.createTargets(targets, chunks: chunks, now: now)
   }
 
   func eventTransportUpdateIds() throws -> [Int64] {

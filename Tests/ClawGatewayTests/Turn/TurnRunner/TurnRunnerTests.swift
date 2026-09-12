@@ -43,14 +43,15 @@ actor StubLLMProvider: LLMProvider {
 /// assistant commit, modeling `/stop` winning after the provider returned usage.
 struct CancellingBeforeAssistantCommitRuns: RunStore {
   let base: RunStoreGRDB
-  let sessionId: Int64
+  let commands: CommandStoreGRDB
+  let sessionKey: String
 
   func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
     try base.pickUp(runId: runId, policyVersion: policyVersion, now: now)
   }
 
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult {
-    _ = try base.cancelActiveRun(sessionId: sessionId, reason: .cancelled, now: now)
+    _ = try commands.applyStop(updateId: 2, sessionKey: sessionKey, now: now)
     return try base.commitAssistantTurn(turn, now: now)
   }
 
@@ -69,18 +70,6 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     now: Date
   ) throws(StoreError) -> SuspendedCommitReceipt {
     try base.commitSuspendedTurn(runId: runId, sessionId: sessionId, commit: commit, now: now)
-  }
-
-  func cancelActiveRun(
-    sessionId: Int64,
-    reason: CancelReason,
-    now: Date
-  ) throws(StoreError) -> Int64? {
-    try base.cancelActiveRun(sessionId: sessionId, reason: reason, now: now)
-  }
-
-  func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] {
-    try base.supersedeSessionRuns(sessionId: sessionId, now: now)
   }
 
   func reconcileRunsAtBoot(
@@ -219,7 +208,8 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
 /// degradation commit, modeling `/stop` winning after the runtime produced a degradation result.
 struct CancellingBeforeDegradedCommitRuns: RunStore {
   let base: RunStoreGRDB
-  let sessionId: Int64
+  let commands: CommandStoreGRDB
+  let sessionKey: String
 
   func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
     try base.pickUp(runId: runId, policyVersion: policyVersion, now: now)
@@ -230,7 +220,7 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   }
 
   func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
-    _ = try base.cancelActiveRun(sessionId: sessionId, reason: .cancelled, now: now)
+    _ = try commands.applyStop(updateId: 2, sessionKey: sessionKey, now: now)
     return try base.commitDegradedTurn(turn, now: now)
   }
 
@@ -245,18 +235,6 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     now: Date
   ) throws(StoreError) -> SuspendedCommitReceipt {
     try base.commitSuspendedTurn(runId: runId, sessionId: sessionId, commit: commit, now: now)
-  }
-
-  func cancelActiveRun(
-    sessionId: Int64,
-    reason: CancelReason,
-    now: Date
-  ) throws(StoreError) -> Int64? {
-    try base.cancelActiveRun(sessionId: sessionId, reason: reason, now: now)
-  }
-
-  func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] {
-    try base.supersedeSessionRuns(sessionId: sessionId, now: now)
   }
 
   func reconcileRunsAtBoot(
@@ -411,12 +389,6 @@ struct DiskFullRuns: RunStore {
   ) throws(StoreError) -> SuspendedCommitReceipt {
     throw StoreError.diskFull
   }
-  func cancelActiveRun(
-    sessionId: Int64,
-    reason: CancelReason,
-    now: Date
-  ) throws(StoreError) -> Int64? { nil }
-  func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] { [] }
   func reconcileRunsAtBoot(
     now: Date,
     degradationText: String,
@@ -514,10 +486,6 @@ struct TurnRunnerWorkspace: WorkspaceReading {
     file == .memory ? memoryFile : .missing
   }
 
-  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
-    .missing
-  }
-
   func scanSkills() -> SkillScanResult {
     SkillScanResult(descriptors: [], warnings: [])
   }
@@ -563,7 +531,7 @@ func makeEnv(
   agentOutcome: StubLLMProvider.Outcome,
   providerOverride: (any LLMProvider)? = nil,
   runs: (any RunStore)? = nil,
-  runsFactory: ((DatabaseQueue, Int64) -> any RunStore)? = nil,
+  runsFactory: ((DatabaseQueue, String) -> any RunStore)? = nil,
   contextBuilder: ContextBuilder? = nil,
   sessionMessagesForRunner: (any SessionMessageStore)? = nil,
   budget: RunBudget = .default,
@@ -583,12 +551,13 @@ func makeEnv(
   let usage = UsageStoreGRDB(writer: queue)
   let outbox = OutboxStoreGRDB(writer: queue)
   let audit = AuditLogGRDB(writer: queue)
+  let resolvedSessionKey = sessionKey ?? SessionKey.telegramDM(chatId: chatId)
 
   // Seed a session + a user message via the real fused claim, so history is realistic.
   let claim = try sessionMessages.claimAndPersistInbound(
     InboundMessage(
       updateId: 1,
-      sessionKey: sessionKey ?? SessionKey.telegramDM(chatId: chatId),
+      sessionKey: resolvedSessionKey,
       chatId: chatId,
       userId: chatId,
       text: "hi",
@@ -626,7 +595,7 @@ func makeEnv(
   let imageCache = ImageCache()
   let runner = TurnRunner(
     sessionMessages: sessionMessagesForRunner ?? sessionMessages,
-    runs: runsFactory?(queue, sessionId) ?? runs ?? RunStoreGRDB(writer: queue),
+    runs: runsFactory?(queue, resolvedSessionKey) ?? runs ?? RunStoreGRDB(writer: queue),
     usageStore: usage,
     audit: audit,
     agent: agent,
@@ -1015,8 +984,9 @@ private func okResponse(content: String) -> ChatResponse {
   @Test func supersededRunSelfAbortsBeforeProviderCall() async throws {
     // given
     let env = try makeEnv(agentOutcome: .respond(okResponse(content: "should not run")))
-    _ = try RunStoreGRDB(writer: env.queue).supersedeSessionRuns(
-      sessionId: env.sessionId,
+    _ = try CommandStoreGRDB(writer: env.queue).applyNew(
+      updateId: 2,
+      sessionKey: SessionKey.telegramDM(chatId: env.chatId),
       now: Date()
     )
 
@@ -1038,10 +1008,11 @@ private func okResponse(content: String) -> ChatResponse {
     // given
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "must not send")),
-      runsFactory: { queue, sessionId in
+      runsFactory: { queue, sessionKey in
         CancellingBeforeAssistantCommitRuns(
           base: RunStoreGRDB(writer: queue),
-          sessionId: sessionId
+          commands: CommandStoreGRDB(writer: queue),
+          sessionKey: sessionKey
         )
       }
     )
@@ -1088,10 +1059,11 @@ private func okResponse(content: String) -> ChatResponse {
     // given
     let raced = try makeEnv(
       agentOutcome: .fail(.terminal(status: 400, message: "bad request")),
-      runsFactory: { queue, sessionId in
+      runsFactory: { queue, sessionKey in
         CancellingBeforeDegradedCommitRuns(
           base: RunStoreGRDB(writer: queue),
-          sessionId: sessionId
+          commands: CommandStoreGRDB(writer: queue),
+          sessionKey: sessionKey
         )
       }
     )

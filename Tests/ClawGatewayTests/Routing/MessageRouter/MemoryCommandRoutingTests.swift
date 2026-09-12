@@ -8,8 +8,8 @@ import Testing
     // given
     let harness = try MemoryRoutingHarness.make()
     _ = try harness.seedItem(text: "ship 3a", kind: .project, day: 86_400)
-    _ = try harness.seedItem(text: "prefers dark mode", kind: .user, day: 172_800)
-    _ = try harness.seedItem(text: "cite sources", kind: .reference, day: 259_200)
+    _ = try harness.seedItem(text: "prefers dark mode", kind: .user, updateId: -2, day: 172_800)
+    _ = try harness.seedItem(text: "cite sources", kind: .reference, updateId: -3, day: 259_200)
 
     // when
     let outcome = await harness.router.handle(
@@ -53,8 +53,8 @@ import Testing
     // given
     let harness = try MemoryRoutingHarness.make()
     _ = try harness.seedItem(text: "ship 3a", kind: .project, day: 86_400)
-    _ = try harness.seedItem(text: "ship 3b", kind: .project, day: 172_800)
-    _ = try harness.seedItem(text: "prefers dark mode", kind: .user, day: 259_200)
+    _ = try harness.seedItem(text: "ship 3b", kind: .project, updateId: -2, day: 172_800)
+    _ = try harness.seedItem(text: "prefers dark mode", kind: .user, updateId: -3, day: 259_200)
 
     // when
     let outcome = await harness.router.handle(

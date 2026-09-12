@@ -145,7 +145,11 @@ import Testing
     // given — /stop has already moved the run to CANCELLED in its command transaction; the waiter
     // now fixes the observation the command left as a placeholder
     let env = try makeSuspendedFixture()
-    _ = try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: Date())
+    _ = try CommandStoreGRDB(writer: env.queue).applyStop(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 7),
+      now: Date()
+    )
     #expect(try runState(env.queue, runId: env.runId) == RunState.cancelled.rawValue)
 
     // when — cancel is non-nil; the FSM refuses the already-terminal run, but the observation

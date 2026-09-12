@@ -1,7 +1,5 @@
 import ClawCore
-import ClawTestSupport
 import Foundation
-import GRDB
 import Testing
 
 @testable import ClawData
@@ -9,84 +7,60 @@ import Testing
 @Suite struct LessonSetStoreTests {
   @Test func twoJobsHoldTheSameEmptySetIndependently() throws {
     // given
-    let queue = try Self.makeArmedDatabase(jobIds: [1, 2])
-    let store = ScheduledLearningStoreGRDB(writer: queue)
-    let now = Date()
+    let env = try BoundRunEnvironment.make()
+    let other = try makeOtherJob(in: env)
 
     // when
-    let first = try store.armJob(jobId: 1, now: now)
-    let second = try store.armJob(jobId: 2, now: now)
+    let firstRunId = try env.pendingBoundRun()
+    let secondOutcome = try env.jobs.fireNow(jobId: other.id, now: env.now)
 
     // then
-    #expect(first.stableDigest == second.stableDigest)
-    let firstSet = try #require(try store.lessonSet(jobId: 1, digest: first.stableDigest))
-    let secondSet = try #require(try store.lessonSet(jobId: 2, digest: second.stableDigest))
-    #expect(firstSet.jobId == 1)
-    #expect(secondSet.jobId == 2)
-  }
-
-  @Test func armingIsIdempotent() throws {
-    // given
-    let queue = try Self.makeArmedDatabase(jobIds: [1])
-    let store = ScheduledLearningStoreGRDB(writer: queue)
-
-    // when
-    let first = try store.armJob(jobId: 1, now: Date())
-    let second = try store.armJob(jobId: 1, now: Date())
-
-    // then
-    #expect(first == second)
+    guard case .fired(let second) = secondOutcome else {
+      Issue.record("expected the other job to fire")
+      return
+    }
+    let first = try #require(try env.learning.binding(runId: firstRunId))
+    let secondBinding = try #require(second.binding)
+    #expect(first.stableDigest == secondBinding.stableDigest)
+    #expect(
+      try env.learning.lessonSet(jobId: env.jobId, digest: first.stableDigest)
+        == LessonSet.empty(jobId: env.jobId)
+    )
+    #expect(
+      try env.learning.lessonSet(jobId: other.id, digest: secondBinding.stableDigest)
+        == LessonSet.empty(jobId: other.id)
+    )
   }
 
   @Test func aLessonSetIsInvisibleToAnotherJob() throws {
     // given
-    let queue = try Self.makeArmedDatabase(jobIds: [1, 2])
-    let store = ScheduledLearningStoreGRDB(writer: queue)
-    let state = try store.armJob(jobId: 1, now: Date())
+    let env = try BoundRunEnvironment.make()
+    let other = try makeOtherJob(in: env)
+    let runId = try env.pendingBoundRun()
+    let binding = try #require(try env.learning.binding(runId: runId))
 
     // when
-    let crossJob = try store.lessonSet(jobId: 2, digest: state.stableDigest)
+    let crossJob = try env.learning.lessonSet(jobId: other.id, digest: binding.stableDigest)
 
     // then
     #expect(crossJob == nil)
-  }
-
-  @Test func armingAnEmptySetStoresItsCanonicalContent() throws {
-    // given
-    let queue = try Self.makeArmedDatabase(jobIds: [1])
-    let store = ScheduledLearningStoreGRDB(writer: queue)
-
-    // when
-    let state = try store.armJob(jobId: 1, now: Date())
-    let set = try #require(try store.lessonSet(jobId: 1, digest: state.stableDigest))
-
-    // then
-    #expect(set == LessonSet.empty(jobId: 1))
-    #expect(state.epoch == LearningEpoch(1))
-    #expect(state.stableRevision == StableRevision(0))
-    #expect(state.feedbackRevision == FeedbackRevision(0))
-    #expect(state.openTrialId == nil)
   }
 }
 
 // MARK: - Fixtures
 
 private extension LessonSetStoreTests {
-  /// `job_learning_state.job_id` is a foreign key, so a job row has to exist before it can arm.
-  static func makeArmedDatabase(jobIds: [Int64]) throws -> DatabaseQueue {
-    let queue = try TestDatabase.make()
-    try queue.write { db in
-      for jobId in jobIds {
-        try db.execute(
-          sql: """
-            INSERT INTO scheduled_jobs(id, owner_chat_id, label, prompt, timezone, status,
-              created_ts, updated_ts)
-            VALUES (?, 777, 'digest', 'Summarize my unread items', 'Europe/Berlin', 'active', 0, 0)
-            """,
-          arguments: [jobId]
-        )
-      }
-    }
-    return queue
+  func makeOtherJob(in env: BoundRunEnvironment) throws -> ScheduledJob {
+    try env.jobs.create(
+      NewScheduledJob(
+        ownerChatId: 777,
+        label: "other digest",
+        prompt: "Summarize my unread items",
+        recurrence: nil,
+        timezone: "Europe/Berlin",
+        nextOccurrence: env.now
+      ),
+      now: env.now
+    )
   }
 }

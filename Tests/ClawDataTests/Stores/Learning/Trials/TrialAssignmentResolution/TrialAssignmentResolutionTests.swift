@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -99,7 +100,7 @@ import Testing
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
     let target = env.runFeedbackTarget(runId: sealed.runId, signal: .resultUseful)
-    try env.learning.createTargets([target], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
 
     // when
     let outcome = try env.learning.consumeAndAppendEvent(

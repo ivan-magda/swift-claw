@@ -12,24 +12,6 @@ import Testing
     return (MemoryStoreGRDB(writer: queue), queue)
   }
 
-  @Test func appendThenGetReturnsTheStoredItem() throws {
-    // given
-    let (store, _) = try freshStore()
-    let now = Date(timeIntervalSince1970: 100)
-    let newItem = NewMemoryItem(text: "ship increment 3a", kind: .project, sessionId: nil)
-
-    // when
-    let appended = try store.append(newItem, now: now)
-    let fetched = try store.get(id: appended.id)
-
-    // then
-    #expect(appended.id > 0)
-    #expect(appended.text == "ship increment 3a")
-    #expect(appended.kind == .project)
-    #expect(appended.createdAt == now)
-    #expect(fetched == appended)
-  }
-
   @Test func getReturnsNilForMissingId() throws {
     // given
     let (store, _) = try freshStore()
@@ -38,37 +20,23 @@ import Testing
     #expect(try store.get(id: 999) == nil)
   }
 
-  @Test func deleteRemovesItemAndReportsWhetherARowWasDeleted() throws {
-    // given
-    let (store, _) = try freshStore()
-    let appended = try store.append(
-      NewMemoryItem(text: "forget me", kind: .user, sessionId: nil),
-      now: Date(timeIntervalSince1970: 1)
-    )
-
-    // when
-    let firstDelete = try store.delete(id: appended.id)
-    let secondDelete = try store.delete(id: appended.id)
-
-    // then
-    #expect(firstDelete)
-    #expect(secondDelete == false)
-    #expect(try store.get(id: appended.id) == nil)
-  }
-
   @Test func listFiltersByKindMostRecentFirst() throws {
     // given
-    let (store, _) = try freshStore()
-    _ = try store.append(
-      NewMemoryItem(text: "user older", kind: .user, sessionId: nil),
+    let (store, queue) = try freshStore()
+    let commands = MemoryCommandStoreGRDB(writer: queue)
+    _ = try commands.applyRemember(
+      updateId: 1,
+      item: NewMemoryItem(text: "user older", kind: .user, sessionId: nil),
       now: Date(timeIntervalSince1970: 10)
     )
-    _ = try store.append(
-      NewMemoryItem(text: "project fact", kind: .project, sessionId: nil),
+    _ = try commands.applyRemember(
+      updateId: 2,
+      item: NewMemoryItem(text: "project fact", kind: .project, sessionId: nil),
       now: Date(timeIntervalSince1970: 20)
     )
-    _ = try store.append(
-      NewMemoryItem(text: "user newer", kind: .user, sessionId: nil),
+    _ = try commands.applyRemember(
+      updateId: 3,
+      item: NewMemoryItem(text: "user newer", kind: .user, sessionId: nil),
       now: Date(timeIntervalSince1970: 30)
     )
 
@@ -113,16 +81,19 @@ import Testing
   }
 
   @Test func sqliteFailureSurfacesAsStoreErrorNotRawDatabaseError() throws {
-    // given - a session_id with no matching session violates the FK (foreign keys are enabled).
-    let (store, _) = try freshStore()
-
-    // when / then
-    #expect(throws: StoreError.self) {
-      try store.append(
-        NewMemoryItem(text: "orphan", kind: .user, sessionId: 9_999),
-        now: Date(timeIntervalSince1970: 1)
-      )
+    // given
+    let (store, queue) = try freshStore()
+    try queue.write { db in
+      try db.execute(sql: "DROP TABLE memory_items")
     }
+
+    // when
+    let readItem = {
+      try store.get(id: 1)
+    }
+
+    // then
+    #expect(throws: StoreError.self, performing: readItem)
   }
 
   @Test func decodeFailsClosedOnUnrecognizedEnumValue() throws {

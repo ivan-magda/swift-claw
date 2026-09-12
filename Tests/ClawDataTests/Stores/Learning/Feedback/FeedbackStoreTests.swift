@@ -18,76 +18,6 @@ import Testing
     #expect(challenge != undomained)
   }
 
-  @Test func targetsAndRunlessChunksCommitTogetherAndLookupUsesNonce() throws {
-    // given — two targets and a multipart notice whose keyboard is on the final chunk
-    let env = try FeedbackStoreEnvironment.make()
-    let first = env.target(
-      nonce: "opaque-a",
-      signal: .candidateReject,
-      subject: "candidate-a",
-      kind: .candidate
-    )
-    let second = env.target(
-      nonce: "opaque-b",
-      signal: .evaluationDispute,
-      subject: "evaluation-b",
-      kind: .evaluation
-    )
-    let chunks = [
-      env.chunk(subject: "candidate-a", ordinal: 0, markup: nil),
-      env.chunk(subject: "candidate-a", ordinal: 1, markup: "{\"inline_keyboard\":[]}"),
-    ]
-
-    // when
-    try env.createTargets([first, second], chunks: chunks)
-
-    // then — returning identifiers or splitting the transactions loses an observable half
-    #expect(try env.learning.feedbackTarget(nonce: first.nonce)?.nonce == first.nonce)
-    #expect(try env.learning.feedbackTarget(nonce: second.nonce)?.nonce == second.nonce)
-    #expect(try env.targetCount() == 2)
-    let deliveries = try env.deliveryRows()
-    #expect(deliveries.count == 2)
-    #expect(deliveries.last?.replyMarkup == chunks.last?.replyMarkup)
-    #expect(
-      deliveries.allSatisfy { row in
-        row.createdAt == env.now
-      }
-    )
-    #expect(
-      deliveries.allSatisfy { row in
-        row.runId == nil && row.source == DeliverySource.learning.rawValue
-      }
-    )
-  }
-
-  @Test func duplicateNonceReachesTheUniqueIndexAndRollsBackTargetsAndChunks() throws {
-    // given — an existing nonce plus a transaction that inserts a chunk and a fresh target first
-    let env = try FeedbackStoreEnvironment.make()
-    let duplicate = env.target(nonce: "duplicate", signal: .resultUseful, subject: "41")
-    try env.createTargets([duplicate], chunks: [])
-    let fresh = env.target(nonce: "fresh", signal: .resultUseful, subject: "42")
-    let chunk = env.chunk(subject: "rollback-subject", ordinal: 0, markup: nil)
-
-    // when — there is deliberately no application duplicate precheck
-    let failure: StoreError?
-    do {
-      try env.createTargets([fresh, duplicate], chunks: [chunk])
-      failure = nil
-    } catch let error {
-      failure = error
-    }
-
-    // then — the SQLite constraint is mapped and the whole write is rolled back
-    guard case .unexpected(let detail) = failure else {
-      Issue.record("expected a mapped UNIQUE-constraint failure")
-      return
-    }
-    #expect(detail.contains("UNIQUE constraint failed: feedback_targets.nonce"))
-    #expect(try env.targetCount() == 1)
-    #expect(try env.learning.feedbackTarget(nonce: fresh.nonce) == nil)
-    #expect(try env.deliveryRows().isEmpty)
-  }
-
   @Test func everyImmediateSignalConsumesAndAdvancesOneRevision() throws {
     // given — all seven actions whose semantic event exists at tap time
     let env = try FeedbackStoreEnvironment.make()
@@ -108,7 +38,7 @@ import Testing
         kind: entry.1
       )
     }
-    try env.createTargets(targets, chunks: [])
+    try env.seedTargets(targets, chunks: [])
 
     // when
     let outcomes = try zip(targets, signals).enumerated().map { offset, pair in
@@ -180,7 +110,7 @@ import Testing
       subject: "candidate-secret",
       kind: .candidate
     )
-    try env.createTargets([correction, edit], chunks: [])
+    try env.seedTargets([correction, edit], chunks: [])
 
     // when
     let first = try env.consume(
@@ -213,7 +143,7 @@ import Testing
     for failureCase in cases {
       let env = try FeedbackStoreEnvironment.make()
       let target = env.target(nonce: "predicate", signal: .resultUseful, subject: "41")
-      try env.createTargets([target], chunks: [])
+      try env.seedTargets([target], chunks: [])
       if failureCase == .epoch {
         try env.setEpoch(2)
       }
@@ -237,7 +167,7 @@ import Testing
     // given
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "single-use", signal: .resultUseful, subject: "41")
-    try env.createTargets([target], chunks: [])
+    try env.seedTargets([target], chunks: [])
     let tap = env.tap(target: target, signal: .resultUseful, updateId: 7)
 
     // when — a fresh transport update reaches the already-consumed nonce a second time
@@ -261,7 +191,7 @@ import Testing
     // given — a valid target and a database-level failure at the transaction's final audit insert
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "audit-rollback", signal: .resultUseful, subject: "41")
-    try env.createTargets([target], chunks: [])
+    try env.seedTargets([target], chunks: [])
     try env.forceFeedbackAuditFailure()
 
     // when
@@ -286,7 +216,7 @@ import Testing
     let useful = env.target(nonce: "useful", signal: .resultUseful, subject: "41")
     let notUseful = env.target(nonce: "not-useful", signal: .resultNotUseful, subject: "41")
     let other = env.target(nonce: "other", signal: .resultUseful, subject: "42")
-    try env.createTargets([useful, other, notUseful], chunks: [])
+    try env.seedTargets([useful, other, notUseful], chunks: [])
 
     // when
     _ = try env.consume(env.tap(target: useful, signal: .resultUseful))

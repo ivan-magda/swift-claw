@@ -193,7 +193,7 @@ import Testing
     // given
     let queue = try TestDatabase.make()
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    let jobId = try ReviewFixture.armJob(queue: queue)
+    let jobId = try ReviewFixture.seedArmedJob(queue: queue)
     let candidate = try ReviewFixture.candidate(jobId: jobId, evaluationCount: 2)
     let other = try ReviewFixture.candidate(jobId: jobId, evaluationCount: 1, suffix: "other")
     let recording = RecordingLearningStore(
@@ -329,7 +329,7 @@ private enum ReviewFixture {
     return ScheduledLearningStoreGRDB(writer: queue)
   }
 
-  static func armJob(queue: DatabaseQueue) throws -> Int64 {
+  static func seedArmedJob(queue: DatabaseQueue) throws -> Int64 {
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let job = try jobs.create(
       NewScheduledJob(
@@ -342,7 +342,7 @@ private enum ReviewFixture {
       ),
       now: now
     )
-    _ = try ScheduledLearningStoreGRDB(writer: queue).armJob(jobId: job.id, now: now)
+    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
     return job.id
   }
 

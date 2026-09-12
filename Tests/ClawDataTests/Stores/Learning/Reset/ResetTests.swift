@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
@@ -114,7 +115,10 @@ import Testing
   ) throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     try fixture.corruptCanonicalEmpty(collision)
     let before = try fixture.state()
 
@@ -166,7 +170,10 @@ import Testing
   ) throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     let otherJobId = try fixture.createOtherJob()
     try fixture.seedOperations(otherJobId: otherJobId)
     try fixture.corruptStartedOperation(corruption)
@@ -200,7 +207,10 @@ import Testing
   @Test func unreadableReceiptNamedStartedOperationRollsBackReplayClaim() throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     let otherJobId = try fixture.createOtherJob()
     try fixture.seedOperations(otherJobId: otherJobId)
     _ = try fixture.env.learning.applyReset(
@@ -233,7 +243,10 @@ import Testing
   @Test func ownerViewRejectsResetReceiptWhoseStartedCallIdentityIsUnreadable() throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     let otherJobId = try fixture.createOtherJob()
     try fixture.seedOperations(otherJobId: otherJobId)
     _ = try fixture.env.learning.applyReset(
@@ -286,7 +299,10 @@ import Testing
   @Test func transportReplayReturnsBeforeReadingResetState() throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     _ = try fixture.env.learning.applyReset(
       updateId: 9_003,
       jobId: fixture.env.jobId,
@@ -308,7 +324,10 @@ import Testing
   @Test func cleanRepeatReplaysTheExactBarrier() throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     let first = try fixture.env.learning.applyReset(
       updateId: 9_004,
       jobId: fixture.env.jobId,
@@ -336,7 +355,10 @@ import Testing
   ) throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     let first = try #require(
       try fixture.env.learning.applyReset(
         updateId: 9_100,
@@ -362,7 +384,10 @@ import Testing
   func everyDirtyOldEpochEffectMakesTheNextResetEffective(_ effect: ResetDirtyEffect) throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     let first = try #require(
       try fixture.env.learning.applyReset(
         updateId: 9_110,
@@ -467,7 +492,10 @@ import Testing
   @Test func cancelledJobWithRetainedStateRemainsResettable() throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     try fixture.env.cancelJob()
 
     // when
@@ -661,7 +689,10 @@ import Testing
   ) throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     let first = try #require(
       try fixture.env.learning.applyReset(
         updateId: 9_016,
@@ -700,7 +731,10 @@ import Testing
   @Test func ambiguousCurrentResetReceiptsRaiseAFreshBarrier() throws {
     // given
     let fixture = try ResetFixture.make()
-    _ = try fixture.env.learning.armJob(jobId: fixture.env.jobId, now: fixture.env.now)
+    _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(
+      jobId: fixture.env.jobId,
+      now: fixture.env.now
+    )
     let first = try #require(
       try fixture.env.learning.applyReset(
         updateId: 9_022,

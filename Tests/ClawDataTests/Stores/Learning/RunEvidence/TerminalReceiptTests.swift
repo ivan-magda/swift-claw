@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -17,29 +18,23 @@ import Testing
     #expect(try env.causeAfterCompletion() == .taskCompleted)
     #expect(try env.causeAfterDegradation(cause: .providerFailure) == .providerFailure)
     #expect(try env.causeAfterFailure(cause: .storageFailure) == .storageFailure)
-    #expect(try env.causeAfterCancellation() == .ownerCancelled)
-    #expect(try env.causeAfterSupersession() == .superseded)
     #expect(try env.causeAfterBootReconciliation() == .incomplete)
   }
 
   @Test func aTerminalReceiptRecordsTheWinningStateAndInstant() throws {
-    // given — a bound run about to be cancelled at a known instant
+    // given — a bound run about to fail at a known instant
     let env = try BoundRunEnvironment.make()
     let runId = try env.runningBoundRun()
-    let cancelledAt = env.now.addingTimeInterval(90)
+    let failedAt = env.now.addingTimeInterval(90)
 
     // when
-    _ = try env.runs.cancelActiveRun(
-      sessionId: env.sessionId,
-      reason: .cancelled,
-      now: cancelledAt
-    )
+    try env.runs.failRun(runId: runId, cause: .storageFailure, now: failedAt)
 
     // then — the receipt names the state the transition won, not the state the run started in
-    let receipt = try #require(try env.learning.settlement(runId: runId))
+    let receipt = try #require(try TestLearningFixtures(writer: env.queue).settlement(runId: runId))
     #expect(receipt.runId == runId)
-    #expect(receipt.winningState == .cancelled)
-    #expect(receipt.terminalAt == cancelledAt)
+    #expect(receipt.winningState == .failed)
+    #expect(receipt.terminalAt == failedAt)
   }
 
   @Test func anUnboundRunRecordsNoReceiptAtAll() throws {
@@ -51,7 +46,7 @@ import Testing
     try env.runs.failRun(runId: runId, cause: .providerFailure, now: env.now)
 
     // then
-    #expect(try env.learning.settlement(runId: runId) == nil)
+    #expect(try TestLearningFixtures(writer: env.queue).settlement(runId: runId) == nil)
     #expect(try env.settlementRowCount() == 0)
   }
 
@@ -78,7 +73,9 @@ import Testing
       degradationText: "unfinished",
       heartbeatNoticeChatId: nil
     )
-    let afterReconcile = try #require(try env.learning.settlement(runId: claimed.runId))
+    let afterReconcile = try #require(
+      try TestLearningFixtures(writer: env.queue).settlement(runId: claimed.runId)
+    )
     let outcome = try env.runs.settleClaimedApprovalAtBoot(
       runId: claimed.runId,
       observationMessageId: claimed.observationMessageId,
@@ -91,7 +88,9 @@ import Testing
     // then — the cause the reconciling transaction stored survives; nothing recomputes it
     #expect(outcome == .settled)
     #expect(afterReconcile.terminalCause == .approvalUnresolved)
-    let receipt = try #require(try env.learning.settlement(runId: claimed.runId))
+    let receipt = try #require(
+      try TestLearningFixtures(writer: env.queue).settlement(runId: claimed.runId)
+    )
     #expect(receipt.terminalCause == .approvalUnresolved)
     #expect(receipt.winningState == .failed)
   }
@@ -112,7 +111,9 @@ import Testing
 
     // then — FAILED alone could not tell this apart from a provider outage
     #expect(result == .committed)
-    let receipt = try #require(try env.learning.settlement(runId: claimed.runId))
+    let receipt = try #require(
+      try TestLearningFixtures(writer: env.queue).settlement(runId: claimed.runId)
+    )
     #expect(receipt.terminalCause == .approvalDenied)
   }
 }
@@ -123,31 +124,19 @@ private extension BoundRunEnvironment {
   func causeAfterCompletion() throws -> TerminalCause? {
     let runId = try runningBoundRun()
     _ = try runs.commitAssistantTurn(assistantTurn(runId: runId), now: now)
-    return try learning.settlement(runId: runId)?.terminalCause
+    return try TestLearningFixtures(writer: queue).settlement(runId: runId)?.terminalCause
   }
 
   func causeAfterDegradation(cause: TerminalCause) throws -> TerminalCause? {
     let runId = try runningBoundRun()
     _ = try runs.commitDegradedTurn(degradedTurn(runId: runId, cause: cause), now: now)
-    return try learning.settlement(runId: runId)?.terminalCause
+    return try TestLearningFixtures(writer: queue).settlement(runId: runId)?.terminalCause
   }
 
   func causeAfterFailure(cause: TerminalCause) throws -> TerminalCause? {
     let runId = try runningBoundRun()
     try runs.failRun(runId: runId, cause: cause, now: now)
-    return try learning.settlement(runId: runId)?.terminalCause
-  }
-
-  func causeAfterCancellation() throws -> TerminalCause? {
-    let runId = try runningBoundRun()
-    _ = try runs.cancelActiveRun(sessionId: sessionId, reason: .cancelled, now: now)
-    return try learning.settlement(runId: runId)?.terminalCause
-  }
-
-  func causeAfterSupersession() throws -> TerminalCause? {
-    let runId = try runningBoundRun()
-    _ = try runs.supersedeSessionRuns(sessionId: sessionId, now: now)
-    return try learning.settlement(runId: runId)?.terminalCause
+    return try TestLearningFixtures(writer: queue).settlement(runId: runId)?.terminalCause
   }
 
   func causeAfterBootReconciliation() throws -> TerminalCause? {
@@ -157,6 +146,6 @@ private extension BoundRunEnvironment {
       degradationText: "unfinished",
       heartbeatNoticeChatId: nil
     )
-    return try learning.settlement(runId: runId)?.terminalCause
+    return try TestLearningFixtures(writer: queue).settlement(runId: runId)?.terminalCause
   }
 }

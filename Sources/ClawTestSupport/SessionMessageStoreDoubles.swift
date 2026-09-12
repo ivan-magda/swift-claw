@@ -15,7 +15,6 @@ public struct FakeSessionMessageStore: SessionMessageStore {
     case claimAndPersistInbound
     case claimAndPersistObserved
     case loadContextSnapshot
-    case resetWindowAndDetaint
   }
 
   /// The snapshot a delegate-less fake reads back: a session with no history, no taint and no
@@ -129,12 +128,5 @@ public struct FakeSessionMessageStore: SessionMessageStore {
       throughMessageId: throughMessageId,
       limit: limit
     )
-  }
-
-  public func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError) {
-    if let error = failures[.resetWindowAndDetaint] {
-      throw error
-    }
-    try inner?.resetWindowAndDetaint(sessionId: sessionId, now: now)
   }
 }

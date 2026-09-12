@@ -298,10 +298,6 @@ struct AcceptanceWorkspace: WorkspaceReading {
     .missing
   }
 
-  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
-    .missing
-  }
-
   func scanSkills() -> SkillScanResult {
     SkillScanResult(descriptors: [], warnings: [])
   }
@@ -837,7 +833,11 @@ func makeStopNewStack(
         ts: Date()
       )
     )
-    _ = try stack.runs.supersedeSessionRuns(sessionId: seedSession, now: Date())
+    _ = try CommandStoreGRDB(writer: queue).applyNew(
+      updateId: 901,
+      sessionKey: SessionKey.telegramDM(chatId: 999),
+      now: Date()
+    )
 
     // when — an allowlisted turn arrives with the cap already met
     await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))

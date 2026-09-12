@@ -5,12 +5,6 @@ import GRDB
 // MARK: - Settlement
 
 extension ScheduledLearningStoreGRDB {
-  public func settlement(runId: Int64) throws(StoreError) -> RunSettlement? {
-    try database.readMapping { db in
-      try Self.readSettlement(db, runId: runId)
-    }
-  }
-
   @discardableResult
   public func settleFromLane(runId: Int64, now: Date) throws(StoreError) -> Bool {
     try database.writeMapping { db in

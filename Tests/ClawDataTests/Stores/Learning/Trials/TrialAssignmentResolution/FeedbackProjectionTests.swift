@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -18,7 +19,7 @@ extension TrialAssignmentResolutionTests {
       digest: digest,
       signal: .evaluationConfirm
     )
-    try env.learning.createTargets([target], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let feedbackAt = env.now.addingTimeInterval(7)
 
     // when
@@ -152,7 +153,7 @@ extension TrialAssignmentResolutionTests {
     let digest = try #require(evaluated.resolvedEvidence?.evaluationDigest)
     let dispute = env.evaluationFeedbackTarget(digest: digest, signal: .evaluationDispute)
     let useful = env.runFeedbackTarget(runId: sealed.runId, signal: .resultUseful)
-    try env.learning.createTargets([dispute, useful], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([dispute, useful])
 
     // when — first remove evaluator support, then add independent run-result support.
     _ = try env.learning.consumeAndAppendEvent(
@@ -182,7 +183,7 @@ extension TrialAssignmentResolutionTests {
     let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
     _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
     let target = env.runFeedbackTarget(runId: sealed.runId, signal: .resultCorrection)
-    try env.learning.createTargets([target], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let opened = try env.learning.consumeAndOpenChallenge(
       env.feedbackTap(target, updateId: 16),
       prompt: env.challengePrompt(target),
@@ -219,7 +220,7 @@ extension TrialAssignmentResolutionTests {
       digest: trial.candidateDigest,
       signal: .candidateReject
     )
-    try env.learning.createTargets([reject], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([reject])
     _ = try env.learning.consumeAndAppendEvent(
       env.feedbackTap(reject, updateId: 15),
       now: env.now.addingTimeInterval(1)

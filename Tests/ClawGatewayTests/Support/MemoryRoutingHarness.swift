@@ -5,6 +5,7 @@ import ClawTestSupport
 import Foundation
 import GRDB
 import Logging
+import Testing
 
 @testable import ClawGateway
 
@@ -75,11 +76,18 @@ struct MemoryRoutingHarness {
     )
   }
 
-  func seedItem(text: String, kind: MemoryKind, day: Double = 86_400) throws -> MemoryItem {
-    try memory.append(
-      NewMemoryItem(text: text, kind: kind, sessionId: nil),
+  func seedItem(
+    text: String,
+    kind: MemoryKind,
+    updateId: Int64 = -1,
+    day: Double = 86_400
+  ) throws -> MemoryItem {
+    let result = try MemoryCommandStoreGRDB(writer: queue).applyRemember(
+      updateId: updateId,
+      item: NewMemoryItem(text: text, kind: kind, sessionId: nil),
       now: Date(timeIntervalSince1970: day)
     )
+    return try #require(result.item)
   }
 
   func memoryItemCount() throws -> Int {

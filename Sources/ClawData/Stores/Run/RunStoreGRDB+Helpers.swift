@@ -34,23 +34,6 @@ extension RunStoreGRDB {
     )
   }
 
-  static func fetchActiveRunId(_ db: Database, sessionId: Int64) throws -> Int64? {
-    try Int64.fetchOne(
-      db,
-      sql: """
-        SELECT id FROM runs
-        WHERE session_id = ? AND state IN (?, ?)
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-      arguments: [
-        sessionId,
-        RunState.running.rawValue,
-        RunState.awaitingApproval.rawValue,
-      ]
-    )
-  }
-
   /// True when the session already carries a non-terminal run (`RunState.liveStates`). The
   /// proactive-fire path checks this before resetting the shared context window: firing into a
   /// live run would advance the window out from under it, emptying its context on resume.

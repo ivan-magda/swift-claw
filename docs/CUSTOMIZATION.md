@@ -33,9 +33,6 @@ The trust tier decides how much authority the text carries:
 When the agent writes to a file that steers a later turn, the approval card carries a
 privileged-file banner: any of the files above, plus `HEARTBEAT.md` and any `SKILL.md`.
 
-The agent writes and reads dated daily logs (`memory/YYYY-MM-DD.md`) when a turn calls for
-one; the context builder never injects them the way it injects the files above.
-
 Durable facts also live in the database: confirm something in chat ("remember that ...")
 and it persists in SQLite across restarts, recalled by importance and recency. Full-text
 search covers conversation history, not these facts. `/memory` shows what is stored.

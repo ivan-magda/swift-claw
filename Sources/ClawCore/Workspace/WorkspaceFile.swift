@@ -1,10 +1,7 @@
 import Foundation
 
-/// The fixed workspace files load by name. Dated daily logs (`memory/YYYY-MM-DD.md`) have
-/// dynamic names and load via `WorkspaceReading.loadDailyLog`, so they are deliberately not
-/// cases here. `HEARTBEAT.md` is read ONLY by the scheduler's heartbeat branch —
-/// `ContextBuilder` loads files by explicit case, never `allCases`, so the checklist never
-/// leaks into ordinary turn assembly.
+/// The fixed workspace files load by name. `HEARTBEAT.md` is read only by the scheduler;
+/// `ContextBuilder` uses explicit cases so the checklist never enters ordinary turn assembly.
 public enum WorkspaceFile: String, Sendable, Equatable, CaseIterable {
   case soul = "SOUL.md"
   case agents = "AGENTS.md"

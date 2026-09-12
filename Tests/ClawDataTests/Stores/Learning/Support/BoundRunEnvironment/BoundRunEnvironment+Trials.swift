@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 
@@ -33,7 +34,7 @@ extension BoundRunEnvironment {
 
   @discardableResult
   func installTrial(jobId: Int64) throws -> LearningTrialIdentity {
-    let state = try learning.armJob(jobId: jobId, now: now)
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: jobId, now: now)
     let base = LessonSet.empty(jobId: jobId)
     let replacement = try LessonSet.canonical(
       jobId: jobId,

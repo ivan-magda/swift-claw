@@ -9,12 +9,6 @@ public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func armJob(jobId: Int64, now: Date) throws(StoreError) -> JobLearningState {
-    try database.writeMapping { db in
-      try Self.armState(db, jobId: jobId, now: now)
-    }
-  }
-
   public func binding(runId: Int64) throws(StoreError) -> RunLearningBinding? {
     try database.readMapping { db in
       try Self.readBinding(db, runId: runId)
@@ -60,8 +54,8 @@ extension ScheduledLearningStoreGRDB {
     return set
   }
 
-  /// `armJob` without a transaction of its own, so the fire path can arm a job and bind its run
-  /// in one write. Idempotent: a job that has already armed keeps the state it has.
+  /// Arms the job inside the fire transaction that binds its run.
+  /// An already-armed job keeps its current state.
   static func armState(_ db: Database, jobId: Int64, now: Date) throws -> JobLearningState {
     // The empty set goes in first: the state row names a digest, and a state that pointed at a
     // lesson set no row holds would let a job fire against a binding it cannot resolve.

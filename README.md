@@ -35,8 +35,8 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 - **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
   occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
 - **Durable memory.** Facts you confirm persist in SQLite, and clawd recalls them by
-  importance and recency. Workspace Markdown files hold your profile, notes, and daily
-  logs, and conversation history is full-text searchable.
+  importance and recency. Workspace Markdown files hold your profile and curated memory,
+  and conversation history is full-text searchable.
 - **Tools behind a policy engine.** `web_fetch` sits behind an SSRF gate; writes and code
   execution wait for an explicit tap-to-approve in Telegram. clawd enforces policy in
   code and treats inbound content as data, never as instructions.

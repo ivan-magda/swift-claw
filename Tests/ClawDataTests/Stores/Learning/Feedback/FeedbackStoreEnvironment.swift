@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 
@@ -72,7 +73,10 @@ struct FeedbackStoreEnvironment {
 
   static func make() throws -> FeedbackStoreEnvironment {
     let base = try BoundRunEnvironment.make()
-    let state = try base.learning.armJob(jobId: base.jobId, now: base.now)
+    let state = try TestLearningFixtures(writer: base.queue).seedArmedJob(
+      jobId: base.jobId,
+      now: base.now
+    )
     return FeedbackStoreEnvironment(base: base, state: state)
   }
 
@@ -132,11 +136,23 @@ struct FeedbackStoreEnvironment {
     )
   }
 
-  func createTargets(
+  func seedTargets(
     _ targets: [NewFeedbackTarget],
     chunks: [LearningNoticeChunk]
-  ) throws(StoreError) {
-    try learning.createTargets(targets, chunks: chunks, now: now)
+  ) throws {
+    try TestLearningFixtures(writer: queue).seedTargets(targets)
+    for chunk in chunks {
+      let deliveryKey = OutboxDedupKey.make(
+        subjectDigest: chunk.subjectDigest,
+        ordinal: chunk.ordinal
+      )
+      try OutboxFixture.seedNotice(
+        in: queue,
+        chunk: chunk,
+        deliveryKey: deliveryKey,
+        now: now
+      )
+    }
   }
 
   func consume(

@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -122,7 +123,7 @@ extension TrialAssignmentResolutionTests {
     let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
     _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
     let target = env.runFeedbackTarget(runId: sealed.runId, signal: .resultNotUseful)
-    try env.learning.createTargets([target], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     try env.corruptAssignmentGeneration(runId: sealed.runId)
     let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
 
@@ -153,7 +154,7 @@ extension TrialAssignmentResolutionTests {
     let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
     _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
     let target = env.runFeedbackTarget(runId: sealed.runId, signal: .resultCorrection)
-    try env.learning.createTargets([target], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let opened = try env.learning.consumeAndOpenChallenge(
       env.feedbackTap(target, updateId: 8),
       prompt: env.challengePrompt(target),

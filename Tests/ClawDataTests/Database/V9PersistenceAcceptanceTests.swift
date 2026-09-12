@@ -225,11 +225,11 @@ import Testing
     defer { try? FileManager.default.removeItem(at: env.root) }
     try env.usage.recordUsage(Self.toolRoundUsage(env))
     #expect(
-      try env.runs.cancelActiveRun(
-        sessionId: env.sessionId,
-        reason: .cancelled,
+      try CommandStoreGRDB(writer: env.pool).applyStop(
+        updateId: 100,
+        sessionKey: Self.legacySessionKey,
         now: Self.seededAt
-      ) == env.runId
+      ).cancelledRunIds == [env.runId]
     )
 
     // when — the terminal commit lands late, then is replayed

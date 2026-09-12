@@ -8,10 +8,6 @@ public protocol WorkspaceReading: Sendable {
   /// throws. `maxGraphemes` nil means no cap.
   func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile
 
-  /// Loads a dated daily log `memory/<day>.md`, where `day` is a `YYYY-MM-DD` stem. A stem that is
-  /// not `YYYY-MM-DD`, or a missing file, returns `.missing`. Same outcome rules as `load`.
-  func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile
-
   /// Scans `skills/<name>/SKILL.md` and returns one `SkillDescriptor` per usable skill, plus a
   /// `WorkspaceWarning` for each present-but-unusable manifest. A manifest is usable only when its
   /// frontmatter carries a non-empty `description` and a `name` that is both an agentskills.io

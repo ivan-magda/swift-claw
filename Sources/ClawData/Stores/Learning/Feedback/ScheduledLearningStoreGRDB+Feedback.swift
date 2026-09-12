@@ -3,21 +3,6 @@ import Foundation
 import GRDB
 
 extension ScheduledLearningStoreGRDB {
-  public func createTargets(
-    _ targets: [NewFeedbackTarget],
-    chunks: [LearningNoticeChunk],
-    now: Date
-  ) throws(StoreError) {
-    try database.writeMapping { db in
-      for chunk in chunks {
-        _ = try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now)
-      }
-      for target in targets {
-        try Self.insertTarget(db, target)
-      }
-    }
-  }
-
   public func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget? {
     try database.readMapping { db in
       try Self.readTarget(db, nonce: nonce)

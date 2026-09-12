@@ -9,12 +9,6 @@ public struct MemoryStoreGRDB: MemoryStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func append(_ newItem: NewMemoryItem, now: Date) throws(StoreError) -> MemoryItem {
-    try database.writeMapping { db in
-      try Self.insertItem(db, item: newItem, now: now)
-    }
-  }
-
   public func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] {
     try database.readMapping { db in
       let rows: [Row]
@@ -55,13 +49,6 @@ public struct MemoryStoreGRDB: MemoryStore {
     }
   }
 
-  public func delete(id: Int64) throws(StoreError) -> Bool {
-    try database.writeMapping { db in
-      try db.execute(sql: "DELETE FROM memory_items WHERE id = ?", arguments: [id])
-      return db.changesCount > 0
-    }
-  }
-
   public func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem] {
     try database.readMapping { db in
       // Pure SQL ordering; the grapheme/budget fill is MemoryRanker's job.
@@ -80,8 +67,7 @@ public struct MemoryStoreGRDB: MemoryStore {
     }
   }
 
-  /// Inserts one memory item and returns the stored value with its assigned rowid. Shared with
-  /// `MemoryCommandStoreGRDB.applyRemember` so the insert stays in one fused write.
+  /// Inserts one memory item within the caller's transaction and returns it with its assigned rowid.
   static func insertItem(_ db: Database, item: NewMemoryItem, now: Date) throws -> MemoryItem {
     try db.execute(
       sql: """

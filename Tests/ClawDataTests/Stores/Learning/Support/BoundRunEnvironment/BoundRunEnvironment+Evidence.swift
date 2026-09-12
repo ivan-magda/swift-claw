@@ -21,12 +21,24 @@ extension BoundRunEnvironment {
     return runId
   }
 
-  /// A bound run that is terminal with its settlement still deferred — the shape `/stop` leaves
-  /// while the in-flight round's usage can still land against the run.
+  /// A historical terminal receipt whose last provider usage or lane finalizer is still owed.
   func terminalBoundRunWithoutSettlement() throws -> Int64 {
     let runId = try runningBoundRun()
-    _ = try runs.cancelActiveRun(sessionId: sessionId, reason: .cancelled, now: now)
+    try seedDeferredCancellation(runId: runId)
     return runId
+  }
+
+  /// Seeds a persisted interruption so readers and crash recovery can consume an unsettled receipt.
+  func seedDeferredCancellation(runId: Int64) throws {
+    try queue.write { db in
+      _ = try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .cancel,
+        now: now,
+        terminal: .deferred(.ownerCancelled)
+      )
+    }
   }
 
   func freezeSurface(runId: Int64, skillSetDigest: String) throws {

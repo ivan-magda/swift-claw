@@ -24,19 +24,6 @@ public struct FileSystemWorkspace: WorkspaceReading {
     loadFile(at: root.appendingPathComponent(file.relativePath), maxGraphemes: maxGraphemes)
   }
 
-  public func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
-    guard Self.isDayStem(day) else {
-      return .missing
-    }
-
-    let fileURL =
-      root
-      .appendingPathComponent("memory", isDirectory: true)
-      .appendingPathComponent("\(day).md")
-
-    return loadFile(at: fileURL, maxGraphemes: maxGraphemes)
-  }
-
   public func scanSkills() -> SkillScanResult {
     let fileManager = FileManager.default
     let skillsRoot = root.appendingPathComponent(
@@ -233,23 +220,6 @@ public struct FileSystemWorkspace: WorkspaceReading {
     }
 
     return result
-  }
-
-  /// True only for a `YYYY-MM-DD` stem (four digits, two, two). Rejects path separators and `..`.
-  private static func isDayStem(_ day: String) -> Bool {
-    let parts = day.split(separator: "-", omittingEmptySubsequences: false)
-    let expectedLengths = [4, 2, 2]
-    guard parts.count == expectedLengths.count else {
-      return false
-    }
-
-    for (part, length) in zip(parts, expectedLengths) {
-      guard part.count == length, part.allSatisfy({ ("0"..."9").contains($0) }) else {
-        return false
-      }
-    }
-
-    return true
   }
 
   /// Shared read + outcome classification for any single file path.

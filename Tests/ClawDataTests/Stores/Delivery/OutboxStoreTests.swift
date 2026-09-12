@@ -7,88 +7,14 @@ import Testing
 @testable import ClawData
 
 @Suite struct OutboxStoreTests {
-  private struct Fixture {
-    let outbox: OutboxStoreGRDB
-    let approvals: ApprovalStoreGRDB
-
-    let writer: DatabaseQueue
-
-    let sessionId: Int64
-    let runId: Int64
-  }
-
-  private func fixture() throws -> Fixture {
-    let queue = try TestDatabase.make()
-    let sessions = SessionMessageStoreGRDB(writer: queue)
-    let claim = try sessions.claimAndPersistInbound(
-      InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
-        text: "seed",
-        isEdited: false,
-        ts: Date()
-      )
-    )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
-    return Fixture(
-      outbox: OutboxStoreGRDB(writer: queue),
-      approvals: ApprovalStoreGRDB(writer: queue),
-      writer: queue,
-      sessionId: sessionId,
-      runId: runId
-    )
-  }
-
-  private func sampleApproval(runId: Int64, sessionId: Int64) -> NewApproval {
-    NewApproval(
-      runId: runId,
-      sessionId: sessionId,
-      tool: "file_write",
-      canonicalArgsJSON: "{\"path\":\"notes.md\"}",
-      canonicalTarget: "/workspace/notes.md",
-      argsHash: "deadbeef",
-      policyVersion: "0123456789abcdef",
-      ownerUserId: 42,
-      nonce: ApprovalNonce.generate(),
-      observationMessageId: 1,
-      toolCallId: "call-1",
-      reason: .askTier,
-      createdTs: Date(),
-      expiresTs: Date().addingTimeInterval(3600)
-    )
-  }
-
-  @Test func claimIsIdempotentOnTheDeterministicKey() throws {
-    // given
-    let env = try fixture()
-
-    // when — the same run_id:step_index claimed twice
-    let first = try env.outbox.claimOutbound(
-      runId: env.runId,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "p", payloadHash: "h")
-    )
-    let second = try env.outbox.claimOutbound(
-      runId: env.runId,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "p", payloadHash: "h")
-    )
-
-    // then — INSERT OR IGNORE dedups; one PENDING row
-    #expect(first)
-    #expect(second == false)
-    #expect(try env.outbox.pendingOutbound().count == 1)
-  }
-
   @Test func markSentRemovesRowFromPending() throws {
     // given
     let env = try fixture()
-    let claimed = try env.outbox.claimOutbound(
+    try OutboxFixture.commitReply(
+      in: env.writer,
       runId: env.runId,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "p", payloadHash: "h")
+      chunks: [OutboxChunk(stepIndex: 0, chatId: 42, payload: "p", payloadHash: "h")]
     )
-    #expect(claimed)
 
     // when
     try env.outbox.markSent(
@@ -101,97 +27,190 @@ import Testing
     #expect(try env.outbox.pendingOutbound().isEmpty)
   }
 
-  @Test func pendingOutboundCarriesApprovalIdAndReplyMarkup() throws {
-    // given — an approvals row and a PENDING delivery linked to it, carrying an inline keyboard
+  @Test func pendingRepliesPrecedeRunlessNoticesInRunOrder() throws {
+    // given — a notice followed by concurrent chats completing in reverse run order
     let env = try fixture()
-    let approvalId = try env.writer.write { db in
-      try ApprovalStoreGRDB.insertApproval(
-        db,
-        sampleApproval(runId: env.runId, sessionId: env.sessionId)
-      )
-    }
-    let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
+    let secondClaim = try SessionMessageStoreGRDB(writer: env.writer).claimAndPersistInbound(
+      inbound(updateId: 2, chatId: 43)
+    )
+    let secondRunId = try #require(secondClaim.runId)
+    _ = try #require(try RunStoreGRDB(writer: env.writer).pickUp(runId: secondRunId, now: Date()))
+    let notice = LearningNoticeChunk(
+      subjectDigest: "candidate",
+      ordinal: 0,
+      chatId: 42,
+      payload: "candidate ready",
+      payloadHash: "hash"
+    )
+    let noticeKey = "fixture-learning-notice"
+    try OutboxFixture.seedNotice(in: env.writer, chunk: notice, deliveryKey: noticeKey)
+    try OutboxFixture.commitReply(
+      in: env.writer,
+      runId: secondRunId,
+      chunks: [OutboxChunk(stepIndex: 0, chatId: 43, payload: "newer", payloadHash: "h")]
+    )
+    try OutboxFixture.commitReply(
+      in: env.writer,
+      runId: env.runId,
+      chunks: [
+        OutboxChunk(stepIndex: 0, chatId: 42, payload: "first", payloadHash: "h"),
+        OutboxChunk(stepIndex: 1, chatId: 42, payload: "second", payloadHash: "h"),
+      ]
+    )
 
     // when
-    _ = try env.outbox.claimOutbound(
-      runId: env.runId,
-      chunk: OutboxChunk(
-        stepIndex: 0,
-        chatId: 42,
-        payload: "prompt",
-        payloadHash: "h",
-        approvalId: approvalId,
-        replyMarkup: markup
-      )
+    let pending = try env.outbox.pendingOutbound()
+
+    // then
+    #expect(
+      pending.map(\.deliveryKey) == [
+        OutboxDedupKey.make(runId: env.runId, stepIndex: 0),
+        OutboxDedupKey.make(runId: env.runId, stepIndex: 1),
+        OutboxDedupKey.make(runId: secondRunId, stepIndex: 0),
+        noticeKey,
+      ]
     )
+  }
+
+  @Test func pendingOutboundCarriesApprovalIdAndReplyMarkup() throws {
+    // given
+    let env = try fixture()
+    let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
+    let approvalId = try suspend(env, markup: markup)
+
+    // when
     let rows = try env.outbox.pendingOutbound()
 
-    // then — both new fields round-trip through the SELECT
+    // then
     let row = try #require(rows.first)
     #expect(row.approvalId == approvalId)
     #expect(row.replyMarkup == markup)
   }
 
   @Test func markSentLinksPromptMessageIdForApprovalBearingRow() throws {
-    // given — an approvals row (prompt_message_id NULL) and its delivery row
+    // given
     let env = try fixture()
-    let approvalId = try env.writer.write { db in
-      try ApprovalStoreGRDB.insertApproval(
-        db,
-        sampleApproval(runId: env.runId, sessionId: env.sessionId)
-      )
-    }
-    _ = try env.outbox.claimOutbound(
-      runId: env.runId,
-      chunk: OutboxChunk(
-        stepIndex: 0,
-        chatId: 42,
-        payload: "prompt",
-        payloadHash: "h",
-        approvalId: approvalId,
-        replyMarkup: "{\"inline_keyboard\":[]}"
-      )
-    )
+    let approvalId = try suspend(env)
 
-    // when — the dispatcher records the delivered Telegram message id
+    // when
     try env.outbox.markSent(
       deliveryKey: OutboxDedupKey.make(runId: env.runId, stepIndex: 0),
       telegramMessageId: 999,
       now: Date()
     )
 
-    // then — the linked approval got prompt_message_id in the same transaction
+    // then
     let approval = try #require(try env.approvals.approval(id: approvalId))
     #expect(approval.promptMessageId == 999)
   }
 
   @Test func markSentLeavesUnlinkedApprovalsUntouched() throws {
-    // given — an approvals row NOT referenced by any delivery, and a plain (approval_id NULL) row
+    // given — a suspended approval and a separate completed reply with no approval link
     let env = try fixture()
-    let approvalId = try env.writer.write { db in
-      try ApprovalStoreGRDB.insertApproval(
-        db,
-        sampleApproval(runId: env.runId, sessionId: env.sessionId)
-      )
-    }
-    _ = try env.outbox.claimOutbound(
-      runId: env.runId,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "plain", payloadHash: "h")
+    let approvalId = try suspend(env)
+    let secondClaim = try SessionMessageStoreGRDB(writer: env.writer).claimAndPersistInbound(
+      inbound(updateId: 2, chatId: 43)
     )
-    // the plain row carries nil approval_id/reply_markup — assert BEFORE markSent flips it to SENT
-    // (a SENT row drops out of pendingOutbound, so this read must precede the mark).
-    let plainRow = try #require(try env.outbox.pendingOutbound().first { $0.approvalId == nil })
-    #expect(plainRow.replyMarkup == nil)
+    let replyRunId = try #require(secondClaim.runId)
+    _ = try #require(try RunStoreGRDB(writer: env.writer).pickUp(runId: replyRunId, now: Date()))
+    try OutboxFixture.commitReply(
+      in: env.writer,
+      runId: replyRunId,
+      chunks: [OutboxChunk(stepIndex: 0, chatId: 43, payload: "plain", payloadHash: "h")]
+    )
 
-    // when — marking the plain row sent must not touch any approval
+    // when
     try env.outbox.markSent(
-      deliveryKey: OutboxDedupKey.make(runId: env.runId, stepIndex: 0),
+      deliveryKey: OutboxDedupKey.make(runId: replyRunId, stepIndex: 0),
       telegramMessageId: 111,
       now: Date()
     )
 
-    // then — the unrelated approval keeps its NULL prompt_message_id
+    // then
     let approval = try #require(try env.approvals.approval(id: approvalId))
     #expect(approval.promptMessageId == nil)
+  }
+}
+
+// MARK: - Fixtures
+
+private extension OutboxStoreTests {
+  struct Fixture {
+    let outbox: OutboxStoreGRDB
+    let approvals: ApprovalStoreGRDB
+    let writer: DatabaseQueue
+    let sessionId: Int64
+    let runId: Int64
+  }
+
+  func fixture() throws -> Fixture {
+    let queue = try TestDatabase.make()
+    let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
+      inbound(updateId: 1)
+    )
+    let sessionId = try #require(claim.sessionId)
+    let runId = try #require(claim.runId)
+    _ = try #require(try RunStoreGRDB(writer: queue).pickUp(runId: runId, now: Date()))
+    return Fixture(
+      outbox: OutboxStoreGRDB(writer: queue),
+      approvals: ApprovalStoreGRDB(writer: queue),
+      writer: queue,
+      sessionId: sessionId,
+      runId: runId
+    )
+  }
+
+  func inbound(updateId: Int64, chatId: Int64 = 42) -> InboundMessage {
+    InboundMessage(
+      updateId: updateId,
+      sessionKey: SessionKey.telegramDM(chatId: chatId),
+      chatId: chatId,
+      userId: chatId,
+      text: "seed",
+      isEdited: false,
+      ts: Date()
+    )
+  }
+
+  func suspend(_ env: Fixture, markup: String = "{\"inline_keyboard\":[]}") throws -> Int64 {
+    let now = Date()
+    let recorded = RecordedToolAction(
+      tool: "file_write",
+      canonicalArgsJSON: #"{"path":"notes.md"}"#,
+      argsHash: "deadbeef",
+      canonicalTarget: "/workspace/notes.md",
+      reason: .askTier,
+      presentation: ToolApprovalPresentation(
+        blastRadius: "create",
+        contentPreview: "",
+        warnings: []
+      )
+    )
+    let receipt = try RunStoreGRDB(writer: env.writer).commitSuspendedTurn(
+      runId: env.runId,
+      sessionId: env.sessionId,
+      commit: SuspendedTurnCommit(
+        assistantContent: "Let me save that.",
+        toolCallsJSON: #"[{"id":"call-1","name":"file_write","arguments":"{}"}]"#,
+        completedObservations: [],
+        pending: PendingToolAction(toolCallId: "call-1", recorded: recorded),
+        ownerUserId: 42,
+        nonce: ApprovalNonce.generate(),
+        promptChunks: [
+          OutboxChunk(
+            stepIndex: 0,
+            chatId: 42,
+            payload: "prompt",
+            payloadHash: "h",
+            replyMarkup: markup
+          )
+        ],
+        setTainted: false,
+        setPrivateData: false,
+        expiresTs: now.addingTimeInterval(3600)
+      ),
+      now: now
+    )
+    return receipt.approvalId
   }
 }

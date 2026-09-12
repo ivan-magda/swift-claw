@@ -168,7 +168,7 @@ struct BoundRunEnvironment {
   }
 
   func settledAt(runId: Int64) throws -> Date? {
-    try learning.settlement(runId: runId)?.settledAt
+    try TestLearningFixtures(writer: queue).settlement(runId: runId)?.settledAt
   }
 
   func settlementRowCount() throws -> Int {

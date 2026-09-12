@@ -29,7 +29,7 @@ import Testing
 
     // then — settlement happened in-process, not at the next boot
     #expect(drained == .drained)
-    let receipt = try #require(try env.learning.settlement(runId: runId))
+    let receipt = try #require(try TestLearningFixtures(writer: env.queue).settlement(runId: runId))
     #expect(receipt.terminalCause == .ownerCancelled)
     #expect(receipt.settledAt != nil)
   }
@@ -51,7 +51,7 @@ import Testing
     _ = await env.lanes.drain(timeout: .seconds(5), clock: ContinuousClock())
 
     // then — every exit from the turn passes the tail, not just the happy one
-    #expect(try env.learning.settlement(runId: runId)?.settledAt != nil)
+    #expect(try TestLearningFixtures(writer: env.queue).settlement(runId: runId)?.settledAt != nil)
   }
 
   @Test func theLaneTailNotifiesTheSealerAndDoesNotOnlySettle() async throws {
@@ -80,7 +80,7 @@ import Testing
     // `ApprovalBootReconciler` enqueues onto the registry itself rather than through `TurnEnqueuer`
     let env = try LaneSettlementEnvironment.make()
     let parked = try env.parkedApprovalOnABoundRun()
-    let parker = CancellingParker(runs: env.runs, sessionId: env.sessionId, now: env.now)
+    let parker = CancellingParker(queue: env.queue, now: env.now)
 
     // when — the waiter's resolution drives the run terminal while it holds the lane
     await env.bootReconciler(waiter: parker).reconcile()
@@ -88,7 +88,9 @@ import Testing
 
     // then — the second lane closure settles too; the run does not wait for the next boot
     #expect(await parker.parkCount == 1)
-    let receipt = try #require(try env.learning.settlement(runId: parked.runId))
+    let receipt = try #require(
+      try TestLearningFixtures(writer: env.queue).settlement(runId: parked.runId)
+    )
     #expect(receipt.terminalCause == .ownerCancelled)
     #expect(receipt.settledAt != nil)
   }
@@ -242,7 +244,7 @@ private struct LaneSettlementEnvironment {
   }
 
   func cancellingDispatcher(error: (any Error)? = nil) -> CancellingDispatcher {
-    CancellingDispatcher(runs: runs, sessionId: sessionId, now: now, error: error)
+    CancellingDispatcher(queue: queue, now: now, error: error)
   }
 
   func bootReconciler(waiter: any ApprovalParking) -> ApprovalBootReconciler {
@@ -304,19 +306,15 @@ private struct LaneSettlementEnvironment {
   }
 }
 
-/// The boot-parked waiter's shape: it holds the lane, its resolution drives the run terminal with a
-/// deferred receipt, and it returns. Modeled as `/stop` reaching the run while it is parked, which
-/// is the reachable case that leaves a receipt this closure alone can settle.
+/// Leaves a deferred terminal receipt while the boot-parked waiter holds the lane.
 private actor CancellingParker: ApprovalParking {
-  private let runs: RunStoreGRDB
-  private let sessionId: Int64
+  private let queue: DatabaseQueue
   private let now: Date
 
   private(set) var parkCount = 0
 
-  init(runs: RunStoreGRDB, sessionId: Int64, now: Date) {
-    self.runs = runs
-    self.sessionId = sessionId
+  init(queue: DatabaseQueue, now: Date) {
+    self.queue = queue
     self.now = now
   }
 
@@ -328,20 +326,34 @@ private actor CancellingParker: ApprovalParking {
     revalidatePolicyOnApprove: Bool
   ) async {
     parkCount += 1
-    _ = try? runs.cancelActiveRun(sessionId: self.sessionId, reason: .cancelled, now: now)
+    _ = try? await queue.write { db in
+      try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .cancel,
+        now: self.now,
+        terminal: .deferred(.ownerCancelled)
+      )
+    }
   }
 }
 
-/// Terminates the run the way `/stop` does while the turn is still in flight, then returns or
-/// throws — the exact shape whose lane tail must still settle.
+/// Leaves a deferred terminal receipt before the turn returns or throws.
 private struct CancellingDispatcher: TurnDispatching {
-  let runs: RunStoreGRDB
-  let sessionId: Int64
+  let queue: DatabaseQueue
   let now: Date
   let error: (any Error)?
 
   func run(runId: Int64, sessionId: Int64, chatId: Int64, triggerMessageId: Int64) async throws {
-    _ = try runs.cancelActiveRun(sessionId: self.sessionId, reason: .cancelled, now: now)
+    _ = try await queue.write { db in
+      try RunStoreGRDB.transitionRun(
+        db,
+        runId: runId,
+        event: .cancel,
+        now: now,
+        terminal: .deferred(.ownerCancelled)
+      )
+    }
     if let error {
       throw error
     }

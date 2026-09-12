@@ -9,18 +9,6 @@ public struct OutboxStoreGRDB: OutboxStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func claimOutbound(runId: Int64, chunk: OutboxChunk) throws(StoreError) -> Bool {
-    try database.writeMapping { db in
-      try RunStoreGRDB.insertOutbox(db, runId: runId, chunk: chunk, now: Date())
-    }
-  }
-
-  public func claimNotice(_ chunk: LearningNoticeChunk) throws(StoreError) -> Bool {
-    try database.writeMapping { db in
-      try Self.insertNotice(db, chunk: chunk, now: Date())
-    }
-  }
-
   public func markSent(
     deliveryKey: String,
     telegramMessageId: Int64,

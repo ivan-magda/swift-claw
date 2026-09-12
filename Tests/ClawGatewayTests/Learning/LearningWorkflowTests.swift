@@ -325,7 +325,7 @@ extension LearningWorkflowTests {
       chatId: EvaluationRunEnvironment.chatId,
       expiresAt: env.now.addingTimeInterval(3_600)
     )
-    try env.learning.createTargets([target], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let stored = try #require(try env.learning.feedbackTarget(nonce: target.nonce))
     let router = try env.workflowRouter(service: service)
     // when
@@ -502,7 +502,7 @@ extension LearningWorkflowTests {
         chatId: EvaluationRunEnvironment.chatId,
         expiresAt: candidate.expiresAt
       )
-      try env.learning.createTargets([target], chunks: [], now: env.now)
+      try TestLearningFixtures(writer: env.queue).seedTargets([target])
       let stored = try #require(try env.learning.feedbackTarget(nonce: target.nonce))
       _ = await router.handle(
         rawUpdate: env.callback(target: stored, action: .resultNotUseful, id: 3)
@@ -542,7 +542,7 @@ extension LearningWorkflowTests {
       chatId: EvaluationRunEnvironment.chatId,
       expiresAt: trial.assignmentDeadline
     )
-    try env.learning.createTargets([target], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let stored = try #require(try env.learning.feedbackTarget(nonce: target.nonce))
     let router = try env.workflowRouter(service: service)
     // when
