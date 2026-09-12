@@ -254,7 +254,7 @@ private extension ChatGPTResponsesAccumulator {
         accumulated.argumentDeltas = ""
       }
     }
-    try retainForReplay(item, at: index)
+    try retainForReplay(item)
   }
 
   /// Publishes and retains visible text. Text for an item that can never surface is dropped as it
@@ -390,7 +390,7 @@ private extension ChatGPTResponsesAccumulator {
   /// commentary from being materialized whole on the way to being discarded. Crossing it drops every
   /// retained item rather than keeping a prefix: a partial replay is worse than none, and state loss
   /// degrades continuity, never the turn.
-  mutating func retainForReplay(_ item: ChatGPTStreamItem, at index: Int) throws {
+  mutating func retainForReplay(_ item: ChatGPTStreamItem) throws {
     guard replayOverflowed == false else {
       return
     }

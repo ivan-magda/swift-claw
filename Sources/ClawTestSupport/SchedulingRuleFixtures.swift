@@ -14,11 +14,6 @@ public enum SchedulingRuleFixtures {
     return calendar
   }
 
-  /// A gregorian calendar fixed to Europe/Berlin.
-  public static func berlinCalendar() -> Calendar {
-    calendar(zone: TimeZone(identifier: "Europe/Berlin") ?? .gmt)
-  }
-
   /// Weekly at 07:00, Monday through Friday, in `zone`. `seconds` is empty by default; suites that
   /// need the stored encoding to carry an explicit `:00` pass `[0]`.
   public static func weekdaySeven(zone: TimeZone, seconds: [Int] = []) -> Calendar.RecurrenceRule {
