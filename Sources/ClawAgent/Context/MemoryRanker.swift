@@ -20,9 +20,11 @@ public enum MemoryRanker {
         if lhs.importance != rhs.importance {
           return lhs.importance > rhs.importance
         }
+
         if lhs.createdAt != rhs.createdAt {
           return lhs.createdAt > rhs.createdAt
         }
+
         return lhs.id > rhs.id
       }
 
