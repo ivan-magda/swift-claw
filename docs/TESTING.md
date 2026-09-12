@@ -37,7 +37,7 @@ This is the root principle; every rule below is downstream of it.
 - **Drive the system through its public seam the way a real caller does**, so that a failure implies a genuine break in a contract someone depends on.
 - **Confidence through realism**: prefer the arrangement that most resembles real usage, within the speed budget.
 
-For swift-claw this means we assert on the **observable effects** the harness produces: outbox payloads, run-state transitions (§7 FSM), persisted rows, the network-egress list, the taint/sensitivity flags on a context snapshot, and the _typed_ error at a seam — never on private structure or call order.
+For swift-claw this means we assert on the **observable effects** the harness produces: outbox payloads, run-state transitions (`ARCHITECTURE.md` §19.1 FSM), persisted rows, the network-egress list, the taint/sensitivity flags on a context snapshot, and the _typed_ error at a seam — never on private structure or call order.
 
 ### 3.1 Assert the effect, not the interaction
 
