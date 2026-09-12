@@ -57,7 +57,6 @@ import Testing
       usageStore: stores.usage,
       audit: stores.audit,
       agent: agent,
-      budget: budget,
       contextBuilder: makeEmptyContextBuilder(),
       imageCache: ImageCache(),
       notifyOutbox: {},

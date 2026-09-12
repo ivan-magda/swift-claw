@@ -1,6 +1,5 @@
 import ClawCore
 import ClawData
-import ClawExec
 import ClawGateway
 import ClawWorkspace
 import Foundation

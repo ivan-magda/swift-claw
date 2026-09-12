@@ -630,7 +630,6 @@ func makeEnv(
     usageStore: usage,
     audit: audit,
     agent: agent,
-    budget: budget,
     contextBuilder: builder,
     imageCache: imageCache,
     notifyOutbox: {},

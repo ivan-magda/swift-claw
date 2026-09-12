@@ -1,4 +1,3 @@
-import ClawCore
 import Foundation
 
 /// How much life a stored access token has left, judged against a supplied wall date.

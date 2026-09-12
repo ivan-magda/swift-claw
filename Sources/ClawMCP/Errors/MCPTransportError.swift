@@ -30,20 +30,6 @@ public enum MCPTransportError: Error, Sendable, Equatable {
   /// callers can read the disposition it already decided.
   case requestFailed(HTTPTransportFailure)
 
-  /// Whether the attempt could have reached the server. A remote call that may have run is not the
-  /// same as one that provably did not, and only the failure knows which it was.
-  public var disposition: HTTPTransmissionDisposition {
-    switch self {
-    case .notConnected:
-      return .definitelyNotSent
-    case .sessionExpired, .httpStatus, .unsupportedContentType, .oversizedMessage,
-      .receiveBufferOverflow, .receiveStreamTerminated:
-      return .mayHaveBeenSent
-    case .requestFailed(let failure):
-      return failure.disposition
-    }
-  }
-
   /// The side-effect disposition the session retry classifier and owner-facing observation share.
   public var callExecutionDisposition: MCPCallExecutionDisposition {
     switch self {

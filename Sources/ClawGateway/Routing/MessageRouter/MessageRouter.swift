@@ -112,7 +112,6 @@ public struct MessageRouter: Sendable {
       lanes: lanes,
       replies: replies,
       now: now,
-      logger: logger,
       coordinator: coordinator
     )
     self.scheduleHandlers = ScheduleHandlers(
@@ -121,8 +120,7 @@ public struct MessageRouter: Sendable {
       pendingConfirmations: pendingConfirmations,
       replies: replies,
       enqueuer: enqueuer,
-      now: now,
-      logger: logger
+      now: now
     )
     self.learningHandlers = Self.makeLearningHandlers(
       store: learningStore,

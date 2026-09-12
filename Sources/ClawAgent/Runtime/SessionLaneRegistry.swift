@@ -22,7 +22,6 @@ public enum SessionLaneDrainResult: Sendable, Equatable {
 /// return, which is what lets a graceful shutdown quiesce the lanes before tearing down resources.
 public actor SessionLaneRegistry {
   private struct ActiveOperation {
-    let operationID: Int64
     let runID: Int64
     let sessionID: Int64
     let task: Task<Void, Never>
@@ -93,7 +92,6 @@ public actor SessionLaneRegistry {
     }
 
     operations[operationID] = ActiveOperation(
-      operationID: operationID,
       runID: runID,
       sessionID: sessionID,
       task: task

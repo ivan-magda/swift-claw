@@ -5,7 +5,6 @@ import ClawCore
 import ClawGateway
 import ClawHTTP
 import ClawSecrets
-import ClawTelegram
 import ClawWorkspace
 import Foundation
 import Logging

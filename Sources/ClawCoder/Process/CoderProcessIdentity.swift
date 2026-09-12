@@ -7,7 +7,6 @@ import Foundation
 #endif
 
 struct CoderProcessIdentity: Sendable {
-  let pid: Int32
   let pgid: Int32
   let birth: String
   let isZombie: Bool
@@ -50,7 +49,6 @@ struct CoderProcessIdentity: Sendable {
       }
       let start = info.kp_proc.p_un.__p_starttime
       return Self(
-        pid: pid,
         pgid: info.kp_eproc.e_pgid,
         birth: "\(start.tv_sec):\(start.tv_usec)",
         isZombie: info.kp_proc.p_stat == SZOMB
@@ -73,7 +71,7 @@ struct CoderProcessIdentity: Sendable {
       guard fields.count > 19, let group = Int32(fields[2]) else {
         throw IdentityError.unreadable
       }
-      return Self(pid: pid, pgid: group, birth: String(fields[19]), isZombie: fields[0] == "Z")
+      return Self(pgid: group, birth: String(fields[19]), isZombie: fields[0] == "Z")
     #endif
   }
 

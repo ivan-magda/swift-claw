@@ -184,7 +184,6 @@ private extension CoderCommandOperation {
     ) { execution in
       await runScoped(
         execution: execution,
-        command: command,
         tracking: tracking,
         onStandardOutput: onStandardOutput
       )
@@ -193,7 +192,6 @@ private extension CoderCommandOperation {
 
   func runScoped<Input: InputProtocol>(
     execution: Execution<Input, SequenceOutput, SequenceOutput>,
-    command: CoderCommand,
     tracking: CoderCommandTracking,
     onStandardOutput: @Sendable @escaping (Data) async throws -> Void
   ) async -> CoderScopedCapture {

@@ -192,10 +192,6 @@ public extension ScriptedHTTPExecutor {
     recorded.map(\.url)
   }
 
-  var lastURL: String? {
-    recorded.last?.url
-  }
-
   var lastHeaders: [String: String] {
     recorded.last?.headers ?? [:]
   }

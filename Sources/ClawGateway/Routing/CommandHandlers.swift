@@ -16,7 +16,6 @@ struct CommandHandlers: Sendable {
   let replies: ReplySender
 
   let now: @Sendable () -> Date
-  let logger: Logger
 
   let coordinator: ApprovalCoordinator
 
