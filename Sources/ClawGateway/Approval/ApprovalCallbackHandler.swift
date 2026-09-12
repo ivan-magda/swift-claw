@@ -26,9 +26,10 @@ public struct ApprovalCallbackHandler: Sendable {
 
   // Module-internal init: `ReplySender`/`RoutingHalt` are internal to `ClawGateway`, so a `public`
   // init would not compile ("parameter uses an internal type"). The daemon composes the handler
-  // through the public `make(...)` factory below — `makeDaemon` injects the result into the
-  // production `MessageRouter` via `approvalCallbacks`; tests reach the init directly through
-  // `@testable import ClawGateway`. The `handle(_:updateId:)` surface stays public.
+  // through the public `make(...)` factory below — `DaemonBuilder.makeApprovalCallbackHandler`
+  // injects the result into the production `MessageRouter` via `approvalCallbacks`; tests reach
+  // the init directly through `@testable import ClawGateway`. The `handle(_:updateId:)` surface
+  // stays public.
   init(
     replies: ReplySender,
     accessControl: AccessControl,
@@ -61,8 +62,8 @@ public struct ApprovalCallbackHandler: Sendable {
 
   /// Composition factory for the `clawd` module. `ReplySender` and the init are `ClawGateway`-internal,
   /// so the daemon cannot call the init directly; this builds the internal `ReplySender` from public
-  /// ingredients and returns the composed handler. `makeDaemon` calls it and injects the
-  /// result into the production `MessageRouter` via `approvalCallbacks`.
+  /// ingredients and returns the composed handler. `DaemonBuilder.makeApprovalCallbackHandler`
+  /// calls it and injects the result into the production `MessageRouter` via `approvalCallbacks`.
   public static func make(  // swiftlint:disable:this function_parameter_count
     processed: any ProcessedUpdateStore,
     delivery: any MessageDelivery,

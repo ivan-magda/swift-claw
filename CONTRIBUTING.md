@@ -53,7 +53,7 @@ sudo chmod +x /usr/local/bin/swiftlint
 Mounting the working directory at its own path keeps the paths SwiftLint prints usable on
 the host. Run the
 gate with `scripts/lint.sh` rather than calling `swiftlint` yourself: warnings are not
-failures by default, so a bare `--strict` run reports the accepted force-unwrap warnings
+failures by default, so a bare `--strict` run reports the accepted warnings
 and exits nonzero on a clean checkout.
 
 Then:
