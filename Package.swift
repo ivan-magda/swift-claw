@@ -183,7 +183,7 @@ let package = Package(
     .testTarget(
       name: "ClawTelegramTests",
       dependencies: [
-        "ClawTelegram", "ClawHTTP",
+        "ClawTelegram",
         "ClawCore",
         "ClawTestSupport",
       ]
@@ -216,7 +216,7 @@ let package = Package(
     ),
     .testTarget(
       name: "ClawExecTests",
-      dependencies: ["ClawExec", "ClawCore", "ClawSubprocess", "ClawTestSupport"]
+      dependencies: ["ClawExec", "ClawCore", "ClawSubprocess"]
     ),
     .testTarget(
       name: "ClawSubprocessTests",
