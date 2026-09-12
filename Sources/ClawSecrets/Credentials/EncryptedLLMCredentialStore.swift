@@ -106,10 +106,6 @@ extension EncryptedLLMCredentialStore {
     }
   }
 
-  static func encode(_ map: CredentialMap) throws(LLMCredentialStoreError) -> Data {
-    try SealedCredentialFile<CredentialMap>.encode(map)
-  }
-
   static func decode(_ plaintext: Data) throws(LLMCredentialStoreError) -> CredentialMap {
     try SealedCredentialFile<CredentialMap>.decode(plaintext)
   }
