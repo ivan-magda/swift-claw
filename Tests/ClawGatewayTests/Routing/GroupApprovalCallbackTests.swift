@@ -49,7 +49,7 @@ import Testing
     let expectedState: ApprovalState = approve ? .approved : .rejected
     let expectedAction: AuditAction = approve ? .approvalGranted : .approvalDenied
     #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == expectedState)
-    let row = try await fixture.queue.read { database in
+    let row = try fixture.queue.read { database in
       try Row.fetchOne(
         database,
         sql: "SELECT actor, actor_user_id FROM audit_events WHERE action = ?",
