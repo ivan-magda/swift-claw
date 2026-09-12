@@ -10,7 +10,7 @@ public actor FakeExecutionBackend: ExecutionBackend, SandboxMaintenance {
 
   private var prepareCalls = 0
   private var shutdownCalls = 0
-  private var admitting = true
+  private let admitting = true
 
   public init(
     availability: BackendAvailability = .available(engineVersion: "1.1.0"),
@@ -55,10 +55,6 @@ public actor FakeExecutionBackend: ExecutionBackend, SandboxMaintenance {
 
   public func isAdmitting() -> Bool {
     admitting
-  }
-
-  public func setAdmitting(_ value: Bool) {
-    admitting = value
   }
 
   public func recordedRequests() -> [ExecutionRequest] {
