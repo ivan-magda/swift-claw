@@ -13,9 +13,11 @@ enum CandidateCapRecallCutoff {
           if lhs.score != rhs.score {
             return lhs.score > rhs.score
           }
+
           if lhs.createdAt != rhs.createdAt {
             return lhs.createdAt > rhs.createdAt
           }
+
           return lhs.id < rhs.id
         }
         .prefix(limit)
