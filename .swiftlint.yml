@@ -112,14 +112,14 @@ custom_rules:
     regex: '(?<!\/\/)(\bprint\()'
     match_kinds:
       - identifier
-    message: "Use os_log / Logger instead of print()"
+    message: "Use swift-log Logger for diagnostic logging instead of print()"
     severity: warning
     excluded: ".*Tests.*"
 
   prefer_logger:
     name: "Prefer structured Logger"
     regex: 'NSLog\('
-    message: "Use Logger (os.log) instead of NSLog"
+    message: "Use swift-log Logger for diagnostic logging instead of NSLog"
     severity: warning
 
   no_objc_unless_needed:
