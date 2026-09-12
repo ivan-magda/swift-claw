@@ -197,7 +197,7 @@ clawd doctor
 
 Expect `sandbox` with `available`, `os_ok`, `version_ok`, `image_digest_ok`, `caps_empty`,
 `net_isolated`, `caps_match`, `reaper_ok`, `rootfs_ro`, `staging_ro`, and `interpreters_ok` all true
-and an empty `last_error`. `clawd doctor --check-config` validates the config (digest-pin format and
+and `last_error` reporting `none`. `clawd doctor --check-config` validates the config (digest-pin format and
 registry allowlist) and the host/version gates without booting a canary.
 
 **Egress is opt-in and gated.** A `network:false` run has no route out. A `network:true` run needs
