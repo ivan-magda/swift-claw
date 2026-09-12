@@ -4,7 +4,7 @@ import Foundation
 /// Whether a failed MCP call could have run on the remote server. This is separate from HTTP
 /// transmission: a session-expired request reached the server, but the server rejected it before the
 /// tool ran.
-public enum MCPCallExecutionDisposition: Sendable, Equatable {
+enum MCPCallExecutionDisposition: Sendable, Equatable {
   case definitelyNotExecuted
   case mayHaveExecuted
 }
@@ -14,7 +14,7 @@ public enum MCPCallExecutionDisposition: Sendable, Equatable {
 /// Every case is safe to render. Nothing quotes the server's body, and the one case that carries a
 /// server-supplied string renders it only through `mediaTypeDescription`, so a failure can be logged
 /// or shown to the owner without carrying remote text into a place that reads as our own words.
-public enum MCPTransportError: Error, Sendable, Equatable {
+enum MCPTransportError: Error, Sendable, Equatable {
   /// A send arrived before `connect()`, or after `disconnect()` spent the instance.
   case notConnected
   /// The server no longer knows the session id we replayed; a fresh transport must re-initialize.
@@ -31,7 +31,7 @@ public enum MCPTransportError: Error, Sendable, Equatable {
   case requestFailed(HTTPTransportFailure)
 
   /// The side-effect disposition the session retry classifier and owner-facing observation share.
-  public var callExecutionDisposition: MCPCallExecutionDisposition {
+  var callExecutionDisposition: MCPCallExecutionDisposition {
     switch self {
     case .notConnected, .sessionExpired:
       return .definitelyNotExecuted
@@ -46,7 +46,7 @@ public enum MCPTransportError: Error, Sendable, Equatable {
 }
 
 extension MCPTransportError: CustomStringConvertible {
-  public var description: String {
+  var description: String {
     switch self {
     case .notConnected:
       return "MCP transport is not connected"

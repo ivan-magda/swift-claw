@@ -14,7 +14,7 @@ public enum MemoryWriteWarning: Sendable, Equatable {
   }
 }
 
-public enum MemoryWriteBuildError: Error, Sendable, Equatable {
+enum MemoryWriteBuildError: Error, Sendable, Equatable {
   case emptyAfterNormalization
 }
 

@@ -3,47 +3,47 @@ import Foundation
 
 /// Owner-facing copy for `/remember` and `/memory`: terse, mobile-first, provenance on the line.
 /// Pure rendering - no store or transport knowledge.
-public enum MemoryReplies {
+enum MemoryReplies {
   /// A screenful on mobile; the review list never tries to show everything.
-  public static let reviewListLimit = 20
+  static let reviewListLimit = 20
 
   static let snippetCapGraphemes = 60
 
-  public static var rememberUsage: String {
+  static var rememberUsage: String {
     "Usage: /remember [\(kindNames):] <text>"
   }
 
-  public static var memoryUsage: String {
+  static var memoryUsage: String {
     "Usage: /memory [\(kindNames)] | /memory show <id> | /memory delete <id>"
   }
 
-  public static let nothingToSave = "No savable text."
-  public static let cancelled = "Cancelled."
+  static let nothingToSave = "No savable text."
+  static let cancelled = "Cancelled."
 
   /// Terminal owner-write failure copy: the pending intent was cleared; re-issue.
-  public static let saveFailed =
+  static let saveFailed =
     "Couldn't save it. Nothing was written. Run /remember again."
-  public static let deleteFailed =
+  static let deleteFailed =
     "Couldn't delete it. Nothing changed. Run /memory delete <id> again."
 
   /// `id` is nil only if a `MemoryCommandStore` violates its newlyClaimed-implies-item contract;
   /// the ack degrades instead of crashing the router.
-  public static func saved(id: Int64?) -> String {
+  static func saved(id: Int64?) -> String {
     if let id {
       return "Saved memory \(id)."
     }
     return "Saved."
   }
 
-  public static func deleted(id: Int64) -> String {
+  static func deleted(id: Int64) -> String {
     "Deleted memory \(id)."
   }
 
-  public static func notFound(id: Int64) -> String {
+  static func notFound(id: Int64) -> String {
     "No memory with id \(id)."
   }
 
-  public static func emptyReview(kind: MemoryKind?) -> String {
+  static func emptyReview(kind: MemoryKind?) -> String {
     if let kind {
       return "No \(kind.rawValue) memories yet."
     }
@@ -52,7 +52,7 @@ public enum MemoryReplies {
 
   /// Grouped by kind (declaration order), each line `id · «short text» · source · date · ⚠`.
   /// Items keep the store's most-recent-first order within their group.
-  public static func reviewList(items: [MemoryItem]) -> String {
+  static func reviewList(items: [MemoryItem]) -> String {
     let limitedItems = Array(items.prefix(reviewListLimit))
     var lines: [String] = []
 
@@ -72,7 +72,7 @@ public enum MemoryReplies {
   }
 
   /// Full text and full provenance: kind, source, session, created, sensitivity.
-  public static func showItem(_ item: MemoryItem) -> String {
+  static func showItem(_ item: MemoryItem) -> String {
     let sessionText = item.sessionId.map(String.init) ?? "none"
     let lines = [
       "Memory \(item.id): \(item.kind.rawValue)",
@@ -84,7 +84,7 @@ public enum MemoryReplies {
     return lines.joined(separator: "\n")
   }
 
-  public static func deleteConfirmPrompt(item: MemoryItem) -> String {
+  static func deleteConfirmPrompt(item: MemoryItem) -> String {
     let lines = [
       "Delete memory \(item.id)?",
       "«\(item.text)»",

@@ -26,7 +26,7 @@ public enum BoundedAsyncChannelError: Error, Sendable, Equatable {
 /// The consumer owns teardown. Abandoning the iteration — `break`ing out of a `for try await`
 /// without cancelling the consuming task — strands every parked producer forever, so such a
 /// consumer must call `finish()`. Cancelling the consumer instead unwinds the producers correctly.
-public struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
+struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
   private let storage: Storage
 
   /// - Parameter capacity: the greatest total weight the buffer may hold. Must be positive.
@@ -34,7 +34,7 @@ public struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
   ///   the channel's lock, and must not return a negative weight. An element's weight is floored at
   ///   one: every element holds a buffer slot whatever its payload costs, so the channel bounds
   ///   element count even for a stream that weighs nothing.
-  public init(
+  init(
     capacity: Int,
     weight: @escaping @Sendable (Element) -> Int = { _ in 1 }
   ) {
@@ -47,31 +47,31 @@ public struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
   /// - Throws: `CancellationError` if the calling task is cancelled first — the element is not
   ///   queued; `BoundedAsyncChannelError.channelFinished` if the channel is already closed; or a
   ///   weight rejection for an element this channel could never admit.
-  public func send(_ element: Element) async throws {
+  func send(_ element: Element) async throws {
     try await storage.send(element)
   }
 
   /// Ends the sequence once every already-accepted element has been read. Later calls are ignored:
   /// the first termination wins.
-  public func finish() {
+  func finish() {
     storage.close(with: .finished)
   }
 
   /// Ends the sequence with `error`, delivered after every already-accepted element. Later calls are
   /// ignored.
-  public func finish(throwing error: any Error) {
+  func finish(throwing error: any Error) {
     storage.close(with: .failed(error))
   }
 
-  public func makeAsyncIterator() -> Iterator {
+  func makeAsyncIterator() -> Iterator {
     Iterator(storage: storage, hasClaim: storage.claimIterator())
   }
 
-  public struct Iterator: AsyncIteratorProtocol {
+  struct Iterator: AsyncIteratorProtocol {
     fileprivate let storage: Storage
     fileprivate let hasClaim: Bool
 
-    public mutating func next() async throws -> Element? {
+    mutating func next() async throws -> Element? {
       guard hasClaim else {
         throw BoundedAsyncChannelError.multipleIterators
       }

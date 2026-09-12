@@ -3,29 +3,29 @@ import Foundation
 
 /// What a model choice is and where it came from. The origin is what lets the command explain a
 /// default it picked without asking.
-public enum ChatGPTModelChoiceOrigin: Sendable, Equatable {
+enum ChatGPTModelChoiceOrigin: Sendable, Equatable {
   case configuredDefault
   case firstReturnedDefault
   case owner
 }
 
-public struct ChatGPTModelChoice: Sendable, Equatable {
-  public let slug: String
-  public let origin: ChatGPTModelChoiceOrigin
+struct ChatGPTModelChoice: Sendable, Equatable {
+  let slug: String
+  let origin: ChatGPTModelChoiceOrigin
 
-  public init(slug: String, origin: ChatGPTModelChoiceOrigin) {
+  init(slug: String, origin: ChatGPTModelChoiceOrigin) {
     self.slug = slug
     self.origin = origin
   }
 
   /// The exact line an owner may paste. The variable is the one configuration reads and the prefix
   /// is the route's own, so a chosen model resolves back to the provider it came from.
-  public var assignment: String {
+  var assignment: String {
     "\(AppConfig.EnvKey.llmModel)=\(ChatGPTProviderMetadata.modelPrefix)\(slug)"
   }
 }
 
-public enum ChatGPTModelPickerOutcome: Sendable, Equatable {
+enum ChatGPTModelPickerOutcome: Sendable, Equatable {
   case chose(ChatGPTModelChoice)
   /// The owner named a row the numbered list does not have. The caller asks again; nothing here
   /// decides how many times it may.
@@ -36,14 +36,14 @@ public enum ChatGPTModelPickerOutcome: Sendable, Equatable {
 /// Picks a model from a catalog. A pure function of what it is handed: it reads no terminal, no
 /// configuration, and no clock, so the same arguments always name the same model — which is what
 /// makes the default a non-interactive run takes provably the one a terminal would have offered.
-public enum ChatGPTModelPicker {
+enum ChatGPTModelPicker {
   /// - Parameters:
   ///   - configuredSuffix: the ChatGPT model already configured, if any. Honored only while the
   ///     catalog still offers it: a default naming a model the vendor has withdrawn would be a
   ///     suggestion that cannot work.
   ///   - chosenIndex: the row an owner named, numbered from one as the printed list is. Ignored
   ///     without a terminal, where no prompt ran and so no answer can have come back.
-  public static func select(
+  static func select(
     catalog: [ChatGPTCatalogModel],
     configuredSuffix: String?,
     isInteractive: Bool,

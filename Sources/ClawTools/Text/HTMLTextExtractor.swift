@@ -8,8 +8,8 @@ import Foundation
 /// O(n) here; the old lazy `<script>…[\s\S]*?…</script>` / `\s*\n\s*` regexes were O(n²) on the same
 /// input and pinned a CPU core for minutes, with no way for the tool timeout to interrupt the
 /// synchronous work. Malicious servers are in scope, so this path must not blow up.
-public enum HTMLTextExtractor {
-  public static func extractText(fromHTML html: String) -> String {
+enum HTMLTextExtractor {
+  static func extractText(fromHTML html: String) -> String {
     let stripped = stripMarkup(html)
     let decoded = decodeEntities(stripped)
     return collapseWhitespace(decoded)

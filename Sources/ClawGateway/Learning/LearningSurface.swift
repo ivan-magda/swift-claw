@@ -2,15 +2,15 @@ import ClawCore
 import Foundation
 
 /// Pure owner-facing rendering for the typed learning snapshot.
-public enum LearningSurface {
-  public static let emptyList = "No scheduled jobs have learning state yet."
+enum LearningSurface {
+  static let emptyList = "No scheduled jobs have learning state yet."
 
-  public enum Style: Sendable {
+  enum Style: Sendable {
     case list
     case detail
   }
 
-  public static func render(_ views: [JobLearningView], style: Style = .detail) -> String {
+  static func render(_ views: [JobLearningView], style: Style = .detail) -> String {
     switch style {
     case .list:
       return renderList(views)

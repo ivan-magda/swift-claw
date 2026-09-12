@@ -113,6 +113,12 @@ Enabled compatible Coder contributes tools at the daemon root; the sole names ar
 `CoderToolNames.submit` (`coder_submit`), `.status` (`coder_status`), and `.cancel` (`coder_cancel`).
 No provider registry, second backend, ACP session manager or generic process module is introduced.
 
+Module-owned helpers stay `internal`; implementation details needed by sibling targets use
+`package`. The type table includes implementation details as well as exported contracts.
+For example, `BoundedAsyncChannel` is internal to `ClawCore`, behind the public
+`HTTPStreamExchange` and `LLMEventStream` seams; its error remains visible to the HTTP adapter.
+Concrete LLM providers are internal to `ClawLLM`, constructed through `ProviderStackFactory`.
+
 The experimental laboratory lives in the separate
 [`swift-claw-evals`](https://github.com/ivan-magda/swift-claw-evals) repository. It owns
 `ClawEvaluation`, `claw-eval`, benchmark corpora, Python reference implementations, freeze tooling

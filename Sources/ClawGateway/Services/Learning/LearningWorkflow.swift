@@ -2,7 +2,7 @@ import ClawCore
 import Foundation
 import Logging
 
-public enum WorkflowStep: Hashable, Sendable {
+enum WorkflowStep: Hashable, Sendable {
   case reflection(TriggerDigest)
   case candidate(CandidateDigest)
   case control(Int64)
@@ -11,14 +11,13 @@ public enum WorkflowStep: Hashable, Sendable {
 }
 
 /// An invocation's reviewed work identity; durable ownership belongs to the underlying transaction.
-public struct WorkflowClaim: Sendable {
-  public let step: WorkflowStep
-  public init(step: WorkflowStep) { self.step = step }
+struct WorkflowClaim: Sendable {
+  let step: WorkflowStep
 }
 
 /// Advances durable transitions to a wait state, using store CAS claims rather than process locks.
 public struct LearningWorkflow: Sendable {
-  public static let maxTransitionsPerInvocation = 64
+  static let maxTransitionsPerInvocation = 64
   let store: any LearningWorkflowStore
   private let jobs: any ScheduledJobStore
   private let runner: LearningOperationRunner

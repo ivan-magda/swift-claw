@@ -1,7 +1,7 @@
 import ClawCore
 import Foundation
 
-public enum SearchError: Error, Sendable, Equatable {
+enum SearchError: Error, Sendable, Equatable {
   case terminal(status: Int, message: String)
   case retryable(status: Int, message: String)
   case transport(String)

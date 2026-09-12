@@ -5,19 +5,19 @@ import Foundation
 /// authored HERE, never by the model, and the fully-resolved canonical target is never
 /// truncated. Delivery-only: joined into the outbox payload, never stored as assistant history.
 /// Exhaustive over `ApprovalReason` — a new approval kind cannot compile without owner-facing copy.
-public enum ToolApprovalPrompt {
+enum ToolApprovalPrompt {
   /// Everything the durable-approval prompt renders. The banners are decided by the suspend
   /// commit from the originating turn's taint state and the target's identity; the
   /// renderer stays a pure function of its input.
-  public struct Input: Sendable, Equatable {
-    public let recorded: RecordedToolAction
+  struct Input: Sendable, Equatable {
+    let recorded: RecordedToolAction
     /// The originating turn ingested untrusted content (TAINT banner).
-    public let taintBanner: Bool
+    let taintBanner: Bool
     /// The canonical target is a file that steers a later turn (privileged-file banner).
-    public let privilegedFileBanner: Bool
-    public let isGroup: Bool
+    let privilegedFileBanner: Bool
+    let isGroup: Bool
 
-    public init(
+    init(
       recorded: RecordedToolAction,
       taintBanner: Bool,
       privilegedFileBanner: Bool,
@@ -34,7 +34,7 @@ public enum ToolApprovalPrompt {
   /// fully-resolved target, blast radius, the privileged-file banner, the tool-authored
   /// secret-redacted preview, and scan warnings — assembled in a fixed order so the owner can
   /// judge risk at a glance.
-  public static func text(for input: Input) -> String {
+  static func text(for input: Input) -> String {
     if input.recorded.reason == .coderSubmit {
       return coderText(for: input)
     }
@@ -73,7 +73,7 @@ public enum ToolApprovalPrompt {
   /// outbox. The inline keyboard rides the FINAL chunk — the one ending with the tap instruction —
   /// and the suspend commit stamps `approval_id` onto exactly that keyboard-carrying chunk
   /// (`enqueuePromptChunks`), so button disarm keeps working across a split.
-  public static func chunks(for input: Input, chatId: Int64, nonce: String) -> [OutboxChunk] {
+  static func chunks(for input: Input, chatId: Int64, nonce: String) -> [OutboxChunk] {
     let prompt = text(for: input)
     let parts =
       input.recorded.reason == .coderSubmit

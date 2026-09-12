@@ -31,7 +31,7 @@ public enum ImageMessageFailure: Error, Sendable, Equatable {
   }
 }
 
-public protocol ImageMessageHandling: Sendable {
+package protocol ImageMessageHandling: Sendable {
   func materialize(_ attachment: PhotoAttachment) async -> Result<ImagePart, ImageMessageFailure>
 }
 

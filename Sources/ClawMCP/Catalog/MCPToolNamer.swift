@@ -21,16 +21,16 @@ public struct MCPToolCoordinate: Sendable, Equatable, Hashable {
 ///
 /// Names are assigned across the whole declared set in one pass, in config order, so a server added
 /// at the end of the file cannot silently rename an earlier server's tools.
-public enum MCPToolNamer {
-  public static let prefix = "mcp__"
-  public static let separator = "__"
+enum MCPToolNamer {
+  static let prefix = "mcp__"
+  static let separator = "__"
   /// Caps the server fragment so one verbose server name cannot crowd out every tool name behind it.
-  public static let serverFragmentLimit = 30
-  public static let nameLimit = 64
+  static let serverFragmentLimit = 30
+  static let nameLimit = 64
 
   /// The local name for each coordinate, positionally: the caller pairs by index, which is the same
   /// order-preservation the one-pass assignment already rests on.
-  public static func assign(_ coordinates: [MCPToolCoordinate]) -> [String] {
+  static func assign(_ coordinates: [MCPToolCoordinate]) -> [String] {
     var taken: Set<String> = []
     var assigned: [String] = []
     assigned.reserveCapacity(coordinates.count)

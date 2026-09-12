@@ -52,10 +52,10 @@ public protocol AuthMutationLocking: Sendable {
 
 // MARK: - Coordinator
 
-public struct AuthMutationCoordinator: Sendable {
+struct AuthMutationCoordinator: Sendable {
   private let lock: any AuthMutationLocking
 
-  public init(lock: any AuthMutationLocking) {
+  init(lock: any AuthMutationLocking) {
     self.lock = lock
   }
 

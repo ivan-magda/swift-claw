@@ -8,7 +8,7 @@ import Logging
 ///
 /// It owns the wire, never the credential: authorization arrives per request from an injected
 /// source, and the only header that source may contribute is `Authorization`.
-public struct OpenAICompatibleProvider: LLMProvider {
+struct OpenAICompatibleProvider: LLMProvider {
   private let config: LLMConfig
   /// The resolved endpoint the route selected. Kept as its own value rather than pulled back out of
   /// the route on every call: this adapter owns the wire URL and applies its own single-slash path
@@ -28,7 +28,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
   /// per-turn correlation lives in `AgentRuntime`, so the `LLMProvider` contract stays unchanged.
   private let logger: Logger
 
-  public init(
+  init(
     config: LLMConfig,
     endpoint: String,
     maxTokensField: MaxTokensField,
@@ -53,7 +53,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
     self.logger = logger
   }
 
-  public func complete(request: ChatRequest) async throws -> ChatResponse {
+  func complete(request: ChatRequest) async throws -> ChatResponse {
     let body = try encode(request: request)
     let url = chatCompletionsURL()
     let exposure = ProviderAttemptExposure()
@@ -149,7 +149,7 @@ public struct OpenAICompatibleProvider: LLMProvider {
     }
   }
 
-  public func stream(request: ChatRequest) -> LLMEventStream {
+  func stream(request: ChatRequest) -> LLMEventStream {
     LLMEventStream.make { sink in
       await infer(request: request, into: sink)
     }

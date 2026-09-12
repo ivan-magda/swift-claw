@@ -5,17 +5,17 @@ import MCP
 
 /// Pinned bounds for one Streamable HTTP exchange, sized for a personal daemon talking to a handful
 /// of servers. An implementer changing one changes it here.
-public enum MCPTransportLimits {
+enum MCPTransportLimits {
   /// The most one JSON-RPC message may weigh: a whole JSON response, or a single SSE event still
   /// waiting for its blank line. A stream may run far longer than this — the bound is per message,
   /// not per transfer.
-  public static let maxMessageBytes = 4 * 1024 * 1024
+  static let maxMessageBytes = 4 * 1024 * 1024
   /// Complete protocol messages waiting for the SDK's receive loop. The HTTP body channel has its
   /// own byte bound; this closes the second queue after framing has split that body into messages.
-  public static let maxBufferedMessages = 16
+  static let maxBufferedMessages = 16
   /// Cancellation is advisory and local continuation cleanup has already won. Do not let a server
   /// that ignores the notice consume another full request budget while the caller is timing out.
-  public static let cancellationTimeout: Duration = .seconds(1)
+  static let cancellationTimeout: Duration = .seconds(1)
 }
 
 /// The MCP Streamable HTTP transport, spoken over swift-claw's own HTTP seam.
@@ -34,8 +34,8 @@ public enum MCPTransportLimits {
 ///
 /// The instance is single-use: `disconnect()` finishes the receive stream, and an `AsyncThrowingStream`
 /// that has finished cannot be reopened. Reconnecting means building a new transport.
-public actor MCPStreamableHTTPTransport: Transport {
-  nonisolated public let logger: Logger
+actor MCPStreamableHTTPTransport: Transport {
+  nonisolated let logger: Logger
 
   private let endpoint: String
   private var baseHeaders: [String: String]
@@ -52,7 +52,7 @@ public actor MCPStreamableHTTPTransport: Transport {
   private let messages: AsyncThrowingStream<Data, any Error>
   private let messageContinuation: AsyncThrowingStream<Data, any Error>.Continuation
 
-  public init(
+  init(
     server: MCPServerConfig,
     token: String? = nil,
     http: any HTTPExecuting & HTTPStreaming,
@@ -76,7 +76,7 @@ public actor MCPStreamableHTTPTransport: Transport {
 
   /// Marks the transport usable. Streamable HTTP has no connection of its own — the initialize POST
   /// the SDK sends next is what reaches the server.
-  public func connect() async throws {
+  func connect() async throws {
     switch lifecycle {
     case .connected:
       return
@@ -90,7 +90,7 @@ public actor MCPStreamableHTTPTransport: Transport {
   /// Ends the receive stream, then tells the server the session is over. The order matters: the
   /// SDK's message loop is parked on our stream and is awaited by `Client.disconnect`, so finishing
   /// first means a slow teardown request cannot hold up a shutdown.
-  public func disconnect() async {
+  func disconnect() async {
     switch lifecycle {
     case .idle, .disconnected:
       return
@@ -108,7 +108,7 @@ public actor MCPStreamableHTTPTransport: Transport {
     await deleteSession(session)
   }
 
-  public func send(_ data: Data) async throws {
+  func send(_ data: Data) async throws {
     guard lifecycle == .connected else {
       throw MCPTransportError.notConnected
     }
@@ -127,7 +127,7 @@ public actor MCPStreamableHTTPTransport: Transport {
     handshakeCompleted = true
   }
 
-  public func receive() -> AsyncThrowingStream<Data, any Error> {
+  func receive() -> AsyncThrowingStream<Data, any Error> {
     messages
   }
 }

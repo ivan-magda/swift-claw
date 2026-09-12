@@ -5,8 +5,8 @@ import Foundation
 /// any anchor whose observations are incomplete, so a malformed history (crash, partial commit)
 /// can never become a wire-protocol 400. The LOAD seam already bounds windows by conversational
 /// rows; no-orphan holds only because BOTH seams enforce it.
-public enum HistoryHygiene {
-  public static func sanitize(_ history: [StoredMessage]) -> [StoredMessage] {
+enum HistoryHygiene {
+  static func sanitize(_ history: [StoredMessage]) -> [StoredMessage] {
     var sanitized: [StoredMessage] = []
     var index = 0
 

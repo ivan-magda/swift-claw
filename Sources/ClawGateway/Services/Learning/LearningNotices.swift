@@ -1,7 +1,7 @@
 import ClawCore
 import Foundation
 
-public enum LearningReviewError: Error, Sendable, Equatable {
+enum LearningReviewError: Error, Sendable, Equatable {
   case invalidCandidate
   case nonceGenerationFailed
 }
