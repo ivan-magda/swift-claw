@@ -1,5 +1,6 @@
 import ClawCore
 import ClawData
+import ClawTestSupport
 import Foundation
 import Logging
 import Testing
@@ -15,18 +16,20 @@ import Testing
     let chatId: Int64
   }
 
-  /// Seeds a session + run (so the `run_id` FK holds) and one PENDING `"**hi**"` outbound row,
-  /// exactly as a committed turn would.
+  /// Commits a completed turn with one PENDING `"**hi**"` reply.
   private func makeFixtureWithPendingHi() throws -> Fixture {
     let seeded = try makeSeededFixture()
-    _ = try seeded.outbox.claimOutbound(
+    try OutboxFixture.commitReply(
+      in: seeded.writer,
       runId: seeded.runId,
-      chunk: OutboxChunk(
-        stepIndex: 0,
-        chatId: seeded.chatId,
-        payload: "**hi**",
-        payloadHash: "hash"
-      )
+      chunks: [
+        OutboxChunk(
+          stepIndex: 0,
+          chatId: seeded.chatId,
+          payload: "**hi**",
+          payloadHash: "hash"
+        )
+      ]
     )
     return Fixture(outbox: seeded.outbox, runId: seeded.runId, chatId: seeded.chatId)
   }

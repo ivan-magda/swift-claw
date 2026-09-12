@@ -13,8 +13,14 @@ import Testing
     let first = try fixture.createJob(label: "first")
     _ = try fixture.createJob(label: "unarmed")
     let third = try fixture.createJob(label: "third")
-    _ = try fixture.learning.armJob(jobId: third.id, now: fixture.now)
-    _ = try fixture.learning.armJob(jobId: first.id, now: fixture.now)
+    _ = try TestLearningFixtures(writer: fixture.queue).seedArmedJob(
+      jobId: third.id,
+      now: fixture.now
+    )
+    _ = try TestLearningFixtures(writer: fixture.queue).seedArmedJob(
+      jobId: first.id,
+      now: fixture.now
+    )
     let before = try fixture.learningStateCount()
 
     // when
@@ -31,7 +37,10 @@ import Testing
     let fixture = try LearningViewFixture.make()
     let unarmed = try fixture.createJob(label: "unarmed")
     let armed = try fixture.createJob(label: "armed")
-    _ = try fixture.learning.armJob(jobId: armed.id, now: fixture.now)
+    _ = try TestLearningFixtures(writer: fixture.queue).seedArmedJob(
+      jobId: armed.id,
+      now: fixture.now
+    )
     let stable = try fixture.installStableLessons(
       ["Keep the first fact.", "Keep the second fact."],
       jobId: armed.id
@@ -55,7 +64,10 @@ import Testing
     // given
     let fixture = try LearningViewFixture.make()
     let job = try fixture.createJob(label: "damaged stable state")
-    _ = try fixture.learning.armJob(jobId: job.id, now: fixture.now)
+    _ = try TestLearningFixtures(writer: fixture.queue).seedArmedJob(
+      jobId: job.id,
+      now: fixture.now
+    )
     try fixture.applyStableCorruption(corruption, jobId: job.id)
 
     // when
@@ -71,8 +83,14 @@ import Testing
     let fixture = try LearningViewFixture.make()
     let healthy = try fixture.createJob(label: "healthy")
     let damaged = try fixture.createJob(label: "damaged")
-    _ = try fixture.learning.armJob(jobId: healthy.id, now: fixture.now)
-    _ = try fixture.learning.armJob(jobId: damaged.id, now: fixture.now)
+    _ = try TestLearningFixtures(writer: fixture.queue).seedArmedJob(
+      jobId: healthy.id,
+      now: fixture.now
+    )
+    _ = try TestLearningFixtures(writer: fixture.queue).seedArmedJob(
+      jobId: damaged.id,
+      now: fixture.now
+    )
     try fixture.invalidateTimezone(jobId: damaged.id)
 
     // when
@@ -89,7 +107,10 @@ import Testing
     // given
     let fixture = try LearningViewFixture.make()
     let job = try fixture.createJob(label: "operational failure")
-    _ = try fixture.learning.armJob(jobId: job.id, now: fixture.now)
+    _ = try TestLearningFixtures(writer: fixture.queue).seedArmedJob(
+      jobId: job.id,
+      now: fixture.now
+    )
     try fixture.queue.write { db in
       try db.drop(table: "job_learning_state")
     }
@@ -429,7 +450,10 @@ import Testing
     // given
     let fixture = try LearningViewFixture.make()
     let job = try fixture.createJob(label: "wrong nullable class")
-    _ = try fixture.learning.armJob(jobId: job.id, now: fixture.now)
+    _ = try TestLearningFixtures(writer: fixture.queue).seedArmedJob(
+      jobId: job.id,
+      now: fixture.now
+    )
     try fixture.storeBlobAsRecurrence(jobId: job.id)
 
     // when
@@ -625,7 +649,7 @@ private struct LearningViewFixture {
       try pointStableState(jobId: jobId, digest: String(repeating: "d", count: 64))
     case .crossJobSet:
       let other = try createJob(label: "foreign stable owner")
-      _ = try learning.armJob(jobId: other.id, now: now)
+      _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: other.id, now: now)
       let foreign = try installStableLessons(["Only the other job owns this."], jobId: other.id)
       try pointStableState(jobId: jobId, digest: foreign.digest.rawValue)
     case .noncanonicalSet:

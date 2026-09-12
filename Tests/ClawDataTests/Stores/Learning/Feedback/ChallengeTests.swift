@@ -12,7 +12,7 @@ extension FeedbackStoreTests {
     let firstTarget = env.target(nonce: "prompt-one", signal: .resultCorrection, subject: "41")
     let secondTarget = env.target(nonce: "prompt-two", signal: .resultCorrection, subject: "41")
     let reviewNotice = env.chunk(subject: "41", ordinal: 0, markup: nil)
-    try env.createTargets([firstTarget, secondTarget], chunks: [reviewNotice])
+    try env.seedTargets([firstTarget, secondTarget], chunks: [reviewNotice])
 
     // when
     let first = try env.openChallenge(firstTarget)
@@ -53,7 +53,7 @@ extension FeedbackStoreTests {
     let prior = env.target(nonce: "prior", signal: .resultNotUseful, subject: "41")
     let other = env.target(nonce: "other-run", signal: .resultUseful, subject: "42")
     let correction = env.target(nonce: "correction", signal: .resultCorrection, subject: "41")
-    try env.createTargets([prior, other, correction], chunks: [])
+    try env.seedTargets([prior, other, correction], chunks: [])
     _ = try env.consume(env.tap(target: prior, signal: .resultNotUseful))
     _ = try env.consume(env.tap(target: other, signal: .resultUseful, updateId: 2))
     let opened = try env.openChallenge(correction, updateId: 3)
@@ -114,7 +114,7 @@ extension FeedbackStoreTests {
         subject: "subject-\(offset)",
         kind: entry.0
       )
-      try env.createTargets([target], chunks: [])
+      try env.seedTargets([target], chunks: [])
       guard case .challengeOpened(let challenge) = try env.openChallenge(target) else {
         Issue.record("expected a payload challenge")
         continue
@@ -142,7 +142,7 @@ extension FeedbackStoreTests {
     // given — a corrupted target says candidate while allowing the run-only correction action
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "mismatched-pair", signal: .resultCorrection, subject: "41")
-    try env.createTargets([target], chunks: [])
+    try env.seedTargets([target], chunks: [])
     try env.setTargetSubjectKind(nonce: target.nonce, kind: .candidate)
 
     // when
@@ -181,7 +181,7 @@ extension FeedbackStoreTests {
         subject: "41",
         expiresAt: expiry
       )
-      try env.createTargets([target], chunks: [])
+      try env.seedTargets([target], chunks: [])
       guard case .challengeOpened(let challenge) = try env.openChallenge(target) else {
         Issue.record("expected the challenge to open")
         continue
@@ -211,7 +211,7 @@ extension FeedbackStoreTests {
     // given — the second prompt identity exists, so the first insert precedes the collision
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "prompt-collision", signal: .resultCorrection, subject: "41")
-    try env.createTargets([target], chunks: [])
+    try env.seedTargets([target], chunks: [])
     let first = try #require(env.challengePrompt(target).first)
     let secondPayload = "Second prompt chunk."
     let second = LearningNoticeChunk(
@@ -222,7 +222,7 @@ extension FeedbackStoreTests {
       payloadHash: ContentHash.fnv1a(secondPayload)
     )
     let prompt = [first, second]
-    try env.createTargets([], chunks: [second])
+    try env.seedTargets([], chunks: [second])
 
     // when / then — accepting INSERT OR IGNORE would consume a target with no new prompt
     #expect(throws: StoreError.self) {
@@ -242,7 +242,7 @@ extension FeedbackStoreTests {
     // given — a live challenge and a database failure at the transaction's final audit row
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "audit-payload", signal: .resultCorrection, subject: "41")
-    try env.createTargets([target], chunks: [])
+    try env.seedTargets([target], chunks: [])
     guard case .challengeOpened(let challenge) = try env.openChallenge(target) else {
       Issue.record("expected the challenge to open")
       return

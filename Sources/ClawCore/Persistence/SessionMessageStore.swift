@@ -235,6 +235,4 @@ public protocol SessionMessageStore: Sendable {
     throughMessageId: Int64,
     limit: Int
   ) throws(StoreError) -> SessionContextSnapshot
-  /// Advances the `/new` context boundary to the latest message and clears session taint.
-  func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError)
 }

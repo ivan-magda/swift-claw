@@ -55,7 +55,7 @@ public protocol CommandStore: Sendable {
     now: Date
   ) throws(StoreError) -> StopCommandResult
   /// Atomic `/new`: claim update + resolve session + RUNNING/PENDING→SUPERSEDED +
-  /// resetWindowAndDetaint + audit in one write.
+  /// context-window reset + detaint + audit in one write.
   func applyNew(
     updateId: Int64,
     sessionKey: String,

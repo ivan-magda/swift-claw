@@ -82,76 +82,14 @@ import Testing
     #expect(try env.runs.pickUp(runId: env.seedRunId, now: Date()) == .scheduled)
   }
 
-  @Test func cancelActiveRunOnlyCancelsRunningRun() throws {
-    // given
-    let env = try fixture()
-    #expect(
-      try env.runs.cancelActiveRun(
-        sessionId: env.sessionId,
-        reason: .cancelled,
-        now: Date()
-      ) == nil
-    )
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
-
-    // when
-    let cancelled = try env.runs.cancelActiveRun(
-      sessionId: env.sessionId,
-      reason: .cancelled,
-      now: Date()
-    )
-
-    // then
-    #expect(cancelled == env.seedRunId)
-    let state = try #require(
-      try env.queue.read { db in
-        try String.fetchOne(
-          db,
-          sql: "SELECT state FROM runs WHERE id = ?",
-          arguments: [env.seedRunId]
-        )
-      }
-    )
-    #expect(state == RunState.cancelled.rawValue)
-  }
-
-  @Test func supersedeSessionRunsTerminatesRunningAndQueuedRuns() throws {
-    // given
-    let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
-    let queued = try env.sessions.claimAndPersistInbound(
-      InboundMessage(
-        updateId: 2,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
-        text: "queued",
-        isEdited: false,
-        ts: Date()
-      )
-    )
-    let queuedRunId = try #require(queued.runId)
-
-    // when
-    let superseded = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
-
-    // then
-    #expect(superseded == [env.seedRunId, queuedRunId])
-    let states = try env.queue.read { db in
-      try String.fetchAll(
-        db,
-        sql: "SELECT state FROM runs WHERE id IN (?, ?) ORDER BY id ASC",
-        arguments: [env.seedRunId, queuedRunId]
-      )
-    }
-    #expect(states == [RunState.superseded.rawValue, RunState.superseded.rawValue])
-    #expect(try env.runs.pickUp(runId: queuedRunId, now: Date()) == nil)
-  }
-
   @Test func assistantCommitAfterSupersedeRecordsUsageOnly() throws {
     // given
     let env = try fixture()
-    _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
+    _ = try CommandStoreGRDB(writer: env.queue).applyNew(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 42),
+      now: Date()
+    )
     let turn = AssistantTurn(
       runId: env.seedRunId,
       sessionId: env.sessionId,
@@ -271,9 +209,11 @@ import Testing
     let env = try fixture()
     let runId = env.seedRunId
     _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
-    _ = try env.outbox.claimOutbound(
+    try OutboxFixture.seedLegacyRunDelivery(
+      in: env.queue,
       runId: runId,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "x", payloadHash: "h")
+      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "x", payloadHash: "h"),
+      deliveryKey: OutboxDedupKey.make(runId: runId, stepIndex: 0)
     )
     try env.outbox.markSent(
       deliveryKey: OutboxDedupKey.make(runId: runId, stepIndex: 0),
@@ -380,8 +320,10 @@ import Testing
         costUSD: 0.004
       )
     )
-    _ = try #require(
-      try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: Date())
+    _ = try CommandStoreGRDB(writer: env.queue).applyStop(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 42),
+      now: Date()
     )
 
     // when — the terminal round's commit arrives after the cancellation
@@ -409,8 +351,10 @@ import Testing
         costUSD: 0.004
       )
     )
-    _ = try #require(
-      try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: Date())
+    _ = try CommandStoreGRDB(writer: env.queue).applyStop(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 42),
+      now: Date()
     )
 
     // when
@@ -525,8 +469,10 @@ import Testing
     // given — a cancelled run whose terminal commit already landed
     let env = try fixture()
     _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
-    _ = try #require(
-      try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: Date())
+    _ = try CommandStoreGRDB(writer: env.queue).applyStop(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 42),
+      now: Date()
     )
     let turn = terminalTurn(
       env,
@@ -567,7 +513,11 @@ import Testing
         costUSD: 0.004
       )
     )
-    _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
+    _ = try CommandStoreGRDB(writer: env.queue).applyNew(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 42),
+      now: Date()
+    )
 
     // when
     let result = try env.runs.commitAssistantTurn(

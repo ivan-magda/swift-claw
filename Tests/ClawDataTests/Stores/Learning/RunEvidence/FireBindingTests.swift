@@ -76,8 +76,23 @@ import Testing
     let binding = try #require(fired.binding)
     #expect(binding.effectiveDigest == LessonSet.empty(jobId: env.jobId).digest)
     #expect(binding.trialId == nil)
-    #expect(try env.learning.lessonSet(jobId: env.jobId, digest: binding.effectiveDigest) != nil)
+    #expect(
+      try env.learning.lessonSet(jobId: env.jobId, digest: binding.effectiveDigest)
+        == LessonSet.empty(jobId: env.jobId)
+    )
+    #expect(binding.epoch == LearningEpoch(1))
     #expect(try env.learning.binding(runId: fired.runId) == binding)
+    let state = try env.queue.read { db in
+      try #require(
+        try Row.fetchOne(
+          db,
+          sql: "SELECT stable_revision, feedback_revision FROM job_learning_state WHERE job_id = ?",
+          arguments: [env.jobId]
+        )
+      )
+    }
+    #expect(StableRevision(state["stable_revision"]) == StableRevision(0))
+    #expect(FeedbackRevision(state["feedback_revision"]) == FeedbackRevision(0))
   }
 
   @Test func aTrialFireConsumesExactlyOneAssignment() throws {
@@ -385,7 +400,7 @@ private struct FireBindingEnvironment {
       lessons: ["Check the archive before answering"]
     )
     if withOpenTrial {
-      _ = try learning.armJob(jobId: job.id, now: admittedAt)
+      _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: admittedAt)
       try openTrial(
         queue,
         jobId: job.id,

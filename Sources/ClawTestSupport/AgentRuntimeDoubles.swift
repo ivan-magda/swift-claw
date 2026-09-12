@@ -228,10 +228,6 @@ public struct EmptyWorkspace: WorkspaceReading {
     .missing
   }
 
-  public func loadDailyLog(day: String, maxGraphemes: Int?) -> LoadedFile {
-    .missing
-  }
-
   public func scanSkills() -> SkillScanResult {
     SkillScanResult(descriptors: [], warnings: [])
   }

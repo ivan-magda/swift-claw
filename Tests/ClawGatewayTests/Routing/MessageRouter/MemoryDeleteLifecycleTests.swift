@@ -103,7 +103,11 @@ import Testing
     #expect(try harness.memory.get(id: seeded.id) == nil)
     #expect(try harness.memoryItemCount() == 0)
     #expect(try harness.auditActions().contains("memory_delete"))
-    #expect(try harness.auditActions().contains("memory_write") == false)
+    #expect(
+      try harness.auditActions().filter { action in
+        action == AuditAction.memoryWrite.rawValue
+      }.count == 1
+    )
     let sent = await harness.transport.sent
     #expect(sent.last?.text == MemoryReplies.deleted(id: seeded.id))
     #expect(await harness.dispatcher.calls.isEmpty)

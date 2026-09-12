@@ -60,39 +60,6 @@ extension RunStoreGRDB {
     }
   }
 
-  public func cancelActiveRun(
-    sessionId: Int64,
-    reason: CancelReason,
-    now: Date
-  ) throws(StoreError) -> Int64? {
-    try database.writeMapping { db in
-      guard let runId = try Self.fetchActiveRunId(db, sessionId: sessionId) else {
-        return nil
-      }
-
-      // Deferred, not settled: the round the command interrupted may still record its usage.
-      guard
-        try Self.transitionRun(
-          db,
-          runId: runId,
-          event: reason.runEvent,
-          now: now,
-          terminal: .deferred(reason.terminalCause)
-        ) != nil
-      else {
-        return nil
-      }
-
-      return runId
-    }
-  }
-
-  public func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] {
-    try database.writeMapping { db in
-      try Self.supersedeRuns(db, sessionId: sessionId, now: now)
-    }
-  }
-
   public func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
     try database.writeMapping { db in
       guard

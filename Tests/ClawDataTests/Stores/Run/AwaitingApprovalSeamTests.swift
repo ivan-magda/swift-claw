@@ -57,34 +57,6 @@ import Testing
     }
   }
 
-  @Test func stopCancelsASuspendedRun() throws {
-    // given
-    let env = try makeSuspendedFixture()
-
-    // when — /stop's single-run path (cancelActiveRun → fetchActiveRunId)
-    let cancelled = try env.runs.cancelActiveRun(
-      sessionId: env.sessionId,
-      reason: .cancelled,
-      now: Date()
-    )
-
-    // then — without the widened predicate, /stop silently skips the suspended run (§4.2)
-    #expect(cancelled == env.runId)
-    #expect(try runState(env.queue, runId: env.runId) == RunState.cancelled.rawValue)
-  }
-
-  @Test func newSupersedesASuspendedRun() throws {
-    // given
-    let env = try makeSuspendedFixture()
-
-    // when — /new's plural path (supersedeSessionRuns → terminateActiveRuns)
-    let superseded = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
-
-    // then
-    #expect(superseded == [env.runId])
-    #expect(try runState(env.queue, runId: env.runId) == RunState.superseded.rawValue)
-  }
-
   @Test func runsHealthCountsASuspendedRunAsInFlight() throws {
     // given
     let env = try makeSuspendedFixture()

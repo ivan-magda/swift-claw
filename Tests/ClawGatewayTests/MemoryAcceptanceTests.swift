@@ -222,13 +222,15 @@ import Testing
     // given — one normal and one high-sensitivity fact in the real GRDB store
     let queue = try TestDatabase.make()
     let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
-    let memoryStore = MemoryStoreGRDB(writer: queue)
-    _ = try memoryStore.append(
-      NewMemoryItem(text: "normal fact", kind: .user, sessionId: nil),
+    let memoryCommands = MemoryCommandStoreGRDB(writer: queue)
+    _ = try memoryCommands.applyRemember(
+      updateId: -1,
+      item: NewMemoryItem(text: "normal fact", kind: .user, sessionId: nil),
       now: Date(timeIntervalSince1970: 86_400)
     )
-    _ = try memoryStore.append(
-      NewMemoryItem(text: "secret omega", kind: .user, sensitivity: .high, sessionId: nil),
+    _ = try memoryCommands.applyRemember(
+      updateId: -2,
+      item: NewMemoryItem(text: "secret omega", kind: .user, sensitivity: .high, sessionId: nil),
       now: Date(timeIntervalSince1970: 172_800)
     )
 
@@ -269,7 +271,7 @@ import Testing
   @Test func hasPrivateDataAccessTracksMemoryInjectionOverTheRealStores() throws {
     // given — a builder over the real stores and an empty workspace
     let queue = try TestDatabase.make()
-    let memoryStore = MemoryStoreGRDB(writer: queue)
+    let memoryCommands = MemoryCommandStoreGRDB(writer: queue)
     let builder = makeAcceptanceContextBuilder(writer: queue)
     let snapshot = SessionContextSnapshot(
       sessionKey: SessionKey.telegramDM(chatId: 42),
@@ -287,10 +289,12 @@ import Testing
     #expect(emptyResult.hasPrivateDataAccess == false)
 
     // when — one durable fact is appended
-    let appended = try memoryStore.append(
-      NewMemoryItem(text: "durable fact", kind: .user, sessionId: nil),
+    let remembered = try memoryCommands.applyRemember(
+      updateId: -1,
+      item: NewMemoryItem(text: "durable fact", kind: .user, sessionId: nil),
       now: Date(timeIntervalSince1970: 86_400)
     )
+    let appended = try #require(remembered.item)
     let injectedResult = try builder.assemble(
       snapshot: snapshot,
       sessionId: 1,
@@ -304,7 +308,11 @@ import Testing
     )
 
     // when — the fact is deleted again
-    #expect(try memoryStore.delete(id: appended.id))
+    _ = try memoryCommands.applyForget(
+      updateId: -2,
+      itemId: appended.id,
+      now: Date(timeIntervalSince1970: 172_800)
+    )
     let deletedResult = try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive)
 
     // then

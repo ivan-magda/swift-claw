@@ -158,7 +158,7 @@ private struct TrialSweepFixture {
       now: admittedAt
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    let state = try learning.armJob(jobId: job.id, now: admittedAt)
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: admittedAt)
     let identity = try installTrial(
       queue: queue,
       state: state,

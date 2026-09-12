@@ -30,70 +30,6 @@ import Testing
     #expect(deliveries[0]["delivery_source"] == DeliverySource.run.rawValue)
   }
 
-  @Test func aRunlessNoticeIsAcceptedAndReadBackWithoutARun() throws {
-    // given — the shape the pre-v13 NOT NULL made unwritable
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    let outbox = OutboxStoreGRDB(writer: queue)
-
-    // when
-    let claimed = try outbox.claimNotice(Self.notice(subjectDigest: "abc", ordinal: 0))
-
-    // then — the row exists, decodes, and names itself by its delivery key rather than a run
-    #expect(claimed)
-    let row = try #require(try outbox.pendingOutbound().first)
-    #expect(row.runId == nil)
-    #expect(row.deliveryKey == "learning:abc:0")
-    #expect(row.originLabel == DeliverySource.learning.rawValue)
-    #expect(row.payload == "candidate ready")
-  }
-
-  /// A drain answers runs before it answers itself. Native Coder completions enqueue against
-  /// their origin run, so a notice sorting ahead of them would let a stalled learning message
-  /// hold back a job result the owner is waiting on.
-  @Test func everyRunSourcedRowDrainsBeforeAnyRunlessNotice() throws {
-    // given — a notice claimed first, so only the ordering can put the run's rows ahead of it
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    let outbox = OutboxStoreGRDB(writer: queue)
-    try Self.seedRun(queue)
-    #expect(try outbox.claimNotice(Self.notice(subjectDigest: "abc", ordinal: 0)))
-    for step in [1, 0] {
-      #expect(
-        try outbox.claimOutbound(
-          runId: 1,
-          chunk: OutboxChunk(
-            stepIndex: step,
-            chatId: 7,
-            payload: "coder result \(step)",
-            payloadHash: "hash-\(step)"
-          )
-        )
-      )
-    }
-
-    // when
-    let pending = try outbox.pendingOutbound()
-
-    // then
-    #expect(pending.map(\.deliveryKey) == ["1:0", "1:1", "learning:abc:0"])
-  }
-
-  @Test func reclaimingTheSameNoticeChunkDoesNotDuplicateIt() throws {
-    // given
-    let queue = try ClawDatabase.makeInMemoryQueue()
-    try ClawDatabase.migrate(queue)
-    let outbox = OutboxStoreGRDB(writer: queue)
-    #expect(try outbox.claimNotice(Self.notice(subjectDigest: "abc", ordinal: 0)))
-
-    // when — the same subject and ordinal are enqueued again after a retry
-    let second = try outbox.claimNotice(Self.notice(subjectDigest: "abc", ordinal: 0))
-
-    // then
-    #expect(second == false)
-    #expect(try outbox.pendingOutbound().count == 1)
-  }
-
   @Test func aRunSourcedRowMayNeverLoseItsRun() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -121,36 +57,6 @@ import Testing
 // MARK: - Fixtures
 
 private extension OutboxRebuildTests {
-  static func notice(subjectDigest: String, ordinal: Int) -> LearningNoticeChunk {
-    LearningNoticeChunk(
-      subjectDigest: subjectDigest,
-      ordinal: ordinal,
-      chatId: 7,
-      payload: "candidate ready",
-      payloadHash: "hash"
-    )
-  }
-
-  /// The session and run a run-sourced delivery has to reference.
-  static func seedRun(_ queue: DatabaseQueue) throws {
-    try queue.write { db in
-      try db.execute(
-        sql: """
-          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-          VALUES ('tg:dm:7', ?, ?, 0)
-          """,
-        arguments: [seededAt, seededAt]
-      )
-      try db.execute(
-        sql: """
-          INSERT INTO runs(session_id, state, created_ts, updated_ts)
-          VALUES (1, 'RUNNING', ?, ?)
-          """,
-        arguments: [seededAt, seededAt]
-      )
-    }
-  }
-
   /// A v10 database holding the one delivery row the v13 rebuild has to carry across.
   static func seedVTen(_ queue: DatabaseQueue) throws {
     try ClawDatabase.migrator.migrate(queue, upTo: "v10")

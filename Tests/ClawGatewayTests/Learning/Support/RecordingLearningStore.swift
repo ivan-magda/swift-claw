@@ -140,14 +140,6 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     try base.applyReset(updateId: updateId, jobId: jobId, now: now)
   }
 
-  func createTargets(
-    _ targets: [NewFeedbackTarget],
-    chunks: [LearningNoticeChunk],
-    now: Date
-  ) throws(StoreError) {
-    try base.createTargets(targets, chunks: chunks, now: now)
-  }
-
   func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget? {
     try base.feedbackTarget(nonce: nonce)
   }
@@ -239,10 +231,6 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     return try base.authorizeAndStartOperation(authorization, now: now)
   }
 
-  func armJob(jobId: Int64, now: Date) throws(StoreError) -> JobLearningState {
-    try base.armJob(jobId: jobId, now: now)
-  }
-
   func lessonSet(jobId: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
     try base.lessonSet(jobId: jobId, digest: digest)
   }
@@ -285,10 +273,6 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
       return result
     }
     return try base.reconcileTrial(identity, now: now)
-  }
-
-  func settlement(runId: Int64) throws(StoreError) -> RunSettlement? {
-    try base.settlement(runId: runId)
   }
 
   @discardableResult

@@ -38,7 +38,10 @@ import Testing
     // given — no ScheduledLearningService is passed to the router.
     let harness = try Harness.make()
     let job = try harness.createJob(label: "retained state")
-    _ = try harness.learning.armJob(jobId: job.id, now: harness.now)
+    _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
+      jobId: job.id,
+      now: harness.now
+    )
     let rowsBefore = try harness.learningRows()
 
     // when
@@ -86,7 +89,10 @@ import Testing
     // given
     let harness = try Harness.make()
     let armed = try harness.createJob(label: "armed")
-    _ = try harness.learning.armJob(jobId: armed.id, now: harness.now)
+    _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
+      jobId: armed.id,
+      now: harness.now
+    )
     let unarmed = try harness.createJob(label: "unarmed")
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 10, from: 42, text: "/learning reset \(armed.id)")
@@ -117,7 +123,10 @@ import Testing
     // given
     let harness = try Harness.make(secretValues: ["secret-label"])
     let job = try harness.createJob(label: "secret-label")
-    _ = try harness.learning.armJob(jobId: job.id, now: harness.now)
+    _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
+      jobId: job.id,
+      now: harness.now
+    )
     try harness.insertUnreadableCurrentDecision(jobId: job.id)
     #expect(try harness.learning.learningView(jobId: job.id).isOnlyUnreadable)
 
@@ -144,8 +153,14 @@ import Testing
     let harness = try Harness.make()
     let first = try harness.createJob(label: "first")
     let second = try harness.createJob(label: "second")
-    _ = try harness.learning.armJob(jobId: first.id, now: harness.now)
-    _ = try harness.learning.armJob(jobId: second.id, now: harness.now)
+    _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
+      jobId: first.id,
+      now: harness.now
+    )
+    _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
+      jobId: second.id,
+      now: harness.now
+    )
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 30, from: 42, text: "/learning reset \(first.id)")
     )
@@ -173,7 +188,10 @@ import Testing
     // given
     let harness = try Harness.make()
     let job = try harness.createJob(label: "resolution race")
-    _ = try harness.learning.armJob(jobId: job.id, now: harness.now)
+    _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
+      jobId: job.id,
+      now: harness.now
+    )
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 35, from: 42, text: "/learning reset \(job.id)")
     )
@@ -204,7 +222,10 @@ import Testing
     // given
     let harness = try Harness.make()
     let job = try harness.createJob(label: "rollback")
-    _ = try harness.learning.armJob(jobId: job.id, now: harness.now)
+    _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
+      jobId: job.id,
+      now: harness.now
+    )
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 40, from: 42, text: "/learning reset \(job.id)")
     )
@@ -230,7 +251,10 @@ import Testing
       let job = try harness.createJob(
         label: "\(String(repeating: "x", count: 55))\(index)"
       )
-      _ = try harness.learning.armJob(jobId: job.id, now: harness.now)
+      _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
+        jobId: job.id,
+        now: harness.now
+      )
     }
     let raw = LearningSurface.render(
       try harness.learning.learningView(jobId: nil),
@@ -265,7 +289,10 @@ import Testing
     // given
     let harness = try Harness.make()
     let job = try harness.createJob(label: "claim failure")
-    _ = try harness.learning.armJob(jobId: job.id, now: harness.now)
+    _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
+      jobId: job.id,
+      now: harness.now
+    )
     try await harness.queue.write { db in
       try db.drop(table: "processed_updates")
     }

@@ -682,9 +682,9 @@ import Testing
       notResumableObservationContent: "stopped",
       now: Date()
     )
-    _ = try env.runs.cancelActiveRun(
-      sessionId: env.sessionId,
-      reason: .cancelled,
+    _ = try CommandStoreGRDB(writer: env.queue).applyStop(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 7),
       now: Date()
     )
 
@@ -707,7 +707,11 @@ import Testing
       notResumableObservationContent: "stopped",
       now: Date()
     )
-    _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
+    _ = try CommandStoreGRDB(writer: env.queue).applyNew(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 7),
+      now: Date()
+    )
 
     // when
     try fill(env, content: "old-window output", setTainted: true, setPrivateData: true)

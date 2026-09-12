@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -36,18 +37,18 @@ import Testing
     #expect(try env.settledAt(runId: runId) == env.now)
   }
 
-  @Test func cancellationDefersSettlementUntilTheLaneFinalizer() throws {
-    // given — a bound run with a provider call still in flight
+  @Test func lateUsageRemainsWritableUntilTheLaneFinalizer() throws {
+    // given — a persisted interruption with a provider call still in flight
     let env = try BoundRunEnvironment.make()
     let runId = try env.runningBoundRun()
 
-    // when — the owner cancels, then the in-flight call returns
-    _ = try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: env.now)
+    try env.seedDeferredCancellation(runId: runId)
+
+    // when — the in-flight call returns
     let lateUsage = try env.runs.commitAssistantTurn(env.assistantTurn(runId: runId), now: env.now)
 
-    // then — the cause is recorded and the usage survives, but the evidence is not frozen yet
-    let receipt = try #require(try env.learning.settlement(runId: runId))
-    #expect(receipt.terminalCause == .ownerCancelled)
+    // then — the usage survives without freezing evidence
+    let receipt = try #require(try TestLearningFixtures(writer: env.queue).settlement(runId: runId))
     #expect(receipt.settledAt == nil)
     #expect(lateUsage == .usageRecordedAfterTerminal)
 
@@ -57,20 +58,6 @@ import Testing
     // then
     #expect(settled)
     #expect(try env.settledAt(runId: runId) == env.now)
-  }
-
-  @Test func supersessionDefersSettlementTheSameWay() throws {
-    // given
-    let env = try BoundRunEnvironment.make()
-    let runId = try env.runningBoundRun()
-
-    // when — `/new` wins the state while the round is still in flight
-    _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: env.now)
-
-    // then
-    let receipt = try #require(try env.learning.settlement(runId: runId))
-    #expect(receipt.terminalCause == .superseded)
-    #expect(receipt.settledAt == nil)
   }
 
   @Test func settlingFromTheLaneIsIdempotentAndNeverInventsAReceipt() throws {
@@ -91,14 +78,14 @@ import Testing
     #expect(resettled == false)
     #expect(inventedForUnbound == false)
     #expect(try env.settledAt(runId: doneRunId) == env.now)
-    #expect(try env.learning.settlement(runId: unboundRunId) == nil)
+    #expect(try TestLearningFixtures(writer: env.queue).settlement(runId: unboundRunId) == nil)
   }
 
   @Test func usageIsRefusedOnceTheRunIsSettled() throws {
     // given — a cancelled run whose lane tail already froze its evidence
     let env = try BoundRunEnvironment.make()
     let runId = try env.runningBoundRun()
-    _ = try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: env.now)
+    try env.seedDeferredCancellation(runId: runId)
     _ = try env.learning.settleFromLane(runId: runId, now: env.now)
 
     // when — a straggling provider call tries to debit against frozen evidence
@@ -110,10 +97,10 @@ import Testing
   }
 
   @Test func bootReconciliationSettlesWhatACrashLeftUnsettled() throws {
-    // given — a run cancelled by `/stop` whose lane tail never ran before the process died
+    // given — a persisted interruption whose lane tail never ran before the process died
     let env = try BoundRunEnvironment.make()
     let runId = try env.runningBoundRun()
-    _ = try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: env.now)
+    try env.seedDeferredCancellation(runId: runId)
 
     // when
     let bootedAt = env.now.addingTimeInterval(3_600)
@@ -124,7 +111,7 @@ import Testing
     )
 
     // then — the crash backstop settles it without disturbing the cause the cancellation stored
-    let receipt = try #require(try env.learning.settlement(runId: runId))
+    let receipt = try #require(try TestLearningFixtures(writer: env.queue).settlement(runId: runId))
     #expect(receipt.terminalCause == .ownerCancelled)
     #expect(receipt.settledAt == bootedAt)
   }
@@ -147,7 +134,7 @@ import Testing
 
     // then — `unknown` is honest about the cause, but the instant must be the run's own, or every
     // restart would re-date a stale run into the evidence-age window
-    let receipt = try #require(try env.learning.settlement(runId: runId))
+    let receipt = try #require(try TestLearningFixtures(writer: env.queue).settlement(runId: runId))
     #expect(receipt.terminalCause == .unknown)
     #expect(receipt.terminalAt == endedAt)
     #expect(receipt.settledAt == bootedAt)
@@ -164,7 +151,9 @@ import Testing
       degradationText: "unfinished",
       heartbeatNoticeChatId: nil
     )
-    let beforeResolution = try #require(try env.learning.settlement(runId: claimed.runId))
+    let beforeResolution = try #require(
+      try TestLearningFixtures(writer: env.queue).settlement(runId: claimed.runId)
+    )
     _ = try env.runs.settleClaimedApprovalAtBoot(
       runId: claimed.runId,
       observationMessageId: claimed.observationMessageId,
@@ -192,7 +181,7 @@ import Testing
     )
 
     // then — the run is still live, so nothing about it is terminal or frozen
-    #expect(try env.learning.settlement(runId: parked.runId) == nil)
+    #expect(try TestLearningFixtures(writer: env.queue).settlement(runId: parked.runId) == nil)
   }
 }
 

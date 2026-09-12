@@ -1,4 +1,5 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
@@ -194,7 +195,7 @@ private extension ResultFeedbackCommitTests {
         )
       }
     case .nonceCollision:
-      try env.learning.createTargets([target], chunks: [], now: env.now)
+      try TestLearningFixtures(writer: env.queue).seedTargets([target])
     }
   }
 

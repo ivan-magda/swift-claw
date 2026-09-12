@@ -646,8 +646,9 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
       httpResponses: ["https://example.com/a": htmlOK("hi")],
       resolverTable: exfilResolver
     )
-    _ = try harness.stores.memory.append(
-      NewMemoryItem(
+    _ = try harness.stores.memoryCommands.applyRemember(
+      updateId: -1,
+      item: NewMemoryItem(
         text: "PUBLIC the user prefers metric units",
         kind: .user,
         sensitivity: .normal,
@@ -655,8 +656,9 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
       ),
       now: Date()
     )
-    _ = try harness.stores.memory.append(
-      NewMemoryItem(
+    _ = try harness.stores.memoryCommands.applyRemember(
+      updateId: -2,
+      item: NewMemoryItem(
         text: "SECRET the vault code is 8842-alpha",
         kind: .user,
         sensitivity: .high,

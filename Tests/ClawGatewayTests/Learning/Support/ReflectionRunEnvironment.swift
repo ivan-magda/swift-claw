@@ -55,7 +55,7 @@ struct ReflectionRunEnvironment {
       now: now
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    _ = try learning.armJob(jobId: job.id, now: now)
+    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
     let runs = RunStoreGRDB(writer: queue)
     let first = try evaluatedEvidence(
       jobs: jobs,

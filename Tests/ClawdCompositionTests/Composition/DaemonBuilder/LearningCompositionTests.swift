@@ -4,6 +4,7 @@ import ClawGateway
 import ClawTestSupport
 import ClawWorkspace
 import Foundation
+import GRDB
 import Testing
 
 @testable import clawd
@@ -71,7 +72,7 @@ import Testing
     try builder.stores.allowlist.seedAllowlist(userIds: [777])
     let now = Date(timeIntervalSince1970: 1_782_000_600)
     let job = try LearningComposition.createJob(builder, now: now, label: "tg-token")
-    _ = try builder.stores.learning.armJob(jobId: job.id, now: now)
+    _ = try LearningComposition.fixtures(builder).seedArmedJob(jobId: job.id, now: now)
     let router = builder.makeIntakeRouter(
       coordination: DaemonBuilder.TurnCoordination(),
       turnRunner: IdleCompositionTurns(),
@@ -171,7 +172,7 @@ import Testing
       try builder.stores.allowlist.seedAllowlist(userIds: [777])
       let now = Date(timeIntervalSince1970: 1_782_000_600)
       let job = try LearningComposition.createJob(builder, now: now)
-      let state = try builder.stores.learning.armJob(jobId: job.id, now: now)
+      let state = try LearningComposition.fixtures(builder).seedArmedJob(jobId: job.id, now: now)
       let target = NewFeedbackTarget(
         nonce: "composition-\(learningEnabled)",
         jobId: job.id,
@@ -183,7 +184,7 @@ import Testing
         chatId: 777,
         expiresAt: .distantFuture
       )
-      try builder.stores.learning.createTargets([target], chunks: [], now: now)
+      try LearningComposition.fixtures(builder).seedTargets([target])
       let router = builder.makeIntakeRouter(
         coordination: DaemonBuilder.TurnCoordination(),
         turnRunner: IdleCompositionTurns(),
@@ -226,7 +227,7 @@ import Testing
       try builder.stores.allowlist.seedAllowlist(userIds: [777])
       let now = Date(timeIntervalSince1970: 1_782_000_600)
       let job = try LearningComposition.createJob(builder, now: now)
-      let state = try builder.stores.learning.armJob(jobId: job.id, now: now)
+      let state = try LearningComposition.fixtures(builder).seedArmedJob(jobId: job.id, now: now)
       let target = NewFeedbackTarget(
         nonce: "composition-challenge-\(learningEnabled)",
         jobId: job.id,
@@ -238,7 +239,7 @@ import Testing
         chatId: 777,
         expiresAt: .distantFuture
       )
-      try builder.stores.learning.createTargets([target], chunks: [], now: now)
+      try LearningComposition.fixtures(builder).seedTargets([target])
       if !learningEnabled {
         let residual = NewFeedbackTarget(
           nonce: "residual-disabled-challenge",
@@ -251,7 +252,7 @@ import Testing
           chatId: 777,
           expiresAt: .distantFuture
         )
-        try builder.stores.learning.createTargets([residual], chunks: [], now: now)
+        try LearningComposition.fixtures(builder).seedTargets([residual])
         let tap = FeedbackTap(
           nonce: residual.nonce,
           signal: .resultCorrection,
@@ -410,6 +411,11 @@ private enum LearningComposition {
       throw StoreError.unexpected("job \(job.id) refused to fire")
     }
     return fired.runId
+  }
+
+  static func fixtures(_ builder: DaemonBuilder) throws -> TestLearningFixtures {
+    let queue = try DatabaseQueue(path: EnvironmentLoader.databasePath(config: builder.config))
+    return TestLearningFixtures(writer: queue)
   }
 
   static func createJob(

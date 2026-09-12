@@ -200,12 +200,6 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
   }
 
-  public func resetWindowAndDetaint(sessionId: Int64, now: Date) throws(StoreError) {
-    try database.writeMapping { db in
-      try Self.resetWindowAndDetaint(db, sessionId: sessionId, now: now)
-    }
-  }
-
   /// Resets the context window boundary to the current message high-water mark and clears both
   /// sticky flags (taint, private data) atomically. Reused inside existing transactions
   /// (e.g. `CommandStoreGRDB`).

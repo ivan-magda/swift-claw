@@ -138,6 +138,7 @@ import Testing
   private struct Fixture {
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
+    let sessionKey: String
     let sessionId: Int64
     let runId: Int64
     let observationMessageId: Int64
@@ -146,10 +147,11 @@ import Testing
   private func makeSuspendedFixture() throws -> Fixture {
     let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
+    let sessionKey = SessionKey.telegramDM(chatId: 7)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
         updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 7),
+        sessionKey: sessionKey,
         chatId: 7,
         userId: 7,
         text: "write",
@@ -182,6 +184,7 @@ import Testing
     return Fixture(
       queue: queue,
       runs: runs,
+      sessionKey: sessionKey,
       sessionId: sessionId,
       runId: runId,
       observationMessageId: observationMessageId
@@ -414,9 +417,9 @@ import Testing
     await gate.waitUntilStarted()
 
     // when: claim is already RUNNING; /stop wins before the fill
-    _ = try env.runs.cancelActiveRun(
-      sessionId: env.sessionId,
-      reason: .cancelled,
+    _ = try CommandStoreGRDB(writer: env.queue).applyStop(
+      updateId: 2,
+      sessionKey: env.sessionKey,
       now: Date()
     )
     await gate.release()
@@ -454,7 +457,11 @@ import Testing
     await gate.waitUntilStarted()
 
     // when: /new supersedes/detaints after claim but before fill
-    _ = try env.runs.supersedeSessionRuns(sessionId: env.sessionId, now: Date())
+    _ = try CommandStoreGRDB(writer: env.queue).applyNew(
+      updateId: 2,
+      sessionKey: env.sessionKey,
+      now: Date()
+    )
     await gate.release()
     let commit = await execution.value
 
@@ -662,14 +669,6 @@ import Testing
       .ignored
     }
     func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
-    func cancelActiveRun(
-      sessionId: Int64,
-      reason: CancelReason,
-      now: Date
-    ) throws(StoreError) -> Int64? {
-      nil
-    }
-    func supersedeSessionRuns(sessionId: Int64, now: Date) throws(StoreError) -> [Int64] { [] }
     func reconcileRunsAtBoot(
       now: Date,
       degradationText: String,

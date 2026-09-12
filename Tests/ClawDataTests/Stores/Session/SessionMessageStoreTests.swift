@@ -205,7 +205,7 @@ import Testing
     #expect(history.map(\.content) == ["m2", "m3", "m4"])
   }
 
-  @Test func resetWindowAndDetaintExcludesEarlierHistory() throws {
+  @Test func newCommandExcludesEarlierHistoryFromTheNextContext() throws {
     // given
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
@@ -216,7 +216,11 @@ import Testing
     }
 
     // when
-    try store.resetWindowAndDetaint(sessionId: sessionId, now: Date())
+    _ = try CommandStoreGRDB(writer: queue).applyNew(
+      updateId: 100,
+      sessionKey: SessionKey.telegramDM(chatId: 42),
+      now: Date()
+    )
     let second = try store.claimAndPersistInbound(inbound(updateId: 2, text: "after"))
     let triggerMessageId = try #require(second.triggerMessageId)
     let history = try store.loadContextSnapshot(
@@ -408,51 +412,6 @@ import Testing
 
     // then
     #expect(snapshot.hasPrivateData)
-  }
-
-  @Test func resetWindowAndDetaintClearsThePrivateDataFlag() throws {
-    // given — both sticky flags armed
-    let queue = try TestDatabase.make()
-    let store = SessionMessageStoreGRDB(writer: queue)
-    let now = Date(timeIntervalSince1970: 1_750_000_000)
-    let claim = try store.claimAndPersistInbound(
-      InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 7),
-        chatId: 7,
-        userId: 7,
-        text: "hi",
-        isEdited: false,
-        ts: now
-      )
-    )
-    let sessionId = try #require(claim.sessionId)
-    try queue.write { db in
-      try db.execute(
-        sql: "UPDATE sessions SET tainted = 1, has_private_data = 1 WHERE id = ?",
-        arguments: [sessionId]
-      )
-    }
-
-    // when — /new detaints and resets the window in one transaction
-    try store.resetWindowAndDetaint(sessionId: sessionId, now: now)
-
-    // then — private-data cleared alongside taint (§4.5); it re-arms on the next private read
-    let flags = try queue.read { db in
-      try Row.fetchOne(
-        db,
-        sql: "SELECT tainted, has_private_data FROM sessions WHERE id = ?",
-        arguments: [sessionId]
-      )
-    }
-    #expect(flags?["tainted"] == false)
-    #expect(flags?["has_private_data"] == false)
-    let snapshot = try store.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: Int64.max,
-      limit: 50
-    )
-    #expect(snapshot.hasPrivateData == false)
   }
 }
 

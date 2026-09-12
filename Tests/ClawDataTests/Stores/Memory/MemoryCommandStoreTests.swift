@@ -47,7 +47,8 @@ import Testing
     let stored = try #require(result.item)
     #expect(stored.text == "ship 3a")
     #expect(stored.kind == .project)
-    #expect(try reads.get(id: stored.id)?.text == "ship 3a")
+    #expect(stored.createdAt == now)
+    #expect(try reads.get(id: stored.id) == stored)
     #expect(try processedCount(queue, updateId: 10) == 1)
 
     let audits = try auditRows(queue)
@@ -82,10 +83,12 @@ import Testing
   @Test func applyForgetClaimsDeletesAndAuditsInOneTransaction() throws {
     // given
     let (commands, reads, queue) = try freshStore()
-    let stored = try reads.append(
-      NewMemoryItem(text: "forget me", kind: .user, sessionId: nil),
+    let remembered = try commands.applyRemember(
+      updateId: 29,
+      item: NewMemoryItem(text: "forget me", kind: .user, sessionId: nil),
       now: Date(timeIntervalSince1970: 1)
     )
+    let stored = try #require(remembered.item)
 
     // when
     let result = try commands.applyForget(
@@ -100,10 +103,11 @@ import Testing
     #expect(try reads.get(id: stored.id) == nil)
     #expect(try processedCount(queue, updateId: 30) == 1)
 
-    let audits = try auditRows(queue)
+    let audits = try auditRows(queue).filter { row in
+      row["action"] as String == AuditAction.memoryDelete.rawValue
+    }
     #expect(audits.count == 1)
     let audit = try #require(audits.first)
-    #expect(audit["action"] as String == AuditAction.memoryDelete.rawValue)
     #expect(audit["decision"] as String == "deleted")
   }
 
@@ -158,10 +162,12 @@ import Testing
     // given - seed one item so there is a row for applyForget to delete.
     let queue = try TestDatabase.make()
     let reads = MemoryStoreGRDB(writer: queue)
-    let stored = try reads.append(
-      NewMemoryItem(text: "to be forgotten", kind: .user, sessionId: nil),
+    let remembered = try MemoryCommandStoreGRDB(writer: queue).applyRemember(
+      updateId: 49,
+      item: NewMemoryItem(text: "to be forgotten", kind: .user, sessionId: nil),
       now: Date(timeIntervalSince1970: 1)
     )
+    let stored = try #require(remembered.item)
     let crashing = MemoryCommandStoreGRDB(
       writer: queue,
       afterClaimForTesting: { throw InjectedCrash() }

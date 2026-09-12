@@ -472,8 +472,9 @@ table outbound_deliveries(
   payload_hash, telegram_message_id NULL,
   status [PENDING | SENT | FAILED], created_ts, sent_ts )
 
-OutboxDispatcher:
-  (1) For each ReplySplitter chunk, INSERT OR IGNORE one row with its own step_index
+Producer commit → OutboxDispatcher:
+  (1) The producer's transaction inserts each ReplySplitter chunk with INSERT OR IGNORE
+      and its own step_index
       (each chunk = its own step_index, so a partial multipart send recovers).
   (2) Send via sendMessage (or editMessageText for streaming coalesce).
   (3) On HTTP 200 → UPDATE status=SENT, telegram_message_id=<id>, sent_ts.
@@ -579,6 +580,16 @@ Dedup key + side effect committed in one `db.write` transaction; deterministic k
 ### 7.5 Store API (Inc 1) — load-bearing signatures
 
 The seam between `ClawData` and the rest. Protocols live in `ClawCore`; `ClawData` implements them.
+Requirements represent operations used by production callers. When a write becomes part of a
+cross-store transaction, its database-scoped helper stays inside `ClawData`; a standalone protocol
+method is not retained solely for tests. Behavioral tests exercise the owning production operation.
+Test-only fixtures may arrange persisted state for another behavior without expanding the store API.
+
+`MemoryStore` exposes reads; confirmed writes belong to `MemoryCommandStore`. Stop/new commands
+own run cancellation and session reset, and scheduler fires own their context reset and learning
+arming. `OutboxStore` exposes delivery reads and acknowledgements; producer commits own insertion.
+Learning result, candidate-review and promotion commits create their feedback targets atomically
+with their deliveries. Settlement reads remain internal to the learning transactions that use them.
 
 ```swift
 // dedup — synchronous claim, no await spanning the check
@@ -588,8 +599,7 @@ func claimUpdate(_ updateId: Int64) throws -> Bool        // INSERT OR IGNORE �
 func persistInbound(_ msg: IncomingMessage) throws         // db.write { dedup row + message }
 func persistAssistant(_ reply: AssistantTurn) throws       // db.write { message + run update }
 
-// outbox
-func claimOutbound(runId: Int64, chunk: OutboxChunk) throws(StoreError) -> Bool
+// outbox delivery acknowledgement; insertion belongs to the producer's transaction
 func markSent(deliveryKey: String, telegramMessageId: Int64, now: Date) throws(StoreError)
 
 // usage + audit (each INSERT OR IGNORE in its own/shared write txn)
@@ -775,7 +785,7 @@ Responses reasoning continuity cannot be expressed as text and tool calls, so `C
 
 ### 9.1 Workspace files
 
-`~/.swift-claw/workspace/`: `SOUL.md` (persona/tone/boundaries), `AGENTS.md` (operating rules), `USER.md` (owner profile/timezone), `TOOLS.md` (tool notes), `MEMORY.md` (curated long-term), `memory/YYYY-MM-DD.md` (daily logs), `HEARTBEAT.md` (proactive tasks), `skills/<name>/SKILL.md` (agentskills.io standard; Yams for frontmatter). **Missing files never crash** — each loads to `(text, wasTruncated)`.
+`~/.swift-claw/workspace/`: `SOUL.md` (persona/tone/boundaries), `AGENTS.md` (operating rules), `USER.md` (owner profile/timezone), `TOOLS.md` (tool notes), `MEMORY.md` (curated long-term), `HEARTBEAT.md` (proactive tasks), `skills/<name>/SKILL.md` (agentskills.io standard; Yams for frontmatter). **Missing files never crash** — each loads to `(text, wasTruncated)`.
 
 **Skill identity is settled at scan time**, so nothing downstream has to re-decide it: the frontmatter `name` must match `^[a-z0-9]+(-[a-z0-9]+)*$` at 1–64 characters **and** equal its own directory name, `description` is collapsed to a single line and then capped at 300 graphemes (the spec allows 1024; the index has to scale with skill count, not with one author's prose, and a block scalar must not let one skill occupy several of the index's one-line-per-skill rows), and a name claimed by two directories drops **every** claimant — silently shadowing one is the bug class the loader exists to avoid. Each rejection reaches the owner as a notice (§9.2), not only the log. The scan feeds the index row; the body is loaded on demand by `skill_load` (§10.1), never injected wholesale.
 

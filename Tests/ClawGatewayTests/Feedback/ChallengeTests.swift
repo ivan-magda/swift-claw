@@ -1,11 +1,11 @@
 import ClawAgent
 import ClawCore
-import ClawData
 import ClawTestSupport
 import Foundation
 import GRDB
 import Testing
 
+@testable import ClawData
 @testable import ClawGateway
 @testable import ClawTelegram
 
@@ -18,7 +18,7 @@ import Testing
       nonce: "router-correction",
       expiresAt: env.now.addingTimeInterval(3_600)
     )
-    try env.learning.createTargets([target], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
 
     // when — the owner taps but has not supplied the payload yet
     let tapOutcome = await env.router.handle(rawUpdate: env.callback(target: target, updateId: 1))
@@ -185,10 +185,21 @@ import Testing
     // given — the prompt's exact outbox identity is already occupied
     let env = try ChallengeEnvironment.make()
     let target = env.target(nonce: "failed-prompt", expiresAt: env.now.addingTimeInterval(3_600))
-    try env.learning.createTargets([target], chunks: [], now: env.now)
+    try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let tap = env.tap(target: target, updateId: 1)
     let prompt = LearningNotices.challengePrompt(for: tap)
-    try env.learning.createTargets([], chunks: prompt, now: env.now)
+    for chunk in prompt {
+      let deliveryKey = OutboxDedupKey.make(
+        subjectDigest: chunk.subjectDigest,
+        ordinal: chunk.ordinal
+      )
+      try OutboxFixture.seedNotice(
+        in: env.queue,
+        chunk: chunk,
+        deliveryKey: deliveryKey,
+        now: env.now
+      )
+    }
 
     // when
     let outcome = await env.router.handle(rawUpdate: env.callback(target: target, updateId: 1))
@@ -284,7 +295,7 @@ private struct ChallengeEnvironment {
       now: now
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    let state = try learning.armJob(jobId: job.id, now: now)
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
     let allowlist = AllowlistStoreGRDB(writer: queue)
     try allowlist.seedAllowlist(userIds: [ownerId])
     let access = AccessControl(allowlist: allowlist, groupChats: [])
@@ -394,7 +405,7 @@ private extension ChallengeEnvironment {
       nonce: nonce,
       expiresAt: expiresAt ?? now.addingTimeInterval(3_600)
     )
-    try learning.createTargets([target], chunks: [], now: now)
+    try TestLearningFixtures(writer: queue).seedTargets([target])
     let outcome = await router.handle(rawUpdate: callback(target: target, updateId: 1))
     #expect(outcome == .processed)
     #expect(try learning.liveChallenge(ownerUserId: ownerId, chatId: chatId) != nil)

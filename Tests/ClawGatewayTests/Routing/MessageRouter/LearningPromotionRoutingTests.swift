@@ -47,7 +47,7 @@ import Testing
 
 private extension LearningRoutingTests.Harness {
   func seedCurrentPromotion(jobId: Int64) throws -> Int64 {
-    let state = try learning.armJob(jobId: jobId, now: now)
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: jobId, now: now)
     let trial = LearningTrial(
       identity: LearningTrialIdentity(trialId: 1, jobId: jobId, epoch: state.epoch, generation: 1),
       baseDigest: LessonSetDigest(rawValue: SHA256Digest.hex("retained predecessor")),

@@ -83,7 +83,7 @@ import Testing
     let env = try BoundRunEnvironment.make()
     let runId = try env.runningBoundRun()
     try env.freezeSurface(runId: runId, skillSetDigest: BoundRunEnvironment.pickupSkillSetDigest)
-    _ = try env.runs.cancelActiveRun(sessionId: env.sessionId, reason: .cancelled, now: env.now)
+    try env.seedDeferredCancellation(runId: runId)
     try env.recordEarlierUsage(runId: runId, model: "openai-chatgpt/fallback")
     #expect(try env.learning.settleFromLane(runId: runId, now: env.now))
 
