@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Logging
 import Testing
@@ -107,11 +108,9 @@ import Testing
   @Test func redactsTheCredentialErrorBeforeLogging() async throws {
     // given
     let secret = "sk-live-credential-secret-xyz"
-    let capture = ShutdownLogCapture()
+    let capture = RecordingLogCapture()
     let coordinator = RuntimeShutdownCoordinator(
-      logger: Logger(label: "test") { _ in
-        CapturingLogHandler(capture: capture)
-      },
+      logger: capture.logger(label: "test"),
       redactor: SecretRedactor(secretValues: [secret])
     )
 
@@ -128,7 +127,7 @@ import Testing
     )
 
     // then — the secret never reaches the log; its redaction marker does.
-    let logged = capture.messages.joined(separator: "\n")
+    let logged = capture.entries.map(\.message).joined(separator: "\n")
     #expect(!logged.contains(secret))
     #expect(logged.contains(SecretRedactor.replacement))
     guard case .failed = outcome else {
@@ -189,36 +188,4 @@ private struct ClientFault: Error {}
 private struct SecretBearingFault: Error, CustomStringConvertible {
   let secret: String
   var description: String { "rotation publish failed with token \(secret)" }
-}
-
-private final class ShutdownLogCapture: @unchecked Sendable {
-  private let lock = NSLock()
-  private var recorded: [String] = []
-
-  var messages: [String] {
-    lock.lock()
-    defer { lock.unlock() }
-    return recorded
-  }
-
-  func append(_ message: String) {
-    lock.lock()
-    defer { lock.unlock() }
-    recorded.append(message)
-  }
-}
-
-private struct CapturingLogHandler: LogHandler {
-  let capture: ShutdownLogCapture
-  var logLevel: Logger.Level = .trace
-  var metadata: Logger.Metadata = [:]
-
-  subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-    get { metadata[key] }
-    set { metadata[key] = newValue }
-  }
-
-  func log(event: LogEvent) {
-    capture.append("\(event.message)")
-  }
 }
