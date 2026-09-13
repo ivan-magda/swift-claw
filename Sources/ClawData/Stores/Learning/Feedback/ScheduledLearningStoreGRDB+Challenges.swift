@@ -169,7 +169,8 @@ extension ScheduledLearningStoreGRDB {
 
   static func advanceFeedbackRevision(
     _ db: Database,
-    challenge: FeedbackChallenge
+    jobId: Int64,
+    epoch: LearningEpoch
   ) throws -> FeedbackRevision? {
     let revision = try Int64.fetchOne(
       db,
@@ -178,7 +179,7 @@ extension ScheduledLearningStoreGRDB {
         WHERE job_id = ? AND learning_epoch = ?
         RETURNING feedback_revision
         """,
-      arguments: [challenge.jobId, challenge.epoch.value]
+      arguments: [jobId, epoch.value]
     )
     return revision.map(FeedbackRevision.init)
   }
