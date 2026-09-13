@@ -22,7 +22,7 @@ import Testing
 /// here is otherwise production: the real Streamable HTTP transport, the real SDK client, the real
 /// resolver and adapter, the real gate, and real in-memory GRDB stores.
 @Suite struct MCPCompositionAcceptanceTests {
-  // MARK: Catalog → registry
+  // MARK: - Catalog → registry
 
   @Test("resolved MCP tools follow the built-ins into the registry, at the ask tier")
   func mcpToolsFollowTheBuiltIns() async throws {
@@ -118,7 +118,7 @@ import Testing
     #expect(stack.sessions.count == 1)
   }
 
-  // MARK: Policy fingerprint
+  // MARK: - Policy fingerprint
 
   @Test("the policy sub-hash is stable across resolutions and moves when the catalog does")
   func policySubhashPinsTheCatalog() async throws {
@@ -218,7 +218,7 @@ import Testing
     #expect(first != movedAuthentication)
   }
 
-  // MARK: Ask-tier round trip
+  // MARK: - Ask-tier round trip
 
   @Test("an ask-tier MCP call parks, then executes as untrusted through the approved path")
   func askTierCallParksThenExecutesUntrusted() async throws {
@@ -294,7 +294,7 @@ import Testing
     #expect(payload.ingestedUntrusted)
   }
 
-  // MARK: Boot path
+  // MARK: - Boot path
 
   @Test("an unreachable server is skipped; the built-ins and the doctor row both survive it")
   func unreachableServerIsSkipped() async throws {

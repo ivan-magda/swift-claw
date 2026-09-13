@@ -27,7 +27,7 @@ import Testing
     let richMessage = try #require(json["rich_message"] as? [String: Any])
     #expect(richMessage["markdown"] as? String == "**hi**")
 
-    // then — link previews are disabled unconditionally (ARCHITECTURE §12)
+    // then — link previews are disabled unconditionally (ARCHITECTURE.md §12)
     let linkPreviewOptions = try #require(json["link_preview_options"] as? [String: Any])
     #expect(linkPreviewOptions["is_disabled"] as? Bool == true)
   }

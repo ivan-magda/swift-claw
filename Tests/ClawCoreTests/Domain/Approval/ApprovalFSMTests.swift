@@ -10,7 +10,7 @@ import Testing
   }
 
   @Test func legalTransitions() {
-    // given — the full legal set of ARCHITECTURE §19.1's ApprovalState table
+    // given — the full legal set of ARCHITECTURE.md §19.1's ApprovalState table
     let legal = [
       Transition(state: .pending, event: .approve, expected: .approved),
       Transition(state: .pending, event: .reject, expected: .rejected),
