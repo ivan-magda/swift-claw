@@ -787,7 +787,7 @@ Responses reasoning continuity cannot be expressed as text and tool calls, so `C
 
 ### 9.1 Workspace files
 
-`~/.swift-claw/workspace/`: `SOUL.md` (persona/tone/boundaries), `AGENTS.md` (operating rules), `USER.md` (owner profile/timezone), `TOOLS.md` (tool notes), `MEMORY.md` (curated long-term), `HEARTBEAT.md` (proactive tasks), `skills/<name>/SKILL.md` (agentskills.io standard; Yams for frontmatter). **Missing files never crash** — each loads to `(text, wasTruncated)`.
+`~/.swift-claw/workspace/`: `SOUL.md` (persona/tone/boundaries), `AGENTS.md` (operating rules), `USER.md` (owner profile/timezone), `TOOLS.md` (tool notes), `MEMORY.md` (curated long-term), `HEARTBEAT.md` (proactive tasks), `skills/<name>/SKILL.md` (agentskills.io standard; Yams for frontmatter). **Missing files never crash** — each loads to a `LoadedFile` whose outcome is `present`, `overCap`, `missing`, or `unreadable`.
 
 **Skill identity is settled at scan time**, so nothing downstream has to re-decide it: the frontmatter `name` must match `^[a-z0-9]+(-[a-z0-9]+)*$` at 1–64 characters **and** equal its own directory name, `description` is collapsed to a single line and then capped at 300 graphemes (the spec allows 1024; the index has to scale with skill count, not with one author's prose, and a block scalar must not let one skill occupy several of the index's one-line-per-skill rows), and a name claimed by two directories drops **every** claimant — silently shadowing one is the bug class the loader exists to avoid. Each rejection reaches the owner as a notice (§9.2), not only the log. The scan feeds the index row; the body is loaded on demand by `skill_load` (§10.1), never injected wholesale.
 

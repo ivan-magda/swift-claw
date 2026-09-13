@@ -264,7 +264,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
 private extension ScheduleDraftParser {
   /// The accountant for one route, built from its own cost and reservation policies so a metered
   /// fallback is charged and capped as metered after an included-plan primary — the same per-route
-  /// derivation `AgentRuntime.ActiveRoute` uses.
+  /// derivation `ActiveRoute` uses.
   func makeAccountant(for binding: LLMRouteBinding) -> ProviderUsageAccountant {
     ProviderUsageAccountant(
       configuredReference: binding.configuredReference,
