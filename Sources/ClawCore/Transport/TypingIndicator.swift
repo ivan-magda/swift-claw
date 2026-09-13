@@ -23,14 +23,13 @@ public func withTypingPulse<Result>(
   messageThreadId: Int64? = nil,
   indicator: any TypingIndicator,
   clock: any Clock<Duration>,
-  every interval: Duration = TypingIndicatorTiming.reissueInterval,
   operation: () async throws -> Result
 ) async rethrows -> Result {
   try await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask {
       while !Task.isCancelled {
         await indicator.sendTyping(chatId: chatId, messageThreadId: messageThreadId)
-        try? await clock.sleep(for: interval)
+        try? await clock.sleep(for: TypingIndicatorTiming.reissueInterval)
       }
     }
 
