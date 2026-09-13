@@ -28,13 +28,7 @@ extension ScheduledLearningStoreGRDB {
         return outcome
       }
 
-      guard
-        let revision = try Self.advanceFeedbackRevision(
-          db,
-          jobId: target.jobId,
-          epoch: target.epoch
-        )
-      else {
+      guard let revision = try Self.advanceFeedbackRevision(db, target: target) else {
         throw StoreError.unexpected("feedback revision CAS lost after target consumption")
       }
       let event = try Self.insertEvent(db, tap: tap, target: target, revision: revision, now: now)
@@ -211,6 +205,24 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Event Rows
 
 private extension ScheduledLearningStoreGRDB {
+  static func advanceFeedbackRevision(
+    _ db: Database,
+    target: FeedbackTarget
+  ) throws -> FeedbackRevision? {
+    let revision = try Int64.fetchOne(
+      db,
+      sql: """
+        UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
+        WHERE job_id = ? AND learning_epoch = ?
+        RETURNING feedback_revision
+        """,
+      arguments: [target.jobId, target.epoch.value]
+    )
+    return revision.map { value in
+      FeedbackRevision(value)
+    }
+  }
+
   static func insertEvent(
     _ db: Database,
     tap: FeedbackTap,
