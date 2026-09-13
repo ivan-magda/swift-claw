@@ -64,7 +64,7 @@ import Testing
       #expect(savedItems.count == 1)
       #expect(savedItems.first?.text == "ship 3a")
       #expect(savedItems.first?.source == .owner)
-      #expect(try auditActions(firstPool).contains("memory_write"))
+      #expect(try auditActions(firstPool).contains(AuditAction.memoryWrite.rawValue))
     }
 
     // when — phase 2 (restart): reopen the same file, back-date the fact a week, start a fresh
@@ -120,7 +120,7 @@ import Testing
 
     // then — hard-deleted, audited, and no longer injected into the next turn's context
     #expect(try MemoryStoreGRDB(writer: pool).get(id: savedItem.id) == nil)
-    #expect(try auditActions(pool).contains("memory_delete"))
+    #expect(try auditActions(pool).contains(AuditAction.memoryDelete.rawValue))
     let finalRequest = try #require(await stack.provider.requests.last)
     #expect(
       finalRequest.allSatisfy { message in message.content.text.contains("ship 3a") == false }

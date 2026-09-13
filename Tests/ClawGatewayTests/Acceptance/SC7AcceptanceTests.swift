@@ -344,7 +344,7 @@ import Testing
     // then — auto-denied by ABSENCE of the write path (spec §10/§16 case 4): unknown tool,
     // zero memory rows
     let memoryWriteRows = try harness.auditRows().filter { row in
-      row.action == "tool_call" && row.tool == "memory_write"
+      row.action == AuditAction.toolCall.rawValue && row.tool == "memory_write"
     }
     #expect(memoryWriteRows.map(\.decision) == ["error"])
     let pool = try ClawDatabase.makePool(path: harness.databasePath)
@@ -632,7 +632,7 @@ import Testing
       heartbeat: enabledHeartbeat(maxPerDay: 1)
     )
     await capped.scheduler.tick()
-    _ = try await capped.waitForAudit(action: "heartbeat_suppressed", atLeast: 1)
+    _ = try await capped.waitForAudit(action: AuditAction.heartbeatSuppressed.rawValue, atLeast: 1)
     capped.clock.advance(to: Self.armMonday.addingTimeInterval(3_660))  // 15:01 Berlin, due again
     await capped.scheduler.tick()
     #expect(try heartbeatSkipDecisions(capped) == [HeartbeatSkipReason.dailyCap.rawValue])

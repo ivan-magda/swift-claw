@@ -24,7 +24,7 @@ import Testing
     #expect(deleteOutcome == .processed)
     #expect(yesOutcome == .processed)
     #expect(try harness.memory.get(id: item.id) == nil)
-    #expect(try harness.auditActions().contains("memory_delete"))
+    #expect(try harness.auditActions().contains(AuditAction.memoryDelete.rawValue))
 
     let deleteSent = await harness.transport.sent
     #expect(deleteSent.last?.text == MemoryReplies.deleted(id: item.id))
@@ -58,7 +58,9 @@ import Testing
     #expect(firstOutcome == .processed)
     #expect(secondOutcome == .skipped)
     #expect(try harness.memory.get(id: item.id) == nil)
-    #expect(try harness.auditActions().filter { $0 == "memory_delete" }.count == 1)
+    #expect(
+      try harness.auditActions().filter { $0 == AuditAction.memoryDelete.rawValue }.count == 1
+    )
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -78,7 +80,7 @@ import Testing
     // then
     #expect(outcome == .processed)
     #expect(try harness.memory.get(id: item.id) != nil)
-    #expect(try harness.auditActions().contains("memory_delete") == false)
+    #expect(try harness.auditActions().contains(AuditAction.memoryDelete.rawValue) == false)
     let sent = await harness.transport.sent
     #expect(sent.last?.text == MemoryReplies.cancelled)
     #expect(await harness.dispatcher.calls.isEmpty)
@@ -102,7 +104,7 @@ import Testing
     #expect(outcome == .processed)
     #expect(try harness.memory.get(id: seeded.id) == nil)
     #expect(try harness.memoryItemCount() == 0)
-    #expect(try harness.auditActions().contains("memory_delete"))
+    #expect(try harness.auditActions().contains(AuditAction.memoryDelete.rawValue))
     #expect(
       try harness.auditActions().filter { action in
         action == AuditAction.memoryWrite.rawValue
