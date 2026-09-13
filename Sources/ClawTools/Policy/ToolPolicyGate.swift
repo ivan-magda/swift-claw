@@ -92,14 +92,7 @@ public struct ToolPolicyGate: Sendable {
     guard context.approvalAlreadyPending == false else {
       // One pending approval per run — a further gated call observes the block, never a
       // second suspend.
-      return .block(
-        payload: ToolPayload(
-          content: "blocked: an approval is already pending",
-          status: .blockedPendingApproval,
-          ingestedUntrusted: false
-        ),
-        argsRedacted: argsRedacted
-      )
+      return pendingApprovalBlock(argsRedacted: argsRedacted)
     }
 
     let recorded = recordedAction(
@@ -310,14 +303,7 @@ private extension ToolPolicyGate {
     // The run holds one approval slot: a further ask-tier call while one is pending gets the
     // blocked observation, never a second park.
     guard context.approvalAlreadyPending == false else {
-      return .block(
-        payload: ToolPayload(
-          content: "blocked: an approval is already pending",
-          status: .blockedPendingApproval,
-          ingestedUntrusted: false
-        ),
-        argsRedacted: argsRedacted
-      )
+      return pendingApprovalBlock(argsRedacted: argsRedacted)
     }
 
     let recorded = recordedAction(call: call, tool: tool, target: target, reason: .askTier)
@@ -395,6 +381,17 @@ private extension ToolPolicyGate {
     )
   }
 
+  func pendingApprovalBlock(argsRedacted: String) -> Verdict {
+    .block(
+      payload: ToolPayload(
+        content: "blocked: an approval is already pending",
+        status: .blockedPendingApproval,
+        ingestedUntrusted: false
+      ),
+      argsRedacted: argsRedacted
+    )
+  }
+
   /// Deterministic sorted-keys re-encoding so the same arguments always hash the same. Falls back
   /// to the raw string only if it is unparseable (the ask-tier path already blocks that case).
   static func canonicalArgs(_ rawArgumentsJSON: String) -> String {
@@ -419,12 +416,7 @@ private extension ToolPolicyGate {
     // A dangerous action can never take the second approval slot, and it cannot park or execute
     // while one is pending, so refuse here before the expensive staging and content scans run.
     guard context.approvalAlreadyPending == false else {
-      return .block(
-        payload: ToolPayload(
-          content: "blocked: an approval is already pending",
-          status: .blockedPendingApproval,
-          ingestedUntrusted: false
-        ),
+      return pendingApprovalBlock(
         argsRedacted: argGuard.renderRedacted(argsJSON: call.argumentsJSON)
       )
     }
