@@ -122,12 +122,12 @@ extension RunStoreGRDB {
     // holds its approval prompt at step 0, and a raw step-0 notice would be dropped silently
     // by the dedup key.
     let chunk = OutboxChunk(
-      stepIndex: try nextOutboxStepBase(db, runId: runId),
+      stepIndex: try OutboxInsertion.nextOutboxStepBase(db, runId: runId),
       chatId: chatId,
       payload: degradationText,
       payloadHash: ContentHash.fnv1a(degradationText)
     )
-    guard try insertOutbox(db, runId: runId, chunk: chunk, now: now) else {
+    guard try OutboxInsertion.insertOutbox(db, runId: runId, chunk: chunk, now: now) else {
       return nil
     }
     return DegradationReply(chatId: chatId, runId: runId, text: degradationText)
@@ -196,12 +196,12 @@ extension RunStoreGRDB {
       // guard — is what keeps an observation from landing against frozen evidence.
       _ = try ScheduledLearningStoreGRDB.freezeEvidence(db, runId: runId, now: now)
       let chunk = OutboxChunk(
-        stepIndex: try Self.nextOutboxStepBase(db, runId: runId),
+        stepIndex: try OutboxInsertion.nextOutboxStepBase(db, runId: runId),
         chatId: noticeChatId,
         payload: noticeText,
         payloadHash: ContentHash.fnv1a(noticeText)
       )
-      _ = try Self.insertOutbox(db, runId: runId, chunk: chunk, now: now)
+      _ = try OutboxInsertion.insertOutbox(db, runId: runId, chunk: chunk, now: now)
       return .settled
     }
   }
