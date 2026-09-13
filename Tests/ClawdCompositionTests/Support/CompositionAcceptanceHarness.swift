@@ -123,7 +123,7 @@ enum CompositionAcceptance {
     )
   }
 
-  // MARK: SSE fixtures (one `data:` frame per event)
+  // MARK: - SSE Fixtures
 
   static func event(_ json: String) -> Data { Data("data: \(json)\n\n".utf8) }
 
@@ -212,7 +212,7 @@ enum CompositionAcceptance {
     )
   }
 
-  // MARK: GRDB
+  // MARK: - GRDB
 
   static func makeStores() throws -> (
     writer: any DatabaseWriter,

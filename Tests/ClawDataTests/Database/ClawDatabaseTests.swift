@@ -79,7 +79,7 @@ import Testing
     // then
     let atReleasedCoder = try Self.tables(queue)
     #expect(atReleasedCoder.contains("coder_jobs"))
-    #expect(atReleasedCoder.filter { $0.hasPrefix("learning_") }.isEmpty)
+    #expect(!atReleasedCoder.contains { $0.hasPrefix("learning_") })
     try ClawDatabase.migrate(queue)
     #expect(try Self.tables(queue).contains("learning_operations"))
   }

@@ -174,9 +174,7 @@ extension EncryptedMCPCredentialStore {
     components?.scheme = url.scheme?.lowercased()
     components?.host = url.host?.lowercased()
     let canonical = components?.string ?? url.absoluteString
-    return SHA256.hash(data: Data(canonical.utf8))
-      .map { String(format: "%02x", $0) }
-      .joined()
+    return SHA256Digest.hex(canonical)
   }
 }
 

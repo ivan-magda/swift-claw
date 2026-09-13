@@ -41,7 +41,8 @@ import Testing
     let audit = try harness.auditRows()
     #expect(
       audit.contains { row in
-        row.action == "tool_call" && row.tool == "web_fetch" && row.decision == "ok"
+        row.action == AuditAction.toolCall.rawValue && row.tool == "web_fetch"
+          && row.decision == ToolObservationStatus.ok.rawValue
       }
     )
 
@@ -186,7 +187,8 @@ import Testing
     // Audit carries three blocked_args rows (decision blocked_args) with redacted args.
     let audit = try harness.auditRows()
     let blockedArgsRows = audit.filter { row in
-      row.action == "tool_call" && row.decision == "blocked_args"
+      row.action == AuditAction.toolCall.rawValue
+        && row.decision == ToolObservationStatus.blockedArgs.rawValue
     }
     #expect(blockedArgsRows.count == 3)
   }

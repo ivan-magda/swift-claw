@@ -33,7 +33,6 @@ public enum TrialOutcomeKind: String, Sendable, Equatable, CaseIterable, Codable
 public enum TrialAssignmentCloseReason: String, Sendable, Equatable, CaseIterable {
   case assignmentLimit = "assignment_limit"
   case assignmentDeadline = "assignment_deadline"
-  case positiveCohortComplete = "positive_cohort_complete"
 }
 
 public enum TrialFallbackReason: String, Sendable, Equatable, CaseIterable {

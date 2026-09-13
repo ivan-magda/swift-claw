@@ -272,7 +272,7 @@ private func client(status: Int, json: String) -> TelegramClient {
 
   @Test func sendMessageDisablesLinkPreviews() async throws {
     // given: an exfil-approval prompt embeds an attacker-chosen URL in outbound text; Telegram
-    // must never auto-fetch it to build a preview (ARCHITECTURE §12), regardless of the owner's
+    // must never auto-fetch it to build a preview (ARCHITECTURE.md §12), regardless of the owner's
     // eventual answer.
     let recorder = RecordingHTTPExecutor.Recorder()
     let http = RecordingHTTPExecutor(

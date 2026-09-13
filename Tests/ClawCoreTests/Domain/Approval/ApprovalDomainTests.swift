@@ -5,7 +5,7 @@ import Testing
 
 @Suite struct ApprovalDomainTests {
   @Test func stateRawValuesMatchTheDBVocabulary() {
-    // given / when / then — exactly four states, per ARCHITECTURE §7.1/§19.1
+    // given / when / then — exactly four states, per ARCHITECTURE.md §7.1/§19.1
     #expect(ApprovalState.pending.rawValue == "PENDING")
     #expect(ApprovalState.approved.rawValue == "APPROVED")
     #expect(ApprovalState.rejected.rawValue == "REJECTED")

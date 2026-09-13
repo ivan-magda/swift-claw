@@ -92,8 +92,10 @@ import Testing
   }
 
   @Test func aNegativeTrialRunFallsBackThroughSettlementNotification() async throws {
-    try await LearningAcceptanceHarness.withHarness(learningEnabled: true, negativeTrial: true) {
-      env in
+    try await LearningAcceptanceHarness.withHarness(
+      learningEnabled: true,
+      negativeTrial: true
+    ) { env in
       // given
       let first = try await env.fireScheduledRun()
       let base = try #require(try env.stores.learning.binding(runId: first)).stableDigest

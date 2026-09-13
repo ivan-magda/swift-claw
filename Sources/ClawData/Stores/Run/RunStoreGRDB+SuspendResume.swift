@@ -458,7 +458,7 @@ private extension RunStoreGRDB {
     approvalId: Int64,
     now: Date
   ) throws {
-    let stepBase = try nextOutboxStepBase(db, runId: runId)
+    let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runId: runId)
     for chunk in chunks {
       let linked = OutboxChunk(
         stepIndex: chunk.stepIndex,
@@ -468,7 +468,12 @@ private extension RunStoreGRDB {
         approvalId: chunk.replyMarkup != nil ? approvalId : chunk.approvalId,
         replyMarkup: chunk.replyMarkup
       )
-      _ = try insertOutbox(db, runId: runId, chunk: shiftedChunk(linked, by: stepBase), now: now)
+      _ = try OutboxInsertion.insertOutbox(
+        db,
+        runId: runId,
+        chunk: OutboxInsertion.shiftedChunk(linked, by: stepBase),
+        now: now
+      )
     }
   }
 }

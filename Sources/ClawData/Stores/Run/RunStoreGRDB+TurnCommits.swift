@@ -117,11 +117,11 @@ extension RunStoreGRDB {
 
       // Same collision guard as the completed path: a degraded RESUME must not silently drop
       // its owner-facing reply against the run's already-enqueued approval prompt.
-      let stepBase = try Self.nextOutboxStepBase(db, runId: turn.runId)
-      _ = try Self.insertOutbox(
+      let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runId: turn.runId)
+      _ = try OutboxInsertion.insertOutbox(
         db,
         runId: turn.runId,
-        chunk: Self.shiftedChunk(turn.chunk, by: stepBase),
+        chunk: OutboxInsertion.shiftedChunk(turn.chunk, by: stepBase),
         now: now
       )
 
@@ -180,16 +180,16 @@ private extension RunStoreGRDB {
     _ = try insertUsage(db, usage)
     try recomputeRunUsageTotals(db, runId: turn.runId, now: now)
 
-    let stepBase = try nextOutboxStepBase(db, runId: turn.runId)
+    let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runId: turn.runId)
     for chunk in turn.chunks {
       let committedChunk =
         turn.feedbackTarget != nil && feedbackTargetCommitted == false
         ? strippingReplyMarkup(from: chunk)
         : chunk
-      _ = try insertOutbox(
+      _ = try OutboxInsertion.insertOutbox(
         db,
         runId: turn.runId,
-        chunk: shiftedChunk(committedChunk, by: stepBase),
+        chunk: OutboxInsertion.shiftedChunk(committedChunk, by: stepBase),
         now: now
       )
     }

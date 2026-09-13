@@ -205,23 +205,6 @@ extension RunStoreGRDB {
     return db.changesCount > 0
   }
 
-  static func insertOutbox(
-    _ db: Database,
-    runId: Int64,
-    chunk: OutboxChunk,
-    now: Date
-  ) throws -> Bool {
-    try OutboxInsertion.insertOutbox(db, runId: runId, chunk: chunk, now: now)
-  }
-
-  static func nextOutboxStepBase(_ db: Database, runId: Int64) throws -> Int {
-    try OutboxInsertion.nextOutboxStepBase(db, runId: runId)
-  }
-
-  static func shiftedChunk(_ chunk: OutboxChunk, by base: Int) -> OutboxChunk {
-    OutboxInsertion.shiftedChunk(chunk, by: base)
-  }
-
   static func setSessionTainted(_ db: Database, sessionId: Int64, now: Date) throws {
     try db.execute(
       sql: "UPDATE sessions SET tainted = 1, updated_ts = ? WHERE id = ?",

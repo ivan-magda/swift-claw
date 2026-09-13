@@ -19,7 +19,7 @@ import Testing
     // then
     #expect(outcome == .processed)
     #expect(try harness.memoryItemCount() == 1)
-    #expect(try harness.auditActions().contains("memory_write"))
+    #expect(try harness.auditActions().contains(AuditAction.memoryWrite.rawValue))
     let sent = await harness.transport.sent
     #expect(sent.last?.text.hasPrefix("Saved memory") == true)
     let sessionId = try harness.ownerSessionId()
@@ -42,7 +42,7 @@ import Testing
     // then
     #expect(secondOutcome == .skipped)
     #expect(try harness.memoryItemCount() == 1)
-    #expect(try harness.auditActions().filter { $0 == "memory_write" }.count == 1)
+    #expect(try harness.auditActions().filter { $0 == AuditAction.memoryWrite.rawValue }.count == 1)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
@@ -118,7 +118,7 @@ import Testing
     // then
     #expect(outcome == .processed)
     #expect(try harness.memory.get(id: seeded.id) == nil)
-    #expect(try harness.auditActions().contains("memory_delete"))
+    #expect(try harness.auditActions().contains(AuditAction.memoryDelete.rawValue))
     let sent = await harness.transport.sent
     #expect(sent.last?.text == MemoryReplies.deleted(id: seeded.id))
     #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
