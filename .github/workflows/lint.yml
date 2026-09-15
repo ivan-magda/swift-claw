@@ -28,7 +28,7 @@ jobs:
         run: |
           source BuildTools/lint-versions.env
           apt-get update
-          apt-get install --yes --no-install-recommends unzip
+          apt-get install --yes --no-install-recommends ca-certificates curl unzip
           curl --fail --location --silent --show-error \
             "https://github.com/realm/SwiftLint/releases/download/${CLAW_LINT_SWIFTLINT_VERSION}/swiftlint_linux_amd64.zip" \
             --output /tmp/swiftlint.zip
