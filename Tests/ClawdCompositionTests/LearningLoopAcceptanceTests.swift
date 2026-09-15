@@ -57,11 +57,10 @@ struct LearningLoopAcceptanceTests {
         #expect(text.hasPrefix(String(opening)))
 
         // when — a crash between fire and lane pickup, after the owner resets the active pointer
-        guard
-          case .fired(let pending) = try restarted.stores.scheduledJobs.fireNow(
-            jobID: env.jobID,
-            now: LearningAcceptanceHarness.now
-          )
+        guard case .fired(let pending) = try restarted.stores.scheduledJobs.fireNow(
+          jobID: env.jobID,
+          now: LearningAcceptanceHarness.now
+        )
         else {
           Issue.record("expected a real pending fire")
           await restarted.stop()

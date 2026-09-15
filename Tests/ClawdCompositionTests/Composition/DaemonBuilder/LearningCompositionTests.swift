@@ -509,11 +509,17 @@ private actor IdleCompositionTurns: TurnDispatching {
 }
 
 private struct IdleCompositionScheduleParser: ScheduleDraftParsing {
-  func parse(ownerText: String, sessionID: Int64) async -> ScheduleDraftParseResult { .unparseable }
+  func parse(ownerText: String, sessionID: Int64) async -> ScheduleDraftParseResult {
+    .unparseable
+  }
 }
 
 private struct IdleCompositionDoctor: DoctorReporting {
-  func report() async -> DoctorReport { DoctorReport() }
+  func report() async -> DoctorReport {
+    DoctorReport()
+  }
 
-  func scanSkills() async -> SkillScanResult { SkillScanResult(descriptors: [], warnings: []) }
+  func scanSkills() async -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
 }

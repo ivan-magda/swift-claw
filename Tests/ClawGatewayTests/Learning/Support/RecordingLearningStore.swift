@@ -171,7 +171,9 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   }
 
   func consumeChallenge(id: Int64, payload: String, now: Date) throws(StoreError) -> FeedbackOutcome
-  { try base.consumeChallenge(id: id, payload: payload, now: now) }
+  {
+    try base.consumeChallenge(id: id, payload: payload, now: now)
+  }
 
   func liveChallenge(ownerUserID: Int64, chatID: Int64) throws(StoreError) -> FeedbackChallenge? {
     try base.liveChallenge(ownerUserID: ownerUserID, chatID: chatID)
@@ -207,8 +209,10 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     try base.editCandidate(edit, redactor: redactor, now: now)
   }
 
-  func commitCandidateReview(_ review: CandidateReviewNotice, now: Date) throws(StoreError) -> Bool
-  {
+  func commitCandidateReview(
+    _ review: CandidateReviewNotice,
+    now: Date
+  ) throws(StoreError) -> Bool {
     if review.candidateDigest == failingReviewCandidate {
       throw .unexpected("injected review failure")
     }
@@ -317,7 +321,9 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   func claimOperation(
     _ key: LearningOperationKey,
     now: Date
-  ) throws(StoreError) -> ClaimedOperation? { try base.claimOperation(key, now: now) }
+  ) throws(StoreError) -> ClaimedOperation? {
+    try base.claimOperation(key, now: now)
+  }
 
   func finishOperation(_ result: LearningOperationResult, now: Date) throws(StoreError) -> Bool {
     try base.finishOperation(result, now: now)

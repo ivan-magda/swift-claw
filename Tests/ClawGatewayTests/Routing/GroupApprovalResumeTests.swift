@@ -22,7 +22,9 @@ struct GroupApprovalResumeTests {
 
     let timeout: Duration = .seconds(1)
 
-    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+      nil
+    }
 
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       ToolPayload(content: "context missing", status: .error, ingestedUntrusted: false)

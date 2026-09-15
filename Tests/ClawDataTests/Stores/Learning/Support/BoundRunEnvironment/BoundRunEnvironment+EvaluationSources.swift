@@ -83,8 +83,10 @@ extension BoundRunEnvironment {
           column: "evaluation_digest",
           value: String(repeating: "f", count: 64)
         )
-      case .job: try updateEvaluation(db, runID: runID, column: "job_id", value: 999)
-      case .epoch: try updateEvaluation(db, runID: runID, column: "learning_epoch", value: 999)
+      case .job:
+        try updateEvaluation(db, runID: runID, column: "job_id", value: 999)
+      case .epoch:
+        try updateEvaluation(db, runID: runID, column: "learning_epoch", value: 999)
       case .evidence:
         try updateEvaluation(
           db,
@@ -92,7 +94,8 @@ extension BoundRunEnvironment {
           column: "evidence_digest",
           value: String(repeating: "f", count: 64)
         )
-      case .outcome: try updateEvaluation(db, runID: runID, column: "outcome", value: "unknown")
+      case .outcome:
+        try updateEvaluation(db, runID: runID, column: "outcome", value: "unknown")
       case .issueCodes:
         try updateEvaluation(db, runID: runID, column: "issue_codes", value: "[\"z\",\"a\"]")
       case .duplicateIssueCode:
@@ -102,7 +105,8 @@ extension BoundRunEnvironment {
           column: "issue_codes",
           value: "[\"duplicate\",\"duplicate\"]"
         )
-      case .rubric: try updateEvaluation(db, runID: runID, column: "rubric_version", value: "999")
+      case .rubric:
+        try updateEvaluation(db, runID: runID, column: "rubric_version", value: "999")
       case .prompt:
         try updateEvaluation(db, runID: runID, column: "evaluator_prompt_version", value: "999")
       case .schema:
@@ -304,8 +308,10 @@ extension BoundRunEnvironment {
           id: operationID,
           assignments: ["state": LearningOperationState.failed.rawValue, "failure_code": "unknown"]
         )
-      case .job: try updateOperation(db, id: operationID, assignments: ["job_id": jobID + 1])
-      case .epoch: try updateOperation(db, id: operationID, assignments: ["learning_epoch": 2])
+      case .job:
+        try updateOperation(db, id: operationID, assignments: ["job_id": jobID + 1])
+      case .epoch:
+        try updateOperation(db, id: operationID, assignments: ["learning_epoch": 2])
       case .phase:
         try updateOperation(
           db,

@@ -605,7 +605,9 @@ private actor ThrowingTransport: Transport {
     stream = await inner.receive()
   }
 
-  func disconnect() async { await inner.disconnect() }
+  func disconnect() async {
+    await inner.disconnect()
+  }
 
   func send(_ data: Data) async throws {
     sends += 1

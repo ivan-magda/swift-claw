@@ -15,14 +15,13 @@ extension RunStoreGRDB {
     now: Date
   ) throws(StoreError) -> SuspendedCommitReceipt {
     try database.writeMapping { db in
-      guard
-        try Self.transitionRun(
-          db,
-          runID: runID,
-          event: .suspendForApproval,
-          now: now,
-          terminal: nil
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: runID,
+        event: .suspendForApproval,
+        now: now,
+        terminal: nil
+      ) != nil
       else {
         throw StoreError.unexpected("run \(runID) was not RUNNING at suspend commit")
       }
@@ -96,8 +95,8 @@ extension RunStoreGRDB {
     guard try observationIsPlaceholder(db, runID: runID, messageID: observationMessageID) else {
       return .alreadyResumed
     }
-    guard
-      try transitionRun(db, runID: runID, event: .resumeApproved, now: now, terminal: nil) != nil
+    guard try transitionRun(db, runID: runID, event: .resumeApproved, now: now, terminal: nil) !=
+          nil
     else {
       try fillApprovedObservation(
         db,
@@ -151,13 +150,12 @@ extension RunStoreGRDB {
     observationMessageID: Int64,
     fill: ClaimedObservationFill
   ) throws {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT session_id, state FROM runs WHERE id = ?",
-        arguments: [runID]
-      ),
-      let state = RunState(rawValue: row["state"])
+    guard let row = try Row.fetchOne(
+      db,
+      sql: "SELECT session_id, state FROM runs WHERE id = ?",
+      arguments: [runID]
+    ),
+          let state = RunState(rawValue: row["state"])
     else {
       throw StoreError.unexpected("run \(runID) is missing or has an unrecognized state")
     }
@@ -312,14 +310,13 @@ extension RunStoreGRDB {
     now: Date
   ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
-      guard
-        try Self.transitionRun(
-          db,
-          runID: runID,
-          event: .fail,
-          now: now,
-          terminal: .settled(.policyBlocked)
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: runID,
+        event: .fail,
+        now: now,
+        terminal: .settled(.policyBlocked)
+      ) != nil
       else {
         return false
       }

@@ -43,7 +43,9 @@ actor RecordingProvider: LLMProvider {
     self.providerState = providerState
   }
 
-  var lastMessageCount: Int { requests.last?.count ?? 0 }
+  var lastMessageCount: Int {
+    requests.last?.count ?? 0
+  }
 
   func complete(request: ChatRequest) async throws -> ChatResponse {
     requests.append(request.messages)
@@ -66,7 +68,8 @@ actor RecordingProvider: LLMProvider {
         costFromProvider: 0.0021,
         providerState: providerState
       )
-    case .fail(let error): throw error
+    case .fail(let error):
+      throw error
     }
   }
 
@@ -175,7 +178,9 @@ actor StreamingAcceptanceProvider: LLMProvider {
     }
   }
 
-  private func currentScript() -> StreamScript { script }
+  private func currentScript() -> StreamScript {
+    script
+  }
 
   private func waitForPostDeltaRelease() async {
     guard !postDeltaReleased else {
@@ -291,9 +296,13 @@ struct StreamingStack {
 }
 
 struct AcceptanceWorkspace: WorkspaceReading {
-  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile { .missing }
+  func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
+    .missing
+  }
 
-  func scanSkills() -> SkillScanResult { SkillScanResult(descriptors: [], warnings: []) }
+  func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
 }
 
 func makeAcceptanceContextBuilder(

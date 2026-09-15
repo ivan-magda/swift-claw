@@ -8,7 +8,9 @@ private final class BaseURLProbe {
   private(set) var accessCount = 0
   private let value: String?
 
-  init(returning value: String? = nil) { self.value = value }
+  init(returning value: String? = nil) {
+    self.value = value
+  }
 
   func read() throws -> String {
     accessCount += 1
@@ -19,7 +21,9 @@ private final class BaseURLProbe {
   }
 }
 
-private enum ProbeFailure: Error, Equatable { case evaluated }
+private enum ProbeFailure: Error, Equatable {
+  case evaluated
+}
 
 @Suite
 struct LLMRouteTests {

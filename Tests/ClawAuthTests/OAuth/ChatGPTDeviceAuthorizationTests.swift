@@ -37,8 +37,10 @@ private actor SequencedHTTP: HTTPExecuting {
       throw Exhausted()
     }
     switch outcome {
-    case .result(let result): return result
-    case .failure(let makeFailure): throw makeFailure()
+    case .result(let result):
+      return result
+    case .failure(let makeFailure):
+      throw makeFailure()
     }
   }
 }

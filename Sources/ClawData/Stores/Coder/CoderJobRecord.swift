@@ -9,11 +9,10 @@ enum CoderJobRecord {
   }
 
   static func decode(_ row: Row) throws -> CoderJob {
-    guard
-      let id = UUID(uuidString: row["id"]),
-      let state = CoderJobState(rawValue: row["state"]),
-      let ownership = CoderProcessOwnership(rawValue: row["process_ownership"]),
-      let createdAt = EpochSecondCodec.date(fromEpoch: row["created_ts"])
+    guard let id = UUID(uuidString: row["id"]),
+          let state = CoderJobState(rawValue: row["state"]),
+          let ownership = CoderProcessOwnership(rawValue: row["process_ownership"]),
+          let createdAt = EpochSecondCodec.date(fromEpoch: row["created_ts"])
     else {
       throw StoreError.unexpected("Invalid Coder job record")
     }
@@ -89,7 +88,9 @@ enum CoderJobRecord {
 
 private extension CoderJobRecord {
   static func decodeJSON<Value: Decodable>(_ json: String) throws -> Value {
-    do { return try JSONDecoder().decode(Value.self, from: Data(json.utf8)) } catch {
+    do {
+      return try JSONDecoder().decode(Value.self, from: Data(json.utf8))
+    } catch {
       throw StoreError.unexpected("Undecodable Coder record")
     }
   }

@@ -448,14 +448,18 @@ private actor DiscoveryConcurrencyProbe {
     active -= 1
   }
 
-  func waitUntilFull() async { await full.wait() }
+  func waitUntilFull() async {
+    await full.wait()
+  }
 }
 
 private enum CatalogFixture {
   static let clientVersion = "0.0.0-test"
 
   static func config(named name: String, tools: MCPToolFilter = .allowAll) throws -> MCPServerConfig
-  { try MCPServerConfig(name: name, url: "https://mcp.example.com/mcp", tools: tools) }
+  {
+    try MCPServerConfig(name: name, url: "https://mcp.example.com/mcp", tools: tools)
+  }
 
   static func session(
     named name: String,

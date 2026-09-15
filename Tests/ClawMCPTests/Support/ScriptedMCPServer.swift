@@ -95,7 +95,9 @@ actor ScriptedMCPServer {
     _ name: String,
     description: String = "a fixture tool",
     schema: Value = .object(["type": .string("object"), "properties": .object([:])])
-  ) -> MCP.Tool { MCP.Tool(name: name, description: description, inputSchema: schema) }
+  ) -> MCP.Tool {
+    MCP.Tool(name: name, description: description, inputSchema: schema)
+  }
 }
 
 /// Opens whatever the test scripts — a live transport, or a failure standing in for a server that
@@ -103,7 +105,9 @@ actor ScriptedMCPServer {
 struct StubTransportFactory: MCPTransportFactory {
   let open: @Sendable () async throws -> any Transport
 
-  func makeTransport() async throws -> any Transport { try await open() }
+  func makeTransport() async throws -> any Transport {
+    try await open()
+  }
 }
 
 /// A transport that accepts everything and answers nothing: `connect` and `send` succeed, and the
@@ -129,11 +133,15 @@ actor SilentTransport: Transport {
 
   func connect() async throws {}
 
-  func disconnect() async { continuation.finish() }
+  func disconnect() async {
+    continuation.finish()
+  }
 
   func send(_ data: Data) async throws {}
 
-  func receive() -> AsyncThrowingStream<Data, any Error> { messages }
+  func receive() -> AsyncThrowingStream<Data, any Error> {
+    messages
+  }
 }
 
 /// Wraps a live transport and stops forwarding from `mutingSend` onward, so the handshake lands but
@@ -158,7 +166,9 @@ actor MuteAfterHandshakeTransport: Transport {
     stream = await inner.receive()
   }
 
-  func disconnect() async { await inner.disconnect() }
+  func disconnect() async {
+    await inner.disconnect()
+  }
 
   func send(_ data: Data) async throws {
     sends += 1
@@ -209,7 +219,9 @@ actor FaultyTransport: Transport {
     stream = await inner.receive()
   }
 
-  func disconnect() async { await inner.disconnect() }
+  func disconnect() async {
+    await inner.disconnect()
+  }
 
   func send(_ data: Data) async throws {
     sends += 1

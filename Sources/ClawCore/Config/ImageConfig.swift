@@ -1,7 +1,9 @@
 public struct ImageConfig: Sendable, Equatable {
   public let enabled: Bool
 
-  public init(enabled: Bool) { self.enabled = enabled }
+  public init(enabled: Bool) {
+    self.enabled = enabled
+  }
 }
 
 // MARK: - Image Parsing

@@ -95,9 +95,12 @@ private extension ApprovedActionExecutor {
       return .storeFailed
     }
     switch claim {
-    case .alreadyResumed: return .ignored
-    case .runNotResumable: return .runNotResumable
-    case .committed: break
+    case .alreadyResumed:
+      return .ignored
+    case .runNotResumable:
+      return .runNotResumable
+    case .committed:
+      break
     }
 
     let payload = await executedPayload(for: approval)
@@ -125,9 +128,8 @@ private extension ApprovedActionExecutor {
   /// Runs the claimed action and returns its full payload — a truthful error payload when the
   /// recorded tool vanished or its args no longer parse.
   func executedPayload(for approval: Approval) async -> ToolPayload {
-    guard
-      let tool = tools[approval.tool],
-      let arguments = JSONValue.parse(approval.canonicalArgsJSON)
+    guard let tool = tools[approval.tool],
+          let arguments = JSONValue.parse(approval.canonicalArgsJSON)
     else {
       logger.error("approved action \(approval.tool) has no registered tool or unparsable args")
       return ToolPayload(
@@ -138,24 +140,21 @@ private extension ApprovedActionExecutor {
     }
     let context: ToolExecutionContext?
     do {
-      if
-        let restored = try runs.executionContext(
-          runID: approval.runID,
-          fallbackChatID: approval.ownerUserID
-        ) {
-        guard
-          restored.sessionID == approval.sessionID,
-          restored.deliveryTarget.chatID == approval.ownerUserID
+      if let restored = try runs.executionContext(
+        runID: approval.runID,
+        fallbackChatID: approval.ownerUserID
+      ) {
+        guard restored.sessionID == approval.sessionID,
+              restored.deliveryTarget.chatID == approval.ownerUserID
         else {
           return missingExecutionContext()
         }
 
         if restored.mode == .group {
-          guard
-            restored.origin == .interactive,
-            restored.requesterUserID != nil,
-            approval.reason == .coderSubmit,
-            approval.tool == CoderToolNames.submit
+          guard restored.origin == .interactive,
+                restored.requesterUserID != nil,
+                approval.reason == .coderSubmit,
+                approval.tool == CoderToolNames.submit
           else {
             return missingExecutionContext()
           }
@@ -173,7 +172,9 @@ private extension ApprovedActionExecutor {
       } else {
         return missingExecutionContext()
       }
-    } catch { return missingExecutionContext() }
+    } catch {
+      return missingExecutionContext()
+    }
     let hasInteractiveRequester = context?.origin == .interactive && context?.requesterUserID != nil
     if tool.definition.requiresInteractiveRequester && !hasInteractiveRequester {
       return missingExecutionContext()
@@ -209,12 +210,11 @@ private extension ApprovedActionExecutor {
 
 private extension ApprovedActionExecutor {
   func applyMemoryWrite(_ approval: Approval) -> ApprovedCommitOutcome {
-    guard
-      let arguments = JSONValue.parse(approval.canonicalArgsJSON),
-      case .parsed(let request) = MemoryWriteArguments.parse(
-        arguments,
-        sessionID: approval.sessionID
-      )
+    guard let arguments = JSONValue.parse(approval.canonicalArgsJSON),
+          case .parsed(let request) = MemoryWriteArguments.parse(
+            arguments,
+            sessionID: approval.sessionID
+          )
     else {
       logger.error("memory_write approval \(approval.id) has unreadable recorded args")
       return resumeWithSyntheticObservation(
@@ -241,9 +241,12 @@ private extension ApprovedActionExecutor {
         now: now()
       )
       switch claim {
-      case .committed: return .committed
-      case .alreadyResumed: return .ignored
-      case .runNotResumable: return .runNotResumable
+      case .committed:
+        return .committed
+      case .alreadyResumed:
+        return .ignored
+      case .runNotResumable:
+        return .runNotResumable
       }
     } catch {
       logger.error("applyApprovedMemoryWrite failed for run \(approval.runID): \(error)")
@@ -265,9 +268,12 @@ private extension ApprovedActionExecutor {
         now: now()
       )
       switch claim {
-      case .alreadyResumed: return .ignored
-      case .runNotResumable: return .runNotResumable
-      case .committed: break
+      case .alreadyResumed:
+        return .ignored
+      case .runNotResumable:
+        return .runNotResumable
+      case .committed:
+        break
       }
       try runs.fillClaimedObservation(
         runID: approval.runID,

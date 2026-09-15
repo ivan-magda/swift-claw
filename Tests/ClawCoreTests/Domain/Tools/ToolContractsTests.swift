@@ -15,9 +15,13 @@ private struct DefaultPrepareTool: Tool {
     )
   }
 
-  var timeout: Duration { .seconds(1) }
+  var timeout: Duration {
+    .seconds(1)
+  }
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     ToolPayload(content: "ok", status: .ok, ingestedUntrusted: false)

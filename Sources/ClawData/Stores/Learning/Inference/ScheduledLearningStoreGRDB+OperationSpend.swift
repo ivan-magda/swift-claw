@@ -46,7 +46,8 @@ extension ScheduledLearningStoreGRDB {
       return true
     }
     switch result.product {
-    case .failure: break
+    case .failure:
+      break
     case .evaluation(let evaluation):
       try recordEvaluation(db, operation: operation, evaluation: evaluation, now: now)
     case .candidate(let artifact):
@@ -95,12 +96,11 @@ private extension ScheduledLearningStoreGRDB {
     result: NoCandidateResult,
     operation: OperationRow
   ) throws -> Bool {
-    guard
-      result.algorithm == .v1,
-      result.triggerDigest.rawValue == operation.sourceDigest,
-      result.operationID == operation.id,
-      result.carrierDigest == operation.carrierDigest,
-      result.authorization.trigger.digest == result.triggerDigest
+    guard result.algorithm == .v1,
+          result.triggerDigest.rawValue == operation.sourceDigest,
+          result.operationID == operation.id,
+          result.carrierDigest == operation.carrierDigest,
+          result.authorization.trigger.digest == result.triggerDigest
     else {
       return false
     }
@@ -139,18 +139,17 @@ extension ScheduledLearningStoreGRDB {
     operation: OperationRow
   ) -> TriggerIdentity? {
     let manifest = artifact.manifest
-    guard
-      manifest.schemaVersion == CandidateSourceManifest.currentSchemaVersion,
-      manifest.origin == .reflection,
-      manifest.algorithm == .v1,
-      manifest.jobID == operation.jobID,
-      artifact.replacement.jobID == operation.jobID,
-      manifest.epoch == operation.epoch,
-      manifest.triggerDigest.rawValue == operation.sourceDigest,
-      manifest.operationID == operation.id,
-      manifest.carrierDigest == operation.carrierDigest,
-      manifest.predecessorCandidate == nil,
-      manifest.predecessorFeedback == nil
+    guard manifest.schemaVersion == CandidateSourceManifest.currentSchemaVersion,
+          manifest.origin == .reflection,
+          manifest.algorithm == .v1,
+          manifest.jobID == operation.jobID,
+          artifact.replacement.jobID == operation.jobID,
+          manifest.epoch == operation.epoch,
+          manifest.triggerDigest.rawValue == operation.sourceDigest,
+          manifest.operationID == operation.id,
+          manifest.carrierDigest == operation.carrierDigest,
+          manifest.predecessorCandidate == nil,
+          manifest.predecessorFeedback == nil
     else {
       return nil
     }

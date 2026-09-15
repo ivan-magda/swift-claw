@@ -11,7 +11,9 @@ enum EnvironmentLoader {
   /// Loads and validates config from the process environment.
   static func loadConfig(
     environment: [String: String] = ProcessInfo.processInfo.environment
-  ) throws -> AppConfig { try AppConfig.load(environment: environment) }
+  ) throws -> AppConfig {
+    try AppConfig.load(environment: environment)
+  }
 
   /// Loads secrets via the fail-closed resolver.
   static func loadSecrets(

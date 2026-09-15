@@ -53,7 +53,9 @@ public struct MCPTool: ClawCore.Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(config.worstCaseCallSeconds + Self.timeoutMarginSeconds) }
+  public var timeout: Duration {
+    .seconds(config.worstCaseCallSeconds + Self.timeoutMarginSeconds)
+  }
 
   /// The server, never a destination read out of the arguments. An MCP call has exactly one
   /// recipient — the one the owner configured — so the approval binds to that, and a model that
@@ -105,11 +107,15 @@ public struct MCPTool: ClawCore.Tool {
 // MARK: - Identity
 
 private extension MCPTool {
-  var config: MCPServerConfig { session.config }
+  var config: MCPServerConfig {
+    session.config
+  }
 
   /// Names the server and its complete endpoint: scheme, port, path, and query can each select a
   /// different recipient, so a host-only label is not an exact-action binding.
-  var target: String { "\(config.name) (\(config.url.absoluteString))" }
+  var target: String {
+    "\(config.name) (\(config.url.absoluteString))"
+  }
 
   var invocationIdentity: String {
     var headers = config.headers.map { header in
@@ -195,7 +201,8 @@ private extension MCPTool {
     }
 
     switch disposition {
-    case .definitelyNotExecuted: return "\(resolved.localName) failed: \(detail)."
+    case .definitelyNotExecuted:
+      return "\(resolved.localName) failed: \(detail)."
     case .mayHaveExecuted:
       return """
         \(resolved.localName) may have completed remotely; \
@@ -228,15 +235,19 @@ private extension MCPTool {
 
   static func part(_ content: MCP.Tool.Content) -> String {
     switch content {
-    case .text(let text, _, _): return text
-    case .image(_, let mimeType, _, _): return "[image: \(mimeType)]"
-    case .audio(_, let mimeType, _, _): return "[audio: \(mimeType)]"
+    case .text(let text, _, _):
+      return text
+    case .image(_, let mimeType, _, _):
+      return "[image: \(mimeType)]"
+    case .audio(_, let mimeType, _, _):
+      return "[audio: \(mimeType)]"
     case .resource(let resource, _, _):
       guard let text = resource.text else {
         return "[resource: \(resource.uri) (\(resource.mimeType ?? "binary"))]"
       }
       return text
-    case .resourceLink(let uri, let name, _, _, _, _): return "[resource link: \(name) at \(uri)]"
+    case .resourceLink(let uri, let name, _, _, _, _):
+      return "[resource link: \(name) at \(uri)]"
     }
   }
 }

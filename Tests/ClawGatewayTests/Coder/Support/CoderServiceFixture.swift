@@ -69,7 +69,9 @@ struct CoderServiceFixture: Sendable {
       let prepared = Self.request(index: index)
       let context = try Self.context(queue: queue, prepared: prepared, index: index)
       return .success(try await service.submit(prepared, context: context))
-    } catch let error as CoderError { return .failure(error) } catch {
+    } catch let error as CoderError {
+      return .failure(error)
+    } catch {
       Issue.record(error)
       return .failure(.unavailable("Fixture origin failed"))
     }
@@ -196,8 +198,10 @@ struct CoderServiceFixture: Sendable {
     )
   }
 
-  static func result(state: CoderJobState = .succeeded, failure: CoderFailure? = nil) -> CoderResult
-  {
+  static func result(
+    state: CoderJobState = .succeeded,
+    failure: CoderFailure? = nil
+  ) -> CoderResult {
     CoderResult(
       state: state,
       summary: "Updated retry handling",
@@ -252,13 +256,19 @@ actor CoderInspectionStub: CoderProcessInspecting {
   nonisolated let proceed = AsyncGate()
   var hold = false
 
-  func holdInspection() { hold = true }
+  func holdInspection() {
+    hold = true
+  }
 
   var observation: CoderRecoveryObservation
 
-  init(observation: CoderRecoveryObservation) { self.observation = observation }
+  init(observation: CoderRecoveryObservation) {
+    self.observation = observation
+  }
 
-  func set(_ observation: CoderRecoveryObservation) { self.observation = observation }
+  func set(_ observation: CoderRecoveryObservation) {
+    self.observation = observation
+  }
 
   func inspect(_ receipt: CoderProcessReceipt) async -> CoderRecoveryObservation {
     entered.open()

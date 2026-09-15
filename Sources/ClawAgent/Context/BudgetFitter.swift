@@ -21,8 +21,10 @@ enum DropMarker: Sendable, Equatable {
 
   func line(kept: Int, total: Int) -> String? {
     switch self {
-    case .none: nil
-    case .showingCount(let noun): "(showing \(kept) of \(total) \(noun))"
+    case .none:
+      nil
+    case .showingCount(let noun):
+      "(showing \(kept) of \(total) \(noun))"
     }
   }
 }
@@ -64,7 +66,9 @@ struct FittedSection: Sendable, Equatable, Identifiable {
   let units: [SectionUnit]
   let droppedUnitIDs: [String]
 
-  var content: String { renderUnits(units) }
+  var content: String {
+    renderUnits(units)
+  }
 
   fileprivate init(source: FittableSection, units: [SectionUnit], droppedUnitIDs: [String] = []) {
     self.id = source.id
@@ -217,10 +221,9 @@ enum BudgetFitter {
     }
 
     let droppedIDs = droppedUnitIDs(in: section, kept: kept)
-    guard
-      droppedIDs.isEmpty == false,
-      let marker = section.dropMarker.line(kept: kept.count, total: section.units.count),
-      renderUnits(kept).count + 1 + marker.count <= maxCount
+    guard droppedIDs.isEmpty == false,
+          let marker = section.dropMarker.line(kept: kept.count, total: section.units.count),
+          renderUnits(kept).count + 1 + marker.count <= maxCount
     else {
       return FittedRow(source: section, units: kept, droppedUnitIDs: droppedIDs)
     }
@@ -269,7 +272,9 @@ private struct FittedRow: Equatable {
   let units: [SectionUnit]
   let droppedUnitIDs: [String]
 
-  var content: String { renderUnits(units) }
+  var content: String {
+    renderUnits(units)
+  }
 }
 
 private func renderUnits(_ units: [SectionUnit]) -> String {

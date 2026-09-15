@@ -30,9 +30,12 @@ extension ResetFixture {
   func seedCurrentEpochActivity(_ activity: ResetCurrentEpochActivity) throws {
     let epoch = try state().epoch
     switch activity {
-    case .binding: _ = try env.pendingBoundRun()
-    case .compatibility: try seedCompatibility(epoch: epoch)
-    case .evidence: try seedEvidence(epoch: epoch)
+    case .binding:
+      _ = try env.pendingBoundRun()
+    case .compatibility:
+      try seedCompatibility(epoch: epoch)
+    case .evidence:
+      try seedEvidence(epoch: epoch)
     case .operation:
       try env.queue.write { db in
         try insertOperation(
@@ -43,13 +46,20 @@ extension ResetFixture {
           state: .failed
         )
       }
-    case .evaluation: try seedEvaluation(epoch: epoch)
-    case .target: try seedTarget(epoch: epoch)
-    case .challenge: try seedChallenge(epoch: epoch)
-    case .feedbackEvent: try seedFeedbackEvent(epoch: epoch)
-    case .candidate: _ = try seedCandidate(epoch: epoch)
-    case .trial: try seedTrialActivity(epoch: epoch)
-    case .assignment: try seedAssignmentActivity(epoch: epoch)
+    case .evaluation:
+      try seedEvaluation(epoch: epoch)
+    case .target:
+      try seedTarget(epoch: epoch)
+    case .challenge:
+      try seedChallenge(epoch: epoch)
+    case .feedbackEvent:
+      try seedFeedbackEvent(epoch: epoch)
+    case .candidate:
+      _ = try seedCandidate(epoch: epoch)
+    case .trial:
+      try seedTrialActivity(epoch: epoch)
+    case .assignment:
+      try seedAssignmentActivity(epoch: epoch)
     }
   }
 
@@ -59,8 +69,10 @@ extension ResetFixture {
     case .liveTrial:
       let candidate = try seedCandidate(epoch: oldEpoch)
       try seedLiveTrial(candidate: candidate, epoch: oldEpoch)
-    case .target: try seedTarget(epoch: oldEpoch, consumed: false)
-    case .challenge: try seedChallenge(epoch: oldEpoch, consumed: false)
+    case .target:
+      try seedTarget(epoch: oldEpoch, consumed: false)
+    case .challenge:
+      try seedChallenge(epoch: oldEpoch, consumed: false)
     case .pendingOperation:
       try env.queue.write { db in
         try insertOperation(
@@ -308,8 +320,12 @@ private extension ResetFixture {
     }
   }
 
-  func insertStartedOperation(_ db: Database, id: String, jobID: Int64, epoch: LearningEpoch) throws
-  {
+  func insertStartedOperation(
+    _ db: Database,
+    id: String,
+    jobID: Int64,
+    epoch: LearningEpoch
+  ) throws {
     try db.execute(
       sql: """
         INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,

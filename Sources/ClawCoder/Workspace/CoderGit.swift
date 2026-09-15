@@ -78,9 +78,8 @@ struct CoderGit: Sendable {
       ["rev-parse", "--verify", "--end-of-options", "\(ref)^{commit}"],
       at: directory
     )
-    guard
-      [40, 64].contains(sha.utf8.count),
-      sha.utf8.allSatisfy({ byte in
+    guard [40, 64].contains(sha.utf8.count),
+          sha.utf8.allSatisfy({ byte in
         (48...57).contains(byte) || (97...102).contains(byte)
       })
     else {
@@ -121,7 +120,9 @@ private actor GitOutput {
 
 extension CoderGit {
   func headCommit(at directory: String) async throws -> String? {
-    do { return try await commit("HEAD", at: directory) } catch CoderGitFailure.command(
+    do {
+      return try await commit("HEAD", at: directory)
+    } catch CoderGitFailure.command(
       let failedHead
     ) {
       let ref = try await text(["symbolic-ref", "--quiet", "HEAD"], at: directory)
@@ -130,7 +131,9 @@ extension CoderGit {
       }
       do {
         try await run(["show-ref", "--verify", "--quiet", "--", ref], at: directory)
-      } catch CoderGitFailure.command(let absentRef) where absentRef.exitCode == 1 { return nil }
+      } catch CoderGitFailure.command(let absentRef) where absentRef.exitCode == 1 {
+        return nil
+      }
       throw CoderGitFailure.command(failedHead)
     }
   }

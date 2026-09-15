@@ -6,13 +6,17 @@ public enum MemoryWriteWarning: Sendable, Equatable {
 
   public var confirmationSummary: String {
     switch self {
-    case .possibleSecret: "possible secret-shaped text"
-    case .possibleInstruction: "possible instruction-shaped text"
+    case .possibleSecret:
+      "possible secret-shaped text"
+    case .possibleInstruction:
+      "possible instruction-shaped text"
     }
   }
 }
 
-enum MemoryWriteBuildError: Error, Sendable, Equatable { case emptyAfterNormalization }
+enum MemoryWriteBuildError: Error, Sendable, Equatable {
+  case emptyAfterNormalization
+}
 
 public struct MemoryWriteRequest: Sendable, Equatable {
   public let item: NewMemoryItem
@@ -82,16 +86,14 @@ private extension MemoryWriteBuilder {
     var warnings: [MemoryWriteWarning] = []
 
     let secretWarningPatterns: Set<String> = ["sk-", "api_key", "token"]
-    if
-      secretWarningPatterns.contains(where: {
+    if secretWarningPatterns.contains(where: {
       loweredText.contains($0)
     }) {
       warnings.append(.possibleSecret)
     }
 
     let instructionWarningPatterns: Set<String> = ["ignore previous", "system prompt"]
-    if
-      instructionWarningPatterns.contains(where: {
+    if instructionWarningPatterns.contains(where: {
       loweredText.contains($0)
     }) {
       warnings.append(.possibleInstruction)

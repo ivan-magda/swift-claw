@@ -32,22 +32,32 @@ public enum DegradationKind: Sendable, Equatable {
     case .providerUnavailable, .authenticationRequired, .accessDenied, .quotaLimited,
       .invalidProviderState, .accountingFailed:
       .providerFailure
-    case .outputTruncated, .contextUnavailable, .visionUnsupported: .incomplete
+    case .outputTruncated, .contextUnavailable, .visionUnsupported:
+      .incomplete
     }
   }
 
   /// The stable string recorded by the audit log. Categorical cases deliberately omit payloads.
   public var auditDecision: String {
     switch self {
-    case .providerUnavailable: "providerUnavailable"
-    case .outputTruncated: "outputTruncated"
-    case .contextUnavailable: "contextUnavailable"
-    case .accountingFailed: "accountingFailed"
-    case .authenticationRequired: "authenticationRequired"
-    case .accessDenied: "accessDenied"
-    case .quotaLimited: "quotaLimited"
-    case .invalidProviderState: "invalidProviderState"
-    case .visionUnsupported: "visionUnsupported"
+    case .providerUnavailable:
+      "providerUnavailable"
+    case .outputTruncated:
+      "outputTruncated"
+    case .contextUnavailable:
+      "contextUnavailable"
+    case .accountingFailed:
+      "accountingFailed"
+    case .authenticationRequired:
+      "authenticationRequired"
+    case .accessDenied:
+      "accessDenied"
+    case .quotaLimited:
+      "quotaLimited"
+    case .invalidProviderState:
+      "invalidProviderState"
+    case .visionUnsupported:
+      "visionUnsupported"
     }
   }
 }

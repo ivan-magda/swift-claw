@@ -58,10 +58,9 @@ public struct FeedbackChallengeHandler: Sendable {
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome? {
-    guard
-      let rawMessage = rawUpdate.message ?? rawUpdate.editedMessage,
-      !rawMessage.isForwarded,
-      let text = rawMessage.text
+    guard let rawMessage = rawUpdate.message ?? rawUpdate.editedMessage,
+          !rawMessage.isForwarded,
+          let text = rawMessage.text
     else {
       return nil
     }

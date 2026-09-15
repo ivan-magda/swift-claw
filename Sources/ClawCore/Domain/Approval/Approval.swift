@@ -141,7 +141,11 @@ public enum OpaqueNonce {
   }
 }
 
-public enum ApprovalNonce { public static func generate() -> String { OpaqueNonce.generate() } }
+public enum ApprovalNonce {
+  public static func generate() -> String {
+    OpaqueNonce.generate()
+  }
+}
 
 /// The single canonical args digest: computed when an action is recorded and recomputed inside
 /// the approve CAS. One helper so the two computations can never diverge.

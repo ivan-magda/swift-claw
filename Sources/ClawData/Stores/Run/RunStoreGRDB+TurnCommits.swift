@@ -32,14 +32,13 @@ extension RunStoreGRDB {
 
       // Settled with the terminal row: every primary fact of a DONE turn — the assistant message,
       // its usage and its outbox chunks — commits inside this same transaction.
-      guard
-        try Self.transitionRun(
-          db,
-          runID: turn.runID,
-          event: .complete,
-          now: now,
-          terminal: .settled(.taskCompleted)
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: turn.runID,
+        event: .complete,
+        now: now,
+        terminal: .settled(.taskCompleted)
+      ) != nil
       else {
         return .ignored
       }
@@ -84,14 +83,13 @@ extension RunStoreGRDB {
         return .ignored
       }
 
-      guard
-        try Self.transitionRun(
-          db,
-          runID: turn.runID,
-          event: .fail,
-          now: now,
-          terminal: .settled(turn.cause)
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: turn.runID,
+        event: .fail,
+        now: now,
+        terminal: .settled(turn.cause)
+      ) != nil
       else {
         return .ignored
       }
@@ -214,13 +212,12 @@ private extension RunStoreGRDB {
       return false
     }
     let expectedActions: [OwnerSignal] = [.resultUseful, .resultNotUseful, .resultCorrection]
-    guard
-      target.subjectKind == .run,
-      target.subjectDigest == String(turn.runID),
-      target.ownerUserID == turn.chatID,
-      target.chatID == turn.chatID,
-      target.allowedActions == expectedActions,
-      target.expiresAt > now
+    guard target.subjectKind == .run,
+          target.subjectDigest == String(turn.runID),
+          target.ownerUserID == turn.chatID,
+          target.chatID == turn.chatID,
+          target.allowedActions == expectedActions,
+          target.expiresAt > now
     else {
       return false
     }
@@ -241,12 +238,11 @@ private extension RunStoreGRDB {
         """,
       arguments: [turn.chatID, turn.runID, RunOrigin.scheduled.rawValue]
     )
-    guard
-      let row,
-      target.jobID == row["job_id"],
-      target.epoch.value == row["learning_epoch"],
-      let occurrenceAt = EpochSecondCodec.date(fromEpoch: row["occurrence_at"]),
-      target.expiresAt == occurrenceAt.addingTimeInterval(EvidenceWindow.maximumAge)
+    guard let row,
+          target.jobID == row["job_id"],
+          target.epoch.value == row["learning_epoch"],
+          let occurrenceAt = EpochSecondCodec.date(fromEpoch: row["occurrence_at"]),
+          target.expiresAt == occurrenceAt.addingTimeInterval(EvidenceWindow.maximumAge)
     else {
       return false
     }

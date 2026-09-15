@@ -188,7 +188,9 @@ struct RuntimeShutdownCoordinatorTests {
 private actor StepRecorder {
   private(set) var events: [String] = []
 
-  func record(_ name: String) { events.append(name) }
+  func record(_ name: String) {
+    events.append(name)
+  }
 }
 
 private struct CredentialFault: Error {}
@@ -198,5 +200,7 @@ private struct ClientFault: Error {}
 private struct SecretBearingFault: Error, CustomStringConvertible {
   let secret: String
 
-  var description: String { "rotation publish failed with token \(secret)" }
+  var description: String {
+    "rotation publish failed with token \(secret)"
+  }
 }

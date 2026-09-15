@@ -889,7 +889,9 @@ private final class FakeRetriever: Retriever, @unchecked Sendable {
   private let hits: [RecallHit]
   private(set) var calls: [Call] = []
 
-  init(hits: [RecallHit] = []) { self.hits = hits }
+  init(hits: [RecallHit] = []) {
+    self.hits = hits
+  }
 
   func searchRelevantMessages(
     query: String,

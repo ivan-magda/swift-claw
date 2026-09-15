@@ -35,7 +35,9 @@ struct ReceivedRequest: Sendable, Equatable {
   let headers: [String: [String]]
   let body: Data
 
-  func values(for name: String) -> [String] { headers[name.lowercased()] ?? [] }
+  func values(for name: String) -> [String] {
+    headers[name.lowercased()] ?? []
+  }
 }
 
 /// Lock-backed rather than an actor so the handler records before it writes the response: by the
@@ -71,7 +73,9 @@ final class ScriptedHTTPServer: @unchecked Sendable {
     port = channel.localAddress?.port ?? 0
   }
 
-  func url(_ path: String) -> String { "http://127.0.0.1:\(port)\(path)" }
+  func url(_ path: String) -> String {
+    "http://127.0.0.1:\(port)\(path)"
+  }
 
   // Async bind/shutdown only: NIO's blocking `wait()`/`syncShutdownGracefully()` would park a Swift
   // concurrency cooperative thread, and enough of those in flight starve the pool and deadlock the
@@ -217,7 +221,9 @@ final class BehaviourHTTPServer: @unchecked Sendable {
     port = channel.localAddress?.port ?? 0
   }
 
-  func url(_ path: String) -> String { "http://127.0.0.1:\(port)\(path)" }
+  func url(_ path: String) -> String {
+    "http://127.0.0.1:\(port)\(path)"
+  }
 
   static func start(behaviour: Behaviour) async throws -> BehaviourHTTPServer {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
@@ -227,8 +233,10 @@ final class BehaviourHTTPServer: @unchecked Sendable {
     ).childChannelInitializer { channel in
       channel.pipeline.configureHTTPServerPipeline().flatMap {
         switch behaviour {
-        case .neverResponds: return channel.pipeline.addHandler(SilentHandler())
-        case .closesBeforeHead: return channel.pipeline.addHandler(CloseAfterRequestHandler())
+        case .neverResponds:
+          return channel.pipeline.addHandler(SilentHandler())
+        case .closesBeforeHead:
+          return channel.pipeline.addHandler(CloseAfterRequestHandler())
         }
       }
     }
@@ -329,7 +337,9 @@ struct AsyncHTTPExecutorGeneralRequestTests {
   private func buffered(
     successBytes: Int = 1024 * 1024,
     errorBytes: Int = 1024 * 1024
-  ) -> HTTPResponseBodyPolicy { .buffered(successBytes: successBytes, errorBytes: errorBytes) }
+  ) -> HTTPResponseBodyPolicy {
+    .buffered(successBytes: successBytes, errorBytes: errorBytes)
+  }
 
   @Test(.timeLimit(.minutes(1)))
   func getCarriesMethodAndHeadersAndReturnsTheBody() async throws {

@@ -49,7 +49,9 @@ public struct SkillLoadTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(5) }
+  public var timeout: Duration {
+    .seconds(5)
+  }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     nil  // nothing egresses; the name is resolved against the scan inside execute
@@ -102,13 +104,14 @@ private extension SkillLoadTool {
 
     let manifestPath: String
     switch WorkspacePathContainment.resolveExisting(path: relativePath, root: workspaceRoot.path) {
-    case .refused(let reason): return errorPayload(reason)
-    case .resolved(let resolved): manifestPath = resolved
+    case .refused(let reason):
+      return errorPayload(reason)
+    case .resolved(let resolved):
+      manifestPath = resolved
     }
 
-    guard
-      let data = FileManager.default.contents(atPath: manifestPath),
-      let text = String(data: data, encoding: .utf8)
+    guard let data = FileManager.default.contents(atPath: manifestPath),
+          let text = String(data: data, encoding: .utf8)
     else {
       return errorPayload("The skill \(descriptor.name) could not be read.")
     }

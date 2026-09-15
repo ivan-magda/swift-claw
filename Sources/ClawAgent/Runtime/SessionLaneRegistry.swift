@@ -161,13 +161,17 @@ public actor SessionLaneRegistry {
     await deadline.value
 
     switch signal {
-    case .drained: return .drained
-    case .timedOut: return .timedOut(activeRunIDs: activeRunIDs())
+    case .drained:
+      return .drained
+    case .timedOut:
+      return .timedOut(activeRunIDs: activeRunIDs())
     }
   }
 
   /// The run ids of every turn still registered, sorted for a stable report.
-  func activeRunIDs() -> [Int64] { operations.values.map(\.runID).sorted() }
+  func activeRunIDs() -> [Int64] {
+    operations.values.map(\.runID).sorted()
+  }
 }
 
 // MARK: - Finalization
@@ -204,7 +208,9 @@ private extension SessionLaneRegistry {
 
   /// The deadline child's callback: resumes any still-parked waiter with `.timedOut`. A no-op once
   /// the finalizer already resumed them, since resumption takes and clears the waiters atomically.
-  private func signalDrainTimeout() { resumeDrainWaiters(with: .timedOut) }
+  private func signalDrainTimeout() {
+    resumeDrainWaiters(with: .timedOut)
+  }
 
   private func resumeDrainWaiters(with signal: DrainSignal) {
     let waiters = drainWaiters

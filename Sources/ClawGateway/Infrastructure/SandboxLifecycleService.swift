@@ -6,7 +6,9 @@ import ServiceLifecycle
 public struct SandboxLifecycleService: Service {
   private let maintenance: any SandboxMaintenance
 
-  public init(maintenance: any SandboxMaintenance) { self.maintenance = maintenance }
+  public init(maintenance: any SandboxMaintenance) {
+    self.maintenance = maintenance
+  }
 
   public func run() async throws {
     // Parks until the group shuts down or the task is cancelled; both exits tear the backend down.

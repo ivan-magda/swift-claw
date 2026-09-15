@@ -51,7 +51,9 @@ private final class RecordingApprovalStore: ApprovalStore, @unchecked Sendable {
     decision: ApprovalDecision,
     actor: ApprovalResolutionActor?,
     now: Date
-  ) throws(StoreError) -> Bool { throw StoreError.unexpected("unused by ApprovalExpiryService") }
+  ) throws(StoreError) -> Bool {
+    throw StoreError.unexpected("unused by ApprovalExpiryService")
+  }
 
   func unresolvedAtBoot() throws(StoreError) -> [Approval] {
     throw StoreError.unexpected("unused by ApprovalExpiryService")

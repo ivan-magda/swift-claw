@@ -130,7 +130,9 @@ extension RunComposition {
 extension RunComposition {
   /// The live `getMe` read behind `fetchBotIdentity`.
   static func readIdentity(_ transport: TelegramClient, _ logger: Logger) async -> BotIdentity? {
-    do { return try await transport.getMe() } catch {
+    do {
+      return try await transport.getMe()
+    } catch {
       logger.warning(
         "failed to fetch bot identity; command mentions will require bare commands: \(error)"
       )
@@ -147,7 +149,9 @@ extension RunComposition {
   /// failed boot is a socket the process would otherwise carry to exit.
   static func closeAll(_ clients: RuntimeHTTPClients<RuntimeHTTPClient>, logger: Logger) async {
     for client in [clients.llm, clients.telegram, clients.tool] {
-      do { try await client.close() } catch {
+      do {
+        try await client.close()
+      } catch {
         logger.error("client shutdown failed during failed-boot cleanup: \(error)")
       }
     }

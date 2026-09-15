@@ -42,9 +42,8 @@ struct CodexOutcome {
       "repository"
     ).path
     var directory: ObjCBool = false
-    guard
-      FileManager.default.fileExists(atPath: destination, isDirectory: &directory),
-      directory.boolValue
+    guard FileManager.default.fileExists(atPath: destination, isDirectory: &directory),
+          directory.boolValue
     else {
       return
     }
@@ -63,9 +62,12 @@ struct CodexOutcome {
     }
     let publication: CoderPublication
     switch self.publication {
-    case .absent: publication = .absent
-    case .confirmed(let url): publication = .confirmed(url: clean(url))
-    case .unknown(let url): publication = .unknown(reportedURL: url.map(clean))
+    case .absent:
+      publication = .absent
+    case .confirmed(let url):
+      publication = .confirmed(url: clean(url))
+    case .unknown(let url):
+      publication = .unknown(reportedURL: url.map(clean))
     }
     let starting = localStartObserved ? workspace?.startingCommit : report?.startingCommit
     return CoderResult(

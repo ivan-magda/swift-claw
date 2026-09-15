@@ -33,7 +33,9 @@ struct AuthAcceptanceWorld: Sendable {
     responses = AcceptanceAuthFixture.happyResponses
   }
 
-  var paths: SecretStatePaths { SecretStatePaths(stateRoot: root) }
+  var paths: SecretStatePaths {
+    SecretStatePaths(stateRoot: root)
+  }
 
   var storedCredential: StoredOAuthCredential? {
     try? EncryptedLLMCredentialStore(stateRoot: root).load(providerID: .openAIChatGPT)
@@ -41,7 +43,9 @@ struct AuthAcceptanceWorld: Sendable {
 
   /// The scripted transport shared by every real client the workflow drives, so a test can read the
   /// exact wire URLs that were reached — the proof that device egress happened (or did not).
-  func makeHTTP() -> RecordingHTTPExecutor { RecordingHTTPExecutor(responses: responses) }
+  func makeHTTP() -> RecordingHTTPExecutor {
+    RecordingHTTPExecutor(responses: responses)
+  }
 
   private var makeCredentialStore: @Sendable () -> any LLMCredentialStore {
     let stateRoot = root

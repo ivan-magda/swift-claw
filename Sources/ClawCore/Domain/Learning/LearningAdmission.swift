@@ -207,7 +207,9 @@ public enum AdmissionValidator {
     redactor: SecretRedactor
   ) -> Result<LessonSet, AdmissionRejection> {
     let replacement: LessonSet
-    do { replacement = try LessonSet.canonical(jobID: jobID, lessons: lessons) } catch {
+    do {
+      replacement = try LessonSet.canonical(jobID: jobID, lessons: lessons)
+    } catch {
       return .failure(.lessonSet(error))
     }
     guard containsSecret(replacement, redactor: redactor) == false else {
@@ -217,8 +219,7 @@ public enum AdmissionValidator {
   }
 
   private static func containsSecret(_ replacement: LessonSet, redactor: SecretRedactor) -> Bool {
-    if
-      replacement.lessons.contains(where: { lesson in
+    if replacement.lessons.contains(where: { lesson in
       redactor.redact(lesson) != lesson
     }) {
       return true
@@ -289,12 +290,11 @@ private extension CandidateSuccessorRules {
     replacement: LessonSet,
     intent: SuccessorIntent
   ) throws(AdmissionRejection) -> CandidateArtifact {
-    guard
-      intent.control.subjectKind == .candidate,
-      intent.control.subjectDigest == predecessor.digest.rawValue,
-      intent.control.signal == intent.expectedSignal,
-      intent.control.revision <= intent.feedbackRevision,
-      intent.feedbackRevision >= predecessor.manifest.feedbackRevision
+    guard intent.control.subjectKind == .candidate,
+          intent.control.subjectDigest == predecessor.digest.rawValue,
+          intent.control.signal == intent.expectedSignal,
+          intent.control.revision <= intent.feedbackRevision,
+          intent.feedbackRevision >= predecessor.manifest.feedbackRevision
     else {
       throw .invalidOwnerControl
     }
@@ -319,7 +319,9 @@ private extension CandidateSuccessorRules {
       predecessorCandidate: predecessor.digest,
       predecessorFeedback: intent.control
     )
-    do { return try CandidateArtifact(replacement: replacement, manifest: manifest) } catch {
+    do {
+      return try CandidateArtifact(replacement: replacement, manifest: manifest)
+    } catch {
       throw .invalidOwnerControl
     }
   }

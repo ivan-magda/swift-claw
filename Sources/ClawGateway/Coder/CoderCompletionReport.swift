@@ -3,7 +3,9 @@ import ClawCore
 struct CoderCompletionReport: Sendable {
   private let redact: @Sendable (_ text: String) -> String
 
-  init(redact: @escaping @Sendable (_ text: String) -> String) { self.redact = redact }
+  init(redact: @escaping @Sendable (_ text: String) -> String) {
+    self.redact = redact
+  }
 
   func chunks(job: CoderJob, result: CoderResult) -> [OutboxChunk] {
     var blocks = ["## Coder · \(redact(result.state.rawValue))", field("Summary", result.summary)]
@@ -65,8 +67,10 @@ private extension CoderCompletionReport {
 
   func publicationEvidence(_ publication: CoderPublication) -> [String] {
     switch publication {
-    case .absent: [field("Publication", "absent")]
-    case .confirmed(let url): [field("Pull request (confirmed)", url)]
+    case .absent:
+      [field("Publication", "absent")]
+    case .confirmed(let url):
+      [field("Pull request (confirmed)", url)]
     case .unknown(let url):
       [field("Publication", "unknown")]
         + (url.map { value in

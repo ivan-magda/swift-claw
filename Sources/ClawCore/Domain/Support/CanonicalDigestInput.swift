@@ -15,5 +15,7 @@ public enum CanonicalDigestInput {
   /// genuinely empty.
   public static let absentField = "\u{1}"
 
-  public static func joined(_ fields: [String]) -> String { fields.joined(separator: separator) }
+  public static func joined(_ fields: [String]) -> String {
+    fields.joined(separator: separator)
+  }
 }

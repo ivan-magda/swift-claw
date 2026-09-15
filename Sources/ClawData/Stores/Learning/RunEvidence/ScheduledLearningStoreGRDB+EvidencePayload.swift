@@ -41,7 +41,8 @@ extension ScheduledLearningStoreGRDB {
       let role = MessageRole(rawValue: row["role"])
       let toolCallsJSON: String? = row["tool_calls"]
       switch (role, toolCallsJSON) {
-      case (.assistant, .some(let json)): proposed.append(contentsOf: ToolCallCoding.decode(json))
+      case (.assistant, .some(let json)):
+        proposed.append(contentsOf: ToolCallCoding.decode(json))
       case (.assistant, .none):
         // The last plain assistant row is the answer the owner received; an earlier one belongs to
         // a superseded step of the same run.
@@ -51,7 +52,8 @@ extension ScheduledLearningStoreGRDB {
         if let callID: String = row["tool_call_id"] {
           observedCallIDs.insert(callID)
         }
-      default: continue
+      default:
+        continue
       }
     }
 
@@ -115,8 +117,10 @@ private extension ScheduledLearningStoreGRDB {
   /// The trigger message identifies the task the run answered. Its content is digested rather than
   /// copied: the evidence row exists to judge the answer, and the prompt already reaches the
   /// evaluator through the job definition.
-  static func readSource(_ db: Database, runID: Int64) throws -> (messageID: Int64, digest: String)
-  {
+  static func readSource(
+    _ db: Database,
+    runID: Int64
+  ) throws -> (messageID: Int64, digest: String) {
     let row = try Row.fetchOne(
       db,
       sql: """

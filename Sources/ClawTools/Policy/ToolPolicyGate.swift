@@ -47,9 +47,12 @@ public struct ToolPolicyGate: Sendable {
     // ask tool (file_write) still parks; dangerous consumes only a tool-prepared action; safe
     // egress falls through to the unconditional/trifecta tiers below.
     switch tool.definition.riskLevel {
-    case .ask: return evaluateAskTier(call: call, tool: tool, context: context)
-    case .dangerous: return await evaluateDangerousTier(call: call, tool: tool, context: context)
-    case .safe: break
+    case .ask:
+      return evaluateAskTier(call: call, tool: tool, context: context)
+    case .dangerous:
+      return await evaluateDangerousTier(call: call, tool: tool, context: context)
+    case .safe:
+      break
     }
 
     // .none-egress fast path — a safe non-egress read (file_read): audit-render only.
@@ -62,7 +65,8 @@ public struct ToolPolicyGate: Sendable {
 
     let argsRedacted: String
     switch scanArguments(call: call, context: context) {
-    case .blocked(let verdict): return verdict
+    case .blocked(let verdict):
+      return verdict
     case .cleared(let redacted, let trifectaHeld):
       // A group topic has nobody to hold the approval, so a held trifecta allows: the
       // unconditional and conditional argument scans above already ran and still block.
@@ -76,8 +80,10 @@ public struct ToolPolicyGate: Sendable {
     // runs take the SAME park (→ EXPIRED → DENY), never an immediate gate DENY.
     let action: ToolAction?
     switch resolveAction(call: call, tool: tool) {
-    case .action(let resolved): action = resolved
-    case .blocked(let payload): return .block(payload: payload, argsRedacted: argsRedacted)
+    case .action(let resolved):
+      action = resolved
+    case .blocked(let payload):
+      return .block(payload: payload, argsRedacted: argsRedacted)
     }
     guard let action else {
       return .allow(argsRedacted: argsRedacted, action: nil)
@@ -129,7 +135,8 @@ public struct ToolPolicyGate: Sendable {
     }
 
     switch tool.canonicalTarget(arguments: arguments) {
-    case .resolved(let target): return .action(ToolAction(tool: call.name, target: target))
+    case .resolved(let target):
+      return .action(ToolAction(tool: call.name, target: target))
     case .refused(let reason):
       return .blocked(ToolPayload(content: reason, status: .error, ingestedUntrusted: false))
     case nil:
@@ -167,13 +174,12 @@ private extension ToolPolicyGate {
     guard tool.definition.requiresInteractiveRequester else {
       return nil
     }
-    guard
-      let execution = context.executionContext,
-      context.mode == execution.mode,
-      execution.origin == .interactive,
-      let requester = execution.requesterUserID,
-      requester > 0,
-      execution.mode == .group || requester == execution.chatID
+    guard let execution = context.executionContext,
+          context.mode == execution.mode,
+          execution.origin == .interactive,
+          let requester = execution.requesterUserID,
+          requester > 0,
+          execution.mode == .group || requester == execution.chatID
     else {
       return dangerousBlock(
         reason: "\(call.name) requires an interactive message with a known requester.",
@@ -233,8 +239,10 @@ private extension ToolPolicyGate {
   /// gate-authorized canonical target, but no approval parks.
   func resolveAndAllow(call: ToolCall, tool: any Tool, argsRedacted: String) -> Verdict {
     switch resolveAction(call: call, tool: tool) {
-    case .action(let action): return .allow(argsRedacted: argsRedacted, action: action)
-    case .blocked(let payload): return .block(payload: payload, argsRedacted: argsRedacted)
+    case .action(let action):
+      return .allow(argsRedacted: argsRedacted, action: action)
+    case .blocked(let payload):
+      return .block(payload: payload, argsRedacted: argsRedacted)
     }
   }
 }
@@ -253,8 +261,10 @@ private extension ToolPolicyGate {
       // Ask-tier parks on the approval fabric whether or not the trifecta holds, so only the
       // redaction matters here.
       switch scanArguments(call: call, context: context) {
-      case .blocked(let verdict): return verdict
-      case .cleared(let redacted, _): argsRedacted = redacted
+      case .blocked(let verdict):
+        return verdict
+      case .cleared(let redacted, _):
+        argsRedacted = redacted
       }
     }
 
@@ -267,8 +277,10 @@ private extension ToolPolicyGate {
 
     let target: String
     switch tool.canonicalTarget(arguments: arguments) {
-    case .resolved(let resolved): target = resolved
-    case .refused(let reason): return askTierBlock(reason: reason, argsRedacted: argsRedacted)
+    case .resolved(let resolved):
+      target = resolved
+    case .refused(let reason):
+      return askTierBlock(reason: reason, argsRedacted: argsRedacted)
     case nil:
       return askTierBlock(
         reason: "\(call.name) is ask-tier but resolved no canonical target.",
@@ -409,8 +421,10 @@ private extension ToolPolicyGate {
 
     let prepared: PreparedToolAction
     switch resolution {
-    case .prepared(let action): prepared = action
-    case .refused(let reason): return dangerousBlock(reason: reason, call: call)
+    case .prepared(let action):
+      prepared = action
+    case .refused(let reason):
+      return dangerousBlock(reason: reason, call: call)
     }
 
     for text in prepared.guardTexts {
@@ -477,11 +491,15 @@ public struct GatedToolDispatcher: ToolDispatching {
     self.clock = clock
   }
 
-  public var definitions: [ToolDefinition] { registry.definitions }
+  public var definitions: [ToolDefinition] {
+    registry.definitions
+  }
 
   /// The same name-keyed catalog `dispatch` gates through, surfaced so the composition root
   /// can build `ApprovedActionExecutor` against the identical tool instances.
-  public var toolsByName: [String: any Tool] { registry.toolsByName }
+  public var toolsByName: [String: any Tool] {
+    registry.toolsByName
+  }
 
   public func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
     // (0) unknown tool → error observation, never a crash
@@ -580,7 +598,8 @@ public struct GatedToolDispatcher: ToolDispatching {
     )
 
     switch outcome {
-    case .operationReturned(let payload): return payload
+    case .operationReturned(let payload):
+      return payload
     case .deadlineExpired, .callerCancelled:
       return ToolPayload(
         content: "The \(tool.definition.name) call timed out.",

@@ -60,13 +60,12 @@ package final class InstanceLock: @unchecked Sendable {
   private static func secure(_ descriptor: Int32) -> Bool {
     var status = stat()
 
-    guard
-      fstat(descriptor, &status) == 0,
-      (status.st_mode & S_IFMT) == S_IFREG,
-      status.st_nlink == 1,
-      status.st_uid == geteuid(),
-      fchmod(descriptor, lockFileMode) == 0,
-      fstat(descriptor, &status) == 0
+    guard fstat(descriptor, &status) == 0,
+          (status.st_mode & S_IFMT) == S_IFREG,
+          status.st_nlink == 1,
+          status.st_uid == geteuid(),
+          fchmod(descriptor, lockFileMode) == 0,
+          fstat(descriptor, &status) == 0
     else {
       return false
     }

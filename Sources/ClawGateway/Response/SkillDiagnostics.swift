@@ -10,15 +10,21 @@ public struct SkillDiagnostics: Sendable, Equatable {
     self.skillsCap = skillsCap
   }
 
-  public var acceptedCount: Int { scan.descriptors.count }
+  public var acceptedCount: Int {
+    scan.descriptors.count
+  }
 
-  public var rejectedCount: Int { scan.warnings.count }
+  public var rejectedCount: Int {
+    scan.warnings.count
+  }
 
   public var completeIndexGraphemes: Int {
     WorkspaceSkills.completeIndexGraphemeCount(for: scan.descriptors)
   }
 
-  public var fitsSkillsCap: Bool { completeIndexGraphemes <= skillsCap }
+  public var fitsSkillsCap: Bool {
+    completeIndexGraphemes <= skillsCap
+  }
 
   public func render() -> String {
     let accepted = scan.descriptors.map { descriptor in

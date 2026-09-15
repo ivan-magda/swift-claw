@@ -138,7 +138,9 @@ struct ProviderSurfaceParityTests {
     return claim.sessionID ?? 0
   }
 
-  private func inMemoryQueue() throws -> DatabaseQueue { return try TestDatabase.make() }
+  private func inMemoryQueue() throws -> DatabaseQueue {
+    return try TestDatabase.make()
+  }
 
   private func usageRowCount(_ queue: DatabaseQueue) throws -> Int {
     try queue.read { db in

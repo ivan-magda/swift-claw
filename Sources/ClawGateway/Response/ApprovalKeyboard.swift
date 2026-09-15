@@ -43,9 +43,12 @@ enum ApprovalKeyboard {
     }
 
     switch parts[2] {
-    case approveVerdict: return (nonce, true)
-    case denyVerdict: return (nonce, false)
-    default: return nil
+    case approveVerdict:
+      return (nonce, true)
+    case denyVerdict:
+      return (nonce, false)
+    default:
+      return nil
     }
   }
 }

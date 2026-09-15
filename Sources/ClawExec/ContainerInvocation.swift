@@ -36,19 +36,29 @@ enum ContainerInvocation {
     ]
   }
 
-  static func systemStatus() -> [String] { ["system", "status", "--format", "json"] }
+  static func systemStatus() -> [String] {
+    ["system", "status", "--format", "json"]
+  }
 
-  static func systemVersion() -> [String] { ["system", "version", "--format", "json"] }
+  static func systemVersion() -> [String] {
+    ["system", "version", "--format", "json"]
+  }
 
   static func systemPropertyList() -> [String] {
     ["system", "property", "list", "--format", "json"]
   }
 
-  static func listAll() -> [String] { ["list", "--all", "--format", "json"] }
+  static func listAll() -> [String] {
+    ["list", "--all", "--format", "json"]
+  }
 
-  static func inspect(_ identity: String) -> [String] { ["inspect", identity] }
+  static func inspect(_ identity: String) -> [String] {
+    ["inspect", identity]
+  }
 
-  static func inspectImage(_ image: String) -> [String] { ["image", "inspect", image] }
+  static func inspectImage(_ image: String) -> [String] {
+    ["image", "inspect", image]
+  }
 
   static func execCanary(_ identity: String, script: String) -> [String] {
     ["exec", "--user", "0", identity, ExecSandboxSettings.shellInterpreter, "-c", script]
@@ -58,11 +68,17 @@ enum ContainerInvocation {
     ["image", "pull", "--scheme", "https", "--progress", "none", image]
   }
 
-  static func stop(_ identity: String) -> [String] { ["stop", "--time", "1", identity] }
+  static func stop(_ identity: String) -> [String] {
+    ["stop", "--time", "1", identity]
+  }
 
-  static func kill(_ identity: String) -> [String] { ["kill", "--signal", "KILL", identity] }
+  static func kill(_ identity: String) -> [String] {
+    ["kill", "--signal", "KILL", identity]
+  }
 
-  static func remove(_ identity: String) -> [String] { ["rm", "--force", identity] }
+  static func remove(_ identity: String) -> [String] {
+    ["rm", "--force", identity]
+  }
 
   /// The stop → kill → remove escalation every teardown path walks; callers keep their own
   /// timeout policy per rung.
@@ -123,8 +139,10 @@ private extension ContainerInvocation {
 
   static func interpreter(for language: ExecLanguage) -> String {
     switch language {
-    case .python: ExecSandboxSettings.pythonInterpreter
-    case .sh: ExecSandboxSettings.shellInterpreter
+    case .python:
+      ExecSandboxSettings.pythonInterpreter
+    case .sh:
+      ExecSandboxSettings.shellInterpreter
     }
   }
 }

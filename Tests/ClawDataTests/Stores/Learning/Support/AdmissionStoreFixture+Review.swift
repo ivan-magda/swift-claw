@@ -185,8 +185,10 @@ extension AdmissionStoreFixture {
             action: button.action
           )
         }
-      case .emptyObjectMarkup: try setCommittedMarkup(db, "{}")
-      case .noncanonicalMarkup: try setCommittedMarkup(db, " \(try committedMarkup(db))")
+      case .emptyObjectMarkup:
+        try setCommittedMarkup(db, "{}")
+      case .noncanonicalMarkup:
+        try setCommittedMarkup(db, " \(try committedMarkup(db))")
       case .missingAdmissionReceipt:
         try db.execute(
           sql: "DELETE FROM learning_decisions WHERE kind = ?",
@@ -304,19 +306,26 @@ extension AdmissionStoreFixture {
         targets: targets,
         chunks: chunks
       )
-    case .wrongCandidateAction: targets[0] = replacing(targets[0], actions: [.candidateApprove])
+    case .wrongCandidateAction:
+      targets[0] = replacing(targets[0], actions: [.candidateApprove])
     case .wrongCandidateSubject:
       targets[0] = replacing(targets[0], subjectDigest: "another-candidate")
-    case .wrongSubjectKind: targets[0] = replacing(targets[0], subjectKind: .evaluation)
-    case .swappedEvaluations: targets.swapAt(1, 2)
+    case .wrongSubjectKind:
+      targets[0] = replacing(targets[0], subjectKind: .evaluation)
+    case .swappedEvaluations:
+      targets.swapAt(1, 2)
     case .extraTarget:
       targets.append(
         replacing(targets[1], nonce: "extra-target", subjectDigest: "extra-evaluation")
       )
-    case .wrongTargetJob: targets[0] = replacing(targets[0], jobID: targets[0].jobID + 1)
-    case .wrongTargetEpoch: targets[0] = replacing(targets[0], epoch: LearningEpoch(99))
-    case .duplicateNonce: targets[1] = replacing(targets[1], nonce: targets[0].nonce)
-    case .emptyNonce: targets[0] = replacing(targets[0], nonce: "")
+    case .wrongTargetJob:
+      targets[0] = replacing(targets[0], jobID: targets[0].jobID + 1)
+    case .wrongTargetEpoch:
+      targets[0] = replacing(targets[0], epoch: LearningEpoch(99))
+    case .duplicateNonce:
+      targets[1] = replacing(targets[1], nonce: targets[0].nonce)
+    case .emptyNonce:
+      targets[0] = replacing(targets[0], nonce: "")
     case .delimiterNonce:
       let validNonce = targets[0].nonce
       let delimiterNonce = "nonce:with-delimiter"
@@ -325,12 +334,18 @@ extension AdmissionStoreFixture {
       chunks[0] = replacing(chunks[0], replyMarkup: markup)
     case .wrongExpiry:
       targets[0] = replacing(targets[0], expiresAt: targets[0].expiresAt.addingTimeInterval(1))
-    case .wrongOwner: targets[0] = replacing(targets[0], ownerUserID: 999)
-    case .wrongChat: targets[0] = replacing(targets[0], chatID: 999)
-    case .wrongChunkSubject: chunks[0] = replacing(chunks[0], subjectDigest: "another-review")
-    case .wrongChunkOrdinal: chunks[0] = replacing(chunks[0], ordinal: 1)
-    case .wrongChunkChat: chunks[0] = replacing(chunks[0], chatID: chunks[0].chatID + 1)
-    case .wrongChunkHash: chunks[0] = replacing(chunks[0], payloadHash: "wrong-hash")
+    case .wrongOwner:
+      targets[0] = replacing(targets[0], ownerUserID: 999)
+    case .wrongChat:
+      targets[0] = replacing(targets[0], chatID: 999)
+    case .wrongChunkSubject:
+      chunks[0] = replacing(chunks[0], subjectDigest: "another-review")
+    case .wrongChunkOrdinal:
+      chunks[0] = replacing(chunks[0], ordinal: 1)
+    case .wrongChunkChat:
+      chunks[0] = replacing(chunks[0], chatID: chunks[0].chatID + 1)
+    case .wrongChunkHash:
+      chunks[0] = replacing(chunks[0], payloadHash: "wrong-hash")
     case .emptyChunk:
       chunks[0] = replacing(chunks[0], payload: "", payloadHash: ContentHash.fnv1a(""))
     case .nonfinalMarkup:
@@ -339,8 +354,10 @@ extension AdmissionStoreFixture {
         replacing(chunks[0], replyMarkup: markup),
         replacing(chunks[0], ordinal: 1, replyMarkup: markup),
       ]
-    case .missingFinalMarkup: chunks[0] = replacing(chunks[0], replyMarkup: nil)
-    case .invalidFinalMarkup: chunks[0] = replacing(chunks[0], replyMarkup: "{}")
+    case .missingFinalMarkup:
+      chunks[0] = replacing(chunks[0], replyMarkup: nil)
+    case .invalidFinalMarkup:
+      chunks[0] = replacing(chunks[0], replyMarkup: "{}")
     }
     return CandidateReviewNotice(
       candidateDigest: review.candidateDigest,

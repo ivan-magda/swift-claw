@@ -13,7 +13,9 @@ enum CandidateTrialMismatch: CaseIterable {
   case replacement
   case currentState
 
-  var expectedState: LearningTrialState { self == .currentState ? .promoted : .open }
+  var expectedState: LearningTrialState {
+    self == .currentState ? .promoted : .open
+  }
 }
 
 enum EvaluationTrialMismatch: CaseIterable {

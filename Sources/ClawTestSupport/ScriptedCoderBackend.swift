@@ -39,11 +39,17 @@ public actor ScriptedCoderBackend: CoderBackend {
 
   nonisolated public let invocations: [Invocation]
 
-  nonisolated public var started: AsyncGate { invocations[0].started }
+  nonisolated public var started: AsyncGate {
+    invocations[0].started
+  }
 
-  nonisolated public var allowCompletion: AsyncGate { invocations[0].allowCompletion }
+  nonisolated public var allowCompletion: AsyncGate {
+    invocations[0].allowCompletion
+  }
 
-  nonisolated public var allowCleanup: AsyncGate { invocations[0].allowCleanup }
+  nonisolated public var allowCleanup: AsyncGate {
+    invocations[0].allowCleanup
+  }
 
   public private(set) var startedJobIDs: [UUID] = []
 
@@ -94,7 +100,9 @@ public actor ScriptedCoderBackend: CoderBackend {
       let event: CoderProcessEvent =
         script.unresolvedCleanup ? .unresolved(launchID: launchID) : .stopped(launchID: launchID)
       try await recordProcess(event)
-    } catch { script.started.open() }
+    } catch {
+      script.started.open()
+    }
     return script.result
   }
 }

@@ -35,7 +35,9 @@ func callbackUpdate(
 actor RecordingCallbacks: CallbackResponding {
   private(set) var answers: [(id: String, text: String?)] = []
 
-  func answerCallbackQuery(id: String, text: String?) async throws { answers.append((id, text)) }
+  func answerCallbackQuery(id: String, text: String?) async throws {
+    answers.append((id, text))
+  }
 
   func editMessageReplyMarkup(chatID: Int64, messageID: Int64, replyMarkup: String?) async throws {}
 }
@@ -80,9 +82,13 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     return recordedDenyCalls
   }
 
-  func approval(nonce: String) throws(StoreError) -> Approval? { byNonce[nonce] }
+  func approval(nonce: String) throws(StoreError) -> Approval? {
+    byNonce[nonce]
+  }
 
-  func approval(id: Int64) throws(StoreError) -> Approval? { nil }
+  func approval(id: Int64) throws(StoreError) -> Approval? {
+    nil
+  }
 
   func approve(
     id: Int64,
@@ -114,11 +120,17 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     return denyResult
   }
 
-  func sweepExpired(now: Date) throws(StoreError) -> [Approval] { [] }
+  func sweepExpired(now: Date) throws(StoreError) -> [Approval] {
+    []
+  }
 
-  func unresolvedAtBoot() throws(StoreError) -> [Approval] { [] }
+  func unresolvedAtBoot() throws(StoreError) -> [Approval] {
+    []
+  }
 
-  func resolveOrphans(now: Date) throws(StoreError) -> Int { 0 }
+  func resolveOrphans(now: Date) throws(StoreError) -> Int {
+    0
+  }
 
   func approvalsHealth(now: Date) throws(StoreError) -> ApprovalsHealth {
     throw StoreError.unexpected("approvalsHealth is not used by the callback handler")

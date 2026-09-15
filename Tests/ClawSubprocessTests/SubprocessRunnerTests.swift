@@ -236,11 +236,10 @@ private func firstValue<Value>(from stream: AsyncStream<Value>) async throws -> 
 
 private func readProcessIdentifier(from file: URL) async -> Int32? {
   await pollUntil {
-    guard
-      let data = try? Data(contentsOf: file),
-      let text = String(bytes: data, encoding: .utf8),
-      let processIdentifier = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)),
-      processIdentifier > 0
+    guard let data = try? Data(contentsOf: file),
+          let text = String(bytes: data, encoding: .utf8),
+          let processIdentifier = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+          processIdentifier > 0
     else {
       return nil
     }
@@ -251,10 +250,9 @@ private func readProcessIdentifier(from file: URL) async -> Int32? {
 private func processBecameUnreachable(_ processIdentifier: Int32) async -> Bool {
   await pollUntil {
     #if canImport(Glibc)
-      if
-        let stat = try? String(contentsOfFile: "/proc/\(processIdentifier)/stat", encoding: .utf8),
-        let commandEnd = stat.lastIndex(of: ")"),
-        stat[stat.index(after: commandEnd)...].split(separator: " ").first == "Z"
+      if let stat = try? String(contentsOfFile: "/proc/\(processIdentifier)/stat", encoding: .utf8),
+         let commandEnd = stat.lastIndex(of: ")"),
+         stat[stat.index(after: commandEnd)...].split(separator: " ").first == "Z"
       {
         return true
       }

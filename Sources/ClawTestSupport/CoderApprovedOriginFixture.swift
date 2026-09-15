@@ -150,8 +150,10 @@ private extension CoderApprovedOriginFixture {
     )
   }
 
-  static func proposedToolCalls(prepared: CoderPreparedRequest, toolCallID: String) throws -> String
-  {
+  static func proposedToolCalls(
+    prepared: CoderPreparedRequest,
+    toolCallID: String
+  ) throws -> String {
     let request = prepared.request
     let sourceJSON = try required(CanonicalJSON.encode(request.source))
     let sourceArgument = try required(JSONValue.parse(sourceJSON))

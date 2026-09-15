@@ -15,7 +15,9 @@ private struct HeartbeatWorkspace: WorkspaceReading {
     file == .heartbeat ? heartbeatFile : .missing
   }
 
-  func scanSkills() -> SkillScanResult { SkillScanResult(descriptors: [], warnings: []) }
+  func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
 }
 
 @Suite

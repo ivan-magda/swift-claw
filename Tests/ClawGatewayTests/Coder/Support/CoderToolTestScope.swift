@@ -1,12 +1,16 @@
 import ClawTestSupport
 import Testing
 
-enum CoderToolCleanupError: Error { case lanesNotDrained }
+enum CoderToolCleanupError: Error {
+  case lanesNotDrained
+}
 
 actor CoderToolStorageCleanup {
   private(set) var deletionAllowed = true
 
-  func retainFiles() { deletionAllowed = false }
+  func retainFiles() {
+    deletionAllowed = false
+  }
 }
 
 extension CoderServiceFixture {
@@ -28,7 +32,9 @@ extension SC3Harness {
   ) async throws {
     try await withCoderToolCleanup(operation: operation) {
       backend.releaseAll()
-      do { try await stop() } catch {
+      do {
+        try await stop()
+      } catch {
         await storage.retainFiles()
         throw error
       }
@@ -43,9 +49,15 @@ private func withCoderToolCleanup(
   operation: () async throws -> Void,
   cleanup: () async throws -> Void
 ) async throws {
-  do { try await operation() } catch {
+  do {
+    try await operation()
+  } catch {
     let operationError = error
-    do { try await cleanup() } catch { Issue.record(error) }
+    do {
+      try await cleanup()
+    } catch {
+      Issue.record(error)
+    }
     throw operationError
   }
   try await cleanup()

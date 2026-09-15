@@ -5,12 +5,11 @@ enum RuntimeInitImageReference {
   // Host/port and repository grammar defer to the same authority that validates the pinned
   // workload image, so the two reference checks cannot drift apart; only tag grammar is local.
   static func isRegistryQualifiedTag(_ value: String) -> Bool {
-    guard
-      !value.isEmpty,
-      !value.contains("://"),
-      !value.contains("@"),
-      !value.contains(where: \.isWhitespace),
-      let slash = value.firstIndex(of: "/")
+    guard !value.isEmpty,
+          !value.contains("://"),
+          !value.contains("@"),
+          !value.contains(where: \.isWhitespace),
+          let slash = value.firstIndex(of: "/")
     else {
       return false
     }
@@ -34,8 +33,7 @@ enum RuntimeInitImageReference {
     }
 
     let components = repository.split(separator: "/", omittingEmptySubsequences: false)
-    guard
-      components.allSatisfy({
+    guard components.allSatisfy({
         PinnedImageReference.isValidRepositoryComponent(String($0))
       })
     else {

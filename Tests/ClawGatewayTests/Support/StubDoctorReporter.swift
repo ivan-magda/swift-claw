@@ -11,15 +11,21 @@ struct StubDoctorReporter: DoctorReporting {
     self.skillScans = StubSkillScans(skillScans)
   }
 
-  func report() async -> DoctorReport { stubbed }
+  func report() async -> DoctorReport {
+    stubbed
+  }
 
-  func scanSkills() async -> SkillScanResult { await skillScans.next() }
+  func scanSkills() async -> SkillScanResult {
+    await skillScans.next()
+  }
 }
 
 private actor StubSkillScans {
   private var scans: [SkillScanResult]
 
-  init(_ scans: [SkillScanResult]) { self.scans = scans }
+  init(_ scans: [SkillScanResult]) {
+    self.scans = scans
+  }
 
   func next() -> SkillScanResult {
     if scans.count > 1 {

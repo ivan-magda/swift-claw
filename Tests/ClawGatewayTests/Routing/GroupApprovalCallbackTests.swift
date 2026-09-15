@@ -80,7 +80,8 @@ struct GroupApprovalCallbackTests {
     )
     try await fixture.queue.write { database in
       switch refusal {
-      case .missingRequester: try database.execute(sql: "UPDATE runs SET requester_user_id = NULL")
+      case .missingRequester:
+        try database.execute(sql: "UPDATE runs SET requester_user_id = NULL")
       case .wrongSession:
         try database.execute(
           sql: "INSERT INTO sessions(session_key, created_ts, updated_ts) VALUES (?, ?, ?)",
@@ -98,7 +99,8 @@ struct GroupApprovalCallbackTests {
         try database.execute(sql: "UPDATE approvals SET owner_user_id = owner_user_id - 1")
       case .undeliveredPrompt:
         try database.execute(sql: "UPDATE approvals SET prompt_message_id = NULL")
-      default: break
+      default:
+        break
       }
     }
     let callbackHandler = handler(

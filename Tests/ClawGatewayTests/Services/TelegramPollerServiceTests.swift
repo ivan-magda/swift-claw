@@ -329,7 +329,9 @@ private final class PollerRecoveryControl: Sendable {
   private let delays = Mutex<[Duration]>([])
   private let expectedFirstDelay: Duration
 
-  init(expectedFirstDelay: Duration) { self.expectedFirstDelay = expectedFirstDelay }
+  init(expectedFirstDelay: Duration) {
+    self.expectedFirstDelay = expectedFirstDelay
+  }
 
   var clock: ScriptedClock {
     ScriptedClock { [self] delay in
@@ -354,7 +356,9 @@ private final class PollerRecoveryControl: Sendable {
     }
   }
 
-  func allowRetry() { retryAllowed.open() }
+  func allowRetry() {
+    retryAllowed.open()
+  }
 
   func releaseAll() {
     retryAllowed.open()

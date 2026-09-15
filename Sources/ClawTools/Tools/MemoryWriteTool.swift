@@ -10,7 +10,9 @@ import Foundation
 public struct MemoryWriteTool: Tool {
   private let redactor: SecretRedactor
 
-  public init(redactor: SecretRedactor) { self.redactor = redactor }
+  public init(redactor: SecretRedactor) {
+    self.redactor = redactor
+  }
 
   public var definition: ToolDefinition {
     ToolDefinition(
@@ -53,14 +55,20 @@ public struct MemoryWriteTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(5) }
+  public var timeout: Duration {
+    .seconds(5)
+  }
 
-  public var executesOnlyViaApproval: Bool { true }
+  public var executesOnlyViaApproval: Bool {
+    true
+  }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     switch MemoryWriteArguments.parse(arguments, sessionID: nil) {
-    case .invalid(let reason): .refused(reason: reason)
-    case .parsed(let request): .resolved(MemoryWriteArguments.canonicalTarget(for: request))
+    case .invalid(let reason):
+      .refused(reason: reason)
+    case .parsed(let request):
+      .resolved(MemoryWriteArguments.canonicalTarget(for: request))
     }
   }
 

@@ -169,7 +169,9 @@ public struct ReflectorOutput: Sendable, Equatable, Decodable {
       lessons = try container.decode([String].self, forKey: .lessons)
     }
 
-    enum CodingKeys: String, CodingKey, CaseIterable { case lessons }
+    enum CodingKeys: String, CodingKey, CaseIterable {
+      case lessons
+    }
   }
 
   enum CodingKeys: String, CodingKey, CaseIterable {
@@ -180,10 +182,16 @@ public struct ReflectorOutput: Sendable, Equatable, Decodable {
   struct AnyKey: CodingKey {
     let stringValue: String
 
-    var intValue: Int? { nil }
+    var intValue: Int? {
+      nil
+    }
 
-    init(stringValue: String) { self.stringValue = stringValue }
+    init(stringValue: String) {
+      self.stringValue = stringValue
+    }
 
-    init?(intValue: Int) { nil }
+    init?(intValue: Int) {
+      nil
+    }
   }
 }

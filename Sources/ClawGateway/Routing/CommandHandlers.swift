@@ -168,9 +168,12 @@ struct CommandHandlers: Sendable {
   ) async throws(RoutingHalt) -> HandleOutcome {
     let target = DeliveryTarget.reply(to: message, mode: mode)
     return switch command {
-    case .review: try await memoryReview(rawUpdate: rawUpdate, target: target, kind: nil)
-    case .filter(let kind): try await memoryReview(rawUpdate: rawUpdate, target: target, kind: kind)
-    case .show(let id): try await memoryShow(rawUpdate: rawUpdate, target: target, id: id)
+    case .review:
+      try await memoryReview(rawUpdate: rawUpdate, target: target, kind: nil)
+    case .filter(let kind):
+      try await memoryReview(rawUpdate: rawUpdate, target: target, kind: kind)
+    case .show(let id):
+      try await memoryShow(rawUpdate: rawUpdate, target: target, id: id)
     case .delete(let id):
       try await memoryDelete(
         rawUpdate: rawUpdate,

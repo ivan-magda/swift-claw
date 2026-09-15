@@ -13,7 +13,9 @@ struct TResponse<R: Decodable>: Decodable {
   let parameters: TResponseParameters?
 }
 
-struct TResponseParameters: Decodable { let retry_after: Int? }
+struct TResponseParameters: Decodable {
+  let retry_after: Int?
+}
 
 struct TUser: Decodable {
   let id: Int64
@@ -42,7 +44,9 @@ struct TChat: Decodable {
   /// Bot API always sends `type`; an absent one is malformed. It maps to `.private` so a
   /// malformed payload keeps the pre-group-mode DM behavior — group mode additionally requires an
   /// allowlisted chat id, so this default can never promote a chat into it.
-  var kind: ChatKind { type.map(ChatKind.init(apiValue:)) ?? .private }
+  var kind: ChatKind {
+    type.map(ChatKind.init(apiValue:)) ?? .private
+  }
 }
 
 /// The `reply_to_message` target, decoded as its own shape rather than a nested `TMessage`
@@ -181,12 +185,16 @@ struct TMessage: Decodable {
 
 /// The rich-content payload of `sendRichMessage` (Bot API 10.1). Telegram accepts exactly one of
 /// `markdown`/`html`; we only ever send `markdown` (rendered server-side, no escaper/converter).
-struct InputRichMessage: Encodable { let markdown: String }
+struct InputRichMessage: Encodable {
+  let markdown: String
+}
 
 /// Bot API 7.0+ `link_preview_options` (outbound controls strip auto-fetching link elements).
 /// Sent unconditionally disabled so Telegram's servers never fetch a URL embedded
 /// in outbound text — including attacker-chosen URLs quoted back in a tool-approval prompt.
-struct LinkPreviewOptions: Encodable { let isDisabled: Bool }
+struct LinkPreviewOptions: Encodable {
+  let isDisabled: Bool
+}
 
 struct SendRichMessageDraftRequest: Encodable {
   private enum CodingKeys: String, CodingKey {
@@ -214,7 +222,9 @@ struct TCallbackQuery: Decodable {
 
 /// Bot API `ChatMember` — only the status is read; the rights bitfield is not, because the log
 /// this feeds says what changed, not what the bot may now do.
-struct TChatMember: Decodable { let status: String? }
+struct TChatMember: Decodable {
+  let status: String?
+}
 
 /// `getChatMember` must identify its subject and status before it can prove current membership.
 struct TChatMemberLookup: Decodable {

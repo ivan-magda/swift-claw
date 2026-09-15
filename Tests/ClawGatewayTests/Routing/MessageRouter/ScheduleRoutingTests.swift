@@ -97,7 +97,9 @@ struct ScheduleRoutingTests {
     )
   }
 
-  private func jobCount(_ harness: Harness) throws -> Int { try harness.jobs.listAll().count }
+  private func jobCount(_ harness: Harness) throws -> Int {
+    try harness.jobs.listAll().count
+  }
 
   @Test
   func scheduleCreateParksAndSendsTheConfirmPrompt() async throws {

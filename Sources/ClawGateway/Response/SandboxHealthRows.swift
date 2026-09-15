@@ -32,13 +32,18 @@ public enum SandboxHealthRows {
 
   public static func rows(for status: SandboxDoctorStatus) -> [DoctorReport.Check] {
     switch status {
-    case .disabled: return [check(key: "sandbox", value: "disabled by CLAW_EXEC_ENABLED", ok: true)]
+    case .disabled:
+      return [check(key: "sandbox", value: "disabled by CLAW_EXEC_ENABLED", ok: true)]
     case .linuxDeferred:
       return [check(key: "sandbox", value: "execute_code awaits the Linux backend", ok: true)]
-    case .configOnly(let availability): return configOnlyRows(availability)
-    case .daemonManaged(let availability): return daemonManagedRows(availability)
-    case .live(let health): return liveRows(health)
-    case .unavailable(let reason): return unavailableRows(reason: reason)
+    case .configOnly(let availability):
+      return configOnlyRows(availability)
+    case .daemonManaged(let availability):
+      return daemonManagedRows(availability)
+    case .live(let health):
+      return liveRows(health)
+    case .unavailable(let reason):
+      return unavailableRows(reason: reason)
     }
   }
 }
@@ -52,7 +57,8 @@ private extension SandboxHealthRows {
       return availableVersionRows(engineVersion) + [
         check(key: "sandbox.canary", value: "deferred until live daemon startup", ok: true),
       ]
-    case .unavailable(let reason): return unavailableVersionRows(reason)
+    case .unavailable(let reason):
+      return unavailableVersionRows(reason)
     }
   }
 
@@ -62,7 +68,8 @@ private extension SandboxHealthRows {
       return availableVersionRows(engineVersion) + [
         check(key: "sandbox.canary", value: "owned by the running daemon", ok: true),
       ]
-    case .unavailable(let reason): return unavailableVersionRows(reason)
+    case .unavailable(let reason):
+      return unavailableVersionRows(reason)
     }
   }
 

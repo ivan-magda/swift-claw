@@ -12,5 +12,7 @@ public enum MCPDescriptionCap {
   public static func cap(
     _ text: String,
     maxGraphemes: Int = MCPDescriptionCap.maxGraphemes
-  ) -> String { TextTruncation.cap(text, maxGraphemes: maxGraphemes) }
+  ) -> String {
+    TextTruncation.cap(text, maxGraphemes: maxGraphemes)
+  }
 }

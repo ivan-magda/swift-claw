@@ -26,7 +26,9 @@ public enum RunState: String, Sendable, Equatable, CaseIterable {
 
   /// The absorbing states: `RunFSM` returns nil for every event once a run reaches one, which is
   /// what makes a terminal transition win exactly once and lets its receipt be written there.
-  public var isTerminal: Bool { !Self.liveStates.contains(self) }
+  public var isTerminal: Bool {
+    !Self.liveStates.contains(self)
+  }
 
   /// The complement of `liveStates`, derived rather than listed so a new state joins exactly one
   /// of the two sets.

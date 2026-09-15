@@ -15,9 +15,13 @@ struct RealInstanceLocking: AuthMutationLocking {
 
   func acquire() throws -> AuthMutationLease {
     let lock: InstanceLock
-    do { lock = try InstanceLock(path: path) } catch InstanceLock.LockError.alreadyLocked {
+    do {
+      lock = try InstanceLock(path: path)
+    } catch InstanceLock.LockError.alreadyLocked {
       throw AuthMutationLockFailure.held
-    } catch { throw AuthMutationLockFailure.unavailable(detail: "\(error)") }
+    } catch {
+      throw AuthMutationLockFailure.unavailable(detail: "\(error)")
+    }
 
     log.record(.lockAcquired)
     let effects = log

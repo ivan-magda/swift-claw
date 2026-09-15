@@ -5,7 +5,9 @@ import GRDB
 public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
   let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func binding(runID: Int64) throws(StoreError) -> RunLearningBinding? {
     try database.readMapping { db in
@@ -42,10 +44,9 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
-    guard
-      let bytes = SQLiteStoredValue.data(in: row, column: "canonical_bytes"),
-      let set = LessonSet.decoded(jobID: jobID, canonicalBytes: bytes),
-      set.digest == digest
+    guard let bytes = SQLiteStoredValue.data(in: row, column: "canonical_bytes"),
+          let set = LessonSet.decoded(jobID: jobID, canonicalBytes: bytes),
+          set.digest == digest
     else {
       throw StoreError.unexpected("lesson set \(digest.rawValue) for job \(jobID) is unreadable")
     }
@@ -86,12 +87,11 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
-    guard
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      let stableDigest = SQLiteStoredValue.string(in: row, column: "stable_lesson_set_digest"),
-      let stableRevision = SQLiteStoredValue.int64(in: row, column: "stable_revision"),
-      let openTrial = SQLiteStoredValue.nullableInt64(in: row, column: "open_trial_id"),
-      let feedbackRevision = SQLiteStoredValue.int64(in: row, column: "feedback_revision")
+    guard let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+          let stableDigest = SQLiteStoredValue.string(in: row, column: "stable_lesson_set_digest"),
+          let stableRevision = SQLiteStoredValue.int64(in: row, column: "stable_revision"),
+          let openTrial = SQLiteStoredValue.nullableInt64(in: row, column: "open_trial_id"),
+          let feedbackRevision = SQLiteStoredValue.int64(in: row, column: "feedback_revision")
     else {
       throw StoreError.unexpected("job \(jobID) has an unreadable learning state")
     }

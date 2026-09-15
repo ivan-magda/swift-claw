@@ -283,7 +283,9 @@ private extension ProviderStackFactory {
   /// backend rather than a silent no-op.
   ///
   /// It is not a test seam: the factory is the production path.
-  static var llmLogger: Logger { Logger(label: "clawd.llm") }
+  static var llmLogger: Logger {
+    Logger(label: "clawd.llm")
+  }
 
   /// Uniform jittered backoff for both adapters: a full-jitter draw over the capped exponential
   /// window, matching what the daemon wired inline before the factory owned composition.

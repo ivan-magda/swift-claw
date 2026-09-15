@@ -71,17 +71,22 @@ enum ChatGPTProviderTestSupport {
   /// The accounting a stream termination carries, or nil when it completed cleanly.
   static func accounting(of terminal: LLMStreamTermination) -> ProviderFailureAccounting? {
     switch terminal {
-    case .failed(let failure): return failure.accounting
-    case .cancelled(let disposition): return disposition
-    case .completed: return nil
+    case .failed(let failure):
+      return failure.accounting
+    case .cancelled(let disposition):
+      return disposition
+    case .completed:
+      return nil
     }
   }
 
   /// The owner-facing message a provider error carries, or nil for the errors that carry none.
   static func message(of failure: ProviderError) -> String? {
     switch failure {
-    case .connectFailed(let message): return message
-    case .transportFailure(let message): return message
+    case .connectFailed(let message):
+      return message
+    case .transportFailure(let message):
+      return message
     case .retryable(_, let message), .rejected(_, let message), .terminal(_, let message):
       return message
     case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
@@ -166,7 +171,9 @@ enum ChatGPTProviderTestSupport {
   /// Scripted SSE bodies for the provider suites. Each `event` is one `data:` frame; the fixtures
   /// assemble the frames a given outcome needs.
   enum Fixtures {
-    static func event(_ json: String) -> Data { Data("data: \(json)\n\n".utf8) }
+    static func event(_ json: String) -> Data {
+      Data("data: \(json)\n\n".utf8)
+    }
 
     /// A minimal success: an announced message, one visible delta, its done item, and a completed
     /// terminal with usage.

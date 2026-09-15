@@ -91,10 +91,9 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
-    guard
-      let winningState = RunState(rawValue: row["winning_state"]),
-      let terminalCause = TerminalCause(rawValue: row["terminal_cause"]),
-      let terminalAt = EpochSecondCodec.date(fromEpoch: row["terminal_at"])
+    guard let winningState = RunState(rawValue: row["winning_state"]),
+          let terminalCause = TerminalCause(rawValue: row["terminal_cause"]),
+          let terminalAt = EpochSecondCodec.date(fromEpoch: row["terminal_at"])
     else {
       throw StoreError.unexpected("run \(runID) has an unreadable terminal receipt")
     }

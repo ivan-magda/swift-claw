@@ -48,7 +48,9 @@ struct ChatGPTResponsesSSEParser: Sendable {
   private var dataEventCount = 0
   private var boundary = DataFieldScan()
 
-  init(bounds: ChatGPTResponsesBounds = .standard) { self.bounds = bounds }
+  init(bounds: ChatGPTResponsesBounds = .standard) {
+    self.bounds = bounds
+  }
 
   mutating func push(_ chunk: Data) throws -> [ChatGPTResponsesEvent] {
     // Scanned before the buffer is bounded: these bytes arrived whatever the parser goes on to make
@@ -187,15 +189,16 @@ private extension ChatGPTResponsesSSEParser {
     }
 
     let payload = Data(payloadLines.joined(separator: "\n").utf8)
-    guard
-      let envelope = try? JSONDecoder().decode(ChatGPTWireEventType.self, from: payload),
-      let name = ChatGPTWireEventName(rawValue: envelope.type)
+    guard let envelope = try? JSONDecoder().decode(ChatGPTWireEventType.self, from: payload),
+          let name = ChatGPTWireEventName(rawValue: envelope.type)
     else {
       return nil
     }
 
     let event: ChatGPTWireEvent
-    do { event = try JSONDecoder().decode(ChatGPTWireEvent.self, from: payload) } catch {
+    do {
+      event = try JSONDecoder().decode(ChatGPTWireEvent.self, from: payload)
+    } catch {
       throw Self.malformedEvent
     }
     return try Self.mapped(name, event)
@@ -229,8 +232,10 @@ private extension ChatGPTResponsesSSEParser {
         callID: event.callID,
         arguments: arguments
       )
-    case .completed, .done, .incomplete, .failed: return .terminal(try terminal(name, event))
-    case .error: return .streamError(ChatGPTRemoteFailure(event.error))
+    case .completed, .done, .incomplete, .failed:
+      return .terminal(try terminal(name, event))
+    case .error:
+      return .streamError(ChatGPTRemoteFailure(event.error))
     }
   }
 
@@ -328,8 +333,10 @@ enum ChatGPTMessagePhase: Sendable, Equatable {
   /// to refuse.
   var isOwnerVisible: Bool {
     switch self {
-    case .unspecified, .final, .finalAnswer: return true
-    case .commentary, .analysis, .other: return false
+    case .unspecified, .final, .finalAnswer:
+      return true
+    case .commentary, .analysis, .other:
+      return false
     }
   }
 }
@@ -366,9 +373,12 @@ struct ChatGPTResponsesTerminal: Sendable, Equatable {
       return status
     }
     switch name {
-    case .completed: return .completed
-    case .incomplete: return .incomplete
-    case .failed: return .failed
+    case .completed:
+      return .completed
+    case .incomplete:
+      return .incomplete
+    case .failed:
+      return .failed
     }
   }
 
@@ -406,7 +416,9 @@ struct ChatGPTRemoteFailure: Sendable, Equatable {
   /// Whether this failure is the backend refusing the replayed encrypted state. Such a turn can be
   /// re-issued without that state, so it maps to `invalidProviderState` rather than a generic
   /// terminal — the failure downstream turns into actionable `/new` guidance.
-  var isInvalidProviderState: Bool { code == Self.invalidEncryptedContentCode }
+  var isInvalidProviderState: Bool {
+    code == Self.invalidEncryptedContentCode
+  }
 }
 
 // MARK: - Wire Types
@@ -431,9 +443,12 @@ extension ChatGPTResponsesTerminal.Name {
   /// that contradicted itself.
   fileprivate init?(_ name: ChatGPTWireEventName) {
     switch name {
-    case .completed, .done: self = .completed
-    case .incomplete: self = .incomplete
-    case .failed: self = .failed
+    case .completed, .done:
+      self = .completed
+    case .incomplete:
+      self = .incomplete
+    case .failed:
+      self = .failed
     case .outputItemAdded, .outputItemDone, .outputTextDelta, .functionCallArgumentsDelta,
       .functionCallArgumentsDone, .error:
       return nil
@@ -443,7 +458,9 @@ extension ChatGPTResponsesTerminal.Name {
 
 /// Read before the event itself so an unknown type is never judged by whether the rest of its
 /// payload happens to fit a shape this route made up for it.
-private struct ChatGPTWireEventType: Decodable { let type: String }
+private struct ChatGPTWireEventType: Decodable {
+  let type: String
+}
 
 private struct ChatGPTWireEvent: Decodable {
   let outputIndex: Int?
@@ -636,10 +653,14 @@ extension ChatGPTStreamItem {
 extension ChatGPTStreamItemType {
   fileprivate init(_ wire: String) {
     switch wire {
-    case "message": self = .message
-    case "reasoning": self = .reasoning
-    case "function_call": self = .functionCall
-    default: self = .other(wire)
+    case "message":
+      self = .message
+    case "reasoning":
+      self = .reasoning
+    case "function_call":
+      self = .functionCall
+    default:
+      self = .other(wire)
     }
   }
 }
@@ -652,12 +673,18 @@ extension ChatGPTMessagePhase {
 
   fileprivate init(_ wire: String?) {
     switch wire {
-    case .none: self = .unspecified
-    case Self.finalWireName: self = .final
-    case Self.finalAnswerWireName: self = .finalAnswer
-    case Self.commentaryWireName: self = .commentary
-    case Self.analysisWireName: self = .analysis
-    case .some(let other): self = .other(other)
+    case .none:
+      self = .unspecified
+    case Self.finalWireName:
+      self = .final
+    case Self.finalAnswerWireName:
+      self = .finalAnswer
+    case Self.commentaryWireName:
+      self = .commentary
+    case Self.analysisWireName:
+      self = .analysis
+    case .some(let other):
+      self = .other(other)
     }
   }
 
@@ -665,12 +692,18 @@ extension ChatGPTMessagePhase {
   /// backend produced rather than as this build's opinion of it.
   var wireName: String? {
     switch self {
-    case .unspecified: return nil
-    case .final: return Self.finalWireName
-    case .finalAnswer: return Self.finalAnswerWireName
-    case .commentary: return Self.commentaryWireName
-    case .analysis: return Self.analysisWireName
-    case .other(let name): return name
+    case .unspecified:
+      return nil
+    case .final:
+      return Self.finalWireName
+    case .finalAnswer:
+      return Self.finalAnswerWireName
+    case .commentary:
+      return Self.commentaryWireName
+    case .analysis:
+      return Self.analysisWireName
+    case .other(let name):
+      return name
     }
   }
 }

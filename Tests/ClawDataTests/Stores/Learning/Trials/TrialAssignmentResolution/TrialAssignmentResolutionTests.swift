@@ -271,7 +271,9 @@ struct TrialAssignmentResolutionTests {
   }
 }
 
-struct AssignmentCacheSnapshot: Equatable { let values: [DatabaseValue] }
+struct AssignmentCacheSnapshot: Equatable {
+  let values: [DatabaseValue]
+}
 
 // MARK: - Assignment Reads
 
@@ -293,12 +295,11 @@ extension BoundRunEnvironment {
       "resolved_at",
     ]
     return try queue.read { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: "SELECT * FROM trial_assignments WHERE run_id = ?",
-          arguments: [runID]
-        )
+      guard let row = try Row.fetchOne(
+        db,
+        sql: "SELECT * FROM trial_assignments WHERE run_id = ?",
+        arguments: [runID]
+      )
       else {
         throw StoreError.unexpected("fixture assignment is missing")
       }

@@ -8,7 +8,9 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
   public let root: URL
 
-  public init(root: URL) { self.root = root }
+  public init(root: URL) {
+    self.root = root
+  }
 
   public func ensureRootExists() throws {
     try FileManager.default.createDirectory(
@@ -39,12 +41,11 @@ public struct FileSystemWorkspace: WorkspaceReading {
       return SkillScanResult(descriptors: [], warnings: [.skillsDirectoryOutsideWorkspace])
     }
 
-    guard
-      let entries = try? fileManager.contentsOfDirectory(
-        at: containmentRoot,
-        includingPropertiesForKeys: nil,
-        options: [.skipsHiddenFiles]
-      )
+    guard let entries = try? fileManager.contentsOfDirectory(
+      at: containmentRoot,
+      includingPropertiesForKeys: nil,
+      options: [.skipsHiddenFiles]
+    )
     else {
       // skills/ exists but cannot be listed: a context-read failure, not a missing directory.
       return SkillScanResult(descriptors: [], warnings: [.unreadableSkillsDirectory])
@@ -57,9 +58,12 @@ public struct FileSystemWorkspace: WorkspaceReading {
       $0.lastPathComponent < $1.lastPathComponent
     }) {
       switch Self.entry(at: subdir, under: containmentRoot) {
-      case .notASkill: continue
-      case .rejected(let warning): warnings.append(warning)
-      case .usable(let descriptor): descriptors.append(descriptor)
+      case .notASkill:
+        continue
+      case .rejected(let warning):
+        warnings.append(warning)
+      case .usable(let descriptor):
+        descriptors.append(descriptor)
       }
     }
 
@@ -80,10 +84,9 @@ public struct FileSystemWorkspace: WorkspaceReading {
   /// The canonical `skills/` directory, or nil when it resolves outside the canonical workspace
   /// root — which is what makes it a sound containment anchor for the skills beneath it.
   static func containedSkillsRoot(_ skillsRoot: URL, under root: URL) -> URL? {
-    guard
-      let canonicalRoot = WorkspacePathContainment.canonicalPath(root.path),
-      let canonicalSkillsRoot = WorkspacePathContainment.canonicalPath(skillsRoot.path),
-      WorkspacePathContainment.isContained(target: canonicalSkillsRoot, root: canonicalRoot)
+    guard let canonicalRoot = WorkspacePathContainment.canonicalPath(root.path),
+          let canonicalSkillsRoot = WorkspacePathContainment.canonicalPath(skillsRoot.path),
+          WorkspacePathContainment.isContained(target: canonicalSkillsRoot, root: canonicalRoot)
     else {
       return nil
     }
@@ -106,8 +109,10 @@ public struct FileSystemWorkspace: WorkspaceReading {
       path: "\(directoryName)/\(WorkspaceSkills.manifestName)",
       root: skillsRoot.path
     ) {
-    case .refused: return .rejected(.escapingSkillDirectory(directory: directoryName))
-    case .resolved(let resolved): manifestPath = resolved
+    case .refused:
+      return .rejected(.escapingSkillDirectory(directory: directoryName))
+    case .resolved(let resolved):
+      manifestPath = resolved
     }
 
     // An unreadable manifest folds to "" → empty frontmatter → the same invalid-manifest warning.
@@ -227,9 +232,8 @@ public struct FileSystemWorkspace: WorkspaceReading {
       return .missing
     }
 
-    guard
-      let rawData = try? Data(contentsOf: fileURL),
-      let text = String(data: rawData, encoding: .utf8)
+    guard let rawData = try? Data(contentsOf: fileURL),
+          let text = String(data: rawData, encoding: .utf8)
     else {
       return LoadedFile(outcome: .unreadable, text: "", graphemeCount: 0)
     }

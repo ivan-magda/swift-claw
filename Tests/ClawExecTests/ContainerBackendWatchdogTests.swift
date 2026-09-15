@@ -104,11 +104,13 @@ struct ContainerBackendWatchdogTests {
         // until the test releases it after the assertions.
         await wedge.wait()
         return commandResult(.exited(0))
-      case "system": return jsonCommandResult(#"{"status":"running"}"#)
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
       case "list":
         let name = value(after: "--name", in: history[0].arguments) ?? "missing-name"
         return jsonCommandResult("[{\"id\":\"\(name)\"}]")
-      default: return commandResult(.exited(0))
+      default:
+        return commandResult(.exited(0))
       }
     }
     let controlAllowance =

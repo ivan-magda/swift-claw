@@ -43,8 +43,12 @@ struct AccessControlTests {
       (kind: .other("gigagroup"), chatID: -100, userID: 42, expected: .denied(.unlistedChat)),
     ]
   )
-  func chatModeDecisionTable(kind: ChatKind, chatID: Int64, userID: Int64, expected: AccessDecision)
-  {
+  func chatModeDecisionTable(
+    kind: ChatKind,
+    chatID: Int64,
+    userID: Int64,
+    expected: AccessDecision
+  ) {
     // given
     let access = AccessControl(allowlist: StubAllowlist(allowed: [42]), groupChats: [-100])
 

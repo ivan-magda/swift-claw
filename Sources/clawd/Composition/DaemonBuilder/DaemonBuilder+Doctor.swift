@@ -43,7 +43,9 @@ struct DaemonDoctorReporter: DoctorReporting {
   let coder: CoderComposition?
   let redactor: SecretRedactor
 
-  func scanSkills() async -> SkillScanResult { DoctorHealth.skillScan(config: config) }
+  func scanSkills() async -> SkillScanResult {
+    DoctorHealth.skillScan(config: config)
+  }
 
   func report() async -> DoctorReport {
     var report = DoctorReport()

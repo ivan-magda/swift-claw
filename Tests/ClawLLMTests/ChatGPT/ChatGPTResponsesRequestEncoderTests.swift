@@ -432,7 +432,9 @@ struct ChatGPTResponsesRequestEncoderTests {
 // MARK: - Fixtures
 
 extension ChatGPTResponsesRequestEncoderTests {
-  fileprivate var encoder: ChatGPTResponsesRequestEncoder { ChatGPTResponsesRequestEncoder() }
+  fileprivate var encoder: ChatGPTResponsesRequestEncoder {
+    ChatGPTResponsesRequestEncoder()
+  }
 
   fileprivate func encodeBody(_ request: ChatRequest) throws -> String {
     try #require(String(data: encoder.encode(request: request), encoding: .utf8))

@@ -33,7 +33,8 @@ enum MCPTransportError: Error, Sendable, Equatable {
   /// The side-effect disposition the session retry classifier and owner-facing observation share.
   var callExecutionDisposition: MCPCallExecutionDisposition {
     switch self {
-    case .notConnected, .sessionExpired: return .definitelyNotExecuted
+    case .notConnected, .sessionExpired:
+      return .definitelyNotExecuted
     case .requestFailed(let failure):
       return failure.disposition == .definitelyNotSent ? .definitelyNotExecuted : .mayHaveExecuted
     case .httpStatus, .unsupportedContentType, .oversizedMessage, .receiveBufferOverflow,
@@ -46,9 +47,12 @@ enum MCPTransportError: Error, Sendable, Equatable {
 extension MCPTransportError: CustomStringConvertible {
   var description: String {
     switch self {
-    case .notConnected: return "MCP transport is not connected"
-    case .sessionExpired: return "MCP session expired"
-    case .httpStatus(let code): return "MCP server returned HTTP \(code)"
+    case .notConnected:
+      return "MCP transport is not connected"
+    case .sessionExpired:
+      return "MCP session expired"
+    case .httpStatus(let code):
+      return "MCP server returned HTTP \(code)"
     case .unsupportedContentType(let value):
       return "MCP server returned an unsupported content type: \(Self.mediaTypeDescription(value))"
     case .oversizedMessage(let limitBytes):
@@ -57,7 +61,8 @@ extension MCPTransportError: CustomStringConvertible {
       return "MCP receive buffer exceeds the \(limitMessages)-message limit"
     case .receiveStreamTerminated:
       return "MCP receive stream ended before the response could be delivered"
-    case .requestFailed(let failure): return "MCP request failed: \(failure.safeMessage)"
+    case .requestFailed(let failure):
+      return "MCP request failed: \(failure.safeMessage)"
     }
   }
 

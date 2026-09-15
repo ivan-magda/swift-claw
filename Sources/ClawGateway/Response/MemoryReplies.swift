@@ -9,7 +9,9 @@ enum MemoryReplies {
 
   static let snippetCapGraphemes = 60
 
-  static var rememberUsage: String { "Usage: /remember [\(kindNames):] <text>" }
+  static var rememberUsage: String {
+    "Usage: /remember [\(kindNames):] <text>"
+  }
 
   static var memoryUsage: String {
     "Usage: /memory [\(kindNames)] | /memory show <id> | /memory delete <id>"
@@ -31,9 +33,13 @@ enum MemoryReplies {
     return "Saved."
   }
 
-  static func deleted(id: Int64) -> String { "Deleted memory \(id)." }
+  static func deleted(id: Int64) -> String {
+    "Deleted memory \(id)."
+  }
 
-  static func notFound(id: Int64) -> String { "No memory with id \(id)." }
+  static func notFound(id: Int64) -> String {
+    "No memory with id \(id)."
+  }
 
   static func emptyReview(kind: MemoryKind?) -> String {
     if let kind {
@@ -109,5 +115,7 @@ enum MemoryReplies {
     return String(text.prefix(snippetCapGraphemes)) + "…"
   }
 
-  private static func formattedDayString(_ date: Date) -> String { date.wallClockDay(in: .gmt) }
+  private static func formattedDayString(_ date: Date) -> String {
+    date.wallClockDay(in: .gmt)
+  }
 }

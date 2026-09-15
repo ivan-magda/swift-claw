@@ -52,7 +52,9 @@ struct DaemonBuilder: Sendable {
   /// `secrets.redactionValues`, so none of them can be built from a narrower list than the log
   /// backend was. Derived rather than passed in: a caller that could supply the list is a caller
   /// that could supply a shorter one.
-  var redactionValues: [String] { mcp.redactionValues(with: secrets) }
+  var redactionValues: [String] {
+    mcp.redactionValues(with: secrets)
+  }
 
   /// The single production bound on both the ServiceGroup's graceful window and the lane drain, so
   /// admission-close, cancel, and the bounded drain all share one deadline.
@@ -302,5 +304,7 @@ struct DaemonBuilder: Sendable {
   static func servicesWithLaneAdmissionLast(
     base: [any Service],
     laneAdmission: LaneAdmissionShutdownService
-  ) -> [any Service] { base + [laneAdmission] }
+  ) -> [any Service] {
+    base + [laneAdmission]
+  }
 }

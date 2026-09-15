@@ -39,7 +39,9 @@ struct ProviderAttemptExposureTests {
       do {
         try exposure.beginHandoff()
         return nil
-      } catch { return error }
+      } catch {
+        return error
+      }
     }.value
 
     // then — the submission is refused outright, so the attempt still claims nothing was sent

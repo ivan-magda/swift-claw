@@ -73,9 +73,12 @@ public enum MemoryCommand: Sendable, Equatable {
     }
 
     switch first {
-    case "show": return .show(id: id)
-    case "delete": return .delete(id: id)
-    default: return .invalid
+    case "show":
+      return .show(id: id)
+    case "delete":
+      return .delete(id: id)
+    default:
+      return .invalid
     }
   }
 }

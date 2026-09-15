@@ -181,12 +181,18 @@ enum AdmissionBindingMutation: CaseIterable, Sendable {
 
   var expected: AdmissionRejection {
     switch self {
-    case .noRecurrence, .cancelled: .jobNotRepeatable
-    case .epoch: .staleEpoch
-    case .baseDigest: .staleBaseDigest
-    case .baseRevision: .staleBaseRevision
-    case .feedbackRevision: .staleFeedbackRevision
-    case .sourceSupport: .sourceBindingsChanged
+    case .noRecurrence, .cancelled:
+      .jobNotRepeatable
+    case .epoch:
+      .staleEpoch
+    case .baseDigest:
+      .staleBaseDigest
+    case .baseRevision:
+      .staleBaseRevision
+    case .feedbackRevision:
+      .staleFeedbackRevision
+    case .sourceSupport:
+      .sourceBindingsChanged
     }
   }
 }

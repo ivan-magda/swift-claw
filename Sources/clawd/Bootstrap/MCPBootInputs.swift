@@ -29,5 +29,7 @@ struct MCPBootInputs: Sendable {
   /// The token to authenticate `server` with, or nil when there is none to send. A token bound to a
   /// URL the server no longer points at reads as absent here, which is the whole point of the
   /// binding.
-  func token(for server: String) -> String? { credentials[server]?.token }
+  func token(for server: String) -> String? {
+    credentials[server]?.token
+  }
 }

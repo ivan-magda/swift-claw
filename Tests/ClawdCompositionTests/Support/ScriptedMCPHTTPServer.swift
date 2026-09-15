@@ -82,7 +82,11 @@ actor ScriptedMCPHTTPServer: HTTPExecuting, HTTPStreaming {
       guard reply.body.isEmpty == false else {
         return .completed
       }
-      do { try await sink.send(reply.body) } catch { return .cancelled(.mayHaveBeenSent) }
+      do {
+        try await sink.send(reply.body)
+      } catch {
+        return .cancelled(.mayHaveBeenSent)
+      }
       return .completed
     }
   }
@@ -92,9 +96,8 @@ actor ScriptedMCPHTTPServer: HTTPExecuting, HTTPStreaming {
 
 private extension ScriptedMCPHTTPServer {
   func answer(to body: Data) throws -> (status: Int, body: Data) {
-    guard
-      let message = try JSONSerialization.jsonObject(with: body) as? [String: Any],
-      let method = message["method"] as? String
+    guard let message = try JSONSerialization.jsonObject(with: body) as? [String: Any],
+          let method = message["method"] as? String
     else {
       return (400, Data())
     }
@@ -104,13 +107,16 @@ private extension ScriptedMCPHTTPServer {
     }
 
     switch method {
-    case "initialize": return (200, try response(id: id, result: initializeResult()))
-    case "tools/list": return (200, try response(id: id, result: try listResult()))
+    case "initialize":
+      return (200, try response(id: id, result: initializeResult()))
+    case "tools/list":
+      return (200, try response(id: id, result: try listResult()))
     case "tools/call":
       let parameters = message["params"] as? [String: Any] ?? [:]
       calledTools.append(parameters["name"] as? String ?? "")
       return (200, try response(id: id, result: callResult()))
-    default: return (200, try response(id: id, result: [:]))
+    default:
+      return (200, try response(id: id, result: [:]))
     }
   }
 
@@ -140,7 +146,8 @@ private extension ScriptedMCPHTTPServer {
 
   func callResult() -> [String: Any] {
     switch outcome {
-    case .text(let text): return ["content": [["type": "text", "text": text]], "isError": false]
+    case .text(let text):
+      return ["content": [["type": "text", "text": text]], "isError": false]
     case .reportedFailure(let text):
       return ["content": [["type": "text", "text": text]], "isError": true]
     }

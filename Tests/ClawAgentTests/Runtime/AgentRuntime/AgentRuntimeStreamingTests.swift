@@ -88,8 +88,10 @@ actor StreamingProvider: LLMProvider {
   func complete(request: ChatRequest) async throws -> ChatResponse {
     completeCalls += 1
     switch blockingScript {
-    case .respond(let response): return response
-    case .fail(let error): throw error
+    case .respond(let response):
+      return response
+    case .fail(let error):
+      throw error
     }
   }
 
@@ -118,8 +120,10 @@ actor StreamingProvider: LLMProvider {
         }
         await gate.awaitRelease()
         return await Self.play(suffix, into: sink) ?? .completed(Self.emptyReply)
-      case .fail(let failure): return .failed(failure)
-      case .reportsCancel(let accounting): return .cancelled(accounting)
+      case .fail(let failure):
+        return .failed(failure)
+      case .reportsCancel(let accounting):
+        return .cancelled(accounting)
       case .neverFinishes:
         while !Task.isCancelled {
           try? await Task.sleep(for: .milliseconds(10))
@@ -159,8 +163,11 @@ actor StreamingProvider: LLMProvider {
       do {
         try await sink.sendDelta(text)
         return nil
-      } catch { return .cancelled(.mayHaveStarted(observing: 0)) }
-    case .finished(let response): return .completed(response)
+      } catch {
+        return .cancelled(.mayHaveStarted(observing: 0))
+      }
+    case .finished(let response):
+      return .completed(response)
     }
   }
 
@@ -171,9 +178,13 @@ actor StreamingProvider: LLMProvider {
     costFromProvider: nil
   )
 
-  private func recordStreamCall() { streamCalls += 1 }
+  private func recordStreamCall() {
+    streamCalls += 1
+  }
 
-  private func streamScriptValue() -> StreamScript { streamScript }
+  private func streamScriptValue() -> StreamScript {
+    streamScript
+  }
 }
 
 actor RecordingDrafts: RichDraftStreaming {
@@ -192,7 +203,9 @@ actor ReleasingRecordingDrafts: RichDraftStreaming {
   private(set) var drafts: [(chatID: Int64, draftID: Int64, markdown: String)] = []
   private let gate: TypingReleaseGate
 
-  init(gate: TypingReleaseGate) { self.gate = gate }
+  init(gate: TypingReleaseGate) {
+    self.gate = gate
+  }
 
   func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool {
     drafts.append((chatID, draftID, markdown))
@@ -209,7 +222,9 @@ actor RecordingStreamingProvider: LLMProvider {
   private var rounds: [[StreamEvent]]
   private(set) var requests: [ChatRequest] = []
 
-  init(rounds: [[StreamEvent]]) { self.rounds = rounds }
+  init(rounds: [[StreamEvent]]) {
+    self.rounds = rounds
+  }
 
   func complete(request: ChatRequest) async throws -> ChatResponse {
     // Streaming is enabled and never connect-fails here, so the blocking fallback is unreachable.
@@ -229,8 +244,10 @@ actor RecordingStreamingProvider: LLMProvider {
       let events = await self.nextRound(recording: request)
       for event in events {
         switch event {
-        case .delta(let text): try? await sink.sendDelta(text)
-        case .finished(let response): return .completed(response)
+        case .delta(let text):
+          try? await sink.sendDelta(text)
+        case .finished(let response):
+          return .completed(response)
         }
       }
       return .completed(
@@ -285,7 +302,9 @@ actor BlockingFinalDrafts: RichDraftStreaming {
   private var blockWaiters: [CheckedContinuation<Void, Never>] = []
   private var observeWaiters: [CheckedContinuation<Void, Never>] = []
 
-  init(finalMarkdown: String) { self.finalMarkdown = finalMarkdown }
+  init(finalMarkdown: String) {
+    self.finalMarkdown = finalMarkdown
+  }
 
   func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool {
     drafts.append(markdown)
@@ -475,7 +494,9 @@ actor TurnResultBox {
 func startTurn(operation: @escaping @Sendable () async throws -> TurnOutcome) -> TurnResultBox {
   let box = TurnResultBox()
   Task {
-    do { await box.resolve(.result(try await operation())) } catch {
+    do {
+      await box.resolve(.result(try await operation()))
+    } catch {
       Issue.record("unexpected runTurn throw in test harness: \(error)")
       await box.resolve(.timeout)
     }
@@ -498,7 +519,8 @@ func waitForTurnResult(
   case .result(let result):
     timeout.cancel()
     return result
-  case .timeout: return nil
+  case .timeout:
+    return nil
   }
 }
 

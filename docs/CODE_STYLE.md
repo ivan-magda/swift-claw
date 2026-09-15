@@ -9,7 +9,10 @@ The adopted revision, explicit local exceptions, and tool ownership are normativ
 
 - Nonempty conditional/loop statements and closure bodies are multiline; inline `if` expressions
   remain allowed.
-- Wrapped condition lists begin on the line after the keyword.
+- Nonempty `do` and `catch` bodies are multiline; review this manually.
+- Switch case bodies start on their own line, including single-statement bodies.
+- Nonempty type, extension, function, initializer, subscript, and computed-property bodies are
+  multiline. Empty bodies may remain `{}`.
 - Group private helpers in `private extension` blocks with an immediately preceding
   `// MARK: - <Group Name>`. Put other access modifiers on members.
 - Structure tests with `// given`, `// when`, and `// then`.
@@ -108,6 +111,8 @@ The existing tools cover mechanical layout. The following details remain manual 
 - Import ordering, conditional-import grouping, and necessity of each import.
 - Blank lines between protocol requirements and short members.
 - Multiline closure bodies, wrapped closure signatures, and short calls containing multiline closures.
+- Multiline `do` and `catch` bodies, including single-statement bodies.
+- Multiline nonempty type and extension bodies.
 - Vertical inheritance lists, unnecessary line breaks, and unusual continuation layouts.
 - Keep function signature tokens from `)` through `async`, `throws`, and `->` together.
   Wrap parameters vertically when needed; review existing breaks around effects manually.

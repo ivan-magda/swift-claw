@@ -25,10 +25,9 @@ extension ScheduledLearningStoreGRDB {
     )
     for row in rows {
       let receipt = try decodeTerminalReceipt(row)
-      if
-        receipt.result == .promoted,
-        receipt.inputs.replacementDigest == state.stableDigest,
-        receipt.record.stableRevision == state.stableRevision
+      if receipt.result == .promoted,
+         receipt.inputs.replacementDigest == state.stableDigest,
+         receipt.record.stableRevision == state.stableRevision
       {
         return receipt
       }
@@ -36,18 +35,19 @@ extension ScheduledLearningStoreGRDB {
     return nil
   }
 
-  public func rollback(_ trigger: RollbackTrigger, now: Date) throws(StoreError) -> DecisionReceipt?
-  {
+  public func rollback(
+    _ trigger: RollbackTrigger,
+    now: Date
+  ) throws(StoreError) -> DecisionReceipt? {
     try database.writeMapping { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: """
+      guard let row = try Row.fetchOne(
+        db,
+        sql: """
             SELECT decision_id, inputs, result FROM learning_decisions \
             WHERE decision_id = ? AND kind = ?
             """,
-          arguments: [trigger.promotionID, LearningDecisionKind.trial.rawValue]
-        )
+        arguments: [trigger.promotionID, LearningDecisionKind.trial.rawValue]
+      )
       else {
         return nil
       }
@@ -152,8 +152,10 @@ private extension ScheduledLearningStoreGRDB {
     promotion: DecisionReceipt
   ) throws -> Bool {
     switch trigger {
-    case .adapter: return false
-    case .safety(_, let digest, _): return isCanonicalDigest(digest)
+    case .adapter:
+      return false
+    case .safety(_, let digest, _):
+      return isCanonicalDigest(digest)
     case .ownerFeedback(_, let eventID):
       guard let event = try effectiveOwnerEvent(db, id: eventID, promotion: promotion) else {
         return false
@@ -168,12 +170,11 @@ private extension ScheduledLearningStoreGRDB {
           && kind == FeedbackSubjectKind.candidate.rawValue
           && digest == promotion.inputs.candidateDigest.rawValue)
     case .supportWithdrawal(_, let eventID):
-      guard
-        let event = try effectiveOwnerEvent(db, id: eventID, promotion: promotion),
-        let signal = OwnerSignal(rawValue: event["signal"]),
-        [.resultNotUseful, .resultCorrection, .evaluationDispute].contains(signal),
-        let state = try readState(db, jobID: promotion.inputs.identity.jobID),
-        let row = try trialRow(db, trialID: promotion.inputs.identity.trialID)
+      guard let event = try effectiveOwnerEvent(db, id: eventID, promotion: promotion),
+            let signal = OwnerSignal(rawValue: event["signal"]),
+            [.resultNotUseful, .resultCorrection, .evaluationDispute].contains(signal),
+            let state = try readState(db, jobID: promotion.inputs.identity.jobID),
+            let row = try trialRow(db, trialID: promotion.inputs.identity.trialID)
       else {
         return false
       }

@@ -8,7 +8,9 @@ enum SQLiteStoredValue {
     case trueValue
   }
 
-  struct Nullable<Value> { let value: Value? }
+  struct Nullable<Value> {
+    let value: Value?
+  }
 
   static func int64(in row: Row, column: String) -> Int64? {
     guard case .int64(let value) = databaseValue(in: row, column: column)?.storage else {
@@ -26,9 +28,12 @@ enum SQLiteStoredValue {
 
   static func boolean(in row: Row, column: String) -> BooleanValue? {
     switch int64(in: row, column: column) {
-    case 0: return .falseValue
-    case 1: return .trueValue
-    default: return nil
+    case 0:
+      return .falseValue
+    case 1:
+      return .trueValue
+    default:
+      return nil
     }
   }
 
@@ -37,9 +42,12 @@ enum SQLiteStoredValue {
       return nil
     }
     switch storage {
-    case .double(let value): return value
-    case .int64(let value): return Double(value)
-    case .null, .string, .blob: return nil
+    case .double(let value):
+      return value
+    case .int64(let value):
+      return Double(value)
+    case .null, .string, .blob:
+      return nil
     }
   }
 
@@ -62,9 +70,12 @@ enum SQLiteStoredValue {
       return nil
     }
     switch storage {
-    case .null: return Nullable(value: nil)
-    case .int64(let value): return Nullable(value: value)
-    case .double, .string, .blob: return nil
+    case .null:
+      return Nullable(value: nil)
+    case .int64(let value):
+      return Nullable(value: value)
+    case .double, .string, .blob:
+      return nil
     }
   }
 
@@ -86,10 +97,14 @@ enum SQLiteStoredValue {
       return nil
     }
     switch storage {
-    case .null: return Nullable(value: nil)
-    case .double(let value): return Nullable(value: value)
-    case .int64(let value): return Nullable(value: Double(value))
-    case .string, .blob: return nil
+    case .null:
+      return Nullable(value: nil)
+    case .double(let value):
+      return Nullable(value: value)
+    case .int64(let value):
+      return Nullable(value: Double(value))
+    case .string, .blob:
+      return nil
     }
   }
 
@@ -98,9 +113,12 @@ enum SQLiteStoredValue {
       return nil
     }
     switch storage {
-    case .null: return Nullable(value: nil)
-    case .string(let value): return Nullable(value: value)
-    case .int64, .double, .blob: return nil
+    case .null:
+      return Nullable(value: nil)
+    case .string(let value):
+      return Nullable(value: value)
+    case .int64, .double, .blob:
+      return nil
     }
   }
 
@@ -109,9 +127,12 @@ enum SQLiteStoredValue {
       return nil
     }
     switch storage {
-    case .null: return Nullable(value: nil)
-    case .blob(let value): return Nullable(value: value)
-    case .int64, .double, .string: return nil
+    case .null:
+      return Nullable(value: nil)
+    case .blob(let value):
+      return Nullable(value: value)
+    case .int64, .double, .string:
+      return nil
     }
   }
 

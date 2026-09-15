@@ -53,8 +53,10 @@ enum CommandReplies {
   /// The manual this conversation can act on.
   static func help(mode: ChatMode) -> String {
     switch mode {
-    case .direct: help
-    case .group: groupHelp
+    case .direct:
+      help
+    case .group:
+      groupHelp
     }
   }
 }

@@ -28,7 +28,9 @@ public struct UnreadableLearningJob: Sendable, Equatable {
 }
 
 /// A non-authoritative mismatch that can be reported without hiding authoritative state.
-public enum LearningViewWarning: Sendable, Equatable { case trialPointerMismatch }
+public enum LearningViewWarning: Sendable, Equatable {
+  case trialPointerMismatch
+}
 
 /// Current assignment facts projected from authoritative source rows in one read snapshot.
 public struct LearningTrialCounts: Sendable, Equatable {
@@ -100,9 +102,13 @@ public struct LearningTrialView: Sendable, Equatable {
 public struct AdmissionDecisionInputs: Sendable, Equatable, Codable {
   public let candidateDigest: CandidateDigest
 
-  public init(candidateDigest: CandidateDigest) { self.candidateDigest = candidateDigest }
+  public init(candidateDigest: CandidateDigest) {
+    self.candidateDigest = candidateDigest
+  }
 
-  enum CodingKeys: String, CodingKey { case candidateDigest = "candidate_digest" }
+  enum CodingKeys: String, CodingKey {
+    case candidateDigest = "candidate_digest"
+  }
 }
 
 public struct ReflectionNoCandidateInputs: Sendable, Equatable, Codable {
@@ -132,9 +138,13 @@ public struct ReflectionNoCandidateReceipt: Sendable, Equatable, Codable {
 
   public let resultDigest: ReflectionResultDigest
 
-  public init(resultDigest: ReflectionResultDigest) { self.resultDigest = resultDigest }
+  public init(resultDigest: ReflectionResultDigest) {
+    self.resultDigest = resultDigest
+  }
 
-  enum CodingKeys: String, CodingKey { case resultDigest = "result_digest" }
+  enum CodingKeys: String, CodingKey {
+    case resultDigest = "result_digest"
+  }
 }
 
 /// The immutable decision receipt shapes production can currently write.

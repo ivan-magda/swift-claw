@@ -53,13 +53,12 @@ extension ScheduledLearningStoreGRDB {
         """,
       arguments: [runID]
     )
-    guard
-      let row,
-      let contextSchemaVersion: String = row["context_schema_version"],
-      let toolCatalogDigest: String = row["tool_catalog_digest"],
-      let policyVersion: String = row["policy_version"],
-      let skillSetDigest: String = row["skill_set_digest"],
-      let configuredRoute: String = row["configured_route"]
+    guard let row,
+          let contextSchemaVersion: String = row["context_schema_version"],
+          let toolCatalogDigest: String = row["tool_catalog_digest"],
+          let policyVersion: String = row["policy_version"],
+          let skillSetDigest: String = row["skill_set_digest"],
+          let configuredRoute: String = row["configured_route"]
     else {
       return nil
     }
@@ -81,8 +80,11 @@ extension ScheduledLearningStoreGRDB {
   /// so a verdict and the surface it was reached on can never disagree. The pickup-time columns
   /// beside them are left alone: `configured_route` describes the run being judged, not the call
   /// judging it.
-  static func stampEvaluatorSurface(_ db: Database, runID: Int64, surface: EvaluatorSurface) throws
-  {
+  static func stampEvaluatorSurface(
+    _ db: Database,
+    runID: Int64,
+    surface: EvaluatorSurface
+  ) throws {
     try db.execute(
       sql: """
         UPDATE run_compatibility

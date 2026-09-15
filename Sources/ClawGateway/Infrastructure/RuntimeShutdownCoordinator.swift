@@ -62,7 +62,9 @@ public struct RuntimeShutdownCoordinator: Sendable {
     }
 
     if let coder {
-      do { try await coder.shutdown() } catch {
+      do {
+        try await coder.shutdown()
+      } catch {
         logger.critical("Coder shutdown could not prove persisted, joined cleanup")
         return .fatalCoderCleanup
       }
@@ -71,7 +73,9 @@ public struct RuntimeShutdownCoordinator: Sendable {
     // A daemon failure already owns the exit; the credential error only fills a vacant slot.
     var runFailure = daemonError
 
-    do { try await dependent.commitCredentials() } catch {
+    do {
+      try await dependent.commitCredentials()
+    } catch {
       // Redact before logging: a refresh/rotation error can carry token material.
       logger.error("credential shutdown failed: \(redactor.redact("\(error)"))")
       if runFailure == nil {
@@ -96,7 +100,9 @@ public struct RuntimeShutdownCoordinator: Sendable {
 
 private extension RuntimeShutdownCoordinator {
   func close(_ step: CleanupStep, named name: String) async {
-    do { try await step() } catch {
+    do {
+      try await step()
+    } catch {
       logger.error("\(name) client shutdown failed: \(redactor.redact("\(error)"))")
     }
   }

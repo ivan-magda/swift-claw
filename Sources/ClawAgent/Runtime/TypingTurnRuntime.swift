@@ -34,15 +34,20 @@ struct TypingTurnRuntime: Sendable {
         deadlineSeconds: wallClockDeadlineSeconds,
         clock: clock
       ) {
-        do { return .response(try await provider.complete(request: request)) } catch {
+        do {
+          return .response(try await provider.complete(request: request))
+        } catch {
           return .failed(error)
         }
       }
 
       switch outcome {
-      case .response(let response): return response
-      case .failed(let error): throw error
-      case .timedOut(.notStarted): throw ProviderNoStartDeadline()
+      case .response(let response):
+        return response
+      case .failed(let error):
+        throw error
+      case .timedOut(.notStarted):
+        throw ProviderNoStartDeadline()
       case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
         throw ProviderInferenceCancellation(observing: observedCompletionTokens)
       case .timedOut(.completed(let response)):

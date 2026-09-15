@@ -128,7 +128,8 @@ private extension ToolApprovalPrompt {
 
   static func headline(tool: String, reason: ApprovalReason) -> String {
     switch reason {
-    case .askTier: "⚠ I want to run \(tool). This changes state and needs your explicit approval."
+    case .askTier:
+      "⚠ I want to run \(tool). This changes state and needs your explicit approval."
     case .exfilTrifecta:
       """
       ⚠ I want to run \(tool) while this session holds private data \

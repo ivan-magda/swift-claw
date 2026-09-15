@@ -116,8 +116,10 @@ struct ScriptedDeviceAuthorization: ChatGPTDeviceAuthorizing {
     log.record(.deviceAuthorizationStarted)
     await onDeviceCode(device)
     switch outcome {
-    case .granted(let grant): return grant
-    case .failure(let makeFailure): throw makeFailure()
+    case .granted(let grant):
+      return grant
+    case .failure(let makeFailure):
+      throw makeFailure()
     }
   }
 }
@@ -137,8 +139,10 @@ struct ScriptedExchange: ChatGPTOAuthExchanging {
   ) async throws -> ChatGPTTokenPair {
     log.record(.tokenExchanged)
     switch outcome {
-    case .pair(let pair): return pair
-    case .failure(let makeFailure): throw makeFailure()
+    case .pair(let pair):
+      return pair
+    case .failure(let makeFailure):
+      throw makeFailure()
     }
   }
 }
@@ -164,8 +168,10 @@ final class ScriptedCatalog: ChatGPTModelCatalogFetching {
       seen = authorization
     }
     switch outcome {
-    case .models(let models): return models
-    case .failure(let failure): throw failure
+    case .models(let models):
+      return models
+    case .failure(let failure):
+      throw failure
     }
   }
 }
@@ -299,10 +305,14 @@ struct AuthWorld: Sendable {
     environment = [EnvSecretStore.EnvKey.botToken: AuthFixture.botToken]
   }
 
-  var paths: SecretStatePaths { SecretStatePaths(stateRoot: root) }
+  var paths: SecretStatePaths {
+    SecretStatePaths(stateRoot: root)
+  }
 
   /// The authorization the catalog fetch saw during the most recent `loginWorkflow().login()`.
-  var seenCatalogAuthorization: LLMRequestAuthorization? { builtCatalog.seenAuthorization }
+  var seenCatalogAuthorization: LLMRequestAuthorization? {
+    builtCatalog.seenAuthorization
+  }
 
   /// Loads the store as the owner's disk actually holds it, unrecorded. Read failures remain test
   /// failures rather than being mistaken for an absent credential.
@@ -390,12 +400,16 @@ func withAuthWorld<Value>(
 /// are asserted against everything the command emitted rather than a line a test picked. Only status
 /// and logout answer through here: login has already presented its lines, and returns none.
 extension AuthCommandResult {
-  var transcript: String { events.map(\.text).joined(separator: "\n") }
+  var transcript: String {
+    events.map(\.text).joined(separator: "\n")
+  }
 }
 
 /// Everything the owner actually saw, in order — which for login is the whole of it, since login
 /// streams rather than returns. The two spellings are deliberately the same word: a test asserts
 /// against whichever end the command in question presents through.
 extension RecordingTerminal {
-  var transcript: String { written.map(\.text).joined(separator: "\n") }
+  var transcript: String {
+    written.map(\.text).joined(separator: "\n")
+  }
 }

@@ -14,7 +14,9 @@ extension TypingIndicator {
   }
 }
 
-public enum TypingIndicatorTiming { public static let reissueInterval: Duration = .seconds(4) }
+public enum TypingIndicatorTiming {
+  public static let reissueInterval: Duration = .seconds(4)
+}
 
 public func withTypingPulse<Result>(
   chatID: Int64,

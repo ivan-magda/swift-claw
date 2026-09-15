@@ -18,7 +18,9 @@ extension CoderServiceTests {
           for job in try fixture.store.reservedJobs() {
             _ = try fixture.store.requestCancellation(id: job.id, now: Date())
           }
-        } catch { Issue.record(error) }
+        } catch {
+          Issue.record(error)
+        }
       }
       return text
     }

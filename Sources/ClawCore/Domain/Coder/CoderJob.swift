@@ -12,8 +12,10 @@ public enum CoderJobState: String, Sendable, Codable {
 
   public var isTerminal: Bool {
     switch self {
-    case .admitted, .running, .stopping: false
-    case .succeeded, .failed, .cancelled, .timedOut, .interrupted: true
+    case .admitted, .running, .stopping:
+      false
+    case .succeeded, .failed, .cancelled, .timedOut, .interrupted:
+      true
     }
   }
 }

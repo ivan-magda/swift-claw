@@ -84,8 +84,10 @@ struct StreamingTurnRuntime: Sendable {
     case .response(let response):
       await sendFinalDraft(response.content, target: target)
       return response
-    case .failed(let error): throw error
-    case .timedOut(.notStarted): throw ProviderNoStartDeadline()
+    case .failed(let error):
+      throw error
+    case .timedOut(.notStarted):
+      throw ProviderNoStartDeadline()
     case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
       // The interrupted attempt may already owe tokens, so the typed marker carries the observed
       // lower bound for the runtime's conservative row.
@@ -132,7 +134,9 @@ private extension StreamingTurnRuntime {
         }
       }
       return .cut
-    } catch is AccumulatedStreamContentTooLarge { return .overflowed } catch {
+    } catch is AccumulatedStreamContentTooLarge {
+      return .overflowed
+    } catch {
       // A cancelled consumer ends here (checkCancellation), and a failed terminal throws its cause.
       // Either way the authoritative outcome is the stream's own termination, read by the coordinator
       // — a cut reply is never surfaced as a whole one.
@@ -189,7 +193,11 @@ private extension StreamingTurnRuntime {
         ticksSinceTyping = 0
       }
 
-      do { try await clock.sleep(for: Self.probeInterval) } catch { return }
+      do {
+        try await clock.sleep(for: Self.probeInterval)
+      } catch {
+        return
+      }
       ticksSinceDraft += 1
       ticksSinceTyping += 1
     }

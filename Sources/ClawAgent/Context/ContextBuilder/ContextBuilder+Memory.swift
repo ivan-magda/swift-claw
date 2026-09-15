@@ -79,8 +79,10 @@ private extension ContextBuilder {
   /// A group topic recalls only its own past; a DM keeps its reach across the owner's sessions.
   func recallRestriction(for snapshot: SessionContextSnapshot, sessionID: Int64) -> Int64? {
     switch SessionKey.mode(from: snapshot.sessionKey) {
-    case .direct: nil
-    case .group: sessionID
+    case .direct:
+      nil
+    case .group:
+      sessionID
     }
   }
 

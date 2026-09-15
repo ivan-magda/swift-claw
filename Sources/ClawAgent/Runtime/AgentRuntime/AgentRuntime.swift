@@ -289,15 +289,14 @@ extension AgentRuntime {
       if metered, recordedRunUSD + preflight.costUSD > budget.perRunUSD {
         return outcome(.budgetStopped(cap: BudgetGate.perRunSpendCap))
       }
-      if
-        case .deny(let cap) = active.gate.preflight(
-          todayTokens: todayTokens + recordedRunTokens,
-          todayUSD: todayUSD + recordedRunUSD,
-          estimatedTotalTokens: preflight.totalTokens,
-          estimatedCostUSD: preflight.costUSD,
-          origin: origin,
-          proactiveTodayUSD: proactiveTodayUSD + recordedRunUSD
-        ) {
+      if case .deny(let cap) = active.gate.preflight(
+        todayTokens: todayTokens + recordedRunTokens,
+        todayUSD: todayUSD + recordedRunUSD,
+        estimatedTotalTokens: preflight.totalTokens,
+        estimatedCostUSD: preflight.costUSD,
+        origin: origin,
+        proactiveTodayUSD: proactiveTodayUSD + recordedRunUSD
+      ) {
         return outcome(.budgetStopped(cap: cap))
       }
 
@@ -320,12 +319,11 @@ extension AgentRuntime {
         estCostUSD=\(USD.precise(preflight.costUSD))
         """
       )
-      if
-        let admission = await attemptState.admission(
-          roundTripIndex: roundTripIndex,
-          priorRecordedTokens: recordedRunTokens,
-          priorResponsesSends: roundTripIndex - 1
-        ) {
+      if let admission = await attemptState.admission(
+        roundTripIndex: roundTripIndex,
+        priorRecordedTokens: recordedRunTokens,
+        priorResponsesSends: roundTripIndex - 1
+      ) {
         if case .deny(let cap) = admission {
           return outcome(.budgetStopped(cap: cap))
         }
@@ -387,7 +385,9 @@ extension AgentRuntime {
             )
           }
 
-          do { try attemptState.finalize(response, scope: outputScope) } catch {
+          do {
+            try attemptState.finalize(response, scope: outputScope)
+          } catch {
             return outcome(
               .degraded(
                 .providerUnavailable,
@@ -409,9 +409,8 @@ extension AgentRuntime {
           let reportedKind = firstFailureKind ?? failure.degradationKind
           firstFailureKind = reportedKind
 
-          guard
-            let persistence = RouteSwitch.permits(error),
-            let next = roster.failover(from: active.position)
+          guard let persistence = RouteSwitch.permits(error),
+                let next = roster.failover(from: active.position)
           else {
             turnLog.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
             return outcome(
@@ -486,7 +485,9 @@ extension AgentRuntime {
         runID: runID,
         sessionID: sessionID
       )
-      do { try usageStore.recordUsage(intermediate) } catch StoreError.diskFull {
+      do {
+        try usageStore.recordUsage(intermediate)
+      } catch StoreError.diskFull {
         throw StoreError.diskFull
       } catch {
         turnLog.warning("mid-run usage write failed; halting provider calls: \(error)")

@@ -186,7 +186,9 @@ extension FeedbackStoreTests {
       try env.seedTargets([target], chunks: [])
 
       // when
-      do { _ = try env.consume(env.tap(target: target, signal: .evaluationDispute)) } catch {
+      do {
+        _ = try env.consume(env.tap(target: target, signal: .evaluationDispute))
+      } catch {
         // Strict artifact corruption aborts the whole feedback transaction; a relational mismatch
         // may still record the event. Both outcomes are fail-closed for the trial.
       }

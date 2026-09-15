@@ -138,9 +138,13 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     throw StoreError.unexpected("unused by SchedulerService")
   }
 
-  func job(id: Int64) throws(StoreError) -> ScheduledJob? { nil }
+  func job(id: Int64) throws(StoreError) -> ScheduledJob? {
+    nil
+  }
 
-  func listAll() throws(StoreError) -> [ScheduledJob] { [] }
+  func listAll() throws(StoreError) -> [ScheduledJob] {
+    []
+  }
 
   func fireNow(jobID: Int64, now: Date) throws(StoreError) -> RunNowOutcome {
     throw StoreError.unexpected("unused by SchedulerService")

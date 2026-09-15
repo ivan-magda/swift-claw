@@ -38,7 +38,9 @@ public struct WebSearchTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(15) }
+  public var timeout: Duration {
+    .seconds(15)
+  }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     nil  // fixed-endpoint: the destination is pinned at composition, not chosen by args
@@ -64,13 +66,17 @@ public struct WebSearchTool: Tool {
       } ?? Self.defaultCount
 
     let results: [SearchResult]
-    do { results = try await search.search(query: query, count: count) } catch let searchError
+    do {
+      results = try await search.search(query: query, count: count)
+    } catch let searchError
       as SearchError
     {
       let reason =
         switch searchError {
-        case .terminal(_, let message), .retryable(_, let message): message
-        case .transport(let message): message
+        case .terminal(_, let message), .retryable(_, let message):
+          message
+        case .transport(let message):
+          message
         }
       return ToolPayload(
         content: "Search failed: \(reason)",

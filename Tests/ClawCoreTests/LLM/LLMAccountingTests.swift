@@ -10,7 +10,9 @@ struct ReservationCase: Sendable, CustomTestStringConvertible {
   let payloadByteCounts: [Int?]
   let expected: Int
 
-  var testDescription: String { scenario }
+  var testDescription: String {
+    scenario
+  }
 }
 
 /// Payload bytes are deliberately invalid UTF-8 and the issuer is a plausible-looking identity, so

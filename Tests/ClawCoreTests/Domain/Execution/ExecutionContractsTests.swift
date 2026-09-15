@@ -62,18 +62,30 @@ private extension ExecutionContractsTests {
     var lastError: String?
 
     switch gate {
-    case .available: available = false
-    case .operatingSystem: osOK = false
-    case .version: versionOK = false
-    case .imageDigest: imageDigestOK = false
-    case .emptyCapabilities: capsEmpty = false
-    case .networkIsolation: netIsolated = false
-    case .matchingCapabilities: capsMatch = false
-    case .reaper: reaperOK = false
-    case .readOnlyRoot: rootfsRO = false
-    case .readOnlyStaging: stagingRO = false
-    case .interpreters: interpretersOK = false
-    case .lastError: lastError = "probe failed"
+    case .available:
+      available = false
+    case .operatingSystem:
+      osOK = false
+    case .version:
+      versionOK = false
+    case .imageDigest:
+      imageDigestOK = false
+    case .emptyCapabilities:
+      capsEmpty = false
+    case .networkIsolation:
+      netIsolated = false
+    case .matchingCapabilities:
+      capsMatch = false
+    case .reaper:
+      reaperOK = false
+    case .readOnlyRoot:
+      rootfsRO = false
+    case .readOnlyStaging:
+      stagingRO = false
+    case .interpreters:
+      interpretersOK = false
+    case .lastError:
+      lastError = "probe failed"
     }
 
     return SandboxHealth(

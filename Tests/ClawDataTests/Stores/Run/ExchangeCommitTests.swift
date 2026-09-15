@@ -346,8 +346,9 @@ extension ExchangeCommitTests {
 
   /// The persisted state pair of every message row, oldest first, read back as raw storage so a
   /// coerced or half-written pair is visible rather than papered over by a typed decode.
-  private func persistedStates(_ fixture: Fixture) throws -> [(role: String, state: DatabaseValue)]
-  {
+  private func persistedStates(
+    _ fixture: Fixture
+  ) throws -> [(role: String, state: DatabaseValue)] {
     try fixture.queue.read { db in
       try Row.fetchAll(db, sql: "SELECT role, provider_state FROM messages ORDER BY id ASC").map {
         (row) in

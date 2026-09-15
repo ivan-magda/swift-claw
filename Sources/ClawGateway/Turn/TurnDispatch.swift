@@ -49,11 +49,10 @@ struct TurnDispatch: Sendable {
       try sessionMessages.claimAndPersistInbound(inbound)
     }
 
-    guard
-      claim.newlyClaimed,
-      let sessionID = claim.sessionID,
-      let runID = claim.runID,
-      let triggerMessageID = claim.triggerMessageID
+    guard claim.newlyClaimed,
+          let sessionID = claim.sessionID,
+          let runID = claim.runID,
+          let triggerMessageID = claim.triggerMessageID
     else {
       return replies.skipDuplicate(updateID: rawUpdate.updateID)
     }
@@ -111,7 +110,9 @@ struct TurnDispatch: Sendable {
     )
 
     let claim: ClaimResult
-    do { claim = try sessionMessages.claimAndPersistObserved(inbound) } catch StoreError.diskFull {
+    do {
+      claim = try sessionMessages.claimAndPersistObserved(inbound)
+    } catch StoreError.diskFull {
       logger.error("observed persist hit a full disk on update \(rawUpdate.updateID)")
       return .storageFull
     } catch {

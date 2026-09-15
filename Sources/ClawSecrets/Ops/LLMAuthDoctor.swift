@@ -20,8 +20,10 @@ public enum LLMAuthDoctor {
   ) -> DoctorRowResult {
     let provider = "provider=\(route.descriptor.providerID)"
     switch route.descriptor.credentialMode {
-    case .noneOrStaticBearer: return staticRow(provider: provider, staticAPIKey: staticAPIKey)
-    case .managedOAuth: return oauthRow(provider: provider, store: credentialStore, now: now)
+    case .noneOrStaticBearer:
+      return staticRow(provider: provider, staticAPIKey: staticAPIKey)
+    case .managedOAuth:
+      return oauthRow(provider: provider, store: credentialStore, now: now)
     }
   }
 
@@ -63,7 +65,9 @@ private extension LLMAuthDoctor {
       return loggedOut(provider: provider)
     }
     let stored: StoredOAuthCredential?
-    do { stored = try store.load(providerID: ChatGPTProviderMetadata.providerID) } catch {
+    do {
+      stored = try store.load(providerID: ChatGPTProviderMetadata.providerID)
+    } catch {
       return unreadable(provider: provider, error: error)
     }
     guard let stored else {
@@ -79,9 +83,12 @@ private extension LLMAuthDoctor {
   /// the skew: the daemon and this row read the same verdict for the same wall date.
   static func statusToken(_ freshness: ChatGPTCredentialFreshness) -> String {
     switch freshness {
-    case .fresh: "fresh"
-    case .expiring: "expiring"
-    case .expired: "expired-refresh-on-use"
+    case .fresh:
+      "fresh"
+    case .expiring:
+      "expiring"
+    case .expired:
+      "expired-refresh-on-use"
     }
   }
 }
@@ -105,12 +112,18 @@ private extension LLMAuthDoctor {
 
   static func reason(_ error: LLMCredentialStoreError) -> String {
     switch error {
-    case .missingRuntimeKey: "runtime key missing"
-    case .insecureStorage: "insecure storage"
-    case .malformedStorage: "malformed"
-    case .unsupportedVersion: "unsupported version"
-    case .oversizedStorage: "oversized"
-    case .publicationFailed, .commitUncertain: "unreadable"
+    case .missingRuntimeKey:
+      "runtime key missing"
+    case .insecureStorage:
+      "insecure storage"
+    case .malformedStorage:
+      "malformed"
+    case .unsupportedVersion:
+      "unsupported version"
+    case .oversizedStorage:
+      "oversized"
+    case .publicationFailed, .commitUncertain:
+      "unreadable"
     }
   }
 }

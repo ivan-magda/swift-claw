@@ -42,14 +42,17 @@ public enum TerminalDisposition: Sendable, Equatable {
 
   public var cause: TerminalCause {
     switch self {
-    case .settled(let cause), .deferred(let cause): cause
+    case .settled(let cause), .deferred(let cause):
+      cause
     }
   }
 
   public var freezesEvidence: Bool {
     switch self {
-    case .settled: true
-    case .deferred: false
+    case .settled:
+      true
+    case .deferred:
+      false
     }
   }
 }
@@ -59,8 +62,10 @@ extension CancelReason {
   /// drift apart between the single-run and plural arms.
   public var runEvent: RunEvent {
     switch self {
-    case .cancelled: .cancel
-    case .superseded: .supersede
+    case .cancelled:
+      .cancel
+    case .superseded:
+      .supersede
     }
   }
 
@@ -69,8 +74,10 @@ extension CancelReason {
   /// `RunState` happens to distinguish, and every other cause it cannot.
   public var terminalCause: TerminalCause {
     switch self {
-    case .cancelled: .ownerCancelled
-    case .superseded: .superseded
+    case .cancelled:
+      .ownerCancelled
+    case .superseded:
+      .superseded
     }
   }
 }

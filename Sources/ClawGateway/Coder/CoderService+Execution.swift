@@ -24,7 +24,9 @@ extension CoderService {
         return
       }
       try await complete(id: admitted.id, result: result, recovering: false)
-    } catch let error as StoreError { fail(.persistence(error)) } catch {
+    } catch let error as StoreError {
+      fail(.persistence(error))
+    } catch {
       fail(.persistence(.unexpected("Coder completion failed: \(error)")))
     }
   }
@@ -46,8 +48,10 @@ extension CoderService {
         now: Date()
       )
       switch outcome {
-      case .stateChanged(let current): job = current
-      case .alreadyTerminal: return
+      case .stateChanged(let current):
+        job = current
+      case .alreadyTerminal:
+        return
       case .committed:
         if !resolved {
           recoveryRequiredJobIDs.insert(id)
@@ -104,11 +108,10 @@ private extension CoderService {
   }
 
   static func selectedResult(_ result: CoderResult, persistedState: CoderJobState) -> CoderResult {
-    guard
-      persistedState == .stopping,
-      result.state != .cancelled,
-      result.state != .timedOut,
-      result.state != .interrupted
+    guard persistedState == .stopping,
+          result.state != .cancelled,
+          result.state != .timedOut,
+          result.state != .interrupted
     else {
       return result
     }

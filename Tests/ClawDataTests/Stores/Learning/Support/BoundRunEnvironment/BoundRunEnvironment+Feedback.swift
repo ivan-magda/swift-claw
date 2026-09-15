@@ -20,8 +20,10 @@ extension BoundRunEnvironment {
     )
   }
 
-  func evaluationFeedbackTarget(digest: EvaluationDigest, signal: OwnerSignal) -> NewFeedbackTarget
-  {
+  func evaluationFeedbackTarget(
+    digest: EvaluationDigest,
+    signal: OwnerSignal
+  ) -> NewFeedbackTarget {
     feedbackTarget(
       nonce: "evaluation-\(signal.rawValue)",
       kind: .evaluation,
@@ -65,11 +67,10 @@ extension BoundRunEnvironment {
   func recordRunFeedback(runID: Int64, signal: OwnerSignal, updateID: Int64) throws {
     let target = runFeedbackTarget(runID: runID, signal: signal)
     try TestLearningFixtures(writer: queue).seedTargets([target])
-    guard
-      case .recorded = try learning.consumeAndAppendEvent(
-        feedbackTap(target, updateID: updateID),
-        now: now.addingTimeInterval(1)
-      )
+    guard case .recorded = try learning.consumeAndAppendEvent(
+      feedbackTap(target, updateID: updateID),
+      now: now.addingTimeInterval(1)
+    )
     else {
       throw StoreError.unexpected("fixture feedback was not recorded")
     }

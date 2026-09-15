@@ -5,10 +5,15 @@ import GRDB
 public struct OutboxStoreGRDB: OutboxStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
-  public func markSent(deliveryKey: String, telegramMessageID: Int64, now: Date) throws(StoreError)
-  {
+  public func markSent(
+    deliveryKey: String,
+    telegramMessageID: Int64,
+    now: Date
+  ) throws(StoreError) {
     try database.writeMapping { db in
       try db.execute(
         sql: """

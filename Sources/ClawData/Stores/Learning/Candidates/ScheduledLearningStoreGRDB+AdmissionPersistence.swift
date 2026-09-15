@@ -24,14 +24,13 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func admissionJob(_ db: Database, jobID: Int64) throws -> AdmissionJob? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql:
+    guard let row = try Row.fetchOne(
+      db,
+      sql:
           "SELECT status, recurrence, session_id, owner_chat_id FROM scheduled_jobs WHERE id = ?",
-        arguments: [jobID]
-      ),
-      let status = ScheduledJobStatus(rawValue: row["status"])
+      arguments: [jobID]
+    ),
+          let status = ScheduledJobStatus(rawValue: row["status"])
     else {
       return nil
     }
@@ -59,16 +58,15 @@ extension ScheduledLearningStoreGRDB {
     guard let row = rows.first else {
       return nil
     }
-    guard
-      let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
-      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
-      let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
-      let generation = SQLiteStoredValue.int(in: row, column: "generation"),
-      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
-      let state = LearningTrialState(rawValue: stateRaw),
-      let algorithm = SQLiteStoredValue.string(in: row, column: "algorithm")
+    guard let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
+          let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+          let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+          let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
+          let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
+          let generation = SQLiteStoredValue.int(in: row, column: "generation"),
+          let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+          let state = LearningTrialState(rawValue: stateRaw),
+          let algorithm = SQLiteStoredValue.string(in: row, column: "algorithm")
     else {
       throw StoreError.unexpected("candidate admission trial is unreadable")
     }
@@ -89,12 +87,11 @@ extension ScheduledLearningStoreGRDB {
     artifact: CandidateArtifact,
     trial: TrialRow
   ) throws -> AdmissionReceipt {
-    guard
-      trial.jobID == artifact.manifest.jobID,
-      trial.epoch == artifact.manifest.epoch,
-      trial.baseDigest == artifact.manifest.baseDigest,
-      trial.candidateDigest == artifact.digest,
-      trial.algorithm == artifact.manifest.algorithm
+    guard trial.jobID == artifact.manifest.jobID,
+          trial.epoch == artifact.manifest.epoch,
+          trial.baseDigest == artifact.manifest.baseDigest,
+          trial.candidateDigest == artifact.digest,
+          trial.algorithm == artifact.manifest.algorithm
     else {
       throw StoreError.unexpected("candidate admission trial identity is inconsistent")
     }
@@ -102,11 +99,10 @@ extension ScheduledLearningStoreGRDB {
     guard receipts.count == 1, let receipt = receipts.first else {
       throw StoreError.unexpected("candidate admission receipt is missing or duplicated")
     }
-    guard
-      receipt.candidateDigest == artifact.digest,
-      receipt.replacementDigest == artifact.replacement.digest,
-      receipt.trialID == trial.id,
-      receipt.generation == trial.generation
+    guard receipt.candidateDigest == artifact.digest,
+          receipt.replacementDigest == artifact.replacement.digest,
+          receipt.trialID == trial.id,
+          receipt.generation == trial.generation
     else {
       throw StoreError.unexpected("candidate admission receipt identity is inconsistent")
     }
@@ -136,17 +132,15 @@ private extension ScheduledLearningStoreGRDB {
     )
     var matches: [AdmissionReceipt] = []
     for row in rows {
-      guard
-        let inputsJSON = SQLiteStoredValue.string(in: row, column: "inputs"),
-        let resultJSON = SQLiteStoredValue.string(in: row, column: "result"),
-        let algorithm = SQLiteStoredValue.string(in: row, column: "algorithm"),
-        algorithm == artifact.manifest.algorithm.rawValue
+      guard let inputsJSON = SQLiteStoredValue.string(in: row, column: "inputs"),
+            let resultJSON = SQLiteStoredValue.string(in: row, column: "result"),
+            let algorithm = SQLiteStoredValue.string(in: row, column: "algorithm"),
+            algorithm == artifact.manifest.algorithm.rawValue
       else {
         throw StoreError.unexpected("candidate admission decision is unreadable")
       }
-      guard
-        let inputs: AdmissionDecisionInputs = try? decodeCanonicalDecision(inputsJSON),
-        let receipt: AdmissionReceipt = try? decodeCanonicalDecision(resultJSON)
+      guard let inputs: AdmissionDecisionInputs = try? decodeCanonicalDecision(inputsJSON),
+            let receipt: AdmissionReceipt = try? decodeCanonicalDecision(resultJSON)
       else {
         throw StoreError.unexpected("candidate admission decision is unreadable")
       }

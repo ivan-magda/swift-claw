@@ -14,26 +14,40 @@ public enum ChatMembershipStatus: Sendable, Equatable {
 
   public init(apiValue: String) {
     switch apiValue {
-    case "creator": self = .creator
-    case "administrator": self = .administrator
-    case "member": self = .member
-    case "restricted": self = .restricted
-    case "left": self = .left
-    case "kicked": self = .kicked
-    default: self = .other(apiValue)
+    case "creator":
+      self = .creator
+    case "administrator":
+      self = .administrator
+    case "member":
+      self = .member
+    case "restricted":
+      self = .restricted
+    case "left":
+      self = .left
+    case "kicked":
+      self = .kicked
+    default:
+      self = .other(apiValue)
     }
   }
 
   /// The Bot API `status` string this case came from.
   public var apiValue: String {
     switch self {
-    case .creator: "creator"
-    case .administrator: "administrator"
-    case .member: "member"
-    case .restricted: "restricted"
-    case .left: "left"
-    case .kicked: "kicked"
-    case .other(let value): value
+    case .creator:
+      "creator"
+    case .administrator:
+      "administrator"
+    case .member:
+      "member"
+    case .restricted:
+      "restricted"
+    case .left:
+      "left"
+    case .kicked:
+      "kicked"
+    case .other(let value):
+      value
     }
   }
 
@@ -41,8 +55,10 @@ public enum ChatMembershipStatus: Sendable, Equatable {
   /// what it may send, not whether it is there.
   public var isPresent: Bool {
     switch self {
-    case .left, .kicked: false
-    case .creator, .administrator, .member, .restricted, .other: true
+    case .left, .kicked:
+      false
+    case .creator, .administrator, .member, .restricted, .other:
+      true
     }
   }
 }
@@ -91,13 +107,18 @@ public struct RawChatMemberUpdate: Sendable, Equatable {
 
   public var change: ChatMembershipChange {
     switch (oldStatus.isPresent, newStatus.isPresent) {
-    case (false, true): .added
-    case (true, false): .removed
-    case (true, true), (false, false): oldStatus == newStatus ? .unchanged : sameSideChange
+    case (false, true):
+      .added
+    case (true, false):
+      .removed
+    case (true, true), (false, false):
+      oldStatus == newStatus ? .unchanged : sameSideChange
     }
   }
 
   /// Two statuses on the same side of the door: a rights change while in the chat, and nothing
   /// worth a distinct word while out of it (left → kicked is still gone).
-  private var sameSideChange: ChatMembershipChange { newStatus.isPresent ? .updated : .unchanged }
+  private var sameSideChange: ChatMembershipChange {
+    newStatus.isPresent ? .updated : .unchanged
+  }
 }

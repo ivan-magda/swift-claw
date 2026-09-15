@@ -8,7 +8,9 @@ import GRDB
 public struct ScheduleCommandStoreGRDB: ScheduleCommandStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func applyArm(
     updateID: Int64,

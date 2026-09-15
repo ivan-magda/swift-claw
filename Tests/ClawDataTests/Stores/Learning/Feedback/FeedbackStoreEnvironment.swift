@@ -14,21 +14,31 @@ enum FeedbackFailureCase: CaseIterable {
 
   var outcome: FeedbackOutcome {
     switch self {
-    case .owner: .ownerMismatch
-    case .chat: .chatMismatch
-    case .expiry: .expired
-    case .action: .actionMismatch
-    case .epoch: .staleEpoch
+    case .owner:
+      .ownerMismatch
+    case .chat:
+      .chatMismatch
+    case .expiry:
+      .expired
+    case .action:
+      .actionMismatch
+    case .epoch:
+      .staleEpoch
     }
   }
 
   var decision: String {
     switch self {
-    case .owner: "owner_mismatch"
-    case .chat: "chat_mismatch"
-    case .expiry: "expired"
-    case .action: "action_mismatch"
-    case .epoch: "stale_epoch"
+    case .owner:
+      "owner_mismatch"
+    case .chat:
+      "chat_mismatch"
+    case .expiry:
+      "expired"
+    case .action:
+      "action_mismatch"
+    case .epoch:
+      "stale_epoch"
     }
   }
 }
@@ -66,13 +76,21 @@ struct FeedbackStoreEnvironment {
   let base: BoundRunEnvironment
   let state: JobLearningState
 
-  var queue: any DatabaseWriter { base.queue }
+  var queue: any DatabaseWriter {
+    base.queue
+  }
 
-  var learning: ScheduledLearningStoreGRDB { base.learning }
+  var learning: ScheduledLearningStoreGRDB {
+    base.learning
+  }
 
-  var jobID: Int64 { base.jobID }
+  var jobID: Int64 {
+    base.jobID
+  }
 
-  var now: Date { base.now }
+  var now: Date {
+    base.now
+  }
 
   static func make() throws -> FeedbackStoreEnvironment {
     let base = try BoundRunEnvironment.make()
@@ -176,18 +194,16 @@ struct FeedbackStoreEnvironment {
 
   func challenge(_ id: Int64) throws -> FeedbackChallenge? {
     try queue.read { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: "SELECT * FROM feedback_challenges WHERE challenge_id = ?",
-          arguments: [id]
-        )
+      guard let row = try Row.fetchOne(
+        db,
+        sql: "SELECT * FROM feedback_challenges WHERE challenge_id = ?",
+        arguments: [id]
+      )
       else {
         return nil
       }
-      guard
-        let kind = FeedbackSubjectKind(rawValue: row["subject_kind"]),
-        let expiresAt = EpochSecondCodec.date(fromEpoch: row["expires_at"])
+      guard let kind = FeedbackSubjectKind(rawValue: row["subject_kind"]),
+            let expiresAt = EpochSecondCodec.date(fromEpoch: row["expires_at"])
       else {
         throw StoreError.unexpected("challenge fixture row is unreadable")
       }
@@ -254,9 +270,13 @@ struct FeedbackStoreEnvironment {
     }
   }
 
-  func targetCount() throws -> Int { try rowCount(table: "feedback_targets") }
+  func targetCount() throws -> Int {
+    try rowCount(table: "feedback_targets")
+  }
 
-  func eventCount() throws -> Int { try rowCount(table: "feedback_events") }
+  func eventCount() throws -> Int {
+    try rowCount(table: "feedback_events")
+  }
 
   func rowCount(table: String) throws -> Int {
     try queue.read { db in
@@ -384,9 +404,8 @@ private extension FeedbackStoreEnvironment {
           """,
         arguments: arguments
       ).map { row in
-        guard
-          let signal = OwnerSignal(rawValue: row["signal"]),
-          let occurredAt = EpochSecondCodec.date(fromEpoch: row["occurred_at"])
+        guard let signal = OwnerSignal(rawValue: row["signal"]),
+              let occurredAt = EpochSecondCodec.date(fromEpoch: row["occurred_at"])
         else {
           throw StoreError.unexpected("feedback event fixture row is unreadable")
         }

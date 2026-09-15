@@ -13,7 +13,9 @@ import Testing
 struct FailingHTTP: HTTPExecuting {
   let makeFailure: @Sendable () -> any Error
 
-  func execute(_ request: HTTPRequest) async throws -> HTTPResult { throw makeFailure() }
+  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
+    throw makeFailure()
+  }
 }
 
 /// The shared scripted values for both ChatGPT OAuth suites: the wire client's and the device
@@ -52,14 +54,18 @@ enum OAuthFixture {
     _ statusCode: Int,
     _ body: String,
     headers: [String: String] = [:]
-  ) -> HTTPResult { HTTPResult(statusCode: statusCode, headers: headers, body: Data(body.utf8)) }
+  ) -> HTTPResult {
+    HTTPResult(statusCode: statusCode, headers: headers, body: Data(body.utf8))
+  }
 
   static func executor(_ url: String, _ result: HTTPResult) -> RecordingHTTPExecutor {
     RecordingHTTPExecutor(responses: [url: result])
   }
 
   /// Wraps scripted fields into a JSON object, so a case can state only the fields it varies.
-  static func json(_ fields: String) -> String { "{\(fields)}" }
+  static func json(_ fields: String) -> String {
+    "{\(fields)}"
+  }
 
   /// A JWT-shaped access token whose only claim is the expiry the fallback path reads.
   static func token(expiringAt seconds: Int) -> String {
@@ -95,7 +101,8 @@ extension ChatGPTOAuthFailure {
     switch self {
     case .malformedResponse(let detail), .grantRejected(let detail), .transport(let detail):
       return detail
-    case .throttled, .deadlineExceeded: return nil
+    case .throttled, .deadlineExceeded:
+      return nil
     }
   }
 }

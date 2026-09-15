@@ -77,7 +77,8 @@ private extension MessageRouter {
       return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: nil)
     case .mcp:
       return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: .mcp)
-    case .skills: return await sendSkills(rawUpdate: rawUpdate, message: message, mode: mode)
+    case .skills:
+      return await sendSkills(rawUpdate: rawUpdate, message: message, mode: mode)
     case .stop:
       return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message, mode: mode)
     case .new:
@@ -158,7 +159,8 @@ private extension MessageRouter {
     switch scheduleCommand {
     case .create(let text):
       return try await scheduleHandlers.create(rawUpdate: rawUpdate, message: message, text: text)
-    case .list: return try await scheduleHandlers.list(rawUpdate: rawUpdate, chatID: message.chatID)
+    case .list:
+      return try await scheduleHandlers.list(rawUpdate: rawUpdate, chatID: message.chatID)
     }
   }
 

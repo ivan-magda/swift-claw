@@ -50,8 +50,10 @@ struct FetchLikeTool: Tool {
       return .refused(reason: "\(name) needs a non-empty \"url\" argument.")
     }
     switch CanonicalURL.canonicalize(rawURL) {
-    case .success(let canonical): return .resolved(canonical)
-    case .failure: return .refused(reason: "That is not a valid URL.")
+    case .success(let canonical):
+      return .resolved(canonical)
+    case .failure:
+      return .refused(reason: "That is not a valid URL.")
     }
   }
 
@@ -72,7 +74,9 @@ struct SearchLikeTool: Tool {
 
   let timeout: Duration = .seconds(1)
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     ToolPayload(content: "results", status: .ok, ingestedUntrusted: true)
@@ -99,7 +103,9 @@ struct WriteLikeTool: Tool {
 
   let timeout: Duration = .seconds(1)
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { resolution }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    resolution
+  }
 
   func approvalPresentation(
     arguments: JSONValue,
@@ -134,11 +140,17 @@ private struct PreparedDangerousTool: Tool {
     )
   }
 
-  var timeout: Duration { .seconds(30) }
+  var timeout: Duration {
+    .seconds(30)
+  }
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
-  func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? { resolution }
+  func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
+    resolution
+  }
 
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     ToolPayload(content: "must not execute in the gate", status: .error, ingestedUntrusted: false)
@@ -150,7 +162,9 @@ private struct PreparedDangerousTool: Tool {
 private actor PrepareCallProbe {
   private(set) var count = 0
 
-  func mark() { count += 1 }
+  func mark() {
+    count += 1
+  }
 }
 
 private struct ProbedDangerousTool: Tool {
@@ -168,9 +182,13 @@ private struct ProbedDangerousTool: Tool {
     )
   }
 
-  var timeout: Duration { .seconds(30) }
+  var timeout: Duration {
+    .seconds(30)
+  }
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
     await probe.mark()
@@ -1051,7 +1069,9 @@ struct GatedToolDispatcherTests {
     actor TargetRecorder {
       private(set) var received: String?
 
-      func record(_ target: String?) { received = target }
+      func record(_ target: String?) {
+        received = target
+      }
     }
     struct RecordingFetchTool: Tool {
       let recorder: TargetRecorder
@@ -1072,8 +1092,10 @@ struct GatedToolDispatcherTests {
           return .refused(reason: "web_fetch needs a non-empty \"url\" argument.")
         }
         switch CanonicalURL.canonicalize(rawURL) {
-        case .success(let canonical): return .resolved(canonical)
-        case .failure: return .refused(reason: "That is not a valid URL.")
+        case .success(let canonical):
+          return .resolved(canonical)
+        case .failure:
+          return .refused(reason: "That is not a valid URL.")
         }
       }
 
@@ -1114,7 +1136,9 @@ struct GatedToolDispatcherTests {
 
       let timeout: Duration = .milliseconds(20)
 
-      func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+      func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+        nil
+      }
 
       func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
         try? await Task.sleep(for: .seconds(10))
@@ -1199,7 +1223,9 @@ struct WedgedTool: Tool {
 
   let timeout: Duration = .seconds(30)
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     await release.wait()
@@ -1216,7 +1242,9 @@ struct TrifectaLegs: Sendable, CustomStringConvertible {
   let runPrivate: Bool
   let session: Bool
 
-  var holds: Bool { (tainted || runIngested) && (assembly || runPrivate || session) }
+  var holds: Bool {
+    (tainted || runIngested) && (assembly || runPrivate || session)
+  }
 
   var context: ToolDispatchContext {
     makeDispatchContext(

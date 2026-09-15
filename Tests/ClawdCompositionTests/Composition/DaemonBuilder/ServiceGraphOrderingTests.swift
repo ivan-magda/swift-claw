@@ -39,4 +39,6 @@ struct ServiceGraphOrderingTests {
   }
 }
 
-private struct InertService: Service { func run() async throws {} }
+private struct InertService: Service {
+  func run() async throws {}
+}

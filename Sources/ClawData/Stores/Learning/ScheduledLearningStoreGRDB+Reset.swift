@@ -64,18 +64,16 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func resetJob(_ db: Database, jobID: Int64) throws -> ResetJob? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT id, session_id FROM scheduled_jobs WHERE id = ?",
-        arguments: [jobID]
-      )
+    guard let row = try Row.fetchOne(
+      db,
+      sql: "SELECT id, session_id FROM scheduled_jobs WHERE id = ?",
+      arguments: [jobID]
+    )
     else {
       return nil
     }
-    guard
-      SQLiteStoredValue.int64(in: row, column: "id") == jobID,
-      let sessionID = SQLiteStoredValue.nullableInt64(in: row, column: "session_id")
+    guard SQLiteStoredValue.int64(in: row, column: "id") == jobID,
+          let sessionID = SQLiteStoredValue.nullableInt64(in: row, column: "session_id")
     else {
       throw StoreError.unexpected("scheduled job is unreadable for learning reset")
     }
@@ -148,15 +146,14 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func validateResetState(_ state: JobLearningState, job: ResetJob) throws {
-    guard
-      state.jobID == job.jobID,
-      state.epoch.value > 0,
-      state.epoch.value < Int64.max,
-      isCanonicalDigest(state.stableDigest.rawValue),
-      state.stableRevision.value >= 0,
-      state.stableRevision.value < Int64.max,
-      state.feedbackRevision.value >= 0,
-      state.openTrialID.map({
+    guard state.jobID == job.jobID,
+          state.epoch.value > 0,
+          state.epoch.value < Int64.max,
+          isCanonicalDigest(state.stableDigest.rawValue),
+          state.stableRevision.value >= 0,
+          state.stableRevision.value < Int64.max,
+          state.feedbackRevision.value >= 0,
+          state.openTrialID.map({
         $0 > 0
       }) ?? true
     else {
@@ -227,21 +224,20 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func resetTrialIdentity(_ row: Row, expectedJobID: Int64) throws -> ResetTrialIdentity {
-    guard
-      let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
-      trialID > 0,
-      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      jobID == expectedJobID,
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      epoch > 0,
-      let generation = SQLiteStoredValue.int(in: row, column: "generation"),
-      generation > 0,
-      let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
-      isCanonicalDigest(baseDigest),
-      let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
-      isCanonicalDigest(candidateDigest),
-      let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm"),
-      LearningAlgorithm(rawValue: algorithmRaw) == .v1
+    guard let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
+          trialID > 0,
+          let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+          jobID == expectedJobID,
+          let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+          epoch > 0,
+          let generation = SQLiteStoredValue.int(in: row, column: "generation"),
+          generation > 0,
+          let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
+          isCanonicalDigest(baseDigest),
+          let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
+          isCanonicalDigest(candidateDigest),
+          let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm"),
+          LearningAlgorithm(rawValue: algorithmRaw) == .v1
     else {
       throw StoreError.unexpected("live trial is unreadable for learning reset")
     }
@@ -331,18 +327,16 @@ extension ScheduledLearningStoreGRDB {
       arguments: [jobID, newEpoch.value] + StatementArguments(stateValues)
     )
     return try rows.map { row in
-      guard
-        let operationID = SQLiteStoredValue.string(in: row, column: "operation_id"),
-        operationID.isEmpty == false
+      guard let operationID = SQLiteStoredValue.string(in: row, column: "operation_id"),
+            operationID.isEmpty == false
       else {
         throw StoreError.unexpected("learning operation is unreadable for reset")
       }
       let id = LearningOperationID(rawValue: operationID)
-      guard
-        let operation = try readOperation(db, id: id),
-        operation.jobID == jobID,
-        operation.epoch.value < newEpoch.value,
-        stateValues.contains(operation.state.rawValue)
+      guard let operation = try readOperation(db, id: id),
+            operation.jobID == jobID,
+            operation.epoch.value < newEpoch.value,
+            stateValues.contains(operation.state.rawValue)
       else {
         throw StoreError.unexpected("learning operation is unreadable for reset")
       }

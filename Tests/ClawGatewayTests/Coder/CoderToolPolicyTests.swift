@@ -8,9 +8,13 @@ import Testing
 
 @Suite
 struct CoderToolPolicyTests {
-  enum MissingIdentity: CaseIterable { case context, requester, proactive, modeMismatch }
+  enum MissingIdentity: CaseIterable {
+    case context, requester, proactive, modeMismatch
+  }
 
-  enum OutboundScope: CaseIterable { case source, startRef, baseBranch }
+  enum OutboundScope: CaseIterable {
+    case source, startRef, baseBranch
+  }
 
   @Test(arguments: MissingIdentity.allCases)
   func requesterRequiredToolsRefuseInvalidIdentity(_ missing: MissingIdentity) async throws {

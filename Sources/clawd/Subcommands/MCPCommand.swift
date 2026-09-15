@@ -139,7 +139,8 @@ enum MCPTokenOutcome: Equatable {
         It is bound to that server's configured URL — re-run set-token if you re-point the server.
         Restart clawd to pick it up.
         """
-    case .cleared(let server): return "Removed the stored access token for MCP server '\(server)'."
+    case .cleared(let server):
+      return "Removed the stored access token for MCP server '\(server)'."
     case .nothingToClear(let server):
       return "No access token was stored for MCP server '\(server)'."
     }
@@ -164,8 +165,7 @@ extension MCPCommand {
     server name: String,
     context: MCPCommandContext
   ) throws -> MCPTokenOutcome {
-    guard
-      let server = context.config.servers.first(where: {
+    guard let server = context.config.servers.first(where: {
         $0.name == name
       })
     else {
@@ -204,8 +204,7 @@ extension MCPCommand {
     guard let name else {
       return config.enabledServers
     }
-    guard
-      let server = config.servers.first(where: {
+    guard let server = config.servers.first(where: {
         $0.name == name
       })
     else {
@@ -261,7 +260,9 @@ private extension MCPCommand {
   /// gets for any unopenable envelope. The read-only verbs take no lock: the daemon writes nothing
   /// there, so the worst a concurrent mutation can do is answer from the previous envelope.
   static func openingTokenStore<Value>(_ body: () throws -> Value) throws -> Value {
-    do { return try body() } catch let error as CredentialStoreError {
+    do {
+      return try body()
+    } catch let error as CredentialStoreError {
       throw fail("token store: \(error)", code: .secretLoadFailed)
     }
   }
@@ -284,10 +285,14 @@ private extension MCPCommand {
         "another clawd process holds the state-root lock; stop the daemon before changing tokens",
         code: .alreadyRunning
       )
-    } catch { throw fail("cannot take the state-root lock: \(error)", code: .alreadyRunning) }
+    } catch {
+      throw fail("cannot take the state-root lock: \(error)", code: .alreadyRunning)
+    }
     defer { lease.release() }
 
-    do { return try body() } catch let error as CredentialStoreError {
+    do {
+      return try body()
+    } catch let error as CredentialStoreError {
       throw fail("token store: \(error)", code: .secretLoadFailed)
     }
   }
@@ -304,7 +309,9 @@ private extension MCPCommand {
     let source = AppConfig.mcpConfigSource(from: environment, stateRoot: stateRoot)
     do {
       return MCPCommandContext(stateRoot: stateRoot, config: try MCPConfigLoader.load(from: source))
-    } catch let error as MCPConfigError { throw fail(error) }
+    } catch let error as MCPConfigError {
+      throw fail(error)
+    }
   }
 
   static func resolveStateRoot(environment: [String: String]) throws -> URL {

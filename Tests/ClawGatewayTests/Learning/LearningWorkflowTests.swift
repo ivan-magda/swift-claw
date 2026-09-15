@@ -479,7 +479,9 @@ extension LearningWorkflowTests {
 }
 
 extension LearningWorkflowTests {
-  enum SourceChange: CaseIterable { case evidence, ownerOutcome }
+  enum SourceChange: CaseIterable {
+    case evidence, ownerOutcome
+  }
 
   @Test(arguments: SourceChange.allCases)
   func actualSourceChangeAfterEditCanReflect(_ change: SourceChange) async throws {
@@ -511,7 +513,8 @@ extension LearningWorkflowTests {
     #expect(await env.provider.requests.count == 3)
     // when
     switch change {
-    case .evidence: await service.advance(runID: try env.settledBoundRun())
+    case .evidence:
+      await service.advance(runID: try env.settledBoundRun())
     case .ownerOutcome:
       let target = NewFeedbackTarget(
         nonce: "new-source-outcome",

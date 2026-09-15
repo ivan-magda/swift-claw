@@ -40,11 +40,14 @@ private extension AgentFailureClassification {
     _ cause: ProviderError
   ) -> Self {
     switch cause {
-    case .connectFailed, .transportFailure: unavailable(failureCause: .transportFailure)
-    case .retryable, .rejected, .terminal, .cleanRejection: unavailable()
+    case .connectFailed, .transportFailure:
+      unavailable(failureCause: .transportFailure)
+    case .retryable, .rejected, .terminal, .cleanRejection:
+      unavailable()
     case .authenticationRequired:
       Self(degradationKind: .authenticationRequired, attemptFailureCause: nil)
-    case .accessDenied: Self(degradationKind: .accessDenied, attemptFailureCause: nil)
+    case .accessDenied:
+      Self(degradationKind: .accessDenied, attemptFailureCause: nil)
     case .quotaLimited(let retryAfterSeconds):
       Self(
         degradationKind: .quotaLimited(retryAfterSeconds: retryAfterSeconds),
@@ -52,14 +55,20 @@ private extension AgentFailureClassification {
       )
     case .invalidProviderState:
       Self(degradationKind: .invalidProviderState, attemptFailureCause: nil)
-    case .visionUnsupported: Self(degradationKind: .visionUnsupported, attemptFailureCause: nil)
-    case .credentialRefreshCompleted: unavailable(failureCause: .credentialRefreshCompleted)
-    case .credentialRefreshExhausted: unavailable(failureCause: .credentialRefreshExhausted)
-    case .credentialStateUnavailable: unavailable(failureCause: .credentialStateUnavailable)
+    case .visionUnsupported:
+      Self(degradationKind: .visionUnsupported, attemptFailureCause: nil)
+    case .credentialRefreshCompleted:
+      unavailable(failureCause: .credentialRefreshCompleted)
+    case .credentialRefreshExhausted:
+      unavailable(failureCause: .credentialRefreshExhausted)
+    case .credentialStateUnavailable:
+      unavailable(failureCause: .credentialStateUnavailable)
     case .partialStreamWithoutCompletedTerminal:
       unavailable(failureCause: .partialStreamWithoutCompletedTerminal)
-    case .localOutputLimit: unavailable(failureCause: .localOutputLimit)
-    case .modelIdentityMismatch: unavailable(failureCause: .modelIdentityMismatch)
+    case .localOutputLimit:
+      unavailable(failureCause: .localOutputLimit)
+    case .modelIdentityMismatch:
+      unavailable(failureCause: .modelIdentityMismatch)
     }
   }
 

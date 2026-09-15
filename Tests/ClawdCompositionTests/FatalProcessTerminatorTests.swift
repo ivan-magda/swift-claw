@@ -82,5 +82,7 @@ private struct CompositionLogHandler: LogHandler {
     set { metadata[key] = newValue }
   }
 
-  func log(event: LogEvent) { capture.append("\(event.message)") }
+  func log(event: LogEvent) {
+    capture.append("\(event.message)")
+  }
 }

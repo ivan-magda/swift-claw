@@ -76,7 +76,11 @@ public struct SchedulerService: Service {
       // Tick immediately on start (restart recovery), then sleep between ticks.
       while !Task.isCancelled {
         await tick()
-        do { try await clock.sleep(for: Self.tickInterval) } catch { break }
+        do {
+          try await clock.sleep(for: Self.tickInterval)
+        } catch {
+          break
+        }
       }
     }
     logger.info("scheduler stopped")
@@ -86,12 +90,16 @@ public struct SchedulerService: Service {
   /// failure (a failed tick is retried by the next one) rather than crash the service group.
   func tick() async {
     let tickTime = now()
-    do { try jobs.recordTick(at: tickTime) } catch {
+    do {
+      try jobs.recordTick(at: tickTime)
+    } catch {
       logger.error("scheduler recordTick failed: \(error)")
     }
 
     let dueJobs: [ScheduledJob]
-    do { dueJobs = try jobs.dueJobs(now: tickTime) } catch {
+    do {
+      dueJobs = try jobs.dueJobs(now: tickTime)
+    } catch {
       logger.error("scheduler due scan failed: \(error)")
       return
     }
@@ -142,19 +150,18 @@ private extension SchedulerService {
         )
       }
 
-      guard
-        let fire = try jobs.claimAndFire(
-          jobID: job.id,
-          due: due,
-          fireAt: fireAt,
-          nextOccurrence: policy.advance(
-            for: job,
-            timezone: timezone,
-            anchor: due,
-            after: tickTime
-          ),
-          now: tickTime
-        )
+      guard let fire = try jobs.claimAndFire(
+        jobID: job.id,
+        due: due,
+        fireAt: fireAt,
+        nextOccurrence: policy.advance(
+          for: job,
+          timezone: timezone,
+          anchor: due,
+          after: tickTime
+        ),
+        now: tickTime
+      )
       else {
         // No run to enqueue: the CAS matched no row (claimed elsewhere / job mutated) OR the
         // job's session already has a live run and the overlap guard skipped this fire.
@@ -162,7 +169,9 @@ private extension SchedulerService {
       }
 
       await enqueuer.enqueue(fire: fire)
-    } catch { logger.error("scheduler fire failed for job \(job.id): \(error)") }
+    } catch {
+      logger.error("scheduler fire failed for job \(job.id): \(error)")
+    }
   }
 
   func skipMisfire(job: ScheduledJob, due: Date, timezone: TimeZone, tickTime: Date) throws {
@@ -201,7 +210,9 @@ private extension SchedulerService {
     }
 
     let state: SchedulerState
-    do { state = try jobs.schedulerState() } catch {
+    do {
+      state = try jobs.schedulerState()
+    } catch {
       logger.error("heartbeat state read failed: \(error)")
       return
     }
@@ -236,13 +247,12 @@ private extension SchedulerService {
     }
 
     do {
-      guard
-        let fire = try jobs.fireHeartbeat(
-          prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
-          ownerChatID: heartbeat.ownerChatID,
-          now: tickTime,
-          day: day
-        )
+      guard let fire = try jobs.fireHeartbeat(
+        prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
+        ownerChatID: heartbeat.ownerChatID,
+        now: tickTime,
+        day: day
+      )
       else {
         // A prior beat is still live: the store skipped this one to protect its window. Record
         // the canonical heartbeat_skipped audit (reason in `decision`) like every other beat skip.
@@ -251,7 +261,9 @@ private extension SchedulerService {
       }
       await skipEpisode.end()
       await enqueuer.enqueue(fire: fire)
-    } catch { logger.error("heartbeat fire failed: \(error)") }
+    } catch {
+      logger.error("heartbeat fire failed: \(error)")
+    }
   }
 
   /// A skip changes no durable state, so its audit row stands alone (no co-transaction to
@@ -271,7 +283,9 @@ private extension SchedulerService {
           ts: tickTime
         )
       )
-    } catch { logger.error("heartbeatSkipped audit failed: \(error)") }
+    } catch {
+      logger.error("heartbeatSkipped audit failed: \(error)")
+    }
   }
 }
 
@@ -299,5 +313,7 @@ actor HeartbeatSkipEpisode {
     return reason != lastReason
   }
 
-  func end() { lastReason = nil }
+  func end() {
+    lastReason = nil
+  }
 }

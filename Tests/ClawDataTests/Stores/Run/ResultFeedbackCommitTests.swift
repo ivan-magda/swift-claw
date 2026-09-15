@@ -203,7 +203,8 @@ private extension ResultFeedbackCommitTests {
           arguments: [binding.jobID, binding.effectiveDigest.rawValue]
         )
       }
-    case .nonceCollision: try TestLearningFixtures(writer: env.queue).seedTargets([target])
+    case .nonceCollision:
+      try TestLearningFixtures(writer: env.queue).seedTargets([target])
     }
   }
 

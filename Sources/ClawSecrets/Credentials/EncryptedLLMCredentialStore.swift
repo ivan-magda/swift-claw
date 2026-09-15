@@ -28,7 +28,9 @@ public struct EncryptedLLMCredentialStore: LLMCredentialStore {
 
   private let file: SealedCredentialFile<CredentialMap>
 
-  public init(stateRoot: URL) { self.init(stateRoot: stateRoot, publisher: SecureFilePublisher()) }
+  public init(stateRoot: URL) {
+    self.init(stateRoot: stateRoot, publisher: SecureFilePublisher())
+  }
 
   init(stateRoot: URL, publisher: SecureFilePublisher) {
     file = SealedCredentialFile(
@@ -75,7 +77,9 @@ extension EncryptedLLMCredentialStore {
   func recoverUncertainCommit(
     _ intended: CredentialMap,
     key: SymmetricKey
-  ) throws(LLMCredentialStoreError) { try file.recoverUncertainCommit(intended, key: key) }
+  ) throws(LLMCredentialStoreError) {
+    try file.recoverUncertainCommit(intended, key: key)
+  }
 }
 
 // MARK: - Plaintext Provider Map
@@ -128,5 +132,7 @@ extension EncryptedLLMCredentialStore {
   static func openEnvelope(
     _ envelope: Data,
     key: SymmetricKey
-  ) throws(LLMCredentialStoreError) -> Data { try envelopeCodec.openCredential(envelope, key: key) }
+  ) throws(LLMCredentialStoreError) -> Data {
+    try envelopeCodec.openCredential(envelope, key: key)
+  }
 }

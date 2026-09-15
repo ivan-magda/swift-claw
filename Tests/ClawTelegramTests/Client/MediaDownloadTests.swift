@@ -134,7 +134,9 @@ struct MediaDownloadTests {
     struct URLEchoError: Error, Sendable, CustomStringConvertible {
       let url: String
 
-      var description: String { "connection to \(url) failed" }
+      var description: String {
+        "connection to \(url) failed"
+      }
     }
     let executor = ClawTestSupport.RecordingHTTPExecutor(
       responses: [Self.getFileURL: envelope(filePath: "voice/file_3.oga")],

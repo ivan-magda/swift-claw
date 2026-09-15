@@ -529,7 +529,9 @@ private extension EncryptedMCPCredentialStoreTests {
   func makeServer(
     name: String = "linear",
     url: String = "https://mcp.example/mcp"
-  ) throws -> MCPServerConfig { try MCPServerConfig(name: name, url: url) }
+  ) throws -> MCPServerConfig {
+    try MCPServerConfig(name: name, url: url)
+  }
 }
 
 // MARK: - Disk Inspection

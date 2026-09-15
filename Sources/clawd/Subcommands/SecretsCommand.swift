@@ -34,7 +34,9 @@ struct SecretsCommand: AsyncParsableCommand {
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
       let config: AppConfig
-      do { config = try AppConfig.load(environment: environment) } catch let error as ConfigError {
+      do {
+        config = try AppConfig.load(environment: environment)
+      } catch let error as ConfigError {
         FileHandle.standardError.write(Data("secrets seal: config error: \(error)\n".utf8))
         throw ExitCode(error.exitCode)
       }
@@ -84,7 +86,9 @@ extension SecretsCommand.Seal {
 
     // The same hardened operation the login transition runs: it publishes crash-safely, proves the
     // result decrypts, and unwinds anything it created if it cannot.
-    do { try EncryptedFileSecretStore.seal(secrets, stateRoot: stateRoot) } catch let error {
+    do {
+      try EncryptedFileSecretStore.seal(secrets, stateRoot: stateRoot)
+    } catch let error {
       FileHandle.standardError.write(Data("secrets seal failed: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
     }
@@ -94,7 +98,9 @@ extension SecretsCommand.Seal {
   /// with the daemon's own already-running code, so a supervisor treats it as non-retryable.
   static func acquireInstanceLockOrExit(stateRoot: URL) throws -> InstanceLock {
     let lockPath = SecretStatePaths(stateRoot: stateRoot).instanceLock.path
-    do { return try InstanceLock(path: lockPath) } catch InstanceLock.LockError.alreadyLocked {
+    do {
+      return try InstanceLock(path: lockPath)
+    } catch InstanceLock.LockError.alreadyLocked {
       FileHandle.standardError.write(
         Data(
           "secrets seal: another clawd process holds the state-root lock; stop it before sealing\n"
@@ -166,9 +172,8 @@ extension SecretsCommand.Seal {
 
     let resolvedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
 
-    guard
-      let data = FileManager.default.contents(atPath: resolvedPath),
-      let contents = String(data: data, encoding: .utf8)
+    guard let data = FileManager.default.contents(atPath: resolvedPath),
+          let contents = String(data: data, encoding: .utf8)
     else {
       return .failed(path: resolvedPath, reason: "unreadable or not UTF-8")
     }
@@ -184,7 +189,9 @@ extension SecretsCommand.Seal {
         to: URL(fileURLWithPath: resolvedPath),
         mode: .replace
       )
-    } catch { return .failed(path: resolvedPath, reason: "\(error)") }
+    } catch {
+      return .failed(path: resolvedPath, reason: "\(error)")
+    }
 
     return .scrubbed(keys: result.scrubbedKeys, path: resolvedPath)
   }
@@ -211,13 +218,15 @@ extension SecretsCommand.Seal {
         \nYour current shell still holds the old values; open a fresh shell \
         before running the daemon.
         """
-    case .alreadyClean(let path): summary += "\nNo plaintext secret values found in \(path)."
+    case .alreadyClean(let path):
+      summary += "\nNo plaintext secret values found in \(path)."
     case .fileAbsent(let path):
       summary += "\nNo env file at \(path) — nothing to scrub. " + manualNote
     case .failed(let path, let reason):
       summary += "\nWARNING: could not scrub \(path) (\(reason))."
       summary += "\nThe plaintext secret values are still in \(path) — " + manualNote
-    case nil: summary += "\n" + manualNote
+    case nil:
+      summary += "\n" + manualNote
     }
 
     return summary

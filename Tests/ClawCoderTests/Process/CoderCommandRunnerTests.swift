@@ -155,8 +155,10 @@ struct CoderCommandRunnerTests {
         tracking: .job { event in
           try await fixture.record(event)
           switch (event, boundary) {
-          case (.willLaunch, .willLaunch), (.didLaunch, .didLaunch): try await callback.suspend()
-          default: break
+          case (.willLaunch, .willLaunch), (.didLaunch, .didLaunch):
+            try await callback.suspend()
+          default:
+            break
           }
         }
       ) { data in
@@ -193,8 +195,10 @@ struct CoderCommandRunnerTests {
         tracking: .job { event in
           try await fixture.record(event)
           switch (event, boundary) {
-          case (.willLaunch, .willLaunch), (.didLaunch, .didLaunch): try await callback.suspend()
-          default: break
+          case (.willLaunch, .willLaunch), (.didLaunch, .didLaunch):
+            try await callback.suspend()
+          default:
+            break
           }
         }
       ) { _ in }

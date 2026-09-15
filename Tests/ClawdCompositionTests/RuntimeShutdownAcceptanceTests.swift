@@ -176,7 +176,9 @@ struct RuntimeShutdownAcceptanceTests {
           let prepared = try await service.prepare(CoderCompositionFixture.request)
           let context = try fixture.approvedContext(prepared)
           _ = await coordination.lanes.enqueue(sessionID: context.sessionID, runID: context.runID) {
-            do { _ = try await service.submit(prepared, context: context) } catch {
+            do {
+              _ = try await service.submit(prepared, context: context)
+            } catch {
               Issue.record(error)
             }
             await withTaskCancellationHandler(
@@ -190,7 +192,9 @@ struct RuntimeShutdownAcceptanceTests {
             laneJoined.open()
           }
           _ = await fixture.backend.started.waitUntilOpen()
-        } catch { Issue.record(error) }
+        } catch {
+          Issue.record(error)
+        }
         bootEntered.open()
         await releaseBoot.waitIgnoringCancellation()
       },
@@ -334,9 +338,12 @@ struct RuntimeShutdownAcceptanceTests {
 
   private static func event(for role: RuntimeHTTPClientRole) -> String {
     switch role {
-    case .telegram: return "telegram"
-    case .llm: return "llm"
-    case .tool: return "tool"
+    case .telegram:
+      return "telegram"
+    case .llm:
+      return "llm"
+    case .tool:
+      return "tool"
     }
   }
 
@@ -379,7 +386,9 @@ struct RuntimeShutdownAcceptanceTests {
 private actor TerminationBox {
   private var termination: LLMStreamTermination?
 
-  func set(_ value: LLMStreamTermination) { termination = value }
+  func set(_ value: LLMStreamTermination) {
+    termination = value
+  }
 
   var isCompleted: Bool {
     if case .completed = termination {
@@ -392,14 +401,18 @@ private actor TerminationBox {
 private actor StepRecorder {
   private(set) var events: [String] = []
 
-  func record(_ name: String) { events.append(name) }
+  func record(_ name: String) {
+    events.append(name)
+  }
 }
 
 private struct RecordingCredentialSource: LLMCredentialSource {
   let base: any LLMCredentialSource
   let recorder: StepRecorder
 
-  func authorization() async throws -> LLMRequestAuthorization { try await base.authorization() }
+  func authorization() async throws -> LLMRequestAuthorization {
+    try await base.authorization()
+  }
 
   func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {
     await base.reject(generation: generation, disposition: disposition)

@@ -304,9 +304,12 @@ enum JSONEscapedSecret: CaseIterable, Sendable {
 
   var value: String {
     switch self {
-    case .quote: "secret\"quoted"
-    case .backslash: "secret\\backslash"
-    case .newline: "secret\nnewline"
+    case .quote:
+      "secret\"quoted"
+    case .backslash:
+      "secret\\backslash"
+    case .newline:
+      "secret\nnewline"
     }
   }
 }

@@ -52,9 +52,8 @@ extension ScheduledLearningStoreGRDB {
 
 extension ScheduledLearningStoreGRDB {
   static func insertTarget(_ db: Database, _ target: NewFeedbackTarget) throws {
-    guard
-      target.allowedActions.isEmpty == false,
-      target.allowedActions.allSatisfy({ signal in
+    guard target.allowedActions.isEmpty == false,
+          target.allowedActions.allSatisfy({ signal in
         signal.feedbackSubjectKind == target.subjectKind
       })
     else {
@@ -85,12 +84,11 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func readTarget(_ db: Database, nonce: String) throws -> FeedbackTarget? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT * FROM feedback_targets WHERE nonce = ?",
-        arguments: [nonce]
-      )
+    guard let row = try Row.fetchOne(
+      db,
+      sql: "SELECT * FROM feedback_targets WHERE nonce = ?",
+      arguments: [nonce]
+    )
     else {
       return nil
     }
@@ -99,15 +97,14 @@ extension ScheduledLearningStoreGRDB {
 
   static func decodeTarget(_ row: Row) throws -> FeedbackTarget {
     let rawActions: String = row["allowed_actions"]
-    guard
-      let subjectKind = FeedbackSubjectKind(rawValue: row["subject_kind"]),
-      let actionData = rawActions.data(using: .utf8),
-      let actionValues = try? JSONDecoder().decode([String].self, from: actionData),
-      !actionValues.isEmpty,
-      actionValues.allSatisfy({
+    guard let subjectKind = FeedbackSubjectKind(rawValue: row["subject_kind"]),
+          let actionData = rawActions.data(using: .utf8),
+          let actionValues = try? JSONDecoder().decode([String].self, from: actionData),
+          !actionValues.isEmpty,
+          actionValues.allSatisfy({
         OwnerSignal(rawValue: $0) != nil
       }),
-      let expiresAt = EpochSecondCodec.date(fromEpoch: row["expires_at"])
+          let expiresAt = EpochSecondCodec.date(fromEpoch: row["expires_at"])
     else {
       throw StoreError.unexpected("feedback target row is unreadable")
     }
@@ -183,18 +180,16 @@ extension ScheduledLearningStoreGRDB {
     if target.expiresAt <= now {
       return .expired
     }
-    if
-      target.subjectKind != tap.signal.feedbackSubjectKind
-      || target.allowedActions.contains(tap.signal) == false
+    if target.subjectKind != tap.signal.feedbackSubjectKind
+       || target.allowedActions.contains(tap.signal) == false
     {
       return .actionMismatch
     }
-    guard
-      let currentEpoch = try Int.fetchOne(
-        db,
-        sql: "SELECT learning_epoch FROM job_learning_state WHERE job_id = ?",
-        arguments: [target.jobID]
-      )
+    guard let currentEpoch = try Int.fetchOne(
+      db,
+      sql: "SELECT learning_epoch FROM job_learning_state WHERE job_id = ?",
+      arguments: [target.jobID]
+    )
     else {
       return .staleEpoch
     }
@@ -292,8 +287,10 @@ private extension ScheduledLearningStoreGRDB {
   ) throws {
     let trialID: Int64?
     switch signal {
-    case .candidateReject: trialID = try closeCandidateTrial(db, target: target)
-    case .evaluationDispute: trialID = try closeEvaluationTrial(db, target: target)
+    case .candidateReject:
+      trialID = try closeCandidateTrial(db, target: target)
+    case .evaluationDispute:
+      trialID = try closeEvaluationTrial(db, target: target)
     case .resultUseful, .resultNotUseful, .resultCorrection, .evaluationConfirm, .candidateApprove,
       .candidateEdit, .promotionRollback:
       trialID = nil
@@ -362,15 +359,14 @@ private extension ScheduledLearningStoreGRDB {
     )
     for row in rows {
       let digest = CandidateDigest(rawValue: row["candidate_digest"])
-      guard
-        let candidate = try readCandidateArtifact(db, digest: digest),
-        candidate.digest == digest,
-        candidate.replacement.jobID == (row["job_id"] as Int64),
-        candidate.manifest.jobID == (row["job_id"] as Int64),
-        candidate.manifest.epoch.value == (row["learning_epoch"] as Int64),
-        candidate.manifest.baseDigest.rawValue == (row["base_digest"] as String),
-        candidate.manifest.algorithm.rawValue == (row["algorithm"] as String),
-        candidate.manifest.evidence.contains(where: { source in
+      guard let candidate = try readCandidateArtifact(db, digest: digest),
+            candidate.digest == digest,
+            candidate.replacement.jobID == (row["job_id"] as Int64),
+            candidate.manifest.jobID == (row["job_id"] as Int64),
+            candidate.manifest.epoch.value == (row["learning_epoch"] as Int64),
+            candidate.manifest.baseDigest.rawValue == (row["base_digest"] as String),
+            candidate.manifest.algorithm.rawValue == (row["algorithm"] as String),
+            candidate.manifest.evidence.contains(where: { source in
           source.evaluationRequired && source.evaluationDigest.rawValue == target.subjectDigest
         })
       else {
@@ -425,16 +421,26 @@ private extension ScheduledLearningStoreGRDB {
 extension FeedbackOutcome {
   var auditDecision: String {
     switch self {
-    case .recorded: "recorded"
-    case .challengeOpened: "challenge_opened"
-    case .targetMissing: "unknown"
-    case .ownerMismatch: "owner_mismatch"
-    case .chatMismatch: "chat_mismatch"
-    case .expired: "expired"
-    case .actionMismatch: "action_mismatch"
-    case .staleEpoch: "stale_epoch"
-    case .alreadyConsumed: "consumed"
-    case .requiresPayloadChallenge: "challenge_required"
+    case .recorded:
+      "recorded"
+    case .challengeOpened:
+      "challenge_opened"
+    case .targetMissing:
+      "unknown"
+    case .ownerMismatch:
+      "owner_mismatch"
+    case .chatMismatch:
+      "chat_mismatch"
+    case .expired:
+      "expired"
+    case .actionMismatch:
+      "action_mismatch"
+    case .staleEpoch:
+      "stale_epoch"
+    case .alreadyConsumed:
+      "consumed"
+    case .requiresPayloadChallenge:
+      "challenge_required"
     }
   }
 }

@@ -17,7 +17,9 @@ actor ScriptedCommandRunner: SubprocessRunning {
   private var commands: [SubprocessCommand] = []
   private var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
 
-  init(handler: @escaping Handler) { self.handler = handler }
+  init(handler: @escaping Handler) {
+    self.handler = handler
+  }
 
   func run(_ command: SubprocessCommand) async -> SubprocessResult {
     commands.append(command)
@@ -34,7 +36,9 @@ actor ScriptedCommandRunner: SubprocessRunning {
     return await handler(command, history)
   }
 
-  func recorded() -> [SubprocessCommand] { commands }
+  func recorded() -> [SubprocessCommand] {
+    commands
+  }
 
   func waitForCount(_ count: Int) async {
     if commands.count >= count {
@@ -118,11 +122,10 @@ func value(after flag: String, in arguments: [String]) -> String? {
 // A foreground run invocation always carries both flags; failing loudly here beats a silent
 // no-op that would only surface later as an unrelated classification failure.
 func writeCidfile(from arguments: [String]) {
-  guard
-    let path = value(after: "--cidfile", in: arguments),
-    let name = value(after: "--name", in: arguments),
-    (try? Data(name.utf8).write(to: URL(fileURLWithPath: path), options: .withoutOverwriting))
-    != nil
+  guard let path = value(after: "--cidfile", in: arguments),
+        let name = value(after: "--name", in: arguments),
+        (try? Data(name.utf8).write(to: URL(fileURLWithPath: path), options: .withoutOverwriting))
+        != nil
   else {
     preconditionFailure("run invocation did not carry cidfile identity")
   }
@@ -146,7 +149,9 @@ struct ScratchFixture {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
   }
 
-  func remove() { try? FileManager.default.removeItem(at: root) }
+  func remove() {
+    try? FileManager.default.removeItem(at: root)
+  }
 }
 
 func fixedIdentity() throws -> ExecutionIdentity {
@@ -157,8 +162,10 @@ func pythonEntrypoint() -> StagedFile {
   StagedFile(name: ".clawd-entrypoint.py", bytes: Data("print('ok')".utf8), mode: .readExecute)
 }
 
-func executionRequest(input: StagedFile? = nil, timeout: Duration = .seconds(1)) -> ExecutionRequest
-{
+func executionRequest(
+  input: StagedFile? = nil,
+  timeout: Duration = .seconds(1)
+) -> ExecutionRequest {
   ExecutionRequest(
     language: .python,
     entrypoint: pythonEntrypoint(),
@@ -224,7 +231,9 @@ struct BackendFixture {
     )
   }
 
-  func remove() { try? FileManager.default.removeItem(at: root) }
+  func remove() {
+    try? FileManager.default.removeItem(at: root)
+  }
 }
 
 // First call anchors the execution start; every later call sits far past the outer

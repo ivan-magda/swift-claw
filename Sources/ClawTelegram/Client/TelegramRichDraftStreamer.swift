@@ -10,7 +10,9 @@ public struct TelegramRichDraftStreamer: RichDraftStreaming {
 
   private let transport: any TelegramTransport
 
-  public init(transport: any TelegramTransport) { self.transport = transport }
+  public init(transport: any TelegramTransport) {
+    self.transport = transport
+  }
 
   /// Telegram accepts a draft only in a private chat, so the negative chat id of every group is
   /// refused here and reported as undelivered — a group turn keeps the typing action as its only

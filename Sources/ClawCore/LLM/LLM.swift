@@ -259,7 +259,9 @@ public enum StructuredOutputMode: String, Sendable, Equatable {
 extension StructuredOutputMode: CustomStringConvertible {
   /// The wire spelling an owner sets `CLAW_LLM_STRUCTURED_OUTPUT` to, so a config error names the
   /// value they typed rather than the Swift case that parsed it.
-  public var description: String { rawValue }
+  public var description: String {
+    rawValue
+  }
 }
 
 /// The provider-neutral LLM settings the composition root wires a stack from. It carries the resolved
@@ -320,7 +322,9 @@ public struct ModelPrice: Sendable, Equatable, Codable {
 public struct PriceTable: Sendable, Equatable {
   public let prices: [String: ModelPrice]
 
-  public init(prices: [String: ModelPrice]) { self.prices = prices }
+  public init(prices: [String: ModelPrice]) {
+    self.prices = prices
+  }
 
   public func price(for model: String) -> ModelPrice? {
     prices[model] ?? prices["openrouter/\(model)"]
@@ -444,8 +448,10 @@ public struct CostResolver: Sendable {
     policy: LLMCostPolicy = .metered
   ) -> ResolvedCost {
     switch policy {
-    case .metered: break
-    case .includedPlan: return ResolvedCost(costUSD: 0, source: .includedPlan, isEstimated: false)
+    case .metered:
+      break
+    case .includedPlan:
+      return ResolvedCost(costUSD: 0, source: .includedPlan, isEstimated: false)
     }
 
     if let providerCost {

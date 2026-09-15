@@ -24,29 +24,26 @@ extension ScheduledLearningStoreGRDB {
       guard try Self.sourceBindingsAreCurrent(db, artifact: predecessor, state: state) else {
         return .rejected(.sourceBindingsChanged)
       }
-      guard
-        let control = try Self.candidateControl(
-          db,
-          eventID: approval.feedbackEventID,
-          candidate: predecessor,
-          signal: .candidateApprove,
-          expectedPayload: nil
-        ),
-        control.revision <= state.feedbackRevision,
-        let preparation = try Self.currentPreparation(db, artifact: predecessor, state: state)
+      guard let control = try Self.candidateControl(
+        db,
+        eventID: approval.feedbackEventID,
+        candidate: predecessor,
+        signal: .candidateApprove,
+        expectedPayload: nil
+      ),
+            control.revision <= state.feedbackRevision,
+            let preparation = try Self.currentPreparation(db, artifact: predecessor, state: state)
       else {
         return .rejected(.invalidOwnerControl)
       }
-      if
-        let existing = try Self.existingSuccessor(
-          db,
-          predecessor: predecessor.digest,
-          control: control,
-          origin: .ownerApproval
-        ) {
-        guard
-          try Self.onlySuccessor(db, predecessor: predecessor.digest, is: existing.digest),
-          try Self.sourceBindingsAreCurrent(db, artifact: existing, state: state)
+      if let existing = try Self.existingSuccessor(
+        db,
+        predecessor: predecessor.digest,
+        control: control,
+        origin: .ownerApproval
+      ) {
+        guard try Self.onlySuccessor(db, predecessor: predecessor.digest, is: existing.digest),
+              try Self.sourceBindingsAreCurrent(db, artifact: existing, state: state)
         else {
           return .rejected(.invalidOwnerControl)
         }
@@ -60,13 +57,14 @@ extension ScheduledLearningStoreGRDB {
           feedbackRevision: state.feedbackRevision,
           effectiveFeedback: preparation.feedbackSources
         )
-      } catch let rejection as AdmissionRejection { return .rejected(rejection) } catch {
+      } catch let rejection as AdmissionRejection {
+        return .rejected(rejection)
+      } catch {
         throw StoreError.unexpected("approval successor construction failed")
       }
       if let existing = try Self.readCandidateArtifact(db, digest: successor.digest) {
-        guard
-          existing == successor,
-          try Self.onlySuccessor(db, predecessor: predecessor.digest, is: successor.digest)
+        guard existing == successor,
+              try Self.onlySuccessor(db, predecessor: predecessor.digest, is: successor.digest)
         else {
           return .rejected(.invalidOwnerControl)
         }
@@ -105,33 +103,34 @@ extension ScheduledLearningStoreGRDB {
         lessons: context.lessons,
         redactor: redactor
       ) {
-      case .success(let set): replacement = set
-      case .failure(let rejection): return .rejected(rejection)
+      case .success(let set):
+        replacement = set
+      case .failure(let rejection):
+        return .rejected(rejection)
       }
-      if
-        let existing = try Self.existingSuccessor(
-          db,
-          predecessor: context.predecessor.digest,
-          control: context.control,
-          origin: .ownerEdit
-        ) {
-        guard
-          try Self.onlySuccessor(db, predecessor: context.predecessor.digest, is: existing.digest),
-          try Self.sourceBindingsAreCurrent(db, artifact: existing, state: context.state),
-          try Self.trialRow(db, candidate: existing.digest) == nil,
-          Self.contentRejection(existing, redactor: redactor) == nil
+      if let existing = try Self.existingSuccessor(
+        db,
+        predecessor: context.predecessor.digest,
+        control: context.control,
+        origin: .ownerEdit
+      ) {
+        guard try Self
+              .onlySuccessor(db, predecessor: context.predecessor.digest, is: existing.digest),
+              try Self.sourceBindingsAreCurrent(db, artifact: existing, state: context.state),
+              try Self.trialRow(db, candidate: existing.digest) == nil,
+              Self.contentRejection(existing, redactor: redactor) == nil
         else {
           return .rejected(.invalidOwnerControl)
         }
         return .awaitingApproval(existing)
       }
-      guard
-        try Self.sourceBindingsAreCurrent(db, artifact: context.predecessor, state: context.state),
-        let preparation = try Self.currentPreparation(
-          db,
-          artifact: context.predecessor,
-          state: context.state
-        )
+      guard try Self
+            .sourceBindingsAreCurrent(db, artifact: context.predecessor, state: context.state),
+            let preparation = try Self.currentPreparation(
+              db,
+              artifact: context.predecessor,
+              state: context.state
+            )
       else {
         return .rejected(.sourceBindingsChanged)
       }
@@ -144,19 +143,20 @@ extension ScheduledLearningStoreGRDB {
           feedbackRevision: context.state.feedbackRevision,
           effectiveFeedback: preparation.feedbackSources
         )
-      } catch let rejection as AdmissionRejection { return .rejected(rejection) } catch {
+      } catch let rejection as AdmissionRejection {
+        return .rejected(rejection)
+      } catch {
         throw StoreError.unexpected("edit successor construction failed")
       }
       if let existing = try Self.readCandidateArtifact(db, digest: successor.digest) {
-        guard
-          existing == successor,
-          try Self.onlySuccessor(
-            db,
-            predecessor: context.predecessor.digest,
-            is: successor.digest
-          ),
-          try Self.sourceBindingsAreCurrent(db, artifact: existing, state: context.state),
-          try Self.trialRow(db, candidate: existing.digest) == nil
+        guard existing == successor,
+              try Self.onlySuccessor(
+                db,
+                predecessor: context.predecessor.digest,
+                is: successor.digest
+              ),
+              try Self.sourceBindingsAreCurrent(db, artifact: existing, state: context.state),
+              try Self.trialRow(db, candidate: existing.digest) == nil
         else {
           return .rejected(.invalidOwnerControl)
         }
@@ -194,18 +194,17 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func editContext(_ db: Database, edit: CandidateEdit) throws -> EditContext? {
-    guard
-      let predecessor = try readCandidateArtifact(db, digest: edit.predecessorDigest),
-      let state = try readState(db, jobID: predecessor.manifest.jobID),
-      let control = try candidateControl(
-        db,
-        eventID: edit.feedbackEventID,
-        candidate: predecessor,
-        signal: .candidateEdit,
-        expectedPayload: edit.payload
-      ),
-      control.revision <= state.feedbackRevision,
-      let lessons = CandidateEditPayload.decode(edit.payload)
+    guard let predecessor = try readCandidateArtifact(db, digest: edit.predecessorDigest),
+          let state = try readState(db, jobID: predecessor.manifest.jobID),
+          let control = try candidateControl(
+            db,
+            eventID: edit.feedbackEventID,
+            candidate: predecessor,
+            signal: .candidateEdit,
+            expectedPayload: edit.payload
+          ),
+          control.revision <= state.feedbackRevision,
+          let lessons = CandidateEditPayload.decode(edit.payload)
     else {
       return nil
     }
@@ -227,7 +226,8 @@ private extension ScheduledLearningStoreGRDB {
     ) {
     case .success(let replacement):
       return replacement == artifact.replacement ? nil : .sourceBindingsChanged
-    case .failure(let rejection): return rejection
+    case .failure(let rejection):
+      return rejection
     }
   }
 

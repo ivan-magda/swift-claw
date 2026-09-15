@@ -10,9 +10,7 @@ public enum ImageReplaySelection {
   public static func affordable(
     _ images: [Int64: ImagePart],
     aggregateCap: Int
-  ) -> [Int64:
-    ImagePart]
-  {
+  ) -> [Int64: ImagePart] {
     let newestFirst = images.sorted { lhs, rhs in
       lhs.key > rhs.key
     }

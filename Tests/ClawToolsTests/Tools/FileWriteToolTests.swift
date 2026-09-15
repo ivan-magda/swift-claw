@@ -62,10 +62,9 @@ struct FileWriteToolTests {
     let tool = makeTool(root: root)
 
     // when / then — overwrite:false (and the missing-flag default) refuse at gate time
-    guard
-      case .refused(let reason) = tool.canonicalTarget(
+    guard case .refused(let reason) = tool.canonicalTarget(
         arguments: args(path: "plan.md", content: "new", overwrite: false)
-      )
+    )
     else {
       Issue.record("expected a refusal for overwrite:false on an existing file")
       return
@@ -102,10 +101,9 @@ struct FileWriteToolTests {
     let root = try makeWorkspace()
 
     // when / then — the flag must match the approved mode: no target, no overwrite
-    guard
-      case .refused(let reason) = makeTool(root: root).canonicalTarget(
+    guard case .refused(let reason) = makeTool(root: root).canonicalTarget(
         arguments: args(path: "fresh.md", content: "new", overwrite: true)
-      )
+    )
     else {
       Issue.record("expected overwrite: true on a missing target to refuse at gate time")
       return
@@ -119,10 +117,9 @@ struct FileWriteToolTests {
     let huge = String(repeating: "a", count: FileWriteTool.maxContentBytes + 1)
 
     // when / then
-    guard
-      case .refused(let reason) = makeTool(root: try makeWorkspace()).canonicalTarget(
+    guard case .refused(let reason) = makeTool(root: try makeWorkspace()).canonicalTarget(
         arguments: args(path: "big.txt", content: huge)
-      )
+    )
     else {
       Issue.record("expected the size cap to refuse")
       return

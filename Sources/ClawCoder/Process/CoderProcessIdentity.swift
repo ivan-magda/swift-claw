@@ -56,7 +56,9 @@ struct CoderProcessIdentity: Sendable {
     #else
       let path = "/proc/\(pid)/stat"
       let text: String
-      do { text = try String(contentsOfFile: path, encoding: .utf8) } catch {
+      do {
+        text = try String(contentsOfFile: path, encoding: .utf8)
+      } catch {
         if kill(pid, 0) == -1 && errno == ESRCH {
           return nil
         }
@@ -118,4 +120,6 @@ struct CoderProcessIdentity: Sendable {
   }
 }
 
-enum IdentityError: Error { case unreadable }
+enum IdentityError: Error {
+  case unreadable
+}

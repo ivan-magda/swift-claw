@@ -65,7 +65,9 @@ public struct FeedbackCallbackHandler: Sendable {
     let noticeChatID = callback.chatID ?? callback.fromUserID
     do throws(RoutingHalt) {
       try await replies.claimUpdate(updateID: updateID, target: .chat(noticeChatID))
-    } catch { return error.outcome }
+    } catch {
+      return error.outcome
+    }
     return await resolve(callback, updateID: updateID)
   }
 }
@@ -90,7 +92,9 @@ private extension FeedbackCallbackHandler {
     updateID: Int64
   ) async -> HandleOutcome {
     let target: FeedbackTarget?
-    do { target = try learning.feedbackTarget(nonce: parsed.nonce) } catch {
+    do {
+      target = try learning.feedbackTarget(nonce: parsed.nonce)
+    } catch {
       return await storeFailure(callback, signal: parsed.action.signal, error: error)
     }
     guard let target else {
@@ -109,10 +113,9 @@ private extension FeedbackCallbackHandler {
         decision: Self.ownerMismatchDecision
       )
     }
-    guard
-      let callbackChatID = callback.chatID,
-      callbackChatID == callback.fromUserID,
-      target.chatID == callbackChatID
+    guard let callbackChatID = callback.chatID,
+          callbackChatID == callback.fromUserID,
+          target.chatID == callbackChatID
     else {
       return await deny(
         callback,
@@ -121,9 +124,8 @@ private extension FeedbackCallbackHandler {
         decision: Self.chatMismatchDecision
       )
     }
-    guard
-      target.allowedActions.contains(parsed.action.signal),
-      target.subjectKind == parsed.action.subjectKind
+    guard target.allowedActions.contains(parsed.action.signal),
+          target.subjectKind == parsed.action.subjectKind
     else {
       return await deny(
         callback,
@@ -162,7 +164,9 @@ private extension FeedbackCallbackHandler {
       transportUpdateID: updateID
     )
     let outcome: FeedbackOutcome
-    do { outcome = try learning.consumeAndAppendEvent(tap, now: now()) } catch {
+    do {
+      outcome = try learning.consumeAndAppendEvent(tap, now: now())
+    } catch {
       return await storeFailure(callback, signal: signal, error: error)
     }
     switch outcome {
@@ -218,11 +222,14 @@ private extension FeedbackCallbackHandler {
       transportUpdateID: updateID
     )
     let outcome: FeedbackOutcome
-    do { outcome = try challenges.open(tap) } catch {
+    do {
+      outcome = try challenges.open(tap)
+    } catch {
       return await storeFailure(callback, signal: signal, error: error)
     }
     switch outcome {
-    case .challengeOpened: return await finish(callback, toast: Self.challengeOpenedToast)
+    case .challengeOpened:
+      return await finish(callback, toast: Self.challengeOpenedToast)
     case .recorded, .targetMissing, .ownerMismatch, .chatMismatch, .expired, .actionMismatch,
       .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
       return await finish(callback, toast: Self.neutralToast)
@@ -249,7 +256,9 @@ private extension FeedbackCallbackHandler {
       runID: Self.runID(target),
       ts: now()
     )
-    do { try audit.appendAudit(event) } catch {
+    do {
+      try audit.appendAudit(event)
+    } catch {
       logger.error("failed to audit rejected feedback callback: \(error)")
     }
     return await finish(callback, toast: Self.neutralToast)
@@ -268,14 +277,18 @@ private extension FeedbackCallbackHandler {
       decision: Self.storeFailureDecision,
       ts: now()
     )
-    do { try audit.appendAudit(event) } catch {
+    do {
+      try audit.appendAudit(event)
+    } catch {
       logger.error("failed to audit feedback store failure: \(error)")
     }
     return await finish(callback, toast: Self.retryToast)
   }
 
   func finish(_ callback: RawCallback, toast: String) async -> HandleOutcome {
-    do { try await callbacks.answerCallbackQuery(id: callback.callbackID, text: toast) } catch {
+    do {
+      try await callbacks.answerCallbackQuery(id: callback.callbackID, text: toast)
+    } catch {
       logger.warning("failed to answer feedback callback \(callback.callbackID): \(error)")
     }
     return .processed

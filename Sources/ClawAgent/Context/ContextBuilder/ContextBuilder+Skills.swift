@@ -41,8 +41,7 @@ extension ContextBuilder {
   /// gone from `fitted` entirely — the case the owner most needs told, so it reads as every skill
   /// dropped rather than as no skills installed.
   func droppedSkillsNotice(fitted: [FittedSection], requested: [FittableSection]) -> String? {
-    guard
-      let source = requested.first(where: {
+    guard let source = requested.first(where: {
         $0.id == .skills
       })
     else {
@@ -72,7 +71,9 @@ extension ContextBuilder {
 private extension ContextBuilder {
   static let skillUnitIDPrefix = "skill-"
 
-  static func skillUnitID(for name: String) -> String { "\(skillUnitIDPrefix)\(name)" }
+  static func skillUnitID(for name: String) -> String {
+    "\(skillUnitIDPrefix)\(name)"
+  }
 
   static func skillName(fromUnitID unitID: String) -> String {
     String(unitID.dropFirst(skillUnitIDPrefix.count))

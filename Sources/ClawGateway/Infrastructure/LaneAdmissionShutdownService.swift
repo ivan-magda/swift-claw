@@ -60,7 +60,8 @@ public struct LaneAdmissionShutdownService: Service {
     await outcome.record(result)
 
     switch result {
-    case .drained: logger.info("session lanes drained")
+    case .drained:
+      logger.info("session lanes drained")
     case .timedOut(let activeRunIDs):
       // A drain timeout is a failure path, not a clean shutdown: report the runs still in flight so
       // the caller can exit before tearing dependent resources down underneath them.

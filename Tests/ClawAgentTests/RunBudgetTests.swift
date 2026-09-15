@@ -20,7 +20,9 @@ struct RunBudgetTests {
     let estimatedTotalTokens: Int
     let expectedCap: String
 
-    var testDescription: String { "deny — \(expectedCap)" }
+    var testDescription: String {
+      "deny — \(expectedCap)"
+    }
   }
 
   static let denyCases: [DenyCase] = [

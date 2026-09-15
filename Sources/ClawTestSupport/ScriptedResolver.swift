@@ -7,7 +7,9 @@ import ClawTools
 public struct ScriptedResolver: AddressResolving {
   public let table: [String: [ResolvedAddress]]
 
-  public init(table: [String: [ResolvedAddress]]) { self.table = table }
+  public init(table: [String: [ResolvedAddress]]) {
+    self.table = table
+  }
 
   public func resolve(host: String) async throws -> [ResolvedAddress] {
     if let literal = ResolvedAddress.parse(host) {

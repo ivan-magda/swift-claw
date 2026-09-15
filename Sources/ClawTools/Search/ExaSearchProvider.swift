@@ -49,14 +49,18 @@ public struct ExaSearchProvider: SearchProviding {
         jsonBody: bodyData,
         timeoutSeconds: timeoutSeconds
       )
-    } catch { throw SearchError.transport(redact("\(error)")) }
+    } catch {
+      throw SearchError.transport(redact("\(error)"))
+    }
 
     guard (200..<300).contains(result.statusCode) else {
       throw classify(status: result.statusCode, body: result.body)
     }
 
     let decoded: ResponseBody
-    do { decoded = try JSONDecoder().decode(ResponseBody.self, from: result.body) } catch {
+    do {
+      decoded = try JSONDecoder().decode(ResponseBody.self, from: result.body)
+    } catch {
       throw SearchError.terminal(status: result.statusCode, message: "malformed search response")
     }
 

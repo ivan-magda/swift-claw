@@ -10,7 +10,9 @@ public enum RunOrigin: String, Sendable, Equatable {
 
   /// True for the origins that run with no owner present (a scheduled job or heartbeat fire) —
   /// the pair every proactive gate (budget, prompt selection, context isolation) keys on.
-  public var isProactive: Bool { self != .interactive }
+  public var isProactive: Bool {
+    self != .interactive
+  }
 
   /// The same pair as a value, for the queries that filter rows by origin rather than test one.
   /// The doctor gauge, the turn preflight and the learning authorization all charge the one pool,

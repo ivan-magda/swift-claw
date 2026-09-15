@@ -11,7 +11,9 @@ public enum ClawDatabase {
   }
 
   public static func makePool(path: String) throws -> DatabasePool {
-    do { return try DatabasePool(path: path, configuration: makeConfiguration()) } catch {
+    do {
+      return try DatabasePool(path: path, configuration: makeConfiguration())
+    } catch {
       throw StoreError.openFailed("\(error)")
     }
   }
@@ -22,7 +24,11 @@ public enum ClawDatabase {
   }
 
   public static func migrate(_ writer: any DatabaseWriter) throws {
-    do { try migrator.migrate(writer) } catch { throw StoreError.migrationFailed("\(error)") }
+    do {
+      try migrator.migrate(writer)
+    } catch {
+      throw StoreError.migrationFailed("\(error)")
+    }
   }
 
   static var migrator: DatabaseMigrator {
@@ -300,8 +306,10 @@ public enum ClawDatabase {
     }
 
     switch databaseError.resultCode.primaryResultCode {
-    case .SQLITE_FULL: return StoreError.diskFull
-    default: return StoreError.unexpected("\(databaseError)")
+    case .SQLITE_FULL:
+      return StoreError.diskFull
+    default:
+      return StoreError.unexpected("\(databaseError)")
     }
   }
 }

@@ -26,7 +26,9 @@ public enum SessionKey {
   /// the delivery target is resolved from config, so `chatID(from:)` stays nil by design.
   public static let heartbeat = "sched:heartbeat"
 
-  public static func telegramDM(chatID: Int64) -> String { "\(dmPrefix)\(chatID)" }
+  public static func telegramDM(chatID: Int64) -> String {
+    "\(dmPrefix)\(chatID)"
+  }
 
   /// One session per forum topic. `threadID` is nil in the General topic and in a non-forum group,
   /// which both collapse onto the chat's single General key — correct, since a non-forum group has
@@ -41,14 +43,18 @@ public enum SessionKey {
   /// on another.
   public static func telegram(for message: IncomingMessage, mode: ChatMode) -> String {
     switch mode {
-    case .direct: telegramDM(chatID: message.chatID)
-    case .group: telegramTopic(chatID: message.chatID, threadID: message.messageThreadID)
+    case .direct:
+      telegramDM(chatID: message.chatID)
+    case .group:
+      telegramTopic(chatID: message.chatID, threadID: message.messageThreadID)
     }
   }
 
   /// A job's dedicated session, created lazily at first fire. No chat id in the key —
   /// the delivery target is `scheduled_jobs.owner_chat_id`, so `chatID(from:)` stays nil by design.
-  public static func scheduledJob(id: Int64) -> String { "\(jobPrefix)\(id)" }
+  public static func scheduledJob(id: Int64) -> String {
+    "\(jobPrefix)\(id)"
+  }
 
   public static func chatID(from key: String) -> Int64? {
     if key.hasPrefix(dmPrefix) {

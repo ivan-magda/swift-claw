@@ -22,7 +22,9 @@ enum MCPDiscoveryLimits {
 /// finished `AsyncThrowingStream` cannot reopen — so reconnecting means building a new one. Making
 /// that a seam is also what lets the session suites run a real client against a real SDK server
 /// with no socket in between.
-public protocol MCPTransportFactory: Sendable { func makeTransport() async throws -> any Transport }
+public protocol MCPTransportFactory: Sendable {
+  func makeTransport() async throws -> any Transport
+}
 
 /// The production factory: one Streamable HTTP transport per connection, over the shared HTTP seam.
 public struct MCPStreamableHTTPTransportFactory: MCPTransportFactory {
@@ -108,7 +110,9 @@ public actor MCPServerSession {
   }
 
   /// Performs the initialize handshake if one is not already live.
-  public func connect() async throws { _ = try await connected() }
+  public func connect() async throws {
+    _ = try await connected()
+  }
 
   /// The server's whole tool list, paged under the discovery caps.
   public func listAllTools() async throws -> [MCP.Tool] {
@@ -181,7 +185,9 @@ public actor MCPServerSession {
   }
 
   /// Ends the session. The next call opens a fresh one.
-  public func disconnect() async { await teardown() }
+  public func disconnect() async {
+    await teardown()
+  }
 }
 
 /// Where a bounded operation leaves its result for the caller to collect.
@@ -199,14 +205,21 @@ private actor BoundedSlot<Value: Sendable> {
   private var outcome: Outcome = .pending
 
   func run(_ operation: @Sendable () async throws -> Value) async {
-    do { outcome = .completed(try await operation()) } catch { outcome = .failed(error) }
+    do {
+      outcome = .completed(try await operation())
+    } catch {
+      outcome = .failed(error)
+    }
   }
 
   func resolve(orTimingOutWith timeout: MCPSessionError) throws -> Value {
     switch outcome {
-    case .completed(let value): return value
-    case .failed(let error): throw error
-    case .pending: throw timeout
+    case .completed(let value):
+      return value
+    case .failed(let error):
+      throw error
+    case .pending:
+      throw timeout
     }
   }
 }
@@ -264,7 +277,8 @@ private extension MCPServerSession {
     }
 
     switch race {
-    case .operationReturned: return try await slot.resolve(orTimingOutWith: timeout)
+    case .operationReturned:
+      return try await slot.resolve(orTimingOutWith: timeout)
     case .deadlineExpired:
       await cancellation?.cancel()
       throw timeout

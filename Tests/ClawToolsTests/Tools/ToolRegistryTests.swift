@@ -28,9 +28,13 @@ struct StubTool: Tool {
     self.payload = payload
   }
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
-  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload { payload }
+  func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
+    payload
+  }
 }
 
 @Suite

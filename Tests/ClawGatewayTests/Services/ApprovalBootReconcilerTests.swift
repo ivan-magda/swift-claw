@@ -34,7 +34,9 @@ struct ApprovalBootReconcilerTests {
     private var resolvedSignals: [Int64: ApprovalSignal] = [:]
     private var resolutionWaiters: [Int64: [CheckedContinuation<ApprovalSignal, Never>]] = [:]
 
-    init(coordinator: ApprovalCoordinator) { self.coordinator = coordinator }
+    init(coordinator: ApprovalCoordinator) {
+      self.coordinator = coordinator
+    }
 
     func park(
       approvalID: Int64,
@@ -208,7 +210,9 @@ struct ApprovalBootReconcilerTests {
       }
     }
 
-    func approvalState(_ id: Int64) throws -> ApprovalState? { try store.approval(id: id)?.state }
+    func approvalState(_ id: Int64) throws -> ApprovalState? {
+      try store.approval(id: id)?.state
+    }
   }
 
   private func makeFixture() throws -> Fixture {

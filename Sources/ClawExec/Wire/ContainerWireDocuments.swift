@@ -1,6 +1,8 @@
 import Foundation
 
-struct SystemStatusDocument: Decodable { let status: String }
+struct SystemStatusDocument: Decodable {
+  let status: String
+}
 
 // All four fields stay required even though only appName/version drive the gate: decoding pins
 // the expected v1.1.0 CLI row shape and rejects unrelated {appName, version} payloads from a
@@ -32,18 +34,26 @@ struct ListedContainer: Decodable, Sendable {
   let id: String?
   let configuration: Configuration?
 
-  var resolvedIdentifier: String? { id ?? configuration?.id }
+  var resolvedIdentifier: String? {
+    id ?? configuration?.id
+  }
 
-  var labels: [String: String] { configuration?.labels ?? [:] }
+  var labels: [String: String] {
+    configuration?.labels ?? [:]
+  }
 }
 
 struct SystemPropertiesDocument: Decodable {
-  struct Vminit: Decodable { let image: String }
+  struct Vminit: Decodable {
+    let image: String
+  }
 
   let vminit: Vminit
 }
 
-struct ImageDigestDescriptor: Decodable { let digest: String }
+struct ImageDigestDescriptor: Decodable {
+  let digest: String
+}
 
 struct ImageInspectDocument: Decodable {
   struct Configuration: Decodable {
@@ -78,7 +88,9 @@ struct ContainerInspectDocument: Decodable {
     let capDrop: [String]
   }
 
-  struct Status: Decodable { let state: String }
+  struct Status: Decodable {
+    let state: String
+  }
 
   let configuration: Configuration
 

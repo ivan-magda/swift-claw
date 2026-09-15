@@ -376,5 +376,7 @@ private struct RealSandboxHost {
     return false
   }
 
-  func remove() { try? FileManager.default.removeItem(at: root) }
+  func remove() {
+    try? FileManager.default.removeItem(at: root)
+  }
 }

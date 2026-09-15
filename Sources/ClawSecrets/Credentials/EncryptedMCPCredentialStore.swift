@@ -69,7 +69,9 @@ public struct EncryptedMCPCredentialStore: Sendable {
 
   private let file: SealedCredentialFile<CredentialMap>
 
-  public init(stateRoot: URL) { self.init(stateRoot: stateRoot, publisher: SecureFilePublisher()) }
+  public init(stateRoot: URL) {
+    self.init(stateRoot: stateRoot, publisher: SecureFilePublisher())
+  }
 
   init(stateRoot: URL, publisher: SecureFilePublisher) {
     file = SealedCredentialFile(
@@ -90,9 +92,9 @@ public struct EncryptedMCPCredentialStore: Sendable {
   /// than once per server — and so a server with nothing stored still gets a row to report.
   public func loadAll(
     servers: [MCPServerConfig]
-  ) throws(CredentialStoreError) -> [String:
-    MCPCredentialLoad]
-  { try loadSnapshot(servers: servers).outcomes }
+  ) throws(CredentialStoreError) -> [String: MCPCredentialLoad] {
+    try loadSnapshot(servers: servers).outcomes
+  }
 
   /// Opens the envelope once for boot, returning both the credentials safe to send and every stored
   /// token that must remain unprintable even after its server is removed or re-pointed.
@@ -214,8 +216,12 @@ extension EncryptedMCPCredentialStore {
   static func sealEnvelope(
     _ plaintext: Data,
     key: SymmetricKey
-  ) throws(CredentialStoreError) -> Data { try envelopeCodec.sealCredential(plaintext, key: key) }
+  ) throws(CredentialStoreError) -> Data {
+    try envelopeCodec.sealCredential(plaintext, key: key)
+  }
 
   static func openEnvelope(_ envelope: Data, key: SymmetricKey) throws(CredentialStoreError) -> Data
-  { try envelopeCodec.openCredential(envelope, key: key) }
+  {
+    try envelopeCodec.openCredential(envelope, key: key)
+  }
 }

@@ -59,9 +59,7 @@ enum DoctorHealth {
     stores: ClawStores,
     config: AppConfig,
     now: Date
-  ) -> [DoctorReport
-    .Check]
-  {
+  ) -> [DoctorReport.Check] {
     let snapshot = SchedulerHealth.Snapshot(
       state: read {
         try stores.scheduledJobs.schedulerState()
@@ -86,9 +84,7 @@ enum DoctorHealth {
     stores: ClawStores,
     config: AppConfig,
     now: Date
-  ) -> [DoctorReport
-    .Check]
-  {
+  ) -> [DoctorReport.Check] {
     return ApprovalsHealthRows.rows(
       health: read {
         try stores.approvals.approvalsHealth(now: now)
@@ -115,6 +111,10 @@ enum DoctorHealth {
 
 private extension DoctorHealth {
   static func read<Value: Sendable>(_ load: () throws -> Value) -> HealthValue<Value> {
-    do { return .available(try load()) } catch { return .unavailable }
+    do {
+      return .available(try load())
+    } catch {
+      return .unavailable
+    }
   }
 }

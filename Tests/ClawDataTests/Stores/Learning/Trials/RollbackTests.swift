@@ -204,8 +204,10 @@ struct RollbackTests {
 }
 
 extension BoundRunEnvironment {
-  func promotionFeedback(_ promotion: DecisionReceipt, signal: OwnerSignal) throws -> FeedbackEvent
-  {
+  func promotionFeedback(
+    _ promotion: DecisionReceipt,
+    signal: OwnerSignal
+  ) throws -> FeedbackEvent {
     let target = NewFeedbackTarget(
       nonce: "promotion-owner-feedback",
       jobID: jobID,
@@ -219,11 +221,10 @@ extension BoundRunEnvironment {
       expiresAt: now.addingTimeInterval(3_600)
     )
     try TestLearningFixtures(writer: queue).seedTargets([target])
-    guard
-      case .recorded(let event) = try learning.consumeAndAppendEvent(
-        feedbackTap(target, updateID: 900),
-        now: now
-      )
+    guard case .recorded(let event) = try learning.consumeAndAppendEvent(
+      feedbackTap(target, updateID: 900),
+      now: now
+    )
     else {
       throw StoreError.unexpected("fixture owner trigger was not recorded")
     }

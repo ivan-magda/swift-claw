@@ -71,7 +71,9 @@ public enum Degradation {
   }
 
   /// The spend-breaker reply; `cap` names the tripped limit (e.g. "per-run spend" / "per-day token").
-  public static func budget(cap: String) -> String { "I stopped because I hit the \(cap) cap." }
+  public static func budget(cap: String) -> String {
+    "I stopped because I hit the \(cap) cap."
+  }
 
   /// The once-per-UTC-day owner DM fired by the post-commit kill-switch (`BudgetBreaker`).
   public static let dailyCapTripped = """
@@ -90,16 +92,24 @@ public enum Degradation {
   /// `DegradationKind`, so a new failure mode forces a deliberate copy decision here.
   public static func message(for kind: DegradationKind) -> String {
     switch kind {
-    case .providerUnavailable: return providerUnavailable
-    case .outputTruncated: return outputTruncated
-    case .contextUnavailable: return contextUnavailable
-    case .accountingFailed: return accountingFailed
-    case .authenticationRequired: return authenticationRequired
-    case .accessDenied: return accessDenied
+    case .providerUnavailable:
+      return providerUnavailable
+    case .outputTruncated:
+      return outputTruncated
+    case .contextUnavailable:
+      return contextUnavailable
+    case .accountingFailed:
+      return accountingFailed
+    case .authenticationRequired:
+      return authenticationRequired
+    case .accessDenied:
+      return accessDenied
     case .quotaLimited(let retryAfterSeconds):
       return quotaLimited(retryAfterSeconds: retryAfterSeconds)
-    case .invalidProviderState: return invalidProviderState
-    case .visionUnsupported: return visionUnsupported
+    case .invalidProviderState:
+      return invalidProviderState
+    case .visionUnsupported:
+      return visionUnsupported
     }
   }
 
@@ -107,8 +117,10 @@ public enum Degradation {
   /// case forces a deliberate copy decision here.
   public static func message(for notice: RouteNotice) -> String {
     switch notice {
-    case .switched(let primary, let fallback): return routeSwitched(from: primary, to: fallback)
-    case .restored(let route): return routeRestored(route: route)
+    case .switched(let primary, let fallback):
+      return routeSwitched(from: primary, to: fallback)
+    case .restored(let route):
+      return routeRestored(route: route)
     }
   }
 
@@ -120,7 +132,9 @@ public enum Degradation {
   }
 
   /// The matching notice when the primary answers again.
-  public static func routeRestored(route: String) -> String { "\(route) is answering again." }
+  public static func routeRestored(route: String) -> String {
+    "\(route) is answering again."
+  }
 
   /// Appended to a degraded reply when the turn already switched routes and the fallback then
   /// failed too, so the reply names the primary's cause without implying the fallback was never

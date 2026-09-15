@@ -55,7 +55,8 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
     )
 
     switch outcome {
-    case .operationReturned(let result): return result
+    case .operationReturned(let result):
+      return result
     case .deadlineExpired:
       return SubprocessResult(
         termination: .timedOut,
@@ -144,8 +145,10 @@ private extension SwiftSubprocessRunner {
     }
 
     switch status {
-    case .exited(let code): return .exited(Int32(code))
-    case .signaled(let signal): return .signaled(Int32(signal))
+    case .exited(let code):
+      return .exited(Int32(code))
+    case .signaled(let signal):
+      return .signaled(Int32(signal))
     }
   }
 }

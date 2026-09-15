@@ -31,10 +31,9 @@ extension RunStoreGRDB {
       for row in stale {
         let runID: Int64 = row["run_id"]
         let disposition = try Self.orphanDisposition(db, runID: runID)
-        guard
-          try Self
-          .transitionRun(db, runID: runID, event: .fail, now: now, terminal: disposition)
-          != nil
+        guard try Self
+              .transitionRun(db, runID: runID, event: .fail, now: now, terminal: disposition)
+              != nil
         else {
           continue
         }

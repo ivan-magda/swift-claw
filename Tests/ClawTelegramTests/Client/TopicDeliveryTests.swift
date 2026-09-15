@@ -21,8 +21,9 @@ struct TopicDeliveryTests {
     )
   }
 
-  private func body(_ executor: ClawTestSupport.RecordingHTTPExecutor) async throws -> [String: Any]
-  {
+  private func body(
+    _ executor: ClawTestSupport.RecordingHTTPExecutor
+  ) async throws -> [String: Any] {
     let raw = try #require(await executor.lastBody)
     return try #require(try JSONSerialization.jsonObject(with: raw) as? [String: Any])
   }

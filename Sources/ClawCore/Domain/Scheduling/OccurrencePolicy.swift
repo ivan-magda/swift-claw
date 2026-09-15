@@ -19,9 +19,8 @@ public struct OccurrencePolicy: Sendable {
     from nowDate: Date,
     limit: Int
   ) -> [Date] {
-    guard
-      let envelope = validated.recurrence,
-      let timezone = TimeZone(identifier: validated.timezone)
+    guard let envelope = validated.recurrence,
+          let timezone = TimeZone(identifier: validated.timezone)
     else {
       return [validated.firstOccurrence]
     }
@@ -45,9 +44,8 @@ public struct OccurrencePolicy: Sendable {
   /// when nothing valid remains to arm: a one-shot whose instant has passed, or (pathological)
   /// a rule with no upcoming occurrence.
   public func armOccurrence(for validated: ValidatedSchedule, at nowDate: Date) -> Date? {
-    guard
-      let envelope = validated.recurrence,
-      let timezone = TimeZone(identifier: validated.timezone)
+    guard let envelope = validated.recurrence,
+          let timezone = TimeZone(identifier: validated.timezone)
     else {
       return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
     }
@@ -86,8 +84,12 @@ public struct OccurrencePolicy: Sendable {
   /// one-shot (→ COMPLETED). `anchor` is the occurrence being advanced from (the claimed or
   /// skipped due) — advances stay on the armed chain, so /schedule's confirm preview can never
   /// disagree with actual fires.
-  public func advance(for job: ScheduledJob, timezone: TimeZone, anchor: Date, after: Date) -> Date?
-  {
+  public func advance(
+    for job: ScheduledJob,
+    timezone: TimeZone,
+    anchor: Date,
+    after: Date
+  ) -> Date? {
     job.recurrence.flatMap { envelope in
       calculator.occurrences(
         rule: envelope.rule,

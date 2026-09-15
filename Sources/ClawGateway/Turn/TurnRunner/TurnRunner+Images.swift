@@ -41,9 +41,8 @@ extension TurnRunner {
     }
 
     let history = snapshot.history.enumerated().map { offset, message in
-      guard
-        offset < snapshot.historyMessageIDs.count,
-        let image = kept[snapshot.historyMessageIDs[offset]]
+      guard offset < snapshot.historyMessageIDs.count,
+            let image = kept[snapshot.historyMessageIDs[offset]]
       else {
         return message
       }

@@ -29,8 +29,7 @@ extension ScheduledLearningStoreGRDB {
       guard prompt.isEmpty == false else {
         throw StoreError.unexpected("feedback challenge prompt has no chunks")
       }
-      guard
-        prompt.allSatisfy({ chunk in
+      guard prompt.allSatisfy({ chunk in
           chunk.subjectDigest == insertion.promptDigest && chunk.chatID == insertion.chatID
         })
       else {
@@ -107,16 +106,15 @@ extension ScheduledLearningStoreGRDB {
     chatID: Int64
   ) throws(StoreError) -> FeedbackChallenge? {
     try database.readMapping { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: """
+      guard let row = try Row.fetchOne(
+        db,
+        sql: """
             SELECT * FROM feedback_challenges
             WHERE owner_user_id = ? AND chat_id = ?
               AND superseded_by IS NULL AND consumed_at IS NULL
             """,
-          arguments: [ownerUserID, chatID]
-        )
+        arguments: [ownerUserID, chatID]
+      )
       else {
         return nil
       }

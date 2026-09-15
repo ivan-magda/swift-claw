@@ -8,8 +8,13 @@ public struct PhotoSize: Sendable, Equatable {
   public let height: Int
   public let fileSizeBytes: Int64?
 
-  public init(fileID: String, fileUniqueID: String?, width: Int, height: Int, fileSizeBytes: Int64?)
-  {
+  public init(
+    fileID: String,
+    fileUniqueID: String?,
+    width: Int,
+    height: Int,
+    fileSizeBytes: Int64?
+  ) {
     self.fileID = fileID
     self.fileUniqueID = fileUniqueID
     self.width = width
@@ -26,7 +31,9 @@ public struct PhotoAttachment: Sendable, Equatable {
 
   public let sizes: [PhotoSize]
 
-  public init(sizes: [PhotoSize]) { self.sizes = sizes }
+  public init(sizes: [PhotoSize]) {
+    self.sizes = sizes
+  }
 
   /// The largest rung whose declared size fits, falling back to the largest overall so the transport
   /// cap stays the ground truth. Telegram documents no ordering for the array and its reference

@@ -13,7 +13,9 @@ import Synchronization
 final class StreamAbandonmentLease: Sendable {
   private let onAbandon: @Sendable () -> Void
 
-  init(_ onAbandon: @escaping @Sendable () -> Void) { self.onAbandon = onAbandon }
+  init(_ onAbandon: @escaping @Sendable () -> Void) {
+    self.onAbandon = onAbandon
+  }
 
   deinit { onAbandon() }
 }

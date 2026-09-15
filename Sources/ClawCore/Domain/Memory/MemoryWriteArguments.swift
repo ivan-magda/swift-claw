@@ -15,9 +15,8 @@ public enum MemoryWriteArguments {
       return .invalid(reason: "memory_write needs a non-empty \"text\" argument.")
     }
 
-    guard
-      let rawKind = arguments.objectValue?["kind"]?.stringValue,
-      let kind = MemoryKind(rawValue: rawKind)
+    guard let rawKind = arguments.objectValue?["kind"]?.stringValue,
+          let kind = MemoryKind(rawValue: rawKind)
     else {
       return .invalid(
         reason: "memory_write needs a \"kind\" of user, feedback, project, or reference."
@@ -26,7 +25,8 @@ public enum MemoryWriteArguments {
 
     let importance: Importance
     switch arguments.objectValue?["importance"]?.stringValue {
-    case nil: importance = .normal
+    case nil:
+      importance = .normal
     case .some(let raw):
       guard let parsed = Importance(wireLabel: raw) else {
         return .invalid(reason: "importance must be low, normal, or high.")
@@ -36,7 +36,8 @@ public enum MemoryWriteArguments {
 
     let sensitivity: Sensitivity
     switch arguments.objectValue?["sensitivity"]?.stringValue {
-    case nil: sensitivity = .normal
+    case nil:
+      sensitivity = .normal
     case .some(let raw):
       guard let parsed = Sensitivity(rawValue: raw) else {
         return .invalid(reason: "sensitivity must be normal or high.")

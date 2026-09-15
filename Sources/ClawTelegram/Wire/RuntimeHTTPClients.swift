@@ -18,8 +18,10 @@ public enum RuntimeHTTPClientRole: Sendable, CaseIterable, Equatable {
   /// redirect-following default it has always used.
   public var egressProfile: HTTPClientProfile {
     switch self {
-    case .telegram: return .redirectFollowing
-    case .llm, .tool: return .protectedEgress
+    case .telegram:
+      return .redirectFollowing
+    case .llm, .tool:
+      return .protectedEgress
     }
   }
 }

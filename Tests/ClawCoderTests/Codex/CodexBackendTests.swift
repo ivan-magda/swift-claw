@@ -107,11 +107,16 @@ struct CodexBackendTests {
     let fixture = try await CodexFixture()
     defer { try? FileManager.default.removeItem(at: fixture.git.root) }
     switch mode {
-    case "blocked", "failed": try fixture.report(["status": mode, "error": "Worker reason"])
-    case "eventFailed": try fixture.write("events", "{\"type\":\"turn.failed\"}\n")
-    case "exit": try fixture.write("exit", "7")
-    case "terminal": try fixture.write("events", "{\"type\":\"item.completed\"}\n")
-    case "missing": try fixture.write("no-report", "")
+    case "blocked", "failed":
+      try fixture.report(["status": mode, "error": "Worker reason"])
+    case "eventFailed":
+      try fixture.write("events", "{\"type\":\"turn.failed\"}\n")
+    case "exit":
+      try fixture.write("exit", "7")
+    case "terminal":
+      try fixture.write("events", "{\"type\":\"item.completed\"}\n")
+    case "missing":
+      try fixture.write("no-report", "")
     case "invalid":
       let data = Data(try fixture.read("report").utf8)
       var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -132,7 +137,8 @@ struct CodexBackendTests {
       let bytes = try JSONSerialization.data(withJSONObject: event)
       let eventText = try #require(String(data: bytes, encoding: .utf8))
       try fixture.write("events", eventText + "\n" + fixture.read("events"))
-    default: break
+    default:
+      break
     }
     let invocation = try await fixture.invocation()
 

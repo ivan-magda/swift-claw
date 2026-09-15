@@ -55,17 +55,23 @@ struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
   /// - Throws: `CancellationError` if the calling task is cancelled first — the element is not
   ///   queued; `BoundedAsyncChannelError.channelFinished` if the channel is already closed; or a
   ///   weight rejection for an element this channel could never admit.
-  func send(_ element: Element) async throws { try await storage.send(element) }
+  func send(_ element: Element) async throws {
+    try await storage.send(element)
+  }
 
   /// Ends the sequence after every already-accepted element has been read.
   ///
   /// The first termination wins; later calls are ignored.
-  func finish() { storage.close(with: .finished) }
+  func finish() {
+    storage.close(with: .finished)
+  }
 
   /// Ends the sequence with `error`, delivered after every already-accepted element.
   ///
   /// Later calls are ignored.
-  func finish(throwing error: any Error) { storage.close(with: .failed(error)) }
+  func finish(throwing error: any Error) {
+    storage.close(with: .failed(error))
+  }
 
   func makeAsyncIterator() -> Iterator {
     Iterator(storage: storage, hasClaim: storage.claimIterator())
@@ -91,10 +97,14 @@ extension BoundedAsyncChannel {
   ///
   /// Suspending rather than dropping is the channel's contract, so tests observe it here;
   /// production reads neither of these.
-  var suspendedSenderCount: Int { storage.suspendedSenderCount }
+  var suspendedSenderCount: Int {
+    storage.suspendedSenderCount
+  }
 
   /// Consumers currently suspended on an empty buffer — at most one, by the single-consumer rule.
-  var suspendedReceiverCount: Int { storage.suspendedReceiverCount }
+  var suspendedReceiverCount: Int {
+    storage.suspendedReceiverCount
+  }
 }
 
 // MARK: - Shared state
@@ -287,12 +297,15 @@ extension BoundedAsyncChannel.Storage {
     }
 
     switch admission {
-    case .buffered: continuation.resume()
+    case .buffered:
+      continuation.resume()
     case .handedOff(let receiver):
       receiver.resume(returning: element)
       continuation.resume()
-    case .parked: break
-    case .rejected(let error): continuation.resume(throwing: error)
+    case .parked:
+      break
+    case .rejected(let error):
+      continuation.resume(throwing: error)
     }
   }
 
@@ -354,7 +367,8 @@ extension BoundedAsyncChannel.Storage {
       case .none:
         current.receivers.append(ParkedReceiver(ticket: ticket, continuation: continuation))
         return .parked
-      case .finished: return .element(nil)
+      case .finished:
+        return .element(nil)
       case .failed(let error):
         current.terminal = .finished
         return .failed(error)
@@ -366,9 +380,12 @@ extension BoundedAsyncChannel.Storage {
     }
 
     switch delivery {
-    case .element(let element): continuation.resume(returning: element)
-    case .parked: break
-    case .failed(let error): continuation.resume(throwing: error)
+    case .element(let element):
+      continuation.resume(returning: element)
+    case .parked:
+      break
+    case .failed(let error):
+      continuation.resume(throwing: error)
     }
   }
 
@@ -436,8 +453,10 @@ extension BoundedAsyncChannel.Storage {
 
     for receiver in wokenReceivers {
       switch terminal {
-      case .finished: receiver.resume(returning: nil)
-      case .failed(let error): receiver.resume(throwing: error)
+      case .finished:
+        receiver.resume(returning: nil)
+      case .failed(let error):
+        receiver.resume(throwing: error)
       }
     }
   }

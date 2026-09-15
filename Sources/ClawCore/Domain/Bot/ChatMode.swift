@@ -18,8 +18,10 @@ extension ChatMode {
   /// topic's history unsearchable. The price is that a group session never arms taint.
   public func storedProvenance(of source: Provenance) -> Provenance {
     switch self {
-    case .direct: source
-    case .group: .trusted
+    case .direct:
+      source
+    case .group:
+      .trusted
     }
   }
 }

@@ -13,9 +13,8 @@ extension ScheduledLearningStoreGRDB {
     _ authorization: LearningAuthorization,
     now: Date
   ) throws -> AuthorizeOutcome {
-    guard
-      let operation = try readOperation(db, id: authorization.operationID),
-      operation.state == .claimed
+    guard let operation = try readOperation(db, id: authorization.operationID),
+          operation.state == .claimed
     else {
       return .superseded
     }
@@ -64,7 +63,8 @@ private extension ScheduledLearningStoreGRDB {
     operation: OperationRow
   ) throws -> Bool {
     switch (operation.phase, authorization.context) {
-    case (.evaluator, .evaluation): return true
+    case (.evaluator, .evaluation):
+      return true
     case (.reflector, .reflection(let reflection)):
       let sourcesAreCurrent = try reflectionAuthorizationIsCurrent(db, authorization: reflection)
       let expectedKey = LearningOperationKey(
@@ -81,7 +81,8 @@ private extension ScheduledLearningStoreGRDB {
         && reflection.trigger.jobID == operation.jobID
         && reflection.trigger.epoch == operation.epoch && reflection.trigger.algorithm == .v1
         && sourcesAreCurrent
-    case (.evaluator, .reflection), (.reflector, .evaluation): return false
+    case (.evaluator, .reflection), (.reflector, .evaluation):
+      return false
     }
   }
 }

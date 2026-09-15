@@ -69,7 +69,9 @@ extension ResetFixture {
     let resetAuditCount: Int
   }
 
-  struct DurableProjection: Equatable { let tables: [DurableTableProjection] }
+  struct DurableProjection: Equatable {
+    let tables: [DurableTableProjection]
+  }
 
   struct DurableTableProjection: Equatable {
     let name: String
@@ -77,9 +79,13 @@ extension ResetFixture {
     let rows: [[DatabaseValue]]
   }
 
-  func state() throws -> JobLearningState { try env.currentLearningState() }
+  func state() throws -> JobLearningState {
+    try env.currentLearningState()
+  }
 
-  func closedTrialIDs() throws -> [Int64] { try trialIDs(state: .closed) }
+  func closedTrialIDs() throws -> [Int64] {
+    try trialIDs(state: .closed)
+  }
 
   func closedTrialReasons() throws -> [String] {
     try env.queue.read { db in
@@ -171,17 +177,16 @@ extension ResetFixture {
 
   func operation(_ id: String) throws -> OperationProjection? {
     try env.queue.read { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: """
+      guard let row = try Row.fetchOne(
+        db,
+        sql: """
             SELECT state, failure_code, reservation_state, reserved_tokens, reserved_cost_usd,
               route, provider_call_id
             FROM learning_operations WHERE operation_id = ?
             """,
-          arguments: [id]
-        ),
-        let state = LearningOperationState(rawValue: row["state"])
+        arguments: [id]
+      ),
+            let state = LearningOperationState(rawValue: row["state"])
       else {
         return nil
       }
@@ -236,9 +241,8 @@ extension ResetFixture {
         sql: "SELECT update_id, claimed_at FROM processed_updates ORDER BY update_id"
       )
       return try rows.map { row in
-        guard
-          let updateID = SQLiteStoredValue.int64(in: row, column: "update_id"),
-          let claimedAt: Date = row["claimed_at"]
+        guard let updateID = SQLiteStoredValue.int64(in: row, column: "update_id"),
+              let claimedAt: Date = row["claimed_at"]
         else {
           throw StoreError.unexpected("fixture processed update is unreadable")
         }
@@ -307,7 +311,9 @@ extension ResetFixture {
     try count("job_learning_state", predicate: "1", arguments: [])
   }
 
-  func lessonSetCount() throws -> Int { try count("lesson_sets", predicate: "1", arguments: []) }
+  func lessonSetCount() throws -> Int {
+    try count("lesson_sets", predicate: "1", arguments: [])
+  }
 
   func consumptionEpochs(
     table: String,

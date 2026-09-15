@@ -53,7 +53,9 @@ public actor ScheduledLearningService {
   /// to avoid. The notification is sent whether or not this call was the one that froze the
   /// evidence: an ordinary DONE commit settles itself, and that run still has to be sealed.
   nonisolated public func settleAndNotify(runID: Int64, now: Date, log: Logger) async {
-    do { try store.settleFromLane(runID: runID, now: now) } catch {
+    do {
+      try store.settleFromLane(runID: runID, now: now)
+    } catch {
       log.error("run \(runID) settlement deferred to boot: \(error)")
     }
     await notifySettled(runID: runID)
@@ -67,7 +69,9 @@ public actor ScheduledLearningService {
     _ = kickDrain(now: now())
   }
 
-  func waitForPendingWork() async { await drain?.value }
+  func waitForPendingWork() async {
+    await drain?.value
+  }
 
   public func notifyChanged(jobID: Int64) {
     guard !stopping else {
@@ -101,7 +105,9 @@ public actor ScheduledLearningService {
       return
     }
     defer {
-      do { _ = try store.sweepRetention(now: now) } catch {
+      do {
+        _ = try store.sweepRetention(now: now)
+      } catch {
         logger.error("learning retention deferred: \(error)")
       }
     }
@@ -135,9 +141,13 @@ public actor ScheduledLearningService {
             if !Task.isCancelled {
               await workflow.advance(jobID: jobID, now: now)
             }
-          } catch { logger.error("job \(jobID) learning recovery deferred: \(error)") }
+          } catch {
+            logger.error("job \(jobID) learning recovery deferred: \(error)")
+          }
         }
-      } catch { logger.error("learning workflow sweep deferred: \(error)") }
+      } catch {
+        logger.error("learning workflow sweep deferred: \(error)")
+      }
     } else {
       await sealSettled(now: now)
       _ = await reconcileTrials(now: now)
@@ -146,12 +156,16 @@ public actor ScheduledLearningService {
 
   /// Attempts prior-process operation accounting before ordinary services start. Network recovery
   /// belongs to the runtime sweep; a failed attempt leaves learning dispatch guarded and retryable.
-  public func reconcileAtBoot(now: Date) { _ = ensureOperations(now: now) }
+  public func reconcileAtBoot(now: Date) {
+    _ = ensureOperations(now: now)
+  }
 
   @discardableResult
   public func reconcileTrials(now: Date) async -> [TrialReconciliation] {
     let identities: [LearningTrialIdentity]
-    do { identities = try store.liveTrialIdentities() } catch {
+    do {
+      identities = try store.liveTrialIdentities()
+    } catch {
       logger.error("learning sweep could not read live trials: \(error)")
       return []
     }
@@ -160,10 +174,14 @@ public actor ScheduledLearningService {
     for identity in identities {
       do {
         switch try store.reconcileTrial(identity, now: now) {
-        case .stale: break
-        case .reconciled(let reconciliation): reconciliations.append(reconciliation)
+        case .stale:
+          break
+        case .reconciled(let reconciliation):
+          reconciliations.append(reconciliation)
         }
-      } catch { logger.error("trial \(identity.trialID) reconciliation failed: \(error)") }
+      } catch {
+        logger.error("trial \(identity.trialID) reconciliation failed: \(error)")
+      }
       await Task.yield()
     }
     return reconciliations
@@ -204,7 +222,9 @@ private extension ScheduledLearningService {
 
 private extension ScheduledLearningService {
   func sealSettled(now: Date) async {
-    do { pending.formUnion(try store.unsealed(limit: Self.sweepBatchLimit)) } catch {
+    do {
+      pending.formUnion(try store.unsealed(limit: Self.sweepBatchLimit))
+    } catch {
       logger.error("learning sweep could not read the unsealed queue: \(error)")
     }
     let task = kickDrain(now: now)
@@ -270,7 +290,9 @@ private extension ScheduledLearningService {
         } else {
           try store.sealEvidence(runID: runID, now: now)
         }
-      } catch { logger.error("run \(runID) evidence sealing failed: \(error)") }
+      } catch {
+        logger.error("run \(runID) evidence sealing failed: \(error)")
+      }
       await Task.yield()
     }
     for jobID in jobs {
@@ -290,7 +312,11 @@ extension ScheduledLearningService: Service {
     await cancelWhenGracefulShutdown {
       while !Task.isCancelled {
         await self.sweep(now: self.now())
-        do { try await self.clock.sleep(for: Self.sweepInterval) } catch { break }
+        do {
+          try await self.clock.sleep(for: Self.sweepInterval)
+        } catch {
+          break
+        }
       }
     }
     await stopDrain()

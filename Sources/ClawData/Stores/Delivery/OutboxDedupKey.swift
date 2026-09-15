@@ -4,7 +4,9 @@ import ClawCore
 /// step; a learning notice, which has no run, keys on the subject it speaks about and the chunk's
 /// ordinal. The `learning:` prefix keeps the two spaces from ever colliding.
 enum OutboxDedupKey {
-  static func make(runID: Int64, stepIndex: Int) -> String { "\(runID):\(stepIndex)" }
+  static func make(runID: Int64, stepIndex: Int) -> String {
+    "\(runID):\(stepIndex)"
+  }
 
   static func make(subjectDigest: String, ordinal: Int) -> String {
     "\(DeliverySource.learning.rawValue):\(subjectDigest):\(ordinal)"

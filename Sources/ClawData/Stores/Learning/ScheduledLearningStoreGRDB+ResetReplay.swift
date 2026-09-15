@@ -31,34 +31,33 @@ extension ScheduledLearningStoreGRDB {
       }
       return nil
     }
-    guard
-      inputs.oldEpoch.value > 0,
-      inputs.oldEpoch.value < Int64.max,
-      inputs.oldEpoch.next() == result.newEpoch,
-      result.newEpoch == record.epoch,
-      isCanonicalDigest(inputs.oldStableDigest.rawValue),
-      inputs.oldStableRevision.value >= 0,
-      inputs.oldStableRevision.value < Int64.max,
-      inputs.oldStableRevision.next() == result.newStableRevision,
-      inputs.feedbackRevisionAtCut.value >= 0,
-      inputs.priorOpenTrialID.map({
+    guard inputs.oldEpoch.value > 0,
+          inputs.oldEpoch.value < Int64.max,
+          inputs.oldEpoch.next() == result.newEpoch,
+          result.newEpoch == record.epoch,
+          isCanonicalDigest(inputs.oldStableDigest.rawValue),
+          inputs.oldStableRevision.value >= 0,
+          inputs.oldStableRevision.value < Int64.max,
+          inputs.oldStableRevision.next() == result.newStableRevision,
+          inputs.feedbackRevisionAtCut.value >= 0,
+          inputs.priorOpenTrialID.map({
         $0 > 0
       }) ?? true,
-      result.emptyStableDigest == LessonSet.empty(jobID: record.jobID).digest,
-      result.invalidatedTargetCount >= 0,
-      result.invalidatedChallengeCount >= 0,
-      resetTrialsAreSortedAndUnique(result.closedTrials),
-      resetOperationsAreSortedAndUnique(result.staleNoCallOperationIDs),
-      resetOperationsAreSortedAndUnique(result.inFlightOperationIDs),
-      Set(result.staleNoCallOperationIDs).isDisjoint(with: result.inFlightOperationIDs),
-      try resetTrialRowsMatch(db, result.closedTrials, jobID: record.jobID),
-      try resetOperationRowsMatch(
-        db,
-        staleNoCall: result.staleNoCallOperationIDs,
-        inFlight: result.inFlightOperationIDs,
-        jobID: record.jobID,
-        before: result.newEpoch
-      )
+          result.emptyStableDigest == LessonSet.empty(jobID: record.jobID).digest,
+          result.invalidatedTargetCount >= 0,
+          result.invalidatedChallengeCount >= 0,
+          resetTrialsAreSortedAndUnique(result.closedTrials),
+          resetOperationsAreSortedAndUnique(result.staleNoCallOperationIDs),
+          resetOperationsAreSortedAndUnique(result.inFlightOperationIDs),
+          Set(result.staleNoCallOperationIDs).isDisjoint(with: result.inFlightOperationIDs),
+          try resetTrialRowsMatch(db, result.closedTrials, jobID: record.jobID),
+          try resetOperationRowsMatch(
+            db,
+            staleNoCall: result.staleNoCallOperationIDs,
+            inFlight: result.inFlightOperationIDs,
+            jobID: record.jobID,
+            before: result.newEpoch
+          )
     else {
       return nil
     }
@@ -82,8 +81,10 @@ private extension ScheduledLearningStoreGRDB {
 
     var allowedStates: [LearningOperationState] {
       switch self {
-      case .staleNoCall: [.failedNoCall]
-      case .inFlight: [.started, .succeeded, .failed, .interruptedUnknown]
+      case .staleNoCall:
+        [.failedNoCall]
+      case .inFlight:
+        [.started, .succeeded, .failed, .interruptedUnknown]
       }
     }
   }
@@ -117,30 +118,29 @@ extension ScheduledLearningStoreGRDB {
     guard rows.count == 1, let row = rows.first else {
       return nil
     }
-    guard
-      SQLiteStoredValue.string(in: row, column: "kind") == ResetReceipt.kind,
-      let decisionID = SQLiteStoredValue.int64(in: row, column: "decision_id"),
-      SQLiteStoredValue.int64(in: row, column: "job_id") == state.jobID,
-      let epochValue = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      let inputsJSON = SQLiteStoredValue.string(in: row, column: "inputs"),
-      let resultJSON = SQLiteStoredValue.string(in: row, column: "result"),
-      let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm"),
-      let decidedEpoch = SQLiteStoredValue.int64(in: row, column: "decided_at"),
-      let decidedAt = EpochSecondCodec.date(fromEpoch: decidedEpoch),
-      let receipt = try resetReceipt(
-        db,
-        record: ResetDecisionRecord(
-          decisionID: decisionID,
-          jobID: state.jobID,
-          epoch: LearningEpoch(epochValue),
-          inputsJSON: inputsJSON,
-          resultJSON: resultJSON,
-          algorithm: LearningAlgorithm(rawValue: algorithmRaw),
-          decidedAt: decidedAt
-        )
-      ),
-      resetStateMatches(state, receipt: receipt),
-      try resetEffectsAreClean(db, state: state, receipt: receipt)
+    guard SQLiteStoredValue.string(in: row, column: "kind") == ResetReceipt.kind,
+          let decisionID = SQLiteStoredValue.int64(in: row, column: "decision_id"),
+          SQLiteStoredValue.int64(in: row, column: "job_id") == state.jobID,
+          let epochValue = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+          let inputsJSON = SQLiteStoredValue.string(in: row, column: "inputs"),
+          let resultJSON = SQLiteStoredValue.string(in: row, column: "result"),
+          let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm"),
+          let decidedEpoch = SQLiteStoredValue.int64(in: row, column: "decided_at"),
+          let decidedAt = EpochSecondCodec.date(fromEpoch: decidedEpoch),
+          let receipt = try resetReceipt(
+            db,
+            record: ResetDecisionRecord(
+              decisionID: decisionID,
+              jobID: state.jobID,
+              epoch: LearningEpoch(epochValue),
+              inputsJSON: inputsJSON,
+              resultJSON: resultJSON,
+              algorithm: LearningAlgorithm(rawValue: algorithmRaw),
+              decidedAt: decidedAt
+            )
+          ),
+          resetStateMatches(state, receipt: receipt),
+          try resetEffectsAreClean(db, state: state, receipt: receipt)
     else {
       return nil
     }
@@ -163,57 +163,56 @@ private extension ScheduledLearningStoreGRDB {
     receipt: ResetReceipt
   ) throws -> Bool {
     let empty = LessonSet.empty(jobID: state.jobID)
-    guard
-      let emptyRow = try Row.fetchOne(
-        db,
-        sql: """
+    guard let emptyRow = try Row.fetchOne(
+      db,
+      sql: """
           SELECT job_id, digest, schema_version, canonical_bytes, source
           FROM lesson_sets WHERE job_id = ? AND digest = ?
           """,
-        arguments: [state.jobID, empty.digest.rawValue]
-      ),
-      canonicalEmptySetMatches(emptyRow, set: empty),
-      try rowExists(
-        db,
-        sql: """
+      arguments: [state.jobID, empty.digest.rawValue]
+    ),
+          canonicalEmptySetMatches(emptyRow, set: empty),
+          try rowExists(
+            db,
+            sql: """
           SELECT EXISTS(SELECT 1 FROM learning_trials
             WHERE job_id = ? AND state IN (?, ?))
           """,
-        arguments: [
-          state.jobID,
-          LearningTrialState.open.rawValue,
-          LearningTrialState.draining.rawValue,
-        ]
-      ) == false,
-      try rowExists(
-        db,
-        sql:
+            arguments: [
+              state.jobID,
+              LearningTrialState.open.rawValue,
+              LearningTrialState.draining.rawValue,
+            ]
+          ) == false,
+          try rowExists(
+            db,
+            sql:
           "SELECT EXISTS(SELECT 1 FROM feedback_targets WHERE job_id = ? AND consumed_at IS NULL)",
-        arguments: [state.jobID]
-      ) == false,
-      try rowExists(
-        db,
-        sql: """
+            arguments: [state.jobID]
+          ) == false,
+          try rowExists(
+            db,
+            sql: """
           SELECT EXISTS(SELECT 1 FROM feedback_challenges
             WHERE job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL)
           """,
-        arguments: [state.jobID]
-      ) == false,
-      try rowExists(
-        db,
-        sql: """
+            arguments: [state.jobID]
+          ) == false,
+          try rowExists(
+            db,
+            sql: """
           SELECT EXISTS(SELECT 1 FROM learning_operations
             WHERE job_id = ? AND learning_epoch < ? AND state IN (?, ?))
           """,
-        arguments: [
-          state.jobID,
-          state.epoch.value,
-          LearningOperationState.pending.rawValue,
-          LearningOperationState.claimed.rawValue,
-        ]
-      ) == false,
-      try startedOperationsAreCovered(db, state: state, receipt: receipt),
-      try currentEpochHasNoPostResetActivity(db, state: state)
+            arguments: [
+              state.jobID,
+              state.epoch.value,
+              LearningOperationState.pending.rawValue,
+              LearningOperationState.claimed.rawValue,
+            ]
+          ) == false,
+          try startedOperationsAreCovered(db, state: state, receipt: receipt),
+          try currentEpochHasNoPostResetActivity(db, state: state)
     else {
       return false
     }
@@ -268,33 +267,35 @@ private extension ScheduledLearningStoreGRDB {
     jobID: Int64
   ) throws -> Bool {
     for trial in trials {
-      guard
-        trial.jobID == jobID,
-        trial.trialID > 0,
-        trial.epoch.value > 0,
-        trial.generation > 0,
-        isCanonicalDigest(trial.baseDigest.rawValue),
-        isCanonicalDigest(trial.candidateDigest.rawValue),
-        trial.algorithm == .v1,
-        let row = try Row.fetchOne(
-          db,
-          sql: """
+      guard trial.jobID == jobID,
+            trial.trialID > 0,
+            trial.epoch.value > 0,
+            trial.generation > 0,
+            isCanonicalDigest(trial.baseDigest.rawValue),
+            isCanonicalDigest(trial.candidateDigest.rawValue),
+            trial.algorithm == .v1,
+            let row = try Row.fetchOne(
+              db,
+              sql: """
             SELECT job_id, learning_epoch, generation, base_digest, candidate_digest, state,
               close_reason, algorithm
             FROM learning_trials WHERE trial_id = ?
             """,
-          arguments: [trial.trialID]
-        ),
-        SQLiteStoredValue.int64(in: row, column: "job_id") == trial.jobID,
-        SQLiteStoredValue.int64(in: row, column: "learning_epoch") == trial.epoch.value,
-        SQLiteStoredValue.int(in: row, column: "generation") == trial.generation,
-        SQLiteStoredValue.string(in: row, column: "base_digest") == trial.baseDigest.rawValue,
-        SQLiteStoredValue.string(in: row, column: "candidate_digest")
-        == trial.candidateDigest.rawValue,
-        SQLiteStoredValue.string(in: row, column: "state") == LearningTrialState.closed.rawValue,
-        SQLiteStoredValue.string(in: row, column: "close_reason")
-        == LearningTrialCloseReason.learningReset.rawValue,
-        SQLiteStoredValue.string(in: row, column: "algorithm") == trial.algorithm.rawValue
+              arguments: [trial.trialID]
+            ),
+            SQLiteStoredValue.int64(in: row, column: "job_id") == trial.jobID,
+            SQLiteStoredValue.int64(in: row, column: "learning_epoch") == trial.epoch.value,
+            SQLiteStoredValue.int(in: row, column: "generation") == trial.generation,
+            SQLiteStoredValue.string(in: row, column: "base_digest") == trial.baseDigest.rawValue,
+            SQLiteStoredValue.string(in: row, column: "candidate_digest")
+            == trial.candidateDigest.rawValue,
+            SQLiteStoredValue.string(
+              in: row,
+              column: "state"
+            ) == LearningTrialState.closed.rawValue,
+            SQLiteStoredValue.string(in: row, column: "close_reason")
+            == LearningTrialCloseReason.learningReset.rawValue,
+            SQLiteStoredValue.string(in: row, column: "algorithm") == trial.algorithm.rawValue
       else {
         return false
       }
@@ -310,27 +311,25 @@ private extension ScheduledLearningStoreGRDB {
     before newEpoch: LearningEpoch
   ) throws -> Bool {
     for id in staleNoCall {
-      guard
-        try resetOperationMatches(
-          db,
-          id: id,
-          jobID: jobID,
-          before: newEpoch,
-          expectation: .staleNoCall
-        )
+      guard try resetOperationMatches(
+        db,
+        id: id,
+        jobID: jobID,
+        before: newEpoch,
+        expectation: .staleNoCall
+      )
       else {
         return false
       }
     }
     for id in inFlight {
-      guard
-        try resetOperationMatches(
-          db,
-          id: id,
-          jobID: jobID,
-          before: newEpoch,
-          expectation: .inFlight
-        )
+      guard try resetOperationMatches(
+        db,
+        id: id,
+        jobID: jobID,
+        before: newEpoch,
+        expectation: .inFlight
+      )
       else {
         return false
       }
@@ -345,22 +344,21 @@ private extension ScheduledLearningStoreGRDB {
     before newEpoch: LearningEpoch,
     expectation: ResetOperationExpectation
   ) throws -> Bool {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: """
+    guard let row = try Row.fetchOne(
+      db,
+      sql: """
           SELECT job_id, learning_epoch, state, failure_code, reserved_tokens,
             reserved_cost_usd, reservation_state
           FROM learning_operations WHERE operation_id = ?
           """,
-        arguments: [id.rawValue]
-      ),
-      SQLiteStoredValue.int64(in: row, column: "job_id") == jobID,
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      epoch < newEpoch.value,
-      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
-      let state = LearningOperationState(rawValue: stateRaw),
-      expectation.allowedStates.contains(state)
+      arguments: [id.rawValue]
+    ),
+          SQLiteStoredValue.int64(in: row, column: "job_id") == jobID,
+          let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+          epoch < newEpoch.value,
+          let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+          let state = LearningOperationState(rawValue: stateRaw),
+          expectation.allowedStates.contains(state)
     else {
       return false
     }

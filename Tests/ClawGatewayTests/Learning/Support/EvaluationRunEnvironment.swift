@@ -186,7 +186,9 @@ extension EvaluationRunEnvironment {
     try operationColumn("failure_code").flatMap(LearningOperationFailure.init(rawValue:))
   }
 
-  func operationRoute() throws -> String? { try operationColumn("route") }
+  func operationRoute() throws -> String? {
+    try operationColumn("route")
+  }
 
   func evaluationRowCount() throws -> Int {
     try queue.read { db in
@@ -204,7 +206,9 @@ extension EvaluationRunEnvironment {
     }
   }
 
-  func runUsage() throws -> [UsageRow] { try usageRows(where: "run_id = \(runID)") }
+  func runUsage() throws -> [UsageRow] {
+    try usageRows(where: "run_id = \(runID)")
+  }
 
   func learningUsage() throws -> [UsageRow] {
     try usageRows(where: "learning_operation_id IS NOT NULL")

@@ -8,7 +8,9 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
     String(repository.split(separator: "/", maxSplits: 1)[0]).lowercased()
   }
 
-  public var description: String { "\(repository)@sha256:\(digest)" }
+  public var description: String {
+    "\(repository)@sha256:\(digest)"
+  }
 
   public static func parse(_ rawValue: String) -> PinnedImageReference? {
     guard rawValue == rawValue.trimmingCharacters(in: .whitespacesAndNewlines) else {
@@ -59,13 +61,12 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
 
     if pieces.count == 2 {
       let rawPort = pieces[1]
-      guard
-        rawPort.isEmpty == false,
-        rawPort.allSatisfy({
+      guard rawPort.isEmpty == false,
+            rawPort.allSatisfy({
           "0123456789".contains($0)
         }),
-        let port = Int(rawPort),
-        (1...65_535).contains(port)
+            let port = Int(rawPort),
+            (1...65_535).contains(port)
       else {
         return false
       }
@@ -80,8 +81,7 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
     guard labels.allSatisfy(isValidDNSLabel) else {
       return false
     }
-    guard
-      labels.allSatisfy({
+    guard labels.allSatisfy({
         Int($0) != nil
       }) == false
     else {

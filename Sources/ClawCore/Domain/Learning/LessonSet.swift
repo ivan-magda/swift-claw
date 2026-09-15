@@ -24,7 +24,9 @@ public struct LessonSet: Sendable, Equatable {
   public let lessons: [String]
   public let digest: LessonSetDigest
 
-  public var isEmpty: Bool { lessons.isEmpty }
+  public var isEmpty: Bool {
+    lessons.isEmpty
+  }
 
   public static func empty(jobID: Int64) -> LessonSet {
     LessonSet(jobID: jobID, schemaVersion: schemaVersion, lessons: [], digest: digest(of: []))
@@ -57,10 +59,9 @@ extension LessonSet {
   /// Rebuilds a stored set from its canonical bytes, re-running validation and re-deriving the
   /// digest. Returns nil when the bytes are not a lesson set this version can read.
   package static func decoded(jobID: Int64, canonicalBytes: Data) -> LessonSet? {
-    guard
-      let payload = try? JSONDecoder().decode(DigestPayload.self, from: canonicalBytes),
-      payload.schemaVersion == schemaVersion,
-      let set = try? canonical(jobID: jobID, lessons: payload.lessons)
+    guard let payload = try? JSONDecoder().decode(DigestPayload.self, from: canonicalBytes),
+          payload.schemaVersion == schemaVersion,
+          let set = try? canonical(jobID: jobID, lessons: payload.lessons)
     else {
       return nil
     }

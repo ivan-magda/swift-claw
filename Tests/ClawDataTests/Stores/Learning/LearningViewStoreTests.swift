@@ -420,8 +420,9 @@ struct LearningViewStoreTests {
   }
 
   @Test(arguments: ViewPrimitiveCorruption.allCases)
-  func incompatibleStoredPrimitivesArePerJobUnreadable(_ corruption: ViewPrimitiveCorruption) throws
-  {
+  func incompatibleStoredPrimitivesArePerJobUnreadable(
+    _ corruption: ViewPrimitiveCorruption
+  ) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -643,17 +644,20 @@ private struct LearningViewFixture {
 
   func applyStableCorruption(_ corruption: StableViewCorruption, jobID: Int64) throws {
     switch corruption {
-    case .missingSet: try pointStableState(jobID: jobID, digest: String(repeating: "d", count: 64))
+    case .missingSet:
+      try pointStableState(jobID: jobID, digest: String(repeating: "d", count: 64))
     case .crossJobSet:
       let other = try createJob(label: "foreign stable owner")
       _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobID: other.id, now: now)
       let foreign = try installStableLessons(["Only the other job owns this."], jobID: other.id)
       try pointStableState(jobID: jobID, digest: foreign.digest.rawValue)
-    case .noncanonicalSet: try replaceStableBytes(jobID: jobID, bytes: Data("{".utf8))
+    case .noncanonicalSet:
+      try replaceStableBytes(jobID: jobID, bytes: Data("{".utf8))
     case .digestMismatch:
       let different = try LessonSet.canonical(jobID: jobID, lessons: ["Different bytes."])
       try replaceStableBytes(jobID: jobID, bytes: different.canonicalBytes)
-    case .invalidJobMetadata: try invalidateTimezone(jobID: jobID)
+    case .invalidJobMetadata:
+      try invalidateTimezone(jobID: jobID)
     }
   }
 
@@ -736,7 +740,8 @@ private extension AdmissionStoreFixture {
 
   func applyLiveWorkflowMutation(_ mutation: LiveWorkflowMutation, trialID: Int64) throws {
     switch mutation {
-    case .cancelledJob: try env.cancelJob()
+    case .cancelledJob:
+      try env.cancelJob()
     case .stalePointer:
       try env.queue.write { db in
         try db.execute(
@@ -852,7 +857,9 @@ private extension AdmissionStoreFixture {
   }
 }
 
-private struct DurableLearningSnapshot: Equatable { let tables: [DurableTableSnapshot] }
+private struct DurableLearningSnapshot: Equatable {
+  let tables: [DurableTableSnapshot]
+}
 
 private struct DurableTableSnapshot: Equatable {
   let name: String

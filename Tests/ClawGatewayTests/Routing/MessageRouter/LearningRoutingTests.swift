@@ -442,9 +442,12 @@ enum ResetConfirmationRace: CaseIterable {
 
   func expectedReply(jobID: Int64) -> String {
     switch self {
-    case .alreadyReset: "Learning for schedule \(jobID) was already reset at epoch 2."
-    case .unarmed: "Schedule \(jobID) has no learning state to reset."
-    case .notFound: "No schedule with id \(jobID). Nothing was reset."
+    case .alreadyReset:
+      "Learning for schedule \(jobID) was already reset at epoch 2."
+    case .unarmed:
+      "Schedule \(jobID) has no learning state to reset."
+    case .notFound:
+      "No schedule with id \(jobID). Nothing was reset."
     }
   }
 }

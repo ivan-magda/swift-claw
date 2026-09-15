@@ -215,7 +215,9 @@ struct PinnedLessonTests {
 
 private extension ChatRequest {
   /// The whole assembled prompt as the provider receives it.
-  var renderedContext: String { messages.map(\.content.text).joined(separator: "\n") }
+  var renderedContext: String {
+    messages.map(\.content.text).joined(separator: "\n")
+  }
 }
 
 /// A migrated database holding one armed scheduled job, the real fire path that binds its runs, and
@@ -542,7 +544,9 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
   }
 
   func commitCandidateReview(_ review: CandidateReviewNotice, now: Date) throws(StoreError) -> Bool
-  { try base.commitCandidateReview(review, now: now) }
+  {
+    try base.commitCandidateReview(review, now: now)
+  }
 
   func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget? {
     try base.feedbackTarget(nonce: nonce)
@@ -561,13 +565,17 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
   }
 
   func consumeChallenge(id: Int64, payload: String, now: Date) throws(StoreError) -> FeedbackOutcome
-  { try base.consumeChallenge(id: id, payload: payload, now: now) }
+  {
+    try base.consumeChallenge(id: id, payload: payload, now: now)
+  }
 
   func liveChallenge(ownerUserID: Int64, chatID: Int64) throws(StoreError) -> FeedbackChallenge? {
     try base.liveChallenge(ownerUserID: ownerUserID, chatID: chatID)
   }
 
-  func lessonSet(jobID: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? { nil }
+  func lessonSet(jobID: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
+    nil
+  }
 
   func binding(runID: Int64) throws(StoreError) -> RunLearningBinding? {
     try base.binding(runID: runID)
@@ -588,7 +596,9 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
   func reconcileTrial(
     _ identity: LearningTrialIdentity,
     now: Date
-  ) throws(StoreError) -> TrialReconciliationResult { try base.reconcileTrial(identity, now: now) }
+  ) throws(StoreError) -> TrialReconciliationResult {
+    try base.reconcileTrial(identity, now: now)
+  }
 
   @discardableResult
   func settleFromLane(runID: Int64, now: Date) throws(StoreError) -> Bool {
@@ -603,7 +613,9 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     try base.compatibility(runID: runID)
   }
 
-  func unsealed(limit: Int) throws(StoreError) -> [Int64] { try base.unsealed(limit: limit) }
+  func unsealed(limit: Int) throws(StoreError) -> [Int64] {
+    try base.unsealed(limit: limit)
+  }
 
   @discardableResult
   func sealEvidence(runID: Int64, now: Date) throws(StoreError) -> SealOutcome {
@@ -621,7 +633,9 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
   func claimOperation(
     _ key: LearningOperationKey,
     now: Date
-  ) throws(StoreError) -> ClaimedOperation? { try base.claimOperation(key, now: now) }
+  ) throws(StoreError) -> ClaimedOperation? {
+    try base.claimOperation(key, now: now)
+  }
 
   func authorizeAndStartOperation(
     _ authorization: LearningAuthorization,

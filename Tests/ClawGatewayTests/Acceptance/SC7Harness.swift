@@ -16,7 +16,9 @@ final class ManualClock: @unchecked Sendable {
   private let lock = NSLock()
   private var instant: Date
 
-  init(startAt instant: Date) { self.instant = instant }
+  init(startAt instant: Date) {
+    self.instant = instant
+  }
 
   var now: Date {
     lock.lock()
@@ -104,7 +106,9 @@ struct SC7Harness {
     await registry.pending(sessionID: try ownerSessionID())
   }
 
-  func jobCount() throws -> Int { try stores.scheduledJobs.listAll().count }
+  func jobCount() throws -> Int {
+    try stores.scheduledJobs.listAll().count
+  }
 
   func runCount(jobID: Int64) throws -> Int {
     try readPool.read { db in

@@ -12,8 +12,10 @@ extension ExecLanguage {
   /// Staged file name of the script the sandbox executes for this language.
   public var entrypointFileName: String {
     switch self {
-    case .python: "\(Self.reservedEntrypointPrefix)py"
-    case .sh: "\(Self.reservedEntrypointPrefix)sh"
+    case .python:
+      "\(Self.reservedEntrypointPrefix)py"
+    case .sh:
+      "\(Self.reservedEntrypointPrefix)sh"
     }
   }
 }

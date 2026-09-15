@@ -46,35 +46,36 @@ private extension ScheduledLearningStoreGRDB {
     review: CandidateReviewNotice
   ) throws -> Bool {
     do {
-      guard
-        review.subjectDigest
-        == CandidateReviewIdentity.digest(candidateDigest: review.candidateDigest),
-        let artifact = try readCandidateArtifact(db, digest: review.candidateDigest),
-        let job = try admissionJob(db, jobID: artifact.manifest.jobID),
-        let state = try committedReviewState(db, artifact: artifact),
-        reviewCarrierMatchesImmutableArtifact(
-          review,
-          artifact: artifact,
-          state: state,
-          ownerChatID: job.ownerChatID
-        ),
-        let delivery = try committedReviewDelivery(
-          db,
-          review: review,
-          ownerChatID: job.ownerChatID
-        ),
-        try committedTargetsAreComplete(
-          db,
-          artifact: artifact,
-          state: state,
-          ownerChatID: job.ownerChatID,
-          delivery: delivery
-        )
+      guard review.subjectDigest
+            == CandidateReviewIdentity.digest(candidateDigest: review.candidateDigest),
+            let artifact = try readCandidateArtifact(db, digest: review.candidateDigest),
+            let job = try admissionJob(db, jobID: artifact.manifest.jobID),
+            let state = try committedReviewState(db, artifact: artifact),
+            reviewCarrierMatchesImmutableArtifact(
+              review,
+              artifact: artifact,
+              state: state,
+              ownerChatID: job.ownerChatID
+            ),
+            let delivery = try committedReviewDelivery(
+              db,
+              review: review,
+              ownerChatID: job.ownerChatID
+            ),
+            try committedTargetsAreComplete(
+              db,
+              artifact: artifact,
+              state: state,
+              ownerChatID: job.ownerChatID,
+              delivery: delivery
+            )
       else {
         return false
       }
       return true
-    } catch is StoreError { return false }
+    } catch is StoreError {
+      return false
+    }
   }
 
   static func committedReviewState(
@@ -113,33 +114,31 @@ private extension ScheduledLearningStoreGRDB {
     for (ordinal, row) in rows.enumerated() {
       let expected = review.chunks[ordinal]
       let payload: String = row["payload"]
-      guard
-        (row["run_id"] as Int64?) == nil,
-        row["step_index"] as Int == ordinal,
-        row["chat_id"] as Int64 == ownerChatID,
-        row["dedup_key"] as String
-        == OutboxDedupKey.make(subjectDigest: review.subjectDigest, ordinal: ordinal),
-        expected.subjectDigest == review.subjectDigest,
-        expected.ordinal == ordinal,
-        expected.chatID == ownerChatID,
-        payload == expected.payload,
-        row["payload_hash"] as String == expected.payloadHash,
-        payload.isEmpty == false,
-        row["payload_hash"] as String == ContentHash.fnv1a(payload),
-        (row["approval_id"] as Int64?) == nil,
-        (row["message_thread_id"] as Int64?) == nil,
-        (row["reply_to_message_id"] as Int64?) == nil,
-        row["created_ts"] as Date == createdAt,
-        row["delivery_source"] as String == DeliverySource.learning.rawValue
+      guard (row["run_id"] as Int64?) == nil,
+            row["step_index"] as Int == ordinal,
+            row["chat_id"] as Int64 == ownerChatID,
+            row["dedup_key"] as String
+            == OutboxDedupKey.make(subjectDigest: review.subjectDigest, ordinal: ordinal),
+            expected.subjectDigest == review.subjectDigest,
+            expected.ordinal == ordinal,
+            expected.chatID == ownerChatID,
+            payload == expected.payload,
+            row["payload_hash"] as String == expected.payloadHash,
+            payload.isEmpty == false,
+            row["payload_hash"] as String == ContentHash.fnv1a(payload),
+            (row["approval_id"] as Int64?) == nil,
+            (row["message_thread_id"] as Int64?) == nil,
+            (row["reply_to_message_id"] as Int64?) == nil,
+            row["created_ts"] as Date == createdAt,
+            row["delivery_source"] as String == DeliverySource.learning.rawValue
       else {
         return nil
       }
     }
-    guard
-      rows.dropLast().allSatisfy({ row in
+    guard rows.dropLast().allSatisfy({ row in
         (row["reply_markup"] as String?) == nil
       }),
-      let markup = rows.last?["reply_markup"] as String?
+          let markup = rows.last?["reply_markup"] as String?
     else {
       return nil
     }
@@ -153,9 +152,8 @@ private extension ScheduledLearningStoreGRDB {
     ownerChatID: Int64,
     delivery: CommittedReviewDelivery
   ) throws -> Bool {
-    guard
-      let rows = try? FeedbackKeyboard.parseMarkup(delivery.markup),
-      rows.count == artifact.manifest.evaluations.count + 1
+    guard let rows = try? FeedbackKeyboard.parseMarkup(delivery.markup),
+          rows.count == artifact.manifest.evaluations.count + 1
     else {
       return false
     }
@@ -166,13 +164,12 @@ private extension ScheduledLearningStoreGRDB {
     var targetNonces: Set<String> = []
     var targets: [NewFeedbackTarget] = []
     for (index, buttons) in rows.enumerated() {
-      guard
-        let nonce = buttons.first?.nonce,
-        buttons.allSatisfy({
+      guard let nonce = buttons.first?.nonce,
+            buttons.allSatisfy({
           $0.nonce == nonce
         }),
-        targetNonces.insert(nonce).inserted,
-        let target = try readTarget(db, nonce: nonce)
+            targetNonces.insert(nonce).inserted,
+            let target = try readTarget(db, nonce: nonce)
       else {
         return false
       }
@@ -188,26 +185,24 @@ private extension ScheduledLearningStoreGRDB {
         expectedDigest = artifact.manifest.evaluations[index - 1].digest.rawValue
         expectedActions = [.evaluationConfirm, .evaluationDispute]
       }
-      guard
-        buttons.map(\.action.signal) == expectedActions,
-        target.jobID == artifact.manifest.jobID,
-        target.epoch == artifact.manifest.epoch,
-        target.subjectKind == expectedKind,
-        target.subjectDigest == expectedDigest,
-        target.allowedActions == expectedActions,
-        target.ownerUserID == ownerChatID,
-        target.chatID == ownerChatID,
-        target.expiresAt == expectedExpiry
+      guard buttons.map(\.action.signal) == expectedActions,
+            target.jobID == artifact.manifest.jobID,
+            target.epoch == artifact.manifest.epoch,
+            target.subjectKind == expectedKind,
+            target.subjectDigest == expectedDigest,
+            target.allowedActions == expectedActions,
+            target.ownerUserID == ownerChatID,
+            target.chatID == ownerChatID,
+            target.expiresAt == expectedExpiry
       else {
         return false
       }
       targets.append(newTarget(from: target))
     }
-    guard
-      FeedbackKeyboard.candidateReviewMarkup(
-        targets: targets,
-        evaluations: artifact.manifest.evaluations
-      ) == delivery.markup
+    guard FeedbackKeyboard.candidateReviewMarkup(
+      targets: targets,
+      evaluations: artifact.manifest.evaluations
+    ) == delivery.markup
     else {
       return false
     }
@@ -229,42 +224,41 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func validateReview(_ db: Database, review: CandidateReviewNotice, now: Date) throws {
-    guard
-      let artifact = try readCandidateArtifact(db, digest: review.candidateDigest),
-      let state = try readState(db, jobID: artifact.manifest.jobID),
-      let job = try admissionJob(db, jobID: artifact.manifest.jobID),
-      job.hasRecurrence,
-      [.active, .paused].contains(job.status),
-      artifact.manifest.jobID == state.jobID,
-      artifact.manifest.epoch == state.epoch,
-      artifact.manifest.baseDigest == state.stableDigest,
-      artifact.manifest.baseRevision == state.stableRevision,
-      artifact.manifest.feedbackRevision == state.feedbackRevision,
-      try sourceBindingsAreCurrent(db, artifact: artifact, state: state),
-      try hardVetoes(db, artifact: artifact).isEmpty,
-      review.subjectDigest == CandidateReviewIdentity.digest(candidateDigest: artifact.digest),
-      review.targets.count == artifact.manifest.evaluations.count + 1,
-      review.chunks.isEmpty == false,
-      review.targets.allSatisfy({
+    guard let artifact = try readCandidateArtifact(db, digest: review.candidateDigest),
+          let state = try readState(db, jobID: artifact.manifest.jobID),
+          let job = try admissionJob(db, jobID: artifact.manifest.jobID),
+          job.hasRecurrence,
+          [.active, .paused].contains(job.status),
+          artifact.manifest.jobID == state.jobID,
+          artifact.manifest.epoch == state.epoch,
+          artifact.manifest.baseDigest == state.stableDigest,
+          artifact.manifest.baseRevision == state.stableRevision,
+          artifact.manifest.feedbackRevision == state.feedbackRevision,
+          try sourceBindingsAreCurrent(db, artifact: artifact, state: state),
+          try hardVetoes(db, artifact: artifact).isEmpty,
+          review.subjectDigest == CandidateReviewIdentity.digest(candidateDigest: artifact.digest),
+          review.targets.count == artifact.manifest.evaluations.count + 1,
+          review.chunks.isEmpty == false,
+          review.targets.allSatisfy({
         $0.nonce.isEmpty == false
       }),
-      Set(review.targets.map(\.nonce)).count == review.targets.count,
-      try reviewState(db, artifact: artifact) == review.state,
-      targetsMatch(
-        review.targets,
-        artifact: artifact,
-        state: review.state,
-        ownerChatID: job.ownerChatID,
-        expiry: now.addingTimeInterval(EvidenceWindow.maximumAge)
-      ),
-      review.chunks.allSatisfy({
+          Set(review.targets.map(\.nonce)).count == review.targets.count,
+          try reviewState(db, artifact: artifact) == review.state,
+          targetsMatch(
+            review.targets,
+            artifact: artifact,
+            state: review.state,
+            ownerChatID: job.ownerChatID,
+            expiry: now.addingTimeInterval(EvidenceWindow.maximumAge)
+          ),
+          review.chunks.allSatisfy({
         $0.chatID == job.ownerChatID
       }),
-      chunksHaveValidShape(review.chunks, subjectDigest: review.subjectDigest),
-      FeedbackKeyboard.candidateReviewMarkup(
-        targets: review.targets,
-        evaluations: artifact.manifest.evaluations
-      ) == review.chunks.last?.replyMarkup
+          chunksHaveValidShape(review.chunks, subjectDigest: review.subjectDigest),
+          FeedbackKeyboard.candidateReviewMarkup(
+            targets: review.targets,
+            evaluations: artifact.manifest.evaluations
+          ) == review.chunks.last?.replyMarkup
     else {
       throw StoreError.unexpected("candidate review carrier is inconsistent")
     }
@@ -292,10 +286,9 @@ private extension ScheduledLearningStoreGRDB {
       _ = try admissionReceipt(db, artifact: artifact, trial: trial)
       return .admitted
     }
-    guard
-      artifact.manifest.origin == .ownerEdit,
-      try hasSuccessor(db, predecessor: artifact.digest) == false,
-      try liveTrial(db, jobID: artifact.manifest.jobID) == nil
+    guard artifact.manifest.origin == .ownerEdit,
+          try hasSuccessor(db, predecessor: artifact.digest) == false,
+          try liveTrial(db, jobID: artifact.manifest.jobID) == nil
     else {
       return nil
     }
@@ -329,8 +322,10 @@ private extension ScheduledLearningStoreGRDB {
 
   static func candidateActions(for state: CandidateReviewState) -> [OwnerSignal] {
     switch state {
-    case .admitted: [.candidateReject, .candidateEdit]
-    case .awaitingApproval: [.candidateApprove, .candidateReject, .candidateEdit]
+    case .admitted:
+      [.candidateReject, .candidateEdit]
+    case .awaitingApproval:
+      [.candidateApprove, .candidateReject, .candidateEdit]
     }
   }
 
@@ -340,29 +335,28 @@ private extension ScheduledLearningStoreGRDB {
     state: CandidateReviewState,
     ownerChatID: Int64
   ) -> Bool {
-    guard
-      review.state == state,
-      review.targets.count == artifact.manifest.evaluations.count + 1,
-      let expiry = review.targets.first?.expiresAt,
-      review.targets.allSatisfy({
+    guard review.state == state,
+          review.targets.count == artifact.manifest.evaluations.count + 1,
+          let expiry = review.targets.first?.expiresAt,
+          review.targets.allSatisfy({
         $0.nonce.isEmpty == false
       }),
-      Set(review.targets.map(\.nonce)).count == review.targets.count,
-      targetsMatch(
-        review.targets,
-        artifact: artifact,
-        state: state,
-        ownerChatID: ownerChatID,
-        expiry: expiry
-      ),
-      review.chunks.allSatisfy({
+          Set(review.targets.map(\.nonce)).count == review.targets.count,
+          targetsMatch(
+            review.targets,
+            artifact: artifact,
+            state: state,
+            ownerChatID: ownerChatID,
+            expiry: expiry
+          ),
+          review.chunks.allSatisfy({
         $0.chatID == ownerChatID
       }),
-      chunksHaveValidShape(review.chunks, subjectDigest: review.subjectDigest),
-      FeedbackKeyboard.candidateReviewMarkup(
-        targets: review.targets,
-        evaluations: artifact.manifest.evaluations
-      ) == review.chunks.last?.replyMarkup
+          chunksHaveValidShape(review.chunks, subjectDigest: review.subjectDigest),
+          FeedbackKeyboard.candidateReviewMarkup(
+            targets: review.targets,
+            evaluations: artifact.manifest.evaluations
+          ) == review.chunks.last?.replyMarkup
     else {
       return false
     }

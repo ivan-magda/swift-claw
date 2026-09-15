@@ -61,7 +61,8 @@ public struct SandboxBootstrapper: Sendable {
         health: nil,
         unavailableReason: reason
       )
-    case .available: break
+    case .available:
+      break
     }
 
     let health = await maintenance.prepare()

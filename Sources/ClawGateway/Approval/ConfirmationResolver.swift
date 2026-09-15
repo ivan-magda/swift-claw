@@ -200,10 +200,14 @@ private extension ConfirmationResolver {
 
     let errorText: String =
       switch confirmation {
-      case .rememberWrite: MemoryReplies.saveFailed
-      case .deleteItem: MemoryReplies.deleteFailed
-      case .scheduleArm: ScheduleReplies.armFailed
-      case .learningReset: LearningReplies.resetFailed
+      case .rememberWrite:
+        MemoryReplies.saveFailed
+      case .deleteItem:
+        MemoryReplies.deleteFailed
+      case .scheduleArm:
+        ScheduleReplies.armFailed
+      case .learningReset:
+        LearningReplies.resetFailed
       }
 
     return await replies.sendCommandAck(

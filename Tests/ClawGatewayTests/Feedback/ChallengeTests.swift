@@ -253,13 +253,17 @@ struct ChallengeTests {
 private struct KeyboardEnvelope: Decodable {
   let inlineKeyboard: [[KeyboardButton]]
 
-  private enum CodingKeys: String, CodingKey { case inlineKeyboard = "inline_keyboard" }
+  private enum CodingKeys: String, CodingKey {
+    case inlineKeyboard = "inline_keyboard"
+  }
 }
 
 private struct KeyboardButton: Decodable {
   let callbackData: String
 
-  private enum CodingKeys: String, CodingKey { case callbackData = "callback_data" }
+  private enum CodingKeys: String, CodingKey {
+    case callbackData = "callback_data"
+  }
 }
 
 // MARK: - Fixtures
@@ -278,7 +282,9 @@ private struct ChallengeEnvironment {
   let pokes: PokeRecorder
   let router: MessageRouter
 
-  var now: Date { clock.now }
+  var now: Date {
+    clock.now
+  }
 
   static func make() throws -> ChallengeEnvironment {
     let queue = try TestDatabase.make()
@@ -420,9 +426,13 @@ private extension ChallengeEnvironment {
     #expect(try learning.liveChallenge(ownerUserID: ownerID, chatID: chatID) != nil)
   }
 
-  func eventCount() throws -> Int { try rowCount(table: "feedback_events") }
+  func eventCount() throws -> Int {
+    try rowCount(table: "feedback_events")
+  }
 
-  func processedCount() throws -> Int { try rowCount(table: "processed_updates") }
+  func processedCount() throws -> Int {
+    try rowCount(table: "processed_updates")
+  }
 
   func persistedTurnCount(text: String) throws -> Int {
     try queue.read { db in

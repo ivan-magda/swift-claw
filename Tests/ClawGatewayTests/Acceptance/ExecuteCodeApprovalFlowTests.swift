@@ -282,7 +282,9 @@ private extension ExecuteCodeApprovalFlowTests {
   }
 }
 
-private struct AcceptanceTimeout: Error { let expected: String }
+private struct AcceptanceTimeout: Error {
+  let expected: String
+}
 
 private actor RemovingExecutionBackend: ExecutionBackend {
   let base: FakeExecutionBackend
@@ -293,7 +295,9 @@ private actor RemovingExecutionBackend: ExecutionBackend {
     self.removeAfterRun = removeAfterRun
   }
 
-  func probe() async -> BackendAvailability { await base.probe() }
+  func probe() async -> BackendAvailability {
+    await base.probe()
+  }
 
   func run(_ request: ExecutionRequest) async -> ExecutionResult {
     let result = await base.run(request)

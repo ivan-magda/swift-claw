@@ -61,7 +61,9 @@ struct OpenAICompatibleProvider: LLMProvider {
     let exposure = ProviderAttemptExposure()
 
     let authorization: LLMRequestAuthorization
-    do { authorization = try await credentials.authorization() } catch is CancellationError {
+    do {
+      authorization = try await credentials.authorization()
+    } catch is CancellationError {
       throw CancellationError()
     } catch {
       // No request goes out without a credential, so nothing was exposed. The cause names the state
@@ -117,8 +119,9 @@ struct OpenAICompatibleProvider: LLMProvider {
       }
 
       if (200..<300).contains(result.statusCode) {
-        do { return try parse(result: result, redactor: redactor) } catch let cause as ProviderError
-        {
+        do {
+          return try parse(result: result, redactor: redactor)
+        } catch let cause as ProviderError {
           // The 2xx head was accepted, so the reply was generated and billed. A body we cannot read
           // is still a failure that must record conservative usage rather than none, so the exposure
           // (still `mayHaveStarted` here) travels on the failure.
@@ -226,7 +229,9 @@ struct OpenAICompatibleProvider: LLMProvider {
 
   func parse(result: HTTPResult, redactor: SecretRedactor) throws -> ChatResponse {
     let decoded: ResponseBody
-    do { decoded = try JSONDecoder().decode(ResponseBody.self, from: result.body) } catch {
+    do {
+      decoded = try JSONDecoder().decode(ResponseBody.self, from: result.body)
+    } catch {
       throw ProviderError.terminal(
         status: result.statusCode,
         message: redactor.redact("malformed response: \(error)")
@@ -266,7 +271,9 @@ private extension OpenAICompatibleProvider {
     let exposure = ProviderAttemptExposure()
 
     let authorization: LLMRequestAuthorization
-    do { authorization = try await credentials.authorization() } catch is CancellationError {
+    do {
+      authorization = try await credentials.authorization()
+    } catch is CancellationError {
       return .cancelled(.notStarted)
     } catch {
       // No request goes out without a credential, so nothing was exposed. The cause names the state
@@ -288,7 +295,9 @@ private extension OpenAICompatibleProvider {
         streamRequest(headers: headers, body: body, exposure: exposure)
       )
       return await consume(exchange: exchange, into: sink, exposure: exposure, redactor: redactor)
-    } catch { return Self.termination(for: error, exposure: exposure, redactor: redactor) }
+    } catch {
+      return Self.termination(for: error, exposure: exposure, redactor: redactor)
+    }
   }
 
   func streamRequest(
@@ -335,8 +344,10 @@ private extension OpenAICompatibleProvider {
       for try await chunk in exchange.body {
         for event in try parser.push(chunk) {
           switch event {
-          case .delta(let text): try await sink.sendDelta(text)
-          case .finished(let response): terminal = response
+          case .delta(let text):
+            try await sink.sendDelta(text)
+          case .finished(let response):
+            terminal = response
           }
         }
         exposure.noteObserved(completionTokens: parser.observedCompletionTokens)
@@ -426,9 +437,12 @@ private extension OpenAICompatibleProvider {
   /// sequence alone would read a truncated stream as a complete one.
   static func check(termination: HTTPStreamTermination) throws {
     switch termination {
-    case .completed: return
-    case .failed(let failure): throw providerError(from: failure)
-    case .cancelled: throw CancellationError()
+    case .completed:
+      return
+    case .failed(let failure):
+      throw providerError(from: failure)
+    case .cancelled:
+      throw CancellationError()
     }
   }
 
@@ -437,8 +451,10 @@ private extension OpenAICompatibleProvider {
   /// attempt can be replayed.
   static func providerError(from failure: HTTPTransportFailure) -> ProviderError {
     switch failure.disposition {
-    case .definitelyNotSent: return .connectFailed(message: failure.safeMessage)
-    case .mayHaveBeenSent: return .retryable(status: nil, message: failure.safeMessage)
+    case .definitelyNotSent:
+      return .connectFailed(message: failure.safeMessage)
+    case .mayHaveBeenSent:
+      return .retryable(status: nil, message: failure.safeMessage)
     }
   }
 
@@ -474,7 +490,8 @@ private extension OpenAICompatibleProvider {
     return .parts(
       content.parts.map { part in
         switch part {
-        case .text(let value): return WireContentPart(type: "text", text: value, imageURL: nil)
+        case .text(let value):
+          return WireContentPart(type: "text", text: value, imageURL: nil)
         case .image(let image):
           return WireContentPart(
             type: "image_url",
@@ -539,9 +556,8 @@ private extension OpenAICompatibleProvider {
   static let liteLLMResponseCostHeader = "x-litellm-response-cost"
 
   func errorMessage(from body: Data) -> String {
-    guard
-      let decoded = try? JSONDecoder().decode(ErrorBody.self, from: body),
-      let message = decoded.error?.message
+    guard let decoded = try? JSONDecoder().decode(ErrorBody.self, from: body),
+          let message = decoded.error?.message
     else {
       return String(data: body, encoding: .utf8) ?? "unknown error"
     }
@@ -578,13 +594,21 @@ private extension OpenAICompatibleProvider {
 private struct DynamicKey: CodingKey {
   let stringValue: String
 
-  var intValue: Int? { nil }
+  var intValue: Int? {
+    nil
+  }
 
-  init(_ stringValue: String) { self.stringValue = stringValue }
+  init(_ stringValue: String) {
+    self.stringValue = stringValue
+  }
 
-  init?(stringValue: String) { self.stringValue = stringValue }
+  init?(stringValue: String) {
+    self.stringValue = stringValue
+  }
 
-  init?(intValue: Int) { nil }
+  init?(intValue: Int) {
+    nil
+  }
 }
 
 private struct WireToolCallFunction: Codable {
@@ -619,8 +643,10 @@ private enum WireContent: Encodable {
   func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
     switch self {
-    case .text(let value): try container.encode(value)
-    case .parts(let parts): try container.encode(parts)
+    case .text(let value):
+      try container.encode(value)
+    case .parts(let parts):
+      try container.encode(parts)
     }
   }
 }
@@ -640,7 +666,9 @@ private struct WireContentPart: Encodable {
 /// `detail` is deliberately absent. Anthropic's compatibility layer documents it as ignored, the
 /// Codex backend disagrees with other clients over what "low" means, and omitting it is what every
 /// route was verified against.
-private struct WireImageURL: Encodable { let url: String }
+private struct WireImageURL: Encodable {
+  let url: String
+}
 
 private struct WireMessage: Encodable {
   let role: String
@@ -699,7 +727,8 @@ private struct WireResponseFormat: Encodable {
     var container = encoder.container(keyedBy: DynamicKey.self)
 
     switch responseFormat {
-    case .jsonObject: try container.encode("json_object", forKey: DynamicKey("type"))
+    case .jsonObject:
+      try container.encode("json_object", forKey: DynamicKey("type"))
     case .jsonSchema(let name, let schema):
       try container.encode("json_schema", forKey: DynamicKey("type"))
       try container.encode(
@@ -719,7 +748,9 @@ private struct WireJSONSchema: Encodable {
 private struct StreamOptions: Encodable {
   let includeUsage: Bool
 
-  enum CodingKeys: String, CodingKey { case includeUsage = "include_usage" }
+  enum CodingKeys: String, CodingKey {
+    case includeUsage = "include_usage"
+  }
 }
 
 private struct DecodedToolCall: Decodable {
@@ -759,7 +790,9 @@ private struct ResponseBody: Decodable {
 }
 
 private struct ErrorBody: Decodable {
-  struct Inner: Decodable { let message: String? }
+  struct Inner: Decodable {
+    let message: String?
+  }
 
   let error: Inner?
 }

@@ -58,12 +58,11 @@ struct CodexInvocation: Sendable {
     schemaPath = directory.appendingPathComponent("schema.json").path
     reportPath = directory.appendingPathComponent("result.json").path
     let schema = Data(PackageResources.CodexResult_schema_json)
-    guard
-      FileManager.default.createFile(
-        atPath: schemaPath,
-        contents: schema,
-        attributes: [.posixPermissions: 0o600]
-      )
+    guard FileManager.default.createFile(
+      atPath: schemaPath,
+      contents: schema,
+      attributes: [.posixPermissions: 0o600]
+    )
     else {
       throw CoderError.unavailable("Cannot create private Codex schema.")
     }
@@ -113,10 +112,9 @@ struct CodexInvocation: Sendable {
     for path in candidates {
       var directory: ObjCBool = false
 
-      guard
-        FileManager.default.fileExists(atPath: path, isDirectory: &directory),
-        !directory.boolValue,
-        FileManager.default.isExecutableFile(atPath: path)
+      guard FileManager.default.fileExists(atPath: path, isDirectory: &directory),
+            !directory.boolValue,
+            FileManager.default.isExecutableFile(atPath: path)
       else {
         continue
       }
@@ -140,7 +138,8 @@ private extension CodexInvocation {
     let request = job.prepared.request
     let source: String
     switch request.source {
-    case .local(let path), .githubRepository(let path), .githubIssue(let path): source = path
+    case .local(let path), .githubRepository(let path), .githubIssue(let path):
+      source = path
     }
     let repository = job.prepared.publicationRepository ?? "unavailable"
     let base = request.baseBranch ?? "repository default branch; determine it, do not assume main"

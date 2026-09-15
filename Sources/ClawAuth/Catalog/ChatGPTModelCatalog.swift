@@ -25,7 +25,9 @@ public struct ChatGPTCatalogModel: Sendable, Equatable {
 /// print the assignment for the owner to set by hand — so the type names one outcome rather than a
 /// taxonomy nobody branches on. What it must never be is a login failure: the credential is already
 /// stored and valid by the time anything asks what models exist.
-enum ChatGPTCatalogFailure: Error, Sendable, Equatable { case unavailable(detail: String) }
+enum ChatGPTCatalogFailure: Error, Sendable, Equatable {
+  case unavailable(detail: String)
+}
 
 public protocol ChatGPTModelCatalogFetching: Sendable {
   func fetch(authorization: LLMRequestAuthorization) async throws -> [ChatGPTCatalogModel]
@@ -39,7 +41,9 @@ public protocol ChatGPTModelCatalogFetching: Sendable {
 public struct ChatGPTModelCatalog: Sendable, ChatGPTModelCatalogFetching {
   private let http: any HTTPExecuting
 
-  public init(http: any HTTPExecuting) { self.http = http }
+  public init(http: any HTTPExecuting) {
+    self.http = http
+  }
 
   /// Asks the vendor which models this credential may use.
   ///
@@ -153,12 +157,11 @@ extension ChatGPTModelCatalog {
 
 private extension ChatGPTModelCatalog {
   static func eligibleModel(in row: JSONValue) -> ChatGPTCatalogModel? {
-    guard
-      case .object(let fields) = row,
-      case .string(let slug)? = fields[Catalog.slug],
-      LLMProviderRegistry.isValidQualifiedModelSuffix(slug),
-      isListed(fields[Catalog.visibility]),
-      isOfferedInPicker(fields[Catalog.showInPicker] ?? fields[Catalog.showInPickerAlias])
+    guard case .object(let fields) = row,
+          case .string(let slug)? = fields[Catalog.slug],
+          LLMProviderRegistry.isValidQualifiedModelSuffix(slug),
+          isListed(fields[Catalog.visibility]),
+          isOfferedInPicker(fields[Catalog.showInPicker] ?? fields[Catalog.showInPickerAlias])
     else {
       return nil
     }
@@ -171,11 +174,13 @@ private extension ChatGPTModelCatalog {
   /// really did mean to list costs nothing worse than being absent until this list learns its word.
   static func isListed(_ value: JSONValue?) -> Bool {
     switch value {
-    case nil, .null?: return true
+    case nil, .null?:
+      return true
     case .string(let raw)?:
       let stated = raw.trimmingCharacters(in: .whitespaces)
       return stated.isEmpty || stated.lowercased() == Catalog.listedVisibility
-    case .bool, .integer, .number, .array, .object: return false
+    case .bool, .integer, .number, .array, .object:
+      return false
     }
   }
 
@@ -184,9 +189,12 @@ private extension ChatGPTModelCatalog {
   /// response may be trying to say "do not show this" is not one to show on a coin toss.
   static func isOfferedInPicker(_ value: JSONValue?) -> Bool {
     switch value {
-    case nil, .null?: return true
-    case .bool(let isOffered)?: return isOffered
-    case .string, .integer, .number, .array, .object: return false
+    case nil, .null?:
+      return true
+    case .bool(let isOffered)?:
+      return isOffered
+    case .string, .integer, .number, .array, .object:
+      return false
     }
   }
 
@@ -194,8 +202,10 @@ private extension ChatGPTModelCatalog {
   /// row unranked rather than coerced into a place it did not earn.
   static func priority(_ value: JSONValue?) -> Double {
     switch value {
-    case .integer(let stated)?: return Double(stated)
-    case .number(let stated)? where stated.isFinite: return stated
+    case .integer(let stated)?:
+      return Double(stated)
+    case .number(let stated)? where stated.isFinite:
+      return stated
     case nil, .null?, .bool?, .string?, .number?, .array?, .object?:
       return ChatGPTCatalogModel.unrankedPriority
     }

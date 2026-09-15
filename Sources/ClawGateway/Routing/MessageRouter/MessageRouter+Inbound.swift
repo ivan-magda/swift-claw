@@ -103,9 +103,12 @@ private extension MessageRouter {
     let transition = "\(membership.oldStatus.apiValue) → \(membership.newStatus.apiValue)"
     let room = "chat \(membership.chatID) \"\(title)\" (\(membership.chatKind.apiValue))"
     switch membership.change {
-    case .added: logger.notice("\(actor) added the bot to \(room): \(transition)")
-    case .removed: logger.notice("\(actor) removed the bot from \(room): \(transition)")
-    case .updated: logger.notice("\(actor) changed the bot's rights in \(room): \(transition)")
+    case .added:
+      logger.notice("\(actor) added the bot to \(room): \(transition)")
+    case .removed:
+      logger.notice("\(actor) removed the bot from \(room): \(transition)")
+    case .updated:
+      logger.notice("\(actor) changed the bot's rights in \(room): \(transition)")
     case .unchanged:
       logger.debug("membership update \(updateID) changed nothing in \(room): \(transition)")
     }

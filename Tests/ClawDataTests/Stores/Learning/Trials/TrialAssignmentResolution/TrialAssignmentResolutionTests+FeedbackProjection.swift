@@ -252,10 +252,9 @@ private struct RawResolvedAssignment {
 private extension BoundRunEnvironment {
   func rawResolvedAssignment(runID: Int64) throws -> RawResolvedAssignment {
     try queue.read { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: """
+      guard let row = try Row.fetchOne(
+        db,
+        sql: """
             SELECT assignment.state, assignment.outcome, assignment.evaluation_digest,
               assignment.effective_feedback_revision, assignment.resolved_at,
               evaluation.evaluation_digest AS source_evaluation_digest
@@ -263,21 +262,27 @@ private extension BoundRunEnvironment {
             LEFT JOIN learning_evaluations AS evaluation ON evaluation.run_id = assignment.run_id
             WHERE assignment.run_id = ?
             """,
-          arguments: [runID]
-        ),
-        let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
-        let state = TrialAssignmentState(rawValue: stateRaw),
-        let outcomeRaw = SQLiteStoredValue.string(in: row, column: "outcome"),
-        let outcome = TrialOutcomeKind(rawValue: outcomeRaw),
-        let evaluationRaw = SQLiteStoredValue.nullableString(in: row, column: "evaluation_digest"),
-        let sourceRaw = SQLiteStoredValue.nullableString(
-          in: row,
-          column: "source_evaluation_digest"
-        ),
-        let feedbackRaw = SQLiteStoredValue.int64(in: row, column: "effective_feedback_revision"),
-        feedbackRaw >= 0,
-        let resolvedRaw = SQLiteStoredValue.int64(in: row, column: "resolved_at"),
-        let resolvedAt = EpochSecondCodec.date(fromEpoch: resolvedRaw)
+        arguments: [runID]
+      ),
+            let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+            let state = TrialAssignmentState(rawValue: stateRaw),
+            let outcomeRaw = SQLiteStoredValue.string(in: row, column: "outcome"),
+            let outcome = TrialOutcomeKind(rawValue: outcomeRaw),
+            let evaluationRaw = SQLiteStoredValue.nullableString(
+              in: row,
+              column: "evaluation_digest"
+            ),
+            let sourceRaw = SQLiteStoredValue.nullableString(
+              in: row,
+              column: "source_evaluation_digest"
+            ),
+            let feedbackRaw = SQLiteStoredValue.int64(
+              in: row,
+              column: "effective_feedback_revision"
+            ),
+            feedbackRaw >= 0,
+            let resolvedRaw = SQLiteStoredValue.int64(in: row, column: "resolved_at"),
+            let resolvedAt = EpochSecondCodec.date(fromEpoch: resolvedRaw)
       else {
         throw StoreError.unexpected("fixture assignment cache is not resolved")
       }

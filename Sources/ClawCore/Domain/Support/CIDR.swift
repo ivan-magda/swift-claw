@@ -11,10 +11,9 @@ public struct CIDR: Sendable, Equatable {
   /// Parses `<address>/<prefix-length>`; nil for anything malformed or out of prefix bounds.
   public static func parse(_ text: String) -> CIDR? {
     let parts = text.split(separator: "/", omittingEmptySubsequences: false)
-    guard
-      parts.count == 2,
-      let address = ResolvedAddress.parse(String(parts[0])),
-      let prefixLength = Int(parts[1])
+    guard parts.count == 2,
+          let address = ResolvedAddress.parse(String(parts[0])),
+          let prefixLength = Int(parts[1])
     else {
       return nil
     }
@@ -39,13 +38,16 @@ public struct CIDR: Sendable, Equatable {
       value & CIDR.v4Mask(prefixLength) == networkValue
     case (.ipv6(let networkBytes), .ipv6(let bytes)):
       bytes.count == 16 && CIDR.maskedV6(bytes, prefixLength) == networkBytes
-    default: false
+    default:
+      false
     }
   }
 }
 
 extension CIDR: CustomStringConvertible {
-  public var description: String { "\(network)/\(prefixLength)" }
+  public var description: String {
+    "\(network)/\(prefixLength)"
+  }
 }
 
 // MARK: - Bit Masking

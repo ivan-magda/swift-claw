@@ -5,7 +5,9 @@ import GRDB
 public struct MemoryStoreGRDB: MemoryStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] {
     try database.readMapping { db in
@@ -34,12 +36,11 @@ public struct MemoryStoreGRDB: MemoryStore {
 
   public func get(id: Int64) throws(StoreError) -> MemoryItem? {
     try database.readMapping { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: "SELECT * FROM memory_items WHERE id = ?",
-          arguments: [id]
-        )
+      guard let row = try Row.fetchOne(
+        db,
+        sql: "SELECT * FROM memory_items WHERE id = ?",
+        arguments: [id]
+      )
       else {
         return nil
       }
@@ -102,11 +103,10 @@ public struct MemoryStoreGRDB: MemoryStore {
   static func decodeItem(_ row: Row) throws -> MemoryItem {
     let rowID: Int64 = row["id"]
 
-    guard
-      let kind = MemoryKind(rawValue: row["kind"]),
-      let sensitivity = Sensitivity(rawValue: row["sensitivity"]),
-      let importance = Importance(rawValue: row["importance"]),
-      let source = MemorySource(rawValue: row["source"])
+    guard let kind = MemoryKind(rawValue: row["kind"]),
+          let sensitivity = Sensitivity(rawValue: row["sensitivity"]),
+          let importance = Importance(rawValue: row["importance"]),
+          let source = MemorySource(rawValue: row["source"])
     else {
       throw StoreError.unexpected("memory_items row \(rowID) has an unrecognized enum value")
     }

@@ -55,7 +55,12 @@ public enum RuntimeSecretPreparer {
   /// module throws only `SecretStoreError` — this is where that contract is enforced rather than
   /// assumed.
   private static func load(_ store: any SecretStore) throws(SecretStoreError) -> Secrets {
-    do { return try store.loadSecrets() } catch let error as SecretStoreError { throw error } catch
-    { throw .unreadable("load runtime secrets") }
+    do {
+      return try store.loadSecrets()
+    } catch let error as SecretStoreError {
+      throw error
+    } catch {
+      throw .unreadable("load runtime secrets")
+    }
   }
 }

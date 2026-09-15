@@ -6,12 +6,11 @@ import Foundation
 
 extension ContainerBackend {
   func engineRunning(deadline: ContinuousClock.Instant) async -> Bool {
-    guard
-      let data = await boundedCommandData(
-        ContainerInvocation.systemStatus(),
-        limit: Self.lifecycleCommandTimeout,
-        deadline: deadline
-      )
+    guard let data = await boundedCommandData(
+      ContainerInvocation.systemStatus(),
+      limit: Self.lifecycleCommandTimeout,
+      deadline: deadline
+    )
     else {
       return false
     }
@@ -22,11 +21,10 @@ extension ContainerBackend {
 
   // swiftlint:disable discouraged_optional_boolean
   func containerPresent(_ identity: String, deadline: ContinuousClock.Instant) async -> Bool? {
-    guard
-      let containers = await listedContainers(
-        limit: Self.lifecycleCommandTimeout,
-        deadline: deadline
-      )
+    guard let containers = await listedContainers(
+      limit: Self.lifecycleCommandTimeout,
+      deadline: deadline
+    )
     else {
       return nil
     }
@@ -86,7 +84,9 @@ extension ContainerBackend {
     _ arguments: [String],
     limit: Duration,
     deadline: ContinuousClock.Instant
-  ) async -> Bool { await boundedCommandData(arguments, limit: limit, deadline: deadline) != nil }
+  ) async -> Bool {
+    await boundedCommandData(arguments, limit: limit, deadline: deadline) != nil
+  }
 
   // swiftlint:disable discouraged_optional_collection
   func listedContainers(
@@ -155,9 +155,12 @@ extension ContainerBackend {
         await commands.run(command)
       }
     ) {
-    case .operationReturned(let result): return result
-    case .deadlineExpired: return failClosedResult(.timedOut)
-    case .callerCancelled: return failClosedResult(.cancelled)
+    case .operationReturned(let result):
+      return result
+    case .deadlineExpired:
+      return failClosedResult(.timedOut)
+    case .callerCancelled:
+      return failClosedResult(.cancelled)
     }
   }
 

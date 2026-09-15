@@ -24,7 +24,9 @@ struct ScriptedAskTool: Tool {
     )
   }
 
-  var timeout: Duration { .seconds(5) }
+  var timeout: Duration {
+    .seconds(5)
+  }
 
   func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     .resolved("/workspace/notes/plan.md")
@@ -102,8 +104,7 @@ struct SuspendLaneHoldTests {
     await coordinator.signal(.denied(.cancelled), forApprovalID: approvalID)
     while true {
       let payloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
-      if
-        payloads.contains(where: { payload in
+      if payloads.contains(where: { payload in
         payload.contains("second turn done")
       }) {
         break

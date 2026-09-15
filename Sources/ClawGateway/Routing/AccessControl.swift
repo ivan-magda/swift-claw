@@ -25,7 +25,11 @@ public struct AccessControl: Sendable {
   }
 
   public func isAllowed(userID: Int64) -> Bool {
-    do { return try allowlist.allowlistContains(userID: userID) } catch { return false }
+    do {
+      return try allowlist.allowlistContains(userID: userID)
+    } catch {
+      return false
+    }
   }
 
   /// A DM is the owner's, keyed on the sender. A group is the season's, keyed on the chat: being
@@ -34,10 +38,12 @@ public struct AccessControl: Sendable {
   /// never seen — is refused, so a new Telegram surface can never inherit either grant.
   public func decide(chatKind: ChatKind, chatID: Int64, userID: Int64) -> AccessDecision {
     switch chatKind {
-    case .private: return isAllowed(userID: userID) ? .allowed(.direct) : .denied(.privateStranger)
+    case .private:
+      return isAllowed(userID: userID) ? .allowed(.direct) : .denied(.privateStranger)
     case .group, .supergroup:
       return groupChats.contains(chatID) ? .allowed(.group) : .denied(.unlistedChat)
-    case .channel, .other: return .denied(.unlistedChat)
+    case .channel, .other:
+      return .denied(.unlistedChat)
     }
   }
 }

@@ -162,16 +162,17 @@ private func fenceNonce(_ body: String) -> String? {
 }
 
 private func unfencedBody(_ value: String) throws -> String {
-  guard
-    let opening = value.firstIndex(of: "\n"),
-    let closing = value.range(of: "\n</claw-untrusted", options: .backwards)
+  guard let opening = value.firstIndex(of: "\n"),
+        let closing = value.range(of: "\n</claw-untrusted", options: .backwards)
   else {
     throw TestFixtureError.malformedFence
   }
   return String(value[value.index(after: opening)..<closing.lowerBound])
 }
 
-private enum TestFixtureError: Error { case malformedFence }
+private enum TestFixtureError: Error {
+  case malformedFence
+}
 
 private func candidateManifest(resultDigest: String) -> CandidateSourceManifest {
   CandidateSourceManifest(

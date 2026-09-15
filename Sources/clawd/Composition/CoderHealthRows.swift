@@ -23,7 +23,9 @@ enum CoderHealthRows {
     static let usage = "coder.usage"
   }
 
-  static var disabled: [DoctorReport.Check] { [row(Key.enabled, "false")] }
+  static var disabled: [DoctorReport.Check] {
+    [row(Key.enabled, "false")]
+  }
 
   static func unavailable(config: CoderConfig, error: (any Error)? = nil) -> [DoctorReport.Check] {
     let reason: String
@@ -113,13 +115,17 @@ enum CoderHealthRows {
       ]
     }
 
-    do { return rows(config: config, setup: try await resolve(config)) } catch {
+    do {
+      return rows(config: config, setup: try await resolve(config))
+    } catch {
       return unavailable(config: config, error: error)
     }
   }
 
-  static func persisted(store: any CoderJobStore, redactor: SecretRedactor) -> [DoctorReport.Check]
-  {
+  static func persisted(
+    store: any CoderJobStore,
+    redactor: SecretRedactor
+  ) -> [DoctorReport.Check] {
     var rows: [DoctorReport.Check] = []
 
     do {
@@ -139,7 +145,9 @@ enum CoderHealthRows {
           ok: unresolved.isEmpty
         ),
       ]
-    } catch { rows += [unreadable(Key.reserved), unreadable(Key.ownership)] }
+    } catch {
+      rows += [unreadable(Key.reserved), unreadable(Key.ownership)]
+    }
 
     do {
       let job = try store.lastFailedJob()
@@ -151,7 +159,9 @@ enum CoderHealthRows {
           """
         } ?? "none"
       rows.append(row(Key.lastFailure, redactor.redact(value)))
-    } catch { rows.append(unreadable(Key.lastFailure)) }
+    } catch {
+      rows.append(unreadable(Key.lastFailure))
+    }
 
     return rows
   }

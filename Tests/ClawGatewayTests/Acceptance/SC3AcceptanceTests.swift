@@ -336,7 +336,9 @@ actor ReleaseGatedIngestDispatcher: ToolDispatching {
   nonisolated let definitions: [ToolDefinition] = []
   private let gate: ReleaseGate
 
-  init(gate: ReleaseGate) { self.gate = gate }
+  init(gate: ReleaseGate) {
+    self.gate = gate
+  }
 
   func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
     await gate.markEntered()

@@ -44,8 +44,9 @@ struct GroupMembershipCheckingTests {
     MembershipCase(status: .kicked, presenceJSON: "", expected: false),
     MembershipCase(status: .other("future_member"), presenceJSON: "", expected: false),
   ])
-  func currentMembershipRequiresRecognizedStatusAndPresence(_ testCase: MembershipCase) async throws
-  {
+  func currentMembershipRequiresRecognizedStatusAndPresence(
+    _ testCase: MembershipCase
+  ) async throws {
     // given
     let json = Self.memberJSON(status: testCase.status, presenceJSON: testCase.presenceJSON)
     let checker = makeClient(json: json)

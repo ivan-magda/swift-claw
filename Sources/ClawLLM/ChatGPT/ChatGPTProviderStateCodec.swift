@@ -89,10 +89,9 @@ struct ChatGPTReplayIdentity: Sendable, Equatable {
     guard fields.count == 4, fields[0] == Self.providerVersion else {
       return nil
     }
-    guard
-      Self.isCanonicalHash(fields[1]),
-      Self.isCanonicalHash(fields[2]),
-      let epoch = Self.canonicalEpoch(fields[3])
+    guard Self.isCanonicalHash(fields[1]),
+          Self.isCanonicalHash(fields[2]),
+          let epoch = Self.canonicalEpoch(fields[3])
     else {
       return nil
     }
@@ -209,9 +208,13 @@ struct ChatGPTReplayDrops: Sendable, Equatable {
   /// Sound state omitted so the request fits its aggregate budget.
   var budgetEvicted = 0
 
-  var total: Int { foreign + staleEpoch + malformed + oversized + budgetEvicted }
+  var total: Int {
+    foreign + staleEpoch + malformed + oversized + budgetEvicted
+  }
 
-  var isEmpty: Bool { total == 0 }
+  var isEmpty: Bool {
+    total == 0
+  }
 }
 
 /// What a request may replay, and what it could not.
@@ -247,7 +250,9 @@ struct ChatGPTProviderStateCodec: Sendable {
     newEpoch: @escaping @Sendable () -> UUID = {
       UUID()
     }
-  ) { self.newEpoch = newEpoch }
+  ) {
+    self.newEpoch = newEpoch
+  }
 
   /// Selects the replay material a request may carry, and the identity its response is stamped with.
   ///
@@ -377,9 +382,8 @@ private extension ChatGPTProviderStateCodec {
         drops.oversized += 1
         continue
       }
-      guard
-        let items = ChatGPTDurableReplayPayload.decode(state.payload),
-        let json = CanonicalJSON.encode(ChatGPTDurableReplayPayload(items))
+      guard let items = ChatGPTDurableReplayPayload.decode(state.payload),
+            let json = CanonicalJSON.encode(ChatGPTDurableReplayPayload(items))
       else {
         drops.malformed += 1
         continue
@@ -401,8 +405,10 @@ private extension ChatGPTProviderStateCodec {
   /// Walking newest-first and stopping at the first state that would cross the cap is what makes the
   /// omission oldest-first: continuing past it could admit a small ancient state over a large recent
   /// one, which is the opposite of the rule. The result is returned chronologically.
-  static func affordable(_ candidates: [Candidate], drops: inout ChatGPTReplayDrops) -> [Candidate]
-  {
+  static func affordable(
+    _ candidates: [Candidate],
+    drops: inout ChatGPTReplayDrops
+  ) -> [Candidate] {
     var selected: [Candidate] = []
     var total = 0
     for (offset, candidate) in candidates.reversed().enumerated() {
@@ -565,7 +571,9 @@ struct DurableContent: Codable {
     case text
   }
 
-  init(_ text: String) { self.text = text }
+  init(_ text: String) {
+    self.text = text
+  }
 
   init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)

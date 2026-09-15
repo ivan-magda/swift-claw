@@ -21,10 +21,14 @@ public enum AuthCommandExit: Sendable, Equatable {
   /// second number for the same condition — a supervisor already knows to back off on that one.
   public var processExitCode: Int32 {
     switch self {
-    case .success: return 0
-    case .cancelled: return 130
-    case .secretLoadFailure: return ClawExitCode.secretLoadFailed.rawValue
-    case .commandFailure: return 1
+    case .success:
+      return 0
+    case .cancelled:
+      return 130
+    case .secretLoadFailure:
+      return ClawExitCode.secretLoadFailed.rawValue
+    case .commandFailure:
+      return 1
     }
   }
 }
@@ -157,12 +161,18 @@ private extension AuthCommandResultMapper {
 
   static func describe(_ error: SecretStoreError) -> String {
     switch error {
-    case .missingTelegramToken: return "no Telegram bot token is configured to seal"
-    case .keyFileInsecure(let detail): return safe(detail)
-    case .malformedEnvelope: return "\(SecretFile.envelope) is not an envelope this build can read"
-    case .decryptionFailed: return "\(SecretFile.envelope) did not decrypt under \(SecretFile.key)"
-    case .unreadable(let name): return "\(safe(name)) could not be read"
-    case .publicationFailed(let detail): return safe(detail)
+    case .missingTelegramToken:
+      return "no Telegram bot token is configured to seal"
+    case .keyFileInsecure(let detail):
+      return safe(detail)
+    case .malformedEnvelope:
+      return "\(SecretFile.envelope) is not an envelope this build can read"
+    case .decryptionFailed:
+      return "\(SecretFile.envelope) did not decrypt under \(SecretFile.key)"
+    case .unreadable(let name):
+      return "\(safe(name)) could not be read"
+    case .publicationFailed(let detail):
+      return safe(detail)
     }
   }
 
@@ -170,19 +180,27 @@ private extension AuthCommandResultMapper {
   /// to the concrete store, which this module does not — and must not — depend on.
   static func describe(_ error: LLMCredentialStoreError) -> String {
     switch error {
-    case .missingRuntimeKey: return "\(SecretFile.key) is missing"
-    case .insecureStorage: return "its envelope is not owner-only, or is not a regular file"
-    case .malformedStorage: return "its envelope is not one this build can open"
-    case .unsupportedVersion: return "its envelope was written by a newer build"
-    case .oversizedStorage: return "its envelope is larger than this build will read"
-    case .publicationFailed: return "its envelope could not be written"
-    case .commitUncertain: return "its envelope was written but not proven durable"
+    case .missingRuntimeKey:
+      return "\(SecretFile.key) is missing"
+    case .insecureStorage:
+      return "its envelope is not owner-only, or is not a regular file"
+    case .malformedStorage:
+      return "its envelope is not one this build can open"
+    case .unsupportedVersion:
+      return "its envelope was written by a newer build"
+    case .oversizedStorage:
+      return "its envelope is larger than this build will read"
+    case .publicationFailed:
+      return "its envelope could not be written"
+    case .commitUncertain:
+      return "its envelope was written but not proven durable"
     }
   }
 
   static func describe(_ failure: ChatGPTOAuthFailure) -> String {
     switch failure {
-    case .deadlineExceeded: return "the approval window closed before the device was approved"
+    case .deadlineExceeded:
+      return "the approval window closed before the device was approved"
     case .throttled(let retryAfter):
       guard let retryAfter else {
         return "the provider asked to be left alone for a while"
@@ -192,7 +210,8 @@ private extension AuthCommandResultMapper {
       return "the provider answered with something this build cannot use — \(safe(detail))"
     case .grantRejected(let detail):
       return "the provider refused the authorization — \(safe(detail))"
-    case .transport(let detail): return "the attempt did not complete — \(safe(detail))"
+    case .transport(let detail):
+      return "the attempt did not complete — \(safe(detail))"
     }
   }
 

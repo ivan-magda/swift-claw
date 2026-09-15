@@ -58,7 +58,9 @@ public struct FileWriteTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(10) }
+  public var timeout: Duration {
+    .seconds(10)
+  }
 
   /// Gate-time resolution: the approval binds to the fully-resolved contained path.
   /// Overwrite policy and the size cap refuse HERE — a doomed write must never park an approval.
@@ -81,7 +83,8 @@ public struct FileWriteTool: Tool {
     }
 
     switch WorkspacePathContainment.resolveForCreation(path: path, root: workspaceRoot.path) {
-    case .refused(let reason): return .refused(reason: reason)
+    case .refused(let reason):
+      return .refused(reason: reason)
     case .resolved(let target):
       var isDirectory = ObjCBool(false)
       let exists = FileManager.default.fileExists(atPath: target, isDirectory: &isDirectory)
@@ -130,21 +133,19 @@ public struct FileWriteTool: Tool {
       return errorPayload("file_write was dispatched without a gate-resolved target.")
     }
 
-    guard
-      let path = arguments.objectValue?["path"]?.stringValue,
-      let content = arguments.objectValue?["content"]?.stringValue
+    guard let path = arguments.objectValue?["path"]?.stringValue,
+          let content = arguments.objectValue?["content"]?.stringValue
     else {
       return errorPayload("file_write needs \"path\" and \"content\" arguments.")
     }
 
     // Re-resolve NOW: if a component was retargeted since approval (symlink swap, replaced
     // directory), the resolution drifts from the approved target — fail closed, write nothing.
-    guard
-      case .resolved(let target) = WorkspacePathContainment.resolveForCreation(
-        path: path,
-        root: workspaceRoot.path
-      ),
-      target == approvedTarget
+    guard case .resolved(let target) = WorkspacePathContainment.resolveForCreation(
+      path: path,
+      root: workspaceRoot.path
+    ),
+          target == approvedTarget
     else {
       return errorPayload(
         "The approved path no longer resolves to the approved target; nothing was written."
@@ -195,7 +196,9 @@ public struct FileWriteTool: Tool {
 // MARK: - Atomic Write Steps
 
 private extension FileWriteTool {
-  struct RenameFailed: Error { let code: Int32 }
+  struct RenameFailed: Error {
+    let code: Int32
+  }
 
   /// The target appeared between approval and execution of a CREATE-approved write: the owner
   /// approved "create", so replacing is off the table — fail closed.

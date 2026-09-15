@@ -32,26 +32,41 @@ public enum RunFSM {
   /// reminder to revisit the lifecycle rules.
   public static func reduce(state: RunState, on event: RunEvent) -> RunState? {
     switch (state, event) {
-    case (.pending, .pickUp): .running
-    case (.pending, .fail): .failed
-    case (.pending, .cancel): .cancelled
-    case (.pending, .supersede): .superseded
-    case (.running, .complete): .done
-    case (.running, .fail): .failed
-    case (.running, .cancel): .cancelled
-    case (.running, .supersede): .superseded
-    case (.running, .suspendForApproval): .awaitingApproval
-    case (.awaitingApproval, .resumeApproved): .running
-    case (.awaitingApproval, .resolveDenied): .failed
-    case (.awaitingApproval, .fail): .failed
-    case (.awaitingApproval, .cancel): .cancelled
-    case (.awaitingApproval, .supersede): .superseded
+    case (.pending, .pickUp):
+      .running
+    case (.pending, .fail):
+      .failed
+    case (.pending, .cancel):
+      .cancelled
+    case (.pending, .supersede):
+      .superseded
+    case (.running, .complete):
+      .done
+    case (.running, .fail):
+      .failed
+    case (.running, .cancel):
+      .cancelled
+    case (.running, .supersede):
+      .superseded
+    case (.running, .suspendForApproval):
+      .awaitingApproval
+    case (.awaitingApproval, .resumeApproved):
+      .running
+    case (.awaitingApproval, .resolveDenied):
+      .failed
+    case (.awaitingApproval, .fail):
+      .failed
+    case (.awaitingApproval, .cancel):
+      .cancelled
+    case (.awaitingApproval, .supersede):
+      .superseded
     case (.pending, .complete), (.pending, .suspendForApproval), (.pending, .resumeApproved),
       (.pending, .resolveDenied), (.running, .pickUp), (.running, .resumeApproved),
       (.running, .resolveDenied), (.awaitingApproval, .pickUp), (.awaitingApproval, .complete),
       (.awaitingApproval, .suspendForApproval):
       nil
-    case (.done, _), (.failed, _), (.cancelled, _), (.superseded, _): nil
+    case (.done, _), (.failed, _), (.cancelled, _), (.superseded, _):
+      nil
     }
   }  // swiftlint:enable cyclomatic_complexity
 }

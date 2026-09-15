@@ -42,7 +42,11 @@ private struct CleanupOperation: Sendable {
 
     let absent = await finalAbsence()
 
-    do { try workspace.remove() } catch { return false }
+    do {
+      try workspace.remove()
+    } catch {
+      return false
+    }
 
     return absent
   }
@@ -60,12 +64,11 @@ private struct CleanupOperation: Sendable {
   // Cleanup deliberately keeps the full per-command timeout (not the run's outer deadline,
   // which may already be exhausted) so a wedged execution still gets its teardown attempts.
   private func finalAbsence() async -> Bool {
-    guard
-      let containers = await ContainerBackend.fetchContainerList(
-        timeout: ContainerBackend.lifecycleCommandTimeout,
-        commands: commands,
-        watchdogSleep: watchdogSleep
-      )
+    guard let containers = await ContainerBackend.fetchContainerList(
+      timeout: ContainerBackend.lifecycleCommandTimeout,
+      commands: commands,
+      watchdogSleep: watchdogSleep
+    )
     else {
       return false
     }

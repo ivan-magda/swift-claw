@@ -16,6 +16,8 @@ public enum AllowlistSeeding {
     do {
       try allowlist.seedAllowlist(userIDs: Array(owners))
       return .seeded
-    } catch { return owners.isEmpty ? .toleratedFailure(error) : .strandedOwners(error) }
+    } catch {
+      return owners.isEmpty ? .toleratedFailure(error) : .strandedOwners(error)
+    }
   }
 }

@@ -184,8 +184,9 @@ struct ReflectionPersistenceTests {
   }
 
   @Test(arguments: [OwnerSignal.resultCorrection, OwnerSignal.resultNotUseful])
-  func undisputedOwnerResultUsingEvaluatorCodesKeepsEvaluationDependency(signal: OwnerSignal) throws
-  {
+  func undisputedOwnerResultUsingEvaluatorCodesKeepsEvaluationDependency(
+    signal: OwnerSignal
+  ) throws {
     // given — both owner categories reuse the undisputed evaluator's material issue code
     let env = try BoundRunEnvironment.make()
     let initial = try env.reflectionFixture()

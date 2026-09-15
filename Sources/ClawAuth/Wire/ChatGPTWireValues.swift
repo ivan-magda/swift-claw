@@ -11,10 +11,14 @@ package enum ChatGPTWireValues {
   /// poll loop, is rejected rather than coerced.
   static func positiveInteger(_ value: JSONValue) -> Int? {
     switch value {
-    case .integer(let integer): return integer > 0 && integer < Int.max ? integer : nil
-    case .number(let number): return positiveInteger(fromNumber: number)
-    case .string(let text): return positiveInteger(fromDecimalString: text)
-    case .null, .bool, .array, .object: return nil
+    case .integer(let integer):
+      return integer > 0 && integer < Int.max ? integer : nil
+    case .number(let number):
+      return positiveInteger(fromNumber: number)
+    case .string(let text):
+      return positiveInteger(fromDecimalString: text)
+    case .null, .bool, .array, .object:
+      return nil
     }
   }
 
@@ -96,20 +100,23 @@ private extension ChatGPTWireValues {
     scalar.value <= 0x1F || (0x7F...0x9F).contains(scalar.value)
   }
 
-  static func isWhitespace(_ scalar: Unicode.Scalar) -> Bool { scalar.properties.isWhitespace }
+  static func isWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+    scalar.properties.isWhitespace
+  }
 
-  static func isASCIIDigit(_ scalar: Unicode.Scalar) -> Bool { ("0"..."9").contains(scalar) }
+  static func isASCIIDigit(_ scalar: Unicode.Scalar) -> Bool {
+    ("0"..."9").contains(scalar)
+  }
 }
 
 // MARK: - Positive Integer Parsing
 
 private extension ChatGPTWireValues {
   static func positiveInteger(fromNumber number: Double) -> Int? {
-    guard
-      number.isFinite,
-      number > 0,
-      number.rounded(.towardZero) == number,
-      number < Double(Int.max)
+    guard number.isFinite,
+          number > 0,
+          number.rounded(.towardZero) == number,
+          number < Double(Int.max)
     else {
       return nil
     }
@@ -119,11 +126,10 @@ private extension ChatGPTWireValues {
   /// ASCII decimal digits only. `Int(_:)` alone would accept a leading sign and non-ASCII digit
   /// shapes, neither of which the vendor sends and both of which read as an attempt to be clever.
   static func positiveInteger(fromDecimalString text: String) -> Int? {
-    guard
-      text.isEmpty == false,
-      text.unicodeScalars.allSatisfy(isASCIIDigit),
-      let parsed = Int(text),
-      parsed > 0
+    guard text.isEmpty == false,
+          text.unicodeScalars.allSatisfy(isASCIIDigit),
+          let parsed = Int(text),
+          parsed > 0
     else {
       return nil
     }
@@ -167,8 +173,10 @@ private extension ChatGPTWireValues {
     }
     scalars = scalars.dropFirst()
     switch introducer {
-    case "[": consumeControlSequence(&scalars)
-    case "]": consumeOperatingSystemCommand(&scalars)
+    case "[":
+      consumeControlSequence(&scalars)
+    case "]":
+      consumeOperatingSystemCommand(&scalars)
     default:
       // A two-character escape: the introducer was the whole sequence.
       break

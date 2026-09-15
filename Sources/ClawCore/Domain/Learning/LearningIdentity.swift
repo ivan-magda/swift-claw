@@ -5,7 +5,9 @@ import Foundation
 public struct LearningAlgorithm: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 
   // swiftlint:disable:next identifier_name
   public static let v1 = LearningAlgorithm(rawValue: "scheduled-learning/v1")
@@ -16,7 +18,9 @@ public struct LearningAlgorithm: RawRepresentable, Sendable, Hashable, Codable {
 public struct LessonSetDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 }
 
 /// Digest of one candidate record. Stays distinct from `LessonSetDigest` — a candidate's own record
@@ -25,7 +29,9 @@ public struct LessonSetDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct CandidateDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 }
 
 /// Digest of the canonical typed source manifest, distinct from the candidate record that also
@@ -33,7 +39,9 @@ public struct CandidateDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct CandidateSourceManifestDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 }
 
 /// SHA-256 over the canonical bytes of what a job asks for. Stays distinct from the lesson-set and
@@ -43,7 +51,9 @@ public struct CandidateSourceManifestDigest: RawRepresentable, Sendable, Hashabl
 public struct JobDefinitionDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 
   public static func of(
     label: String,
@@ -76,14 +86,18 @@ public struct JobDefinitionDigest: RawRepresentable, Sendable, Hashable, Codable
 public struct EvidenceDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 }
 
 /// Digest of one frozen evaluation used as reflection evidence.
 public struct EvaluationDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 }
 
 /// Digest of one exact append-only owner-feedback event. The row id locates the dependency; this
@@ -91,7 +105,9 @@ public struct EvaluationDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct FeedbackEventDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 
   public static func of(  // swiftlint:disable:this function_parameter_count
     eventID: Int64,
@@ -162,11 +178,17 @@ public struct FeedbackEventDigest: RawRepresentable, Sendable, Hashable, Codable
 public struct LearningEpoch: Sendable, Hashable, Comparable, Codable {
   public let value: Int64
 
-  public init(_ value: Int64) { self.value = value }
+  public init(_ value: Int64) {
+    self.value = value
+  }
 
-  public static func < (lhs: LearningEpoch, rhs: LearningEpoch) -> Bool { lhs.value < rhs.value }
+  public static func < (lhs: LearningEpoch, rhs: LearningEpoch) -> Bool {
+    lhs.value < rhs.value
+  }
 
-  public func next() -> LearningEpoch { LearningEpoch(value + 1) }
+  public func next() -> LearningEpoch {
+    LearningEpoch(value + 1)
+  }
 }
 
 /// Marks which frozen version of the current stable lesson set an evidence window or trial was
@@ -174,11 +196,17 @@ public struct LearningEpoch: Sendable, Hashable, Comparable, Codable {
 public struct StableRevision: Sendable, Hashable, Comparable, Codable {
   public let value: Int64
 
-  public init(_ value: Int64) { self.value = value }
+  public init(_ value: Int64) {
+    self.value = value
+  }
 
-  public static func < (lhs: StableRevision, rhs: StableRevision) -> Bool { lhs.value < rhs.value }
+  public static func < (lhs: StableRevision, rhs: StableRevision) -> Bool {
+    lhs.value < rhs.value
+  }
 
-  public func next() -> StableRevision { StableRevision(value + 1) }
+  public func next() -> StableRevision {
+    StableRevision(value + 1)
+  }
 }
 
 /// Marks which frozen version of the append-only owner-feedback log a candidate, approval or
@@ -187,13 +215,17 @@ public struct StableRevision: Sendable, Hashable, Comparable, Codable {
 public struct FeedbackRevision: Sendable, Hashable, Comparable, Codable {
   public let value: Int64
 
-  public init(_ value: Int64) { self.value = value }
+  public init(_ value: Int64) {
+    self.value = value
+  }
 
   public static func < (lhs: FeedbackRevision, rhs: FeedbackRevision) -> Bool {
     lhs.value < rhs.value
   }
 
-  public func next() -> FeedbackRevision { FeedbackRevision(value + 1) }
+  public func next() -> FeedbackRevision {
+    FeedbackRevision(value + 1)
+  }
 }
 
 /// Digest of the whole surface two runs must share before their verdicts may be counted as
@@ -204,14 +236,18 @@ public struct FeedbackRevision: Sendable, Hashable, Comparable, Codable {
 public struct CompatibilityDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 }
 
 /// SHA-256 identity of one frozen reflection question.
 public struct TriggerDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 }
 
 /// Digest of one `LearningOperationKey`. The stored claim key: `learning_operations` has no
@@ -220,7 +256,9 @@ public struct TriggerDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct LearningOperationKeyDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 }
 
 /// One durable `learning_operations` row. Its shape is the key digest and the attempt generation,
@@ -228,7 +266,9 @@ public struct LearningOperationKeyDigest: RawRepresentable, Sendable, Hashable, 
 public struct LearningOperationID: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 
   public init(key: LearningOperationKeyDigest, attemptGeneration: Int) {
     rawValue = "\(key.rawValue):\(attemptGeneration)"
@@ -241,7 +281,9 @@ public struct LearningOperationID: RawRepresentable, Sendable, Hashable, Codable
 public struct CarrierDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 }
 
 /// Digest of the exact closed reflector reply after fence removal. It is source provenance, not
@@ -249,7 +291,9 @@ public struct CarrierDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct ReflectionResultDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 
   public static func of(_ bytes: Data) -> ReflectionResultDigest {
     let framed = CanonicalDigestInput.joined(["reflection-result/v1", bytes.base64EncodedString()])

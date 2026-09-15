@@ -51,7 +51,9 @@ enum LLMEventStreamTests {
         for try await event in stream {
           events.append(event)
         }
-      } catch { caught = error }
+      } catch {
+        caught = error
+      }
 
       // then the accepted delta survives, and joining does not erase the cause the iterator threw
       #expect(events == [.delta("partial")])
@@ -113,7 +115,9 @@ enum LLMEventStreamTests {
       let stream = LLMEventStream.make(limits: tinyLimits) { sink in
         try? await sink.sendDelta("first")
         try? await sink.sendDelta("second")
-        do { try await sink.sendDelta("third") } catch {
+        do {
+          try await sink.sendDelta("third")
+        } catch {
           blockedSendFailed.withLock { current in
             current = true
           }
@@ -182,7 +186,11 @@ enum LLMEventStreamTests {
       // given a producer that would stream deltas forever
       let stream = LLMEventStream.make(limits: tinyLimits) { sink in
         while true {
-          do { try await sink.sendDelta("x") } catch { return .cancelled(.notStarted) }
+          do {
+            try await sink.sendDelta("x")
+          } catch {
+            return .cancelled(.notStarted)
+          }
         }
       }
 
@@ -377,7 +385,9 @@ enum LLMEventStreamTests {
       // given a delta no drain could ever make room for
       let sendFailure = Mutex<BoundedAsyncChannelError?>(nil)
       let stream = LLMEventStream.make(limits: tinyLimits) { sink in
-        do { try await sink.sendDelta(String(repeating: "z", count: 65)) } catch {
+        do {
+          try await sink.sendDelta(String(repeating: "z", count: 65))
+        } catch {
           sendFailure.withLock { current in
             current = error as? BoundedAsyncChannelError
           }

@@ -56,9 +56,13 @@ extension SecretStoreResolver {
     do {
       _ = try resolution.store.loadSecrets()
       switch resolution.backend {
-      case .encrypted: return DoctorRowResult(value: "backend=encrypted", ok: true)
-      case .env: return DoctorRowResult(value: "backend=env (WARN: plaintext)", ok: true)
+      case .encrypted:
+        return DoctorRowResult(value: "backend=encrypted", ok: true)
+      case .env:
+        return DoctorRowResult(value: "backend=env (WARN: plaintext)", ok: true)
       }
-    } catch { return DoctorRowResult(value: "FAIL: \(error)", ok: false) }
+    } catch {
+      return DoctorRowResult(value: "FAIL: \(error)", ok: false)
+    }
   }
 }

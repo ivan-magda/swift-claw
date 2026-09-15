@@ -5,7 +5,9 @@ import GRDB
 public struct UsageStoreGRDB: UsageStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func recordUsage(_ usage: ProviderUsage) throws(StoreError) {
     _ = try database.writeMapping { db in

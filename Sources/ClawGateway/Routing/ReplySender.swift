@@ -5,7 +5,9 @@ import Logging
 /// A routing decision that is already final — the failure was mapped, any notice sent — thrown so
 /// handlers unwind straight to `MessageRouter.handle`, the single place the outcome is returned
 /// to the poller.
-struct RoutingHalt: Error { let outcome: HandleOutcome }
+struct RoutingHalt: Error {
+  let outcome: HandleOutcome
+}
 
 /// How a handler recovers from a non-disk store failure: `retryUpdate` when nothing durable
 /// happened yet (do not advance the cursor; the poller redelivers), `ack` when the effect's own
@@ -32,12 +34,15 @@ struct ReplySender: Sendable {
     onFailure: StoreFailureReply = .retryUpdate,
     body: () throws -> Value
   ) async throws(RoutingHalt) -> Value {
-    do { return try body() } catch StoreError.diskFull {
+    do {
+      return try body()
+    } catch StoreError.diskFull {
       throw RoutingHalt(outcome: await storageFull(target: target))
     } catch {
       logger.error("\(operation) failed for update \(updateID): \(error)")
       switch onFailure {
-      case .retryUpdate: throw RoutingHalt(outcome: .transientFailure)
+      case .retryUpdate:
+        throw RoutingHalt(outcome: .transientFailure)
       case .ack(let text):
         throw RoutingHalt(
           outcome: await sendCommandAck(updateID: updateID, target: target, text: text)
@@ -70,9 +75,15 @@ struct ReplySender: Sendable {
       return .transientFailure
     }
 
-    do { try await claimUpdate(updateID: updateID, target: target) } catch { return error.outcome }
+    do {
+      try await claimUpdate(updateID: updateID, target: target)
+    } catch {
+      return error.outcome
+    }
 
-    do { _ = try await delivery.sendMessage(to: target, text: text) } catch {
+    do {
+      _ = try await delivery.sendMessage(to: target, text: text)
+    } catch {
       logger.error("send failed for update \(updateID): \(error)")
       return .transientFailure
     }
@@ -90,7 +101,11 @@ struct ReplySender: Sendable {
       return .transientFailure
     }
 
-    do { try await claimUpdate(updateID: updateID, target: target) } catch { return error.outcome }
+    do {
+      try await claimUpdate(updateID: updateID, target: target)
+    } catch {
+      return error.outcome
+    }
 
     do {
       for text in texts {
@@ -105,9 +120,14 @@ struct ReplySender: Sendable {
 
   /// Ack for a command whose effect already claimed the update; the send is best-effort — a lost
   /// ack must not re-run the effect.
-  func sendCommandAck(updateID: Int64, target: DeliveryTarget, text: String) async -> HandleOutcome
-  {
-    do { _ = try await delivery.sendMessage(to: target, text: text) } catch {
+  func sendCommandAck(
+    updateID: Int64,
+    target: DeliveryTarget,
+    text: String
+  ) async -> HandleOutcome {
+    do {
+      _ = try await delivery.sendMessage(to: target, text: text)
+    } catch {
       logger.error("command ack send failed for update \(updateID): \(error)")
     }
     return .processed
@@ -120,7 +140,9 @@ struct ReplySender: Sendable {
   /// Best-effort "storage full" notice (the send may still succeed — a full disk doesn't break
   /// the network) and the signal for the poller to back off without advancing the offset.
   func storageFull(target: DeliveryTarget) async -> HandleOutcome {
-    do { _ = try await delivery.sendMessage(to: target, text: Degradation.storageFull) } catch {
+    do {
+      _ = try await delivery.sendMessage(to: target, text: Degradation.storageFull)
+    } catch {
       logger.error("failed to send storage-full notice: \(error)")
     }
     return .storageFull

@@ -48,8 +48,7 @@ struct ScratchWorkspace: Sendable {
     try ensurePrivateDirectory(scratchRoot)
     try ensurePrivateDirectory(controlRoot)
 
-    guard
-      directory.path.withCString({
+    guard directory.path.withCString({
         mkdir($0, 0o700)
       }) == 0
     else {
@@ -96,10 +95,9 @@ private extension ScratchWorkspace {
   static func validate(_ request: ExecutionRequest) throws {
     let expectedEntrypoint = ExecEntrypoint.fileName(for: request.language)
 
-    guard
-      request.entrypoint.name == expectedEntrypoint,
-      request.entrypoint.mode == .readExecute,
-      request.entrypoint.bytes.count <= maxEntrypointBytes
+    guard request.entrypoint.name == expectedEntrypoint,
+          request.entrypoint.mode == .readExecute,
+          request.entrypoint.bytes.count <= maxEntrypointBytes
     else {
       throw ScratchWorkspaceError.invalidRequest("invalid execution entrypoint")
     }
@@ -152,7 +150,9 @@ private extension ScratchWorkspace {
 
 private extension ScratchWorkspace {
   static func ensurePrivateDirectory(_ url: URL) throws {
-    do { try PrivateDirectory.ensure(at: url) } catch {
+    do {
+      try PrivateDirectory.ensure(at: url)
+    } catch {
       throw ScratchWorkspaceError.fileSystem("cannot create private directory")
     }
   }

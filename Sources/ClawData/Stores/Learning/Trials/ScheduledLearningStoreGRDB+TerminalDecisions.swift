@@ -12,8 +12,10 @@ extension ScheduledLearningStoreGRDB {
     now: Date
   ) throws(StoreError) -> DecisionReceipt? {
     switch decision {
-    case .wait, .closeAssignment: return nil
-    case .promote, .fallback: break
+    case .wait, .closeAssignment:
+      return nil
+    case .promote, .fallback:
+      break
     }
     let inputs = TrialDecisionInputs(trial: trial, feedbackRevision: feedbackRevision)
     return try database.writeMapping { db -> DecisionReceipt? in
@@ -25,23 +27,22 @@ extension ScheduledLearningStoreGRDB {
       }
       let current = try Self.readState(db, jobID: trial.jobID)
       let stored = try Self.strictTrial(db, row: row, currentState: nil)
-      guard
-        let current,
-        let job = try Self.admissionJob(db, jobID: trial.jobID),
-        job.hasRecurrence,
-        job.status != .cancelled,
-        current.epoch == inputs.identity.epoch,
-        stored.identity == inputs.identity,
-        stored.candidateDigest == inputs.candidateDigest,
-        stored.replacementDigest == inputs.replacementDigest,
-        stored.baseDigest == inputs.baseDigest,
-        stored.baseRevision == inputs.baseRevision,
-        current.stableDigest == inputs.baseDigest,
-        current.stableRevision == inputs.baseRevision,
-        current.feedbackRevision == inputs.feedbackRevision,
-        stored.algorithm == inputs.algorithm,
-        inputs.algorithm == .v1,
-        stored.state == .open || stored.state == .draining
+      guard let current,
+            let job = try Self.admissionJob(db, jobID: trial.jobID),
+            job.hasRecurrence,
+            job.status != .cancelled,
+            current.epoch == inputs.identity.epoch,
+            stored.identity == inputs.identity,
+            stored.candidateDigest == inputs.candidateDigest,
+            stored.replacementDigest == inputs.replacementDigest,
+            stored.baseDigest == inputs.baseDigest,
+            stored.baseRevision == inputs.baseRevision,
+            current.stableDigest == inputs.baseDigest,
+            current.stableRevision == inputs.baseRevision,
+            current.feedbackRevision == inputs.feedbackRevision,
+            stored.algorithm == inputs.algorithm,
+            inputs.algorithm == .v1,
+            stored.state == .open || stored.state == .draining
       else {
         return try Self.finishTrial(
           db,
@@ -70,9 +71,8 @@ extension ScheduledLearningStoreGRDB {
         guard decision == .promote else {
           return nil
         }
-        guard
-          let candidate = try Self.readCandidateArtifact(db, digest: stored.candidateDigest),
-          try Self.sourceBindingsAreCurrent(db, artifact: candidate, state: current)
+        guard let candidate = try Self.readCandidateArtifact(db, digest: stored.candidateDigest),
+              try Self.sourceBindingsAreCurrent(db, artifact: candidate, state: current)
         else {
           return try Self.finishTrial(
             db,
@@ -91,7 +91,8 @@ extension ScheduledLearningStoreGRDB {
       case .fallback(let fallback):
         result = .fallback
         reason = fallback.rawValue
-      case .wait, .closeAssignment: return nil
+      case .wait, .closeAssignment:
+        return nil
       }
       let revision =
         result == .promoted
@@ -189,9 +190,8 @@ extension ScheduledLearningStoreGRDB {
       return
     }
     let trial = try strictTrial(db, row: row, currentState: nil)
-    guard
-      trial.state == .open || trial.state == .draining,
-      let state = try readState(db, jobID: trial.jobID)
+    guard trial.state == .open || trial.state == .draining,
+          let state = try readState(db, jobID: trial.jobID)
     else {
       return
     }
@@ -235,21 +235,20 @@ extension ScheduledLearningStoreGRDB {
     _ db: Database,
     inputs: TrialDecisionInputs
   ) throws -> DecisionReceipt? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: """
+    guard let row = try Row.fetchOne(
+      db,
+      sql: """
           SELECT decision_id, inputs, result FROM learning_decisions
           WHERE kind = ? AND job_id = ? AND learning_epoch = ? AND inputs = ?
           ORDER BY decision_id LIMIT 1
           """,
-        arguments: [
-          LearningDecisionKind.trial.rawValue,
-          inputs.identity.jobID,
-          inputs.identity.epoch.value,
-          try canonicalDecisionJSON(inputs),
-        ]
-      )
+      arguments: [
+        LearningDecisionKind.trial.rawValue,
+        inputs.identity.jobID,
+        inputs.identity.epoch.value,
+        try canonicalDecisionJSON(inputs),
+      ]
+    )
     else {
       return nil
     }

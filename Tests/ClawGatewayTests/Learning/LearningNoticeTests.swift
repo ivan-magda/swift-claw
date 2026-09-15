@@ -310,7 +310,9 @@ private final class ReviewNonceSequence: @unchecked Sendable {
   private var nonces: [String]
   private var value = 0
 
-  init(nonces: [String] = []) { self.nonces = nonces }
+  init(nonces: [String] = []) {
+    self.nonces = nonces
+  }
 
   func next() -> String {
     lock.lock()
@@ -410,9 +412,8 @@ private enum ReviewFixture {
   }
 
   static func buttonLabels(_ markup: String) throws -> [String] {
-    guard
-      let object = try JSONSerialization.jsonObject(with: Data(markup.utf8)) as? [String: Any],
-      let rows = object["inline_keyboard"] as? [[Any]]
+    guard let object = try JSONSerialization.jsonObject(with: Data(markup.utf8)) as? [String: Any],
+          let rows = object["inline_keyboard"] as? [[Any]]
     else {
       throw LearningReviewError.invalidCandidate
     }

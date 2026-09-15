@@ -18,7 +18,9 @@ private func racedResponse(content: String = "raced reply") -> ChatResponse {
 }
 
 /// Fires the deadline the instant the child sleeps.
-private var instantDeadlineClock: ScriptedClock { ScriptedClock { _ in } }
+private var instantDeadlineClock: ScriptedClock {
+  ScriptedClock { _ in }
+}
 
 /// Parks the deadline until the child is cancelled — the provider-wins pacing, with no real sleep and
 /// no timer that can fire on its own.
@@ -57,14 +59,17 @@ private let consumeToTerminal:
         for try await event in stream {
           try Task.checkCancellation()
           switch event {
-          case .delta: continue
+          case .delta:
+            continue
           case .finished:
             _ = box.claim(.provider)
             return .completed
           }
         }
         return .cut
-      } catch { return .cut }
+      } catch {
+        return .cut
+      }
     }
 
 /// A consumer that never reads — it parks until cancelled — so the terminal's final event stays
@@ -121,7 +126,9 @@ private func runOutcome(
 
 // MARK: - Matchers
 
-private struct OutcomeMismatch: Error, CustomStringConvertible { let description: String }
+private struct OutcomeMismatch: Error, CustomStringConvertible {
+  let description: String
+}
 
 private func requireResponse(_ outcome: ProviderDeadlineOutcome) throws -> ChatResponse {
   guard case .response(let response) = outcome else {
@@ -158,7 +165,9 @@ private actor GatedSend {
   private(set) var observedCancellation = false
 
   /// True once `run` has begun, so a test can wait for the send to be in flight before cancelling it.
-  var started: Bool { startGate.isOpen }
+  var started: Bool {
+    startGate.isOpen
+  }
 
   func run() async {
     startGate.open()
@@ -169,9 +178,13 @@ private actor GatedSend {
     }
   }
 
-  func waitUntilStarted() async { await startGate.waitIgnoringCancellation() }
+  func waitUntilStarted() async {
+    await startGate.waitIgnoringCancellation()
+  }
 
-  func release() { releaseGate.open() }
+  func release() {
+    releaseGate.open()
+  }
 }
 
 // One @Suite of deadline-coordinator behaviors sharing the fixtures above.

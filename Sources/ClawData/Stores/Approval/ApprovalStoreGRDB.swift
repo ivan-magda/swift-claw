@@ -12,7 +12,9 @@ import GRDB
 public struct ApprovalStoreGRDB: ApprovalStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func approval(nonce: String) throws(StoreError) -> Approval? {
     try database.readMapping { db in
@@ -302,9 +304,8 @@ extension ApprovalStoreGRDB {
     on event: ApprovalEvent,
     now: Date
   ) throws -> ApprovalState? {
-    guard
-      let state = try currentApprovalState(db, id: id),
-      let nextState = ApprovalFSM.reduce(state: state, on: event)
+    guard let state = try currentApprovalState(db, id: id),
+          let nextState = ApprovalFSM.reduce(state: state, on: event)
     else {
       return nil
     }
@@ -370,12 +371,11 @@ private extension ApprovalStoreGRDB {
     """
 
   static func currentApprovalState(_ db: Database, id: Int64) throws -> ApprovalState? {
-    if
-      let rawState = try String.fetchOne(
-        db,
-        sql: "SELECT state FROM approvals WHERE id = ?",
-        arguments: [id]
-      ) {
+    if let rawState = try String.fetchOne(
+      db,
+      sql: "SELECT state FROM approvals WHERE id = ?",
+      arguments: [id]
+    ) {
       return ApprovalState(rawValue: rawState)
     }
     return nil
@@ -390,12 +390,11 @@ private extension ApprovalStoreGRDB {
     whereClause: String,
     arguments: StatementArguments
   ) throws -> Approval? {
-    if
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause)",
-        arguments: arguments
-      ) {
+    if let row = try Row.fetchOne(
+      db,
+      sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause)",
+      arguments: arguments
+    ) {
       return try mapApproval(row)
     }
     return nil
@@ -424,9 +423,8 @@ private extension ApprovalStoreGRDB {
       throw StoreError.unexpected("approvals row has an unrecognized reason")
     }
 
-    guard
-      let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
-      let expiresTs = EpochSecondCodec.date(fromEpoch: row["expires_ts"])
+    guard let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
+          let expiresTs = EpochSecondCodec.date(fromEpoch: row["expires_ts"])
     else {
       throw StoreError.unexpected("approvals row is missing a required timestamp")
     }

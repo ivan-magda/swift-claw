@@ -324,4 +324,6 @@ struct DoctorReportTests {
   }
 }
 
-private struct DoctorJSONPayload: Decodable { let checks: [DoctorReport.Check] }
+private struct DoctorJSONPayload: Decodable {
+  let checks: [DoctorReport.Check]
+}

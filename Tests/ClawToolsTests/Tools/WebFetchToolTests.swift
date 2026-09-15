@@ -9,7 +9,9 @@ import Testing
 struct ScriptedFakeIPDetector: FakeIPDetecting {
   let detection: FakeIPDetection
 
-  func detect() async -> FakeIPDetection { detection }
+  func detect() async -> FakeIPDetection {
+    detection
+  }
 }
 
 @Suite
@@ -50,8 +52,10 @@ struct WebFetchToolTests {
   private func fetch(_ tool: WebFetchTool, url: String) async -> ToolPayload {
     let canonicalTarget: String
     switch CanonicalURL.canonicalize(url) {
-    case .success(let canonical): canonicalTarget = canonical
-    case .failure: canonicalTarget = url
+    case .success(let canonical):
+      canonicalTarget = canonical
+    case .failure:
+      canonicalTarget = url
     }
     return await tool.execute(
       arguments: .object(["url": .string(url)]),

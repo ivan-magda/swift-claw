@@ -8,7 +8,9 @@ import GRDB
 struct ResetFixture {
   let env: BoundRunEnvironment
 
-  static func make() throws -> ResetFixture { ResetFixture(env: try BoundRunEnvironment.make()) }
+  static func make() throws -> ResetFixture {
+    ResetFixture(env: try BoundRunEnvironment.make())
+  }
 
   func installStableLessons(_ lessons: [String]) throws -> LessonSet {
     _ = try TestLearningFixtures(writer: env.queue).seedArmedJob(jobID: env.jobID, now: env.now)

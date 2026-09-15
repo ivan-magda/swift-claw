@@ -22,7 +22,9 @@ final class ArrivalCounter: Sendable {
   private let target: Int
   let reached = AsyncGate()
 
-  init(target: Int) { self.target = target }
+  init(target: Int) {
+    self.target = target
+  }
 
   var count: Int {
     arrivals.withLock { current in
@@ -112,7 +114,11 @@ typealias Caller = Task<Result<LLMRequestAuthorization, any Error>, Never>
 
 func authorizing(_ source: ChatGPTCredentialSource<ScriptedClock>) -> Caller {
   Task {
-    do { return .success(try await source.authorization()) } catch { return .failure(error) }
+    do {
+      return .success(try await source.authorization())
+    } catch {
+      return .failure(error)
+    }
   }
 }
 
@@ -265,7 +271,11 @@ struct ChatGPTCredentialSourceTests {
     let admit = AsyncGate()
     let cancelled = Task { () -> Result<LLMRequestAuthorization, any Error> in
       await admit.waitIgnoringCancellation()
-      do { return .success(try await source.authorization()) } catch { return .failure(error) }
+      do {
+        return .success(try await source.authorization())
+      } catch {
+        return .failure(error)
+      }
     }
     cancelled.cancel()
     admit.open()

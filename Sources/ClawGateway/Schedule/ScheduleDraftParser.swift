@@ -124,12 +124,11 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     var accountant = makeAccountant(for: active.binding)
 
     // Day-cap preflight before issuing: a denial or an accounting failure refuses without a call.
-    if
-      let refusal = preflightRefusal(
-        for: messages,
-        gate: makeGate(for: active.binding),
-        accountant: accountant
-      ) {
+    if let refusal = preflightRefusal(
+      for: messages,
+      gate: makeGate(for: active.binding),
+      accountant: accountant
+    ) {
       return refusal
     }
 
@@ -177,9 +176,8 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
         if firstFailureError == nil {
           firstFailureError = error
         }
-        guard
-          let persistence = RouteSwitch.permits(error),
-          let next = roster.failover(from: active.position)
+        guard let persistence = RouteSwitch.permits(error),
+              let next = roster.failover(from: active.position)
         else {
           // One decision for every natural failure, keyed on the same vendor-neutral disposition a
           // turn reads. `mayHaveStarted` (exhausted retries, transport loss) debits an estimate so a
@@ -295,9 +293,12 @@ private extension ScheduleDraftParser {
   /// the strict decode stays the safety net for a provider that ignores or rejects the field.
   static func responseFormat(for mode: StructuredOutputMode) -> ResponseFormat? {
     switch mode {
-    case .off: nil
-    case .jsonObject: .jsonObject
-    case .jsonSchema: .jsonSchema(name: schemaName, schema: draftSchema)
+    case .off:
+      nil
+    case .jsonObject:
+      .jsonObject
+    case .jsonSchema:
+      .jsonSchema(name: schemaName, schema: draftSchema)
     }
   }
 
@@ -384,19 +385,20 @@ private extension ScheduleDraftParser {
   ) -> ScheduleDraftParseResult? {
     let todayTokens: Int
     let todayUSD: Double
-    do { (todayTokens, todayUSD) = try usageStore.todayTokensAndCost(now: now()) } catch {
+    do {
+      (todayTokens, todayUSD) = try usageStore.todayTokensAndCost(now: now())
+    } catch {
       logger.warning("schedule parse: day-totals read failed; refusing to spend: \(error)")
       return .providerUnavailable
     }
 
     let estimate = accountant.preflightEstimate(context: messages)
-    if
-      case .deny(let cap) = gate.preflight(
-        todayTokens: todayTokens,
-        todayUSD: todayUSD,
-        estimatedTotalTokens: estimate.totalTokens,
-        estimatedCostUSD: estimate.costUSD
-      ) {
+    if case .deny(let cap) = gate.preflight(
+      todayTokens: todayTokens,
+      todayUSD: todayUSD,
+      estimatedTotalTokens: estimate.totalTokens,
+      estimatedCostUSD: estimate.costUSD
+    ) {
       return .budgetDenied(cap: cap)
     }
     return nil
@@ -412,8 +414,10 @@ private extension ScheduleDraftParser {
   /// unavailable. No remote diagnostic text ever crosses into an owner reply.
   static func parseFailureResult(for error: any Error) -> ScheduleDraftParseResult {
     switch ProviderError.cause(of: error) {
-    case .authenticationRequired: return .authenticationRequired
-    case .accessDenied: return .accessDenied
+    case .authenticationRequired:
+      return .authenticationRequired
+    case .accessDenied:
+      return .accessDenied
     case .quotaLimited(let retryAfterSeconds):
       return .quotaLimited(retryAfterSeconds: retryAfterSeconds)
     case .terminal, .cleanRejection, .transportFailure, .retryable, .connectFailed, .rejected,
@@ -471,7 +475,9 @@ private extension ScheduleDraftParser {
   }
 
   func persist(_ usage: ProviderUsage) {
-    do { try usageStore.recordUsage(usage) } catch {
+    do {
+      try usageStore.recordUsage(usage)
+    } catch {
       // The spend already happened and no further call follows, so unlike the mid-run rule
       // there is nothing left to halt; surface the accounting gap instead of failing the parse.
       logger.warning("schedule parse: usage write failed: \(error)")
@@ -494,20 +500,26 @@ private extension ScheduleDraftParser {
   /// disposition — a proven no-start owes nothing, a may-have-started owes the estimate — rather than
   /// collapsing both into one debit; a provider that wins with its own failure rethrows for the typed
   /// catches above.
-  func completeBounded(request: ChatRequest, provider: any LLMProvider) async throws -> ChatResponse
-  {
+  func completeBounded(
+    request: ChatRequest,
+    provider: any LLMProvider
+  ) async throws -> ChatResponse {
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: Self.parseDeadlineSeconds,
       clock: clock
     ) {
-      do { return .response(try await provider.complete(request: request)) } catch {
+      do {
+        return .response(try await provider.complete(request: request))
+      } catch {
         return .failed(error)
       }
     }
 
     switch outcome {
-    case .response(let response): return response
-    case .failed(let error): throw error
+    case .response(let response):
+      return response
+    case .failed(let error):
+      throw error
     case .timedOut(.completed(let response)):
       // A reply that landed under the won deadline: surfaced so its authoritative usage is recorded
       // rather than discarded for the timeout estimate.

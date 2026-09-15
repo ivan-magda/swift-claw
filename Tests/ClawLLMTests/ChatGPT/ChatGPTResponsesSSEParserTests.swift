@@ -795,7 +795,11 @@ struct ChatGPTResponsesSSEParserTests {
 
     // when
     var thrown: (any Error)?
-    do { _ = try accumulator.consume(try parser.push(Data(stream.utf8))) } catch { thrown = error }
+    do {
+      _ = try accumulator.consume(try parser.push(Data(stream.utf8)))
+    } catch {
+      thrown = error
+    }
     let failure = try #require(thrown as? ProviderError)
 
     // then
@@ -820,7 +824,11 @@ struct ChatGPTResponsesSSEParserTests {
 
     // when
     var thrown: (any Error)?
-    do { _ = try accumulator.consume(try parser.push(Data(stream.utf8))) } catch { thrown = error }
+    do {
+      _ = try accumulator.consume(try parser.push(Data(stream.utf8)))
+    } catch {
+      thrown = error
+    }
     let failure = try #require(thrown as? ProviderError)
 
     // then
@@ -860,8 +868,10 @@ extension ChatGPTResponsesSSEParserTests {
     for chunk in chunks(of: Data(stream.utf8), size: chunkSize) {
       for event in try accumulator.consume(try parser.push(chunk)) {
         switch event {
-        case .delta(let text): deltas.append(text)
-        case .finished(let finished): response = finished
+        case .delta(let text):
+          deltas.append(text)
+        case .finished(let finished):
+          response = finished
         }
       }
     }

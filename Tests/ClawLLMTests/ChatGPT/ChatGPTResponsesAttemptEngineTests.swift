@@ -866,13 +866,21 @@ private struct Harness: Sendable {
     }
   }
 
-  var attemptCount: Int { get async { await http.recorded.count } }
+  var attemptCount: Int {
+    get async { await http.recorded.count }
+  }
 
-  var deltas: [String] { get async { await sink.received } }
+  var deltas: [String] {
+    get async { await sink.received }
+  }
 
-  var delays: [Double] { get async { await sleeps.delays } }
+  var delays: [Double] {
+    get async { await sleeps.delays }
+  }
 
-  var includePriorStateLog: [Bool] { stateLog.values }
+  var includePriorStateLog: [Bool] {
+    stateLog.values
+  }
 
   var credentialRejections: [GenerationRecordingCredentialSource.Rejection] {
     get async {
@@ -922,9 +930,13 @@ private actor GenerationRecordingCredentialSource: LLMCredentialSource {
 private struct ThrowingCredentialSource: LLMCredentialSource {
   private let error: ChatGPTCredentialError
 
-  init(_ error: ChatGPTCredentialError) { self.error = error }
+  init(_ error: ChatGPTCredentialError) {
+    self.error = error
+  }
 
-  func authorization() async throws -> LLMRequestAuthorization { throw error }
+  func authorization() async throws -> LLMRequestAuthorization {
+    throw error
+  }
 
   func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {}
 
@@ -937,7 +949,9 @@ private actor DeltaSink {
   private(set) var received: [String] = []
   private var firstFailure: (any Error)?
 
-  init(failOnFirstDelta firstFailure: (any Error)?) { self.firstFailure = firstFailure }
+  init(failOnFirstDelta firstFailure: (any Error)?) {
+    self.firstFailure = firstFailure
+  }
 
   func emit(_ text: String) throws {
     if let failure = firstFailure {

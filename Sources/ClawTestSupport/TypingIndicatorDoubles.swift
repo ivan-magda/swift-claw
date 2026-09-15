@@ -19,7 +19,9 @@ public actor RecordingTyping: TypingIndicator {
 
   public private(set) var pulses: [Pulse] = []
 
-  public var calls: Int { pulses.count }
+  public var calls: Int {
+    pulses.count
+  }
 
   public init() {}
 
@@ -40,13 +42,17 @@ public actor TypingReleaseGate {
 
   public init() {}
 
-  public func awaitRelease() async { await gate.waitIgnoringCancellation() }
+  public func awaitRelease() async {
+    await gate.waitIgnoringCancellation()
+  }
 
   public func waitUntilReleased(timeout: Duration = .seconds(30)) async -> Bool {
     await gate.waitUntilOpen(timeout: timeout)
   }
 
-  public func release() { gate.open() }
+  public func release() {
+    gate.open()
+  }
 }
 
 /// Releases `gate` on its first pulse, so a gated producer cannot finish before the owner has
@@ -55,7 +61,9 @@ public actor GatingTyping: TypingIndicator {
   public private(set) var calls = 0
   private let gate: TypingReleaseGate
 
-  public init(gate: TypingReleaseGate) { self.gate = gate }
+  public init(gate: TypingReleaseGate) {
+    self.gate = gate
+  }
 
   public func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
     calls += 1

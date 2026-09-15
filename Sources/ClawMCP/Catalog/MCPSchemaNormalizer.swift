@@ -191,7 +191,8 @@ private extension MCPSchemaNormalizer {
         result[key] = normalizeSchema(value, path: path + [key], promotions: &promotions)
       case .array(let items):
         result[key] = .array(normalizeAll(items, path: path + [key], promotions: &promotions))
-      default: continue
+      default:
+        continue
       }
     }
 
@@ -231,7 +232,8 @@ private extension MCPSchemaNormalizer {
           rewriteReferences($0, promotions: promotions)
         }
       )
-    case .null, .bool, .integer, .number, .string: return node
+    case .null, .bool, .integer, .number, .string:
+      return node
     }
   }
 

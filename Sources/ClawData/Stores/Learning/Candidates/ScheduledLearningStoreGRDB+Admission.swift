@@ -60,9 +60,8 @@ extension ScheduledLearningStoreGRDB {
     guard try admissionDecisionExists(db, artifact: artifact) == false else {
       throw StoreError.unexpected("candidate admission decision has no matching trial")
     }
-    guard
-      let state = try readState(db, jobID: artifact.manifest.jobID),
-      let job = try admissionJob(db, jobID: artifact.manifest.jobID)
+    guard let state = try readState(db, jobID: artifact.manifest.jobID),
+          let job = try admissionJob(db, jobID: artifact.manifest.jobID)
     else {
       return .rejected(.jobNotRepeatable)
     }
@@ -102,22 +101,29 @@ extension ScheduledLearningStoreGRDB {
     now: Date
   ) throws -> AdmissionOutcome {
     switch plan {
-    case .replay(let receipt): return .admitted(receipt)
-    case .awaitingApproval: return .awaitingApproval(artifact)
+    case .replay(let receipt):
+      return .admitted(receipt)
+    case .awaitingApproval:
+      return .awaitingApproval(artifact)
     case .insert(let job, let generation):
       return .admitted(
         try insertTrial(db, artifact: artifact, job: job, generation: generation, now: now)
       )
-    case .rejected(let rejection): return .rejected(rejection)
+    case .rejected(let rejection):
+      return .rejected(rejection)
     }
   }
 
   static func outcome(for plan: AdmissionPlan, artifact: CandidateArtifact) -> AdmissionOutcome {
     switch plan {
-    case .replay(let receipt): return .admitted(receipt)
-    case .awaitingApproval: return .awaitingApproval(artifact)
-    case .rejected(let rejection): return .rejected(rejection)
-    case .insert: return .rejected(.sourceBindingsChanged)
+    case .replay(let receipt):
+      return .admitted(receipt)
+    case .awaitingApproval:
+      return .awaitingApproval(artifact)
+    case .rejected(let rejection):
+      return .rejected(rejection)
+    case .insert:
+      return .rejected(.sourceBindingsChanged)
     }
   }
 }
@@ -185,11 +191,15 @@ private extension ScheduledLearningStoreGRDB {
     switch artifact.manifest.origin {
     case .reflection:
       switch artifact.manifest.triggerReason {
-      case .recurringIssue: .recurringIssue
-      case .ownerCorrection: .ownerCorrection
+      case .recurringIssue:
+        .recurringIssue
+      case .ownerCorrection:
+        .ownerCorrection
       }
-    case .ownerApproval: .ownerApproval
-    case .ownerEdit: nil
+    case .ownerApproval:
+      .ownerApproval
+    case .ownerEdit:
+      nil
     }
   }
 

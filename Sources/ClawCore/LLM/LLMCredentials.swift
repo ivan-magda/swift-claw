@@ -8,7 +8,9 @@ import Foundation
 public struct LLMCredentialGeneration: Sendable, Hashable, Equatable {
   public let value: UInt64
 
-  public init(value: UInt64) { self.value = value }
+  public init(value: UInt64) {
+    self.value = value
+  }
 
   /// The generation of a source that never rotates. A refreshable source starts above this, so a
   /// constant generation can never be mistaken for a snapshot that could go stale.

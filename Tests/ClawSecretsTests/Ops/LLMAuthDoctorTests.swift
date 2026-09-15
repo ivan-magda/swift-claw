@@ -18,13 +18,17 @@ private final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Send
   let behavior: Behavior
   private(set) var loadCount = 0
 
-  init(_ behavior: Behavior) { self.behavior = behavior }
+  init(_ behavior: Behavior) {
+    self.behavior = behavior
+  }
 
   func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
     loadCount += 1
     switch behavior {
-    case .value(let credential): return credential
-    case .failure(let error): throw error
+    case .value(let credential):
+      return credential
+    case .failure(let error):
+      throw error
     }
   }
 

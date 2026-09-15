@@ -28,9 +28,13 @@ struct ApprovalWaiterTests {
       )
     }
 
-    var timeout: Duration { .seconds(1) }
+    var timeout: Duration {
+      .seconds(1)
+    }
 
-    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+      nil
+    }
 
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       ToolPayload(content: result, status: .ok, ingestedUntrusted: false)
@@ -41,7 +45,9 @@ struct ApprovalWaiterTests {
   private struct ScriptedExecutor: ApprovedActionExecuting {
     let commit: ApprovedCommitOutcome
 
-    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome { commit }
+    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
+      commit
+    }
   }
 
   /// An executor whose action only completes after `gate` releases — i.e. after typing fired once —
@@ -62,7 +68,9 @@ struct ApprovalWaiterTests {
     private(set) var executed = false
     private(set) var disarmedBeforeExecution = false
 
-    init(callbacks: RecordingCallbacks) { self.callbacks = callbacks }
+    init(callbacks: RecordingCallbacks) {
+      self.callbacks = callbacks
+    }
 
     func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
       executed = true
@@ -103,7 +111,9 @@ struct ApprovalWaiterTests {
       to target: DeliveryTarget,
       markdown: String,
       replyMarkup: String?
-    ) async throws -> Int64 { 1 }
+    ) async throws -> Int64 {
+      1
+    }
   }
 
   private actor RecordingCallbacks: CallbackResponding {
@@ -111,8 +121,11 @@ struct ApprovalWaiterTests {
 
     func answerCallbackQuery(id: String, text: String?) async throws {}
 
-    func editMessageReplyMarkup(chatID: Int64, messageID: Int64, replyMarkup: String?) async throws
-    {
+    func editMessageReplyMarkup(
+      chatID: Int64,
+      messageID: Int64,
+      replyMarkup: String?
+    ) async throws {
       if replyMarkup == nil {
         disarmed.append(messageID)
       }

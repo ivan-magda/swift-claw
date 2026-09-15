@@ -81,7 +81,9 @@ private final class BurstingServer: @unchecked Sendable {
     port = channel.localAddress?.port ?? 0
   }
 
-  func url() -> String { "http://127.0.0.1:\(port)/stream" }
+  func url() -> String {
+    "http://127.0.0.1:\(port)/stream"
+  }
 
   static func start(chunkCount: Int, chunkBytes: Int) async throws -> BurstingServer {
     let written = AsyncGate()
@@ -440,7 +442,9 @@ struct HTTPStreamExchangeOwnershipTests {
         filled.open()
         try await sink.send(Data(repeating: 0x62, count: 4))
         return .completed
-      } catch { return .cancelled(.mayHaveBeenSent) }
+      } catch {
+        return .cancelled(.mayHaveBeenSent)
+      }
     }
 
     // when — yielding drives the producer to its suspension point rather than waiting on a clock
@@ -490,7 +494,9 @@ struct HTTPStreamExchangeOwnershipTests {
         await release.waitIgnoringCancellation()
         try await sink.send(Data("second".utf8))
         return .completed
-      } catch { return .cancelled(.mayHaveBeenSent) }
+      } catch {
+        return .cancelled(.mayHaveBeenSent)
+      }
     }
     await delivered.wait()
 

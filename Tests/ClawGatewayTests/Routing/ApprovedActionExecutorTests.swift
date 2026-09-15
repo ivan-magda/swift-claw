@@ -15,7 +15,9 @@ struct ApprovedActionExecutorTests {
   private actor ExecutionProbe {
     private(set) var executed = false
 
-    func mark() { executed = true }
+    func mark() {
+      executed = true
+    }
   }
 
   private actor ExecutionGate {
@@ -93,9 +95,13 @@ struct ApprovedActionExecutorTests {
       )
     }
 
-    var timeout: Duration { .milliseconds(1) }
+    var timeout: Duration {
+      .milliseconds(1)
+    }
 
-    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+      nil
+    }
 
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       await probe?.mark()
@@ -121,9 +127,13 @@ struct ApprovedActionExecutorTests {
       )
     }
 
-    var timeout: Duration { .seconds(1) }
+    var timeout: Duration {
+      .seconds(1)
+    }
 
-    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+      nil
+    }
 
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       let state =
@@ -654,7 +664,9 @@ struct ApprovedActionExecutorTests {
       runID: Int64,
       observationMessageID: Int64,
       fill: ClaimedObservationFill
-    ) throws(StoreError) { throw StoreError.diskFull }
+    ) throws(StoreError) {
+      throw StoreError.diskFull
+    }
 
     func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
       runID: Int64,
@@ -664,14 +676,18 @@ struct ApprovedActionExecutorTests {
       audit: ApprovedExecutionAudit,
       notResumableObservationContent: String,
       now: Date
-    ) throws(StoreError) -> ApprovedExecutionClaim { throw StoreError.diskFull }
+    ) throws(StoreError) -> ApprovedExecutionClaim {
+      throw StoreError.diskFull
+    }
 
     func pickUp(runID: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
       nil
     }
 
     func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult
-    { .ignored }
+    {
+      .ignored
+    }
 
     func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
       .ignored
@@ -683,7 +699,9 @@ struct ApprovedActionExecutorTests {
       now: Date,
       degradationText: String,
       heartbeatNoticeChatID: Int64?
-    ) throws(StoreError) -> [DegradationReply] { [] }
+    ) throws(StoreError) -> [DegradationReply] {
+      []
+    }
 
     func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
       RunsHealth(
@@ -730,7 +748,9 @@ struct ApprovedActionExecutorTests {
       try base.runOrigin(runID: runID)
     }
 
-    func jobID(runID: Int64) throws(StoreError) -> Int64? { nil }
+    func jobID(runID: Int64) throws(StoreError) -> Int64? {
+      nil
+    }
 
     func failRunStalePolicy(
       runID: Int64,
@@ -738,7 +758,9 @@ struct ApprovedActionExecutorTests {
       observationMessageID: Int64,
       observationContent: String,
       now: Date
-    ) throws(StoreError) -> Bool { false }
+    ) throws(StoreError) -> Bool {
+      false
+    }
 
     func resolveDeniedObservation(
       runID: Int64,
@@ -746,7 +768,9 @@ struct ApprovedActionExecutorTests {
       content: String,
       cancel: CancelReason?,
       now: Date
-    ) throws(StoreError) -> RunCommitResult { .ignored }
+    ) throws(StoreError) -> RunCommitResult {
+      .ignored
+    }
   }
 
   @Test

@@ -180,7 +180,9 @@ struct SSEParser: Sendable {
   }
 
   private func decodeChunk(_ payload: String) throws -> Chunk {
-    do { return try JSONDecoder().decode(Chunk.self, from: Data(payload.utf8)) } catch {
+    do {
+      return try JSONDecoder().decode(Chunk.self, from: Data(payload.utf8))
+    } catch {
       throw SSEParserError.malformedJSON("\(error)")
     }
   }
@@ -203,7 +205,9 @@ extension SSEParser {
 
   /// A lower bound on what the reply has been billed for so far, for a caller accounting for an
   /// attempt that may not reach its terminal.
-  var observedCompletionTokens: Int { usage?.completionTokens ?? 0 }
+  var observedCompletionTokens: Int {
+    usage?.completionTokens ?? 0
+  }
 }
 
 // MARK: - Stream Usage Accounting
@@ -211,7 +215,9 @@ extension SSEParser {
 private extension SSEParser {
   /// The terminal event — one construction shared by `finish()` and the `[DONE]` sentinel so the two
   /// paths can never drift.
-  var finishedEvent: StreamEvent { .finished(assembledResponse) }
+  var finishedEvent: StreamEvent {
+    .finished(assembledResponse)
+  }
 
   mutating func record(_ chunkUsage: WireUsage) {
     usage = chunkUsage.toChatUsage()

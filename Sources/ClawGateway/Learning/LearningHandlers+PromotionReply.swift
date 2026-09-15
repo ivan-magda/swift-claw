@@ -17,11 +17,10 @@ extension LearningHandlers {
     ) {
       try learning.currentPromotion(jobID: jobID)
     }
-    guard
-      let promotion,
-      case .readable(let readable)? = view.first,
-      readable.stableRevision == promotion.record.stableRevision,
-      readable.stableLessons.digest == promotion.inputs.replacementDigest
+    guard let promotion,
+          case .readable(let readable)? = view.first,
+          readable.stableRevision == promotion.record.stableRevision,
+          readable.stableLessons.digest == promotion.inputs.replacementDigest
     else {
       return nil
     }
@@ -78,8 +77,10 @@ extension LearningHandlers {
     case .committed:
       signal.poke()
       return .processed
-    case .duplicate: return replies.skipDuplicate(updateID: rawUpdate.updateID)
-    case .stale: return nil
+    case .duplicate:
+      return replies.skipDuplicate(updateID: rawUpdate.updateID)
+    case .stale:
+      return nil
     }
   }
 }

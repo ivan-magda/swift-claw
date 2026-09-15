@@ -11,7 +11,9 @@ struct BearerCase: Sendable, CustomTestStringConvertible {
   let expectedHeaders: [String: String]
   let expectedRedactionValues: [String]
 
-  var testDescription: String { scenario }
+  var testDescription: String {
+    scenario
+  }
 }
 
 @Suite

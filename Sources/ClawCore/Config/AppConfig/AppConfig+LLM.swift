@@ -63,9 +63,8 @@ private extension AppConfig {
   /// model resolves to that route. A managed model leaves this unevaluated, which is what lets
   /// `CLAW_LLM_BASE_URL` stay absent for it.
   static func requiredBaseURL(from env: [String: String]) throws -> String {
-    guard
-      let baseURL = env[EnvKey.llmBaseURL]?.trimmingCharacters(in: .whitespaces),
-      !baseURL.isEmpty
+    guard let baseURL = env[EnvKey.llmBaseURL]?.trimmingCharacters(in: .whitespaces),
+          !baseURL.isEmpty
     else {
       throw ConfigError.missingLLMBaseURL
     }
@@ -76,9 +75,8 @@ private extension AppConfig {
   /// distinct variable: reusing the primary's would silently point a fallback at the endpoint that
   /// just failed, and would let a missing primary endpoint pass validation.
   static func parseFallbackRoute(from env: [String: String]) throws -> ResolvedLLMRoute? {
-    guard
-      let model = env[EnvKey.llmFallbackModel]?.trimmingCharacters(in: .whitespaces),
-      !model.isEmpty
+    guard let model = env[EnvKey.llmFallbackModel]?.trimmingCharacters(in: .whitespaces),
+          !model.isEmpty
     else {
       return nil
     }
@@ -98,9 +96,8 @@ private extension AppConfig {
   /// The fallback route's required base URL, thrown lazily for the same reason `requiredBaseURL` is:
   /// a managed fallback never evaluates this closure, so it stays exempt from the variable.
   static func requiredFallbackBaseURL(from env: [String: String]) throws -> String {
-    guard
-      let baseURL = env[EnvKey.llmFallbackBaseURL]?.trimmingCharacters(in: .whitespaces),
-      !baseURL.isEmpty
+    guard let baseURL = env[EnvKey.llmFallbackBaseURL]?.trimmingCharacters(in: .whitespaces),
+          !baseURL.isEmpty
     else {
       throw ConfigError.missingLLMFallbackBaseURL
     }

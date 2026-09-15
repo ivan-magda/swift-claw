@@ -24,9 +24,12 @@ struct ContainerBackendExecutionTests {
           await firstRunGate.wait()
         }
         return commandResult(.exited(Int32(runNumber)))
-      case "system": return jsonCommandResult(#"{"status":"running"}"#)
-      case "list": return jsonCommandResult("[]")
-      default: return commandResult(.exited(0))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner, executionAdmitted: admissions.record)
@@ -99,9 +102,12 @@ struct ContainerBackendExecutionTests {
           stdoutTotal: 2_000_000,
           stdoutTruncated: true
         )
-      case "system": return jsonCommandResult(#"{"status":"running"}"#)
-      case "list": return jsonCommandResult("[]")
-      default: return commandResult(.exited(0))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner)
@@ -149,9 +155,12 @@ struct ContainerBackendExecutionTests {
       case "run":
         writeCidfile(from: command.arguments)
         return commandResult(.exited(0))
-      case "system": return jsonCommandResult(#"{"status":"running"}"#)
-      case "list": return jsonCommandResult("[]")
-      default: return commandResult(.exited(0))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner)
@@ -217,7 +226,8 @@ struct ContainerBackendExecutionTests {
       case "run":
         writeCidfile(from: command.arguments)
         return commandResult(.exited(0))
-      case "system": return jsonCommandResult(#"{"status":"running"}"#)
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
       case "list" where history.count < 5:
         let name = value(after: "--name", in: history[0].arguments) ?? "missing-name"
         return jsonCommandResult(
@@ -226,8 +236,10 @@ struct ContainerBackendExecutionTests {
           "labels":{"clawd.exec":"1"}}}]
           """
         )
-      case "list": return jsonCommandResult("[]")
-      default: return commandResult(.exited(0))
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner)
@@ -253,8 +265,10 @@ struct ContainerBackendExecutionTests {
       case "run":
         writeCidfile(from: command.arguments)
         return commandResult(.timedOut, stdout: Data("partial".utf8))
-      case "list": return jsonCommandResult("[]")
-      default: return commandResult(.exited(0))
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner)
@@ -388,9 +402,12 @@ struct ContainerBackendExecutionTests {
           await firstRunGate.wait()
         }
         return commandResult(.exited(Int32(runNumber)))
-      case "system": return jsonCommandResult(#"{"status":"running"}"#)
-      case "list": return jsonCommandResult("[]")
-      default: return commandResult(.exited(0))
+      case "system":
+        return jsonCommandResult(#"{"status":"running"}"#)
+      case "list":
+        return jsonCommandResult("[]")
+      default:
+        return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner, executionAdmitted: admissions.record)

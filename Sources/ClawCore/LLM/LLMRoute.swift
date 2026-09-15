@@ -5,7 +5,9 @@ import Foundation
 public struct LLMProviderID: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) { self.rawValue = rawValue }
+  public init(rawValue: String) {
+    self.rawValue = rawValue
+  }
 
   public static let openAICompatible = LLMProviderID(rawValue: "openai-compatible")
   public static let openAIChatGPT = LLMProviderID(rawValue: "openai-chatgpt")
@@ -15,7 +17,11 @@ public struct LLMProviderID: RawRepresentable, Sendable, Hashable, Codable {
 /// ordered `["openai-chatgpt", {…}, "openai-compatible", {…}]`.
 extension LLMProviderID: CodingKeyRepresentable {}
 
-extension LLMProviderID: CustomStringConvertible { public var description: String { rawValue } }
+extension LLMProviderID: CustomStringConvertible {
+  public var description: String {
+    rawValue
+  }
+}
 
 public enum LLMCredentialMode: Sendable, Equatable {
   case noneOrStaticBearer
@@ -120,9 +126,8 @@ public enum LLMProviderRegistry {
     configuredBaseURL: @autoclosure () throws -> String
   ) throws -> ResolvedLLMRoute {
     for descriptor in qualifiedDescriptors {
-      guard
-        let prefix = descriptor.qualifiedPrefix,
-        let suffix = strippingPrefix(prefix, from: modelReference)
+      guard let prefix = descriptor.qualifiedPrefix,
+            let suffix = strippingPrefix(prefix, from: modelReference)
       else {
         continue
       }
@@ -192,10 +197,14 @@ private extension LLMProviderRegistry {
 
   static func validateQualifiedSuffix(_ suffix: String, reference: String) throws {
     switch qualifiedSuffixRejection(suffix) {
-    case nil: return
-    case .empty: throw ConfigError.emptyQualifiedModelSuffix(reference: reference)
-    case .oversized: throw ConfigError.oversizedQualifiedModelSuffix(reference: reference)
-    case .unsafe: throw ConfigError.unsafeQualifiedModelSuffix(reference: reference)
+    case nil:
+      return
+    case .empty:
+      throw ConfigError.emptyQualifiedModelSuffix(reference: reference)
+    case .oversized:
+      throw ConfigError.oversizedQualifiedModelSuffix(reference: reference)
+    case .unsafe:
+      throw ConfigError.unsafeQualifiedModelSuffix(reference: reference)
     }
   }
 

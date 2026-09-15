@@ -75,7 +75,9 @@ public struct WebFetchTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(30) }
+  public var timeout: Duration {
+    .seconds(30)
+  }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     guard let rawURL = arguments.objectValue?["url"]?.stringValue, rawURL.isEmpty == false else {
@@ -83,8 +85,10 @@ public struct WebFetchTool: Tool {
     }
 
     switch CanonicalURL.canonicalize(rawURL) {
-    case .success(let canonical): return .resolved(canonical)
-    case .failure(let policyError): return .refused(reason: Self.describe(policyError))
+    case .success(let canonical):
+      return .resolved(canonical)
+    case .failure(let policyError):
+      return .refused(reason: Self.describe(policyError))
     }
   }
 
@@ -133,7 +137,8 @@ public struct WebFetchTool: Tool {
         case .follow(let nextURL):
           currentURL = nextURL
           continue
-        case .refused(let payload): return payload
+        case .refused(let payload):
+          return payload
         }
       }
 
@@ -163,7 +168,9 @@ private extension WebFetchTool {
   /// refused unconditionally.
   func refusalForNonPublicHost(_ host: String) async -> ToolPayload? {
     let addresses: [ResolvedAddress]
-    do { addresses = try await resolver.resolve(host: host) } catch {
+    do {
+      addresses = try await resolver.resolve(host: host)
+    } catch {
       return errorPayload("Could not resolve \(host).")
     }
 
@@ -176,12 +183,11 @@ private extension WebFetchTool {
     // Literals stay on the pure blocklist — including the legacy numeric spellings getaddrinfo
     // resolves without DNS (http://3323068500/), which strict IP-literal parsing would miss.
     if ResolvedAddress.denotesIPLiteral(host: host) {
-      guard
-        addresses.allSatisfy(
+      guard addresses.allSatisfy(
           {
             SSRFGuard.isPublic($0)
           }
-        )
+      )
       else {
         return refusalPayload("Refused: \(host) is a private or reserved address.")
       }
@@ -243,7 +249,8 @@ private extension WebFetchTool {
     }
     let nextRaw = Self.resolveLocation(location, against: current)
     switch CanonicalURL.canonicalize(nextRaw) {
-    case .success(let canonical): return .follow(canonical)
+    case .success(let canonical):
+      return .follow(canonical)
     case .failure(let policyError):
       return .refused(errorPayload("Redirect target refused: \(Self.describe(policyError))"))
     }
@@ -299,13 +306,16 @@ private extension WebFetchTool {
 
   static func describe(_ policyError: CanonicalURLError) -> String {
     switch policyError {
-    case .unparseable: return "That is not a valid URL."
+    case .unparseable:
+      return "That is not a valid URL."
     case .unsupportedScheme(let scheme):
       return "Only http and https URLs are supported (got \(scheme))."
     case .nonASCIIHost:
       return "Internationalized (non-ASCII/punycode) hosts are not supported in v1."
-    case .userinfoPresent: return "URLs with embedded credentials are not allowed."
-    case .unsupportedPort(let port): return "Only ports 80 and 443 are allowed (got \(port))."
+    case .userinfoPresent:
+      return "URLs with embedded credentials are not allowed."
+    case .unsupportedPort(let port):
+      return "Only ports 80 and 443 are allowed (got \(port))."
     }
   }
 

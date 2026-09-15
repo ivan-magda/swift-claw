@@ -167,10 +167,14 @@ public enum ChatGPTProviderMetadata {
     redacting secrets: [String],
     onTransportFailure asFailure: (_ message: String) -> Failure
   ) async throws -> HTTPResult {
-    do { return try await http.execute(request) } catch let cancellation as CancellationError {
+    do {
+      return try await http.execute(request)
+    } catch let cancellation as CancellationError {
       throw cancellation
     } catch let failure as HTTPTransportFailure {
       throw asFailure(safeDiagnostic(failure.safeMessage, redacting: secrets))
-    } catch { throw asFailure(safeDiagnostic("\(error)", redacting: secrets)) }
+    } catch {
+      throw asFailure(safeDiagnostic("\(error)", redacting: secrets))
+    }
   }
 }

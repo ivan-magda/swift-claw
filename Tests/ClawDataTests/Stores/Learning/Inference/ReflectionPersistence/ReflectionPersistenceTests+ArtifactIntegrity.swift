@@ -114,7 +114,8 @@ private extension ReflectionPersistenceTests {
     }
     var object = try manifestObject(original)
     switch corruption {
-    case .unknownTopLevel: object["unexpected"] = true
+    case .unknownTopLevel:
+      object["unexpected"] = true
     case .unknownEvidence:
       var values = try nestedObjects(object, key: "evidence")
       values[0]["unexpected"] = true
@@ -127,7 +128,8 @@ private extension ReflectionPersistenceTests {
       var values = try nestedObjects(object, key: "feedback")
       values[0]["unexpected"] = true
       object["feedback"] = values
-    case .wrongSchema, .nonCanonical: throw ArtifactFixtureError.unsupportedCorruption
+    case .wrongSchema, .nonCanonical:
+      throw ArtifactFixtureError.unsupportedCorruption
     }
     return try CanonicalJSON.data(fromJSONObject: object)
   }
@@ -146,8 +148,11 @@ private extension ReflectionPersistenceTests {
     return values
   }
 
-  func replaceManifestBytes(_ bytes: Data, digest: CandidateDigest, env: BoundRunEnvironment) throws
-  {
+  func replaceManifestBytes(
+    _ bytes: Data,
+    digest: CandidateDigest,
+    env: BoundRunEnvironment
+  ) throws {
     // swiftlint:disable:next optional_data_string_conversion
     let json = String(decoding: bytes, as: UTF8.self)
     try env.queue.write { db in

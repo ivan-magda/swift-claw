@@ -12,7 +12,9 @@ import Testing
 
 @testable import ClawCoder
 
-enum FixtureFailure: Error { case rejected }
+enum FixtureFailure: Error {
+  case rejected
+}
 
 final class ProcessFixture: Sendable {
   let ready = AsyncGate()
@@ -38,9 +40,13 @@ final class ProcessFixture: Sendable {
     }
   }
 
-  var pids: [Int32] { get async { await capture.pids } }
+  var pids: [Int32] {
+    get async { await capture.pids }
+  }
 
-  var text: String { get async { await capture.text } }
+  var text: String {
+    get async { await capture.text }
+  }
 
   var commandRunner: CoderCommandRunner {
     CoderCommandRunner {
@@ -102,7 +108,8 @@ final class ProcessFixture: Sendable {
             kill(pid, 0) == -1 && errno == ESRCH
           } ?? false
       }
-    default: break
+    default:
+      break
     }
   }
 
@@ -137,9 +144,8 @@ final class ProcessFixture: Sendable {
       }
       return info.pbi_status != SZOMB
     #else
-      guard
-        let stat = try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8),
-        let end = stat.lastIndex(of: ")")
+      guard let stat = try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8),
+            let end = stat.lastIndex(of: ")")
       else {
         return false
       }
@@ -157,5 +163,7 @@ private actor FixtureCapture {
     }
   }
 
-  func append(_ data: Data) { text += String(bytes: data, encoding: .utf8) ?? "" }
+  func append(_ data: Data) {
+    text += String(bytes: data, encoding: .utf8) ?? ""
+  }
 }

@@ -34,8 +34,10 @@ struct CoderCommandRunner: Sendable {
     }
     let timeout: Duration
     switch tracking {
-    case .preApprovalReadOnly: timeout = Self.readOnlyTimeout
-    case .job: timeout = command.timeout
+    case .preApprovalReadOnly:
+      timeout = Self.readOnlyTimeout
+    case .job:
+      timeout = command.timeout
     }
     let deadline = now().advanced(by: timeout)
     let operation = Task {
@@ -143,7 +145,9 @@ private extension CoderCommandResult {
 private extension CoderCommandOperation {
   func recordLaunchIntent(_ receipt: CoderProcessReceipt, tracking: CoderCommandTracking) async {
     await runCallbacks {
-      do { try await tracking.record(.willLaunch(receipt)) } catch {
+      do {
+        try await tracking.record(.willLaunch(receipt))
+      } catch {
         await control.recordCallbackFailure(
           error,
           message: "Coder launch receipt could not be persisted."
@@ -209,7 +213,9 @@ private extension CoderCommandOperation {
     let ownedGroup = ManagedCoderProcessGroup(receipt: receipt)
     async let supervision = supervise(execution: execution, group: ownedGroup, deadline: deadline)
     await runCallbacks {
-      do { try await tracking.record(.didLaunch(receipt)) } catch {
+      do {
+        try await tracking.record(.didLaunch(receipt))
+      } catch {
         await control.recordCallbackFailure(
           error,
           message: "Coder process receipt could not be persisted."
@@ -257,7 +263,9 @@ private extension CoderCommandOperation {
           }
           return await group.terminate()
         }
-      } catch { return false }
+      } catch {
+        return false
+      }
       try? await Task.sleep(for: ManagedCoderProcessGroup.pollInterval)
     }
   }
@@ -271,7 +279,9 @@ private extension CoderCommandOperation {
         let data = buffer.withUnsafeBytes { bytes in
           Data(bytes)
         }
-        do { try await consumer(data) } catch {
+        do {
+          try await consumer(data)
+        } catch {
           await control.recordCallbackFailure(
             error,
             message: "Coder standard output consumer failed."
@@ -327,7 +337,9 @@ private extension CoderCommandOperation {
         resolved ? .stopped(launchID: launchID) : .unresolved(launchID: launchID)
       )
       return resolved
-    } catch { return false }
+    } catch {
+      return false
+    }
   }
 }
 
@@ -341,17 +353,29 @@ private actor CoderCommandControl {
   private var diagnostics = Data()
   private let now: @Sendable () -> ContinuousClock.Instant
 
-  init(now: @Sendable @escaping () -> ContinuousClock.Instant) { self.now = now }
+  init(now: @Sendable @escaping () -> ContinuousClock.Instant) {
+    self.now = now
+  }
 
-  var stopping: Bool { cancelled || timedOut || failed }
+  var stopping: Bool {
+    cancelled || timedOut || failed
+  }
 
-  nonisolated var cancellationRequested: Bool { cancellation.load(ordering: .acquiring) }
+  nonisolated var cancellationRequested: Bool {
+    cancellation.load(ordering: .acquiring)
+  }
 
-  nonisolated func requestCancellation() { cancellation.store(true, ordering: .releasing) }
+  nonisolated func requestCancellation() {
+    cancellation.store(true, ordering: .releasing)
+  }
 
-  func setReceipt(_ value: CoderProcessReceipt) { receipt = value }
+  func setReceipt(_ value: CoderProcessReceipt) {
+    receipt = value
+  }
 
-  func markSpawned() { spawned = true }
+  func markSpawned() {
+    spawned = true
+  }
 
   func latchCancelled() {
     if !timedOut {
@@ -387,7 +411,9 @@ private actor CoderCommandControl {
     appendDiagnostics(Data(message.utf8))
   }
 
-  func noteStreamError() { fail("Coder process stream failed.") }
+  func noteStreamError() {
+    fail("Coder process stream failed.")
+  }
 
   func appendDiagnostics(_ bytes: Data) {
     diagnostics.append(

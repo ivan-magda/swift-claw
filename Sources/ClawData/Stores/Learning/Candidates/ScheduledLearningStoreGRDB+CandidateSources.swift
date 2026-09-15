@@ -12,16 +12,15 @@ extension ScheduledLearningStoreGRDB {
     artifact: CandidateArtifact,
     state: JobLearningState
   ) throws -> Bool {
-    guard
-      let ancestry = try candidateAncestry(db, artifact: artifact),
-      try candidateProvenanceIsValid(db, ancestry: ancestry, state: state),
-      let current = try preparation(
-        db,
-        artifact: artifact,
-        feedbackCutoff: state.feedbackRevision,
-        state: state,
-        triggerFeedbackRevision: ancestry.triggerFeedbackRevision
-      )
+    guard let ancestry = try candidateAncestry(db, artifact: artifact),
+          try candidateProvenanceIsValid(db, ancestry: ancestry, state: state),
+          let current = try preparation(
+            db,
+            artifact: artifact,
+            feedbackCutoff: state.feedbackRevision,
+            state: state,
+            triggerFeedbackRevision: ancestry.triggerFeedbackRevision
+          )
     else {
       return false
     }
@@ -65,15 +64,14 @@ extension ScheduledLearningStoreGRDB {
       issueCodes: manifest.qualifyingIssueCodes,
       reason: manifest.triggerReason
     )
-    guard
-      trigger.digest == manifest.triggerDigest,
-      let current = try prepareReflection(
-        db,
-        trigger: trigger,
-        feedbackCutoff: feedbackCutoff,
-        requiredStateFeedbackRevision: state.feedbackRevision,
-        requiresNoLiveTrial: false
-      )
+    guard trigger.digest == manifest.triggerDigest,
+          let current = try prepareReflection(
+            db,
+            trigger: trigger,
+            feedbackCutoff: feedbackCutoff,
+            requiredStateFeedbackRevision: state.feedbackRevision,
+            requiresNoLiveTrial: false
+          )
     else {
       return nil
     }
@@ -100,9 +98,8 @@ extension ScheduledLearningStoreGRDB {
       if current.manifest.origin == .reflection {
         break
       }
-      guard
-        let predecessor = current.manifest.predecessorCandidate,
-        let loaded = try readCandidateArtifact(db, digest: predecessor)
+      guard let predecessor = current.manifest.predecessorCandidate,
+            let loaded = try readCandidateArtifact(db, digest: predecessor)
       else {
         return nil
       }
@@ -119,26 +116,24 @@ extension ScheduledLearningStoreGRDB {
     ancestry: CandidateAncestry,
     state: JobLearningState
   ) throws -> Bool {
-    guard
-      let root = ancestry.rootToTip.first,
-      try reflectionProvenanceIsValid(
-        db,
-        artifact: root,
-        state: state,
-        triggerFeedbackRevision: ancestry.triggerFeedbackRevision
-      )
+    guard let root = ancestry.rootToTip.first,
+          try reflectionProvenanceIsValid(
+            db,
+            artifact: root,
+            state: state,
+            triggerFeedbackRevision: ancestry.triggerFeedbackRevision
+          )
     else {
       return false
     }
     for index in ancestry.rootToTip.indices.dropFirst() {
-      guard
-        try successorProvenanceIsValid(
-          db,
-          artifact: ancestry.rootToTip[index],
-          predecessor: ancestry.rootToTip[ancestry.rootToTip.index(before: index)],
-          state: state,
-          triggerFeedbackRevision: ancestry.triggerFeedbackRevision
-        )
+      guard try successorProvenanceIsValid(
+        db,
+        artifact: ancestry.rootToTip[index],
+        predecessor: ancestry.rootToTip[ancestry.rootToTip.index(before: index)],
+        state: state,
+        triggerFeedbackRevision: ancestry.triggerFeedbackRevision
+      )
       else {
         return false
       }
@@ -153,20 +148,19 @@ extension ScheduledLearningStoreGRDB {
     triggerFeedbackRevision: FeedbackRevision
   ) throws -> Bool {
     let manifest = artifact.manifest
-    guard
-      manifest.origin == .reflection,
-      manifest.predecessorCandidate == nil,
-      manifest.predecessorFeedback == nil,
-      manifest.feedbackRevision == triggerFeedbackRevision,
-      let operation = try readOperation(db, id: manifest.operationID),
-      reflectionTrigger(artifact: artifact, operation: operation) != nil,
-      let preparation = try preparation(
-        db,
-        artifact: artifact,
-        feedbackCutoff: manifest.feedbackRevision,
-        state: state,
-        triggerFeedbackRevision: triggerFeedbackRevision
-      )
+    guard manifest.origin == .reflection,
+          manifest.predecessorCandidate == nil,
+          manifest.predecessorFeedback == nil,
+          manifest.feedbackRevision == triggerFeedbackRevision,
+          let operation = try readOperation(db, id: manifest.operationID),
+          reflectionTrigger(artifact: artifact, operation: operation) != nil,
+          let preparation = try preparation(
+            db,
+            artifact: artifact,
+            feedbackCutoff: manifest.feedbackRevision,
+            state: state,
+            triggerFeedbackRevision: triggerFeedbackRevision
+          )
     else {
       return false
     }
@@ -184,32 +178,31 @@ extension ScheduledLearningStoreGRDB {
     triggerFeedbackRevision: FeedbackRevision
   ) throws -> Bool {
     let manifest = artifact.manifest
-    guard
-      let predecessorDigest = manifest.predecessorCandidate,
-      let claimedControl = manifest.predecessorFeedback,
-      predecessorDigest == predecessor.digest,
-      predecessor.digest != artifact.digest,
-      let storedControl = try storedCandidateControl(
-        db,
-        eventID: claimedControl.eventID,
-        candidate: predecessor,
-        signal: manifest.origin == .ownerApproval ? .candidateApprove : .candidateEdit
-      ),
-      storedControl.source == claimedControl,
-      claimedControl.revision <= manifest.feedbackRevision,
-      let preparation = try preparation(
-        db,
-        artifact: artifact,
-        feedbackCutoff: manifest.feedbackRevision,
-        state: state,
-        triggerFeedbackRevision: triggerFeedbackRevision
-      ),
-      let expected = expectedSuccessor(
-        artifact: artifact,
-        predecessor: predecessor,
-        control: storedControl,
-        effectiveFeedback: preparation.feedbackSources
-      )
+    guard let predecessorDigest = manifest.predecessorCandidate,
+          let claimedControl = manifest.predecessorFeedback,
+          predecessorDigest == predecessor.digest,
+          predecessor.digest != artifact.digest,
+          let storedControl = try storedCandidateControl(
+            db,
+            eventID: claimedControl.eventID,
+            candidate: predecessor,
+            signal: manifest.origin == .ownerApproval ? .candidateApprove : .candidateEdit
+          ),
+          storedControl.source == claimedControl,
+          claimedControl.revision <= manifest.feedbackRevision,
+          let preparation = try preparation(
+            db,
+            artifact: artifact,
+            feedbackCutoff: manifest.feedbackRevision,
+            state: state,
+            triggerFeedbackRevision: triggerFeedbackRevision
+          ),
+          let expected = expectedSuccessor(
+            artifact: artifact,
+            predecessor: predecessor,
+            control: storedControl,
+            effectiveFeedback: preparation.feedbackSources
+          )
     else {
       return false
     }
@@ -236,14 +229,13 @@ extension ScheduledLearningStoreGRDB {
           effectiveFeedback: effectiveFeedback
         )
       case .ownerEdit:
-        guard
-          let payload = control.payload,
-          let lessons = CandidateEditPayload.decode(Data(payload.utf8)),
-          let replacement = try? LessonSet.canonical(
-            jobID: predecessor.manifest.jobID,
-            lessons: lessons
-          ),
-          replacement == artifact.replacement
+        guard let payload = control.payload,
+              let lessons = CandidateEditPayload.decode(Data(payload.utf8)),
+              let replacement = try? LessonSet.canonical(
+                jobID: predecessor.manifest.jobID,
+                lessons: lessons
+              ),
+              replacement == artifact.replacement
         else {
           return nil
         }
@@ -254,9 +246,12 @@ extension ScheduledLearningStoreGRDB {
           feedbackRevision: manifest.feedbackRevision,
           effectiveFeedback: effectiveFeedback
         )
-      case .reflection: return nil
+      case .reflection:
+        return nil
       }
-    } catch { return nil }
+    } catch {
+      return nil
+    }
   }
 
   static func hardVetoes(_ db: Database, artifact: CandidateArtifact) throws -> Set<HardVeto> {
@@ -270,8 +265,10 @@ extension ScheduledLearningStoreGRDB {
     return vetoes
   }
 
-  static func hasEffectiveCandidateVeto(_ db: Database, artifact: CandidateArtifact) throws -> Bool
-  {
+  static func hasEffectiveCandidateVeto(
+    _ db: Database,
+    artifact: CandidateArtifact
+  ) throws -> Bool {
     try Bool.fetchOne(
       db,
       sql: """
@@ -345,14 +342,13 @@ extension ScheduledLearningStoreGRDB {
     signal: OwnerSignal,
     expectedPayload: Data?
   ) throws -> CandidateFeedbackSource? {
-    guard
-      let stored = try storedCandidateControl(
-        db,
-        eventID: eventID,
-        candidate: candidate,
-        signal: signal
-      ),
-      payloadMatches(stored.payload, expected: expectedPayload)
+    guard let stored = try storedCandidateControl(
+      db,
+      eventID: eventID,
+      candidate: candidate,
+      signal: signal
+    ),
+          payloadMatches(stored.payload, expected: expectedPayload)
     else {
       return nil
     }
@@ -365,10 +361,9 @@ extension ScheduledLearningStoreGRDB {
     candidate: CandidateArtifact,
     signal: OwnerSignal
   ) throws -> StoredCandidateControl? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: """
+    guard let row = try Row.fetchOne(
+      db,
+      sql: """
           SELECT event_id, subject_kind, subject_digest, signal, payload, actor,
             transport_update_id, feedback_revision, supersedes, occurred_at
           FROM feedback_events AS event
@@ -377,15 +372,15 @@ extension ScheduledLearningStoreGRDB {
               SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
             )
           """,
-        arguments: [eventID, candidate.manifest.jobID, candidate.manifest.epoch.value]
-      ),
-      let subject = FeedbackSubjectKind(rawValue: row["subject_kind"]),
-      let storedSignal = OwnerSignal(rawValue: row["signal"]),
-      let actor = AuditActor(rawValue: row["actor"]),
-      subject == .candidate,
-      storedSignal == signal,
-      actor == .owner,
-      (row["subject_digest"] as String) == candidate.digest.rawValue
+      arguments: [eventID, candidate.manifest.jobID, candidate.manifest.epoch.value]
+    ),
+          let subject = FeedbackSubjectKind(rawValue: row["subject_kind"]),
+          let storedSignal = OwnerSignal(rawValue: row["signal"]),
+          let actor = AuditActor(rawValue: row["actor"]),
+          subject == .candidate,
+          storedSignal == signal,
+          actor == .owner,
+          (row["subject_digest"] as String) == candidate.digest.rawValue
     else {
       return nil
     }
@@ -418,9 +413,12 @@ extension ScheduledLearningStoreGRDB {
 
   static func payloadMatches(_ stored: String?, expected: Data?) -> Bool {
     switch (stored, expected) {
-    case (nil, nil): true
-    case (.some(let stored), .some(let expected)): Data(stored.utf8) == expected
-    case (.none, .some), (.some, .none): false
+    case (nil, nil):
+      true
+    case (.some(let stored), .some(let expected)):
+      Data(stored.utf8) == expected
+    case (.none, .some), (.some, .none):
+      false
     }
   }
 
@@ -463,9 +461,8 @@ extension ScheduledLearningStoreGRDB {
     candidate: CandidateArtifact,
     now: Date
   ) throws -> Int64? {
-    guard
-      let trial = try trialRow(db, candidate: candidate.digest),
-      trial.state == .open || trial.state == .draining
+    guard let trial = try trialRow(db, candidate: candidate.digest),
+          trial.state == .open || trial.state == .draining
     else {
       return nil
     }

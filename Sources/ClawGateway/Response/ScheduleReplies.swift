@@ -10,20 +10,28 @@ enum ScheduleReplies {
 
   static let exampleLine = "Example: /schedule every weekday at 07:00, summarize my unread items"
 
-  static var parseFailed: String { "I couldn't turn that into a schedule. \(exampleLine)" }
+  static var parseFailed: String {
+    "I couldn't turn that into a schedule. \(exampleLine)"
+  }
 
   // The provider-failure copy for a `/schedule` parse delegates to `Degradation` so a scheduled
   // parse and an interactive turn hand the owner byte-identical guidance for the same failure — the
   // auth sentence names the exact recovery command, while access and quota deliberately do not.
 
   /// A `/schedule` parse that could not reach a usable model (terminal reject, brownout, deadline).
-  static var providerUnavailable: String { Degradation.providerUnavailable }
+  static var providerUnavailable: String {
+    Degradation.providerUnavailable
+  }
 
   /// The credential is gone or refused; names `clawd auth login` as the exact recovery.
-  static var authenticationRequired: String { Degradation.authenticationRequired }
+  static var authenticationRequired: String {
+    Degradation.authenticationRequired
+  }
 
   /// The plan/account cannot use the requested route or model; does not tell the owner to log in.
-  static var accessDenied: String { Degradation.accessDenied }
+  static var accessDenied: String {
+    Degradation.accessDenied
+  }
 
   /// A clean throttle; says to retry after the provider's hint or the plan reset, never to log in.
   static func quotaLimited(retryAfterSeconds: Int?) -> String {
@@ -35,15 +43,20 @@ enum ScheduleReplies {
   /// router only routes provider-failure results here, so the fallback is never reached in practice).
   static func providerFailure(_ result: ScheduleDraftParseResult) -> String {
     switch result {
-    case .authenticationRequired: return authenticationRequired
-    case .accessDenied: return accessDenied
+    case .authenticationRequired:
+      return authenticationRequired
+    case .accessDenied:
+      return accessDenied
     case .quotaLimited(let retryAfterSeconds):
       return quotaLimited(retryAfterSeconds: retryAfterSeconds)
-    case .providerUnavailable, .draft, .unparseable, .budgetDenied: return providerUnavailable
+    case .providerUnavailable, .draft, .unparseable, .budgetDenied:
+      return providerUnavailable
     }
   }
 
-  static var emptyList: String { "No schedules yet. \(exampleLine)" }
+  static var emptyList: String {
+    "No schedules yet. \(exampleLine)"
+  }
 
   /// Terminal arm failure: the pending intent was cleared; re-issue.
   static let armFailed = "Couldn't arm the schedule. Nothing was created. Run /schedule again."
@@ -99,7 +112,9 @@ enum ScheduleReplies {
     }.joined(separator: "\n")
   }
 
-  static func notFound(id: Int64) -> String { "No schedule with id \(id). See /schedule list." }
+  static func notFound(id: Int64) -> String {
+    "No schedule with id \(id). See /schedule list."
+  }
 
   /// Terminal verb failure after the update was already claimed: nothing changed; re-issue.
   static let verbFailed = "Couldn't update the schedule. Nothing changed. Try again."

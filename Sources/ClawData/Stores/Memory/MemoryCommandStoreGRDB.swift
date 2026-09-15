@@ -6,7 +6,9 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
   private let database: MappedDatabase
   private let afterClaimForTesting: @Sendable () throws -> Void
 
-  public init(writer: any DatabaseWriter) { self.init(writer: writer) {} }
+  public init(writer: any DatabaseWriter) {
+    self.init(writer: writer) {}
+  }
 
   init(writer: any DatabaseWriter, afterClaimForTesting: @Sendable @escaping () throws -> Void) {
     database = MappedDatabase(writer: writer)

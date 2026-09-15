@@ -147,7 +147,11 @@ struct VisionRefusalProviderMappingTests {
 
     // when
     var thrown: (any Error)?
-    do { _ = try await provider.complete(request: sampleRequest) } catch { thrown = error }
+    do {
+      _ = try await provider.complete(request: sampleRequest)
+    } catch {
+      thrown = error
+    }
 
     // then — a clean 400 head proves nothing was generated, so nothing is debited either
     let failure = try #require(thrown as? ProviderFailure)
@@ -185,7 +189,11 @@ struct VisionRefusalProviderMappingTests {
 
     // when
     var thrown: (any Error)?
-    do { _ = try await provider.complete(request: sampleRequest) } catch { thrown = error }
+    do {
+      _ = try await provider.complete(request: sampleRequest)
+    } catch {
+      thrown = error
+    }
 
     // then — the additive discriminator never swallows the existing terminal path
     let failure = try #require(thrown as? ProviderFailure)

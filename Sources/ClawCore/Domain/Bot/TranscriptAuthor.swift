@@ -19,7 +19,9 @@ public struct TranscriptAuthor: Sendable, Equatable {
     self.init(displayName: message.senderDisplayName, userID: message.userID)
   }
 
-  public func prefixing(_ text: String) -> String { label + Self.separator + text }
+  public func prefixing(_ text: String) -> String {
+    label + Self.separator + text
+  }
 
   /// Folds the separator and every line break into spaces, then collapses the runs — a name is one
   /// plain line or it is not usable as a label.
@@ -39,8 +41,10 @@ extension ChatMode {
   /// group line is prefixed with its speaker.
   public func transcriptText(_ text: String, author: TranscriptAuthor) -> String {
     switch self {
-    case .direct: text
-    case .group: author.prefixing(text)
+    case .direct:
+      text
+    case .group:
+      author.prefixing(text)
     }
   }
 }

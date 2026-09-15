@@ -130,7 +130,9 @@ struct LessonRowTests {
 // MARK: - Fixture
 
 private extension [ChatMessage] {
-  var joinedText: String { map(\.content.text).joined(separator: "\n") }
+  var joinedText: String {
+    map(\.content.text).joined(separator: "\n")
+  }
 }
 
 private func lessonBudget(inputCapGraphemes: Int) -> ContextBudget {

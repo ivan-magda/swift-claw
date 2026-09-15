@@ -131,7 +131,8 @@ package struct SecureFilePublisher: Sendable {
 
     var identity: SecureFileIdentity {
       switch self {
-      case .published(let identity), .commitUncertain(let identity): return identity
+      case .published(let identity), .commitUncertain(let identity):
+        return identity
       }
     }
 
@@ -145,7 +146,9 @@ package struct SecureFilePublisher: Sendable {
 
   private let failpoint: Failpoint?
 
-  package init(failpoint: Failpoint? = nil) { self.failpoint = failpoint }
+  package init(failpoint: Failpoint? = nil) {
+    self.failpoint = failpoint
+  }
 
   /// Publishes `bytes` at `url`: same-directory 0600 temp file, all bytes written, `fsync` the
   /// file, claim the target name, `fsync` the parent directory. The temp entry is unlinked on every
@@ -200,7 +203,9 @@ package struct SecureFilePublisher: Sendable {
     // Captured before the commit: claiming the name attaches it to this inode without moving the
     // inode, so this is the identity that will be sitting at the target.
     let identity: SecureFileIdentity
-    do { identity = try Self.facts(ofDescriptor: descriptor, name: name).identity } catch {
+    do {
+      identity = try Self.facts(ofDescriptor: descriptor, name: name).identity
+    } catch {
       // `facts` speaks the read path's vocabulary; here the failure is a failure to publish, and
       // pointing the owner at a read they never asked for would misdirect them.
       throw .publicationFailed("stat \(name)")
@@ -256,7 +261,8 @@ package struct SecureFilePublisher: Sendable {
   /// that the exact published file still owns the name, so only the parent directory sync remains.
   package func proveDurable(_ outcome: PublicationOutcome, at url: URL) -> Bool {
     switch outcome {
-    case .published: return true
+    case .published:
+      return true
     case .commitUncertain(let identity):
       guard let facts = Self.facts(ofEntryAt: url), facts.isRegularFile, facts.identity == identity
       else {

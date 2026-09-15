@@ -5,7 +5,9 @@ public struct SkillDescriptor: Sendable, Equatable, Identifiable {
   public let description: String
   public let directory: URL
 
-  public var id: String { name }
+  public var id: String {
+    name
+  }
 
   public init(name: String, description: String, directory: URL) {
     self.name = name
@@ -37,7 +39,9 @@ public enum ContextTier: Sendable, Equatable {
 public struct ContextPriority: Sendable, Equatable, Comparable, Hashable {
   public let rawValue: Int
 
-  public init(_ rawValue: Int) { self.rawValue = rawValue }
+  public init(_ rawValue: Int) {
+    self.rawValue = rawValue
+  }
 
   public static func < (lhs: ContextPriority, rhs: ContextPriority) -> Bool {
     lhs.rawValue < rhs.rawValue
@@ -118,11 +122,17 @@ public struct BuildResult: Sendable, Equatable {
 public struct RecallScore: Sendable, Equatable, Comparable, Hashable {
   public let value: Double
 
-  public init(sqliteBM25: Double) { value = -sqliteBM25 }
+  public init(sqliteBM25: Double) {
+    value = -sqliteBM25
+  }
 
-  public init(value: Double) { self.value = value }
+  public init(value: Double) {
+    self.value = value
+  }
 
-  public static func < (lhs: RecallScore, rhs: RecallScore) -> Bool { lhs.value < rhs.value }
+  public static func < (lhs: RecallScore, rhs: RecallScore) -> Bool {
+    lhs.value < rhs.value
+  }
 }
 
 public struct RecallHit: Sendable, Equatable, Identifiable {

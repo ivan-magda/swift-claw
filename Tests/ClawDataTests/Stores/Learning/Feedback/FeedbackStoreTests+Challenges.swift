@@ -20,9 +20,8 @@ extension FeedbackStoreTests {
     let second = try env.openChallenge(secondTarget, updateID: 2)
 
     // then — subject-only outbox identity would drop the second prompt
-    guard
-      case .challengeOpened(let firstChallenge) = first,
-      case .challengeOpened(let secondChallenge) = second
+    guard case .challengeOpened(let firstChallenge) = first,
+          case .challengeOpened(let secondChallenge) = second
     else {
       Issue.record("expected both correction prompts to open")
       return
@@ -282,7 +281,9 @@ extension FeedbackStoreTests {
     do {
       try env.insertTwoLiveChallengesDirectly()
       failure = nil
-    } catch let error { failure = error }
+    } catch let error {
+      failure = error
+    }
 
     // then — application supersession cannot make this pass; the v13 partial index must fire
     guard case .unexpected = failure else {
@@ -300,9 +301,12 @@ private enum ChallengeFailure: CaseIterable {
 
   var outcome: FeedbackOutcome {
     switch self {
-    case .replay: .alreadyConsumed
-    case .expired: .expired
-    case .staleEpoch: .staleEpoch
+    case .replay:
+      .alreadyConsumed
+    case .expired:
+      .expired
+    case .staleEpoch:
+      .staleEpoch
     }
   }
 }

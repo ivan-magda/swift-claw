@@ -82,4 +82,6 @@ public struct AuditEvent: Sendable, Equatable {
   }
 }
 
-public protocol AuditLog: Sendable { func appendAudit(_ event: AuditEvent) throws(StoreError) }
+public protocol AuditLog: Sendable {
+  func appendAudit(_ event: AuditEvent) throws(StoreError)
+}

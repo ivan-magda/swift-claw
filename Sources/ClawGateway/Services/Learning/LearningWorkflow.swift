@@ -11,7 +11,9 @@ enum WorkflowStep: Hashable, Sendable {
 }
 
 /// An invocation's reviewed work identity; durable ownership belongs to the underlying transaction.
-struct WorkflowClaim: Sendable { let step: WorkflowStep }
+struct WorkflowClaim: Sendable {
+  let step: WorkflowStep
+}
 
 /// Advances durable transitions to a wait state, using store CAS claims rather than process locks.
 public struct LearningWorkflow: Sendable {
@@ -51,7 +53,9 @@ public struct LearningWorkflow: Sendable {
       }
       _ = try store.recomputeAssignment(runID: runID, now: now)
       await advance(jobID: binding.jobID, now: now)
-    } catch { logger.error("run \(runID) learning workflow deferred: \(error)") }
+    } catch {
+      logger.error("run \(runID) learning workflow deferred: \(error)")
+    }
   }
 
   public func advance(jobID: Int64, now: Date) async {
@@ -75,7 +79,9 @@ public struct LearningWorkflow: Sendable {
         visited.insert(claim.step)
         try await apply(claim, jobID: jobID, now: now)
       }
-    } catch { logger.error("job \(jobID) learning workflow deferred: \(error)") }
+    } catch {
+      logger.error("job \(jobID) learning workflow deferred: \(error)")
+    }
   }
 }
 
@@ -94,7 +100,8 @@ private extension LearningWorkflow {
       switch trigger {
       case .ownerFeedback(_, let eventID), .supportWithdrawal(_, let eventID):
         return .rollback(eventID)
-      case .adapter, .safety: return .rollback(trigger.promotionID)
+      case .adapter, .safety:
+        return .rollback(trigger.promotionID)
       }
     }
     steps += try store.workflowCandidates(jobID: jobID).map(WorkflowStep.candidate)
@@ -109,8 +116,7 @@ private extension LearningWorkflow {
   func apply(_ claim: WorkflowClaim, jobID: Int64, now: Date) async throws {
     switch claim.step {
     case .reflection(let digest):
-      if
-        let trigger = try store.workflowTriggers(jobID: jobID, now: now).first(where: { trigger in
+      if let trigger = try store.workflowTriggers(jobID: jobID, now: now).first(where: { trigger in
         trigger.digest == digest
       }) {
         await runner.runReflection(trigger: trigger, now: now)
@@ -119,8 +125,7 @@ private extension LearningWorkflow {
       let outcome = try store.admitCandidate(digest: digest, redactor: redactor, now: now)
       try notify(outcome, jobID: jobID, now: now)
     case .control(let eventID):
-      guard
-        let control = try store.workflowControls(jobID: jobID).first(where: { control in
+      guard let control = try store.workflowControls(jobID: jobID).first(where: { control in
           control.eventID == eventID
         })
       else {
@@ -147,15 +152,15 @@ private extension LearningWorkflow {
           redactor: redactor,
           now: now
         )
-      default: return
+      default:
+        return
       }
       try notify(outcome, jobID: jobID, now: now)
     case .trial:
-      guard
-        let trial = try store.openTrial(jobID: jobID),
-        case .reconciled(let result) = try store.reconcileTrial(trial.identity, now: now),
-        let current = try store.openTrial(jobID: jobID),
-        let state = try store.learningState(jobID: jobID)
+      guard let trial = try store.openTrial(jobID: jobID),
+            case .reconciled(let result) = try store.reconcileTrial(trial.identity, now: now),
+            let current = try store.openTrial(jobID: jobID),
+            let state = try store.learningState(jobID: jobID)
       else {
         return
       }
@@ -171,7 +176,8 @@ private extension LearningWorkflow {
         case .ownerFeedback(_, let id) where id == eventID,
           .supportWithdrawal(_, let id) where id == eventID:
           _ = try store.rollback(trigger, now: now)
-        default: break
+        default:
+          break
         }
       }
     }
@@ -190,7 +196,8 @@ private extension LearningWorkflow {
     case .awaitingApproval(let artifact):
       candidate = artifact
       state = .awaitingApproval
-    case .rejected: return
+    case .rejected:
+      return
     }
     guard let job = try jobs.job(id: jobID) else {
       return

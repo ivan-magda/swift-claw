@@ -51,9 +51,8 @@ public enum CanonicalJSON {
     }
 
     var raw: Int64 = 0
-    guard
-      CFNumberGetValue(cfNumber, .sInt64Type, &raw),
-      number.compare(NSNumber(value: raw)) == .orderedSame
+    guard CFNumberGetValue(cfNumber, .sInt64Type, &raw),
+          number.compare(NSNumber(value: raw)) == .orderedSame
     else {
       return nil
     }
@@ -70,4 +69,6 @@ public enum CanonicalJSON {
   }  // swiftlint:enable discouraged_optional_boolean
 }
 
-package enum CanonicalJSONError: Error, Sendable, Equatable { case invalidJSONObject }
+package enum CanonicalJSONError: Error, Sendable, Equatable {
+  case invalidJSONObject
+}

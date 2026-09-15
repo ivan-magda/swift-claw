@@ -8,8 +8,9 @@ import Testing
 @Suite
 struct CandidateSuccessorStoreTests {
   @Test(arguments: ApprovalRejectionScenario.allCases)
-  func normalApprovalRejectionLeavesNoOrphanSuccessor(_ scenario: ApprovalRejectionScenario) throws
-  {
+  func normalApprovalRejectionLeavesNoOrphanSuccessor(
+    _ scenario: ApprovalRejectionScenario
+  ) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate(lessons: scenario.lessons)
@@ -564,12 +565,16 @@ enum ApprovalRejectionScenario: CaseIterable, Sendable {
   case competingTrial
   case noOp
 
-  var lessons: [String] { self == .noOp ? [] : ["Report only material changes."] }
+  var lessons: [String] {
+    self == .noOp ? [] : ["Report only material changes."]
+  }
 
   var expected: AdmissionRejection {
     switch self {
-    case .competingTrial: .trialAlreadyLive
-    case .noOp: .noOpReplacement
+    case .competingTrial:
+      .trialAlreadyLive
+    case .noOp:
+      .noOpReplacement
     }
   }
 }
@@ -592,16 +597,21 @@ enum InvalidEditPayload: CaseIterable, Sendable {
 
   var payload: String {
     switch self {
-    case .malformedJSON: #"{"lessons":["unfinished"]"#
-    case .unknownKey: #"{"lessons":[],"authority":"approve"}"#
-    case .invalidLesson: #"{"lessons":[""]}"#
+    case .malformedJSON:
+      #"{"lessons":["unfinished"]"#
+    case .unknownKey:
+      #"{"lessons":[],"authority":"approve"}"#
+    case .invalidLesson:
+      #"{"lessons":[""]}"#
     }
   }
 
   var expected: AdmissionRejection {
     switch self {
-    case .malformedJSON, .unknownKey: .invalidOwnerControl
-    case .invalidLesson: .lessonSet(.emptyLesson(index: 0))
+    case .malformedJSON, .unknownKey:
+      .invalidOwnerControl
+    case .invalidLesson:
+      .lessonSet(.emptyLesson(index: 0))
     }
   }
 }
@@ -632,8 +642,10 @@ private extension AdmissionStoreFixture {
     predecessor: CandidateArtifact
   ) throws {
     switch scenario {
-    case .competingTrial: try insertCompetingDrainingTrial(from: predecessor)
-    case .noOp: break
+    case .competingTrial:
+      try insertCompetingDrainingTrial(from: predecessor)
+    case .noOp:
+      break
     }
   }
 

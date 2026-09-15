@@ -12,9 +12,8 @@ public enum OutboxFixture {
     now: Date = Date(timeIntervalSince1970: 1_700_000_000)
   ) throws {
     let runs = RunStoreGRDB(writer: writer)
-    guard
-      let chunk = chunks.first,
-      let context = try runs.executionContext(runID: runID, fallbackChatID: chunk.chatID)
+    guard let chunk = chunks.first,
+          let context = try runs.executionContext(runID: runID, fallbackChatID: chunk.chatID)
     else {
       throw StoreError.unexpected("Outbox fixture needs a run and reply chunks")
     }

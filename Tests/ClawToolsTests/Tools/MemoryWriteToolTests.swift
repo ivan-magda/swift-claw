@@ -8,7 +8,9 @@ import Testing
 struct MemoryWriteToolTests {
   private let tool = MemoryWriteTool(redactor: SecretRedactor(secretValues: []))
 
-  private func arguments(_ json: String) -> JSONValue { JSONValue.parse(json) ?? .null }
+  private func arguments(_ json: String) -> JSONValue {
+    JSONValue.parse(json) ?? .null
+  }
 
   @Test
   func declaresAskTierWithNoEgress() {

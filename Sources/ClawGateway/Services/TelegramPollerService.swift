@@ -70,7 +70,8 @@ public struct TelegramPollerService: Service {
           )
           batch: for rawUpdate in updates {
             switch await router.handle(rawUpdate: rawUpdate) {
-            case .processed, .skipped: try cursor.advanceCursor(to: rawUpdate.updateID)
+            case .processed, .skipped:
+              try cursor.advanceCursor(to: rawUpdate.updateID)
             case .transientFailure:
               // Leave the offset untouched and re-poll the same window; the synchronous
               // claim dedups the redelivery. Stop the batch so later updates don't jump ahead.
@@ -89,7 +90,9 @@ public struct TelegramPollerService: Service {
               break batch
             }
           }
-        } catch is CancellationError { break } catch let error as TelegramError {
+        } catch is CancellationError {
+          break
+        } catch let error as TelegramError {
           try await react(to: error)
         } catch {
           logger.error("poll loop error: \(error)")

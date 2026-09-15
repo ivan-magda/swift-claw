@@ -41,10 +41,9 @@ public struct LearningNotices: Sendable {
     chatID: Int64,
     now: Date
   ) throws -> CandidateReviewNotice {
-    guard
-      candidate.manifest.evaluations.count <= EvidenceWindow.maximumCount,
-      Set(candidate.manifest.evaluations.map(\.digest)).count
-      == candidate.manifest.evaluations.count
+    guard candidate.manifest.evaluations.count <= EvidenceWindow.maximumCount,
+          Set(candidate.manifest.evaluations.map(\.digest)).count
+          == candidate.manifest.evaluations.count
     else {
       throw LearningReviewError.invalidCandidate
     }
@@ -52,7 +51,8 @@ public struct LearningNotices: Sendable {
     let expiry = now.addingTimeInterval(EvidenceWindow.maximumAge)
     let candidateActions: [OwnerSignal]
     switch state {
-    case .admitted: candidateActions = [.candidateReject, .candidateEdit]
+    case .admitted:
+      candidateActions = [.candidateReject, .candidateEdit]
     case .awaitingApproval:
       candidateActions = [.candidateApprove, .candidateReject, .candidateEdit]
     }
@@ -87,11 +87,10 @@ public struct LearningNotices: Sendable {
     guard parts.isEmpty == false else {
       throw LearningReviewError.invalidCandidate
     }
-    guard
-      let markup = FeedbackKeyboard.candidateReviewMarkup(
-        targets: targets,
-        evaluations: candidate.manifest.evaluations
-      )
+    guard let markup = FeedbackKeyboard.candidateReviewMarkup(
+      targets: targets,
+      evaluations: candidate.manifest.evaluations
+    )
     else {
       throw LearningReviewError.invalidCandidate
     }
@@ -153,7 +152,8 @@ public struct LearningNotices: Sendable {
   static func challengePrompt(for tap: FeedbackTap) -> [LearningNoticeChunk] {
     let payload: String
     switch tap.signal {
-    case .resultCorrection: payload = "Reply with what this result should have done differently."
+    case .resultCorrection:
+      payload = "Reply with what this result should have done differently."
     case .candidateEdit:
       payload = #"Reply with one JSON object: {"lessons":["..."]} (zero to three lessons)."#
     case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute, .candidateApprove,

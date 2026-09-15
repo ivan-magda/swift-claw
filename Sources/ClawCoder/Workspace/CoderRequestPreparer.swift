@@ -4,7 +4,9 @@ import Foundation
 public struct CoderRequestPreparer: CoderRequestPreparing {
   private let executionPolicyID: String
 
-  public init(executionPolicyID: String) { self.executionPolicyID = executionPolicyID }
+  public init(executionPolicyID: String) {
+    self.executionPolicyID = executionPolicyID
+  }
 
   public func prepare(_ request: CoderRequest) async throws -> CoderPreparedRequest {
     let request = try request.validated()
@@ -27,7 +29,9 @@ public struct CoderRequestPreparer: CoderRequestPreparing {
         publication =
           request.deliverable == .pullRequest
           ? try await Self.publicationOrigin(at: identity.checkout, git: git) : nil
-      } catch is CancellationError { throw CancellationError() } catch {
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
         throw CoderError.invalidRequest(
           "Cannot resolve local Git checkout or its unambiguous GitHub origin for publication."
         )

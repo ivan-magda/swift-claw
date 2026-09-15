@@ -113,8 +113,7 @@ private extension ContextBuilder {
     fitted: [FittedSection],
     snapshot: SessionContextSnapshot
   ) -> [ChatMessage] {
-    guard
-      let historySection = fitted.first(where: { section in
+    guard let historySection = fitted.first(where: { section in
         section.id == .history
       })
     else {
@@ -167,8 +166,10 @@ private extension ContextBuilder {
               providerState: message.providerState
             )
           )
-        case .user: rendered.append(userMessage(from: message))
-        case .system: rendered.append(ChatMessage(role: .system, content: message.content))
+        case .user:
+          rendered.append(userMessage(from: message))
+        case .system:
+          rendered.append(ChatMessage(role: .system, content: message.content))
         }
       }
     }
@@ -216,12 +217,18 @@ private extension ContextBuilder {
 
   func label(for id: ContextRowID) -> String {
     switch id {
-    case .userFile: WorkspaceFile.user.relativePath
-    case .memoryFile: WorkspaceFile.memory.relativePath
-    case .memoryItems: "memory_items"
-    case .skills: WorkspaceSkills.fenceLabel
-    case .lessons: Self.lessonsLabel
-    case .policy, .systemWorkspace, .tools, .metadata, .history, .recall: id.rawValue
+    case .userFile:
+      WorkspaceFile.user.relativePath
+    case .memoryFile:
+      WorkspaceFile.memory.relativePath
+    case .memoryItems:
+      "memory_items"
+    case .skills:
+      WorkspaceSkills.fenceLabel
+    case .lessons:
+      Self.lessonsLabel
+    case .policy, .systemWorkspace, .tools, .metadata, .history, .recall:
+      id.rawValue
     }
   }
 }

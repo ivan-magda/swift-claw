@@ -10,7 +10,9 @@ import Testing
 struct ScheduleCommandStoreTests {
   private let fixedNow = SchedulingTestClock.mondayNoonBerlin
 
-  private func makeQueue() throws -> DatabaseQueue { return try TestDatabase.make() }
+  private func makeQueue() throws -> DatabaseQueue {
+    return try TestDatabase.make()
+  }
 
   private func makeNewJob() throws -> NewScheduledJob {
     var calendar = Calendar(identifier: .gregorian)

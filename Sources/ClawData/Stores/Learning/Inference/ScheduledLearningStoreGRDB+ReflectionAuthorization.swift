@@ -18,10 +18,9 @@ extension ScheduledLearningStoreGRDB {
       sql: "SELECT status, recurrence FROM scheduled_jobs WHERE id = ?",
       arguments: [jobID]
     )
-    guard
-      let row,
-      row["recurrence"] as String? != nil,
-      let status = ScheduledJobStatus(rawValue: row["status"])
+    guard let row,
+          row["recurrence"] as String? != nil,
+          let status = ScheduledJobStatus(rawValue: row["status"])
     else {
       return false
     }

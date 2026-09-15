@@ -37,7 +37,9 @@ import Foundation
       }
 
       let probeFile: AVAudioFile
-      do { probeFile = try AVAudioFile(forReading: url) } catch {
+      do {
+        probeFile = try AVAudioFile(forReading: url)
+      } catch {
         throw VoiceTranscriptionError.undecodableAudio("\(error)")
       }
       try Self.enforceDecodedDuration(of: probeFile, capSeconds: maxAudioDurationSeconds)
@@ -54,7 +56,9 @@ import Foundation
 
       for lane in lanes {
         let transcript: ScoredTranscript
-        do { transcript = try await run(lane, configuredTags: configuredTags, url: url) } catch {
+        do {
+          transcript = try await run(lane, configuredTags: configuredTags, url: url)
+        } catch {
           if case .cancelled = error {
             throw VoiceTranscriptionError.cancelled
           }
@@ -70,8 +74,10 @@ import Foundation
       }
 
       switch Self.settle(candidates: candidates, firstFailure: firstFailure) {
-      case .success(let transcript): return transcript
-      case .failure(let failure): throw failure
+      case .success(let transcript):
+        return transcript
+      case .failure(let failure):
+        throw failure
       }
     }
 
@@ -125,7 +131,8 @@ import Foundation
 
       var locale: Locale {
         switch self {
-        case .speech(let locale), .dictation(let locale): return locale
+        case .speech(let locale), .dictation(let locale):
+          return locale
         }
       }
     }
@@ -139,19 +146,17 @@ import Foundation
       for identifier in identifiers {
         let requestedLocale = Locale(identifier: identifier)
 
-        if
-          let locale = await resolve(
-            requestedLocale,
-            in: speechLocales,
-            via: SpeechTranscriber.supportedLocale(equivalentTo:)
-          ) {
+        if let locale = await resolve(
+          requestedLocale,
+          in: speechLocales,
+          via: SpeechTranscriber.supportedLocale(equivalentTo:)
+        ) {
           lanes.append(.speech(locale))
-        } else if
-          let locale = await resolve(
-            requestedLocale,
-            in: dictationLocales,
-            via: DictationTranscriber.supportedLocale(equivalentTo:)
-          ) {
+        } else if let locale = await resolve(
+          requestedLocale,
+          in: dictationLocales,
+          via: DictationTranscriber.supportedLocale(equivalentTo:)
+        ) {
           lanes.append(.dictation(locale))
         }
       }
@@ -165,8 +170,7 @@ import Foundation
       via equivalent: (_ locale: Locale) async -> Locale?
     ) async -> Locale? {
       let requestedTag = requestedLocale.bcp47Tag
-      if
-        let exactMatch = supportedLocales.first(where: {
+      if let exactMatch = supportedLocales.first(where: {
         $0.bcp47Tag == requestedTag
       }) {
         return exactMatch
@@ -251,7 +255,9 @@ import Foundation
           text: transcript,
           confidence: VoiceTranscriptArbiter.averageConfidence(confidences)
         )
-      } catch is CancellationError { throw VoiceTranscriptionError.cancelled } catch {
+      } catch is CancellationError {
+        throw VoiceTranscriptionError.cancelled
+      } catch {
         throw VoiceTranscriptionError.transcriptionFailed("\(error)")
       }
     }
@@ -280,19 +286,19 @@ import Foundation
     ) async throws(VoiceTranscriptionError) {
       do {
         let reserved = await AssetInventory.reservedLocales
-        if
-          !reserved.contains(where: {
+        if !reserved.contains(where: {
           $0.bcp47Tag == locale.bcp47Tag
         }) {
           for stale in reserved where !configuredTags.contains(stale.bcp47Tag) {
             await AssetInventory.release(reservedLocale: stale)
           }
 
-          do { try await AssetInventory.reserve(locale: locale) } catch {
+          do {
+            try await AssetInventory.reserve(locale: locale)
+          } catch {
             let occupied = await AssetInventory.reservedLocales
 
-            guard
-              let evictable = occupied.first(where: {
+            guard let evictable = occupied.first(where: {
                 $0.bcp47Tag != locale.bcp47Tag
               })
             else {
@@ -310,7 +316,9 @@ import Foundation
         }
 
         try await request.downloadAndInstall()
-      } catch is CancellationError { throw VoiceTranscriptionError.cancelled } catch {
+      } catch is CancellationError {
+        throw VoiceTranscriptionError.cancelled
+      } catch {
         throw VoiceTranscriptionError.assetsUnavailable("\(error)")
       }
     }
@@ -318,7 +326,11 @@ import Foundation
 
   // MARK: - Locale Identity
 
-  extension Locale { fileprivate var bcp47Tag: String { identifier(.bcp47).lowercased() } }
+  extension Locale {
+    fileprivate var bcp47Tag: String {
+      identifier(.bcp47).lowercased()
+    }
+  }
 #endif
 
 public enum SystemVoiceTranscriber {

@@ -24,8 +24,10 @@ public enum SSRFGuard {
 
   public static func isPublic(_ address: ResolvedAddress) -> Bool {
     switch address {
-    case .ipv4(let value): isPublicV4(value)
-    case .ipv6(let bytes): isPublicV6(bytes)
+    case .ipv4(let value):
+      isPublicV4(value)
+    case .ipv6(let bytes):
+      isPublicV6(bytes)
     }
   }
 }
@@ -80,12 +82,11 @@ private extension SSRFGuard {
     }
 
     // IPv4-mapped (::ffff:a.b.c.d): unwrap and re-check the embedded v4.
-    if
-      bytes[0...9].allSatisfy({
+    if bytes[0...9].allSatisfy({
       $0 == 0
     }),
-      bytes[10] == 0xFF,
-      bytes[11] == 0xFF
+       bytes[10] == 0xFF,
+       bytes[11] == 0xFF
     {
       return isPublicV4(embeddedV4(bytes))
     }
@@ -101,8 +102,7 @@ private extension SSRFGuard {
     }
     // IPv4-compatible ::a.b.c.d (::/96, deprecated): unwrap the embedded v4. This also subsumes the
     // unspecified :: (→ 0.0.0.0) and loopback ::1 (→ 0.0.0.1), both refused by the v4 blocklist.
-    if
-      bytes[0...11].allSatisfy({
+    if bytes[0...11].allSatisfy({
       $0 == 0
     }) {
       return isPublicV4(embeddedV4(bytes))
@@ -133,7 +133,9 @@ public protocol AddressResolving: Sendable {
   func resolve(host: String) async throws -> [ResolvedAddress]
 }
 
-public enum AddressResolutionError: Error, Sendable, Equatable { case unresolvable(host: String) }
+public enum AddressResolutionError: Error, Sendable, Equatable {
+  case unresolvable(host: String)
+}
 
 /// The system resolver via `getaddrinfo` — works on macOS and Linux behind the one seam.
 /// `getaddrinfo` is a BLOCKING syscall that never observes cancellation, so it runs on a

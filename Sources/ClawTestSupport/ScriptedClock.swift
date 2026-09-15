@@ -13,11 +13,17 @@ public struct ScriptedClock: Clock {
 
     let offset: Duration
 
-    public func advanced(by duration: Duration) -> Instant { Instant(offset: offset + duration) }
+    public func advanced(by duration: Duration) -> Instant {
+      Instant(offset: offset + duration)
+    }
 
-    public func duration(to other: Instant) -> Duration { other.offset - offset }
+    public func duration(to other: Instant) -> Duration {
+      other.offset - offset
+    }
 
-    public static func < (lhs: Instant, rhs: Instant) -> Bool { lhs.offset < rhs.offset }
+    public static func < (lhs: Instant, rhs: Instant) -> Bool {
+      lhs.offset < rhs.offset
+    }
   }
 
   private let script: @Sendable (_ duration: Duration) async throws -> Void
@@ -27,9 +33,13 @@ public struct ScriptedClock: Clock {
     self.script = script
   }
 
-  public var now: Instant { Instant(offset: elapsed.value) }
+  public var now: Instant {
+    Instant(offset: elapsed.value)
+  }
 
-  public var minimumResolution: Duration { .zero }
+  public var minimumResolution: Duration {
+    .zero
+  }
 
   /// The script receives the delay remaining until the deadline rather than the deadline itself, so
   /// a scripted expectation reads the same whether it runs at virtual zero or an hour in. That

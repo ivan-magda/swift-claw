@@ -40,10 +40,9 @@ public struct SemanticVersion: Sendable, Equatable, Comparable {
       return nil
     }
 
-    guard
-      let major = Int(components[0]),
-      let minor = Int(components[1]),
-      let patch = Int(components[2])
+    guard let major = Int(components[0]),
+          let minor = Int(components[1]),
+          let patch = Int(components[2])
     else {
       return nil
     }
@@ -79,11 +78,17 @@ struct ExecutionIdentity: Sendable, Equatable {
 
   let uuid: UUID
 
-  init(uuid: UUID = UUID()) { self.uuid = uuid }
+  init(uuid: UUID = UUID()) {
+    self.uuid = uuid
+  }
 
-  var identifier: String { uuid.uuidString.lowercased() }
+  var identifier: String {
+    uuid.uuidString.lowercased()
+  }
 
-  var name: String { "\(Self.namePrefix)\(identifier)" }
+  var name: String {
+    "\(Self.namePrefix)\(identifier)"
+  }
 }
 
 /// Guest-side view of the reserved entrypoint namespace: the staged file names come from
@@ -92,7 +97,9 @@ enum ExecEntrypoint {
   static let reservedPrefix = ExecLanguage.reservedEntrypointPrefix
   static let guestWorkDirectory = "/work"
 
-  static func fileName(for language: ExecLanguage) -> String { language.entrypointFileName }
+  static func fileName(for language: ExecLanguage) -> String {
+    language.entrypointFileName
+  }
 
   static func guestPath(for language: ExecLanguage) -> String {
     "\(guestWorkDirectory)/\(fileName(for: language))"

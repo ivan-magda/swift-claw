@@ -15,7 +15,8 @@ public struct AuthLogoutWorkflow: Sendable {
 
   public func logout() -> AuthCommandResult {
     switch coordinator.acquire() {
-    case .failure(let failure): return AuthCommandResultMapper.result(for: failure)
+    case .failure(let failure):
+      return AuthCommandResultMapper.result(for: failure)
     case .success(let lease):
       defer { lease.release() }
       return runLogout()
@@ -28,7 +29,9 @@ public struct AuthLogoutWorkflow: Sendable {
 private extension AuthLogoutWorkflow {
   func runLogout() -> AuthCommandResult {
     let store: any LLMCredentialStore
-    do { store = try makeCredentialStore() } catch {
+    do {
+      store = try makeCredentialStore()
+    } catch {
       return AuthCommandResultMapper.credentialStoreResult(for: error)
     }
 
@@ -49,7 +52,9 @@ private extension AuthLogoutWorkflow {
         )
       }
       try store.delete(providerID: ChatGPTProviderMetadata.providerID)
-    } catch { return AuthCommandResultMapper.result(for: error) }
+    } catch {
+      return AuthCommandResultMapper.result(for: error)
+    }
 
     return AuthCommandResult(
       exit: .success,

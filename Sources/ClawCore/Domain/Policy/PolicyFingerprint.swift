@@ -127,9 +127,12 @@ private extension PolicyFingerprint {
   /// (a rename here voids every outstanding approval, which is the intended strictness).
   static func egressLabel(_ egressClass: ToolEgressClass) -> String {
     switch egressClass {
-    case .none: "none"
-    case .fixedEndpoint: "fixed_endpoint"
-    case .arbitraryDestination: "arbitrary_destination"
+    case .none:
+      "none"
+    case .fixedEndpoint:
+      "fixed_endpoint"
+    case .arbitraryDestination:
+      "arbitrary_destination"
     }
   }
 
@@ -141,7 +144,8 @@ private extension PolicyFingerprint {
   /// approval.
   static func egressIdentityLabel(_ egress: LLMEgressIdentity) -> String {
     switch egress {
-    case .configuredEndpoint(let endpoint): return "llm_egress:configured:\(endpoint)"
+    case .configuredEndpoint(let endpoint):
+      return "llm_egress:configured:\(endpoint)"
     case .managed(let providerID, let endpoint):
       return "llm_egress:managed:\(providerID.rawValue):\(endpoint)"
     }

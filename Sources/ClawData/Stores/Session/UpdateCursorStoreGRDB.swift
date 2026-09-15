@@ -5,7 +5,9 @@ import GRDB
 public struct UpdateCursorStoreGRDB: UpdateCursorStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func loadCursor() throws(StoreError) -> Int64? {
     try database.readMapping { db in

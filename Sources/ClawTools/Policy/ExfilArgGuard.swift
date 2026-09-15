@@ -117,7 +117,9 @@ public struct ExfilArgGuard: Sendable {
 
   // MARK: - Tiers 1 + 2 (always)
 
-  public func evaluateUnconditional(argsJSON: String) -> Verdict { evaluate(text: argsJSON) }
+  public func evaluateUnconditional(argsJSON: String) -> Verdict {
+    evaluate(text: argsJSON)
+  }
 
   public func evaluate(text: String) -> Verdict {
     let candidates = Self.matchCandidates(text)
@@ -241,11 +243,10 @@ public struct ExfilArgGuard: Sendable {
     while index < scalars.count {
       let scalar = scalars[index]
 
-      guard
-        scalar == "%",
-        index + 2 < scalars.count,
-        let high = Self.hexNibble(scalars[index + 1]),
-        let low = Self.hexNibble(scalars[index + 2])
+      guard scalar == "%",
+            index + 2 < scalars.count,
+            let high = Self.hexNibble(scalars[index + 1]),
+            let low = Self.hexNibble(scalars[index + 2])
       else {
         bytes.append(contentsOf: Array(String(scalar).utf8))
         index += 1
@@ -270,10 +271,14 @@ public struct ExfilArgGuard: Sendable {
   /// The numeric value 0...15 of a single hex digit, or nil for any non-hex scalar.
   private static func hexNibble(_ scalar: Unicode.Scalar) -> UInt8? {
     switch scalar {
-    case "0"..."9": UInt8(scalar.value - ("0" as Unicode.Scalar).value)
-    case "a"..."f": UInt8(scalar.value - ("a" as Unicode.Scalar).value + 10)
-    case "A"..."F": UInt8(scalar.value - ("A" as Unicode.Scalar).value + 10)
-    default: nil
+    case "0"..."9":
+      UInt8(scalar.value - ("0" as Unicode.Scalar).value)
+    case "a"..."f":
+      UInt8(scalar.value - ("a" as Unicode.Scalar).value + 10)
+    case "A"..."F":
+      UInt8(scalar.value - ("A" as Unicode.Scalar).value + 10)
+    default:
+      nil
     }
   }
 
@@ -313,10 +318,14 @@ public struct ExfilArgGuard: Sendable {
 
     for byte in token.utf8 {
       switch byte {
-      case UInt8(ascii: "0")...UInt8(ascii: "9"): hasDigit = true
-      case UInt8(ascii: "A")...UInt8(ascii: "Z"): hasUppercase = true
-      case UInt8(ascii: "a")...UInt8(ascii: "z"): hasLowercase = true
-      default: continue
+      case UInt8(ascii: "0")...UInt8(ascii: "9"):
+        hasDigit = true
+      case UInt8(ascii: "A")...UInt8(ascii: "Z"):
+        hasUppercase = true
+      case UInt8(ascii: "a")...UInt8(ascii: "z"):
+        hasLowercase = true
+      default:
+        continue
       }
 
       if hasDigit, hasUppercase, hasLowercase {

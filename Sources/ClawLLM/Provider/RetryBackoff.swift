@@ -57,7 +57,11 @@ struct RetryBackoff: Sendable {
 private extension RetryBackoff {
   /// The smaller of the fixed ceiling and the configured request timeout. The runtime's remaining
   /// turn deadline can still cancel a wait earlier than this.
-  var ceilingSeconds: Int { min(Self.maximumRetryAfterSeconds, requestTimeoutSeconds) }
+  var ceilingSeconds: Int {
+    min(Self.maximumRetryAfterSeconds, requestTimeoutSeconds)
+  }
 
-  func clamped(_ retryAfter: Duration) -> Duration { min(retryAfter, .seconds(ceilingSeconds)) }
+  func clamped(_ retryAfter: Duration) -> Duration {
+    min(retryAfter, .seconds(ceilingSeconds))
+  }
 }

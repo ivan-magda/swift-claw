@@ -8,7 +8,9 @@ extension LearningOperationRunner {
   /// One reflection for one frozen trigger, or no call. The trigger cannot affect ordinary task
   /// delivery, so every store and provider failure is contained and logged here.
   public func runReflection(trigger: TriggerIdentity, now: Date) async {
-    do { try await reflect(trigger: trigger, now: now) } catch {
+    do {
+      try await reflect(trigger: trigger, now: now)
+    } catch {
       logger.error("trigger \(trigger.digest.rawValue) could not be reflected: \(error)")
     }
   }
@@ -76,11 +78,13 @@ private extension LearningOperationRunner {
       context: .reflection(call.authorization)
     )
     switch try learning.authorizeAndStartOperation(authorization, now: now) {
-    case .started: return true
+    case .started:
+      return true
     case .deniedNoCall(let failure):
       logger.info("reflection \(call.operationID.rawValue) refused: \(failure.rawValue)")
       return false
-    case .superseded: return false
+    case .superseded:
+      return false
     }
   }
 }
@@ -111,9 +115,8 @@ private extension LearningOperationRunner {
         )
         return
       } catch {
-        guard
-          let persistence = RouteSwitch.permits(error),
-          let next = roster.failover(from: active.position)
+        guard let persistence = RouteSwitch.permits(error),
+              let next = roster.failover(from: active.position)
         else {
           commitReflection(failure: error, call: call, route: active.binding, now: now)
           return
@@ -284,7 +287,9 @@ private extension LearningOperationRunner {
     let messages: [ChatMessage]
   }
 
-  enum ReflectionValidationError: Error { case secretLeak }
+  enum ReflectionValidationError: Error {
+    case secretLeak
+  }
 
   func reflectionKey(for trigger: TriggerIdentity) -> LearningOperationKey {
     LearningOperationKey(

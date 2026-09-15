@@ -38,7 +38,9 @@ struct SC7AcceptanceTests {
 
   // MARK: - Rule + seeding fixtures
 
-  private func berlinCalendar() -> Calendar { SchedulingRuleFixtures.calendar(zone: berlin) }
+  private func berlinCalendar() -> Calendar {
+    SchedulingRuleFixtures.calendar(zone: berlin)
+  }
 
   private func weekdaySevenRule() -> Calendar.RecurrenceRule {
     SchedulingRuleFixtures.weekdaySeven(zone: berlin, seconds: [0])

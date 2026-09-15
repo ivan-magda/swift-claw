@@ -32,7 +32,9 @@ actor FakeTurnRunner: TurnDispatching {
   private let error: (any Error)?
   private var continuations: [CheckedContinuation<Void, Never>] = []
 
-  init(error: (any Error)? = nil) { self.error = error }
+  init(error: (any Error)? = nil) {
+    self.error = error
+  }
 
   func run(runID: Int64, sessionID: Int64, chatID: Int64, triggerMessageID: Int64) async throws {
     calls.append(
@@ -96,7 +98,9 @@ actor RecordingTransport: TelegramTransport {
 
   private var failPlainFallbackNext = false
 
-  private enum Event { case sent, attempt, poll, draft, answer }
+  private enum Event {
+    case sent, attempt, poll, draft, answer
+  }
 
   private var waiters: [Event: [(threshold: Int, continuation: CheckedContinuation<Void, Never>)]] =
     [:]
@@ -115,7 +119,9 @@ actor RecordingTransport: TelegramTransport {
     self.failSendAtAttempt = failSendAtAttempt
   }
 
-  func getMe() async throws -> BotIdentity { BotIdentity(id: 1, username: "claw_bot") }
+  func getMe() async throws -> BotIdentity {
+    BotIdentity(id: 1, username: "claw_bot")
+  }
 
   func getUpdates(
     offset: Int64?,
@@ -427,9 +433,13 @@ actor FakeDraftParser: ScheduleDraftParsing {
   private var results: [ScheduleDraftParseResult]
   private(set) var ownerTexts: [String] = []
 
-  init(results: [ScheduleDraftParseResult]) { self.results = results }
+  init(results: [ScheduleDraftParseResult]) {
+    self.results = results
+  }
 
-  init(result: ScheduleDraftParseResult) { self.init(results: [result]) }
+  init(result: ScheduleDraftParseResult) {
+    self.init(results: [result])
+  }
 
   func parse(ownerText: String, sessionID: Int64) async -> ScheduleDraftParseResult {
     ownerTexts.append(ownerText)

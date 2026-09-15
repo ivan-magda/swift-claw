@@ -7,7 +7,9 @@ import Testing
 struct MockHTTPExecutor: HTTPExecuting {
   let result: HTTPResult
 
-  func execute(_ request: HTTPRequest) async throws -> HTTPResult { result }
+  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
+    result
+  }
 }
 
 /// Local to this suite: it answers with one canned result and records the fields the Telegram wire
@@ -41,7 +43,9 @@ struct URLEchoingExecutor: HTTPExecuting {
   struct URLEchoError: Error, CustomStringConvertible {
     let url: String
 
-    var description: String { "connection failed for \(url)" }
+    var description: String {
+      "connection failed for \(url)"
+    }
   }
 
   func execute(_ request: HTTPRequest) async throws -> HTTPResult {

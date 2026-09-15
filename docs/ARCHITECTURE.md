@@ -1712,9 +1712,9 @@ edit does not silently change the repository contract. Generated build products 
 checkouts are excluded. [CODE_STYLE.md](CODE_STYLE.md) provides the contributor workflow.
 
 Run `scripts/lint.sh` for the complete local and CI gate. The canonical formatting result is the
-output of the whole ordered pipeline: SwiftLint corrections, Apple signature layout, a narrow
-SwiftFormat return-placement pass, final Apple layout, then targeted Google and local layout rules.
-The signature pass keeps `)` through `->` together before Apple formats the function body.
+output of the whole ordered pipeline: SwiftLint corrections, Apple layout, then targeted Google and
+local layout rules. Apple and SwiftFormat each format once; the final SwiftFormat pass keeps `)`
+through `->` together and the first condition beside its keyword.
 Check mode formats temporary copies and compares the
 final bytes; fix mode writes that same result. Apple's non-correctable checks inspect its normalized
 intermediate output, and SwiftLint checks correctness and idiom on the final source. Standalone
@@ -1724,23 +1724,27 @@ toolchain. Local, CI, per-file, and editor-buffer formatting share this pipeline
 
 Apple owns general spacing, indentation and wrapping, braces, and declaration layout
 through `.swift-format`. It preserves existing line breaks so reviewed multiline layouts survive.
-The narrow SwiftFormat pass owns return-arrow placement; the final targeted pass owns attributes,
-collection trailing commas, multiline conditional/loop statement bodies, and final width wrapping. SwiftLint owns the
+The targeted SwiftFormat pass owns return-arrow and first-condition placement, attributes,
+collection trailing commas, multiline statement/function/property bodies, switch case bodies, and
+final width wrapping. SwiftLint owns the
 hard line limit, correctness, idiom, and configured identifier/complexity limits in `.swiftlint.yml`,
 including test-specific overrides. Duplicate layout rules are disabled there. The gate's idempotence
 and editor/check/fix agreement must be verified when these owners change.
 
 Automation uses these existing tools only. Reviewers check the remaining Google/local details:
 import ordering and conditional-import group placement, blank lines between bodyless or short members, multiline
-closure bodies and wrapped signatures, function effect placement, vertical inheritance lists, and argument boundaries in
-short calls containing multiline closures. Passing lint does not waive these rules. Do not add a
+type/extension, closure and `do`/`catch` bodies, wrapped signatures, function effect placement, vertical inheritance
+lists, and argument boundaries in short calls containing multiline closures. Passing lint does not waive these rules. Do not add a
 repository-owned formatter or parser dependency merely to automate those review checks.
 
 The following local rules refine or explicitly depart from Google:
 
 - Nonempty conditional and loop statement bodies are multiline. Inline `if` expressions remain
   allowed. Every nonempty closure body starts on its own line, including after an explicit `in`.
-- Wrapped condition lists start after the `if`, `guard`, or `while` keyword on a new line.
+- Nonempty `do` and `catch` bodies are multiline, including single-statement bodies.
+- Switch case bodies start on their own line, including single-statement bodies.
+- Nonempty type, extension, function, initializer, subscript, and computed-property bodies are
+  multiline. Empty bodies may remain `{}`.
 - Private helpers are grouped by responsibility in `private extension` blocks, each immediately
   preceded by a bare `// MARK: - <Group Name>` heading. This is the sole extension-access exception;
   other access levels belong on members, preserving their effective visibility.

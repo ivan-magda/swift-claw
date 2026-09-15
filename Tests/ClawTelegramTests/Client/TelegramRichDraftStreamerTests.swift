@@ -14,25 +14,33 @@ actor DraftTransport: TelegramTransport {
   private(set) var draftAttempts: [DraftRecord] = []
   var throwDraft = false
 
-  func getMe() async throws -> BotIdentity { BotIdentity(id: 1, username: "claw_bot") }
+  func getMe() async throws -> BotIdentity {
+    BotIdentity(id: 1, username: "claw_bot")
+  }
 
   func getUpdates(
     offset: Int64?,
     timeout: Int,
     allowedUpdates: [String]
-  ) async throws -> [RawUpdate] { [] }
+  ) async throws -> [RawUpdate] {
+    []
+  }
 
   func sendMessage(
     to target: DeliveryTarget,
     text: String,
     replyMarkup: String?
-  ) async throws -> Int64 { 1 }
+  ) async throws -> Int64 {
+    1
+  }
 
   func sendRichMessage(
     to target: DeliveryTarget,
     markdown: String,
     replyMarkup: String?
-  ) async throws -> Int64 { 1 }
+  ) async throws -> Int64 {
+    1
+  }
 
   func sendRichMessageDraft(chatID: Int64, draftID: Int64, markdown: String) async throws -> Bool {
     let record = DraftRecord(chatID: chatID, draftID: draftID, markdown: markdown)
@@ -103,4 +111,8 @@ struct TelegramRichDraftStreamerTests {
   }
 }
 
-extension DraftTransport { func setThrowDraft(_ value: Bool) { throwDraft = value } }
+extension DraftTransport {
+  func setThrowDraft(_ value: Bool) {
+    throwDraft = value
+  }
+}

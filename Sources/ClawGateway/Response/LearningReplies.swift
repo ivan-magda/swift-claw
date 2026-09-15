@@ -36,8 +36,10 @@ enum LearningReplies {
     case .alreadyReset(let receipt):
       let epoch = receipt.result.newEpoch.value
       return "Learning for schedule \(jobID) was already reset at epoch \(epoch)."
-    case .unarmed: return "Schedule \(jobID) has no learning state to reset."
-    case .notFound: return "No schedule with id \(jobID). Nothing was reset."
+    case .unarmed:
+      return "Schedule \(jobID) has no learning state to reset."
+    case .notFound:
+      return "No schedule with id \(jobID). Nothing was reset."
     }
   }
 }

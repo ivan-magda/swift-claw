@@ -37,11 +37,10 @@ extension ScheduledLearningStoreGRDB {
     now: Date
   ) throws {
     let runID = try evaluatedRunID(db, operation: operation)
-    guard
-      let compatibility = try readCompatibility(db, runID: runID),
-      // The binding carries the two inputs the compatibility row does not: what the job asked for
-      // when this run fired, and which stable set it was asking under.
-      let binding = try readBinding(db, runID: runID)
+    guard let compatibility = try readCompatibility(db, runID: runID),
+          // The binding carries the two inputs the compatibility row does not: what the job asked for
+          // when this run fired, and which stable set it was asking under.
+          let binding = try readBinding(db, runID: runID)
     else {
       throw StoreError.unexpected(
         "run \(runID) was evaluated with no frozen compatibility surface to file it under"
@@ -162,8 +161,10 @@ extension ScheduledLearningStoreGRDB {
     return rows.first?.evaluation
   }
 
-  static func storedEvaluations(_ db: Database, runID: Int64) throws -> [StoredEvaluationProjection]
-  {
+  static func storedEvaluations(
+    _ db: Database,
+    runID: Int64
+  ) throws -> [StoredEvaluationProjection] {
     let rows = try Row.fetchAll(
       db,
       sql: """
@@ -188,16 +189,15 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func decodeCanonicalIssueCodes(_ json: String) throws -> [String] {
-    guard
-      let data = json.data(using: .utf8),
-      let codes = try? JSONDecoder().decode([String].self, from: data),
-      codes.count <= EvaluatorOutput.maxIssueCodes,
-      codes.allSatisfy({ code in
+    guard let data = json.data(using: .utf8),
+          let codes = try? JSONDecoder().decode([String].self, from: data),
+          codes.count <= EvaluatorOutput.maxIssueCodes,
+          codes.allSatisfy({ code in
         code.isEmpty == false && code.count <= EvaluatorOutput.maxIssueCodeCharacters
       }),
-      Set(codes).count == codes.count,
-      codes == codes.sorted(),
-      try issueCodesJSON(codes) == json
+          Set(codes).count == codes.count,
+          codes == codes.sorted(),
+          try issueCodesJSON(codes) == json
     else {
       throw StoreError.unexpected("assignment source has noncanonical issue codes")
     }
@@ -208,33 +208,32 @@ extension ScheduledLearningStoreGRDB {
     _ row: Row,
     expectedRunID: Int64
   ) throws -> StoredEvaluationProjection {
-    guard
-      let digestRaw = SQLiteStoredValue.string(in: row, column: "evaluation_digest"),
-      isCanonicalDigest(digestRaw),
-      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      jobID > 0,
-      let epochRaw = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      epochRaw > 0,
-      let runID = SQLiteStoredValue.int64(in: row, column: "run_id"),
-      runID == expectedRunID,
-      let evidenceRaw = SQLiteStoredValue.string(in: row, column: "evidence_digest"),
-      isCanonicalDigest(evidenceRaw),
-      let outcomeRaw = SQLiteStoredValue.string(in: row, column: "outcome"),
-      let outcome = EvaluatorOutcome(rawValue: outcomeRaw),
-      let issueJSON = SQLiteStoredValue.string(in: row, column: "issue_codes"),
-      let issueCodes = try? decodeCanonicalIssueCodes(issueJSON),
-      let rubricRaw = SQLiteStoredValue.string(in: row, column: "rubric_version"),
-      let rubricVersion = Int(rubricRaw),
-      let promptRaw = SQLiteStoredValue.string(in: row, column: "evaluator_prompt_version"),
-      let promptVersion = Int(promptRaw),
-      let schemaRaw = SQLiteStoredValue.string(in: row, column: "evaluator_schema_version"),
-      let schemaVersion = Int(schemaRaw),
-      let compatibilityRaw = SQLiteStoredValue.string(in: row, column: "compatibility_digest"),
-      isCanonicalDigest(compatibilityRaw),
-      let createdRaw = SQLiteStoredValue.int64(in: row, column: "created_at"),
-      let createdAt = EpochSecondCodec.date(fromEpoch: createdRaw),
-      let route = SQLiteStoredValue.string(in: row, column: "evaluator_route"),
-      route.isEmpty == false
+    guard let digestRaw = SQLiteStoredValue.string(in: row, column: "evaluation_digest"),
+          isCanonicalDigest(digestRaw),
+          let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+          jobID > 0,
+          let epochRaw = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+          epochRaw > 0,
+          let runID = SQLiteStoredValue.int64(in: row, column: "run_id"),
+          runID == expectedRunID,
+          let evidenceRaw = SQLiteStoredValue.string(in: row, column: "evidence_digest"),
+          isCanonicalDigest(evidenceRaw),
+          let outcomeRaw = SQLiteStoredValue.string(in: row, column: "outcome"),
+          let outcome = EvaluatorOutcome(rawValue: outcomeRaw),
+          let issueJSON = SQLiteStoredValue.string(in: row, column: "issue_codes"),
+          let issueCodes = try? decodeCanonicalIssueCodes(issueJSON),
+          let rubricRaw = SQLiteStoredValue.string(in: row, column: "rubric_version"),
+          let rubricVersion = Int(rubricRaw),
+          let promptRaw = SQLiteStoredValue.string(in: row, column: "evaluator_prompt_version"),
+          let promptVersion = Int(promptRaw),
+          let schemaRaw = SQLiteStoredValue.string(in: row, column: "evaluator_schema_version"),
+          let schemaVersion = Int(schemaRaw),
+          let compatibilityRaw = SQLiteStoredValue.string(in: row, column: "compatibility_digest"),
+          isCanonicalDigest(compatibilityRaw),
+          let createdRaw = SQLiteStoredValue.int64(in: row, column: "created_at"),
+          let createdAt = EpochSecondCodec.date(fromEpoch: createdRaw),
+          let route = SQLiteStoredValue.string(in: row, column: "evaluator_route"),
+          route.isEmpty == false
     else {
       throw StoreError.unexpected("run \(expectedRunID) holds an unreadable evaluation")
     }

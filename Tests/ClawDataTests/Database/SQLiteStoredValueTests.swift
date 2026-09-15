@@ -82,9 +82,8 @@ private extension SQLiteStoredValueTests {
   }
 
   func booleanDomainIsExact(in row: Row) -> Bool {
-    guard
-      case .falseValue? = SQLiteStoredValue.boolean(in: row, column: "zero_value"),
-      case .trueValue? = SQLiteStoredValue.boolean(in: row, column: "one_value")
+    guard case .falseValue? = SQLiteStoredValue.boolean(in: row, column: "zero_value"),
+          case .trueValue? = SQLiteStoredValue.boolean(in: row, column: "one_value")
     else {
       return false
     }
@@ -99,15 +98,16 @@ private extension SQLiteStoredValueTests {
     switch (expected, nullable) {
     case (.some(let expected), .some(let nullable)):
       return decoded == expected && nullable.value == expected
-    case (nil, nil): return decoded == nil
-    default: return false
+    case (nil, nil):
+      return decoded == nil
+    default:
+      return false
     }
   }
 
   func doublesUseNumericStorageClasses(in row: Row) -> Bool {
-    guard
-      let nullableInteger = SQLiteStoredValue.nullableDouble(in: row, column: "one_value"),
-      let nullableReal = SQLiteStoredValue.nullableDouble(in: row, column: "real_value")
+    guard let nullableInteger = SQLiteStoredValue.nullableDouble(in: row, column: "one_value"),
+          let nullableReal = SQLiteStoredValue.nullableDouble(in: row, column: "real_value")
     else {
       return false
     }
@@ -119,8 +119,10 @@ private extension SQLiteStoredValueTests {
 
   func isAbsent<Value>(_ value: Value?) -> Bool {
     switch value {
-    case nil: true
-    case .some: false
+    case nil:
+      true
+    case .some:
+      false
     }
   }
 }

@@ -145,8 +145,10 @@ private extension ContextBuilder {
   func rawPromptText(_ file: WorkspaceFile) -> String {
     let loadedFile = workspace.load(file: file, maxGraphemes: nil)
     switch loadedFile.outcome {
-    case .present: return loadedFile.text
-    case .overCap, .missing, .unreadable: return ""
+    case .present:
+      return loadedFile.text
+    case .overCap, .missing, .unreadable:
+      return ""
     }
   }
 }

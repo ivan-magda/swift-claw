@@ -17,7 +17,9 @@ private struct ByteExactIssueCode: Hashable, Comparable {
     lhs.bytes.lexicographicallyPrecedes(rhs.bytes)
   }
 
-  func hash(into hasher: inout Hasher) { hasher.combine(bytes) }
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(bytes)
+  }
 }
 
 /// One completed compatible evaluation after owner precedence has been frozen at a revision.
@@ -147,7 +149,9 @@ public struct TriggerIdentity: Sendable, Equatable {
 
   private static let canonicalPrefix = "learning-trigger/v1"
 
-  private static func lengthPrefixed(_ field: String) -> String { "\(field.utf8.count):\(field)" }
+  private static func lengthPrefixed(_ field: String) -> String {
+    "\(field.utf8.count):\(field)"
+  }
 }
 
 public enum LearningTrigger {

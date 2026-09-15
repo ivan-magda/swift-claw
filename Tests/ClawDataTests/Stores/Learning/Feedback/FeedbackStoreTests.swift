@@ -200,7 +200,9 @@ struct FeedbackStoreTests {
     do {
       _ = try env.consume(env.tap(target: target, signal: .resultUseful))
       failure = nil
-    } catch let error { failure = error }
+    } catch let error {
+      failure = error
+    }
 
     // then — moving audit outside the write transaction would leave the preceding mutations behind
     #expect(failure != nil)

@@ -158,7 +158,9 @@ struct CoderCompositionTests {
     do {
       let prepared = try await service.prepare(CoderCompositionFixture.request)
       preparation = .success(prepared)
-    } catch { preparation = .failure(error) }
+    } catch {
+      preparation = .failure(error)
+    }
     try await service.shutdown()
 
     // then

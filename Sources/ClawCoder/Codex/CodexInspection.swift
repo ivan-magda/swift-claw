@@ -20,7 +20,9 @@ struct CodexInspection: Sendable {
         outcome.changedFiles = current.changedPaths(comparedWith: baseline)
       } catch RepositoryInventory.Failure.unavailable {
         outcome.changedFiles = nil
-      } catch CoderGitFailure.command { outcome.changedFiles = nil } catch CoderGitFailure.output {
+      } catch CoderGitFailure.command {
+        outcome.changedFiles = nil
+      } catch CoderGitFailure.output {
         outcome.changedFiles = nil
       }
     }
@@ -29,7 +31,9 @@ struct CodexInspection: Sendable {
         ["symbolic-ref", "--short", "HEAD"],
         at: workspace.directory
       )
-    } catch CoderGitFailure.command { outcome.branch = nil }
+    } catch CoderGitFailure.command {
+      outcome.branch = nil
+    }
     outcome.commit = try await git.headCommit(at: workspace.directory)
     if outcome.commit != nil {
       outcome.commitAuthor = try await git.text(
@@ -47,14 +51,13 @@ struct CodexInspection: Sendable {
 
 private extension CodexInspection {
   func inspectPublication(_ outcome: inout CodexOutcome, invocation: CoderInvocation) async throws {
-    guard
-      let report = outcome.report,
-      let reportedURL = report.prURL,
-      let repository = invocation.prepared.publicationRepository,
-      let number = pullNumber(reportedURL, repository: repository),
-      let head = outcome.branch,
-      head == report.branch,
-      let commit = outcome.commit
+    guard let report = outcome.report,
+          let reportedURL = report.prURL,
+          let repository = invocation.prepared.publicationRepository,
+          let number = pullNumber(reportedURL, repository: repository),
+          let head = outcome.branch,
+          head == report.branch,
+          let commit = outcome.commit
     else {
       throw CoderError.unavailable("PR publication could not be independently confirmed.")
     }
@@ -85,11 +88,10 @@ private extension CodexInspection {
       ]
     )
     let pull = try JSONDecoder().decode(Pull.self, from: data)
-    guard
-      pullNumber(pull.url, repository: repository) == number,
-      pull.headRefName == head,
-      pull.headRefOid == commit,
-      pull.baseRefName == expectedBase
+    guard pullNumber(pull.url, repository: repository) == number,
+          pull.headRefName == head,
+          pull.headRefOid == commit,
+          pull.baseRefName == expectedBase
     else {
       throw CoderError.unavailable("GitHub PR evidence does not match repository, head and base.")
     }
@@ -98,29 +100,27 @@ private extension CodexInspection {
   }
 
   func pullNumber(_ raw: String, repository: String) -> String? {
-    guard
-      let url = URLComponents(string: raw),
-      url.scheme == "https",
-      url.host?.lowercased() == "github.com",
-      url.user == nil,
-      url.password == nil,
-      url.port == nil,
-      url.query == nil,
-      url.fragment == nil,
-      url.percentEncodedPath == url.path
+    guard let url = URLComponents(string: raw),
+          url.scheme == "https",
+          url.host?.lowercased() == "github.com",
+          url.user == nil,
+          url.password == nil,
+          url.port == nil,
+          url.query == nil,
+          url.fragment == nil,
+          url.percentEncodedPath == url.path
     else {
       return nil
     }
     let parts = url.path.split(separator: "/", omittingEmptySubsequences: false)
-    guard
-      parts.count == 5,
-      parts[0].isEmpty,
-      parts[3] == "pull",
-      "\(parts[1])/\(parts[2])".lowercased() == repository,
-      !parts[4].isEmpty,
-      parts[4].allSatisfy(\.isNumber),
-      let number = Int(parts[4]),
-      number > 0
+    guard parts.count == 5,
+          parts[0].isEmpty,
+          parts[3] == "pull",
+          "\(parts[1])/\(parts[2])".lowercased() == repository,
+          !parts[4].isEmpty,
+          parts[4].allSatisfy(\.isNumber),
+          let number = Int(parts[4]),
+          number > 0
     else {
       return nil
     }
@@ -128,13 +128,17 @@ private extension CodexInspection {
   }
 
   struct Repository: Decodable {
-    struct Branch: Decodable { let name: String }
+    struct Branch: Decodable {
+      let name: String
+    }
 
     let defaultBranchRef: Branch
   }
 
   struct Pull: Decodable {
-    struct Author: Decodable { let login: String }
+    struct Author: Decodable {
+      let login: String
+    }
 
     let url: String
     let headRefName: String

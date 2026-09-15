@@ -42,8 +42,10 @@ extension ScheduledLearningStoreGRDB {
     let recomputation = try recomputeAssignment(db, runID: runID, now: now)
     let identity: LearningTrialIdentity
     switch recomputation {
-    case .notAssigned, .stale: return nil
-    case .unchanged(let assignment), .updated(let assignment): identity = assignment.identity.trial
+    case .notAssigned, .stale:
+      return nil
+    case .unchanged(let assignment), .updated(let assignment):
+      identity = assignment.identity.trial
     }
     return try reconcileTrial(db, identity: identity, now: now)
   }
@@ -63,9 +65,8 @@ extension ScheduledLearningStoreGRDB {
     guard trial.identity == identity else {
       throw StoreError.unexpected("live trial identity changed during reconciliation")
     }
-    guard
-      let currentState = try readState(db, jobID: trial.jobID),
-      currentState.epoch == trial.epoch
+    guard let currentState = try readState(db, jobID: trial.jobID),
+          currentState.epoch == trial.epoch
     else {
       return .stale
     }
@@ -116,11 +117,10 @@ extension ScheduledLearningStoreGRDB {
     )
     var seenJobs: Set<Int64> = []
     return try rows.map { row in
-      guard
-        let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
-        jobID > 0,
-        seenJobs.insert(jobID).inserted,
-        let currentState = try readState(db, jobID: jobID)
+      guard let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+            jobID > 0,
+            seenJobs.insert(jobID).inserted,
+            let currentState = try readState(db, jobID: jobID)
       else {
         throw StoreError.unexpected("live trial identity set is unreadable or duplicated")
       }
@@ -197,7 +197,8 @@ extension ScheduledLearningStoreGRDB {
         throw StoreError.unexpected("evaluation feedback resolves to multiple runs")
       }
       runID = rows.first
-    case .candidate, .promotion: runID = nil
+    case .candidate, .promotion:
+      runID = nil
     }
     if let runID {
       _ = try recomputeAndReconcile(db, runID: runID, now: now)

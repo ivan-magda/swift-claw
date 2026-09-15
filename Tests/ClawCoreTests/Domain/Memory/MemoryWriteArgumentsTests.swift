@@ -5,7 +5,9 @@ import Testing
 
 @Suite
 struct MemoryWriteArgumentsTests {
-  private func arguments(_ json: String) -> JSONValue { JSONValue.parse(json) ?? .null }
+  private func arguments(_ json: String) -> JSONValue {
+    JSONValue.parse(json) ?? .null
+  }
 
   @Test
   func parseBuildsAnAssistantSourcedItemWithDefaults() throws {

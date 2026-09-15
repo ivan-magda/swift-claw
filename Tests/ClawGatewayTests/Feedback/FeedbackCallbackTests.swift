@@ -270,19 +270,27 @@ private enum FeedbackAuthFailure {
 
   var allowedUsers: [Int64] {
     switch self {
-    case .ownerMismatch: [42, 43]
-    case .forbidden, .malformed, .unknown, .groupChat, .actionMismatch, .guessableTargetID: [42]
+    case .ownerMismatch:
+      [42, 43]
+    case .forbidden, .malformed, .unknown, .groupChat, .actionMismatch, .guessableTargetID:
+      [42]
     }
   }
 
   var decision: String {
     switch self {
-    case .forbidden: "forbidden"
-    case .malformed: "malformed"
-    case .unknown, .guessableTargetID: "unknown"
-    case .ownerMismatch: "owner_mismatch"
-    case .groupChat: "chat_mismatch"
-    case .actionMismatch: "action_mismatch"
+    case .forbidden:
+      "forbidden"
+    case .malformed:
+      "malformed"
+    case .unknown, .guessableTargetID:
+      "unknown"
+    case .ownerMismatch:
+      "owner_mismatch"
+    case .groupChat:
+      "chat_mismatch"
+    case .actionMismatch:
+      "action_mismatch"
     }
   }
 
@@ -514,7 +522,9 @@ private struct FeedbackCallbackEnvironment {
     )
   }
 
-  func eventCount() throws -> Int { try count(table: "feedback_events") }
+  func eventCount() throws -> Int {
+    try count(table: "feedback_events")
+  }
 
   func eventTransportUpdateIDs() throws -> [Int64] {
     try queue.read { db in
@@ -525,7 +535,9 @@ private struct FeedbackCallbackEnvironment {
     }
   }
 
-  func processedCount() throws -> Int { try count(table: "processed_updates") }
+  func processedCount() throws -> Int {
+    try count(table: "processed_updates")
+  }
 
   func count(table: String) throws -> Int {
     try queue.read { db in

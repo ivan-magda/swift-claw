@@ -187,11 +187,10 @@ struct CoderApprovalFlowTests {
         ),
         now: now
       )
-      guard
-        case .fired(let fire) = try harness.stores.scheduledJobs.fireNow(
-          jobID: scheduled.id,
-          now: now
-        )
+      guard case .fired(let fire) = try harness.stores.scheduledJobs.fireNow(
+        jobID: scheduled.id,
+        now: now
+      )
       else {
         Issue.record("Scheduled run was not created")
         return

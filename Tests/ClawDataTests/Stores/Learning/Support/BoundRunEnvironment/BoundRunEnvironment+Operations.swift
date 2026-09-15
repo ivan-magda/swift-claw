@@ -42,7 +42,9 @@ extension BoundRunEnvironment {
     let tokens: Int
   }
 
-  var usage: UsageStoreGRDB { UsageStoreGRDB(writer: queue) }
+  var usage: UsageStoreGRDB {
+    UsageStoreGRDB(writer: queue)
+  }
 
   /// One completed bound run, sealed as evidence the evaluator is allowed to read.
   func sealedEvidence() throws -> SealedEvidence {
@@ -73,7 +75,9 @@ extension BoundRunEnvironment {
     )
   }
 
-  func evaluatorKey() throws -> LearningOperationKey { evaluatorKey(for: try sealedEvidence()) }
+  func evaluatorKey() throws -> LearningOperationKey {
+    evaluatorKey(for: try sealedEvidence())
+  }
 
   func claim(_ key: LearningOperationKey) throws -> ClaimedOperation {
     guard let claim = try learning.claimOperation(key, now: now) else {

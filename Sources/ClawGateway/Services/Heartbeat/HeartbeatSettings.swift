@@ -53,5 +53,7 @@ enum HeartbeatTemplate {
     """
   }
 
-  static func prompt(checklist: String) -> String { "\(contractSentence)\n\n\(checklist)" }
+  static func prompt(checklist: String) -> String {
+    "\(contractSentence)\n\n\(checklist)"
+  }
 }

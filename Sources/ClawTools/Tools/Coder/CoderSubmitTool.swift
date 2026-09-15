@@ -30,18 +30,21 @@ public struct CoderSubmitTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(30) }
+  public var timeout: Duration {
+    .seconds(30)
+  }
 
-  public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
     do {
       let request = try CoderSubmitArguments.decode(arguments)
       let prepared = try await service.prepare(request)
 
-      guard
-        prepared.executionPolicyID == executionPolicyID,
-        let canonical = CanonicalJSON.encode(prepared)
+      guard prepared.executionPolicyID == executionPolicyID,
+            let canonical = CanonicalJSON.encode(prepared)
       else {
         return .refused(reason: "The Coder execution policy changed; request fresh approval.")
       }
@@ -56,7 +59,9 @@ public struct CoderSubmitTool: Tool {
           approvalReason: .coderSubmit
         )
       )
-    } catch { return .refused(reason: CoderToolOutput.failure(error, redactor: redactor).content) }
+    } catch {
+      return .refused(reason: CoderToolOutput.failure(error, redactor: redactor).content)
+    }
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
@@ -72,14 +77,13 @@ public struct CoderSubmitTool: Tool {
       return CoderToolOutput.missingContext
     }
 
-    guard
-      let canonical = CanonicalJSON.encode(arguments),
-      let prepared = try? JSONDecoder().decode(
-        CoderPreparedRequest.self,
-        from: Data(canonical.utf8)
-      ),
-      prepared.canonicalSource == canonicalTarget,
-      prepared.executionPolicyID == executionPolicyID
+    guard let canonical = CanonicalJSON.encode(arguments),
+          let prepared = try? JSONDecoder().decode(
+            CoderPreparedRequest.self,
+            from: Data(canonical.utf8)
+          ),
+          prepared.canonicalSource == canonicalTarget,
+          prepared.executionPolicyID == executionPolicyID
     else {
       return CoderToolOutput.failure(CoderError.staleApproval, redactor: redactor)
     }
@@ -87,7 +91,9 @@ public struct CoderSubmitTool: Tool {
     do {
       let job = try await service.submit(prepared, context: context)
       return CoderToolOutput.job(job, redactor: redactor)
-    } catch { return CoderToolOutput.failure(error, redactor: redactor) }
+    } catch {
+      return CoderToolOutput.failure(error, redactor: redactor)
+    }
   }
 }
 
@@ -99,7 +105,8 @@ private extension CoderSubmitTool {
 
     let source: String
     switch request.source {
-    case .local(let value), .githubRepository(let value), .githubIssue(let value): source = value
+    case .local(let value), .githubRepository(let value), .githubIssue(let value):
+      source = value
     }
 
     var texts = [source, request.task, request.instructions, request.startRef]

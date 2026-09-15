@@ -70,10 +70,14 @@ public struct ApprovalBootReconciler: Sendable {
       if cleaned > 0 {
         logger.warning("boot approvals: resolved \(cleaned) orphaned pending approval(s)")
       }
-    } catch { logger.error("boot approvals: resolveOrphans failed: \(error)") }
+    } catch {
+      logger.error("boot approvals: resolveOrphans failed: \(error)")
+    }
 
     let unresolved: [Approval]
-    do { unresolved = try approvals.unresolvedAtBoot() } catch {
+    do {
+      unresolved = try approvals.unresolvedAtBoot()
+    } catch {
       logger.error("boot approvals: unresolvedAtBoot failed: \(error)")
       return
     }
@@ -135,7 +139,8 @@ private extension ApprovalBootReconciler {
     case .alreadyResolved:
       logger.debug("boot approvals: approval \(approval.id) already carries its result")
       return false
-    case .reparkForReplay: return true
+    case .reparkForReplay:
+      return true
     }
   }
 

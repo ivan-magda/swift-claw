@@ -9,7 +9,9 @@ struct DisallowedScalarCase: Sendable, CustomTestStringConvertible {
   let name: String
   let scalar: Unicode.Scalar
 
-  var testDescription: String { name }
+  var testDescription: String {
+    name
+  }
 }
 
 @Suite

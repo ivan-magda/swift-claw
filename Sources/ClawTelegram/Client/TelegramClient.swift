@@ -45,9 +45,12 @@ public struct TelegramClient: TelegramTransport {
       return false
     }
     switch ChatMembershipStatus(apiValue: member.status) {
-    case .creator, .administrator, .member: return true
-    case .restricted: return member.is_member == true
-    case .left, .kicked, .other: return false
+    case .creator, .administrator, .member:
+      return true
+    case .restricted:
+      return member.is_member == true
+    case .left, .kicked, .other:
+      return false
     }
   }
 
@@ -211,7 +214,9 @@ extension TelegramClient: MediaFetching {
       // signal available, since an over-cap body is refused outright instead of handed back short.
       // Its message is built from the cap alone, so it cannot echo the token-bearing URL.
       throw overCap
-    } catch { throw TelegramError.transport(sanitize("media download: \(error)")) }
+    } catch {
+      throw TelegramError.transport(sanitize("media download: \(error)"))
+    }
 
     guard result.statusCode == 200 else {
       throw TelegramError.apiError(code: result.statusCode, description: "media download failed")
@@ -268,7 +273,9 @@ extension TelegramClient {
         jsonBody: payload,
         timeoutSeconds: httpTimeout
       )
-    } catch { throw TelegramError.transport(sanitize("\(methodName): \(error)")) }
+    } catch {
+      throw TelegramError.transport(sanitize("\(methodName): \(error)"))
+    }
 
     return try Self.decode(result)
   }
@@ -283,7 +290,9 @@ extension TelegramClient {
   /// returning `result` on success and mapping failures to typed `TelegramError` cases.
   static func decode<R: Decodable>(_ result: HTTPResult) throws -> R {
     let envelope: TResponse<R>
-    do { envelope = try JSONDecoder().decode(TResponse<R>.self, from: result.body) } catch {
+    do {
+      envelope = try JSONDecoder().decode(TResponse<R>.self, from: result.body)
+    } catch {
       throw TelegramError.decoding("status \(result.statusCode): \(error)")
     }
 
@@ -294,9 +303,12 @@ extension TelegramClient {
     let code = envelope.error_code ?? result.statusCode
     let description = envelope.description ?? "unknown error"
     switch code {
-    case 409: throw TelegramError.conflict409(description: description)
-    case 429: throw TelegramError.floodControl(retryAfter: envelope.parameters?.retry_after ?? 5)
-    default: throw TelegramError.apiError(code: code, description: description)
+    case 409:
+      throw TelegramError.conflict409(description: description)
+    case 429:
+      throw TelegramError.floodControl(retryAfter: envelope.parameters?.retry_after ?? 5)
+    default:
+      throw TelegramError.apiError(code: code, description: description)
     }
   }
 }
@@ -308,7 +320,9 @@ private struct GetUpdatesRequest: Encodable {
 }
 
 private struct GetFileRequest: Encodable {
-  private enum CodingKeys: String, CodingKey { case fileID = "fileId" }
+  private enum CodingKeys: String, CodingKey {
+    case fileID = "fileId"
+  }
 
   let fileID: String
 }
@@ -390,7 +404,9 @@ private struct SendChatActionRequest: Encodable {
   let action: String
 }
 
-private struct SetMyCommandsRequest: Encodable { let commands: [BotMenuCommand] }
+private struct SetMyCommandsRequest: Encodable {
+  let commands: [BotMenuCommand]
+}
 
 private struct AnswerCallbackQueryRequest: Encodable {
   private enum CodingKeys: String, CodingKey {
@@ -419,7 +435,9 @@ private struct EditMessageReplyMarkupRequest: Encodable {
 public struct TelegramTypingIndicator: TypingIndicator {
   private let transport: any TelegramTransport
 
-  public init(transport: any TelegramTransport) { self.transport = transport }
+  public init(transport: any TelegramTransport) {
+    self.transport = transport
+  }
 
   public func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
     try? await transport.sendChatAction(

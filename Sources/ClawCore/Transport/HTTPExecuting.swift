@@ -13,7 +13,9 @@ public struct HTTPResult: Sendable {
     self.body = body
   }
 
-  public func header(for name: String) -> String? { headers.caseInsensitiveValue(for: name) }
+  public func header(for name: String) -> String? {
+    headers.caseInsensitiveValue(for: name)
+  }
 }
 
 public struct HTTPStreamHead: Sendable, Equatable {
@@ -25,7 +27,9 @@ public struct HTTPStreamHead: Sendable, Equatable {
     self.headers = headers
   }
 
-  public func header(for name: String) -> String? { headers.caseInsensitiveValue(for: name) }
+  public func header(for name: String) -> String? {
+    headers.caseInsensitiveValue(for: name)
+  }
 }
 
 // MARK: - HTTP Header Defaults
@@ -93,7 +97,9 @@ extension HTTPTransportFailure {
   /// The type carries no case tag, so recognizing that refusal means comparing against the value
   /// the factory builds — done here, once, rather than by each caller re-deriving the message the
   /// factory happens to format.
-  public func isOversizedBody(cap: Int) -> Bool { self == .oversizedBody(cap: cap) }
+  public func isOversizedBody(cap: Int) -> Bool {
+    self == .oversizedBody(cap: cap)
+  }
 }
 
 /// How much of a response body an executor may hold, and whether the caller reads it as one value
@@ -142,7 +148,9 @@ extension HTTPResponseBodyPolicy {
   ///
   /// The single definition every executor consults so a change to the success band cannot leave a
   /// double asserting a stale one.
-  public static func isSuccess(_ statusCode: Int) -> Bool { (200..<300).contains(statusCode) }
+  public static func isSuccess(_ statusCode: Int) -> Bool {
+    (200..<300).contains(statusCode)
+  }
 }
 
 /// One outbound request.
@@ -304,14 +312,18 @@ public struct HTTPStreamExchange: Sendable {
     )
   }
 
-  public func cancel() { owner.cancel() }
+  public func cancel() {
+    owner.cancel()
+  }
 
   public func cancelAndAwait() async -> HTTPStreamTermination {
     owner.cancel()
     return await owner.awaitTermination()
   }
 
-  public func awaitTermination() async -> HTTPStreamTermination { await owner.awaitTermination() }
+  public func awaitTermination() async -> HTTPStreamTermination {
+    await owner.awaitTermination()
+  }
 }
 
 /// The write end of a stream exchange's body.
@@ -323,7 +335,9 @@ public struct HTTPBodySink: Sendable {
   /// - Throws: `CancellationError` or `BoundedAsyncChannelError.channelFinished` once the exchange
   ///   is cancelled, or `BoundedAsyncChannelError.elementExceedsCapacity` for a chunk larger than
   ///   the whole unread allowance, which no amount of draining could ever admit.
-  public func send(_ bytes: Data) async throws { try await channel.send(bytes) }
+  public func send(_ bytes: Data) async throws {
+    try await channel.send(bytes)
+  }
 }
 
 /// The read end of a stream exchange's body.
@@ -349,7 +363,9 @@ public struct HTTPBodySequence: AsyncSequence, Sendable {
     /// Held, never read: dropping the iterator is what the lease is here to notice.
     fileprivate let lease: StreamAbandonmentLease
 
-    public mutating func next() async throws -> Data? { try await base.next() }
+    public mutating func next() async throws -> Data? {
+      try await base.next()
+    }
   }
 }
 

@@ -440,7 +440,9 @@ private struct StateCorruption: Sendable, CustomTestStringConvertible {
   let payload: DatabaseValue
   let violatesPairCheck: Bool
 
-  var testDescription: String { label }
+  var testDescription: String {
+    label
+  }
 }
 
 extension SessionMessageStoreTests {

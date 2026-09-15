@@ -35,11 +35,10 @@ struct AdmissionStoreFixture {
     let reflection = try env.reflectionFixture()
     let operation = try env.startReflector(reflection)
     let artifact = try env.candidate(fixture: reflection, operation: operation, lessons: lessons)
-    guard
-      try env.learning.finishOperation(
-        env.reflectionResult(operation: operation, product: .candidate(artifact)),
-        now: env.now
-      )
+    guard try env.learning.finishOperation(
+      env.reflectionResult(operation: operation, product: .candidate(artifact)),
+      now: env.now
+    )
     else {
       throw StoreError.unexpected("fixture candidate did not persist")
     }
@@ -75,11 +74,10 @@ struct AdmissionStoreFixture {
     )
     let operation = try env.startReflector(reflection)
     let artifact = try env.candidate(fixture: reflection, operation: operation)
-    guard
-      try env.learning.finishOperation(
-        env.reflectionResult(operation: operation, product: .candidate(artifact)),
-        now: env.now
-      )
+    guard try env.learning.finishOperation(
+      env.reflectionResult(operation: operation, product: .candidate(artifact)),
+      now: env.now
+    )
     else {
       throw StoreError.unexpected("fixture feedback candidate did not persist")
     }

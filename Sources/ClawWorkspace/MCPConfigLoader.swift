@@ -57,9 +57,8 @@ public enum MCPConfigLoader {
       throw MCPConfigError.unreadableFile(path: path)
     }
 
-    guard
-      let data = fileManager.contents(atPath: path),
-      let text = String(data: data, encoding: .utf8)
+    guard let data = fileManager.contents(atPath: path),
+          let text = String(data: data, encoding: .utf8)
     else {
       throw MCPConfigError.unreadableFile(path: path)
     }
@@ -69,7 +68,9 @@ public enum MCPConfigLoader {
 
   public static func parse(yaml: String) throws -> MCPConfig {
     let loaded: Any?
-    do { loaded = try Yams.load(yaml: yaml) } catch {
+    do {
+      loaded = try Yams.load(yaml: yaml)
+    } catch {
       throw MCPConfigError.malformed(reason: "\(error)")
     }
 

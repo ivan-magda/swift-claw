@@ -131,15 +131,19 @@ enum LiveTrialPair: CaseIterable {
 
   var first: LearningTrialState {
     switch self {
-    case .openOpen, .openDraining: .open
-    case .drainingOpen, .drainingDraining: .draining
+    case .openOpen, .openDraining:
+      .open
+    case .drainingOpen, .drainingDraining:
+      .draining
     }
   }
 
   var second: LearningTrialState {
     switch self {
-    case .openOpen, .drainingOpen: .open
-    case .openDraining, .drainingDraining: .draining
+    case .openOpen, .drainingOpen:
+      .open
+    case .openDraining, .drainingDraining:
+      .draining
     }
   }
 }

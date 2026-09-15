@@ -30,7 +30,9 @@ struct SessionLaneRegistryTests {
       waiters = stillWaiting
     }
 
-    func snapshot() -> [String] { events }
+    func snapshot() -> [String] {
+      events
+    }
 
     func waitForCount(_ count: Int) async {
       if events.count >= count {
@@ -52,7 +54,9 @@ struct SessionLaneRegistryTests {
   }
 
   /// A clock whose `sleep` fires immediately, so the timeout always wins a drain race.
-  private func immediateClock() -> ScriptedClock { ScriptedClock { _ in } }
+  private func immediateClock() -> ScriptedClock {
+    ScriptedClock { _ in }
+  }
 
   /// A clock whose `sleep` parks on `hold` — the deadline never fires until a test opens the gate,
   /// and it returns on cancellation so a drain that already drained can consume it.
@@ -508,7 +512,9 @@ private actor Cancellation {
   private var seen: [Bool] = []
   private var waiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
-  var values: [Bool] { seen }
+  var values: [Bool] {
+    seen
+  }
 
   func record(_ wasCancelled: Bool) {
     seen.append(wasCancelled)

@@ -195,10 +195,9 @@ public struct IncomingMessage: Sendable, Equatable {
   /// so a captioned voice stays a text message. A caption on media with no usable attachment counts
   /// as text; other bare media maps to `.unsupported`.
   public static func normalize(from raw: RawUpdate) -> IncomingMessage? {
-    guard
-      let message = raw.message ?? raw.editedMessage,
-      let fromUserID = message.fromUserID,
-      !message.hasSenderChat
+    guard let message = raw.message ?? raw.editedMessage,
+          let fromUserID = message.fromUserID,
+          !message.hasSenderChat
     else {
       return nil
     }

@@ -6,9 +6,13 @@ import Foundation
 struct MCPMetadataSanitizer: Sendable {
   private let redactor: SecretRedactor
 
-  init(redactor: SecretRedactor) { self.redactor = redactor }
+  init(redactor: SecretRedactor) {
+    self.redactor = redactor
+  }
 
-  func text(_ raw: String) -> String { redactor.redact(raw) }
+  func text(_ raw: String) -> String {
+    redactor.redact(raw)
+  }
 
   func schema(_ value: JSONValue) -> JSONValue {
     switch value {
@@ -21,9 +25,12 @@ struct MCPMetadataSanitizer: Sendable {
         redacted[text(key)] = schema(child)
       }
       return .object(redacted)
-    case .array(let values): return .array(values.map(schema))
-    case .string(let value): return .string(text(value))
-    case .null, .bool, .integer, .number: return value
+    case .array(let values):
+      return .array(values.map(schema))
+    case .string(let value):
+      return .string(text(value))
+    case .null, .bool, .integer, .number:
+      return value
     }
   }
 
@@ -32,8 +39,10 @@ struct MCPMetadataSanitizer: Sendable {
   func displayName(_ raw: String) -> String {
     let visible = text(raw).unicodeScalars.map { scalar -> String in
       switch scalar.properties.generalCategory {
-      case .control, .format, .lineSeparator, .paragraphSeparator: return " "
-      default: return String(scalar)
+      case .control, .format, .lineSeparator, .paragraphSeparator:
+        return " "
+      default:
+        return String(scalar)
       }
     }.joined()
     let singleLine = visible.split {

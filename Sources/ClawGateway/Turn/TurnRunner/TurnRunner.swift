@@ -160,7 +160,9 @@ public struct TurnRunner: TurnDispatching {
         at: now,
         images: await cachedImages(sessionID: sessionID)
       )
-    } catch StoreError.diskFull { throw StoreError.diskFull } catch {
+    } catch StoreError.diskFull {
+      throw StoreError.diskFull
+    } catch {
       logger.error("context build failed for run \(runID): \(error)")
       try commitContextUnavailable(
         runID: runID,
@@ -278,7 +280,9 @@ public struct TurnRunner: TurnDispatching {
         ownerNotices: inputs.buildResult.ownerNotices,
         origin: origin
       )
-    } catch { logger.error("resume commit failed for run \(runID): \(error)") }
+    } catch {
+      logger.error("resume commit failed for run \(runID): \(error)")
+    }
   }
 }
 
@@ -304,8 +308,10 @@ enum ResumeStage: String {
 
   private var stageCause: TerminalCause {
     switch self {
-    case .contextBuild: .incomplete
-    case .turn: .providerFailure
+    case .contextBuild:
+      .incomplete
+    case .turn:
+      .providerFailure
     }
   }
 }

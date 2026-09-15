@@ -53,7 +53,9 @@ struct TurnEnqueuer: Sendable {
         )
       } catch StoreError.diskFull {
         runLog.error("run \(runID) stopped by storage full after enqueue")
-      } catch { runLog.error("run \(runID) error (handled in-band): \(error)") }
+      } catch {
+        runLog.error("run \(runID) error (handled in-band): \(error)")
+      }
       // Every exit from the turn passes here, including cancellation and supersession. Settling in
       // the closure is what keeps a cancelled bound run inside the learning loop; boot
       // reconciliation is a crash backstop, not the ordinary path to settlement.

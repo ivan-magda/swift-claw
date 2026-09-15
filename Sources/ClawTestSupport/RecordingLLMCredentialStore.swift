@@ -25,7 +25,9 @@ public final class RecordingLLMCredentialStore: LLMCredentialStore, Sendable {
   }
 
   /// Every accepted write, including writes the script rejects.
-  public var saveAttempts: Int { saved.count }
+  public var saveAttempts: Int {
+    saved.count
+  }
 
   public func stopFailing() {
     ledger.withLock { current in
@@ -35,7 +37,9 @@ public final class RecordingLLMCredentialStore: LLMCredentialStore, Sendable {
 
   public func load(
     providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) -> StoredOAuthCredential? { nil }
+  ) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
+    nil
+  }
 
   public func save(
     _ credential: StoredOAuthCredential,

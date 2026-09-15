@@ -27,14 +27,18 @@ actor StubLLMProvider: LLMProvider {
   private(set) var callCount = 0
   private(set) var requests: [ChatRequest] = []
 
-  init(_ outcome: Outcome) { self.outcome = outcome }
+  init(_ outcome: Outcome) {
+    self.outcome = outcome
+  }
 
   func complete(request: ChatRequest) async throws -> ChatResponse {
     callCount += 1
     requests.append(request)
     switch outcome {
-    case .respond(let response): return response
-    case .fail(let error): throw error
+    case .respond(let response):
+      return response
+    case .fail(let error):
+      throw error
     }
   }
 }
@@ -84,7 +88,9 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     )
   }
 
-  func runsHealth(now: Date) throws(StoreError) -> RunsHealth { try base.runsHealth(now: now) }
+  func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
+    try base.runsHealth(now: now)
+  }
 
   func claimApprovedExecution(
     runID: Int64,
@@ -161,9 +167,13 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.executionContext(runID: runID, fallbackChatID: fallbackChatID)
   }
 
-  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? { try base.runOrigin(runID: runID) }
+  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? {
+    try base.runOrigin(runID: runID)
+  }
 
-  func jobID(runID: Int64) throws(StoreError) -> Int64? { try base.jobID(runID: runID) }
+  func jobID(runID: Int64) throws(StoreError) -> Int64? {
+    try base.jobID(runID: runID)
+  }
 
   func failRunStalePolicy(
     runID: Int64,
@@ -243,7 +253,9 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     )
   }
 
-  func runsHealth(now: Date) throws(StoreError) -> RunsHealth { try base.runsHealth(now: now) }
+  func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
+    try base.runsHealth(now: now)
+  }
 
   func claimApprovedExecution(
     runID: Int64,
@@ -320,9 +332,13 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.executionContext(runID: runID, fallbackChatID: fallbackChatID)
   }
 
-  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? { try base.runOrigin(runID: runID) }
+  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? {
+    try base.runOrigin(runID: runID)
+  }
 
-  func jobID(runID: Int64) throws(StoreError) -> Int64? { try base.jobID(runID: runID) }
+  func jobID(runID: Int64) throws(StoreError) -> Int64? {
+    try base.jobID(runID: runID)
+  }
 
   func failRunStalePolicy(
     runID: Int64,
@@ -378,13 +394,17 @@ struct DiskFullRuns: RunStore {
     sessionID: Int64,
     commit: SuspendedTurnCommit,
     now: Date
-  ) throws(StoreError) -> SuspendedCommitReceipt { throw StoreError.diskFull }
+  ) throws(StoreError) -> SuspendedCommitReceipt {
+    throw StoreError.diskFull
+  }
 
   func reconcileRunsAtBoot(
     now: Date,
     degradationText: String,
     heartbeatNoticeChatID: Int64?
-  ) throws(StoreError) -> [DegradationReply] { [] }
+  ) throws(StoreError) -> [DegradationReply] {
+    []
+  }
 
   func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
     RunsHealth(
@@ -401,13 +421,17 @@ struct DiskFullRuns: RunStore {
     observationMessageID: Int64,
     notResumableObservationContent: String,
     now: Date
-  ) throws(StoreError) -> ApprovedExecutionClaim { throw StoreError.diskFull }
+  ) throws(StoreError) -> ApprovedExecutionClaim {
+    throw StoreError.diskFull
+  }
 
   func fillClaimedObservation(
     runID: Int64,
     observationMessageID: Int64,
     fill: ClaimedObservationFill
-  ) throws(StoreError) { throw StoreError.diskFull }
+  ) throws(StoreError) {
+    throw StoreError.diskFull
+  }
 
   func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
     runID: Int64,
@@ -417,7 +441,9 @@ struct DiskFullRuns: RunStore {
     audit: ApprovedExecutionAudit,
     notResumableObservationContent: String,
     now: Date
-  ) throws(StoreError) -> ApprovedExecutionClaim { throw StoreError.diskFull }
+  ) throws(StoreError) -> ApprovedExecutionClaim {
+    throw StoreError.diskFull
+  }
 
   func settleClaimedApprovalAtBoot(
     runID: Int64,
@@ -426,18 +452,28 @@ struct DiskFullRuns: RunStore {
     noticeChatID: Int64,
     noticeText: String,
     now: Date
-  ) throws(StoreError) -> ClaimedApprovalBootOutcome { throw StoreError.diskFull }
+  ) throws(StoreError) -> ClaimedApprovalBootOutcome {
+    throw StoreError.diskFull
+  }
 
-  func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage { throw StoreError.diskFull }
+  func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage {
+    throw StoreError.diskFull
+  }
 
   func executionContext(
     runID: Int64,
     fallbackChatID: Int64
-  ) throws(StoreError) -> RunExecutionContext? { nil }
+  ) throws(StoreError) -> RunExecutionContext? {
+    nil
+  }
 
-  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? { throw StoreError.diskFull }
+  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? {
+    throw StoreError.diskFull
+  }
 
-  func jobID(runID: Int64) throws(StoreError) -> Int64? { throw StoreError.diskFull }
+  func jobID(runID: Int64) throws(StoreError) -> Int64? {
+    throw StoreError.diskFull
+  }
 
   func failRunStalePolicy(
     runID: Int64,
@@ -445,7 +481,9 @@ struct DiskFullRuns: RunStore {
     observationMessageID: Int64,
     observationContent: String,
     now: Date
-  ) throws(StoreError) -> Bool { throw StoreError.diskFull }
+  ) throws(StoreError) -> Bool {
+    throw StoreError.diskFull
+  }
 
   func resolveDeniedObservation(
     runID: Int64,
@@ -453,19 +491,25 @@ struct DiskFullRuns: RunStore {
     content: String,
     cancel: CancelReason?,
     now: Date
-  ) throws(StoreError) -> RunCommitResult { throw StoreError.diskFull }
+  ) throws(StoreError) -> RunCommitResult {
+    throw StoreError.diskFull
+  }
 }
 
 struct TurnRunnerWorkspace: WorkspaceReading {
   let memoryFile: LoadedFile
 
-  init(memoryFile: LoadedFile = .missing) { self.memoryFile = memoryFile }
+  init(memoryFile: LoadedFile = .missing) {
+    self.memoryFile = memoryFile
+  }
 
   func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
     file == .memory ? memoryFile : .missing
   }
 
-  func scanSkills() -> SkillScanResult { SkillScanResult(descriptors: [], warnings: []) }
+  func scanSkills() -> SkillScanResult {
+    SkillScanResult(descriptors: [], warnings: [])
+  }
 }
 
 /// Shared `TurnRunner` test fixture, hoisted to file scope (out of `TurnRunnerTests`' body) so the
@@ -1362,8 +1406,9 @@ struct TurnRunnerTests {
     )
   }
 
-  private func heartbeatAuditCounts(_ queue: DatabaseQueue) throws -> (suppressed: Int, fired: Int)
-  {
+  private func heartbeatAuditCounts(
+    _ queue: DatabaseQueue
+  ) throws -> (suppressed: Int, fired: Int) {
     try queue.read { db in
       let suppressed =
         try Int.fetchOne(

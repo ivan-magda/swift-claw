@@ -1,8 +1,10 @@
 /// Blanks the values of sealed secret assignments in an env file's text, leaving every other
 /// byte untouched, so plaintext secrets leave the disk without hand-editing a working config.
 enum EnvFileSecretScrubber {
-  static func scrub(contents: String, keys: [String]) -> (contents: String, scrubbedKeys: [String])
-  {
+  static func scrub(
+    contents: String,
+    keys: [String]
+  ) -> (contents: String, scrubbedKeys: [String]) {
     var scrubbedKeys: [String] = []
     let lines = contents.split(separator: "\n", omittingEmptySubsequences: false)
 

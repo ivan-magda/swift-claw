@@ -40,7 +40,9 @@ public enum StateRootResolver {
         withIntermediateDirectories: true,
         attributes: [.posixPermissions: permissions]
       )
-    } catch { throw ConfigError.unwritableStateRoot(stateRootURL.path) }
+    } catch {
+      throw ConfigError.unwritableStateRoot(stateRootURL.path)
+    }
 
     return stateRootURL
   }

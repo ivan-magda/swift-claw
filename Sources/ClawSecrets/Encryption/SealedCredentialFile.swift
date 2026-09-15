@@ -27,7 +27,9 @@ protocol SealedCredentialMap: Codable, Equatable, Sendable {
 /// nobody notices is missing until a machine loses power, so a second copy of it is a copy that
 /// eventually differs.
 struct SealedCredentialFile<Map: SealedCredentialMap>: Sendable {
-  static var maximumEnvelopeByteCount: Int { AESGCMEnvelope.maximumByteCount }
+  static var maximumEnvelopeByteCount: Int {
+    AESGCMEnvelope.maximumByteCount
+  }
 
   /// Neither credential file has ever been written by anything but the protocol below, so both can
   /// demand the mode a secret deserves — unlike the runtime envelope, whose 0644 predates it and
@@ -62,7 +64,9 @@ struct SealedCredentialFile<Map: SealedCredentialMap>: Sendable {
     self.publisher = publisher
   }
 
-  var url: URL { paths.url(for: entry) }
+  var url: URL {
+    paths.url(for: entry)
+  }
 
   /// Takes no lock. The commit is a rename, so a reader sees the whole old map or the whole new one
   /// and never a torn one; making readers queue behind a writer's fsync would buy nothing.
@@ -136,7 +140,9 @@ extension SealedCredentialFile {
     key: SymmetricKey
   ) throws(CredentialStoreError) -> SecureFilePublisher.PublicationOutcome {
     let envelope = try codec.sealCredential(try Self.encode(map), key: key)
-    do { return try publisher.publish(envelope, to: url, mode: .replace) } catch {
+    do {
+      return try publisher.publish(envelope, to: url, mode: .replace)
+    } catch {
       // Throwing from `publish` means the name was never claimed, so whatever the owner had is still
       // whole and the caller may retry as though nothing happened.
       throw Self.mapEnvelopeError(error)
@@ -165,7 +171,9 @@ private extension SealedCredentialFile {
     guard SecureFilePublisher.entryExists(at: paths.key) else {
       throw .missingRuntimeKey
     }
-    do { return try EncryptedFileSecretStore.openKey(at: paths.key) } catch {
+    do {
+      return try EncryptedFileSecretStore.openKey(at: paths.key)
+    } catch {
       // Opening an existing key fails for exactly one reason: the protocol refuses its metadata or
       // its length.
       throw .insecureStorage
@@ -178,7 +186,9 @@ private extension SealedCredentialFile {
     }
 
     let envelope: Data
-    do { envelope = try SecureFilePublisher.read(at: url, policy: Self.readPolicy) } catch {
+    do {
+      envelope = try SecureFilePublisher.read(at: url, policy: Self.readPolicy)
+    } catch {
       throw Self.mapEnvelopeError(error)
     }
     return try Self.decode(try codec.openCredential(envelope, key: key))
@@ -190,7 +200,8 @@ private extension SealedCredentialFile {
       // Reached only once something has been seen standing at the path, so a no-follow open that
       // fails is the protocol refusing a planted symlink — not an absent file.
       return .insecureStorage
-    case .oversized: return .oversizedStorage
+    case .oversized:
+      return .oversizedStorage
     case .publicationFailed, .alreadyExists:
       // `.alreadyExists` is unreachable: these files are published to be replaced. Folding it in
       // rather than assuming it away keeps a future exclusive caller from being misdiagnosed.
@@ -234,11 +245,17 @@ extension AESGCMEnvelope {
   /// because the runtime secret store maps the same failures differently, and one shared mapping
   /// would have to lose whichever distinction the other store depends on.
   func sealCredential(_ plaintext: Data, key: SymmetricKey) throws(CredentialStoreError) -> Data {
-    do { return try seal(plaintext, key: key) } catch { throw .publicationFailed }
+    do {
+      return try seal(plaintext, key: key)
+    } catch {
+      throw .publicationFailed
+    }
   }
 
   func openCredential(_ envelope: Data, key: SymmetricKey) throws(CredentialStoreError) -> Data {
-    do { return try open(envelope, key: key) } catch AESGCMEnvelopeError.unsupportedVersion {
+    do {
+      return try open(envelope, key: key)
+    } catch AESGCMEnvelopeError.unsupportedVersion {
       // An unknown version is a build that cannot read this file — a different thing to tell an
       // owner than a tampered file, so it keeps its own remedy.
       throw .unsupportedVersion

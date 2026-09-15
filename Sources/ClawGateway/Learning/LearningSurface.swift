@@ -12,8 +12,10 @@ enum LearningSurface {
 
   static func render(_ views: [JobLearningView], style: Style = .detail) -> String {
     switch style {
-    case .list: return renderList(views)
-    case .detail: return renderDetail(views)
+    case .list:
+      return renderList(views)
+    case .detail:
+      return renderDetail(views)
     }
   }
 }
@@ -53,8 +55,10 @@ private extension LearningSurface {
         """
     case .unreadable(let job):
       return "\(job.jobID) · \(job.validatedLabel ?? "unknown label") · learning state unreadable"
-    case .unarmed(let job): return "\(job.jobID) · \(job.label) · no learning state"
-    case .notFound(let jobID): return "No schedule with id \(jobID). See /schedule list."
+    case .unarmed(let job):
+      return "\(job.jobID) · \(job.label) · no learning state"
+    case .notFound(let jobID):
+      return "No schedule with id \(jobID). See /schedule list."
     }
   }
 }
@@ -71,7 +75,8 @@ private extension LearningSurface {
 
   static func detail(_ view: JobLearningView) -> String {
     switch view {
-    case .notFound(let jobID): return "No schedule with id \(jobID). See /schedule list."
+    case .notFound(let jobID):
+      return "No schedule with id \(jobID). See /schedule list."
     case .unarmed(let job):
       return """
         Schedule \(job.jobID) · \(job.label)
@@ -85,7 +90,8 @@ private extension LearningSurface {
         learning state: unreadable
         Run /doctor and inspect the daemon logs; this read did not change or repair stored state.
         """
-    case .readable(let readable): return readableDetail(readable)
+    case .readable(let readable):
+      return readableDetail(readable)
     }
   }
 
@@ -196,9 +202,12 @@ private extension LearningSurface {
     case .terminal(let receipt):
       receipt.record.rollbackTrigger == nil
         ? LearningDecisionKind.trial.rawValue : LearningDecisionKind.rollback.rawValue
-    case .candidateAdmission: AdmissionReceipt.kind
-    case .reflectionNoCandidate: ReflectionNoCandidateReceipt.kind
-    case .learningReset: ResetReceipt.kind
+    case .candidateAdmission:
+      AdmissionReceipt.kind
+    case .reflectionNoCandidate:
+      ReflectionNoCandidateReceipt.kind
+    case .learningReset:
+      ResetReceipt.kind
     }
   }
 
@@ -211,7 +220,8 @@ private extension LearningSurface {
 
   static func warningText(_ warning: LearningViewWarning) -> String {
     switch warning {
-    case .trialPointerMismatch: "stored trial pointer does not match the live trial"
+    case .trialPointerMismatch:
+      "stored trial pointer does not match the live trial"
     }
   }
 

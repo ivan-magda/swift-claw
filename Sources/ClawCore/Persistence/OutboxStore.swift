@@ -87,7 +87,9 @@ public struct OutboxRow: Sendable, Equatable {
   }
 
   /// What a log line calls this row's origin: its run, or the learning source when it has none.
-  public var originLabel: String { runID.map(String.init) ?? DeliverySource.learning.rawValue }
+  public var originLabel: String {
+    runID.map(String.init) ?? DeliverySource.learning.rawValue
+  }
 
   public init(
     deliveryKey: String,

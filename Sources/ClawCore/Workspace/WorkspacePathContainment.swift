@@ -53,8 +53,7 @@ public enum WorkspacePathContainment {
     guard components.isEmpty == false else {
       return .refused(reason: "The path is empty.")
     }
-    guard
-      components.contains(where: {
+    guard components.contains(where: {
         $0 == ".." || $0 == "."
       }) == false
     else {

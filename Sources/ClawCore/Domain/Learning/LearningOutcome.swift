@@ -65,7 +65,9 @@ public struct ResolvedOutcome: Sendable, Equatable {
     self.hardVetoes = hardVetoes
   }
 
-  public var permitsDependentDecision: Bool { hardVetoes.isEmpty }
+  public var permitsDependentDecision: Bool {
+    hardVetoes.isEmpty
+  }
 }
 
 public enum OwnerPrecedence {
@@ -88,8 +90,10 @@ public enum OwnerPrecedence {
     let evaluationRequired: Bool
     if let resultSignal {
       switch resultSignal.signal {
-      case .resultNotUseful, .resultCorrection: evaluationRequired = usesEvaluatorCodes
-      case .resultUseful: evaluationRequired = false
+      case .resultNotUseful, .resultCorrection:
+        evaluationRequired = usesEvaluatorCodes
+      case .resultUseful:
+        evaluationRequired = false
       case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
         .candidateEdit, .promotionRollback:
         evaluationRequired = false
@@ -128,12 +132,14 @@ public enum OwnerPrecedence {
 private extension OwnerPrecedence {
   static func ownerOutcome(signal: OwnerSignal, evaluatorIssueCodes: [String]) -> EffectiveOutcome {
     switch signal {
-    case .resultUseful: return .positive
+    case .resultUseful:
+      return .positive
     case .resultNotUseful:
       let codes =
         evaluatorIssueCodes.isEmpty ? [syntheticNotUsefulCode] : evaluatorIssueCodes.sorted()
       return .negative(issueCodes: codes)
-    case .resultCorrection: return .negative(issueCodes: evaluatorIssueCodes.sorted())
+    case .resultCorrection:
+      return .negative(issueCodes: evaluatorIssueCodes.sorted())
     case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
       .candidateEdit, .promotionRollback:
       return .neutral
@@ -149,9 +155,12 @@ private extension OwnerPrecedence {
       return .neutral
     }
     switch evaluator {
-    case .noIssue: return .positive
-    case .reusableIssue: return .negative(issueCodes: issueCodes.sorted())
-    case .transientIssue, .uncertain, nil: return .neutral
+    case .noIssue:
+      return .positive
+    case .reusableIssue:
+      return .negative(issueCodes: issueCodes.sorted())
+    case .transientIssue, .uncertain, nil:
+      return .neutral
     }
   }
 }
@@ -188,7 +197,8 @@ extension FeedbackEvent {
 private extension OwnerSignal {
   var isResultSignal: Bool {
     switch self {
-    case .resultUseful, .resultNotUseful, .resultCorrection: true
+    case .resultUseful, .resultNotUseful, .resultCorrection:
+      true
     case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
       .candidateEdit, .promotionRollback:
       false

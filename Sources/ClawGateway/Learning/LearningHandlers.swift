@@ -114,16 +114,15 @@ struct LearningHandlers: Sendable {
     ) {
       try learning.learningView(jobID: jobID)
     }
-    if
-      let jobID,
-      let outboxSignal,
-      let outcome = try await promotionReply(
-        jobID: jobID,
-        view: view,
-        rawUpdate: rawUpdate,
-        message: message,
-        signal: outboxSignal
-      )
+    if let jobID,
+       let outboxSignal,
+       let outcome = try await promotionReply(
+         jobID: jobID,
+         view: view,
+         rawUpdate: rawUpdate,
+         message: message,
+         signal: outboxSignal
+       )
     {
       return outcome
     }

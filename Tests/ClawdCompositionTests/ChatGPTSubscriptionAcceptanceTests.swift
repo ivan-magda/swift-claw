@@ -620,4 +620,8 @@ private struct StopBuild: Error {}
 
 // MARK: - Response Body Inspection
 
-private extension Data { var utf8String: String { String(bytes: self, encoding: .utf8) ?? "" } }
+private extension Data {
+  var utf8String: String {
+    String(bytes: self, encoding: .utf8) ?? ""
+  }
+}

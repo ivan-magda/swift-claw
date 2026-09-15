@@ -17,16 +17,20 @@ extension TrialAssignmentResolutionTests {
     let key = env.evaluatorKey(for: evidence)
     let operation: ClaimedOperation?
     switch fault {
-    case .claim: operation = nil
-    case .start, .denial, .bootClaimed: operation = try env.claim(key)
-    case .bootStarted: operation = try env.startedOperation(key)
+    case .claim:
+      operation = nil
+    case .start, .denial, .bootClaimed:
+      operation = try env.claim(key)
+    case .bootStarted:
+      operation = try env.startedOperation(key)
     }
     try env.corruptAssignmentGeneration(runID: evidence.runID)
 
     // when / then
     #expect {
       switch fault {
-      case .claim: _ = try env.learning.claimOperation(key, now: env.now)
+      case .claim:
+        _ = try env.learning.claimOperation(key, now: env.now)
       case .start:
         _ = try env.learning.authorizeAndStartOperation(
           env.authorization(for: try #require(operation)),
@@ -45,7 +49,8 @@ extension TrialAssignmentResolutionTests {
           ),
           now: env.now
         )
-      case .bootClaimed, .bootStarted: _ = try env.learning.reconcileOperationsAtBoot(now: env.now)
+      case .bootClaimed, .bootStarted:
+        _ = try env.learning.reconcileOperationsAtBoot(now: env.now)
       }
     } throws: { error in
       guard case StoreError.unexpected = error else {
@@ -55,10 +60,12 @@ extension TrialAssignmentResolutionTests {
     }
 
     switch fault {
-    case .claim: #expect(try env.countRows(in: "learning_operations") == 0)
+    case .claim:
+      #expect(try env.countRows(in: "learning_operations") == 0)
     case .start, .denial, .bootClaimed:
       #expect(try env.operationState(try #require(operation).id) == .claimed)
-    case .bootStarted: #expect(try env.operationState(try #require(operation).id) == .started)
+    case .bootStarted:
+      #expect(try env.operationState(try #require(operation).id) == .started)
     }
   }
 
@@ -254,15 +261,14 @@ private struct SealingVersionSnapshot: Equatable {
 private extension BoundRunEnvironment {
   func sealingVersionSnapshot(runID: Int64) throws -> SealingVersionSnapshot {
     try queue.read { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: """
+      guard let row = try Row.fetchOne(
+        db,
+        sql: """
             SELECT evidence_schema_version, classifier_version
             FROM run_compatibility WHERE run_id = ?
             """,
-          arguments: [runID]
-        )
+        arguments: [runID]
+      )
       else {
         throw StoreError.unexpected("fixture compatibility is missing")
       }

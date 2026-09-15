@@ -38,7 +38,9 @@ struct CostAndTokenTests {
     let expectedSource: CostSource
     let expectedIsEstimated: Bool
 
-    var testDescription: String { name }
+    var testDescription: String {
+      name
+    }
   }
 
   static let resolveCases: [ResolveCase] = [

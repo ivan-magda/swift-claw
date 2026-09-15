@@ -7,15 +7,14 @@ extension RunStoreGRDB {
     fallbackChatID: Int64
   ) throws(StoreError) -> RunExecutionContext? {
     try database.readMapping { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: """
+      guard let row = try Row.fetchOne(
+        db,
+        sql: """
             SELECT runs.session_id, runs.origin, runs.requester_user_id, sessions.session_key
             FROM runs JOIN sessions ON sessions.id = runs.session_id WHERE runs.id = ?
             """,
-          arguments: [runID]
-        )
+        arguments: [runID]
+      )
       else {
         return nil
       }
@@ -26,12 +25,11 @@ extension RunStoreGRDB {
       let mode = SessionKey.mode(from: sessionKey)
       let storedChatID = SessionKey.chatID(from: sessionKey)
       if mode == .group {
-        guard
-          let storedChatID,
-          SessionKey.telegramTopic(
-            chatID: storedChatID,
-            threadID: SessionKey.threadID(from: sessionKey)
-          ) == sessionKey
+        guard let storedChatID,
+              SessionKey.telegramTopic(
+                chatID: storedChatID,
+                threadID: SessionKey.threadID(from: sessionKey)
+              ) == sessionKey
         else {
           throw StoreError.unexpected("runs row \(runID) has an invalid group session key")
         }

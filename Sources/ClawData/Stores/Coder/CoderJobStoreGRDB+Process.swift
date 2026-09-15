@@ -39,10 +39,9 @@ private extension CoderJobStoreGRDB {
   )? {
     switch event {
     case .willLaunch(let receipt):
-      guard
-        job.state == .running,
-        job.slotReserved,
-        job.ownership == .none || job.ownership == .stopped
+      guard job.state == .running,
+            job.slotReserved,
+            job.ownership == .none || job.ownership == .stopped
       else {
         throw StoreError.unexpected("Coder job cannot begin a process launch")
       }

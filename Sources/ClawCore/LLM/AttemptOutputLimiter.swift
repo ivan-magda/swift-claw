@@ -111,7 +111,9 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
   package let limits: AttemptOutputLimits
   private let state = Mutex(State())
 
-  package init(limits: AttemptOutputLimits) { self.limits = limits }
+  package init(limits: AttemptOutputLimits) {
+    self.limits = limits
+  }
 
   package func beginRound() -> AttemptOutputScope {
     let roundID = UUID()

@@ -145,7 +145,9 @@ struct DeveloperLoggingTests {
 private struct FakeSecretError: Error, CustomStringConvertible {
   let detail: String
 
-  var description: String { "write failed: \(detail)" }
+  var description: String {
+    "write failed: \(detail)"
+  }
 }
 
 /// Thread-safe sink so the test can read back what the wrapped handler received post-redaction.

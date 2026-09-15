@@ -93,9 +93,7 @@ public struct CoderConfig: Sendable, Equatable {
 private extension CoderConfig {
   static func nonemptySettings(
     _ environment: [String: String]
-  ) throws(ConfigError) -> [String:
-    String]
-  {
+  ) throws(ConfigError) -> [String: String] {
     let keys = [
       AppConfig.EnvKey.coderEnabled,
       AppConfig.EnvKey.coderMaxConcurrentJobs,
@@ -114,9 +112,8 @@ private extension CoderConfig {
 
       let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
 
-      guard
-        !value.isEmpty,
-        !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+      guard !value.isEmpty,
+            !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
       else {
         throw .invalidCoderSetting(key: key)
       }

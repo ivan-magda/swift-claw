@@ -62,7 +62,8 @@ extension AgentRuntime {
     }
 
     switch ProviderFailureAccounting.classify(error) {
-    case .notStarted: return .degraded(degradationKind, usage: nil)
+    case .notStarted:
+      return .degraded(degradationKind, usage: nil)
     case .mayHaveStarted(let observedCompletionTokens):
       return .degraded(
         degradationKind,

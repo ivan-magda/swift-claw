@@ -19,19 +19,26 @@ public enum MCPConfigError: Error, Sendable, Equatable {
   case dangerousRiskOverride(server: String, tool: String)
 
   /// Every case is the owner's file being wrong, so one exit code covers them all.
-  public var exitCode: Int32 { ClawExitCode.configInvalid.rawValue }
+  public var exitCode: Int32 {
+    ClawExitCode.configInvalid.rawValue
+  }
 }
 
 extension MCPConfigError: CustomStringConvertible {
   public var description: String {
     switch self {
-    case .unreadableFile(let path): return "cannot read MCP config at \(path)"
-    case .malformed(let reason): return "malformed MCP config: \(reason)"
-    case .unknownKey(let key): return "unknown key '\(key)' in MCP config"
-    case .missingValue(let key): return "missing required key '\(key)' in MCP config"
+    case .unreadableFile(let path):
+      return "cannot read MCP config at \(path)"
+    case .malformed(let reason):
+      return "malformed MCP config: \(reason)"
+    case .unknownKey(let key):
+      return "unknown key '\(key)' in MCP config"
+    case .missingValue(let key):
+      return "missing required key '\(key)' in MCP config"
     case .invalidValue(let key, let value):
       return "invalid value for '\(key)' in MCP config: \(value)"
-    case .invalidServerName(let name): return "invalid MCP server name: '\(name)'"
+    case .invalidServerName(let name):
+      return "invalid MCP server name: '\(name)'"
     case .invalidURL(let server, let value):
       return "invalid url for MCP server '\(server)': \(value)"
     case .unsupportedScheme(let server, let value):

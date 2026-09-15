@@ -940,8 +940,11 @@ struct MessageRouterTests {
     )
   }
 
-  private func seedPendingRun(_ harness: Harness, updateID: Int64, text: String) throws -> SeededRun
-  {
+  private func seedPendingRun(
+    _ harness: Harness,
+    updateID: Int64,
+    text: String
+  ) throws -> SeededRun {
     let claim = try harness.sessionMessages.claimAndPersistInbound(
       InboundMessage(
         updateID: updateID,

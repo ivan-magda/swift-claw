@@ -41,7 +41,9 @@ public struct FileReadTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(5) }
+  public var timeout: Duration {
+    .seconds(5)
+  }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     nil  // nothing egresses; containment is enforced inside execute
@@ -56,8 +58,10 @@ public struct FileReadTool: Tool {
     }
     let canonicalTarget: String
     switch WorkspacePathContainment.resolveExisting(path: path, root: workspaceRoot.path) {
-    case .refused(let reason): return errorPayload(reason)
-    case .resolved(let resolved): canonicalTarget = resolved
+    case .refused(let reason):
+      return errorPayload(reason)
+    case .resolved(let resolved):
+      canonicalTarget = resolved
     }
 
     guard let data = FileManager.default.contents(atPath: canonicalTarget) else {

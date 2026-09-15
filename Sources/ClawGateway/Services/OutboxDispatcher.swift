@@ -14,7 +14,9 @@ public struct OutboxSignal: Sendable {
   private let stream: AsyncStream<Void>
   private let continuation: AsyncStream<Void>.Continuation
 
-  var notifications: AsyncStream<Void> { stream }
+  var notifications: AsyncStream<Void> {
+    stream
+  }
 
   public init() {
     (stream, continuation) = AsyncStream.makeStream(
@@ -24,10 +26,14 @@ public struct OutboxSignal: Sendable {
   }
 
   /// Requests one drain. Safe to call from any thread; coalesced against an in-flight drain.
-  public func poke() { continuation.yield(()) }
+  public func poke() {
+    continuation.yield(())
+  }
 
   /// Ends the stream so the dispatcher's `for await` loop completes (used on teardown/tests).
-  public func finish() { continuation.finish() }
+  public func finish() {
+    continuation.finish()
+  }
 }
 
 /// Drains `PENDING` `outbound_deliveries` rows and delivers each at-least-once, recording the
@@ -81,7 +87,9 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
   /// rather than crash and strand the remaining rows.
   func drainOnce() async {
     let pendingRows: [OutboxRow]
-    do { pendingRows = try outbox.pendingOutbound() } catch {
+    do {
+      pendingRows = try outbox.pendingOutbound()
+    } catch {
       logger.error("outbox drain aborted; could not read pending rows: \(error)")
       return
     }
@@ -100,7 +108,9 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
       }
 
       let messageID: Int64
-      do { messageID = try await send(row) } catch {
+      do {
+        messageID = try await send(row)
+      } catch {
         // A send interrupted by shutdown is not a fault — the row stays PENDING and boot recovery
         // redelivers it; only a genuine failure is worth a warning.
         if Task.isCancelled {

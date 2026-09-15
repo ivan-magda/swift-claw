@@ -70,7 +70,9 @@ struct ChatGPTResponsesRequestEncoder: Sendable {
 extension ChatGPTResponsesRequestEncoder {
   /// The wire model an owner's qualified reference resolves to, exposed so the provider derives the
   /// same value it stamps replay identities with rather than re-deriving the prefix rule.
-  static func wireModel(for model: String) -> String { unqualifiedModel(model) }
+  static func wireModel(for model: String) -> String {
+    unqualifiedModel(model)
+  }
 
   /// The refusal both the plan validation and the encoder raise when a caller supplies a stop
   /// string: this route has no stop-string contract, so the request fails whole before network I/O.
@@ -130,8 +132,10 @@ private extension ChatGPTResponsesRequestEncoder {
     case .system:
       // Already folded into `instructions`; sending it again would say it twice.
       return []
-    case .user: return [.userMessage(message.content)]
-    case .assistant: return assistantItems(for: message)
+    case .user:
+      return [.userMessage(message.content)]
+    case .assistant:
+      return assistantItems(for: message)
     case .tool:
       // A result that names no call has nothing the route can pair it with, and inventing an
       // identity for it would attach it to someone else's call.
@@ -403,8 +407,10 @@ struct ChatGPTWireContent: Encodable {
     }
     return content.parts.map { part -> ChatGPTWireContent in
       switch part {
-      case .text(let value): return .inputText(value)
-      case .image(let image): return .inputImage(image)
+      case .text(let value):
+        return .inputText(value)
+      case .image(let image):
+        return .inputImage(image)
       }
     }
   }

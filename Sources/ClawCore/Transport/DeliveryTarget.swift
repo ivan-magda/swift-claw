@@ -14,13 +14,16 @@ public struct DeliveryTarget: Sendable, Equatable {
 
   /// The whole-chat target: no topic, no reply. Every DM send uses it, as does any notice with no
   /// calling message to answer.
-  public static func chat(_ chatID: Int64) -> DeliveryTarget { DeliveryTarget(chatID: chatID) }
+  public static func chat(_ chatID: Int64) -> DeliveryTarget {
+    DeliveryTarget(chatID: chatID)
+  }
 
   /// Where an answer to `message` belongs: in a room, the topic it was asked in, threaded under the
   /// message that asked, so a burst of concurrent questions stays legible.
   public static func reply(to message: IncomingMessage, mode: ChatMode) -> DeliveryTarget {
     switch mode {
-    case .direct: .chat(message.chatID)
+    case .direct:
+      .chat(message.chatID)
     case .group:
       DeliveryTarget(
         chatID: message.chatID,

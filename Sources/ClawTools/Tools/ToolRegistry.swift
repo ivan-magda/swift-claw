@@ -18,7 +18,11 @@ public struct ToolRegistry: Sendable {
     )
   }
 
-  public var definitions: [ToolDefinition] { tools.map(\.definition) }
+  public var definitions: [ToolDefinition] {
+    tools.map(\.definition)
+  }
 
-  public func tool(named name: String) -> (any Tool)? { toolsByName[name] }
+  public func tool(named name: String) -> (any Tool)? {
+    toolsByName[name]
+  }
 }

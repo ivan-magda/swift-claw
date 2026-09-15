@@ -5,7 +5,9 @@ import GRDB
 public struct CoderJobStoreGRDB: CoderJobStore {
   let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func admit(
     id: UUID,
@@ -15,12 +17,11 @@ public struct CoderJobStoreGRDB: CoderJobStore {
     now: Date
   ) throws(StoreError) -> CoderAdmission {
     try database.writeMapping { db in
-      if
-        let row = try Row.fetchOne(
-          db,
-          sql: "SELECT * FROM coder_jobs WHERE origin_run_id = ? AND tool_call_id = ?",
-          arguments: [origin.runID, origin.toolCallID]
-        ) {
+      if let row = try Row.fetchOne(
+        db,
+        sql: "SELECT * FROM coder_jobs WHERE origin_run_id = ? AND tool_call_id = ?",
+        arguments: [origin.runID, origin.toolCallID]
+      ) {
         return .existing(try CoderJobRecord.decode(row))
       }
       let unresolved =

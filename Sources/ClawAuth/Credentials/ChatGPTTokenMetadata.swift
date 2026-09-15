@@ -60,11 +60,10 @@ private extension ChatGPTTokenMetadata {
   /// `Data(base64Encoded:)` without `.ignoreUnknownCharacters` rejects what the alphabet check
   /// could not.
   static func decodingBase64URL(_ segment: Substring) -> Data? {
-    guard
-      segment.isEmpty == false,
-      let decodedByteCount = decodedByteCount(ofBase64URL: segment),
-      decodedByteCount <= maximumPayloadBytes,
-      segment.unicodeScalars.allSatisfy(isBase64URLScalar)
+    guard segment.isEmpty == false,
+          let decodedByteCount = decodedByteCount(ofBase64URL: segment),
+          decodedByteCount <= maximumPayloadBytes,
+          segment.unicodeScalars.allSatisfy(isBase64URLScalar)
     else {
       return nil
     }
@@ -115,9 +114,8 @@ private extension ChatGPTTokenMetadata {
   /// issuer. Reusing the wire parser is what makes a fractional or negative expiry impossible here
   /// without restating the rule.
   static func expiry(from claims: [String: JSONValue]) -> Date? {
-    guard
-      let claim = claims[expiryClaimName],
-      let seconds = ChatGPTWireValues.positiveInteger(claim)
+    guard let claim = claims[expiryClaimName],
+          let seconds = ChatGPTWireValues.positiveInteger(claim)
     else {
       return nil
     }
@@ -125,9 +123,8 @@ private extension ChatGPTTokenMetadata {
   }
 
   static func account(from claims: [String: JSONValue]) -> String? {
-    guard
-      case .object(let auth)? = claims[authClaimName],
-      case .string(let raw)? = auth[accountClaimName]
+    guard case .object(let auth)? = claims[authClaimName],
+          case .string(let raw)? = auth[accountClaimName]
     else {
       return nil
     }

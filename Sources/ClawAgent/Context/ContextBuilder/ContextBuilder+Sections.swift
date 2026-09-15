@@ -124,7 +124,8 @@ private extension ContextBuilder {
           warn("Workspace file \(file.relativePath) exceeded an uncapped load")
         }
         return nil
-      case .missing: return nil
+      case .missing:
+        return nil
       case .unreadable:
         warn("Workspace file \(file.relativePath) could not be read")
         return nil
@@ -176,8 +177,7 @@ extension ContextBuilder {
 
 private extension ContextBuilder {
   func spec(for id: ContextRowID) -> RowSpec {
-    guard
-      let spec = ContextRowPolicy.specs.first(where: {
+    guard let spec = ContextRowPolicy.specs.first(where: {
         $0.id == id
       })
     else {

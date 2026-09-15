@@ -18,12 +18,11 @@ extension ContainerBackend {
       timeout: Self.ordinaryCommandTimeout
     )
 
-    guard
-      let workspace = try? ScratchWorkspace.create(
-        stateRoot: stateRoot,
-        identity: identity,
-        request: request
-      )
+    guard let workspace = try? ScratchWorkspace.create(
+      stateRoot: stateRoot,
+      identity: identity,
+      request: request
+    )
     else {
       return nil
     }
@@ -49,47 +48,44 @@ extension ContainerBackend {
     initImage: String,
     deadline: ContinuousClock.Instant
   ) async -> CanaryOutcome? {
-    guard
-      await boundedCommandSucceeded(
-        ContainerInvocation.detachedCanary(
+    guard await boundedCommandSucceeded(
+      ContainerInvocation.detachedCanary(
           context: ContainerLaunchContext(
             identity: identity,
             scratchPath: workspace.directory.path,
             settings: settings,
             initImage: initImage
           )
-        ),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      )
+      ),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    )
     else {
       return nil
     }
 
-    guard
-      let inspectData = await boundedCommandData(
-        ContainerInvocation.inspect(identity.name),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      ),
-      let inspections = try? JSONDecoder().decode(
-        [ContainerInspectDocument].self,
-        from: inspectData
-      ),
-      let inspection = inspections.first(where: {
+    guard let inspectData = await boundedCommandData(
+      ContainerInvocation.inspect(identity.name),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    ),
+          let inspections = try? JSONDecoder().decode(
+            [ContainerInspectDocument].self,
+            from: inspectData
+          ),
+          let inspection = inspections.first(where: {
         $0.configuration.id == identity.name
       })
     else {
       return nil
     }
 
-    guard
-      let guestData = await boundedCommandData(
-        ContainerInvocation.execCanary(identity.name, script: Self.guestCanaryScript),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      ),
-      let guest = try? JSONDecoder().decode(GuestCanaryDocument.self, from: guestData)
+    guard let guestData = await boundedCommandData(
+      ContainerInvocation.execCanary(identity.name, script: Self.guestCanaryScript),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    ),
+          let guest = try? JSONDecoder().decode(GuestCanaryDocument.self, from: guestData)
     else {
       return nil
     }

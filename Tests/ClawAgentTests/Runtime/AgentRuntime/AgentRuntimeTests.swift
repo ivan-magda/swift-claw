@@ -604,9 +604,8 @@ extension AgentRuntimeTests {
         guard context.roundTripIndex == 2 else {
           return .allow
         }
-        guard
-          context.priorMissingUsageResponsesSends == 1,
-          context.priorMissingUsageRecordedTokens > 0
+        guard context.priorMissingUsageResponsesSends == 1,
+              context.priorMissingUsageRecordedTokens > 0
         else {
           return .allow
         }

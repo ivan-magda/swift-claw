@@ -77,7 +77,9 @@ extension ContainerBackend {
         identity: identity,
         request: request
       )
-    } catch { return infrastructureResult("failed to materialize execution scratch: \(error)") }
+    } catch {
+      return infrastructureResult("failed to materialize execution scratch: \(error)")
+    }
 
     let command = foregroundCommand(
       request: request,
@@ -95,8 +97,10 @@ extension ContainerBackend {
           cidFile: workspace.cidFile,
           deadline: deadline
         )
-      case .deadlineExpired: self.result(.timedOutKilled)
-      case .callerCancelled: self.result(.cancelled)
+      case .deadlineExpired:
+        self.result(.timedOutKilled)
+      case .callerCancelled:
+        self.result(.cancelled)
       }
 
     let cleanupOK = await runShieldedCleanup(identity: identity, workspace: workspace)
@@ -159,9 +163,12 @@ extension ContainerBackend {
     deadline: ContinuousClock.Instant
   ) async -> ExecutionResult {
     switch commandResult.termination {
-    case .timedOut: return result(.timedOutKilled)
-    case .cancelled: return result(.cancelled)
-    case .startFailed(let reason): return infrastructureResult(reason)
+    case .timedOut:
+      return result(.timedOutKilled)
+    case .cancelled:
+      return result(.cancelled)
+    case .startFailed(let reason):
+      return infrastructureResult(reason)
     case .signaled(let signal):
       return infrastructureResult("container CLI was terminated by host signal \(signal)")
     case .exited(let code):

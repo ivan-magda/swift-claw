@@ -132,15 +132,18 @@ struct RedactingLogHandler: LogHandler {
     using redact: (_ text: String) -> String
   ) -> Logger.MetadataValue {
     switch value {
-    case .string(let text): .string(redact(text))
-    case .stringConvertible(let convertible): .string(redact("\(convertible)"))
+    case .string(let text):
+      .string(redact(text))
+    case .stringConvertible(let convertible):
+      .string(redact("\(convertible)"))
     case .array(let values):
       .array(
         values.map {
           redacted($0, using: redact)
         }
       )
-    case .dictionary(let nested): .dictionary(redacted(nested, using: redact))
+    case .dictionary(let nested):
+      .dictionary(redacted(nested, using: redact))
     }
   }
 }

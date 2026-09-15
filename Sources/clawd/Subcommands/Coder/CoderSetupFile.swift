@@ -14,9 +14,8 @@ struct CoderSetupFile {
   init(path: String) throws {
     url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
 
-    guard
-      let data = FileManager.default.contents(atPath: url.path),
-      let contents = String(data: data, encoding: .utf8)
+    guard let data = FileManager.default.contents(atPath: url.path),
+          let contents = String(data: data, encoding: .utf8)
     else {
       throw ValidationError(
         "Cannot read the existing env file. Configure clawd first or use --env-file."
@@ -100,7 +99,9 @@ struct CoderSetupFile {
 // MARK: - Literal Assignments
 
 private extension CoderSetupFile {
-  enum ParseError: Error { case unsupported }
+  enum ParseError: Error {
+    case unsupported
+  }
 
   static func assignment(_ key: String, _ value: String) -> String {
     let escaped = value.reduce(into: "") { result, character in
@@ -128,11 +129,10 @@ private extension CoderSetupFile {
     }
 
     let key = String(text[..<equal])
-    guard
-      let first = key.first,
-      first.isASCII,
-      first.isLetter || first == "_",
-      key.allSatisfy({
+    guard let first = key.first,
+          first.isASCII,
+          first.isLetter || first == "_",
+          key.allSatisfy({
         $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_")
       })
     else {

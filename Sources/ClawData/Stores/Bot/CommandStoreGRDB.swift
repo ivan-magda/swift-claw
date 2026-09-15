@@ -7,7 +7,9 @@ public struct CommandStoreGRDB: CommandStore {
   private let afterClaimForTesting: @Sendable () throws -> Void
   private let afterSupersedeAndDetaintForTesting: @Sendable () throws -> Void
 
-  public init(writer: any DatabaseWriter) { self.init(writer: writer, afterClaimForTesting: {}) }
+  public init(writer: any DatabaseWriter) {
+    self.init(writer: writer, afterClaimForTesting: {})
+  }
 
   init(
     writer: any DatabaseWriter,

@@ -5,9 +5,13 @@ import Foundation
 public struct ScriptedTransportFailure: Error, CustomStringConvertible, Sendable {
   public let message: String
 
-  public init(message: String) { self.message = message }
+  public init(message: String) {
+    self.message = message
+  }
 
-  public var description: String { message }
+  public var description: String {
+    message
+  }
 }
 
 /// Parks a scripted stream's body producer at a chosen boundary inside the exchange: `started` opens
@@ -72,7 +76,9 @@ public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
   private var steps: [Step]
   public private(set) var recorded: [Recorded] = []
 
-  public init(_ steps: [Step]) { self.steps = steps }
+  public init(_ steps: [Step]) {
+    self.steps = steps
+  }
 
   public func execute(_ request: HTTPRequest) async throws -> HTTPResult {
     guard case .buffered = request.responseBodyPolicy else {
@@ -86,10 +92,14 @@ public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
       throw ScriptedTransportFailure(message: "scripted executor exhausted")
     }
     switch steps.removeFirst() {
-    case .ok(let result): return result
-    case .responding(let response): return try await response(request)
-    case .fail(let error): throw error
-    case .transportFailure(let failure): throw failure
+    case .ok(let result):
+      return result
+    case .responding(let response):
+      return try await response(request)
+    case .fail(let error):
+      throw error
+    case .transportFailure(let failure):
+      throw failure
     case .stream, .streamFailure, .respondingStream, .blockedStream, .streamThenBlock:
       throw ScriptedTransportFailure(message: "expected buffered step, got streaming step")
     }
@@ -129,7 +139,8 @@ private extension ScriptedHTTPExecutor {
     errorBytes: Int
   ) throws -> HTTPStreamExchange {
     switch step {
-    case .transportFailure(let failure): throw failure
+    case .transportFailure(let failure):
+      throw failure
     case .stream(let head, let chunks):
       return Self.exchange(
         head: head,
@@ -182,11 +193,17 @@ private extension ScriptedHTTPExecutor {
 
 extension ScriptedHTTPExecutor {
   /// URLs of every recorded call, in dispatch order.
-  public var requestedURLs: [String] { recorded.map(\.url) }
+  public var requestedURLs: [String] {
+    recorded.map(\.url)
+  }
 
-  public var lastHeaders: [String: String] { recorded.last?.headers ?? [:] }
+  public var lastHeaders: [String: String] {
+    recorded.last?.headers ?? [:]
+  }
 
-  public var lastBody: Data? { recorded.last?.body }
+  public var lastBody: Data? {
+    recorded.last?.body
+  }
 }
 
 // MARK: - Scripting

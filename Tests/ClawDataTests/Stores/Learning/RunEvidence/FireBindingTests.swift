@@ -504,11 +504,17 @@ private struct FireBindingEnvironment {
     }
   }
 
-  func assignmentCount() throws -> Int { try rowCount(in: "trial_assignments") }
+  func assignmentCount() throws -> Int {
+    try rowCount(in: "trial_assignments")
+  }
 
-  func bindingCount() throws -> Int { try rowCount(in: "run_learning_bindings") }
+  func bindingCount() throws -> Int {
+    try rowCount(in: "run_learning_bindings")
+  }
 
-  func runCount() throws -> Int { try rowCount(in: "runs") }
+  func runCount() throws -> Int {
+    try rowCount(in: "runs")
+  }
 
   func moveAdmission(to admittedAt: Date) throws {
     try queue.write { db in
@@ -598,7 +604,8 @@ private struct FireBindingEnvironment {
           sql: "UPDATE learning_trials SET consumed_assignments = 4 WHERE job_id = ?",
           arguments: [jobID]
         )
-      case .candidateEpoch: try db.execute(sql: "UPDATE learning_candidates SET learning_epoch = 2")
+      case .candidateEpoch:
+        try db.execute(sql: "UPDATE learning_candidates SET learning_epoch = 2")
       case .candidateBase:
         try db.execute(sql: "UPDATE learning_candidates SET base_digest = replacement_digest")
       case .candidateBaseRevision:
@@ -611,14 +618,13 @@ private struct FireBindingEnvironment {
       case .candidateAlgorithm:
         try db.execute(sql: "UPDATE learning_candidates SET algorithm = 'unknown'")
       case .admissionReceipt:
-        guard
-          let raw = try String.fetchOne(
-            db,
-            sql: "SELECT result FROM learning_decisions WHERE kind = ?",
-            arguments: [AdmissionReceipt.kind]
-          ),
-          let bytes = raw.data(using: .utf8),
-          let receipt = try? JSONDecoder().decode(AdmissionReceipt.self, from: bytes)
+        guard let raw = try String.fetchOne(
+          db,
+          sql: "SELECT result FROM learning_decisions WHERE kind = ?",
+          arguments: [AdmissionReceipt.kind]
+        ),
+              let bytes = raw.data(using: .utf8),
+              let receipt = try? JSONDecoder().decode(AdmissionReceipt.self, from: bytes)
         else {
           throw StoreError.unexpected("fixture admission receipt is missing")
         }

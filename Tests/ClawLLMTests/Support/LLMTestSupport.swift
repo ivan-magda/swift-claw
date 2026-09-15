@@ -19,13 +19,17 @@ final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Sendable {
   let behavior: Behavior
   private(set) var loadCount = 0
 
-  init(_ behavior: Behavior) { self.behavior = behavior }
+  init(_ behavior: Behavior) {
+    self.behavior = behavior
+  }
 
   func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
     loadCount += 1
     switch behavior {
-    case .value(let credential): return credential
-    case .failure(let error): throw error
+    case .value(let credential):
+      return credential
+    case .failure(let error):
+      throw error
     }
   }
 
@@ -68,7 +72,9 @@ struct CredentialUnavailable: Error {}
 actor SleepRecorder {
   private(set) var delays: [Double] = []
 
-  func record(_ seconds: Double) { delays.append(seconds) }
+  func record(_ seconds: Double) {
+    delays.append(seconds)
+  }
 }
 
 // MARK: - Builders
@@ -201,7 +207,9 @@ func drain(
     for try await event in stream {
       events.append(event)
     }
-  } catch { thrown = error }
+  } catch {
+    thrown = error
+  }
   return (events, thrown, await stream.awaitTermination())
 }
 

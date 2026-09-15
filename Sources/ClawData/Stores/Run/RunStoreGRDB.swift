@@ -31,15 +31,14 @@ extension RunStoreGRDB {
     now: Date
   ) throws(StoreError) -> RunOrigin? {
     try database.writeMapping { db in
-      guard
-        try Self.transitionRun(
-          db,
-          runID: runID,
-          event: .pickUp,
-          now: now,
-          policyVersion: policyVersion,
-          terminal: nil
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: runID,
+        event: .pickUp,
+        now: now,
+        policyVersion: policyVersion,
+        terminal: nil
+      ) != nil
       else {
         return nil
       }
@@ -62,10 +61,9 @@ extension RunStoreGRDB {
 
   public func failRun(runID: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
     try database.writeMapping { db in
-      guard
-        try Self
-        .transitionRun(db, runID: runID, event: .fail, now: now, terminal: .settled(cause))
-        != nil
+      guard try Self
+            .transitionRun(db, runID: runID, event: .fail, now: now, terminal: .settled(cause))
+            != nil
       else {
         return
       }
@@ -101,14 +99,13 @@ extension RunStoreGRDB {
         ?? .settled(.approvalDenied)
       // For the command path the run is already CANCELLED/SUPERSEDED, so the FSM returns nil and we
       // report `.ignored`: the observation fix above was the only remaining work.
-      guard
-        let nextState = try Self.transitionRun(
-          db,
-          runID: runID,
-          event: event,
-          now: now,
-          terminal: terminal
-        )
+      guard let nextState = try Self.transitionRun(
+        db,
+        runID: runID,
+        event: event,
+        now: now,
+        terminal: terminal
+      )
       else {
         return .ignored
       }

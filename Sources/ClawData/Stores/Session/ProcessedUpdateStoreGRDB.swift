@@ -5,7 +5,9 @@ import GRDB
 public struct ProcessedUpdateStoreGRDB: ProcessedUpdateStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func claimUpdate(updateID: Int64) throws(StoreError) -> Bool {
     try database.writeMapping { db in

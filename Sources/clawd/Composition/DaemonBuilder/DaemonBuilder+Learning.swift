@@ -74,7 +74,9 @@ extension DaemonBuilder {
           configuredRoute: configuredRoute
         )
         try learning.freezeCompatibility(runID: runID, surface: surface)
-      } catch { logger.error("run \(runID) compatibility freeze failed: \(error)") }
+      } catch {
+        logger.error("run \(runID) compatibility freeze failed: \(error)")
+      }
     }
   }
 

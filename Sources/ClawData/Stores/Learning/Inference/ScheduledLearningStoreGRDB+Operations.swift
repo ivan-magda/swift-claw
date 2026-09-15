@@ -75,7 +75,8 @@ private extension ScheduledLearningStoreGRDB {
           supersedes: latest.id,
           now: now
         )
-      case .claimed, .started, .succeeded, .failed, .failedNoCall: claimed = nil
+      case .claimed, .started, .succeeded, .failed, .failedNoCall:
+        claimed = nil
       }
     } else {
       claimed = try insertClaim(db, key: key, generation: 1, supersedes: nil, now: now)
@@ -249,23 +250,22 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
-    guard
-      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      let phaseRaw = SQLiteStoredValue.string(in: row, column: "phase"),
-      let sourceDigest = SQLiteStoredValue.string(in: row, column: "source_digest"),
-      let keyDigest = SQLiteStoredValue.string(in: row, column: "key_digest"),
-      let carrier = SQLiteStoredValue.nullableString(in: row, column: "carrier_digest"),
-      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
-      let failureRaw = SQLiteStoredValue.nullableString(in: row, column: "failure_code"),
-      let route = SQLiteStoredValue.nullableString(in: row, column: "route"),
-      let providerCall = SQLiteStoredValue.nullableString(in: row, column: "provider_call_id"),
-      let reservedTokens = SQLiteStoredValue.nullableInt(in: row, column: "reserved_tokens"),
-      let reservedCost = SQLiteStoredValue.nullableDouble(in: row, column: "reserved_cost_usd"),
-      let reservationState = SQLiteStoredValue.nullableString(
-        in: row,
-        column: "reservation_state"
-      )
+    guard let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+          let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+          let phaseRaw = SQLiteStoredValue.string(in: row, column: "phase"),
+          let sourceDigest = SQLiteStoredValue.string(in: row, column: "source_digest"),
+          let keyDigest = SQLiteStoredValue.string(in: row, column: "key_digest"),
+          let carrier = SQLiteStoredValue.nullableString(in: row, column: "carrier_digest"),
+          let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+          let failureRaw = SQLiteStoredValue.nullableString(in: row, column: "failure_code"),
+          let route = SQLiteStoredValue.nullableString(in: row, column: "route"),
+          let providerCall = SQLiteStoredValue.nullableString(in: row, column: "provider_call_id"),
+          let reservedTokens = SQLiteStoredValue.nullableInt(in: row, column: "reserved_tokens"),
+          let reservedCost = SQLiteStoredValue.nullableDouble(in: row, column: "reserved_cost_usd"),
+          let reservationState = SQLiteStoredValue.nullableString(
+            in: row,
+            column: "reservation_state"
+          )
     else {
       throw StoreError.unexpected("operation \(id.rawValue) holds unreadable stored values")
     }
@@ -294,17 +294,16 @@ extension ScheduledLearningStoreGRDB {
   static func startedOperationReservation(
     _ operation: OperationRow
   ) throws -> StartedOperationReservation {
-    guard
-      let providerCallID = operation.providerCallID,
-      providerCallID.rawValue.isEmpty == false,
-      let route = operation.route,
-      route.isEmpty == false,
-      let reservedTokens = operation.reservedTokens,
-      reservedTokens >= 0,
-      let reservedCostUSD = operation.reservedCostUSD,
-      reservedCostUSD.isFinite,
-      reservedCostUSD >= 0,
-      operation.reservationState == LearningReservationState.open.rawValue
+    guard let providerCallID = operation.providerCallID,
+          providerCallID.rawValue.isEmpty == false,
+          let route = operation.route,
+          route.isEmpty == false,
+          let reservedTokens = operation.reservedTokens,
+          reservedTokens >= 0,
+          let reservedCostUSD = operation.reservedCostUSD,
+          reservedCostUSD.isFinite,
+          reservedCostUSD >= 0,
+          operation.reservationState == LearningReservationState.open.rawValue
     else {
       throw StoreError.unexpected(
         "started operation \(operation.id.rawValue) has an unreadable call reservation"

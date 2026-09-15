@@ -46,11 +46,10 @@ struct CodexReport: Sendable, Decodable {
     }
     defer { close(descriptor) }
     var metadata = stat()
-    guard
-      fstat(descriptor, &metadata) == 0,
-      metadata.st_mode & S_IFMT == S_IFREG,
-      metadata.st_size >= 0,
-      metadata.st_size <= byteLimit
+    guard fstat(descriptor, &metadata) == 0,
+          metadata.st_mode & S_IFMT == S_IFREG,
+          metadata.st_size >= 0,
+          metadata.st_size <= byteLimit
     else {
       throw CodexProtocolFailure.invalidReport
     }
@@ -69,9 +68,8 @@ struct CodexReport: Sendable, Decodable {
       }
       data.append(contentsOf: buffer.prefix(count))
     }
-    guard
-      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      Set(object.keys) == Set(CodingKeys.allCases.map(\.rawValue))
+    guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          Set(object.keys) == Set(CodingKeys.allCases.map(\.rawValue))
     else {
       throw CodexProtocolFailure.invalidReport
     }
@@ -81,4 +79,6 @@ struct CodexReport: Sendable, Decodable {
 
 // swiftlint:enable discouraged_optional_collection
 
-enum CodexProtocolFailure: Error { case invalidReport, invalidEvents }
+enum CodexProtocolFailure: Error {
+  case invalidReport, invalidEvents
+}

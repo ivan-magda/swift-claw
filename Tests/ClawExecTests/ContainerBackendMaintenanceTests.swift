@@ -334,11 +334,10 @@ private final class MaintenanceFixture: @unchecked Sendable {
       path: "clawd-maintenance-tests-\(UUID().uuidString.lowercased())"
     )
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
-    guard
-      let workloadImage = PinnedImageReference.parse(
+    guard let workloadImage = PinnedImageReference.parse(
         // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      )
+    )
     else {
       throw MaintenanceFixtureError.missingIdentity
     }
@@ -365,8 +364,10 @@ private final class MaintenanceFixture: @unchecked Sendable {
     )
   }
 
-  func response(for command: SubprocessCommand, history _: [SubprocessCommand]) -> SubprocessResult
-  {
+  func response(
+    for command: SubprocessCommand,
+    history _: [SubprocessCommand]
+  ) -> SubprocessResult {
     let arguments = command.arguments
     if arguments == ContainerInvocation.systemStatus() {
       return jsonCommandResult(#"{"status":"running"}"#)
@@ -412,7 +413,9 @@ private final class MaintenanceFixture: @unchecked Sendable {
     return commandResult(.exited(0))
   }
 
-  func remove() { try? FileManager.default.removeItem(at: root) }
+  func remove() {
+    try? FileManager.default.removeItem(at: root)
+  }
 }
 
 private func maintenanceRequest() -> ExecutionRequest {
@@ -429,4 +432,6 @@ private func maintenanceRequest() -> ExecutionRequest {
   )
 }
 
-private enum MaintenanceFixtureError: Error { case missingIdentity }
+private enum MaintenanceFixtureError: Error {
+  case missingIdentity
+}

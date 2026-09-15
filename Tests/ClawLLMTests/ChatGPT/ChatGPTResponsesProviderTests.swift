@@ -524,7 +524,9 @@ private let okHead = Support.okHead
 private let plainRequest = Support.plainRequest
 private let sessionedRequest = Support.sessionedRequest
 
-private func head(_ status: Int) -> HTTPStreamHead { Support.head(status) }
+private func head(_ status: Int) -> HTTPStreamHead {
+  Support.head(status)
+}
 
 // MARK: - Assertions
 
@@ -536,7 +538,9 @@ private func requireProviderFailure(_ body: () async throws -> some Any) async -
       cause: .terminal(status: nil, message: "unreached"),
       accounting: .notStarted
     )
-  } catch let failure as ProviderFailure { return failure } catch {
+  } catch let failure as ProviderFailure {
+    return failure
+  } catch {
     Issue.record("expected a ProviderFailure, got \(error)")
     return ProviderFailure(
       cause: .terminal(status: nil, message: "unreached"),
@@ -547,10 +551,9 @@ private func requireProviderFailure(_ body: () async throws -> some Any) async -
 
 private func assistantOutputTexts(_ input: [[String: Any]]) -> [String] {
   input.compactMap { item -> String? in
-    guard
-      item["type"] as? String == "message",
-      item["role"] as? String == "assistant",
-      let content = item["content"] as? [[String: Any]]
+    guard item["type"] as? String == "message",
+          item["role"] as? String == "assistant",
+          let content = item["content"] as? [[String: Any]]
     else {
       return nil
     }

@@ -13,10 +13,9 @@ extension ScheduledLearningStoreGRDB {
 
   static func decodeCanonicalDecision<Value: Codable>(_ json: String) throws -> Value {
     let bytes = Data(json.utf8)
-    guard
-      let value = try? JSONDecoder().decode(Value.self, from: bytes),
-      let canonical = try? CanonicalJSON.data(encoding: value),
-      canonical == bytes
+    guard let value = try? JSONDecoder().decode(Value.self, from: bytes),
+          let canonical = try? CanonicalJSON.data(encoding: value),
+          canonical == bytes
     else {
       throw StoreError.unexpected("learning decision payload is unreadable")
     }

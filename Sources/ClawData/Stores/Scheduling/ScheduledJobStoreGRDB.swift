@@ -29,7 +29,9 @@ extension ScheduledJobStoreGRDB {
   static func insertJob(_ db: Database, _ job: NewScheduledJob, now: Date) throws -> ScheduledJob {
     let recurrenceJSON: String?
     if let envelope = job.recurrence {
-      do { recurrenceJSON = try envelope.encodedJSON() } catch {
+      do {
+        recurrenceJSON = try envelope.encodedJSON()
+      } catch {
         // Domain-typed at the seam: an EncodingError must not leak past the store either
         // (mirrors jobFromRow's decode wrap).
         throw StoreError.unexpected("unencodable recurrence envelope: \(error)")
@@ -99,12 +101,11 @@ extension ScheduledJobStoreGRDB {
 
 extension ScheduledJobStoreGRDB {
   static func fetchJob(_ db: Database, id: Int64) throws -> ScheduledJob? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT * FROM scheduled_jobs WHERE id = ?",
-        arguments: [id]
-      )
+    guard let row = try Row.fetchOne(
+      db,
+      sql: "SELECT * FROM scheduled_jobs WHERE id = ?",
+      arguments: [id]
+    )
     else {
       return nil
     }
@@ -114,7 +115,9 @@ extension ScheduledJobStoreGRDB {
   static func jobFromRow(_ row: Row) throws -> ScheduledJob {
     let recurrence: RecurrenceEnvelope?
     if let json = row["recurrence"] as String? {
-      do { recurrence = try RecurrenceEnvelope.decode(fromJSON: json) } catch {
+      do {
+        recurrence = try RecurrenceEnvelope.decode(fromJSON: json)
+      } catch {
         // Domain-typed at the seam: a DecodingError must not leak past the store either.
         throw StoreError.unexpected("undecodable recurrence envelope: \(error)")
       }
@@ -125,9 +128,8 @@ extension ScheduledJobStoreGRDB {
     guard let status = ScheduledJobStatus(rawValue: row["status"]) else {
       throw StoreError.unexpected("unknown scheduled job status")
     }
-    guard
-      let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
-      let updatedTs = EpochSecondCodec.date(fromEpoch: row["updated_ts"])
+    guard let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
+          let updatedTs = EpochSecondCodec.date(fromEpoch: row["updated_ts"])
     else {
       throw StoreError.unexpected("scheduled job row missing timestamps")
     }
@@ -158,9 +160,12 @@ extension ScheduledJobStoreGRDB {
         return nil
       }
       switch current.status {
-      case .paused: return current  // idempotent re-pause: no write, no duplicate audit
-      case .completed, .cancelled: return nil  // terminal — the FSM has no exit
-      case .active: break
+      case .paused:
+        return current  // idempotent re-pause: no write, no duplicate audit
+      case .completed, .cancelled:
+        return nil  // terminal — the FSM has no exit
+      case .active:
+        break
       }
 
       try db.execute(
@@ -193,9 +198,12 @@ extension ScheduledJobStoreGRDB {
         return nil
       }
       switch current.status {
-      case .active: return current  // idempotent: an already-running schedule is never re-aimed
-      case .completed, .cancelled: return nil
-      case .paused: break
+      case .active:
+        return current  // idempotent: an already-running schedule is never re-aimed
+      case .completed, .cancelled:
+        return nil
+      case .paused:
+        break
       }
 
       try db.execute(

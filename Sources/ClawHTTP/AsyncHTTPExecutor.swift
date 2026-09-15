@@ -19,7 +19,9 @@ import NIOPosix
 public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
   private let client: HTTPClient
 
-  public init(client: HTTPClient) { self.client = client }
+  public init(client: HTTPClient) {
+    self.client = client
+  }
 
   public func execute(_ request: HTTPRequest) async throws -> HTTPResult {
     guard case .buffered(let successBytes, let errorBytes) = request.responseBodyPolicy else {
@@ -42,7 +44,9 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
           whenOversized: isSuccess ? .fails : .truncates
         )
       )
-    } catch let oversized as HTTPTransportFailure { throw oversized } catch {
+    } catch let oversized as HTTPTransportFailure {
+      throw oversized
+    } catch {
       throw Self.classifyPostHead(error)
     }
   }
@@ -78,15 +82,20 @@ private extension AsyncHTTPExecutor {
 
     do {
       return try await client.execute(clientRequest, timeout: TimeAmount(request.timeout))
-    } catch { throw Self.classify(error) }
+    } catch {
+      throw Self.classify(error)
+    }
   }
 
   func makeClientRequest(_ request: HTTPRequest) -> HTTPClientRequest {
     var clientRequest = HTTPClientRequest(url: request.url)
     switch request.method {
-    case .get: clientRequest.method = .GET
-    case .post: clientRequest.method = .POST
-    case .delete: clientRequest.method = .DELETE
+    case .get:
+      clientRequest.method = .GET
+    case .post:
+      clientRequest.method = .POST
+    case .delete:
+      clientRequest.method = .DELETE
     }
 
     for (name, value) in request.headers {
@@ -137,7 +146,8 @@ private extension AsyncHTTPExecutor {
 
       guard view.count <= remaining else {
         switch handling {
-        case .fails: throw HTTPTransportFailure.oversizedBody(cap: cap)
+        case .fails:
+          throw HTTPTransportFailure.oversizedBody(cap: cap)
         case .truncates:
           collected.append(contentsOf: view.prefix(remaining))
           return collected
@@ -186,9 +196,15 @@ private extension AsyncHTTPExecutor {
         try await sink.send(chunk)
       }
       return .completed
-    } catch is CancellationError { return .cancelled(.mayHaveBeenSent) } catch let error
+    } catch is CancellationError {
+      return .cancelled(.mayHaveBeenSent)
+    } catch let error
       as BoundedAsyncChannelError
-    { return terminationForSink(error) } catch { return .failed(classifyPostHead(error)) }
+    {
+      return terminationForSink(error)
+    } catch {
+      return .failed(classifyPostHead(error))
+    }
   }
 
   static func terminationForSink(_ error: BoundedAsyncChannelError) -> HTTPStreamTermination {
@@ -201,7 +217,8 @@ private extension AsyncHTTPExecutor {
             "response body chunk of \(weight) bytes exceeds the \(capacity)-byte unread limit"
         )
       )
-    case .channelFinished: return .cancelled(.mayHaveBeenSent)
+    case .channelFinished:
+      return .cancelled(.mayHaveBeenSent)
     case .negativeWeight, .multipleIterators:
       return .failed(
         HTTPTransportFailure(

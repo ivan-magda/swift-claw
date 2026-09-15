@@ -148,11 +148,15 @@ public struct MessageRouter: Sendable {
   static let welcomeText = "Hi! I'm online. Send me a message and I'll do my best to help."
   static let privateBotText = "Sorry, this is a private bot."
 
-  static func unsupportedMediaText(kind: String) -> String { "I can't read \(kind) yet." }
+  static func unsupportedMediaText(kind: String) -> String {
+    "I can't read \(kind) yet."
+  }
 
   @discardableResult
   public func handle(rawUpdate: RawUpdate) async -> HandleOutcome {
-    do throws(RoutingHalt) { return try await route(rawUpdate: rawUpdate) } catch {
+    do throws(RoutingHalt) {
+      return try await route(rawUpdate: rawUpdate)
+    } catch {
       return error.outcome
     }
   }
@@ -217,7 +221,8 @@ private extension MessageRouter {
     )
     let mode: ChatMode
     switch decision {
-    case .allowed(let allowed): mode = allowed
+    case .allowed(let allowed):
+      mode = allowed
     case .denied(let denial):
       return await denyAccess(denial, rawUpdate: rawUpdate, message: message)
     }

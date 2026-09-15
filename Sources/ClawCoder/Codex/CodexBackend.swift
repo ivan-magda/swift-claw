@@ -69,7 +69,9 @@ public struct CodexBackend: CoderBackend {
   public static func effectivePath(
     config: CoderConfig,
     environment: [String: String] = ProcessInfo.processInfo.environment
-  ) -> String { config.searchPath ?? environment["PATH"] ?? "/usr/bin:/bin" }
+  ) -> String {
+    config.searchPath ?? environment["PATH"] ?? "/usr/bin:/bin"
+  }
 
   /// Checks fixed local CLI capabilities without inference or reading its authentication cache.
   public func compatibility() async throws -> String {
@@ -80,9 +82,13 @@ public struct CodexBackend: CoderBackend {
       phase: .prepare,
       deadline: ContinuousClock.now.advanced(by: CoderCommandRunner.readOnlyTimeout)
     )
-    do { return redactor.redact(try await context.compatibility(executable: executable)) } catch let
+    do {
+      return redactor.redact(try await context.compatibility(executable: executable))
+    } catch let
       error as CoderError
-    { throw error } catch {
+    {
+      throw error
+    } catch {
       throw CoderError.unavailable(
         """
         Codex CLI could not complete its compatibility checks. \
@@ -107,21 +113,22 @@ public struct CodexBackend: CoderBackend {
       timeout: CoderCommandRunner.readOnlyTimeout
     )
     let result = await CoderCommandRunner().run(command, tracking: .preApprovalReadOnly) { _ in }
-    guard
-      !result.supervisionFailed,
-      result.cleanupResolved,
-      !result.cancelled,
-      !result.timedOut,
-      result.signal == nil
+    guard !result.supervisionFailed,
+          result.cleanupResolved,
+          !result.cancelled,
+          !result.timedOut,
+          result.signal == nil
     else {
       return .unavailable
     }
     switch result.exitCode {
-    case 0: return .authenticated
+    case 0:
+      return .authenticated
     case 1:
       return result.diagnostics.trimmingCharacters(in: .whitespacesAndNewlines) == "Not logged in"
         ? .missing : .unavailable
-    default: return .unavailable
+    default:
+      return .unavailable
     }
   }
 
@@ -203,7 +210,9 @@ private extension CodexBackend {
       outcome.stopIfNeeded(deadline: deadline)
     }
     if FileManager.default.fileExists(atPath: protocolDirectory.path) {
-      do { try FileManager.default.removeItem(at: protocolDirectory) } catch {
+      do {
+        try FileManager.default.removeItem(at: protocolDirectory)
+      } catch {
         outcome.fail(.cleanup, "Private Codex protocol files could not be removed.")
       }
     }
@@ -264,8 +273,11 @@ private extension CodexBackend {
     }
   }
 
-  func classify(process: CoderCommandResult, events: CodexEvents, outcome: inout CodexOutcome) async
-  {
+  func classify(
+    process: CoderCommandResult,
+    events: CodexEvents,
+    outcome: inout CodexOutcome
+  ) async {
     if process.cancelled {
       outcome.state = .cancelled
     } else if process.timedOut {
@@ -291,8 +303,10 @@ private extension CodexBackend {
   func classifyReport(events: CodexEvents, outcome: inout CodexOutcome) async {
     if let report = outcome.report {
       switch report.status {
-      case .blocked: outcome.fail(.permission, report.error ?? "Codex reported the task blocked.")
-      case .failed: outcome.fail(.execution, report.error ?? "Codex reported the task failed.")
+      case .blocked:
+        outcome.fail(.permission, report.error ?? "Codex reported the task blocked.")
+      case .failed:
+        outcome.fail(.execution, report.error ?? "Codex reported the task failed.")
       case .succeeded:
         if await events.completed {
           outcome.state = .succeeded

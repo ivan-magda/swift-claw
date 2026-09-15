@@ -75,7 +75,9 @@ extension TelegramTransport {
     chatID: Int64,
     draftID: Int64,
     markdown: String
-  ) async throws -> Bool { throw TelegramError.transport("sendRichMessageDraft not implemented") }
+  ) async throws -> Bool {
+    throw TelegramError.transport("sendRichMessageDraft not implemented")
+  }
 
   public func setMyCommands(_ commands: [BotMenuCommand]) async throws {}
 
@@ -87,7 +89,9 @@ extension TelegramTransport {
     chatID: Int64,
     messageID: Int64,
     replyMarkup: String?
-  ) async throws { throw TelegramError.transport("editMessageReplyMarkup not implemented") }
+  ) async throws {
+    throw TelegramError.transport("editMessageReplyMarkup not implemented")
+  }
 }
 
 extension MessageDelivery {
@@ -126,5 +130,7 @@ public protocol RichDraftStreaming: Sendable {
 public struct NoopRichDraftStreaming: RichDraftStreaming {
   public init() {}
 
-  public func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool { false }
+  public func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool {
+    false
+  }
 }

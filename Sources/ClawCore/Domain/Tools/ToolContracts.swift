@@ -55,16 +55,24 @@ public indirect enum JSONValue: Sendable, Equatable {
 extension JSONValue {
   public static func == (left: JSONValue, right: JSONValue) -> Bool {
     switch (left, right) {
-    case (.null, .null): return true
-    case (.bool(let leftValue), .bool(let rightValue)): return leftValue == rightValue
-    case (.integer(let leftValue), .integer(let rightValue)): return leftValue == rightValue
-    case (.number(let leftValue), .number(let rightValue)): return leftValue == rightValue
+    case (.null, .null):
+      return true
+    case (.bool(let leftValue), .bool(let rightValue)):
+      return leftValue == rightValue
+    case (.integer(let leftValue), .integer(let rightValue)):
+      return leftValue == rightValue
+    case (.number(let leftValue), .number(let rightValue)):
+      return leftValue == rightValue
     case (.integer(let integer), .number(let number)), (.number(let number), .integer(let integer)):
       return Int(exactly: number) == integer
-    case (.string(let leftValue), .string(let rightValue)): return leftValue == rightValue
-    case (.array(let leftValue), .array(let rightValue)): return leftValue == rightValue
-    case (.object(let leftValue), .object(let rightValue)): return leftValue == rightValue
-    default: return false
+    case (.string(let leftValue), .string(let rightValue)):
+      return leftValue == rightValue
+    case (.array(let leftValue), .array(let rightValue)):
+      return leftValue == rightValue
+    case (.object(let leftValue), .object(let rightValue)):
+      return leftValue == rightValue
+    default:
+      return false
     }
   }
 }
@@ -96,13 +104,20 @@ extension JSONValue: Codable {
   public func encode(to encoder: any Encoder) throws {
     var container = encoder.singleValueContainer()
     switch self {
-    case .null: try container.encodeNil()
-    case .bool(let boolValue): try container.encode(boolValue)
-    case .integer(let integerValue): try container.encode(integerValue)
-    case .number(let numberValue): try container.encode(numberValue)
-    case .string(let stringValue): try container.encode(stringValue)
-    case .array(let arrayValue): try container.encode(arrayValue)
-    case .object(let objectValue): try container.encode(objectValue)
+    case .null:
+      try container.encodeNil()
+    case .bool(let boolValue):
+      try container.encode(boolValue)
+    case .integer(let integerValue):
+      try container.encode(integerValue)
+    case .number(let numberValue):
+      try container.encode(numberValue)
+    case .string(let stringValue):
+      try container.encode(stringValue)
+    case .array(let arrayValue):
+      try container.encode(arrayValue)
+    case .object(let objectValue):
+      try container.encode(objectValue)
     }
   }
 }
@@ -131,9 +146,12 @@ extension JSONValue {
 
   public var numberValue: Double? {
     switch self {
-    case .integer(let integerValue): return Double(integerValue)
-    case .number(let numberValue): return numberValue
-    case .null, .bool, .string, .array, .object: return nil
+    case .integer(let integerValue):
+      return Double(integerValue)
+    case .number(let numberValue):
+      return numberValue
+    case .null, .bool, .string, .array, .object:
+      return nil
     }
   }
 }
@@ -337,11 +355,17 @@ extension Tool {
     arguments: JSONValue,
     canonicalTarget: String?,
     context: ToolExecutionContext?
-  ) async -> ToolPayload { await execute(arguments: arguments, canonicalTarget: canonicalTarget) }
+  ) async -> ToolPayload {
+    await execute(arguments: arguments, canonicalTarget: canonicalTarget)
+  }
 
-  public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? { nil }
+  public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
+    nil
+  }
 
-  public var executesOnlyViaApproval: Bool { false }
+  public var executesOnlyViaApproval: Bool {
+    false
+  }
 
   public func approvalPresentation(
     arguments: JSONValue,

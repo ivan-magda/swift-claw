@@ -19,8 +19,9 @@ struct LLMCredentialStorePublicationTests {
     SecureFilePublisher.Failpoint.Step.fileSync,
     SecureFilePublisher.Failpoint.Step.commit,
   ])
-  func aFailureBeforeTheCommitLeavesTheOldMapWhole(step: SecureFilePublisher.Failpoint.Step) throws
-  {
+  func aFailureBeforeTheCommitLeavesTheOldMapWhole(
+    step: SecureFilePublisher.Failpoint.Step
+  ) throws {
     // given — a map already holding a record for another provider, which the failed save must not
     // be able to damage.
     let stateRoot = try makeSealedRoot()
@@ -232,7 +233,9 @@ struct LLMCredentialStorePublicationTests {
 // MARK: - Fixtures
 
 private extension LLMCredentialStorePublicationTests {
-  var syntheticProvider: LLMProviderID { LLMProviderID(rawValue: "synthetic-provider") }
+  var syntheticProvider: LLMProviderID {
+    LLMProviderID(rawValue: "synthetic-provider")
+  }
 
   /// Every entry a sealed root with a credential map holds. Named once so a test that means to
   /// assert "nothing was stranded" cannot quietly assert "nothing exists".

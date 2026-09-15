@@ -67,7 +67,9 @@ extension TurnRunner {
         commit: commit,
         now: context.committedAt
       )
-    } catch StoreError.diskFull { throw StoreError.diskFull } catch {
+    } catch StoreError.diskFull {
+      throw StoreError.diskFull
+    } catch {
       logger.debug("suspend commit did not apply for run \(context.runID): \(error)")
       return
     }

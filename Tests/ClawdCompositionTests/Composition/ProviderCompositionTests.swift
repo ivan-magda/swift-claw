@@ -20,7 +20,9 @@ private struct BuildStopped: Error {}
 private final class InvocationFlag: @unchecked Sendable {
   private(set) var invoked = false
 
-  func mark() { invoked = true }
+  func mark() {
+    invoked = true
+  }
 }
 
 @Suite

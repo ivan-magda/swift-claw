@@ -30,5 +30,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidExecTimeout(String)
   case invalidCoderSetting(key: String)
 
-  public var exitCode: Int32 { ClawExitCode.configInvalid.rawValue }
+  public var exitCode: Int32 {
+    ClawExitCode.configInvalid.rawValue
+  }
 }

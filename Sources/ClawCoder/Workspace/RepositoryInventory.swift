@@ -11,7 +11,9 @@ struct RepositoryInventory: Sendable, Equatable {
   static let pathLimit = 10_000
   private let entries: [String: Entry]
 
-  enum Failure: Error { case unavailable }
+  enum Failure: Error {
+    case unavailable
+  }
 
   fileprivate enum Entry: Sendable, Equatable {
     case file(contents: Data, executable: Bool)
@@ -65,8 +67,7 @@ struct RepositoryInventory: Sendable, Equatable {
 private extension RepositoryInventory {
   static func readEntry(_ path: String, root: Int32, remaining: inout Int) throws -> Entry? {
     let parts = path.split(separator: "/", omittingEmptySubsequences: false)
-    guard
-      parts.allSatisfy({ part in
+    guard parts.allSatisfy({ part in
         !part.isEmpty && part != "." && part != ".." && part != ".git"
       })
     else {
@@ -120,11 +121,10 @@ private extension RepositoryInventory {
       throw Failure.unavailable
     }
     defer { close(file) }
-    guard
-      fstat(file, &metadata) == 0,
-      metadata.st_mode & S_IFMT == S_IFREG,
-      metadata.st_size >= 0,
-      metadata.st_size <= remaining
+    guard fstat(file, &metadata) == 0,
+          metadata.st_mode & S_IFMT == S_IFREG,
+          metadata.st_size >= 0,
+          metadata.st_size <= remaining
     else {
       throw Failure.unavailable
     }

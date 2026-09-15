@@ -119,8 +119,9 @@ struct ResetTests {
   }
 
   @Test(arguments: ResetEmptyCollision.allCases)
-  func canonicalEmptyCollisionRollsBackTheConfirmationClaim(_ collision: ResetEmptyCollision) throws
-  {
+  func canonicalEmptyCollisionRollsBackTheConfirmationClaim(
+    _ collision: ResetEmptyCollision
+  ) throws {
     // given
     let fixture = try ResetFixture.make()
     _ = try TestLearningFixtures(writer: fixture.env.queue).seedArmedJob(

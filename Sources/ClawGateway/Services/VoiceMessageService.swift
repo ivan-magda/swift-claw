@@ -25,17 +25,24 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
 
     public var ownerReplyText: String {
       switch self {
-      case .tooLong: "That voice message is too long for me to transcribe."
-      case .downloadFailed: "I couldn't download that voice message. Please try again."
-      case .transcriptionUnavailable: "I can't transcribe voice messages on this machine yet."
-      case .undecodableAudio: "I couldn't decode that voice message's audio."
+      case .tooLong:
+        "That voice message is too long for me to transcribe."
+      case .downloadFailed:
+        "I couldn't download that voice message. Please try again."
+      case .transcriptionUnavailable:
+        "I can't transcribe voice messages on this machine yet."
+      case .undecodableAudio:
+        "I couldn't decode that voice message's audio."
       case .transcriptionFailed:
         "Something went wrong transcribing that voice message. Please try again."
-      case .timedOut: "Transcribing that voice message took too long, so I gave up."
-      case .emptyTranscript: "I couldn't hear any speech in that voice message."
+      case .timedOut:
+        "Transcribing that voice message took too long, so I gave up."
+      case .emptyTranscript:
+        "I couldn't hear any speech in that voice message."
       case .lowConfidence:
         "I couldn't make out that voice message in any of my configured languages."
-      case .storageFull: Degradation.storageFull
+      case .storageFull:
+        Degradation.storageFull
       }
     }
   }
@@ -101,7 +108,9 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
     }
 
     let stagedFileURL: URL
-    do { stagedFileURL = try stageAudioData(audioData) } catch {
+    do {
+      stagedFileURL = try stageAudioData(audioData)
+    } catch {
       logger.error("voice staging failed: \(error)")
       return .failure(Self.classifyStagingError(error))
     }
@@ -109,8 +118,10 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
 
     let transcript: String
     switch await transcribeWithDeadline(audioFileAt: stagedFileURL) {
-    case .success(let engineTranscript): transcript = engineTranscript
-    case .failure(let failure): return .failure(failure)
+    case .success(let engineTranscript):
+      transcript = engineTranscript
+    case .failure(let failure):
+      return .failure(failure)
     }
 
     logger.info(
@@ -132,18 +143,22 @@ private extension VoiceMessageService {
 
     let outcome = await DeadlineRace.race(allowance: transcriptionDeadline) {
       () async -> Result<String, Failure> in
-      do { return .success(try await transcriber.transcribe(audioFileAt: staged)) } catch {
+      do {
+        return .success(try await transcriber.transcribe(audioFileAt: staged))
+      } catch {
         logger.error("voice transcription failed: \(error)")
         return .failure(Self.mapTranscriptionError(error))
       }
     }
 
     switch outcome {
-    case .operationReturned(let result): return result
+    case .operationReturned(let result):
+      return result
     case .deadlineExpired:
       logger.error("voice transcription exceeded its \(transcriptionDeadline) deadline")
       return .failure(.timedOut)
-    case .callerCancelled: return .failure(.transcriptionFailed)
+    case .callerCancelled:
+      return .failure(.transcriptionFailed)
     }
   }
 }
@@ -182,11 +197,16 @@ private extension VoiceMessageService {
     }
 
     switch transcriptionError {
-    case .unavailable, .localeUnsupported, .assetsUnavailable: return .transcriptionUnavailable
-    case .undecodableAudio: return .undecodableAudio
-    case .audioTooLong: return .tooLong
-    case .transcriptionFailed, .cancelled: return .transcriptionFailed
-    case .lowConfidence: return .lowConfidence
+    case .unavailable, .localeUnsupported, .assetsUnavailable:
+      return .transcriptionUnavailable
+    case .undecodableAudio:
+      return .undecodableAudio
+    case .audioTooLong:
+      return .tooLong
+    case .transcriptionFailed, .cancelled:
+      return .transcriptionFailed
+    case .lowConfidence:
+      return .lowConfidence
     }
   }
 }

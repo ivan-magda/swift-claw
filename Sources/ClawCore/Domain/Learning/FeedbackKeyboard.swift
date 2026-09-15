@@ -1,6 +1,8 @@
 import Foundation
 
-public enum FeedbackKeyboardError: Error, Sendable, Equatable { case invalidMarkup }
+public enum FeedbackKeyboardError: Error, Sendable, Equatable {
+  case invalidMarkup
+}
 
 /// The compact action vocabulary carried by Telegram's bounded `callback_data` field.
 public enum FeedbackAction: String, Sendable, Equatable, CaseIterable {
@@ -16,35 +18,57 @@ public enum FeedbackAction: String, Sendable, Equatable, CaseIterable {
 
   public init(signal: OwnerSignal) {
     switch signal {
-    case .resultUseful: self = .resultUseful
-    case .resultNotUseful: self = .resultNotUseful
-    case .resultCorrection: self = .resultCorrection
-    case .evaluationConfirm: self = .evaluationConfirm
-    case .evaluationDispute: self = .evaluationDispute
-    case .candidateApprove: self = .candidateApprove
-    case .candidateReject: self = .candidateReject
-    case .candidateEdit: self = .candidateEdit
-    case .promotionRollback: self = .promotionRollback
+    case .resultUseful:
+      self = .resultUseful
+    case .resultNotUseful:
+      self = .resultNotUseful
+    case .resultCorrection:
+      self = .resultCorrection
+    case .evaluationConfirm:
+      self = .evaluationConfirm
+    case .evaluationDispute:
+      self = .evaluationDispute
+    case .candidateApprove:
+      self = .candidateApprove
+    case .candidateReject:
+      self = .candidateReject
+    case .candidateEdit:
+      self = .candidateEdit
+    case .promotionRollback:
+      self = .promotionRollback
     }
   }
 
   public var signal: OwnerSignal {
     switch self {
-    case .resultUseful: .resultUseful
-    case .resultNotUseful: .resultNotUseful
-    case .resultCorrection: .resultCorrection
-    case .evaluationConfirm: .evaluationConfirm
-    case .evaluationDispute: .evaluationDispute
-    case .candidateApprove: .candidateApprove
-    case .candidateReject: .candidateReject
-    case .candidateEdit: .candidateEdit
-    case .promotionRollback: .promotionRollback
+    case .resultUseful:
+      .resultUseful
+    case .resultNotUseful:
+      .resultNotUseful
+    case .resultCorrection:
+      .resultCorrection
+    case .evaluationConfirm:
+      .evaluationConfirm
+    case .evaluationDispute:
+      .evaluationDispute
+    case .candidateApprove:
+      .candidateApprove
+    case .candidateReject:
+      .candidateReject
+    case .candidateEdit:
+      .candidateEdit
+    case .promotionRollback:
+      .promotionRollback
     }
   }
 
-  public var subjectKind: FeedbackSubjectKind { signal.feedbackSubjectKind }
+  public var subjectKind: FeedbackSubjectKind {
+    signal.feedbackSubjectKind
+  }
 
-  public var opensChallenge: Bool { signal.opensFeedbackChallenge }
+  public var opensChallenge: Bool {
+    signal.opensFeedbackChallenge
+  }
 }
 
 /// A strict feedback envelope and canonical inline-keyboard representation.
@@ -92,9 +116,8 @@ public enum FeedbackKeyboard {
   }
 
   public static func markup(rows: [[Button]]) -> String? {
-    guard
-      rows.isEmpty == false,
-      rows.allSatisfy({
+    guard rows.isEmpty == false,
+          rows.allSatisfy({
         $0.isEmpty == false
       })
     else {
@@ -105,10 +128,9 @@ public enum FeedbackKeyboard {
       var wireButtons: [WireButton] = []
       for button in row {
         let callback = callbackData(nonce: button.nonce, action: button.action)
-        guard
-          let parsed = parse(callback),
-          parsed.nonce == button.nonce,
-          parsed.action == button.action
+        guard let parsed = parse(callback),
+              parsed.nonce == button.nonce,
+              parsed.action == button.action
         else {
           return nil
         }
@@ -121,12 +143,11 @@ public enum FeedbackKeyboard {
   }
 
   public static func parseMarkup(_ markup: String) throws(FeedbackKeyboardError) -> [[Button]] {
-    guard
-      let data = markup.data(using: .utf8),
-      let wire = try? JSONDecoder().decode(WireMarkup.self, from: data),
-      CanonicalJSON.encode(wire) == markup,
-      wire.inlineKeyboard.isEmpty == false,
-      wire.inlineKeyboard.allSatisfy({
+    guard let data = markup.data(using: .utf8),
+          let wire = try? JSONDecoder().decode(WireMarkup.self, from: data),
+          CanonicalJSON.encode(wire) == markup,
+          wire.inlineKeyboard.isEmpty == false,
+          wire.inlineKeyboard.allSatisfy({
         $0.isEmpty == false
       })
     else {
@@ -168,12 +189,18 @@ public enum FeedbackKeyboard {
 
   private static func reviewLabel(_ signal: OwnerSignal, evaluationRunID: Int64?) -> String {
     switch signal {
-    case .candidateApprove: "Approve"
-    case .candidateReject: "Reject"
-    case .candidateEdit: "Edit"
-    case .evaluationConfirm: "Eval #\(evaluationRunID ?? 0) correct"
-    case .evaluationDispute: "Eval #\(evaluationRunID ?? 0) wrong"
-    case .resultUseful, .resultNotUseful, .resultCorrection, .promotionRollback: signal.rawValue
+    case .candidateApprove:
+      "Approve"
+    case .candidateReject:
+      "Reject"
+    case .candidateEdit:
+      "Edit"
+    case .evaluationConfirm:
+      "Eval #\(evaluationRunID ?? 0) correct"
+    case .evaluationDispute:
+      "Eval #\(evaluationRunID ?? 0) wrong"
+    case .resultUseful, .resultNotUseful, .resultCorrection, .promotionRollback:
+      signal.rawValue
     }
   }
 }
@@ -184,7 +211,9 @@ private extension FeedbackKeyboard {
   struct WireMarkup: Codable {
     let inlineKeyboard: [[WireButton]]
 
-    enum CodingKeys: String, CodingKey { case inlineKeyboard = "inline_keyboard" }
+    enum CodingKeys: String, CodingKey {
+      case inlineKeyboard = "inline_keyboard"
+    }
   }
 
   struct WireButton: Codable {

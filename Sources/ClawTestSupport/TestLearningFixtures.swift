@@ -8,7 +8,9 @@ import GRDB
 public struct TestLearningFixtures {
   private let writer: any DatabaseWriter
 
-  public init(writer: any DatabaseWriter) { self.writer = writer }
+  public init(writer: any DatabaseWriter) {
+    self.writer = writer
+  }
 
   @discardableResult
   public func seedArmedJob(jobID: Int64, now: Date) throws(StoreError) -> JobLearningState {
@@ -39,12 +41,11 @@ public struct TestLearningFixtures {
             """,
           arguments: [jobID, empty.digest.rawValue, Int64(now.timeIntervalSince1970)]
         )
-        guard
-          let row = try Row.fetchOne(
-            db,
-            sql: "SELECT * FROM job_learning_state WHERE job_id = ?",
-            arguments: [jobID]
-          )
+        guard let row = try Row.fetchOne(
+          db,
+          sql: "SELECT * FROM job_learning_state WHERE job_id = ?",
+          arguments: [jobID]
+        )
         else {
           throw StoreError.unexpected("learning fixture state is missing")
         }
@@ -57,7 +58,9 @@ public struct TestLearningFixtures {
           feedbackRevision: FeedbackRevision(row["feedback_revision"])
         )
       }
-    } catch { throw ClawDatabase.classifyError(error) }
+    } catch {
+      throw ClawDatabase.classifyError(error)
+    }
   }
 
   public func seedTargets(_ targets: [NewFeedbackTarget]) throws(StoreError) {
@@ -86,25 +89,25 @@ public struct TestLearningFixtures {
           )
         }
       }
-    } catch { throw ClawDatabase.classifyError(error) }
+    } catch {
+      throw ClawDatabase.classifyError(error)
+    }
   }
 
   /// Reads the durable receipt after a production run transition or lane settlement.
   public func settlement(runID: Int64) throws(StoreError) -> RunSettlement? {
     do {
       return try writer.read { db -> RunSettlement? in
-        guard
-          let row = try Row.fetchOne(
-            db,
-            sql: "SELECT * FROM run_settlements WHERE run_id = ?",
-            arguments: [runID]
-          )
+        guard let row = try Row.fetchOne(
+          db,
+          sql: "SELECT * FROM run_settlements WHERE run_id = ?",
+          arguments: [runID]
+        )
         else {
           return nil
         }
-        guard
-          let state = RunState(rawValue: row["winning_state"]),
-          let cause = TerminalCause(rawValue: row["terminal_cause"])
+        guard let state = RunState(rawValue: row["winning_state"]),
+              let cause = TerminalCause(rawValue: row["terminal_cause"])
         else {
           throw StoreError.unexpected("learning fixture receipt is unreadable")
         }
@@ -120,6 +123,8 @@ public struct TestLearningFixtures {
           }
         )
       }
-    } catch { throw ClawDatabase.classifyError(error) }
+    } catch {
+      throw ClawDatabase.classifyError(error)
+    }
   }
 }

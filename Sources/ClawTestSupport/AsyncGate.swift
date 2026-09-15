@@ -56,7 +56,11 @@ public final class AsyncGate: Sendable {
         return self.isOpen
       }
       group.addTask {
-        do { try await Task.sleep(for: timeout) } catch { return false }
+        do {
+          try await Task.sleep(for: timeout)
+        } catch {
+          return false
+        }
         return false
       }
       let opened = await group.next() ?? false

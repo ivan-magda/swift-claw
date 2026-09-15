@@ -107,14 +107,18 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     return LLMEventStream(channel: channel, owner: owner)
   }
 
-  public func cancel() { owner.cancel() }
+  public func cancel() {
+    owner.cancel()
+  }
 
   public func cancelAndAwait() async -> LLMStreamTermination {
     owner.cancel()
     return await owner.awaitTermination()
   }
 
-  public func awaitTermination() async -> LLMStreamTermination { await owner.awaitTermination() }
+  public func awaitTermination() async -> LLMStreamTermination {
+    await owner.awaitTermination()
+  }
 
   public func makeAsyncIterator() -> AsyncIterator {
     AsyncIterator(
@@ -156,9 +160,13 @@ public struct LLMEventStream: AsyncSequence, Sendable {
 // MARK: - Suspension observation
 
 extension LLMEventStream {
-  var suspendedDeltaSenderCount: Int { channel.suspendedSenderCount }
+  var suspendedDeltaSenderCount: Int {
+    channel.suspendedSenderCount
+  }
 
-  var parkedJoinerCount: Int { owner.parkedJoinerCount }
+  var parkedJoinerCount: Int {
+    owner.parkedJoinerCount
+  }
 }
 
 // MARK: - Event sink
@@ -175,7 +183,9 @@ public struct LLMEventSink: Sendable {
   /// - Throws: `CancellationError` or `BoundedAsyncChannelError.channelFinished` once the stream is
   ///   cancelled or its terminal has landed, or `BoundedAsyncChannelError.elementExceedsCapacity`
   ///   for a delta larger than the whole delta budget, which no amount of draining could admit.
-  public func sendDelta(_ text: String) async throws { try await channel.send(text) }
+  public func sendDelta(_ text: String) async throws {
+    try await channel.send(text)
+  }
 }
 
 // MARK: - Weighing
@@ -185,9 +195,13 @@ extension LLMEventBufferLimits {
   ///
   /// The default byte budget divides evenly into slots, bounding both count and bytes.
   /// Custom ratios round down; their count cap can therefore exceed the requested target.
-  private var deltaSlotBytes: Int { max(1, maximumDeltaBytes / maximumDeltaCount) }
+  private var deltaSlotBytes: Int {
+    max(1, maximumDeltaBytes / maximumDeltaCount)
+  }
 
-  func deltaCharge(forTextBytes textBytes: Int) -> Int { max(textBytes, deltaSlotBytes) }
+  func deltaCharge(forTextBytes textBytes: Int) -> Int {
+    max(textBytes, deltaSlotBytes)
+  }
 
   /// What holding `response` costs against the reservation: every byte a consumer can read back off
   /// it, not just the visible text, because replay state and tool arguments are held just as long.

@@ -21,7 +21,9 @@ extension ReflectionPersistenceTests {
         now: env.now
       )
       failure = nil
-    } catch let error { failure = error }
+    } catch let error {
+      failure = error
+    }
 
     // then — accepting an evaluator product would make the closed result union merely cosmetic
     guard case .unexpected = failure else {
@@ -50,7 +52,9 @@ extension ReflectionPersistenceTests {
         now: env.now
       )
       failure = nil
-    } catch let error { failure = error }
+    } catch let error {
+      failure = error
+    }
 
     // then — without the opposite phase arm, a false-current artifact still closes an evaluator
     guard case .unexpected = failure else {

@@ -59,7 +59,9 @@ public struct LearningOperationRunner: Sendable {
   /// One evaluation of one run, or nothing at all. Never throws: a run the evaluator cannot judge
   /// must not disturb the pass that asked for it, let alone ordinary scheduled execution.
   public func runEvaluation(runID: Int64, now: Date) async {
-    do { try await evaluate(runID: runID, now: now) } catch {
+    do {
+      try await evaluate(runID: runID, now: now)
+    } catch {
       logger.error("run \(runID) could not be evaluated: \(error)")
     }
   }
@@ -69,15 +71,14 @@ public struct LearningOperationRunner: Sendable {
 
 private extension LearningOperationRunner {
   func evaluate(runID: Int64, now: Date) async throws {
-    guard
-      let evidence = try learning.evidence(runID: runID),
-      evidence.eligibility.reachesEvaluator,
-      let payload = evidence.payload,
-      let job = try jobs.job(id: evidence.jobID),
-      // A job that has never fired has no session for the result commit to charge against. It
-      // cannot own a settled bound run either, so this refuses before the claim rather than
-      // leaving a `started` row for boot to charge conservatively.
-      job.sessionID != nil
+    guard let evidence = try learning.evidence(runID: runID),
+          evidence.eligibility.reachesEvaluator,
+          let payload = evidence.payload,
+          let job = try jobs.job(id: evidence.jobID),
+          // A job that has never fired has no session for the result commit to charge against. It
+          // cannot own a settled bound run either, so this refuses before the claim rather than
+          // leaving a `started` row for boot to charge conservatively.
+          job.sessionID != nil
     else {
       return
     }
@@ -141,11 +142,13 @@ private extension LearningOperationRunner {
       budget: BudgetGate(budget: budget, costPolicy: route.binding.costPolicy)
     )
     switch try learning.authorizeAndStartOperation(authorization, now: now) {
-    case .started: return true
+    case .started:
+      return true
     case .deniedNoCall(let failure):
       logger.info("learning call \(call.operationID.rawValue) refused: \(failure.rawValue)")
       return false
-    case .superseded: return false
+    case .superseded:
+      return false
     }
   }
 
@@ -164,9 +167,8 @@ private extension LearningOperationRunner {
         commit(response, call: call, route: active.binding, now: now)
         return
       } catch {
-        guard
-          let persistence = RouteSwitch.permits(error),
-          let next = roster.failover(from: active.position)
+        guard let persistence = RouteSwitch.permits(error),
+              let next = roster.failover(from: active.position)
         else {
           commit(failure: error, call: call, route: active.binding, now: now)
           return
@@ -253,8 +255,12 @@ private extension LearningOperationRunner {
   /// The verdict rides the same commit as the operation's terminal state. A `succeeded` row whose
   /// verdict landed in a later transaction could lose it to a crash, and `claim` refuses a finished
   /// key forever — so that run's evidence would be paid for and permanently unjudgeable.
-  func finish(_ call: Call, usage: LearningCallUsage, product: LearningOperationProduct, now: Date)
-  {
+  func finish(
+    _ call: Call,
+    usage: LearningCallUsage,
+    product: LearningOperationProduct,
+    now: Date
+  ) {
     do {
       _ = try learning.finishOperation(
         LearningOperationResult(operationID: call.operationID, usage: usage, product: product),

@@ -149,7 +149,9 @@ struct LearningAcceptanceHarness {
       outbox: outbox,
       learning: learning,
       pollerTask: Task {
-        do { try await poller.run() } catch {
+        do {
+          try await poller.run()
+        } catch {
           if !Task.isCancelled {
             Issue.record(error)
           }

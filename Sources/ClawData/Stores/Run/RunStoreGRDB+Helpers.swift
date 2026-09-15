@@ -125,9 +125,8 @@ extension RunStoreGRDB {
     policyVersion: String? = nil,
     terminal: TerminalDisposition?
   ) throws -> RunState? {
-    guard
-      let state = try currentRunState(db, runID: runID),
-      let nextState = RunFSM.reduce(state: state, on: event)
+    guard let state = try currentRunState(db, runID: runID),
+          let nextState = RunFSM.reduce(state: state, on: event)
     else {
       return nil
     }

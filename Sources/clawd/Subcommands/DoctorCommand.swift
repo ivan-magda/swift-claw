@@ -32,7 +32,9 @@ struct DoctorCommand: AsyncParsableCommand {
 
     // Config/secret is checked first and printed first if it errored.
     let config: AppConfig
-    do { config = try EnvironmentLoader.loadConfig() } catch let error as ConfigError {
+    do {
+      config = try EnvironmentLoader.loadConfig()
+    } catch let error as ConfigError {
       report.add(key: "config", value: "FAIL: \(error)", ok: false, group: .config)
       emit(report)
       throw ExitCode(error.exitCode)
@@ -221,7 +223,9 @@ extension DoctorCommand {
   /// rather than re-reading the catalog and possibly answering about a different one.
   static func addMCPRows(to report: inout DoctorReport, config: AppConfig) -> MCPDoctorLoadResult {
     let catalog: MCPConfig
-    do { catalog = try EnvironmentLoader.loadMCPConfig(config: config) } catch {
+    do {
+      catalog = try EnvironmentLoader.loadMCPConfig(config: config)
+    } catch {
       report.add(contentsOf: [MCPDoctorRows.failureRow("config error: \(error)")])
       return .failed(exitCode: .configInvalid)
     }
@@ -299,7 +303,8 @@ private extension DoctorCommand {
           """,
         group: .connectivity
       )
-    case .inactive: report.add(key: "dns.fake_ip", value: "not detected", group: .connectivity)
+    case .inactive:
+      report.add(key: "dns.fake_ip", value: "not detected", group: .connectivity)
     }
 
     guard let secrets = try? EnvironmentLoader.loadSecrets(config: config) else {
@@ -467,7 +472,11 @@ private extension DoctorCommand {
       probe.arguments = ["print", "gui/\(uid)/com.ivanmagda.swift-claw"]
       probe.standardOutput = FileHandle.nullDevice
       probe.standardError = FileHandle.nullDevice
-      do { try probe.run() } catch { return false }
+      do {
+        try probe.run()
+      } catch {
+        return false
+      }
       probe.waitUntilExit()
       return probe.terminationStatus == 0
     }

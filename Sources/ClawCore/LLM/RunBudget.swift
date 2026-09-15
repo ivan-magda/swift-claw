@@ -140,5 +140,7 @@ public struct BudgetGate: Sendable {
 
   /// Whether USD caps can reject this route. A subscription's dollars are recorded for audit but
   /// never gate, so only the metered policy compares them.
-  private var enforcesUSD: Bool { costPolicy == .metered }
+  private var enforcesUSD: Bool {
+    costPolicy == .metered
+  }
 }

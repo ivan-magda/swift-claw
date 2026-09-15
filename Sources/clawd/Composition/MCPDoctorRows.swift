@@ -13,9 +13,7 @@ enum MCPDoctorRows {
   static func rows(
     config: MCPConfig,
     credentials: [String: MCPCredentialLoad]
-  ) -> [DoctorReport
-    .Check]
-  {
+  ) -> [DoctorReport.Check] {
     guard config.servers.isEmpty == false else {
       return [row(key: "mcp", value: "no servers configured", ok: true)]
     }
@@ -95,9 +93,12 @@ private extension MCPDoctorRows {
   /// URL is: it will never be sent, and only the owner can repair it.
   static func tokenState(_ load: MCPCredentialLoad) -> String {
     switch load {
-    case .absent: return "no token"
-    case .token: return "token set"
-    case .boundToDifferentURL: return "token bound to a different URL; re-run clawd mcp set-token"
+    case .absent:
+      return "no token"
+    case .token:
+      return "token set"
+    case .boundToDifferentURL:
+      return "token bound to a different URL; re-run clawd mcp set-token"
     }
   }
 

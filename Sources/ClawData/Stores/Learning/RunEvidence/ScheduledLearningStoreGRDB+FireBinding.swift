@@ -72,9 +72,8 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
-    guard
-      let fireKind = ScheduledFireKind(rawValue: row["fire_kind"]),
-      let occurrenceAt = EpochSecondCodec.date(fromEpoch: row["occurrence_at"])
+    guard let fireKind = ScheduledFireKind(rawValue: row["fire_kind"]),
+          let occurrenceAt = EpochSecondCodec.date(fromEpoch: row["occurrence_at"])
     else {
       throw StoreError.unexpected("run \(runID) has an unreadable learning binding")
     }
@@ -148,9 +147,8 @@ private extension ScheduledLearningStoreGRDB {
     guard let trial = try liveTrial(db, jobID: state.jobID) else {
       return stable
     }
-    if
-      trial.state == .open,
-      trial.consumedAssignments >= trial.maxAssignments || now >= trial.assignmentDeadline
+    if trial.state == .open,
+       trial.consumedAssignments >= trial.maxAssignments || now >= trial.assignmentDeadline
     {
       try drain(db, trial: trial)
       return stable

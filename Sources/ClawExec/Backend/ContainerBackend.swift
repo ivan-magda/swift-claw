@@ -105,23 +105,21 @@ public actor ContainerBackend {
     }
 
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
-    guard
-      let data = await boundedCommandData(
-        ContainerInvocation.systemVersion(),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      )
+    guard let data = await boundedCommandData(
+      ContainerInvocation.systemVersion(),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    )
     else {
       return .unavailable(reason: ownerSafe("container version command failed"))
     }
 
-    guard
-      let documents = try? JSONDecoder().decode([SystemVersionDocument].self, from: data),
-      let cli = documents.first(
+    guard let documents = try? JSONDecoder().decode([SystemVersionDocument].self, from: data),
+          let cli = documents.first(
         where: {
           $0.appName == "container"
         }
-      )
+          )
     else {
       return .unavailable(reason: ownerSafe("container version response was invalid"))
     }
@@ -145,14 +143,13 @@ public actor ContainerBackend {
     }
 
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
-    guard
-      let data = await boundedCommandData(
-        ContainerInvocation.systemStatus(),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      ),
-      let status = try? JSONDecoder().decode(SystemStatusDocument.self, from: data),
-      status.status == "running"
+    guard let data = await boundedCommandData(
+      ContainerInvocation.systemStatus(),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    ),
+          let status = try? JSONDecoder().decode(SystemStatusDocument.self, from: data),
+          status.status == "running"
     else {
       return .unavailable(reason: ownerSafe("container engine is not running"))
     }
@@ -173,7 +170,9 @@ public actor ContainerBackend {
     }
   }
 
-  func setPreparedInitImageForTesting(_ image: String?) { preparedInitImage = image }
+  func setPreparedInitImageForTesting(_ image: String?) {
+    preparedInitImage = image
+  }
 }
 
 // MARK: - Results and Reason Boundary

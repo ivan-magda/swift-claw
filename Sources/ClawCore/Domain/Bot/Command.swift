@@ -77,39 +77,59 @@ private extension Command {
     }
 
     switch name {
-    case "start": return .start
-    case "stop": return .stop
-    case "new": return .new
-    case "help": return .help
-    case "status", "doctor": return .doctor
-    case "mcp": return .mcp
-    case "skills": return .skills
-    default: return .plain(originalText)
+    case "start":
+      return .start
+    case "stop":
+      return .stop
+    case "new":
+      return .new
+    case "help":
+      return .help
+    case "status", "doctor":
+      return .doctor
+    case "mcp":
+      return .mcp
+    case "skills":
+      return .skills
+    default:
+      return .plain(originalText)
     }
   }
 
   static func familyCommand(named name: String, arguments: Substring) -> Command? {
     switch name {
-    case "remember": .remember(RememberCommand.parse(arguments: arguments))
-    case "memory": .memory(MemoryCommand.parse(arguments: arguments))
-    case "schedule": .schedule(ScheduleCommand.parse(arguments: arguments))
-    case "learning": .learning(LearningCommand.parse(arguments: arguments))
-    default: nil
+    case "remember":
+      .remember(RememberCommand.parse(arguments: arguments))
+    case "memory":
+      .memory(MemoryCommand.parse(arguments: arguments))
+    case "schedule":
+      .schedule(ScheduleCommand.parse(arguments: arguments))
+    case "learning":
+      .learning(LearningCommand.parse(arguments: arguments))
+    default:
+      nil
     }
   }
 
   static func jobCommand(named name: String, arguments: Substring) -> Command? {
     switch name {
-    case "pause": .pause(jobID: jobID(from: arguments))
-    case "resume": .resume(jobID: jobID(from: arguments))
-    case "runnow": .runNow(jobID: jobID(from: arguments))
-    case "cancel": .cancelJob(jobID: jobID(from: arguments))
-    default: nil
+    case "pause":
+      .pause(jobID: jobID(from: arguments))
+    case "resume":
+      .resume(jobID: jobID(from: arguments))
+    case "runnow":
+      .runNow(jobID: jobID(from: arguments))
+    case "cancel":
+      .cancelJob(jobID: jobID(from: arguments))
+    default:
+      nil
     }
   }
 
   /// nil ⇒ missing/invalid argument; the router replies with usage, never guesses.
-  static func jobID(from arguments: Substring) -> Int64? { PositiveInt64.parse(String(arguments)) }
+  static func jobID(from arguments: Substring) -> Int64? {
+    PositiveInt64.parse(String(arguments))
+  }
 }
 
 /// Parsed `/schedule` arguments. Bare `/schedule` and `/schedule list` both list;
@@ -162,8 +182,10 @@ extension Command {
   /// that message belongs to whoever typed fastest, so one attendee could commit another's draft.
   public var isDirectOnly: Bool {
     switch self {
-    case .remember, .memory, .schedule, .learning, .pause, .resume, .runNow, .cancelJob: true
-    case .start, .stop, .new, .help, .doctor, .mcp, .skills, .plain: false
+    case .remember, .memory, .schedule, .learning, .pause, .resume, .runNow, .cancelJob:
+      true
+    case .start, .stop, .new, .help, .doctor, .mcp, .skills, .plain:
+      false
     }
   }
 }

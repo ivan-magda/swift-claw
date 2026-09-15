@@ -21,10 +21,14 @@ public enum ApprovalEvent: Sendable, Equatable {
 public enum ApprovalFSM {
   public static func reduce(state: ApprovalState, on event: ApprovalEvent) -> ApprovalState? {
     switch (state, event) {
-    case (.pending, .approve): .approved
-    case (.pending, .reject): .rejected
-    case (.pending, .expire): .expired
-    case (.approved, _), (.rejected, _), (.expired, _): nil
+    case (.pending, .approve):
+      .approved
+    case (.pending, .reject):
+      .rejected
+    case (.pending, .expire):
+      .expired
+    case (.approved, _), (.rejected, _), (.expired, _):
+      nil
     }
   }
 }

@@ -39,9 +39,12 @@ where ClockType.Duration == Duration {
     while true {
       let timeout = try requestTimeout(until: deadline)
       switch try await client.pollOnce(device: device, timeout: timeout) {
-      case .granted(let grant): return grant
-      case .pending: try await wait(device.pollInterval, until: deadline)
-      case .throttled(let retryAfter): try await wait(retryAfter, until: deadline)
+      case .granted(let grant):
+        return grant
+      case .pending:
+        try await wait(device.pollInterval, until: deadline)
+      case .throttled(let retryAfter):
+        try await wait(retryAfter, until: deadline)
       }
     }
   }

@@ -8,13 +8,17 @@ struct StubVoiceTranscriber: VoiceTranscribing {
   let calls = CallCounter()
   var result: Result<String, VoiceTranscriptionError> = .success("spoken words")
 
-  var callCount: Int { get async { await calls.count } }
+  var callCount: Int {
+    get async { await calls.count }
+  }
 
   func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String {
     _ = await calls.next()
     switch result {
-    case .success(let transcript): return transcript
-    case .failure(let error): throw error
+    case .success(let transcript):
+      return transcript
+    case .failure(let error):
+      throw error
     }
   }
 }
@@ -46,5 +50,7 @@ struct ScriptedVoiceService: VoiceMessageTranscribing {
   ) async -> Result<
     String,
     VoiceMessageService.Failure
-  > { result }
+  > {
+    result
+  }
 }

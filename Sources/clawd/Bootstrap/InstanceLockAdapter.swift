@@ -7,7 +7,9 @@ import Foundation
 struct InstanceLockAdapter: AuthMutationLocking {
   let path: String
 
-  init(path: String) { self.path = path }
+  init(path: String) {
+    self.path = path
+  }
 
   init(stateRoot: URL) {
     let statePaths = SecretStatePaths(stateRoot: stateRoot)
@@ -16,9 +18,13 @@ struct InstanceLockAdapter: AuthMutationLocking {
 
   func acquire() throws -> AuthMutationLease {
     let lock: InstanceLock
-    do { lock = try InstanceLock(path: path) } catch InstanceLock.LockError.alreadyLocked {
+    do {
+      lock = try InstanceLock(path: path)
+    } catch InstanceLock.LockError.alreadyLocked {
       throw AuthMutationLockFailure.held
-    } catch { throw AuthMutationLockFailure.unavailable(detail: "\(error)") }
+    } catch {
+      throw AuthMutationLockFailure.unavailable(detail: "\(error)")
+    }
 
     return AuthMutationLease {
       lock.release()

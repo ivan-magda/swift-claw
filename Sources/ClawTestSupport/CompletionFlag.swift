@@ -7,5 +7,7 @@ public actor CompletionFlag {
 
   public init() {}
 
-  public func markDone() { done = true }
+  public func markDone() {
+    done = true
+  }
 }

@@ -5,7 +5,9 @@ import GRDB
 public struct RetrieverGRDB: Retriever {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func searchRelevantMessages(
     query: String,

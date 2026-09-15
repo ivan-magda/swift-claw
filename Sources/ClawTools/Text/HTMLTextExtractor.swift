@@ -230,8 +230,7 @@ private extension HTMLTextExtractor {
         continue
       }
 
-      if
-        let entity = entities.first(where: {
+      if let entity = entities.first(where: {
         matchesExact($0.token, in: scalars, at: index)
       }) {
         output.append(entity.replacement)
@@ -321,8 +320,10 @@ private extension HTMLTextExtractor {
 
   static func isASCIIWhitespace(_ scalar: Unicode.Scalar) -> Bool {
     switch scalar {
-    case " ", "\t", "\n", "\r", "\u{0B}", "\u{0C}": true
-    default: false
+    case " ", "\t", "\n", "\r", "\u{0B}", "\u{0C}":
+      true
+    default:
+      false
     }
   }
 

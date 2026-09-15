@@ -140,8 +140,10 @@ private extension TurnRunner {
       try auditCompleted(content: content, suppressedAck: suppressHeartbeatAck, in: context)
       notifyOutbox()
       await notifyDailyCapIfTripped(in: context)
-    case .usageRecordedAfterTerminal: await notifyDailyCapIfTripped(in: context)
-    case .ignored: return
+    case .usageRecordedAfterTerminal:
+      await notifyDailyCapIfTripped(in: context)
+    case .ignored:
+      return
     }
   }
 

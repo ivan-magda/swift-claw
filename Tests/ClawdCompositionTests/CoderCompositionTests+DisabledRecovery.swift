@@ -59,7 +59,9 @@ extension CoderCompositionTests {
       // when
       let coder = await restarted.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
       let service = try #require(coder.service)
-      do { try await service.start() } catch {
+      do {
+        try await service.start()
+      } catch {
         try? await service.shutdown()
         throw error
       }

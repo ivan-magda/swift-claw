@@ -108,13 +108,15 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
       throw ProviderFailure(cause: cause, accounting: .notStarted)
     case .success(let plan):
       switch await engine.run(plan: plan, emitDelta: Self.discardDelta) {
-      case .completed(let response): return response
+      case .completed(let response):
+        return response
       case .failed(let failure):
         // The whole failure travels, cause and accounting together: a budget-exhausted clean 5xx
         // reports `notStarted`, and throwing the bare cause would strand that fact and invite a
         // false debit.
         throw failure
-      case .cancelled(let accounting): throw Self.cancellation(for: accounting)
+      case .cancelled(let accounting):
+        throw Self.cancellation(for: accounting)
       }
     }
   }
@@ -245,7 +247,9 @@ private extension ChatGPTResponsesProvider {
 // MARK: - Headers
 
 private extension ChatGPTResponsesProvider {
-  static var maximumBuildVersionBytes: Int { 256 }
+  static var maximumBuildVersionBytes: Int {
+    256
+  }
 
   /// The two headers a credential source may contribute, keyed by normalized name and mapped to the
   /// single spelling that reaches the wire.

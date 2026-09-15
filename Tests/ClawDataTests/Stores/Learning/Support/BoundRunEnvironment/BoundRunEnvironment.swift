@@ -85,7 +85,9 @@ struct BoundRunEnvironment {
   }
 
   /// A fresh bound run left PENDING — the shape `/stop` cancels before any lane picks it up.
-  func pendingBoundRun() throws -> Int64 { try Self.fire(jobs, jobID: jobID, now: now).runID }
+  func pendingBoundRun() throws -> Int64 {
+    try Self.fire(jobs, jobID: jobID, now: now).runID
+  }
 
   /// A run on the job's session with no learning binding: the heartbeat/pre-upgrade shape, and the
   /// only run in this fixture that must leave `run_settlements` empty.

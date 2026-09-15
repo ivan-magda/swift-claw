@@ -5,7 +5,9 @@ import GRDB
 public struct SessionMessageStoreGRDB: SessionMessageStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64 {
     try database.writeMapping { db in
@@ -286,9 +288,8 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   static func decodeStoredMessage(_ row: Row) throws -> StoredMessage {
     let rowID: Int64 = row["id"]
 
-    guard
-      let role = MessageRole(rawValue: row["role"]),
-      let provenance = Provenance(rawValue: row["provenance"])
+    guard let role = MessageRole(rawValue: row["role"]),
+          let provenance = Provenance(rawValue: row["provenance"])
     else {
       throw StoreError.unexpected("messages row \(rowID) has an unrecognized role or provenance")
     }

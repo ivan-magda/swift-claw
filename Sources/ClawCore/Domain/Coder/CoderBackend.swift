@@ -6,8 +6,12 @@ public struct CoderInvocation: Sendable {
   public let jobDirectory: String
   public let timeout: Duration
 
-  public init(jobID: UUID, prepared: CoderPreparedRequest, jobDirectory: String, timeout: Duration)
-  {
+  public init(
+    jobID: UUID,
+    prepared: CoderPreparedRequest,
+    jobDirectory: String,
+    timeout: Duration
+  ) {
     self.jobID = jobID
     self.prepared = prepared
     self.jobDirectory = jobDirectory
@@ -22,7 +26,9 @@ public protocol CoderBackend: Sendable {
   ) async -> CoderResult
 }
 
-public enum CoderRecoveryObservation: Sendable, Equatable { case stopped, liveOwned, unresolved }
+public enum CoderRecoveryObservation: Sendable, Equatable {
+  case stopped, liveOwned, unresolved
+}
 
 public protocol CoderProcessInspecting: Sendable {
   func inspect(_ receipt: CoderProcessReceipt) async -> CoderRecoveryObservation

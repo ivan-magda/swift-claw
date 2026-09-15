@@ -12,9 +12,8 @@ extension LearningRetentionSnapshot {
       retained.lessons.insert(
         LearningRetentionLesson(jobID: jobID, digest: state["stable_lesson_set_digest"])
       )
-      if
-        let current = try ScheduledLearningStoreGRDB.readState(db, jobID: jobID),
-        let promotion = try ScheduledLearningStoreGRDB.currentPromotion(db, state: current)
+      if let current = try ScheduledLearningStoreGRDB.readState(db, jobID: jobID),
+         let promotion = try ScheduledLearningStoreGRDB.currentPromotion(db, state: current)
       {
         retained.decisions.insert(promotion.decisionID)
       }
@@ -36,8 +35,7 @@ extension LearningRetentionSnapshot {
     }
     let timestamp = EpochSecondCodec.epoch(now)
     for target in targets + challenges {
-      guard
-        (target["expires_at"] as Int64) >= timestamp && (target["consumed_at"] as Int64?) == nil
+      guard (target["expires_at"] as Int64) >= timestamp && (target["consumed_at"] as Int64?) == nil
       else {
         continue
       }
@@ -100,8 +98,7 @@ extension LearningRetentionSnapshot {
     for row in decisions where (row["kind"] as String) == ResetReceipt.kind {
       let result: LearningResetDecisionResult =
         try ScheduledLearningStoreGRDB.decodeCanonicalDecision(row["result"])
-      if
-        states.contains(where: { state in
+      if states.contains(where: { state in
         sameJobEpoch(state, row)
           && (state["stable_revision"] as Int64) == result.newStableRevision.value
       }) {
@@ -117,21 +114,18 @@ extension LearningRetentionSnapshot {
     for state in states {
       let jobID: Int64 = state["job_id"]
       var bases: Set<String> = [state["stable_lesson_set_digest"]]
-      if
-        let current = try ScheduledLearningStoreGRDB.readState(db, jobID: jobID),
-        let promotion = try ScheduledLearningStoreGRDB.currentPromotion(db, state: current)
+      if let current = try ScheduledLearningStoreGRDB.readState(db, jobID: jobID),
+         let promotion = try ScheduledLearningStoreGRDB.currentPromotion(db, state: current)
       {
         bases.insert(promotion.inputs.baseDigest.rawValue)
       }
       for trial in trials {
-        guard
-          !isLiveTrial(trial) && sameJobEpoch(state, trial)
-          && bases.contains(trial["base_digest"])
+        guard !isLiveTrial(trial) && sameJobEpoch(state, trial)
+              && bases.contains(trial["base_digest"])
         else {
           continue
         }
-        guard
-          let candidate = candidates.first(where: { candidate in
+        guard let candidate = candidates.first(where: { candidate in
             (candidate["candidate_digest"] as String) == (trial["candidate_digest"] as String)
           })
         else {
@@ -201,15 +195,19 @@ extension LearningRetentionSnapshot {
   func subjectIsRetained(_ row: Row, retained: LearningRetentionReferences) -> Bool {
     let digest: String = row["subject_digest"]
     switch FeedbackSubjectKind(rawValue: row["subject_kind"]) {
-    case .run: return Int64(digest).map(retained.runs.contains) ?? false
+    case .run:
+      return Int64(digest).map(retained.runs.contains) ?? false
     case .evaluation:
       return evaluations.contains { evaluation in
         sameJobEpoch(row, evaluation) && (evaluation["evaluation_digest"] as String) == digest
           && retained.runs.contains(evaluation["run_id"])
       }
-    case .candidate: return retained.candidates.contains(digest)
-    case .promotion: return Int64(digest).map(retained.decisions.contains) ?? false
-    case nil: return false
+    case .candidate:
+      return retained.candidates.contains(digest)
+    case .promotion:
+      return Int64(digest).map(retained.decisions.contains) ?? false
+    case nil:
+      return false
     }
   }
 }
@@ -239,8 +237,7 @@ private extension LearningRetentionSnapshot {
       }
       // A successor and notice target are also durable completion markers for the predecessor.
       for successor in candidates {
-        guard
-          (successor["predecessor_digest"] as String?) == (row["candidate_digest"] as String)
+        guard (successor["predecessor_digest"] as String?) == (row["candidate_digest"] as String)
         else {
           continue
         }
@@ -253,9 +250,8 @@ private extension LearningRetentionSnapshot {
     for row in decisions {
       let id: Int64 = row["decision_id"]
       let kind: String = row["kind"]
-      if
-        kind == LearningDecisionKind.trial.rawValue
-        || kind == LearningDecisionKind.rollback.rawValue
+      if kind == LearningDecisionKind.trial.rawValue
+         || kind == LearningDecisionKind.rollback.rawValue
       {
         let receipt = try ScheduledLearningStoreGRDB.decodeTerminalReceipt(row)
         if retained.trials.contains(receipt.inputs.identity.trialID) {
@@ -272,9 +268,12 @@ private extension LearningRetentionSnapshot {
           .supportWithdrawal(let promotionID, let eventID):
           retained.decisions.insert(promotionID)
           retained.feedback.insert(eventID)
-        case .safety(let promotionID, _, _): retained.decisions.insert(promotionID)
-        case .adapter(let promotionID, _, _): retained.decisions.insert(promotionID)
-        case nil: break
+        case .safety(let promotionID, _, _):
+          retained.decisions.insert(promotionID)
+        case .adapter(let promotionID, _, _):
+          retained.decisions.insert(promotionID)
+        case nil:
+          break
         }
       } else if kind == AdmissionReceipt.kind {
         let receipt: AdmissionReceipt = try ScheduledLearningStoreGRDB.decodeCanonicalDecision(
@@ -312,9 +311,8 @@ private extension LearningRetentionSnapshot {
     }
     for row in evidence where retained.runs.contains(row["run_id"]) {
       for operation in operations {
-        guard
-          sameJobEpoch(row, operation)
-          && (operation["source_digest"] as String) == (row["evidence_digest"] as String)
+        guard sameJobEpoch(row, operation)
+              && (operation["source_digest"] as String) == (row["evidence_digest"] as String)
         else {
           continue
         }
@@ -333,9 +331,8 @@ private extension LearningRetentionSnapshot {
       }
       if (row["phase"] as String) == LearningPhase.evaluator.rawValue {
         for source in evidence {
-          guard
-            sameJobEpoch(row, source)
-            && (row["source_digest"] as String) == (source["evidence_digest"] as String)
+          guard sameJobEpoch(row, source)
+                && (row["source_digest"] as String) == (source["evidence_digest"] as String)
           else {
             continue
           }
@@ -390,19 +387,20 @@ private extension LearningRetentionSnapshot {
       }
     case .evaluation:
       for evaluation in evaluations {
-        guard
-          sameJobEpoch(row, evaluation) && (evaluation["evaluation_digest"] as String) == digest
+        guard sameJobEpoch(row, evaluation) && (evaluation["evaluation_digest"] as String) == digest
         else {
           continue
         }
         retained.runs.insert(evaluation["run_id"])
       }
-    case .candidate: retained.candidates.insert(digest)
+    case .candidate:
+      retained.candidates.insert(digest)
     case .promotion:
       if let id = Int64(digest) {
         retained.decisions.insert(id)
       }
-    case nil: break
+    case nil:
+      break
     }
   }
 }

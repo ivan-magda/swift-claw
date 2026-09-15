@@ -101,7 +101,9 @@ public struct ApprovalCallbackHandler: Sendable {
 
     do throws(RoutingHalt) {
       try await replies.claimUpdate(updateID: updateID, target: .chat(noticeChatID))
-    } catch { return error.outcome }
+    } catch {
+      return error.outcome
+    }
 
     return await resolve(callback)
   }
@@ -117,7 +119,9 @@ private extension ApprovalCallbackHandler {
     }
 
     let found: Approval?
-    do { found = try approvals.approval(nonce: parsed.nonce) } catch {
+    do {
+      found = try approvals.approval(nonce: parsed.nonce)
+    } catch {
       return await storeFailure(callback, error)
     }
 
@@ -147,45 +151,46 @@ private extension ApprovalCallbackHandler {
         runID: approval.runID,
         fallbackChatID: approval.ownerUserID
       )
-    } catch { return nil }
+    } catch {
+      return nil
+    }
 
     if let context, context.mode == .group {
-      guard
-        context.origin == .interactive,
-        context.requesterUserID != nil,
-        context.sessionID == approval.sessionID,
-        context.deliveryTarget.chatID == approval.ownerUserID,
-        approval.reason == .coderSubmit,
-        approval.tool == CoderToolNames.submit,
-        callback.chatID == context.deliveryTarget.chatID,
-        let promptMessageID = approval.promptMessageID,
-        callback.messageID == promptMessageID,
-        accessControl.decide(
-          chatKind: .supergroup,
-          chatID: context.deliveryTarget.chatID,
-          userID: callback.fromUserID
-        ) == .allowed(.group)
+      guard context.origin == .interactive,
+            context.requesterUserID != nil,
+            context.sessionID == approval.sessionID,
+            context.deliveryTarget.chatID == approval.ownerUserID,
+            approval.reason == .coderSubmit,
+            approval.tool == CoderToolNames.submit,
+            callback.chatID == context.deliveryTarget.chatID,
+            let promptMessageID = approval.promptMessageID,
+            callback.messageID == promptMessageID,
+            accessControl.decide(
+              chatKind: .supergroup,
+              chatID: context.deliveryTarget.chatID,
+              userID: callback.fromUserID
+            ) == .allowed(.group)
       else {
         return nil
       }
 
       do {
-        guard
-          try await membership.isCurrentMember(
-            chatID: context.deliveryTarget.chatID,
-            userID: callback.fromUserID
-          )
+        guard try await membership.isCurrentMember(
+          chatID: context.deliveryTarget.chatID,
+          userID: callback.fromUserID
+        )
         else {
           return nil
         }
-      } catch { return nil }
+      } catch {
+        return nil
+      }
 
       return ApprovalResolutionActor(actor: .groupMember, userID: callback.fromUserID)
     }
 
-    guard
-      accessControl.isAllowed(userID: callback.fromUserID),
-      callback.fromUserID == approval.ownerUserID
+    guard accessControl.isAllowed(userID: callback.fromUserID),
+          callback.fromUserID == approval.ownerUserID
     else {
       return nil
     }
@@ -215,7 +220,9 @@ private extension ApprovalCallbackHandler {
     actor: ApprovalResolutionActor
   ) async -> HandleOutcome {
     let policyVersion: String
-    do { policyVersion = try currentPolicyVersion() } catch {
+    do {
+      policyVersion = try currentPolicyVersion()
+    } catch {
       return await storeFailure(callback, error)
     }
 
@@ -227,7 +234,9 @@ private extension ApprovalCallbackHandler {
         actor: actor,
         now: now()
       )
-    } catch { return await storeFailure(callback, error) }
+    } catch {
+      return await storeFailure(callback, error)
+    }
 
     switch outcome {
     case .approved:
@@ -236,8 +245,10 @@ private extension ApprovalCallbackHandler {
     case .stalePolicy:
       await coordinator.signal(.denied(.stalePolicy), forApprovalID: approval.id)
       return await finish(callback, toast: Self.stalePolicyToast)
-    case .notPending: return await finish(callback, toast: Self.alreadyHandledToast)
-    case .expiredRow: return await commitExpiry(callback, approval: approval)
+    case .notPending:
+      return await finish(callback, toast: Self.alreadyHandledToast)
+    case .expiredRow:
+      return await commitExpiry(callback, approval: approval)
     }
   }
 
@@ -245,7 +256,9 @@ private extension ApprovalCallbackHandler {
   /// waiter fails the run exactly as the ticker would.
   func commitExpiry(_ callback: RawCallback, approval: Approval) async -> HandleOutcome {
     let denied: Bool
-    do { denied = try approvals.deny(id: approval.id, decision: .expired, now: now()) } catch {
+    do {
+      denied = try approvals.deny(id: approval.id, decision: .expired, now: now())
+    } catch {
       return await storeFailure(callback, error)
     }
 
@@ -264,7 +277,9 @@ private extension ApprovalCallbackHandler {
     let denied: Bool
     do {
       denied = try approvals.deny(id: approval.id, decision: .rejected, actor: actor, now: now())
-    } catch { return await storeFailure(callback, error) }
+    } catch {
+      return await storeFailure(callback, error)
+    }
 
     guard denied else {
       // A racing resolver (ticker/duplicate) already won; nothing to signal, answer neutrally.
@@ -294,7 +309,9 @@ private extension ApprovalCallbackHandler {
       ts: now()
     )
 
-    do { try audit.appendAudit(event) } catch {
+    do {
+      try audit.appendAudit(event)
+    } catch {
       logger.error("failed to audit forbidden callback: \(error)")
     }
 
@@ -313,7 +330,9 @@ private extension ApprovalCallbackHandler {
   /// Answer the callback (stop the client spinner) and report the update durably handled. The answer
   /// is best-effort: a lost toast must not re-run the resolution.
   func finish(_ callback: RawCallback, toast: String) async -> HandleOutcome {
-    do { try await callbacks.answerCallbackQuery(id: callback.callbackID, text: toast) } catch {
+    do {
+      try await callbacks.answerCallbackQuery(id: callback.callbackID, text: toast)
+    } catch {
       logger.warning("failed to answer callback \(callback.callbackID): \(error)")
     }
     return .processed

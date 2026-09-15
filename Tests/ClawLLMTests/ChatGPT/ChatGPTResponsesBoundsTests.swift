@@ -328,7 +328,9 @@ struct ChatGPTResponsesBoundsTests {
 
     // when
     var thrown: (any Error)?
-    do { _ = try Self.deliver(stream, through: &parser, into: &accumulator) } catch {
+    do {
+      _ = try Self.deliver(stream, through: &parser, into: &accumulator)
+    } catch {
       thrown = error
     }
     let failure = try #require(thrown as? ProviderError)
@@ -372,7 +374,9 @@ extension ChatGPTResponsesBoundsTests {
     ChatGPTResponsesSSEParser(bounds: compactBounds)
   }
 
-  fileprivate static func event(_ payload: String) -> String { "data: \(payload)\n\n" }
+  fileprivate static func event(_ payload: String) -> String {
+    "data: \(payload)\n\n"
+  }
 
   /// Delivers a stream the way a transport does — in chunks the parser drains as it goes — so that a
   /// test about an accumulation bound cannot trip the raw-buffer bound on its way there.
@@ -458,8 +462,11 @@ extension ChatGPTResponsesBoundsTests {
     )
   }
 
-  fileprivate static func argumentDeltaEvent(index: Int, callID: String, fragment: String) -> String
-  {
+  fileprivate static func argumentDeltaEvent(
+    index: Int,
+    callID: String,
+    fragment: String
+  ) -> String {
     event(
       #"{"type":"response.function_call_arguments.delta","output_index":\#(index),"#
         + #""call_id":"\#(callID)","delta":"\#(fragment)"}"#

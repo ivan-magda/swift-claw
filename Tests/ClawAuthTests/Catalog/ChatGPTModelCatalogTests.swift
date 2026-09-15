@@ -32,7 +32,9 @@ private enum CatalogFixture {
     return .object(fields)
   }
 
-  static func payload(_ rows: [JSONValue]) -> JSONValue { .object(["models": .array(rows)]) }
+  static func payload(_ rows: [JSONValue]) -> JSONValue {
+    .object(["models": .array(rows)])
+  }
 
   static func slugs(_ rows: [JSONValue]) throws -> [String] {
     try ChatGPTModelCatalog.eligibleModels(in: payload(rows)).map(\.slug)
@@ -53,7 +55,8 @@ extension ChatGPTCatalogFailure {
   /// carry. Composed at runtime, so it cannot be written into an equality expectation.
   var detailText: String {
     switch self {
-    case .unavailable(let detail): return detail
+    case .unavailable(let detail):
+      return detail
     }
   }
 }
@@ -153,8 +156,10 @@ struct ChatGPTModelCatalogVisibilityTests {
     (JSONValue.bool(true), false),
     (JSONValue.array([.string("list")]), false),
   ])
-  func onlyAnAbsentBlankOrListVisibilityIsEligible(visibility: JSONValue?, isEligible: Bool) throws
-  {
+  func onlyAnAbsentBlankOrListVisibilityIsEligible(
+    visibility: JSONValue?,
+    isEligible: Bool
+  ) throws {
     // given
     let rows = [CatalogFixture.row(visibility: visibility)]
 

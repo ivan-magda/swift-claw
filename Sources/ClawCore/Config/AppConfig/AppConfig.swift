@@ -274,8 +274,10 @@ extension AppConfig {
   /// Public because the CLI verbs that manage MCP tokens need the catalog's location without the
   /// rest of the daemon's configuration having to be valid: an owner repairing a token must not be
   /// stopped by an unrelated env var.
-  public static func mcpConfigSource(from env: [String: String], stateRoot: URL) -> MCPConfigSource
-  {
+  public static func mcpConfigSource(
+    from env: [String: String],
+    stateRoot: URL
+  ) -> MCPConfigSource {
     let raw = env[EnvKey.mcpConfigPath]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard raw.isEmpty == false else {
       return .probed(stateRoot.appendingPathComponent(MCPLimits.configFileName))
@@ -306,9 +308,12 @@ extension AppConfig {
     }
 
     switch trimmed.lowercased() {
-    case "1", "true", "yes", "on": return true
-    case "0", "false", "no", "off": return false
-    default: throw ConfigError.invalidBool(key: key, value: trimmed)
+    case "1", "true", "yes", "on":
+      return true
+    case "0", "false", "no", "off":
+      return false
+    default:
+      throw ConfigError.invalidBool(key: key, value: trimmed)
     }
   }
 }
@@ -323,9 +328,8 @@ private extension AppConfig {
     from environmentValue: String?,
     invalid: (_ value: String) -> ConfigError
   ) throws -> Set<Int64> {
-    guard
-      let environmentValue = environmentValue?.trimmingCharacters(in: .whitespaces),
-      !environmentValue.isEmpty
+    guard let environmentValue = environmentValue?.trimmingCharacters(in: .whitespaces),
+          !environmentValue.isEmpty
     else {
       return []
     }

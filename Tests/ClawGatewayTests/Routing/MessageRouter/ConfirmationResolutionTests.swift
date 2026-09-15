@@ -140,13 +140,17 @@ struct ConfirmationResolutionTests {
         updateID: Int64,
         item: NewMemoryItem,
         now: Date
-      ) throws(StoreError) -> MemoryCommandResult { throw StoreError.unexpected("commit lost") }
+      ) throws(StoreError) -> MemoryCommandResult {
+        throw StoreError.unexpected("commit lost")
+      }
 
       func applyForget(
         updateID: Int64,
         itemID: Int64,
         now: Date
-      ) throws(StoreError) -> MemoryCommandResult { throw StoreError.unexpected("commit lost") }
+      ) throws(StoreError) -> MemoryCommandResult {
+        throw StoreError.unexpected("commit lost")
+      }
     }
 
     let harness = try MemoryRoutingHarness.make(memoryCommands: FailingMemoryCommands())
@@ -183,13 +187,17 @@ struct ConfirmationResolutionTests {
         updateID: Int64,
         item: NewMemoryItem,
         now: Date
-      ) throws(StoreError) -> MemoryCommandResult { throw StoreError.diskFull }
+      ) throws(StoreError) -> MemoryCommandResult {
+        throw StoreError.diskFull
+      }
 
       func applyForget(
         updateID: Int64,
         itemID: Int64,
         now: Date
-      ) throws(StoreError) -> MemoryCommandResult { throw StoreError.diskFull }
+      ) throws(StoreError) -> MemoryCommandResult {
+        throw StoreError.diskFull
+      }
     }
 
     let harness = try MemoryRoutingHarness.make(memoryCommands: DiskFullMemoryCommands())

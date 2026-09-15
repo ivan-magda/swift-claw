@@ -16,18 +16,30 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
 
   public var title: String {
     switch self {
-    case .config: "Config"
-    case .database: "Database"
-    case .llmRuns: "LLM & Runs"
-    case .context: "Context"
-    case .spend: "Spend"
-    case .storage: "Storage"
-    case .scheduler: "Scheduler"
-    case .approvals: "Approvals"
-    case .connectivity: "Connectivity"
-    case .mcp: "MCP"
-    case .sandbox: "Sandbox"
-    case .coder: "Coder"
+    case .config:
+      "Config"
+    case .database:
+      "Database"
+    case .llmRuns:
+      "LLM & Runs"
+    case .context:
+      "Context"
+    case .spend:
+      "Spend"
+    case .storage:
+      "Storage"
+    case .scheduler:
+      "Scheduler"
+    case .approvals:
+      "Approvals"
+    case .connectivity:
+      "Connectivity"
+    case .mcp:
+      "MCP"
+    case .sandbox:
+      "Sandbox"
+    case .coder:
+      "Coder"
     }
   }
 }
@@ -50,8 +62,13 @@ public struct DoctorReport: Sendable {
     public let group: DoctorGroup
     public let isHeadline: Bool
 
-    public init(key: String, value: String, ok: Bool, group: DoctorGroup, isHeadline: Bool = false)
-    {
+    public init(
+      key: String,
+      value: String,
+      ok: Bool,
+      group: DoctorGroup,
+      isHeadline: Bool = false
+    ) {
       self.key = key
       self.value = value
       self.ok = ok
@@ -62,9 +79,13 @@ public struct DoctorReport: Sendable {
 
   public private(set) var checks: [Check]
 
-  public init(checks: [Check] = []) { self.checks = checks }
+  public init(checks: [Check] = []) {
+    self.checks = checks
+  }
 
-  public var ok: Bool { checks.allSatisfy(\.ok) }
+  public var ok: Bool {
+    checks.allSatisfy(\.ok)
+  }
 
   public mutating func add(
     key: String,
@@ -72,9 +93,13 @@ public struct DoctorReport: Sendable {
     ok: Bool = true,
     group: DoctorGroup,
     headline: Bool = false
-  ) { checks.append(Check(key: key, value: value, ok: ok, group: group, isHeadline: headline)) }
+  ) {
+    checks.append(Check(key: key, value: value, ok: ok, group: group, isHeadline: headline))
+  }
 
-  public mutating func add(contentsOf newChecks: [Check]) { checks.append(contentsOf: newChecks) }
+  public mutating func add(contentsOf newChecks: [Check]) {
+    checks.append(contentsOf: newChecks)
+  }
 
   public func renderText() -> String {
     nonEmptyGroups().map {

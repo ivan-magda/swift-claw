@@ -29,7 +29,9 @@ actor CodexEvents {
 
   func finish() throws {
     if !pending.isEmpty {
-      do { try frame() } catch {
+      do {
+        try frame()
+      } catch {
         invalid = true
         throw error
       }
@@ -50,12 +52,16 @@ private extension CodexEvents {
     case "turn.completed":
       completed = true
       usage = try JSONDecoder().decode(Completion.self, from: pending).usage ?? usage
-    case "turn.failed", "error": failed = true
-    default: break
+    case "turn.failed", "error":
+      failed = true
+    default:
+      break
     }
   }
 
-  struct Event: Decodable { let type: String }
+  struct Event: Decodable {
+    let type: String
+  }
 
   struct Completion: Decodable {
     // swiftlint:disable:next discouraged_optional_collection

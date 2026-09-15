@@ -8,9 +8,12 @@ extension ContextRowID {
   /// whatever the fixed sections left.
   func resolve(in budget: ContextBudget, residualGraphemes: Int?) -> Int? {
     switch self {
-    case .policy, .systemWorkspace, .tools, .metadata, .lessons: nil
-    case .userFile: budget.userFileCap
-    case .memoryFile: budget.memoryFileCap
+    case .policy, .systemWorkspace, .tools, .metadata, .lessons:
+      nil
+    case .userFile:
+      budget.userFileCap
+    case .memoryFile:
+      budget.memoryFileCap
     case .memoryItems:
       scaledTruncatableCap(
         absolute: budget.itemsCap,

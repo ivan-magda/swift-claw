@@ -76,9 +76,12 @@ public struct ResolvedRunEvidence: Sendable, Equatable {
 
   public var outcome: TrialOutcomeKind {
     switch effective.outcome {
-    case .positive: return .positive
-    case .negative: return .negative
-    case .neutral: return .neutral
+    case .positive:
+      return .positive
+    case .negative:
+      return .negative
+    case .neutral:
+      return .neutral
     }
   }
 
@@ -89,11 +92,17 @@ public struct ResolvedRunEvidence: Sendable, Equatable {
     return issueCodes
   }
 
-  public var evaluationRequired: Bool { effective.evaluationRequired }
+  public var evaluationRequired: Bool {
+    effective.evaluationRequired
+  }
 
-  public var ownerConfirmed: Bool { effective.ownerConfirmed }
+  public var ownerConfirmed: Bool {
+    effective.ownerConfirmed
+  }
 
-  public var hardVetoes: Set<HardVeto> { effective.hardVetoes }
+  public var hardVetoes: Set<HardVeto> {
+    effective.hardVetoes
+  }
 }
 
 public struct TrialAssignment: Sendable, Equatable {

@@ -6,18 +6,26 @@ struct StubAllowlist: AllowlistStore {
 
   func seedAllowlist(userIDs: [Int64]) throws(StoreError) {}
 
-  func allowlistContains(userID: Int64) throws(StoreError) -> Bool { allowed.contains(userID) }
+  func allowlistContains(userID: Int64) throws(StoreError) -> Bool {
+    allowed.contains(userID)
+  }
 
-  func allowlistCount() throws(StoreError) -> Int { allowed.count }
+  func allowlistCount() throws(StoreError) -> Int {
+    allowed.count
+  }
 }
 
 /// Allowlist double whose every operation throws, to exercise fail-closed and seed-failure paths.
 struct ThrowingAllowlist: AllowlistStore {
-  func seedAllowlist(userIDs: [Int64]) throws(StoreError) { throw StoreError.unexpected("boom") }
+  func seedAllowlist(userIDs: [Int64]) throws(StoreError) {
+    throw StoreError.unexpected("boom")
+  }
 
   func allowlistContains(userID: Int64) throws(StoreError) -> Bool {
     throw StoreError.unexpected("boom")
   }
 
-  func allowlistCount() throws(StoreError) -> Int { throw StoreError.unexpected("boom") }
+  func allowlistCount() throws(StoreError) -> Int {
+    throw StoreError.unexpected("boom")
+  }
 }

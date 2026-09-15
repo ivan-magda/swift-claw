@@ -5,7 +5,9 @@ import GRDB
 public struct AuditLogGRDB: AuditLog {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func appendAudit(_ event: AuditEvent) throws(StoreError) {
     try database.writeMapping { db in

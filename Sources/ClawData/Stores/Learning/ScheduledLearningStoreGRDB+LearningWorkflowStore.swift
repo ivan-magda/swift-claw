@@ -131,9 +131,8 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
 
   public func workflowRollbacks(jobID: Int64) throws(StoreError) -> [RollbackTrigger] {
     try database.readMapping { db in
-      guard
-        let state = try Self.readState(db, jobID: jobID),
-        let promotion = try Self.currentPromotion(db, state: state)
+      guard let state = try Self.readState(db, jobID: jobID),
+            let promotion = try Self.currentPromotion(db, state: state)
       else {
         return []
       }
@@ -170,16 +169,14 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
         let signal = OwnerSignal(rawValue: row["signal"])
         let trigger: RollbackTrigger
         if signal == .promotionRollback || signal == .candidateReject {
-          guard
-            (kind == .promotion && subject == promotion.promotionSubject)
-            || (kind == .candidate && subject == promotion.inputs.candidateDigest.rawValue)
+          guard (kind == .promotion && subject == promotion.promotionSubject)
+                || (kind == .candidate && subject == promotion.inputs.candidateDigest.rawValue)
           else {
             return nil
           }
           trigger = .ownerFeedback(promotionID: promotion.decisionID, eventID: row["event_id"])
         } else {
-          guard
-            promotion.cohort.contains(where: { support in
+          guard promotion.cohort.contains(where: { support in
               support.outcome == .positive
                 && ((kind == .run && subject == String(support.runID))
                   || (kind == .evaluation && subject == support.evaluationDigest?.rawValue))

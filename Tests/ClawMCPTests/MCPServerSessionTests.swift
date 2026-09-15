@@ -409,13 +409,17 @@ struct MCPServerSessionTests {
 private actor ArgumentRecorder {
   private(set) var arguments: [String: Value] = [:]
 
-  func record(_ arguments: [String: Value]) { self.arguments = arguments }
+  func record(_ arguments: [String: Value]) {
+    self.arguments = arguments
+  }
 }
 
 private actor MutedTransportRecorder {
   private(set) var last: MuteAfterHandshakeTransport?
 
-  func record(_ transport: MuteAfterHandshakeTransport) { last = transport }
+  func record(_ transport: MuteAfterHandshakeTransport) {
+    last = transport
+  }
 }
 
 private enum SessionFixture {

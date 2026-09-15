@@ -163,7 +163,8 @@ private extension ApprovalWaiter {
       )
       await notifyParticipant(target: target, text: Self.recordFailureNotice)
       return
-    case .committed: break
+    case .committed:
+      break
     }
 
     await turns.resume(
@@ -175,7 +176,9 @@ private extension ApprovalWaiter {
   }
 
   func policyStillMatches(_ approval: Approval) -> Bool {
-    do { return try currentPolicyVersion() == approval.policyVersion } catch {
+    do {
+      return try currentPolicyVersion() == approval.policyVersion
+    } catch {
       logger.error("policy recompute failed at resume for run \(approval.runID): \(error)")
       return false  // fail closed
     }
@@ -190,7 +193,9 @@ private extension ApprovalWaiter {
         observationContent: Self.deniedObservationContent(for: .stalePolicy),
         now: now()
       )
-    } catch { logger.error("failRunStalePolicy failed for run \(approval.runID): \(error)") }
+    } catch {
+      logger.error("failRunStalePolicy failed for run \(approval.runID): \(error)")
+    }
     await notifyParticipant(target: target, text: Self.stalePolicyNotice)
   }
 }
@@ -208,9 +213,12 @@ extension ApprovalWaiter {
   func resolveDenied(approval: Approval, decision: ApprovalDecision) async {
     let cancel: CancelReason? =
       switch decision {
-      case .cancelled: .cancelled
-      case .superseded: .superseded
-      case .rejected, .expired, .stalePolicy: nil
+      case .cancelled:
+        .cancelled
+      case .superseded:
+        .superseded
+      case .rejected, .expired, .stalePolicy:
+        nil
       }
 
     do {
@@ -221,7 +229,9 @@ extension ApprovalWaiter {
         cancel: cancel,
         now: now()
       )
-    } catch { logger.error("approval \(approval.id) deny-observation commit failed: \(error)") }
+    } catch {
+      logger.error("approval \(approval.id) deny-observation commit failed: \(error)")
+    }
 
     if cancel == nil, let target = deliveryTarget(for: approval) {
       await notifyParticipant(target: target, text: Self.ownerNotice(for: decision))
@@ -238,11 +248,16 @@ extension ApprovalWaiter {
   /// the next assembly explains the missing result instead of exposing a dangling proposal.
   static func deniedObservationContent(for decision: ApprovalDecision) -> String {
     switch decision {
-    case .rejected: "This action was declined."
-    case .expired: "The approval expired before anyone responded."
-    case .cancelled: "Cancelled by /stop."
-    case .superseded: "Superseded by /new."
-    case .stalePolicy: "The approval was voided because the policy changed before it ran."
+    case .rejected:
+      "This action was declined."
+    case .expired:
+      "The approval expired before anyone responded."
+    case .cancelled:
+      "Cancelled by /stop."
+    case .superseded:
+      "Superseded by /new."
+    case .stalePolicy:
+      "The approval was voided because the policy changed before it ran."
     }
   }
 
@@ -250,9 +265,12 @@ extension ApprovalWaiter {
   /// `/stop`//`new` command ack, so no notice is sent for those.
   static func ownerNotice(for decision: ApprovalDecision) -> String {
     switch decision {
-    case .expired: "That approval expired, so I didn't run the action."
-    case .stalePolicy: "I didn't run that action — the configuration changed after I asked."
-    case .rejected, .cancelled, .superseded: "Understood — I won't run that action."
+    case .expired:
+      "That approval expired, so I didn't run the action."
+    case .stalePolicy:
+      "I didn't run that action — the configuration changed after I asked."
+    case .rejected, .cancelled, .superseded:
+      "Understood — I won't run that action."
     }
   }
 }
@@ -272,7 +290,9 @@ private extension ApprovalWaiter {
     "The approved action ran, but I couldn't record its result; a restart will settle things."
 
   func loadApproval(_ id: Int64) -> Approval? {
-    do { return try approvals.approval(id: id) } catch {
+    do {
+      return try approvals.approval(id: id)
+    } catch {
       logger.error("approval \(id) load failed: \(error)")
       return nil
     }
@@ -280,13 +300,12 @@ private extension ApprovalWaiter {
 
   func deliveryTarget(for approval: Approval) -> DeliveryTarget? {
     do {
-      guard
-        let context = try runs.executionContext(
-          runID: approval.runID,
-          fallbackChatID: approval.ownerUserID
-        ),
-        context.sessionID == approval.sessionID,
-        context.deliveryTarget.chatID == approval.ownerUserID
+      guard let context = try runs.executionContext(
+        runID: approval.runID,
+        fallbackChatID: approval.ownerUserID
+      ),
+            context.sessionID == approval.sessionID,
+            context.deliveryTarget.chatID == approval.ownerUserID
       else {
         logger.error("approval \(approval.id) has no matching durable destination")
         return nil

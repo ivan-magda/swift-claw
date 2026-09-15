@@ -402,8 +402,10 @@ private extension MCPCompositionAcceptanceTests {
     )
   }
 
-  func makeDispatcher(_ builder: DaemonBuilder, mcpTools: [any Tool]) throws -> GatedToolDispatcher
-  {
+  func makeDispatcher(
+    _ builder: DaemonBuilder,
+    mcpTools: [any Tool]
+  ) throws -> GatedToolDispatcher {
     builder.makeToolDispatcher(
       workspace: FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: builder.config)),
       sandbox: SandboxBootstrapResult(

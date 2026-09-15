@@ -92,10 +92,9 @@ public struct CandidateFeedbackSource: Sendable, Equatable, Codable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let rawKind = try container.decode(String.self, forKey: .subjectKind)
     let rawSignal = try container.decode(String.self, forKey: .signal)
-    guard
-      let subjectKind = FeedbackSubjectKind(rawValue: rawKind),
-      let signal = OwnerSignal(rawValue: rawSignal),
-      signal.feedbackSubjectKind == subjectKind
+    guard let subjectKind = FeedbackSubjectKind(rawValue: rawKind),
+          let signal = OwnerSignal(rawValue: rawSignal),
+          signal.feedbackSubjectKind == subjectKind
     else {
       throw DecodingError.dataCorruptedError(
         forKey: .signal,
@@ -239,10 +238,9 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
   /// The one persisted-manifest trust boundary. Decoding closes every typed object; canonical
   /// re-encoding also catches unknown keys inside scalar wrapper values and alternate JSON forms.
   package static func decodedCanonical(from bytes: Data) -> CandidateSourceManifest? {
-    guard
-      let manifest = try? JSONDecoder().decode(Self.self, from: bytes),
-      let canonical = try? CanonicalJSON.data(encoding: manifest),
-      canonical == bytes
+    guard let manifest = try? JSONDecoder().decode(Self.self, from: bytes),
+          let canonical = try? CanonicalJSON.data(encoding: manifest),
+          canonical == bytes
     else {
       return nil
     }
@@ -303,11 +301,17 @@ private enum CandidateManifestDecoding {
   struct AnyKey: CodingKey {
     let stringValue: String
 
-    var intValue: Int? { nil }
+    var intValue: Int? {
+      nil
+    }
 
-    init(stringValue: String) { self.stringValue = stringValue }
+    init(stringValue: String) {
+      self.stringValue = stringValue
+    }
 
-    init?(intValue: Int) { nil }
+    init?(intValue: Int) {
+      nil
+    }
   }
 }
 
@@ -359,9 +363,13 @@ public struct ReflectionPreparation: Sendable, Equatable {
     self.ownerPayloads = ownerPayloads
   }
 
-  public var evidenceSources: [CandidateEvidenceSource] { evaluations.map(\.evidence) }
+  public var evidenceSources: [CandidateEvidenceSource] {
+    evaluations.map(\.evidence)
+  }
 
-  public var evaluationSources: [CandidateEvaluationSource] { evaluations.map(\.evaluation) }
+  public var evaluationSources: [CandidateEvaluationSource] {
+    evaluations.map(\.evaluation)
+  }
 }
 
 public struct PreparedReflectionEvaluation: Sendable, Equatable {

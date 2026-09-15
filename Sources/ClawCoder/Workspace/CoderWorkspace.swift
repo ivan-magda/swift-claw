@@ -60,8 +60,13 @@ struct CoderWorkspace: Sendable {
     let baseline: RepositoryInventory?
     do {
       baseline = try await RepositoryInventory.capture(at: directory, git: git)
-    } catch RepositoryInventory.Failure.unavailable { baseline = nil } catch CoderGitFailure.command
-    { baseline = nil } catch CoderGitFailure.output { baseline = nil }
+    } catch RepositoryInventory.Failure.unavailable {
+      baseline = nil
+    } catch CoderGitFailure.command {
+      baseline = nil
+    } catch CoderGitFailure.output {
+      baseline = nil
+    }
     return CoderWorkspaceState(
       directory: directory,
       baseline: baseline,

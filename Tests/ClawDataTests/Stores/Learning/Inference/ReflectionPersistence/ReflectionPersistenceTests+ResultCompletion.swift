@@ -76,7 +76,9 @@ extension ReflectionPersistenceTests {
         now: env.now
       )
       failure = nil
-    } catch let error { failure = error }
+    } catch let error {
+      failure = error
+    }
 
     // then — committing operation or usage before the candidate INSERT would leave a torn result
     #expect(failure != nil)
@@ -109,7 +111,9 @@ extension ReflectionPersistenceTests {
         now: env.now
       )
       failure = nil
-    } catch let error { failure = error }
+    } catch let error {
+      failure = error
+    }
 
     // then — committing closure or spend before the receipt would tear null-result completion
     #expect(failure != nil)
@@ -149,11 +153,10 @@ private extension ReflectionPersistenceTests {
 
   func reflectionDecision(_ env: BoundRunEnvironment) throws -> DecisionRow? {
     try env.queue.read { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: "SELECT kind, inputs, result, algorithm FROM learning_decisions"
-        )
+      guard let row = try Row.fetchOne(
+        db,
+        sql: "SELECT kind, inputs, result, algorithm FROM learning_decisions"
+      )
       else {
         return nil
       }

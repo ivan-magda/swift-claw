@@ -72,9 +72,12 @@ private extension CoderCardMarkdown {
 
   static func encode(_ text: String, preformatted: Bool) -> String {
     switch text {
-    case "\n": preformatted ? "&#10;" : "<br>"
-    case "\r": preformatted ? "&#13;" : "<br>"
-    case "\r\n": preformatted ? "&#13;&#10;" : "<br>"
+    case "\n":
+      preformatted ? "&#10;" : "<br>"
+    case "\r":
+      preformatted ? "&#13;" : "<br>"
+    case "\r\n":
+      preformatted ? "&#13;&#10;" : "<br>"
     default:
       text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
         .replacingOccurrences(of: ">", with: "&gt;")

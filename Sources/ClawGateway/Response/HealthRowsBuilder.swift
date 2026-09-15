@@ -234,19 +234,24 @@ private extension HealthRowsBuilder {
   /// are what report that.
   static func activeRoute(_ health: LLMRouteHealth) -> String {
     switch health.cooldown {
-    case .clear: return health.primaryReference
+    case .clear:
+      return health.primaryReference
     case .cooling:
       let answering = health.fallbackReference ?? health.primaryReference
       return "\(answering) (primary \(health.primaryReference) cooling)"
-    case .unobservable: return "\(health.primaryReference) (configured primary)"
+    case .unobservable:
+      return "\(health.primaryReference) (configured primary)"
     }
   }
 
   static func cooldownSeconds(_ cooldown: LLMRouteHealth.Cooldown) -> String {
     switch cooldown {
-    case .clear: "none"
-    case .cooling(let remainingSeconds): "\(remainingSeconds)"
-    case .unobservable: "unknown"
+    case .clear:
+      "none"
+    case .cooling(let remainingSeconds):
+      "\(remainingSeconds)"
+    case .unobservable:
+      "unknown"
     }
   }
 

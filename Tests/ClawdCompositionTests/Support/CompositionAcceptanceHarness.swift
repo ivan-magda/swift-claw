@@ -36,7 +36,9 @@ final class FreshCredentialStore: LLMCredentialStore, @unchecked Sendable {
 
   /// A store whose `load` throws — the managed-store failure a boot must propagate and close every
   /// client on.
-  init(failure: LLMCredentialStoreError) { outcome = .failure(failure) }
+  init(failure: LLMCredentialStoreError) {
+    outcome = .failure(failure)
+  }
 
   var loadCount: Int {
     lock.lock()
@@ -49,8 +51,10 @@ final class FreshCredentialStore: LLMCredentialStore, @unchecked Sendable {
     loads += 1
     lock.unlock()
     switch outcome {
-    case .success(let credential): return credential
-    case .failure(let error): throw error
+    case .success(let credential):
+      return credential
+    case .failure(let error):
+      throw error
     }
   }
 
@@ -124,7 +128,9 @@ enum CompositionAcceptance {
 
   // MARK: - SSE Fixtures
 
-  static func event(_ json: String) -> Data { Data("data: \(json)\n\n".utf8) }
+  static func event(_ json: String) -> Data {
+    Data("data: \(json)\n\n".utf8)
+  }
 
   static let okHead = HTTPStreamHead(statusCode: 200, headers: [:])
 
@@ -259,12 +265,16 @@ final class ExitCodeBox: @unchecked Sendable {
 actor CloseRecorder {
   private(set) var order: [RuntimeHTTPClientRole] = []
 
-  func record(_ role: RuntimeHTTPClientRole) { order.append(role) }
+  func record(_ role: RuntimeHTTPClientRole) {
+    order.append(role)
+  }
 }
 
 /// Captures the one roster the assembler received, so a test reads the resolved routes without
 /// standing up a real daemon.
-final class StackBox: @unchecked Sendable { var stack: RosterStack? }
+final class StackBox: @unchecked Sendable {
+  var stack: RosterStack?
+}
 
 /// The runtime HTTP clients wired to real per-role `HTTPClient`s, each of which records its role on
 /// `recorder` as it closes — so a boot-failure test can prove every client was shut down, and in what
@@ -373,7 +383,9 @@ struct CompositionAcceptanceHarness {
     )
   }
 
-  func healthRow(_ key: String) -> String? { rows[key] }
+  func healthRow(_ key: String) -> String? {
+    rows[key]
+  }
 
   /// Re-reads the rows from the same reporter, so a test that changes live state (arming the shared
   /// cooldown, say) sees what the daemon would report now rather than what it reported at boot.

@@ -13,7 +13,9 @@ private let accountClaimName = "https://api.openai.com/auth"
 /// test, so the third segment is arbitrary text rather than a real MAC. Module-scoped, so the suites
 /// that need a token with a given claim share one notion of what a token looks like.
 enum TokenBuilder {
-  static func segment(_ json: String) -> String { base64URL(Data(json.utf8)) }
+  static func segment(_ json: String) -> String {
+    base64URL(Data(json.utf8))
+  }
 
   static func base64URL(_ data: Data) -> String {
     standardBase64(data).replacingOccurrences(of: "+", with: "-").replacingOccurrences(

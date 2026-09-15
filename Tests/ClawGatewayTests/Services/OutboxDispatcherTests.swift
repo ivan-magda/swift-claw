@@ -18,7 +18,9 @@ private struct MarkSentFailingOutbox: OutboxStore {
     throw StoreError.diskFull
   }
 
-  func pendingOutbound() throws(StoreError) -> [OutboxRow] { try base.pendingOutbound() }
+  func pendingOutbound() throws(StoreError) -> [OutboxRow] {
+    try base.pendingOutbound()
+  }
 }
 
 /// Records every send the dispatcher makes — its target, its `replyMarkup` and its payload — and
@@ -79,8 +81,10 @@ private actor DeliverySpy: MessageDelivery {
 
   private func answer(for chatID: Int64) throws {
     switch outcomes[chatID] {
-    case .none: return
-    case .some(.unreachable): throw TelegramError.transport("chat \(chatID) down")
+    case .none:
+      return
+    case .some(.unreachable):
+      throw TelegramError.transport("chat \(chatID) down")
     case .some(.floodControl(let retryAfter, let times)):
       guard times > 0 else {
         return
@@ -102,7 +106,9 @@ private final class RetryWaitHold: Sendable {
   private let released = AsyncGate()
   private let requested = Mutex<[Duration]>([])
 
-  init(retryAfter: Duration) { self.retryAfter = retryAfter }
+  init(retryAfter: Duration) {
+    self.retryAfter = retryAfter
+  }
 
   var clock: ScriptedClock {
     ScriptedClock { [self] delay in
@@ -123,7 +129,9 @@ private final class RetryWaitHold: Sendable {
     }
   }
 
-  func release() { released.open() }
+  func release() {
+    released.open()
+  }
 }
 
 @Suite

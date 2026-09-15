@@ -171,7 +171,8 @@ extension ResetFixture {
       }
       let corrupted: String
       switch corruption {
-      case .noncanonicalJSON: corrupted = " \(result)"
+      case .noncanonicalJSON:
+        corrupted = " \(result)"
       case .wrongStableRevision:
         let decoded: LearningResetDecisionResult =
           try ScheduledLearningStoreGRDB.decodeCanonicalDecision(result)

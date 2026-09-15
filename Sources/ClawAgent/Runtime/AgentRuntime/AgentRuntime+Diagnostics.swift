@@ -95,7 +95,9 @@ extension AgentRuntime {
   /// Writes one audit row on the turn's single throwing contract. Audit is observability, not a
   /// gate: only a full disk stops the turn, any other write failure logs and the run continues.
   func recordAudit(_ event: AuditEvent, runID: Int64, sessionID: Int64) throws {
-    do { try auditLog.appendAudit(event) } catch StoreError.diskFull {
+    do {
+      try auditLog.appendAudit(event)
+    } catch StoreError.diskFull {
       throw StoreError.diskFull
     } catch {
       logger.warning(

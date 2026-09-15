@@ -42,7 +42,9 @@ public enum MCPHTTPHeader {
     }
   )
 
-  public static func isReserved(_ name: String) -> Bool { reserved.contains(name.lowercased()) }
+  public static func isReserved(_ name: String) -> Bool {
+    reserved.contains(name.lowercased())
+  }
 
   /// RFC 9110 `field-name` is an ASCII token. Validating before NIO sees it turns malformed owner
   /// config into a typed startup error instead of an `HTTPHeaders` precondition failure.
@@ -67,7 +69,8 @@ public enum MCPHTTPHeader {
     case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"),
       UInt8(ascii: "0")...UInt8(ascii: "9"):
       return true
-    default: return "!#$%&'*+-.^_`|~".utf8.contains(byte)
+    default:
+      return "!#$%&'*+-.^_`|~".utf8.contains(byte)
     }
   }
 }
@@ -82,7 +85,8 @@ public enum MCPConfigSource: Sendable, Equatable {
 
   public var url: URL {
     switch self {
-    case .explicit(let url), .probed(let url): return url
+    case .explicit(let url), .probed(let url):
+      return url
     }
   }
 
@@ -121,7 +125,9 @@ public struct MCPToolFilter: Sendable, Equatable {
   }
 
   /// The tier a remote tool lands on. Every MCP tool is `.ask` unless the owner downgraded it.
-  public func riskLevel(for remoteName: String) -> RiskLevel { risk[remoteName] ?? .ask }
+  public func riskLevel(for remoteName: String) -> RiskLevel {
+    risk[remoteName] ?? .ask
+  }
 }
 
 // swiftlint:enable discouraged_optional_collection
@@ -199,7 +205,9 @@ public struct MCPServerConfig: Sendable, Equatable {
   }
 
   /// Worst case for one tool call: a dead session reconnects, then the call runs.
-  public var worstCaseCallSeconds: Int { connectTimeoutSeconds + requestTimeoutSeconds }
+  public var worstCaseCallSeconds: Int {
+    connectTimeoutSeconds + requestTimeoutSeconds
+  }
 
   /// What `authHeader` carries for `token`. `Bearer` is the `Authorization` header's scheme, not a
   /// property of the token, so a server configured onto a header of its own (an API-key header, say)
@@ -261,7 +269,9 @@ public struct MCPConfig: Sendable, Equatable {
 
   public static let empty = MCPConfig(unchecked: [])
 
-  private init(unchecked servers: [MCPServerConfig]) { self.servers = servers }
+  private init(unchecked servers: [MCPServerConfig]) {
+    self.servers = servers
+  }
 
   /// Rejects names that collide once sanitized: two servers folding to the same tool-name prefix
   /// would make `mcp__<server>__<tool>` ambiguous, and renaming behind the owner's back is worse
@@ -279,5 +289,7 @@ public struct MCPConfig: Sendable, Equatable {
     self.init(unchecked: servers)
   }
 
-  public var enabledServers: [MCPServerConfig] { servers.filter(\.enabled) }
+  public var enabledServers: [MCPServerConfig] {
+    servers.filter(\.enabled)
+  }
 }

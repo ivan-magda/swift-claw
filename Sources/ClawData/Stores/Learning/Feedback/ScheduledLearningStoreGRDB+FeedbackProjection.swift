@@ -78,24 +78,23 @@ extension ScheduledLearningStoreGRDB {
     runIDs: Set<Int64>,
     evaluationRuns: [String: Int64]
   ) throws -> StoredFeedbackProjection {
-    guard
-      let eventID = SQLiteStoredValue.int64(in: row, column: "event_id"),
-      eventID > 0,
-      let kindRaw = SQLiteStoredValue.string(in: row, column: "subject_kind"),
-      let kind = FeedbackSubjectKind(rawValue: kindRaw),
-      let subject = SQLiteStoredValue.string(in: row, column: "subject_digest"),
-      let signalRaw = SQLiteStoredValue.string(in: row, column: "signal"),
-      let signal = OwnerSignal(rawValue: signalRaw),
-      signal.feedbackSubjectKind == kind,
-      let payload = SQLiteStoredValue.nullableString(in: row, column: "payload"),
-      let revisionRaw = SQLiteStoredValue.int64(in: row, column: "feedback_revision"),
-      revisionRaw > 0,
-      let supersedes = SQLiteStoredValue.nullableInt64(in: row, column: "supersedes"),
-      let occurredRaw = SQLiteStoredValue.int64(in: row, column: "occurred_at"),
-      let occurredAt = EpochSecondCodec.date(fromEpoch: occurredRaw),
-      let actorRaw = SQLiteStoredValue.string(in: row, column: "actor"),
-      let actor = AuditActor(rawValue: actorRaw),
-      let updateID = SQLiteStoredValue.nullableInt64(in: row, column: "transport_update_id")
+    guard let eventID = SQLiteStoredValue.int64(in: row, column: "event_id"),
+          eventID > 0,
+          let kindRaw = SQLiteStoredValue.string(in: row, column: "subject_kind"),
+          let kind = FeedbackSubjectKind(rawValue: kindRaw),
+          let subject = SQLiteStoredValue.string(in: row, column: "subject_digest"),
+          let signalRaw = SQLiteStoredValue.string(in: row, column: "signal"),
+          let signal = OwnerSignal(rawValue: signalRaw),
+          signal.feedbackSubjectKind == kind,
+          let payload = SQLiteStoredValue.nullableString(in: row, column: "payload"),
+          let revisionRaw = SQLiteStoredValue.int64(in: row, column: "feedback_revision"),
+          revisionRaw > 0,
+          let supersedes = SQLiteStoredValue.nullableInt64(in: row, column: "supersedes"),
+          let occurredRaw = SQLiteStoredValue.int64(in: row, column: "occurred_at"),
+          let occurredAt = EpochSecondCodec.date(fromEpoch: occurredRaw),
+          let actorRaw = SQLiteStoredValue.string(in: row, column: "actor"),
+          let actor = AuditActor(rawValue: actorRaw),
+          let updateID = SQLiteStoredValue.nullableInt64(in: row, column: "transport_update_id")
     else {
       throw StoreError.unexpected("assignment source holds an unreadable feedback event")
     }

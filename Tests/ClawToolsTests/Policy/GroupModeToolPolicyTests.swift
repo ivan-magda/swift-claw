@@ -64,8 +64,10 @@ struct GroupModeToolPolicyTests {
     )
   }
 
-  private func makeExecuteTool(workspaceRoot: URL, backend: FakeExecutionBackend) -> ExecuteCodeTool
-  {
+  private func makeExecuteTool(
+    workspaceRoot: URL,
+    backend: FakeExecutionBackend
+  ) -> ExecuteCodeTool {
     ExecuteCodeTool(
       workspaceRoot: workspaceRoot,
       backend: backend,

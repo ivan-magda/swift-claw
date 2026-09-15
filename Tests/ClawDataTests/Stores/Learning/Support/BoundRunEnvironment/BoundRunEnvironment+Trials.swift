@@ -28,7 +28,9 @@ enum TrialSnapshotCorruption: CaseIterable {
 }
 
 extension BoundRunEnvironment {
-  func installTrial() throws { _ = try installTrial(jobID: jobID) }
+  func installTrial() throws {
+    _ = try installTrial(jobID: jobID)
+  }
 
   @discardableResult
   func installTrial(jobID: Int64) throws -> LearningTrialIdentity {
@@ -110,7 +112,9 @@ extension BoundRunEnvironment {
     }
   }
 
-  func sealedTrialEvidence() throws -> SealedEvidence { try seal(runID: settledBoundRun()) }
+  func sealedTrialEvidence() throws -> SealedEvidence {
+    try seal(runID: settledBoundRun())
+  }
 
   func assignmentState(runID: Int64) throws -> TrialAssignmentState? {
     try queue.read { db in
@@ -125,8 +129,10 @@ extension BoundRunEnvironment {
 
   func assignment(runID: Int64) throws -> TrialAssignment? {
     switch try learning.recomputeAssignment(runID: runID, now: now) {
-    case .notAssigned, .stale: return nil
-    case .unchanged(let assignment), .updated(let assignment): return assignment
+    case .notAssigned, .stale:
+      return nil
+    case .unchanged(let assignment), .updated(let assignment):
+      return assignment
     }
   }
 

@@ -31,7 +31,8 @@ public enum SSEFraming {
         if let upper = crlfBlankLineEnd(in: data, from: index) {
           return index..<upper
         }
-      default: break
+      default:
+        break
       }
       index = data.index(after: index)
     }

@@ -72,11 +72,10 @@ enum CanonicalURL {
     while index < scalars.count {
       let scalar = scalars[index]
 
-      guard
-        scalar == "%",
-        index + 2 < scalars.count,
-        isHexDigit(scalars[index + 1]),
-        isHexDigit(scalars[index + 2])
+      guard scalar == "%",
+            index + 2 < scalars.count,
+            isHexDigit(scalars[index + 1]),
+            isHexDigit(scalars[index + 2])
       else {
         output.append(scalar)
         index += 1

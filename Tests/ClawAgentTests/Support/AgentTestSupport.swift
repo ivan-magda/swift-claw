@@ -32,18 +32,25 @@ actor StubProvider: LLMProvider {
   private(set) var calls = 0
   private(set) var lastRequest: ChatRequest?
 
-  init(_ outcome: Outcome) { self.outcome = outcome }
+  init(_ outcome: Outcome) {
+    self.outcome = outcome
+  }
 
   func complete(request: ChatRequest) async throws -> ChatResponse {
     calls += 1
     lastRequest = request
 
     switch outcome {
-    case .respond(let response): return response
-    case .fail(let error): throw error
-    case .failFailure(let failure): throw failure
-    case .failInferenceCancellation(let cancellation): throw cancellation
-    case .failCancellation: throw CancellationError()
+    case .respond(let response):
+      return response
+    case .fail(let error):
+      throw error
+    case .failFailure(let failure):
+      throw failure
+    case .failInferenceCancellation(let cancellation):
+      throw cancellation
+    case .failCancellation:
+      throw CancellationError()
     }
   }
 }
@@ -79,7 +86,9 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
     recordedUsage.append(usage)
   }
 
-  func todayTokensAndCost(now: Date) throws(StoreError) -> (tokens: Int, costUSD: Double) { (0, 0) }
+  func todayTokensAndCost(now: Date) throws(StoreError) -> (tokens: Int, costUSD: Double) {
+    (0, 0)
+  }
 
   func todayTokensAndCost(
     origins: [RunOrigin],
@@ -87,9 +96,13 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
   ) throws(StoreError) -> (
     tokens: Int,
     costUSD: Double
-  ) { (0, 0) }
+  ) {
+    (0, 0)
+  }
 
-  func costSourceMix(now: Date) throws(StoreError) -> [CostSource: Int] { [:] }
+  func costSourceMix(now: Date) throws(StoreError) -> [CostSource: Int] {
+    [:]
+  }
 
   func latestPromptUsage() throws(StoreError) -> LatestPromptUsage? {
     lock.lock()
@@ -246,20 +259,25 @@ func requireCompleted(
     struct Mismatch: Error, CustomStringConvertible {
       let result: TurnResult
 
-      var description: String { "expected TurnResult.completed, got \(result)" }
+      var description: String {
+        "expected TurnResult.completed, got \(result)"
+      }
     }
     throw Mismatch(result: result)
   }
   return (content, usage, providerState)
 }
 
-func requireDegraded(_ result: TurnResult) throws -> (kind: DegradationKind, usage: ProviderUsage?)
-{
+func requireDegraded(
+  _ result: TurnResult
+) throws -> (kind: DegradationKind, usage: ProviderUsage?) {
   guard case .degraded(let kind, let usage) = result else {
     struct Mismatch: Error, CustomStringConvertible {
       let result: TurnResult
 
-      var description: String { "expected TurnResult.degraded, got \(result)" }
+      var description: String {
+        "expected TurnResult.degraded, got \(result)"
+      }
     }
     throw Mismatch(result: result)
   }
@@ -306,8 +324,10 @@ final class FakeWorkspace: WorkspaceReading, @unchecked Sendable {
 
     var loadedFile: LoadedFile {
       switch self {
-      case .present(let text): LoadedFile(outcome: .present, text: text, graphemeCount: text.count)
-      case .overCap(let count): LoadedFile(outcome: .overCap, text: "", graphemeCount: count)
+      case .present(let text):
+        LoadedFile(outcome: .present, text: text, graphemeCount: text.count)
+      case .overCap(let count):
+        LoadedFile(outcome: .overCap, text: "", graphemeCount: count)
       }
     }
   }
@@ -341,11 +361,17 @@ final class FakeMemoryStore: MemoryStore, @unchecked Sendable {
   private let items: [MemoryItem]
   private(set) var fetchRankedCalls: [Bool] = []
 
-  init(items: [MemoryItem] = []) { self.items = items }
+  init(items: [MemoryItem] = []) {
+    self.items = items
+  }
 
-  func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
+  func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] {
+    []
+  }
 
-  func get(id: Int64) throws(StoreError) -> MemoryItem? { nil }
+  func get(id: Int64) throws(StoreError) -> MemoryItem? {
+    nil
+  }
 
   func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem] {
     fetchRankedCalls.append(excludeSensitive)

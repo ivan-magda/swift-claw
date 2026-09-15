@@ -20,18 +20,23 @@ public actor ScriptedChatGPTOAuthRefresh: ChatGPTOAuthRefreshing {
     self.hold = hold
   }
 
-  public var callCount: Int { tokensSeen.count }
+  public var callCount: Int {
+    tokensSeen.count
+  }
 
   public func refresh(refreshToken: String, timeout: Duration) async throws -> ChatGPTTokenPair {
     tokensSeen.append(refreshToken)
     started.open()
     switch hold {
-    case .none: break
+    case .none:
+      break
     case .reportingCancellation(let gate):
       await Self.waitWithBackstop(on: gate)
       try Task.checkCancellation()
-    case .answeringAfterCancellation(let gate): await Self.waitWithBackstop(on: gate)
-    case .ignoringCancellation(let gate): await gate.waitIgnoringCancellation()
+    case .answeringAfterCancellation(let gate):
+      await Self.waitWithBackstop(on: gate)
+    case .ignoringCancellation(let gate):
+      await gate.waitIgnoringCancellation()
     }
     guard script.isEmpty == false else {
       throw ChatGPTOAuthFailure.grantRejected(detail: "unscripted refresh")

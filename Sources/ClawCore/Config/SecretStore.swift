@@ -3,7 +3,9 @@ import Foundation
 /// Loads the immutable secrets shared across tasks after startup.
 ///
 /// Secrets load once at startup; concrete stores live in `ClawSecrets`.
-public protocol SecretStore: Sendable { func loadSecrets() throws -> Secrets }
+public protocol SecretStore: Sendable {
+  func loadSecrets() throws -> Secrets
+}
 
 /// The loaded secrets.
 ///
@@ -62,5 +64,7 @@ public enum SecretStoreError: Error, Sendable, Equatable {
   /// here.
   case publicationFailed(String)
 
-  public var exitCode: Int32 { ClawExitCode.secretLoadFailed.rawValue }
+  public var exitCode: Int32 {
+    ClawExitCode.secretLoadFailed.rawValue
+  }
 }

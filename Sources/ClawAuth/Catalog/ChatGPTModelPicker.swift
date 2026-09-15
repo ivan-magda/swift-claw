@@ -79,10 +79,9 @@ private extension ChatGPTModelPicker {
     configuredSuffix: String?,
     first: ChatGPTCatalogModel
   ) -> ChatGPTModelChoice {
-    guard
-      let configured = configuredSuffix,
-      LLMProviderRegistry.isValidQualifiedModelSuffix(configured),
-      catalog.contains(where: {
+    guard let configured = configuredSuffix,
+          LLMProviderRegistry.isValidQualifiedModelSuffix(configured),
+          catalog.contains(where: {
         $0.slug == configured
       })
     else {

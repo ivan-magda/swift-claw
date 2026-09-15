@@ -193,7 +193,11 @@ enum BoundedAsyncChannelTests {
       var iterator = channel.makeAsyncIterator()
       let first = try await iterator.next()
       var failure: (any Error)?
-      do { _ = try await iterator.next() } catch { failure = error }
+      do {
+        _ = try await iterator.next()
+      } catch {
+        failure = error
+      }
       let afterFailure = try await iterator.next()
       #expect(first == 1)
       #expect(failure is StreamFailure)

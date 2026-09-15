@@ -21,7 +21,9 @@ struct GroupCommandRefusalTests {
     let sessionMessages: SessionMessageStoreGRDB
     let queue: DatabaseQueue
 
-    func replyTexts() async -> [String] { await transport.sent.map(\.text) }
+    func replyTexts() async -> [String] {
+      await transport.sent.map(\.text)
+    }
 
     func scheduledJobCount() throws -> Int {
       try queue.read { db in

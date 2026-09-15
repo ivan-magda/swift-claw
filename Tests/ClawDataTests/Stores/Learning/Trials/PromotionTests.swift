@@ -82,10 +82,14 @@ struct PromotionTests {
     let trial = try #require(try env.learning.openTrial(jobID: env.jobID))
     let request = trial.reviewedMutation(predicate)
     switch predicate {
-    case .feedback: try env.recordRunFeedback(runID: run, signal: .resultUseful, updateID: 800)
-    case .epoch: _ = try env.learning.applyReset(updateID: 801, jobID: env.jobID, now: env.now)
-    case .cancelled: _ = try env.jobs.cancel(id: env.jobID, now: env.now)
-    case .baseRevision, .baseDigest, .candidate, .replacement, .generation, .algorithm: break
+    case .feedback:
+      try env.recordRunFeedback(runID: run, signal: .resultUseful, updateID: 800)
+    case .epoch:
+      _ = try env.learning.applyReset(updateID: 801, jobID: env.jobID, now: env.now)
+    case .cancelled:
+      _ = try env.jobs.cancel(id: env.jobID, now: env.now)
+    case .baseRevision, .baseDigest, .candidate, .replacement, .generation, .algorithm:
+      break
     }
     let before = try env.currentLearningState()
 
@@ -130,9 +134,8 @@ struct PromotionTests {
     #expect(receipt.cohort.first?.outcome == .negative)
     #expect(try env.currentLearningState().stableDigest == trial.baseDigest)
     #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
-    guard
-      case .readable(let view) = try env.learning.learningView(jobID: env.jobID)[0],
-      case .terminal(let shown) = view.lastDecision?.detail
+    guard case .readable(let view) = try env.learning.learningView(jobID: env.jobID)[0],
+          case .terminal(let shown) = view.lastDecision?.detail
     else {
       Issue.record("terminal receipt must remain readable")
       return
@@ -222,12 +225,11 @@ extension BoundRunEnvironment {
     let env = try make()
     let fixture = AdmissionStoreFixture(env: env)
     let artifact = try fixture.persistedCandidate()
-    guard
-      case .admitted = try env.learning.admitCandidate(
-        digest: artifact.digest,
-        redactor: SecretRedactor(secretValues: []),
-        now: env.now
-      )
+    guard case .admitted = try env.learning.admitCandidate(
+      digest: artifact.digest,
+      redactor: SecretRedactor(secretValues: []),
+      now: env.now
+    )
     else {
       throw StoreError.unexpected("promotion fixture admission failed")
     }

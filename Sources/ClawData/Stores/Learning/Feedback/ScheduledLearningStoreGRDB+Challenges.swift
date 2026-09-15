@@ -77,12 +77,11 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func readChallenge(_ db: Database, id: Int64) throws -> FeedbackChallenge? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT * FROM feedback_challenges WHERE challenge_id = ?",
-        arguments: [id]
-      )
+    guard let row = try Row.fetchOne(
+      db,
+      sql: "SELECT * FROM feedback_challenges WHERE challenge_id = ?",
+      arguments: [id]
+    )
     else {
       return nil
     }
@@ -90,10 +89,9 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func decodeChallenge(_ row: Row) throws -> FeedbackChallenge {
-    guard
-      let subjectKind = FeedbackSubjectKind(rawValue: row["subject_kind"]),
-      subjectKind == .run || subjectKind == .candidate,
-      let expiresAt = EpochSecondCodec.date(fromEpoch: row["expires_at"])
+    guard let subjectKind = FeedbackSubjectKind(rawValue: row["subject_kind"]),
+          subjectKind == .run || subjectKind == .candidate,
+          let expiresAt = EpochSecondCodec.date(fromEpoch: row["expires_at"])
     else {
       throw StoreError.unexpected("feedback challenge row is unreadable")
     }
@@ -152,12 +150,11 @@ extension ScheduledLearningStoreGRDB {
     if challenge.expiresAt <= now {
       return .expired
     }
-    guard
-      let currentEpoch = try Int.fetchOne(
-        db,
-        sql: "SELECT learning_epoch FROM job_learning_state WHERE job_id = ?",
-        arguments: [challenge.jobID]
-      )
+    guard let currentEpoch = try Int.fetchOne(
+      db,
+      sql: "SELECT learning_epoch FROM job_learning_state WHERE job_id = ?",
+      arguments: [challenge.jobID]
+    )
     else {
       return .staleEpoch
     }
@@ -248,8 +245,10 @@ extension ScheduledLearningStoreGRDB {
 
   static func challengeSignal(_ subjectKind: FeedbackSubjectKind) throws -> OwnerSignal {
     switch subjectKind {
-    case .run: return .resultCorrection
-    case .candidate: return .candidateEdit
+    case .run:
+      return .resultCorrection
+    case .candidate:
+      return .candidateEdit
     case .evaluation, .promotion:
       throw StoreError.unexpected("feedback challenge subject kind cannot carry free text")
     }
@@ -271,7 +270,8 @@ extension ScheduledLearningStoreGRDB {
     subjectDigest: String
   ) throws -> Int64? {
     switch subjectKind {
-    case .run: return Int64(subjectDigest)
+    case .run:
+      return Int64(subjectDigest)
     case .evaluation:
       return try Int64.fetchOne(
         db,
@@ -281,7 +281,8 @@ extension ScheduledLearningStoreGRDB {
           """,
         arguments: [jobID, subjectDigest]
       )
-    case .candidate, .promotion: return nil
+    case .candidate, .promotion:
+      return nil
     }
   }
 }

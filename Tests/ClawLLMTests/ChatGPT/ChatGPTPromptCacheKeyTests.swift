@@ -267,7 +267,9 @@ struct ChatGPTPromptCacheKeyTests {
 private typealias Support = ChatGPTProviderTestSupport
 
 extension ChatGPTPromptCacheKeyTests {
-  fileprivate var encoder: ChatGPTResponsesRequestEncoder { ChatGPTResponsesRequestEncoder() }
+  fileprivate var encoder: ChatGPTResponsesRequestEncoder {
+    ChatGPTResponsesRequestEncoder()
+  }
 
   fileprivate func makeRequest(
     instructions: [String],

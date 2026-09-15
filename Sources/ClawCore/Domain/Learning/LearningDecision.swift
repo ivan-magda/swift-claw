@@ -93,11 +93,17 @@ public struct DecisionReceipt: Sendable, Equatable {
   public let inputs: TrialDecisionInputs
   public let record: LearningDecisionRecord
 
-  public var result: LearningDecisionResult { record.result }
+  public var result: LearningDecisionResult {
+    record.result
+  }
 
-  public var cohort: [DecisionSupport] { record.cohort }
+  public var cohort: [DecisionSupport] {
+    record.cohort
+  }
 
-  public var promotionSubject: String { String(decisionID) }
+  public var promotionSubject: String {
+    String(decisionID)
+  }
 
   public init(decisionID: Int64, inputs: TrialDecisionInputs, record: LearningDecisionRecord) {
     self.decisionID = decisionID

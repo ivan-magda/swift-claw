@@ -5,7 +5,9 @@ import GRDB
 public struct AllowlistStoreGRDB: AllowlistStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
+  public init(writer: any DatabaseWriter) {
+    database = MappedDatabase(writer: writer)
+  }
 
   public func seedAllowlist(userIDs: [Int64]) throws(StoreError) {
     try database.writeMapping { db in
