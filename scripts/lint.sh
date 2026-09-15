@@ -90,8 +90,8 @@ for file in "${files[@]}"; do
   [[ "$mode" == stdin || -f "$file" ]] || fail "file not found: $file"
 done
 
-stage 'Prepare pinned SwiftFormat' swift build --package-path BuildTools -c debug --product swiftformat
-formatter_directory=$(swift build --package-path BuildTools -c debug --show-bin-path)
+stage 'Prepare pinned SwiftFormat' swift build --package-path BuildTools -c release --product swiftformat
+formatter_directory=$(swift build --package-path BuildTools -c release --show-bin-path)
 formatter="$formatter_directory/swiftformat"
 [[ "$("$formatter" --version)" == "$CLAW_LINT_SWIFTFORMAT_VERSION" ]] ||
   fail "SwiftFormat $CLAW_LINT_SWIFTFORMAT_VERSION required"

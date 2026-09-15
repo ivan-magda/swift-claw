@@ -38,7 +38,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: BuildTools/.build
-          key: lint-${{ runner.os }}-${{ hashFiles('BuildTools/Package.swift', 'BuildTools/Package.resolved', 'BuildTools/lint-versions.env') }}
+          key: lint-release-${{ runner.os }}-${{ hashFiles('BuildTools/Package.swift', 'BuildTools/Package.resolved', 'BuildTools/lint-versions.env') }}
       - name: Canonical local and CI gate
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
