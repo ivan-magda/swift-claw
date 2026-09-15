@@ -24,13 +24,14 @@ The adopted revision, explicit local exceptions, and tool ownership are normativ
 
 ## Setup
 
-Use Swift **6.3.3**, its bundled Apple swift-format **6.3.0**, SwiftLint **0.65.1**, and
-SwiftFormat **0.62.1**. The checked pins live in
+Use Swift **6.3.3**, SwiftLint **0.65.1**, and SwiftFormat **0.62.1**. The bundled Apple
+swift-format reports **6.3.0** in Xcode on macOS and **6.3.3** in the Linux toolchain;
+the gate checks the exact platform-specific version. The checked pins live in
 [`BuildTools/lint-versions.env`](../BuildTools/lint-versions.env); `.swift-version` selects the
 Swift toolchain for tools that support it. SwiftFormat builds from the locked `BuildTools`
 package on the first run, which needs dependency access.
 
-On macOS, select the matching Swift toolchain and install SwiftLint 0.65.1 from its
+On macOS, select the matching Xcode toolchain and install SwiftLint 0.65.1 from its
 [official release](https://github.com/realm/SwiftLint/releases/tag/0.65.1). Homebrew is also
 usable when its installed version matches the pin. Check `swift --version`,
 `swift format --version`, and `swiftlint version`; the gate rejects mismatches before changing

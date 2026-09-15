@@ -26,7 +26,7 @@ For vulnerabilities, never open a public issue. Follow [SECURITY.md](SECURITY.md
 ## Development setup
 
 Use the [pinned Swift style toolchain](docs/CODE_STYLE.md#setup): Swift 6.3.3,
-Apple swift-format 6.3.0, SwiftLint 0.65.1, and SwiftFormat 0.62.1. The lint script
+Apple swift-format 6.3.0 on macOS / 6.3.3 on Linux, SwiftLint 0.65.1, and SwiftFormat 0.62.1. The lint script
 validates versions before changing source; BuildTools supplies SwiftFormat from a
 locked dependency. Its first run needs dependency access.
 Linux development also needs `libsqlite3-dev` for GRDB.

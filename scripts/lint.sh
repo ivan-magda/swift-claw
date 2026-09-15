@@ -45,8 +45,14 @@ done
 swift_version=$(swift --version 2>&1 | sed -nE 's/.*Swift version ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
 [[ "$swift_version" == "$CLAW_LINT_SWIFT_VERSION" ]] ||
   fail "Swift $CLAW_LINT_SWIFT_VERSION required; found $swift_version"
-[[ "$(swift format --version)" == "$CLAW_LINT_APPLE_FORMAT_VERSION" ]] ||
-  fail "Apple swift-format $CLAW_LINT_APPLE_FORMAT_VERSION required"
+case "$(uname -s)" in
+  Darwin) apple_format_version=$CLAW_LINT_APPLE_FORMAT_MACOS_VERSION ;;
+  Linux) apple_format_version=$CLAW_LINT_APPLE_FORMAT_LINUX_VERSION ;;
+  *) fail 'supported lint platforms are macOS and Linux' ;;
+esac
+installed_apple_format_version=$(swift format --version)
+[[ "$installed_apple_format_version" == "$apple_format_version" ]] ||
+  fail "Apple swift-format $apple_format_version required; found $installed_apple_format_version"
 [[ "$(swiftlint version)" == "$CLAW_LINT_SWIFTLINT_VERSION" ]] ||
   fail "SwiftLint $CLAW_LINT_SWIFTLINT_VERSION required"
 [[ "$(cat .swift-version)" == "$CLAW_LINT_SWIFT_VERSION" ]] ||
