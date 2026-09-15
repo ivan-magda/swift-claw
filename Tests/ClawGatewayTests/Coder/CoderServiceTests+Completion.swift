@@ -71,16 +71,16 @@ extension CoderServiceTests {
       if receiptWrite {
         try db.execute(
           sql: """
-          CREATE TRIGGER fail_coder_receipt BEFORE UPDATE OF process_ownership ON coder_jobs
-          BEGIN SELECT RAISE(ABORT, 'receipt write failed'); END
-          """
+            CREATE TRIGGER fail_coder_receipt BEFORE UPDATE OF process_ownership ON coder_jobs
+            BEGIN SELECT RAISE(ABORT, 'receipt write failed'); END
+            """
         )
       } else {
         try db.execute(
           sql: """
-          CREATE TRIGGER fail_coder_notice BEFORE INSERT ON outbound_deliveries
-          WHEN NEW.approval_id IS NULL BEGIN SELECT RAISE(ABORT, 'report write failed'); END
-          """
+            CREATE TRIGGER fail_coder_notice BEFORE INSERT ON outbound_deliveries
+            WHEN NEW.approval_id IS NULL BEGIN SELECT RAISE(ABORT, 'report write failed'); END
+            """
         )
       }
     }

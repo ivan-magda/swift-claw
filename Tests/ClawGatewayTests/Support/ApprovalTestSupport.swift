@@ -86,9 +86,9 @@ func fetchApprovals(databasePath: String) throws -> [ApprovalRowSnapshot] {
     try Row.fetchAll(
       db,
       sql: """
-      SELECT id, run_id, state, tool, canonical_target, canonical_args, nonce, reason
-      FROM approvals ORDER BY id
-      """
+        SELECT id, run_id, state, tool, canonical_target, canonical_args, nonce, reason
+        FROM approvals ORDER BY id
+        """
     ).map { row in
       ApprovalRowSnapshot(
         id: row["id"],
@@ -132,7 +132,10 @@ func tamperApproval(
   }
 }
 
-func sessionFlags(databasePath: String, sessionID: Int64) throws -> (
+func sessionFlags(
+  databasePath: String,
+  sessionID: Int64
+) throws -> (
   tainted: Bool,
   hasPrivateData: Bool
 ) {

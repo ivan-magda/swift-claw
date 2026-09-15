@@ -33,9 +33,11 @@ extension ContextBuilder {
     return section(id: .memoryItems, cap: cap, units: units)
   }
 
-  func recallSection(snapshot: SessionContextSnapshot, sessionID: Int64, residual: Int)
-    -> FittableSection?
-  {
+  func recallSection(
+    snapshot: SessionContextSnapshot,
+    sessionID: Int64,
+    residual: Int
+  ) -> FittableSection? {
     let cap = cap(for: .recall, residual: residual)
     guard cap > 0, let query = latestUserMessage(in: snapshot.history) else {
       return nil

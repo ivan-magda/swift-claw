@@ -15,9 +15,10 @@ extension TurnRunner {
   ///
   /// Budget selection runs after the match, not before, so the aggregate cap is only ever spent on
   /// images that actually landed inside the history window.
-  static func attach(_ images: [Int64: ImagePart], to snapshot: SessionContextSnapshot)
-    -> SessionContextSnapshot
-  {
+  static func attach(
+    _ images: [Int64: ImagePart],
+    to snapshot: SessionContextSnapshot
+  ) -> SessionContextSnapshot {
     guard images.isEmpty == false else {
       return snapshot
     }

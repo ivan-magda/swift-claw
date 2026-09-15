@@ -34,12 +34,18 @@ public protocol MemoryStore: Sendable {
 
 public protocol MemoryCommandStore: Sendable {
   /// Atomic confirmed remember: claim update + insert memory item + audit in one write.
-  func applyRemember(updateID: Int64, item: NewMemoryItem, now: Date) throws(StoreError)
-    -> MemoryCommandResult
+  func applyRemember(
+    updateID: Int64,
+    item: NewMemoryItem,
+    now: Date
+  ) throws(StoreError) -> MemoryCommandResult
 
   /// Atomic confirmed delete: claim update + hard-delete memory item + audit in one write.
-  func applyForget(updateID: Int64, itemID: Int64, now: Date) throws(StoreError)
-    -> MemoryCommandResult
+  func applyForget(
+    updateID: Int64,
+    itemID: Int64,
+    now: Date
+  ) throws(StoreError) -> MemoryCommandResult
 }
 
 public protocol Retriever: Sendable {

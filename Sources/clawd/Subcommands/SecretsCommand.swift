@@ -22,9 +22,9 @@ struct SecretsCommand: AsyncParsableCommand {
     @Option(
       name: .customLong("env-file"),
       help: """
-      Env file to scrub sealed secrets from \
-      (default: $CLAW_ENV_FILE or ~/.swift-claw/clawd.env).
-      """
+        Env file to scrub sealed secrets from \
+        (default: $CLAW_ENV_FILE or ~/.swift-claw/clawd.env).
+        """
     )
     var envFile: String?
 
@@ -57,11 +57,11 @@ struct SecretsCommand: AsyncParsableCommand {
       let keyPath = paths.key.path
       let scrubOutcome: SealScrubOutcome? =
         noScrub
-          ? nil
-          : Self.scrubEnvFile(
-            at: resolvedEnvFilePath(environment: environment),
-            keys: EnvSecretStore.EnvKey.sealed
-          )
+        ? nil
+        : Self.scrubEnvFile(
+          at: resolvedEnvFilePath(environment: environment),
+          keys: EnvSecretStore.EnvKey.sealed
+        )
       // swiftlint:disable:next no_print_in_production
       print(
         Self.sealSummary(envelopePath: envelopePath, keyPath: keyPath, scrubOutcome: scrubOutcome)
@@ -109,9 +109,10 @@ extension SecretsCommand.Seal {
 // MARK: - Merge
 
 extension SecretsCommand.Seal {
-  static func mergeEnvironment(_ environment: [String: String], fallingBackTo existing: Secrets?)
-    -> [String: String]
-  {
+  static func mergeEnvironment(
+    _ environment: [String: String],
+    fallingBackTo existing: Secrets?
+  ) -> [String: String] {
     guard let existing else {
       return environment
     }
@@ -188,26 +189,28 @@ extension SecretsCommand.Seal {
     return .scrubbed(keys: result.scrubbedKeys, path: resolvedPath)
   }
 
-  static func sealSummary(envelopePath: String, keyPath: String, scrubOutcome: SealScrubOutcome?)
-    -> String
-  {
+  static func sealSummary(
+    envelopePath: String,
+    keyPath: String,
+    scrubOutcome: SealScrubOutcome?
+  ) -> String {
     var summary = """
-    Sealed secrets → \(envelopePath)
-    Key → \(keyPath) (mode 0600 — keep this OUTSIDE your state-root backup boundary)
-    """
+      Sealed secrets → \(envelopePath)
+      Key → \(keyPath) (mode 0600 — keep this OUTSIDE your state-root backup boundary)
+      """
 
     let manualNote = """
-    Remove the plaintext \(EnvSecretStore.EnvKey.sealed.joined(separator: " / ")) \
-    values from your env file yourself.
-    """
+      Remove the plaintext \(EnvSecretStore.EnvKey.sealed.joined(separator: " / ")) \
+      values from your env file yourself.
+      """
 
     switch scrubOutcome {
     case .scrubbed(let keys, let path):
       summary += "\nBlanked \(keys.joined(separator: ", ")) in \(path)."
       summary += """
-      \nYour current shell still holds the old values; open a fresh shell \
-      before running the daemon.
-      """
+        \nYour current shell still holds the old values; open a fresh shell \
+        before running the daemon.
+        """
     case .alreadyClean(let path): summary += "\nNo plaintext secret values found in \(path)."
     case .fileAbsent(let path):
       summary += "\nNo env file at \(path) — nothing to scrub. " + manualNote

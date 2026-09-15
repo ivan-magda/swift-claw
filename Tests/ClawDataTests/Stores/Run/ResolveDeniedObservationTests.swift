@@ -43,16 +43,16 @@ struct ResolveDeniedObservationTests {
     let observationMessageID = try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, 'assistant', 'I will write the plan.', 'trusted', ?, '[{"id":"c1"}]')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
+          VALUES (?, ?, 'assistant', 'I will write the plan.', 'trusted', ?, '[{"id":"c1"}]')
+          """,
         arguments: [sessionID, runID, Date()]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
+          """,
         arguments: [sessionID, runID, Date()]
       )
       let placeholderID = db.lastInsertedRowID
@@ -130,10 +130,10 @@ struct ResolveDeniedObservationTests {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT role, content, tool_call_id FROM messages
-        WHERE run_id = ? AND role IN ('assistant', 'tool')
-        ORDER BY id ASC
-        """,
+          SELECT role, content, tool_call_id FROM messages
+          WHERE run_id = ? AND role IN ('assistant', 'tool')
+          ORDER BY id ASC
+          """,
         arguments: [env.runID]
       )
     }

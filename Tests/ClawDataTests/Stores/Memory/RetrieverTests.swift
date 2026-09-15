@@ -51,9 +51,9 @@ struct RetrieverTests {
     try corpus.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, 'user', ?, ?, ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, 'user', ?, ?, ?)
+          """,
         arguments: [sessionID, content, provenance.rawValue, Date(timeIntervalSince1970: seconds)]
       )
       return db.lastInsertedRowID

@@ -37,9 +37,9 @@ extension ScheduledLearningStoreGRDB {
   ) throws -> Int64 {
     try db.execute(
       sql: """
-      INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
-        decided_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
+          decided_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         kind,
         jobID,

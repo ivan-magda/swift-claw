@@ -128,9 +128,9 @@ public enum HealthRowsBuilder {
     DoctorReport.Check(
       key: "context.skills",
       value: """
-      accepted=\(diagnostics.acceptedCount) rejected=\(diagnostics.rejectedCount) \
-      fits_cap=\(diagnostics.fitsSkillsCap)
-      """,
+        accepted=\(diagnostics.acceptedCount) rejected=\(diagnostics.rejectedCount) \
+        fits_cap=\(diagnostics.fitsSkillsCap)
+        """,
       ok: diagnostics.rejectedCount == 0 && diagnostics.fitsSkillsCap,
       group: .context,
       isHeadline: true
@@ -279,9 +279,9 @@ private extension HealthRowsBuilder {
         "\(usage.tokens)"
       },
       .storeRead(inputs.todayUsage, key: "spend.remaining_day_usd", group: .spend, isHeadline: true)
-        { usage in
-          USD.display(max(0, inputs.perDayUSD - usage.costUSD))
-        },
+      { usage in
+        USD.display(max(0, inputs.perDayUSD - usage.costUSD))
+      },
       check("spend.per_run_cap_usd", USD.display(inputs.perRunUSD), .spend),
       .storeRead(inputs.costMix, key: "spend.cost_source_mix", group: .spend) { costMix in
         let text = costMix.map { entry in
@@ -306,7 +306,12 @@ private extension HealthRowsBuilder {
     ]
   }
 
-  static func check(_ key: String, _ value: String, _ group: DoctorGroup, headline: Bool = false)
-    -> DoctorReport.Check
-  { DoctorReport.Check(key: key, value: value, ok: true, group: group, isHeadline: headline) }
+  static func check(
+    _ key: String,
+    _ value: String,
+    _ group: DoctorGroup,
+    headline: Bool = false
+  ) -> DoctorReport.Check {
+    DoctorReport.Check(key: key, value: value, ok: true, group: group, isHeadline: headline)
+  }
 }

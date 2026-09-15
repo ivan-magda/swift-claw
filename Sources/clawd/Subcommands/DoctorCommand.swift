@@ -135,7 +135,7 @@ private extension DoctorCommand {
     // the household kill-switch dominates.
     let proactiveNote =
       config.proactivePerDayUSD >= config.budget.perDayUSD
-        ? " (>= CLAW_PER_DAY_USD; the global cap dominates)" : ""
+      ? " (>= CLAW_PER_DAY_USD; the global cap dominates)" : ""
     report.add(
       key: "spend.proactive_per_day_usd",
       value: USD.display(config.proactivePerDayUSD) + proactiveNote,
@@ -294,9 +294,9 @@ private extension DoctorCommand {
       report.add(
         key: "dns.fake_ip",
         value: """
-        detected (public hosts resolve into \(SSRFGuard.benchmarkRange), e.g. \(sample); \
-        web_fetch allows probe-confirmed answers in that range)
-        """,
+          detected (public hosts resolve into \(SSRFGuard.benchmarkRange), e.g. \(sample); \
+          web_fetch allows probe-confirmed answers in that range)
+          """,
         group: .connectivity
       )
     case .inactive: report.add(key: "dns.fake_ip", value: "not detected", group: .connectivity)

@@ -118,6 +118,8 @@ public protocol ChatGPTOAuthRefreshing: Sendable {
 }
 
 public protocol ChatGPTOAuthExchanging: Sendable {
-  func exchange(grant: ChatGPTAuthorizationGrant, timeout: Duration) async throws
-    -> ChatGPTTokenPair
+  func exchange(
+    grant: ChatGPTAuthorizationGrant,
+    timeout: Duration
+  ) async throws -> ChatGPTTokenPair
 }

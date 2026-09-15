@@ -121,9 +121,10 @@ public enum ChatGPTProviderMetadata {
   /// to the wire adapter. The account claim is unverified metadata, so it is added only when it can
   /// safely be a header value and is otherwise omitted — a token whose account cannot be read is
   /// still a token the server may accept, and composition must not pre-empt that verdict.
-  public static func authorization(accessToken: String, generation: LLMCredentialGeneration)
-    -> LLMRequestAuthorization
-  {
+  public static func authorization(
+    accessToken: String,
+    generation: LLMCredentialGeneration
+  ) -> LLMRequestAuthorization {
     var headers = ["Authorization": "Bearer \(accessToken)"]
     var redactionValues = [accessToken]
 

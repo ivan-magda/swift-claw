@@ -123,8 +123,7 @@ struct CoderApprovalFlowTests {
         )
         let expectedTarget =
           mode == .group
-            ? DeliveryTarget(chatID: chat, messageThreadID: thread, replyToMessageID: 1) :
-            .chat(chat)
+          ? DeliveryTarget(chatID: chat, messageThreadID: thread, replyToMessageID: 1) : .chat(chat)
         #expect(report.target == expectedTarget)
       }
     }
@@ -287,9 +286,9 @@ private extension CoderApprovalFlowTests {
       id: "coder-1",
       name: CoderToolNames.submit,
       argumentsJSON: """
-      {"source":{"local":{"path":"/fixture/repository-1"}},"task":"Fix retry handling",
-      "workspace":"inPlace","deliverable":"localChanges","publish_existing_changes":false}
-      """
+        {"source":{"local":{"path":"/fixture/repository-1"}},"task":"Fix retry handling",
+        "workspace":"inPlace","deliverable":"localChanges","publish_existing_changes":false}
+        """
     )
   }
 

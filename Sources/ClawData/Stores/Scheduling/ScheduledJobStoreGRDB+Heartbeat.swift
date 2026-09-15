@@ -32,9 +32,9 @@ extension ScheduledJobStoreGRDB {
     try database.writeMapping { db in
       try db.execute(
         sql: """
-        INSERT INTO scheduler_state(id, last_tick_at) VALUES (1, ?)
-        ON CONFLICT(id) DO UPDATE SET last_tick_at = excluded.last_tick_at
-        """,
+          INSERT INTO scheduler_state(id, last_tick_at) VALUES (1, ?)
+          ON CONFLICT(id) DO UPDATE SET last_tick_at = excluded.last_tick_at
+          """,
         arguments: [EpochSecondCodec.epoch(tickTime)]
       )
     }
@@ -45,9 +45,12 @@ extension ScheduledJobStoreGRDB {
 
 extension ScheduledJobStoreGRDB {
   // swiftlint:disable:next function_body_length
-  public func fireHeartbeat(prompt: String, ownerChatID: Int64, now: Date, day: String)
-    throws(StoreError) -> ClaimedFire?
-  {
+  public func fireHeartbeat(
+    prompt: String,
+    ownerChatID: Int64,
+    now: Date,
+    day: String
+  ) throws(StoreError) -> ClaimedFire? {
     try database.writeMapping { db in
       let sessionID = try SessionMessageStoreGRDB.upsertSession(
         db,
@@ -72,9 +75,9 @@ extension ScheduledJobStoreGRDB {
       // (contrast the scheduled-job trigger, which is pure owner-confirmed text).
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, ?, ?, ?, ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, ?, ?, ?, ?)
+          """,
         arguments: [
           sessionID,
           MessageRole.user.rawValue,
@@ -87,9 +90,9 @@ extension ScheduledJobStoreGRDB {
 
       try db.execute(
         sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
+          VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           sessionID,
           RunState.pending.rawValue,
@@ -112,13 +115,13 @@ extension ScheduledJobStoreGRDB {
       let newCount = previousDay == day ? previousCount + 1 : 1
       try db.execute(
         sql: """
-        INSERT INTO scheduler_state(id, last_heartbeat_at, heartbeat_count_day, heartbeat_count)
-        VALUES (1, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          last_heartbeat_at = excluded.last_heartbeat_at,
-          heartbeat_count_day = excluded.heartbeat_count_day,
-          heartbeat_count = excluded.heartbeat_count
-        """,
+          INSERT INTO scheduler_state(id, last_heartbeat_at, heartbeat_count_day, heartbeat_count)
+          VALUES (1, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            last_heartbeat_at = excluded.last_heartbeat_at,
+            heartbeat_count_day = excluded.heartbeat_count_day,
+            heartbeat_count = excluded.heartbeat_count
+          """,
         arguments: [EpochSecondCodec.epoch(now), day, newCount]
       )
 

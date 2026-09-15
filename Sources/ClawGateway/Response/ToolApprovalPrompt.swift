@@ -77,7 +77,7 @@ enum ToolApprovalPrompt {
     let prompt = text(for: input)
     let parts =
       input.recorded.reason == .coderSubmit
-        ? CoderCardMarkdown.split(text: prompt) : ReplySplitter.split(text: prompt)
+      ? CoderCardMarkdown.split(text: prompt) : ReplySplitter.split(text: prompt)
     return parts.enumerated().map { index, payload in
       OutboxChunk(
         stepIndex: index,

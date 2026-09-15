@@ -71,9 +71,11 @@ extension ContainerBackend {
   }
 
   /// Fail-closed evidence: stdout only when the command exited 0 with neither stream truncated.
-  func boundedCommandData(_ arguments: [String], limit: Duration, deadline: ContinuousClock.Instant)
-    async -> Data?
-  {
+  func boundedCommandData(
+    _ arguments: [String],
+    limit: Duration,
+    deadline: ContinuousClock.Instant
+  ) async -> Data? {
     if let result = await boundedCommandResult(arguments, limit: limit, deadline: deadline) {
       return Self.successOutput(of: result)
     }
@@ -87,9 +89,10 @@ extension ContainerBackend {
   ) async -> Bool { await boundedCommandData(arguments, limit: limit, deadline: deadline) != nil }
 
   // swiftlint:disable discouraged_optional_collection
-  func listedContainers(limit: Duration, deadline: ContinuousClock.Instant) async
-    -> [ListedContainer]?
-  {
+  func listedContainers(
+    limit: Duration,
+    deadline: ContinuousClock.Instant
+  ) async -> [ListedContainer]? {
     if let timeout = clampedTimeout(limit: limit, deadline: deadline) {
       return await Self.fetchContainerList(
         timeout: timeout,

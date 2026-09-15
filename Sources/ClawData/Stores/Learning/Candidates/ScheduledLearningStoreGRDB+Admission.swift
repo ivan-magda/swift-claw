@@ -5,9 +5,11 @@ import GRDB
 // MARK: - Candidate Admission
 
 extension ScheduledLearningStoreGRDB {
-  public func admitCandidate(digest: CandidateDigest, redactor: SecretRedactor, now: Date)
-    throws(StoreError) -> AdmissionOutcome
-  {
+  public func admitCandidate(
+    digest: CandidateDigest,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
     try database.writeMapping { db in
       guard let artifact = try Self.readCandidateArtifact(db, digest: digest) else {
         return .rejected(.sourceBindingsChanged)
@@ -132,11 +134,11 @@ private extension ScheduledLearningStoreGRDB {
   ) throws -> AdmissionReceipt {
     try db.execute(
       sql: """
-      INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-        generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-        consumed_assignments, cohort_cutoff, state, algorithm)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-      """,
+        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+          consumed_assignments, cohort_cutoff, state, algorithm)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+        """,
       arguments: [
         artifact.manifest.jobID,
         artifact.manifest.epoch.value,
@@ -160,9 +162,9 @@ private extension ScheduledLearningStoreGRDB {
     )
     try db.execute(
       sql: """
-      UPDATE job_learning_state SET open_trial_id = ?
-      WHERE job_id = ? AND learning_epoch = ?
-      """,
+        UPDATE job_learning_state SET open_trial_id = ?
+        WHERE job_id = ? AND learning_epoch = ?
+        """,
       arguments: [receipt.trialID, artifact.manifest.jobID, artifact.manifest.epoch.value]
     )
     try insertAdmissionReceipt(db, artifact: artifact, receipt: receipt, now: now)
@@ -196,9 +198,9 @@ private extension ScheduledLearningStoreGRDB {
       try Int.fetchOne(
         db,
         sql: """
-        SELECT MAX(generation) FROM learning_trials
-        WHERE job_id = ? AND learning_epoch = ?
-        """,
+          SELECT MAX(generation) FROM learning_trials
+          WHERE job_id = ? AND learning_epoch = ?
+          """,
         arguments: [artifact.manifest.jobID, artifact.manifest.epoch.value]
       ) ?? 0
     return latest + 1
@@ -208,15 +210,15 @@ private extension ScheduledLearningStoreGRDB {
     try Bool.fetchOne(
       db,
       sql: """
-      SELECT EXISTS(
-        SELECT 1 FROM learning_trials AS trial
-        JOIN learning_candidates AS candidate
-          ON candidate.candidate_digest = trial.candidate_digest
-        WHERE trial.job_id = ? AND trial.learning_epoch = ? AND trial.base_digest = ?
-          AND candidate.replacement_digest = ? AND trial.algorithm = ?
-          AND trial.state NOT IN (?, ?)
-      )
-      """,
+        SELECT EXISTS(
+          SELECT 1 FROM learning_trials AS trial
+          JOIN learning_candidates AS candidate
+            ON candidate.candidate_digest = trial.candidate_digest
+          WHERE trial.job_id = ? AND trial.learning_epoch = ? AND trial.base_digest = ?
+            AND candidate.replacement_digest = ? AND trial.algorithm = ?
+            AND trial.state NOT IN (?, ?)
+        )
+        """,
       arguments: [
         artifact.manifest.jobID,
         artifact.manifest.epoch.value,

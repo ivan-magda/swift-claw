@@ -97,9 +97,13 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     }
   }
 
-  func claimAndFire(jobID: Int64, due: Date, fireAt: Date, nextOccurrence: Date?, now: Date)
-    throws(StoreError) -> ClaimedFire?
-  {
+  func claimAndFire(
+    jobID: Int64,
+    due: Date,
+    fireAt: Date,
+    nextOccurrence: Date?,
+    now: Date
+  ) throws(StoreError) -> ClaimedFire? {
     lock.lock()
     defer { lock.unlock() }
     recordedClaims.append(
@@ -108,9 +112,13 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     return claimResult
   }
 
-  func skipMisfire(jobID: Int64, due: Date, nextOccurrence: Date?, skippedCount: Int, now: Date)
-    throws(StoreError) -> Bool
-  {
+  func skipMisfire(
+    jobID: Int64,
+    due: Date,
+    nextOccurrence: Date?,
+    skippedCount: Int,
+    now: Date
+  ) throws(StoreError) -> Bool {
     lock.lock()
     defer { lock.unlock() }
     recordedSkips.append(
@@ -156,9 +164,12 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     return cannedState
   }
 
-  func fireHeartbeat(prompt: String, ownerChatID: Int64, now: Date, day: String) throws(StoreError)
-    -> ClaimedFire?
-  {
+  func fireHeartbeat(
+    prompt: String,
+    ownerChatID: Int64,
+    now: Date,
+    day: String
+  ) throws(StoreError) -> ClaimedFire? {
     lock.lock()
     defer { lock.unlock() }
     recordedHeartbeats.append(HeartbeatCall(prompt: prompt, ownerChatID: ownerChatID, day: day))

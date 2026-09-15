@@ -28,10 +28,10 @@ public struct SkillLoadTool: Tool {
     ToolDefinition(
       name: "skill_load",
       description: """
-      Load one skill the owner installed, by the name the skills index spells. Returns the \
-      skill's instructions to follow for the current task; an unknown name returns the \
-      installed names.
-      """,
+        Load one skill the owner installed, by the name the skills index spells. Returns the \
+        skill's instructions to follow for the current task; an unknown name returns the \
+        installed names.
+        """,
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
@@ -144,8 +144,8 @@ private extension SkillLoadTool {
     let names = scan.descriptors.map(\.name).sorted()
     let content =
       names.isEmpty
-        ? "That skill is not installed, and the workspace has no skills at all."
-        : "That skill is not installed. Installed skills: \(names.joined(separator: ", "))."
+      ? "That skill is not installed, and the workspace has no skills at all."
+      : "That skill is not installed. Installed skills: \(names.joined(separator: ", "))."
     return ToolPayload(content: content, status: .ok, ingestedUntrusted: false)
   }
 
@@ -156,9 +156,9 @@ private extension SkillLoadTool {
   static func duplicateRefusal(name: String, directories: [String]) -> String {
     let claimants = directories.sorted().joined(separator: ", ")
     return """
-    Several skill directories claim the name \(name) (\(claimants)), so I can't tell which one \
-    you mean. Ask the owner to rename one of them.
-    """
+      Several skill directories claim the name \(name) (\(claimants)), so I can't tell which one \
+      you mean. Ask the owner to rename one of them.
+      """
   }
 
   /// The directories that collided over `name`, empty when the scan reported no collision — a

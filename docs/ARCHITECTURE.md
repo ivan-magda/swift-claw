@@ -1712,25 +1712,27 @@ edit does not silently change the repository contract. Generated build products 
 checkouts are excluded. [CODE_STYLE.md](CODE_STYLE.md) provides the contributor workflow.
 
 Run `scripts/lint.sh` for the complete local and CI gate. The canonical formatting result is the
-output of the whole ordered pipeline: SwiftLint corrections, Apple swift-format's general layout,
-then targeted Google and local layout rules. Check mode formats temporary copies and compares the
+output of the whole ordered pipeline: SwiftLint corrections, Apple signature layout, a narrow
+SwiftFormat return-placement pass, final Apple layout, then targeted Google and local layout rules.
+The signature pass keeps `)` through `->` together before Apple formats the function body.
+Check mode formats temporary copies and compares the
 final bytes; fix mode writes that same result. Apple's non-correctable checks inspect its normalized
 intermediate output, and SwiftLint checks correctness and idiom on the final source. Standalone
 formatter invocations are not a substitute for this gate. Versions are pinned and validated before
 source mutation in `BuildTools/lint-versions.env`; `.swift-version` selects the corresponding Swift
 toolchain. Local, CI, per-file, and editor-buffer formatting share this pipeline.
 
-Apple owns general spacing, initial indentation and wrapping, braces, and declaration layout
+Apple owns general spacing, indentation and wrapping, braces, and declaration layout
 through `.swift-format`. It preserves existing line breaks so reviewed multiline layouts survive.
-Targeted SwiftFormat rules own final control-flow indentation, attributes, collection trailing
-commas, multiline conditional/loop statement bodies, and final width wrapping. SwiftLint owns the
+The narrow SwiftFormat pass owns return-arrow placement; the final targeted pass owns attributes,
+collection trailing commas, multiline conditional/loop statement bodies, and final width wrapping. SwiftLint owns the
 hard line limit, correctness, idiom, and configured identifier/complexity limits in `.swiftlint.yml`,
 including test-specific overrides. Duplicate layout rules are disabled there. The gate's idempotence
 and editor/check/fix agreement must be verified when these owners change.
 
 Automation uses these existing tools only. Reviewers check the remaining Google/local details:
 import ordering and conditional-import group placement, blank lines between bodyless or short members, multiline
-closure bodies and wrapped signatures, vertical inheritance lists, and argument boundaries in
+closure bodies and wrapped signatures, function effect placement, vertical inheritance lists, and argument boundaries in
 short calls containing multiline closures. Passing lint does not waive these rules. Do not add a
 repository-owned formatter or parser dependency merely to automate those review checks.
 
@@ -1739,9 +1741,6 @@ The following local rules refine or explicitly depart from Google:
 - Nonempty conditional and loop statement bodies are multiline. Inline `if` expressions remain
   allowed. Every nonempty closure body starts on its own line, including after an explicit `in`.
 - Wrapped condition lists start after the `if`, `guard`, or `while` keyword on a new line.
-  For wrapped `for … where` headers, retain the native formatters' two-space continuation indent
-  instead of Google's alignment under the pattern. Both native formatters rewrite the latter;
-  this narrow layout exception avoids maintaining a custom formatter or directive scaffolding.
 - Private helpers are grouped by responsibility in `private extension` blocks, each immediately
   preceded by a bare `// MARK: - <Group Name>` heading. This is the sole extension-access exception;
   other access levels belong on members, preserving their effective visibility.

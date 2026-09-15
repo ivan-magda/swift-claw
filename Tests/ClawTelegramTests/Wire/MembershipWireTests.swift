@@ -20,17 +20,17 @@ struct MembershipWireTests {
   func addingTheBotToAForumDecodesTheChatAndBothStatuses() throws {
     // given — an admin adds the bot to a forum supergroup
     let json = """
-    {
-      "update_id": 30,
-      "my_chat_member": {
-        "chat": {"id": -1001234, "type": "supergroup", "is_forum": true, "title": "Podlodka"},
-        "from": {"id": 42, "is_bot": false, "first_name": "Ada", "last_name": "Lovelace"},
-        "date": 1750000000,
-        "old_chat_member": {"user": {"id": 900, "is_bot": true}, "status": "left"},
-        "new_chat_member": {"user": {"id": 900, "is_bot": true}, "status": "member"}
+      {
+        "update_id": 30,
+        "my_chat_member": {
+          "chat": {"id": -1001234, "type": "supergroup", "is_forum": true, "title": "Podlodka"},
+          "from": {"id": 42, "is_bot": false, "first_name": "Ada", "last_name": "Lovelace"},
+          "date": 1750000000,
+          "old_chat_member": {"user": {"id": 900, "is_bot": true}, "status": "left"},
+          "new_chat_member": {"user": {"id": 900, "is_bot": true}, "status": "member"}
+        }
       }
-    }
-    """
+      """
 
     // when
     let update = try membership(json)
@@ -50,15 +50,15 @@ struct MembershipWireTests {
   func aStatusThisBuildHasNeverSeenSurvivesVerbatim() throws {
     // given
     let json = """
-    {
-      "update_id": 31,
-      "my_chat_member": {
-        "chat": {"id": -1001234, "type": "supergroup"},
-        "old_chat_member": {"status": "member"},
-        "new_chat_member": {"status": "hyperadmin"}
+      {
+        "update_id": 31,
+        "my_chat_member": {
+          "chat": {"id": -1001234, "type": "supergroup"},
+          "old_chat_member": {"status": "member"},
+          "new_chat_member": {"status": "hyperadmin"}
+        }
       }
-    }
-    """
+      """
 
     // when
     let update = try membership(json)
@@ -72,15 +72,15 @@ struct MembershipWireTests {
   func aMembershipUpdateCarriesNoMessage() throws {
     // given
     let json = """
-    {
-      "update_id": 32,
-      "my_chat_member": {
-        "chat": {"id": -1001234, "type": "supergroup"},
-        "old_chat_member": {"status": "member"},
-        "new_chat_member": {"status": "kicked"}
+      {
+        "update_id": 32,
+        "my_chat_member": {
+          "chat": {"id": -1001234, "type": "supergroup"},
+          "old_chat_member": {"status": "member"},
+          "new_chat_member": {"status": "kicked"}
+        }
       }
-    }
-    """
+      """
 
     // when
     let raw = try decoder.decode(TUpdate.self, from: Data(json.utf8)).toRawUpdate()
@@ -96,8 +96,8 @@ struct MembershipWireTests {
   func anUpdateKindThisBuildDoesNotDecodeStaysEmpty() throws {
     // given — a kind never listed in allowedUpdates, delivered anyway
     let json = """
-    {"update_id": 33, "poll_answer": {"poll_id": "1", "option_ids": [0]}}
-    """
+      {"update_id": 33, "poll_answer": {"poll_id": "1", "option_ids": [0]}}
+      """
 
     // when
     let raw = try decoder.decode(TUpdate.self, from: Data(json.utf8)).toRawUpdate()

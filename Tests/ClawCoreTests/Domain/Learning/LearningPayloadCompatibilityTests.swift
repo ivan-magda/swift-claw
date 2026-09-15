@@ -53,13 +53,13 @@ struct LearningPayloadCompatibilityTests {
   func evidencePayloadKeepsItsLegacyMessageAndUsageKeys() throws {
     // given
     let json = """
-    {"configuredRoute":"route","contextSchemaVersion":"ctx-1",\
-    "effectiveLessonSetDigest":"lessons","finalOutput":"answer",\
-    "jobDefinitionDigest":"job","observedCalls":0,"policyVersion":"policy",\
-    "proposedCalls":0,"schemaVersion":"evidence/v1","skillSetDigest":"skills",\
-    "sourceDigest":"source","sourceMessageId":7,"toolCatalogDigest":"tools",\
-    "toolFacts":[],"usageRowIds":[11]}
-    """
+      {"configuredRoute":"route","contextSchemaVersion":"ctx-1",\
+      "effectiveLessonSetDigest":"lessons","finalOutput":"answer",\
+      "jobDefinitionDigest":"job","observedCalls":0,"policyVersion":"policy",\
+      "proposedCalls":0,"schemaVersion":"evidence/v1","skillSetDigest":"skills",\
+      "sourceDigest":"source","sourceMessageId":7,"toolCatalogDigest":"tools",\
+      "toolFacts":[],"usageRowIds":[11]}
+      """
 
     // when
     let decoded = try JSONDecoder().decode(EvidencePayload.self, from: Data(json.utf8))
@@ -95,8 +95,8 @@ private extension LearningPayloadCompatibilityTests {
     ),
     RollbackCase(
       json: """
-      {"safety":{"failure":"security","promotionId":12,"receiptDigest":"receipt"}}
-      """,
+        {"safety":{"failure":"security","promotionId":12,"receiptDigest":"receipt"}}
+        """,
       trigger: .safety(promotionID: 12, receiptDigest: "receipt", failure: .security)
     ),
   ]

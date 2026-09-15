@@ -17,9 +17,11 @@ extension ScheduledLearningStoreGRDB {
     let resolvedAt: Date?
   }
 
-  static func recomputeAssignment(_ db: Database, runID: Int64, now: Date) throws
-    -> AssignmentRecomputation
-  {
+  static func recomputeAssignment(
+    _ db: Database,
+    runID: Int64,
+    now: Date
+  ) throws -> AssignmentRecomputation {
     guard let cached = try cachedAssignment(db, runID: runID) else {
       return .notAssigned
     }
@@ -91,11 +93,11 @@ extension ScheduledLearningStoreGRDB {
       let row = try Row.fetchOne(
         db,
         sql: """
-        SELECT run_id, trial_id, job_id, learning_epoch, trial_generation, assigned_at, state,
-          outcome, issue_codes, evaluation_digest, evaluation_required,
-          effective_feedback_revision, resolved_at
-        FROM trial_assignments WHERE run_id = ?
-        """,
+          SELECT run_id, trial_id, job_id, learning_epoch, trial_generation, assigned_at, state,
+            outcome, issue_codes, evaluation_digest, evaluation_required,
+            effective_feedback_revision, resolved_at
+          FROM trial_assignments WHERE run_id = ?
+          """,
         arguments: [runID]
       )
     else {
@@ -236,12 +238,12 @@ extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: """
-      UPDATE trial_assignments
-      SET state = ?, outcome = ?, issue_codes = ?, evaluation_digest = ?,
-        evaluation_required = ?, effective_feedback_revision = ?, resolved_at = ?
-      WHERE run_id = ? AND trial_id = ? AND job_id = ? AND learning_epoch = ?
-        AND trial_generation = ?
-      """,
+        UPDATE trial_assignments
+        SET state = ?, outcome = ?, issue_codes = ?, evaluation_digest = ?,
+          evaluation_required = ?, effective_feedback_revision = ?, resolved_at = ?
+        WHERE run_id = ? AND trial_id = ? AND job_id = ? AND learning_epoch = ?
+          AND trial_generation = ?
+        """,
       arguments: [
         assignment.state.rawValue,
         evidence?.outcome.rawValue,
@@ -262,9 +264,10 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  private static func withResolvedAt(_ assignment: TrialAssignment, _ resolvedAt: Date?)
-    -> TrialAssignment
-  {
+  private static func withResolvedAt(
+    _ assignment: TrialAssignment,
+    _ resolvedAt: Date?
+  ) -> TrialAssignment {
     TrialAssignment(
       identity: assignment.identity,
       assignedAt: assignment.assignedAt,
@@ -274,9 +277,10 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  private static func issueCodesMatchOutcome(_ issueCodes: [String], outcome: TrialOutcomeKind)
-    -> Bool
-  {
+  private static func issueCodesMatchOutcome(
+    _ issueCodes: [String],
+    outcome: TrialOutcomeKind
+  ) -> Bool {
     switch outcome {
     case .positive, .neutral: return issueCodes.isEmpty
     case .negative: return true
@@ -379,9 +383,10 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  private static func unresolvedAssignment(_ cached: CachedAssignment, state: TrialAssignmentState)
-    -> TrialAssignment
-  {
+  private static func unresolvedAssignment(
+    _ cached: CachedAssignment,
+    state: TrialAssignmentState
+  ) -> TrialAssignment {
     TrialAssignment(
       identity: cached.identity,
       assignedAt: cached.assignedAt,

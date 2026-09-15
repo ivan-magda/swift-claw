@@ -42,7 +42,8 @@ struct ToolFenceLabelsTests {
   @Test
   func anUnknownToolNameFallsBackToTheUnattributedLabel() {
     // given — history can replay a tool that is no longer registered
-    let labels = ToolFenceLabels(definitions: [definition(name: "skill_load", fenceLabel: "skills")]
+    let labels = ToolFenceLabels(
+      definitions: [definition(name: "skill_load", fenceLabel: "skills")]
     )
 
     // when / then
@@ -57,7 +58,8 @@ struct ToolFenceLabelsTests {
     // given — tool names arrive from the provider stream, so an injected turn can propose one that
     // spells a privileged label; the dispatcher answers an unknown name with an error observation
     // that still reaches the fence seam.
-    let labels = ToolFenceLabels(definitions: [definition(name: "skill_load", fenceLabel: "skills")]
+    let labels = ToolFenceLabels(
+      definitions: [definition(name: "skill_load", fenceLabel: "skills")]
     )
 
     // when / then — only the registered tool earns "skills"

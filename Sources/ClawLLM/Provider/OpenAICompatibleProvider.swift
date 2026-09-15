@@ -291,9 +291,11 @@ private extension OpenAICompatibleProvider {
     } catch { return Self.termination(for: error, exposure: exposure, redactor: redactor) }
   }
 
-  func streamRequest(headers: [String: String], body: Data, exposure: ProviderAttemptExposure)
-    -> HTTPRequest
-  {
+  func streamRequest(
+    headers: [String: String],
+    body: Data,
+    exposure: ProviderAttemptExposure
+  ) -> HTTPRequest {
     HTTPRequest(
       method: .post,
       url: chatCompletionsURL(),
@@ -402,9 +404,10 @@ private extension OpenAICompatibleProvider {
 
   /// The body of a non-success head. The executor has already capped it, so reading to the end holds
   /// no more than the diagnostic allowance.
-  func rejection(from exchange: HTTPStreamExchange, redactor: SecretRedactor) async throws
-    -> ProviderError
-  {
+  func rejection(
+    from exchange: HTTPStreamExchange,
+    redactor: SecretRedactor
+  ) async throws -> ProviderError {
     var collected = Data()
     for try await chunk in exchange.body {
       collected.append(chunk)

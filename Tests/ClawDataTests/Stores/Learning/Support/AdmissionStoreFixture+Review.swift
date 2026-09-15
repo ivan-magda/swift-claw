@@ -65,9 +65,11 @@ enum ReviewStateMutation: CaseIterable, Sendable {
 }
 
 extension AdmissionStoreFixture {
-  func multipartReview(candidate: CandidateArtifact, now: Date, nonceSuffix: String = "first")
-    -> CandidateReviewNotice
-  {
+  func multipartReview(
+    candidate: CandidateArtifact,
+    now: Date,
+    nonceSuffix: String = "first"
+  ) -> CandidateReviewNotice {
     let review = review(candidate: candidate, state: .admitted, now: now, nonceSuffix: nonceSuffix)
     let first = "Review this candidate, part one."
     let final = "Review this candidate, part two."
@@ -97,9 +99,10 @@ extension AdmissionStoreFixture {
     )
   }
 
-  func corruptCommittedReview(_ corruption: CommittedReviewCorruption, candidate: CandidateArtifact)
-    throws
-  {
+  func corruptCommittedReview(
+    _ corruption: CommittedReviewCorruption,
+    candidate: CandidateArtifact
+  ) throws {
     try env.queue.write { db in
       switch corruption {
       case .admittedCandidateActions:
@@ -138,12 +141,12 @@ extension AdmissionStoreFixture {
         let nonce = rows[1][0].nonce
         try db.execute(
           sql: """
-          INSERT INTO feedback_targets(nonce, job_id, learning_epoch, subject_kind,
-            subject_digest, allowed_actions, owner_user_id, chat_id, expires_at, consumed_at)
-          SELECT ?, job_id, learning_epoch, subject_kind, subject_digest, allowed_actions,
-            owner_user_id, chat_id, expires_at, consumed_at
-          FROM feedback_targets WHERE nonce = ?
-          """,
+            INSERT INTO feedback_targets(nonce, job_id, learning_epoch, subject_kind,
+              subject_digest, allowed_actions, owner_user_id, chat_id, expires_at, consumed_at)
+            SELECT ?, job_id, learning_epoch, subject_kind, subject_digest, allowed_actions,
+              owner_user_id, chat_id, expires_at, consumed_at
+            FROM feedback_targets WHERE nonce = ?
+            """,
           arguments: ["decoy-evaluation-target", nonce]
         )
         try db.execute(sql: "DELETE FROM feedback_targets WHERE nonce = ?", arguments: [nonce])
@@ -192,9 +195,9 @@ extension AdmissionStoreFixture {
       case .runID:
         try db.execute(
           sql: """
-          UPDATE outbound_deliveries SET run_id = (SELECT MIN(id) FROM runs)
-          WHERE delivery_source = ?
-          """,
+            UPDATE outbound_deliveries SET run_id = (SELECT MIN(id) FROM runs)
+            WHERE delivery_source = ?
+            """,
           arguments: [DeliverySource.learning.rawValue]
         )
       case .deliverySource:
@@ -216,10 +219,10 @@ extension AdmissionStoreFixture {
         )
         try db.execute(
           sql: """
-          INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-            payload_hash, reply_markup, status, created_ts, delivery_source)
-          VALUES(NULL, 2, 777, ?, ?, ?, ?, 'PENDING', ?, ?)
-          """,
+            INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+              payload_hash, reply_markup, status, created_ts, delivery_source)
+            VALUES(NULL, 2, 777, ?, ?, ?, ?, 'PENDING', ?, ?)
+            """,
           arguments: [
             OutboxDedupKey.make(subjectDigest: subject, ordinal: 2),
             payload,
@@ -286,9 +289,10 @@ extension AdmissionStoreFixture {
     }
   }
 
-  func mutate(_ review: CandidateReviewNotice, mutation: ReviewCarrierMutation)
-    -> CandidateReviewNotice
-  {
+  func mutate(
+    _ review: CandidateReviewNotice,
+    mutation: ReviewCarrierMutation
+  ) -> CandidateReviewNotice {
     var targets = review.targets
     var chunks = review.chunks
     switch mutation {
@@ -366,10 +370,10 @@ extension AdmissionStoreFixture {
       let targets = try Row.fetchAll(
         db,
         sql: """
-        SELECT target_id, nonce, job_id, learning_epoch, subject_kind, subject_digest,
-          allowed_actions, owner_user_id, chat_id, expires_at, consumed_at
-        FROM feedback_targets ORDER BY nonce
-        """
+          SELECT target_id, nonce, job_id, learning_epoch, subject_kind, subject_digest,
+            allowed_actions, owner_user_id, chat_id, expires_at, consumed_at
+          FROM feedback_targets ORDER BY nonce
+          """
       ).map { row in
         let targetID: Int64 = row["target_id"]
         let nonce: String = row["nonce"]
@@ -399,11 +403,11 @@ extension AdmissionStoreFixture {
       let chunks = try Row.fetchAll(
         db,
         sql: """
-        SELECT run_id, step_index, chat_id, dedup_key, payload, payload_hash,
-          telegram_message_id, status, created_ts, sent_ts, approval_id, reply_markup,
-          message_thread_id, reply_to_message_id, delivery_source
-        FROM outbound_deliveries ORDER BY dedup_key
-        """
+          SELECT run_id, step_index, chat_id, dedup_key, payload, payload_hash,
+            telegram_message_id, status, created_ts, sent_ts, approval_id, reply_markup,
+            message_thread_id, reply_to_message_id, delivery_source
+          FROM outbound_deliveries ORDER BY dedup_key
+          """
       ).map { row in
         let runID: Int64? = row["run_id"]
         let key: String = row["dedup_key"]
@@ -453,9 +457,9 @@ extension AdmissionStoreFixture {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT created_ts FROM outbound_deliveries
-        WHERE dedup_key GLOB ? ORDER BY step_index
-        """,
+          SELECT created_ts FROM outbound_deliveries
+          WHERE dedup_key GLOB ? ORDER BY step_index
+          """,
         arguments: ["\(prefix)*"]
       ).map { row in
         row["created_ts"]
@@ -488,9 +492,9 @@ private extension AdmissionStoreFixture {
     let markup: String? = try String.fetchOne(
       db,
       sql: """
-      SELECT reply_markup FROM outbound_deliveries
-      WHERE delivery_source = ? AND reply_markup IS NOT NULL
-      """,
+        SELECT reply_markup FROM outbound_deliveries
+        WHERE delivery_source = ? AND reply_markup IS NOT NULL
+        """,
       arguments: [DeliverySource.learning.rawValue]
     )
     return try #require(markup)

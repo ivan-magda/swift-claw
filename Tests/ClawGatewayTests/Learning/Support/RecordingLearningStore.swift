@@ -146,9 +146,13 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     try base.learningView(jobID: jobID)
   }
 
-  func applyReset(updateID: Int64, jobID: Int64, now: Date) throws(StoreError)
-    -> ConfirmedLearningResetResult
-  { try base.applyReset(updateID: updateID, jobID: jobID, now: now) }
+  func applyReset(
+    updateID: Int64,
+    jobID: Int64,
+    now: Date
+  ) throws(StoreError) -> ConfirmedLearningResetResult {
+    try base.applyReset(updateID: updateID, jobID: jobID, now: now)
+  }
 
   func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget? {
     try base.feedbackTarget(nonce: nonce)
@@ -158,9 +162,13 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     try base.consumeAndAppendEvent(tap, now: now)
   }
 
-  func consumeAndOpenChallenge(_ tap: FeedbackTap, prompt: [LearningNoticeChunk], now: Date)
-    throws(StoreError) -> FeedbackOutcome
-  { try base.consumeAndOpenChallenge(tap, prompt: prompt, now: now) }
+  func consumeAndOpenChallenge(
+    _ tap: FeedbackTap,
+    prompt: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
+    try base.consumeAndOpenChallenge(tap, prompt: prompt, now: now)
+  }
 
   func consumeChallenge(id: Int64, payload: String, now: Date) throws(StoreError) -> FeedbackOutcome
   { try base.consumeChallenge(id: id, payload: payload, now: now) }
@@ -169,9 +177,11 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     try base.liveChallenge(ownerUserID: ownerUserID, chatID: chatID)
   }
 
-  func admitCandidate(digest: CandidateDigest, redactor: SecretRedactor, now: Date)
-    throws(StoreError) -> AdmissionOutcome
-  {
+  func admitCandidate(
+    digest: CandidateDigest,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
     lock.withLock {
       admissions += 1
     }
@@ -181,13 +191,21 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     return try base.admitCandidate(digest: digest, redactor: redactor, now: now)
   }
 
-  func approveCandidate(_ approval: CandidateApproval, redactor: SecretRedactor, now: Date)
-    throws(StoreError) -> AdmissionOutcome
-  { try base.approveCandidate(approval, redactor: redactor, now: now) }
+  func approveCandidate(
+    _ approval: CandidateApproval,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.approveCandidate(approval, redactor: redactor, now: now)
+  }
 
-  func editCandidate(_ edit: CandidateEdit, redactor: SecretRedactor, now: Date) throws(StoreError)
-    -> AdmissionOutcome
-  { try base.editCandidate(edit, redactor: redactor, now: now) }
+  func editCandidate(
+    _ edit: CandidateEdit,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.editCandidate(edit, redactor: redactor, now: now)
+  }
 
   func commitCandidateReview(_ review: CandidateReviewNotice, now: Date) throws(StoreError) -> Bool
   {
@@ -203,9 +221,10 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     return try base.commitCandidateReview(review, now: now)
   }
 
-  func authorizeAndStartOperation(_ authorization: LearningAuthorization, now: Date)
-    throws(StoreError) -> AuthorizeOutcome
-  {
+  func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome {
     lock.lock()
     presented.append(authorization)
     lock.unlock()
@@ -242,9 +261,10 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     return try base.liveTrialIdentities()
   }
 
-  func reconcileTrial(_ identity: LearningTrialIdentity, now: Date) throws(StoreError)
-    -> TrialReconciliationResult
-  {
+  func reconcileTrial(
+    _ identity: LearningTrialIdentity,
+    now: Date
+  ) throws(StoreError) -> TrialReconciliationResult {
     recordServiceCall("trial:\(identity.trialID)")
     if serviceBehavior.failingTrialIDs.contains(identity.trialID) {
       throw .unexpected("injected trial reconciliation failure")
@@ -294,9 +314,10 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     try base.prepareReflection(trigger: trigger)
   }
 
-  func claimOperation(_ key: LearningOperationKey, now: Date) throws(StoreError)
-    -> ClaimedOperation?
-  { try base.claimOperation(key, now: now) }
+  func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation? { try base.claimOperation(key, now: now) }
 
   func finishOperation(_ result: LearningOperationResult, now: Date) throws(StoreError) -> Bool {
     try base.finishOperation(result, now: now)

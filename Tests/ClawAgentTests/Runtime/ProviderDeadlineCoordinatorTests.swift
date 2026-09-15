@@ -50,33 +50,33 @@ private func awaitCancellation() async {
 /// claim the race on it, and defer everything else — content included — to the stream's own join.
 private let consumeToTerminal:
   @Sendable (_ stream: LLMEventStream, _ box: ProviderRaceBox)
-  async -> StreamConsumerOutcome = {
-    stream,
-    box in
-    do {
-      for try await event in stream {
-        try Task.checkCancellation()
-        switch event {
-        case .delta: continue
-        case .finished:
-          _ = box.claim(.provider)
-          return .completed
+    async -> StreamConsumerOutcome = {
+      stream,
+      box in
+      do {
+        for try await event in stream {
+          try Task.checkCancellation()
+          switch event {
+          case .delta: continue
+          case .finished:
+            _ = box.claim(.provider)
+            return .completed
+          }
         }
-      }
-      return .cut
-    } catch { return .cut }
-  }
+        return .cut
+      } catch { return .cut }
+    }
 
 /// A consumer that never reads — it parks until cancelled — so the terminal's final event stays
 /// unconsumed while the deadline takes the lock.
 private let neverReadingConsume:
   @Sendable (_ stream: LLMEventStream, _ box: ProviderRaceBox)
-  async -> StreamConsumerOutcome = {
-    _,
-    _ in
-    await awaitCancellation()
-    return .cut
-  }
+    async -> StreamConsumerOutcome = {
+      _,
+      _ in
+      await awaitCancellation()
+      return .cut
+    }
 
 private let noAuxiliary: @Sendable (_ box: ProviderRaceBox) async -> Void = { _ in }
 
@@ -109,9 +109,9 @@ private actor OutcomeBox {
   }
 }
 
-private func runOutcome(_ operation: @escaping @Sendable () async -> ProviderDeadlineOutcome)
-  -> OutcomeBox
-{
+private func runOutcome(
+  _ operation: @escaping @Sendable () async -> ProviderDeadlineOutcome
+) -> OutcomeBox {
   let box = OutcomeBox()
   Task {
     await box.resolve(await operation())
@@ -137,9 +137,9 @@ private func requireFailed(_ outcome: ProviderDeadlineOutcome) throws -> any Err
   return error
 }
 
-private func requireTimedOut(_ outcome: ProviderDeadlineOutcome) throws
-  -> ProviderDeadlineAccounting
-{
+private func requireTimedOut(
+  _ outcome: ProviderDeadlineOutcome
+) throws -> ProviderDeadlineAccounting {
   guard case .timedOut(let accounting) = outcome else {
     throw OutcomeMismatch(description: "expected .timedOut, got \(outcome)")
   }
@@ -580,9 +580,9 @@ struct ProviderDeadlineCoordinatorTests {
 
     // when
     await ProviderDeadlineCoordinator.sendBounded(timeout: .seconds(3), clock: instantDeadlineClock)
-      {
-        await send.run()
-      }
+    {
+      await send.run()
+    }
 
     // then — the send did not wedge the turn; it was cancelled and drained, never orphaned
     #expect(await send.started == true)

@@ -9,18 +9,20 @@ extension ScheduledLearningStoreGRDB {
     try Row.fetchOne(
       db,
       sql: """
-      SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-        admitted_at, assignment_deadline, decision_deadline, max_assignments,
-        consumed_assignments, cohort_cutoff, state, close_reason, algorithm
-      FROM learning_trials WHERE trial_id = ?
-      """,
+        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+          admitted_at, assignment_deadline, decision_deadline, max_assignments,
+          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
+        FROM learning_trials WHERE trial_id = ?
+        """,
       arguments: [trialID]
     )
   }
 
-  static func strictTrial(_ db: Database, row: Row, currentState: JobLearningState?) throws
-    -> LearningTrial
-  {
+  static func strictTrial(
+    _ db: Database,
+    row: Row,
+    currentState: JobLearningState?
+  ) throws -> LearningTrial {
     guard
       let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
       trialID > 0,

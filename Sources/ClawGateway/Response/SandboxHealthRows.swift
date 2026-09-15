@@ -8,9 +8,11 @@ public enum SandboxDoctorStatus: Sendable, Equatable {
   case live(health: SandboxHealth)
   case unavailable(reason: String)
 
-  public static func atBoot(execEnabled: Bool, health: SandboxHealth?, unavailableReason: String?)
-    -> SandboxDoctorStatus
-  {
+  public static func atBoot(
+    execEnabled: Bool,
+    health: SandboxHealth?,
+    unavailableReason: String?
+  ) -> SandboxDoctorStatus {
     guard execEnabled else {
       return .disabled
     }

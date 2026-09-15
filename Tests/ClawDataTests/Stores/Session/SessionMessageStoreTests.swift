@@ -526,10 +526,10 @@ extension SessionMessageStoreTests {
 
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts, tool_calls,
-          provider_state_issuer, provider_state)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts, tool_calls,
+            provider_state_issuer, provider_state)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           fixture.sessionID,
           MessageRole.assistant.rawValue,
@@ -618,9 +618,9 @@ extension SessionMessageStoreTests {
   }
 
   @Test(arguments: SessionMessageStoreTests.corruptions)
-  fileprivate func invalidProviderStateIsDroppedAndTheMessageSurvives(_ corruption: StateCorruption)
-    throws
-  {
+  fileprivate func invalidProviderStateIsDroppedAndTheMessageSurvives(
+    _ corruption: StateCorruption
+  ) throws {
     // given
     let fixture = try stateFixture()
     _ = try insertAnchor(

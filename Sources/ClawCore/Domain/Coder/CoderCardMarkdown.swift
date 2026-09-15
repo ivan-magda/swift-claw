@@ -36,9 +36,12 @@ public enum CoderCardMarkdown {
 // MARK: - Literal Encoding
 
 private extension CoderCardMarkdown {
-  static func blocks(_ value: String, opening: String, closing: String, preformatted: Bool)
-    -> String
-  {
+  static func blocks(
+    _ value: String,
+    opening: String,
+    closing: String,
+    preformatted: Bool
+  ) -> String {
     let bodyLimit = ReplySplitter.limit - opening.utf8.count - closing.utf8.count
     var result: [String] = []
     var body = ""

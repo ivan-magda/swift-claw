@@ -91,9 +91,10 @@ struct DaemonBuilder: Sendable {
   ///   - cooldown: The shared route ledger used by turns and schedule parsing so one path honors
   ///     a cooldown recorded by the other.
   /// - Returns: The composed runtime and its coordinated shutdown dependencies.
-  func build(rosterStack: RosterStack, cooldown: any PrimaryRouteCooldownTracking) async throws
-    -> DaemonRuntimeBundle
-  {
+  func build(
+    rosterStack: RosterStack,
+    cooldown: any PrimaryRouteCooldownTracking
+  ) async throws -> DaemonRuntimeBundle {
     let sandbox = await prepareSandbox()
     let coordination = TurnCoordination()
     let coder = await prepareCoder(coordination: coordination)

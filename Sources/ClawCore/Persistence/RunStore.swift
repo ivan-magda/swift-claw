@@ -330,8 +330,10 @@ public struct ClaimedObservationFill: Sendable, Equatable {
 
 public protocol RunStore: Sendable {
   /// Restores the original requester and conversation target without treating a group chat as a user.
-  func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
-    -> RunExecutionContext?
+  func executionContext(
+    runID: Int64,
+    fallbackChatID: Int64
+  ) throws(StoreError) -> RunExecutionContext?
 
   /// PENDING → RUNNING through `RunFSM`, returning the run's origin in the same write; nil means
   /// the run is absent or no longer pending (one query, no separate origin read). `policyVersion`
@@ -356,8 +358,11 @@ public protocol RunStore: Sendable {
   /// degradation notice per run that never delivered. `heartbeatNoticeChatID` is the
   /// config-resolved owner DM for crashed heartbeat runs — their synthetic
   /// session key carries no chat id; nil (heartbeat unconfigured) skips the notice only.
-  func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
-    throws(StoreError) -> [DegradationReply]
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatID: Int64?
+  ) throws(StoreError) -> [DegradationReply]
 
   /// Snapshot of run-table health: in-flight count, age of oldest running run, last
   /// success/failure timestamps, and count of consecutive failures at the head of the table.
@@ -369,8 +374,12 @@ public protocol RunStore: Sendable {
   /// the `approvals` row (policy_version copied from the run row in-txn), `RUNNING→AWAITING_APPROVAL`,
   /// `setTainted`/`setPrivateData`, the `approvalRequested` audit, and the approval-prompt outbox
   /// chunk(s). Commit, then send.
-  func commitSuspendedTurn(runID: Int64, sessionID: Int64, commit: SuspendedTurnCommit, now: Date)
-    throws(StoreError) -> SuspendedCommitReceipt
+  func commitSuspendedTurn(
+    runID: Int64,
+    sessionID: Int64,
+    commit: SuspendedTurnCommit,
+    now: Date
+  ) throws(StoreError) -> SuspendedCommitReceipt
 
   /// Approve resume, pre-execution half (file_write / web_fetch): one txn, guarded on the
   /// placeholder check (per-approval exactly-once) and the AWAITING_APPROVAL → RUNNING flip. The

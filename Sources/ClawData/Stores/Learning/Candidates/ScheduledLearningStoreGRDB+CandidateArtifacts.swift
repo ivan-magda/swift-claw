@@ -24,11 +24,11 @@ extension ScheduledLearningStoreGRDB {
     let manifestJSON = String(decoding: bytes, as: UTF8.self)
     try db.execute(
       sql: """
-      INSERT OR IGNORE INTO lesson_sets(
-        job_id, digest, schema_version, canonical_bytes, source, created_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?)
-      """,
+        INSERT OR IGNORE INTO lesson_sets(
+          job_id, digest, schema_version, canonical_bytes, source, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         artifact.replacement.jobID,
         artifact.replacement.digest.rawValue,
@@ -50,11 +50,11 @@ extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: """
-      INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
-        replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
-        source_manifest, predecessor_digest, algorithm, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
+          replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
+          source_manifest, predecessor_digest, algorithm, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         artifact.digest.rawValue,
         artifact.manifest.jobID,
@@ -72,18 +72,19 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func readCandidateArtifact(_ db: Database, digest: CandidateDigest) throws
-    -> CandidateArtifact?
-  {
+  static func readCandidateArtifact(
+    _ db: Database,
+    digest: CandidateDigest
+  ) throws -> CandidateArtifact? {
     guard
       let row = try Row.fetchOne(
         db,
         sql: """
-        SELECT candidate_digest, job_id, learning_epoch, replacement_digest, base_digest,
-          base_revision, frozen_feedback_revision, origin, source_manifest, predecessor_digest,
-          algorithm
-        FROM learning_candidates WHERE candidate_digest = ?
-        """,
+          SELECT candidate_digest, job_id, learning_epoch, replacement_digest, base_digest,
+            base_revision, frozen_feedback_revision, origin, source_manifest, predecessor_digest,
+            algorithm
+          FROM learning_candidates WHERE candidate_digest = ?
+          """,
         arguments: [digest.rawValue]
       )
     else {

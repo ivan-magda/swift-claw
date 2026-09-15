@@ -4,9 +4,11 @@ import Foundation
 // MARK: - Ordered Section Assembly
 
 extension ContextBuilder {
-  func buildFixedSections(origin: RunOrigin, lessons: LessonSet?, ownerNotices: inout [String])
-    -> [FittableSection]
-  {
+  func buildFixedSections(
+    origin: RunOrigin,
+    lessons: LessonSet?,
+    ownerNotices: inout [String]
+  ) -> [FittableSection] {
     [
       section(
         id: .policy,
@@ -114,9 +116,9 @@ private extension ContextBuilder {
       case .overCap:
         if let cap {
           let notice = """
-          ⚠ `\(file.relativePath)` is \(loaded.graphemeCount)/\(cap) \
-          — edit it to trim; left out this turn.
-          """
+            ⚠ `\(file.relativePath)` is \(loaded.graphemeCount)/\(cap) \
+            — edit it to trim; left out this turn.
+            """
           ownerNotices.append(notice)
         } else {
           warn("Workspace file \(file.relativePath) exceeded an uncapped load")

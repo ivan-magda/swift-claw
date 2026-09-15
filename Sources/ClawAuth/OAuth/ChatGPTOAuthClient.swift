@@ -39,9 +39,10 @@ public struct ChatGPTOAuthClient: Sendable, ChatGPTOAuthRefreshing, ChatGPTOAuth
   /// Both statuses the vendor answers a waiting device with are ordinary "not yet" — 403 alongside
   /// the 404 the endpoint returns before the authorization exists. Everything else is an answer, and
   /// answers are not waited on.
-  public func pollOnce(device: ChatGPTDeviceCode, timeout: Duration) async throws
-    -> ChatGPTPollResult
-  {
+  public func pollOnce(
+    device: ChatGPTDeviceCode,
+    timeout: Duration
+  ) async throws -> ChatGPTPollResult {
     // Both submitted values are redacted: a 4xx/5xx body may echo either, and either reaching a
     // diagnostic is a leak.
     let secrets = [device.deviceAuthID, device.userCode]
@@ -73,9 +74,10 @@ public struct ChatGPTOAuthClient: Sendable, ChatGPTOAuthRefreshing, ChatGPTOAuth
   }
 
   /// Spends an approved grant for the credential pair it stands for.
-  public func exchange(grant: ChatGPTAuthorizationGrant, timeout: Duration) async throws
-    -> ChatGPTTokenPair
-  {
+  public func exchange(
+    grant: ChatGPTAuthorizationGrant,
+    timeout: Duration
+  ) async throws -> ChatGPTTokenPair {
     guard
       let code = ChatGPTWireValues.controlFree(
         grant.authorizationCode,
@@ -225,7 +227,7 @@ private extension ChatGPTOAuthClient {
   static func isUnreserved(_ byte: UInt8) -> Bool {
     switch byte {
     case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"),
-         UInt8(ascii: "0")...UInt8(ascii: "9"):
+      UInt8(ascii: "0")...UInt8(ascii: "9"):
       return true
     case UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "_"), UInt8(ascii: "~"): return true
     default: return false
@@ -237,7 +239,10 @@ private extension ChatGPTOAuthClient {
 
 private extension ChatGPTOAuthClient {
   /// The decoded object of a successful response, or the typed failure a non-success one stands for.
-  static func successFields(of response: HTTPResult, redacting secrets: [String]) throws -> [String:
+  static func successFields(
+    of response: HTTPResult,
+    redacting secrets: [String]
+  ) throws -> [String:
     JSONValue]
   {
     guard HTTPResponseBodyPolicy.isSuccess(response.statusCode) else {
@@ -358,9 +363,11 @@ private extension ChatGPTOAuthClient {
 // MARK: - Token Pairs
 
 private extension ChatGPTOAuthClient {
-  func tokenPair(from body: Data, redacting secrets: [String], timeout: Duration) async throws
-    -> ChatGPTTokenPair
-  {
+  func tokenPair(
+    from body: Data,
+    redacting secrets: [String],
+    timeout: Duration
+  ) async throws -> ChatGPTTokenPair {
     let response = try await send(
       to: ChatGPTProviderMetadata.tokenURL,
       contentType: Wire.formContentType,

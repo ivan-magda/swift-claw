@@ -29,9 +29,11 @@ public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
 // MARK: - In-Transaction Arming
 
 extension ScheduledLearningStoreGRDB {
-  static func readLessonSet(_ db: Database, jobID: Int64, digest: LessonSetDigest) throws
-    -> LessonSet?
-  {
+  static func readLessonSet(
+    _ db: Database,
+    jobID: Int64,
+    digest: LessonSetDigest
+  ) throws -> LessonSet? {
     let row = try Row.fetchOne(
       db,
       sql: "SELECT canonical_bytes FROM lesson_sets WHERE job_id = ? AND digest = ?",
@@ -59,10 +61,10 @@ extension ScheduledLearningStoreGRDB {
     try ensureCanonicalEmptySet(db, empty, now: now)
     try db.execute(
       sql: """
-      INSERT OR IGNORE INTO job_learning_state(job_id, learning_epoch,
-        stable_lesson_set_digest, stable_revision, open_trial_id, feedback_revision, armed_at)
-      VALUES (?, 1, ?, 0, NULL, 0, ?)
-      """,
+        INSERT OR IGNORE INTO job_learning_state(job_id, learning_epoch,
+          stable_lesson_set_digest, stable_revision, open_trial_id, feedback_revision, armed_at)
+        VALUES (?, 1, ?, 0, NULL, 0, ?)
+        """,
       arguments: [jobID, empty.digest.rawValue, EpochSecondCodec.epoch(now)]
     )
     guard let state = try readState(db, jobID: jobID) else {
@@ -75,10 +77,10 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT learning_epoch, stable_lesson_set_digest, stable_revision, open_trial_id,
-        feedback_revision
-      FROM job_learning_state WHERE job_id = ?
-      """,
+        SELECT learning_epoch, stable_lesson_set_digest, stable_revision, open_trial_id,
+          feedback_revision
+        FROM job_learning_state WHERE job_id = ?
+        """,
       arguments: [jobID]
     )
     guard let row else {
@@ -111,9 +113,9 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT job_id, digest, schema_version, canonical_bytes, source
-      FROM lesson_sets WHERE job_id = ? AND digest = ?
-      """,
+        SELECT job_id, digest, schema_version, canonical_bytes, source
+        FROM lesson_sets WHERE job_id = ? AND digest = ?
+        """,
       arguments: [set.jobID, set.digest.rawValue]
     )
     if let row {
@@ -124,9 +126,9 @@ extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: """
-      INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         set.jobID,
         set.digest.rawValue,
@@ -144,7 +146,7 @@ extension ScheduledLearningStoreGRDB {
       && SQLiteStoredValue.int(in: row, column: "schema_version") == set.schemaVersion
       && SQLiteStoredValue.data(in: row, column: "canonical_bytes") == set.canonicalBytes
       && SQLiteStoredValue.string(in: row, column: "source")
-      == LessonSetSource.canonicalEmpty.rawValue
+        == LessonSetSource.canonicalEmpty.rawValue
   }
 
   static func isCanonicalDigest(_ value: String) -> Bool {

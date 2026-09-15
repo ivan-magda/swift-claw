@@ -19,9 +19,11 @@ struct CommandHandlers: Sendable {
 
   let coordinator: ApprovalCoordinator
 
-  func stop(rawUpdate: RawUpdate, message: IncomingMessage, mode: ChatMode = .direct)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func stop(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode = .direct
+  ) async throws(RoutingHalt) -> HandleOutcome {
     let result = try await replies.perform(
       "stop command",
       updateID: rawUpdate.updateID,
@@ -63,9 +65,11 @@ struct CommandHandlers: Sendable {
     )
   }
 
-  func new(rawUpdate: RawUpdate, message: IncomingMessage, mode: ChatMode = .direct)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func new(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode = .direct
+  ) async throws(RoutingHalt) -> HandleOutcome {
     let result = try await replies.perform(
       "new command",
       updateID: rawUpdate.updateID,
@@ -187,9 +191,11 @@ struct CommandHandlers: Sendable {
 // MARK: - Memory Commands
 
 private extension CommandHandlers {
-  func memoryReview(rawUpdate: RawUpdate, target: DeliveryTarget, kind: MemoryKind?)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func memoryReview(
+    rawUpdate: RawUpdate,
+    target: DeliveryTarget,
+    kind: MemoryKind?
+  ) async throws(RoutingHalt) -> HandleOutcome {
     let items = try await replies.perform(
       "memory review",
       updateID: rawUpdate.updateID,
@@ -204,9 +210,11 @@ private extension CommandHandlers {
     return await replies.sendCanned(updateID: rawUpdate.updateID, target: target, text: text)
   }
 
-  func memoryShow(rawUpdate: RawUpdate, target: DeliveryTarget, id: Int64) async throws(RoutingHalt)
-    -> HandleOutcome
-  {
+  func memoryShow(
+    rawUpdate: RawUpdate,
+    target: DeliveryTarget,
+    id: Int64
+  ) async throws(RoutingHalt) -> HandleOutcome {
     let item = try await replies.perform(
       "memory show",
       updateID: rawUpdate.updateID,
@@ -219,9 +227,12 @@ private extension CommandHandlers {
     return await replies.sendCanned(updateID: rawUpdate.updateID, target: target, text: text)
   }
 
-  func memoryDelete(rawUpdate: RawUpdate, target: DeliveryTarget, sessionKey: String, id: Int64)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func memoryDelete(
+    rawUpdate: RawUpdate,
+    target: DeliveryTarget,
+    sessionKey: String,
+    id: Int64
+  ) async throws(RoutingHalt) -> HandleOutcome {
     let existing = try await replies.perform(
       "memory delete lookup",
       updateID: rawUpdate.updateID,

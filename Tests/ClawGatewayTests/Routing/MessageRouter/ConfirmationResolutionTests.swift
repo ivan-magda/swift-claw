@@ -136,13 +136,17 @@ struct ConfirmationResolutionTests {
   func nonDiskCommitFailureSurfacesAnOwnerErrorAndClearsThePending() async throws {
     // given
     struct FailingMemoryCommands: MemoryCommandStore {
-      func applyRemember(updateID: Int64, item: NewMemoryItem, now: Date) throws(StoreError)
-        -> MemoryCommandResult
-      { throw StoreError.unexpected("commit lost") }
+      func applyRemember(
+        updateID: Int64,
+        item: NewMemoryItem,
+        now: Date
+      ) throws(StoreError) -> MemoryCommandResult { throw StoreError.unexpected("commit lost") }
 
-      func applyForget(updateID: Int64, itemID: Int64, now: Date) throws(StoreError)
-        -> MemoryCommandResult
-      { throw StoreError.unexpected("commit lost") }
+      func applyForget(
+        updateID: Int64,
+        itemID: Int64,
+        now: Date
+      ) throws(StoreError) -> MemoryCommandResult { throw StoreError.unexpected("commit lost") }
     }
 
     let harness = try MemoryRoutingHarness.make(memoryCommands: FailingMemoryCommands())
@@ -175,13 +179,17 @@ struct ConfirmationResolutionTests {
   func diskFullCommitFailureKeepsThePendingEntryForRetryAfterCleanup() async throws {
     // given
     struct DiskFullMemoryCommands: MemoryCommandStore {
-      func applyRemember(updateID: Int64, item: NewMemoryItem, now: Date) throws(StoreError)
-        -> MemoryCommandResult
-      { throw StoreError.diskFull }
+      func applyRemember(
+        updateID: Int64,
+        item: NewMemoryItem,
+        now: Date
+      ) throws(StoreError) -> MemoryCommandResult { throw StoreError.diskFull }
 
-      func applyForget(updateID: Int64, itemID: Int64, now: Date) throws(StoreError)
-        -> MemoryCommandResult
-      { throw StoreError.diskFull }
+      func applyForget(
+        updateID: Int64,
+        itemID: Int64,
+        now: Date
+      ) throws(StoreError) -> MemoryCommandResult { throw StoreError.diskFull }
     }
 
     let harness = try MemoryRoutingHarness.make(memoryCommands: DiskFullMemoryCommands())

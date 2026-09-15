@@ -30,15 +30,15 @@ struct ChatGPTResponsesRequestEncoderTests {
     // then
     #expect(
       body == """
-      {"include":["reasoning.encrypted_content"],\
-      "input":[\
-      {"content":[{"text":"hello","type":"input_text"}],"role":"user","type":"message"}],\
-      "instructions":"You are helpful.\\n\\nBe brief.",\
-      "model":"gpt-5",\
-      "prompt_cache_key":"swift-claw:cbcece245430edb08f8e6a62",\
-      "store":false,\
-      "stream":true}
-      """
+        {"include":["reasoning.encrypted_content"],\
+        "input":[\
+        {"content":[{"text":"hello","type":"input_text"}],"role":"user","type":"message"}],\
+        "instructions":"You are helpful.\\n\\nBe brief.",\
+        "model":"gpt-5",\
+        "prompt_cache_key":"swift-claw:cbcece245430edb08f8e6a62",\
+        "store":false,\
+        "stream":true}
+        """
     )
   }
 
@@ -70,29 +70,29 @@ struct ChatGPTResponsesRequestEncoderTests {
     // then
     #expect(
       body == """
-      {"include":["reasoning.encrypted_content"],\
-      "input":[\
-      {"content":[{"text":"u","type":"input_text"}],"role":"user","type":"message"},\
-      {"content":[{"text":"thinking out loud","type":"output_text"}],\
-      "role":"assistant","status":"completed","type":"message"},\
-      {"arguments":"{}","call_id":"call_1","name":"clock","type":"function_call"},\
-      {"call_id":"call_1","output":"12:00","type":"function_call_output"},\
-      {"content":[{"text":"It is noon.","type":"output_text"}],\
-      "role":"assistant","status":"completed","type":"message"}],\
-      "instructions":"S",\
-      "model":"gpt-5",\
-      "parallel_tool_calls":true,\
-      "prompt_cache_key":"swift-claw:fd25691adfb5ff2a3c9ef65a",\
-      "store":false,\
-      "stream":true,\
-      "tool_choice":"auto",\
-      "tools":[\
-      {"description":"Fetch a URL.","name":"web_fetch",\
-      "parameters":{"properties":{"url":{"type":"string"}},"required":["url"],"type":"object"},\
-      "strict":false,"type":"function"},\
-      {"description":"Read the clock.","name":"clock",\
-      "parameters":{"type":"object"},"strict":false,"type":"function"}]}
-      """
+        {"include":["reasoning.encrypted_content"],\
+        "input":[\
+        {"content":[{"text":"u","type":"input_text"}],"role":"user","type":"message"},\
+        {"content":[{"text":"thinking out loud","type":"output_text"}],\
+        "role":"assistant","status":"completed","type":"message"},\
+        {"arguments":"{}","call_id":"call_1","name":"clock","type":"function_call"},\
+        {"call_id":"call_1","output":"12:00","type":"function_call_output"},\
+        {"content":[{"text":"It is noon.","type":"output_text"}],\
+        "role":"assistant","status":"completed","type":"message"}],\
+        "instructions":"S",\
+        "model":"gpt-5",\
+        "parallel_tool_calls":true,\
+        "prompt_cache_key":"swift-claw:fd25691adfb5ff2a3c9ef65a",\
+        "store":false,\
+        "stream":true,\
+        "tool_choice":"auto",\
+        "tools":[\
+        {"description":"Fetch a URL.","name":"web_fetch",\
+        "parameters":{"properties":{"url":{"type":"string"}},"required":["url"],"type":"object"},\
+        "strict":false,"type":"function"},\
+        {"description":"Read the clock.","name":"clock",\
+        "parameters":{"type":"object"},"strict":false,"type":"function"}]}
+        """
     )
   }
 

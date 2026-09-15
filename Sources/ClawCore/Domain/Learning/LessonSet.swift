@@ -30,9 +30,10 @@ public struct LessonSet: Sendable, Equatable {
     LessonSet(jobID: jobID, schemaVersion: schemaVersion, lessons: [], digest: digest(of: []))
   }
 
-  public static func canonical(jobID: Int64, lessons raw: [String]) throws(LessonSetError)
-    -> LessonSet
-  {
+  public static func canonical(
+    jobID: Int64,
+    lessons raw: [String]
+  ) throws(LessonSetError) -> LessonSet {
     let normalized = try normalize(raw)
     return LessonSet(
       jobID: jobID,

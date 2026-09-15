@@ -295,9 +295,11 @@ private extension AppConfig {
 // MARK: - Generic Value Parsing
 
 extension AppConfig {
-  static func boolValue(_ raw: String?, key: String, default fallback: Bool) throws(ConfigError)
-    -> Bool
-  {
+  static func boolValue(
+    _ raw: String?,
+    key: String,
+    default fallback: Bool
+  ) throws(ConfigError) -> Bool {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !trimmed.isEmpty else {
       return fallback
@@ -317,9 +319,10 @@ private extension AppConfig {
   /// Parses one comma-separated list of Telegram ids. The caller names the error so a bad entry
   /// points at the variable it came from; both lists share this parser so they can never disagree
   /// about whitespace or emptiness.
-  static func parseIDSet(from environmentValue: String?, invalid: (_ value: String) -> ConfigError)
-    throws -> Set<Int64>
-  {
+  static func parseIDSet(
+    from environmentValue: String?,
+    invalid: (_ value: String) -> ConfigError
+  ) throws -> Set<Int64> {
     guard
       let environmentValue = environmentValue?.trimmingCharacters(in: .whitespaces),
       !environmentValue.isEmpty

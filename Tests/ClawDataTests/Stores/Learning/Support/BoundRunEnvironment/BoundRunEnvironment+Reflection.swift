@@ -42,9 +42,10 @@ extension BoundRunEnvironment {
     return ReflectionFixture(trigger: trigger, preparation: preparation)
   }
 
-  func evaluatedEvidence(issueCode: String, output: String = "The result missed a material change.")
-    throws -> (evidence: SealedEvidence, evaluation: CandidateEvaluationSource)
-  {
+  func evaluatedEvidence(
+    issueCode: String,
+    output: String = "The result missed a material change."
+  ) throws -> (evidence: SealedEvidence, evaluation: CandidateEvaluationSource) {
     let runID = try runningBoundRun()
     try freezeSurface(runID: runID, skillSetDigest: Self.pickupSkillSetDigest)
     _ = try runs.commitAssistantTurn(assistantTurn(runID: runID, content: output), now: now)
@@ -112,9 +113,10 @@ extension BoundRunEnvironment {
     return claim
   }
 
-  func reflectionResult(operation: ClaimedOperation, product: LearningOperationProduct)
-    -> LearningOperationResult
-  {
+  func reflectionResult(
+    operation: ClaimedOperation,
+    product: LearningOperationProduct
+  ) -> LearningOperationResult {
     LearningOperationResult(
       operationID: operation.id,
       usage: LearningCallUsage(
@@ -163,9 +165,10 @@ extension BoundRunEnvironment {
     )
   }
 
-  func noCandidate(fixture: ReflectionFixture, operation: ClaimedOperation) throws
-    -> NoCandidateResult
-  {
+  func noCandidate(
+    fixture: ReflectionFixture,
+    operation: ClaimedOperation
+  ) throws -> NoCandidateResult {
     NoCandidateResult(
       algorithm: .v1,
       triggerDigest: fixture.trigger.digest,
@@ -207,9 +210,9 @@ extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        UPDATE job_learning_state SET feedback_revision = feedback_revision + 1 \
-        WHERE job_id = ?
-        """,
+          UPDATE job_learning_state SET feedback_revision = feedback_revision + 1 \
+          WHERE job_id = ?
+          """,
         arguments: [jobID]
       )
     }
@@ -220,11 +223,11 @@ extension BoundRunEnvironment {
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: candidate, now: now)
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           candidate.manifest.epoch.value,
@@ -270,17 +273,17 @@ extension BoundRunEnvironment {
         try Int64.fetchOne(
           db,
           sql: """
-          UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
-          WHERE job_id = ? RETURNING feedback_revision
-          """,
+            UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
+            WHERE job_id = ? RETURNING feedback_revision
+            """,
           arguments: [jobID]
         ) ?? -1
       try db.execute(
         sql: """
-        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
-          payload, actor, feedback_revision, supersedes, occurred_at)
-        VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
+            payload, actor, feedback_revision, supersedes, occurred_at)
+          VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           subjectKind.rawValue,
@@ -322,11 +325,11 @@ extension BoundRunEnvironment {
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: candidate, now: now)
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, 5, 1, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 5, 1, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           candidate.manifest.epoch.value,

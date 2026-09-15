@@ -77,9 +77,9 @@ extension ProviderError {
     case .terminal(let status, let message):
       .terminal(status: status, message: redactor.redact(message))
     case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-         .invalidProviderState, .visionUnsupported, .credentialRefreshCompleted,
-         .credentialRefreshExhausted, .credentialStateUnavailable,
-         .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch:
+      .invalidProviderState, .visionUnsupported, .credentialRefreshCompleted,
+      .credentialRefreshExhausted, .credentialStateUnavailable,
+      .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch:
       self
     }
   }
@@ -119,11 +119,11 @@ extension ProviderFailureAccounting {
 
     switch providerError {
     case .connectFailed, .rejected, .terminal, .authenticationRequired, .accessDenied,
-         .quotaLimited, .cleanRejection, .invalidProviderState, .visionUnsupported,
-         .credentialStateUnavailable:
+      .quotaLimited, .cleanRejection, .invalidProviderState, .visionUnsupported,
+      .credentialStateUnavailable:
       return .notStarted
     case .transportFailure, .retryable, .credentialRefreshCompleted, .credentialRefreshExhausted,
-         .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch:
+      .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch:
       return .mayHaveStarted(observing: 0)
     }
   }

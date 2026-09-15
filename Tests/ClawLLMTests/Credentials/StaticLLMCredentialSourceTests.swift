@@ -60,9 +60,9 @@ struct StaticLLMCredentialSourceTests {
   // MARK: - Lifecycle
 
   @Test(arguments: [LLMCredentialRejection.refresh, .authenticationRequired])
-  func rejectionNeitherRotatesTheKeyNorLatchesTheSource(disposition: LLMCredentialRejection)
-    async throws
-  {
+  func rejectionNeitherRotatesTheKeyNorLatchesTheSource(
+    disposition: LLMCredentialRejection
+  ) async throws {
     // given
     let source = StaticLLMCredentialSource(bearer: "sk-test-value")
     let before = try await source.authorization()

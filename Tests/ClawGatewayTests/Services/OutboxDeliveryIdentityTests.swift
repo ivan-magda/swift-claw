@@ -44,9 +44,10 @@ private extension OutboxDeliveryIdentityTests {
     )
   }
 
-  static func dispatcher(outbox: OutboxStoreGRDB, transport: RecordingTransport)
-    -> OutboxDispatcher<ContinuousClock>
-  {
+  static func dispatcher(
+    outbox: OutboxStoreGRDB,
+    transport: RecordingTransport
+  ) -> OutboxDispatcher<ContinuousClock> {
     OutboxDispatcher(
       outbox: outbox,
       delivery: transport,

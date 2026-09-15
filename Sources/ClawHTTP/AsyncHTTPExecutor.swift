@@ -157,9 +157,11 @@ private extension AsyncHTTPExecutor {
   ///   - sink: The bounded exchange sink that receives each forwarded chunk.
   ///   - totalBytes: The diagnostic body's total transfer cap, or nil to stream the entire body.
   /// - Returns: Completion, cancellation, or the classified transfer failure.
-  static func forward(_ body: HTTPClientResponse.Body, into sink: HTTPBodySink, totalBytes: Int?)
-    async -> HTTPStreamTermination
-  {
+  static func forward(
+    _ body: HTTPClientResponse.Body,
+    into sink: HTTPBodySink,
+    totalBytes: Int?
+  ) async -> HTTPStreamTermination {
     var forwarded = 0
 
     do {
@@ -196,7 +198,7 @@ private extension AsyncHTTPExecutor {
         HTTPTransportFailure(
           disposition: .mayHaveBeenSent,
           safeMessage:
-          "response body chunk of \(weight) bytes exceeds the \(capacity)-byte unread limit"
+            "response body chunk of \(weight) bytes exceeds the \(capacity)-byte unread limit"
         )
       )
     case .channelFinished: return .cancelled(.mayHaveBeenSent)

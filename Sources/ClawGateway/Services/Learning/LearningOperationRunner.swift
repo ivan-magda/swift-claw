@@ -124,9 +124,12 @@ private extension LearningOperationRunner {
 
   /// The last gate before the network. `.superseded` is neither a failure nor a verdict: the claim
   /// stopped describing work worth doing, so nothing is written and nothing is logged as an error.
-  func authorize(_ call: Call, route: RouteSelection, carrier: CarrierAuthorization, now: Date)
-    throws -> Bool
-  {
+  func authorize(
+    _ call: Call,
+    route: RouteSelection,
+    carrier: CarrierAuthorization,
+    now: Date
+  ) throws -> Bool {
     let estimate = accountant(for: route.binding).preflightEstimate(context: call.messages)
     let authorization = LearningAuthorization(
       operationID: call.operationID,

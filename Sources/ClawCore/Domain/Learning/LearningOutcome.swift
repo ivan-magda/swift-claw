@@ -91,7 +91,7 @@ public enum OwnerPrecedence {
       case .resultNotUseful, .resultCorrection: evaluationRequired = usesEvaluatorCodes
       case .resultUseful: evaluationRequired = false
       case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
-           .candidateEdit, .promotionRollback:
+        .candidateEdit, .promotionRollback:
         evaluationRequired = false
       }
     } else {
@@ -111,9 +111,9 @@ public enum OwnerPrecedence {
       } ?? Self.evaluatorOutcome(evaluator, issueCodes: issueCodes, isDisputed: evaluationDisputed)
     let ownerConfirmed =
       resultSignal == nil && evaluationDisputed == false
-        && effectiveSignals.contains { event in
-          event.signal == .evaluationConfirm
-        }
+      && effectiveSignals.contains { event in
+        event.signal == .evaluationConfirm
+      }
     return ResolvedOutcome(
       outcome: outcome,
       ownerConfirmed: ownerConfirmed,
@@ -135,7 +135,7 @@ private extension OwnerPrecedence {
       return .negative(issueCodes: codes)
     case .resultCorrection: return .negative(issueCodes: evaluatorIssueCodes.sorted())
     case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
-         .candidateEdit, .promotionRollback:
+      .candidateEdit, .promotionRollback:
       return .neutral
     }
   }
@@ -190,7 +190,7 @@ private extension OwnerSignal {
     switch self {
     case .resultUseful, .resultNotUseful, .resultCorrection: true
     case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
-         .candidateEdit, .promotionRollback:
+      .candidateEdit, .promotionRollback:
       false
     }
   }

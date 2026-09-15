@@ -107,9 +107,11 @@ private extension StreamingTurnRuntime {
   /// so the accumulation here feeds live drafts and the overflow check only, never the final reply. A
   /// cut iteration and a failed terminal both defer to that join, which carries the disposition; an
   /// overrun is flagged so the coordinator can refuse it locally.
-  func consumeStream(_ stream: LLMEventStream, snapshot: DraftSnapshot, box: ProviderRaceBox) async
-    -> StreamConsumerOutcome
-  {
+  func consumeStream(
+    _ stream: LLMEventStream,
+    snapshot: DraftSnapshot,
+    box: ProviderRaceBox
+  ) async -> StreamConsumerOutcome {
     var content = ""
     var contentBytes = 0
 

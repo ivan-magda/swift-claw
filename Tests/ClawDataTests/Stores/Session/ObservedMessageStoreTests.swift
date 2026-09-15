@@ -21,9 +21,11 @@ struct ObservedMessageStoreTests {
     return Fixture(store: SessionMessageStoreGRDB(writer: queue), queue: queue)
   }
 
-  private func inbound(updateID: Int64, text: String, provenance: Provenance = .trusted)
-    -> InboundMessage
-  {
+  private func inbound(
+    updateID: Int64,
+    text: String,
+    provenance: Provenance = .trusted
+  ) -> InboundMessage {
     InboundMessage(
       updateID: updateID,
       sessionKey: SessionKey.telegramTopic(chatID: -1_001_234, threadID: 5),

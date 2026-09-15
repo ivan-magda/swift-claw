@@ -25,10 +25,10 @@ struct V12MigrationTests {
       let runID = db.lastInsertedRowID
       try db.execute(
         sql: """
-        INSERT INTO audit_events(ts, actor, action, args_redacted, result_size, decision,
-          run_id, session_id)
-        VALUES (?, ?, ?, '', 0, ?, ?, ?)
-        """,
+          INSERT INTO audit_events(ts, actor, action, args_redacted, result_size, decision,
+            run_id, session_id)
+          VALUES (?, ?, ?, '', 0, ?, ?, ?)
+          """,
         arguments: [
           Date(),
           AuditActor.owner.rawValue,

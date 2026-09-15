@@ -73,9 +73,9 @@ struct V6MigrationTests {
       try String.fetchOne(
         db,
         sql: """
-        SELECT sql FROM sqlite_master
-        WHERE type = 'index' AND name = 'index_scheduled_jobs_status_next_occurrence'
-        """
+          SELECT sql FROM sqlite_master
+          WHERE type = 'index' AND name = 'index_scheduled_jobs_status_next_occurrence'
+          """
       )
     }
     #expect(indexSQL?.contains("status") == true)
@@ -117,23 +117,23 @@ struct V6MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) \
-        VALUES ('tg:dm:1', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) \
+          VALUES ('tg:dm:1', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts) \
-        VALUES (1, 'user', 'old row', 'trusted', ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts) \
+          VALUES (1, 'user', 'old row', 'trusted', ?)
+          """,
         arguments: [Date()]
       )
       try db.execute(
         sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id)
-        VALUES (1, 'DONE', ?, ?, 1)
-        """,
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id)
+          VALUES (1, 'DONE', ?, ?, 1)
+          """,
         arguments: [Date(), Date()]
       )
     }
@@ -152,11 +152,11 @@ struct V6MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO scheduled_jobs(owner_chat_id, label, prompt, recurrence, timezone,
-          next_occurrence, status, created_ts, updated_ts)
-        VALUES (7, 'digest', 'Summarize my unread items', NULL, 'Europe/Berlin',
-          1782000000, 'ACTIVE', 1781990000, 1781990000)
-        """
+          INSERT INTO scheduled_jobs(owner_chat_id, label, prompt, recurrence, timezone,
+            next_occurrence, status, created_ts, updated_ts)
+          VALUES (7, 'digest', 'Summarize my unread items', NULL, 'Europe/Berlin',
+            1782000000, 'ACTIVE', 1781990000, 1781990000)
+          """
       )
     }
     let status = try queue.read { db in

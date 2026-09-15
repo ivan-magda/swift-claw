@@ -156,7 +156,7 @@ private extension ReflectionPersistenceTests {
   ) throws -> LearningOperationProduct {
     switch mismatch {
     case .candidateOperation, .candidateCarrier, .candidateTrigger, .candidateSchema,
-         .candidateOrigin, .candidatePredecessor, .candidatePredecessorFeedback:
+      .candidateOrigin, .candidatePredecessor, .candidatePredecessorFeedback:
       let artifact = try env.candidate(fixture: fixture, operation: operation)
       let manifest = copyManifest(artifact.manifest, productMismatch: mismatch)
       return .candidate(
@@ -209,9 +209,10 @@ private extension ReflectionPersistenceTests {
     )
   }
 
-  func copyNoCandidate(_ result: NoCandidateResult, mismatch: ReflectionProductIdentityMismatch)
-    -> NoCandidateResult
-  {
+  func copyNoCandidate(
+    _ result: NoCandidateResult,
+    mismatch: ReflectionProductIdentityMismatch
+  ) -> NoCandidateResult {
     NoCandidateResult(
       algorithm: result.algorithm,
       triggerDigest: mismatch == .noCandidateTrigger

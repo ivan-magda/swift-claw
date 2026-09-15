@@ -95,9 +95,9 @@ struct SSEParserToolCallTests {
       _ = try parser.push(
         Data(
           ("data: " + #"""
-          {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a",\#
-          "function":{"name":"n","arguments":"\#(hugeArguments)"}}]}}]}
-          """# + "\n\n").utf8
+            {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a",\#
+            "function":{"name":"n","arguments":"\#(hugeArguments)"}}]}}]}
+            """# + "\n\n").utf8
         )
       )
     }

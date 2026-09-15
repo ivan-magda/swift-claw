@@ -11,13 +11,13 @@ struct EnvFileSecretScrubberTests {
   func blanksOnlyTheListedSecretKeysAndKeepsEverythingElse() {
     // given — an env file with secrets, comments, and non-secret assignments
     let contents = """
-    # --- SECRETS ---
-    CLAW_TELEGRAM_BOT_TOKEN=123456:real-token
-    CLAW_ALLOWLIST=12345678
-    export CLAW_LLM_API_KEY=sk-live-key
-      CLAW_SEARCH_API_KEY=exa-key
-    CLAW_LLM_MODEL=claude-sonnet-4-6
-    """
+      # --- SECRETS ---
+      CLAW_TELEGRAM_BOT_TOKEN=123456:real-token
+      CLAW_ALLOWLIST=12345678
+      export CLAW_LLM_API_KEY=sk-live-key
+        CLAW_SEARCH_API_KEY=exa-key
+      CLAW_LLM_MODEL=claude-sonnet-4-6
+      """
 
     // when
     let result = EnvFileSecretScrubber.scrub(
@@ -28,13 +28,13 @@ struct EnvFileSecretScrubberTests {
     // then — secret values are blanked in place; structure, comments, other keys untouched
     #expect(
       result.contents == """
-      # --- SECRETS ---
-      CLAW_TELEGRAM_BOT_TOKEN=
-      CLAW_ALLOWLIST=12345678
-      export CLAW_LLM_API_KEY=
-        CLAW_SEARCH_API_KEY=
-      CLAW_LLM_MODEL=claude-sonnet-4-6
-      """
+        # --- SECRETS ---
+        CLAW_TELEGRAM_BOT_TOKEN=
+        CLAW_ALLOWLIST=12345678
+        export CLAW_LLM_API_KEY=
+          CLAW_SEARCH_API_KEY=
+        CLAW_LLM_MODEL=claude-sonnet-4-6
+        """
     )
     #expect(
       result.scrubbedKeys == ["CLAW_TELEGRAM_BOT_TOKEN", "CLAW_LLM_API_KEY", "CLAW_SEARCH_API_KEY"]
@@ -45,12 +45,12 @@ struct EnvFileSecretScrubberTests {
   func sealBlanksEverySecretItSeals() {
     // given — an env file carrying every sealed secret, the fallback key among them
     let contents = """
-    CLAW_TELEGRAM_BOT_TOKEN=123456:real-token
-    CLAW_LLM_API_KEY=sk-live-key
-    CLAW_LLM_FALLBACK_API_KEY=sk-fallback-key
-    CLAW_SEARCH_API_KEY=exa-key
-    CLAW_LLM_MODEL=claude-sonnet-4-6
-    """
+      CLAW_TELEGRAM_BOT_TOKEN=123456:real-token
+      CLAW_LLM_API_KEY=sk-live-key
+      CLAW_LLM_FALLBACK_API_KEY=sk-fallback-key
+      CLAW_SEARCH_API_KEY=exa-key
+      CLAW_LLM_MODEL=claude-sonnet-4-6
+      """
 
     // when — scrubbing with the very list `secrets seal` passes
     let result = EnvFileSecretScrubber.scrub(contents: contents, keys: EnvSecretStore.EnvKey.sealed)
@@ -58,12 +58,12 @@ struct EnvFileSecretScrubberTests {
     // then — nothing the envelope now holds is left in plaintext
     #expect(
       result.contents == """
-      CLAW_TELEGRAM_BOT_TOKEN=
-      CLAW_LLM_API_KEY=
-      CLAW_LLM_FALLBACK_API_KEY=
-      CLAW_SEARCH_API_KEY=
-      CLAW_LLM_MODEL=claude-sonnet-4-6
-      """
+        CLAW_TELEGRAM_BOT_TOKEN=
+        CLAW_LLM_API_KEY=
+        CLAW_LLM_FALLBACK_API_KEY=
+        CLAW_SEARCH_API_KEY=
+        CLAW_LLM_MODEL=claude-sonnet-4-6
+        """
     )
     #expect(result.scrubbedKeys.contains(EnvSecretStore.EnvKey.llmFallbackAPIKey))
   }
@@ -72,9 +72,9 @@ struct EnvFileSecretScrubberTests {
   func reportsNothingScrubbedWhenValuesAreAlreadyBlankOrKeysAbsent() {
     // given — secrets already blank or missing entirely
     let contents = """
-    CLAW_TELEGRAM_BOT_TOKEN=
-    CLAW_LLM_MODEL=claude-sonnet-4-6
-    """
+      CLAW_TELEGRAM_BOT_TOKEN=
+      CLAW_LLM_MODEL=claude-sonnet-4-6
+      """
 
     // when
     let result = EnvFileSecretScrubber.scrub(

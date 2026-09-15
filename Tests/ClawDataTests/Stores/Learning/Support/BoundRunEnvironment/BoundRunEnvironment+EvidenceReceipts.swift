@@ -44,10 +44,10 @@ extension BoundRunEnvironment {
         )
         try db.execute(
           sql: """
-          UPDATE learning_evidence
-          SET payload = NULL, eligibility = ?, exclusion_reason = ?, evidence_digest = ?
-          WHERE run_id = ?
-          """,
+            UPDATE learning_evidence
+            SET payload = NULL, eligibility = ?, exclusion_reason = ?, evidence_digest = ?
+            WHERE run_id = ?
+            """,
           arguments: [eligibility.rawValue, EvidenceExclusion.staleEpoch.rawValue, digest, runID]
         )
       case .unknownExclusion:
@@ -86,10 +86,10 @@ extension BoundRunEnvironment {
       case .compactDigest:
         try db.execute(
           sql: """
-          UPDATE learning_evidence
-          SET payload = NULL, eligibility = ?, exclusion_reason = NULL
-          WHERE run_id = ?
-          """,
+            UPDATE learning_evidence
+            SET payload = NULL, eligibility = ?, exclusion_reason = NULL
+            WHERE run_id = ?
+            """,
           arguments: [LearningEligibility.insufficientEvidence.rawValue, runID]
         )
       }

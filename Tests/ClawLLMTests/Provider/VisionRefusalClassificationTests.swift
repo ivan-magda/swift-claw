@@ -13,9 +13,9 @@ struct VisionRefusalClassificationTests {
   /// The observed OpenAI shape: `invalid_request_error`, a null code, and the offending content-part
   /// type named in the message.
   private static let openAIRefusalBody = """
-  {"error":{"message":"Invalid content type. image_url is only supported by certain models.",\
-  "type":"invalid_request_error","param":null,"code":null}}
-  """
+    {"error":{"message":"Invalid content type. image_url is only supported by certain models.",\
+    "type":"invalid_request_error","param":null,"code":null}}
+    """
 
   @Test
   func recognisesTheOpenAiVisionRefusal() {
@@ -33,10 +33,10 @@ struct VisionRefusalClassificationTests {
   func recognisesTheResponsesRouteContentPartName() {
     // given — the managed route names the part `input_image` rather than `image_url`
     let body = """
-    {"error":{"message":"Invalid value: 'input_image'. \
-    This model does not support image inputs.",\
-    "type":"invalid_request_error","param":"input","code":null}}
-    """
+      {"error":{"message":"Invalid value: 'input_image'. \
+      This model does not support image inputs.",\
+      "type":"invalid_request_error","param":"input","code":null}}
+      """
 
     // when
     let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: Data(body.utf8))
@@ -49,8 +49,8 @@ struct VisionRefusalClassificationTests {
   func doesNotMisreadAnUnrelatedBadRequest() {
     // given
     let body = """
-    {"error":{"message":"Unsupported parameter: 'stop'.","type":"invalid_request_error"}}
-    """
+      {"error":{"message":"Unsupported parameter: 'stop'.","type":"invalid_request_error"}}
+      """
 
     // when
     let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: Data(body.utf8))
@@ -63,8 +63,8 @@ struct VisionRefusalClassificationTests {
   func ignoresNonBadRequestStatuses() {
     // given — a 500 mentioning images is an outage, not a capability answer
     let body = """
-    {"error":{"message":"image_url processing failed","type":"server_error"}}
-    """
+      {"error":{"message":"image_url processing failed","type":"server_error"}}
+      """
 
     // when
     let matched = ProviderErrorClassifier.isVisionRefusal(status: 500, body: Data(body.utf8))
@@ -90,9 +90,9 @@ struct VisionRefusalClassificationTests {
   func ignoresABadRequestOfAnotherErrorTypeThatQuotesAnImagePart() {
     // given — an image part named inside a body that is not an invalid-request rejection
     let body = """
-    {"error":{"message":"Rate limit reached while processing image_url parts.",\
-    "type":"rate_limit_error","code":null}}
-    """
+      {"error":{"message":"Rate limit reached while processing image_url parts.",\
+      "type":"rate_limit_error","code":null}}
+      """
 
     // when
     let matched = ProviderErrorClassifier.isVisionRefusal(status: 400, body: Data(body.utf8))

@@ -15,9 +15,10 @@ public enum EligibilityClassifier {
   /// compatibility window rather than silently reinterpret the receipts an earlier version wrote.
   public static let version = "eligibility/v1"
 
-  public static func classify(_ settlement: RunSettlement, transcript: EvidenceTranscript)
-    -> LearningEligibility
-  {
+  public static func classify(
+    _ settlement: RunSettlement,
+    transcript: EvidenceTranscript
+  ) -> LearningEligibility {
     // Transcript first. A run whose evidence cannot be reconstructed whole is neutral however it
     // ended: the evaluator must never receive a partial reconstruction, and a truncated answer
     // would read as the model's own.

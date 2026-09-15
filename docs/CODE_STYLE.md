@@ -9,8 +9,7 @@ The adopted revision, explicit local exceptions, and tool ownership are normativ
 
 - Nonempty conditional/loop statements and closure bodies are multiline; inline `if` expressions
   remain allowed.
-- Wrapped condition lists begin on the line after the keyword. Wrapped `for … where` headers use
-  the native tools' two-space continuation indent, a documented deviation from Google alignment.
+- Wrapped condition lists begin on the line after the keyword.
 - Group private helpers in `private extension` blocks with an immediately preceding
   `// MARK: - <Group Name>`. Put other access modifiers on members.
 - Structure tests with `// given`, `// when`, and `// then`.
@@ -110,6 +109,8 @@ The existing tools cover mechanical layout. The following details remain manual 
 - Blank lines between protocol requirements and short members.
 - Multiline closure bodies, wrapped closure signatures, and short calls containing multiline closures.
 - Vertical inheritance lists, unnecessary line breaks, and unusual continuation layouts.
+- Keep function signature tokens from `)` through `async`, `throws`, and `->` together.
+  Wrap parameters vertically when needed; review existing breaks around effects manually.
 - Naming, declaration responsibility, and accurate documentation contracts.
 
 Reviewers apply all seven sections in context:

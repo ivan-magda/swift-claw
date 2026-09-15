@@ -185,8 +185,10 @@ public struct ExfilArgGuard: Sendable {
         continue
       }
 
-      for match in Self.regexMatches(shape.pattern, in: rendered)
-        where shape.rule != "high-entropy" || Self.looksHighEntropy(match) {
+      for match in Self.regexMatches(shape.pattern, in: rendered) {
+        guard shape.rule != "high-entropy" || Self.looksHighEntropy(match) else {
+          continue
+        }
         rendered = rendered.replacingOccurrences(of: match, with: "[REDACTED:\(shape.rule)]")
       }
     }
@@ -390,12 +392,10 @@ public struct ExfilArgGuard: Sendable {
     }
     // A span present only in a decoded candidate isn't in `raw`, so neither the sweep nor the
     // loop above could remove its still-one-decode-away encoded form — nuke the whole string.
-    if
-      spans.contains(
-        where: { span in
-          raw.contains(span) == false
-        }
-      ) {
+    let containsDecodedOnlySpan = spans.contains { span in
+      raw.contains(span) == false
+    }
+    if containsDecodedOnlySpan {
       return Verdict(blockedRule: rule, redactedArgs: "[REDACTED:\(rule)]")
     }
 

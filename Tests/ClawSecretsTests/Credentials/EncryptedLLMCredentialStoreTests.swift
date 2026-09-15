@@ -679,11 +679,11 @@ private extension EncryptedLLMCredentialStoreTests {
   /// to the shape has to be made here on purpose: every field name, the object-keyed `providers`,
   /// the lexicographic ordering `.sortedKeys` imposes, and the version.
   static let pinnedTwoRecordPlaintext = """
-  {"providers":{"openai-chatgpt":{"accessToken":"access-a","expiresAt":821692800,\
-  "profileID":"A1B2C3D4-0000-4000-8000-000000000001","refreshToken":"refresh-a"},\
-  "synthetic-provider":{"accessToken":"access-b","expiresAt":921692800,\
-  "profileID":"A1B2C3D4-0000-4000-8000-000000000002","refreshToken":"refresh-b"}},"version":1}
-  """
+    {"providers":{"openai-chatgpt":{"accessToken":"access-a","expiresAt":821692800,\
+    "profileID":"A1B2C3D4-0000-4000-8000-000000000001","refreshToken":"refresh-a"},\
+    "synthetic-provider":{"accessToken":"access-b","expiresAt":921692800,\
+    "profileID":"A1B2C3D4-0000-4000-8000-000000000002","refreshToken":"refresh-b"}},"version":1}
+    """
 }
 
 // MARK: - Disk Inspection

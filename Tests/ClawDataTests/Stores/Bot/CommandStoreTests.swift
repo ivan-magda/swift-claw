@@ -344,7 +344,10 @@ struct CommandStoreTests {
     }
   }
 
-  private func sessionFlags(_ queue: DatabaseQueue, sessionID: Int64) throws -> (
+  private func sessionFlags(
+    _ queue: DatabaseQueue,
+    sessionID: Int64
+  ) throws -> (
     tainted: Bool,
     hasPrivateData: Bool
   ) {
@@ -385,10 +388,10 @@ struct CommandStoreTests {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT actor, action, args_redacted, decision, run_id, session_id
-        FROM audit_events
-        ORDER BY id ASC
-        """
+          SELECT actor, action, args_redacted, decision, run_id, session_id
+          FROM audit_events
+          ORDER BY id ASC
+          """
       )
     }
   }

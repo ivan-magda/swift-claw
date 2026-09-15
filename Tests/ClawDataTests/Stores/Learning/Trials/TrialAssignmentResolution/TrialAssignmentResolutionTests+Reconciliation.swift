@@ -136,9 +136,9 @@ extension TrialAssignmentResolutionTests {
   }
 
   @Test(arguments: TrialSnapshotCorruption.allCases)
-  func trialSnapshotRejectsCountAndForeignAssignmentMismatch(_ corruption: TrialSnapshotCorruption)
-    throws
-  {
+  func trialSnapshotRejectsCountAndForeignAssignmentMismatch(
+    _ corruption: TrialSnapshotCorruption
+  ) throws {
     // given
     let env = try trialEnvironment()
     let runID = try env.settledBoundRun()

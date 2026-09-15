@@ -603,9 +603,9 @@ private struct LearningViewFixture {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
-          created_at) VALUES (?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
+            created_at) VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           set.digest.rawValue,
@@ -617,17 +617,17 @@ private struct LearningViewFixture {
       )
       try db.execute(
         sql: """
-        UPDATE job_learning_state
-        SET stable_lesson_set_digest = ?, stable_revision = 7
-        WHERE job_id = ?
-        """,
+          UPDATE job_learning_state
+          SET stable_lesson_set_digest = ?, stable_revision = 7
+          WHERE job_id = ?
+          """,
         arguments: [set.digest.rawValue, jobID]
       )
       try db.execute(
         sql: """
-        INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
-          created_at) VALUES (?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
+            created_at) VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           decoy.digest.rawValue,
@@ -688,11 +688,11 @@ private struct LearningViewFixture {
     try queue.write { db in
       try db.execute(
         sql: """
-        UPDATE lesson_sets SET canonical_bytes = ?
-        WHERE job_id = ? AND digest = (
-          SELECT stable_lesson_set_digest FROM job_learning_state WHERE job_id = ?
-        )
-        """,
+          UPDATE lesson_sets SET canonical_bytes = ?
+          WHERE job_id = ? AND digest = (
+            SELECT stable_lesson_set_digest FROM job_learning_state WHERE job_id = ?
+          )
+          """,
         arguments: [bytes, jobID, jobID]
       )
     }
@@ -778,9 +778,10 @@ private extension AdmissionStoreFixture {
     }
   }
 
-  func corruptCurrentDecision(_ corruption: CurrentDecisionCorruption, receipt: AdmissionReceipt)
-    throws
-  {
+  func corruptCurrentDecision(
+    _ corruption: CurrentDecisionCorruption,
+    receipt: AdmissionReceipt
+  ) throws {
     try env.queue.write { db in
       switch corruption {
       case .unknownKind:
@@ -881,9 +882,9 @@ private extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
-          decided_at) VALUES ('unknown', ?, 0, '{}', '{}', ?, ?)
-        """,
+          INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
+            decided_at) VALUES ('unknown', ?, 0, '{}', '{}', ?, ?)
+          """,
         arguments: [jobID, LearningAlgorithm.v1.rawValue, EpochSecondCodec.epoch(decidedAt)]
       )
     }
@@ -893,9 +894,9 @@ private extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
-          decided_at) VALUES (?, ?, 1, '{}', '{}', ?, ?)
-        """,
+          INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
+            decided_at) VALUES (?, ?, 1, '{}', '{}', ?, ?)
+          """,
         arguments: [
           ReflectionNoCandidateReceipt.kind,
           jobID,

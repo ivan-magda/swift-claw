@@ -43,7 +43,7 @@ struct RunComposition {
   /// no operator signal.
   var fetchBotIdentity:
     @Sendable (_ transport: TelegramClient, _ logger: Logger) async -> BotIdentity? = Self
-    .readIdentity
+      .readIdentity
 
   /// Assembles the daemon bundle from the roster and the shared cooldown. Injectable so a test
   /// forces a post-clients build failure and proves every already-created client is closed rather

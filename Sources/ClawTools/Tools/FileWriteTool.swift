@@ -31,9 +31,9 @@ public struct FileWriteTool: Tool {
     ToolDefinition(
       name: "file_write",
       description: """
-      Write a UTF-8 text file inside the workspace (owner approval required). The path is \
-      relative to the workspace root; set overwrite to true to replace an existing file.
-      """,
+        Write a UTF-8 text file inside the workspace (owner approval required). The path is \
+        relative to the workspace root; set overwrite to true to replace an existing file.
+        """,
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
@@ -74,9 +74,9 @@ public struct FileWriteTool: Tool {
     guard content.utf8.count <= Self.maxContentBytes else {
       return .refused(
         reason: """
-        That write is \(ByteCount.text(content.utf8.count)) — the cap is \
-        \(ByteCount.text(Self.maxContentBytes)).
-        """
+          That write is \(ByteCount.text(content.utf8.count)) — the cap is \
+          \(ByteCount.text(Self.maxContentBytes)).
+          """
       )
     }
 
@@ -105,9 +105,10 @@ public struct FileWriteTool: Tool {
     }
   }
 
-  public func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
-    -> ToolApprovalPresentation
-  {
+  public func approvalPresentation(
+    arguments: JSONValue,
+    canonicalTarget: String
+  ) -> ToolApprovalPresentation {
     let content = arguments.objectValue?["content"]?.stringValue ?? ""
     let exists = FileManager.default.fileExists(atPath: canonicalTarget)
     return ToolApprovalPresentation(
@@ -182,9 +183,9 @@ public struct FileWriteTool: Tool {
 
     return ToolPayload(
       content: """
-      Wrote \(ByteCount.text(content.utf8.count)) to \(target) \
-      (\(overwriting ? "overwritten" : "created")).
-      """,
+        Wrote \(ByteCount.text(content.utf8.count)) to \(target) \
+        (\(overwriting ? "overwritten" : "created")).
+        """,
       status: .ok,
       ingestedUntrusted: false
     )

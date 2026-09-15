@@ -212,9 +212,10 @@ extension LLMEventBufferLimits {
   /// can hold.
   ///
   /// Reads only immutable configuration, which is what lets the owner run it under its commit lock.
-  func resolvedTermination(_ termination: LLMStreamTermination, isCancelRequested: Bool)
-    -> LLMStreamTermination
-  {
+  func resolvedTermination(
+    _ termination: LLMStreamTermination,
+    isCancelRequested: Bool
+  ) -> LLMStreamTermination {
     guard case .completed(let response) = termination else {
       return termination
     }
@@ -231,7 +232,7 @@ extension LLMEventBufferLimits {
           cause: .terminal(
             status: nil,
             message:
-            "streamed reply exceeded the \(reservedTerminalBytes)-byte terminal reservation"
+              "streamed reply exceeded the \(reservedTerminalBytes)-byte terminal reservation"
           ),
           accounting: .mayHaveStarted(observing: observedTokens)
         )

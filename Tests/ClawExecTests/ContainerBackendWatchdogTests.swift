@@ -113,7 +113,7 @@ struct ContainerBackendWatchdogTests {
     }
     let controlAllowance =
       ContainerBackend.lifecycleCommandTimeout + ContainerBackend.commandTeardownGrace
-        + ContainerBackend.hostWatchdogSlack
+      + ContainerBackend.hostWatchdogSlack
     let backend = fixture.backend(
       commands: runner,
       watchdogSleep: { duration in

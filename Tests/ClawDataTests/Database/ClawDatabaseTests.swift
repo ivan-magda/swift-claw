@@ -19,9 +19,9 @@ struct ClawDatabaseTests {
       let names = try String.fetchAll(
         db,
         sql: """
-        SELECT name FROM sqlite_master WHERE type='table' \
-        AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
-        """
+          SELECT name FROM sqlite_master WHERE type='table' \
+          AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
+          """
       )
       return Set(names)
     }
@@ -118,9 +118,9 @@ private extension ClawDatabaseTests {
         try String.fetchAll(
           db,
           sql: """
-          SELECT name FROM sqlite_master
-          WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
-          """
+            SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
+            """
         )
       )
     }

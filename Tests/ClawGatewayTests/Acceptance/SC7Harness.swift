@@ -155,9 +155,9 @@ func makeSC7Harness(
   // 1. Temp-file stores. Reuse `databasePath` to model a restart against the SAME DB (spec §17).
   let resolvedDatabasePath =
     databasePath
-      ?? fileManager.temporaryDirectory
-      .appendingPathComponent("claw-sc7-\(UUID().uuidString).sqlite")
-      .path
+    ?? fileManager.temporaryDirectory
+    .appendingPathComponent("claw-sc7-\(UUID().uuidString).sqlite")
+    .path
   let stores = try ClawDatabase.openStores(path: resolvedDatabasePath)
   try stores.allowlist.seedAllowlist(userIDs: [7])
 

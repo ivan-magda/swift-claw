@@ -46,9 +46,9 @@ public struct ExecuteCodeTool: Tool {
     ToolDefinition(
       name: Self.name,
       description: """
-      Run a short Python or shell script in a locked-down, throwaway sandbox \
-      (owner approval required; no network unless explicitly requested).
-      """,
+        Run a short Python or shell script in a locked-down, throwaway sandbox \
+        (owner approval required; no network unless explicitly requested).
+        """,
       parameters: .object(
         [
           "type": .string("object"),
@@ -402,9 +402,10 @@ private extension ExecuteCodeTool {
     case duplicate
   }
 
-  static func validateBasename(of path: String, claimed normalizedNames: inout Set<String>)
-    -> BasenameValidation
-  {
+  static func validateBasename(
+    of path: String,
+    claimed normalizedNames: inout Set<String>
+  ) -> BasenameValidation {
     let basename = (path as NSString).lastPathComponent
     let normalized = normalizedBasename(basename)
 
@@ -468,26 +469,27 @@ private extension ExecuteCodeTool {
       + String(SHA256Digest.hex(Data(canonicalArgsJSON.utf8)).prefix(16))
   }
 
-  func approvalPresentation(raw: RawArguments, recorded: RecordedArguments)
-    -> ToolApprovalPresentation
-  {
+  func approvalPresentation(
+    raw: RawArguments,
+    recorded: RecordedArguments
+  ) -> ToolApprovalPresentation {
     let codeBytes = raw.code.utf8.count
     let totalBytes = recorded.stage.reduce(0) { partial, stage in
       partial + stage.bytes
     }
     let preview = """
-    ```\(recorded.language.rawValue)
-    \(redactor.redact(raw.code))
-    ```
-    \(stagedInputsSummary(recorded.stage))
-    """
+      ```\(recorded.language.rawValue)
+      \(redactor.redact(raw.code))
+      ```
+      \(stagedInputsSummary(recorded.stage))
+      """
 
     return ToolApprovalPresentation(
       blastRadius: """
-      run \(recorded.language.rawValue) · egress: \(recorded.network ? "yes" : "no") · \
-      \(settings.cpus) CPU / \(settings.memoryMiB) MiB · code \(codeBytes) B · \
-      \(recorded.stage.count) staged file(s), \(totalBytes) B
-      """,
+        run \(recorded.language.rawValue) · egress: \(recorded.network ? "yes" : "no") · \
+        \(settings.cpus) CPU / \(settings.memoryMiB) MiB · code \(codeBytes) B · \
+        \(recorded.stage.count) staged file(s), \(totalBytes) B
+        """,
       contentPreview: preview,
       warnings: recorded.network ? ["network egress is enabled — this run can send data out"] : []
     )
@@ -559,9 +561,10 @@ private extension ExecuteCodeTool {
     return nil
   }
 
-  func revalidateRecordedStage(_ record: RecordedStage, claimed normalizedNames: inout Set<String>)
-    -> StageOutcome<LoadedStage>
-  {
+  func revalidateRecordedStage(
+    _ record: RecordedStage,
+    claimed normalizedNames: inout Set<String>
+  ) -> StageOutcome<LoadedStage> {
     let liveRealpath: String
     switch WorkspacePathContainment.resolveExisting(path: record.path, root: workspaceRoot.path) {
     case .refused:
@@ -630,12 +633,12 @@ private extension ExecuteCodeTool {
       let stdout = redactor.redact(result.stdout)
       let stderr = redactor.redact(result.stderr)
       var content = """
-      exit \(code)
-      --- stdout ---
-      \(stdout)
-      --- stderr ---
-      \(stderr)
-      """
+        exit \(code)
+        --- stdout ---
+        \(stdout)
+        --- stderr ---
+        \(stderr)
+        """
       if code == 137 {
         content += "\n" + Self.memoryCapHint
       }

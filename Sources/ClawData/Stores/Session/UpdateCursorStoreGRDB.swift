@@ -17,10 +17,10 @@ public struct UpdateCursorStoreGRDB: UpdateCursorStore {
     try database.writeMapping { db in
       try db.execute(
         sql: """
-        INSERT INTO update_cursor(id, last_update_id) VALUES (0, ?)
-        ON CONFLICT(id) DO UPDATE SET
-        last_update_id = MAX(last_update_id, excluded.last_update_id)
-        """,
+          INSERT INTO update_cursor(id, last_update_id) VALUES (0, ?)
+          ON CONFLICT(id) DO UPDATE SET
+          last_update_id = MAX(last_update_id, excluded.last_update_id)
+          """,
         arguments: [updateID]
       )
     }

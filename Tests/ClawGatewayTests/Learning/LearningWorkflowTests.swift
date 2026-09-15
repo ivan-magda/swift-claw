@@ -439,7 +439,7 @@ extension LearningWorkflowTests {
     let noCandidate = #"{"schema_version":1,"candidate":null}"#
     let replies =
       Array(repeating: Self.negative, count: evaluationCount - 1)
-        + Array(repeating: noCandidate, count: windowCount)
+      + Array(repeating: noCandidate, count: windowCount)
     let env = try EvaluationRunEnvironment.make(
       reply: Self.negative,
       followingReplies: replies,

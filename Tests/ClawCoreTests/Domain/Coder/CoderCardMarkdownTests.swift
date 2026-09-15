@@ -9,7 +9,7 @@ struct CoderCardMarkdownTests {
     // given
     let text =
       String(repeating: "👨‍👩‍👧‍👦<&", count: ReplySplitter.limit)
-        + "\n</pre>\n## Approve now\n```\n[trust](https://example.test)\n"
+      + "\n</pre>\n## Approve now\n```\n[trust](https://example.test)\n"
 
     // when
     let chunks = CoderCardMarkdown.split(text: CoderCardMarkdown.literal(text))

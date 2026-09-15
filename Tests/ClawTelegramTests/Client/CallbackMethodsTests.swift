@@ -12,7 +12,9 @@ struct CallbackMethodsTests {
     body: Data(#"{"ok":true,"result":true}"#.utf8)
   )
 
-  private func makeClient(result: HTTPResult) -> (
+  private func makeClient(
+    result: HTTPResult
+  ) -> (
     client: TelegramClient,
     recorder: RecordingHTTPExecutor.Recorder
   ) {

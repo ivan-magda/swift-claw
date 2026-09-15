@@ -41,9 +41,9 @@ struct ExecuteCodeApprovalFlowTests {
               id: "exec-1",
               name: "execute_code",
               argumentsJSON: #"""
-              {"language":"python","code":"print('first line')\nprint('last line')",\#
-              "stage":["MEMORY.md"],"network":false}
-              """#
+                {"language":"python","code":"print('first line')\nprint('last line')",\#
+                "stage":["MEMORY.md"],"network":false}
+                """#
             ),
           ]),
           toolCallResponse([fetchProposal(id: "follow-up", url: "https://example.com/b")]),
@@ -261,14 +261,15 @@ private extension ExecuteCodeApprovalFlowTests {
       id: id,
       name: "execute_code",
       argumentsJSON: """
-      {"language":"sh","code":"printf approved","stage":[],"network":\(network)}
-      """
+        {"language":"sh","code":"printf approved","stage":[],"network":\(network)}
+        """
     )
   }
 
-  func waitForRequests(_ backend: FakeExecutionBackend, count: Int) async throws
-    -> [ExecutionRequest]
-  {
+  func waitForRequests(
+    _ backend: FakeExecutionBackend,
+    count: Int
+  ) async throws -> [ExecutionRequest] {
     let deadline = ContinuousClock.now.advanced(by: .seconds(10))
     while ContinuousClock.now < deadline {
       let requests = await backend.recordedRequests()

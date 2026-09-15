@@ -16,10 +16,10 @@ public struct AuditLogGRDB: AuditLog {
   static func insertAudit(_ db: Database, _ event: AuditEvent) throws {
     try db.execute(
       sql: """
-      INSERT INTO audit_events(ts, actor, action, tool, args_redacted, result_size, decision,
-        run_id, session_id, actor_user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO audit_events(ts, actor, action, tool, args_redacted, result_size, decision,
+          run_id, session_id, actor_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         event.ts,
         event.actor.rawValue,

@@ -21,9 +21,11 @@ struct OutboxTopicTargetTests {
   private static let groupChatID: Int64 = -1_001
   private static let triggerMessageID: Int64 = 88
 
-  private func fixture(sessionKey: String, chatID: Int64, telegramMessageID: Int64?) throws
-    -> Fixture
-  {
+  private func fixture(
+    sessionKey: String,
+    chatID: Int64,
+    telegramMessageID: Int64?
+  ) throws -> Fixture {
     let queue = try TestDatabase.make()
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(

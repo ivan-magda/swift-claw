@@ -89,10 +89,10 @@ struct TelegramClientTests {
     let telegram = client(
       status: 200,
       json: #"""
-      {"ok":true,"result":[
-        {"update_id":12,"message":{"message_id":3,"from":{"id":42},"chat":{"id":42},"text":"hi"}}
-      ]}
-      """#
+        {"ok":true,"result":[
+          {"update_id":12,"message":{"message_id":3,"from":{"id":42},"chat":{"id":42},"text":"hi"}}
+        ]}
+        """#
     )
 
     // when
@@ -115,10 +115,10 @@ struct TelegramClientTests {
     let telegram = client(
       status: 200,
       json: #"""
-      {"ok":true,"result":[
-        {"update_id":13,"message":{"message_id":4,"from":{"id":42},"chat":{"id":42},"voice":{}}}
-      ]}
-      """#
+        {"ok":true,"result":[
+          {"update_id":13,"message":{"message_id":4,"from":{"id":42},"chat":{"id":42},"voice":{}}}
+        ]}
+        """#
     )
 
     // when
@@ -138,9 +138,9 @@ struct TelegramClientTests {
     HTTPErrorCase(
       status: 409,
       json: #"""
-      {"ok":false,"error_code":409,\#
-      "description":"Conflict: terminated by other getUpdates request"}
-      """#,
+        {"ok":false,"error_code":409,\#
+        "description":"Conflict: terminated by other getUpdates request"}
+        """#,
       expected: TelegramError.conflict409(
         description: "Conflict: terminated by other getUpdates request"
       )
@@ -148,9 +148,9 @@ struct TelegramClientTests {
     HTTPErrorCase(
       status: 429,
       json: #"""
-      {"ok":false,"error_code":429,"description":"Too Many Requests",\#
-      "parameters":{"retry_after":7}}
-      """#,
+        {"ok":false,"error_code":429,"description":"Too Many Requests",\#
+        "parameters":{"retry_after":7}}
+        """#,
       expected: TelegramError.floodControl(retryAfter: 7)
     ),
     HTTPErrorCase(

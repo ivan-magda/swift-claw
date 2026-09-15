@@ -4,9 +4,10 @@ import Testing
 
 @Suite
 struct ChatMembershipTests {
-  private func membership(from old: ChatMembershipStatus, to new: ChatMembershipStatus)
-    -> RawChatMemberUpdate
-  {
+  private func membership(
+    from old: ChatMembershipStatus,
+    to new: ChatMembershipStatus
+  ) -> RawChatMemberUpdate {
     RawChatMemberUpdate(
       chatID: -1_001_234,
       chatKind: .supergroup,

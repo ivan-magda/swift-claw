@@ -51,9 +51,11 @@ public struct TelegramClient: TelegramTransport {
     }
   }
 
-  public func getUpdates(offset: Int64?, timeout: Int, allowedUpdates: [String]) async throws
-    -> [RawUpdate]
-  {
+  public func getUpdates(
+    offset: Int64?,
+    timeout: Int,
+    allowedUpdates: [String]
+  ) async throws -> [RawUpdate] {
     let request = GetUpdatesRequest(
       offset: offset,
       timeout: timeout,
@@ -69,9 +71,11 @@ public struct TelegramClient: TelegramTransport {
     }
   }
 
-  public func sendMessage(to target: DeliveryTarget, text: String, replyMarkup: String?)
-    async throws -> Int64
-  {
+  public func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     let request = SendMessageRequest(
       chatID: target.chatID,
       text: text,
@@ -88,9 +92,11 @@ public struct TelegramClient: TelegramTransport {
     return message.message_id
   }
 
-  public func sendRichMessage(to target: DeliveryTarget, markdown: String, replyMarkup: String?)
-    async throws -> Int64
-  {
+  public func sendRichMessage(
+    to target: DeliveryTarget,
+    markdown: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     let request = SendRichMessageRequest(
       chatID: target.chatID,
       richMessage: InputRichMessage(markdown: markdown),
@@ -116,9 +122,11 @@ public struct TelegramClient: TelegramTransport {
     )
   }
 
-  public func editMessageReplyMarkup(chatID: Int64, messageID: Int64, replyMarkup: String?)
-    async throws
-  {
+  public func editMessageReplyMarkup(
+    chatID: Int64,
+    messageID: Int64,
+    replyMarkup: String?
+  ) async throws {
     let request = EditMessageReplyMarkupRequest(
       chatID: chatID,
       messageID: messageID,
@@ -131,9 +139,11 @@ public struct TelegramClient: TelegramTransport {
     )
   }
 
-  public func sendRichMessageDraft(chatID: Int64, draftID: Int64, markdown: String) async throws
-    -> Bool
-  {
+  public func sendRichMessageDraft(
+    chatID: Int64,
+    draftID: Int64,
+    markdown: String
+  ) async throws -> Bool {
     let request = SendRichMessageDraftRequest(
       chatID: chatID,
       draftID: draftID,

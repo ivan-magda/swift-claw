@@ -29,11 +29,11 @@ struct MCPCommand: ParsableCommand {
       commandName: "list",
       abstract: "Show the configured MCP servers and their token state.",
       discussion: """
-      A static check: it reads the catalog and the token store and contacts nothing, \
-      so it answers \
-      the same way whether the daemon is up, down, or the servers are unreachable. Use probe for \
-      live proof.
-      """
+        A static check: it reads the catalog and the token store and contacts nothing, \
+        so it answers \
+        the same way whether the daemon is up, down, or the servers are unreachable. Use probe for \
+        live proof.
+        """
     )
 
     func run() throws {
@@ -48,11 +48,11 @@ struct MCPCommand: ParsableCommand {
       commandName: "probe",
       abstract: "Contact each MCP server and report what it answers.",
       discussion: """
-      Connects, runs the initialize handshake, and counts the tools the server would \
-      contribute — the same path the daemon takes at boot, so a server that probes clean \
-      is a server that will \
-      load. Exits non-zero when any probed server fails.
-      """
+        Connects, runs the initialize handshake, and counts the tools the server would \
+        contribute — the same path the daemon takes at boot, so a server that probes clean \
+        is a server that will \
+        load. Exits non-zero when any probed server fails.
+        """
     )
 
     @Argument(help: "Probe only this server. Omitted, every enabled server is probed.")
@@ -81,11 +81,11 @@ struct MCPCommand: ParsableCommand {
       commandName: "set-token",
       abstract: "Store the access token for a configured MCP server.",
       discussion: """
-      The token is read from stdin — piped, or typed at the prompt — \
-      never from the command line, \
-      where it would land in the shell history and the process table. Stop the daemon first: the \
-      token is read once at boot.
-      """
+        The token is read from stdin — piped, or typed at the prompt — \
+        never from the command line, \
+        where it would land in the shell history and the process table. Stop the daemon first: the \
+        token is read once at boot.
+        """
     )
 
     @Argument(help: "Server name as it appears in the MCP config.")
@@ -104,9 +104,9 @@ struct MCPCommand: ParsableCommand {
       commandName: "clear-token",
       abstract: "Remove the stored access token for an MCP server.",
       discussion: """
-      Takes a bare name rather than a configured server, so a token left behind by a server the \
-      owner has since removed can still be cleared.
-      """
+        Takes a bare name rather than a configured server, so a token left behind by a server the \
+        owner has since removed can still be cleared.
+        """
     )
 
     @Argument(help: "Server name the token was stored under.")
@@ -135,10 +135,10 @@ enum MCPTokenOutcome: Equatable {
     switch self {
     case .stored(let server):
       return """
-      Stored the access token for MCP server '\(server)'.
-      It is bound to that server's configured URL — re-run set-token if you re-point the server.
-      Restart clawd to pick it up.
-      """
+        Stored the access token for MCP server '\(server)'.
+        It is bound to that server's configured URL — re-run set-token if you re-point the server.
+        Restart clawd to pick it up.
+        """
     case .cleared(let server): return "Removed the stored access token for MCP server '\(server)'."
     case .nothingToClear(let server):
       return "No access token was stored for MCP server '\(server)'."
@@ -159,9 +159,11 @@ extension MCPCommand {
   ///
   /// The server must be in the config, because its URL is what the token is bound to: a record with
   /// no binding is a secret at rest that no request could ever be allowed to use.
-  static func setToken(_ token: String, server name: String, context: MCPCommandContext) throws
-    -> MCPTokenOutcome
-  {
+  static func setToken(
+    _ token: String,
+    server name: String,
+    context: MCPCommandContext
+  ) throws -> MCPTokenOutcome {
     guard
       let server = context.config.servers.first(where: {
         $0.name == name
@@ -214,9 +216,10 @@ extension MCPCommand {
 
   /// Live proof: every target contacted over the real transport, reported in the same vocabulary the
   /// daemon records at boot.
-  static func probeReport(targets: [MCPServerConfig], context: MCPCommandContext) async throws
-    -> DoctorReport
-  {
+  static func probeReport(
+    targets: [MCPServerConfig],
+    context: MCPCommandContext
+  ) async throws -> DoctorReport {
     let credentials = try openingTokenStore {
       try EncryptedMCPCredentialStore(stateRoot: context.stateRoot).loadAll(servers: targets)
     }
@@ -269,9 +272,10 @@ private extension MCPCommand {
 private extension MCPCommand {
   /// Runs `body` while holding the state root's single-instance lock, so a token cannot be rewritten
   /// under a daemon that has already read the old one — it loads credentials once at boot.
-  static func underInstanceLock(stateRoot: URL, _ body: () throws -> MCPTokenOutcome) throws
-    -> MCPTokenOutcome
-  {
+  static func underInstanceLock(
+    stateRoot: URL,
+    _ body: () throws -> MCPTokenOutcome
+  ) throws -> MCPTokenOutcome {
     let lease: AuthMutationLease
     do {
       lease = try InstanceLockAdapter(stateRoot: stateRoot).acquire()

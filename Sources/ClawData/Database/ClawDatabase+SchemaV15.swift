@@ -10,9 +10,9 @@ extension ClawDatabase {
     let draining = LearningTrialState.draining.rawValue
     try db.execute(
       sql: """
-      CREATE UNIQUE INDEX idx_learning_trials_live_job ON learning_trials(job_id)
-      WHERE state IN ('\(open)', '\(draining)')
-      """
+        CREATE UNIQUE INDEX idx_learning_trials_live_job ON learning_trials(job_id)
+        WHERE state IN ('\(open)', '\(draining)')
+        """
     )
   }
 }

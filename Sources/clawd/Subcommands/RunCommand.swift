@@ -147,9 +147,11 @@ extension RunCommand {
     let redactionValues: [String]
   }
 
-  static func makeBootLogging(secrets: Secrets, mcp: MCPBootInputs, bootstrap: LoggerBootstrap)
-    -> BootLogging
-  {
+  static func makeBootLogging(
+    secrets: Secrets,
+    mcp: MCPBootInputs,
+    bootstrap: LoggerBootstrap
+  ) -> BootLogging {
     let redactionValues = mcp.redactionValues(with: secrets)
     return BootLogging(logger: bootstrap(redactionValues), redactionValues: redactionValues)
   }

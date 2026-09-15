@@ -474,9 +474,12 @@ private func correction(runID: Int64) -> FeedbackEvent {
   feedback(.resultCorrection, runID: runID, id: runID, revision: 2)
 }
 
-private func feedback(_ signal: OwnerSignal, runID: Int64, id: Int64, revision: Int64)
-  -> FeedbackEvent
-{
+private func feedback(
+  _ signal: OwnerSignal,
+  runID: Int64,
+  id: Int64,
+  revision: Int64
+) -> FeedbackEvent {
   FeedbackEvent(
     id: id,
     runID: runID,

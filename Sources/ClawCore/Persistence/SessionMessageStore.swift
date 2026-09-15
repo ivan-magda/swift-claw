@@ -204,8 +204,11 @@ public enum CommandClaim: Sendable, Equatable {
 public protocol SessionMessageStore: Sendable {
   func loadOrCreateSession(sessionKey: String, now: Date) throws(StoreError) -> Int64
 
-  func claimCommandUpdate(updateID: Int64, sessionKey: String, now: Date) throws(StoreError)
-    -> CommandClaim
+  func claimCommandUpdate(
+    updateID: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> CommandClaim
 
   func findSession(sessionKey: String) throws(StoreError) -> Int64?
 
@@ -222,6 +225,9 @@ public protocol SessionMessageStore: Sendable {
 
   /// Context snapshot returned oldest-first and bounded to the message this run is answering.
   /// Includes the durable session metadata the assembler needs for recall dedup and taint reads.
-  func loadContextSnapshot(sessionID: Int64, throughMessageID: Int64, limit: Int) throws(StoreError)
-    -> SessionContextSnapshot
+  func loadContextSnapshot(
+    sessionID: Int64,
+    throughMessageID: Int64,
+    limit: Int
+  ) throws(StoreError) -> SessionContextSnapshot
 }

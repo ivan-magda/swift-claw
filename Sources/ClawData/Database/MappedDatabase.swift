@@ -13,12 +13,16 @@ struct MappedDatabase: Sendable {
 
   /// A store write whose GRDB failures are translated to domain `StoreError`s at the seam
   /// (e.g. a full disk → `StoreError.diskFull`).
-  func writeMapping<Value>(_ updates: (_ database: Database) throws -> Value) throws(StoreError)
-    -> Value
-  { do { return try writer.write(updates) } catch { throw ClawDatabase.classifyError(error) } }
+  func writeMapping<Value>(
+    _ updates: (_ database: Database) throws -> Value
+  ) throws(StoreError) -> Value {
+    do { return try writer.write(updates) } catch { throw ClawDatabase.classifyError(error) }
+  }
 
   /// A store read whose GRDB failures are translated to domain `StoreError`s at the seam.
-  func readMapping<Value>(_ value: (_ database: Database) throws -> Value) throws(StoreError)
-    -> Value
-  { do { return try writer.read(value) } catch { throw ClawDatabase.classifyError(error) } }
+  func readMapping<Value>(
+    _ value: (_ database: Database) throws -> Value
+  ) throws(StoreError) -> Value {
+    do { return try writer.read(value) } catch { throw ClawDatabase.classifyError(error) }
+  }
 }

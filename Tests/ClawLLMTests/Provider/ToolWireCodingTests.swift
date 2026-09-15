@@ -149,21 +149,21 @@ struct ToolWireCodingTests {
   func responseDecodesToolCallsAndFinishReason() throws {
     // given — a captured-shape tool-call response body
     let fixture = #"""
-    {
-      "choices": [{
-        "message": {
-          "content": null,
-          "tool_calls": [{
-            "id": "call_9",
-            "type": "function",
-            "function": {"name": "web_search", "arguments": "{\"query\":\"swift\"}"}
-          }]
-        },
-        "finish_reason": "tool_calls"
-      }],
-      "usage": {"prompt_tokens": 12, "completion_tokens": 7, "total_tokens": 19}
-    }
-    """#
+      {
+        "choices": [{
+          "message": {
+            "content": null,
+            "tool_calls": [{
+              "id": "call_9",
+              "type": "function",
+              "function": {"name": "web_search", "arguments": "{\"query\":\"swift\"}"}
+            }]
+          },
+          "finish_reason": "tool_calls"
+        }],
+        "usage": {"prompt_tokens": 12, "completion_tokens": 7, "total_tokens": 19}
+      }
+      """#
 
     // when
     let response = try makeProvider().parse(
@@ -201,19 +201,19 @@ struct ToolWireCodingTests {
   func toolCallMissingIDIsDropped() throws {
     // given — a tool_calls entry that omits id (malformed provider response)
     let fixture = #"""
-    {
-      "choices": [{
-        "message": {
-          "content": null,
-          "tool_calls": [{
-            "type": "function",
-            "function": {"name": "web_search", "arguments": "{}"}
-          }]
-        },
-        "finish_reason": "tool_calls"
-      }]
-    }
-    """#
+      {
+        "choices": [{
+          "message": {
+            "content": null,
+            "tool_calls": [{
+              "type": "function",
+              "function": {"name": "web_search", "arguments": "{}"}
+            }]
+          },
+          "finish_reason": "tool_calls"
+        }]
+      }
+      """#
 
     // when
     let response = try makeProvider().parse(
@@ -229,20 +229,20 @@ struct ToolWireCodingTests {
   func toolCallMissingFunctionNameIsDropped() throws {
     // given — a tool_calls entry that omits function.name
     let fixture = #"""
-    {
-      "choices": [{
-        "message": {
-          "content": null,
-          "tool_calls": [{
-            "id": "call_1",
-            "type": "function",
-            "function": {"arguments": "{}"}
-          }]
-        },
-        "finish_reason": "tool_calls"
-      }]
-    }
-    """#
+      {
+        "choices": [{
+          "message": {
+            "content": null,
+            "tool_calls": [{
+              "id": "call_1",
+              "type": "function",
+              "function": {"arguments": "{}"}
+            }]
+          },
+          "finish_reason": "tool_calls"
+        }]
+      }
+      """#
 
     // when
     let response = try makeProvider().parse(
@@ -258,20 +258,20 @@ struct ToolWireCodingTests {
   func toolCallMissingArgumentsDefaultsToEmptyObject() throws {
     // given — id and name present but the arguments field is absent
     let fixture = #"""
-    {
-      "choices": [{
-        "message": {
-          "content": null,
-          "tool_calls": [{
-            "id": "call_9",
-            "type": "function",
-            "function": {"name": "web_search"}
-          }]
-        },
-        "finish_reason": "tool_calls"
-      }]
-    }
-    """#
+      {
+        "choices": [{
+          "message": {
+            "content": null,
+            "tool_calls": [{
+              "id": "call_9",
+              "type": "function",
+              "function": {"name": "web_search"}
+            }]
+          },
+          "finish_reason": "tool_calls"
+        }]
+      }
+      """#
 
     // when
     let response = try makeProvider().parse(

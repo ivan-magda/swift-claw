@@ -54,9 +54,10 @@ final class FreshCredentialStore: LLMCredentialStore, @unchecked Sendable {
     }
   }
 
-  func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
-    throws(LLMCredentialStoreError)
-  {}
+  func save(
+    _ credential: StoredOAuthCredential,
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError) {}
 
   func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
 }
@@ -78,9 +79,10 @@ enum CompositionAcceptance {
 
   /// Builds the real provider stack through the **production `ProviderStackFactory`** over a scripted
   /// transport and a fresh managed credential — no hand-built provider.
-  static func makeStack(http: ScriptedHTTPExecutor, store: any LLMCredentialStore) throws
-    -> ProviderStack
-  {
+  static func makeStack(
+    http: ScriptedHTTPExecutor,
+    store: any LLMCredentialStore
+  ) throws -> ProviderStack {
     let config = try chatGPTConfig()
     return try ProviderStackFactory.make(
       route: config.llm.route,

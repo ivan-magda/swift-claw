@@ -15,10 +15,10 @@ struct CoderCommand: ParsableCommand {
       commandName: "setup",
       abstract: "Enable Coder using the tools available in this terminal.",
       discussion: """
-      Saves this terminal's absolute PATH entries as CLAW_CODER_PATH in the existing env file. \
-      Checks Codex locally without inference, installing tools or importing credentials. \
-      Restart the service afterwards and inspect Telegram /status to confirm its environment.
-      """
+        Saves this terminal's absolute PATH entries as CLAW_CODER_PATH in the existing env file. \
+        Checks Codex locally without inference, installing tools or importing credentials. \
+        Restart the service afterwards and inspect Telegram /status to confirm its environment.
+        """
     )
 
     @Option(help: "Config file (default: $CLAW_ENV_FILE or ~/.swift-claw/clawd.env).")

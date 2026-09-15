@@ -40,9 +40,9 @@ public struct CodexBackend: CoderBackend {
     profile = config.profile
     configHome =
       child["CODEX_HOME"]
-        ?? child["HOME"].map {
-          URL(fileURLWithPath: $0).appendingPathComponent(".codex").path
-        }
+      ?? child["HOME"].map {
+        URL(fileURLWithPath: $0).appendingPathComponent(".codex").path
+      }
 
     var sources = child.filter {
       ["GH_CONFIG_DIR", "GH_HOST", "SSH_AUTH_SOCK"].contains($0.key)
@@ -50,9 +50,9 @@ public struct CodexBackend: CoderBackend {
     sources["CODEX_HOME"] = configHome
     sources["GH_CONFIG_DIR"] =
       sources["GH_CONFIG_DIR"]
-        ?? child["HOME"].map {
-          URL(fileURLWithPath: $0).appendingPathComponent(".config/gh").path
-        }
+      ?? child["HOME"].map {
+        URL(fileURLWithPath: $0).appendingPathComponent(".config/gh").path
+      }
     sources["GH_HOST"] = sources["GH_HOST"] ?? "github.com"
 
     for key in CodexInvocation.credentialKeys where child[key] != nil {

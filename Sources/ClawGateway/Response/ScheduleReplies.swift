@@ -93,9 +93,9 @@ enum ScheduleReplies {
           fireTime(date, timezoneID: row.job.timezone)
         } ?? "—"
       return """
-      \(row.job.id) · \(row.job.label) · \(row.job.status.rawValue) · \
-      \(RecurrenceWords.describe(row.job.recurrence)) · \(row.job.timezone) · next \(fire)
-      """
+        \(row.job.id) · \(row.job.label) · \(row.job.status.rawValue) · \
+        \(RecurrenceWords.describe(row.job.recurrence)) · \(row.job.timezone) · next \(fire)
+        """
     }.joined(separator: "\n")
   }
 
@@ -118,9 +118,9 @@ enum ScheduleReplies {
       return "Resumed schedule \(job.id) · «\(job.label)». Nothing left to fire."
     }
     return """
-    Resumed schedule \(job.id) · «\(job.label)». Next fire \
-    \(fireTime(next, timezoneID: job.timezone)).
-    """
+      Resumed schedule \(job.id) · «\(job.label)». Next fire \
+      \(fireTime(next, timezoneID: job.timezone)).
+      """
   }
 
   static func cancelled(job: ScheduledJob) -> String {

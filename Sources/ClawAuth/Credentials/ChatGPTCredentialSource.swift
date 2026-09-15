@@ -115,7 +115,7 @@ struct ChatGPTValidatedCredential: Sendable, Equatable {
 /// second implicit flight, and the store stays synchronous so that installing a refreshed pair opens
 /// no reentrancy window between deciding to publish and having published.
 public actor ChatGPTCredentialSource<ClockType: Clock>: LLMCredentialSource
-  where ClockType.Duration == Duration {
+where ClockType.Duration == Duration {
   private let store: any LLMCredentialStore
   private let oauth: any ChatGPTOAuthRefreshing
   private let clock: ClockType

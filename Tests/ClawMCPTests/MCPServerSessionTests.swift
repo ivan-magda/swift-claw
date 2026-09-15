@@ -441,9 +441,12 @@ private enum SessionFixture {
     )
   }
 
-  static func config(name: String = "linear", tools: MCPToolFilter = .allowAll) throws
-    -> MCPServerConfig
-  { try MCPServerConfig(name: name, url: "https://mcp.example.com/mcp", tools: tools) }
+  static func config(
+    name: String = "linear",
+    tools: MCPToolFilter = .allowAll
+  ) throws -> MCPServerConfig {
+    try MCPServerConfig(name: name, url: "https://mcp.example.com/mcp", tools: tools)
+  }
 
   /// A session whose every connection is served by `scripted`, optionally wrapped per connection.
   static func session(

@@ -201,10 +201,10 @@ private enum FallbackWire {
 
   static var okCompletion: HTTPResult {
     let json = """
-    {"id":"cmpl-1","choices":[{"index":0,"message":{"role":"assistant","content":"It is noon."},\
-    "finish_reason":"stop"}],\
-    "usage":{"prompt_tokens":9,"completion_tokens":4,"total_tokens":13}}
-    """
+      {"id":"cmpl-1","choices":[{"index":0,"message":{"role":"assistant","content":"It is noon."},\
+      "finish_reason":"stop"}],\
+      "usage":{"prompt_tokens":9,"completion_tokens":4,"total_tokens":13}}
+      """
     return HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8))
   }
 

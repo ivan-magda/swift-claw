@@ -1002,9 +1002,10 @@ struct AgentRuntimeFailureAccountingTests {
     )
   }
 
-  private static func runDegraded(_ outcome: StubProvider.Outcome, store: RecordingUsageStore)
-    async throws -> (kind: DegradationKind, usage: ProviderUsage?)
-  {
+  private static func runDegraded(
+    _ outcome: StubProvider.Outcome,
+    store: RecordingUsageStore
+  ) async throws -> (kind: DegradationKind, usage: ProviderUsage?) {
     let outcome = try await makeRuntime(provider: StubProvider(outcome), usageStore: store).runTurn(
       runID: 1,
       sessionID: 2,

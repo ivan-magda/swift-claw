@@ -104,8 +104,8 @@ struct SuspendLaneHoldTests {
       let payloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
       if
         payloads.contains(where: { payload in
-          payload.contains("second turn done")
-        }) {
+        payload.contains("second turn done")
+      }) {
         break
       }
       guard await notifications.next() != nil else {

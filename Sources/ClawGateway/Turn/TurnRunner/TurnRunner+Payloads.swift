@@ -26,9 +26,11 @@ extension TurnRunner {
 
   /// Assembles the owner-visible payload: overflow notices PREPEND, the approval prompt APPENDS.
   /// Single-part payloads (the common case) pass through unchanged.
-  func ownerVisiblePayload(reply: String, ownerNotices: [String], appendedNotices: [String] = [])
-    -> String
-  {
+  func ownerVisiblePayload(
+    reply: String,
+    ownerNotices: [String],
+    appendedNotices: [String] = []
+  ) -> String {
     let parts = ownerNotices + [reply] + appendedNotices
     guard parts.count > 1 else {
       return reply
@@ -38,9 +40,11 @@ extension TurnRunner {
 
   /// Splits an assistant reply into deterministic outbox chunks (grapheme-capped, FNV-1a hashed).
   /// Mechanical helper for the `.completed` path — not part of the commit ordering.
-  func outboxChunks(for content: String, chatID: Int64, finalReplyMarkup: String? = nil)
-    -> [OutboxChunk]
-  {
+  func outboxChunks(
+    for content: String,
+    chatID: Int64,
+    finalReplyMarkup: String? = nil
+  ) -> [OutboxChunk] {
     let payloads = ReplySplitter.split(text: content)
     return payloads.enumerated().map { index, payload in
       OutboxChunk(

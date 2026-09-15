@@ -63,9 +63,11 @@ public struct FakeSessionMessageStore: SessionMessageStore {
     return try inner.loadOrCreateSession(sessionKey: sessionKey, now: now)
   }
 
-  public func claimCommandUpdate(updateID: Int64, sessionKey: String, now: Date) throws(StoreError)
-    -> CommandClaim
-  {
+  public func claimCommandUpdate(
+    updateID: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> CommandClaim {
     if let error = failures[.claimCommandUpdate] {
       throw error
     }
@@ -114,9 +116,11 @@ public struct FakeSessionMessageStore: SessionMessageStore {
     return try inner.claimAndPersistObserved(inbound)
   }
 
-  public func loadContextSnapshot(sessionID: Int64, throughMessageID: Int64, limit: Int)
-    throws(StoreError) -> SessionContextSnapshot
-  {
+  public func loadContextSnapshot(
+    sessionID: Int64,
+    throughMessageID: Int64,
+    limit: Int
+  ) throws(StoreError) -> SessionContextSnapshot {
     if let error = failures[.loadContextSnapshot] {
       throw error
     }

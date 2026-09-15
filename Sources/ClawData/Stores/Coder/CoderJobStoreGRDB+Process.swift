@@ -13,9 +13,9 @@ extension CoderJobStoreGRDB {
       }
       try db.execute(
         sql: """
-        UPDATE coder_jobs SET process_ownership = ?, process_receipt_json = ?, updated_ts = ?
-        WHERE id = ?
-        """,
+          UPDATE coder_jobs SET process_ownership = ?, process_receipt_json = ?, updated_ts = ?
+          WHERE id = ?
+          """,
         arguments: [
           update.ownership.rawValue,
           try CoderJobRecord.encodeJSON(update.receipt),
@@ -30,7 +30,10 @@ extension CoderJobStoreGRDB {
 // MARK: - Process Transitions
 
 private extension CoderJobStoreGRDB {
-  static func processUpdate(job: CoderJob, event: CoderProcessEvent) throws -> (
+  static func processUpdate(
+    job: CoderJob,
+    event: CoderProcessEvent
+  ) throws -> (
     ownership: CoderProcessOwnership,
     receipt: CoderProcessReceipt
   )? {

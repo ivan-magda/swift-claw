@@ -5,9 +5,10 @@ import GRDB
 // MARK: - Public Trial Resolution
 
 extension ScheduledLearningStoreGRDB {
-  public func recomputeAssignment(runID: Int64, now: Date) throws(StoreError)
-    -> AssignmentRecomputation
-  {
+  public func recomputeAssignment(
+    runID: Int64,
+    now: Date
+  ) throws(StoreError) -> AssignmentRecomputation {
     try database.writeMapping { db in
       try Self.recomputeAssignment(db, runID: runID, now: now)
     }
@@ -19,9 +20,10 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  public func reconcileTrial(_ identity: LearningTrialIdentity, now: Date) throws(StoreError)
-    -> TrialReconciliationResult
-  {
+  public func reconcileTrial(
+    _ identity: LearningTrialIdentity,
+    now: Date
+  ) throws(StoreError) -> TrialReconciliationResult {
     try database.writeMapping { db in
       try Self.reconcileTrial(db, identity: identity, now: now)
     }
@@ -32,9 +34,11 @@ extension ScheduledLearningStoreGRDB {
 
 extension ScheduledLearningStoreGRDB {
   @discardableResult
-  static func recomputeAndReconcile(_ db: Database, runID: Int64, now: Date) throws
-    -> TrialReconciliationResult?
-  {
+  static func recomputeAndReconcile(
+    _ db: Database,
+    runID: Int64,
+    now: Date
+  ) throws -> TrialReconciliationResult? {
     let recomputation = try recomputeAssignment(db, runID: runID, now: now)
     let identity: LearningTrialIdentity
     switch recomputation {
@@ -44,9 +48,11 @@ extension ScheduledLearningStoreGRDB {
     return try reconcileTrial(db, identity: identity, now: now)
   }
 
-  static func reconcileTrial(_ db: Database, identity: LearningTrialIdentity, now: Date) throws
-    -> TrialReconciliationResult
-  {
+  static func reconcileTrial(
+    _ db: Database,
+    identity: LearningTrialIdentity,
+    now: Date
+  ) throws -> TrialReconciliationResult {
     guard let row = try trialRow(db, trialID: identity.trialID) else {
       return .stale
     }
@@ -100,12 +106,12 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-        admitted_at, assignment_deadline, decision_deadline, max_assignments,
-        consumed_assignments, cohort_cutoff, state, close_reason, algorithm
-      FROM learning_trials WHERE state IN (?, ?)
-      ORDER BY job_id, trial_id
-      """,
+        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+          admitted_at, assignment_deadline, decision_deadline, max_assignments,
+          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
+        FROM learning_trials WHERE state IN (?, ?)
+        ORDER BY job_id, trial_id
+        """,
       arguments: [LearningTrialState.open.rawValue, LearningTrialState.draining.rawValue]
     )
     var seenJobs: Set<Int64> = []
@@ -132,10 +138,10 @@ extension ScheduledLearningStoreGRDB {
     let runIDs = try Int64.fetchAll(
       db,
       sql: """
-      SELECT run_id FROM learning_evidence
-      WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
-      ORDER BY run_id
-      """,
+        SELECT run_id FROM learning_evidence
+        WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
+        ORDER BY run_id
+        """,
       arguments: [jobID, epoch.value, evidenceDigest]
     )
     guard runIDs.count <= 1 else {
@@ -164,11 +170,11 @@ extension ScheduledLearningStoreGRDB {
         try Bool.fetchOne(
           db,
           sql: """
-          SELECT EXISTS(
-            SELECT 1 FROM trial_assignments
-            WHERE run_id = ? AND job_id = ? AND learning_epoch = ?
-          )
-          """,
+            SELECT EXISTS(
+              SELECT 1 FROM trial_assignments
+              WHERE run_id = ? AND job_id = ? AND learning_epoch = ?
+            )
+            """,
           arguments: [parsed, jobID, epoch.value]
         ) ?? false
       runID = isAssigned ? parsed : nil
@@ -176,15 +182,15 @@ extension ScheduledLearningStoreGRDB {
       let rows = try Int64.fetchAll(
         db,
         sql: """
-        SELECT evaluation.run_id
-        FROM learning_evaluations AS evaluation
-        JOIN trial_assignments AS assignment ON assignment.run_id = evaluation.run_id
-          AND assignment.job_id = evaluation.job_id
-          AND assignment.learning_epoch = evaluation.learning_epoch
-        WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
-          AND evaluation.evaluation_digest = ?
-        ORDER BY evaluation.run_id
-        """,
+          SELECT evaluation.run_id
+          FROM learning_evaluations AS evaluation
+          JOIN trial_assignments AS assignment ON assignment.run_id = evaluation.run_id
+            AND assignment.job_id = evaluation.job_id
+            AND assignment.learning_epoch = evaluation.learning_epoch
+          WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
+            AND evaluation.evaluation_digest = ?
+          ORDER BY evaluation.run_id
+          """,
         arguments: [jobID, epoch.value, subjectDigest]
       )
       guard rows.count <= 1 else {

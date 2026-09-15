@@ -64,11 +64,11 @@ extension FeedbackStoreEnvironment {
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: artifact, now: now)
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           state.epoch.value,
@@ -154,11 +154,11 @@ extension FeedbackStoreEnvironment {
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: artifact, now: now)
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           state.epoch.value,
@@ -264,11 +264,11 @@ extension FeedbackStoreEnvironment {
         let otherJobID = jobID + 1_000
         try db.execute(
           sql: """
-          INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
-            created_at)
-          SELECT ?, digest, schema_version, canonical_bytes, source, created_at
-          FROM lesson_sets WHERE job_id = ? AND digest = ?
-          """,
+            INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
+              created_at)
+            SELECT ?, digest, schema_version, canonical_bytes, source, created_at
+            FROM lesson_sets WHERE job_id = ? AND digest = ?
+            """,
           arguments: [otherJobID, jobID, trial.replacementDigest]
         )
         try db.execute(
@@ -326,9 +326,11 @@ extension FeedbackStoreEnvironment {
 // MARK: - Candidate Mutation
 
 private extension FeedbackStoreEnvironment {
-  func updateCandidate(column: String, value: (any DatabaseValueConvertible)?, digest: String)
-    throws
-  {
+  func updateCandidate(
+    column: String,
+    value: (any DatabaseValueConvertible)?,
+    digest: String
+  ) throws {
     try queue.write { db in
       try db.execute(
         sql: "UPDATE learning_candidates SET \(column) = ? WHERE candidate_digest = ?",

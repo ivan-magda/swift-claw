@@ -81,7 +81,10 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
 
   func todayTokensAndCost(now: Date) throws(StoreError) -> (tokens: Int, costUSD: Double) { (0, 0) }
 
-  func todayTokensAndCost(origins: [RunOrigin], now: Date) throws(StoreError) -> (
+  func todayTokensAndCost(
+    origins: [RunOrigin],
+    now: Date
+  ) throws(StoreError) -> (
     tokens: Int,
     costUSD: Double
   ) { (0, 0) }
@@ -232,7 +235,9 @@ func makeBudget(maxTurns: Int) -> RunBudget {
   )
 }
 
-func requireCompleted(_ result: TurnResult) throws -> (
+func requireCompleted(
+  _ result: TurnResult
+) throws -> (
   content: String,
   usage: ProviderUsage,
   providerState: ProviderExchangeState?

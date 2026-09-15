@@ -52,13 +52,13 @@ struct SubprocessRunnerTests {
     // given
     let runner = SwiftSubprocessRunner(executablePath: "/bin/sh")
     let script = """
-    count=0
-    while [ "$count" -lt 4096 ]; do
-      printf 'oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo'
-      printf 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' >&2
-      count=$((count + 1))
-    done
-    """
+      count=0
+      while [ "$count" -lt 4096 ]; do
+        printf 'oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo'
+        printf 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' >&2
+        count=$((count + 1))
+      done
+      """
     let command = testCommand(["-c", script], captureLimit: 1024)
 
     // when
@@ -86,11 +86,11 @@ struct SubprocessRunnerTests {
       ]
     )
     let script = """
-    printf '%s|%s|%s' \
-      "${CLAW_REMOVE_FIRST-unset}" \
-      "${CLAW_REMOVE_SECOND-unset}" \
-      "${CLAW_KEEP_SENTINEL-unset}"
-    """
+      printf '%s|%s|%s' \
+        "${CLAW_REMOVE_FIRST-unset}" \
+        "${CLAW_REMOVE_SECOND-unset}" \
+        "${CLAW_KEEP_SENTINEL-unset}"
+      """
     let command = testCommand(
       ["-c", script],
       environmentKeysToRemove: ["CLAW_REMOVE_FIRST", "CLAW_REMOVE_SECOND"]
@@ -153,12 +153,12 @@ struct SubprocessRunnerTests {
       continuation.yield(processIdentifier)
     }
     let script = """
-    trap '' TERM
-    (trap '' TERM; exec cat "$2") &
-    grandchild=$!
-    printf '%s\n' "$grandchild" > "$1"
-    wait
-    """
+      trap '' TERM
+      (trap '' TERM; exec cat "$2") &
+      grandchild=$!
+      printf '%s\n' "$grandchild" > "$1"
+      wait
+      """
     let task = Task {
       await runner.run(
         testCommand(["-c", script, "claw-subprocess-test", grandchildPIDFile.path, pipe.path])

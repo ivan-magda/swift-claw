@@ -100,54 +100,54 @@ public enum ScheduleDraftProblem: Error, Sendable, Equatable {
     switch self {
     case .emptyLabel:
       return """
-      I need a short name for this schedule. \(example)
-      """
+        I need a short name for this schedule. \(example)
+        """
     case .labelTooLong(let count):
       return """
-      That label is \(count) characters, past the 64 cap. Use a shorter name. \(example)
-      """
+        That label is \(count) characters, past the 64 cap. Use a shorter name. \(example)
+        """
     case .emptyPrompt:
       return """
-      I need a task to run. \(example)
-      """
+        I need a task to run. \(example)
+        """
     case .unknownTimezone(let zone):
       return """
-      I don't recognize the timezone «\(zone)». Use an IANA name like Europe/Berlin. \
-      \(example)
-      """
+        I don't recognize the timezone «\(zone)». Use an IANA name like Europe/Berlin. \
+        \(example)
+        """
     case .missingField(let kind, let field):
       return """
-      A \(kind.rawValue) schedule needs «\(field)». \(example)
-      """
+        A \(kind.rawValue) schedule needs «\(field)». \(example)
+        """
     case .invalidTime(let time):
       return """
-      «\(time)» isn't a time I can use. Write it as 24-hour HH:MM. \
-      Example: /schedule every day at 07:30, summarize my unread items
-      """
+        «\(time)» isn't a time I can use. Write it as 24-hour HH:MM. \
+        Example: /schedule every day at 07:30, summarize my unread items
+        """
     case .invalidDate(let date):
       return """
-      «\(date)» isn't a date I can use. Write it as YYYY-MM-DD. \
-      Example: /schedule once on 2026-07-10 at 09:00, send the report reminder
-      """
+        «\(date)» isn't a date I can use. Write it as YYYY-MM-DD. \
+        Example: /schedule once on 2026-07-10 at 09:00, send the report reminder
+        """
     case .invalidWeekday(let day):
       return """
-      «\(day)» isn't a weekday I know. Use monday…sunday. \
-      Example: /schedule every friday at 16:00, post the weekly summary
-      """
+        «\(day)» isn't a weekday I know. Use monday…sunday. \
+        Example: /schedule every friday at 16:00, post the weekly summary
+        """
     case .intervalTooSmall(let minutes, let floorMinutes):
       return """
-      Every \(minutes) minutes is below the \(floorMinutes)-minute floor. \
-      Example: /schedule every 30 minutes, check the build status
-      """
+        Every \(minutes) minutes is below the \(floorMinutes)-minute floor. \
+        Example: /schedule every 30 minutes, check the build status
+        """
     case .onceInThePast:
       return """
-      That time is already in the past. Pick a future one. \
-      Example: /schedule once on 2026-07-10 at 09:00, send the report reminder
-      """
+        That time is already in the past. Pick a future one. \
+        Example: /schedule once on 2026-07-10 at 09:00, send the report reminder
+        """
     case .noUpcomingOccurrence:
       return """
-      I couldn't find an upcoming time for that schedule. \(example)
-      """
+        I couldn't find an upcoming time for that schedule. \(example)
+        """
     }
   }
 }
@@ -237,7 +237,10 @@ public struct ScheduleDraftValidator: Sendable {
     self.defaultTimezone = defaultTimezone
   }
 
-  public func validate(_ draft: ScheduleDraft, now: Date) -> Result<
+  public func validate(
+    _ draft: ScheduleDraft,
+    now: Date
+  ) -> Result<
     ValidatedSchedule,
     ScheduleDraftProblem
   > {
@@ -330,7 +333,10 @@ private extension ScheduleDraftValidator {
 
   /// The exhaustive draft → rule mapping. Every rule pins `seconds: [0]` so fires
   /// land on the minute regardless of when validation ran.
-  func buildRule(_ schedule: DraftSchedule, timezone: TimeZone) -> Result<
+  func buildRule(
+    _ schedule: DraftSchedule,
+    timezone: TimeZone
+  ) -> Result<
     Calendar.RecurrenceRule,
     ScheduleDraftProblem
   > {
@@ -387,7 +393,10 @@ private extension ScheduleDraftValidator {
     }
   }
 
-  func weeklyRule(_ schedule: DraftSchedule, calendar: Calendar) -> Result<
+  func weeklyRule(
+    _ schedule: DraftSchedule,
+    calendar: Calendar
+  ) -> Result<
     Calendar.RecurrenceRule,
     ScheduleDraftProblem
   > {
@@ -489,7 +498,10 @@ private extension ScheduleDraftValidator {
 // MARK: - Field Parsing
 
 extension ScheduleDraftValidator {
-  private func clockComponents(_ schedule: DraftSchedule, kind: DraftScheduleKind) -> Result<
+  private func clockComponents(
+    _ schedule: DraftSchedule,
+    kind: DraftScheduleKind
+  ) -> Result<
     (hour: Int, minute: Int),
     ScheduleDraftProblem
   > {
@@ -540,9 +552,11 @@ extension ScheduleDraftValidator {
     return DayParts(year: year, month: month, day: day)
   }
 
-  private static func dayRoundTrips(_ parts: DateComponents, instant: Date, calendar: Calendar)
-    -> Bool
-  {
+  private static func dayRoundTrips(
+    _ parts: DateComponents,
+    instant: Date,
+    calendar: Calendar
+  ) -> Bool {
     let back = calendar.dateComponents([.year, .month, .day], from: instant)
     return back.year == parts.year && back.month == parts.month && back.day == parts.day
   }

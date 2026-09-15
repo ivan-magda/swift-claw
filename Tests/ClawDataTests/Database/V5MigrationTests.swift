@@ -33,16 +33,16 @@ struct V5MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) \
-        VALUES ('tg:dm:1', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) \
+          VALUES ('tg:dm:1', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts) \
-        VALUES (1, 'user', 'old row', 'trusted', ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts) \
+          VALUES (1, 'user', 'old row', 'trusted', ?)
+          """,
         arguments: [Date()]
       )
     }
@@ -72,16 +72,16 @@ struct V5MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) \
-        VALUES ('tg:dm:1', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) \
+          VALUES ('tg:dm:1', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts, tool_calls)
-        VALUES (1, 'assistant', 'fetch the zebra page', 'trusted', ?, '[]')
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts, tool_calls)
+          VALUES (1, 'assistant', 'fetch the zebra page', 'trusted', ?, '[]')
+          """,
         arguments: [Date()]
       )
     }

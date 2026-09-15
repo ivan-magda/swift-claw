@@ -24,7 +24,7 @@ public struct FileReadTool: Tool {
     ToolDefinition(
       name: "file_read",
       description:
-      "Read a UTF-8 text file from the workspace. The path is relative to the workspace root.",
+        "Read a UTF-8 text file from the workspace. The path is relative to the workspace root.",
       parameters: .object([
         "type": .string("object"),
         "properties": .object([

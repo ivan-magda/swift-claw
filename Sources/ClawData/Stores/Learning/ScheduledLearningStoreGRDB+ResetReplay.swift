@@ -108,10 +108,10 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT decision_id, kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
-      FROM learning_decisions WHERE job_id = ? AND learning_epoch = ?
-      ORDER BY decision_id
-      """,
+        SELECT decision_id, kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
+        FROM learning_decisions WHERE job_id = ? AND learning_epoch = ?
+        ORDER BY decision_id
+        """,
       arguments: [state.jobID, state.epoch.value]
     )
     guard rows.count == 1, let row = rows.first else {
@@ -157,26 +157,28 @@ private extension ScheduledLearningStoreGRDB {
       && state.feedbackRevision == receipt.inputs.feedbackRevisionAtCut && state.openTrialID == nil
   }
 
-  static func resetEffectsAreClean(_ db: Database, state: JobLearningState, receipt: ResetReceipt)
-    throws -> Bool
-  {
+  static func resetEffectsAreClean(
+    _ db: Database,
+    state: JobLearningState,
+    receipt: ResetReceipt
+  ) throws -> Bool {
     let empty = LessonSet.empty(jobID: state.jobID)
     guard
       let emptyRow = try Row.fetchOne(
         db,
         sql: """
-        SELECT job_id, digest, schema_version, canonical_bytes, source
-        FROM lesson_sets WHERE job_id = ? AND digest = ?
-        """,
+          SELECT job_id, digest, schema_version, canonical_bytes, source
+          FROM lesson_sets WHERE job_id = ? AND digest = ?
+          """,
         arguments: [state.jobID, empty.digest.rawValue]
       ),
       canonicalEmptySetMatches(emptyRow, set: empty),
       try rowExists(
         db,
         sql: """
-        SELECT EXISTS(SELECT 1 FROM learning_trials
-          WHERE job_id = ? AND state IN (?, ?))
-        """,
+          SELECT EXISTS(SELECT 1 FROM learning_trials
+            WHERE job_id = ? AND state IN (?, ?))
+          """,
         arguments: [
           state.jobID,
           LearningTrialState.open.rawValue,
@@ -186,23 +188,23 @@ private extension ScheduledLearningStoreGRDB {
       try rowExists(
         db,
         sql:
-        "SELECT EXISTS(SELECT 1 FROM feedback_targets WHERE job_id = ? AND consumed_at IS NULL)",
+          "SELECT EXISTS(SELECT 1 FROM feedback_targets WHERE job_id = ? AND consumed_at IS NULL)",
         arguments: [state.jobID]
       ) == false,
       try rowExists(
         db,
         sql: """
-        SELECT EXISTS(SELECT 1 FROM feedback_challenges
-          WHERE job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL)
-        """,
+          SELECT EXISTS(SELECT 1 FROM feedback_challenges
+            WHERE job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL)
+          """,
         arguments: [state.jobID]
       ) == false,
       try rowExists(
         db,
         sql: """
-        SELECT EXISTS(SELECT 1 FROM learning_operations
-          WHERE job_id = ? AND learning_epoch < ? AND state IN (?, ?))
-        """,
+          SELECT EXISTS(SELECT 1 FROM learning_operations
+            WHERE job_id = ? AND learning_epoch < ? AND state IN (?, ?))
+          """,
         arguments: [
           state.jobID,
           state.epoch.value,
@@ -232,9 +234,10 @@ private extension ScheduledLearningStoreGRDB {
     return Set(started).isSubset(of: receipt.result.inFlightOperationIDs)
   }
 
-  static func currentEpochHasNoPostResetActivity(_ db: Database, state: JobLearningState) throws
-    -> Bool
-  {
+  static func currentEpochHasNoPostResetActivity(
+    _ db: Database,
+    state: JobLearningState
+  ) throws -> Bool {
     for table in resetActivityTables {
       let count = try Int.fetchOne(
         db,
@@ -259,9 +262,11 @@ private extension ScheduledLearningStoreGRDB {
       && operations.elementsAreInStrictAscendingOrder(by: \.rawValue)
   }
 
-  static func resetTrialRowsMatch(_ db: Database, _ trials: [ResetTrialIdentity], jobID: Int64)
-    throws -> Bool
-  {
+  static func resetTrialRowsMatch(
+    _ db: Database,
+    _ trials: [ResetTrialIdentity],
+    jobID: Int64
+  ) throws -> Bool {
     for trial in trials {
       guard
         trial.jobID == jobID,
@@ -274,10 +279,10 @@ private extension ScheduledLearningStoreGRDB {
         let row = try Row.fetchOne(
           db,
           sql: """
-          SELECT job_id, learning_epoch, generation, base_digest, candidate_digest, state,
-            close_reason, algorithm
-          FROM learning_trials WHERE trial_id = ?
-          """,
+            SELECT job_id, learning_epoch, generation, base_digest, candidate_digest, state,
+              close_reason, algorithm
+            FROM learning_trials WHERE trial_id = ?
+            """,
           arguments: [trial.trialID]
         ),
         SQLiteStoredValue.int64(in: row, column: "job_id") == trial.jobID,
@@ -286,9 +291,7 @@ private extension ScheduledLearningStoreGRDB {
         SQLiteStoredValue.string(in: row, column: "base_digest") == trial.baseDigest.rawValue,
         SQLiteStoredValue.string(in: row, column: "candidate_digest")
         == trial.candidateDigest.rawValue,
-        SQLiteStoredValue.string(in: row, column: "state")
-        == LearningTrialState.closed
-        .rawValue,
+        SQLiteStoredValue.string(in: row, column: "state") == LearningTrialState.closed.rawValue,
         SQLiteStoredValue.string(in: row, column: "close_reason")
         == LearningTrialCloseReason.learningReset.rawValue,
         SQLiteStoredValue.string(in: row, column: "algorithm") == trial.algorithm.rawValue
@@ -346,10 +349,10 @@ private extension ScheduledLearningStoreGRDB {
       let row = try Row.fetchOne(
         db,
         sql: """
-        SELECT job_id, learning_epoch, state, failure_code, reserved_tokens,
-          reserved_cost_usd, reservation_state
-        FROM learning_operations WHERE operation_id = ?
-        """,
+          SELECT job_id, learning_epoch, state, failure_code, reserved_tokens,
+            reserved_cost_usd, reservation_state
+          FROM learning_operations WHERE operation_id = ?
+          """,
         arguments: [id.rawValue]
       ),
       SQLiteStoredValue.int64(in: row, column: "job_id") == jobID,
@@ -375,7 +378,7 @@ private extension ScheduledLearningStoreGRDB {
       && SQLiteStoredValue.int(in: row, column: "reserved_tokens") == 0
       && SQLiteStoredValue.double(in: row, column: "reserved_cost_usd") == 0
       && SQLiteStoredValue.string(in: row, column: "reservation_state")
-      == LearningReservationState.closed.rawValue
+        == LearningReservationState.closed.rawValue
   }
 
   static func rowExists(_ db: Database, sql: String, arguments: StatementArguments) throws -> Bool {
@@ -386,9 +389,9 @@ private extension ScheduledLearningStoreGRDB {
 // MARK: - Strict Ordering
 
 private extension Array {
-  func elementsAreInStrictAscendingOrder<Value: Comparable>(by keyPath: KeyPath<Element, Value>)
-    -> Bool
-  {
+  func elementsAreInStrictAscendingOrder<Value: Comparable>(
+    by keyPath: KeyPath<Element, Value>
+  ) -> Bool {
     zip(self, dropFirst()).allSatisfy { left, right in
       left[keyPath: keyPath] < right[keyPath: keyPath]
     }

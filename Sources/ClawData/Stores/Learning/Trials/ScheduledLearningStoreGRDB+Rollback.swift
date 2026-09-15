@@ -18,9 +18,9 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT decision_id, inputs, result FROM learning_decisions
-      WHERE job_id = ? AND learning_epoch = ? AND kind = ? ORDER BY decision_id DESC
-      """,
+        SELECT decision_id, inputs, result FROM learning_decisions
+        WHERE job_id = ? AND learning_epoch = ? AND kind = ? ORDER BY decision_id DESC
+        """,
       arguments: [state.jobID, state.epoch.value, LearningDecisionKind.trial.rawValue]
     )
     for row in rows {
@@ -43,9 +43,9 @@ extension ScheduledLearningStoreGRDB {
         let row = try Row.fetchOne(
           db,
           sql: """
-          SELECT decision_id, inputs, result FROM learning_decisions \
-          WHERE decision_id = ? AND kind = ?
-          """,
+            SELECT decision_id, inputs, result FROM learning_decisions \
+            WHERE decision_id = ? AND kind = ?
+            """,
           arguments: [trigger.promotionID, LearningDecisionKind.trial.rawValue]
         )
       else {
@@ -59,9 +59,9 @@ extension ScheduledLearningStoreGRDB {
       let priorRows = try Row.fetchAll(
         db,
         sql: """
-        SELECT decision_id, inputs, result FROM learning_decisions \
-        WHERE job_id = ? AND kind = ?
-        """,
+          SELECT decision_id, inputs, result FROM learning_decisions \
+          WHERE job_id = ? AND kind = ?
+          """,
         arguments: [inputs.identity.jobID, LearningDecisionKind.rollback.rawValue]
       )
       for priorRow in priorRows {
@@ -80,8 +80,8 @@ extension ScheduledLearningStoreGRDB {
         try current && Self.rollbackTriggerIsValid(db, trigger: trigger, promotion: promotion)
       let revision =
         valid
-          ? StableRevision(promotion.record.stableRevision.value + 1)
-          : state?.stableRevision ?? promotion.record.stableRevision
+        ? StableRevision(promotion.record.stableRevision.value + 1)
+        : state?.stableRevision ?? promotion.record.stableRevision
       let result: LearningDecisionResult = valid ? .rolledBack : .stale
       if valid, let state {
         try Self.closeDependentTrialForRollback(db, state: state, now: now)
@@ -97,10 +97,10 @@ extension ScheduledLearningStoreGRDB {
       if valid {
         try db.execute(
           sql: """
-          UPDATE job_learning_state SET stable_lesson_set_digest = ?, stable_revision = ?
-          WHERE job_id = ? AND learning_epoch = ? AND stable_lesson_set_digest = ?
-            AND stable_revision = ?
-          """,
+            UPDATE job_learning_state SET stable_lesson_set_digest = ?, stable_revision = ?
+            WHERE job_id = ? AND learning_epoch = ? AND stable_lesson_set_digest = ?
+              AND stable_revision = ?
+            """,
           arguments: [
             inputs.baseDigest.rawValue,
             revision.value,
@@ -122,9 +122,11 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Trigger Authority
 
 private extension ScheduledLearningStoreGRDB {
-  static func closeDependentTrialForRollback(_ db: Database, state: JobLearningState, now: Date)
-    throws
-  {
+  static func closeDependentTrialForRollback(
+    _ db: Database,
+    state: JobLearningState,
+    now: Date
+  ) throws {
     guard let trial = try liveTrial(db, jobID: state.jobID) else {
       return
     }
@@ -161,7 +163,7 @@ private extension ScheduledLearningStoreGRDB {
       let digest: String = event["subject_digest"]
       return
         (signal == OwnerSignal.promotionRollback.rawValue
-          && kind == FeedbackSubjectKind.promotion.rawValue && digest == promotion.promotionSubject)
+        && kind == FeedbackSubjectKind.promotion.rawValue && digest == promotion.promotionSubject)
         || (signal == OwnerSignal.candidateReject.rawValue
           && kind == FeedbackSubjectKind.candidate.rawValue
           && digest == promotion.inputs.candidateDigest.rawValue)
@@ -200,7 +202,7 @@ private extension ScheduledLearningStoreGRDB {
         )
         let valid =
           projected.resolvedEvidence?.outcome == .positive
-            && projected.resolvedEvidence?.hardVetoes.isEmpty == true
+          && projected.resolvedEvidence?.hardVetoes.isEmpty == true
         if valid {
           remaining += 1
         } else if affected.contains(support) {
@@ -211,19 +213,21 @@ private extension ScheduledLearningStoreGRDB {
     }
   }
 
-  static func effectiveOwnerEvent(_ db: Database, id: Int64, promotion: DecisionReceipt) throws
-    -> Row?
-  {
+  static func effectiveOwnerEvent(
+    _ db: Database,
+    id: Int64,
+    promotion: DecisionReceipt
+  ) throws -> Row? {
     try Row.fetchOne(
       db,
       sql: """
-      SELECT event.signal, event.subject_kind, event.subject_digest
-      FROM feedback_events AS event
-      WHERE event.event_id = ? AND event.job_id = ? AND event.learning_epoch = ?
-        AND event.actor = ?
-        AND NOT EXISTS (SELECT 1 FROM feedback_events AS successor
-          WHERE successor.supersedes = event.event_id)
-      """,
+        SELECT event.signal, event.subject_kind, event.subject_digest
+        FROM feedback_events AS event
+        WHERE event.event_id = ? AND event.job_id = ? AND event.learning_epoch = ?
+          AND event.actor = ?
+          AND NOT EXISTS (SELECT 1 FROM feedback_events AS successor
+            WHERE successor.supersedes = event.event_id)
+        """,
       arguments: [
         id,
         promotion.inputs.identity.jobID,

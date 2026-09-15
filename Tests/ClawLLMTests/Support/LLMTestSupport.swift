@@ -29,9 +29,10 @@ final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Sendable {
     }
   }
 
-  func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
-    throws(LLMCredentialStoreError)
-  {}
+  func save(
+    _ credential: StoredOAuthCredential,
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError) {}
 
   func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
 }
@@ -84,9 +85,10 @@ struct TestProviderConfig {
 
 /// A current-route resolution for a configured endpoint, so a test needing only the wire adapter does
 /// not restate the descriptor.
-func makeCurrentRoute(endpoint: String = "https://api.test/v1", model: String = "gpt-4o")
-  -> ResolvedLLMRoute
-{
+func makeCurrentRoute(
+  endpoint: String = "https://api.test/v1",
+  model: String = "gpt-4o"
+) -> ResolvedLLMRoute {
   ResolvedLLMRoute(
     descriptor: .openAICompatible(endpoint: endpoint),
     configuredReference: model,
@@ -186,7 +188,9 @@ func makeProvider(
 
 /// Drains a session and joins it, the way every consumer must. Returns the events and the terminal
 /// so a test can assert on both without repeating the join.
-func drain(_ stream: LLMEventStream) async -> (
+func drain(
+  _ stream: LLMEventStream
+) async -> (
   events: [StreamEvent],
   thrown: (any Error)?,
   terminal: LLMStreamTermination
@@ -201,14 +205,16 @@ func drain(_ stream: LLMEventStream) async -> (
   return (events, thrown, await stream.awaitTermination())
 }
 
-func okStep(content: String = "hi", finishReason: String = "stop", headers: [String: String] = [:])
-  -> ScriptedHTTPExecutor.Step
-{
+func okStep(
+  content: String = "hi",
+  finishReason: String = "stop",
+  headers: [String: String] = [:]
+) -> ScriptedHTTPExecutor.Step {
   let json = """
-  {"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"\(content)"},
-  "finish_reason":"\(finishReason)"}],
-  "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
-  """
+    {"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"\(content)"},
+    "finish_reason":"\(finishReason)"}],
+    "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+    """
   return .ok(HTTPResult(statusCode: 200, headers: headers, body: Data(json.utf8)))
 }
 

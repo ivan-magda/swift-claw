@@ -74,9 +74,10 @@ struct GitWorkspaceFixture {
     )
   }
 
-  func invocation(_ prepared: CoderPreparedRequest, timeout: Duration = .seconds(30))
-    -> CoderInvocation
-  {
+  func invocation(
+    _ prepared: CoderPreparedRequest,
+    timeout: Duration = .seconds(30)
+  ) -> CoderInvocation {
     let id = UUID()
     return CoderInvocation(
       jobID: id,

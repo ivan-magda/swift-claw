@@ -224,9 +224,9 @@ struct ChatGPTPromptCacheKeyTests {
   func lengthPrefixesSeparateInstructionsFromToolDefinitions() throws {
     // given
     let toolJSON = """
-    {"description":"d","name":"a","parameters":{"type":"object"},"strict":false,\
-    "type":"function"}
-    """
+      {"description":"d","name":"a","parameters":{"type":"object"},"strict":false,\
+      "type":"function"}
+      """
     let asTool = ChatRequest(
       model: "gpt-5",
       messages: [ChatMessage(role: .user, content: "hello")],

@@ -9,8 +9,9 @@ public protocol AuthRuntimeSecretPreparing: Sendable { func prepare() throws }
 /// The device flow from the first request to an approved grant, as one call. The login sequence
 /// depends on the outcome, not on the poll loop that produced it.
 public protocol ChatGPTDeviceAuthorizing: Sendable {
-  func authorize(onDeviceCode: @escaping @Sendable (_ deviceCode: ChatGPTDeviceCode) async -> Void)
-    async throws -> ChatGPTAuthorizationGrant
+  func authorize(
+    onDeviceCode: @escaping @Sendable (_ deviceCode: ChatGPTDeviceCode) async -> Void
+  ) async throws -> ChatGPTAuthorizationGrant
 }
 
 // MARK: - Workflow
@@ -149,9 +150,10 @@ private extension AuthLoginWorkflow {
     await transcript.emit(Self.assignmentEvents(for: choice))
   }
 
-  func chooseModel(from models: [ChatGPTCatalogModel], transcript: AuthTranscript) async
-    -> ChatGPTModelChoice?
-  {
+  func chooseModel(
+    from models: [ChatGPTCatalogModel],
+    transcript: AuthTranscript
+  ) async -> ChatGPTModelChoice? {
     let configuredSuffix = ModelSelection.configuredChatGPTSuffix(in: bootstrap.configuredModel)
 
     // The default is computed by the same pure selector the prompt uses, with the terminal denied.
@@ -181,7 +183,8 @@ private extension AuthLoginWorkflow {
       }
 
       guard let index = Int(typed) else {
-        await transcript.emit([.error("That is not a number. Enter a row number, or press return.")]
+        await transcript.emit(
+          [.error("That is not a number. Enter a row number, or press return.")]
         )
         continue
       }
@@ -226,9 +229,10 @@ private extension AuthLoginWorkflow {
     ]
   }
 
-  static func catalogEvents(for models: [ChatGPTCatalogModel], default fallback: ChatGPTModelChoice)
-    -> [AuthPresentationEvent]
-  {
+  static func catalogEvents(
+    for models: [ChatGPTCatalogModel],
+    default fallback: ChatGPTModelChoice
+  ) -> [AuthPresentationEvent] {
     var events: [AuthPresentationEvent] = [.output("Available models:")]
     for (offset, model) in models.enumerated() {
       events.append(.output("  \(offset + 1). \(model.slug)"))

@@ -5,9 +5,9 @@ import Foundation
 // MARK: - Serialized Execution
 
 extension ContainerBackend {
-  func enqueueExecution(operation: @escaping @Sendable () async -> ExecutionResult) async
-    -> ExecutionResult
-  {
+  func enqueueExecution(
+    operation: @escaping @Sendable () async -> ExecutionResult
+  ) async -> ExecutionResult {
     guard !shuttingDown, !Task.isCancelled else {
       return Self.cancelledResult()
     }
@@ -140,9 +140,10 @@ extension ContainerBackend {
   // bound so a wedged `container run` that never returns cannot hang the execution lane. A wedged
   // runner is cancelled and abandoned after the deadline; the shielded teardown ladder plus the
   // prepared-image disarm own containment.
-  func boundedForegroundRun(_ command: SubprocessCommand, deadline: ContinuousClock.Instant) async
-    -> DeadlineRaceOutcome<SubprocessResult>
-  {
+  func boundedForegroundRun(
+    _ command: SubprocessCommand,
+    deadline: ContinuousClock.Instant
+  ) async -> DeadlineRaceOutcome<SubprocessResult> {
     let commands = commands
     let remaining = now().duration(to: deadline)
 

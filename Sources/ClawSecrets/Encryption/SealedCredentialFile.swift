@@ -131,9 +131,10 @@ extension SealedCredentialFile {
     }
   }
 
-  func publishEnvelope(_ map: Map, key: SymmetricKey) throws(CredentialStoreError)
-    -> SecureFilePublisher.PublicationOutcome
-  {
+  func publishEnvelope(
+    _ map: Map,
+    key: SymmetricKey
+  ) throws(CredentialStoreError) -> SecureFilePublisher.PublicationOutcome {
     let envelope = try codec.sealCredential(try Self.encode(map), key: key)
     do { return try publisher.publish(envelope, to: url, mode: .replace) } catch {
       // Throwing from `publish` means the name was never claimed, so whatever the owner had is still

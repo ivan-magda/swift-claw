@@ -3,9 +3,12 @@ import ClawCore
 // MARK: - Control Routing
 
 extension MessageRouter {
-  func routeText(_ text: String, rawUpdate: RawUpdate, message: IncomingMessage, mode: ChatMode)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func routeText(
+    _ text: String,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async throws(RoutingHalt) -> HandleOutcome {
     if mode == .direct, let feedbackChallenges {
       let consumed = try await feedbackChallenges.consumeIfOpen(
         rawUpdate: rawUpdate,
@@ -133,9 +136,11 @@ private extension MessageRouter {
 
   /// A fresh scan on every request keeps the owner view aligned with the workspace on disk. The
   /// router only renders it; scanning and presentation remain owned by their existing seams.
-  func sendSkills(rawUpdate: RawUpdate, message: IncomingMessage, mode: ChatMode) async
-    -> HandleOutcome
-  {
+  func sendSkills(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async -> HandleOutcome {
     let scan = await doctor.scanSkills()
     let diagnostics = SkillDiagnostics(scan: scan, skillsCap: ContextBudget.default.skillsCap)
     return await replies.sendCanned(
@@ -157,9 +162,11 @@ private extension MessageRouter {
     }
   }
 
-  func routeLearning(_ command: LearningCommand, rawUpdate: RawUpdate, message: IncomingMessage)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func routeLearning(
+    _ command: LearningCommand,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
     guard let learningHandlers else {
       return await replies.sendCanned(
         updateID: rawUpdate.updateID,
@@ -176,9 +183,12 @@ private extension MessageRouter {
   /// A room skips the offer outright instead of being trusted to come up empty. Nothing can park
   /// there — all families that park are refused in `routeAllowed` — and skipping keeps it that
   /// way even if another one is ever added: a "yes" typed in a topic is just a word.
-  func routePlain(_ text: String, rawUpdate: RawUpdate, message: IncomingMessage, mode: ChatMode)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func routePlain(
+    _ text: String,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async throws(RoutingHalt) -> HandleOutcome {
     if mode == .direct {
       let resolved = try await confirmations.resolve(
         rawUpdate: rawUpdate,

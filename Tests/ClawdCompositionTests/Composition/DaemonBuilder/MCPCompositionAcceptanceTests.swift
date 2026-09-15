@@ -86,7 +86,7 @@ struct MCPCompositionAcceptanceTests {
         name: "search_\(secret)",
         description: "uses \(secret)",
         schemaJSON:
-        #"{"type":"object","properties":{"linear-token":{"description":"linear-token"}}}"#
+          #"{"type":"object","properties":{"linear-token":{"description":"linear-token"}}}"#
       ),
     ])
     let builder = try makeBuilder(
@@ -416,9 +416,11 @@ private extension MCPCompositionAcceptanceTests {
     )
   }
 
-  func subhash(_ server: ScriptedMCPHTTPServer, _ config: AppConfig, _ servers: [MCPServerConfig])
-    async throws -> String
-  {
+  func subhash(
+    _ server: ScriptedMCPHTTPServer,
+    _ config: AppConfig,
+    _ servers: [MCPServerConfig]
+  ) async throws -> String {
     let builder = try makeBuilder(http: server, servers: servers, config: config)
     let dispatcher = try makeDispatcher(builder, mcpTools: await builder.resolveMCPStack().tools)
     return builder.policyStaticSubhash(
@@ -487,9 +489,9 @@ private extension MCPCompositionAcceptanceTests {
     let observationMessageID = try queue.write { database -> Int64 in
       try database.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', 'awaiting owner approval', 'trusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', 'awaiting owner approval', 'trusted', ?, 'c1')
+          """,
         arguments: [sessionID, runID, Date()]
       )
       let messageID = database.lastInsertedRowID

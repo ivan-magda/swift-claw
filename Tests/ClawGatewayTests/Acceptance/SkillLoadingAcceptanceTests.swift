@@ -15,14 +15,14 @@ import Testing
 @Suite
 struct SkillLoadingAcceptanceTests {
   private static let manifest = """
-  ---
-  name: summarize
-  description: Summarize owner-provided text.
-  ---
-  # Summarize
+    ---
+    name: summarize
+    description: Summarize owner-provided text.
+    ---
+    # Summarize
 
-  Keep it to three bullets.
-  """
+    Keep it to three bullets.
+    """
 
   private static let skillCall = ToolCall(
     id: "s1",

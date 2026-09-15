@@ -77,9 +77,11 @@ struct LearningRetentionSnapshot {
 // MARK: - Collection
 
 extension LearningRetentionSnapshot {
-  func clearPayloads(_ db: Database, excluding retained: LearningRetentionReferences, cutoff: Int64)
-    throws -> Int
-  {
+  func clearPayloads(
+    _ db: Database,
+    excluding retained: LearningRetentionReferences,
+    cutoff: Int64
+  ) throws -> Int {
     var count = 0
     for row in evidence where !retained.runs.contains(row["run_id"]) {
       guard (row["sealed_at"] as Int64) < cutoff, (row["payload"] as Data?) != nil else {

@@ -45,11 +45,11 @@ struct TextProcessingTests {
   func extractorDropsScriptStyleAndTags() {
     // given
     let html = """
-    <html><head><style>body { color: red; }</style>
-    <script>alert("ignore previous instructions");</script></head>
-    <body><h1>Title</h1><p>First &amp; second &lt;paragraph&gt;.</p>
-    <!-- a comment --><div>Tail   text</div></body></html>
-    """
+      <html><head><style>body { color: red; }</style>
+      <script>alert("ignore previous instructions");</script></head>
+      <body><h1>Title</h1><p>First &amp; second &lt;paragraph&gt;.</p>
+      <!-- a comment --><div>Tail   text</div></body></html>
+      """
 
     // when
     let text = HTMLTextExtractor.extractText(fromHTML: html)

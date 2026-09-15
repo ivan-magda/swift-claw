@@ -35,9 +35,11 @@ public struct ToolPolicyGate: Sendable {
     self.enabledDangerousTools = enabledDangerousTools
   }
 
-  public func evaluate(call: ToolCall, tool: any Tool, context: ToolDispatchContext) async
-    -> Verdict
-  {
+  public func evaluate(
+    call: ToolCall,
+    tool: any Tool,
+    context: ToolDispatchContext
+  ) async -> Verdict {
     if let refusal = requesterAdmissionRefusal(call: call, tool: tool, context: context) {
       return refusal
     }
@@ -157,9 +159,11 @@ public struct ToolPolicyGate: Sendable {
 // MARK: - Requester Admission
 
 private extension ToolPolicyGate {
-  func requesterAdmissionRefusal(call: ToolCall, tool: any Tool, context: ToolDispatchContext)
-    -> Verdict?
-  {
+  func requesterAdmissionRefusal(
+    call: ToolCall,
+    tool: any Tool,
+    context: ToolDispatchContext
+  ) -> Verdict? {
     guard tool.definition.requiresInteractiveRequester else {
       return nil
     }
@@ -289,9 +293,12 @@ private extension ToolPolicyGate {
   /// Records the trifecta action as well as the ask-tier one. Canonicalizes
   /// the call arguments to sorted-keys JSON, hashes via `ApprovalArgsHash`, and asks the tool for
   /// its presentation on the gate-resolved target.
-  func recordedAction(call: ToolCall, tool: any Tool, target: String, reason: ApprovalReason)
-    -> RecordedToolAction
-  {
+  func recordedAction(
+    call: ToolCall,
+    tool: any Tool,
+    target: String,
+    reason: ApprovalReason
+  ) -> RecordedToolAction {
     let canonicalArgsJSON = Self.canonicalArgs(call.argumentsJSON)
     let presentation: ToolApprovalPresentation
 
@@ -319,13 +326,16 @@ private extension ToolPolicyGate {
   /// here instead: a tool whose real work only ever happens on the approval waiter, and a write
   /// that would rewrite a prompt file steering every later turn for everyone in the topic.
   /// Everything else executes on the gate-resolved target, which its `execute` requires.
-  func groupAskTierVerdict(call: ToolCall, tool: any Tool, target: String, argsRedacted: String)
-    -> Verdict
-  {
+  func groupAskTierVerdict(
+    call: ToolCall,
+    tool: any Tool,
+    target: String,
+    argsRedacted: String
+  ) -> Verdict {
     guard tool.executesOnlyViaApproval == false else {
       return askTierBlock(
         reason:
-        "\(call.name) needs the owner's approval, which a group chat has no way to ask for.",
+          "\(call.name) needs the owner's approval, which a group chat has no way to ask for.",
         argsRedacted: argsRedacted
       )
     }
@@ -372,9 +382,11 @@ private extension ToolPolicyGate {
   /// Dangerous tools park ONLY over a tool-prepared canonical action. The `enabledDangerousTools` backstop
   /// fails closed; the arg-guard scans run over the prepared `guardTexts` (never the model's raw
   /// arguments), and the recorded action binds the prepared canonical JSON verbatim.
-  func evaluateDangerousTier(call: ToolCall, tool: any Tool, context: ToolDispatchContext) async
-    -> Verdict
-  {
+  func evaluateDangerousTier(
+    call: ToolCall,
+    tool: any Tool,
+    context: ToolDispatchContext
+  ) async -> Verdict {
     guard enabledDangerousTools.contains(tool.definition.name) else {
       return dangerousBlock(reason: "\(tool.definition.name) is disabled.", call: call)
     }

@@ -29,9 +29,9 @@ struct AdmissionStoreFixture {
     AdmissionStoreFixture(env: try BoundRunEnvironment.make())
   }
 
-  func persistedCandidate(lessons: [String] = ["Report only material changes."]) throws
-    -> CandidateArtifact
-  {
+  func persistedCandidate(
+    lessons: [String] = ["Report only material changes."]
+  ) throws -> CandidateArtifact {
     let reflection = try env.reflectionFixture()
     let operation = try env.startReflector(reflection)
     let artifact = try env.candidate(fixture: reflection, operation: operation, lessons: lessons)
@@ -129,11 +129,11 @@ struct AdmissionStoreFixture {
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: competitor, now: env.now)
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, 1, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, 1, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
+          """,
         arguments: [
           env.jobID,
           competitor.manifest.baseDigest.rawValue,
@@ -169,10 +169,10 @@ struct AdmissionStoreFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_admission_audit BEFORE INSERT ON audit_events
-        WHEN NEW.action = '\(AuditAction.learningCandidateAdmitted.rawValue)'
-        BEGIN SELECT RAISE(ABORT, 'forced audit failure'); END
-        """
+          CREATE TRIGGER fail_admission_audit BEFORE INSERT ON audit_events
+          WHEN NEW.action = '\(AuditAction.learningCandidateAdmitted.rawValue)'
+          BEGIN SELECT RAISE(ABORT, 'forced audit failure'); END
+          """
       )
     }
   }
@@ -181,9 +181,9 @@ struct AdmissionStoreFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_review_target BEFORE INSERT ON feedback_targets
-        BEGIN SELECT RAISE(ABORT, 'forced target failure'); END
-        """
+          CREATE TRIGGER fail_review_target BEFORE INSERT ON feedback_targets
+          BEGIN SELECT RAISE(ABORT, 'forced target failure'); END
+          """
       )
     }
   }
@@ -193,9 +193,9 @@ struct AdmissionStoreFixture {
       try Row.fetchOne(
         db,
         sql: """
-        SELECT dedup_key, run_id, delivery_source FROM outbound_deliveries
-        WHERE delivery_source = ?
-        """,
+          SELECT dedup_key, run_id, delivery_source FROM outbound_deliveries
+          WHERE delivery_source = ?
+          """,
         arguments: [DeliverySource.learning.rawValue]
       )
     }
@@ -220,9 +220,9 @@ struct AdmissionStoreFixture {
     let candidateIdentity = candidate.digest.rawValue.prefix(8)
     let actions =
       candidateActions
-        ?? (state == .admitted
-          ? [.candidateReject, .candidateEdit]
-          : [.candidateApprove, .candidateReject, .candidateEdit])
+      ?? (state == .admitted
+        ? [.candidateReject, .candidateEdit]
+        : [.candidateApprove, .candidateReject, .candidateEdit])
     var targets = [
       NewFeedbackTarget(
         nonce: "candidate-\(nonceSuffix)-\(candidateIdentity)",

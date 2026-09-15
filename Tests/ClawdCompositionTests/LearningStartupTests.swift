@@ -140,7 +140,10 @@ struct LearningStartupTests {
 // MARK: - Persisted Backlog
 
 private extension LearningStartupTests {
-  static func commitBacklog(stores: ClawStores, route: String) throws -> (
+  static func commitBacklog(
+    stores: ClawStores,
+    route: String
+  ) throws -> (
     jobID: Int64,
     runID: Int64
   ) {

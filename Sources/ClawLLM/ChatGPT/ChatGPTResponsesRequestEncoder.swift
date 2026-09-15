@@ -151,9 +151,10 @@ private extension ChatGPTResponsesRequestEncoder {
   /// only the reasoning would drop the visible answer that lives in `message.content`. So the
   /// synthesized text is emitted alongside the reasoning, which also makes the both-empty turn
   /// (no reasoning, no message) reduce to exactly the normal encoding.
-  static func replayItems(for turn: ChatGPTReplayTurn, message: ChatMessage)
-    -> [ChatGPTWireInputItem]
-  {
+  static func replayItems(
+    for turn: ChatGPTReplayTurn,
+    message: ChatMessage
+  ) -> [ChatGPTWireInputItem] {
     var items: [ChatGPTWireInputItem] = []
     for reasoning in turn.reasoning {
       items.append(

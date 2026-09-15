@@ -163,9 +163,10 @@ public actor MCPServerSession {
     }
   }
 
-  public func callTool(name: String, arguments: [String: JSONValue]) async throws
-    -> MCPToolCallResult
-  {
+  public func callTool(
+    name: String,
+    arguments: [String: JSONValue]
+  ) async throws -> MCPToolCallResult {
     let payload = arguments.mapValues(MCPValueBridge.value)
     let budget = config.worstCaseCallSeconds
 
@@ -333,9 +334,11 @@ private extension MCPServerSession {
 // MARK: - Calling
 
 private extension MCPServerSession {
-  func attempt(name: String, arguments: [String: Value], cancellation: MCPRequestCancellation)
-    async throws -> MCPToolCallResult
-  {
+  func attempt(
+    name: String,
+    arguments: [String: Value],
+    cancellation: MCPRequestCancellation
+  ) async throws -> MCPToolCallResult {
     do {
       return try await invoke(name: name, arguments: arguments, cancellation: cancellation)
     } catch {
@@ -347,9 +350,11 @@ private extension MCPServerSession {
     }
   }
 
-  func invoke(name: String, arguments: [String: Value], cancellation: MCPRequestCancellation)
-    async throws -> MCPToolCallResult
-  {
+  func invoke(
+    name: String,
+    arguments: [String: Value],
+    cancellation: MCPRequestCancellation
+  ) async throws -> MCPToolCallResult {
     let client = try await connected()
     let context: RequestContext<CallTool.Result> = try await client.callTool(
       name: name,

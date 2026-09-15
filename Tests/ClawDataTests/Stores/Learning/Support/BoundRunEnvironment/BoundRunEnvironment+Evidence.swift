@@ -12,9 +12,9 @@ extension BoundRunEnvironment {
 
   /// A bound run picked up, frozen against `skillSetDigest`, then completed — so `settled_at` is
   /// written by the commit that won the state, exactly as an ordinary DONE turn does it.
-  func settledBoundRun(skillSetDigest: String = BoundRunEnvironment.pickupSkillSetDigest) throws
-    -> Int64
-  {
+  func settledBoundRun(
+    skillSetDigest: String = BoundRunEnvironment.pickupSkillSetDigest
+  ) throws -> Int64 {
     let runID = try runningBoundRun()
     try freezeSurface(runID: runID, skillSetDigest: skillSetDigest)
     _ = try runs.commitAssistantTurn(assistantTurn(runID: runID), now: now)
@@ -59,18 +59,18 @@ extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, 'assistant', '', 'trusted', ?,
-          '[{"id":"c1","name":"file_read","arguments":"{}"},
-            {"id":"c2","name":"file_write","arguments":"{}"}]')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
+          VALUES (?, ?, 'assistant', '', 'trusted', ?,
+            '[{"id":"c1","name":"file_read","arguments":"{}"},
+              {"id":"c2","name":"file_write","arguments":"{}"}]')
+          """,
         arguments: [sessionID, runID, now]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', 'ok', 'untrusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', 'ok', 'untrusted', ?, 'c1')
+          """,
         arguments: [sessionID, runID, now]
       )
     }
@@ -82,10 +82,10 @@ extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO provider_usage(provider_call_id, run_id, session_id, model, prompt_tokens,
-          completion_tokens, cost_usd, cost_source, is_estimated, ts)
-        VALUES (?, ?, ?, ?, 1, 1, 0.0, ?, 0, ?)
-        """,
+          INSERT INTO provider_usage(provider_call_id, run_id, session_id, model, prompt_tokens,
+            completion_tokens, cost_usd, cost_source, is_estimated, ts)
+          VALUES (?, ?, ?, ?, 1, 1, 0.0, ?, 0, ?)
+          """,
         arguments: [UUID().uuidString, runID, sessionID, model, CostSource.heuristic.rawValue, now]
       )
     }

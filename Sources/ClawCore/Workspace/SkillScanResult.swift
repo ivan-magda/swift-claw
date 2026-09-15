@@ -36,13 +36,13 @@ public enum WorkspaceWarning: Sendable, Equatable {
     switch self {
     case .invalidSkillManifest(let skill):
       return """
-      Skill `\(skill)`: `SKILL.md` needs `---` frontmatter with `name` and `description`; skipped.
-      """
+        Skill `\(skill)`: `SKILL.md` needs `---` frontmatter with `name` and `description`; skipped.
+        """
     case .invalidSkillName(let directory, let name):
       return """
-      Skill `\(directory)`: name `\(name)` must be lowercase letters, digits and single hyphens \
-      (1–64 characters); skipped.
-      """
+        Skill `\(directory)`: name `\(name)` must be lowercase letters, digits and single hyphens \
+        (1–64 characters); skipped.
+        """
     case .skillNameDirectoryMismatch(let directory, let name):
       return "Skill `\(directory)`: manifest name `\(name)` must match the directory name; skipped."
     case .duplicateSkillName(let name, let directories):
@@ -52,19 +52,19 @@ public enum WorkspaceWarning: Sendable, Equatable {
       return "Skill name `\(name)` is claimed by \(claimants); all of them skipped, rename one."
     case .escapingSkillDirectory(let directory):
       return """
-      Skill `\(directory)`: its `SKILL.md` resolves outside the workspace, which I can't load \
-      from; skipped. Copy the skill in instead of linking to it.
-      """
+        Skill `\(directory)`: its `SKILL.md` resolves outside the workspace, which I can't load \
+        from; skipped. Copy the skill in instead of linking to it.
+        """
     case .unreadableSkillsDirectory:
       return """
-      The `skills` directory couldn't be read; all skills skipped. Check its permissions and try \
-      again.
-      """
+        The `skills` directory couldn't be read; all skills skipped. Check its permissions and try \
+        again.
+        """
     case .skillsDirectoryOutsideWorkspace:
       return """
-      The `skills` directory resolves outside the workspace, which I can't load from; all skills \
-      skipped. Move it into the workspace instead of linking to it.
-      """
+        The `skills` directory resolves outside the workspace, which I can't load from; all skills \
+        skipped. Move it into the workspace instead of linking to it.
+        """
     }
   }
 }

@@ -49,11 +49,11 @@ enum CoderJobRecord {
   ) throws -> CoderJob {
     try db.execute(
       sql: """
-      INSERT INTO coder_jobs(id, origin_run_id, origin_session_id, requester_user_id, chat_id,
-        tool_call_id, approval_id, prepared_json, state, slot_reserved, checkout_path,
-        common_git_directory, process_ownership, created_ts, updated_ts)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO coder_jobs(id, origin_run_id, origin_session_id, requester_user_id, chat_id,
+          tool_call_id, approval_id, prepared_json, state, slot_reserved, checkout_path,
+          common_git_directory, process_ownership, created_ts, updated_ts)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         id.uuidString,
         origin.runID,

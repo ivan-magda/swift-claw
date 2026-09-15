@@ -117,6 +117,12 @@ done < <(git ls-files -z --cached --others --exclude-standard -- '*.swiftlint.ym
 format_copies() {
   cd "$formatted"
   stage "SwiftLint automatic fixes" swiftlint lint --fix --quiet "${files[@]}"
+  stage "Apple signature layout" swift format format --in-place --parallel \
+    --configuration "$repository_root/.swift-format" "${files[@]}"
+  stage "Function return placement" "$formatter" \
+    --rules wrapArguments --wrap-return-type never \
+    --wrap-arguments preserve --wrap-parameters preserve --max-width none \
+    --indent 2 --quiet --cache ignore "${files[@]}"
   stage "Apple layout" swift format format --in-place --parallel \
     --configuration "$repository_root/.swift-format" "${files[@]}"
   # Non-correctable Apple rules inspect Apple's intermediate layout.

@@ -16,17 +16,23 @@ actor DraftTransport: TelegramTransport {
 
   func getMe() async throws -> BotIdentity { BotIdentity(id: 1, username: "claw_bot") }
 
-  func getUpdates(offset: Int64?, timeout: Int, allowedUpdates: [String]) async throws
-    -> [RawUpdate]
-  { [] }
+  func getUpdates(
+    offset: Int64?,
+    timeout: Int,
+    allowedUpdates: [String]
+  ) async throws -> [RawUpdate] { [] }
 
-  func sendMessage(to target: DeliveryTarget, text: String, replyMarkup: String?) async throws
-    -> Int64
-  { 1 }
+  func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64 { 1 }
 
-  func sendRichMessage(to target: DeliveryTarget, markdown: String, replyMarkup: String?)
-    async throws -> Int64
-  { 1 }
+  func sendRichMessage(
+    to target: DeliveryTarget,
+    markdown: String,
+    replyMarkup: String?
+  ) async throws -> Int64 { 1 }
 
   func sendRichMessageDraft(chatID: Int64, draftID: Int64, markdown: String) async throws -> Bool {
     let record = DraftRecord(chatID: chatID, draftID: draftID, markdown: markdown)

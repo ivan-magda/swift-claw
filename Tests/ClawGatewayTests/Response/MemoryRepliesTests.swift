@@ -42,16 +42,16 @@ struct MemoryRepliesTests {
 
     // then
     let expected = """
-    user:
-    3 · «prefers dark mode» · owner · 1970-01-02
-    1 · «likes terse replies» · owner · 1970-01-02
-    feedback:
-    7 · «keep the owner posted» · owner · 1970-01-02
-    project:
-    12 · «ship 3a» · owner · 1970-01-02
-    reference:
-    9 · «cite sources» · owner · 1970-01-02
-    """
+      user:
+      3 · «prefers dark mode» · owner · 1970-01-02
+      1 · «likes terse replies» · owner · 1970-01-02
+      feedback:
+      7 · «keep the owner posted» · owner · 1970-01-02
+      project:
+      12 · «ship 3a» · owner · 1970-01-02
+      reference:
+      9 · «cite sources» · owner · 1970-01-02
+      """
     #expect(rendered == expected)
   }
 
@@ -68,9 +68,9 @@ struct MemoryRepliesTests {
     let expectedSnippet = String(repeating: "1234567890", count: 6) + "…"
     #expect(
       rendered == """
-      reference:
-      5 · «\(expectedSnippet)» · owner · 1970-01-02 · ⚠
-      """
+        reference:
+        5 · «\(expectedSnippet)» · owner · 1970-01-02 · ⚠
+        """
     )
   }
 
@@ -85,12 +85,12 @@ struct MemoryRepliesTests {
     // then
     #expect(
       rendered == """
-      Memory 9: project
-      source: owner · session: 4
-      created: 1970-01-02 · sensitivity: normal
+        Memory 9: project
+        source: owner · session: 4
+        created: 1970-01-02 · sensitivity: normal
 
-      ship 3a
-      """
+        ship 3a
+        """
     )
   }
 
@@ -126,9 +126,9 @@ struct MemoryRepliesTests {
     )
     #expect(
       MemoryReplies.memoryUsage == """
-      Usage: /memory [user|feedback|project|reference] | \
-      /memory show <id> | /memory delete <id>
-      """
+        Usage: /memory [user|feedback|project|reference] | \
+        /memory show <id> | /memory delete <id>
+        """
     )
     #expect(MemoryReplies.nothingToSave == "No savable text.")
     #expect(MemoryReplies.cancelled == "Cancelled.")

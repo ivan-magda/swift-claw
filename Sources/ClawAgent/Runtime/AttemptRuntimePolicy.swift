@@ -105,9 +105,11 @@ struct AttemptRuntimeState {
     try scope?.finalize(response)
   }
 
-  func admission(roundTripIndex: Int, priorRecordedTokens: Int, priorResponsesSends: Int) async
-    -> ProviderRoundTripAdmission?
-  {
+  func admission(
+    roundTripIndex: Int,
+    priorRecordedTokens: Int,
+    priorResponsesSends: Int
+  ) async -> ProviderRoundTripAdmission? {
     guard let admission = policy.roundTripAdmission else {
       return nil
     }

@@ -85,9 +85,10 @@ extension ScheduledLearningStoreGRDB {
     let triggerFeedbackRevision: FeedbackRevision
   }
 
-  static func candidateAncestry(_ db: Database, artifact: CandidateArtifact) throws
-    -> CandidateAncestry?
-  {
+  static func candidateAncestry(
+    _ db: Database,
+    artifact: CandidateArtifact
+  ) throws -> CandidateAncestry? {
     var current = artifact
     var tipToRoot: [CandidateArtifact] = []
     var visited: Set<CandidateDigest> = []
@@ -274,16 +275,16 @@ extension ScheduledLearningStoreGRDB {
     try Bool.fetchOne(
       db,
       sql: """
-      SELECT EXISTS(
-        SELECT 1 FROM feedback_events AS event
-        WHERE event.job_id = ? AND event.learning_epoch = ?
-          AND event.subject_kind = ? AND event.subject_digest = ?
-          AND event.signal IN (?, ?)
-          AND NOT EXISTS(
-            SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
-          )
-      )
-      """,
+        SELECT EXISTS(
+          SELECT 1 FROM feedback_events AS event
+          WHERE event.job_id = ? AND event.learning_epoch = ?
+            AND event.subject_kind = ? AND event.subject_digest = ?
+            AND event.signal IN (?, ?)
+            AND NOT EXISTS(
+              SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
+            )
+        )
+        """,
       arguments: [
         artifact.manifest.jobID,
         artifact.manifest.epoch.value,
@@ -295,23 +296,24 @@ extension ScheduledLearningStoreGRDB {
     ) ?? false
   }
 
-  static func hasRequiredEvaluationDispute(_ db: Database, artifact: CandidateArtifact) throws
-    -> Bool
-  {
+  static func hasRequiredEvaluationDispute(
+    _ db: Database,
+    artifact: CandidateArtifact
+  ) throws -> Bool {
     for source in artifact.manifest.evidence where source.evaluationRequired {
       let disputed =
         try Bool.fetchOne(
           db,
           sql: """
-          SELECT EXISTS(
-            SELECT 1 FROM feedback_events AS event
-            WHERE event.job_id = ? AND event.learning_epoch = ?
-              AND event.subject_kind = ? AND event.subject_digest = ? AND event.signal = ?
-              AND NOT EXISTS(
-                SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
-              )
-          )
-          """,
+            SELECT EXISTS(
+              SELECT 1 FROM feedback_events AS event
+              WHERE event.job_id = ? AND event.learning_epoch = ?
+                AND event.subject_kind = ? AND event.subject_digest = ? AND event.signal = ?
+                AND NOT EXISTS(
+                  SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
+                )
+            )
+            """,
           arguments: [
             artifact.manifest.jobID,
             artifact.manifest.epoch.value,
@@ -367,14 +369,14 @@ extension ScheduledLearningStoreGRDB {
       let row = try Row.fetchOne(
         db,
         sql: """
-        SELECT event_id, subject_kind, subject_digest, signal, payload, actor,
-          transport_update_id, feedback_revision, supersedes, occurred_at
-        FROM feedback_events AS event
-        WHERE event_id = ? AND job_id = ? AND learning_epoch = ?
-          AND NOT EXISTS(
-            SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
-          )
-        """,
+          SELECT event_id, subject_kind, subject_digest, signal, payload, actor,
+            transport_update_id, feedback_revision, supersedes, occurred_at
+          FROM feedback_events AS event
+          WHERE event_id = ? AND job_id = ? AND learning_epoch = ?
+            AND NOT EXISTS(
+              SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
+            )
+          """,
         arguments: [eventID, candidate.manifest.jobID, candidate.manifest.epoch.value]
       ),
       let subject = FeedbackSubjectKind(rawValue: row["subject_kind"]),
@@ -431,9 +433,9 @@ extension ScheduledLearningStoreGRDB {
     let digests = try String.fetchAll(
       db,
       sql: """
-      SELECT candidate_digest FROM learning_candidates
-      WHERE predecessor_digest = ? AND origin = ? ORDER BY candidate_digest
-      """,
+        SELECT candidate_digest FROM learning_candidates
+        WHERE predecessor_digest = ? AND origin = ? ORDER BY candidate_digest
+        """,
       arguments: [predecessor.rawValue, origin.rawValue]
     )
     for raw in digests {
@@ -456,9 +458,11 @@ extension ScheduledLearningStoreGRDB {
     ) ?? false
   }
 
-  static func closeCandidateTrial(_ db: Database, candidate: CandidateArtifact, now: Date) throws
-    -> Int64?
-  {
+  static func closeCandidateTrial(
+    _ db: Database,
+    candidate: CandidateArtifact,
+    now: Date
+  ) throws -> Int64? {
     guard
       let trial = try trialRow(db, candidate: candidate.digest),
       trial.state == .open || trial.state == .draining

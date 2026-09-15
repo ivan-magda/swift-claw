@@ -12,9 +12,9 @@ public struct OutboxStoreGRDB: OutboxStore {
     try database.writeMapping { db in
       try db.execute(
         sql: """
-        UPDATE outbound_deliveries SET status = 'SENT', telegram_message_id = ?, sent_ts = ?
-        WHERE dedup_key = ?
-        """,
+          UPDATE outbound_deliveries SET status = 'SENT', telegram_message_id = ?, sent_ts = ?
+          WHERE dedup_key = ?
+          """,
         arguments: [telegramMessageID, now, deliveryKey]
       )
       // An approval-prompt delivery links its Telegram message to the approval so the
@@ -22,9 +22,9 @@ public struct OutboxStoreGRDB: OutboxStore {
       // the subquery yield NULL, so `id = NULL` matches nothing and plain rows stay untouched.
       try db.execute(
         sql: """
-        UPDATE approvals SET prompt_message_id = ?
-        WHERE id = (SELECT approval_id FROM outbound_deliveries WHERE dedup_key = ?)
-        """,
+          UPDATE approvals SET prompt_message_id = ?
+          WHERE id = (SELECT approval_id FROM outbound_deliveries WHERE dedup_key = ?)
+          """,
         arguments: [telegramMessageID, deliveryKey]
       )
     }
@@ -38,12 +38,12 @@ public struct OutboxStoreGRDB: OutboxStore {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT dedup_key, run_id, step_index, chat_id, payload, approval_id, reply_markup,
-          message_thread_id, reply_to_message_id
-        FROM outbound_deliveries
-        WHERE status = 'PENDING'
-        ORDER BY run_id IS NULL, run_id, step_index, dedup_key
-        """
+          SELECT dedup_key, run_id, step_index, chat_id, payload, approval_id, reply_markup,
+            message_thread_id, reply_to_message_id
+          FROM outbound_deliveries
+          WHERE status = 'PENDING'
+          ORDER BY run_id IS NULL, run_id, step_index, dedup_key
+          """
       ).map { row in
         OutboxRow(
           deliveryKey: row["dedup_key"],
@@ -69,10 +69,10 @@ extension OutboxStoreGRDB {
   static func insertNotice(_ db: Database, chunk: LearningNoticeChunk, now: Date) throws -> Bool {
     try db.execute(
       sql: """
-      INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
-        payload, payload_hash, reply_markup, status, created_ts, delivery_source)
-      VALUES (NULL, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-      """,
+        INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
+          payload, payload_hash, reply_markup, status, created_ts, delivery_source)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+        """,
       arguments: [
         chunk.ordinal,
         chunk.chatID,

@@ -12,24 +12,24 @@ struct PhotoWireTests {
   func photoUpdateCapturesTheWholeSizeLadder() throws {
     // given — a getUpdates payload carrying a real-client compressed photo
     let json = """
-    {
-      "update_id": 11,
-      "message": {
-        "message_id": 200,
-        "from": {"id": 42, "is_bot": false},
-        "chat": {"id": 42},
-        "caption": "what is this?",
-        "photo": [
-          {"file_id": "s-id", "file_unique_id": "s-u", "width": 90, "height": 67,
-           "file_size": 1466},
-          {"file_id": "x-id", "file_unique_id": "x-u", "width": 800, "height": 600,
-           "file_size": 61234},
-          {"file_id": "y-id", "file_unique_id": "y-u", "width": 1280, "height": 960,
-           "file_size": 186422}
-        ]
+      {
+        "update_id": 11,
+        "message": {
+          "message_id": 200,
+          "from": {"id": 42, "is_bot": false},
+          "chat": {"id": 42},
+          "caption": "what is this?",
+          "photo": [
+            {"file_id": "s-id", "file_unique_id": "s-u", "width": 90, "height": 67,
+             "file_size": 1466},
+            {"file_id": "x-id", "file_unique_id": "x-u", "width": 800, "height": 600,
+             "file_size": 61234},
+            {"file_id": "y-id", "file_unique_id": "y-u", "width": 1280, "height": 960,
+             "file_size": 186422}
+          ]
+        }
       }
-    }
-    """
+      """
 
     // when
     let update = try decoder.decode(TUpdate.self, from: Data(json.utf8))
@@ -50,16 +50,16 @@ struct PhotoWireTests {
   func rungsWithOptionalFieldsAbsentStillDecode() throws {
     // given — file_size is emitted only when non-zero, per the Bot API
     let json = """
-    {
-      "update_id": 12,
-      "message": {
-        "message_id": 201,
-        "from": {"id": 42, "is_bot": false},
-        "chat": {"id": 42},
-        "photo": [{"file_id": "y-id", "width": 1280, "height": 960}]
+      {
+        "update_id": 12,
+        "message": {
+          "message_id": 201,
+          "from": {"id": 42, "is_bot": false},
+          "chat": {"id": 42},
+          "photo": [{"file_id": "y-id", "width": 1280, "height": 960}]
+        }
       }
-    }
-    """
+      """
 
     // when
     let update = try decoder.decode(TUpdate.self, from: Data(json.utf8))
@@ -77,16 +77,16 @@ struct PhotoWireTests {
     // given — a rung missing file_id, which no future API shape may be allowed to turn into a
     // decode failure that stalls the whole getUpdates batch
     let json = """
-    {
-      "update_id": 13,
-      "message": {
-        "message_id": 202,
-        "from": {"id": 42, "is_bot": false},
-        "chat": {"id": 42},
-        "photo": [{"width": 1280, "height": 960}]
+      {
+        "update_id": 13,
+        "message": {
+          "message_id": 202,
+          "from": {"id": 42, "is_bot": false},
+          "chat": {"id": 42},
+          "photo": [{"width": 1280, "height": 960}]
+        }
       }
-    }
-    """
+      """
 
     // when
     let update = try decoder.decode(TUpdate.self, from: Data(json.utf8))

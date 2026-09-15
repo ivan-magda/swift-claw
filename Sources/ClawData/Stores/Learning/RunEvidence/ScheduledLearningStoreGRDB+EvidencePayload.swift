@@ -26,9 +26,9 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT role, content, tool_calls, tool_call_id FROM messages
-      WHERE run_id = ? ORDER BY id
-      """,
+        SELECT role, content, tool_calls, tool_call_id FROM messages
+        WHERE run_id = ? ORDER BY id
+        """,
       arguments: [runID]
     )
 
@@ -120,10 +120,10 @@ private extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT messages.id AS message_id, messages.content AS content
-      FROM runs JOIN messages ON messages.id = runs.trigger_message_id
-      WHERE runs.id = ?
-      """,
+        SELECT messages.id AS message_id, messages.content AS content
+        FROM runs JOIN messages ON messages.id = runs.trigger_message_id
+        WHERE runs.id = ?
+        """,
       arguments: [runID]
     )
     guard let row else {

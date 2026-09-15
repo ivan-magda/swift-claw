@@ -420,9 +420,11 @@ private enum LearningComposition {
     return TestLearningFixtures(writer: queue)
   }
 
-  static func createJob(_ builder: DaemonBuilder, now: Date, label: String = "digest") throws
-    -> ScheduledJob
-  {
+  static func createJob(
+    _ builder: DaemonBuilder,
+    now: Date,
+    label: String = "digest"
+  ) throws -> ScheduledJob {
     try builder.stores.scheduledJobs.create(
       NewScheduledJob(
         ownerChatID: 777,

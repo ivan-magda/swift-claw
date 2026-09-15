@@ -14,9 +14,9 @@ struct ScheduleDraftParserTests {
   }
 
   private static let draftJSON = """
-  {"label":"morning digest","prompt":"Summarize my unread items",\
-  "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
-  """
+    {"label":"morning digest","prompt":"Summarize my unread items",\
+    "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
+    """
 
   private static let expectedDraft = ScheduleDraft(
     label: "morning digest",
@@ -133,8 +133,8 @@ struct ScheduleDraftParserTests {
     #expect(ScheduleDraftParser.decode("Sure! Here is the plan…") == .unparseable)
     #expect(ScheduleDraftParser.decode("") == .unparseable)
     let badKind = """
-    {"label":"x","prompt":"y","schedule":{"kind":"fortnightly","time":"07:00"}}
-    """
+      {"label":"x","prompt":"y","schedule":{"kind":"fortnightly","time":"07:00"}}
+      """
     #expect(ScheduleDraftParser.decode(badKind) == .unparseable)
   }
 
@@ -150,9 +150,9 @@ struct ScheduleDraftParserTests {
       ) == .unparseable
     )
     let flagged = """
-    {"unparseable":false,"label":"morning digest","prompt":"Summarize my unread items",\
-    "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
-    """
+      {"unparseable":false,"label":"morning digest","prompt":"Summarize my unread items",\
+      "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
+      """
     #expect(ScheduleDraftParser.decode(flagged) == .draft(Self.expectedDraft))
   }
 

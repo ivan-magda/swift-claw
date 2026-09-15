@@ -127,9 +127,11 @@ extension CoderCompositionTests {
 // MARK: - Persisted Enabled Jobs
 
 private extension CoderCompositionTests {
-  func oldJob(_ fixture: CoderCompositionFixture, prepared: CoderPreparedRequest, updateID: Int64)
-    throws -> CoderJob
-  {
+  func oldJob(
+    _ fixture: CoderCompositionFixture,
+    prepared: CoderPreparedRequest,
+    updateID: Int64
+  ) throws -> CoderJob {
     let origin = try CoderApprovedOriginFixture.make(
       queue: fixture.queue,
       updateID: updateID,

@@ -2,17 +2,18 @@ import ClawCore
 import GRDB
 
 extension RunStoreGRDB {
-  public func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
-    -> RunExecutionContext?
-  {
+  public func executionContext(
+    runID: Int64,
+    fallbackChatID: Int64
+  ) throws(StoreError) -> RunExecutionContext? {
     try database.readMapping { db in
       guard
         let row = try Row.fetchOne(
           db,
           sql: """
-          SELECT runs.session_id, runs.origin, runs.requester_user_id, sessions.session_key
-          FROM runs JOIN sessions ON sessions.id = runs.session_id WHERE runs.id = ?
-          """,
+            SELECT runs.session_id, runs.origin, runs.requester_user_id, sessions.session_key
+            FROM runs JOIN sessions ON sessions.id = runs.session_id WHERE runs.id = ?
+            """,
           arguments: [runID]
         )
       else {

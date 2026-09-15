@@ -72,14 +72,14 @@ struct VoiceRoutingTests {
 
     let voice: (any VoiceMessageTranscribing)? =
       serviceOverride
-        ?? (voiceEnabled
-          ? VoiceMessageService(
-            fetcher: fetcher,
-            transcriber: transcriber,
-            stagingDirectory: staging,
-            redactor: SecretRedactor(secretValues: []),
-            logger: TestLog.silent
-          ) : nil)
+      ?? (voiceEnabled
+        ? VoiceMessageService(
+          fetcher: fetcher,
+          transcriber: transcriber,
+          stagingDirectory: staging,
+          redactor: SecretRedactor(secretValues: []),
+          logger: TestLog.silent
+        ) : nil)
 
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),

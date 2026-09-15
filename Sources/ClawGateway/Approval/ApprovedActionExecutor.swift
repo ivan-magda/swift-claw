@@ -227,9 +227,9 @@ private extension ApprovedActionExecutor {
     // observation update in ONE fused transaction; the placeholder guard inside
     // applyApprovedMemoryWrite makes a crash-window re-run a no-op.
     let content = """
-    Saved memory item (kind \(request.item.kind.rawValue), \
-    \(MemoryWriteArguments.canonicalTarget(for: request))).
-    """
+      Saved memory item (kind \(request.item.kind.rawValue), \
+      \(MemoryWriteArguments.canonicalTarget(for: request))).
+      """
     do {
       let claim = try runs.applyApprovedMemoryWrite(
         runID: approval.runID,
@@ -253,9 +253,10 @@ private extension ApprovedActionExecutor {
 
   /// Resumes the run with a synthetic (no side effect performed) observation: same claim-first
   /// discipline as a real execution, so a cancelled run is never resumed by an error path either.
-  func resumeWithSyntheticObservation(_ approval: Approval, content: String)
-    -> ApprovedCommitOutcome
-  {
+  func resumeWithSyntheticObservation(
+    _ approval: Approval,
+    content: String
+  ) -> ApprovedCommitOutcome {
     do {
       let claim = try runs.claimApprovedExecution(
         runID: approval.runID,

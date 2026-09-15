@@ -81,7 +81,10 @@ struct ExecuteCodeToolTests {
     return true
   }
 
-  private func recordedInvocation(tool: ExecuteCodeTool, arguments: JSONValue) async throws -> (
+  private func recordedInvocation(
+    tool: ExecuteCodeTool,
+    arguments: JSONValue
+  ) async throws -> (
     JSONValue,
     String
   ) {
@@ -313,7 +316,7 @@ extension ExecuteCodeToolTests {
       stages.first { stage in
         stage.objectValue?["path"] == .string("notes/input.txt")
       }?
-        .objectValue
+      .objectValue
     )
     let memoryStage = try #require(
       stages.first { stage in
@@ -391,9 +394,9 @@ extension ExecuteCodeToolTests {
     #expect(preview.contains(String(twoHash)))
     #expect(
       action.presentation.blastRadius == """
-      run python · egress: no · 4 CPU / 1024 MiB · \
-      code \(code.utf8.count) B · 2 staged file(s), 6 B
-      """
+        run python · egress: no · 4 CPU / 1024 MiB · \
+        code \(code.utf8.count) B · 2 staged file(s), 6 B
+        """
     )
   }
 

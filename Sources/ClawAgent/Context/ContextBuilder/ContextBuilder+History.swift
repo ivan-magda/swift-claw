@@ -109,9 +109,10 @@ private extension ContextBuilder {
   /// tool rows (labeled by the owning anchor's declared fence label). Kept groups come from the
   /// fitter verbatim — one `SectionUnit` per group — so this only re-expands each surviving
   /// group's rows.
-  func fittedHistoryMessages(fitted: [FittedSection], snapshot: SessionContextSnapshot)
-    -> [ChatMessage]
-  {
+  func fittedHistoryMessages(
+    fitted: [FittedSection],
+    snapshot: SessionContextSnapshot
+  ) -> [ChatMessage] {
     guard
       let historySection = fitted.first(where: { section in
         section.id == .history

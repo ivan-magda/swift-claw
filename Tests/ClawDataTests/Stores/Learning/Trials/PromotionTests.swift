@@ -194,9 +194,9 @@ struct PromotionTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_promotion BEFORE UPDATE OF stable_lesson_set_digest
-        ON job_learning_state BEGIN SELECT RAISE(ABORT, 'injected disk failure'); END
-        """
+          CREATE TRIGGER fail_promotion BEFORE UPDATE OF stable_lesson_set_digest
+          ON job_learning_state BEGIN SELECT RAISE(ABORT, 'injected disk failure'); END
+          """
       )
     }
 

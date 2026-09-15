@@ -106,9 +106,10 @@ private extension ContainerBackend {
     return engineVersion
   }
 
-  func resolveInitImage(engineVersion: String, deadline: ContinuousClock.Instant)
-    async throws(PrepareAbort) -> String
-  {
+  func resolveInitImage(
+    engineVersion: String,
+    deadline: ContinuousClock.Instant
+  ) async throws(PrepareAbort) -> String {
     guard
       let propertyData = await boundedCommandData(
         ContainerInvocation.systemPropertyList(),
@@ -141,9 +142,11 @@ private extension ContainerBackend {
     return initImage
   }
 
-  func stageImages(engineVersion: String, initImage: String, deadline: ContinuousClock.Instant)
-    async throws(PrepareAbort)
-  {
+  func stageImages(
+    engineVersion: String,
+    initImage: String,
+    deadline: ContinuousClock.Instant
+  ) async throws(PrepareAbort) {
     // Shutdown may complete while prepare is suspended; re-check before pulling images,
     // before launching the canary container, and before re-arming the init image so a
     // finished shutdown leaves no sandbox activity or prepared state behind.

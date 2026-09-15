@@ -17,8 +17,8 @@ struct MediaDownloadTests {
         ", \"file_path\": \"\(path)\""
       } ?? ""
     let body = """
-    {"ok": true, "result": {"file_id": "F1", "file_unique_id": "U1"\(pathField)}}
-    """
+      {"ok": true, "result": {"file_id": "F1", "file_unique_id": "U1"\(pathField)}}
+      """
     return HTTPResult(statusCode: 200, headers: [:], body: Data(body.utf8))
   }
 

@@ -7,14 +7,14 @@ import Testing
 @Suite
 struct WorkspaceSkillsScannerTests {
   private static let validManifest = """
-  ---
-  name: summarize
-  description: Summarize owner-provided text.
-  ---
-  # Summarize
+    ---
+    name: summarize
+    description: Summarize owner-provided text.
+    ---
+    # Summarize
 
-  Body content the index ignores.
-  """
+    Body content the index ignores.
+    """
 
   @Test
   func missingSkillsDirectoryYieldsEmptyResult() throws {
@@ -109,11 +109,11 @@ struct WorkspaceSkillsScannerTests {
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let manifest = """
-    ---
-    name: partial
-    ---
-    body
-    """
+      ---
+      name: partial
+      ---
+      body
+      """
     try writeSkill(named: "partial", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
@@ -148,12 +148,12 @@ struct WorkspaceSkillsScannerTests {
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let manifest = """
-    ---
-    name: [unterminated
-    description: x
-    ---
-    body
-    """
+      ---
+      name: [unterminated
+      description: x
+      ---
+      body
+      """
     try writeSkill(named: "broken", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
@@ -171,14 +171,14 @@ struct WorkspaceSkillsScannerTests {
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let manifest = """
-    ---
-    name: rich
-    description: Rich skill.
-    version: 3
-    tags: [a, b]
-    ---
-    body
-    """
+      ---
+      name: rich
+      description: Rich skill.
+      version: 3
+      tags: [a, b]
+      ---
+      body
+      """
     try writeSkill(named: "rich", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
@@ -251,13 +251,13 @@ struct WorkspaceSkillsScannerTests {
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let manifest = """
-    ---
-    name: verbose
-    description: |
-      First line.
-      Second line.
-    ---
-    """
+      ---
+      name: verbose
+      description: |
+        First line.
+        Second line.
+      ---
+      """
     try writeSkill(named: "verbose", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
@@ -321,13 +321,13 @@ struct WorkspaceSkillsScannerTests {
     defer { try? FileManager.default.removeItem(at: root) }
     let runaway = String(repeating: "A", count: 500)
     let manifest = """
-    ---
-    name: |
-      \(runaway)
-      second line
-    description: An unbounded name.
-    ---
-    """
+      ---
+      name: |
+        \(runaway)
+        second line
+      description: An unbounded name.
+      ---
+      """
     try writeSkill(named: "runaway", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 

@@ -165,9 +165,9 @@ struct ApprovedActionExecutorTests {
     let observationMessageID = try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
+          """,
         arguments: [sessionID, runID, Date()]
       )
       let messageID = db.lastInsertedRowID
@@ -276,11 +276,11 @@ struct ApprovedActionExecutorTests {
         try Row.fetchOne(
           db,
           sql: """
-          SELECT tool, args_redacted, result_size, decision
-          FROM audit_events
-          WHERE run_id = ? AND action = ?
-          ORDER BY id DESC LIMIT 1
-          """,
+            SELECT tool, args_redacted, result_size, decision
+            FROM audit_events
+            WHERE run_id = ? AND action = ?
+            ORDER BY id DESC LIMIT 1
+            """,
           arguments: [env.runID, AuditAction.toolCall.rawValue]
         )
       )
@@ -679,9 +679,11 @@ struct ApprovedActionExecutorTests {
 
     func failRun(runID: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
 
-    func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
-      throws(StoreError) -> [DegradationReply]
-    { [] }
+    func reconcileRunsAtBoot(
+      now: Date,
+      degradationText: String,
+      heartbeatNoticeChatID: Int64?
+    ) throws(StoreError) -> [DegradationReply] { [] }
 
     func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
       RunsHealth(
@@ -693,9 +695,14 @@ struct ApprovedActionExecutorTests {
       )
     }
 
-    func commitSuspendedTurn(runID: Int64, sessionID: Int64, commit: SuspendedTurnCommit, now: Date)
-      throws(StoreError) -> SuspendedCommitReceipt
-    { throw StoreError.unexpected("unused in this fixture") }
+    func commitSuspendedTurn(
+      runID: Int64,
+      sessionID: Int64,
+      commit: SuspendedTurnCommit,
+      now: Date
+    ) throws(StoreError) -> SuspendedCommitReceipt {
+      throw StoreError.unexpected("unused in this fixture")
+    }
 
     func settleClaimedApprovalAtBoot(
       runID: Int64,
@@ -712,9 +719,12 @@ struct ApprovedActionExecutorTests {
       throw StoreError.unexpected("unused in this fixture")
     }
 
-    func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
-      -> RunExecutionContext?
-    { try base.executionContext(runID: runID, fallbackChatID: fallbackChatID) }
+    func executionContext(
+      runID: Int64,
+      fallbackChatID: Int64
+    ) throws(StoreError) -> RunExecutionContext? {
+      try base.executionContext(runID: runID, fallbackChatID: fallbackChatID)
+    }
 
     func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? {
       try base.runOrigin(runID: runID)

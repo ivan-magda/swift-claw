@@ -14,9 +14,11 @@ public struct OccurrencePolicy: Sendable {
 
   /// The confirm preview's fire times. The SAME `nowDate` that validation used seeds the
   /// calculator, so the preview's first entry IS the parked `firstOccurrence`.
-  public func confirmPreview(for validated: ValidatedSchedule, from nowDate: Date, limit: Int)
-    -> [Date]
-  {
+  public func confirmPreview(
+    for validated: ValidatedSchedule,
+    from nowDate: Date,
+    limit: Int
+  ) -> [Date] {
     guard
       let envelope = validated.recurrence,
       let timezone = TimeZone(identifier: validated.timezone)

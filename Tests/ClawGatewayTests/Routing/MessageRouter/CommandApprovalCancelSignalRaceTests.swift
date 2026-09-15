@@ -213,20 +213,20 @@ private extension CommandApprovalCancelSignalRaceTests {
       for index in 0..<Self.paddingRuns {
         try db.execute(
           sql: """
-          INSERT INTO runs(session_id, state, created_ts, updated_ts)
-          VALUES (?, ?, ?, ?)
-          """,
+            INSERT INTO runs(session_id, state, created_ts, updated_ts)
+            VALUES (?, ?, ?, ?)
+            """,
           arguments: [sessionID, RunState.running.rawValue, now, now]
         )
         let paddingRunID = db.lastInsertedRowID
         try db.execute(
           sql: """
-          INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-            args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-            reason, created_ts, expires_ts)
-          VALUES (?, ?, 'PENDING', 'file_write', ?, '/w/pad.md', ?, 'pv', 42, ?, 0, ?,
-            'ask_tier', 1782000000, 1782003600)
-          """,
+            INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+              args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+              reason, created_ts, expires_ts)
+            VALUES (?, ?, 'PENDING', 'file_write', ?, '/w/pad.md', ?, 'pv', 42, ?, 0, ?,
+              'ask_tier', 1782000000, 1782003600)
+            """,
           arguments: [paddingRunID, sessionID, argsJSON, argsHash, "pad-\(index)", "pad-c\(index)"]
         )
       }
@@ -239,9 +239,9 @@ private extension CommandApprovalCancelSignalRaceTests {
     return try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
+          """,
         arguments: [sessionID, runID, RunStoreGRDB.placeholderObservationContent, now]
       )
       let observationMessageID = db.lastInsertedRowID
@@ -254,12 +254,12 @@ private extension CommandApprovalCancelSignalRaceTests {
       )
       try db.execute(
         sql: """
-        INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-          args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-          reason, prompt_message_id, created_ts, expires_ts)
-        VALUES (?, ?, 'PENDING', 'file_write', ?, '/w/plan.md', ?, 'pv', 42, 'nonce-a', ?, 'c1',
-          'ask_tier', 900, 1782000000, 1782003600)
-        """,
+          INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+            args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+            reason, prompt_message_id, created_ts, expires_ts)
+          VALUES (?, ?, 'PENDING', 'file_write', ?, '/w/plan.md', ?, 'pv', 42, 'nonce-a', ?, 'c1',
+            'ask_tier', 900, 1782000000, 1782003600)
+          """,
         arguments: [
           runID,
           sessionID,

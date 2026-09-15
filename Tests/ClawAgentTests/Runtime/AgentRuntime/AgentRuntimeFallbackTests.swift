@@ -7,9 +7,10 @@ import Testing
 
 @Suite("Agent runtime route fallback")
 struct AgentRuntimeFallbackTests {
-  private func run(_ runtime: AgentRuntime, origin: RunOrigin = .interactive) async throws
-    -> TurnOutcome
-  {
+  private func run(
+    _ runtime: AgentRuntime,
+    origin: RunOrigin = .interactive
+  ) async throws -> TurnOutcome {
     try await runtime.runTurn(
       runID: 1,
       sessionID: 1,

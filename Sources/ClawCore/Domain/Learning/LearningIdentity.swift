@@ -45,9 +45,12 @@ public struct JobDefinitionDigest: RawRepresentable, Sendable, Hashable, Codable
 
   public init(rawValue: String) { self.rawValue = rawValue }
 
-  public static func of(label: String, prompt: String, recurrenceJSON: String?, timezone: String)
-    throws -> JobDefinitionDigest
-  {
+  public static func of(
+    label: String,
+    prompt: String,
+    recurrenceJSON: String?,
+    timezone: String
+  ) throws -> JobDefinitionDigest {
     let payload = Payload(
       label: label,
       prompt: prompt,

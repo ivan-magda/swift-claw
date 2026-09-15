@@ -26,9 +26,11 @@ struct ScratchWorkspace: Sendable {
   let directory: URL
   let cidFile: URL
 
-  static func create(stateRoot: URL, identity: ExecutionIdentity, request: ExecutionRequest) throws
-    -> ScratchWorkspace
-  {
+  static func create(
+    stateRoot: URL,
+    identity: ExecutionIdentity,
+    request: ExecutionRequest
+  ) throws -> ScratchWorkspace {
     try validate(request)
 
     let scratchRoot = stateRoot.appending(path: scratchRootName, directoryHint: .isDirectory)

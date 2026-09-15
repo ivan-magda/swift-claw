@@ -317,14 +317,19 @@ public protocol Tool: Sendable {
   /// exactly what was authorized, never re-derive it; `nil` for the other classes.
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload
 
-  func execute(arguments: JSONValue, canonicalTarget: String?, context: ToolExecutionContext?) async
-    -> ToolPayload
+  func execute(
+    arguments: JSONValue,
+    canonicalTarget: String?,
+    context: ToolExecutionContext?
+  ) async -> ToolPayload
 
   /// The prompt inputs for an ask-tier or trifecta approval, produced at gate time on the
   /// gate-resolved `canonicalTarget`. The default is a generic egress presentation; write tools
   /// override with blast radius, a redacted preview, and any scan warnings.
-  func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
-    -> ToolApprovalPresentation
+  func approvalPresentation(
+    arguments: JSONValue,
+    canonicalTarget: String
+  ) -> ToolApprovalPresentation
 }
 
 extension Tool {
@@ -338,9 +343,10 @@ extension Tool {
 
   public var executesOnlyViaApproval: Bool { false }
 
-  public func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
-    -> ToolApprovalPresentation
-  {
+  public func approvalPresentation(
+    arguments: JSONValue,
+    canonicalTarget: String
+  ) -> ToolApprovalPresentation {
     ToolApprovalPresentation(
       blastRadius: "egress to \(canonicalTarget)",
       contentPreview: nil,

@@ -156,8 +156,8 @@ struct ReflectionOperationRunnerTests {
     let secret = "secret-in-candidate-99"
     let env = try ReflectionRunEnvironment.make(
       reply: """
-      {"schema_version":1,"candidate":{"lessons":["Keep \(secret)"]}}
-      """,
+        {"schema_version":1,"candidate":{"lessons":["Keep \(secret)"]}}
+        """,
       secretValues: [secret]
     )
 

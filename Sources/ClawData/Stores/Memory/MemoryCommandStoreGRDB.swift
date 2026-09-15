@@ -13,9 +13,11 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
     self.afterClaimForTesting = afterClaimForTesting
   }
 
-  public func applyRemember(updateID: Int64, item: NewMemoryItem, now: Date) throws(StoreError)
-    -> MemoryCommandResult
-  {
+  public func applyRemember(
+    updateID: Int64,
+    item: NewMemoryItem,
+    now: Date
+  ) throws(StoreError) -> MemoryCommandResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
@@ -46,9 +48,11 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
     }
   }
 
-  public func applyForget(updateID: Int64, itemID: Int64, now: Date) throws(StoreError)
-    -> MemoryCommandResult
-  {
+  public func applyForget(
+    updateID: Int64,
+    itemID: Int64,
+    now: Date
+  ) throws(StoreError) -> MemoryCommandResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,

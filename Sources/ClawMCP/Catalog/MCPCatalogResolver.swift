@@ -146,9 +146,10 @@ private extension MCPCatalogResolver {
 
   /// Runs discovery over a rolling window of `connectConcurrency` servers, then restores config
   /// order. A slow server delays only itself.
-  static func discoverAll(_ sessions: [MCPServerSession], metadataRedactor: SecretRedactor) async
-    -> [Discovery]
-  {
+  static func discoverAll(
+    _ sessions: [MCPServerSession],
+    metadataRedactor: SecretRedactor
+  ) async -> [Discovery] {
     await withTaskGroup(of: (offset: Int, discovery: Discovery).self) { group in
       var scheduled = 0
       var collected: [(offset: Int, discovery: Discovery)] = []
@@ -180,9 +181,10 @@ private extension MCPCatalogResolver {
     }
   }
 
-  static func discover(_ session: MCPServerSession, metadataRedactor: SecretRedactor) async
-    -> Discovery
-  {
+  static func discover(
+    _ session: MCPServerSession,
+    metadataRedactor: SecretRedactor
+  ) async -> Discovery {
     do {
       try await session.connect()
       return .listed(try await session.listAllTools())

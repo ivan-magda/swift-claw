@@ -259,9 +259,9 @@ extension SuspendedTurnCommitTests {
         try Row.fetchOne(
           db,
           sql: """
-          SELECT provider_state_issuer, provider_state FROM messages
-          WHERE run_id = ? AND role = ?
-          """,
+            SELECT provider_state_issuer, provider_state FROM messages
+            WHERE run_id = ? AND role = ?
+            """,
           arguments: [fixture.runID, MessageRole.assistant.rawValue]
         )
       }

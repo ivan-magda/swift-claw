@@ -34,9 +34,12 @@ public enum SchedulingRuleFixtures {
   }
 
   /// Daily at `hour:minute` in `zone`. `seconds` is empty by default (see `weekdaySeven`).
-  public static func dailyAt(hour: Int, minute: Int, zone: TimeZone, seconds: [Int] = [])
-    -> Calendar.RecurrenceRule
-  {
+  public static func dailyAt(
+    hour: Int,
+    minute: Int,
+    zone: TimeZone,
+    seconds: [Int] = []
+  ) -> Calendar.RecurrenceRule {
     Calendar.RecurrenceRule(
       calendar: calendar(zone: zone),
       frequency: .daily,

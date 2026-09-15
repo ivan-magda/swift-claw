@@ -25,9 +25,11 @@ public struct RunStoreGRDB: RunStore {
 // MARK: - Run Lifecycle
 
 extension RunStoreGRDB {
-  public func pickUp(runID: Int64, policyVersion: String?, now: Date) throws(StoreError)
-    -> RunOrigin?
-  {
+  public func pickUp(
+    runID: Int64,
+    policyVersion: String?,
+    now: Date
+  ) throws(StoreError) -> RunOrigin? {
     try database.writeMapping { db in
       guard
         try Self.transitionRun(
@@ -62,8 +64,8 @@ extension RunStoreGRDB {
     try database.writeMapping { db in
       guard
         try Self
-          .transitionRun(db, runID: runID, event: .fail, now: now, terminal: .settled(cause))
-          != nil
+        .transitionRun(db, runID: runID, event: .fail, now: now, terminal: .settled(cause))
+        != nil
       else {
         return
       }

@@ -232,16 +232,25 @@ public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
   func learningView(jobID: Int64?) throws(StoreError) -> [JobLearningView]
 
   /// Revalidates and admits one already-persisted immutable candidate.
-  func admitCandidate(digest: CandidateDigest, redactor: SecretRedactor, now: Date)
-    throws(StoreError) -> AdmissionOutcome
+  func admitCandidate(
+    digest: CandidateDigest,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome
 
   /// Creates an immutable approval successor and admits it through the common transaction.
-  func approveCandidate(_ approval: CandidateApproval, redactor: SecretRedactor, now: Date)
-    throws(StoreError) -> AdmissionOutcome
+  func approveCandidate(
+    _ approval: CandidateApproval,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome
 
   /// Vetoes the predecessor and creates an immutable unadmitted edit successor.
-  func editCandidate(_ edit: CandidateEdit, redactor: SecretRedactor, now: Date) throws(StoreError)
-    -> AdmissionOutcome
+  func editCandidate(
+    _ edit: CandidateEdit,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome
 
   /// Atomically inserts every target and every runless chunk for one stable review identity.
   func commitCandidateReview(_ review: CandidateReviewNotice, now: Date) throws(StoreError) -> Bool
@@ -254,8 +263,11 @@ public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
   func consumeAndAppendEvent(_ tap: FeedbackTap, now: Date) throws(StoreError) -> FeedbackOutcome
 
   /// Consumes one payload-bearing target and commits its one-shot challenge plus prompt chunks.
-  func consumeAndOpenChallenge(_ tap: FeedbackTap, prompt: [LearningNoticeChunk], now: Date)
-    throws(StoreError) -> FeedbackOutcome
+  func consumeAndOpenChallenge(
+    _ tap: FeedbackTap,
+    prompt: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome
 
   /// Consumes the one live challenge and appends its exact UTF-8 payload as untrusted feedback.
   func consumeChallenge(id: Int64, payload: String, now: Date) throws(StoreError) -> FeedbackOutcome
@@ -283,8 +295,10 @@ public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
   func liveTrialIdentities() throws(StoreError) -> [LearningTrialIdentity]
 
   /// Reprojects one exact live cohort and applies only its open-to-draining edge.
-  func reconcileTrial(_ identity: LearningTrialIdentity, now: Date) throws(StoreError)
-    -> TrialReconciliationResult
+  func reconcileTrial(
+    _ identity: LearningTrialIdentity,
+    now: Date
+  ) throws(StoreError) -> TrialReconciliationResult
 
   /// Revalidates the complete cohort and commits an exact terminal recommendation atomically.
   func applyTrialDecision(
@@ -349,16 +363,20 @@ public protocol ScheduledLearningStore: LearningResetApplying, Sendable {
   /// evaluator may read, it already has a verdict, or another attempt at this key is live or
   /// already finished. A claim authorizes nothing — it only reserves the identity a later
   /// authorization can start.
-  func claimOperation(_ key: LearningOperationKey, now: Date) throws(StoreError)
-    -> ClaimedOperation?
+  func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation?
 
   /// Everything between the claim and the network, in one transaction. Checking the breakers
   /// outside the store and starting inside it lets two workers both read headroom and both
   /// dispatch. This re-reads the durable totals, verifies the job's epoch and the carrier
   /// authorization, records the reservation and the provider-call id, and compare-and-swaps
   /// `claimed → started`. Nothing may reach the network before it returns `.started`.
-  func authorizeAndStartOperation(_ authorization: LearningAuthorization, now: Date)
-    throws(StoreError) -> AuthorizeOutcome
+  func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome
 
   /// Commits one network boundary crossing: the actual usage row under the reserved call id and
   /// the operation's terminal state, under the predicate `state == started`.

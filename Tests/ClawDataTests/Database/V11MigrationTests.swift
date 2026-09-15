@@ -28,13 +28,13 @@ struct V11MigrationTests {
       try fixture.queue.write { db in
         try db.execute(
           sql: """
-          INSERT INTO coder_jobs(id, origin_run_id, origin_session_id, requester_user_id,
-            chat_id, tool_call_id, approval_id, prepared_json, state, slot_reserved,
-            process_ownership, created_ts, updated_ts)
-          SELECT ?, origin_run_id, origin_session_id, requester_user_id, chat_id,
-            tool_call_id, approval_id, prepared_json, state, slot_reserved,
-            process_ownership, created_ts, updated_ts FROM coder_jobs WHERE id = ?
-          """,
+            INSERT INTO coder_jobs(id, origin_run_id, origin_session_id, requester_user_id,
+              chat_id, tool_call_id, approval_id, prepared_json, state, slot_reserved,
+              process_ownership, created_ts, updated_ts)
+            SELECT ?, origin_run_id, origin_session_id, requester_user_id, chat_id,
+              tool_call_id, approval_id, prepared_json, state, slot_reserved,
+              process_ownership, created_ts, updated_ts FROM coder_jobs WHERE id = ?
+            """,
           arguments: [UUID().uuidString, id.uuidString]
         )
       }
@@ -59,10 +59,10 @@ private extension V11MigrationTests {
       )
       try db.execute(
         sql: """
-        INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-          payload_hash, status, created_ts)
-        VALUES (?, 0, 42, 'legacy-coder-notice', 'pending notice', 'legacy-hash', 'PENDING', ?)
-        """,
+          INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+            payload_hash, status, created_ts)
+          VALUES (?, 0, 42, 'legacy-coder-notice', 'pending notice', 'legacy-hash', 'PENDING', ?)
+          """,
         arguments: [db.lastInsertedRowID, Date()]
       )
     }

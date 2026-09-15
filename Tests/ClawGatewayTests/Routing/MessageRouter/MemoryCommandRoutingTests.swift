@@ -24,13 +24,13 @@ struct MemoryCommandRoutingTests {
     #expect(sent.count == 1)
     #expect(
       sent.first?.text == """
-      user:
-      2 · «prefers dark mode» · owner · 1970-01-03
-      project:
-      1 · «ship 3a» · owner · 1970-01-02
-      reference:
-      3 · «cite sources» · owner · 1970-01-04
-      """
+        user:
+        2 · «prefers dark mode» · owner · 1970-01-03
+        project:
+        1 · «ship 3a» · owner · 1970-01-02
+        reference:
+        3 · «cite sources» · owner · 1970-01-04
+        """
     )
     #expect(await harness.dispatcher.calls.isEmpty)
   }
@@ -70,10 +70,10 @@ struct MemoryCommandRoutingTests {
     #expect(sent.count == 1)
     #expect(
       sent.first?.text == """
-      project:
-      2 · «ship 3b» · owner · 1970-01-03
-      1 · «ship 3a» · owner · 1970-01-02
-      """
+        project:
+        2 · «ship 3b» · owner · 1970-01-03
+        1 · «ship 3a» · owner · 1970-01-02
+        """
     )
   }
 

@@ -13,12 +13,12 @@ extension ScheduledLearningStoreGRDB {
       // a disarmed daemon — out of the table entirely.
       try db.execute(
         sql: """
-        INSERT OR IGNORE INTO run_compatibility(run_id, job_id, learning_epoch,
-          context_schema_version, tool_catalog_digest, policy_version, skill_set_digest,
-          configured_route)
-        SELECT run_id, job_id, learning_epoch, ?, ?, ?, ?, ?
-        FROM run_learning_bindings WHERE run_id = ?
-        """,
+          INSERT OR IGNORE INTO run_compatibility(run_id, job_id, learning_epoch,
+            context_schema_version, tool_catalog_digest, policy_version, skill_set_digest,
+            configured_route)
+          SELECT run_id, job_id, learning_epoch, ?, ?, ?, ?, ?
+          FROM run_learning_bindings WHERE run_id = ?
+          """,
         arguments: [
           surface.contextSchemaVersion,
           surface.toolCatalogDigest,
@@ -47,10 +47,10 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT job_id, learning_epoch, context_schema_version, tool_catalog_digest, policy_version,
-        skill_set_digest, configured_route, evidence_schema_version, classifier_version
-      FROM run_compatibility WHERE run_id = ?
-      """,
+        SELECT job_id, learning_epoch, context_schema_version, tool_catalog_digest, policy_version,
+          skill_set_digest, configured_route, evidence_schema_version, classifier_version
+        FROM run_compatibility WHERE run_id = ?
+        """,
       arguments: [runID]
     )
     guard
@@ -85,11 +85,11 @@ extension ScheduledLearningStoreGRDB {
   {
     try db.execute(
       sql: """
-      UPDATE run_compatibility
-      SET evaluator_route = ?, evaluator_prompt_version = ?, evaluator_schema_version = ?,
-        rubric_version = ?
-      WHERE run_id = ?
-      """,
+        UPDATE run_compatibility
+        SET evaluator_route = ?, evaluator_prompt_version = ?, evaluator_schema_version = ?,
+          rubric_version = ?
+        WHERE run_id = ?
+        """,
       arguments: [
         surface.route,
         String(surface.promptVersion),
@@ -105,9 +105,9 @@ extension ScheduledLearningStoreGRDB {
   static func stampSealingVersions(_ db: Database, runID: Int64) throws {
     try db.execute(
       sql: """
-      UPDATE run_compatibility SET evidence_schema_version = ?, classifier_version = ?
-      WHERE run_id = ?
-      """,
+        UPDATE run_compatibility SET evidence_schema_version = ?, classifier_version = ?
+        WHERE run_id = ?
+        """,
       arguments: [EvidenceLimits.schemaVersion, EligibilityClassifier.version, runID]
     )
   }

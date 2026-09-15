@@ -99,10 +99,10 @@ private extension CoderDoneWhenTests {
       id: "coder-background",
       name: CoderToolNames.submit,
       argumentsJSON: """
-      {"source":{"local":{"path":"/fixture/repository-1"}},"task":"Fix retry handling",
-      "workspace":"\(CoderWorkspaceMode.inPlace.rawValue)",
-      "deliverable":"\(CoderDeliverable.localChanges.rawValue)","publish_existing_changes":false}
-      """
+        {"source":{"local":{"path":"/fixture/repository-1"}},"task":"Fix retry handling",
+        "workspace":"\(CoderWorkspaceMode.inPlace.rawValue)",
+        "deliverable":"\(CoderDeliverable.localChanges.rawValue)","publish_existing_changes":false}
+        """
     )
   }
 
@@ -121,17 +121,19 @@ private extension CoderDoneWhenTests {
     return approval
   }
 
-  func rowIDs(containing text: String, deliveredOnly: Bool, in harness: SC3Harness) throws
-    -> [String]
-  {
+  func rowIDs(
+    containing text: String,
+    deliveredOnly: Bool,
+    in harness: SC3Harness
+  ) throws -> [String] {
     try harness.readPool.read { database in
       try String.fetchAll(
         database,
         sql: """
-        SELECT dedup_key FROM outbound_deliveries
-        WHERE instr(payload, ?) > 0 AND (? = 0 OR telegram_message_id IS NOT NULL)
-        ORDER BY dedup_key
-        """,
+          SELECT dedup_key FROM outbound_deliveries
+          WHERE instr(payload, ?) > 0 AND (? = 0 OR telegram_message_id IS NOT NULL)
+          ORDER BY dedup_key
+          """,
         arguments: [text, deliveredOnly]
       )
     }

@@ -109,10 +109,10 @@ struct MemoryStoreTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO memory_items(text, kind, sensitivity, importance, \
-        source, session_id, created_at)
-        VALUES ('corrupt', 'user', 'bogus', 1, 'owner', NULL, ?)
-        """,
+          INSERT INTO memory_items(text, kind, sensitivity, importance, \
+          source, session_id, created_at)
+          VALUES ('corrupt', 'user', 'bogus', 1, 'owner', NULL, ?)
+          """,
         arguments: [Date(timeIntervalSince1970: 1)]
       )
     }
@@ -135,10 +135,10 @@ struct MemoryStoreTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO memory_items(text, kind, sensitivity, importance, \
-        source, session_id, created_at)
-        VALUES (?, 'user', ?, ?, 'owner', NULL, ?)
-        """,
+          INSERT INTO memory_items(text, kind, sensitivity, importance, \
+          source, session_id, created_at)
+          VALUES (?, 'user', ?, ?, 'owner', NULL, ?)
+          """,
         arguments: [text, sensitivity, importance, Date(timeIntervalSince1970: seconds)]
       )
     }

@@ -14,11 +14,11 @@ public struct MemoryStoreGRDB: MemoryStore {
         rows = try Row.fetchAll(
           db,
           sql: """
-          SELECT * FROM memory_items
-          WHERE kind = ?
-          ORDER BY created_at DESC, id DESC
-          LIMIT ?
-          """,
+            SELECT * FROM memory_items
+            WHERE kind = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
           arguments: [kind.rawValue, limit]
         )
       } else {
@@ -54,11 +54,11 @@ public struct MemoryStoreGRDB: MemoryStore {
       let rows = try Row.fetchAll(
         db,
         sql: """
-        SELECT * FROM memory_items
-        \(sensitivityFilter)
-        ORDER BY importance DESC, created_at DESC, id DESC
-        LIMIT ?
-        """,
+          SELECT * FROM memory_items
+          \(sensitivityFilter)
+          ORDER BY importance DESC, created_at DESC, id DESC
+          LIMIT ?
+          """,
         arguments: [limit]
       )
       return try rows.map(Self.decodeItem)
@@ -69,10 +69,10 @@ public struct MemoryStoreGRDB: MemoryStore {
   static func insertItem(_ db: Database, item: NewMemoryItem, now: Date) throws -> MemoryItem {
     try db.execute(
       sql: """
-      INSERT INTO memory_items(text, kind, sensitivity, importance, \
-      source, session_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO memory_items(text, kind, sensitivity, importance, \
+        source, session_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         item.text,
         item.kind.rawValue,

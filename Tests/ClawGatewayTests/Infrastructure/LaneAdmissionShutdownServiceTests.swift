@@ -13,9 +13,10 @@ struct LaneAdmissionShutdownServiceTests {
   /// sequence — close admission, cancel, begin drain — has run) and then parks on `holdDeadline`.
   /// The park is cancellation-aware, so a clean drain's `deadline.cancel()` releases it; opening
   /// `holdDeadline` fires the timeout instead.
-  private func deadlineDrivingClock(drainStarted: AsyncGate, holdDeadline: AsyncGate)
-    -> ScriptedClock
-  {
+  private func deadlineDrivingClock(
+    drainStarted: AsyncGate,
+    holdDeadline: AsyncGate
+  ) -> ScriptedClock {
     ScriptedClock { _ in
       drainStarted.open()
       await holdDeadline.wait()

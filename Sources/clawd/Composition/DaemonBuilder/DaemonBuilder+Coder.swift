@@ -54,12 +54,12 @@ extension DaemonBuilder {
       let reservedJobs = try? stores.coderJobs.reservedJobs()
       let service =
         reservedJobs?.isEmpty == true
-          ? nil
-          : makeCoderService(
-            backend: nil,
-            policyID: Self.unavailableCoderPolicyID,
-            coordination: coordination
-          )
+        ? nil
+        : makeCoderService(
+          backend: nil,
+          policyID: Self.unavailableCoderPolicyID,
+          coordination: coordination
+        )
       return CoderComposition(service: service, tools: [], checks: CoderHealthRows.disabled)
     }
 

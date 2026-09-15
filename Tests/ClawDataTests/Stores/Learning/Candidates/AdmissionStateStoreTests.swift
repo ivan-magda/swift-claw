@@ -279,9 +279,10 @@ private extension AdmissionStoreFixture {
     }
   }
 
-  func applyReplayCorruption(_ corruption: AdmissionReplayCorruption, receipt: AdmissionReceipt)
-    throws
-  {
+  func applyReplayCorruption(
+    _ corruption: AdmissionReplayCorruption,
+    receipt: AdmissionReceipt
+  ) throws {
     try env.queue.writeWithoutTransaction { db in
       try db.execute(sql: "PRAGMA foreign_keys = OFF")
       defer { try? db.execute(sql: "PRAGMA foreign_keys = ON") }

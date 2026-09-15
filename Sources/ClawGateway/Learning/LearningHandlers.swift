@@ -11,9 +11,11 @@ struct LearningHandlers: Sendable {
   let now: @Sendable () -> Date
   let outboxSignal: OutboxSignal?
 
-  func handle(_ command: LearningCommand, rawUpdate: RawUpdate, message: IncomingMessage)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func handle(
+    _ command: LearningCommand,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
     switch command {
     case .list:
       return try await read(jobID: nil, style: .list, rawUpdate: rawUpdate, message: message)
@@ -31,9 +33,11 @@ struct LearningHandlers: Sendable {
     }
   }
 
-  private func requestReset(jobID: Int64, rawUpdate: RawUpdate, message: IncomingMessage)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  private func requestReset(
+    jobID: Int64,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
     let view = try await replies.perform(
       "learning reset view",
       updateID: rawUpdate.updateID,

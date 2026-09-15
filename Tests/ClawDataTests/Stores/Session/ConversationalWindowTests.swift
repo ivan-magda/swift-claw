@@ -32,9 +32,9 @@ struct ConversationalWindowTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts, tool_calls, tool_call_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts, tool_calls, tool_call_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           sessionID,
           role,

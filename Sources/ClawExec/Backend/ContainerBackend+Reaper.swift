@@ -22,7 +22,7 @@ extension ContainerBackend {
 
       return identity.hasPrefix(ExecutionIdentity.namePrefix)
         && container.labels[ExecutionIdentity.ownershipLabelKey]
-        == ExecutionIdentity.ownershipLabelValue
+          == ExecutionIdentity.ownershipLabelValue
     }
   }
 

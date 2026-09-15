@@ -52,10 +52,10 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       ": keep-alive\r\n\r\n"
-        + Self.event(Self.addedMessage(index: 0, phase: "final"), separator: "\r\n")
-        + Self.event(Self.textDelta(index: 0, text: "one"), separator: "\r\n")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "one"), separator: "\r\n")
-        + Self.event(Self.completed(), separator: "\r\n")
+      + Self.event(Self.addedMessage(index: 0, phase: "final"), separator: "\r\n")
+      + Self.event(Self.textDelta(index: 0, text: "one"), separator: "\r\n")
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "one"), separator: "\r\n")
+      + Self.event(Self.completed(), separator: "\r\n")
 
     // when
     let run = try Self.consume(stream)
@@ -72,11 +72,11 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.event(#"{"type":"response.reasoning_summary_part.added","output_index":0}"#)
-        + Self.event(#"{"type":"something.we.have.never.seen","payload":{"nested":[1,2]}}"#)
-        + Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.textDelta(index: 0, text: "still here"))
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "still here"))
-        + Self.event(Self.completed())
+      + Self.event(#"{"type":"something.we.have.never.seen","payload":{"nested":[1,2]}}"#)
+      + Self.addedMessageEvent(index: 0, phase: "final")
+      + Self.event(Self.textDelta(index: 0, text: "still here"))
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "still here"))
+      + Self.event(Self.completed())
 
     // when
     let run = try Self.consume(stream)
@@ -166,9 +166,9 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "draft")
-        + Self.event(Self.textDelta(index: 0, text: "half-formed"))
-        + Self.event(Self.doneMessage(index: 0, phase: "draft", text: "half-formed"))
-        + Self.event(Self.completed())
+      + Self.event(Self.textDelta(index: 0, text: "half-formed"))
+      + Self.event(Self.doneMessage(index: 0, phase: "draft", text: "half-formed"))
+      + Self.event(Self.completed())
 
     // when
     let run = try Self.consume(stream)
@@ -254,10 +254,10 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "commentary")
-        + Self.event(Self.textDelta(index: 0, text: "notes to self"))
-        + Self.addedMessageEvent(index: 1, phase: "final")
-        + Self.event(Self.textDelta(index: 1, text: "half an "))
-        + Self.event(Self.textDelta(index: 1, text: "answer")) + Self.event(Self.completed())
+      + Self.event(Self.textDelta(index: 0, text: "notes to self"))
+      + Self.addedMessageEvent(index: 1, phase: "final")
+      + Self.event(Self.textDelta(index: 1, text: "half an "))
+      + Self.event(Self.textDelta(index: 1, text: "answer")) + Self.event(Self.completed())
 
     // when
     let run = try Self.consume(stream)
@@ -365,12 +365,12 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.textDelta(index: 0, text: "as far as I got"))
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "as far as I got"))
-        + Self.event(
-          #"{"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","#
-            + #""incomplete_details":{"reason":"max_output_tokens"}}}"#
-        )
+      + Self.event(Self.textDelta(index: 0, text: "as far as I got"))
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "as far as I got"))
+      + Self.event(
+        #"{"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","#
+          + #""incomplete_details":{"reason":"max_output_tokens"}}}"#
+      )
 
     // when
     let run = try Self.consume(stream)
@@ -394,7 +394,7 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.textDelta(index: 0, text: "some text")) + Self.event(terminal)
+      + Self.event(Self.textDelta(index: 0, text: "some text")) + Self.event(terminal)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -409,12 +409,12 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let succeeding =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "fine"))
-        + Self.event(#"{"type":"response.failed","response":{"id":"r","status":"completed"}}"#)
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "fine"))
+      + Self.event(#"{"type":"response.failed","response":{"id":"r","status":"completed"}}"#)
     let failing =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "fine"))
-        + Self.event(#"{"type":"response.completed","response":{"id":"r","status":"failed"}}"#)
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "fine"))
+      + Self.event(#"{"type":"response.completed","response":{"id":"r","status":"failed"}}"#)
 
     // when
     let run = try Self.consume(succeeding)
@@ -433,8 +433,8 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "named"))
-        + Self.event(#"{"type":"response.completed","response":{"id":"r"}}"#)
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "named"))
+      + Self.event(#"{"type":"response.completed","response":{"id":"r"}}"#)
 
     // when
     let run = try Self.consume(stream)
@@ -455,8 +455,8 @@ struct ChatGPTResponsesSSEParserTests {
     // applying the batch past its outcome would publish it.
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "first"))
-        + Self.event(Self.completed()) + Self.event(Self.textDelta(index: 0, text: "same batch"))
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "first"))
+      + Self.event(Self.completed()) + Self.event(Self.textDelta(index: 0, text: "same batch"))
 
     // when
     let events = try accumulator.consume(try parser.push(Data(stream.utf8)))
@@ -479,9 +479,9 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let conflicting =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-        + Self.event(Self.completed(id: "resp_1"))
-        + Self.event(#"{"type":"response.failed","response":{"id":"resp_1","status":"failed"}}"#)
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+      + Self.event(Self.completed(id: "resp_1"))
+      + Self.event(#"{"type":"response.failed","response":{"id":"resp_1","status":"failed"}}"#)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -494,9 +494,9 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let repeated =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-        + Self.event(Self.completed(id: "resp_1"))
-        + Self.event(#"{"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#)
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+      + Self.event(Self.completed(id: "resp_1"))
+      + Self.event(#"{"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#)
 
     // when
     let run = try Self.consume(repeated)
@@ -512,19 +512,19 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let repeatedTerminal =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-        + Self.event(
-          #"""
-          {"type":"response.completed","response":{"id":"resp_1","status":"completed",\#
-          "model":"gpt-a"}}
-          """#
-        )
-        + Self.event(
-          #"""
-          {"type":"response.done","response":{"id":"resp_1","status":"completed",\#
-          "model":"gpt-b"}}
-          """#
-        )
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+      + Self.event(
+        #"""
+        {"type":"response.completed","response":{"id":"resp_1","status":"completed",\#
+        "model":"gpt-a"}}
+        """#
+      )
+      + Self.event(
+        #"""
+        {"type":"response.done","response":{"id":"resp_1","status":"completed",\#
+        "model":"gpt-b"}}
+        """#
+      )
 
     // when
     let run = try Self.consume(repeatedTerminal)
@@ -543,8 +543,8 @@ struct ChatGPTResponsesSSEParserTests {
     var accumulator = Self.accumulator()
     let decided =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "decided"))
-        + Self.event(Self.completed(id: "resp_1"))
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "decided"))
+      + Self.event(Self.completed(id: "resp_1"))
 
     // when
     let events = try accumulator.consume(try parser.push(Data(decided.utf8)))
@@ -573,14 +573,14 @@ struct ChatGPTResponsesSSEParserTests {
     var accumulator = Self.accumulator()
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.textDelta(index: 0, text: "an answer that never landed"))
-        + Self.event(
-          Self.doneMessage(
-            index: 0,
-            phase: "final",
-            text: "an answer that never landed"
-          )
+      + Self.event(Self.textDelta(index: 0, text: "an answer that never landed"))
+      + Self.event(
+        Self.doneMessage(
+          index: 0,
+          phase: "final",
+          text: "an answer that never landed"
         )
+      )
 
     // when
     _ = try accumulator.consume(try parser.push(Data(stream.utf8)))
@@ -619,13 +619,13 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-        + Self.event(
-          #"""
-          {"type":"response.completed","response":{"id":"r","status":"completed",\#
-          "usage":\#(usage)}}
-          """#
-        )
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+      + Self.event(
+        #"""
+        {"type":"response.completed","response":{"id":"r","status":"completed",\#
+        "usage":\#(usage)}}
+        """#
+      )
 
     // then
     #expect(throws: ProviderError.self) {
@@ -640,11 +640,11 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-        + Self.event(
-          #"{"type":"response.completed","response":{"id":"r","status":"completed","#
-            + #""usage":{"input_tokens":7,"output_tokens":3}}}"#
-        )
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+      + Self.event(
+        #"{"type":"response.completed","response":{"id":"r","status":"completed","#
+          + #""usage":{"input_tokens":7,"output_tokens":3}}}"#
+      )
 
     // when
     let run = try Self.consume(stream)
@@ -660,8 +660,8 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-        + Self.event(#"{"type":"response.completed","response":{"id":"r","status":"completed"}}"#)
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+      + Self.event(#"{"type":"response.completed","response":{"id":"r","status":"completed"}}"#)
 
     // when
     let run = try Self.consume(stream)
@@ -675,8 +675,8 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-        + Self.event(#"{"type":"response.completed","response":{"id":"r","status":7}}"#)
+      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+      + Self.event(#"{"type":"response.completed","response":{"id":"r","status":7}}"#)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -715,8 +715,8 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.functionCallEvents(index: 0, callID: "call_same", name: "clock")
-        + Self.functionCallEvents(index: 1, callID: "call_same", name: "clock")
-        + Self.event(Self.completed())
+      + Self.functionCallEvents(index: 1, callID: "call_same", name: "clock")
+      + Self.event(Self.completed())
 
     // then
     #expect(throws: ProviderError.self) {
@@ -736,8 +736,8 @@ struct ChatGPTResponsesSSEParserTests {
     // given
     let stream =
       Self.event(#"{"type":"response.output_item.added","output_index":0,"item":\#(item)}"#)
-        + Self.event(#"{"type":"response.output_item.done","output_index":0,"item":\#(item)}"#)
-        + Self.event(Self.completed())
+      + Self.event(#"{"type":"response.output_item.done","output_index":0,"item":\#(item)}"#)
+      + Self.event(Self.completed())
 
     // then
     #expect(throws: ProviderError.self) {
@@ -840,9 +840,9 @@ extension ChatGPTResponsesSSEParserTests {
 
   /// Any identity will do: nothing here asserts on the issuer, only on the material stamped with it.
   /// Generating one rather than pinning a literal is what says so.
-  fileprivate static func accumulator(redacting secrets: [String] = [])
-    -> ChatGPTResponsesAccumulator
-  {
+  fileprivate static func accumulator(
+    redacting secrets: [String] = []
+  ) -> ChatGPTResponsesAccumulator {
     ChatGPTResponsesAccumulator(
       identity: ChatGPTReplayIdentity(profileID: UUID(), wireModel: "gpt-5", epoch: UUID()),
       redactionValues: secrets
@@ -933,7 +933,7 @@ extension ChatGPTResponsesSSEParserTests {
   fileprivate static func functionCallEvents(index: Int, callID: String, name: String) -> String {
     let item =
       #"{"id":"fc_\#(index)","type":"function_call","call_id":"\#(callID)","#
-        + #""name":"\#(name)","arguments":"{}"}"#
+      + #""name":"\#(name)","arguments":"{}"}"#
     return event(#"{"type":"response.output_item.added","output_index":\#(index),"item":\#(item)}"#)
       + event(#"{"type":"response.output_item.done","output_index":\#(index),"item":\#(item)}"#)
   }

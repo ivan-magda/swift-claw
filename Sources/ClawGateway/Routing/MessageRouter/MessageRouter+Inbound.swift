@@ -24,9 +24,11 @@ extension MessageRouter {
   /// need bytes the bot deliberately never fetched for a message that did not name it, so there is
   /// nothing of them to write down. The room's transcript therefore holds what was said in it, and
   /// no placeholder for what was shown.
-  func observe(rawUpdate: RawUpdate, message: IncomingMessage, mode: ChatMode) async
-    -> HandleOutcome
-  {
+  func observe(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    mode: ChatMode
+  ) async -> HandleOutcome {
     guard case .text(let text) = message.content else {
       logger.debug(
         "update \(rawUpdate.updateID) in chat \(message.chatID) does not address the bot, skipping"
@@ -49,9 +51,11 @@ extension MessageRouter {
   /// An unlisted chat is answered with silence but still logged: the id and title are the only way
   /// an operator can learn what to put in `CLAW_GROUP_CHATS`, since the bot says nothing in a room
   /// until that id is already configured.
-  func denyAccess(_ denial: AccessDenial, rawUpdate: RawUpdate, message: IncomingMessage) async
-    -> HandleOutcome
-  {
+  func denyAccess(
+    _ denial: AccessDenial,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async -> HandleOutcome {
     switch denial {
     case .unlistedChat:
       let title = message.chatTitle ?? "(untitled)"

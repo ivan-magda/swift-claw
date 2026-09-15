@@ -413,9 +413,12 @@ private struct AdmissionFixture {
     )
   }
 
-  func control(_ signal: OwnerSignal, subjectDigest: String? = nil, eventID: Int64, revision: Int64)
-    -> CandidateFeedbackSource
-  {
+  func control(
+    _ signal: OwnerSignal,
+    subjectDigest: String? = nil,
+    eventID: Int64,
+    revision: Int64
+  ) -> CandidateFeedbackSource {
     CandidateFeedbackSource(
       eventID: eventID,
       digest: FeedbackEventDigest(rawValue: "feedback-\(eventID)"),

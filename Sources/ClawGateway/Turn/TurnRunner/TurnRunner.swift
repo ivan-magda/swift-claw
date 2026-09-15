@@ -13,9 +13,12 @@ public protocol TurnDispatching: Sendable {
 }
 
 extension TurnDispatching {
-  public func resume(runID: Int64, sessionID: Int64, chatID: Int64, contextBoundMessageID: Int64)
-    async
-  {}
+  public func resume(
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
+    contextBoundMessageID: Int64
+  ) async {}
 }
 
 /// Picks up a durable PENDING run, assembles its trigger-bounded context, executes the agent, and
@@ -207,9 +210,12 @@ public struct TurnRunner: TurnDispatching {
   /// with the run's carried-over budget counters. Non-throwing: it runs on the session lane inside
   /// the waiter's `park`, so every failure resolves in-band (a build/turn failure fails the run so
   /// the lane frees).
-  public func resume(runID: Int64, sessionID: Int64, chatID: Int64, contextBoundMessageID: Int64)
-    async
-  {
+  public func resume(
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
+    contextBoundMessageID: Int64
+  ) async {
     guard !Task.isCancelled else {
       return
     }

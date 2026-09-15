@@ -117,9 +117,11 @@ actor RecordingTransport: TelegramTransport {
 
   func getMe() async throws -> BotIdentity { BotIdentity(id: 1, username: "claw_bot") }
 
-  func getUpdates(offset: Int64?, timeout: Int, allowedUpdates: [String]) async throws
-    -> [RawUpdate]
-  {
+  func getUpdates(
+    offset: Int64?,
+    timeout: Int,
+    allowedUpdates: [String]
+  ) async throws -> [RawUpdate] {
     pollCount += 1
     lastAllowedUpdates = allowedUpdates
     resumeWaiters(.poll, reached: pollCount)
@@ -134,9 +136,11 @@ actor RecordingTransport: TelegramTransport {
   }
 
   // Recorded sends don't render keyboards; prompt-row assertions are DB-side (outbox rows).
-  func sendMessage(to target: DeliveryTarget, text: String, replyMarkup: String?) async throws
-    -> Int64
-  {
+  func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     sendAttempts += 1
     resumeWaiters(.attempt, reached: sendAttempts)
     if let sendError {
@@ -151,9 +155,11 @@ actor RecordingTransport: TelegramTransport {
     return Int64(sendAttempts)
   }
 
-  func sendRichMessage(to target: DeliveryTarget, markdown: String, replyMarkup: String?)
-    async throws -> Int64
-  {
+  func sendRichMessage(
+    to target: DeliveryTarget,
+    markdown: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     sendAttempts += 1
     resumeWaiters(.attempt, reached: sendAttempts)
     if let richError {

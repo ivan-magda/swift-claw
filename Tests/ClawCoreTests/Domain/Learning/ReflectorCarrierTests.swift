@@ -29,8 +29,8 @@ struct ReflectorCarrierTests {
     let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
     let bodies =
       (try #require(object["stable_lessons"] as? [String]))
-        + (try #require(object["evaluations"] as? [String]))
-        + (try #require(object["owner_payloads"] as? [String]))
+      + (try #require(object["evaluations"] as? [String]))
+      + (try #require(object["owner_payloads"] as? [String]))
 
     // then — reusing one nonce would let one body terminate another body's trust boundary
     #expect(Set(bodies.compactMap(fenceNonce)).count == 4)

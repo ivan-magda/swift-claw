@@ -389,14 +389,14 @@ extension ClawDatabase {
     // mis-seat every value if either table's column order ever drifted.
     try db.execute(
       sql: """
-      INSERT INTO outbound_deliveries_new (run_id, step_index, chat_id, dedup_key, payload,
-        payload_hash, telegram_message_id, status, created_ts, sent_ts, approval_id,
-        reply_markup, message_thread_id, reply_to_message_id)
-      SELECT run_id, step_index, chat_id, dedup_key, payload, payload_hash,
-        telegram_message_id, status, created_ts, sent_ts, approval_id, reply_markup,
-        message_thread_id, reply_to_message_id
-      FROM outbound_deliveries
-      """
+        INSERT INTO outbound_deliveries_new (run_id, step_index, chat_id, dedup_key, payload,
+          payload_hash, telegram_message_id, status, created_ts, sent_ts, approval_id,
+          reply_markup, message_thread_id, reply_to_message_id)
+        SELECT run_id, step_index, chat_id, dedup_key, payload, payload_hash,
+          telegram_message_id, status, created_ts, sent_ts, approval_id, reply_markup,
+          message_thread_id, reply_to_message_id
+        FROM outbound_deliveries
+        """
     )
     try db.drop(table: "outbound_deliveries")
     try db.rename(table: "outbound_deliveries_new", to: "outbound_deliveries")

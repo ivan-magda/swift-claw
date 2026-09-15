@@ -94,18 +94,18 @@ struct ContainerBackendMaintenanceTests {
     let prefixOnly = "clawd-exec-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     let labelOnly = "someone-elses-container"
     let firstList = """
-    [
-      {"id":"\(owned)","configuration":{"id":"\(owned)","labels":{"clawd.exec":"1"}}},
-      {"id":"\(prefixOnly)","configuration":{"id":"\(prefixOnly)","labels":{}}},
-      {"id":"\(labelOnly)","configuration":{"id":"\(labelOnly)","labels":{"clawd.exec":"1"}}}
-    ]
-    """
+      [
+        {"id":"\(owned)","configuration":{"id":"\(owned)","labels":{"clawd.exec":"1"}}},
+        {"id":"\(prefixOnly)","configuration":{"id":"\(prefixOnly)","labels":{}}},
+        {"id":"\(labelOnly)","configuration":{"id":"\(labelOnly)","labels":{"clawd.exec":"1"}}}
+      ]
+      """
     let finalList = """
-    [
-      {"id":"\(prefixOnly)","configuration":{"id":"\(prefixOnly)","labels":{}}},
-      {"id":"\(labelOnly)","configuration":{"id":"\(labelOnly)","labels":{"clawd.exec":"1"}}}
-    ]
-    """
+      [
+        {"id":"\(prefixOnly)","configuration":{"id":"\(prefixOnly)","labels":{}}},
+        {"id":"\(labelOnly)","configuration":{"id":"\(labelOnly)","labels":{"clawd.exec":"1"}}}
+      ]
+      """
     let runner = ScriptedCommandRunner { command, history in
       if command.arguments == ContainerInvocation.listAll() {
         return jsonCommandResult(history.count == 1 ? firstList : finalList)

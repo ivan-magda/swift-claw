@@ -17,9 +17,10 @@ struct BoundRunEnvironment {
   let sessionID: Int64
   let now: Date
 
-  static func make(learningEnabled: Bool = true, databasePath: String? = nil) throws
-    -> BoundRunEnvironment
-  {
+  static func make(
+    learningEnabled: Bool = true,
+    databasePath: String? = nil
+  ) throws -> BoundRunEnvironment {
     let writer: any DatabaseWriter
     if let databasePath {
       writer = try DatabaseQueue(
@@ -32,9 +33,10 @@ struct BoundRunEnvironment {
     return try make(learningEnabled: learningEnabled, writer: writer)
   }
 
-  static func make(learningEnabled: Bool = true, writer: any DatabaseWriter) throws
-    -> BoundRunEnvironment
-  {
+  static func make(
+    learningEnabled: Bool = true,
+    writer: any DatabaseWriter
+  ) throws -> BoundRunEnvironment {
     try ClawDatabase.migrate(writer)
     let jobs = ScheduledJobStoreGRDB(writer: writer, learningEnabled: learningEnabled)
     let now = Date(timeIntervalSince1970: 1_782_000_600)
@@ -91,9 +93,9 @@ struct BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, ?, ?, ?, ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, ?, ?, ?, ?)
+          """,
         arguments: [
           sessionID,
           MessageRole.user.rawValue,
@@ -105,9 +107,9 @@ struct BoundRunEnvironment {
       let triggerMessageID = db.lastInsertedRowID
       try db.execute(
         sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
+          VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           sessionID,
           RunState.running.rawValue,
@@ -194,17 +196,17 @@ private extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, 'assistant', '', 'trusted', ?,
-          '[{"id":"c1","name":"file_write","arguments":"{}"}]')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
+          VALUES (?, ?, 'assistant', '', 'trusted', ?,
+            '[{"id":"c1","name":"file_write","arguments":"{}"}]')
+          """,
         arguments: [sessionID, runID, now]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
+          """,
         arguments: [sessionID, runID, RunStoreGRDB.placeholderObservationContent, now]
       )
       let observationMessageID = db.lastInsertedRowID

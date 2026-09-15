@@ -365,9 +365,11 @@ private enum ReviewFixture {
     return job.id
   }
 
-  static func candidate(jobID: Int64 = 41, evaluationCount: Int, suffix: String = "base") throws
-    -> CandidateArtifact
-  {
+  static func candidate(
+    jobID: Int64 = 41,
+    evaluationCount: Int,
+    suffix: String = "base"
+  ) throws -> CandidateArtifact {
     let base = LessonSet.empty(jobID: jobID)
     let replacement = try LessonSet.canonical(
       jobID: jobID,

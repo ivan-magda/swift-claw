@@ -95,9 +95,9 @@ extension ReflectionPersistenceTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_reflection_receipt BEFORE INSERT ON learning_decisions
-        BEGIN SELECT RAISE(ABORT, 'forced receipt failure'); END
-        """
+          CREATE TRIGGER fail_reflection_receipt BEFORE INSERT ON learning_decisions
+          BEGIN SELECT RAISE(ABORT, 'forced receipt failure'); END
+          """
       )
     }
 

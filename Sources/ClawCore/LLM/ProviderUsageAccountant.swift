@@ -179,9 +179,10 @@ public struct ProviderUsageAccountant: Sendable {
   /// The pre-call estimate a budget gate reads before a call is issued: reserved input, the total for
   /// the token cap, and the USD figure — resolved under the injected policy, so `includedPlan` yields
   /// a zero the dollar gate skips — for the spend cap.
-  public func preflightEstimate(context: [ChatMessage], tools: [ToolDefinition] = [])
-    -> PreflightEstimate
-  {
+  public func preflightEstimate(
+    context: [ChatMessage],
+    tools: [ToolDefinition] = []
+  ) -> PreflightEstimate {
     let inputTokens = SaturatingArithmetic.sum(
       TokenEstimator.estimateInputTokens(context, tools: tools),
       reservationPolicy.additionalTokens(for: context)

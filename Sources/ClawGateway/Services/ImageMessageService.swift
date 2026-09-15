@@ -49,7 +49,9 @@ public struct ImageMessageService: ImageMessageHandling {
     self.logger = logger
   }
 
-  public func materialize(_ attachment: PhotoAttachment) async -> Result<
+  public func materialize(
+    _ attachment: PhotoAttachment
+  ) async -> Result<
     ImagePart,
     ImageMessageFailure
   > {

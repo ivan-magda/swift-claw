@@ -137,9 +137,10 @@ private extension ApprovalCallbackHandler {
     )
   }
 
-  func authorizedActor(_ callback: RawCallback, approval: Approval) async
-    -> ApprovalResolutionActor?
-  {
+  func authorizedActor(
+    _ callback: RawCallback,
+    approval: Approval
+  ) async -> ApprovalResolutionActor? {
     let context: RunExecutionContext?
     do {
       context = try runs.executionContext(
@@ -208,9 +209,11 @@ private extension ApprovalCallbackHandler {
     return await commitDeny(callback, approval: approval, actor: actor)
   }
 
-  func commitApprove(_ callback: RawCallback, approval: Approval, actor: ApprovalResolutionActor)
-    async -> HandleOutcome
-  {
+  func commitApprove(
+    _ callback: RawCallback,
+    approval: Approval,
+    actor: ApprovalResolutionActor
+  ) async -> HandleOutcome {
     let policyVersion: String
     do { policyVersion = try currentPolicyVersion() } catch {
       return await storeFailure(callback, error)
@@ -253,9 +256,11 @@ private extension ApprovalCallbackHandler {
     return await finish(callback, toast: Self.expiredToast)
   }
 
-  func commitDeny(_ callback: RawCallback, approval: Approval, actor: ApprovalResolutionActor) async
-    -> HandleOutcome
-  {
+  func commitDeny(
+    _ callback: RawCallback,
+    approval: Approval,
+    actor: ApprovalResolutionActor
+  ) async -> HandleOutcome {
     let denied: Bool
     do {
       denied = try approvals.deny(id: approval.id, decision: .rejected, actor: actor, now: now())

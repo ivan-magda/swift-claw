@@ -102,9 +102,9 @@ extension ResetFixture {
       try Int64.fetchAll(
         db,
         sql: """
-        SELECT trial_id FROM learning_trials
-        WHERE job_id = ? AND state IN (?, ?) ORDER BY trial_id
-        """,
+          SELECT trial_id FROM learning_trials
+          WHERE job_id = ? AND state IN (?, ?) ORDER BY trial_id
+          """,
         arguments: [
           env.jobID,
           LearningTrialState.open.rawValue,
@@ -119,9 +119,9 @@ extension ResetFixture {
       try Int64.fetchAll(
         db,
         sql: """
-        SELECT trial_id FROM learning_trials
-        WHERE job_id = ? AND state = ? ORDER BY trial_id
-        """,
+          SELECT trial_id FROM learning_trials
+          WHERE job_id = ? AND state = ? ORDER BY trial_id
+          """,
         arguments: [env.jobID, state.rawValue]
       )
     }
@@ -175,10 +175,10 @@ extension ResetFixture {
         let row = try Row.fetchOne(
           db,
           sql: """
-          SELECT state, failure_code, reservation_state, reserved_tokens, reserved_cost_usd,
-            route, provider_call_id
-          FROM learning_operations WHERE operation_id = ?
-          """,
+            SELECT state, failure_code, reservation_state, reserved_tokens, reserved_cost_usd,
+              route, provider_call_id
+            FROM learning_operations WHERE operation_id = ?
+            """,
           arguments: [id]
         ),
         let state = LearningOperationState(rawValue: row["state"])
@@ -204,9 +204,9 @@ extension ResetFixture {
       try Row.fetchOne(
         db,
         sql: """
-        SELECT actor, action, tool, args_redacted, result_size, decision, run_id, session_id
-        FROM audit_events WHERE action = ?
-        """,
+          SELECT actor, action, tool, args_redacted, result_size, decision, run_id, session_id
+          FROM audit_events WHERE action = ?
+          """,
         arguments: [AuditAction.learningReset.rawValue]
       )
     }

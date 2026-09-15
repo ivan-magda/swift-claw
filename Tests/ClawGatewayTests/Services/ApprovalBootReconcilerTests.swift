@@ -160,9 +160,12 @@ struct ApprovalBootReconcilerTests {
     }
 
     @discardableResult
-    func insertApproval(runID: Int64, nonce: String, createdTs: Date, expiresTs: Date) throws
-      -> Int64
-    {
+    func insertApproval(
+      runID: Int64,
+      nonce: String,
+      createdTs: Date,
+      expiresTs: Date
+    ) throws -> Int64 {
       let canonicalArgsJSON = #"{"path":"/w/plan.md"}"#
       // Production's suspend commit always inserts the placeholder observation row the approval
       // points back at (§5.3), and `unresolvedAtBoot`'s crash-window arm keys on that placeholder
@@ -170,9 +173,9 @@ struct ApprovalBootReconcilerTests {
       return try queue.write { db in
         try db.execute(
           sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
-          """,
+            INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+            VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
+            """,
           arguments: [runID, RunStoreGRDB.placeholderObservationContent, Date()]
         )
         let observationMessageID = db.lastInsertedRowID
@@ -213,9 +216,9 @@ struct ApprovalBootReconcilerTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:7', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:7', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
     }

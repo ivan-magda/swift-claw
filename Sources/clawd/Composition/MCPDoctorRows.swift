@@ -10,7 +10,10 @@ import ClawSecrets
 /// `rows` reports the catalog and token store without contacting a server. A full doctor appends a
 /// live probe, while the daemon appends the catalog outcome it pinned at boot for `/mcp`.
 enum MCPDoctorRows {
-  static func rows(config: MCPConfig, credentials: [String: MCPCredentialLoad]) -> [DoctorReport
+  static func rows(
+    config: MCPConfig,
+    credentials: [String: MCPCredentialLoad]
+  ) -> [DoctorReport
     .Check]
   {
     guard config.servers.isEmpty == false else {
@@ -65,7 +68,7 @@ enum MCPDoctorRows {
     return row(
       key: "mcp.unbound_tokens",
       value:
-      "\(orphans.joined(separator: ", ")) — not in the config; clawd mcp clear-token removes",
+        "\(orphans.joined(separator: ", ")) — not in the config; clawd mcp clear-token removes",
       ok: true
     )
   }

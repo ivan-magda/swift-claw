@@ -194,13 +194,15 @@ private extension MCPTokenCommandTests {
     return stateRoot
   }
 
-  func makeServer(name: String = "linear", url: String = "https://mcp.example/mcp") throws
-    -> MCPServerConfig
-  { try MCPServerConfig(name: name, url: url) }
+  func makeServer(
+    name: String = "linear",
+    url: String = "https://mcp.example/mcp"
+  ) throws -> MCPServerConfig { try MCPServerConfig(name: name, url: url) }
 
-  func makeContext(stateRoot: URL, url: String = "https://mcp.example/mcp") throws
-    -> MCPCommandContext
-  {
+  func makeContext(
+    stateRoot: URL,
+    url: String = "https://mcp.example/mcp"
+  ) throws -> MCPCommandContext {
     MCPCommandContext(
       stateRoot: stateRoot,
       config: try MCPConfig(servers: [try makeServer(url: url)])

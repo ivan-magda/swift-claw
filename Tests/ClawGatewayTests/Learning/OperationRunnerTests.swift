@@ -33,9 +33,9 @@ struct OperationRunnerTests {
     // given
     let env = try EvaluationRunEnvironment.make(
       reply: """
-      {"schema_version":1,"outcome":"reusable_issue",\
-      "issue_codes":["missed_price_change","empty_answer"]}
-      """
+        {"schema_version":1,"outcome":"reusable_issue",\
+        "issue_codes":["missed_price_change","empty_answer"]}
+        """
     )
 
     // when

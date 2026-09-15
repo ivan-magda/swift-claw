@@ -39,9 +39,9 @@ private func reply(issueCodes: [String]) -> String {
     "\"\(code)\""
   }
   return """
-  {"schema_version":1,"outcome":"reusable_issue",\
-  "issue_codes":[\(codes.joined(separator: ","))]}
-  """
+    {"schema_version":1,"outcome":"reusable_issue",\
+    "issue_codes":[\(codes.joined(separator: ","))]}
+    """
 }
 
 /// The evaluator is blind by construction, not by convention: `EvaluatorCarrier` is the whole
@@ -100,9 +100,9 @@ struct EvaluatorCarrierTests {
   func issueCodesAreStoredSortedSoTwoRunsCompareByExactEquality() throws {
     // given — the same two codes a second run could report in the other order
     let json = """
-    {"schema_version":1,"outcome":"reusable_issue",\
-    "issue_codes":["missed_price_change","empty_answer"]}
-    """
+      {"schema_version":1,"outcome":"reusable_issue",\
+      "issue_codes":["missed_price_change","empty_answer"]}
+      """
 
     // when
     let output = try JSONDecoder().decode(EvaluatorOutput.self, from: Data(json.utf8))

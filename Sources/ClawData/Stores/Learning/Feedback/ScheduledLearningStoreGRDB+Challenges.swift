@@ -13,27 +13,28 @@ extension ScheduledLearningStoreGRDB {
     try Int64.fetchOne(
       db,
       sql: """
-      UPDATE feedback_challenges SET consumed_at = ?
-      WHERE owner_user_id = ? AND chat_id = ?
-        AND superseded_by IS NULL AND consumed_at IS NULL
-      RETURNING challenge_id
-      """,
+        UPDATE feedback_challenges SET consumed_at = ?
+        WHERE owner_user_id = ? AND chat_id = ?
+          AND superseded_by IS NULL AND consumed_at IS NULL
+        RETURNING challenge_id
+        """,
       arguments: [EpochSecondCodec.epoch(now), challenge.ownerUserID, challenge.chatID]
     )
   }
 
-  static func insertChallenge(_ db: Database, _ challenge: NewFeedbackChallenge) throws
-    -> FeedbackChallenge
-  {
+  static func insertChallenge(
+    _ db: Database,
+    _ challenge: NewFeedbackChallenge
+  ) throws -> FeedbackChallenge {
     guard challenge.subjectKind == .run || challenge.subjectKind == .candidate else {
       throw StoreError.unexpected("feedback challenge subject kind cannot carry free text")
     }
     try db.execute(
       sql: """
-      INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
-        subject_kind, subject_digest, superseded_by, consumed_at, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)
-      """,
+        INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
+          subject_kind, subject_digest, superseded_by, consumed_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+        """,
       arguments: [
         challenge.ownerUserID,
         challenge.chatID,
@@ -58,17 +59,19 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func finishChallengeSupersession(_ db: Database, priorID: Int64?, replacementID: Int64)
-    throws
-  {
+  static func finishChallengeSupersession(
+    _ db: Database,
+    priorID: Int64?,
+    replacementID: Int64
+  ) throws {
     guard let priorID else {
       return
     }
     try db.execute(
       sql: """
-      UPDATE feedback_challenges SET superseded_by = ?, consumed_at = NULL
-      WHERE challenge_id = ?
-      """,
+        UPDATE feedback_challenges SET superseded_by = ?, consumed_at = NULL
+        WHERE challenge_id = ?
+        """,
       arguments: [replacementID, priorID]
     )
   }
@@ -113,29 +116,33 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Challenge Consumption
 
 extension ScheduledLearningStoreGRDB {
-  static func consumeLiveChallenge(_ db: Database, id: Int64, now: Date) throws
-    -> FeedbackChallenge?
-  {
+  static func consumeLiveChallenge(
+    _ db: Database,
+    id: Int64,
+    now: Date
+  ) throws -> FeedbackChallenge? {
     let row = try Row.fetchOne(
       db,
       sql: """
-      UPDATE feedback_challenges SET consumed_at = ?
-      WHERE challenge_id = ? AND consumed_at IS NULL AND superseded_by IS NULL
-        AND expires_at > ?
-        AND learning_epoch = (
-          SELECT learning_epoch FROM job_learning_state
-          WHERE job_id = feedback_challenges.job_id
-        )
-      RETURNING *
-      """,
+        UPDATE feedback_challenges SET consumed_at = ?
+        WHERE challenge_id = ? AND consumed_at IS NULL AND superseded_by IS NULL
+          AND expires_at > ?
+          AND learning_epoch = (
+            SELECT learning_epoch FROM job_learning_state
+            WHERE job_id = feedback_challenges.job_id
+          )
+        RETURNING *
+        """,
       arguments: [EpochSecondCodec.epoch(now), id, EpochSecondCodec.epoch(now)]
     )
     return try row.map(decodeChallenge)
   }
 
-  static func failedChallengeOutcome(_ db: Database, challenge: FeedbackChallenge?, now: Date)
-    throws -> FeedbackOutcome
-  {
+  static func failedChallengeOutcome(
+    _ db: Database,
+    challenge: FeedbackChallenge?,
+    now: Date
+  ) throws -> FeedbackOutcome {
     guard let challenge else {
       return .targetMissing
     }
@@ -160,16 +167,17 @@ extension ScheduledLearningStoreGRDB {
     throw StoreError.unexpected("feedback challenge CAS lost without a classified predicate")
   }
 
-  static func advanceFeedbackRevision(_ db: Database, challenge: FeedbackChallenge) throws
-    -> FeedbackRevision?
-  {
+  static func advanceFeedbackRevision(
+    _ db: Database,
+    challenge: FeedbackChallenge
+  ) throws -> FeedbackRevision? {
     let revision = try Int64.fetchOne(
       db,
       sql: """
-      UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
-      WHERE job_id = ? AND learning_epoch = ?
-      RETURNING feedback_revision
-      """,
+        UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
+        WHERE job_id = ? AND learning_epoch = ?
+        RETURNING feedback_revision
+        """,
       arguments: [challenge.jobID, challenge.epoch.value]
     )
     return revision.map(FeedbackRevision.init)
@@ -190,10 +198,10 @@ extension ScheduledLearningStoreGRDB {
     let supersedes = try Int64.fetchOne(
       db,
       sql: """
-      SELECT event_id FROM feedback_events
-      WHERE job_id = ? AND learning_epoch = ? AND subject_kind = ? AND subject_digest = ?
-      ORDER BY feedback_revision DESC, event_id DESC LIMIT 1
-      """,
+        SELECT event_id FROM feedback_events
+        WHERE job_id = ? AND learning_epoch = ? AND subject_kind = ? AND subject_digest = ?
+        ORDER BY feedback_revision DESC, event_id DESC LIMIT 1
+        """,
       arguments: [
         challenge.jobID,
         challenge.epoch.value,
@@ -203,10 +211,10 @@ extension ScheduledLearningStoreGRDB {
     )
     try db.execute(
       sql: """
-      INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
-        payload, actor, transport_update_id, feedback_revision, supersedes, occurred_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
-      """,
+        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
+          payload, actor, transport_update_id, feedback_revision, supersedes, occurred_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+        """,
       arguments: [
         challenge.jobID,
         challenge.epoch.value,
@@ -268,9 +276,9 @@ extension ScheduledLearningStoreGRDB {
       return try Int64.fetchOne(
         db,
         sql: """
-        SELECT run_id FROM learning_evaluations
-        WHERE job_id = ? AND evaluation_digest = ?
-        """,
+          SELECT run_id FROM learning_evaluations
+          WHERE job_id = ? AND evaluation_digest = ?
+          """,
         arguments: [jobID, subjectDigest]
       )
     case .candidate, .promotion: return nil

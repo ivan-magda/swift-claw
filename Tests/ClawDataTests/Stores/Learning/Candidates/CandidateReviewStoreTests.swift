@@ -252,9 +252,9 @@ struct CandidateReviewStoreTests {
     try fixture.env.queue.write { db in
       try db.execute(
         sql: """
-        UPDATE job_learning_state SET learning_epoch = 2, stable_revision = 1
-        WHERE job_id = ?
-        """,
+          UPDATE job_learning_state SET learning_epoch = 2, stable_revision = 1
+          WHERE job_id = ?
+          """,
         arguments: [fixture.env.jobID]
       )
       try db.execute(

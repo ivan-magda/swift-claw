@@ -254,9 +254,11 @@ struct ChatGPTProviderStateCodec: Sendable {
   /// Nothing here can fail a turn. State that is foreign, damaged, too large, or simply unaffordable
   /// is left behind and counted; the conversation continues on its text and its tool calls, which
   /// are never this method's to drop.
-  func decodeCompatibleHistory(messages: [ChatMessage], profileID: UUID, wireModel: String)
-    -> ChatGPTReplaySelection
-  {
+  func decodeCompatibleHistory(
+    messages: [ChatMessage],
+    profileID: UUID,
+    wireModel: String
+  ) -> ChatGPTReplaySelection {
     var drops = ChatGPTReplayDrops()
     let origin = ChatGPTReplayOrigin(profileID: profileID, wireModel: wireModel)
     let candidates = Self.compatibleCandidates(in: messages, origin: origin, drops: &drops)
@@ -306,9 +308,10 @@ struct ChatGPTProviderStateCodec: Sendable {
   /// to say, and that stamp is the entire record a restart derives the epoch from: without it the
   /// newest compatible state in history is the poisoned one again, and the recovery is undone on
   /// reload. So this writes the empty payload rather than returning nothing.
-  func encodeResponseState(items: ChatGPTReplayItems, identity: ChatGPTReplayIdentity) throws
-    -> ProviderExchangeState
-  {
+  func encodeResponseState(
+    items: ChatGPTReplayItems,
+    identity: ChatGPTReplayIdentity
+  ) throws -> ProviderExchangeState {
     let payload = try Self.canonicalPayload(items)
     guard payload.count <= Self.maximumStateBytes else {
       return ProviderExchangeState(

@@ -84,9 +84,10 @@ struct ObservedCredentialStore: LLMCredentialStore {
     return try inner.load(providerID: providerID)
   }
 
-  func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
-    throws(LLMCredentialStoreError)
-  {
+  func save(
+    _ credential: StoredOAuthCredential,
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError) {
     log.record(.credentialSaved)
     try inner.save(credential, providerID: providerID)
   }
@@ -107,9 +108,9 @@ struct ScriptedDeviceAuthorization: ChatGPTDeviceAuthorizing {
   let outcome: Outcome
   let log: AuthEffectLog
 
-  func authorize(onDeviceCode: @escaping @Sendable (_ deviceCode: ChatGPTDeviceCode) async -> Void)
-    async throws -> ChatGPTAuthorizationGrant
-  {
+  func authorize(
+    onDeviceCode: @escaping @Sendable (_ deviceCode: ChatGPTDeviceCode) async -> Void
+  ) async throws -> ChatGPTAuthorizationGrant {
     // Recorded before anything is reported: the question this marker answers is whether login
     // reached the vendor at all, not whether it got an answer.
     log.record(.deviceAuthorizationStarted)
@@ -130,9 +131,10 @@ struct ScriptedExchange: ChatGPTOAuthExchanging {
   let outcome: Outcome
   let log: AuthEffectLog
 
-  func exchange(grant: ChatGPTAuthorizationGrant, timeout: Duration) async throws
-    -> ChatGPTTokenPair
-  {
+  func exchange(
+    grant: ChatGPTAuthorizationGrant,
+    timeout: Duration
+  ) async throws -> ChatGPTTokenPair {
     log.record(.tokenExchanged)
     switch outcome {
     case .pair(let pair): return pair

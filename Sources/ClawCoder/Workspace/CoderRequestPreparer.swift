@@ -26,7 +26,7 @@ public struct CoderRequestPreparer: CoderRequestPreparing {
         common = identity.common
         publication =
           request.deliverable == .pullRequest
-            ? try await Self.publicationOrigin(at: identity.checkout, git: git) : nil
+          ? try await Self.publicationOrigin(at: identity.checkout, git: git) : nil
       } catch is CancellationError { throw CancellationError() } catch {
         throw CoderError.invalidRequest(
           "Cannot resolve local Git checkout or its unambiguous GitHub origin for publication."
@@ -59,7 +59,10 @@ public struct CoderRequestPreparer: CoderRequestPreparing {
 // MARK: - Local identity
 
 extension CoderRequestPreparer {
-  static func localIdentity(at path: String, git: CoderGit) async throws -> (
+  static func localIdentity(
+    at path: String,
+    git: CoderGit
+  ) async throws -> (
     checkout: String,
     common: String
   ) {

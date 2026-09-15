@@ -5,9 +5,9 @@ import GRDB
 // MARK: - Aggregate Preparation
 
 extension ScheduledLearningStoreGRDB {
-  public func prepareReflection(trigger: TriggerIdentity) throws(StoreError)
-    -> ReflectionPreparation?
-  {
+  public func prepareReflection(
+    trigger: TriggerIdentity
+  ) throws(StoreError) -> ReflectionPreparation? {
     try database.readMapping { db in
       try Self.prepareReflection(db, trigger: trigger)
     }
@@ -17,9 +17,10 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Preparation Gate
 
 extension ScheduledLearningStoreGRDB {
-  static func prepareReflection(_ db: Database, trigger: TriggerIdentity) throws
-    -> ReflectionPreparation?
-  {
+  static func prepareReflection(
+    _ db: Database,
+    trigger: TriggerIdentity
+  ) throws -> ReflectionPreparation? {
     try prepareReflection(
       db,
       trigger: trigger,
@@ -115,16 +116,16 @@ private extension ScheduledLearningStoreGRDB {
         let row = try Row.fetchOne(
           db,
           sql: """
-          SELECT evaluation.evaluation_digest, evaluation.run_id, evaluation.outcome,
-            evaluation.issue_codes, evaluation.compatibility_digest, evaluation.created_at,
-            evidence.payload, binding.occurrence_at, binding.stable_digest, binding.trial_id
-          FROM learning_evaluations AS evaluation
-          JOIN learning_evidence AS evidence ON evidence.run_id = evaluation.run_id
-            AND evidence.evidence_digest = evaluation.evidence_digest
-          JOIN run_learning_bindings AS binding ON binding.run_id = evaluation.run_id
-          WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
-            AND evaluation.evidence_digest = ?
-          """,
+            SELECT evaluation.evaluation_digest, evaluation.run_id, evaluation.outcome,
+              evaluation.issue_codes, evaluation.compatibility_digest, evaluation.created_at,
+              evidence.payload, binding.occurrence_at, binding.stable_digest, binding.trial_id
+            FROM learning_evaluations AS evaluation
+            JOIN learning_evidence AS evidence ON evidence.run_id = evaluation.run_id
+              AND evidence.evidence_digest = evaluation.evidence_digest
+            JOIN run_learning_bindings AS binding ON binding.run_id = evaluation.run_id
+            WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
+              AND evaluation.evidence_digest = ?
+            """,
           arguments: [trigger.jobID, trigger.epoch.value, evidenceDigest.rawValue]
         ),
         row["trial_id"] as Int64? == nil,
@@ -352,18 +353,18 @@ extension ScheduledLearningStoreGRDB {
       let rows = try Row.fetchAll(
         db,
         sql: """
-        SELECT evidence_digest, compatibility_digest FROM (
-          SELECT evaluation.evidence_digest, evaluation.compatibility_digest,
-            ROW_NUMBER() OVER (PARTITION BY evaluation.compatibility_digest
-              ORDER BY binding.occurrence_at DESC, binding.run_id DESC) AS position
-          FROM learning_evaluations AS evaluation
-          JOIN run_learning_bindings AS binding ON binding.run_id = evaluation.run_id
-          WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
-            AND binding.stable_digest = ? AND binding.trial_id IS NULL
-            AND binding.occurrence_at >= ? AND binding.occurrence_at <= ?
-            AND evaluation.created_at <= ?
-        ) WHERE position <= ? ORDER BY compatibility_digest, position DESC
-        """,
+          SELECT evidence_digest, compatibility_digest FROM (
+            SELECT evaluation.evidence_digest, evaluation.compatibility_digest,
+              ROW_NUMBER() OVER (PARTITION BY evaluation.compatibility_digest
+                ORDER BY binding.occurrence_at DESC, binding.run_id DESC) AS position
+            FROM learning_evaluations AS evaluation
+            JOIN run_learning_bindings AS binding ON binding.run_id = evaluation.run_id
+            WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
+              AND binding.stable_digest = ? AND binding.trial_id IS NULL
+              AND binding.occurrence_at >= ? AND binding.occurrence_at <= ?
+              AND evaluation.created_at <= ?
+          ) WHERE position <= ? ORDER BY compatibility_digest, position DESC
+          """,
         arguments: [
           jobID,
           state.epoch.value,
@@ -437,27 +438,28 @@ private extension ScheduledLearningStoreGRDB {
     let raw = try String.fetchOne(
       db,
       sql: """
-      SELECT state FROM learning_operations WHERE key_digest = ?
-      ORDER BY attempt_generation DESC LIMIT 1
-      """,
+        SELECT state FROM learning_operations WHERE key_digest = ?
+        ORDER BY attempt_generation DESC LIMIT 1
+        """,
       arguments: [key.digest.rawValue]
     )
     return raw == nil || raw == LearningOperationState.pending.rawValue
       || raw == LearningOperationState.interruptedUnknown.rawValue
   }
 
-  static func onlyControlsChangedSinceAttempt(_ db: Database, trigger: TriggerIdentity) throws
-    -> Bool
-  {
+  static func onlyControlsChangedSinceAttempt(
+    _ db: Database,
+    trigger: TriggerIdentity
+  ) throws -> Bool {
     let revisions = try Int64.fetchAll(
       db,
       sql: """
-      SELECT feedback_revision - 1 FROM feedback_events
-      WHERE job_id = ? AND learning_epoch = ? AND subject_kind IN (?, ?)
-        AND feedback_revision > COALESCE((SELECT MAX(feedback_revision) FROM feedback_events
-          WHERE job_id = ? AND learning_epoch = ? AND subject_kind NOT IN (?, ?)), 0)
-        AND feedback_revision <= ? ORDER BY feedback_revision DESC
-      """,
+        SELECT feedback_revision - 1 FROM feedback_events
+        WHERE job_id = ? AND learning_epoch = ? AND subject_kind IN (?, ?)
+          AND feedback_revision > COALESCE((SELECT MAX(feedback_revision) FROM feedback_events
+            WHERE job_id = ? AND learning_epoch = ? AND subject_kind NOT IN (?, ?)), 0)
+          AND feedback_revision <= ? ORDER BY feedback_revision DESC
+        """,
       arguments: [
         trigger.jobID,
         trigger.epoch.value,

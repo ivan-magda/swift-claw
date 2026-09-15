@@ -33,9 +33,9 @@ struct RollbackTests {
   }
 
   @Test(arguments: [OwnerSignal.resultNotUseful, .evaluationDispute, .resultCorrection])
-  func rediscoveredWithdrawalReusesReceiptAndLaterFeedbackStillRollsBack(_ signal: OwnerSignal)
-    throws
-  {
+  func rediscoveredWithdrawalReusesReceiptAndLaterFeedbackStillRollsBack(
+    _ signal: OwnerSignal
+  ) throws {
     // given
     let env = try BoundRunEnvironment.promotionEnvironment()
     let first = try env.positiveTrialRun()
@@ -230,9 +230,11 @@ extension BoundRunEnvironment {
     return event
   }
 
-  func withdrawalFeedback(runID: Int64, signal: OwnerSignal, updateID: Int64) throws
-    -> FeedbackEvent
-  {
+  func withdrawalFeedback(
+    runID: Int64,
+    signal: OwnerSignal,
+    updateID: Int64
+  ) throws -> FeedbackEvent {
     let target: NewFeedbackTarget
     if signal == .evaluationDispute {
       let assignment = try #require(try assignment(runID: runID))

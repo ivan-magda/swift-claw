@@ -26,9 +26,11 @@ extension ScheduledLearningStoreGRDB {
     let evaluation: StrictEvaluation?
   }
 
-  static func strictEvidence(_ db: Database, runID: Int64, trial: LearningTrial) throws
-    -> StrictEvidence?
-  {
+  static func strictEvidence(
+    _ db: Database,
+    runID: Int64,
+    trial: LearningTrial
+  ) throws -> StrictEvidence? {
     guard let evidence = try readEvidence(db, runID: runID) else {
       return nil
     }
@@ -77,9 +79,11 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Evaluator Operation Lineage
 
 private extension ScheduledLearningStoreGRDB {
-  static func latestEvaluatorAttempt(_ db: Database, trial: LearningTrial, evidence: StrictEvidence)
-    throws -> StrictAttempt?
-  {
+  static func latestEvaluatorAttempt(
+    _ db: Database,
+    trial: LearningTrial,
+    evidence: StrictEvidence
+  ) throws -> StrictAttempt? {
     let key = exactEvaluatorKey(trial: trial, evidence: evidence)
     let rows = try evaluatorAttemptRows(db, key: key, trial: trial, evidence: evidence)
     var attempts: [StrictAttempt] = []
@@ -123,9 +127,10 @@ private extension ScheduledLearningStoreGRDB {
     return attempts.last
   }
 
-  static func exactEvaluatorKey(trial: LearningTrial, evidence: StrictEvidence)
-    -> LearningOperationKey
-  {
+  static func exactEvaluatorKey(
+    trial: LearningTrial,
+    evidence: StrictEvidence
+  ) -> LearningOperationKey {
     LearningOperationKey(
       jobID: trial.jobID,
       epoch: trial.epoch,
@@ -146,13 +151,13 @@ private extension ScheduledLearningStoreGRDB {
     try Row.fetchAll(
       db,
       sql: """
-      SELECT operation_id, attempt_generation, supersedes
-      FROM learning_operations
-      WHERE key_digest = ? OR (
-        job_id = ? AND learning_epoch = ? AND phase = ? AND source_digest = ?
-      )
-      ORDER BY attempt_generation
-      """,
+        SELECT operation_id, attempt_generation, supersedes
+        FROM learning_operations
+        WHERE key_digest = ? OR (
+          job_id = ? AND learning_epoch = ? AND phase = ? AND source_digest = ?
+        )
+        ORDER BY attempt_generation
+        """,
       arguments: [
         key.digest.rawValue,
         trial.jobID,
@@ -200,7 +205,7 @@ private extension ScheduledLearningStoreGRDB {
     case .failedNoCall:
       let failureIsValid =
         operation.failure == .budgetDenied || operation.failure == .carrierPolicyDenied
-          || operation.failure == .staleEpoch
+        || operation.failure == .staleEpoch
       guard
         failureIsValid,
         operation.carrierDigest == nil,

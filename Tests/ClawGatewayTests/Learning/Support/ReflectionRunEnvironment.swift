@@ -42,7 +42,7 @@ struct ReflectionRunEnvironment {
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let recurrence =
       repeatable
-        ? SchedulingRuleFixtures.weekdayEnvelope(zone: TimeZone(secondsFromGMT: 0) ?? .gmt) : nil
+      ? SchedulingRuleFixtures.weekdayEnvelope(zone: TimeZone(secondsFromGMT: 0) ?? .gmt) : nil
     let job = try jobs.create(
       NewScheduledJob(
         ownerChatID: 777,
@@ -259,10 +259,10 @@ extension ReflectionRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO lesson_sets(job_id, digest, schema_version, \
-        canonical_bytes, source, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO lesson_sets(job_id, digest, schema_version, \
+          canonical_bytes, source, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           replacement.digest.rawValue,
@@ -274,11 +274,11 @@ extension ReflectionRunEnvironment {
       )
       try db.execute(
         sql: """
-        INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
-          replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
-          source_manifest, algorithm, created_at)
-        VALUES ('live-candidate', ?, ?, ?, ?, 0, 0, ?, '{}', ?, ?)
-        """,
+          INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
+            replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
+            source_manifest, algorithm, created_at)
+          VALUES ('live-candidate', ?, ?, ?, ?, 0, 0, ?, '{}', ?, ?)
+          """,
         arguments: [
           jobID,
           trigger.epoch.value,
@@ -291,11 +291,11 @@ extension ReflectionRunEnvironment {
       )
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, 'live-candidate', 1, ?, ?, ?, 5, 0, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, 'live-candidate', 1, ?, ?, ?, 5, 0, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           trigger.epoch.value,
@@ -316,9 +316,9 @@ extension ReflectionRunEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT evaluation_digest, run_id FROM learning_evaluations
-        WHERE job_id = ? ORDER BY created_at, run_id LIMIT 2
-        """,
+          SELECT evaluation_digest, run_id FROM learning_evaluations
+          WHERE job_id = ? ORDER BY created_at, run_id LIMIT 2
+          """,
         arguments: [jobID]
       )
     }
@@ -330,10 +330,10 @@ extension ReflectionRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
-          actor, feedback_revision, occurred_at)
-        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-        """,
+          INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
+            actor, feedback_revision, occurred_at)
+          VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+          """,
         arguments: [
           jobID,
           trigger.epoch.value,
@@ -346,10 +346,10 @@ extension ReflectionRunEnvironment {
       )
       try db.execute(
         sql: """
-        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
-          payload, actor, feedback_revision, occurred_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 2, ?)
-        """,
+          INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
+            payload, actor, feedback_revision, occurred_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 2, ?)
+          """,
         arguments: [
           jobID,
           trigger.epoch.value,

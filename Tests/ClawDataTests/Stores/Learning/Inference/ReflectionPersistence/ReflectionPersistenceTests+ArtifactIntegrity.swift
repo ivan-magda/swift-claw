@@ -17,8 +17,8 @@ extension ReflectionPersistenceTests {
     let baseline = try env.candidate(fixture: fixture, operation: operation)
     let schemaVersion =
       corruption == .wrongSchema
-        ? CandidateSourceManifest.currentSchemaVersion + 1
-        : CandidateSourceManifest.currentSchemaVersion
+      ? CandidateSourceManifest.currentSchemaVersion + 1
+      : CandidateSourceManifest.currentSchemaVersion
     let artifact = try artifactWithFeedback(baseline, schemaVersion: schemaVersion)
     try insertArtifactForReload(artifact, env: env)
     if corruption != .wrongSchema {
@@ -34,9 +34,9 @@ extension ReflectionPersistenceTests {
   }
 
   @Test(arguments: CandidateRowMismatch.allCases)
-  func candidateArtifactRejectsManifestRowProjectionMismatch(_ mismatch: CandidateRowMismatch)
-    throws
-  {
+  func candidateArtifactRejectsManifestRowProjectionMismatch(
+    _ mismatch: CandidateRowMismatch
+  ) throws {
     // given
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
@@ -79,9 +79,10 @@ enum CandidateRowMismatch: CaseIterable, Sendable {
 // MARK: - Artifact Corruption Fixtures
 
 private extension ReflectionPersistenceTests {
-  func artifactWithFeedback(_ artifact: CandidateArtifact, schemaVersion: Int) throws
-    -> CandidateArtifact
-  {
+  func artifactWithFeedback(
+    _ artifact: CandidateArtifact,
+    schemaVersion: Int
+  ) throws -> CandidateArtifact {
     let manifest = artifact.manifest
     let feedback = CandidateFeedbackSource(
       eventID: 91,
@@ -103,9 +104,10 @@ private extension ReflectionPersistenceTests {
     }
   }
 
-  func corruptedManifestBytes(for artifact: CandidateArtifact, corruption: ManifestByteCorruption)
-    throws -> Data
-  {
+  func corruptedManifestBytes(
+    for artifact: CandidateArtifact,
+    corruption: ManifestByteCorruption
+  ) throws -> Data {
     let original = try CanonicalJSON.data(encoding: artifact.manifest)
     if corruption == .nonCanonical {
       return original + Data(" ".utf8)
@@ -239,9 +241,9 @@ private extension ReflectionPersistenceTests {
       try env.queue.write { db in
         try db.execute(
           sql: """
-          UPDATE learning_candidates SET candidate_digest = ?, source_manifest = ?
-          WHERE candidate_digest = ?
-          """,
+            UPDATE learning_candidates SET candidate_digest = ?, source_manifest = ?
+            WHERE candidate_digest = ?
+            """,
           arguments: [changedArtifact.digest.rawValue, json, artifact.digest.rawValue]
         )
       }
@@ -277,10 +279,10 @@ private extension ReflectionPersistenceTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO lesson_sets(job_id, digest, schema_version, \
-        canonical_bytes, source, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO lesson_sets(job_id, digest, schema_version, \
+          canonical_bytes, source, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           lessonSet.jobID,
           lessonSet.digest.rawValue,

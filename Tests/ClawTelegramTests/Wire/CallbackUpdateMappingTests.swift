@@ -10,9 +10,9 @@ struct CallbackUpdateMappingTests {
   func mapsCallbackQueryIntoRawUpdateCallback() throws {
     // given — a Bot API update carrying only a callback_query (no message/edited_message)
     let json = """
-    {"update_id":77,"callback_query":{"id":"cbX","from":{"id":42},
-    "message":{"message_id":9,"chat":{"id":99}},"data":"apr:NONCE:y"}}
-    """
+      {"update_id":77,"callback_query":{"id":"cbX","from":{"id":42},
+      "message":{"message_id":9,"chat":{"id":99}},"data":"apr:NONCE:y"}}
+      """
 
     // when
     let update = try JSONDecoder().decode(TUpdate.self, from: Data(json.utf8))
@@ -34,8 +34,8 @@ struct CallbackUpdateMappingTests {
   func plainMessageUpdateHasNilCallback() throws {
     // given
     let json = """
-    {"update_id":78,"message":{"message_id":3,"from":{"id":42},"chat":{"id":42},"text":"hi"}}
-    """
+      {"update_id":78,"message":{"message_id":3,"from":{"id":42},"chat":{"id":42},"text":"hi"}}
+      """
 
     // when
     let raw = try JSONDecoder().decode(TUpdate.self, from: Data(json.utf8)).toRawUpdate()

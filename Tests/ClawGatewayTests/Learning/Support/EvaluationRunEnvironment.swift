@@ -279,10 +279,10 @@ private extension EvaluationRunEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT model, run_id, learning_job_id, cost_usd, cost_source,
-          prompt_tokens + completion_tokens AS tokens
-        FROM provider_usage WHERE \(predicate) ORDER BY id
-        """
+          SELECT model, run_id, learning_job_id, cost_usd, cost_source,
+            prompt_tokens + completion_tokens AS tokens
+          FROM provider_usage WHERE \(predicate) ORDER BY id
+          """
       ).map { row in
         UsageRow(
           model: row["model"],

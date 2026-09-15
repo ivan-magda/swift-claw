@@ -17,21 +17,21 @@ struct GroupWireTests {
   func forumTopicMessageCarriesItsChatKindThreadAndAuthor() throws {
     // given — a message posted in a forum supergroup topic, replying to another attendee
     let json = """
-    {
-      "update_id": 20,
-      "message": {
-        "message_id": 500,
-        "message_thread_id": 77,
-        "from": {"id": 42, "is_bot": false, "first_name": "Ada", "last_name": "Lovelace"},
-        "chat": {"id": -1001234, "type": "supergroup", "is_forum": true},
-        "reply_to_message": {
-          "message_id": 499,
-          "from": {"id": 7, "is_bot": true, "username": "claw_bot"}
-        },
-        "text": "@claw_bot what is the schedule?"
+      {
+        "update_id": 20,
+        "message": {
+          "message_id": 500,
+          "message_thread_id": 77,
+          "from": {"id": 42, "is_bot": false, "first_name": "Ada", "last_name": "Lovelace"},
+          "chat": {"id": -1001234, "type": "supergroup", "is_forum": true},
+          "reply_to_message": {
+            "message_id": 499,
+            "from": {"id": 7, "is_bot": true, "username": "claw_bot"}
+          },
+          "text": "@claw_bot what is the schedule?"
+        }
       }
-    }
-    """
+      """
 
     // when
     let raw = try rawMessage(json)
@@ -50,16 +50,16 @@ struct GroupWireTests {
   func unknownChatTypeDoesNotDecodeAsPrivate() throws {
     // given — a chat type introduced after this build
     let json = """
-    {
-      "update_id": 21,
-      "message": {
-        "message_id": 501,
-        "from": {"id": 42},
-        "chat": {"id": -100999, "type": "hyperforum"},
-        "text": "hi"
+      {
+        "update_id": 21,
+        "message": {
+          "message_id": 501,
+          "from": {"id": 42},
+          "chat": {"id": -100999, "type": "hyperforum"},
+          "text": "hi"
+        }
       }
-    }
-    """
+      """
 
     // when
     let raw = try rawMessage(json)
@@ -72,16 +72,16 @@ struct GroupWireTests {
   func absentChatTypeKeepsTheDirectMessageShape() throws {
     // given — the DM payloads every other suite decodes carry no explicit type
     let json = """
-    {
-      "update_id": 22,
-      "message": {
-        "message_id": 502,
-        "from": {"id": 42},
-        "chat": {"id": 42},
-        "text": "hi"
+      {
+        "update_id": 22,
+        "message": {
+          "message_id": 502,
+          "from": {"id": 42},
+          "chat": {"id": 42},
+          "text": "hi"
+        }
       }
-    }
-    """
+      """
 
     // when
     let raw = try rawMessage(json)
@@ -96,16 +96,16 @@ struct GroupWireTests {
   func generalTopicHasNoThreadID() throws {
     // given — the General topic of a forum omits message_thread_id entirely
     let json = """
-    {
-      "update_id": 23,
-      "message": {
-        "message_id": 503,
-        "from": {"id": 42, "first_name": "Ada"},
-        "chat": {"id": -1001234, "type": "supergroup", "is_forum": true},
-        "text": "hello all"
+      {
+        "update_id": 23,
+        "message": {
+          "message_id": 503,
+          "from": {"id": 42, "first_name": "Ada"},
+          "chat": {"id": -1001234, "type": "supergroup", "is_forum": true},
+          "text": "hello all"
+        }
       }
-    }
-    """
+      """
 
     // when
     let raw = try rawMessage(json)
@@ -119,17 +119,17 @@ struct GroupWireTests {
   func anonymousAdminMessageCarriesItsSenderChat() throws {
     // given — a message sent on behalf of the group, with no usable human sender
     let json = """
-    {
-      "update_id": 24,
-      "message": {
-        "message_id": 504,
-        "from": {"id": 1087968824, "is_bot": true, "username": "GroupAnonymousBot"},
-        "sender_chat": {"id": -1001234, "type": "supergroup"},
-        "chat": {"id": -1001234, "type": "supergroup"},
-        "text": "announcement"
+      {
+        "update_id": 24,
+        "message": {
+          "message_id": 504,
+          "from": {"id": 1087968824, "is_bot": true, "username": "GroupAnonymousBot"},
+          "sender_chat": {"id": -1001234, "type": "supergroup"},
+          "chat": {"id": -1001234, "type": "supergroup"},
+          "text": "announcement"
+        }
       }
-    }
-    """
+      """
 
     // when
     let raw = try rawMessage(json)
@@ -142,17 +142,17 @@ struct GroupWireTests {
   func migratedGroupCarriesItsNewChatID() throws {
     // given — Telegram upgrading a group to a supergroup
     let json = """
-    {
-      "update_id": 25,
-      "message": {
-        "message_id": 505,
-        "from": {"id": 42},
-        "chat": {"id": -400, "type": "group"},
-        "text": "x",
-        "migrate_to_chat_id": -1001234
+      {
+        "update_id": 25,
+        "message": {
+          "message_id": 505,
+          "from": {"id": 42},
+          "chat": {"id": -400, "type": "group"},
+          "text": "x",
+          "migrate_to_chat_id": -1001234
+        }
       }
-    }
-    """
+      """
 
     // when
     let raw = try rawMessage(json)
@@ -166,16 +166,16 @@ struct GroupWireTests {
   func displayNameFallsBackToTheUsername() throws {
     // given — a sender with no first_name (bots and some deleted accounts)
     let json = """
-    {
-      "update_id": 26,
-      "message": {
-        "message_id": 506,
-        "from": {"id": 42, "username": "ada"},
-        "chat": {"id": -1001234, "type": "supergroup"},
-        "text": "hi"
+      {
+        "update_id": 26,
+        "message": {
+          "message_id": 506,
+          "from": {"id": 42, "username": "ada"},
+          "chat": {"id": -1001234, "type": "supergroup"},
+          "text": "hi"
+        }
       }
-    }
-    """
+      """
 
     // when
     let raw = try rawMessage(json)

@@ -40,10 +40,10 @@ extension ScheduledJobStoreGRDB {
 
     try db.execute(
       sql: """
-      INSERT INTO scheduled_jobs(owner_chat_id, label, prompt, recurrence, timezone,
-        next_occurrence, status, created_ts, updated_ts)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO scheduled_jobs(owner_chat_id, label, prompt, recurrence, timezone,
+          next_occurrence, status, created_ts, updated_ts)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         job.ownerChatID,
         job.label,
@@ -82,10 +82,10 @@ extension ScheduledJobStoreGRDB {
       let rows = try Row.fetchAll(
         db,
         sql: """
-        SELECT * FROM scheduled_jobs
-        WHERE status = ? AND next_occurrence IS NOT NULL AND next_occurrence <= ?
-        ORDER BY next_occurrence ASC, id ASC
-        """,
+          SELECT * FROM scheduled_jobs
+          WHERE status = ? AND next_occurrence IS NOT NULL AND next_occurrence <= ?
+          ORDER BY next_occurrence ASC, id ASC
+          """,
         arguments: [ScheduledJobStatus.active.rawValue, EpochSecondCodec.epoch(now)]
       )
       return try rows.map { row in
@@ -183,9 +183,11 @@ extension ScheduledJobStoreGRDB {
     }
   }
 
-  public func resume(id: Int64, nextOccurrence: Date?, now: Date) throws(StoreError)
-    -> ScheduledJob?
-  {
+  public func resume(
+    id: Int64,
+    nextOccurrence: Date?,
+    now: Date
+  ) throws(StoreError) -> ScheduledJob? {
     try database.writeMapping { db in
       guard let current = try Self.fetchJob(db, id: id) else {
         return nil
@@ -198,9 +200,9 @@ extension ScheduledJobStoreGRDB {
 
       try db.execute(
         sql: """
-        UPDATE scheduled_jobs SET status = ?, next_occurrence = ?, updated_ts = ?
-        WHERE id = ? AND status = ?
-        """,
+          UPDATE scheduled_jobs SET status = ?, next_occurrence = ?, updated_ts = ?
+          WHERE id = ? AND status = ?
+          """,
         arguments: [
           ScheduledJobStatus.active.rawValue,
           nextOccurrence.map(EpochSecondCodec.epoch),
@@ -232,9 +234,9 @@ extension ScheduledJobStoreGRDB {
       // Terminal, row retained for audit; NULL next keeps it out of the ticker index forever.
       try db.execute(
         sql: """
-        UPDATE scheduled_jobs SET status = ?, next_occurrence = NULL, updated_ts = ?
-        WHERE id = ? AND status IN (?, ?)
-        """,
+          UPDATE scheduled_jobs SET status = ?, next_occurrence = NULL, updated_ts = ?
+          WHERE id = ? AND status IN (?, ?)
+          """,
         arguments: [
           ScheduledJobStatus.cancelled.rawValue,
           EpochSecondCodec.epoch(now),

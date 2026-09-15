@@ -16,9 +16,9 @@ import Testing
 @Suite
 struct ProviderSurfaceParityTests {
   private static let draftJSON = """
-  {"label":"morning digest","prompt":"Summarize my unread items",\
-  "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
-  """
+    {"label":"morning digest","prompt":"Summarize my unread items",\
+    "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
+    """
 
   private static let expectedDraft = ScheduleDraft(
     label: "morning digest",
@@ -29,9 +29,9 @@ struct ProviderSurfaceParityTests {
   /// The spec's exact recovery sentence, copied here as an independent literal so a reword of the
   /// constant that still contains `clawd auth login` is caught rather than mirrored.
   private static let specAuthSentence = """
-  ChatGPT authentication is required. Stop clawd, run `clawd auth login`, \
-  then start clawd again.
-  """
+    ChatGPT authentication is required. Stop clawd, run `clawd auth login`, \
+    then start clawd again.
+    """
 
   private func userBuildResult() -> BuildResult {
     BuildResult(

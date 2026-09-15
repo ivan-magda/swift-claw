@@ -54,9 +54,10 @@ public struct FeedbackChallengeHandler: Sendable {
     return outcome
   }
 
-  func consumeIfOpen(rawUpdate: RawUpdate, message: IncomingMessage) async throws(RoutingHalt)
-    -> HandleOutcome?
-  {
+  func consumeIfOpen(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome? {
     guard
       let rawMessage = rawUpdate.message ?? rawUpdate.editedMessage,
       !rawMessage.isForwarded,
@@ -93,7 +94,7 @@ public struct FeedbackChallengeHandler: Sendable {
       await workflow?.notifyChanged(jobID: challenge.jobID)
       acknowledgement = Self.recordedText
     case .challengeOpened, .targetMissing, .ownerMismatch, .chatMismatch, .expired, .actionMismatch,
-         .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
+      .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
       acknowledgement = Self.neutralText
     }
     return await replies.sendCommandAck(

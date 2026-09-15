@@ -231,10 +231,10 @@ private struct LaneSettlementEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
-          source_digest, attempt_generation, state, key_digest, created_at)
-        VALUES (?, ?, 1, ?, 'evidence', 1, ?, ?, 0)
-        """,
+          INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
+            source_digest, attempt_generation, state, key_digest, created_at)
+          VALUES (?, ?, 1, ?, 'evidence', 1, ?, ?, 0)
+          """,
         arguments: [
           id,
           jobID,
@@ -283,9 +283,9 @@ private struct LaneSettlementEnvironment {
     let approvalID = try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
+          """,
         arguments: [sessionID, runID, RunStoreGRDB.placeholderObservationContent, now]
       )
       let observationMessageID = db.lastInsertedRowID

@@ -94,9 +94,9 @@ struct ExchangeCommitTests {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT id, role, content, provenance, tool_calls, tool_call_id, run_id \
-        FROM messages ORDER BY id ASC
-        """
+          SELECT id, role, content, provenance, tool_calls, tool_call_id, run_id \
+          FROM messages ORDER BY id ASC
+          """
       )
     }
     // user inbound, exchange anchor, tool observation, final reply — count guards spurious rows
@@ -458,9 +458,9 @@ extension ExchangeCommitTests {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT COUNT(*) AS total FROM messages
-        WHERE provider_state_issuer IS NOT NULL OR provider_state IS NOT NULL
-        """
+          SELECT COUNT(*) AS total FROM messages
+          WHERE provider_state_issuer IS NOT NULL OR provider_state IS NOT NULL
+          """
       )
     }
     #expect(pairs.first?["total"] == 0)

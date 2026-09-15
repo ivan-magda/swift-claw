@@ -16,10 +16,10 @@ public struct MemoryWriteTool: Tool {
     ToolDefinition(
       name: "memory_write",
       description: """
-      Save one durable memory item (owner approval required). kind is one of \
-      user|feedback|project|reference; importance low|normal|high (default normal); \
-      sensitivity normal|high (default normal).
-      """,
+        Save one durable memory item (owner approval required). kind is one of \
+        user|feedback|project|reference; importance low|normal|high (default normal); \
+        sensitivity normal|high (default normal).
+        """,
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
@@ -64,19 +64,20 @@ public struct MemoryWriteTool: Tool {
     }
   }
 
-  public func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
-    -> ToolApprovalPresentation
-  {
+  public func approvalPresentation(
+    arguments: JSONValue,
+    canonicalTarget: String
+  ) -> ToolApprovalPresentation {
     guard case .parsed(let request) = MemoryWriteArguments.parse(arguments, sessionID: nil) else {
       return ToolApprovalPresentation(blastRadius: "memory item", contentPreview: nil, warnings: [])
     }
 
     return ToolApprovalPresentation(
       blastRadius: """
-      memory item, kind \(request.item.kind.rawValue), \
-      sensitivity \(request.item.sensitivity.rawValue), \
-      importance \(request.item.importance.wireLabel)
-      """,
+        memory item, kind \(request.item.kind.rawValue), \
+        sensitivity \(request.item.sensitivity.rawValue), \
+        importance \(request.item.importance.wireLabel)
+        """,
       // The preview is the capped normalized text so the owner judges exactly what would be
       // stored — except exact loaded secret values, which are barred from every outbound reply;
       // the scan warnings still flag secret/instruction SHAPES rather than hiding them.

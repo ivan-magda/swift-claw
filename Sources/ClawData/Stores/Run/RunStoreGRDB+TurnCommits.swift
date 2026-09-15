@@ -5,9 +5,10 @@ import GRDB
 // MARK: - Turn Commits
 
 extension RunStoreGRDB {
-  public func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError)
-    -> RunCommitResult
-  {
+  public func commitAssistantTurn(
+    _ turn: AssistantTurn,
+    now: Date
+  ) throws(StoreError) -> RunCommitResult {
     try database.writeMapping { db in
       guard let currentState = try Self.currentRunState(db, runID: turn.runID) else {
         return .ignored
@@ -55,9 +56,10 @@ extension RunStoreGRDB {
     }
   }
 
-  public func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError)
-    -> RunCommitResult
-  {
+  public func commitDegradedTurn(
+    _ turn: DegradedTurn,
+    now: Date
+  ) throws(StoreError) -> RunCommitResult {
     try database.writeMapping { db in
       guard let currentState = try Self.currentRunState(db, runID: turn.runID) else {
         return .ignored
@@ -188,7 +190,7 @@ private extension RunStoreGRDB {
     for chunk in turn.chunks {
       let committedChunk =
         turn.feedbackTarget != nil && feedbackTargetCommitted == false
-          ? strippingReplyMarkup(from: chunk) : chunk
+        ? strippingReplyMarkup(from: chunk) : chunk
       _ = try OutboxInsertion.insertOutbox(
         db,
         runID: turn.runID,
@@ -226,17 +228,17 @@ private extension RunStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT binding.job_id, binding.learning_epoch, binding.occurrence_at
-      FROM run_learning_bindings AS binding
-      JOIN runs AS run ON run.id = binding.run_id AND run.job_id = binding.job_id
-      JOIN scheduled_jobs AS job ON job.id = run.job_id AND job.owner_chat_id = ?
-      JOIN job_learning_state AS state
-        ON state.job_id = binding.job_id
-        AND state.learning_epoch = binding.learning_epoch
-      JOIN lesson_sets AS effective
-        ON effective.job_id = binding.job_id AND effective.digest = binding.effective_digest
-      WHERE binding.run_id = ? AND run.origin = ?
-      """,
+        SELECT binding.job_id, binding.learning_epoch, binding.occurrence_at
+        FROM run_learning_bindings AS binding
+        JOIN runs AS run ON run.id = binding.run_id AND run.job_id = binding.job_id
+        JOIN scheduled_jobs AS job ON job.id = run.job_id AND job.owner_chat_id = ?
+        JOIN job_learning_state AS state
+          ON state.job_id = binding.job_id
+          AND state.learning_epoch = binding.learning_epoch
+        JOIN lesson_sets AS effective
+          ON effective.job_id = binding.job_id AND effective.digest = binding.effective_digest
+        WHERE binding.run_id = ? AND run.origin = ?
+        """,
       arguments: [turn.chatID, turn.runID, RunOrigin.scheduled.rawValue]
     )
     guard
@@ -319,17 +321,17 @@ private extension RunStoreGRDB {
   static func recomputeRunUsageTotals(_ db: Database, runID: Int64, now: Date) throws {
     try db.execute(
       sql: """
-      UPDATE runs SET
-        updated_ts = ?,
-        input_tokens = (
-          SELECT COALESCE(SUM(prompt_tokens), 0) FROM provider_usage WHERE run_id = ?
-        ),
-        output_tokens = (
-          SELECT COALESCE(SUM(completion_tokens), 0) FROM provider_usage WHERE run_id = ?
-        ),
-        cost_usd = (SELECT COALESCE(SUM(cost_usd), 0) FROM provider_usage WHERE run_id = ?)
-      WHERE id = ?
-      """,
+        UPDATE runs SET
+          updated_ts = ?,
+          input_tokens = (
+            SELECT COALESCE(SUM(prompt_tokens), 0) FROM provider_usage WHERE run_id = ?
+          ),
+          output_tokens = (
+            SELECT COALESCE(SUM(completion_tokens), 0) FROM provider_usage WHERE run_id = ?
+          ),
+          cost_usd = (SELECT COALESCE(SUM(cost_usd), 0) FROM provider_usage WHERE run_id = ?)
+        WHERE id = ?
+        """,
       arguments: [now, runID, runID, runID, runID]
     )
   }

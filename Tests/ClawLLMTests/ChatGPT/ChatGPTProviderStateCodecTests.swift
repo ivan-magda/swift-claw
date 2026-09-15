@@ -557,10 +557,10 @@ struct ChatGPTProviderStateCodecTests {
     #expect(state.issuer == Self.goldenIssuer)
     #expect(
       try Self.rendered(state) == """
-      {"assistant_messages":[{"content":[{"text":"hi","type":"output_text"}],"phase":"final",\
-      "role":"assistant","status":"completed","type":"message"}],"reasoning":\
-      [{"encrypted_content":"ENC","summary":["thought"],"type":"reasoning"}]}
-      """
+        {"assistant_messages":[{"content":[{"text":"hi","type":"output_text"}],"phase":"final",\
+        "role":"assistant","status":"completed","type":"message"}],"reasoning":\
+        [{"encrypted_content":"ENC","summary":["thought"],"type":"reasoning"}]}
+        """
     )
   }
 
@@ -1006,23 +1006,24 @@ extension ChatGPTProviderStateCodecTests {
   /// model, first sixteen bytes apiece.
   fileprivate static let goldenIssuer =
     "openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:"
-      + "b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111"
+    + "b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111"
 
   fileprivate static func identity(epoch: UUID) -> ChatGPTReplayIdentity {
     ChatGPTReplayIdentity(profileID: profileID, wireModel: wireModel, epoch: epoch)
   }
 
-  fileprivate static func codec(newEpoch: UUID = fixedUUID("00000000-0000-4000-8000-00000000ffff"))
-    -> ChatGPTProviderStateCodec
-  {
+  fileprivate static func codec(
+    newEpoch: UUID = fixedUUID("00000000-0000-4000-8000-00000000ffff")
+  ) -> ChatGPTProviderStateCodec {
     ChatGPTProviderStateCodec {
       newEpoch
     }
   }
 
-  fileprivate static func state(reasoning: String, identity: ChatGPTReplayIdentity) throws
-    -> ProviderExchangeState
-  {
+  fileprivate static func state(
+    reasoning: String,
+    identity: ChatGPTReplayIdentity
+  ) throws -> ProviderExchangeState {
     try codec().encodeResponseState(
       items: ChatGPTReplayItems(
         reasoning: [ChatGPTReasoningItem(encryptedContent: reasoning)],
@@ -1035,9 +1036,10 @@ extension ChatGPTProviderStateCodecTests {
   /// A state whose canonical encoding weighs exactly `canonicalBytes`. The padding is ASCII that
   /// JSON never escapes, so a byte of content is a byte of payload and the boundary tests can name
   /// the cap rather than approach it.
-  fileprivate static func state(canonicalBytes: Int, identity: ChatGPTReplayIdentity) throws
-    -> ProviderExchangeState
-  {
+  fileprivate static func state(
+    canonicalBytes: Int,
+    identity: ChatGPTReplayIdentity
+  ) throws -> ProviderExchangeState {
     let empty = try codec().encodeResponseState(
       items: ChatGPTReplayItems(reasoning: [ChatGPTReasoningItem(encryptedContent: "")]),
       identity: identity

@@ -23,17 +23,17 @@ struct CoderToolPolicyTests {
       )
       let execution: ToolExecutionContext? =
         missing == .context
-          ? nil
-          : ToolExecutionContext(
-            runID: 1,
-            sessionID: 1,
-            chatID: 7,
-            requesterUserID: missing == .requester ? nil : 7,
-            origin: missing == .proactive ? .scheduled : .interactive,
-            mode: missing == .modeMismatch ? .group : .direct,
-            toolCallID: "status",
-            approvalID: nil
-          )
+        ? nil
+        : ToolExecutionContext(
+          runID: 1,
+          sessionID: 1,
+          chatID: 7,
+          requesterUserID: missing == .requester ? nil : 7,
+          origin: missing == .proactive ? .scheduled : .interactive,
+          mode: missing == .modeMismatch ? .group : .direct,
+          toolCallID: "status",
+          approvalID: nil
+        )
 
       // when
       let verdict = await gate().evaluate(
@@ -173,17 +173,17 @@ struct CoderToolPolicyTests {
       switch scope {
       case .source:
         replacement = """
-        "source":{"local":{"path":"/fixture/sk-abcdefghijklmnop"}},
-        "workspace":"\(CoderWorkspaceMode.separate.rawValue)"
-        """
+          "source":{"local":{"path":"/fixture/sk-abcdefghijklmnop"}},
+          "workspace":"\(CoderWorkspaceMode.separate.rawValue)"
+          """
       case .startRef:
         replacement = """
-        "start_ref":"\(secretRef)","workspace":"\(CoderWorkspaceMode.separate.rawValue)"
-        """
+          "start_ref":"\(secretRef)","workspace":"\(CoderWorkspaceMode.separate.rawValue)"
+          """
       case .baseBranch:
         replacement = """
-        "base_branch":"\(privateBranch)","deliverable":"\(CoderDeliverable.pullRequest.rawValue)"
-        """
+          "base_branch":"\(privateBranch)","deliverable":"\(CoderDeliverable.pullRequest.rawValue)"
+          """
       }
 
       // when

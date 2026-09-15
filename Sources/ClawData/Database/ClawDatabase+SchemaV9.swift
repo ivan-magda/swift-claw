@@ -39,12 +39,12 @@ extension ClawDatabase {
     // mis-seat every value if either table's column order ever drifted.
     try db.execute(
       sql: """
-      INSERT INTO messages_new (id, session_id, run_id, role, content, provenance, ts,
-        prompt_tokens, completion_tokens, tool_calls, tool_call_id)
-      SELECT id, session_id, run_id, role, content, provenance, ts, prompt_tokens,
-        completion_tokens, tool_calls, tool_call_id
-      FROM messages
-      """
+        INSERT INTO messages_new (id, session_id, run_id, role, content, provenance, ts,
+          prompt_tokens, completion_tokens, tool_calls, tool_call_id)
+        SELECT id, session_id, run_id, role, content, provenance, ts, prompt_tokens,
+          completion_tokens, tool_calls, tool_call_id
+        FROM messages
+        """
     )
     try db.drop(table: "messages")
     try db.rename(table: "messages_new", to: "messages")
@@ -78,12 +78,12 @@ extension ClawDatabase {
     }
     try db.execute(
       sql: """
-      INSERT INTO provider_usage_new (id, run_id, session_id, model, prompt_tokens,
-        completion_tokens, cost_usd, cost_source, is_estimated, ts, provider_call_id)
-      SELECT id, run_id, session_id, model, prompt_tokens, completion_tokens, cost_usd,
-        cost_source, is_estimated, ts, 'legacy:' || id
-      FROM provider_usage
-      """
+        INSERT INTO provider_usage_new (id, run_id, session_id, model, prompt_tokens,
+          completion_tokens, cost_usd, cost_source, is_estimated, ts, provider_call_id)
+        SELECT id, run_id, session_id, model, prompt_tokens, completion_tokens, cost_usd,
+          cost_source, is_estimated, ts, 'legacy:' || id
+        FROM provider_usage
+        """
     )
     try db.drop(table: "provider_usage")
     try db.rename(table: "provider_usage_new", to: "provider_usage")

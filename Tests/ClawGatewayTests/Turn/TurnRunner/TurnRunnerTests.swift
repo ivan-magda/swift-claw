@@ -63,13 +63,20 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.failRun(runID: runID, cause: cause, now: now)
   }
 
-  func commitSuspendedTurn(runID: Int64, sessionID: Int64, commit: SuspendedTurnCommit, now: Date)
-    throws(StoreError) -> SuspendedCommitReceipt
-  { try base.commitSuspendedTurn(runID: runID, sessionID: sessionID, commit: commit, now: now) }
+  func commitSuspendedTurn(
+    runID: Int64,
+    sessionID: Int64,
+    commit: SuspendedTurnCommit,
+    now: Date
+  ) throws(StoreError) -> SuspendedCommitReceipt {
+    try base.commitSuspendedTurn(runID: runID, sessionID: sessionID, commit: commit, now: now)
+  }
 
-  func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
-    throws(StoreError) -> [DegradationReply]
-  {
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatID: Int64?
+  ) throws(StoreError) -> [DegradationReply] {
     try base.reconcileRunsAtBoot(
       now: now,
       degradationText: degradationText,
@@ -147,9 +154,12 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.resumeUsage(runID: runID)
   }
 
-  func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
-    -> RunExecutionContext?
-  { try base.executionContext(runID: runID, fallbackChatID: fallbackChatID) }
+  func executionContext(
+    runID: Int64,
+    fallbackChatID: Int64
+  ) throws(StoreError) -> RunExecutionContext? {
+    try base.executionContext(runID: runID, fallbackChatID: fallbackChatID)
+  }
 
   func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? { try base.runOrigin(runID: runID) }
 
@@ -212,13 +222,20 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.failRun(runID: runID, cause: cause, now: now)
   }
 
-  func commitSuspendedTurn(runID: Int64, sessionID: Int64, commit: SuspendedTurnCommit, now: Date)
-    throws(StoreError) -> SuspendedCommitReceipt
-  { try base.commitSuspendedTurn(runID: runID, sessionID: sessionID, commit: commit, now: now) }
+  func commitSuspendedTurn(
+    runID: Int64,
+    sessionID: Int64,
+    commit: SuspendedTurnCommit,
+    now: Date
+  ) throws(StoreError) -> SuspendedCommitReceipt {
+    try base.commitSuspendedTurn(runID: runID, sessionID: sessionID, commit: commit, now: now)
+  }
 
-  func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
-    throws(StoreError) -> [DegradationReply]
-  {
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatID: Int64?
+  ) throws(StoreError) -> [DegradationReply] {
     try base.reconcileRunsAtBoot(
       now: now,
       degradationText: degradationText,
@@ -296,9 +313,12 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.resumeUsage(runID: runID)
   }
 
-  func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
-    -> RunExecutionContext?
-  { try base.executionContext(runID: runID, fallbackChatID: fallbackChatID) }
+  func executionContext(
+    runID: Int64,
+    fallbackChatID: Int64
+  ) throws(StoreError) -> RunExecutionContext? {
+    try base.executionContext(runID: runID, fallbackChatID: fallbackChatID)
+  }
 
   func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? { try base.runOrigin(runID: runID) }
 
@@ -353,13 +373,18 @@ struct DiskFullRuns: RunStore {
 
   func failRun(runID: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
 
-  func commitSuspendedTurn(runID: Int64, sessionID: Int64, commit: SuspendedTurnCommit, now: Date)
-    throws(StoreError) -> SuspendedCommitReceipt
-  { throw StoreError.diskFull }
+  func commitSuspendedTurn(
+    runID: Int64,
+    sessionID: Int64,
+    commit: SuspendedTurnCommit,
+    now: Date
+  ) throws(StoreError) -> SuspendedCommitReceipt { throw StoreError.diskFull }
 
-  func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
-    throws(StoreError) -> [DegradationReply]
-  { [] }
+  func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatID: Int64?
+  ) throws(StoreError) -> [DegradationReply] { [] }
 
   func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
     RunsHealth(
@@ -405,9 +430,10 @@ struct DiskFullRuns: RunStore {
 
   func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage { throw StoreError.diskFull }
 
-  func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
-    -> RunExecutionContext?
-  { nil }
+  func executionContext(
+    runID: Int64,
+    fallbackChatID: Int64
+  ) throws(StoreError) -> RunExecutionContext? { nil }
 
   func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? { throw StoreError.diskFull }
 
@@ -594,9 +620,11 @@ func latestRunState(_ queue: DatabaseQueue) throws -> String? {
 /// suspend on a gated fetch, then the owner's approve claiming and filling the observation — and
 /// hands back the message id `resume` binds its context to. File-internal so the image-replay suite
 /// resumes the same way this one does rather than restating forty lines of setup.
-func suspendOnAGatedFetchThenApprove(env: Env, origin: RunOrigin = .interactive, now: Date)
-  async throws -> Int64
-{
+func suspendOnAGatedFetchThenApprove(
+  env: Env,
+  origin: RunOrigin = .interactive,
+  now: Date
+) async throws -> Int64 {
   let runs = RunStoreGRDB(writer: env.queue)
   _ = try #require(try runs.pickUp(runID: env.runID, policyVersion: nil, now: now))
   try await env.queue.write { db in
@@ -790,9 +818,9 @@ struct TurnRunnerTests {
       try Int.fetchOne(
         db,
         sql: """
-        SELECT COUNT(*) FROM audit_events
-        WHERE action = 'budget_tripped' AND decision = 'proactive_per_day'
-        """
+          SELECT COUNT(*) FROM audit_events
+          WHERE action = 'budget_tripped' AND decision = 'proactive_per_day'
+          """
       )
     }
     #expect(tripCount == 1)

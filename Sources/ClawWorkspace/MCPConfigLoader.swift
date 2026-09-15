@@ -44,9 +44,10 @@ public enum MCPConfigLoader {
 
   /// Reads and decodes the catalog. An absent probed file means the feature is off; an absent file
   /// the owner named by env var is their error.
-  public static func load(from source: MCPConfigSource, fileManager: FileManager = .default) throws
-    -> MCPConfig
-  {
+  public static func load(
+    from source: MCPConfigSource,
+    fileManager: FileManager = .default
+  ) throws -> MCPConfig {
     let path = source.url.path
 
     guard fileManager.fileExists(atPath: path) else {
@@ -180,9 +181,11 @@ private extension MCPConfigLoader {
     return raw
   }
 
-  static func requireKnownKeys(in mapping: [String: Any], allowed: Set<String>, context: String?)
-    throws
-  {
+  static func requireKnownKeys(
+    in mapping: [String: Any],
+    allowed: Set<String>,
+    context: String?
+  ) throws {
     for key in mapping.keys.sorted() where allowed.contains(key) == false {
       throw MCPConfigError.unknownKey(
         context.map {

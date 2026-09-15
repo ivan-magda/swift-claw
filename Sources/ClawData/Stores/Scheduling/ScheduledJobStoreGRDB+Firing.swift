@@ -22,10 +22,10 @@ extension ScheduledJobStoreGRDB {
     if let nextOccurrence {
       try db.execute(
         sql: """
-        UPDATE scheduled_jobs
-        SET next_occurrence = ?, updated_ts = ?
-        WHERE id = ? AND next_occurrence = ? AND status = ?
-        """,
+          UPDATE scheduled_jobs
+          SET next_occurrence = ?, updated_ts = ?
+          WHERE id = ? AND next_occurrence = ? AND status = ?
+          """,
         arguments: [
           EpochSecondCodec.epoch(nextOccurrence),
           EpochSecondCodec.epoch(now),
@@ -37,10 +37,10 @@ extension ScheduledJobStoreGRDB {
     } else {
       try db.execute(
         sql: """
-        UPDATE scheduled_jobs
-        SET next_occurrence = NULL, status = ?, updated_ts = ?
-        WHERE id = ? AND next_occurrence = ? AND status = ?
-        """,
+          UPDATE scheduled_jobs
+          SET next_occurrence = NULL, status = ?, updated_ts = ?
+          WHERE id = ? AND next_occurrence = ? AND status = ?
+          """,
         arguments: [
           ScheduledJobStatus.completed.rawValue,
           EpochSecondCodec.epoch(now),
@@ -57,9 +57,13 @@ extension ScheduledJobStoreGRDB {
 // MARK: - Fused Claim
 
 extension ScheduledJobStoreGRDB {
-  public func claimAndFire(jobID: Int64, due: Date, fireAt: Date, nextOccurrence: Date?, now: Date)
-    throws(StoreError) -> ClaimedFire?
-  {
+  public func claimAndFire(
+    jobID: Int64,
+    due: Date,
+    fireAt: Date,
+    nextOccurrence: Date?,
+    now: Date
+  ) throws(StoreError) -> ClaimedFire? {
     try database.writeMapping { db in
       // Step 1: the compare-and-advance. This IS the atomic claim expressed on the occurrence.
       // `last_fired_at` is deliberately NOT set here: it must move only when a run is actually
@@ -148,9 +152,9 @@ extension ScheduledJobStoreGRDB {
     // trusted-tier deliberately (anything the RUN ingests stays untrusted).
     try db.execute(
       sql: """
-      INSERT INTO messages(session_id, role, content, provenance, ts)
-      VALUES (?, ?, ?, ?, ?)
-      """,
+        INSERT INTO messages(session_id, role, content, provenance, ts)
+        VALUES (?, ?, ?, ?, ?)
+        """,
       arguments: [sessionID, MessageRole.user.rawValue, prompt, Provenance.trusted.rawValue, now]
     )
     let triggerMessageID = db.lastInsertedRowID
@@ -257,12 +261,12 @@ extension ScheduledJobStoreGRDB {
 
       try db.execute(
         sql: """
-        INSERT INTO scheduler_state(id, last_misfire_at, last_misfire_skipped_count)
-        VALUES (1, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          last_misfire_at = excluded.last_misfire_at,
-          last_misfire_skipped_count = excluded.last_misfire_skipped_count
-        """,
+          INSERT INTO scheduler_state(id, last_misfire_at, last_misfire_skipped_count)
+          VALUES (1, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            last_misfire_at = excluded.last_misfire_at,
+            last_misfire_skipped_count = excluded.last_misfire_skipped_count
+          """,
         arguments: [EpochSecondCodec.epoch(now), skippedCount]
       )
       try AuditLogGRDB.insertAudit(
@@ -312,9 +316,12 @@ private extension ScheduledJobStoreGRDB {
 
   /// Step 3: the job's dedicated session, created lazily on first fire. The session row
   /// stores NO chat id — the delivery target stays on the job row.
-  static func ensureJobSession(_ db: Database, jobID: Int64, existingSessionID: Int64?, now: Date)
-    throws -> Int64
-  {
+  static func ensureJobSession(
+    _ db: Database,
+    jobID: Int64,
+    existingSessionID: Int64?,
+    now: Date
+  ) throws -> Int64 {
     if let existingSessionID {
       return existingSessionID
     }
@@ -340,10 +347,10 @@ private extension ScheduledJobStoreGRDB {
   ) throws -> Int64 {
     try db.execute(
       sql: """
-      INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
-        origin, job_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
+          origin, job_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         sessionID,
         RunState.pending.rawValue,

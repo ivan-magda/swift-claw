@@ -117,9 +117,10 @@ public actor CoderService: CoderServing, Service {
     return try await preparer.prepare(request)
   }
 
-  public func submit(_ prepared: CoderPreparedRequest, context: ToolExecutionContext) async throws
-    -> CoderJob
-  {
+  public func submit(
+    _ prepared: CoderPreparedRequest,
+    context: ToolExecutionContext
+  ) async throws -> CoderJob {
     let origin = try approvedOrigin(context)
     _ = try requireAdmission()
     guard prepared.executionPolicyID == executionPolicyID else {

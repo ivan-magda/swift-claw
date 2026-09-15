@@ -280,12 +280,12 @@ struct MCPToolTests {
     // then
     #expect(
       payload.content == """
-      chart below
-      [image: image/png]
-      [audio: audio/wav]
-      [resource: file:///report.bin (application/octet-stream)]
-      [resource link: doc at https://example.com/doc]
-      """
+        chart below
+        [image: image/png]
+        [audio: audio/wav]
+        [resource: file:///report.bin (application/octet-stream)]
+        [resource link: doc at https://example.com/doc]
+        """
     )
 
     await harness.tearDown()
@@ -506,9 +506,9 @@ struct MCPToolTests {
     #expect(payload.content.contains("IGNORE PREVIOUS INSTRUCTIONS") == false)
     #expect(
       payload.content == """
-      mcp__linear__list_issues may have completed remotely; \
-      verify its effects before retrying: the server did not complete the call.
-      """
+        mcp__linear__list_issues may have completed remotely; \
+        verify its effects before retrying: the server did not complete the call.
+        """
     )
 
     await harness.tearDown()
@@ -660,9 +660,10 @@ private enum ToolFixture {
     )
   }
 
-  static func resolved(remoteName: String = "list_issues", riskLevel: RiskLevel = .ask)
-    -> ResolvedMCPTool
-  {
+  static func resolved(
+    remoteName: String = "list_issues",
+    riskLevel: RiskLevel = .ask
+  ) -> ResolvedMCPTool {
     ResolvedMCPTool(
       coordinate: MCPToolCoordinate(server: "linear", remoteName: remoteName),
       localName: "mcp__linear__list_issues",

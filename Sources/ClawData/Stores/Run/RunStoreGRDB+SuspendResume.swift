@@ -246,27 +246,27 @@ extension RunStoreGRDB {
         try Int.fetchOne(
           db,
           sql: """
-          SELECT COUNT(*) FROM messages \
-          WHERE run_id = ? AND role = '\(MessageRole.assistant.rawValue)'
-          """,
+            SELECT COUNT(*) FROM messages \
+            WHERE run_id = ? AND role = '\(MessageRole.assistant.rawValue)'
+            """,
           arguments: [runID]
         ) ?? 0
       let toolCalls =
         try Int.fetchOne(
           db,
           sql: """
-          SELECT COUNT(*) FROM messages \
-          WHERE run_id = ? AND role = '\(MessageRole.tool.rawValue)'
-          """,
+            SELECT COUNT(*) FROM messages \
+            WHERE run_id = ? AND role = '\(MessageRole.tool.rawValue)'
+            """,
           arguments: [runID]
         ) ?? 0
       let tokens =
         try Int.fetchOne(
           db,
           sql: """
-          SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0)
-          FROM provider_usage WHERE run_id = ?
-          """,
+            SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0)
+            FROM provider_usage WHERE run_id = ?
+            """,
           arguments: [runID]
         ) ?? 0
       let costUSD =
@@ -348,17 +348,19 @@ extension RunStoreGRDB {
   /// The per-approval half of the exactly-once guard: true while the approval's reserved
   /// observation row still carries the placeholder content, i.e. no resume commit has landed for
   /// THIS approval. Same row scoping as `fillApprovedObservation`.
-  static func observationIsPlaceholder(_ db: Database, runID: Int64, messageID: Int64) throws
-    -> Bool
-  {
+  static func observationIsPlaceholder(
+    _ db: Database,
+    runID: Int64,
+    messageID: Int64
+  ) throws -> Bool {
     try Bool.fetchOne(
       db,
       sql: """
-      SELECT EXISTS(
-        SELECT 1 FROM messages
-        WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)' AND content = ?
-      )
-      """,
+        SELECT EXISTS(
+          SELECT 1 FROM messages
+          WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)' AND content = ?
+        )
+        """,
       arguments: [messageID, runID, placeholderObservationContent]
     ) ?? false
   }
@@ -374,9 +376,9 @@ extension RunStoreGRDB {
   ) throws {
     try db.execute(
       sql: """
-      UPDATE messages SET content = ? \
-      WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'
-      """,
+        UPDATE messages SET content = ? \
+        WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'
+        """,
       arguments: [content, messageID, runID]
     )
   }

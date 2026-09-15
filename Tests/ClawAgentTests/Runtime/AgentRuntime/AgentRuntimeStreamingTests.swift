@@ -137,9 +137,10 @@ actor StreamingProvider: LLMProvider {
 
   /// Replays a script, returning the terminal its `.finished` names — or nil when the script runs
   /// out without one, which is how a caller tells "the script ended" from "the stream ended".
-  private static func play(_ events: [StreamEvent], into sink: LLMEventSink) async
-    -> LLMStreamTermination?
-  {
+  private static func play(
+    _ events: [StreamEvent],
+    into sink: LLMEventSink
+  ) async -> LLMStreamTermination? {
     for event in events {
       if let terminal = await send(event, into: sink) {
         return terminal
@@ -149,9 +150,10 @@ actor StreamingProvider: LLMProvider {
   }
 
   /// Returns the terminal once the script reaches one, or once the consumer has stopped listening.
-  private static func send(_ event: StreamEvent, into sink: LLMEventSink) async
-    -> LLMStreamTermination?
-  {
+  private static func send(
+    _ event: StreamEvent,
+    into sink: LLMEventSink
+  ) async -> LLMStreamTermination? {
     switch event {
     case .delta(let text):
       do {
@@ -483,9 +485,10 @@ func startTurn(operation: @escaping @Sendable () async throws -> TurnOutcome) ->
 
 /// The ceiling is a liveness backstop, never a synchronization point: it is cancelled the moment
 /// the turn resolves, so it must be generous enough to survive a CPU-starved CI runner.
-func waitForTurnResult(_ result: TurnResultBox, ceiling: Duration = .seconds(30)) async
-  -> TurnOutcome?
-{
+func waitForTurnResult(
+  _ result: TurnResultBox,
+  ceiling: Duration = .seconds(30)
+) async -> TurnOutcome? {
   let timeout = Task {
     try? await Task.sleep(for: ceiling)
     await result.resolve(.timeout)

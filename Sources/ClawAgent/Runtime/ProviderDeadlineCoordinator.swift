@@ -152,7 +152,7 @@ extension ProviderDeadlineCoordinator {
     deadlineSeconds: Int,
     clock: any Clock<Duration>,
     consume:
-    @escaping @Sendable (_ stream: LLMEventStream, _ box: ProviderRaceBox) async ->
+      @escaping @Sendable (_ stream: LLMEventStream, _ box: ProviderRaceBox) async ->
       StreamConsumerOutcome,
     auxiliary: @escaping @Sendable (_ box: ProviderRaceBox) async -> Void
   ) async -> ProviderDeadlineOutcome {
@@ -278,9 +278,10 @@ private extension ProviderDeadlineCoordinator {
   /// content is the final reply, never the consumer's delta accumulation, which drove only live
   /// drafts and can lag a done item that supersedes the deltas (so persisted text and replay state
   /// stay in agreement). A failure keeps its typed cause; a cancellation carries its accounting.
-  static func streamingOutcome(consumer: StreamConsumerOutcome?, termination: LLMStreamTermination)
-    -> ProviderDeadlineOutcome
-  {
+  static func streamingOutcome(
+    consumer: StreamConsumerOutcome?,
+    termination: LLMStreamTermination
+  ) -> ProviderDeadlineOutcome {
     if case .overflowed = consumer {
       return .failed(AccumulatedStreamContentTooLarge())
     }

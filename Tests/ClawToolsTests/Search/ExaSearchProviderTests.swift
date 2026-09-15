@@ -9,27 +9,27 @@ import Testing
 struct ExaSearchProviderTests {
   /// A captured-shape /search response (§20 item 7 — the mapping fixture).
   private static let fixtureBody = #"""
-  {
-    "requestId": "r1",
-    "results": [
-      {
-        "title": "Swift.org - Welcome",
-        "url": "https://swift.org/",
-        "highlights": ["Swift is a general-purpose programming language."],
-        "text": "full page text here"
-      },
-      {
-        "title": "Swift Forums",
-        "url": "https://forums.swift.org/",
-        "summary": "Community discussion for Swift."
-      },
-      {
-        "title": "Bare Result",
-        "url": "https://example.com/bare"
-      }
-    ]
-  }
-  """#
+    {
+      "requestId": "r1",
+      "results": [
+        {
+          "title": "Swift.org - Welcome",
+          "url": "https://swift.org/",
+          "highlights": ["Swift is a general-purpose programming language."],
+          "text": "full page text here"
+        },
+        {
+          "title": "Swift Forums",
+          "url": "https://forums.swift.org/",
+          "summary": "Community discussion for Swift."
+        },
+        {
+          "title": "Bare Result",
+          "url": "https://example.com/bare"
+        }
+      ]
+    }
+    """#
 
   @Test
   func mapsResultsWithThePinnedSnippetFallback() async throws {

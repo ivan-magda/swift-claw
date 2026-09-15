@@ -29,9 +29,9 @@ extension CoderJobStoreGRDB {
       }
       try db.execute(
         sql: """
-        UPDATE coder_jobs SET state = ?, result_json = ?, slot_reserved = ?, updated_ts = ?
-        WHERE id = ?
-        """,
+          UPDATE coder_jobs SET state = ?, result_json = ?, slot_reserved = ?, updated_ts = ?
+          WHERE id = ?
+          """,
         arguments: [
           result.state.rawValue,
           try CoderJobRecord.encodeJSON(result),
@@ -68,9 +68,12 @@ private extension CoderJobStoreGRDB {
     }
   }
 
-  static func insertCompletion(_ db: Database, job: CoderJob, chunks: [OutboxChunk], now: Date)
-    throws
-  {
+  static func insertCompletion(
+    _ db: Database,
+    job: CoderJob,
+    chunks: [OutboxChunk],
+    now: Date
+  ) throws {
     let base = try OutboxInsertion.nextOutboxStepBase(db, runID: job.origin.runID)
     for chunk in chunks {
       let addressed = OutboxChunk(

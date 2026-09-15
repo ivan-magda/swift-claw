@@ -28,9 +28,11 @@ struct ProviderCompositionTests {
   private static let baseURLKey = "CLAW_LLM_BASE_URL"
   private static let groupChatsKey = "CLAW_GROUP_CHATS"
 
-  private func config(model: String, baseURL: String?, groupChats: String? = nil) throws
-    -> AppConfig
-  {
+  private func config(
+    model: String,
+    baseURL: String?,
+    groupChats: String? = nil
+  ) throws -> AppConfig {
     let root = NSTemporaryDirectory() + "clawd-composition-" + UUID().uuidString
     var env = [AppConfig.EnvKey.stateRoot: root, AppConfig.EnvKey.llmModel: model]
     if let baseURL {
@@ -53,11 +55,11 @@ struct ProviderCompositionTests {
     recorder: CloseRecorder,
     makeManagedStore: @escaping @Sendable (_ stateRoot: URL) -> any LLMCredentialStore,
     buildDaemon:
-    @escaping @Sendable (
-      _ builder: DaemonBuilder,
-      _ stack: RosterStack,
-      _ cooldown: PrimaryRouteCooldown<ContinuousClock>
-    ) async throws -> DaemonRuntimeBundle
+      @escaping @Sendable (
+        _ builder: DaemonBuilder,
+        _ stack: RosterStack,
+        _ cooldown: PrimaryRouteCooldown<ContinuousClock>
+      ) async throws -> DaemonRuntimeBundle
   ) throws -> RunComposition {
     var composition = RunComposition(
       config: config,

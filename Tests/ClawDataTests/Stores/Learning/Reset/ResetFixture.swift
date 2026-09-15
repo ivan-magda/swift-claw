@@ -16,9 +16,9 @@ struct ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
-          created_at) VALUES (?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
+            created_at) VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           set.jobID,
           set.digest.rawValue,
@@ -30,9 +30,9 @@ struct ResetFixture {
       )
       try db.execute(
         sql: """
-        UPDATE job_learning_state SET stable_lesson_set_digest = ?, stable_revision = 4
-        WHERE job_id = ?
-        """,
+          UPDATE job_learning_state SET stable_lesson_set_digest = ?, stable_revision = 4
+          WHERE job_id = ?
+          """,
         arguments: [set.digest.rawValue, env.jobID]
       )
     }
@@ -60,9 +60,9 @@ struct ResetFixture {
         )
         try db.execute(
           sql: """
-          INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
-            created_at) VALUES (?, ?, ?, ?, ?, ?)
-          """,
+            INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
+              created_at) VALUES (?, ?, ?, ?, ?, ?)
+            """,
           arguments: [
             env.jobID,
             replacement.digest.rawValue,
@@ -74,11 +74,11 @@ struct ResetFixture {
         )
         try db.execute(
           sql: """
-          INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
-            replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
-            source_manifest, algorithm, created_at)
-          VALUES (?, ?, 1, ?, ?, 4, 7, 'reflection', '{}', ?, ?)
-          """,
+            INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
+              replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
+              source_manifest, algorithm, created_at)
+            VALUES (?, ?, 1, ?, ?, 4, 7, 'reflection', '{}', ?, ?)
+            """,
           arguments: [
             candidateDigest,
             env.jobID,
@@ -90,11 +90,11 @@ struct ResetFixture {
         )
         try db.execute(
           sql: """
-          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-            consumed_assignments, cohort_cutoff, state, algorithm)
-          VALUES (?, 1, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
-          """,
+            INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+              generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+              consumed_assignments, cohort_cutoff, state, algorithm)
+            VALUES (?, 1, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
+            """,
           arguments: [
             env.jobID,
             base.rawValue,
@@ -142,10 +142,10 @@ struct ResetFixture {
       ] {
         try db.execute(
           sql: """
-          INSERT INTO feedback_targets(nonce, job_id, learning_epoch, subject_kind,
-            subject_digest, allowed_actions, owner_user_id, chat_id, expires_at)
-          VALUES (?, ?, ?, 'run', 'subject', '["result_useful"]', ?, ?, ?)
-          """,
+            INSERT INTO feedback_targets(nonce, job_id, learning_epoch, subject_kind,
+              subject_digest, allowed_actions, owner_user_id, chat_id, expires_at)
+            VALUES (?, ?, ?, 'run', 'subject', '["result_useful"]', ?, ?, ?)
+            """,
           arguments: [nonce, jobID, epoch, jobID + 100, jobID + 200, 1]
         )
       }
@@ -156,19 +156,19 @@ struct ResetFixture {
       ] {
         try db.execute(
           sql: """
-          INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
-            subject_kind, subject_digest, expires_at)
-          VALUES (?, ?, ?, ?, 'run', 'subject', 1)
-          """,
+            INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
+              subject_kind, subject_digest, expires_at)
+            VALUES (?, ?, ?, ?, 'run', 'subject', 1)
+            """,
           arguments: [owner, chat, jobID, epoch]
         )
       }
       try db.execute(
         sql: """
-        INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
-          subject_kind, subject_digest, expires_at)
-        VALUES (103, 203, ?, 0, 'run', 'history', 1)
-        """,
+          INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
+            subject_kind, subject_digest, expires_at)
+          VALUES (103, 203, ?, 0, 'run', 'history', 1)
+          """,
         arguments: [env.jobID]
       )
       let historyID = db.lastInsertedRowID
@@ -188,17 +188,20 @@ struct ResetFixture {
     }
   }
 
-  func insertOperation(_ db: Database, id: String, jobID: Int64, state: LearningOperationState)
-    throws
-  {
+  func insertOperation(
+    _ db: Database,
+    id: String,
+    jobID: Int64,
+    state: LearningOperationState
+  ) throws {
     let started = state == .started
     try db.execute(
       sql: """
-      INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
-        source_digest, carrier_digest, route, provider_call_id, attempt_generation, state,
-        reserved_tokens, reserved_cost_usd, reservation_state, created_at, key_digest)
-      VALUES (?, ?, 1, 'evaluator', ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
+          source_digest, carrier_digest, route, provider_call_id, attempt_generation, state,
+          reserved_tokens, reserved_cost_usd, reservation_state, created_at, key_digest)
+        VALUES (?, ?, 1, 'evaluator', ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         id,
         jobID,

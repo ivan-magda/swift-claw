@@ -60,9 +60,9 @@ struct RunExecutionContextTests {
         let sessionID = db.lastInsertedRowID
         try db.execute(
           sql: """
-          INSERT INTO runs(session_id, state, origin, requester_user_id, created_ts, updated_ts)
-          VALUES (?, ?, ?, ?, ?, ?)
-          """,
+            INSERT INTO runs(session_id, state, origin, requester_user_id, created_ts, updated_ts)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
           arguments: [
             sessionID,
             RunState.pending.rawValue,

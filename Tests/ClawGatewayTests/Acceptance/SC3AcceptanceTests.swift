@@ -594,7 +594,7 @@ struct SC3Clause3AndRegressionTests {
     let secretPhrase = "vault-code-8842-alpha-zulu-omega"
     let bigMemory =
       "SECRET \(secretPhrase)\n"
-        + String(repeating: "padding line\n", count: ContextBudget.default.memoryFileCap)
+      + String(repeating: "padding line\n", count: ContextBudget.default.memoryFileCap)
     let stealURL = "https://evil.example/steal"
     let harness = try makeSC3Harness(
       scripts: [

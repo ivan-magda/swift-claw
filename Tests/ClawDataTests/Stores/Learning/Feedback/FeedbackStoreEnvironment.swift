@@ -163,9 +163,10 @@ struct FeedbackStoreEnvironment {
     ]
   }
 
-  func openChallenge(_ target: NewFeedbackTarget, updateID: Int64 = 1) throws(StoreError)
-    -> FeedbackOutcome
-  {
+  func openChallenge(
+    _ target: NewFeedbackTarget,
+    updateID: Int64 = 1
+  ) throws(StoreError) -> FeedbackOutcome {
     try learning.consumeAndOpenChallenge(
       tap(target: target, signal: target.allowedActions[0], updateID: updateID),
       prompt: challengePrompt(target),
@@ -235,10 +236,10 @@ struct FeedbackStoreEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_feedback_audit BEFORE INSERT ON audit_events
-        WHEN NEW.action = '\(AuditAction.learningFeedback.rawValue)'
-        BEGIN SELECT RAISE(ABORT, 'forced feedback audit failure'); END
-        """
+          CREATE TRIGGER fail_feedback_audit BEFORE INSERT ON audit_events
+          WHEN NEW.action = '\(AuditAction.learningFeedback.rawValue)'
+          BEGIN SELECT RAISE(ABORT, 'forced feedback audit failure'); END
+          """
       )
     }
   }
@@ -268,10 +269,10 @@ struct FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT dedup_key, run_id, delivery_source, payload, reply_markup, created_ts
-        FROM outbound_deliveries
-        ORDER BY step_index
-        """
+          SELECT dedup_key, run_id, delivery_source, payload, reply_markup, created_ts
+          FROM outbound_deliveries
+          ORDER BY step_index
+          """
       ).map { row in
         let createdAt: Date = row["created_ts"]
         return DeliveryRow(
@@ -291,9 +292,9 @@ struct FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT ts, actor, action, tool, args_redacted, result_size, decision FROM audit_events
-        WHERE action = ? ORDER BY id
-        """,
+          SELECT ts, actor, action, tool, args_redacted, result_size, decision FROM audit_events
+          WHERE action = ? ORDER BY id
+          """,
         arguments: [AuditAction.learningFeedback.rawValue]
       ).map { row in
         let ts: Date = row["ts"]
@@ -318,10 +319,10 @@ struct FeedbackStoreEnvironment {
       for subject in ["41", "42"] {
         try db.execute(
           sql: """
-          INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
-            subject_kind, subject_digest, expires_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          """,
+            INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
+              subject_kind, subject_digest, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
           arguments: [
             42,
             42,
@@ -340,10 +341,10 @@ struct FeedbackStoreEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
-          subject_kind, subject_digest, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
+            subject_kind, subject_digest, expires_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           42,
           42,
@@ -375,12 +376,12 @@ private extension FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT event_id, signal, feedback_revision, supersedes, subject_digest, payload,
-          occurred_at
-        FROM feedback_events
-        WHERE \(whereClause)
-        ORDER BY feedback_revision, event_id
-        """,
+          SELECT event_id, signal, feedback_revision, supersedes, subject_digest, payload,
+            occurred_at
+          FROM feedback_events
+          WHERE \(whereClause)
+          ORDER BY feedback_revision, event_id
+          """,
         arguments: arguments
       ).map { row in
         guard

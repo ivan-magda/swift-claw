@@ -111,8 +111,8 @@ private extension LearningWorkflow {
     case .reflection(let digest):
       if
         let trigger = try store.workflowTriggers(jobID: jobID, now: now).first(where: { trigger in
-          trigger.digest == digest
-        }) {
+        trigger.digest == digest
+      }) {
         await runner.runReflection(trigger: trigger, now: now)
       }
     case .candidate(let digest):
@@ -169,7 +169,7 @@ private extension LearningWorkflow {
       for trigger in try store.workflowRollbacks(jobID: jobID) {
         switch trigger {
         case .ownerFeedback(_, let id) where id == eventID,
-             .supportWithdrawal(_, let id) where id == eventID:
+          .supportWithdrawal(_, let id) where id == eventID:
           _ = try store.rollback(trigger, now: now)
         default: break
         }

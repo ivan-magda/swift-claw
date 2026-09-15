@@ -20,9 +20,9 @@ struct ApprovedResumeStoreTests {
 
   /// A run suspended to AWAITING_APPROVAL through the real reducer, with an assistant anchor and a
   /// placeholder observation row persisted (the shape Task 14's `commitSuspendedTurn` leaves).
-  private func makeSuspendedFixture(claimedFillFault: @escaping @Sendable () throws -> Void = {})
-    throws -> Fixture
-  {
+  private func makeSuspendedFixture(
+    claimedFillFault: @escaping @Sendable () throws -> Void = {}
+  ) throws -> Fixture {
     let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
@@ -48,17 +48,17 @@ struct ApprovedResumeStoreTests {
     let observationMessageID = try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, 'assistant', '', 'trusted', ?, \
-        '[{"id":"c1","name":"file_write","arguments":"{}"}]')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
+          VALUES (?, ?, 'assistant', '', 'trusted', ?, \
+          '[{"id":"c1","name":"file_write","arguments":"{}"}]')
+          """,
         arguments: [sessionID, runID, Date()]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
+          """,
         arguments: [sessionID, runID, Self.placeholder, Date()]
       )
       let messageID = db.lastInsertedRowID
@@ -115,11 +115,11 @@ struct ApprovedResumeStoreTests {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT actor, action, tool, args_redacted, result_size, decision, run_id, session_id, ts
-        FROM audit_events
-        WHERE run_id = ? AND action = ?
-        ORDER BY id
-        """,
+          SELECT actor, action, tool, args_redacted, result_size, decision, run_id, session_id, ts
+          FROM audit_events
+          WHERE run_id = ? AND action = ?
+          ORDER BY id
+          """,
         arguments: [env.runID, AuditAction.toolCall.rawValue]
       )
     }
@@ -229,9 +229,9 @@ struct ApprovedResumeStoreTests {
       try String.fetchAll(
         db,
         sql: """
-        SELECT payload FROM outbound_deliveries
-        WHERE run_id = ? AND status = 'PENDING' ORDER BY step_index
-        """,
+          SELECT payload FROM outbound_deliveries
+          WHERE run_id = ? AND status = 'PENDING' ORDER BY step_index
+          """,
         arguments: [runID]
       )
     }
@@ -472,9 +472,9 @@ struct ApprovedResumeStoreTests {
     try env.queue.write { db -> Int64 in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c2')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c2')
+          """,
         arguments: [env.sessionID, env.runID, Self.placeholder, Date()]
       )
       let messageID = db.lastInsertedRowID
@@ -564,32 +564,32 @@ struct ApprovedResumeStoreTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
-        VALUES (?, ?, 'assistant', '', 'trusted', ?, '[]')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_calls)
+          VALUES (?, ?, 'assistant', '', 'trusted', ?, '[]')
+          """,
         arguments: [env.sessionID, env.runID, Date()]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', 'obs', 'untrusted', ?, 'c2')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', 'obs', 'untrusted', ?, 'c2')
+          """,
         arguments: [env.sessionID, env.runID, Date()]
       )
       try db.execute(
         sql: """
-        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-          cost_usd, cost_source, is_estimated, ts, provider_call_id)
-        VALUES (?, ?, 'm', 100, 20, 0.03, 'price_file', 0, ?, 'call-round-1')
-        """,
+          INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+            cost_usd, cost_source, is_estimated, ts, provider_call_id)
+          VALUES (?, ?, 'm', 100, 20, 0.03, 'price_file', 0, ?, 'call-round-1')
+          """,
         arguments: [env.runID, env.sessionID, Date()]
       )
       try db.execute(
         sql: """
-        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-          cost_usd, cost_source, is_estimated, ts, provider_call_id)
-        VALUES (?, ?, 'm', 50, 10, 0.01, 'price_file', 0, ?, 'call-round-2')
-        """,
+          INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+            cost_usd, cost_source, is_estimated, ts, provider_call_id)
+          VALUES (?, ?, 'm', 50, 10, 0.01, 'price_file', 0, ?, 'call-round-2')
+          """,
         arguments: [env.runID, env.sessionID, Date()]
       )
     }

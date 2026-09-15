@@ -430,9 +430,10 @@ struct ChatGPTCredentialSourceTests {
     (ChatGPTOAuthFailure.grantRejected(detail: "status 401"), 1),
     (ChatGPTOAuthFailure.grantRejected(detail: "status 403"), 1),
   ])
-  func aRejectedGrantRequiresLoginWithoutRetrying(failure: ChatGPTOAuthFailure, calls: Int)
-    async throws
-  {
+  func aRejectedGrantRequiresLoginWithoutRetrying(
+    failure: ChatGPTOAuthFailure,
+    calls: Int
+  ) async throws {
     // given
     let oauth = ScriptedRefresh([.failure(failure)])
     let source = CredentialFixture.source(

@@ -412,10 +412,10 @@ extension LearningRoutingTests {
       try queue.write { db in
         try db.execute(
           sql: """
-          INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result,
-            algorithm, decided_at)
-          VALUES ('unknown', ?, 1, '{}', '{}', ?, ?)
-          """,
+            INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result,
+              algorithm, decided_at)
+            VALUES ('unknown', ?, 1, '{}', '{}', ?, ?)
+            """,
           arguments: [jobID, LearningAlgorithm.v1.rawValue, now]
         )
       }
@@ -425,10 +425,10 @@ extension LearningRoutingTests {
       try queue.write { db in
         try db.execute(
           sql: """
-          CREATE TRIGGER fail_reset_audit BEFORE INSERT ON audit_events
-          WHEN NEW.action = '\(AuditAction.learningReset.rawValue)'
-          BEGIN SELECT RAISE(ABORT, 'forced reset audit failure'); END
-          """
+            CREATE TRIGGER fail_reset_audit BEFORE INSERT ON audit_events
+            WHEN NEW.action = '\(AuditAction.learningReset.rawValue)'
+            BEGIN SELECT RAISE(ABORT, 'forced reset audit failure'); END
+            """
         )
       }
     }

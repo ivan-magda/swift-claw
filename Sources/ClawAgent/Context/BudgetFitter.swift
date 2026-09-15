@@ -85,9 +85,10 @@ enum BudgetFitter {
   static let truncationMarker = TextTruncation.marker
   static let dropMarkerUnitID = "drop-marker"
 
-  static func fitWithUnits(_ sections: [FittableSection], budget: ContextBudget) throws
-    -> [FittedSection]
-  {
+  static func fitWithUnits(
+    _ sections: [FittableSection],
+    budget: ContextBudget
+  ) throws -> [FittedSection] {
     let ordered = sections.sorted { first, second in
       first.priority < second.priority
     }
@@ -206,9 +207,11 @@ enum BudgetFitter {
   /// Appends the row's drop marker when the budget left units out. The marker shares the cap with
   /// the content it describes, so a cap too tight for both ships the kept units unmarked — giving
   /// content back to make room would let an annotation about missing skills empty the whole row.
-  private static func markedRow(for section: FittableSection, kept: [SectionUnit], maxCount: Int)
-    -> FittedRow?
-  {
+  private static func markedRow(
+    for section: FittableSection,
+    kept: [SectionUnit],
+    maxCount: Int
+  ) -> FittedRow? {
     guard kept.isEmpty == false else {
       return nil
     }

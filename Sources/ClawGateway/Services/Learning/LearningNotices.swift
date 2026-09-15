@@ -142,12 +142,12 @@ public struct LearningNotices: Sendable {
     let notUseful = FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultNotUseful)
     let correction = FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultCorrection)
     return #"""
-    {"inline_keyboard":[[\#
-    {"callback_data":"\#(useful)","text":"Useful"},\#
-    {"callback_data":"\#(notUseful)","text":"Not useful"},\#
-    {"callback_data":"\#(correction)","text":"Correct it"}\#
-    ]]}
-    """#
+      {"inline_keyboard":[[\#
+      {"callback_data":"\#(useful)","text":"Useful"},\#
+      {"callback_data":"\#(notUseful)","text":"Not useful"},\#
+      {"callback_data":"\#(correction)","text":"Correct it"}\#
+      ]]}
+      """#
   }
 
   static func challengePrompt(for tap: FeedbackTap) -> [LearningNoticeChunk] {
@@ -157,7 +157,7 @@ public struct LearningNotices: Sendable {
     case .candidateEdit:
       payload = #"Reply with one JSON object: {"lessons":["..."]} (zero to three lessons)."#
     case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute, .candidateApprove,
-         .candidateReject, .promotionRollback:
+      .candidateReject, .promotionRollback:
       payload = "Reply with your feedback."
     }
     return [
@@ -197,12 +197,12 @@ private extension LearningNotices {
     let lessons = candidate.replacement.lessons
     let body =
       lessons.isEmpty
-        ? "- Remove all learned lessons."
-        : lessons.enumerated().map { index, lesson in
-          "\(index + 1). \(lesson)"
-        }.joined(
-          separator: "\n"
-        )
+      ? "- Remove all learned lessons."
+      : lessons.enumerated().map { index, lesson in
+        "\(index + 1). \(lesson)"
+      }.joined(
+        separator: "\n"
+      )
     return "Candidate lessons for review:\n\(body)"
   }
 }

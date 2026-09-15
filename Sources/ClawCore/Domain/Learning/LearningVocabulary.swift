@@ -112,7 +112,7 @@ public enum OwnerSignal: String, Sendable, Equatable, CaseIterable {
     switch self {
     case .resultCorrection, .candidateEdit: true
     case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute, .candidateApprove,
-         .candidateReject, .promotionRollback:
+      .candidateReject, .promotionRollback:
       false
     }
   }

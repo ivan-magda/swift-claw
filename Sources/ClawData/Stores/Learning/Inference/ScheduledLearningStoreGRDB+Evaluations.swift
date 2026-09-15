@@ -57,11 +57,11 @@ extension ScheduledLearningStoreGRDB {
     let issueCodes = try issueCodesJSON(evaluation.issueCodes)
     try db.execute(
       sql: """
-      INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
-        evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
-        evaluator_schema_version, compatibility_digest, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
+          evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
+          evaluator_schema_version, compatibility_digest, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         digest(
           operation: operation,
@@ -106,9 +106,9 @@ extension ScheduledLearningStoreGRDB {
     let runID = try Int64.fetchOne(
       db,
       sql: """
-      SELECT run_id FROM learning_evidence
-      WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
-      """,
+        SELECT run_id FROM learning_evidence
+        WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
+        """,
       arguments: [operation.jobID, operation.epoch.value, operation.sourceDigest]
     )
     guard let runID else {
@@ -167,19 +167,19 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT learning_evaluations.evaluation_digest, learning_evaluations.job_id,
-        learning_evaluations.learning_epoch, learning_evaluations.run_id,
-        learning_evaluations.evidence_digest, learning_evaluations.outcome,
-        learning_evaluations.issue_codes,
-        learning_evaluations.rubric_version, learning_evaluations.evaluator_prompt_version,
-        learning_evaluations.evaluator_schema_version,
-        learning_evaluations.compatibility_digest, learning_evaluations.created_at,
-        run_compatibility.evaluator_route
-      FROM learning_evaluations
-      LEFT JOIN run_compatibility ON run_compatibility.run_id = learning_evaluations.run_id
-      WHERE learning_evaluations.run_id = ?
-      ORDER BY learning_evaluations.evaluation_digest
-      """,
+        SELECT learning_evaluations.evaluation_digest, learning_evaluations.job_id,
+          learning_evaluations.learning_epoch, learning_evaluations.run_id,
+          learning_evaluations.evidence_digest, learning_evaluations.outcome,
+          learning_evaluations.issue_codes,
+          learning_evaluations.rubric_version, learning_evaluations.evaluator_prompt_version,
+          learning_evaluations.evaluator_schema_version,
+          learning_evaluations.compatibility_digest, learning_evaluations.created_at,
+          run_compatibility.evaluator_route
+        FROM learning_evaluations
+        LEFT JOIN run_compatibility ON run_compatibility.run_id = learning_evaluations.run_id
+        WHERE learning_evaluations.run_id = ?
+        ORDER BY learning_evaluations.evaluation_digest
+        """,
       arguments: [runID]
     )
     return try rows.map { row in
@@ -204,9 +204,10 @@ extension ScheduledLearningStoreGRDB {
     return codes
   }
 
-  private static func decodeStoredEvaluation(_ row: Row, expectedRunID: Int64) throws
-    -> StoredEvaluationProjection
-  {
+  private static func decodeStoredEvaluation(
+    _ row: Row,
+    expectedRunID: Int64
+  ) throws -> StoredEvaluationProjection {
     guard
       let digestRaw = SQLiteStoredValue.string(in: row, column: "evaluation_digest"),
       isCanonicalDigest(digestRaw),

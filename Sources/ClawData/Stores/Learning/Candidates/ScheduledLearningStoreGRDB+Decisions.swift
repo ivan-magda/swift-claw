@@ -5,9 +5,11 @@ import GRDB
 // MARK: - Owner Decisions
 
 extension ScheduledLearningStoreGRDB {
-  public func approveCandidate(_ approval: CandidateApproval, redactor: SecretRedactor, now: Date)
-    throws(StoreError) -> AdmissionOutcome
-  {
+  public func approveCandidate(
+    _ approval: CandidateApproval,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
     try database.writeMapping { db in
       guard let predecessor = try Self.readCandidateArtifact(db, digest: approval.predecessorDigest)
       else {
@@ -88,9 +90,11 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  public func editCandidate(_ edit: CandidateEdit, redactor: SecretRedactor, now: Date)
-    throws(StoreError) -> AdmissionOutcome
-  {
+  public func editCandidate(
+    _ edit: CandidateEdit,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
     try database.writeMapping { db in
       guard let context = try Self.editContext(db, edit: edit) else {
         return .rejected(.invalidOwnerControl)
@@ -212,9 +216,10 @@ private extension ScheduledLearningStoreGRDB {
 // MARK: - Successor Validation
 
 private extension ScheduledLearningStoreGRDB {
-  static func contentRejection(_ artifact: CandidateArtifact, redactor: SecretRedactor)
-    -> AdmissionRejection?
-  {
+  static func contentRejection(
+    _ artifact: CandidateArtifact,
+    redactor: SecretRedactor
+  ) -> AdmissionRejection? {
     switch AdmissionValidator.validatedReplacement(
       jobID: artifact.manifest.jobID,
       lessons: artifact.replacement.lessons,

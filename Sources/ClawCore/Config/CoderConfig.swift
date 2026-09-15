@@ -91,7 +91,9 @@ public struct CoderConfig: Sendable, Equatable {
 // MARK: - Scalar Validation
 
 private extension CoderConfig {
-  static func nonemptySettings(_ environment: [String: String]) throws(ConfigError) -> [String:
+  static func nonemptySettings(
+    _ environment: [String: String]
+  ) throws(ConfigError) -> [String:
     String]
   {
     let keys = [

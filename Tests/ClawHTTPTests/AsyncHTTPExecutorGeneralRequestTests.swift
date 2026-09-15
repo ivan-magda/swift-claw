@@ -326,9 +326,10 @@ final class HandoffCounter: Sendable {
 
 @Suite(.serialized)
 struct AsyncHTTPExecutorGeneralRequestTests {
-  private func buffered(successBytes: Int = 1024 * 1024, errorBytes: Int = 1024 * 1024)
-    -> HTTPResponseBodyPolicy
-  { .buffered(successBytes: successBytes, errorBytes: errorBytes) }
+  private func buffered(
+    successBytes: Int = 1024 * 1024,
+    errorBytes: Int = 1024 * 1024
+  ) -> HTTPResponseBodyPolicy { .buffered(successBytes: successBytes, errorBytes: errorBytes) }
 
   @Test(.timeLimit(.minutes(1)))
   func getCarriesMethodAndHeadersAndReturnsTheBody() async throws {

@@ -46,9 +46,11 @@ struct SchedulerHeartbeatTests {
     )
   }
 
-  private func state(lastHeartbeatAt: Date? = nil, countDay: String? = nil, count: Int = 0)
-    -> SchedulerState
-  {
+  private func state(
+    lastHeartbeatAt: Date? = nil,
+    countDay: String? = nil,
+    count: Int = 0
+  ) -> SchedulerState {
     SchedulerState(
       lastTickAt: nil,
       lastMisfireAt: nil,
@@ -77,12 +79,12 @@ struct SchedulerHeartbeatTests {
     // prior beat's run is still live, so the service must audit an overlap skip rather than fire.
     let heartbeatResult =
       firesHeartbeat
-        ? ClaimedFire(
-          runID: 901,
-          sessionID: 501,
-          triggerMessageID: 301,
-          ownerChatID: heartbeat?.ownerChatID ?? 777
-        ) : nil
+      ? ClaimedFire(
+        runID: 901,
+        sessionID: 501,
+        triggerMessageID: 301,
+        ownerChatID: heartbeat?.ownerChatID ?? 777
+      ) : nil
     let store = ScriptedJobStore(
       jobs: [],
       claimResult: nil,

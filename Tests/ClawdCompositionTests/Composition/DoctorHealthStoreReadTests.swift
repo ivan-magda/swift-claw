@@ -138,8 +138,8 @@ private extension DoctorHealthStoreReadTests {
     )
     let checks =
       HealthRowsBuilder.checks(inputs)
-        + DoctorHealth.schedulerChecks(stores: stores, config: config, now: now)
-        + DoctorHealth.approvalChecks(stores: stores, config: config, now: now)
+      + DoctorHealth.schedulerChecks(stores: stores, config: config, now: now)
+      + DoctorHealth.approvalChecks(stores: stores, config: config, now: now)
     return Dictionary(
       checks.map { check in
         (check.key, check)

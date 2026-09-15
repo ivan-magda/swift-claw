@@ -15,9 +15,9 @@ struct ReconcileBootApprovalExemptionTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:7', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:7', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
       try db.execute(
@@ -48,15 +48,16 @@ struct ReconcileBootApprovalExemptionTests {
     #expect(states == [RunState.failed.rawValue, RunState.awaitingApproval.rawValue])
   }
 
-  private func makeRunningOrphan(_ queue: DatabaseQueue, sentRowIsApprovalPrompt: Bool) throws
-    -> Int64
-  {
+  private func makeRunningOrphan(
+    _ queue: DatabaseQueue,
+    sentRowIsApprovalPrompt: Bool
+  ) throws -> Int64 {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:7', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:7', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
       try db.execute(
@@ -69,9 +70,9 @@ struct ReconcileBootApprovalExemptionTests {
       if sentRowIsApprovalPrompt {
         try db.execute(
           sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (1, ?, 'tool', 'filled result', 'untrusted', ?, 'c1')
-          """,
+            INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+            VALUES (1, ?, 'tool', 'filled result', 'untrusted', ?, 'c1')
+            """,
           arguments: [runID, Date()]
         )
         let argsJSON = #"{"path":"/w/plan.md"}"#
@@ -97,10 +98,10 @@ struct ReconcileBootApprovalExemptionTests {
       }
       try db.execute(
         sql: """
-        INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-          payload_hash, approval_id, status, created_ts)
-        VALUES (?, 0, 7, ?, 'sent earlier', 'h', ?, 'SENT', ?)
-        """,
+          INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+            payload_hash, approval_id, status, created_ts)
+          VALUES (?, 0, 7, ?, 'sent earlier', 'h', ?, 'SENT', ?)
+          """,
         arguments: [runID, "\(runID):0", approvalID, Date()]
       )
       return runID

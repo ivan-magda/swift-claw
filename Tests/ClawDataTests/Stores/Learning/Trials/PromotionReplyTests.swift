@@ -41,9 +41,9 @@ struct PromotionReplyTests {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT reply_markup FROM outbound_deliveries \
-        WHERE dedup_key IN (?, ?) ORDER BY step_index
-        """,
+          SELECT reply_markup FROM outbound_deliveries \
+          WHERE dedup_key IN (?, ?) ORDER BY step_index
+          """,
         arguments: StatementArguments(
           chunks.map { chunk in
             OutboxDedupKey.make(subjectDigest: chunk.subjectDigest, ordinal: chunk.ordinal)
@@ -102,9 +102,9 @@ struct PromotionReplyTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_promotion_reply BEFORE INSERT ON outbound_deliveries
-        WHEN NEW.step_index = 1 BEGIN SELECT RAISE(ABORT, 'outbox failure'); END
-        """
+          CREATE TRIGGER fail_promotion_reply BEFORE INSERT ON outbound_deliveries
+          WHEN NEW.step_index = 1 BEGIN SELECT RAISE(ABORT, 'outbox failure'); END
+          """
       )
     }
 

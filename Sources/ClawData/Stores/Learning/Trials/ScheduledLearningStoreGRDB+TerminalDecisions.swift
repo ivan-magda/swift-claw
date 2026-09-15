@@ -95,7 +95,7 @@ extension ScheduledLearningStoreGRDB {
       }
       let revision =
         result == .promoted
-          ? StableRevision(current.stableRevision.value + 1) : current.stableRevision
+        ? StableRevision(current.stableRevision.value + 1) : current.stableRevision
       return try Self.finishTrial(
         db,
         trial: stored,
@@ -136,10 +136,10 @@ extension ScheduledLearningStoreGRDB {
     if result == .promoted {
       try db.execute(
         sql: """
-        UPDATE job_learning_state SET stable_lesson_set_digest = ?, stable_revision = ?
-        WHERE job_id = ? AND learning_epoch = ? AND stable_lesson_set_digest = ?
-          AND stable_revision = ? AND feedback_revision = ?
-        """,
+          UPDATE job_learning_state SET stable_lesson_set_digest = ?, stable_revision = ?
+          WHERE job_id = ? AND learning_epoch = ? AND stable_lesson_set_digest = ?
+            AND stable_revision = ? AND feedback_revision = ?
+          """,
         arguments: [
           inputs.replacementDigest.rawValue,
           revision.value,
@@ -158,10 +158,10 @@ extension ScheduledLearningStoreGRDB {
       let state: LearningTrialState = result == .promoted ? .promoted : .fellBack
       try db.execute(
         sql: """
-        UPDATE learning_trials SET state = ?, close_reason = ?
-        WHERE trial_id = ? AND job_id = ? AND learning_epoch = ? AND generation = ?
-          AND state IN (?, ?)
-        """,
+          UPDATE learning_trials SET state = ?, close_reason = ?
+          WHERE trial_id = ? AND job_id = ? AND learning_epoch = ? AND generation = ?
+            AND state IN (?, ?)
+          """,
         arguments: [
           state.rawValue,
           reason,
@@ -175,9 +175,9 @@ extension ScheduledLearningStoreGRDB {
       )
       try db.execute(
         sql: """
-        UPDATE job_learning_state SET open_trial_id = NULL
-        WHERE job_id = ? AND learning_epoch = ? AND open_trial_id = ?
-        """,
+          UPDATE job_learning_state SET open_trial_id = NULL
+          WHERE job_id = ? AND learning_epoch = ? AND open_trial_id = ?
+          """,
         arguments: [trial.jobID, trial.epoch.value, trial.trialID]
       )
     }
@@ -231,17 +231,18 @@ extension ScheduledLearningStoreGRDB {
     return DecisionReceipt(decisionID: id, inputs: inputs, record: record)
   }
 
-  static func terminalReceipt(_ db: Database, inputs: TrialDecisionInputs) throws
-    -> DecisionReceipt?
-  {
+  static func terminalReceipt(
+    _ db: Database,
+    inputs: TrialDecisionInputs
+  ) throws -> DecisionReceipt? {
     guard
       let row = try Row.fetchOne(
         db,
         sql: """
-        SELECT decision_id, inputs, result FROM learning_decisions
-        WHERE kind = ? AND job_id = ? AND learning_epoch = ? AND inputs = ?
-        ORDER BY decision_id LIMIT 1
-        """,
+          SELECT decision_id, inputs, result FROM learning_decisions
+          WHERE kind = ? AND job_id = ? AND learning_epoch = ? AND inputs = ?
+          ORDER BY decision_id LIMIT 1
+          """,
         arguments: [
           LearningDecisionKind.trial.rawValue,
           inputs.identity.jobID,

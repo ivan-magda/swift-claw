@@ -333,10 +333,10 @@ struct V9PersistenceAcceptanceTests {
       try MappedDatabase(writer: env.pool).writeMapping { db in
         try db.execute(
           sql: """
-          INSERT INTO messages(session_id, role, content, provenance, ts,
-            provider_state_issuer, provider_state)
-          VALUES (?, 'assistant', 'half a pair', 'trusted', ?, 'openai-chatgpt', NULL)
-          """,
+            INSERT INTO messages(session_id, role, content, provenance, ts,
+              provider_state_issuer, provider_state)
+            VALUES (?, 'assistant', 'half a pair', 'trusted', ?, 'openai-chatgpt', NULL)
+            """,
           arguments: [env.sessionID, Self.seededAt]
         )
       }
@@ -534,9 +534,9 @@ private extension V9PersistenceAcceptanceTests {
     try pool.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES (?, ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES (?, ?, ?, 0)
+          """,
         arguments: [legacySessionKey, seededAt, seededAt]
       )
       try db.execute(
@@ -545,25 +545,25 @@ private extension V9PersistenceAcceptanceTests {
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts)
-        VALUES (1, 1, 'assistant', 'the archived plan', 'trusted', ?)
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts)
+          VALUES (1, 1, 'assistant', 'the archived plan', 'trusted', ?)
+          """,
         arguments: [seededAt]
       )
       try db.execute(
         sql: """
-        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-          cost_usd, cost_source, is_estimated, ts)
-        VALUES (1, 1, 'gpt-4o', 11, 5, 0.004, 'price_file', 0, ?)
-        """,
+          INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+            cost_usd, cost_source, is_estimated, ts)
+          VALUES (1, 1, 'gpt-4o', 11, 5, 0.004, 'price_file', 0, ?)
+          """,
         arguments: [seededAt]
       )
       try db.execute(
         sql: """
-        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-          cost_usd, cost_source, is_estimated, ts)
-        VALUES (NULL, 1, 'gpt-4o-mini', 7, 2, 0.001, 'heuristic', 1, ?)
-        """,
+          INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+            cost_usd, cost_source, is_estimated, ts)
+          VALUES (NULL, 1, 'gpt-4o-mini', 7, 2, 0.001, 'heuristic', 1, ?)
+          """,
         arguments: [seededAt]
       )
     }
@@ -589,9 +589,9 @@ private extension V9PersistenceAcceptanceTests {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT role, \(ProviderStateCoding.selection) FROM messages
-        WHERE run_id = ? ORDER BY id ASC
-        """,
+          SELECT role, \(ProviderStateCoding.selection) FROM messages
+          WHERE run_id = ? ORDER BY id ASC
+          """,
         arguments: [env.runID]
       ).map { row in
         StateRow(
@@ -634,9 +634,9 @@ private extension V9PersistenceAcceptanceTests {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT prompt_tokens, completion_tokens FROM provider_usage
-        WHERE run_id = ? ORDER BY id ASC
-        """,
+          SELECT prompt_tokens, completion_tokens FROM provider_usage
+          WHERE run_id = ? ORDER BY id ASC
+          """,
         arguments: [env.runID]
       ).map { row in
         UsageFigures(promptTokens: row["prompt_tokens"], completionTokens: row["completion_tokens"])

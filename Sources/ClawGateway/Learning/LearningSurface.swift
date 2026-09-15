@@ -47,10 +47,10 @@ private extension LearningSurface {
         } ?? "no decision"
       let warning = readable.warnings.isEmpty ? "" : " · warning"
       return """
-      \(readable.job.jobID) · \(readable.job.label) · \(readable.job.status.rawValue) · \
-      epoch \(readable.epoch.value) · \(readable.stableLessons.lessons.count) lessons · \
-      \(trial) · \(decision)\(warning)
-      """
+        \(readable.job.jobID) · \(readable.job.label) · \(readable.job.status.rawValue) · \
+        epoch \(readable.epoch.value) · \(readable.stableLessons.lessons.count) lessons · \
+        \(trial) · \(decision)\(warning)
+        """
     case .unreadable(let job):
       return "\(job.jobID) · \(job.validatedLabel ?? "unknown label") · learning state unreadable"
     case .unarmed(let job): return "\(job.jobID) · \(job.label) · no learning state"
@@ -74,17 +74,17 @@ private extension LearningSurface {
     case .notFound(let jobID): return "No schedule with id \(jobID). See /schedule list."
     case .unarmed(let job):
       return """
-      Schedule \(job.jobID) · \(job.label)
-      status: \(job.status.rawValue)
-      timezone: \(job.timezone)
-      learning state: not created
-      """
+        Schedule \(job.jobID) · \(job.label)
+        status: \(job.status.rawValue)
+        timezone: \(job.timezone)
+        learning state: not created
+        """
     case .unreadable(let job):
       return """
-      Schedule \(job.jobID) · \(job.validatedLabel ?? "unknown label")
-      learning state: unreadable
-      Run /doctor and inspect the daemon logs; this read did not change or repair stored state.
-      """
+        Schedule \(job.jobID) · \(job.validatedLabel ?? "unknown label")
+        learning state: unreadable
+        Run /doctor and inspect the daemon logs; this read did not change or repair stored state.
+        """
     case .readable(let readable): return readableDetail(readable)
     }
   }

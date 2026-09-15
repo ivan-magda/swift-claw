@@ -263,7 +263,7 @@ private extension MCPStreamableHTTPTransport {
     let rawContentType = exchange.head.header(for: MCPHTTPHeader.contentType) ?? ""
     let contentType =
       rawContentType.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false).first?
-        .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+      .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
     if contentType == ContentType.eventStream {
       try await deliverEvents(exchange)
     } else if contentType == ContentType.json {

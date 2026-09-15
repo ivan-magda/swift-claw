@@ -28,9 +28,11 @@ struct GroupApprovalResumeTests {
       ToolPayload(content: "context missing", status: .error, ingestedUntrusted: false)
     }
 
-    func execute(arguments: JSONValue, canonicalTarget: String?, context: ToolExecutionContext?)
-      async -> ToolPayload
-    {
+    func execute(
+      arguments: JSONValue,
+      canonicalTarget: String?,
+      context: ToolExecutionContext?
+    ) async -> ToolPayload {
       let value = JSONValue.object(
         [
           "requester": .string(context?.requesterUserID.map(String.init) ?? "missing"),

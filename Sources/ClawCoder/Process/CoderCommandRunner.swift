@@ -241,9 +241,11 @@ private extension CoderCommandOperation {
     return resolved
   }
 
-  func observe(pid: Int32, group: ManagedCoderProcessGroup, deadline: ContinuousClock.Instant) async
-    -> Bool
-  {
+  func observe(
+    pid: Int32,
+    group: ManagedCoderProcessGroup,
+    deadline: ContinuousClock.Instant
+  ) async -> Bool {
     while true {
       if await control.callbackStopNeeded(deadline: deadline) {
         return await group.terminate()

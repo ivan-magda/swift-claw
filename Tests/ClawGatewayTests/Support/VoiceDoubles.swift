@@ -41,7 +41,9 @@ struct ParkUntilCancelledTranscriber: VoiceTranscribing {
 struct ScriptedVoiceService: VoiceMessageTranscribing {
   var result: Result<String, VoiceMessageService.Failure>
 
-  func transcribe(_ attachment: VoiceAttachment) async -> Result<
+  func transcribe(
+    _ attachment: VoiceAttachment
+  ) async -> Result<
     String,
     VoiceMessageService.Failure
   > { result }

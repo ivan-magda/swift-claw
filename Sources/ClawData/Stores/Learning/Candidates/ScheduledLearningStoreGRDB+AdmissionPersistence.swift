@@ -28,7 +28,7 @@ extension ScheduledLearningStoreGRDB {
       let row = try Row.fetchOne(
         db,
         sql:
-        "SELECT status, recurrence, session_id, owner_chat_id FROM scheduled_jobs WHERE id = ?",
+          "SELECT status, recurrence, session_id, owner_chat_id FROM scheduled_jobs WHERE id = ?",
         arguments: [jobID]
       ),
       let status = ScheduledJobStatus(rawValue: row["status"])
@@ -47,10 +47,10 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-        state, algorithm
-      FROM learning_trials WHERE candidate_digest = ? ORDER BY trial_id
-      """,
+        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+          state, algorithm
+        FROM learning_trials WHERE candidate_digest = ? ORDER BY trial_id
+        """,
       arguments: [candidate.rawValue]
     )
     guard rows.count <= 1 else {
@@ -84,9 +84,11 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func admissionReceipt(_ db: Database, artifact: CandidateArtifact, trial: TrialRow) throws
-    -> AdmissionReceipt
-  {
+  static func admissionReceipt(
+    _ db: Database,
+    artifact: CandidateArtifact,
+    trial: TrialRow
+  ) throws -> AdmissionReceipt {
     guard
       trial.jobID == artifact.manifest.jobID,
       trial.epoch == artifact.manifest.epoch,
@@ -119,16 +121,17 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Admission Receipt Lookup
 
 private extension ScheduledLearningStoreGRDB {
-  static func admissionReceipts(_ db: Database, artifact: CandidateArtifact) throws
-    -> [AdmissionReceipt]
-  {
+  static func admissionReceipts(
+    _ db: Database,
+    artifact: CandidateArtifact
+  ) throws -> [AdmissionReceipt] {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT inputs, result, algorithm FROM learning_decisions
-      WHERE kind = ? AND job_id = ? AND learning_epoch = ?
-      ORDER BY decision_id
-      """,
+        SELECT inputs, result, algorithm FROM learning_decisions
+        WHERE kind = ? AND job_id = ? AND learning_epoch = ?
+        ORDER BY decision_id
+        """,
       arguments: [AdmissionReceipt.kind, artifact.manifest.jobID, artifact.manifest.epoch.value]
     )
     var matches: [AdmissionReceipt] = []

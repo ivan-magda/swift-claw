@@ -138,7 +138,9 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
   /// Drops every claimant of a duplicated name: two directories asserting one identity leave no
   /// principled winner, and shadowing one silently is exactly what the loader must never do.
-  static func withoutCollidingNames(_ descriptors: [SkillDescriptor]) -> (
+  static func withoutCollidingNames(
+    _ descriptors: [SkillDescriptor]
+  ) -> (
     descriptors: [SkillDescriptor],
     warnings: [WorkspaceWarning]
   ) {

@@ -14,9 +14,12 @@ struct TopicSessionIsolationTests {
     return SessionMessageStoreGRDB(writer: queue)
   }
 
-  private func inbound(updateID: Int64, sessionKey: String, chatID: Int64, text: String)
-    -> InboundMessage
-  {
+  private func inbound(
+    updateID: Int64,
+    sessionKey: String,
+    chatID: Int64,
+    text: String
+  ) -> InboundMessage {
     InboundMessage(
       updateID: updateID,
       sessionKey: sessionKey,

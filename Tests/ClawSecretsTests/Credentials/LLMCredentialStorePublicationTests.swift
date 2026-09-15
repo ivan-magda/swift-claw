@@ -242,9 +242,10 @@ private extension LLMCredentialStorePublicationTests {
 
   /// A store whose publisher fails `step` on the credential envelope only. Naming the entry is what
   /// keeps the failpoint off the runtime seal that built the fixture.
-  func makeStore(stateRoot: URL, failing step: SecureFilePublisher.Failpoint.Step)
-    -> EncryptedLLMCredentialStore
-  {
+  func makeStore(
+    stateRoot: URL,
+    failing step: SecureFilePublisher.Failpoint.Step
+  ) -> EncryptedLLMCredentialStore {
     EncryptedLLMCredentialStore(
       stateRoot: stateRoot,
       publisher: SecureFilePublisher(

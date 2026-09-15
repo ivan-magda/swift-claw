@@ -14,14 +14,17 @@ struct MessageFTSMigrationTests {
     return db.lastInsertedRowID
   }
 
-  private func insertMessage(_ db: Database, sessionID: Int64, content: String, at when: Date)
-    throws -> Int64
-  {
+  private func insertMessage(
+    _ db: Database,
+    sessionID: Int64,
+    content: String,
+    at when: Date
+  ) throws -> Int64 {
     try db.execute(
       sql: """
-      INSERT INTO messages(session_id, role, content, provenance, ts)
-      VALUES (?, 'user', ?, 'trusted', ?)
-      """,
+        INSERT INTO messages(session_id, role, content, provenance, ts)
+        VALUES (?, 'user', ?, 'trusted', ?)
+        """,
       arguments: [sessionID, content, when]
     )
     return db.lastInsertedRowID

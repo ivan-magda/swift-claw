@@ -112,7 +112,7 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
     } catch {
       let termination: SubprocessTermination =
         Task.isCancelled || error is CancellationError
-          ? .cancelled : .startFailed(String(describing: error))
+        ? .cancelled : .startFailed(String(describing: error))
 
       return SubprocessResult(
         termination: termination,
@@ -173,9 +173,10 @@ private extension SwiftSubprocessRunner {
 private extension SwiftSubprocessRunner {
   static let emptyStream = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
 
-  static func capture(_ sequence: SubprocessOutputSequence, limit: Int) async throws
-    -> CapturedCommandStream
-  {
+  static func capture(
+    _ sequence: SubprocessOutputSequence,
+    limit: Int
+  ) async throws -> CapturedCommandStream {
     var prefix = Data()
     prefix.reserveCapacity(min(limit, 64 * 1024))
 

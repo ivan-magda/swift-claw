@@ -145,14 +145,14 @@ private extension AuthCommandResultMapper {
   static func repair(for error: SecretStoreError?) -> String {
     if error == .missingTelegramToken {
       return """
-      Put the Telegram bot token in the daemon's environment first — there is nothing to seal \
-      without it — then run `clawd secrets seal` and log in again.
-      """
+        Put the Telegram bot token in the daemon's environment first — there is nothing to seal \
+        without it — then run `clawd secrets seal` and log in again.
+        """
     }
     return """
-    Both \(SecretFile.key) and \(SecretFile.envelope) must be present and readable. \
-    Run `clawd secrets seal` to repair the encrypted secret backend, then log in again.
-    """
+      Both \(SecretFile.key) and \(SecretFile.envelope) must be present and readable. \
+      Run `clawd secrets seal` to repair the encrypted secret backend, then log in again.
+      """
   }
 
   static func describe(_ error: SecretStoreError) -> String {

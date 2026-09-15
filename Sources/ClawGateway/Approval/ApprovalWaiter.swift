@@ -261,9 +261,9 @@ extension ApprovalWaiter {
 
 private extension ApprovalWaiter {
   static let stalePolicyNotice = """
-  My instructions or tools changed since you were asked, \
-  so I can't run that now — please re-run.
-  """
+    My instructions or tools changed since you were asked, \
+    so I can't run that now — please re-run.
+    """
 
   static let storeFailureNotice =
     "The approved action could not be recorded; it will be retried after a restart."

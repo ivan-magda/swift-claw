@@ -32,9 +32,9 @@ struct ScheduleRoutingTests {
     let queue: DatabaseQueue
   }
 
-  private func makeHarness(parseResults: [ScheduleDraftParseResult] = [.draft(Self.weekdayDraft)])
-    throws -> Harness
-  {
+  private func makeHarness(
+    parseResults: [ScheduleDraftParseResult] = [.draft(Self.weekdayDraft)]
+  ) throws -> Harness {
     let queue = try TestDatabase.make()
     try AllowlistStoreGRDB(writer: queue).seedAllowlist(userIDs: [42])
     let transport = RecordingTransport()

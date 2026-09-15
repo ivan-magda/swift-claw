@@ -3,7 +3,9 @@ import Foundation
 import Logging
 
 public protocol VoiceMessageTranscribing: Sendable {
-  func transcribe(_ attachment: VoiceAttachment) async -> Result<
+  func transcribe(
+    _ attachment: VoiceAttachment
+  ) async -> Result<
     String,
     VoiceMessageService.Failure
   >
@@ -198,7 +200,7 @@ extension VoiceMessageService {
     while let current = candidate {
       let isCocoaDiskFull =
         current.domain == NSCocoaErrorDomain
-          && current.code == CocoaError.fileWriteOutOfSpace.rawValue
+        && current.code == CocoaError.fileWriteOutOfSpace.rawValue
       let isPOSIXDiskFull = current.domain == NSPOSIXErrorDomain && current.code == Int(ENOSPC)
 
       if isCocoaDiskFull || isPOSIXDiskFull {

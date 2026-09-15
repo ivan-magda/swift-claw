@@ -98,15 +98,15 @@ extension ContainerBackend {
 
     let imageDigestOK =
       inspection.configuration.image.reference == settings.workloadImage.description
-        && inspection.configuration.image.descriptor.digest == expectedDigest
+      && inspection.configuration.image.descriptor.digest == expectedDigest
 
     let memoryInBytes = UInt64(settings.memoryMiB) * 1024 * 1024
     let capsMatch =
       inspection.status.state == "running"
-        && inspection.configuration.resources.cpus == settings.cpus
-        && inspection.configuration.resources.memoryInBytes == memoryInBytes
-        && inspection.configuration.readOnly && inspection.configuration.useInit
-        && inspection.configuration.capAdd.isEmpty && inspection.configuration.capDrop == ["ALL"]
+      && inspection.configuration.resources.cpus == settings.cpus
+      && inspection.configuration.resources.memoryInBytes == memoryInBytes
+      && inspection.configuration.readOnly && inspection.configuration.useInit
+      && inspection.configuration.capAdd.isEmpty && inspection.configuration.capDrop == ["ALL"]
 
     return CanaryOutcome(imageDigestOK: imageDigestOK, capsMatch: capsMatch, guest: guest)
   }

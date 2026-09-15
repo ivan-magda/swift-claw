@@ -16,10 +16,10 @@ public struct CoderSubmitTool: Tool {
     ToolDefinition(
       name: CoderToolNames.submit,
       description: """
-      Request approval to delegate a repository task to the owner's native Codex \
-      as a background job.
-      Select workspace and publication scope through the structured fields.
-      """,
+        Request approval to delegate a repository task to the owner's native Codex \
+        as a background job.
+        Select workspace and publication scope through the structured fields.
+        """,
       parameters: CoderSubmitArguments.schema,
       metadataProvenance: .trusted,
       egressClass: .none,
@@ -119,9 +119,10 @@ private extension CoderSubmitTool {
 // MARK: - Approval Presentation
 
 extension CoderSubmitTool {
-  static func presentation(_ prepared: CoderPreparedRequest, redactor: SecretRedactor)
-    -> ToolApprovalPresentation
-  {
+  static func presentation(
+    _ prepared: CoderPreparedRequest,
+    redactor: SecretRedactor
+  ) -> ToolApprovalPresentation {
     let request = prepared.request
 
     let source: String
@@ -133,11 +134,11 @@ extension CoderSubmitTool {
 
     let workspace =
       request.workspace == .inPlace
-        ? "In place — existing branch and working files" : "Separate copy — committed history only"
+      ? "In place — existing branch and working files" : "Separate copy — committed history only"
 
     let start =
       request.workspace == .inPlace
-        ? "Current checkout HEAD" : request.startRef ?? "Source HEAD / remote default branch"
+      ? "Current checkout HEAD" : request.startRef ?? "Source HEAD / remote default branch"
 
     let fields = [
       ("Source", source),

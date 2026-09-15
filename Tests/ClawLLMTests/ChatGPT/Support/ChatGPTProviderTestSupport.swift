@@ -85,9 +85,9 @@ enum ChatGPTProviderTestSupport {
     case .retryable(_, let message), .rejected(_, let message), .terminal(_, let message):
       return message
     case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-         .credentialRefreshCompleted, .credentialRefreshExhausted, .credentialStateUnavailable,
-         .invalidProviderState, .visionUnsupported, .partialStreamWithoutCompletedTerminal,
-         .localOutputLimit, .modelIdentityMismatch:
+      .credentialRefreshCompleted, .credentialRefreshExhausted, .credentialStateUnavailable,
+      .invalidProviderState, .visionUnsupported, .partialStreamWithoutCompletedTerminal,
+      .localOutputLimit, .modelIdentityMismatch:
       return nil
     }
   }

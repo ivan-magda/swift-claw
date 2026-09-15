@@ -150,24 +150,24 @@ public enum TrialReconciliationResult: Sendable, Equatable {
 }
 
 public enum TrialPolicy {
-  public static func decide(trial: LearningTrial, assignments: [TrialAssignment], now: Date)
-    -> TrialDecision
-  {
+  public static func decide(
+    trial: LearningTrial,
+    assignments: [TrialAssignment],
+    now: Date
+  ) -> TrialDecision {
     let resolved = assignments.compactMap(\.resolvedEvidence)
     let hasHardVeto =
       trial.hardVetoes.isEmpty == false
-        || resolved.contains { evidence in
-          evidence.hardVetoes.isEmpty == false
-        }
+      || resolved.contains { evidence in
+        evidence.hardVetoes.isEmpty == false
+      }
     if hasHardVeto {
       return .fallback(reason: .hardVeto)
     }
-    if
-      resolved.contains(
-        where: {
-          $0.outcome == .negative
-        }
-      ) {
+    let hasNegativeOutcome = resolved.contains {
+      $0.outcome == .negative
+    }
+    if hasNegativeOutcome {
       return .fallback(reason: .negativeOutcome)
     }
 

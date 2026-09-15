@@ -19,9 +19,11 @@ struct ScheduleHandlers: Sendable {
   /// `/schedule <text>`: claim the update, run the ONE parse call, validate
   /// deterministically, park the validated draft, and send the gateway-authored confirm prompt.
   /// Nothing is armed here; every failure is a plain-language reply and parks nothing.
-  func create(rawUpdate: RawUpdate, message: IncomingMessage, text: String)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func create(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    text: String
+  ) async throws(RoutingHalt) -> HandleOutcome {
     let claim = try await replies.perform(
       "schedule claim",
       updateID: rawUpdate.updateID,
@@ -118,9 +120,11 @@ struct ScheduleHandlers: Sendable {
     )
   }
 
-  func pause(rawUpdate: RawUpdate, message: IncomingMessage, jobID: Int64?)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func pause(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    jobID: Int64?
+  ) async throws(RoutingHalt) -> HandleOutcome {
     guard let jobID else {
       return await replies.sendCanned(
         updateID: rawUpdate.updateID,
@@ -147,9 +151,11 @@ struct ScheduleHandlers: Sendable {
     )
   }
 
-  func resume(rawUpdate: RawUpdate, message: IncomingMessage, jobID: Int64?)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func resume(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    jobID: Int64?
+  ) async throws(RoutingHalt) -> HandleOutcome {
     guard let jobID else {
       return await replies.sendCanned(
         updateID: rawUpdate.updateID,
@@ -200,9 +206,11 @@ struct ScheduleHandlers: Sendable {
     )
   }
 
-  func runNow(rawUpdate: RawUpdate, message: IncomingMessage, jobID: Int64?)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func runNow(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    jobID: Int64?
+  ) async throws(RoutingHalt) -> HandleOutcome {
     guard let jobID else {
       return await replies.sendCanned(
         updateID: rawUpdate.updateID,
@@ -248,9 +256,11 @@ struct ScheduleHandlers: Sendable {
     }
   }
 
-  func cancelJob(rawUpdate: RawUpdate, message: IncomingMessage, jobID: Int64?)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func cancelJob(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    jobID: Int64?
+  ) async throws(RoutingHalt) -> HandleOutcome {
     guard let jobID else {
       return await replies.sendCanned(
         updateID: rawUpdate.updateID,

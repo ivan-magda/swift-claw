@@ -63,10 +63,10 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT job_id, learning_epoch, occurrence_at, fire_kind, job_definition_digest,
-        stable_digest, effective_digest, trial_id, trial_generation
-      FROM run_learning_bindings WHERE run_id = ?
-      """,
+        SELECT job_id, learning_epoch, occurrence_at, fire_kind, job_definition_digest,
+          stable_digest, effective_digest, trial_id, trial_generation
+        FROM run_learning_bindings WHERE run_id = ?
+        """,
       arguments: [runID]
     )
     guard let row else {
@@ -98,13 +98,13 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-        admitted_at, assignment_deadline, decision_deadline, max_assignments,
-        consumed_assignments, cohort_cutoff, state, close_reason, algorithm
-      FROM learning_trials
-      WHERE job_id = ? AND state IN (?, ?)
-      ORDER BY trial_id
-      """,
+        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+          admitted_at, assignment_deadline, decision_deadline, max_assignments,
+          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
+        FROM learning_trials
+        WHERE job_id = ? AND state IN (?, ?)
+        ORDER BY trial_id
+        """,
       arguments: [jobID, LearningTrialState.open.rawValue, LearningTrialState.draining.rawValue]
     )
     guard rows.count <= 1 else {
@@ -119,9 +119,11 @@ extension ScheduledLearningStoreGRDB {
     return try decodeLiveTrial(db, row: row, currentState: state)
   }
 
-  static func decodeLiveTrial(_ db: Database, row: Row, currentState: JobLearningState) throws
-    -> LearningTrial
-  {
+  static func decodeLiveTrial(
+    _ db: Database,
+    row: Row,
+    currentState: JobLearningState
+  ) throws -> LearningTrial {
     let trial = try strictTrial(db, row: row, currentState: currentState)
     guard trial.state == .open || trial.state == .draining else {
       throw StoreError.unexpected("job \(currentState.jobID) has a non-live trial in its live set")
@@ -170,10 +172,10 @@ extension ScheduledLearningStoreGRDB {
   static func drain(_ db: Database, trial: LearningTrial) throws {
     try db.execute(
       sql: """
-      UPDATE learning_trials SET state = ?
-      WHERE trial_id = ? AND job_id = ? AND learning_epoch = ? AND generation = ?
-        AND base_digest = ? AND candidate_digest = ? AND algorithm = ? AND state = ?
-      """,
+        UPDATE learning_trials SET state = ?
+        WHERE trial_id = ? AND job_id = ? AND learning_epoch = ? AND generation = ?
+          AND base_digest = ? AND candidate_digest = ? AND algorithm = ? AND state = ?
+        """,
       arguments: [
         LearningTrialState.draining.rawValue,
         trial.trialID,
@@ -198,11 +200,11 @@ private extension ScheduledLearningStoreGRDB {
   static func insertBinding(_ db: Database, _ binding: RunLearningBinding) throws {
     try db.execute(
       sql: """
-      INSERT INTO run_learning_bindings(run_id, job_id, learning_epoch, occurrence_at,
-        fire_kind, job_definition_digest, stable_digest, effective_digest, trial_id,
-        trial_generation)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO run_learning_bindings(run_id, job_id, learning_epoch, occurrence_at,
+          fire_kind, job_definition_digest, stable_digest, effective_digest, trial_id,
+          trial_generation)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         binding.runID,
         binding.jobID,
@@ -229,27 +231,27 @@ private extension ScheduledLearningStoreGRDB {
     let consumed = try Int.fetchOne(
       db,
       sql: """
-      UPDATE learning_trials
-      SET consumed_assignments = consumed_assignments + 1,
-        state = CASE
-          WHEN consumed_assignments + 1 = max_assignments THEN ?
-          ELSE state
-        END
-      WHERE trial_id = ? AND job_id = ? AND learning_epoch = ? AND generation = ?
-        AND base_digest = ? AND candidate_digest = ? AND algorithm = ? AND state = ?
-        AND consumed_assignments < max_assignments
-        AND cohort_cutoff <= ? AND assignment_deadline > ?
-        AND EXISTS(
-          SELECT 1 FROM learning_candidates AS candidate
-          WHERE candidate.candidate_digest = learning_trials.candidate_digest
-            AND candidate.job_id = learning_trials.job_id
-            AND candidate.learning_epoch = learning_trials.learning_epoch
-            AND candidate.base_digest = learning_trials.base_digest
-            AND candidate.base_revision = ? AND candidate.replacement_digest = ?
-            AND candidate.algorithm = learning_trials.algorithm
-        )
-      RETURNING consumed_assignments
-      """,
+        UPDATE learning_trials
+        SET consumed_assignments = consumed_assignments + 1,
+          state = CASE
+            WHEN consumed_assignments + 1 = max_assignments THEN ?
+            ELSE state
+          END
+        WHERE trial_id = ? AND job_id = ? AND learning_epoch = ? AND generation = ?
+          AND base_digest = ? AND candidate_digest = ? AND algorithm = ? AND state = ?
+          AND consumed_assignments < max_assignments
+          AND cohort_cutoff <= ? AND assignment_deadline > ?
+          AND EXISTS(
+            SELECT 1 FROM learning_candidates AS candidate
+            WHERE candidate.candidate_digest = learning_trials.candidate_digest
+              AND candidate.job_id = learning_trials.job_id
+              AND candidate.learning_epoch = learning_trials.learning_epoch
+              AND candidate.base_digest = learning_trials.base_digest
+              AND candidate.base_revision = ? AND candidate.replacement_digest = ?
+              AND candidate.algorithm = learning_trials.algorithm
+          )
+        RETURNING consumed_assignments
+        """,
       arguments: [
         LearningTrialState.draining.rawValue,
         trial.trialID,
@@ -271,10 +273,10 @@ private extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: """
-      INSERT INTO trial_assignments(run_id, trial_id, job_id, learning_epoch, trial_generation,
-        assigned_at, state, evaluation_required)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO trial_assignments(run_id, trial_id, job_id, learning_epoch, trial_generation,
+          assigned_at, state, evaluation_required)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         binding.runID,
         trial.trialID,
@@ -310,8 +312,8 @@ private extension ScheduledLearningStoreGRDB {
   static func auditArgs(_ binding: RunLearningBinding) -> String {
     let trial = binding.trialID.map(String.init) ?? "null"
     return """
-    {"job_id":\(binding.jobID),"effective_digest":"\(binding.effectiveDigest.rawValue)",\
-    "trial_id":\(trial)}
-    """
+      {"job_id":\(binding.jobID),"effective_digest":"\(binding.effectiveDigest.rawValue)",\
+      "trial_id":\(trial)}
+      """
   }
 }

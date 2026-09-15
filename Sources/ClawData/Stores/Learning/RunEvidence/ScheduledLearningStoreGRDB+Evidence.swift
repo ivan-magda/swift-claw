@@ -12,13 +12,13 @@ extension ScheduledLearningStoreGRDB {
       try Int64.fetchAll(
         db,
         sql: """
-        SELECT run_settlements.run_id FROM run_settlements
-        JOIN run_learning_bindings ON run_learning_bindings.run_id = run_settlements.run_id
-        LEFT JOIN learning_evidence ON learning_evidence.run_id = run_settlements.run_id
-        WHERE run_settlements.settled_at IS NOT NULL AND learning_evidence.run_id IS NULL
-        ORDER BY run_settlements.settled_at, run_settlements.run_id
-        LIMIT ?
-        """,
+          SELECT run_settlements.run_id FROM run_settlements
+          JOIN run_learning_bindings ON run_learning_bindings.run_id = run_settlements.run_id
+          LEFT JOIN learning_evidence ON learning_evidence.run_id = run_settlements.run_id
+          WHERE run_settlements.settled_at IS NOT NULL AND learning_evidence.run_id IS NULL
+          ORDER BY run_settlements.settled_at, run_settlements.run_id
+          LIMIT ?
+          """,
         arguments: [limit]
       )
     }
@@ -84,13 +84,13 @@ private extension ScheduledLearningStoreGRDB {
     // never see, and an over-cap answer is refused whole rather than clipped into one.
     let payload =
       eligibility.reachesEvaluator
-        ? try buildPayload(
-          db,
-          runID: runID,
-          binding: binding,
-          compatibility: compatibility,
-          transcript: transcript
-        ) : nil
+      ? try buildPayload(
+        db,
+        runID: runID,
+        binding: binding,
+        compatibility: compatibility,
+        transcript: transcript
+      ) : nil
 
     try insertReceipt(
       db,
@@ -144,10 +144,10 @@ private extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: """
-      INSERT INTO learning_evidence(run_id, job_id, learning_epoch, evidence_digest, payload,
-        exclusion_reason, eligibility, classifier_version, sealed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO learning_evidence(run_id, job_id, learning_epoch, evidence_digest, payload,
+          exclusion_reason, eligibility, classifier_version, sealed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         binding.runID,
         binding.jobID,
@@ -165,9 +165,11 @@ private extension ScheduledLearningStoreGRDB {
   /// Over the payload when there is one, and over the compact receipt otherwise — a receipt still
   /// needs an identity later work can reference, and two payload-free receipts for different runs
   /// must not collide.
-  static func digest(runID: Int64, eligibility: LearningEligibility, payloadBytes: Data?)
-    -> EvidenceDigest
-  {
+  static func digest(
+    runID: Int64,
+    eligibility: LearningEligibility,
+    payloadBytes: Data?
+  ) -> EvidenceDigest {
     guard let payloadBytes else {
       let receipt = "\(EvidenceLimits.schemaVersion):\(runID):\(eligibility.rawValue)"
       return EvidenceDigest(rawValue: SHA256Digest.hex(receipt))
@@ -187,13 +189,13 @@ private extension ScheduledLearningStoreGRDB {
   static func stampTerminalRoute(_ db: Database, runID: Int64) throws {
     try db.execute(
       sql: """
-      UPDATE run_settlements
-      SET terminal_route = (
-        SELECT provider_usage.model FROM provider_usage
-        WHERE provider_usage.run_id = ? ORDER BY provider_usage.id DESC LIMIT 1
-      )
-      WHERE run_id = ?
-      """,
+        UPDATE run_settlements
+        SET terminal_route = (
+          SELECT provider_usage.model FROM provider_usage
+          WHERE provider_usage.run_id = ? ORDER BY provider_usage.id DESC LIMIT 1
+        )
+        WHERE run_id = ?
+        """,
       arguments: [runID, runID]
     )
   }
@@ -226,10 +228,10 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT run_id, job_id, learning_epoch, evidence_digest, payload, exclusion_reason,
-        eligibility, classifier_version, sealed_at
-      FROM learning_evidence WHERE run_id = ?
-      """,
+        SELECT run_id, job_id, learning_epoch, evidence_digest, payload, exclusion_reason,
+          eligibility, classifier_version, sealed_at
+        FROM learning_evidence WHERE run_id = ?
+        """,
       arguments: [runID]
     )
     guard let row else {
@@ -311,8 +313,7 @@ private extension ScheduledLearningStoreGRDB {
     }
     guard
       eligibility.reachesEvaluator
-      || digest(runID: runID, eligibility: eligibility, payloadBytes: nil)
-      .rawValue == digestRaw,
+      || digest(runID: runID, eligibility: eligibility, payloadBytes: nil).rawValue == digestRaw,
       exclusion == nil || (eligibility == .insufficientEvidence && exclusion != .legacyUnbound),
       eligibility.reachesEvaluator == false || exclusion == nil
     else {

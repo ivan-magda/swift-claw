@@ -81,9 +81,11 @@ struct ReplySender: Sendable {
   }
 
   /// One claimed canned response delivered in stable chunk order.
-  func sendCannedChunks(updateID: Int64, target: DeliveryTarget, texts: [String]) async
-    -> HandleOutcome
-  {
+  func sendCannedChunks(
+    updateID: Int64,
+    target: DeliveryTarget,
+    texts: [String]
+  ) async -> HandleOutcome {
     guard Task.isCancelled == false, texts.isEmpty == false else {
       return .transientFailure
     }

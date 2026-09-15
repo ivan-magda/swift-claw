@@ -50,14 +50,14 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT event_id, subject_kind, subject_digest, signal, payload, feedback_revision,
-        supersedes, occurred_at, actor, transport_update_id
-      FROM feedback_events
-      WHERE job_id = ? AND learning_epoch = ?
-        AND (\(subjectPredicates.joined(separator: " OR ")))
-        \(cutoffPredicate)
-      ORDER BY feedback_revision, event_id
-      """,
+        SELECT event_id, subject_kind, subject_digest, signal, payload, feedback_revision,
+          supersedes, occurred_at, actor, transport_update_id
+        FROM feedback_events
+        WHERE job_id = ? AND learning_epoch = ?
+          AND (\(subjectPredicates.joined(separator: " OR ")))
+          \(cutoffPredicate)
+        ORDER BY feedback_revision, event_id
+        """,
       arguments: StatementArguments(arguments)
     )
     return try rows.map { row in

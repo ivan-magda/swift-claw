@@ -92,9 +92,12 @@ struct TurnDispatch: Sendable {
   /// Persists an overheard group message and returns, having said and run nothing. Silence is the
   /// contract even when the write fails: a room the bot was not talking to is told nothing about
   /// the daemon's disk, so the outcome alone carries the failure back to the poller.
-  func observe(rawUpdate: RawUpdate, message: IncomingMessage, text: String, mode: ChatMode) async
-    -> HandleOutcome
-  {
+  func observe(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    text: String,
+    mode: ChatMode
+  ) async -> HandleOutcome {
     let inbound = InboundMessage(
       updateID: rawUpdate.updateID,
       sessionKey: SessionKey.telegram(for: message, mode: mode),

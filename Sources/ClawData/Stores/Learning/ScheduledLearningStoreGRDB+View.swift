@@ -40,12 +40,12 @@ private extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT state.job_id AS selected_job_id, job.id, job.label, job.status, job.timezone,
-        job.recurrence
-      FROM job_learning_state AS state
-      JOIN scheduled_jobs AS job ON job.id = state.job_id
-      ORDER BY job.id
-      """
+        SELECT state.job_id AS selected_job_id, job.id, job.label, job.status, job.timezone,
+          job.recurrence
+        FROM job_learning_state AS state
+        JOIN scheduled_jobs AS job ON job.id = state.job_id
+        ORDER BY job.id
+        """
     )
     return rows.map { row in
       viewJob(row: row, requestedJobID: nil)
@@ -56,9 +56,9 @@ private extension ScheduledLearningStoreGRDB {
     try Row.fetchOne(
       db,
       sql: """
-      SELECT id, label, status, timezone, recurrence
-      FROM scheduled_jobs WHERE id = ?
-      """,
+        SELECT id, label, status, timezone, recurrence
+        FROM scheduled_jobs WHERE id = ?
+        """,
       arguments: [jobID]
     ).map { row in
       viewJob(row: row, requestedJobID: jobID)
@@ -171,22 +171,24 @@ private extension ScheduledLearningStoreGRDB {
 // MARK: - Trial Projection
 
 private extension ScheduledLearningStoreGRDB {
-  static func liveTrialView(_ db: Database, job: ViewJobRow, state: JobLearningState) throws
-    -> LearningTrialView?
-  {
+  static func liveTrialView(
+    _ db: Database,
+    job: ViewJobRow,
+    state: JobLearningState
+  ) throws -> LearningTrialView? {
     guard try currentEpochHasOnlyKnownTrialStates(db, state: state) else {
       throw ViewCorruption.invalid
     }
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-        admitted_at, assignment_deadline, decision_deadline, max_assignments,
-        consumed_assignments, cohort_cutoff, state, close_reason, algorithm
-      FROM learning_trials
-      WHERE job_id = ? AND state IN (?, ?)
-      ORDER BY trial_id
-      """,
+        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+          admitted_at, assignment_deadline, decision_deadline, max_assignments,
+          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
+        FROM learning_trials
+        WHERE job_id = ? AND state IN (?, ?)
+        ORDER BY trial_id
+        """,
       arguments: [
         job.jobID,
         LearningTrialState.open.rawValue,
@@ -214,26 +216,29 @@ private extension ScheduledLearningStoreGRDB {
     return try projectedTrialView(db, trial: trial, state: state)
   }
 
-  static func currentEpochHasOnlyKnownTrialStates(_ db: Database, state: JobLearningState) throws
-    -> Bool
-  {
+  static func currentEpochHasOnlyKnownTrialStates(
+    _ db: Database,
+    state: JobLearningState
+  ) throws -> Bool {
     let known = LearningTrialState.allCases.map(\.rawValue)
     return try Bool.fetchOne(
       db,
       sql: """
-      SELECT NOT EXISTS(
-        SELECT 1 FROM learning_trials
-        WHERE job_id = ? AND learning_epoch = ?
-          AND state NOT IN (?, ?, ?, ?, ?)
-      )
-      """,
+        SELECT NOT EXISTS(
+          SELECT 1 FROM learning_trials
+          WHERE job_id = ? AND learning_epoch = ?
+            AND state NOT IN (?, ?, ?, ?, ?)
+        )
+        """,
       arguments: [state.jobID, state.epoch.value] + StatementArguments(known)
     ) ?? false
   }
 
-  static func projectedTrialView(_ db: Database, trial: LearningTrial, state: JobLearningState)
-    throws -> LearningTrialView
-  {
+  static func projectedTrialView(
+    _ db: Database,
+    trial: LearningTrial,
+    state: JobLearningState
+  ) throws -> LearningTrialView {
     let runIDs = try assignmentRunIDs(db, trialID: trial.trialID)
     guard runIDs.count == trial.consumedAssignments, Set(runIDs).count == runIDs.count else {
       throw ViewCorruption.invalid
@@ -295,19 +300,20 @@ private extension ScheduledLearningStoreGRDB {
     let decidedAt: Date
   }
 
-  static func lastDecisionView(_ db: Database, state: JobLearningState) throws
-    -> LearningDecisionView?
-  {
+  static func lastDecisionView(
+    _ db: Database,
+    state: JobLearningState
+  ) throws -> LearningDecisionView? {
     guard
       let row = try Row.fetchOne(
         db,
         sql: """
-        SELECT decision_id, kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
-        FROM learning_decisions
-        WHERE job_id = ? AND learning_epoch = ?
-        ORDER BY decided_at DESC, decision_id DESC
-        LIMIT 1
-        """,
+          SELECT decision_id, kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
+          FROM learning_decisions
+          WHERE job_id = ? AND learning_epoch = ?
+          ORDER BY decided_at DESC, decision_id DESC
+          LIMIT 1
+          """,
         arguments: [state.jobID, state.epoch.value]
       )
     else {
@@ -352,9 +358,11 @@ private extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func decisionDetail(_ db: Database, record: ViewDecisionRecord, state: JobLearningState)
-    throws -> LearningDecisionDetail
-  {
+  static func decisionDetail(
+    _ db: Database,
+    record: ViewDecisionRecord,
+    state: JobLearningState
+  ) throws -> LearningDecisionDetail {
     switch record.kind {
     case LearningDecisionKind.trial.rawValue, LearningDecisionKind.rollback.rawValue:
       let inputs: TrialDecisionInputs = try decodeCanonicalDecision(record.inputsJSON)

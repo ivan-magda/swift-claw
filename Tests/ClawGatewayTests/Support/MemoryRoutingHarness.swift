@@ -76,9 +76,12 @@ struct MemoryRoutingHarness {
     )
   }
 
-  func seedItem(text: String, kind: MemoryKind, updateID: Int64 = -1, day: Double = 86_400) throws
-    -> MemoryItem
-  {
+  func seedItem(
+    text: String,
+    kind: MemoryKind,
+    updateID: Int64 = -1,
+    day: Double = 86_400
+  ) throws -> MemoryItem {
     let result = try MemoryCommandStoreGRDB(writer: queue).applyRemember(
       updateID: updateID,
       item: NewMemoryItem(text: text, kind: kind, sessionID: nil),

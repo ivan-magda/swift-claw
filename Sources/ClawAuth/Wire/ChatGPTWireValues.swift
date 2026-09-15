@@ -49,9 +49,11 @@ package enum ChatGPTWireValues {
   /// Order is load-bearing. Sanitizing precedes redaction so that text which only *becomes* a
   /// secret once its escapes are stripped is still matched, and truncation comes last so it can
   /// only ever cut a placeholder rather than expose the prefix of a token that outran the bound.
-  package static func safeRemoteDiagnostic(_ raw: String, redacting values: [String], maxBytes: Int)
-    -> String
-  {
+  package static func safeRemoteDiagnostic(
+    _ raw: String,
+    redacting values: [String],
+    maxBytes: Int
+  ) -> String {
     let sanitized = collapsingWhitespace(strippingControls(strippingEscapeSequences(raw)))
     let redacted = SecretRedactor(secretValues: values).redact(sanitized)
     return truncating(redacted, toBytes: maxBytes)

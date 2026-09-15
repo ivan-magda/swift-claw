@@ -37,10 +37,10 @@ extension ScheduledLearningStoreGRDB {
     // take the assistant message and outbox rows with it.
     try db.execute(
       sql: """
-      INSERT OR IGNORE INTO run_settlements(run_id, winning_state, terminal_cause, terminal_at,
-        settled_at)
-      VALUES (?, ?, ?, ?, ?)
-      """,
+        INSERT OR IGNORE INTO run_settlements(run_id, winning_state, terminal_cause, terminal_at,
+          settled_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
       arguments: [
         runID,
         state.rawValue,
@@ -59,9 +59,9 @@ extension ScheduledLearningStoreGRDB {
   static func freezeEvidence(_ db: Database, runID: Int64, now: Date) throws -> Bool {
     try db.execute(
       sql: """
-      UPDATE run_settlements SET settled_at = ?
-      WHERE run_id = ? AND settled_at IS NULL
-      """,
+        UPDATE run_settlements SET settled_at = ?
+        WHERE run_id = ? AND settled_at IS NULL
+        """,
       arguments: [EpochSecondCodec.epoch(now), runID]
     )
     return db.changesCount > 0
@@ -71,10 +71,10 @@ extension ScheduledLearningStoreGRDB {
     try Bool.fetchOne(
       db,
       sql: """
-      SELECT EXISTS(
-        SELECT 1 FROM run_settlements WHERE run_id = ? AND settled_at IS NOT NULL
-      )
-      """,
+        SELECT EXISTS(
+          SELECT 1 FROM run_settlements WHERE run_id = ? AND settled_at IS NOT NULL
+        )
+        """,
       arguments: [runID]
     ) ?? false
   }
@@ -83,9 +83,9 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT winning_state, terminal_cause, terminal_at, settled_at
-      FROM run_settlements WHERE run_id = ?
-      """,
+        SELECT winning_state, terminal_cause, terminal_at, settled_at
+        FROM run_settlements WHERE run_id = ?
+        """,
       arguments: [runID]
     )
     guard let row else {
@@ -123,9 +123,11 @@ extension ScheduledLearningStoreGRDB {
   /// A run that still owes its approval placeholder is left open for the writer that owes it.
   /// Nothing else is excluded: boot reconciliation runs before lane admission opens, so no
   /// current-process lane owns a run here.
-  static func settleAbandonedRuns(_ db: Database, unresolvedObservationContent: String, now: Date)
-    throws
-  {
+  static func settleAbandonedRuns(
+    _ db: Database,
+    unresolvedObservationContent: String,
+    now: Date
+  ) throws {
     let epoch = EpochSecondCodec.epoch(now)
     let terminalStates = RunState.terminalStates.map(\.rawValue)
     let statePlaceholders = databaseQuestionMarks(count: terminalStates.count)
@@ -135,15 +137,15 @@ extension ScheduledLearningStoreGRDB {
 
     try db.execute(
       sql: """
-      INSERT INTO run_settlements(run_id, winning_state, terminal_cause, terminal_at, settled_at)
-      SELECT runs.id, runs.state, ?, \(terminalAt), ?
-      FROM runs
-      JOIN run_learning_bindings ON run_learning_bindings.run_id = runs.id
-      LEFT JOIN run_settlements ON run_settlements.run_id = runs.id
-      WHERE run_settlements.run_id IS NULL
-        AND runs.state IN (\(statePlaceholders))
-        AND NOT \(owedFactExists(runColumn: "runs.id"))
-      """,
+        INSERT INTO run_settlements(run_id, winning_state, terminal_cause, terminal_at, settled_at)
+        SELECT runs.id, runs.state, ?, \(terminalAt), ?
+        FROM runs
+        JOIN run_learning_bindings ON run_learning_bindings.run_id = runs.id
+        LEFT JOIN run_settlements ON run_settlements.run_id = runs.id
+        WHERE run_settlements.run_id IS NULL
+          AND runs.state IN (\(statePlaceholders))
+          AND NOT \(owedFactExists(runColumn: "runs.id"))
+        """,
       arguments: StatementArguments(
         [TerminalCause.unknown.rawValue, epoch, epoch] as [DatabaseValueConvertible]
           + terminalStates + [unresolvedObservationContent]
@@ -152,19 +154,21 @@ extension ScheduledLearningStoreGRDB {
 
     try db.execute(
       sql: """
-      UPDATE run_settlements SET settled_at = ?
-      WHERE settled_at IS NULL
-        AND NOT \(owedFactExists(runColumn: "run_settlements.run_id"))
-      """,
+        UPDATE run_settlements SET settled_at = ?
+        WHERE settled_at IS NULL
+          AND NOT \(owedFactExists(runColumn: "run_settlements.run_id"))
+        """,
       arguments: [epoch, unresolvedObservationContent]
     )
   }
 
   /// Whether this one run still owes the approval placeholder that the boot claimed-approval
   /// settlement writes. The per-run half of the same rule `settleAbandonedRuns` applies set-wide.
-  static func owesUnresolvedFact(_ db: Database, runID: Int64, unresolvedObservationContent: String)
-    throws -> Bool
-  {
+  static func owesUnresolvedFact(
+    _ db: Database,
+    runID: Int64,
+    unresolvedObservationContent: String
+  ) throws -> Bool {
     try Bool.fetchOne(
       db,
       sql: "SELECT \(owedFactExists(runColumn: "?"))",

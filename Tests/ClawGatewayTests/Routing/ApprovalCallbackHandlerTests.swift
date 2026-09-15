@@ -10,9 +10,13 @@ import Testing
 @testable import ClawGateway
 
 /// A callback update carrying only a tapped inline button (no message/edited_message).
-func callbackUpdate(id: Int64, from: Int64, chat: Int64? = nil, messageID: Int64 = 1, data: String?)
-  -> RawUpdate
-{
+func callbackUpdate(
+  id: Int64,
+  from: Int64,
+  chat: Int64? = nil,
+  messageID: Int64 = 1,
+  data: String?
+) -> RawUpdate {
   RawUpdate(
     updateID: id,
     message: nil,
@@ -80,9 +84,12 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
 
   func approval(id: Int64) throws(StoreError) -> Approval? { nil }
 
-  func approve(id: Int64, currentPolicyVersion: String, actor: ApprovalResolutionActor?, now: Date)
-    throws(StoreError) -> ApprovalApproveOutcome
-  {
+  func approve(
+    id: Int64,
+    currentPolicyVersion: String,
+    actor: ApprovalResolutionActor?,
+    now: Date
+  ) throws(StoreError) -> ApprovalApproveOutcome {
     if throwOnResolve {
       throw StoreError.unexpected("scripted store failure")
     }
@@ -92,9 +99,12 @@ final class ScriptedApprovals: ApprovalStore, @unchecked Sendable {
     return approveOutcome
   }
 
-  func deny(id: Int64, decision: ApprovalDecision, actor: ApprovalResolutionActor?, now: Date)
-    throws(StoreError) -> Bool
-  {
+  func deny(
+    id: Int64,
+    decision: ApprovalDecision,
+    actor: ApprovalResolutionActor?,
+    now: Date
+  ) throws(StoreError) -> Bool {
     if throwOnResolve {
       throw StoreError.unexpected("scripted store failure")
     }

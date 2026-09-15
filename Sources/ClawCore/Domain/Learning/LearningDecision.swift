@@ -151,7 +151,7 @@ public enum RollbackTrigger: Sendable, Equatable, Codable {
   public var promotionID: Int64 {
     switch self {
     case .ownerFeedback(let id, _), .supportWithdrawal(let id, _), .adapter(let id, _, _),
-         .safety(let id, _, _):
+      .safety(let id, _, _):
       id
     }
   }

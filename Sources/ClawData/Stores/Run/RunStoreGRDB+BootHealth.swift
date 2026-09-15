@@ -5,9 +5,11 @@ import GRDB
 // MARK: - Boot Reconciliation & Health
 
 extension RunStoreGRDB {
-  public func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
-    throws(StoreError) -> [DegradationReply]
-  {
+  public func reconcileRunsAtBoot(
+    now: Date,
+    degradationText: String,
+    heartbeatNoticeChatID: Int64?
+  ) throws(StoreError) -> [DegradationReply] {
     try database.writeMapping { db in
       // AWAITING_APPROVAL is deliberately excluded, not merely omitted: a suspended run is a live
       // durable checkpoint, not a crash orphan. The approval boot reconciliation
@@ -17,11 +19,11 @@ extension RunStoreGRDB {
       let stale = try Row.fetchAll(
         db,
         sql: """
-        SELECT r.id AS run_id, r.job_id AS job_id, s.session_key AS session_key FROM runs r
-        JOIN sessions s ON s.id = r.session_id
-        WHERE r.state IN (?, ?)
-        ORDER BY r.id ASC
-        """,
+          SELECT r.id AS run_id, r.job_id AS job_id, s.session_key AS session_key FROM runs r
+          JOIN sessions s ON s.id = r.session_id
+          WHERE r.state IN (?, ?)
+          ORDER BY r.id ASC
+          """,
         arguments: StatementArguments(orphanFailStates)
       )
 
@@ -31,8 +33,8 @@ extension RunStoreGRDB {
         let disposition = try Self.orphanDisposition(db, runID: runID)
         guard
           try Self
-            .transitionRun(db, runID: runID, event: .fail, now: now, terminal: disposition)
-            != nil
+          .transitionRun(db, runID: runID, event: .fail, now: now, terminal: disposition)
+          != nil
         else {
           continue
         }
@@ -101,10 +103,10 @@ extension RunStoreGRDB {
     let newestSent = try Row.fetchOne(
       db,
       sql: """
-      SELECT approval_id FROM outbound_deliveries
-      WHERE run_id = ? AND status = 'SENT'
-      ORDER BY step_index DESC LIMIT 1
-      """,
+        SELECT approval_id FROM outbound_deliveries
+        WHERE run_id = ? AND status = 'SENT'
+        ORDER BY step_index DESC LIMIT 1
+        """,
       arguments: [runID]
     )
     let ownerSawAReply = newestSent != nil && (newestSent?["approval_id"] as Int64?) == nil

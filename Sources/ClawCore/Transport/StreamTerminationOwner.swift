@@ -55,7 +55,7 @@ final class StreamTerminationOwner<Element: Sendable, Termination: Sendable>: Se
   init(
     channel: BoundedAsyncChannel<Element>,
     resolve:
-    @escaping @Sendable (_ reported: Termination, _ isCancelRequested: Bool) -> Termination,
+      @escaping @Sendable (_ reported: Termination, _ isCancelRequested: Bool) -> Termination,
     channelError: @escaping @Sendable (_ termination: Termination) -> (any Error)?
   ) {
     self.channel = channel

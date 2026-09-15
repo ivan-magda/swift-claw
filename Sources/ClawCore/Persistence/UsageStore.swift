@@ -114,7 +114,10 @@ public protocol UsageStore: Sendable {
   /// A learning call has no run to join, so it is counted through its own scope columns instead,
   /// and only when `origins` contains `.scheduled`: learning exists only for a scheduled job, so
   /// that is the pool its spend charges.
-  func todayTokensAndCost(origins: [RunOrigin], now: Date) throws(StoreError) -> (
+  func todayTokensAndCost(
+    origins: [RunOrigin],
+    now: Date
+  ) throws(StoreError) -> (
     tokens: Int,
     costUSD: Double
   )

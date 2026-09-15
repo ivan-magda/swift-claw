@@ -283,9 +283,10 @@ struct LLMRouteTests {
     ("https://api.example.com/v1///", "https://api.example.com/v1"),
     ("  https://api.example.com/v1/  ", "https://api.example.com/v1"),
   ])
-  func theCurrentRouteCanonicalizesTheConfiguredEndpoint(configured: String, expected: String)
-    throws
-  {
+  func theCurrentRouteCanonicalizesTheConfiguredEndpoint(
+    configured: String,
+    expected: String
+  ) throws {
     // given
     let probe = BaseURLProbe(returning: configured)
 

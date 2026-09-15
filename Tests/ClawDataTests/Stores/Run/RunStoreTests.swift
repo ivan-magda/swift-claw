@@ -249,9 +249,9 @@ struct RunStoreTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER boom BEFORE INSERT ON outbound_deliveries \
-        BEGIN SELECT RAISE(ABORT, 'boom'); END
-        """
+          CREATE TRIGGER boom BEFORE INSERT ON outbound_deliveries \
+          BEGIN SELECT RAISE(ABORT, 'boom'); END
+          """
       )
     }
     let turn = AssistantTurn(

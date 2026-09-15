@@ -5,9 +5,11 @@ import GRDB
 // MARK: - Feedback Challenges
 
 extension ScheduledLearningStoreGRDB {
-  public func consumeAndOpenChallenge(_ tap: FeedbackTap, prompt: [LearningNoticeChunk], now: Date)
-    throws(StoreError) -> FeedbackOutcome
-  {
+  public func consumeAndOpenChallenge(
+    _ tap: FeedbackTap,
+    prompt: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
     try database.writeMapping { db in
       guard tap.signal.opensFeedbackChallenge else {
         let target = try Self.readTarget(db, nonce: tap.nonce)
@@ -51,9 +53,11 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  public func consumeChallenge(id: Int64, payload: String, now: Date) throws(StoreError)
-    -> FeedbackOutcome
-  {
+  public func consumeChallenge(
+    id: Int64,
+    payload: String,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
     try database.writeMapping { db in
       guard let challenge = try Self.consumeLiveChallenge(db, id: id, now: now) else {
         let found = try Self.readChallenge(db, id: id)
@@ -98,18 +102,19 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  public func liveChallenge(ownerUserID: Int64, chatID: Int64) throws(StoreError)
-    -> FeedbackChallenge?
-  {
+  public func liveChallenge(
+    ownerUserID: Int64,
+    chatID: Int64
+  ) throws(StoreError) -> FeedbackChallenge? {
     try database.readMapping { db in
       guard
         let row = try Row.fetchOne(
           db,
           sql: """
-          SELECT * FROM feedback_challenges
-          WHERE owner_user_id = ? AND chat_id = ?
-            AND superseded_by IS NULL AND consumed_at IS NULL
-          """,
+            SELECT * FROM feedback_challenges
+            WHERE owner_user_id = ? AND chat_id = ?
+              AND superseded_by IS NULL AND consumed_at IS NULL
+            """,
           arguments: [ownerUserID, chatID]
         )
       else {

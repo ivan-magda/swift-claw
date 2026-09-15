@@ -421,9 +421,10 @@ func makeStack(
   )
 }
 
-func makeStreamingStack(writer: any DatabaseWriter, allow chatID: Int64 = 42) throws
-  -> StreamingStack
-{
+func makeStreamingStack(
+  writer: any DatabaseWriter,
+  allow chatID: Int64 = 42
+) throws -> StreamingStack {
   let allowlist = AllowlistStoreGRDB(writer: writer)
   try allowlist.seedAllowlist(userIDs: [chatID])
   let processed = ProcessedUpdateStoreGRDB(writer: writer)
@@ -1075,9 +1076,9 @@ struct LLMTurnPersistenceAcceptanceTests {
       let blob = try Data.fetchOne(
         db,
         sql: """
-        SELECT provider_state FROM messages WHERE role = 'assistant' \
-        AND provider_state IS NOT NULL
-        """
+          SELECT provider_state FROM messages WHERE role = 'assistant' \
+          AND provider_state IS NOT NULL
+          """
       )
       return blob.map {
         (String(bytes: $0, encoding: .utf8) ?? "").contains(marker)

@@ -48,9 +48,11 @@ private actor DeliverySpy: MessageDelivery {
     self.outcomes = outcomes
   }
 
-  func sendMessage(to target: DeliveryTarget, text: String, replyMarkup: String?) async throws
-    -> Int64
-  {
+  func sendMessage(
+    to target: DeliveryTarget,
+    text: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     plainAttempts.append(target.chatID)
     try answer(for: target.chatID)
     plainMarkups.append(replyMarkup)
@@ -59,9 +61,11 @@ private actor DeliverySpy: MessageDelivery {
     return 1
   }
 
-  func sendRichMessage(to target: DeliveryTarget, markdown: String, replyMarkup: String?)
-    async throws -> Int64
-  {
+  func sendRichMessage(
+    to target: DeliveryTarget,
+    markdown: String,
+    replyMarkup: String?
+  ) async throws -> Int64 {
     richAttempts.append(target.chatID)
     try answer(for: target.chatID)
     if failRich {
@@ -141,9 +145,11 @@ struct OutboxDispatcherTests {
     )
   }
 
-  private func seedPending(_ fixture: Fixture, payloads: [String], replyMarkup: String? = nil)
-    throws
-  {
+  private func seedPending(
+    _ fixture: Fixture,
+    payloads: [String],
+    replyMarkup: String? = nil
+  ) throws {
     try seedPending(
       in: fixture.writer,
       runID: fixture.runID,
@@ -187,9 +193,10 @@ struct OutboxDispatcherTests {
     let secondChatID: Int64
   }
 
-  private func makeTwoChatFixture(firstPayload: String, secondPayload: String) throws
-    -> TwoChatFixture
-  {
+  private func makeTwoChatFixture(
+    firstPayload: String,
+    secondPayload: String
+  ) throws -> TwoChatFixture {
     let firstChatID: Int64 = -1_001
     let secondChatID: Int64 = -1_002
     let seeded = try makeSeededFixture(chatID: firstChatID)

@@ -23,12 +23,12 @@ struct SkillDiagnosticsCompositionTests {
     let before = harness.healthRow("context.skills")
     try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
     let manifest = """
-    ---
-    name: summarize
-    description: Summarize owner-provided text.
-    ---
-    Follow the owner's requested summary format.
-    """
+      ---
+      name: summarize
+      description: Summarize owner-provided text.
+      ---
+      Follow the owner's requested summary format.
+      """
     try Data(manifest.utf8).write(
       to: skillDirectory.appendingPathComponent(WorkspaceSkills.manifestName)
     )

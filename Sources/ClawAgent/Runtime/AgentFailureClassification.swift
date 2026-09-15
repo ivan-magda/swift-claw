@@ -7,7 +7,7 @@ struct AgentFailureClassification {
   init(error: any Error) {
     let isDeadline =
       error is ProviderNoStartDeadline || error is RacedDeadlineSuccess
-        || error is ProviderInferenceCancellation
+      || error is ProviderInferenceCancellation
     if isDeadline {
       self = Self.unavailable(failureCause: .deadline)
       return

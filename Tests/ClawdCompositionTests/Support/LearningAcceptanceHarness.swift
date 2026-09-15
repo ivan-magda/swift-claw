@@ -70,15 +70,15 @@ struct LearningAcceptanceHarness {
       }
       let json =
         request.url.hasSuffix("/sendMessage")
-          ? #"{"ok":true,"result":{"message_id":900,"chat":{"id":777}}}"#
-          : #"{"ok":true,"result":true}"#
+        ? #"{"ok":true,"result":{"message_id":900,"chat":{"id":777}}}"#
+        : #"{"ok":true,"result":true}"#
       return HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8))
     }
     let telegram = ScriptedHTTPExecutor(Array(repeating: response, count: 128))
     let replies =
       existingJob == nil
-        ? [answer, noIssue, candidate, answer, negativeTrial ? negative : noIssue, answer, noIssue]
-        : [answer, noIssue]
+      ? [answer, noIssue, candidate, answer, negativeTrial ? negative : noIssue, answer, noIssue]
+      : [answer, noIssue]
     let llm = ScriptedHTTPExecutor(try replies.map(completion))
     var builder = try CompositionAcceptance.makeBuilder(
       http: telegram,
@@ -257,11 +257,11 @@ struct LearningAcceptanceHarness {
       let tables = try String.fetchAll(
         db,
         sql: """
-        SELECT name FROM sqlite_master WHERE type = 'table' AND
-          (name LIKE 'learning_%' OR name LIKE 'feedback_%' OR name IN (
-            'job_learning_state', 'lesson_sets', 'run_learning_bindings', 'run_compatibility',
-            'run_settlements', 'trial_assignments'))
-        """
+          SELECT name FROM sqlite_master WHERE type = 'table' AND
+            (name LIKE 'learning_%' OR name LIKE 'feedback_%' OR name IN (
+              'job_learning_state', 'lesson_sets', 'run_learning_bindings', 'run_compatibility',
+              'run_settlements', 'trial_assignments'))
+          """
       )
       return try tables.map { table in
         try #require(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)"))

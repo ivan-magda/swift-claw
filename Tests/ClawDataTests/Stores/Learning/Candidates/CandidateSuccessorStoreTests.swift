@@ -656,9 +656,10 @@ private extension AdmissionStoreFixture {
     )
   }
 
-  func insertClosedReplacementTrial(from predecessor: CandidateArtifact, replacement: LessonSet)
-    throws
-  {
+  func insertClosedReplacementTrial(
+    from predecessor: CandidateArtifact,
+    replacement: LessonSet
+  ) throws {
     let source = predecessor.manifest
     let alternateManifest = CandidateSourceManifest(
       origin: source.origin,
@@ -685,11 +686,11 @@ private extension AdmissionStoreFixture {
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: closed, now: env.now)
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
+          """,
         arguments: [
           env.jobID,
           source.epoch.value,
@@ -716,9 +717,10 @@ private extension AdmissionStoreFixture {
     }
   }
 
-  func persistForgedApproval(predecessor: CandidateArtifact, corruption: PersistedControlCorruption)
-    throws -> CandidateArtifact
-  {
+  func persistForgedApproval(
+    predecessor: CandidateArtifact,
+    corruption: PersistedControlCorruption
+  ) throws -> CandidateArtifact {
     var control = try env.appendFeedback(
       subjectKind: .candidate,
       subjectDigest: corruption == .wrongSubject

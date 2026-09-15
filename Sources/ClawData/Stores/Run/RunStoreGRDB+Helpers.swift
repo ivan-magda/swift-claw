@@ -48,10 +48,10 @@ extension RunStoreGRDB {
     let found = try Int.fetchOne(
       db,
       sql: """
-      SELECT 1 FROM runs
-      WHERE session_id = ? AND state IN (\(placeholders))
-      LIMIT 1
-      """,
+        SELECT 1 FROM runs
+        WHERE session_id = ? AND state IN (\(placeholders))
+        LIMIT 1
+        """,
       arguments: StatementArguments(values)
     )
     return found != nil
@@ -84,10 +84,10 @@ extension RunStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT id FROM runs
-      WHERE session_id = ? AND state IN (\(placeholders))
-      ORDER BY id ASC
-      """,
+        SELECT id FROM runs
+        WHERE session_id = ? AND state IN (\(placeholders))
+        ORDER BY id ASC
+        """,
       arguments: StatementArguments(values)
     )
 
@@ -179,12 +179,12 @@ extension RunStoreGRDB {
   /// The named `provider_call_id` conflict target ignores only an already-recorded call. Other
   /// uniqueness, NOT NULL, CHECK, and foreign-key failures still raise.
   static let insertUsageStatement = """
-  INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-    cost_usd, cost_source, is_estimated, ts, provider_call_id,
-    learning_operation_id, learning_job_id)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  ON CONFLICT(provider_call_id) DO NOTHING
-  """
+    INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+      cost_usd, cost_source, is_estimated, ts, provider_call_id,
+      learning_operation_id, learning_job_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(provider_call_id) DO NOTHING
+    """
 
   /// Stores a provider usage row once per call identity within the caller's transaction.
   ///

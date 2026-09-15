@@ -54,9 +54,11 @@ private extension LLMAuthDoctor {
 // MARK: - ChatGPT Route
 
 private extension LLMAuthDoctor {
-  static func oauthRow(provider: String, store: (any LLMCredentialStore)?, now: Date)
-    -> DoctorRowResult
-  {
+  static func oauthRow(
+    provider: String,
+    store: (any LLMCredentialStore)?,
+    now: Date
+  ) -> DoctorRowResult {
     guard let store else {
       return loggedOut(provider: provider)
     }
@@ -96,7 +98,7 @@ private extension LLMAuthDoctor {
   static func unreadable(provider: String, error: LLMCredentialStoreError) -> DoctorRowResult {
     DoctorRowResult(
       value:
-      "\(provider) mode=oauth credential unreadable (\(reason(error))); run: clawd auth login",
+        "\(provider) mode=oauth credential unreadable (\(reason(error))); run: clawd auth login",
       ok: false
     )
   }

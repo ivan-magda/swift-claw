@@ -9,14 +9,14 @@ struct FrontmatterFenceTests {
   func splitsFrontmatterFromBody() {
     // given
     let text = """
-    ---
-    name: summarize
-    description: Summarize text.
-    ---
-    # Summarize
+      ---
+      name: summarize
+      description: Summarize text.
+      ---
+      # Summarize
 
-    Step one.
-    """
+      Step one.
+      """
 
     // when
     let document = FrontmatterFence.split(text)
@@ -55,15 +55,15 @@ struct FrontmatterFenceTests {
   func horizontalRuleInsideTheBodyStaysInTheBody() {
     // given — the closing fence is the FIRST one after the opener; later rules are content
     let text = """
-    ---
-    name: summarize
-    ---
-    Intro.
+      ---
+      name: summarize
+      ---
+      Intro.
 
-    ---
+      ---
 
-    Outro.
-    """
+      Outro.
+      """
 
     // when
     let document = FrontmatterFence.split(text)

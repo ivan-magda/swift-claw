@@ -59,9 +59,9 @@ public struct CoderJobStoreGRDB: CoderJobStore {
       try Row.fetchOne(
         db,
         sql: """
-        SELECT * FROM coder_jobs WHERE state IN (?, ?, ?)
-        ORDER BY updated_ts DESC, id DESC LIMIT 1
-        """,
+          SELECT * FROM coder_jobs WHERE state IN (?, ?, ?)
+          ORDER BY updated_ts DESC, id DESC LIMIT 1
+          """,
         arguments: [
           CoderJobState.failed.rawValue,
           CoderJobState.timedOut.rawValue,
@@ -118,9 +118,10 @@ private extension CoderJobStoreGRDB {
     )
   }
 
-  static func conflicts(_ reserved: CoderPreparedRequest, with proposed: CoderPreparedRequest)
-    -> Bool
-  {
+  static func conflicts(
+    _ reserved: CoderPreparedRequest,
+    with proposed: CoderPreparedRequest
+  ) -> Bool {
     guard reserved.request.workspace == .inPlace else {
       return false
     }

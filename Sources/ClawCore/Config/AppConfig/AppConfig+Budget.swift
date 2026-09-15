@@ -6,9 +6,11 @@ extension AppConfig {
   /// The spend budget mirrors `RunBudget.default`, except the four USD/ceiling knobs are env
   /// overridable and `maxOutputTokens`/`retryBudget` mirror `llm` (the single source of truth for
   /// those). Any present override must parse to a positive value, else fail-closed.
-  static func parseBudget(from env: [String: String], llm: LLMConfig, proactivePerDayUSD: Double)
-    throws -> RunBudget
-  {
+  static func parseBudget(
+    from env: [String: String],
+    llm: LLMConfig,
+    proactivePerDayUSD: Double
+  ) throws -> RunBudget {
     let base = RunBudget.default
     return RunBudget(
       maxInputTokens: base.maxInputTokens,

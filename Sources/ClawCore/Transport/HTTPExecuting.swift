@@ -212,9 +212,12 @@ extension HTTPExecuting {
     )
   }
 
-  public func get(url: String, headers: [String: String], timeoutSeconds: Int, maxBodyBytes: Int)
-    async throws -> HTTPResult
-  {
+  public func get(
+    url: String,
+    headers: [String: String],
+    timeoutSeconds: Int,
+    maxBodyBytes: Int
+  ) async throws -> HTTPResult {
     try await execute(
       HTTPRequest(
         method: .get,

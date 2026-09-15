@@ -5,25 +5,28 @@ import GRDB
 // MARK: - Operation Lifecycle
 
 extension ScheduledLearningStoreGRDB {
-  public func claimOperation(_ key: LearningOperationKey, now: Date) throws(StoreError)
-    -> ClaimedOperation?
-  {
+  public func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation? {
     try database.writeMapping { db in
       try Self.claim(db, key: key, now: now)
     }
   }
 
-  public func authorizeAndStartOperation(_ authorization: LearningAuthorization, now: Date)
-    throws(StoreError) -> AuthorizeOutcome
-  {
+  public func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome {
     try database.writeMapping { db in
       try Self.authorize(db, authorization, now: now)
     }
   }
 
-  public func finishOperation(_ result: LearningOperationResult, now: Date) throws(StoreError)
-    -> Bool
-  {
+  public func finishOperation(
+    _ result: LearningOperationResult,
+    now: Date
+  ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       try Self.finish(db, result, now: now)
     }
@@ -43,9 +46,11 @@ private extension ScheduledLearningStoreGRDB {
   /// Refuses far more often than it claims, and every refusal is the same nil: a claim is only
   /// worth taking when the job is still in the epoch the key names, the source is still work the
   /// evaluator may do, and no other attempt at this key is live or already finished.
-  static func claim(_ db: Database, key: LearningOperationKey, now: Date) throws
-    -> ClaimedOperation?
-  {
+  static func claim(
+    _ db: Database,
+    key: LearningOperationKey,
+    now: Date
+  ) throws -> ClaimedOperation? {
     guard try readState(db, jobID: key.jobID)?.epoch == key.epoch else {
       return nil
     }
@@ -97,10 +102,10 @@ private extension ScheduledLearningStoreGRDB {
       return try Bool.fetchOne(
         db,
         sql: """
-        SELECT NOT EXISTS(
-          SELECT 1 FROM learning_evaluations WHERE job_id = ? AND evidence_digest = ?
-        )
-        """,
+          SELECT NOT EXISTS(
+            SELECT 1 FROM learning_evaluations WHERE job_id = ? AND evidence_digest = ?
+          )
+          """,
         arguments: [key.jobID, key.sourceDigest]
       ) ?? false
     case .reflector:
@@ -117,9 +122,9 @@ private extension ScheduledLearningStoreGRDB {
     let raw = try String.fetchOne(
       db,
       sql: """
-      SELECT eligibility FROM learning_evidence
-      WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
-      """,
+        SELECT eligibility FROM learning_evidence
+        WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
+        """,
       arguments: [key.jobID, key.epoch.value, key.sourceDigest]
     )
     guard let eligibility = raw.flatMap(LearningEligibility.init(rawValue:)) else {
@@ -138,10 +143,10 @@ private extension ScheduledLearningStoreGRDB {
     let id = LearningOperationID(key: key.digest, attemptGeneration: generation)
     try db.execute(
       sql: """
-      INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase, source_digest,
-        attempt_generation, supersedes, state, key_digest, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase, source_digest,
+          attempt_generation, supersedes, state, key_digest, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         id.rawValue,
         key.jobID,
@@ -158,9 +163,11 @@ private extension ScheduledLearningStoreGRDB {
     return ClaimedOperation(id: id, key: key, attemptGeneration: generation, supersedes: supersedes)
   }
 
-  static func reclaim(_ db: Database, _ attempt: AttemptRow, key: LearningOperationKey) throws
-    -> ClaimedOperation?
-  {
+  static func reclaim(
+    _ db: Database,
+    _ attempt: AttemptRow,
+    key: LearningOperationKey
+  ) throws -> ClaimedOperation? {
     try db.execute(
       sql: "UPDATE learning_operations SET state = ? WHERE operation_id = ? AND state = ?",
       arguments: [
@@ -210,10 +217,10 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT operation_id, attempt_generation, state, supersedes
-      FROM learning_operations WHERE key_digest = ?
-      ORDER BY attempt_generation DESC LIMIT 1
-      """,
+        SELECT operation_id, attempt_generation, state, supersedes
+        FROM learning_operations WHERE key_digest = ?
+        ORDER BY attempt_generation DESC LIMIT 1
+        """,
       arguments: [key.rawValue]
     )
     guard let row else {
@@ -232,11 +239,11 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT job_id, learning_epoch, phase, source_digest, key_digest, carrier_digest, state,
-        failure_code, route, provider_call_id, reserved_tokens, reserved_cost_usd,
-        reservation_state
-      FROM learning_operations WHERE operation_id = ?
-      """,
+        SELECT job_id, learning_epoch, phase, source_digest, key_digest, carrier_digest, state,
+          failure_code, route, provider_call_id, reserved_tokens, reserved_cost_usd,
+          reservation_state
+        FROM learning_operations WHERE operation_id = ?
+        """,
       arguments: [id.rawValue]
     )
     guard let row else {
@@ -284,9 +291,9 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func startedOperationReservation(_ operation: OperationRow) throws
-    -> StartedOperationReservation
-  {
+  static func startedOperationReservation(
+    _ operation: OperationRow
+  ) throws -> StartedOperationReservation {
     guard
       let providerCallID = operation.providerCallID,
       providerCallID.rawValue.isEmpty == false,
@@ -311,9 +318,10 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func operationState(_ raw: String, of id: LearningOperationID) throws
-    -> LearningOperationState
-  {
+  static func operationState(
+    _ raw: String,
+    of id: LearningOperationID
+  ) throws -> LearningOperationState {
     guard let state = LearningOperationState(rawValue: raw) else {
       throw StoreError.unexpected("operation \(id.rawValue) holds an unreadable state '\(raw)'")
     }

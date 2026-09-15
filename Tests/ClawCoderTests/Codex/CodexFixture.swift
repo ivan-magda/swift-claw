@@ -90,9 +90,10 @@ struct CodexFixture {
     )
   }
 
-  func backend(extraEnvironment: [String: String] = [:], profile: String? = nil) throws
-    -> CodexBackend
-  {
+  func backend(
+    extraEnvironment: [String: String] = [:],
+    profile: String? = nil
+  ) throws -> CodexBackend {
     var environment = ["PATH": "\(git.root.path):/usr/bin:/bin", "HOME": git.root.path]
     environment.merge(extraEnvironment) { _, updated in
       updated

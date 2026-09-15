@@ -62,9 +62,12 @@ struct TurnDispatchModeTests {
     return Harness(dispatch: dispatch, sessionMessages: sessionMessages, runner: runner)
   }
 
-  private func update(id: Int64, chatID: Int64, threadID: Int64?, displayName: String? = nil) throws
-    -> (RawUpdate, IncomingMessage)
-  {
+  private func update(
+    id: Int64,
+    chatID: Int64,
+    threadID: Int64?,
+    displayName: String? = nil
+  ) throws -> (RawUpdate, IncomingMessage) {
     let raw = RawUpdate(
       updateID: id,
       message: RawMessage(

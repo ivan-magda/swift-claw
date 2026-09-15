@@ -203,9 +203,10 @@ private extension ChatGPTResponsesSSEParser {
 
   /// A known event in the route's own terms. A known name whose payload does not carry what that
   /// name promises is damage rather than something to ignore, so it fails rather than vanishing.
-  static func mapped(_ name: ChatGPTWireEventName, _ event: ChatGPTWireEvent) throws
-    -> ChatGPTResponsesEvent
-  {
+  static func mapped(
+    _ name: ChatGPTWireEventName,
+    _ event: ChatGPTWireEvent
+  ) throws -> ChatGPTResponsesEvent {
     switch name {
     case .outputItemAdded:
       return .outputItemAdded(index: try index(of: event), item: try item(of: event))
@@ -255,9 +256,10 @@ private extension ChatGPTResponsesSSEParser {
     return delta
   }
 
-  static func terminal(_ name: ChatGPTWireEventName, _ event: ChatGPTWireEvent) throws
-    -> ChatGPTResponsesTerminal
-  {
+  static func terminal(
+    _ name: ChatGPTWireEventName,
+    _ event: ChatGPTWireEvent
+  ) throws -> ChatGPTResponsesTerminal {
     guard let response = event.response, let terminalName = ChatGPTResponsesTerminal.Name(name)
     else {
       throw malformedEvent
@@ -433,7 +435,7 @@ extension ChatGPTResponsesTerminal.Name {
     case .incomplete: self = .incomplete
     case .failed: self = .failed
     case .outputItemAdded, .outputItemDone, .outputTextDelta, .functionCallArgumentsDelta,
-         .functionCallArgumentsDone, .error:
+      .functionCallArgumentsDone, .error:
       return nil
     }
   }

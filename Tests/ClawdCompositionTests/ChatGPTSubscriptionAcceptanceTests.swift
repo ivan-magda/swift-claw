@@ -363,13 +363,13 @@ struct ChatGPTSubscriptionAcceptanceTests {
 
     let threaded =
       [ChatMessage(role: .user, content: "what time is it?")]
-        + anchors.map { anchor in
-          ChatMessage(
-            role: .assistant,
-            content: anchor.content,
-            providerState: anchor.providerState
-          )
-        } + [ChatMessage(role: .user, content: "still there?")]
+      + anchors.map { anchor in
+        ChatMessage(
+          role: .assistant,
+          content: anchor.content,
+          providerState: anchor.providerState
+        )
+      } + [ChatMessage(role: .user, content: "still there?")]
     _ = try await restartStack.binding.provider.complete(
       request: ChatRequest(
         model: restartStack.binding.wireModel,
@@ -518,7 +518,9 @@ struct ChatGPTSubscriptionAcceptanceTests {
   /// Runs the production doctor `llm.auth` composition — the exact `LLMAuthDoctor.inspect` overload
   /// `DoctorCommand`/`DaemonDoctorReporter` call, over a real encrypted store — against a state root
   /// arranged by `arrange`, and returns the rendered report plus its verdict.
-  private static func doctorRow(arrange: (_ stateRoot: URL) throws -> Void) throws -> (
+  private static func doctorRow(
+    arrange: (_ stateRoot: URL) throws -> Void
+  ) throws -> (
     render: String,
     ok: Bool
   ) {
@@ -586,9 +588,10 @@ struct ChatGPTSubscriptionAcceptanceTests {
     }
   }
 
-  private static func makeComposition(recorder: CloseRecorder, store: any LLMCredentialStore) throws
-    -> RunComposition
-  {
+  private static func makeComposition(
+    recorder: CloseRecorder,
+    store: any LLMCredentialStore
+  ) throws -> RunComposition {
     let config = try CompositionAcceptance.chatGPTConfig()
     var composition = RunComposition(
       config: config,

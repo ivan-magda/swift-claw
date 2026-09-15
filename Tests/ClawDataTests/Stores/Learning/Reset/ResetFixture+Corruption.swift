@@ -42,11 +42,11 @@ extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        UPDATE learning_trials SET base_digest = 'corrupt'
-        WHERE trial_id = (
-          SELECT trial_id FROM learning_trials WHERE job_id = ? ORDER BY trial_id LIMIT 1
-        )
-        """,
+          UPDATE learning_trials SET base_digest = 'corrupt'
+          WHERE trial_id = (
+            SELECT trial_id FROM learning_trials WHERE job_id = ? ORDER BY trial_id LIMIT 1
+          )
+          """,
         arguments: [env.jobID]
       )
     }
@@ -145,10 +145,10 @@ extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_reset_audit BEFORE INSERT ON audit_events
-        WHEN NEW.action = '\(AuditAction.learningReset.rawValue)'
-        BEGIN SELECT RAISE(ABORT, 'forced reset audit failure'); END
-        """
+          CREATE TRIGGER fail_reset_audit BEFORE INSERT ON audit_events
+          WHEN NEW.action = '\(AuditAction.learningReset.rawValue)'
+          BEGIN SELECT RAISE(ABORT, 'forced reset audit failure'); END
+          """
       )
     }
   }
@@ -198,11 +198,11 @@ extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
-          decided_at)
-        SELECT kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
-        FROM learning_decisions WHERE kind = ? ORDER BY decision_id DESC LIMIT 1
-        """,
+          INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
+            decided_at)
+          SELECT kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
+          FROM learning_decisions WHERE kind = ? ORDER BY decision_id DESC LIMIT 1
+          """,
         arguments: [ResetReceipt.kind]
       )
     }

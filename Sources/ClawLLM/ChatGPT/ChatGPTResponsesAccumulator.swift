@@ -610,9 +610,10 @@ private extension ChatGPTResponsesAccumulator {
   /// repaint a terminal, collapsed onto one line, redacted against the credential the request
   /// carried, and bounded — in that order, so a value that only becomes a secret once its escapes
   /// are gone is still matched, and the truncation can only ever cut a placeholder.
-  func failure(_ remote: ChatGPTRemoteFailure?, fallback: String = "the ChatGPT reply failed")
-    -> ProviderError
-  {
+  func failure(
+    _ remote: ChatGPTRemoteFailure?,
+    fallback: String = "the ChatGPT reply failed"
+  ) -> ProviderError {
     // The backend refusing the replayed encrypted state is not a generic terminal: a fresh session
     // drops that state, so it surfaces as invalid replay state and its downstream `/new` guidance.
     if remote?.isInvalidProviderState == true {

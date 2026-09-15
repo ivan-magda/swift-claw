@@ -28,9 +28,10 @@ private final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Send
     }
   }
 
-  func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
-    throws(LLMCredentialStoreError)
-  {}
+  func save(
+    _ credential: StoredOAuthCredential,
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError) {}
 
   func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
 }

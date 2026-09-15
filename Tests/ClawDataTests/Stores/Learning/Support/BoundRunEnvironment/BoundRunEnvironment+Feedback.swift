@@ -104,9 +104,12 @@ extension BoundRunEnvironment {
 // MARK: - Feedback Targets
 
 private extension BoundRunEnvironment {
-  func feedbackTarget(nonce: String, kind: FeedbackSubjectKind, digest: String, signal: OwnerSignal)
-    -> NewFeedbackTarget
-  {
+  func feedbackTarget(
+    nonce: String,
+    kind: FeedbackSubjectKind,
+    digest: String,
+    signal: OwnerSignal
+  ) -> NewFeedbackTarget {
     NewFeedbackTarget(
       nonce: nonce,
       jobID: jobID,

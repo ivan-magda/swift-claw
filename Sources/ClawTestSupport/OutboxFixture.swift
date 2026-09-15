@@ -44,10 +44,10 @@ public enum OutboxFixture {
     try writer.write { db in
       try db.execute(
         sql: """
-        INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
-          payload, payload_hash, reply_markup, status, created_ts, delivery_source)
-        VALUES (NULL, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
-        """,
+          INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
+            payload, payload_hash, reply_markup, status, created_ts, delivery_source)
+          VALUES (NULL, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+          """,
         arguments: [
           chunk.ordinal,
           chunk.chatID,
@@ -73,10 +73,10 @@ public enum OutboxFixture {
     try writer.write { db in
       try db.execute(
         sql: """
-        INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
-          payload, payload_hash, status, created_ts)
-        VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
-        """,
+          INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
+            payload, payload_hash, status, created_ts)
+          VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
+          """,
         arguments: [
           runID,
           chunk.stepIndex,

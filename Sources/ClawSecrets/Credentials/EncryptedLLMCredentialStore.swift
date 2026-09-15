@@ -41,13 +41,16 @@ public struct EncryptedLLMCredentialStore: LLMCredentialStore {
 
   // MARK: - LLMCredentialStore
 
-  public func load(providerID: LLMProviderID) throws(LLMCredentialStoreError)
-    -> StoredOAuthCredential?
-  { try file.load()?.providers[providerID] }
+  public func load(
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
+    try file.load()?.providers[providerID]
+  }
 
-  public func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
-    throws(LLMCredentialStoreError)
-  {
+  public func save(
+    _ credential: StoredOAuthCredential,
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError) {
     try file.mutate { map in
       map.providers[providerID] = credential
       return true
@@ -69,9 +72,10 @@ public struct EncryptedLLMCredentialStore: LLMCredentialStore {
 extension EncryptedLLMCredentialStore {
   /// The uncertain-commit contract, exposed at this seam because it is this store's promise that a
   /// caller told "saved" holds a durable credential.
-  func recoverUncertainCommit(_ intended: CredentialMap, key: SymmetricKey)
-    throws(LLMCredentialStoreError)
-  { try file.recoverUncertainCommit(intended, key: key) }
+  func recoverUncertainCommit(
+    _ intended: CredentialMap,
+    key: SymmetricKey
+  ) throws(LLMCredentialStoreError) { try file.recoverUncertainCommit(intended, key: key) }
 }
 
 // MARK: - Plaintext Provider Map
@@ -114,11 +118,15 @@ extension EncryptedLLMCredentialStore {
     Data("swift-claw:llm-credentials:v\(version)".utf8)
   }
 
-  static func sealEnvelope(_ plaintext: Data, key: SymmetricKey) throws(LLMCredentialStoreError)
-    -> Data
-  { try envelopeCodec.sealCredential(plaintext, key: key) }
+  static func sealEnvelope(
+    _ plaintext: Data,
+    key: SymmetricKey
+  ) throws(LLMCredentialStoreError) -> Data {
+    try envelopeCodec.sealCredential(plaintext, key: key)
+  }
 
-  static func openEnvelope(_ envelope: Data, key: SymmetricKey) throws(LLMCredentialStoreError)
-    -> Data
-  { try envelopeCodec.openCredential(envelope, key: key) }
+  static func openEnvelope(
+    _ envelope: Data,
+    key: SymmetricKey
+  ) throws(LLMCredentialStoreError) -> Data { try envelopeCodec.openCredential(envelope, key: key) }
 }

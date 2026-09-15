@@ -55,31 +55,31 @@ private extension V10MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:7', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:7', ?, ?, 0)
+          """,
         arguments: [seededAt, seededAt]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts)
-        VALUES (1, NULL, 'user', 'find the plan', 'trusted', ?)
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts)
+          VALUES (1, NULL, 'user', 'find the plan', 'trusted', ?)
+          """,
         arguments: [seededAt]
       )
       try db.execute(
         sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id)
-        VALUES (1, 'DONE', ?, ?, 1)
-        """,
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id)
+          VALUES (1, 'DONE', ?, ?, 1)
+          """,
         arguments: [seededAt, seededAt]
       )
       try db.execute(
         sql: """
-        INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-          payload_hash, status, created_ts)
-        VALUES (1, 0, 7, 'dedup-1', 'already delivered', 'hash-1', 'SENT', ?)
-        """,
+          INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+            payload_hash, status, created_ts)
+          VALUES (1, 0, 7, 'dedup-1', 'already delivered', 'hash-1', 'SENT', ?)
+          """,
         arguments: [seededAt]
       )
     }

@@ -61,14 +61,14 @@ struct SkillLoadToolTests {
   }
 
   private static let manifest = """
-  ---
-  name: summarize
-  description: Summarize owner-provided text.
-  ---
-  # Summarize
+    ---
+    name: summarize
+    description: Summarize owner-provided text.
+    ---
+    # Summarize
 
-  Keep it to three bullets.
-  """
+    Keep it to three bullets.
+    """
 
   // MARK: - Success
 
@@ -122,12 +122,12 @@ struct SkillLoadToolTests {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
     let manifest = """
-    ---
-    name: deploy
-    description: Deploy.
-    ---
-    Use tok-secret-1 then \(String(repeating: "x", count: 200))
-    """
+      ---
+      name: deploy
+      description: Deploy.
+      ---
+      Use tok-secret-1 then \(String(repeating: "x", count: 200))
+      """
     let descriptor = try writeSkill(named: "deploy", manifest: manifest, under: fixture.root)
     let tool = makeTool(
       root: fixture.root,
@@ -152,16 +152,16 @@ struct SkillLoadToolTests {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
     let manifest = """
-    ---
-    name: review
-    description: Review.
-    ---
-    Step one.
+      ---
+      name: review
+      description: Review.
+      ---
+      Step one.
 
-    ---
+      ---
 
-    Step two.
-    """
+      Step two.
+      """
     let descriptor = try writeSkill(named: "review", manifest: manifest, under: fixture.root)
     let tool = makeTool(
       root: fixture.root,
@@ -489,12 +489,12 @@ struct SkillLoadToolTests {
     let descriptor = try writeSkill(
       named: "summarize",
       manifest: """
-      ---
-      name: summarize
-      description: Summarize owner-provided text.
-      ---
+        ---
+        name: summarize
+        description: Summarize owner-provided text.
+        ---
 
-      """,
+        """,
       under: fixture.root
     )
     let tool = makeTool(

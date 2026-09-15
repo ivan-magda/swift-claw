@@ -95,9 +95,10 @@ struct OutboxStepSequenceTests {
 
   /// Suspends the run once (prompt at step 0), approves the row, and resumes the run to RUNNING —
   /// the state every "commit after a suspend" scenario starts from.
-  private func suspendApproveResume(_ fixture: Fixture, nonce: String) throws
-    -> SuspendedCommitReceipt
-  {
+  private func suspendApproveResume(
+    _ fixture: Fixture,
+    nonce: String
+  ) throws -> SuspendedCommitReceipt {
     let receipt = try fixture.runs.commitSuspendedTurn(
       runID: fixture.runID,
       sessionID: fixture.sessionID,
@@ -142,8 +143,8 @@ struct OutboxStepSequenceTests {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT step_index, payload, approval_id FROM outbound_deliveries ORDER BY step_index
-        """
+          SELECT step_index, payload, approval_id FROM outbound_deliveries ORDER BY step_index
+          """
       ).map { row in
         OutboxSnapshot(
           stepIndex: row["step_index"],

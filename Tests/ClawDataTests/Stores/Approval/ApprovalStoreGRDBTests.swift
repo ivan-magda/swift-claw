@@ -20,9 +20,9 @@ struct ApprovalStoreGRDBTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:7', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:7', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
     }
@@ -50,9 +50,9 @@ struct ApprovalStoreGRDBTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
+          """,
         arguments: [runID, content, Date()]
       )
       return db.lastInsertedRowID
@@ -102,9 +102,9 @@ struct ApprovalStoreGRDBTests {
   private func audits(_ queue: DatabaseQueue) throws -> [AuditLine] {
     try queue.read { db in
       try Row.fetchAll(db, sql: "SELECT actor, action, decision FROM audit_events ORDER BY id").map
-        { row in
-          AuditLine(actor: row["actor"], action: row["action"], decision: row["decision"])
-        }
+      { row in
+        AuditLine(actor: row["actor"], action: row["action"], decision: row["decision"])
+      }
     }
   }
 
@@ -789,10 +789,10 @@ extension ApprovalStoreGRDBTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_actor_audit BEFORE INSERT ON audit_events
-        WHEN NEW.actor_user_id IS NOT NULL
-        BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END
-        """
+          CREATE TRIGGER fail_actor_audit BEFORE INSERT ON audit_events
+          WHEN NEW.actor_user_id IS NOT NULL
+          BEGIN SELECT RAISE(ABORT, 'injected audit failure'); END
+          """
       )
     }
 

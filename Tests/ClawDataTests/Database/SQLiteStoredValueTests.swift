@@ -16,10 +16,10 @@ struct SQLiteStoredValueTests {
         try Row.fetchOne(
           db,
           sql: """
-          SELECT NULL AS null_value, 0 AS zero_value, 1 AS one_value, 2 AS two_value,
-            9223372036854775807 AS maximum_integer, 1.5 AS real_value,
-            '1' AS text_value, X'01' AS blob_value
-          """
+            SELECT NULL AS null_value, 0 AS zero_value, 1 AS one_value, 2 AS two_value,
+              9223372036854775807 AS maximum_integer, 1.5 AS real_value,
+              '1' AS text_value, X'01' AS blob_value
+            """
         )
       )
     }

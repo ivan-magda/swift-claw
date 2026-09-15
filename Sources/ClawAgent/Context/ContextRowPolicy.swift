@@ -38,9 +38,11 @@ extension ContextRowID {
     }
   }
 
-  private func scaledTruncatableCap(absolute: Int, budget: ContextBudget, residualGraphemes: Int?)
-    -> Int
-  {
+  private func scaledTruncatableCap(
+    absolute: Int,
+    budget: ContextBudget,
+    residualGraphemes: Int?
+  ) -> Int {
     guard let residualGraphemes else {
       return absolute
     }

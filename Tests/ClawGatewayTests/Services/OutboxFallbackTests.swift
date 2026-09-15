@@ -30,9 +30,10 @@ struct OutboxFallbackTests {
     return Fixture(outbox: seeded.outbox, runID: seeded.runID, chatID: seeded.chatID)
   }
 
-  private func makeDispatcher(_ fixture: Fixture, transport: RecordingTransport)
-    -> OutboxDispatcher<ContinuousClock>
-  {
+  private func makeDispatcher(
+    _ fixture: Fixture,
+    transport: RecordingTransport
+  ) -> OutboxDispatcher<ContinuousClock> {
     OutboxDispatcher(
       outbox: fixture.outbox,
       delivery: transport,

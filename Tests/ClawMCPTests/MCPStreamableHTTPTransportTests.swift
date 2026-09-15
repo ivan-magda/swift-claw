@@ -354,7 +354,7 @@ struct MCPStreamableHTTPTransportTests {
     let head = HTTPStreamHead(statusCode: 200, headers: ["Content-Type": contentType])
     let body =
       contentType.lowercased().contains("event-stream")
-        ? Data("data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n\n".utf8) : Fixture.reply
+      ? Data("data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n\n".utf8) : Fixture.reply
     let executor = ScriptedHTTPExecutor([.stream(head, [body])])
     let transport = try TransportFixture.transport(http: executor)
     try await transport.connect()
@@ -518,9 +518,11 @@ private enum TransportFixture {
     )
   }
 
-  static func transport(http: any HTTPExecuting & HTTPStreaming) throws
-    -> MCPStreamableHTTPTransport
-  { MCPStreamableHTTPTransport(server: try server(), http: http) }
+  static func transport(
+    http: any HTTPExecuting & HTTPStreaming
+  ) throws -> MCPStreamableHTTPTransport {
+    MCPStreamableHTTPTransport(server: try server(), http: http)
+  }
 
   static func jsonHead(status: Int = 200, session: String? = nil) -> HTTPStreamHead {
     head(status: status, contentType: "application/json", session: session)

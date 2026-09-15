@@ -242,9 +242,9 @@ extension BoundRunEnvironment {
       let row = try Row.fetchOne(
         db,
         sql: """
-        SELECT reservation_state, reserved_tokens, reserved_cost_usd
-        FROM learning_operations WHERE operation_id = ?
-        """,
+          SELECT reservation_state, reserved_tokens, reserved_cost_usd
+          FROM learning_operations WHERE operation_id = ?
+          """,
         arguments: [id.rawValue]
       )
       guard let row else {
@@ -263,10 +263,10 @@ extension BoundRunEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT provider_call_id, learning_job_id, run_id, cost_usd,
-          prompt_tokens + completion_tokens AS tokens
-        FROM provider_usage WHERE learning_operation_id = ? ORDER BY id
-        """,
+          SELECT provider_call_id, learning_job_id, run_id, cost_usd,
+            prompt_tokens + completion_tokens AS tokens
+          FROM provider_usage WHERE learning_operation_id = ? ORDER BY id
+          """,
         arguments: [operationID.rawValue]
       ).map { row in
         LearningUsageRow(
@@ -286,11 +286,11 @@ extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
-          evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
-          evaluator_schema_version, compatibility_digest, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, '[]', '1', '1', '1', 'compat', ?)
-        """,
+          INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
+            evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
+            evaluator_schema_version, compatibility_digest, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, '[]', '1', '1', '1', 'compat', ?)
+          """,
         arguments: [
           "evaluation-\(evidence.digest.rawValue)",
           evidence.jobID,

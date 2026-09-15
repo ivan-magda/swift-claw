@@ -7,9 +7,9 @@ import Testing
 
 extension TrialAssignmentResolutionTests {
   @Test(arguments: AssignmentIdentityCorruption.allCases)
-  func recomputeRequiresTheFivePartAssignmentIdentity(_ corruption: AssignmentIdentityCorruption)
-    throws
-  {
+  func recomputeRequiresTheFivePartAssignmentIdentity(
+    _ corruption: AssignmentIdentityCorruption
+  ) throws {
     // given
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()

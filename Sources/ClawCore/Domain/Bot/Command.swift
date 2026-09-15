@@ -33,7 +33,10 @@ public enum Command: Sendable, Equatable {
 private extension Command {
   /// The leading slash-token, split into a lowercased command name and its argument tail. nil when
   /// the text carries no authoritative slash-token (or one addressed to a different bot).
-  static func slashToken(in text: String, botUsername: String?) -> (
+  static func slashToken(
+    in text: String,
+    botUsername: String?
+  ) -> (
     name: String,
     arguments: Substring
   )? {

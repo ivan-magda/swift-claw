@@ -107,20 +107,20 @@ private extension TurnRunner {
     let suppressHeartbeatAck = context.origin == .heartbeat && HeartbeatAck.isAck(content)
     let feedbackTarget =
       suppressHeartbeatAck
-        ? nil
-        : resultFeedbackTarget(runID: context.runID, chatID: context.chatID, origin: context.origin)
+      ? nil
+      : resultFeedbackTarget(runID: context.runID, chatID: context.chatID, origin: context.origin)
     let chunks =
       suppressHeartbeatAck
-        ? []
-        : outboxChunks(
-          for: ownerVisiblePayload(
-            reply: content,
-            ownerNotices: context.ownerNotices,
-            appendedNotices: appendedNotices
-          ),
-          chatID: context.chatID,
-          finalReplyMarkup: feedbackTarget.map(LearningNotices.resultKeyboard)
-        )
+      ? []
+      : outboxChunks(
+        for: ownerVisiblePayload(
+          reply: content,
+          ownerNotices: context.ownerNotices,
+          appendedNotices: appendedNotices
+        ),
+        chatID: context.chatID,
+        finalReplyMarkup: feedbackTarget.map(LearningNotices.resultKeyboard)
+      )
     let turn = AssistantTurn(
       runID: context.runID,
       sessionID: context.sessionID,
@@ -239,9 +239,11 @@ private extension TurnRunner {
     }
   }
 
-  func commitBudgetStopped(cap: String, outcome: TurnOutcome, in context: CommitContext)
-    async throws
-  {
+  func commitBudgetStopped(
+    cap: String,
+    outcome: TurnOutcome,
+    in context: CommitContext
+  ) async throws {
     // `routeNotice` is turn-scoped (set once, before the cap tripped), so a switch earlier in this
     // same turn still owes the owner its notice even though this round produced no answer.
     let appendedNotices =

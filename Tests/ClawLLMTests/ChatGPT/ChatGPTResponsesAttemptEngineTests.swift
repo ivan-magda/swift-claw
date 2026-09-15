@@ -185,9 +185,10 @@ struct ChatGPTResponsesAttemptEngineTests {
   }
 
   @Test(.timeLimit(.minutes(1)), arguments: [(60, 30), (10, 10)])
-  func aClean429IsQuotaLimitedHonoringTheClampedRetryAfter(timeout: Int, expectedClamp: Int)
-    async throws
-  {
+  func aClean429IsQuotaLimitedHonoringTheClampedRetryAfter(
+    timeout: Int,
+    expectedClamp: Int
+  ) async throws {
     // given — a 429 asks for 300 seconds, retried once then exhausted at budget 2
     let harness = Harness(
       steps: [

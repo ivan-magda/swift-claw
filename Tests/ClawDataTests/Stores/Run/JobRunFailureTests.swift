@@ -23,11 +23,11 @@ struct JobRunFailureTests {
     let seeded: (runID: Int64, sessionID: Int64) = try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO scheduled_jobs(id, owner_chat_id, label, prompt, recurrence, timezone,
-          next_occurrence, last_fired_at, status, session_id, created_ts, updated_ts)
-        VALUES (7, 4242, 'digest', 'Summarize my unread items', NULL, 'Europe/Berlin',
-          NULL, NULL, 'ACTIVE', NULL, ?, ?)
-        """,
+          INSERT INTO scheduled_jobs(id, owner_chat_id, label, prompt, recurrence, timezone,
+            next_occurrence, last_fired_at, status, session_id, created_ts, updated_ts)
+          VALUES (7, 4242, 'digest', 'Summarize my unread items', NULL, 'Europe/Berlin',
+            NULL, NULL, 'ACTIVE', NULL, ?, ?)
+          """,
         arguments: [now, now]
       )
       try db.execute(
@@ -37,18 +37,18 @@ struct JobRunFailureTests {
       let sessionID = db.lastInsertedRowID
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, 'user', 'Summarize my unread items', 'trusted', ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, 'user', 'Summarize my unread items', 'trusted', ?)
+          """,
         arguments: [sessionID, now]
       )
       let messageID = db.lastInsertedRowID
       try db.execute(
         sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
-          origin, job_id)
-        VALUES (?, 'PENDING', ?, ?, ?, 'scheduled', 7)
-        """,
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
+            origin, job_id)
+          VALUES (?, 'PENDING', ?, ?, ?, 'scheduled', 7)
+          """,
         arguments: [sessionID, now, now, messageID]
       )
       return (db.lastInsertedRowID, sessionID)
@@ -66,9 +66,9 @@ struct JobRunFailureTests {
       try Int.fetchOne(
         db,
         sql: """
-        SELECT COUNT(*) FROM audit_events
-        WHERE action = 'job_failed' AND decision = 'job:7' AND run_id = ?
-        """,
+          SELECT COUNT(*) FROM audit_events
+          WHERE action = 'job_failed' AND decision = 'job:7' AND run_id = ?
+          """,
         arguments: [runID]
       ) ?? 0
     }
@@ -188,17 +188,17 @@ struct JobRunFailureTests {
       let sessionID = db.lastInsertedRowID
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, 'user', 'Review the checklist below…', 'untrusted', ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, 'user', 'Review the checklist below…', 'untrusted', ?)
+          """,
         arguments: [sessionID, now]
       )
       let messageID = db.lastInsertedRowID
       try db.execute(
         sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
-        VALUES (?, 'RUNNING', ?, ?, ?, 'heartbeat')
-        """,
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
+          VALUES (?, 'RUNNING', ?, ?, ?, 'heartbeat')
+          """,
         arguments: [sessionID, now, now, messageID]
       )
       return db.lastInsertedRowID

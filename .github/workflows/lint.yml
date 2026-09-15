@@ -40,7 +40,9 @@ jobs:
           path: BuildTools/.build
           key: lint-${{ runner.os }}-${{ hashFiles('BuildTools/Package.swift', 'BuildTools/Package.resolved', 'BuildTools/lint-versions.env') }}
       - name: Canonical local and CI gate
-        run: scripts/lint.sh
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          scripts/lint.sh
       - name: Verify formatter workflow
         run: scripts/test-lint.sh
 

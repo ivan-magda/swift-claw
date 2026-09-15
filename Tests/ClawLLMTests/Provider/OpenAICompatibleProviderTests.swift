@@ -217,10 +217,10 @@ struct OpenAICompatibleProviderTests {
   func parsesProviderCostFromUsageField() async throws {
     // given — OpenRouter carries cost in usage.cost
     let json = """
-    {"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},
-    "finish_reason":"stop"}],
-    "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"cost":0.0012}}
-    """
+      {"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},
+      "finish_reason":"stop"}],
+      "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"cost":0.0012}}
+      """
     let exec = ScriptedHTTPExecutor([
       .ok(HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8))),
     ])
@@ -322,9 +322,9 @@ struct OpenAICompatibleProviderTests {
     let exec = ScriptedHTTPExecutor(Array(repeating: errorStep(500), count: 9))
     let recorder = SleepRecorder()
     let provider = makeProvider(config: makeConfig(retryBudget: 9), http: exec, recorder: recorder)
-      {
-        $0
-      }
+    {
+      $0
+    }
 
     // when — the budget is exhausted after 9 attempts (8 backoffs between them)
     await #expect {
@@ -446,7 +446,8 @@ struct OpenAICompatibleProviderTests {
       Data("\n\n".utf8),
       Data("data: [DONE]\n\n".utf8),
     ]
-    let exec = ScriptedHTTPExecutor([.stream(HTTPStreamHead(statusCode: 200, headers: [:]), chunks)]
+    let exec = ScriptedHTTPExecutor(
+      [.stream(HTTPStreamHead(statusCode: 200, headers: [:]), chunks)]
     )
     let provider = makeProvider(config: makeConfig(), http: exec)
 

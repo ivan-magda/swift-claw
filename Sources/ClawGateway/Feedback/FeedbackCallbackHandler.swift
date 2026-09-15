@@ -170,7 +170,7 @@ private extension FeedbackCallbackHandler {
       await workflow?.notifyChanged(jobID: target.jobID)
       return await finish(callback, toast: Self.recordedToast)
     case .challengeOpened, .targetMissing, .ownerMismatch, .chatMismatch, .expired, .actionMismatch,
-         .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
+      .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
       return await finish(callback, toast: Self.neutralToast)
     }
   }
@@ -224,7 +224,7 @@ private extension FeedbackCallbackHandler {
     switch outcome {
     case .challengeOpened: return await finish(callback, toast: Self.challengeOpenedToast)
     case .recorded, .targetMissing, .ownerMismatch, .chatMismatch, .expired, .actionMismatch,
-         .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
+      .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
       return await finish(callback, toast: Self.neutralToast)
     }
   }
@@ -255,9 +255,11 @@ private extension FeedbackCallbackHandler {
     return await finish(callback, toast: Self.neutralToast)
   }
 
-  func storeFailure(_ callback: RawCallback, signal: OwnerSignal?, error: any Error) async
-    -> HandleOutcome
-  {
+  func storeFailure(
+    _ callback: RawCallback,
+    signal: OwnerSignal?,
+    error: any Error
+  ) async -> HandleOutcome {
     logger.error("feedback callback store failure: \(error)")
     let event = AuditEvent(
       actor: .system,

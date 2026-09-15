@@ -39,9 +39,9 @@ struct AuditLogTests {
         try Row.fetchOne(
           db,
           sql: """
-          SELECT ts, actor, action, tool, args_redacted, result_size, decision, run_id, session_id
-          FROM audit_events
-          """
+            SELECT ts, actor, action, tool, args_redacted, result_size, decision, run_id, session_id
+            FROM audit_events
+            """
         )
       }
     )

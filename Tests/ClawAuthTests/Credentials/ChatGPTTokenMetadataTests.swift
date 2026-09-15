@@ -228,8 +228,8 @@ struct ChatGPTTokenMetadataTests {
   /// both, which would make a strictness test vacuous; the `?` forces a 63 sextet, so the standard
   /// form carries `/` exactly where the base64url form carries `_`.
   static let divergentPayload = #"""
-  {"exp":1893456000,"https://api.openai.com/auth":{"chatgpt_account_id":"acct-123"},"pad":"?"}
-  """#
+    {"exp":1893456000,"https://api.openai.com/auth":{"chatgpt_account_id":"acct-123"},"pad":"?"}
+    """#
 
   @Test
   func extractReadsAPayloadEncodedInBase64url() {
@@ -380,8 +380,8 @@ struct ChatGPTTokenMetadataTests {
     // A malformed account is not a credential failure; the expiry beside it must still be read.
     let token = TokenBuilder.token(
       payload: #"""
-      {"exp":1893456000,"\#(accountClaimName)":{"chatgpt_account_id":"bad account"}}
-      """#
+        {"exp":1893456000,"\#(accountClaimName)":{"chatgpt_account_id":"bad account"}}
+        """#
     )
 
     // when

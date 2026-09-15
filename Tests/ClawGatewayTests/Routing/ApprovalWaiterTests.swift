@@ -90,16 +90,20 @@ struct ApprovalWaiterTests {
   private actor RecordingDelivery: MessageDelivery {
     private(set) var texts: [String] = []
 
-    func sendMessage(to target: DeliveryTarget, text: String, replyMarkup: String?) async throws
-      -> Int64
-    {
+    func sendMessage(
+      to target: DeliveryTarget,
+      text: String,
+      replyMarkup: String?
+    ) async throws -> Int64 {
       texts.append(text)
       return 1
     }
 
-    func sendRichMessage(to target: DeliveryTarget, markdown: String, replyMarkup: String?)
-      async throws -> Int64
-    { 1 }
+    func sendRichMessage(
+      to target: DeliveryTarget,
+      markdown: String,
+      replyMarkup: String?
+    ) async throws -> Int64 { 1 }
   }
 
   private actor RecordingCallbacks: CallbackResponding {
@@ -155,9 +159,9 @@ struct ApprovalWaiterTests {
     let observationMessageID = try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
+          """,
         arguments: [sessionID, runID, Date()]
       )
       let messageID = db.lastInsertedRowID
@@ -170,12 +174,12 @@ struct ApprovalWaiterTests {
       )
       try db.execute(
         sql: """
-        INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-          args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-          reason, prompt_message_id, created_ts, expires_ts)
-        VALUES (?, ?, 'APPROVED', 'file_write', ?, '/w/plan.md', ?, ?, 7, 'nonce-a', ?, 'c1',
-          'ask_tier', ?, 1782000000, 1782003600)
-        """,
+          INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+            args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+            reason, prompt_message_id, created_ts, expires_ts)
+          VALUES (?, ?, 'APPROVED', 'file_write', ?, '/w/plan.md', ?, ?, 7, 'nonce-a', ?, 'c1',
+            'ask_tier', ?, 1782000000, 1782003600)
+          """,
         arguments: [
           runID,
           sessionID,

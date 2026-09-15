@@ -20,9 +20,9 @@ struct PersistenceSchemaMigrationTests {
         try String.fetchAll(
           db,
           sql: """
-          SELECT name FROM sqlite_master WHERE type='table' \
-          AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
-          """
+            SELECT name FROM sqlite_master WHERE type='table' \
+            AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
+            """
         )
       )
     }
@@ -49,9 +49,9 @@ struct PersistenceSchemaMigrationTests {
       try queue.write { db in
         try db.execute(
           sql: """
-          INSERT INTO messages(session_id, role, content, provenance, ts) \
-          VALUES (9999,'user','x','trusted',?)
-          """,
+            INSERT INTO messages(session_id, role, content, provenance, ts) \
+            VALUES (9999,'user','x','trusted',?)
+            """,
           arguments: [Date()]
         )
       }

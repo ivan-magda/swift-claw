@@ -37,13 +37,21 @@ private final class RecordingApprovalStore: ApprovalStore, @unchecked Sendable {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 
-  func approve(id: Int64, currentPolicyVersion: String, actor: ApprovalResolutionActor?, now: Date)
-    throws(StoreError) -> ApprovalApproveOutcome
-  { throw StoreError.unexpected("unused by ApprovalExpiryService") }
+  func approve(
+    id: Int64,
+    currentPolicyVersion: String,
+    actor: ApprovalResolutionActor?,
+    now: Date
+  ) throws(StoreError) -> ApprovalApproveOutcome {
+    throw StoreError.unexpected("unused by ApprovalExpiryService")
+  }
 
-  func deny(id: Int64, decision: ApprovalDecision, actor: ApprovalResolutionActor?, now: Date)
-    throws(StoreError) -> Bool
-  { throw StoreError.unexpected("unused by ApprovalExpiryService") }
+  func deny(
+    id: Int64,
+    decision: ApprovalDecision,
+    actor: ApprovalResolutionActor?,
+    now: Date
+  ) throws(StoreError) -> Bool { throw StoreError.unexpected("unused by ApprovalExpiryService") }
 
   func unresolvedAtBoot() throws(StoreError) -> [Approval] {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
@@ -94,9 +102,9 @@ struct ApprovalExpiryServiceTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:7', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:7', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
     }
@@ -122,9 +130,9 @@ struct ApprovalExpiryServiceTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts)
-        VALUES (1, ?, ?, ?)
-        """,
+          INSERT INTO runs(session_id, state, created_ts, updated_ts)
+          VALUES (1, ?, ?, ?)
+          """,
         arguments: [RunState.awaitingApproval.rawValue, Date(), Date()]
       )
       return db.lastInsertedRowID
@@ -144,12 +152,12 @@ struct ApprovalExpiryServiceTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-          args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-          reason, created_ts, expires_ts)
-        VALUES (?, 1, 'PENDING', 'file_write', '{}', '/w/plan.md', 'h16', 'pv16', 7, ?, 1, 'c1',
-          'ask_tier', ?, ?)
-        """,
+          INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+            args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+            reason, created_ts, expires_ts)
+          VALUES (?, 1, 'PENDING', 'file_write', '{}', '/w/plan.md', 'h16', 'pv16', 7, ?, 1, 'c1',
+            'ask_tier', ?, ?)
+          """,
         arguments: [runID, nonce, createdEpoch, expiresEpoch]
       )
       return db.lastInsertedRowID

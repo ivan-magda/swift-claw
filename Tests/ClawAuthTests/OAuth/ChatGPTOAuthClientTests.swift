@@ -48,9 +48,11 @@ enum OAuthFixture {
     }
   }
 
-  static func result(_ statusCode: Int, _ body: String, headers: [String: String] = [:])
-    -> HTTPResult
-  { HTTPResult(statusCode: statusCode, headers: headers, body: Data(body.utf8)) }
+  static func result(
+    _ statusCode: Int,
+    _ body: String,
+    headers: [String: String] = [:]
+  ) -> HTTPResult { HTTPResult(statusCode: statusCode, headers: headers, body: Data(body.utf8)) }
 
   static func executor(_ url: String, _ result: HTTPResult) -> RecordingHTTPExecutor {
     RecordingHTTPExecutor(responses: [url: result])
@@ -250,9 +252,9 @@ struct ChatGPTOAuthClientTests {
     #","interval":"soon""#,
     #","interval":null"#,
   ])
-  func deviceCodeFallsBackToThePinnedIntervalWhenTheServerNamesNoUsableOne(field: String)
-    async throws
-  {
+  func deviceCodeFallsBackToThePinnedIntervalWhenTheServerNamesNoUsableOne(
+    field: String
+  ) async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.userCodeURL,
@@ -308,9 +310,10 @@ struct ChatGPTOAuthClientTests {
     // One byte past the device-auth-ID bound, alongside a user code that is fine.
     (8, ChatGPTProviderMetadata.maximumDeviceAuthIDBytes + 1),
   ])
-  func deviceCodeRefusesAnIdentifierPastItsByteBound(userCodeBytes: Int, deviceAuthIDBytes: Int)
-    async throws
-  {
+  func deviceCodeRefusesAnIdentifierPastItsByteBound(
+    userCodeBytes: Int,
+    deviceAuthIDBytes: Int
+  ) async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.userCodeURL,
@@ -530,9 +533,10 @@ struct ChatGPTOAuthClientTests {
     // Bounded: a wait no login window could ever spend is cut back to the window itself.
     ("999999", ChatGPTProviderMetadata.maximumLoginWait),
   ])
-  func pollReturnsATypedThrottleWithABoundedRetryAfter(header: String, expected: Duration)
-    async throws
-  {
+  func pollReturnsATypedThrottleWithABoundedRetryAfter(
+    header: String,
+    expected: Duration
+  ) async throws {
     // given
     let headers = header.isEmpty ? [:] : ["Retry-After": header]
     let http = OAuthFixture.executor(
@@ -872,9 +876,10 @@ struct ChatGPTOAuthClientTests {
     (#""expires_in":"3600""#, 3600),
     (#""expires_in":1"#, 1),
   ])
-  func expiryComesFromAPositiveExpiresInMeasuredOnTheInjectedWallDate(field: String, seconds: Int)
-    async throws
-  {
+  func expiryComesFromAPositiveExpiresInMeasuredOnTheInjectedWallDate(
+    field: String,
+    seconds: Int
+  ) async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.tokenURL,

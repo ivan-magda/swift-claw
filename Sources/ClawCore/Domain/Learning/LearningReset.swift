@@ -168,6 +168,9 @@ public struct ConfirmedLearningResetResult: Sendable, Equatable {
 
 /// The narrow seam used by confirmation resolution to claim and apply a reset atomically.
 public protocol LearningResetApplying: Sendable {
-  func applyReset(updateID: Int64, jobID: Int64, now: Date) throws(StoreError)
-    -> ConfirmedLearningResetResult
+  func applyReset(
+    updateID: Int64,
+    jobID: Int64,
+    now: Date
+  ) throws(StoreError) -> ConfirmedLearningResetResult
 }

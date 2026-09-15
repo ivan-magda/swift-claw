@@ -10,6 +10,26 @@ import Testing
 @testable import ClawCore
 
 struct StyleFixture {
+  func fittedHistoryMessages(
+    fitted: [FittedSection],
+    snapshot: SessionContextSnapshot
+  ) -> [ChatMessage] {
+    []
+  }
+
+  func approve(
+    id: Int64,
+    currentPolicyVersion: String,
+    now: Date
+  ) throws(StoreError) -> ApprovalApproveOutcome {
+    try approve(id: id, currentPolicyVersion: currentPolicyVersion, actor: nil, now: now)
+  }
+
+  func requireOnly<Key>(_ keyType: Key.Type, in decoder: any Decoder) throws
+  where Key: CodingKey & CaseIterable {
+    _ = decoder
+  }
+
   @available(macOS 13, *)
   func display(_ values: [Int]) -> String {
     guard

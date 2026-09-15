@@ -62,9 +62,11 @@ public actor SessionLaneRegistry {
   /// are one uninterrupted turn, so a call that observes admission closed is always rejected and a
   /// post-close call can never be accepted. The new task cannot service its own finalize callback
   /// until this turn ends, so its operation is always registered first.
-  public func enqueue(sessionID: Int64, runID: Int64, work: @escaping @Sendable () async -> Void)
-    -> LaneEnqueueResult
-  {
+  public func enqueue(
+    sessionID: Int64,
+    runID: Int64,
+    work: @escaping @Sendable () async -> Void
+  ) -> LaneEnqueueResult {
     let admitted = admissionOpen.withLock { open in
       open
     }
@@ -134,9 +136,10 @@ public actor SessionLaneRegistry {
   /// deadline child ignores caller cancellation and always fires, keeping the bound intact. Assumes
   /// a single concurrent drain: a timeout resumes every parked waiter, so two overlapping drains
   /// with different deadlines could resume each other early.
-  public func drain<ClockType: Clock>(timeout: Duration, clock: ClockType) async
-    -> SessionLaneDrainResult where ClockType.Duration == Duration
-  {
+  public func drain<ClockType: Clock>(
+    timeout: Duration,
+    clock: ClockType
+  ) async -> SessionLaneDrainResult where ClockType.Duration == Duration {
     if operations.isEmpty {
       return .drained
     }

@@ -84,16 +84,16 @@ private extension MemoryWriteBuilder {
     let secretWarningPatterns: Set<String> = ["sk-", "api_key", "token"]
     if
       secretWarningPatterns.contains(where: {
-        loweredText.contains($0)
-      }) {
+      loweredText.contains($0)
+    }) {
       warnings.append(.possibleSecret)
     }
 
     let instructionWarningPatterns: Set<String> = ["ignore previous", "system prompt"]
     if
       instructionWarningPatterns.contains(where: {
-        loweredText.contains($0)
-      }) {
+      loweredText.contains($0)
+    }) {
       warnings.append(.possibleInstruction)
     }
 

@@ -179,9 +179,11 @@ private struct TrialSweepFixture {
 // MARK: - Trial Installation
 
 private extension TrialSweepFixture {
-  static func installTrial(queue: DatabaseQueue, state: JobLearningState, admittedAt: Date) throws
-    -> LearningTrialIdentity
-  {
+  static func installTrial(
+    queue: DatabaseQueue,
+    state: JobLearningState,
+    admittedAt: Date
+  ) throws -> LearningTrialIdentity {
     let replacement = try LessonSet.canonical(
       jobID: state.jobID,
       lessons: ["Check the archive before answering."]
@@ -215,11 +217,11 @@ private extension TrialSweepFixture {
       )
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
+          """,
         arguments: [
           state.jobID,
           state.epoch.value,

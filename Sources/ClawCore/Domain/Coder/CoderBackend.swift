@@ -35,8 +35,10 @@ public protocol CoderRequestPreparing: Sendable {
 public protocol CoderServing: Sendable {
   func prepare(_ request: CoderRequest) async throws -> CoderPreparedRequest
 
-  func submit(_ prepared: CoderPreparedRequest, context: ToolExecutionContext) async throws
-    -> CoderJob
+  func submit(
+    _ prepared: CoderPreparedRequest,
+    context: ToolExecutionContext
+  ) async throws -> CoderJob
 
   func status(id: UUID, context: ToolExecutionContext) async throws -> CoderJob
 

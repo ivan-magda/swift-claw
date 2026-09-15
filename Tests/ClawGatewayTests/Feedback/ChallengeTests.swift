@@ -100,9 +100,9 @@ struct ChallengeTests {
     "caption": "Media caption"
     """,
   ])
-  func forwardedTextAndCaptionsLeaveTheChallengeForOriginalOwnerText(messageFields: String)
-    async throws
-  {
+  func forwardedTextAndCaptionsLeaveTheChallengeForOriginalOwnerText(
+    messageFields: String
+  ) async throws {
     // given
     let env = try ChallengeEnvironment.make()
     try await env.openChallenge(nonce: "original-text-only")
@@ -110,16 +110,16 @@ struct ChallengeTests {
       try env.learning.liveChallenge(ownerUserID: env.ownerID, chatID: env.chatID)
     )
     let json = """
-    {
-      "update_id": 2,
-      "message": {
-        "message_id": 200,
-        "from": {"id": \(env.ownerID)},
-        "chat": {"id": \(env.chatID), "type": "private"},
-        \(messageFields)
+      {
+        "update_id": 2,
+        "message": {
+          "message_id": 200,
+          "from": {"id": \(env.ownerID)},
+          "chat": {"id": \(env.chatID), "type": "private"},
+          \(messageFields)
+        }
       }
-    }
-    """
+      """
     let update = try JSONDecoder().decode(TUpdate.self, from: Data(json.utf8)).toRawUpdate()
 
     // when
@@ -429,10 +429,10 @@ private extension ChallengeEnvironment {
       try Int.fetchOne(
         db,
         sql: """
-        SELECT COUNT(*) FROM runs
-        JOIN messages ON messages.id = runs.trigger_message_id
-        WHERE messages.content = ? AND messages.role = ?
-        """,
+          SELECT COUNT(*) FROM runs
+          JOIN messages ON messages.id = runs.trigger_message_id
+          WHERE messages.content = ? AND messages.role = ?
+          """,
         arguments: [text, MessageRole.user.rawValue]
       ) ?? -1
     }

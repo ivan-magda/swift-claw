@@ -22,9 +22,11 @@ struct ConfirmationResolver: Sendable {
   ///
   /// Direct conversations only, which is why the key is the owner's DM: a room's commands are
   /// refused before they can park anything, so a group session is never offered here.
-  func resolve(rawUpdate: RawUpdate, message: IncomingMessage, text: String)
-    async throws(RoutingHalt) -> HandleOutcome?
-  {
+  func resolve(
+    rawUpdate: RawUpdate,
+    message: IncomingMessage,
+    text: String
+  ) async throws(RoutingHalt) -> HandleOutcome? {
     let existing = try await replies.perform(
       "pending lookup",
       updateID: rawUpdate.updateID,
@@ -168,9 +170,11 @@ private extension ConfirmationResolver {
 
   /// A parked schedule confirmed after its only fire time has passed: nothing valid remains to
   /// arm. Claim the update (dedup), clear the slot, and tell the owner to reschedule.
-  func rejectStaleArm(sessionID: Int64, rawUpdate: RawUpdate, message: IncomingMessage)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func rejectStaleArm(
+    sessionID: Int64,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
     try await replies.claimUpdate(updateID: rawUpdate.updateID, target: .chat(message.chatID))
 
     await pendingConfirmations.clear(sessionID: sessionID)
@@ -210,9 +214,11 @@ private extension ConfirmationResolver {
   }
 
   /// A negative confirmation claims the update, clears the parked entry, and sends a cancel ack.
-  func cancelPending(sessionID: Int64, rawUpdate: RawUpdate, message: IncomingMessage)
-    async throws(RoutingHalt) -> HandleOutcome
-  {
+  func cancelPending(
+    sessionID: Int64,
+    rawUpdate: RawUpdate,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
     try await replies.claimUpdate(updateID: rawUpdate.updateID, target: .chat(message.chatID))
 
     await pendingConfirmations.clear(sessionID: sessionID)

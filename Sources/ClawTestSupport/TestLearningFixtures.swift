@@ -17,10 +17,10 @@ public struct TestLearningFixtures {
         let empty = LessonSet.empty(jobID: jobID)
         try db.execute(
           sql: """
-          INSERT OR IGNORE INTO lesson_sets(
-            job_id, digest, schema_version, canonical_bytes, source, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-          """,
+            INSERT OR IGNORE INTO lesson_sets(
+              job_id, digest, schema_version, canonical_bytes, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
           arguments: [
             jobID,
             empty.digest.rawValue,
@@ -32,11 +32,11 @@ public struct TestLearningFixtures {
         )
         try db.execute(
           sql: """
-          INSERT OR IGNORE INTO job_learning_state(
-            job_id, learning_epoch, stable_lesson_set_digest, stable_revision,
-            open_trial_id, feedback_revision, armed_at)
-          VALUES (?, 1, ?, 0, NULL, 0, ?)
-          """,
+            INSERT OR IGNORE INTO job_learning_state(
+              job_id, learning_epoch, stable_lesson_set_digest, stable_revision,
+              open_trial_id, feedback_revision, armed_at)
+            VALUES (?, 1, ?, 0, NULL, 0, ?)
+            """,
           arguments: [jobID, empty.digest.rawValue, Int64(now.timeIntervalSince1970)]
         )
         guard
@@ -67,11 +67,11 @@ public struct TestLearningFixtures {
           let actions = try JSONEncoder().encode(target.allowedActions.map(\.rawValue))
           try db.execute(
             sql: """
-            INSERT INTO feedback_targets(
-              nonce, job_id, learning_epoch, subject_kind, subject_digest, allowed_actions,
-              owner_user_id, chat_id, expires_at, consumed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-            """,
+              INSERT INTO feedback_targets(
+                nonce, job_id, learning_epoch, subject_kind, subject_digest, allowed_actions,
+                owner_user_id, chat_id, expires_at, consumed_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+              """,
             arguments: [
               target.nonce,
               target.jobID,

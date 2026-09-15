@@ -503,9 +503,9 @@ struct V9MigrationTests {
       try String.fetchOne(
         db,
         sql: """
-        SELECT sql FROM sqlite_master
-        WHERE type = 'index' AND name = 'index_provider_usage_provider_call_id'
-        """
+          SELECT sql FROM sqlite_master
+          WHERE type = 'index' AND name = 'index_provider_usage_provider_call_id'
+          """
       )
     }
     #expect(indexSQL?.localizedCaseInsensitiveContains("unique") == true)
@@ -524,10 +524,10 @@ struct V9MigrationTests {
       try queue.write { db in
         try db.execute(
           sql: """
-          INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens,
-            completion_tokens, cost_usd, cost_source, is_estimated, ts, provider_call_id)
-          VALUES (NULL, 1, 'm', 1, 1, 0.001, 'heuristic', 0, ?, NULL)
-          """,
+            INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens,
+              completion_tokens, cost_usd, cost_source, is_estimated, ts, provider_call_id)
+            VALUES (NULL, 1, 'm', 1, 1, 0.001, 'heuristic', 0, ?, NULL)
+            """,
           arguments: [Self.seededAt]
         )
       }
@@ -614,9 +614,9 @@ private extension V9MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:7', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:7', ?, ?, 0)
+          """,
         arguments: [seededAt, seededAt]
       )
       try db.execute(
@@ -625,40 +625,40 @@ private extension V9MigrationTests {
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts)
-        VALUES (1, NULL, 'user', 'find the plan', 'trusted', ?)
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts)
+          VALUES (1, NULL, 'user', 'find the plan', 'trusted', ?)
+          """,
         arguments: [seededAt]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, prompt_tokens,
-          completion_tokens, tool_calls)
-        VALUES (1, 1, 'assistant', 'reading it now', 'trusted', ?, 11, 5, ?)
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, prompt_tokens,
+            completion_tokens, tool_calls)
+          VALUES (1, 1, 'assistant', 'reading it now', 'trusted', ?, 11, 5, ?)
+          """,
         arguments: [seededAt, #"[{"id":"call-1","name":"file_read"}]"#]
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-        VALUES (1, 1, 'tool', 'observation payload', 'untrusted', ?, 'call-1')
-        """,
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (1, 1, 'tool', 'observation payload', 'untrusted', ?, 'call-1')
+          """,
         arguments: [seededAt]
       )
       try db.execute(
         sql: """
-        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-          cost_usd, cost_source, is_estimated, ts)
-        VALUES (1, 1, 'gpt-4o', 11, 5, 0.004, 'price_file', 0, ?)
-        """,
+          INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+            cost_usd, cost_source, is_estimated, ts)
+          VALUES (1, 1, 'gpt-4o', 11, 5, 0.004, 'price_file', 0, ?)
+          """,
         arguments: [seededAt]
       )
       try db.execute(
         sql: """
-        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-          cost_usd, cost_source, is_estimated, ts)
-        VALUES (NULL, 1, 'gpt-4o-mini', 7, 2, 0.001, 'heuristic', 1, ?)
-        """,
+          INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+            cost_usd, cost_source, is_estimated, ts)
+          VALUES (NULL, 1, 'gpt-4o-mini', 7, 2, 0.001, 'heuristic', 1, ?)
+          """,
         arguments: [seededAt]
       )
     }
@@ -668,9 +668,9 @@ private extension V9MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:7', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:7', ?, ?, 0)
+          """,
         arguments: [seededAt, seededAt]
       )
     }
@@ -684,10 +684,10 @@ private extension V9MigrationTests {
   ) throws {
     try db.execute(
       sql: """
-      INSERT INTO messages(session_id, role, content, provenance, ts, provider_state_issuer,
-        provider_state)
-      VALUES (1, 'assistant', ?, 'trusted', ?, ?, ?)
-      """,
+        INSERT INTO messages(session_id, role, content, provenance, ts, provider_state_issuer,
+          provider_state)
+        VALUES (1, 'assistant', ?, 'trusted', ?, ?, ?)
+        """,
       arguments: [content, seededAt, issuer, state]
     )
   }
@@ -697,17 +697,19 @@ private extension V9MigrationTests {
   static func insertUsageSQL(_ db: Database, callID: String) throws {
     try db.execute(
       sql: """
-      INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-        cost_usd, cost_source, is_estimated, ts, provider_call_id)
-      VALUES (NULL, 1, 'm', 1, 1, 0.001, 'heuristic', 0, ?, ?)
-      """,
+        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+          cost_usd, cost_source, is_estimated, ts, provider_call_id)
+        VALUES (NULL, 1, 'm', 1, 1, 0.001, 'heuristic', 0, ?, ?)
+        """,
       arguments: [seededAt, callID]
     )
   }
 
-  static func usageArguments(callID: String, runID: Int64? = 1, model: String? = "gpt-4o")
-    -> StatementArguments
-  {
+  static func usageArguments(
+    callID: String,
+    runID: Int64? = 1,
+    model: String? = "gpt-4o"
+  ) -> StatementArguments {
     // The trailing pair is the learning scope, null for every call a run made.
     [
       runID,

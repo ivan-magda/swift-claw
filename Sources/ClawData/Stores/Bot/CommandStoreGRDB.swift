@@ -19,9 +19,11 @@ public struct CommandStoreGRDB: CommandStore {
     self.afterSupersedeAndDetaintForTesting = afterSupersedeAndDetaintForTesting
   }
 
-  public func applyStop(updateID: Int64, sessionKey: String, now: Date) throws(StoreError)
-    -> StopCommandResult
-  {
+  public func applyStop(
+    updateID: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> StopCommandResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
@@ -101,9 +103,11 @@ public struct CommandStoreGRDB: CommandStore {
     }
   }
 
-  public func applyNew(updateID: Int64, sessionKey: String, now: Date) throws(StoreError)
-    -> NewCommandResult
-  {
+  public func applyNew(
+    updateID: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> NewCommandResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,

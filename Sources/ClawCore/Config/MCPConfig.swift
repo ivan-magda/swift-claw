@@ -65,7 +65,7 @@ public enum MCPHTTPHeader {
   private static func isTokenByte(_ byte: UInt8) -> Bool {
     switch byte {
     case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"),
-         UInt8(ascii: "0")...UInt8(ascii: "9"):
+      UInt8(ascii: "0")...UInt8(ascii: "9"):
       return true
     default: return "!#$%&'*+-.^_`|~".utf8.contains(byte)
     }

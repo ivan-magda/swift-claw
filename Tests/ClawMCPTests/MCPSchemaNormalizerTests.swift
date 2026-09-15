@@ -110,8 +110,7 @@ struct MCPSchemaNormalizerTests {
           "anyOf": .array([
             .object(["type": .string("string")]),
             .object(["type": .string("null")]),
-          ]
-          ),
+          ]),
         ]),
       ]),
     ])
@@ -314,7 +313,8 @@ struct MCPSchemaNormalizerTests {
     let schema = JSONValue.object([
       "type": .string("object"),
       "additionalProperties": .bool(false),
-      "properties": .object(["mode": .object(["enum": .array([.string("fast"), .string("slow")])])]
+      "properties": .object(
+        ["mode": .object(["enum": .array([.string("fast"), .string("slow")])])]
       ),
     ])
 

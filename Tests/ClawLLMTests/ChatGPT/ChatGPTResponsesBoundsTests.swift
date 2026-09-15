@@ -185,7 +185,7 @@ struct ChatGPTResponsesBoundsTests {
     let half = Self.compactBounds.maximumAccumulatedOutputBytes / 2
     let stream =
       Self.visibleTextEvents(bytes: half + 1) + Self.argumentEvents(bytes: half)
-        + Self.event(Self.completed())
+      + Self.event(Self.completed())
 
     // then
     #expect(throws: ProviderError.self) {
@@ -532,7 +532,7 @@ extension ChatGPTResponsesBoundsTests {
       let width = min(chunkBytes, bytes - written)
       let item =
         #"{"id":"fc_\#(index)","type":"function_call","call_id":"call_\#(index)","#
-          + #""name":"clock","arguments":"\#(String(repeating: "a", count: width))"}"#
+        + #""name":"clock","arguments":"\#(String(repeating: "a", count: width))"}"#
       stream +=
         event(#"{"type":"response.output_item.added","output_index":\#(index),"item":\#(item)}"#)
         + event(#"{"type":"response.output_item.done","output_index":\#(index),"item":\#(item)}"#)
@@ -549,7 +549,7 @@ extension ChatGPTResponsesBoundsTests {
     for index in 0..<items {
       let item =
         #"{"id":"rs_\#(index)","type":"reasoning","#
-          + #""encrypted_content":"\#(String(repeating: "a", count: encryptedBytes))"}"#
+        + #""encrypted_content":"\#(String(repeating: "a", count: encryptedBytes))"}"#
       stream +=
         event(#"{"type":"response.output_item.added","output_index":\#(index),"item":\#(item)}"#)
         + event(#"{"type":"response.output_item.done","output_index":\#(index),"item":\#(item)}"#)

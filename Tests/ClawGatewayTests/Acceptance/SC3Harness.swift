@@ -207,9 +207,9 @@ func makeSC3Harness(
   // 1. Temp-file stores. Reuse `databasePath` to model a restart against the SAME DB (spec §17).
   let resolvedDatabasePath =
     databasePath
-      ?? fileManager.temporaryDirectory
-      .appendingPathComponent("claw-sc3-\(UUID().uuidString).sqlite")
-      .path
+    ?? fileManager.temporaryDirectory
+    .appendingPathComponent("claw-sc3-\(UUID().uuidString).sqlite")
+    .path
   let stores = try ClawDatabase.openStores(path: resolvedDatabasePath)
   try stores.allowlist.seedAllowlist(userIDs: [7])
 
@@ -217,10 +217,10 @@ func makeSC3Harness(
   // `workspaceRoot` (with `databasePath`) to model a restart against the SAME disk (spec §17).
   let workspaceRoot =
     workspaceRoot
-      ?? fileManager.temporaryDirectory.appendingPathComponent(
-        "claw-sc3-ws-\(UUID().uuidString)",
-        isDirectory: true
-      )
+    ?? fileManager.temporaryDirectory.appendingPathComponent(
+      "claw-sc3-ws-\(UUID().uuidString)",
+      isDirectory: true
+    )
   try fileManager.createDirectory(at: workspaceRoot, withIntermediateDirectories: true)
   for (relativePath, content) in workspaceFiles {
     let destination = workspaceRoot.appendingPathComponent(relativePath)

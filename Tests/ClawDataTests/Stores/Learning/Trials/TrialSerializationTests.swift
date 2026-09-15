@@ -25,11 +25,11 @@ struct TrialSerializationTests {
     try await fixture.env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER hold_task16_recompute
-        BEFORE UPDATE OF state ON trial_assignments
-        WHEN OLD.run_id = \(evidence.runID)
-        BEGIN SELECT task16_hold(); END
-        """
+          CREATE TRIGGER hold_task16_recompute
+          BEFORE UPDATE OF state ON trial_assignments
+          WHEN OLD.run_id = \(evidence.runID)
+          BEGIN SELECT task16_hold(); END
+          """
       )
     }
     let learning = fixture.env.learning
@@ -79,11 +79,11 @@ struct TrialSerializationTests {
     try await fixture.env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER hold_task16_reset
-        BEFORE UPDATE OF learning_epoch ON job_learning_state
-        WHEN OLD.job_id = \(fixture.env.jobID)
-        BEGIN SELECT task16_hold(); END
-        """
+          CREATE TRIGGER hold_task16_reset
+          BEFORE UPDATE OF learning_epoch ON job_learning_state
+          WHEN OLD.job_id = \(fixture.env.jobID)
+          BEGIN SELECT task16_hold(); END
+          """
       )
     }
     let learning = fixture.env.learning
@@ -131,11 +131,11 @@ struct TrialSerializationTests {
     try await fixture.env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER hold_task16_third_fire
-        BEFORE UPDATE OF consumed_assignments ON learning_trials
-        WHEN NEW.consumed_assignments = 3
-        BEGIN SELECT task16_hold(); END
-        """
+          CREATE TRIGGER hold_task16_third_fire
+          BEFORE UPDATE OF consumed_assignments ON learning_trials
+          WHEN NEW.consumed_assignments = 3
+          BEGIN SELECT task16_hold(); END
+          """
       )
     }
     let env = fixture.env
@@ -168,9 +168,9 @@ private struct PooledTrialEnvironment {
   let env: BoundRunEnvironment
 }
 
-private func databaseTask<Value: Sendable>(_ operation: @escaping @Sendable () throws -> Value)
-  -> Task<Value, any Error>
-{
+private func databaseTask<Value: Sendable>(
+  _ operation: @escaping @Sendable () throws -> Value
+) -> Task<Value, any Error> {
   Task {
     try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global().async {
@@ -180,9 +180,10 @@ private func databaseTask<Value: Sendable>(_ operation: @escaping @Sendable () t
   }
 }
 
-private func pooledTrialEnvironment(prefix: String, gate: SQLiteTransactionGate) throws
-  -> PooledTrialEnvironment
-{
+private func pooledTrialEnvironment(
+  prefix: String,
+  gate: SQLiteTransactionGate
+) throws -> PooledTrialEnvironment {
   let path = makeTempDatabasePath(prefix: prefix)
   var configuration = ClawDatabase.makeConfiguration()
   configuration.prepareDatabase { db in

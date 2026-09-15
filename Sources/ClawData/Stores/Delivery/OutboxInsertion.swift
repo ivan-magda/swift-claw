@@ -3,17 +3,20 @@ import Foundation
 import GRDB
 
 enum OutboxInsertion {
-  static func insertOutbox(_ db: Database, runID: Int64, chunk: OutboxChunk, now: Date) throws
-    -> Bool
-  {
+  static func insertOutbox(
+    _ db: Database,
+    runID: Int64,
+    chunk: OutboxChunk,
+    now: Date
+  ) throws -> Bool {
     let target = try outboxTarget(db, runID: runID, chatID: chunk.chatID)
     try db.execute(
       sql: """
-      INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-        payload_hash, approval_id, reply_markup, message_thread_id, reply_to_message_id,
-        status, created_ts)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
-      """,
+        INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+          payload_hash, approval_id, reply_markup, message_thread_id, reply_to_message_id,
+          status, created_ts)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
+        """,
       arguments: [
         runID,
         chunk.stepIndex,
@@ -36,11 +39,11 @@ enum OutboxInsertion {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT sessions.session_key AS session_key,
-        runs.trigger_telegram_message_id AS trigger_telegram_message_id
-      FROM runs JOIN sessions ON sessions.id = runs.session_id
-      WHERE runs.id = ?
-      """,
+        SELECT sessions.session_key AS session_key,
+          runs.trigger_telegram_message_id AS trigger_telegram_message_id
+        FROM runs JOIN sessions ON sessions.id = runs.session_id
+        WHERE runs.id = ?
+        """,
       arguments: [runID]
     )
     guard let row, SessionKey.mode(from: row["session_key"]) == .group else {

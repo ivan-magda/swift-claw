@@ -90,9 +90,11 @@ public struct EncryptedFileSecretStore: SecretStore {
   }
 
   @discardableResult
-  static func seal(_ secrets: Secrets, stateRoot: URL, publisher: SecureFilePublisher)
-    throws(SecretStoreError) -> Secrets
-  {
+  static func seal(
+    _ secrets: Secrets,
+    stateRoot: URL,
+    publisher: SecureFilePublisher
+  ) throws(SecretStoreError) -> Secrets {
     let paths = SecretStatePaths(stateRoot: stateRoot)
     var created = CreatedRuntimeArtifacts()
     var sealed = false

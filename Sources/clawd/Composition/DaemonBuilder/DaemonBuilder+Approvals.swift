@@ -64,9 +64,10 @@ extension DaemonBuilder {
 
   /// The handler that answers an owner's approve/deny tap. It reaches the router, so it is built
   /// ahead of the router it answers into.
-  func makeApprovalCallbackHandler(coordination: TurnCoordination, agentStack: AgentStack)
-    -> ApprovalCallbackHandler
-  {
+  func makeApprovalCallbackHandler(
+    coordination: TurnCoordination,
+    agentStack: AgentStack
+  ) -> ApprovalCallbackHandler {
     let contextBuilder = agentStack.contextBuilder
     return ApprovalCallbackHandler.make(
       processed: stores.processed,

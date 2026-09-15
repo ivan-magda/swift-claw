@@ -5,9 +5,12 @@ import ClawWorkspace
 import Foundation
 
 enum DoctorHealth {
-  static func inputs(stores: ClawStores, config: AppConfig, now: Date, routeHealth: LLMRouteHealth)
-    -> HealthRowsBuilder.Inputs
-  {
+  static func inputs(
+    stores: ClawStores,
+    config: AppConfig,
+    now: Date,
+    routeHealth: LLMRouteHealth
+  ) -> HealthRowsBuilder.Inputs {
     let skillDiagnostics = SkillDiagnostics(
       scan: skillScan(config: config),
       skillsCap: ContextBudget.default.skillsCap
@@ -52,7 +55,11 @@ enum DoctorHealth {
     FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config)).scanSkills()
   }
 
-  static func schedulerChecks(stores: ClawStores, config: AppConfig, now: Date) -> [DoctorReport
+  static func schedulerChecks(
+    stores: ClawStores,
+    config: AppConfig,
+    now: Date
+  ) -> [DoctorReport
     .Check]
   {
     let snapshot = SchedulerHealth.Snapshot(
@@ -75,7 +82,11 @@ enum DoctorHealth {
     return SchedulerHealth.rows(snapshot)
   }
 
-  static func approvalChecks(stores: ClawStores, config: AppConfig, now: Date) -> [DoctorReport
+  static func approvalChecks(
+    stores: ClawStores,
+    config: AppConfig,
+    now: Date
+  ) -> [DoctorReport
     .Check]
   {
     return ApprovalsHealthRows.rows(

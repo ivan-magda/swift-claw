@@ -388,9 +388,11 @@ private struct FireBindingEnvironment {
   let assignmentDeadline: Date
   let candidateDigest: LessonSetDigest
 
-  static func make(withOpenTrial: Bool, consumedAssignments: Int, learningEnabled: Bool = true)
-    throws -> FireBindingEnvironment
-  {
+  static func make(
+    withOpenTrial: Bool,
+    consumedAssignments: Int,
+    learningEnabled: Bool = true
+  ) throws -> FireBindingEnvironment {
     let queue = try TestDatabase.make()
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: learningEnabled)
     let learning = ScheduledLearningStoreGRDB(writer: queue)
@@ -449,9 +451,9 @@ private struct FireBindingEnvironment {
       )
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, ?, ?, ?, ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, ?, ?, ?, ?)
+          """,
         arguments: [
           sessionID,
           MessageRole.user.rawValue,
@@ -463,10 +465,10 @@ private struct FireBindingEnvironment {
       let triggerMessageID = db.lastInsertedRowID
       try db.execute(
         sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
-          origin, job_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
+            origin, job_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           sessionID,
           RunState.pending.rawValue,
@@ -512,10 +514,10 @@ private struct FireBindingEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        UPDATE learning_trials
-        SET admitted_at = ?, cohort_cutoff = ?, assignment_deadline = ?, decision_deadline = ?
-        WHERE job_id = ?
-        """,
+          UPDATE learning_trials
+          SET admitted_at = ?, cohort_cutoff = ?, assignment_deadline = ?, decision_deadline = ?
+          WHERE job_id = ?
+          """,
         arguments: [
           EpochSecondCodec.epoch(admittedAt),
           EpochSecondCodec.epoch(admittedAt),
@@ -531,9 +533,9 @@ private struct FireBindingEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER reject_trial_assignment BEFORE INSERT ON trial_assignments
-        BEGIN SELECT RAISE(ABORT, 'injected assignment failure'); END
-        """
+          CREATE TRIGGER reject_trial_assignment BEFORE INSERT ON trial_assignments
+          BEGIN SELECT RAISE(ABORT, 'injected assignment failure'); END
+          """
       )
     }
   }
@@ -575,15 +577,15 @@ private struct FireBindingEnvironment {
       case .assignmentDeadline:
         try db.execute(
           sql: """
-          UPDATE learning_trials SET assignment_deadline = assignment_deadline + 1 \
-          WHERE job_id = ?
-          """,
+            UPDATE learning_trials SET assignment_deadline = assignment_deadline + 1 \
+            WHERE job_id = ?
+            """,
           arguments: [jobID]
         )
       case .decisionDeadline:
         try db.execute(
           sql:
-          "UPDATE learning_trials SET decision_deadline = decision_deadline + 1 WHERE job_id = ?",
+            "UPDATE learning_trials SET decision_deadline = decision_deadline + 1 WHERE job_id = ?",
           arguments: [jobID]
         )
       case .maximumAssignments:
@@ -681,11 +683,11 @@ private extension FireBindingEnvironment {
       )
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, 1, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, 1, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           baseDigest.rawValue,

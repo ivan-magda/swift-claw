@@ -90,9 +90,7 @@ struct CoderServiceFixture: Sendable {
     redactor: @escaping @Sendable (_ text: String) -> String = { text in
       text
     }
-  )
-    -> CoderService
-  {
+  ) -> CoderService {
     Self.makeService(
       store: store,
       backend: backend,
@@ -174,9 +172,10 @@ struct CoderServiceFixture: Sendable {
     )
   }
 
-  static func request(index: Int64 = 1, policy: String = CoderServiceFixture.executionPolicyID)
-    -> CoderPreparedRequest
-  {
+  static func request(
+    index: Int64 = 1,
+    policy: String = CoderServiceFixture.executionPolicyID
+  ) -> CoderPreparedRequest {
     let path = "/fixture/repository-\(index)"
     return CoderPreparedRequest(
       request: CoderRequest(

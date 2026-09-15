@@ -101,9 +101,10 @@ struct WriteLikeTool: Tool {
 
   func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { resolution }
 
-  func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
-    -> ToolApprovalPresentation
-  {
+  func approvalPresentation(
+    arguments: JSONValue,
+    canonicalTarget: String
+  ) -> ToolApprovalPresentation {
     ToolApprovalPresentation(
       blastRadius: "create, 12 B",
       contentPreview: arguments.objectValue?["content"]?.stringValue,

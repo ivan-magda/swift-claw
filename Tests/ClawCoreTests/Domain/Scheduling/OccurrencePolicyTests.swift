@@ -33,9 +33,11 @@ struct OccurrencePolicyTests {
     )
   }
 
-  private func job(recurrence: RecurrenceEnvelope?, nextOccurrence: Date?, timezone: String = "UTC")
-    -> ScheduledJob
-  {
+  private func job(
+    recurrence: RecurrenceEnvelope?,
+    nextOccurrence: Date?,
+    timezone: String = "UTC"
+  ) -> ScheduledJob {
     ScheduledJob(
       id: 1,
       ownerChatID: 7,

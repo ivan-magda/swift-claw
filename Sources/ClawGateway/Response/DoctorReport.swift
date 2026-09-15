@@ -88,8 +88,8 @@ public struct DoctorReport: Sendable {
     }
     let verdict =
       failingCount == 0
-        ? "clawd: all systems healthy"
-        : "clawd: \(failingCount) \(failingCount == 1 ? "check" : "checks") failing"
+      ? "clawd: all systems healthy"
+      : "clawd: \(failingCount) \(failingCount == 1 ? "check" : "checks") failing"
 
     let sections = nonEmptyGroups().map {
       summarySection(group: $0.group, rows: $0.rows)

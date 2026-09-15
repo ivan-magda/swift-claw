@@ -153,9 +153,11 @@ package struct SecureFilePublisher: Sendable {
   /// ever points at them, so no crash can expose a half-written entry under the target name.
   ///
   /// `mode` decides only how the name is claimed; everything above it is identical.
-  package func publish(_ bytes: Data, to url: URL, mode: PublicationMode = .replace)
-    throws(SecureFileError) -> PublicationOutcome
-  {
+  package func publish(
+    _ bytes: Data,
+    to url: URL,
+    mode: PublicationMode = .replace
+  ) throws(SecureFileError) -> PublicationOutcome {
     let name = url.lastPathComponent
     let directory = url.deletingLastPathComponent()
     let temporary = directory.appendingPathComponent(
@@ -341,9 +343,12 @@ private extension SecureFilePublisher {
   /// `link` is what makes exclusivity real rather than advisory: a check-then-`rename` can only
   /// narrow the race window, while `link` is refused by the kernel the instant the name is taken —
   /// no lock between the racing processes required.
-  static func claim(_ temporary: URL, as url: URL, mode: PublicationMode, name: String)
-    throws(SecureFileError)
-  {
+  static func claim(
+    _ temporary: URL,
+    as url: URL,
+    mode: PublicationMode,
+    name: String
+  ) throws(SecureFileError) {
     switch mode {
     case .replace:
       guard rename(temporary.path, url.path) == 0 else {
@@ -365,9 +370,10 @@ private extension SecureFilePublisher {
 // MARK: - Facts
 
 extension SecureFilePublisher {
-  static func facts(ofDescriptor descriptor: Int32, name: String) throws(SecureFileError)
-    -> SecureFileFacts
-  {
+  static func facts(
+    ofDescriptor descriptor: Int32,
+    name: String
+  ) throws(SecureFileError) -> SecureFileFacts {
     var status = stat()
     guard fstat(descriptor, &status) == 0 else {
       throw .unreadable("stat \(name)")

@@ -11,7 +11,7 @@ import Foundation
 /// Generic over the clock so the fifteen-minute window can be driven to its end without waiting out
 /// fifteen minutes, and without a double having to fabricate a `ContinuousClock.Instant`.
 public struct ChatGPTDeviceAuthorization<ClockType: Clock>: Sendable
-  where ClockType.Duration == Duration {
+where ClockType.Duration == Duration {
   private let client: ChatGPTOAuthClient
   private let clock: ClockType
 

@@ -20,9 +20,9 @@ struct SkillDiagnosticsTests {
     // then
     #expect(
       index == """
-      - alpha: First skill.
-      - emoji: One family 👨‍👩‍👧‍👦.
-      """
+        - alpha: First skill.
+        - emoji: One family 👨‍👩‍👧‍👦.
+        """
     )
     #expect(count == index.count)
     #expect(WorkspaceSkills.indexLine(for: descriptors[0]) == "- alpha: First skill.")

@@ -18,9 +18,9 @@ struct CoderJobCompletionTests {
     try fixture.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TEMP TRIGGER reject_coder_notice BEFORE INSERT ON outbound_deliveries
-        BEGIN SELECT RAISE(ABORT, 'fixture completion failure'); END
-        """
+          CREATE TEMP TRIGGER reject_coder_notice BEFORE INSERT ON outbound_deliveries
+          BEGIN SELECT RAISE(ABORT, 'fixture completion failure'); END
+          """
       )
     }
     // when

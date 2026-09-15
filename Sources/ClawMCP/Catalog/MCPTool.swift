@@ -62,9 +62,10 @@ public struct MCPTool: ClawCore.Tool {
     .resolved(target)
   }
 
-  public func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
-    -> ToolApprovalPresentation
-  {
+  public func approvalPresentation(
+    arguments: JSONValue,
+    canonicalTarget: String
+  ) -> ToolApprovalPresentation {
     ToolApprovalPresentation(
       blastRadius: "MCP: \(config.name) · "
         + MCPMetadataSanitizer(redactor: redactor).displayName(resolved.coordinate.remoteName),
@@ -197,9 +198,9 @@ private extension MCPTool {
     case .definitelyNotExecuted: return "\(resolved.localName) failed: \(detail)."
     case .mayHaveExecuted:
       return """
-      \(resolved.localName) may have completed remotely; \
-      verify its effects before retrying: \(detail).
-      """
+        \(resolved.localName) may have completed remotely; \
+        verify its effects before retrying: \(detail).
+        """
     }
   }
 }

@@ -33,13 +33,14 @@ public final class RecordingLLMCredentialStore: LLMCredentialStore, Sendable {
     }
   }
 
-  public func load(providerID: LLMProviderID) throws(LLMCredentialStoreError)
-    -> StoredOAuthCredential?
-  { nil }
+  public func load(
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError) -> StoredOAuthCredential? { nil }
 
-  public func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
-    throws(LLMCredentialStoreError)
-  {
+  public func save(
+    _ credential: StoredOAuthCredential,
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError) {
     let failure = ledger.withLock { current -> LLMCredentialStoreError? in
       current.saved.append(credential)
       return current.failure

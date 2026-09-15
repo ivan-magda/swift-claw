@@ -258,9 +258,9 @@ private extension BoundRunEnvironment {
         let row = try Row.fetchOne(
           db,
           sql: """
-          SELECT evidence_schema_version, classifier_version
-          FROM run_compatibility WHERE run_id = ?
-          """,
+            SELECT evidence_schema_version, classifier_version
+            FROM run_compatibility WHERE run_id = ?
+            """,
           arguments: [runID]
         )
       else {

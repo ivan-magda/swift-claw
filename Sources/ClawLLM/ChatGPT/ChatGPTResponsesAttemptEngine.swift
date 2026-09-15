@@ -417,9 +417,10 @@ private extension ChatGPTResponsesAttemptEngine {
     }
   }
 
-  static func providerError(from transport: HTTPTransportFailure, redactor: SecretRedactor)
-    -> ProviderError
-  {
+  static func providerError(
+    from transport: HTTPTransportFailure,
+    redactor: SecretRedactor
+  ) -> ProviderError {
     let message = redactor.redact(transport.safeMessage)
     switch transport.disposition {
     case .definitelyNotSent: return .connectFailed(message: message)
@@ -609,9 +610,11 @@ private extension ChatGPTResponsesAttemptEngine {
 
   /// The default bucket: a clean poisoned-state rejection earns one state-free recovery, counted
   /// against the budget; every other clean head is a terminal rejection.
-  func terminalOrRecovery(_ diagnosis: HeadDiagnosis, canRetry: Bool, recoveryUsed: Bool)
-    -> HeadDecision
-  {
+  func terminalOrRecovery(
+    _ diagnosis: HeadDiagnosis,
+    canRetry: Bool,
+    recoveryUsed: Bool
+  ) -> HeadDecision {
     guard diagnosis.visionRefusal == false else {
       return .fail(.visionUnsupported)
     }

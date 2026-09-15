@@ -5,9 +5,11 @@ import GRDB
 // MARK: - Confirmed Reset
 
 extension ScheduledLearningStoreGRDB {
-  public func applyReset(updateID: Int64, jobID: Int64, now: Date) throws(StoreError)
-    -> ConfirmedLearningResetResult
-  {
+  public func applyReset(
+    updateID: Int64,
+    jobID: Int64,
+    now: Date
+  ) throws(StoreError) -> ConfirmedLearningResetResult {
     try database.writeMapping { db in
       guard try ProcessedUpdateStoreGRDB.claimUpdate(db: db, updateID: updateID, claimedAt: now)
       else {
@@ -80,9 +82,12 @@ private extension ScheduledLearningStoreGRDB {
     return ResetJob(jobID: jobID, sessionID: sessionID.value)
   }
 
-  static func applyReset(_ db: Database, job: ResetJob, state: JobLearningState, now: Date) throws
-    -> ResetReceipt
-  {
+  static func applyReset(
+    _ db: Database,
+    job: ResetJob,
+    state: JobLearningState,
+    now: Date
+  ) throws -> ResetReceipt {
     try validateResetState(state, job: job)
     let empty = LessonSet.empty(jobID: job.jobID)
     try ensureCanonicalEmptySet(db, empty, now: now)
@@ -168,11 +173,11 @@ private extension ScheduledLearningStoreGRDB {
   ) throws {
     try db.execute(
       sql: """
-      UPDATE job_learning_state
-      SET learning_epoch = ?, stable_lesson_set_digest = ?, stable_revision = ?,
-        open_trial_id = NULL
-      WHERE job_id = ? AND learning_epoch = ? AND stable_revision = ?
-      """,
+        UPDATE job_learning_state
+        SET learning_epoch = ?, stable_lesson_set_digest = ?, stable_revision = ?,
+          open_trial_id = NULL
+        WHERE job_id = ? AND learning_epoch = ? AND stable_revision = ?
+        """,
       arguments: [
         newEpoch.value,
         emptyDigest.rawValue,
@@ -191,12 +196,12 @@ private extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT trial_id, job_id, learning_epoch, generation, base_digest, candidate_digest,
-        algorithm
-      FROM learning_trials
-      WHERE job_id = ? AND state IN (?, ?)
-      ORDER BY trial_id
-      """,
+        SELECT trial_id, job_id, learning_epoch, generation, base_digest, candidate_digest,
+          algorithm
+        FROM learning_trials
+        WHERE job_id = ? AND state IN (?, ?)
+        ORDER BY trial_id
+        """,
       arguments: [jobID, LearningTrialState.open.rawValue, LearningTrialState.draining.rawValue]
     )
     let trials = try rows.map { row in
@@ -204,9 +209,9 @@ private extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: """
-      UPDATE learning_trials SET state = ?, close_reason = ?
-      WHERE job_id = ? AND state IN (?, ?)
-      """,
+        UPDATE learning_trials SET state = ?, close_reason = ?
+        WHERE job_id = ? AND state IN (?, ?)
+        """,
       arguments: [
         LearningTrialState.closed.rawValue,
         LearningTrialCloseReason.learningReset.rawValue,
@@ -262,17 +267,19 @@ private extension ScheduledLearningStoreGRDB {
   static func invalidateChallenges(_ db: Database, jobID: Int64, now: Date) throws -> Int {
     try db.execute(
       sql: """
-      UPDATE feedback_challenges SET consumed_at = ?
-      WHERE job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL
-      """,
+        UPDATE feedback_challenges SET consumed_at = ?
+        WHERE job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL
+        """,
       arguments: [EpochSecondCodec.epoch(now), jobID]
     )
     return db.changesCount
   }
 
-  static func resetOperations(_ db: Database, jobID: Int64, before newEpoch: LearningEpoch) throws
-    -> ResetOperationPlan
-  {
+  static func resetOperations(
+    _ db: Database,
+    jobID: Int64,
+    before newEpoch: LearningEpoch
+  ) throws -> ResetOperationPlan {
     let stale = try resetOperationIDs(
       db,
       jobID: jobID,
@@ -282,11 +289,11 @@ private extension ScheduledLearningStoreGRDB {
     let inFlight = try resetOperationIDs(db, jobID: jobID, before: newEpoch, states: [.started])
     try db.execute(
       sql: """
-      UPDATE learning_operations
-      SET state = ?, failure_code = ?, reserved_tokens = 0, reserved_cost_usd = 0,
-        reservation_state = ?
-      WHERE job_id = ? AND learning_epoch < ? AND state IN (?, ?)
-      """,
+        UPDATE learning_operations
+        SET state = ?, failure_code = ?, reserved_tokens = 0, reserved_cost_usd = 0,
+          reservation_state = ?
+        WHERE job_id = ? AND learning_epoch < ? AND state IN (?, ?)
+        """,
       arguments: [
         LearningOperationState.failedNoCall.rawValue,
         LearningOperationFailure.staleEpoch.rawValue,
@@ -316,11 +323,11 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT operation_id
-      FROM learning_operations
-      WHERE job_id = ? AND learning_epoch < ? AND state IN (\(placeholders))
-      ORDER BY operation_id
-      """,
+        SELECT operation_id
+        FROM learning_operations
+        WHERE job_id = ? AND learning_epoch < ? AND state IN (\(placeholders))
+        ORDER BY operation_id
+        """,
       arguments: [jobID, newEpoch.value] + StatementArguments(stateValues)
     )
     return try rows.map { row in

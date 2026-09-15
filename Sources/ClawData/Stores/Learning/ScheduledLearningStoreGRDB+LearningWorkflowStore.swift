@@ -14,39 +14,41 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
       try Int64.fetchAll(
         db,
         sql: """
-        SELECT job_id FROM job_learning_state WHERE job_id > ? ORDER BY job_id LIMIT ?
-        """,
+          SELECT job_id FROM job_learning_state WHERE job_id > ? ORDER BY job_id LIMIT ?
+          """,
         arguments: [jobID, max(0, limit)]
       )
     }
   }
 
-  public func workflowRuns(jobID: Int64, after runID: Int64, limit: Int) throws(StoreError)
-    -> [Int64]
-  {
+  public func workflowRuns(
+    jobID: Int64,
+    after runID: Int64,
+    limit: Int
+  ) throws(StoreError) -> [Int64] {
     try database.readMapping { db in
       try Int64.fetchAll(
         db,
         sql: """
-        SELECT binding.run_id FROM run_learning_bindings AS binding
-        JOIN run_settlements AS settlement ON settlement.run_id = binding.run_id
-        JOIN job_learning_state AS state ON state.job_id = binding.job_id
-        LEFT JOIN learning_evidence AS evidence ON evidence.run_id = binding.run_id
-        WHERE binding.job_id = ? AND binding.run_id > ?
-          AND binding.learning_epoch = state.learning_epoch AND settlement.settled_at IS NOT NULL
-          AND (evidence.run_id IS NULL OR (evidence.eligibility = ? \
-        AND evidence.payload IS NOT NULL))
-          AND NOT EXISTS (SELECT 1 FROM learning_evaluations AS evaluation
-            WHERE evaluation.run_id = binding.run_id)
-          AND NOT EXISTS (SELECT 1 FROM learning_operations AS operation
-            WHERE operation.job_id = binding.job_id
-              AND operation.learning_epoch = binding.learning_epoch
-              AND operation.phase = ? AND operation.source_digest = evidence.evidence_digest
-              AND operation.attempt_generation = (SELECT MAX(latest.attempt_generation)
-                FROM learning_operations AS latest WHERE latest.key_digest = operation.key_digest)
-              AND operation.state NOT IN (?, ?))
-        ORDER BY binding.run_id LIMIT ?
-        """,
+          SELECT binding.run_id FROM run_learning_bindings AS binding
+          JOIN run_settlements AS settlement ON settlement.run_id = binding.run_id
+          JOIN job_learning_state AS state ON state.job_id = binding.job_id
+          LEFT JOIN learning_evidence AS evidence ON evidence.run_id = binding.run_id
+          WHERE binding.job_id = ? AND binding.run_id > ?
+            AND binding.learning_epoch = state.learning_epoch AND settlement.settled_at IS NOT NULL
+            AND (evidence.run_id IS NULL OR (evidence.eligibility = ? \
+          AND evidence.payload IS NOT NULL))
+            AND NOT EXISTS (SELECT 1 FROM learning_evaluations AS evaluation
+              WHERE evaluation.run_id = binding.run_id)
+            AND NOT EXISTS (SELECT 1 FROM learning_operations AS operation
+              WHERE operation.job_id = binding.job_id
+                AND operation.learning_epoch = binding.learning_epoch
+                AND operation.phase = ? AND operation.source_digest = evidence.evidence_digest
+                AND operation.attempt_generation = (SELECT MAX(latest.attempt_generation)
+                  FROM learning_operations AS latest WHERE latest.key_digest = operation.key_digest)
+                AND operation.state NOT IN (?, ?))
+          ORDER BY binding.run_id LIMIT ?
+          """,
         arguments: [
           jobID,
           runID,
@@ -65,22 +67,22 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
       try String.fetchAll(
         db,
         sql: """
-        SELECT candidate.candidate_digest FROM learning_candidates AS candidate
-        JOIN job_learning_state AS state ON state.job_id = candidate.job_id
-        WHERE candidate.job_id = ? AND candidate.learning_epoch = state.learning_epoch
-          AND candidate.base_digest = state.stable_lesson_set_digest
-          AND (candidate.frozen_feedback_revision = state.feedback_revision
-            OR EXISTS (SELECT 1 FROM learning_trials AS admitted
-              WHERE admitted.candidate_digest = candidate.candidate_digest))
-          AND NOT EXISTS (SELECT 1 FROM feedback_targets AS target
-            WHERE target.subject_kind = ? AND target.subject_digest = candidate.candidate_digest)
-          AND NOT EXISTS (SELECT 1 FROM learning_trials AS trial
-            WHERE trial.candidate_digest = candidate.candidate_digest \
-        AND trial.state NOT IN (?, ?))
-          AND NOT EXISTS (SELECT 1 FROM learning_candidates AS successor
-            WHERE successor.predecessor_digest = candidate.candidate_digest)
-        ORDER BY candidate.created_at, candidate.candidate_digest
-        """,
+          SELECT candidate.candidate_digest FROM learning_candidates AS candidate
+          JOIN job_learning_state AS state ON state.job_id = candidate.job_id
+          WHERE candidate.job_id = ? AND candidate.learning_epoch = state.learning_epoch
+            AND candidate.base_digest = state.stable_lesson_set_digest
+            AND (candidate.frozen_feedback_revision = state.feedback_revision
+              OR EXISTS (SELECT 1 FROM learning_trials AS admitted
+                WHERE admitted.candidate_digest = candidate.candidate_digest))
+            AND NOT EXISTS (SELECT 1 FROM feedback_targets AS target
+              WHERE target.subject_kind = ? AND target.subject_digest = candidate.candidate_digest)
+            AND NOT EXISTS (SELECT 1 FROM learning_trials AS trial
+              WHERE trial.candidate_digest = candidate.candidate_digest \
+          AND trial.state NOT IN (?, ?))
+            AND NOT EXISTS (SELECT 1 FROM learning_candidates AS successor
+              WHERE successor.predecessor_digest = candidate.candidate_digest)
+          ORDER BY candidate.created_at, candidate.candidate_digest
+          """,
         arguments: [
           jobID,
           FeedbackSubjectKind.candidate.rawValue,
@@ -96,17 +98,17 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
       try Row.fetchAll(
         db,
         sql: """
-        SELECT event.event_id, event.subject_digest, event.signal, event.payload
-        FROM feedback_events AS event
-        JOIN job_learning_state AS state ON state.job_id = event.job_id
-        WHERE event.job_id = ? AND event.learning_epoch = state.learning_epoch
-          AND event.subject_kind = ? AND event.signal IN (?, ?)
-          AND NOT EXISTS (SELECT 1 FROM feedback_events AS newer
-            WHERE newer.supersedes = event.event_id)
-          AND NOT EXISTS (SELECT 1 FROM learning_candidates AS successor
-            WHERE successor.predecessor_digest = event.subject_digest)
-        ORDER BY event.feedback_revision, event.event_id
-        """,
+          SELECT event.event_id, event.subject_digest, event.signal, event.payload
+          FROM feedback_events AS event
+          JOIN job_learning_state AS state ON state.job_id = event.job_id
+          WHERE event.job_id = ? AND event.learning_epoch = state.learning_epoch
+            AND event.subject_kind = ? AND event.signal IN (?, ?)
+            AND NOT EXISTS (SELECT 1 FROM feedback_events AS newer
+              WHERE newer.supersedes = event.event_id)
+            AND NOT EXISTS (SELECT 1 FROM learning_candidates AS successor
+              WHERE successor.predecessor_digest = event.subject_digest)
+          ORDER BY event.feedback_revision, event.event_id
+          """,
         arguments: [
           jobID,
           FeedbackSubjectKind.candidate.rawValue,
@@ -138,11 +140,11 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
       let rows = try Row.fetchAll(
         db,
         sql: """
-        SELECT event_id, signal, subject_kind, subject_digest FROM feedback_events
-        WHERE job_id = ? AND learning_epoch = ?
-          AND feedback_revision > ?
-          AND signal IN (?, ?, ?, ?, ?) ORDER BY feedback_revision, event_id
-        """,
+          SELECT event_id, signal, subject_kind, subject_digest FROM feedback_events
+          WHERE job_id = ? AND learning_epoch = ?
+            AND feedback_revision > ?
+            AND signal IN (?, ?, ?, ?, ?) ORDER BY feedback_revision, event_id
+          """,
         arguments: [
           jobID,
           promotion.inputs.identity.epoch.value,
@@ -157,9 +159,9 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
       let receipts = try Row.fetchAll(
         db,
         sql: """
-        SELECT decision_id, inputs, result FROM learning_decisions \
-        WHERE job_id = ? AND kind = ?
-        """,
+          SELECT decision_id, inputs, result FROM learning_decisions \
+          WHERE job_id = ? AND kind = ?
+          """,
         arguments: [jobID, LearningDecisionKind.rollback.rawValue]
       ).map(Self.decodeTerminalReceipt)
       return rows.compactMap { row in

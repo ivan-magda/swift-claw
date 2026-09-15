@@ -82,8 +82,10 @@ public typealias LLMCredentialStoreError = CredentialStoreError
 public protocol LLMCredentialStore: Sendable {
   func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential?
 
-  func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
-    throws(LLMCredentialStoreError)
+  func save(
+    _ credential: StoredOAuthCredential,
+    providerID: LLMProviderID
+  ) throws(LLMCredentialStoreError)
 
   func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError)
 }

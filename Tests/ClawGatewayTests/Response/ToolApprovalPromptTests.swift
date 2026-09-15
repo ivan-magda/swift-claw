@@ -334,7 +334,7 @@ struct ToolApprovalPromptTests {
     let task = String(repeating: "Complete task 👨‍👩‍👧‍👦\n", count: 3_000)
     let preview =
       "### Task\n\n" + CoderCardMarkdown.literal(task) + "\n\n### Instructions\n\n"
-        + CoderCardMarkdown.literal("Last instruction <keep>")
+      + CoderCardMarkdown.literal("Last instruction <keep>")
     let input = ToolApprovalPrompt.Input(
       recorded: recorded(
         tool: CoderToolNames.submit,

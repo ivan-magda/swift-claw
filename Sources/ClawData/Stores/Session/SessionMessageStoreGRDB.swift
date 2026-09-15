@@ -13,9 +13,11 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     }
   }
 
-  public func claimCommandUpdate(updateID: Int64, sessionKey: String, now: Date) throws(StoreError)
-    -> CommandClaim
-  {
+  public func claimCommandUpdate(
+    updateID: Int64,
+    sessionKey: String,
+    now: Date
+  ) throws(StoreError) -> CommandClaim {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
@@ -52,10 +54,10 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
 
       try db.execute(
         sql: """
-        INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
-          trigger_telegram_message_id, requester_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
+          INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
+            trigger_telegram_message_id, requester_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           sessionID,
           RunState.pending.rawValue,
@@ -87,9 +89,10 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   /// Claim, session upsert, message insert and taint — everything both inbound paths share, so an
   /// overheard message dedups on the same key an answered one does and carries the same trust tier.
   /// The run is the caller's, because only one of the two paths owes an answer.
-  private static func claimAndInsertMessage(_ db: Database, _ inbound: InboundMessage) throws
-    -> ClaimResult
-  {
+  private static func claimAndInsertMessage(
+    _ db: Database,
+    _ inbound: InboundMessage
+  ) throws -> ClaimResult {
     let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
       db: db,
       updateID: inbound.updateID,
@@ -112,9 +115,9 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     // fences it and the exfil gate arms without any tool having run.
     try db.execute(
       sql: """
-      INSERT INTO messages(session_id, role, content, provenance, ts)
-      VALUES (?, ?, ?, ?, ?)
-      """,
+        INSERT INTO messages(session_id, role, content, provenance, ts)
+        VALUES (?, ?, ?, ?, ?)
+        """,
       arguments: [
         sessionID,
         MessageRole.user.rawValue,
@@ -138,9 +141,11 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     )
   }
 
-  public func loadContextSnapshot(sessionID: Int64, throughMessageID: Int64, limit: Int)
-    throws(StoreError) -> SessionContextSnapshot
-  {
+  public func loadContextSnapshot(
+    sessionID: Int64,
+    throughMessageID: Int64,
+    limit: Int
+  ) throws(StoreError) -> SessionContextSnapshot {
     try database.readMapping { db in
       let header = try Self.sessionHeader(db, sessionID: sessionID)
       let windowStartMessageID = header.windowStartMessageID
@@ -154,24 +159,24 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
         try Int64.fetchOne(
           db,
           sql: """
-          SELECT id FROM messages
-          WHERE session_id = ? AND id > ? AND id <= ?
-            AND role IN ('\(MessageRole.user.rawValue)', '\(MessageRole.assistant.rawValue)')
-          ORDER BY id DESC
-          LIMIT 1 OFFSET ?
-          """,
+            SELECT id FROM messages
+            WHERE session_id = ? AND id > ? AND id <= ?
+              AND role IN ('\(MessageRole.user.rawValue)', '\(MessageRole.assistant.rawValue)')
+            ORDER BY id DESC
+            LIMIT 1 OFFSET ?
+            """,
           arguments: [sessionID, windowStart, throughMessageID, max(0, limit - 1)]
         ) ?? 0
 
       let rows = try Row.fetchAll(
         db,
         sql: """
-        SELECT id, role, content, provenance, tool_calls, tool_call_id,
-          \(ProviderStateCoding.selection)
-        FROM messages
-        WHERE session_id = ? AND id > ? AND id <= ? AND id >= ?
-        ORDER BY id ASC
-        """,
+          SELECT id, role, content, provenance, tool_calls, tool_call_id,
+            \(ProviderStateCoding.selection)
+          FROM messages
+          WHERE session_id = ? AND id > ? AND id <= ? AND id >= ?
+          ORDER BY id ASC
+          """,
         arguments: [sessionID, windowStart, throughMessageID, boundaryID]
       )
 
@@ -207,10 +212,10 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
 
     try db.execute(
       sql: """
-      UPDATE sessions
-      SET window_start_message_id = ?, tainted = 0, has_private_data = 0, updated_ts = ?
-      WHERE id = ?
-      """,
+        UPDATE sessions
+        SET window_start_message_id = ?, tainted = 0, has_private_data = 0, updated_ts = ?
+        WHERE id = ?
+        """,
       arguments: [boundary, now, sessionID]
     )
   }
@@ -220,9 +225,9 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
   static func upsertSession(_ db: Database, sessionKey: String, now: Date) throws -> Int64 {
     try db.execute(
       sql: """
-      INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) VALUES (?, ?, ?, 0)
-      ON CONFLICT(session_key) DO UPDATE SET updated_ts = excluded.updated_ts
-      """,
+        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted) VALUES (?, ?, ?, 0)
+        ON CONFLICT(session_key) DO UPDATE SET updated_ts = excluded.updated_ts
+        """,
       arguments: [sessionKey, now, now]
     )
 
@@ -246,9 +251,9 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
     let row = try Row.fetchOne(
       db,
       sql: """
-      SELECT session_key, window_start_message_id, tainted, has_private_data
-      FROM sessions WHERE id = ?
-      """,
+        SELECT session_key, window_start_message_id, tainted, has_private_data
+        FROM sessions WHERE id = ?
+        """,
       arguments: [sessionID]
     )
 

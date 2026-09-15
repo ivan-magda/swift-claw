@@ -256,13 +256,13 @@ private extension BoundRunEnvironment {
         let row = try Row.fetchOne(
           db,
           sql: """
-          SELECT assignment.state, assignment.outcome, assignment.evaluation_digest,
-            assignment.effective_feedback_revision, assignment.resolved_at,
-            evaluation.evaluation_digest AS source_evaluation_digest
-          FROM trial_assignments AS assignment
-          LEFT JOIN learning_evaluations AS evaluation ON evaluation.run_id = assignment.run_id
-          WHERE assignment.run_id = ?
-          """,
+            SELECT assignment.state, assignment.outcome, assignment.evaluation_digest,
+              assignment.effective_feedback_revision, assignment.resolved_at,
+              evaluation.evaluation_digest AS source_evaluation_digest
+            FROM trial_assignments AS assignment
+            LEFT JOIN learning_evaluations AS evaluation ON evaluation.run_id = assignment.run_id
+            WHERE assignment.run_id = ?
+            """,
           arguments: [runID]
         ),
         let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),

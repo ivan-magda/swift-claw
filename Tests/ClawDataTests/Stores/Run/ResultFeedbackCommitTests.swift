@@ -68,9 +68,9 @@ struct ResultFeedbackCommitTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_result_target BEFORE INSERT ON feedback_targets
-        BEGIN SELECT RAISE(ABORT, 'target abort'); END
-        """
+          CREATE TRIGGER fail_result_target BEFORE INSERT ON feedback_targets
+          BEGIN SELECT RAISE(ABORT, 'target abort'); END
+          """
       )
     }
 
@@ -97,9 +97,9 @@ struct ResultFeedbackCommitTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        CREATE TRIGGER fail_result_outbox BEFORE INSERT ON outbound_deliveries
-        BEGIN SELECT RAISE(ABORT, 'outbox abort'); END
-        """
+          CREATE TRIGGER fail_result_outbox BEFORE INSERT ON outbound_deliveries
+          BEGIN SELECT RAISE(ABORT, 'outbox abort'); END
+          """
       )
     }
 
@@ -128,9 +128,11 @@ private enum ResultTargetInvalidation: CaseIterable {
 private extension ResultFeedbackCommitTests {
   static let keyboard = "result-feedback-keyboard"
 
-  func resultTarget(env: BoundRunEnvironment, runID: Int64, nonce: String) throws
-    -> NewFeedbackTarget
-  {
+  func resultTarget(
+    env: BoundRunEnvironment,
+    runID: Int64,
+    nonce: String
+  ) throws -> NewFeedbackTarget {
     let binding = try #require(try env.learning.binding(runID: runID))
     return NewFeedbackTarget(
       nonce: nonce,
@@ -145,9 +147,11 @@ private extension ResultFeedbackCommitTests {
     )
   }
 
-  func assistantTurn(env: BoundRunEnvironment, runID: Int64, target: NewFeedbackTarget)
-    -> AssistantTurn
-  {
+  func assistantTurn(
+    env: BoundRunEnvironment,
+    runID: Int64,
+    target: NewFeedbackTarget
+  ) -> AssistantTurn {
     AssistantTurn(
       runID: runID,
       sessionID: env.sessionID,
@@ -214,9 +218,11 @@ private extension ResultFeedbackCommitTests {
     }
   }
 
-  func rowCount(_ env: BoundRunEnvironment, table: String, where predicate: String = "1 = 1") throws
-    -> Int
-  {
+  func rowCount(
+    _ env: BoundRunEnvironment,
+    table: String,
+    where predicate: String = "1 = 1"
+  ) throws -> Int {
     try env.queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table) WHERE \(predicate)") ?? -1
     }

@@ -563,9 +563,9 @@ enum BoundedAsyncChannelTests {
 
 private struct StreamFailure: Error, Equatable {}
 
-private func collect<Element: Sendable>(_ channel: BoundedAsyncChannel<Element>) async throws
-  -> [Element]
-{
+private func collect<Element: Sendable>(
+  _ channel: BoundedAsyncChannel<Element>
+) async throws -> [Element] {
   var received: [Element] = []
   for try await element in channel {
     received.append(element)

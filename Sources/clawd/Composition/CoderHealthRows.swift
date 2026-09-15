@@ -194,9 +194,14 @@ private extension CoderHealthRows {
     ]
   }
 
-  static func row(_ key: String, _ value: String, ok: Bool = true, headline: Bool = false)
-    -> DoctorReport.Check
-  { DoctorReport.Check(key: key, value: value, ok: ok, group: .coder, isHeadline: headline) }
+  static func row(
+    _ key: String,
+    _ value: String,
+    ok: Bool = true,
+    headline: Bool = false
+  ) -> DoctorReport.Check {
+    DoctorReport.Check(key: key, value: value, ok: ok, group: .coder, isHeadline: headline)
+  }
 
   static func unreadable(_ key: String) -> DoctorReport.Check {
     row(key, "unreadable (db read failed)", ok: false)

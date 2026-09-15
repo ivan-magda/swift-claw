@@ -226,9 +226,11 @@ private extension WebFetchTool {
 
   /// One 3xx hop: consumes a hop from the budget and re-canonicalizes the Location target so the
   /// next iteration re-runs the full per-hop policy on it.
-  func redirectStep(after result: HTTPResult, current: String, hopsRemaining: inout Int)
-    -> RedirectStep
-  {
+  func redirectStep(
+    after result: HTTPResult,
+    current: String,
+    hopsRemaining: inout Int
+  ) -> RedirectStep {
     guard hopsRemaining > 0 else {
       return .refused(errorPayload("Too many redirects (more than \(maxHops))."))
     }

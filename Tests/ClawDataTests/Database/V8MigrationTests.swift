@@ -20,9 +20,9 @@ struct V8MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:7', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:7', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
       try db.execute(
@@ -40,12 +40,12 @@ struct V8MigrationTests {
   ) throws {
     try db.execute(
       sql: """
-      INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-        args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-        reason, created_ts, expires_ts)
-      VALUES (?, 1, ?, 'file_write', '{}', '/w/plan.md', 'h16', 'pv16', 7, ?, 1, 'c1',
-        'ask_tier', 1782000000, 1782003600)
-      """,
+        INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+          args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+          reason, created_ts, expires_ts)
+        VALUES (?, 1, ?, 'file_write', '{}', '/w/plan.md', 'h16', 'pv16', 7, ?, 1, 'c1',
+          'ask_tier', 1782000000, 1782003600)
+        """,
       arguments: [runID, state, nonce]
     )
   }
@@ -101,9 +101,9 @@ struct V8MigrationTests {
       try String.fetchOne(
         db,
         sql: """
-        SELECT sql FROM sqlite_master
-        WHERE type = 'index' AND name = 'index_approvals_pending_run'
-        """
+          SELECT sql FROM sqlite_master
+          WHERE type = 'index' AND name = 'index_approvals_pending_run'
+          """
       )
     }
     #expect(indexSQL?.localizedCaseInsensitiveContains("unique") == true)
@@ -165,9 +165,9 @@ struct V8MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-        VALUES ('tg:dm:1', ?, ?, 0)
-        """,
+          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+          VALUES ('tg:dm:1', ?, ?, 0)
+          """,
         arguments: [Date(), Date()]
       )
       try db.execute(
@@ -176,10 +176,10 @@ struct V8MigrationTests {
       )
       try db.execute(
         sql: """
-        INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-          payload_hash, status, created_ts)
-        VALUES (1, 0, 7, '1:0', 'hello', 'h', 'PENDING', ?)
-        """,
+          INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+            payload_hash, status, created_ts)
+          VALUES (1, 0, 7, '1:0', 'hello', 'h', 'PENDING', ?)
+          """,
         arguments: [Date()]
       )
     }
@@ -200,9 +200,9 @@ struct V8MigrationTests {
       try Row.fetchOne(
         db,
         sql: """
-        SELECT status, approval_id, reply_markup FROM outbound_deliveries \
-        WHERE dedup_key = '1:0'
-        """
+          SELECT status, approval_id, reply_markup FROM outbound_deliveries \
+          WHERE dedup_key = '1:0'
+          """
       )
     }
     #expect(outboundRow?["status"] == "PENDING")

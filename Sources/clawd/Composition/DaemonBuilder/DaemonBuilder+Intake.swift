@@ -217,9 +217,10 @@ extension DaemonBuilder {
     )
   }
 
-  func policyStaticSubhash(toolDispatcher: GatedToolDispatcher, workspace: FileSystemWorkspace)
-    -> String
-  {
+  func policyStaticSubhash(
+    toolDispatcher: GatedToolDispatcher,
+    workspace: FileSystemWorkspace
+  ) -> String {
     PolicyFingerprint.staticSubhash(
       inputs: PolicyFingerprint.StaticInputs(
         tools: toolDispatcher.definitions,

@@ -429,10 +429,10 @@ private struct PinnedLessonEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT OR IGNORE INTO lesson_sets(job_id, digest, schema_version, canonical_bytes,
-          source, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
+          INSERT OR IGNORE INTO lesson_sets(job_id, digest, schema_version, canonical_bytes,
+            source, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           set.jobID,
           set.digest.rawValue,
@@ -509,21 +509,37 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     try base.learningView(jobID: jobID)
   }
 
-  func applyReset(updateID: Int64, jobID: Int64, now: Date) throws(StoreError)
-    -> ConfirmedLearningResetResult
-  { try base.applyReset(updateID: updateID, jobID: jobID, now: now) }
+  func applyReset(
+    updateID: Int64,
+    jobID: Int64,
+    now: Date
+  ) throws(StoreError) -> ConfirmedLearningResetResult {
+    try base.applyReset(updateID: updateID, jobID: jobID, now: now)
+  }
 
-  func admitCandidate(digest: CandidateDigest, redactor: SecretRedactor, now: Date)
-    throws(StoreError) -> AdmissionOutcome
-  { try base.admitCandidate(digest: digest, redactor: redactor, now: now) }
+  func admitCandidate(
+    digest: CandidateDigest,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.admitCandidate(digest: digest, redactor: redactor, now: now)
+  }
 
-  func approveCandidate(_ approval: CandidateApproval, redactor: SecretRedactor, now: Date)
-    throws(StoreError) -> AdmissionOutcome
-  { try base.approveCandidate(approval, redactor: redactor, now: now) }
+  func approveCandidate(
+    _ approval: CandidateApproval,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.approveCandidate(approval, redactor: redactor, now: now)
+  }
 
-  func editCandidate(_ edit: CandidateEdit, redactor: SecretRedactor, now: Date) throws(StoreError)
-    -> AdmissionOutcome
-  { try base.editCandidate(edit, redactor: redactor, now: now) }
+  func editCandidate(
+    _ edit: CandidateEdit,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws(StoreError) -> AdmissionOutcome {
+    try base.editCandidate(edit, redactor: redactor, now: now)
+  }
 
   func commitCandidateReview(_ review: CandidateReviewNotice, now: Date) throws(StoreError) -> Bool
   { try base.commitCandidateReview(review, now: now) }
@@ -536,9 +552,13 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     try base.consumeAndAppendEvent(tap, now: now)
   }
 
-  func consumeAndOpenChallenge(_ tap: FeedbackTap, prompt: [LearningNoticeChunk], now: Date)
-    throws(StoreError) -> FeedbackOutcome
-  { try base.consumeAndOpenChallenge(tap, prompt: prompt, now: now) }
+  func consumeAndOpenChallenge(
+    _ tap: FeedbackTap,
+    prompt: [LearningNoticeChunk],
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
+    try base.consumeAndOpenChallenge(tap, prompt: prompt, now: now)
+  }
 
   func consumeChallenge(id: Int64, payload: String, now: Date) throws(StoreError) -> FeedbackOutcome
   { try base.consumeChallenge(id: id, payload: payload, now: now) }
@@ -565,9 +585,10 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     try base.liveTrialIdentities()
   }
 
-  func reconcileTrial(_ identity: LearningTrialIdentity, now: Date) throws(StoreError)
-    -> TrialReconciliationResult
-  { try base.reconcileTrial(identity, now: now) }
+  func reconcileTrial(
+    _ identity: LearningTrialIdentity,
+    now: Date
+  ) throws(StoreError) -> TrialReconciliationResult { try base.reconcileTrial(identity, now: now) }
 
   @discardableResult
   func settleFromLane(runID: Int64, now: Date) throws(StoreError) -> Bool {
@@ -597,13 +618,17 @@ private struct UnresolvableLessonSets: ScheduledLearningStore {
     try base.prepareReflection(trigger: trigger)
   }
 
-  func claimOperation(_ key: LearningOperationKey, now: Date) throws(StoreError)
-    -> ClaimedOperation?
-  { try base.claimOperation(key, now: now) }
+  func claimOperation(
+    _ key: LearningOperationKey,
+    now: Date
+  ) throws(StoreError) -> ClaimedOperation? { try base.claimOperation(key, now: now) }
 
-  func authorizeAndStartOperation(_ authorization: LearningAuthorization, now: Date)
-    throws(StoreError) -> AuthorizeOutcome
-  { try base.authorizeAndStartOperation(authorization, now: now) }
+  func authorizeAndStartOperation(
+    _ authorization: LearningAuthorization,
+    now: Date
+  ) throws(StoreError) -> AuthorizeOutcome {
+    try base.authorizeAndStartOperation(authorization, now: now)
+  }
 
   func finishOperation(_ result: LearningOperationResult, now: Date) throws(StoreError) -> Bool {
     try base.finishOperation(result, now: now)

@@ -52,9 +52,9 @@ public enum SchedulerHealth {
         state.lastTickAt.map(String.init(describing:)) ?? "never"
       },
       .storeRead(snapshot.dueCount, key: "scheduler.due_count", group: .scheduler, isHeadline: true)
-        { count in
-          String(count)
-        },
+      { count in
+        String(count)
+      },
       .storeRead(snapshot.state, key: "scheduler.last_misfire", group: .scheduler) { state in
         guard let lastMisfireAt = state.lastMisfireAt else {
           return "none"

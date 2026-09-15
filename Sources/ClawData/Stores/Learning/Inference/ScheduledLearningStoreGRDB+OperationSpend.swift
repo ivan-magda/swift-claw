@@ -83,7 +83,7 @@ private extension ScheduledLearningStoreGRDB {
   static func product(_ product: LearningOperationProduct, belongsTo phase: LearningPhase) -> Bool {
     switch (phase, product) {
     case (.evaluator, .evaluation), (.reflector, .candidate), (.reflector, .noCandidate),
-         (_, .failure):
+      (_, .failure):
       return true
     case (.evaluator, .candidate), (.evaluator, .noCandidate), (.reflector, .evaluation):
       return false
@@ -134,9 +134,10 @@ extension ScheduledLearningStoreGRDB {
       && manifest.feedback == current.feedbackSources
   }
 
-  static func reflectionTrigger(artifact: CandidateArtifact, operation: OperationRow)
-    -> TriggerIdentity?
-  {
+  static func reflectionTrigger(
+    artifact: CandidateArtifact,
+    operation: OperationRow
+  ) -> TriggerIdentity? {
     let manifest = artifact.manifest
     guard
       manifest.schemaVersion == CandidateSourceManifest.currentSchemaVersion,
@@ -200,18 +201,18 @@ private extension ScheduledLearningStoreGRDB {
     try Int64.fetchAll(
       db,
       sql: """
-      SELECT DISTINCT evidence.run_id
-      FROM learning_operations AS operation
-      JOIN learning_evidence AS evidence
-        ON evidence.job_id = operation.job_id
-        AND evidence.learning_epoch = operation.learning_epoch
-        AND evidence.evidence_digest = operation.source_digest
-      JOIN trial_assignments AS assignment ON assignment.run_id = evidence.run_id
-      JOIN job_learning_state AS learning ON learning.job_id = assignment.job_id
-        AND learning.learning_epoch = assignment.learning_epoch
-      WHERE operation.phase = ? AND operation.state IN (?, ?)
-      ORDER BY evidence.run_id
-      """,
+        SELECT DISTINCT evidence.run_id
+        FROM learning_operations AS operation
+        JOIN learning_evidence AS evidence
+          ON evidence.job_id = operation.job_id
+          AND evidence.learning_epoch = operation.learning_epoch
+          AND evidence.evidence_digest = operation.source_digest
+        JOIN trial_assignments AS assignment ON assignment.run_id = evidence.run_id
+        JOIN job_learning_state AS learning ON learning.job_id = assignment.job_id
+          AND learning.learning_epoch = assignment.learning_epoch
+        WHERE operation.phase = ? AND operation.state IN (?, ?)
+        ORDER BY evidence.run_id
+        """,
       arguments: [
         LearningPhase.evaluator.rawValue,
         LearningOperationState.started.rawValue,
@@ -236,11 +237,11 @@ private extension ScheduledLearningStoreGRDB {
   ) throws -> Bool {
     try db.execute(
       sql: """
-      UPDATE learning_operations
-      SET state = ?, failure_code = ?, reserved_tokens = 0, reserved_cost_usd = 0,
-        reservation_state = ?
-      WHERE operation_id = ? AND state = ?
-      """,
+        UPDATE learning_operations
+        SET state = ?, failure_code = ?, reserved_tokens = 0, reserved_cost_usd = 0,
+          reservation_state = ?
+        WHERE operation_id = ? AND state = ?
+        """,
       arguments: [
         terminal.rawValue,
         failure?.rawValue,
@@ -277,10 +278,10 @@ private extension ScheduledLearningStoreGRDB {
     )
     try db.execute(
       sql: """
-      UPDATE learning_operations
-      SET state = ?, reserved_tokens = 0, reserved_cost_usd = 0, reservation_state = ?
-      WHERE operation_id = ? AND state = ?
-      """,
+        UPDATE learning_operations
+        SET state = ?, reserved_tokens = 0, reserved_cost_usd = 0, reservation_state = ?
+        WHERE operation_id = ? AND state = ?
+        """,
       arguments: [
         LearningOperationState.interruptedUnknown.rawValue,
         LearningReservationState.closed.rawValue,
@@ -338,9 +339,10 @@ private extension ScheduledLearningStoreGRDB {
     return sessionID
   }
 
-  static func operationIDs(_ db: Database, state: LearningOperationState) throws
-    -> [LearningOperationID]
-  {
+  static func operationIDs(
+    _ db: Database,
+    state: LearningOperationState
+  ) throws -> [LearningOperationID] {
     try String.fetchAll(
       db,
       sql: "SELECT operation_id FROM learning_operations WHERE state = ? ORDER BY operation_id",

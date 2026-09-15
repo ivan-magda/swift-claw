@@ -66,14 +66,14 @@ extension BoundRunEnvironment {
       case .duplicate:
         try db.execute(
           sql: """
-          INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
-            evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
-            evaluator_schema_version, compatibility_digest, created_at)
-          SELECT ?, job_id, learning_epoch, run_id, evidence_digest, outcome, issue_codes,
-            rubric_version, evaluator_prompt_version, evaluator_schema_version,
-            compatibility_digest, created_at
-          FROM learning_evaluations WHERE run_id = ?
-          """,
+            INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
+              evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
+              evaluator_schema_version, compatibility_digest, created_at)
+            SELECT ?, job_id, learning_epoch, run_id, evidence_digest, outcome, issue_codes,
+              rubric_version, evaluator_prompt_version, evaluator_schema_version,
+              compatibility_digest, created_at
+            FROM learning_evaluations WHERE run_id = ?
+            """,
           arguments: [String(repeating: "f", count: 64), runID]
         )
       case .digest:

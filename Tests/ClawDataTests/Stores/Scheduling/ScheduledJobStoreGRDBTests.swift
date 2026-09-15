@@ -373,9 +373,9 @@ extension ScheduledJobStoreGRDBTests {
       try count(
         queue,
         sql: """
-        SELECT COUNT(*) FROM messages
-        WHERE role = 'user' AND provenance = 'trusted' AND content = 'Summarize my unread items'
-        """
+          SELECT COUNT(*) FROM messages
+          WHERE role = 'user' AND provenance = 'trusted' AND content = 'Summarize my unread items'
+          """
       ) == 2
     )
   }
@@ -760,9 +760,9 @@ extension ScheduledJobStoreGRDBTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, 'assistant', 'That text needs to be sent as a /schedule command', 'trusted', ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, 'assistant', 'That text needs to be sent as a /schedule command', 'trusted', ?)
+          """,
         arguments: [firstFire.sessionID, dueFirst]
       )
       try db.execute(
@@ -806,9 +806,9 @@ extension ScheduledJobStoreGRDBTests {
     try queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO messages(session_id, role, content, provenance, ts)
-        VALUES (?, 'assistant', 'HEARTBEAT_OK', 'trusted', ?)
-        """,
+          INSERT INTO messages(session_id, role, content, provenance, ts)
+          VALUES (?, 'assistant', 'HEARTBEAT_OK', 'trusted', ?)
+          """,
         arguments: [firstBeat.sessionID, baseNow]
       )
     }

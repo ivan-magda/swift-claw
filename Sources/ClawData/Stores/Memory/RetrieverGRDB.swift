@@ -27,13 +27,13 @@ public struct RetrieverGRDB: Retriever {
       // content — resurfacing it into a later or detainted session would re-ingest it without
       // re-arming session taint, leaving the trifecta gate unarmed (ARCHITECTURE.md §12).
       var sql = """
-      SELECT m.id, m.session_id, m.role, m.content, m.ts, bm25(messages_fts) AS bm25_score
-      FROM messages m
-      JOIN messages_fts ON messages_fts.rowid = m.id
-      WHERE messages_fts MATCH ?
-        AND m.role IN ('\(MessageRole.user.rawValue)', '\(MessageRole.assistant.rawValue)')
-        AND m.provenance = '\(Provenance.trusted.rawValue)'
-      """
+        SELECT m.id, m.session_id, m.role, m.content, m.ts, bm25(messages_fts) AS bm25_score
+        FROM messages m
+        JOIN messages_fts ON messages_fts.rowid = m.id
+        WHERE messages_fts MATCH ?
+          AND m.role IN ('\(MessageRole.user.rawValue)', '\(MessageRole.assistant.rawValue)')
+          AND m.provenance = '\(Provenance.trusted.rawValue)'
+        """
       var arguments: StatementArguments = [pattern]
 
       if let onlySessionID = restrictToSessionID {

@@ -63,11 +63,11 @@ extension BoundRunEnvironment {
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: artifact, now: now)
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
+          """,
         arguments: [
           jobID,
           state.epoch.value,
@@ -134,7 +134,7 @@ extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql:
-        "UPDATE trial_assignments SET trial_generation = trial_generation + 1 WHERE run_id = ?",
+          "UPDATE trial_assignments SET trial_generation = trial_generation + 1 WHERE run_id = ?",
         arguments: [runID]
       )
     }
@@ -144,11 +144,11 @@ extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        UPDATE trial_assignments
-        SET state = ?, outcome = NULL, issue_codes = NULL, evaluation_digest = NULL,
-          evaluation_required = 1, effective_feedback_revision = NULL, resolved_at = NULL
-        WHERE run_id = ?
-        """,
+          UPDATE trial_assignments
+          SET state = ?, outcome = NULL, issue_codes = NULL, evaluation_digest = NULL,
+            evaluation_required = 1, effective_feedback_revision = NULL, resolved_at = NULL
+          WHERE run_id = ?
+          """,
         arguments: [state.rawValue, runID]
       )
     }
@@ -158,8 +158,8 @@ extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-        UPDATE trial_assignments SET effective_feedback_revision = ? WHERE run_id = ?
-        """,
+          UPDATE trial_assignments SET effective_feedback_revision = ? WHERE run_id = ?
+          """,
         arguments: [revision, runID]
       )
     }
@@ -181,16 +181,16 @@ extension BoundRunEnvironment {
       try queue.write { db in
         try db.execute(
           sql: """
-          INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
-            created_at)
-          SELECT ?, lesson_sets.digest, lesson_sets.schema_version, lesson_sets.canonical_bytes,
-            lesson_sets.source, lesson_sets.created_at
-          FROM lesson_sets
-          JOIN run_learning_bindings \
-          ON run_learning_bindings.effective_digest = lesson_sets.digest
-            AND run_learning_bindings.job_id = lesson_sets.job_id
-          WHERE run_learning_bindings.run_id = ?
-          """,
+            INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
+              created_at)
+            SELECT ?, lesson_sets.digest, lesson_sets.schema_version, lesson_sets.canonical_bytes,
+              lesson_sets.source, lesson_sets.created_at
+            FROM lesson_sets
+            JOIN run_learning_bindings \
+            ON run_learning_bindings.effective_digest = lesson_sets.digest
+              AND run_learning_bindings.job_id = lesson_sets.job_id
+            WHERE run_learning_bindings.run_id = ?
+            """,
           arguments: [otherJob.id, runID]
         )
         try db.execute(
@@ -237,19 +237,19 @@ extension BoundRunEnvironment {
       case .stableDigest:
         try db.execute(
           sql: """
-          UPDATE job_learning_state
-          SET stable_lesson_set_digest = (
-            SELECT replacement_digest FROM learning_candidates WHERE job_id = ?
-          )
-          WHERE job_id = ?
-          """,
+            UPDATE job_learning_state
+            SET stable_lesson_set_digest = (
+              SELECT replacement_digest FROM learning_candidates WHERE job_id = ?
+            )
+            WHERE job_id = ?
+            """,
           arguments: [jobID, jobID]
         )
       case .stableRevision:
         try db.execute(
           sql: """
-          UPDATE job_learning_state SET stable_revision = stable_revision + 1 WHERE job_id = ?
-          """,
+            UPDATE job_learning_state SET stable_revision = stable_revision + 1 WHERE job_id = ?
+            """,
           arguments: [jobID]
         )
       }
@@ -278,14 +278,14 @@ extension BoundRunEnvironment {
       try db.execute(sql: "DROP INDEX idx_learning_trials_live_job")
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, close_reason, algorithm)
-        SELECT job_id, learning_epoch, base_digest, candidate_digest, generation + 1,
-          admitted_at, assignment_deadline, decision_deadline, max_assignments, 0,
-          cohort_cutoff, state, close_reason, algorithm
-        FROM learning_trials WHERE job_id = ?
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, close_reason, algorithm)
+          SELECT job_id, learning_epoch, base_digest, candidate_digest, generation + 1,
+            admitted_at, assignment_deadline, decision_deadline, max_assignments, 0,
+            cohort_cutoff, state, close_reason, algorithm
+          FROM learning_trials WHERE job_id = ?
+          """,
         arguments: [jobID]
       )
     }

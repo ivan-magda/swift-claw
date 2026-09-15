@@ -107,11 +107,11 @@ struct ContainerBackendRealAcceptanceTests {
 
     // when — the guest dumps its env and tries to read the host file by absolute and $HOME path
     let script = """
-    env
-    cat \(homeSentinel.path) 2>/dev/null || true
-    cat "$HOME/.claw-layerb-sentinel" 2>/dev/null || true
-    echo probe-done
-    """
+      env
+      cat \(homeSentinel.path) 2>/dev/null || true
+      cat "$HOME/.claw-layerb-sentinel" 2>/dev/null || true
+      echo probe-done
+      """
     let result = await backend.run(host.shellRequest(script))
 
     // then — the fresh VM inherits no host env and mounts no host path, so the sentinel never leaks
@@ -135,13 +135,13 @@ struct ContainerBackendRealAcceptanceTests {
 
     // when — the guest reads the input, then tries to write, create, and chmod under /work
     let script = """
-    set -e
-    test "$(cat /work/input.txt)" = "staged-content"
-    if ( echo mutate > /work/input.txt ) 2>/dev/null; then echo FAIL-write; exit 11; fi
-    if ( : > /work/created ) 2>/dev/null; then echo FAIL-create; exit 12; fi
-    if chmod 0700 /work/input.txt 2>/dev/null; then echo FAIL-chmod; exit 13; fi
-    echo staging-readonly-ok
-    """
+      set -e
+      test "$(cat /work/input.txt)" = "staged-content"
+      if ( echo mutate > /work/input.txt ) 2>/dev/null; then echo FAIL-write; exit 11; fi
+      if ( : > /work/created ) 2>/dev/null; then echo FAIL-create; exit 12; fi
+      if chmod 0700 /work/input.txt 2>/dev/null; then echo FAIL-chmod; exit 13; fi
+      echo staging-readonly-ok
+      """
     let result = await backend.run(host.shellRequest(script, inputs: [staged]))
 
     // then — every mutation of the read-only bind fails; the read succeeds
@@ -164,16 +164,16 @@ struct ContainerBackendRealAcceptanceTests {
 
     // when — a network:false run attempts a raw outbound TCP connection (no DNS dependence)
     let script = """
-    /usr/bin/python - <<'PY'
-    import socket
-    socket.setdefaulttimeout(5)
-    try:
-        socket.create_connection(("1.1.1.1", 53))
-        print("NETWORK-REACHABLE")
-    except OSError:
-        print("network-denied-ok")
-    PY
-    """
+      /usr/bin/python - <<'PY'
+      import socket
+      socket.setdefaulttimeout(5)
+      try:
+          socket.create_connection(("1.1.1.1", 53))
+          print("NETWORK-REACHABLE")
+      except OSError:
+          print("network-denied-ok")
+      PY
+      """
     let result = await backend.run(host.shellRequest(script, network: false))
 
     // then
@@ -314,12 +314,12 @@ private struct RealSandboxHost {
   func backend(memoryMiB: Int? = nil, cpus: Int? = nil) -> ContainerBackend {
     let resolved =
       memoryMiB == nil && cpus == nil
-        ? settings
-        : ExecSandboxSettings(
-          workloadImage: settings.workloadImage,
-          memoryMiB: memoryMiB ?? settings.memoryMiB,
-          cpus: cpus ?? settings.cpus
-        )
+      ? settings
+      : ExecSandboxSettings(
+        workloadImage: settings.workloadImage,
+        memoryMiB: memoryMiB ?? settings.memoryMiB,
+        cpus: cpus ?? settings.cpus
+      )
     return ContainerBackend(
       settings: resolved,
       stateRoot: root,

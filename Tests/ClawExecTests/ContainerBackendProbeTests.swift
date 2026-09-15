@@ -86,12 +86,12 @@ struct ContainerBackendProbeTests {
     let fixture = try BackendFixture()
     defer { fixture.remove() }
     let json = """
-    [
-      {"version":"99.0.0","buildType":"release","commit":"server",\
-    "appName":"container-apiserver"},
-      {"version":"1.0.0","buildType":"release","commit":"cli","appName":"container"}
-    ]
-    """
+      [
+        {"version":"99.0.0","buildType":"release","commit":"server",\
+      "appName":"container-apiserver"},
+        {"version":"1.0.0","buildType":"release","commit":"cli","appName":"container"}
+      ]
+      """
     let runner = ScriptedCommandRunner { command, _ in
       command.arguments == ContainerInvocation.systemVersion()
         ? jsonCommandResult(json) : jsonCommandResult(#"{"status":"running"}"#)
@@ -118,8 +118,8 @@ struct ContainerBackendProbeTests {
     let fixture = try BackendFixture()
     defer { fixture.remove() }
     let json = """
-    [{"version":"\(version)","buildType":"release","commit":"cli","appName":"container"}]
-    """
+      [{"version":"\(version)","buildType":"release","commit":"cli","appName":"container"}]
+      """
     let runner = ScriptedCommandRunner { _, _ in
       jsonCommandResult(json)
     }

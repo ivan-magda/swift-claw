@@ -156,9 +156,10 @@ public struct AdmissionValidationContext: Sendable {
 }
 
 public enum AdmissionValidator {
-  public static func validate(candidate: CandidateArtifact, context: AdmissionValidationContext)
-    -> AdmissionRejection?
-  {
+  public static func validate(
+    candidate: CandidateArtifact,
+    context: AdmissionValidationContext
+  ) -> AdmissionRejection? {
     let manifest = candidate.manifest
     let state = context.currentState
     guard context.jobHasRecurrence, [.active, .paused].contains(context.jobStatus) else {
@@ -200,9 +201,11 @@ public enum AdmissionValidator {
     return nil
   }
 
-  public static func validatedReplacement(jobID: Int64, lessons: [String], redactor: SecretRedactor)
-    -> Result<LessonSet, AdmissionRejection>
-  {
+  public static func validatedReplacement(
+    jobID: Int64,
+    lessons: [String],
+    redactor: SecretRedactor
+  ) -> Result<LessonSet, AdmissionRejection> {
     let replacement: LessonSet
     do { replacement = try LessonSet.canonical(jobID: jobID, lessons: lessons) } catch {
       return .failure(.lessonSet(error))
@@ -216,8 +219,8 @@ public enum AdmissionValidator {
   private static func containsSecret(_ replacement: LessonSet, redactor: SecretRedactor) -> Bool {
     if
       replacement.lessons.contains(where: { lesson in
-        redactor.redact(lesson) != lesson
-      }) {
+      redactor.redact(lesson) != lesson
+    }) {
       return true
     }
     // swiftlint:disable:next optional_data_string_conversion

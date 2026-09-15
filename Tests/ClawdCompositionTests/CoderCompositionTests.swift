@@ -41,10 +41,10 @@ struct CoderCompositionTests {
       id: "coder-composition-proposal",
       name: CoderToolNames.submit,
       argumentsJSON: """
-      {"source":{"githubRepository":{"url":"https://github.com/example/project"}},
-      "task":"Fix retry","workspace":"\(CoderWorkspaceMode.separate.rawValue)",
-      "deliverable":"\(CoderDeliverable.localChanges.rawValue)"}
-      """
+        {"source":{"githubRepository":{"url":"https://github.com/example/project"}},
+        "task":"Fix retry","workspace":"\(CoderWorkspaceMode.separate.rawValue)",
+        "deliverable":"\(CoderDeliverable.localChanges.rawValue)"}
+        """
     )
     let proposed = await agent.toolDispatcher.dispatch(
       call: proposal,

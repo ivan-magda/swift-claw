@@ -9,9 +9,10 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  public func consumeAndAppendEvent(_ tap: FeedbackTap, now: Date) throws(StoreError)
-    -> FeedbackOutcome
-  {
+  public func consumeAndAppendEvent(
+    _ tap: FeedbackTap,
+    now: Date
+  ) throws(StoreError) -> FeedbackOutcome {
     try database.writeMapping { db in
       guard tap.signal.opensFeedbackChallenge == false else {
         let target = try Self.readTarget(db, nonce: tap.nonce)
@@ -65,10 +66,10 @@ extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: """
-      INSERT INTO feedback_targets(nonce, job_id, learning_epoch, subject_kind, subject_digest,
-        allowed_actions, owner_user_id, chat_id, expires_at, consumed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-      """,
+        INSERT INTO feedback_targets(nonce, job_id, learning_epoch, subject_kind, subject_digest,
+          allowed_actions, owner_user_id, chat_id, expires_at, consumed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        """,
       arguments: [
         target.nonce,
         target.jobID,
@@ -135,19 +136,19 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-      UPDATE feedback_targets SET consumed_at = ?
-      WHERE nonce = ? AND consumed_at IS NULL AND owner_user_id = ? AND chat_id = ?
-        AND expires_at > ?
-        AND subject_kind = ?
-        AND learning_epoch = (
-          SELECT learning_epoch FROM job_learning_state
-          WHERE job_id = feedback_targets.job_id
-        )
-        AND EXISTS (
-          SELECT 1 FROM json_each(feedback_targets.allowed_actions) WHERE value = ?
-        )
-      RETURNING *
-      """,
+        UPDATE feedback_targets SET consumed_at = ?
+        WHERE nonce = ? AND consumed_at IS NULL AND owner_user_id = ? AND chat_id = ?
+          AND expires_at > ?
+          AND subject_kind = ?
+          AND learning_epoch = (
+            SELECT learning_epoch FROM job_learning_state
+            WHERE job_id = feedback_targets.job_id
+          )
+          AND EXISTS (
+            SELECT 1 FROM json_each(feedback_targets.allowed_actions) WHERE value = ?
+          )
+        RETURNING *
+        """,
       arguments: [
         EpochSecondCodec.epoch(now),
         tap.nonce,
@@ -161,9 +162,12 @@ extension ScheduledLearningStoreGRDB {
     return try row.map(decodeTarget)
   }
 
-  static func failedOutcome(_ db: Database, tap: FeedbackTap, target: FeedbackTarget?, now: Date)
-    throws -> FeedbackOutcome
-  {
+  static func failedOutcome(
+    _ db: Database,
+    tap: FeedbackTap,
+    target: FeedbackTarget?,
+    now: Date
+  ) throws -> FeedbackOutcome {
     guard let target else {
       return .targetMissing
     }
@@ -204,16 +208,17 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Event Rows
 
 private extension ScheduledLearningStoreGRDB {
-  static func advanceFeedbackRevision(_ db: Database, target: FeedbackTarget) throws
-    -> FeedbackRevision?
-  {
+  static func advanceFeedbackRevision(
+    _ db: Database,
+    target: FeedbackTarget
+  ) throws -> FeedbackRevision? {
     let revision = try Int64.fetchOne(
       db,
       sql: """
-      UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
-      WHERE job_id = ? AND learning_epoch = ?
-      RETURNING feedback_revision
-      """,
+        UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
+        WHERE job_id = ? AND learning_epoch = ?
+        RETURNING feedback_revision
+        """,
       arguments: [target.jobID, target.epoch.value]
     )
     return revision.map { value in
@@ -231,10 +236,10 @@ private extension ScheduledLearningStoreGRDB {
     let supersedes = try Int64.fetchOne(
       db,
       sql: """
-      SELECT event_id FROM feedback_events
-      WHERE job_id = ? AND learning_epoch = ? AND subject_kind = ? AND subject_digest = ?
-      ORDER BY feedback_revision DESC, event_id DESC LIMIT 1
-      """,
+        SELECT event_id FROM feedback_events
+        WHERE job_id = ? AND learning_epoch = ? AND subject_kind = ? AND subject_digest = ?
+        ORDER BY feedback_revision DESC, event_id DESC LIMIT 1
+        """,
       arguments: [
         target.jobID,
         target.epoch.value,
@@ -244,10 +249,10 @@ private extension ScheduledLearningStoreGRDB {
     )
     try db.execute(
       sql: """
-      INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
-        payload, actor, transport_update_id, feedback_revision, supersedes, occurred_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
+        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
+          payload, actor, transport_update_id, feedback_revision, supersedes, occurred_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
       arguments: [
         target.jobID,
         target.epoch.value,
@@ -290,7 +295,7 @@ private extension ScheduledLearningStoreGRDB {
     case .candidateReject: trialID = try closeCandidateTrial(db, target: target)
     case .evaluationDispute: trialID = try closeEvaluationTrial(db, target: target)
     case .resultUseful, .resultNotUseful, .resultCorrection, .evaluationConfirm, .candidateApprove,
-         .candidateEdit, .promotionRollback:
+      .candidateEdit, .promotionRollback:
       trialID = nil
     }
     if let trialID {
@@ -302,28 +307,28 @@ private extension ScheduledLearningStoreGRDB {
     try Int64.fetchOne(
       db,
       sql: """
-      SELECT trial_id FROM learning_trials WHERE trial_id = (
-        SELECT trial.trial_id
-        FROM learning_trials AS trial
-        JOIN learning_candidates AS candidate
-          ON candidate.candidate_digest = trial.candidate_digest
-        JOIN lesson_sets AS replacement
-          ON replacement.job_id = candidate.job_id
-          AND replacement.digest = candidate.replacement_digest
-        JOIN job_learning_state AS learning_state
-          ON learning_state.job_id = trial.job_id
-          AND learning_state.learning_epoch = trial.learning_epoch
-          AND learning_state.stable_lesson_set_digest = trial.base_digest
-        WHERE trial.job_id = ? AND trial.learning_epoch = ?
-          AND trial.state IN (?, ?)
-          AND trial.candidate_digest = ?
-          AND candidate.job_id = trial.job_id
-          AND candidate.learning_epoch = trial.learning_epoch
-          AND candidate.base_digest = trial.base_digest
-          AND candidate.algorithm = trial.algorithm
-        ORDER BY trial.trial_id DESC LIMIT 1
-      )
-      """,
+        SELECT trial_id FROM learning_trials WHERE trial_id = (
+          SELECT trial.trial_id
+          FROM learning_trials AS trial
+          JOIN learning_candidates AS candidate
+            ON candidate.candidate_digest = trial.candidate_digest
+          JOIN lesson_sets AS replacement
+            ON replacement.job_id = candidate.job_id
+            AND replacement.digest = candidate.replacement_digest
+          JOIN job_learning_state AS learning_state
+            ON learning_state.job_id = trial.job_id
+            AND learning_state.learning_epoch = trial.learning_epoch
+            AND learning_state.stable_lesson_set_digest = trial.base_digest
+          WHERE trial.job_id = ? AND trial.learning_epoch = ?
+            AND trial.state IN (?, ?)
+            AND trial.candidate_digest = ?
+            AND candidate.job_id = trial.job_id
+            AND candidate.learning_epoch = trial.learning_epoch
+            AND candidate.base_digest = trial.base_digest
+            AND candidate.algorithm = trial.algorithm
+          ORDER BY trial.trial_id DESC LIMIT 1
+        )
+        """,
       arguments: [
         target.jobID,
         target.epoch.value,
@@ -338,16 +343,16 @@ private extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT trial.trial_id, trial.job_id, trial.learning_epoch, trial.base_digest,
-        trial.candidate_digest, trial.algorithm
-      FROM learning_trials AS trial
-      JOIN job_learning_state AS learning_state
-        ON learning_state.job_id = trial.job_id
-        AND learning_state.learning_epoch = trial.learning_epoch
-        AND learning_state.stable_lesson_set_digest = trial.base_digest
-      WHERE trial.job_id = ? AND trial.learning_epoch = ? AND trial.state IN (?, ?)
-      ORDER BY trial.trial_id DESC
-      """,
+        SELECT trial.trial_id, trial.job_id, trial.learning_epoch, trial.base_digest,
+          trial.candidate_digest, trial.algorithm
+        FROM learning_trials AS trial
+        JOIN job_learning_state AS learning_state
+          ON learning_state.job_id = trial.job_id
+          AND learning_state.learning_epoch = trial.learning_epoch
+          AND learning_state.stable_lesson_set_digest = trial.base_digest
+        WHERE trial.job_id = ? AND trial.learning_epoch = ? AND trial.state IN (?, ?)
+        ORDER BY trial.trial_id DESC
+        """,
       arguments: [
         target.jobID,
         target.epoch.value,

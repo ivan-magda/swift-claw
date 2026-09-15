@@ -126,9 +126,12 @@ private func withBurstingServer<Result>(
 
 @Suite(.serialized)
 struct AsyncHTTPExecutorStreamingTests {
-  private func streaming(maximumUnreadBytes: Int = 4 * 1024 * 1024, errorBytes: Int = 64 * 1024)
-    -> HTTPResponseBodyPolicy
-  { .streaming(maximumUnreadBytes: maximumUnreadBytes, errorBytes: errorBytes) }
+  private func streaming(
+    maximumUnreadBytes: Int = 4 * 1024 * 1024,
+    errorBytes: Int = 64 * 1024
+  ) -> HTTPResponseBodyPolicy {
+    .streaming(maximumUnreadBytes: maximumUnreadBytes, errorBytes: errorBytes)
+  }
 
   private func streamRequest(
     url: String,

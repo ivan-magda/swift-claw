@@ -91,10 +91,10 @@ private extension ResetFixture {
   ) throws {
     try db.execute(
       sql: """
-      INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
-        source_digest, attempt_generation, state, created_at, key_digest)
-      VALUES (?, ?, ?, 'evaluator', ?, 1, ?, ?, ?)
-      """,
+        INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
+          source_digest, attempt_generation, state, created_at, key_digest)
+        VALUES (?, ?, ?, 'evaluator', ?, 1, ?, ?, ?)
+        """,
       arguments: [
         id,
         jobID,
@@ -112,9 +112,9 @@ private extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO run_compatibility(run_id, job_id, learning_epoch)
-        VALUES (?, ?, ?)
-        """,
+          INSERT INTO run_compatibility(run_id, job_id, learning_epoch)
+          VALUES (?, ?, ?)
+          """,
         arguments: [runID, env.jobID, epoch.value]
       )
     }
@@ -125,10 +125,10 @@ private extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO learning_evidence(run_id, job_id, learning_epoch, evidence_digest,
-          eligibility, classifier_version, sealed_at)
-        VALUES (?, ?, ?, 'current-evidence', 'insufficient_evidence', '1', ?)
-        """,
+          INSERT INTO learning_evidence(run_id, job_id, learning_epoch, evidence_digest,
+            eligibility, classifier_version, sealed_at)
+          VALUES (?, ?, ?, 'current-evidence', 'insufficient_evidence', '1', ?)
+          """,
         arguments: [runID, env.jobID, epoch.value, EpochSecondCodec.epoch(env.now)]
       )
     }
@@ -139,12 +139,12 @@ private extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
-          evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
-          evaluator_schema_version, compatibility_digest, created_at)
-        VALUES ('current-evaluation', ?, ?, ?, 'evidence', 'no_issue', '[]', '1', '1', '1',
-          'compatibility', ?)
-        """,
+          INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
+            evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
+            evaluator_schema_version, compatibility_digest, created_at)
+          VALUES ('current-evaluation', ?, ?, ?, 'evidence', 'no_issue', '[]', '1', '1', '1',
+            'compatibility', ?)
+          """,
         arguments: [env.jobID, epoch.value, runID, EpochSecondCodec.epoch(env.now)]
       )
     }
@@ -154,10 +154,10 @@ private extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO feedback_targets(nonce, job_id, learning_epoch, subject_kind,
-          subject_digest, allowed_actions, owner_user_id, chat_id, expires_at, consumed_at)
-        VALUES (?, ?, ?, 'run', 'subject', '["result_useful"]', 1, 1, 1, ?)
-        """,
+          INSERT INTO feedback_targets(nonce, job_id, learning_epoch, subject_kind,
+            subject_digest, allowed_actions, owner_user_id, chat_id, expires_at, consumed_at)
+          VALUES (?, ?, ?, 'run', 'subject', '["result_useful"]', 1, 1, 1, ?)
+          """,
         arguments: [
           consumed ? "current-consumed-target" : "late-old-live-target",
           env.jobID,
@@ -172,10 +172,10 @@ private extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
-          subject_kind, subject_digest, consumed_at, expires_at)
-        VALUES (?, ?, ?, ?, 'run', 'subject', ?, 1)
-        """,
+          INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
+            subject_kind, subject_digest, consumed_at, expires_at)
+          VALUES (?, ?, ?, ?, 'run', 'subject', ?, 1)
+          """,
         arguments: [consumed ? 1 : 2, consumed ? 1 : 2, env.jobID, epoch.value, consumed ? 1 : nil]
       )
     }
@@ -185,10 +185,10 @@ private extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest,
-          signal, actor, feedback_revision, occurred_at)
-        VALUES (?, ?, 'run', 'subject', 'result_useful', 'owner', 1, 1)
-        """,
+          INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest,
+            signal, actor, feedback_revision, occurred_at)
+          VALUES (?, ?, 'run', 'subject', 'result_useful', 'owner', 1, 1)
+          """,
         arguments: [env.jobID, epoch.value]
       )
     }
@@ -201,9 +201,9 @@ private extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT OR IGNORE INTO lesson_sets(job_id, digest, schema_version, canonical_bytes,
-          source, created_at) VALUES (?, ?, ?, ?, ?, ?)
-        """,
+          INSERT OR IGNORE INTO lesson_sets(job_id, digest, schema_version, canonical_bytes,
+            source, created_at) VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [
           env.jobID,
           replacement.digest.rawValue,
@@ -215,11 +215,11 @@ private extension ResetFixture {
       )
       try db.execute(
         sql: """
-        INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
-          replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
-          source_manifest, algorithm, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'reflection', '{}', ?, ?)
-        """,
+          INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
+            replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
+            source_manifest, algorithm, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'reflection', '{}', ?, ?)
+          """,
         arguments: [
           digest,
           env.jobID,
@@ -248,10 +248,10 @@ private extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO trial_assignments(run_id, trial_id, job_id, learning_epoch,
-          trial_generation, assigned_at, state, evaluation_required)
-        VALUES (?, ?, ?, ?, 1, ?, 'created', 1)
-        """,
+          INSERT INTO trial_assignments(run_id, trial_id, job_id, learning_epoch,
+            trial_generation, assigned_at, state, evaluation_required)
+          VALUES (?, ?, ?, ?, 1, ?, 'created', 1)
+          """,
         arguments: [runID, trialID, env.jobID, epoch.value, EpochSecondCodec.epoch(env.now)]
       )
     }
@@ -262,11 +262,11 @@ private extension ResetFixture {
     return try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, close_reason, algorithm)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, 'closed', 'fixture', ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, close_reason, algorithm)
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, 'closed', 'fixture', ?)
+          """,
         arguments: [
           env.jobID,
           epoch.value,
@@ -288,11 +288,11 @@ private extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, 'open', ?)
-        """,
+          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+            consumed_assignments, cohort_cutoff, state, algorithm)
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, 'open', ?)
+          """,
         arguments: [
           env.jobID,
           epoch.value,
@@ -312,12 +312,12 @@ private extension ResetFixture {
   {
     try db.execute(
       sql: """
-      INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
-        source_digest, carrier_digest, route, provider_call_id, attempt_generation, state,
-        reserved_tokens, reserved_cost_usd, reservation_state, created_at, key_digest)
-      VALUES (?, ?, ?, 'evaluator', ?, 'carrier', 'route', 'call', 1, 'started',
-        1, 0.1, 'open', ?, ?)
-      """,
+        INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
+          source_digest, carrier_digest, route, provider_call_id, attempt_generation, state,
+          reserved_tokens, reserved_cost_usd, reservation_state, created_at, key_digest)
+        VALUES (?, ?, ?, 'evaluator', ?, 'carrier', 'route', 'call', 1, 'started',
+          1, 0.1, 'open', ?, ?)
+        """,
       arguments: [
         id,
         jobID,

@@ -10,20 +10,20 @@ struct MCPConfigLoaderTests {
   func decodesServerListWithEveryFieldSet() throws {
     // given
     let yaml = """
-    servers:
-      - name: linear
-        url: https://mcp.linear.app/mcp
-        enabled: false
-        authHeader: X-Api-Key
-        headers:
-          X-Client: swift-claw
-        connectTimeoutSeconds: 5
-        requestTimeoutSeconds: 60
-        tools:
-          include: [list_issues, create_issue]
-          risk:
-            list_issues: safe
-    """
+      servers:
+        - name: linear
+          url: https://mcp.linear.app/mcp
+          enabled: false
+          authHeader: X-Api-Key
+          headers:
+            X-Client: swift-claw
+          connectTimeoutSeconds: 5
+          requestTimeoutSeconds: 60
+          tools:
+            include: [list_issues, create_issue]
+            risk:
+              list_issues: safe
+      """
 
     // when
     let config = try MCPConfigLoader.parse(yaml: yaml)
@@ -48,10 +48,10 @@ struct MCPConfigLoaderTests {
   func appliesDefaultsWhenOnlyNameAndURLAreGiven() throws {
     // given
     let yaml = """
-    servers:
-      - name: docs
-        url: http://127.0.0.1:8080/mcp
-    """
+      servers:
+        - name: docs
+          url: http://127.0.0.1:8080/mcp
+      """
 
     // when
     let config = try MCPConfigLoader.parse(yaml: yaml)
@@ -71,13 +71,13 @@ struct MCPConfigLoaderTests {
   func includeWinsWhenBothFiltersArePresent() throws {
     // given
     let yaml = """
-    servers:
-      - name: docs
-        url: https://example.com/mcp
-        tools:
-          include: [search]
-          exclude: [search, write]
-    """
+      servers:
+        - name: docs
+          url: https://example.com/mcp
+          tools:
+            include: [search]
+            exclude: [search, write]
+      """
 
     // when
     let server = try #require(MCPConfigLoader.parse(yaml: yaml).servers.first)
@@ -91,12 +91,12 @@ struct MCPConfigLoaderTests {
   func explicitEmptyIncludeExposesNoRemoteTools() throws {
     // given
     let yaml = """
-    servers:
-      - name: docs
-        url: https://example.com/mcp
-        tools:
-          include: []
-    """
+      servers:
+        - name: docs
+          url: https://example.com/mcp
+          tools:
+            include: []
+      """
 
     // when
     let server = try #require(MCPConfigLoader.parse(yaml: yaml).servers.first)
@@ -138,7 +138,7 @@ struct MCPConfigLoaderTests {
     (
       "unknown tools key",
       yaml:
-      "servers:\n  - name: docs\n    url: https://example.com/mcp\n    tools:\n      only: []\n",
+        "servers:\n  - name: docs\n    url: https://example.com/mcp\n    tools:\n      only: []\n",
       expected: MCPConfigError.unknownKey("servers[0].tools.only")
     ),
     (

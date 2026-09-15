@@ -40,9 +40,9 @@ struct V15MigrationTests {
     // then
     let rows = try queue.read { db in
       try Row.fetchAll(db, sql: "SELECT trial_id, state FROM learning_trials ORDER BY trial_id").map
-        { row in
-          "\(row["trial_id"] as Int64):\(row["state"] as String)"
-        }
+      { row in
+        "\(row["trial_id"] as Int64):\(row["state"] as String)"
+      }
     }
     #expect(rows == ["1:draining", "2:promoted", "3:fell_back"])
   }
@@ -157,25 +157,25 @@ private func seedJob(_ queue: DatabaseQueue, jobID: Int64) throws {
   try queue.write { db in
     try db.execute(
       sql: """
-      INSERT INTO scheduled_jobs(id, owner_chat_id, label, prompt, recurrence, timezone,
-        next_occurrence, last_fired_at, status, session_id, created_ts, updated_ts)
-      VALUES (?, 1, 'job', 'prompt', '{}', 'UTC', NULL, NULL, 'active', NULL, 1, 1)
-      """,
+        INSERT INTO scheduled_jobs(id, owner_chat_id, label, prompt, recurrence, timezone,
+          next_occurrence, last_fired_at, status, session_id, created_ts, updated_ts)
+        VALUES (?, 1, 'job', 'prompt', '{}', 'UTC', NULL, NULL, 'active', NULL, 1, 1)
+        """,
       arguments: [jobID]
     )
     try db.execute(
       sql: """
-      INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source, created_at)
-      VALUES (?, ?, 1, X'00', 'canonical_empty', 1)
-      """,
+        INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source, created_at)
+        VALUES (?, ?, 1, X'00', 'canonical_empty', 1)
+        """,
       arguments: [jobID, base]
     )
     try db.execute(
       sql: """
-      INSERT INTO job_learning_state(job_id, learning_epoch, stable_lesson_set_digest,
-        stable_revision, open_trial_id, feedback_revision, armed_at)
-      VALUES (?, 1, ?, 0, NULL, 0, 1)
-      """,
+        INSERT INTO job_learning_state(job_id, learning_epoch, stable_lesson_set_digest,
+          stable_revision, open_trial_id, feedback_revision, armed_at)
+        VALUES (?, 1, ?, 0, NULL, 0, 1)
+        """,
       arguments: [jobID, base]
     )
   }
@@ -204,20 +204,20 @@ private func insertTrial(
   let candidate = String(repeating: candidateByte, count: 64)
   try db.execute(
     sql: """
-    INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
-      replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
-      source_manifest, predecessor_digest, algorithm, created_at)
-    VALUES (?, ?, 1, ?, ?, 0, 0, 'reflection', '{}', NULL, ?, 1)
-    """,
+      INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
+        replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
+        source_manifest, predecessor_digest, algorithm, created_at)
+      VALUES (?, ?, 1, ?, ?, 0, 0, 'reflection', '{}', NULL, ?, 1)
+      """,
     arguments: [candidate, jobID, base, base, LearningAlgorithm.v1.rawValue]
   )
   try db.execute(
     sql: """
-    INSERT INTO learning_trials(trial_id, job_id, learning_epoch, base_digest,
-      candidate_digest, generation, admitted_at, assignment_deadline, decision_deadline,
-      max_assignments, consumed_assignments, cohort_cutoff, state, close_reason, algorithm)
-    VALUES (?, ?, 1, ?, ?, ?, 1, 2, 3, 3, 0, 1, ?, NULL, ?)
-    """,
+      INSERT INTO learning_trials(trial_id, job_id, learning_epoch, base_digest,
+        candidate_digest, generation, admitted_at, assignment_deadline, decision_deadline,
+        max_assignments, consumed_assignments, cohort_cutoff, state, close_reason, algorithm)
+      VALUES (?, ?, 1, ?, ?, ?, 1, 2, 3, 3, 0, 1, ?, NULL, ?)
+      """,
     arguments: [
       trialID,
       jobID,
@@ -247,7 +247,7 @@ private func indexSQL(_ queue: DatabaseQueue) throws -> [String: String] {
     let rows = try Row.fetchAll(
       db,
       sql:
-      "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'learning_trials'"
+        "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'learning_trials'"
     )
     return Dictionary(
       uniqueKeysWithValues: rows.compactMap { row in

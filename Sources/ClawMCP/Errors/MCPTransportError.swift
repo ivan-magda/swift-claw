@@ -37,7 +37,7 @@ enum MCPTransportError: Error, Sendable, Equatable {
     case .requestFailed(let failure):
       return failure.disposition == .definitelyNotSent ? .definitelyNotExecuted : .mayHaveExecuted
     case .httpStatus, .unsupportedContentType, .oversizedMessage, .receiveBufferOverflow,
-         .receiveStreamTerminated:
+      .receiveStreamTerminated:
       return .mayHaveExecuted
     }
   }
@@ -72,9 +72,9 @@ extension MCPTransportError: CustomStringConvertible {
     let parts = mediaType.split(separator: "/", omittingEmptySubsequences: false)
     let wellFormed =
       parts.count == 2 && mediaType.count <= 64
-        && parts.allSatisfy {
-          $0.isEmpty == false && $0.allSatisfy(isMediaTypeCharacter)
-        }
+      && parts.allSatisfy {
+        $0.isEmpty == false && $0.allSatisfy(isMediaTypeCharacter)
+      }
 
     return wellFormed ? mediaType : "unrecognized"
   }

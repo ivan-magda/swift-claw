@@ -286,7 +286,7 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
 
 private enum CandidateManifestDecoding {
   static func requireOnly<Key>(_ keyType: Key.Type, in decoder: any Decoder) throws
-    where Key: CodingKey & CaseIterable {
+  where Key: CodingKey & CaseIterable {
     let container = try decoder.container(keyedBy: AnyKey.self)
     let allowed = Set(keyType.allCases.map(\.stringValue))
     let unknown = Set(container.allKeys.map(\.stringValue)).subtracting(allowed)

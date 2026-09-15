@@ -5,9 +5,10 @@ import GRDB
 // MARK: - Review Commit
 
 extension ScheduledLearningStoreGRDB {
-  public func commitCandidateReview(_ review: CandidateReviewNotice, now: Date) throws(StoreError)
-    -> Bool
-  {
+  public func commitCandidateReview(
+    _ review: CandidateReviewNotice,
+    now: Date
+  ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       let firstKey = OutboxDedupKey.make(subjectDigest: review.subjectDigest, ordinal: 0)
       let exists =
@@ -40,9 +41,10 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Authoritative Review State
 
 private extension ScheduledLearningStoreGRDB {
-  static func committedReviewIsComplete(_ db: Database, review: CandidateReviewNotice) throws
-    -> Bool
-  {
+  static func committedReviewIsComplete(
+    _ db: Database,
+    review: CandidateReviewNotice
+  ) throws -> Bool {
     do {
       guard
         review.subjectDigest
@@ -75,9 +77,10 @@ private extension ScheduledLearningStoreGRDB {
     } catch is StoreError { return false }
   }
 
-  static func committedReviewState(_ db: Database, artifact: CandidateArtifact) throws
-    -> CandidateReviewState?
-  {
+  static func committedReviewState(
+    _ db: Database,
+    artifact: CandidateArtifact
+  ) throws -> CandidateReviewState? {
     if let trial = try trialRow(db, candidate: artifact.digest) {
       _ = try admissionReceipt(db, artifact: artifact, trial: trial)
       return .admitted
@@ -97,10 +100,10 @@ private extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-      SELECT run_id, step_index, chat_id, dedup_key, payload, payload_hash, approval_id,
-        reply_markup, message_thread_id, reply_to_message_id, created_ts, delivery_source
-      FROM outbound_deliveries WHERE dedup_key GLOB ? ORDER BY step_index
-      """,
+        SELECT run_id, step_index, chat_id, dedup_key, payload, payload_hash, approval_id,
+          reply_markup, message_thread_id, reply_to_message_id, created_ts, delivery_source
+        FROM outbound_deliveries WHERE dedup_key GLOB ? ORDER BY step_index
+        """,
       arguments: ["\(prefix)*"]
     )
     guard rows.count == review.chunks.count, rows.isEmpty == false else {
@@ -278,9 +281,10 @@ private extension ScheduledLearningStoreGRDB {
       && chunks.last?.replyMarkup != nil
   }
 
-  static func reviewState(_ db: Database, artifact: CandidateArtifact) throws
-    -> CandidateReviewState?
-  {
+  static func reviewState(
+    _ db: Database,
+    artifact: CandidateArtifact
+  ) throws -> CandidateReviewState? {
     if let trial = try trialRow(db, candidate: artifact.digest) {
       guard trial.state == .open || trial.state == .draining else {
         return nil
@@ -308,13 +312,13 @@ private extension ScheduledLearningStoreGRDB {
     let candidateActions = candidateActions(for: state)
     let expectedSubjects =
       [(FeedbackSubjectKind.candidate, artifact.digest.rawValue, candidateActions)]
-        + artifact.manifest.evaluations.map { evaluation in
-          (
-            FeedbackSubjectKind.evaluation,
-            evaluation.digest.rawValue,
-            [OwnerSignal.evaluationConfirm, .evaluationDispute]
-          )
-        }
+      + artifact.manifest.evaluations.map { evaluation in
+        (
+          FeedbackSubjectKind.evaluation,
+          evaluation.digest.rawValue,
+          [OwnerSignal.evaluationConfirm, .evaluationDispute]
+        )
+      }
     return zip(targets, expectedSubjects).allSatisfy { target, expected in
       target.jobID == artifact.manifest.jobID && target.epoch == artifact.manifest.epoch
         && target.subjectKind == expected.0 && target.subjectDigest == expected.1

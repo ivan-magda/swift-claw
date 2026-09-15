@@ -22,7 +22,8 @@ public struct WebSearchTool: Tool {
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
-          "query": .object(["type": .string("string"), "description": .string("The search query.")]
+          "query": .object(
+            ["type": .string("string"), "description": .string("The search query.")]
           ),
           "count": .object([
             "type": .string("number"),
