@@ -20,10 +20,10 @@ public struct FakeSessionMessageStore: SessionMessageStore {
   /// The snapshot a delegate-less fake reads back: a session with no history, no taint and no
   /// private data, keyed to an arbitrary DM so consumers deriving a mode from it read `.direct`.
   public static let emptySnapshot = SessionContextSnapshot(
-    sessionKey: SessionKey.telegramDM(chatId: 42),
+    sessionKey: SessionKey.telegramDM(chatID: 42),
     history: [],
-    historyMessageIds: [],
-    windowStartMessageId: nil,
+    historyMessageIDs: [],
+    windowStartMessageID: nil,
     isTainted: false,
     hasPrivateData: false
   )
@@ -45,7 +45,11 @@ public struct FakeSessionMessageStore: SessionMessageStore {
   /// A store no operation can reach — the shape a full disk or a lost database file presents.
   public static func failingEverything(with error: StoreError) -> FakeSessionMessageStore {
     FakeSessionMessageStore(
-      failures: Dictionary(uniqueKeysWithValues: Operation.allCases.map { ($0, error) })
+      failures: Dictionary(
+        uniqueKeysWithValues: Operation.allCases.map {
+          ($0, error)
+        }
+      )
     )
   }
 
@@ -59,18 +63,16 @@ public struct FakeSessionMessageStore: SessionMessageStore {
     return try inner.loadOrCreateSession(sessionKey: sessionKey, now: now)
   }
 
-  public func claimCommandUpdate(
-    updateId: Int64,
-    sessionKey: String,
-    now: Date
-  ) throws(StoreError) -> CommandClaim {
+  public func claimCommandUpdate(updateID: Int64, sessionKey: String, now: Date) throws(StoreError)
+    -> CommandClaim
+  {
     if let error = failures[.claimCommandUpdate] {
       throw error
     }
     guard let inner else {
       return .duplicate
     }
-    return try inner.claimCommandUpdate(updateId: updateId, sessionKey: sessionKey, now: now)
+    return try inner.claimCommandUpdate(updateID: updateID, sessionKey: sessionKey, now: now)
   }
 
   public func findSession(sessionKey: String) throws(StoreError) -> Int64? {
@@ -87,10 +89,10 @@ public struct FakeSessionMessageStore: SessionMessageStore {
     guard let inner else {
       return ClaimResult(
         newlyClaimed: false,
-        sessionId: nil,
-        messageId: nil,
-        runId: nil,
-        triggerMessageId: nil
+        sessionID: nil,
+        messageID: nil,
+        runID: nil,
+        triggerMessageID: nil
       )
     }
     return try inner.claimAndPersistInbound(inbound)
@@ -103,20 +105,18 @@ public struct FakeSessionMessageStore: SessionMessageStore {
     guard let inner else {
       return ClaimResult(
         newlyClaimed: false,
-        sessionId: nil,
-        messageId: nil,
-        runId: nil,
-        triggerMessageId: nil
+        sessionID: nil,
+        messageID: nil,
+        runID: nil,
+        triggerMessageID: nil
       )
     }
     return try inner.claimAndPersistObserved(inbound)
   }
 
-  public func loadContextSnapshot(
-    sessionId: Int64,
-    throughMessageId: Int64,
-    limit: Int
-  ) throws(StoreError) -> SessionContextSnapshot {
+  public func loadContextSnapshot(sessionID: Int64, throughMessageID: Int64, limit: Int)
+    throws(StoreError) -> SessionContextSnapshot
+  {
     if let error = failures[.loadContextSnapshot] {
       throw error
     }
@@ -124,8 +124,8 @@ public struct FakeSessionMessageStore: SessionMessageStore {
       return snapshot
     }
     return try inner.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: throughMessageId,
+      sessionID: sessionID,
+      throughMessageID: throughMessageID,
       limit: limit
     )
   }

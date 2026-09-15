@@ -28,7 +28,7 @@ extension ScheduledLearningStoreGRDB {
   static func insertDecision<Inputs: Encodable, Result: Encodable>(
     _ db: Database,
     kind: String,
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     inputs: Inputs,
     result: Result,
@@ -37,12 +37,12 @@ extension ScheduledLearningStoreGRDB {
   ) throws -> Int64 {
     try db.execute(
       sql: """
-        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
-          decided_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
+      INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
+        decided_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+      """,
       arguments: [
         kind,
-        jobId,
+        jobID,
         epoch.value,
         try canonicalDecisionJSON(inputs),
         try canonicalDecisionJSON(result),

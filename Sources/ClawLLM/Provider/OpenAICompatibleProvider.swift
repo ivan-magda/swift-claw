@@ -35,8 +35,10 @@ struct OpenAICompatibleProvider: LLMProvider {
     credentials: any LLMCredentialSource,
     http: any HTTPExecuting & HTTPStreaming,
     clock: any Clock<Duration>,
-    jitter: @escaping @Sendable (Duration) -> Duration,
-    logger: Logger = Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() })
+    jitter: @escaping @Sendable (_ duration: Duration) -> Duration,
+    logger: Logger = Logger(label: "clawd.llm") { _ in
+      SwiftLogNoOpLogHandler()
+    }
   ) {
     self.config = config
     self.endpoint = endpoint
@@ -59,9 +61,7 @@ struct OpenAICompatibleProvider: LLMProvider {
     let exposure = ProviderAttemptExposure()
 
     let authorization: LLMRequestAuthorization
-    do {
-      authorization = try await credentials.authorization()
-    } catch is CancellationError {
+    do { authorization = try await credentials.authorization() } catch is CancellationError {
       throw CancellationError()
     } catch {
       // No request goes out without a credential, so nothing was exposed. The cause names the state
@@ -117,9 +117,8 @@ struct OpenAICompatibleProvider: LLMProvider {
       }
 
       if (200..<300).contains(result.statusCode) {
-        do {
-          return try parse(result: result, redactor: redactor)
-        } catch let cause as ProviderError {
+        do { return try parse(result: result, redactor: redactor) } catch let cause as ProviderError
+        {
           // The 2xx head was accepted, so the reply was generated and billed. A body we cannot read
           // is still a failure that must record conservative usage rather than none, so the exposure
           // (still `mayHaveStarted` here) travels on the failure.
@@ -195,7 +194,7 @@ struct OpenAICompatibleProvider: LLMProvider {
         role: message.role.rawValue,
         content: content,
         toolCalls: wireCalls.isEmpty ? nil : wireCalls,
-        toolCallId: message.toolCallId
+        toolCallID: message.toolCallID
       )
     }
     let wireTools = request.tools.map { definition in
@@ -209,7 +208,7 @@ struct OpenAICompatibleProvider: LLMProvider {
       )
     }
 
-    let sessionId = Self.baseURLIsOpenRouter(endpoint) ? request.sessionId : nil
+    let sessionID = Self.baseURLIsOpenRouter(endpoint) ? request.sessionID : nil
     let payload = RequestBody(
       model: request.model,
       messages: wireMessages,
@@ -220,16 +219,14 @@ struct OpenAICompatibleProvider: LLMProvider {
       streamOptions: streaming ? StreamOptions(includeUsage: true) : nil,
       tools: wireTools.isEmpty ? nil : wireTools,
       responseFormat: request.responseFormat,
-      sessionId: sessionId
+      sessionID: sessionID
     )
     return try JSONEncoder().encode(payload)
   }
 
   func parse(result: HTTPResult, redactor: SecretRedactor) throws -> ChatResponse {
     let decoded: ResponseBody
-    do {
-      decoded = try JSONDecoder().decode(ResponseBody.self, from: result.body)
-    } catch {
+    do { decoded = try JSONDecoder().decode(ResponseBody.self, from: result.body) } catch {
       throw ProviderError.terminal(
         status: result.statusCode,
         message: redactor.redact("malformed response: \(error)")
@@ -237,18 +234,17 @@ struct OpenAICompatibleProvider: LLMProvider {
     }
 
     let choice = decoded.choices.first
-    let usage =
-      decoded.usage.map { wireUsage in
-        wireUsage.toChatUsage()
-      }
+    let usage = decoded.usage.map { wireUsage in
+      wireUsage.toChatUsage()
+    }
     // OpenRouter reports cost in usage.cost; LiteLLM in a response header.
     let providerCost = decoded.usage?.cost ?? providerCost(from: result)
 
     let toolCalls = (choice?.message.toolCalls ?? []).compactMap { decoded -> ToolCall? in
-      guard let callId = decoded.id, let name = decoded.function?.name else {
+      guard let callID = decoded.id, let name = decoded.function?.name else {
         return nil
       }
-      return ToolCall(id: callId, name: name, argumentsJSON: decoded.function?.arguments ?? "{}")
+      return ToolCall(id: callID, name: name, argumentsJSON: decoded.function?.arguments ?? "{}")
     }
 
     return ChatResponse(
@@ -270,9 +266,7 @@ private extension OpenAICompatibleProvider {
     let exposure = ProviderAttemptExposure()
 
     let authorization: LLMRequestAuthorization
-    do {
-      authorization = try await credentials.authorization()
-    } catch is CancellationError {
+    do { authorization = try await credentials.authorization() } catch is CancellationError {
       return .cancelled(.notStarted)
     } catch {
       // No request goes out without a credential, so nothing was exposed. The cause names the state
@@ -294,16 +288,12 @@ private extension OpenAICompatibleProvider {
         streamRequest(headers: headers, body: body, exposure: exposure)
       )
       return await consume(exchange: exchange, into: sink, exposure: exposure, redactor: redactor)
-    } catch {
-      return Self.termination(for: error, exposure: exposure, redactor: redactor)
-    }
+    } catch { return Self.termination(for: error, exposure: exposure, redactor: redactor) }
   }
 
-  func streamRequest(
-    headers: [String: String],
-    body: Data,
-    exposure: ProviderAttemptExposure
-  ) -> HTTPRequest {
+  func streamRequest(headers: [String: String], body: Data, exposure: ProviderAttemptExposure)
+    -> HTTPRequest
+  {
     HTTPRequest(
       method: .post,
       url: chatCompletionsURL(),
@@ -313,9 +303,10 @@ private extension OpenAICompatibleProvider {
       responseBodyPolicy: .streaming(
         maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
         errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
-      ),
-      beginHandoff: { try exposure.beginHandoff() }
-    )
+      )
+    ) {
+      try exposure.beginHandoff()
+    }
   }
 
   /// Reads the exchange and joins it on the way out, whichever way it ends. The exchange owns the
@@ -342,10 +333,8 @@ private extension OpenAICompatibleProvider {
       for try await chunk in exchange.body {
         for event in try parser.push(chunk) {
           switch event {
-          case .delta(let text):
-            try await sink.sendDelta(text)
-          case .finished(let response):
-            terminal = response
+          case .delta(let text): try await sink.sendDelta(text)
+          case .finished(let response): terminal = response
           }
         }
         exposure.noteObserved(completionTokens: parser.observedCompletionTokens)
@@ -413,10 +402,9 @@ private extension OpenAICompatibleProvider {
 
   /// The body of a non-success head. The executor has already capped it, so reading to the end holds
   /// no more than the diagnostic allowance.
-  func rejection(
-    from exchange: HTTPStreamExchange,
-    redactor: SecretRedactor
-  ) async throws -> ProviderError {
+  func rejection(from exchange: HTTPStreamExchange, redactor: SecretRedactor) async throws
+    -> ProviderError
+  {
     var collected = Data()
     for try await chunk in exchange.body {
       collected.append(chunk)
@@ -427,11 +415,7 @@ private extension OpenAICompatibleProvider {
     if Self.isRetryableStatus(exchange.head.statusCode) {
       return ProviderError.rejected(status: exchange.head.statusCode, message: message)
     }
-    return Self.headRejection(
-      status: exchange.head.statusCode,
-      body: collected,
-      message: message
-    )
+    return Self.headRejection(status: exchange.head.statusCode, body: collected, message: message)
   }
 
   /// The body sequence ending says only that no more bytes are coming; the termination says whether
@@ -439,12 +423,9 @@ private extension OpenAICompatibleProvider {
   /// sequence alone would read a truncated stream as a complete one.
   static func check(termination: HTTPStreamTermination) throws {
     switch termination {
-    case .completed:
-      return
-    case .failed(let failure):
-      throw providerError(from: failure)
-    case .cancelled:
-      throw CancellationError()
+    case .completed: return
+    case .failed(let failure): throw providerError(from: failure)
+    case .cancelled: throw CancellationError()
     }
   }
 
@@ -453,10 +434,8 @@ private extension OpenAICompatibleProvider {
   /// attempt can be replayed.
   static func providerError(from failure: HTTPTransportFailure) -> ProviderError {
     switch failure.disposition {
-    case .definitelyNotSent:
-      return .connectFailed(message: failure.safeMessage)
-    case .mayHaveBeenSent:
-      return .retryable(status: nil, message: failure.safeMessage)
+    case .definitelyNotSent: return .connectFailed(message: failure.safeMessage)
+    case .mayHaveBeenSent: return .retryable(status: nil, message: failure.safeMessage)
     }
   }
 
@@ -492,8 +471,7 @@ private extension OpenAICompatibleProvider {
     return .parts(
       content.parts.map { part in
         switch part {
-        case .text(let value):
-          return WireContentPart(type: "text", text: value, imageURL: nil)
+        case .text(let value): return WireContentPart(type: "text", text: value, imageURL: nil)
         case .image(let image):
           return WireContentPart(
             type: "image_url",
@@ -545,9 +523,10 @@ private extension OpenAICompatibleProvider {
       responseBodyPolicy: .buffered(
         successBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes,
         errorBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes
-      ),
-      beginHandoff: { try exposure.beginHandoff() }
-    )
+      )
+    ) {
+      try exposure.beginHandoff()
+    }
   }
 }
 
@@ -567,11 +546,11 @@ private extension OpenAICompatibleProvider {
   }
 
   func providerCost(from head: HTTPStreamHead) -> Double? {
-    head.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
+    head.header(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
   }
 
   func providerCost(from result: HTTPResult) -> Double? {
-    result.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
+    result.header(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
   }
 }
 
@@ -582,10 +561,12 @@ private extension OpenAICompatibleProvider {
   /// before falling back to whole/fractional seconds. The wait itself clamps this hint, so the raw
   /// value is returned here without a ceiling of its own.
   func retryAfterDelay(from result: HTTPResult) -> Duration? {
-    if let milliseconds = result.getHeader(for: "retry-after-ms").flatMap(Double.init) {
+    if let milliseconds = result.header(for: "retry-after-ms").flatMap(Double.init) {
       return .milliseconds(milliseconds)
     }
-    return result.getHeader(for: "retry-after").flatMap(Double.init).map { .seconds($0) }
+    return result.header(for: "retry-after").flatMap(Double.init).map {
+      .seconds($0)
+    }
   }
 }
 
@@ -593,19 +574,14 @@ private extension OpenAICompatibleProvider {
 
 private struct DynamicKey: CodingKey {
   let stringValue: String
+
   var intValue: Int? { nil }
 
-  init(_ stringValue: String) {
-    self.stringValue = stringValue
-  }
+  init(_ stringValue: String) { self.stringValue = stringValue }
 
-  init?(stringValue: String) {
-    self.stringValue = stringValue
-  }
+  init?(stringValue: String) { self.stringValue = stringValue }
 
-  init?(intValue: Int) {
-    nil
-  }
+  init?(intValue: Int) { nil }
 }
 
 private struct WireToolCallFunction: Codable {
@@ -640,10 +616,8 @@ private enum WireContent: Encodable {
   func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
     switch self {
-    case .text(let value):
-      try container.encode(value)
-    case .parts(let parts):
-      try container.encode(parts)
+    case .text(let value): try container.encode(value)
+    case .parts(let parts): try container.encode(parts)
     }
   }
 }
@@ -663,22 +637,20 @@ private struct WireContentPart: Encodable {
 /// `detail` is deliberately absent. Anthropic's compatibility layer documents it as ignored, the
 /// Codex backend disagrees with other clients over what "low" means, and omitting it is what every
 /// route was verified against.
-private struct WireImageURL: Encodable {
-  let url: String
-}
+private struct WireImageURL: Encodable { let url: String }
 
 private struct WireMessage: Encodable {
   let role: String
   let content: WireContent?
   // swiftlint:disable:next discouraged_optional_collection
   let toolCalls: [WireToolCall]?
-  let toolCallId: String?
+  let toolCallID: String?
 
   enum CodingKeys: String, CodingKey {
     case role
     case content
     case toolCalls = "tool_calls"
-    case toolCallId = "tool_call_id"
+    case toolCallID = "tool_call_id"
   }
 }
 
@@ -694,7 +666,7 @@ private struct RequestBody: Encodable {
   // swiftlint:disable:next discouraged_optional_collection
   let tools: [WireToolDefinition]?
   let responseFormat: ResponseFormat?
-  let sessionId: String?
+  let sessionID: String?
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: DynamicKey.self)
@@ -706,7 +678,7 @@ private struct RequestBody: Encodable {
     try container.encodeIfPresent(streamOptions, forKey: DynamicKey("stream_options"))
     try container.encodeIfPresent(stop, forKey: DynamicKey("stop"))
     try container.encodeIfPresent(tools, forKey: DynamicKey("tools"))
-    try container.encodeIfPresent(sessionId, forKey: DynamicKey("session_id"))
+    try container.encodeIfPresent(sessionID, forKey: DynamicKey("session_id"))
 
     if let responseFormat {
       try container.encode(
@@ -724,8 +696,7 @@ private struct WireResponseFormat: Encodable {
     var container = encoder.container(keyedBy: DynamicKey.self)
 
     switch responseFormat {
-    case .jsonObject:
-      try container.encode("json_object", forKey: DynamicKey("type"))
+    case .jsonObject: try container.encode("json_object", forKey: DynamicKey("type"))
     case .jsonSchema(let name, let schema):
       try container.encode("json_schema", forKey: DynamicKey("type"))
       try container.encode(
@@ -745,9 +716,7 @@ private struct WireJSONSchema: Encodable {
 private struct StreamOptions: Encodable {
   let includeUsage: Bool
 
-  enum CodingKeys: String, CodingKey {
-    case includeUsage = "include_usage"
-  }
+  enum CodingKeys: String, CodingKey { case includeUsage = "include_usage" }
 }
 
 private struct DecodedToolCall: Decodable {
@@ -787,9 +756,7 @@ private struct ResponseBody: Decodable {
 }
 
 private struct ErrorBody: Decodable {
-  struct Inner: Decodable {
-    let message: String?
-  }
+  struct Inner: Decodable { let message: String? }
 
   let error: Inner?
 }

@@ -3,8 +3,10 @@ import Testing
 @testable import ClawAgent
 @testable import ClawCore
 
-@Suite struct ContextRowPolicyTests {
-  @Test func rowPolicyPrioritiesAreUniqueAndAlreadySorted() {
+@Suite
+struct ContextRowPolicyTests {
+  @Test
+  func rowPolicyPrioritiesAreUniqueAndAlreadySorted() {
     // given
     let specs = ContextRowPolicy.specs
 
@@ -19,7 +21,8 @@ import Testing
 
   /// `ContextBuilder.spec(for:)` traps on a row id with no spec, so a new case added without its
   /// entry is a crash the compiler cannot see. This closes that for every future case as well.
-  @Test func everyRowIDHasExactlyOneSpec() {
+  @Test
+  func everyRowIDHasExactlyOneSpec() {
     // given
     let ids = ContextRowID.allCases
 
@@ -38,7 +41,8 @@ import Testing
     )
   }
 
-  @Test func theLessonsRowIsFencedAsUntrustedAndNeverTruncated() throws {
+  @Test
+  func theLessonsRowIsFencedAsUntrustedAndNeverTruncated() throws {
     // given
     let lessons = try #require(
       ContextRowPolicy.specs.first { spec in
@@ -52,7 +56,8 @@ import Testing
     #expect(ContextRowID.lessons.resolve(in: .default, residualGraphemes: 10) == nil)
   }
 
-  @Test func rowCapsResolveThroughContextBudgetWhenResidualIsAbsent() {
+  @Test
+  func rowCapsResolveThroughContextBudgetWhenResidualIsAbsent() {
     // given
     let budget = ContextBudget(
       inputCapGraphemes: 100,
@@ -75,7 +80,8 @@ import Testing
     #expect(ContextRowID.skills.resolve(in: budget, residualGraphemes: nil) == 66)
   }
 
-  @Test func truncatableRowCapsScaleByResidualBudgetShare() {
+  @Test
+  func truncatableRowCapsScaleByResidualBudgetShare() {
     // given
     let budget = ContextBudget(
       inputCapGraphemes: 100,

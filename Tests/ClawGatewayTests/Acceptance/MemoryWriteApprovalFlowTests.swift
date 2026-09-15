@@ -7,8 +7,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite(.serialized) struct MemoryWriteApprovalFlowTests {
-  @Test func suspendApproveInsertsExactlyOneAssistantItem() async throws {
+@Suite(.serialized)
+struct MemoryWriteApprovalFlowTests {
+  @Test
+  func suspendApproveInsertsExactlyOneAssistantItem() async throws {
     // given — a proposal whose text trips the secret-shape scan (§8.2 warning surfacing)
     let harness = try makeSC3Harness(
       scripts: [
@@ -18,10 +20,10 @@ import Testing
               id: "m1",
               name: "memory_write",
               argumentsJSON: #"{"text":"the api_key lives in 1Password","kind":"reference"}"#
-            )
+            ),
           ]),
           okResponse(content: "Noted durably."),
-        ]
+        ],
       ],
       httpResponses: [:]
     )
@@ -69,7 +71,7 @@ import Testing
     #expect(items.first?["source"] == "assistant")
     #expect(items.first?["kind"] == "reference")
     _ = try await pollUntilTrue {
-      try runState(databasePath: harness.databasePath, runId: approval.runId)
+      try runState(databasePath: harness.databasePath, runID: approval.runID)
         == RunState.done.rawValue
     }
   }

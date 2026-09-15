@@ -6,10 +6,12 @@ import Testing
 
 @testable import ClawSecrets
 
-@Suite struct EncryptedMCPCredentialStoreTests {
+@Suite
+struct EncryptedMCPCredentialStoreTests {
   // MARK: - Round trip
 
-  @Test func loadOnAStateRootWithoutATokenFileIsAbsentRatherThanAnError() throws {
+  @Test
+  func loadOnAStateRootWithoutATokenFileIsAbsentRatherThanAnError() throws {
     // given — a root with no key and no envelope: the state before a token was ever set.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -24,7 +26,8 @@ import Testing
     #expect(try entryNames(in: stateRoot).isEmpty)
   }
 
-  @Test func saveThenLoadReturnsTheTokenForTheServerItWasSetFor() throws {
+  @Test
+  func saveThenLoadReturnsTheTokenForTheServerItWasSetFor() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -38,7 +41,8 @@ import Testing
     #expect(try store.load(server: server) == .token("mcp-token"))
   }
 
-  @Test func loadOnAServerWithNoRecordIsAbsentEvenWhenTheMapExists() throws {
+  @Test
+  func loadOnAServerWithNoRecordIsAbsentEvenWhenTheMapExists() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -49,7 +53,8 @@ import Testing
     #expect(try store.load(server: try makeServer(name: "other")) == .absent)
   }
 
-  @Test func savingOneServerPreservesAnUnrelatedServersToken() throws {
+  @Test
+  func savingOneServerPreservesAnUnrelatedServersToken() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -65,7 +70,8 @@ import Testing
     #expect(try store.load(server: bystander) == .token("bystander-token"))
   }
 
-  @Test func loadAllReportsEveryConfiguredServerIncludingTheOnesWithNothingStored() throws {
+  @Test
+  func loadAllReportsEveryConfiguredServerIncludingTheOnesWithNothingStored() throws {
     // given — the boot path reads once and needs a row per server, not only per stored token.
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -77,13 +83,11 @@ import Testing
     try store.save(token: "repointed-token", for: repointed)
 
     // when
-    let outcomes = try store.loadAll(
-      servers: [
-        configured,
-        untokened,
-        try makeServer(name: "repointed", url: "https://new.example/mcp"),
-      ]
-    )
+    let outcomes = try store.loadAll(servers: [
+      configured,
+      untokened,
+      try makeServer(name: "repointed", url: "https://new.example/mcp"),
+    ])
 
     // then
     #expect(
@@ -95,7 +99,8 @@ import Testing
     )
   }
 
-  @Test func storedServerNamesListsEveryRecordIncludingOnesNoLongerConfigured() throws {
+  @Test
+  func storedServerNamesListsEveryRecordIncludingOnesNoLongerConfigured() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -110,7 +115,8 @@ import Testing
     #expect(try store.storedServerNames() == ["linear", "retired"])
   }
 
-  @Test func bootSnapshotRedactsConfiguredRepointedAndOrphanedTokens() throws {
+  @Test
+  func bootSnapshotRedactsConfiguredRepointedAndOrphanedTokens() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -132,15 +138,14 @@ import Testing
     #expect(snapshot.outcomes["linear"] == .token("configured-token"))
     #expect(snapshot.outcomes["repointed"] == .boundToDifferentURL)
     #expect(
-      Set(snapshot.redactionValues) == [
-        "configured-token", "repointed-token", "retired-token",
-      ]
+      Set(snapshot.redactionValues) == ["configured-token", "repointed-token", "retired-token"]
     )
   }
 
   // MARK: - URL binding
 
-  @Test func aTokenSetForAnotherURLIsReportedAsBoundElsewhereRatherThanReturned() throws {
+  @Test
+  func aTokenSetForAnotherURLIsReportedAsBoundElsewhereRatherThanReturned() throws {
     // given — the server was re-pointed after its token was issued.
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -158,7 +163,8 @@ import Testing
     #expect(loaded.token == nil)
   }
 
-  @Test func settingTheTokenAgainRebindsItToTheServersCurrentURL() throws {
+  @Test
+  func settingTheTokenAgainRebindsItToTheServersCurrentURL() throws {
     // given — the repair an owner is told to run after re-pointing a server.
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -176,16 +182,13 @@ import Testing
     #expect(try store.load(server: repointed) == .token("issued-for-new-host"))
   }
 
-  @Test(
-    arguments: [
-      (setFor: "https://mcp.example/mcp", loadedFor: "HTTPS://MCP.EXAMPLE/mcp", matches: true),
-      (setFor: "https://mcp.example/mcp", loadedFor: "https://mcp.example/other", matches: false),
-      (
-        setFor: "https://mcp.example/mcp", loadedFor: "https://mcp.example:8443/mcp", matches: false
-      ),
-      (setFor: "https://mcp.example/mcp", loadedFor: "http://mcp.example/mcp", matches: false),
-    ]
-  ) func theBindingIgnoresCaseInSchemeAndHostAndNothingElse(
+  @Test(arguments: [
+    (setFor: "https://mcp.example/mcp", loadedFor: "HTTPS://MCP.EXAMPLE/mcp", matches: true),
+    (setFor: "https://mcp.example/mcp", loadedFor: "https://mcp.example/other", matches: false),
+    (setFor: "https://mcp.example/mcp", loadedFor: "https://mcp.example:8443/mcp", matches: false),
+    (setFor: "https://mcp.example/mcp", loadedFor: "http://mcp.example/mcp", matches: false),
+  ])
+  func theBindingIgnoresCaseInSchemeAndHostAndNothingElse(
     binding: (setFor: String, loadedFor: String, matches: Bool)
   ) throws {
     let (setFor, loadedFor, matches) = binding
@@ -205,7 +208,8 @@ import Testing
 
   // MARK: - Clearing
 
-  @Test func deletingReportsWhetherThereWasATokenAndPreservesUnrelatedRecords() throws {
+  @Test
+  func deletingReportsWhetherThereWasATokenAndPreservesUnrelatedRecords() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -225,7 +229,8 @@ import Testing
     #expect(try store.load(server: bystander) == .token("bystander-token"))
   }
 
-  @Test func deletingTheLastTokenLeavesAValidEmptyMapRatherThanNoFile() throws {
+  @Test
+  func deletingTheLastTokenLeavesAValidEmptyMapRatherThanNoFile() throws {
     // given — an absent envelope and an empty one read the same, but only one of them proves the
     // clear ran rather than something having eaten the file.
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
@@ -243,7 +248,8 @@ import Testing
 
   // MARK: - On-disk protection
 
-  @Test func theTokenEnvelopeIsPublishedOwnerOnly() throws {
+  @Test
+  func theTokenEnvelopeIsPublishedOwnerOnly() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -258,7 +264,8 @@ import Testing
     #expect(try permissionBits(of: mcpEnvelopeURL(in: stateRoot)) == 0o600)
   }
 
-  @Test func theTokenEnvelopeCarriesNoPlaintextTokenServerNameOrEndpoint() throws {
+  @Test
+  func theTokenEnvelopeCarriesNoPlaintextTokenServerNameOrEndpoint() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -285,7 +292,8 @@ import Testing
     }
   }
 
-  @Test func aWorldReadableTokenEnvelopeIsRefused() throws {
+  @Test
+  func aWorldReadableTokenEnvelopeIsRefused() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -302,7 +310,8 @@ import Testing
     }
   }
 
-  @Test func theTokenReadPolicyCapsTheEnvelopeAndDemandsOwnerOnlyMode() {
+  @Test
+  func theTokenReadPolicyCapsTheEnvelopeAndDemandsOwnerOnlyMode() {
     // given — the policy the store hands the protocol, proven from `fstat` before a byte of payload
     // is allocated.
     let policy = EncryptedMCPCredentialStore.envelopeReadPolicy
@@ -312,7 +321,8 @@ import Testing
     #expect(policy.requiredPermissionBits == SecureFilePublisher.ownerOnlyPermissions)
   }
 
-  @Test func aTokenMapOnAStateRootWithoutAKeyReportsTheMissingKey() throws {
+  @Test
+  func aTokenMapOnAStateRootWithoutAKeyReportsTheMissingKey() throws {
     // given — the map is sealed under the runtime key, so an envelope standing alone is unopenable.
     // It must not read as "no token stored".
     let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-credentials")
@@ -327,7 +337,8 @@ import Testing
 
   // MARK: - Envelope authentication
 
-  @Test func theProviderCredentialMapAtTheTokenPathFailsAuthentication() throws {
+  @Test
+  func theProviderCredentialMapAtTheTokenPathFailsAuthentication() throws {
     // given — all three envelopes are sealed under the same key, so only the associated data keeps
     // them apart. Swapping them is what an owner does by accident and an attacker does on purpose.
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
@@ -344,9 +355,7 @@ import Testing
     // then — asserted at the envelope seam as well as the owner-facing one: only here does sharing
     // the associated data change the observable outcome, by handing back the provider map's
     // plaintext instead of throwing.
-    let key = try EncryptedFileSecretStore.openKey(
-      at: SecretStatePaths(stateRoot: stateRoot).key
-    )
+    let key = try EncryptedFileSecretStore.openKey(at: SecretStatePaths(stateRoot: stateRoot).key)
     #expect(throws: CredentialStoreError.malformedStorage) {
       _ = try EncryptedMCPCredentialStore.openEnvelope(providerEnvelope, key: key)
     }
@@ -355,7 +364,8 @@ import Testing
     }
   }
 
-  @Test func theTokenMapMovedToTheProviderCredentialPathFailsAuthentication() throws {
+  @Test
+  func theTokenMapMovedToTheProviderCredentialPathFailsAuthentication() throws {
     // given — the same swap in the other direction, proving the distinction is symmetric rather
     // than an accident of one reader being stricter than the other.
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
@@ -379,7 +389,8 @@ import Testing
     }
   }
 
-  @Test func aTamperedTokenEnvelopeIsRefused() throws {
+  @Test
+  func aTamperedTokenEnvelopeIsRefused() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -399,7 +410,8 @@ import Testing
     }
   }
 
-  @Test func anUnsupportedEnvelopeVersionIsRefusedBeforeDecryption() throws {
+  @Test
+  func anUnsupportedEnvelopeVersionIsRefusedBeforeDecryption() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -419,7 +431,8 @@ import Testing
     }
   }
 
-  @Test func anUnsupportedPlaintextMapVersionIsRefused() throws {
+  @Test
+  func anUnsupportedPlaintextMapVersionIsRefused() throws {
     // given — a genuinely authentic envelope under the right key and the right associated data,
     // carrying a map version this build does not know.
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
@@ -432,7 +445,8 @@ import Testing
     }
   }
 
-  @Test func anEnvelopeLargerThanTheCapIsRefused() throws {
+  @Test
+  func anEnvelopeLargerThanTheCapIsRefused() throws {
     // given
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -449,7 +463,8 @@ import Testing
     }
   }
 
-  @Test func aFailedPublicationLeavesThePreviousTokenWhole() throws {
+  @Test
+  func aFailedPublicationLeavesThePreviousTokenWhole() throws {
     // given — the same crash-safe publication the provider map rides, proven to be wired up here
     // too: a failure before the commit must leave a usable token behind.
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
@@ -481,7 +496,8 @@ import Testing
 
   // MARK: - Concurrency
 
-  @Test func concurrentSavesForDifferentServersAllSurvive() async throws {
+  @Test
+  func concurrentSavesForDifferentServersAllSurvive() async throws {
     // given — every save republishes the whole map, so two interleaved read-modify-write cycles
     // would drop one another's record. The store's lock is what stops that.
     let stateRoot = try makeSealedRoot(prefix: "claw-mcp-credentials")
@@ -510,12 +526,9 @@ import Testing
 // MARK: - Fixtures
 
 private extension EncryptedMCPCredentialStoreTests {
-  func makeServer(
-    name: String = "linear",
-    url: String = "https://mcp.example/mcp"
-  ) throws -> MCPServerConfig {
-    try MCPServerConfig(name: name, url: url)
-  }
+  func makeServer(name: String = "linear", url: String = "https://mcp.example/mcp") throws
+    -> MCPServerConfig
+  { try MCPServerConfig(name: name, url: url) }
 }
 
 // MARK: - Disk Inspection
@@ -533,9 +546,7 @@ private extension EncryptedMCPCredentialStoreTests {
   /// Seals arbitrary plaintext under the root's real key and the store's real associated data — an
   /// envelope that authenticates, so only what is inside it is on trial.
   func sealMCPPlaintext(_ plaintext: Data, in stateRoot: URL) throws {
-    let key = try EncryptedFileSecretStore.openKey(
-      at: SecretStatePaths(stateRoot: stateRoot).key
-    )
+    let key = try EncryptedFileSecretStore.openKey(at: SecretStatePaths(stateRoot: stateRoot).key)
     try writeMCPEnvelope(
       try EncryptedMCPCredentialStore.sealEnvelope(plaintext, key: key),
       in: stateRoot
@@ -543,9 +554,7 @@ private extension EncryptedMCPCredentialStoreTests {
   }
 
   func storedMCPMap(in stateRoot: URL) throws -> EncryptedMCPCredentialStore.CredentialMap {
-    let key = try EncryptedFileSecretStore.openKey(
-      at: SecretStatePaths(stateRoot: stateRoot).key
-    )
+    let key = try EncryptedFileSecretStore.openKey(at: SecretStatePaths(stateRoot: stateRoot).key)
     return try EncryptedMCPCredentialStore.decode(
       try EncryptedMCPCredentialStore.openEnvelope(
         try Data(contentsOf: mcpEnvelopeURL(in: stateRoot)),

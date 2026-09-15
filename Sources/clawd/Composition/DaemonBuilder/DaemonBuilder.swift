@@ -10,12 +10,14 @@ import Logging
 import ServiceLifecycle
 import UnixSignals
 
-/// The composition root. Holds the cross-cutting inputs `run()` resolves before wiring — config,
-/// secrets, stores, the dedicated tool executor, the Telegram transport, and the logger — plus the
-/// lazy managed-store factory. `makeRosterStack` resolves the configured routes into erased
-/// providers on the dedicated LLM executor, and `build(rosterStack:cooldown:)` assembles the whole
-/// service graph from them: the roster + agent feed a `TurnRunner`, which the router dispatches from
-/// the poller. The `make*` builders are organized by subsystem in `DaemonBuilder+*.swift`.
+/// The composition root.
+///
+/// Holds the cross-cutting inputs `run()` resolves before wiring — config, secrets, stores, the
+/// dedicated tool executor, the Telegram transport, and the logger — plus the lazy managed-store
+/// factory. `makeRosterStack` resolves the configured routes into erased providers on the dedicated
+/// LLM executor, and `build(rosterStack:cooldown:)` assembles the whole service graph from them:
+/// the roster + agent feed a `TurnRunner`, which the router dispatches from the poller. The `make*`
+/// builders are organized by subsystem in `DaemonBuilder+*.swift`.
 struct DaemonBuilder: Sendable {
   let config: AppConfig
   let secrets: Secrets
@@ -29,31 +31,38 @@ struct DaemonBuilder: Sendable {
   let mcp: MCPBootInputs
 
   let logger: Logger
-  var now: @Sendable () -> Date = { Date() }
 
-  /// Builds the encrypted credential store the managed route loads its record from. A field rather
-  /// than a literal so a composition test scripts a missing or malformed envelope in place of the
-  /// real one; the current route never invokes it.
+  var now: @Sendable () -> Date = {
+    Date()
+  }
+
+  /// Builds the encrypted credential store the managed route loads its record from.
+  ///
+  /// A field rather than a literal so a composition test scripts a missing or malformed envelope in
+  /// place of the real one; the current route never invokes it.
   let makeManagedStore: @Sendable () -> any LLMCredentialStore
 
   /// Resolves native CLI readiness once; injectable at the unmanaged process boundary.
-  var resolveCoder: @Sendable (CoderConfig) async throws -> CoderBackendSetup = CoderBackendSetup
-    .live
+  var resolveCoder: @Sendable (_ config: CoderConfig) async throws -> CoderBackendSetup =
+    CoderBackendSetup.live
 
-  /// The one redaction set for this process — secret-store values plus MCP tokens. Every redactor
-  /// and arg guard the builder makes reads this instead of `secrets.redactionValues`, so none of
-  /// them can be built from a narrower list than the log backend was. Derived rather than passed in:
-  /// a caller that could supply the list is a caller that could supply a shorter one.
+  /// The one redaction set for this process — secret-store values plus MCP tokens.
+  ///
+  /// Every redactor and arg guard the builder makes reads this instead of
+  /// `secrets.redactionValues`, so none of them can be built from a narrower list than the log
+  /// backend was. Derived rather than passed in: a caller that could supply the list is a caller
+  /// that could supply a shorter one.
   var redactionValues: [String] { mcp.redactionValues(with: secrets) }
 
   /// The single production bound on both the ServiceGroup's graceful window and the lane drain, so
   /// admission-close, cancel, and the bounded drain all share one deadline.
   static let gracefulShutdownSeconds = 30
 
-  /// Resolves every configured route into a provider roster on the dedicated LLM executor. It
-  /// supplies only inputs — the resolved routes and settings, the two lazy bearers, the lazy managed
-  /// store, the executor, and the build version — while the tested `ProviderStackFactory` in
-  /// `ClawLLM` owns the selection. Each bearer is read only for the route it belongs to and the
+  /// Resolves every configured route into a provider roster on the dedicated LLM executor.
+  ///
+  /// It supplies only inputs — the resolved routes and settings, the two lazy bearers, the lazy
+  /// managed store, the executor, and the build version — while the tested `ProviderStackFactory`
+  /// in `ClawLLM` owns the selection. Each bearer is read only for the route it belongs to and the
   /// managed store is built only for the ChatGPT route, so a route never opens another's credential
   /// path. A fallback that cannot be built throws here, at boot, rather than at the 3am the
   /// primary's quota runs out; a malformed or insecure managed envelope throws the closed store
@@ -63,20 +72,28 @@ struct DaemonBuilder: Sendable {
       primaryRoute: config.llm.route,
       fallbackRoute: config.llm.fallbackRoute,
       settings: config.llm,
-      loadStaticBearer: { secrets.llmApiKey },
-      loadFallbackBearer: { secrets.llmFallbackApiKey },
+      loadStaticBearer: {
+        secrets.llmAPIKey
+      },
+      loadFallbackBearer: {
+        secrets.llmFallbackAPIKey
+      },
       makeManagedCredentialStore: makeManagedStore,
       http: http,
       buildVersion: ClawdVersion.current
     )
   }
 
-  /// - Parameter cooldown: the ONE window ledger the turn path and the `/schedule` parse share, so a
-  ///   route a turn just walled off is not re-probed by the very next scheduled parse.
-  func build(
-    rosterStack: RosterStack,
-    cooldown: any PrimaryRouteCooldownTracking
-  ) async throws -> DaemonRuntimeBundle {
+  /// Composes the daemon's services around the resolved provider roster.
+  ///
+  /// - Parameters:
+  ///   - rosterStack: The providers and credential lifetimes prepared for the configured routes.
+  ///   - cooldown: The shared route ledger used by turns and schedule parsing so one path honors
+  ///     a cooldown recorded by the other.
+  /// - Returns: The composed runtime and its coordinated shutdown dependencies.
+  func build(rosterStack: RosterStack, cooldown: any PrimaryRouteCooldownTracking) async throws
+    -> DaemonRuntimeBundle
+  {
     let sandbox = await prepareSandbox()
     let coordination = TurnCoordination()
     let coder = await prepareCoder(coordination: coordination)
@@ -276,13 +293,13 @@ struct DaemonBuilder: Sendable {
     )
   }
 
-  /// Appends the lane-admission service LAST. ServiceLifecycle shuts services down in reverse array
-  /// order, so the last-registered service is the first to receive graceful shutdown — the lanes
-  /// must close admission and drain before any service they depend on tears down.
+  /// Appends the lane-admission service LAST.
+  ///
+  /// ServiceLifecycle shuts services down in reverse array order, so the last-registered service is
+  /// the first to receive graceful shutdown — the lanes must close admission and drain before any
+  /// service they depend on tears down.
   static func servicesWithLaneAdmissionLast(
     base: [any Service],
     laneAdmission: LaneAdmissionShutdownService
-  ) -> [any Service] {
-    base + [laneAdmission]
-  }
+  ) -> [any Service] { base + [laneAdmission] }
 }

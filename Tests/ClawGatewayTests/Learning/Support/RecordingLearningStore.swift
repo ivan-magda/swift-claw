@@ -19,25 +19,25 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   struct ServiceBehavior: Sendable {
     let identities: [LearningTrialIdentity]?
     let trialResults: [Int64: TrialReconciliationResult]
-    let failingTrialIds: Set<Int64>
+    let failingTrialIDs: Set<Int64>
     let failEnumeration: Bool
-    let unsealedRunIds: [Int64]?
-    let handledSealRunIds: Set<Int64>
+    let unsealedRunIDs: [Int64]?
+    let handledSealRunIDs: Set<Int64>
 
     init(
       identities: [LearningTrialIdentity]? = nil,
       trialResults: [Int64: TrialReconciliationResult] = [:],
-      failingTrialIds: Set<Int64> = [],
+      failingTrialIDs: Set<Int64> = [],
       failEnumeration: Bool = false,
-      unsealedRunIds: [Int64]? = nil,
-      handledSealRunIds: Set<Int64> = []
+      unsealedRunIDs: [Int64]? = nil,
+      handledSealRunIDs: Set<Int64> = []
     ) {
       self.identities = identities
       self.trialResults = trialResults
-      self.failingTrialIds = failingTrialIds
+      self.failingTrialIDs = failingTrialIDs
       self.failEnumeration = failEnumeration
-      self.unsealedRunIds = unsealedRunIds
-      self.handledSealRunIds = handledSealRunIds
+      self.unsealedRunIDs = unsealedRunIDs
+      self.handledSealRunIDs = handledSealRunIDs
     }
   }
 
@@ -81,20 +81,34 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   }
 
   var admissionAttempts: Int {
-    lock.withLock { admissions }
+    lock.withLock {
+      admissions
+    }
   }
 
   var serviceCalls: [String] {
-    lock.withLock { recordedServiceCalls }
+    lock.withLock {
+      recordedServiceCalls
+    }
   }
 
   var failBootReconciliation: Bool {
-    get { lock.withLock { bootReconciliationFails } }
-    set { lock.withLock { bootReconciliationFails = newValue } }
+    get {
+      lock.withLock {
+        bootReconciliationFails
+      }
+    }
+    set {
+      lock.withLock {
+        bootReconciliationFails = newValue
+      }
+    }
   }
 
   func clearServiceCalls() {
-    lock.withLock { recordedServiceCalls.removeAll() }
+    lock.withLock {
+      recordedServiceCalls.removeAll()
+    }
   }
 
   func applyTrialDecision(
@@ -116,96 +130,67 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   }
 
   func commitPromotionReply(
-    updateId: Int64,
+    updateID: Int64,
     target: NewFeedbackTarget,
     chunks: [LearningNoticeChunk],
     now: Date
   ) throws(StoreError) -> PromotionReplyOutcome {
-    try base.commitPromotionReply(updateId: updateId, target: target, chunks: chunks, now: now)
+    try base.commitPromotionReply(updateID: updateID, target: target, chunks: chunks, now: now)
   }
 
-  func currentPromotion(jobId: Int64) throws(StoreError) -> DecisionReceipt? {
-    try base.currentPromotion(jobId: jobId)
+  func currentPromotion(jobID: Int64) throws(StoreError) -> DecisionReceipt? {
+    try base.currentPromotion(jobID: jobID)
   }
 
-  func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView] {
-    try base.learningView(jobId: jobId)
+  func learningView(jobID: Int64?) throws(StoreError) -> [JobLearningView] {
+    try base.learningView(jobID: jobID)
   }
 
-  func applyReset(
-    updateId: Int64,
-    jobId: Int64,
-    now: Date
-  ) throws(StoreError) -> ConfirmedLearningResetResult {
-    try base.applyReset(updateId: updateId, jobId: jobId, now: now)
-  }
+  func applyReset(updateID: Int64, jobID: Int64, now: Date) throws(StoreError)
+    -> ConfirmedLearningResetResult
+  { try base.applyReset(updateID: updateID, jobID: jobID, now: now) }
 
   func feedbackTarget(nonce: String) throws(StoreError) -> FeedbackTarget? {
     try base.feedbackTarget(nonce: nonce)
   }
 
-  func consumeAndAppendEvent(
-    _ tap: FeedbackTap,
-    now: Date
-  ) throws(StoreError) -> FeedbackOutcome {
+  func consumeAndAppendEvent(_ tap: FeedbackTap, now: Date) throws(StoreError) -> FeedbackOutcome {
     try base.consumeAndAppendEvent(tap, now: now)
   }
 
-  func consumeAndOpenChallenge(
-    _ tap: FeedbackTap,
-    prompt: [LearningNoticeChunk],
-    now: Date
-  ) throws(StoreError) -> FeedbackOutcome {
-    try base.consumeAndOpenChallenge(tap, prompt: prompt, now: now)
+  func consumeAndOpenChallenge(_ tap: FeedbackTap, prompt: [LearningNoticeChunk], now: Date)
+    throws(StoreError) -> FeedbackOutcome
+  { try base.consumeAndOpenChallenge(tap, prompt: prompt, now: now) }
+
+  func consumeChallenge(id: Int64, payload: String, now: Date) throws(StoreError) -> FeedbackOutcome
+  { try base.consumeChallenge(id: id, payload: payload, now: now) }
+
+  func liveChallenge(ownerUserID: Int64, chatID: Int64) throws(StoreError) -> FeedbackChallenge? {
+    try base.liveChallenge(ownerUserID: ownerUserID, chatID: chatID)
   }
 
-  func consumeChallenge(
-    id: Int64,
-    payload: String,
-    now: Date
-  ) throws(StoreError) -> FeedbackOutcome {
-    try base.consumeChallenge(id: id, payload: payload, now: now)
-  }
-
-  func liveChallenge(
-    ownerUserId: Int64,
-    chatId: Int64
-  ) throws(StoreError) -> FeedbackChallenge? {
-    try base.liveChallenge(ownerUserId: ownerUserId, chatId: chatId)
-  }
-
-  func admitCandidate(
-    digest: CandidateDigest,
-    redactor: SecretRedactor,
-    now: Date
-  ) throws(StoreError) -> AdmissionOutcome {
-    lock.withLock { admissions += 1 }
+  func admitCandidate(digest: CandidateDigest, redactor: SecretRedactor, now: Date)
+    throws(StoreError) -> AdmissionOutcome
+  {
+    lock.withLock {
+      admissions += 1
+    }
     guard admissionFails == false else {
       throw .unexpected("injected admission failure")
     }
     return try base.admitCandidate(digest: digest, redactor: redactor, now: now)
   }
 
-  func approveCandidate(
-    _ approval: CandidateApproval,
-    redactor: SecretRedactor,
-    now: Date
-  ) throws(StoreError) -> AdmissionOutcome {
-    try base.approveCandidate(approval, redactor: redactor, now: now)
-  }
+  func approveCandidate(_ approval: CandidateApproval, redactor: SecretRedactor, now: Date)
+    throws(StoreError) -> AdmissionOutcome
+  { try base.approveCandidate(approval, redactor: redactor, now: now) }
 
-  func editCandidate(
-    _ edit: CandidateEdit,
-    redactor: SecretRedactor,
-    now: Date
-  ) throws(StoreError) -> AdmissionOutcome {
-    try base.editCandidate(edit, redactor: redactor, now: now)
-  }
+  func editCandidate(_ edit: CandidateEdit, redactor: SecretRedactor, now: Date) throws(StoreError)
+    -> AdmissionOutcome
+  { try base.editCandidate(edit, redactor: redactor, now: now) }
 
-  func commitCandidateReview(
-    _ review: CandidateReviewNotice,
-    now: Date
-  ) throws(StoreError) -> Bool {
+  func commitCandidateReview(_ review: CandidateReviewNotice, now: Date) throws(StoreError) -> Bool
+  {
     if review.candidateDigest == failingReviewCandidate {
       throw .unexpected("injected review failure")
     }
@@ -218,10 +203,9 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     return try base.commitCandidateReview(review, now: now)
   }
 
-  func authorizeAndStartOperation(
-    _ authorization: LearningAuthorization,
-    now: Date
-  ) throws(StoreError) -> AuthorizeOutcome {
+  func authorizeAndStartOperation(_ authorization: LearningAuthorization, now: Date)
+    throws(StoreError) -> AuthorizeOutcome
+  {
     lock.lock()
     presented.append(authorization)
     lock.unlock()
@@ -231,23 +215,20 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     return try base.authorizeAndStartOperation(authorization, now: now)
   }
 
-  func lessonSet(jobId: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
-    try base.lessonSet(jobId: jobId, digest: digest)
+  func lessonSet(jobID: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
+    try base.lessonSet(jobID: jobID, digest: digest)
   }
 
-  func binding(runId: Int64) throws(StoreError) -> RunLearningBinding? {
-    try base.binding(runId: runId)
+  func binding(runID: Int64) throws(StoreError) -> RunLearningBinding? {
+    try base.binding(runID: runID)
   }
 
-  func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial? {
-    try base.openTrial(jobId: jobId)
+  func openTrial(jobID: Int64) throws(StoreError) -> LearningTrial? {
+    try base.openTrial(jobID: jobID)
   }
 
-  func recomputeAssignment(
-    runId: Int64,
-    now: Date
-  ) throws(StoreError) -> AssignmentRecomputation {
-    try base.recomputeAssignment(runId: runId, now: now)
+  func recomputeAssignment(runID: Int64, now: Date) throws(StoreError) -> AssignmentRecomputation {
+    try base.recomputeAssignment(runID: runID, now: now)
   }
 
   func liveTrialIdentities() throws(StoreError) -> [LearningTrialIdentity] {
@@ -261,77 +242,68 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
     return try base.liveTrialIdentities()
   }
 
-  func reconcileTrial(
-    _ identity: LearningTrialIdentity,
-    now: Date
-  ) throws(StoreError) -> TrialReconciliationResult {
-    recordServiceCall("trial:\(identity.trialId)")
-    if serviceBehavior.failingTrialIds.contains(identity.trialId) {
+  func reconcileTrial(_ identity: LearningTrialIdentity, now: Date) throws(StoreError)
+    -> TrialReconciliationResult
+  {
+    recordServiceCall("trial:\(identity.trialID)")
+    if serviceBehavior.failingTrialIDs.contains(identity.trialID) {
       throw .unexpected("injected trial reconciliation failure")
     }
-    if let result = serviceBehavior.trialResults[identity.trialId] {
+    if let result = serviceBehavior.trialResults[identity.trialID] {
       return result
     }
     return try base.reconcileTrial(identity, now: now)
   }
 
   @discardableResult
-  func settleFromLane(runId: Int64, now: Date) throws(StoreError) -> Bool {
-    try base.settleFromLane(runId: runId, now: now)
+  func settleFromLane(runID: Int64, now: Date) throws(StoreError) -> Bool {
+    try base.settleFromLane(runID: runID, now: now)
   }
 
-  func freezeCompatibility(runId: Int64, surface: RunSurface) throws(StoreError) {
-    try base.freezeCompatibility(runId: runId, surface: surface)
+  func freezeCompatibility(runID: Int64, surface: RunSurface) throws(StoreError) {
+    try base.freezeCompatibility(runID: runID, surface: surface)
   }
 
-  func compatibility(runId: Int64) throws(StoreError) -> RunCompatibility? {
-    try base.compatibility(runId: runId)
+  func compatibility(runID: Int64) throws(StoreError) -> RunCompatibility? {
+    try base.compatibility(runID: runID)
   }
 
   func unsealed(limit: Int) throws(StoreError) -> [Int64] {
     onUnsealed()
     recordServiceCall("unsealed")
-    if let runIds = serviceBehavior.unsealedRunIds {
-      return runIds
+    if let runIDs = serviceBehavior.unsealedRunIDs {
+      return runIDs
     }
     return try base.unsealed(limit: limit)
   }
 
   @discardableResult
-  func sealEvidence(runId: Int64, now: Date) throws(StoreError) -> SealOutcome {
-    recordServiceCall("seal:\(runId)")
-    if serviceBehavior.handledSealRunIds.contains(runId) {
+  func sealEvidence(runID: Int64, now: Date) throws(StoreError) -> SealOutcome {
+    recordServiceCall("seal:\(runID)")
+    if serviceBehavior.handledSealRunIDs.contains(runID) {
       return .alreadySealed
     }
-    return try base.sealEvidence(runId: runId, now: now)
+    return try base.sealEvidence(runID: runID, now: now)
   }
 
-  func evidence(runId: Int64) throws(StoreError) -> SealedEvidence? {
-    try base.evidence(runId: runId)
+  func evidence(runID: Int64) throws(StoreError) -> SealedEvidence? {
+    try base.evidence(runID: runID)
   }
 
-  func prepareReflection(
-    trigger: TriggerIdentity
-  ) throws(StoreError) -> ReflectionPreparation? {
+  func prepareReflection(trigger: TriggerIdentity) throws(StoreError) -> ReflectionPreparation? {
     try base.prepareReflection(trigger: trigger)
   }
 
-  func claimOperation(
-    _ key: LearningOperationKey,
-    now: Date
-  ) throws(StoreError) -> ClaimedOperation? {
-    try base.claimOperation(key, now: now)
-  }
+  func claimOperation(_ key: LearningOperationKey, now: Date) throws(StoreError)
+    -> ClaimedOperation?
+  { try base.claimOperation(key, now: now) }
 
-  func finishOperation(
-    _ result: LearningOperationResult,
-    now: Date
-  ) throws(StoreError) -> Bool {
+  func finishOperation(_ result: LearningOperationResult, now: Date) throws(StoreError) -> Bool {
     try base.finishOperation(result, now: now)
   }
 
-  func evaluation(runId: Int64) throws(StoreError) -> LearningEvaluation? {
-    try base.evaluation(runId: runId)
+  func evaluation(runID: Int64) throws(StoreError) -> LearningEvaluation? {
+    try base.evaluation(runID: runID)
   }
 
   func candidateArtifact(digest: CandidateDigest) throws(StoreError) -> CandidateArtifact? {
@@ -348,8 +320,12 @@ final class RecordingLearningStore: ScheduledLearningStore, @unchecked Sendable 
   }
 }
 
+// MARK: - Service Call Recording
+
 private extension RecordingLearningStore {
   func recordServiceCall(_ call: String) {
-    lock.withLock { recordedServiceCalls.append(call) }
+    lock.withLock {
+      recordedServiceCalls.append(call)
+    }
   }
 }

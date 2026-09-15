@@ -6,11 +6,13 @@ import Testing
 
 private typealias Support = ChatGPTProviderTestSupport
 
-@Suite struct ChatGPTResponsesRequestEncoderTests {
+@Suite
+struct ChatGPTResponsesRequestEncoderTests {
   /// The whole body, byte for byte, for a request that advertises no tools. Every value here is a
   /// literal rather than a reference to the constant that produced it: an assertion that re-derives
   /// its expectation from the code under test moves with it and pins nothing.
-  @Test func requestWithoutToolsEncodesTheGoldenBody() throws {
+  @Test
+  func requestWithoutToolsEncodesTheGoldenBody() throws {
     // given
     let request = ChatRequest(
       model: "openai-chatgpt/gpt-5",
@@ -28,21 +30,22 @@ private typealias Support = ChatGPTProviderTestSupport
     // then
     #expect(
       body == """
-        {"include":["reasoning.encrypted_content"],\
-        "input":[\
-        {"content":[{"text":"hello","type":"input_text"}],"role":"user","type":"message"}],\
-        "instructions":"You are helpful.\\n\\nBe brief.",\
-        "model":"gpt-5",\
-        "prompt_cache_key":"swift-claw:cbcece245430edb08f8e6a62",\
-        "store":false,\
-        "stream":true}
-        """
+      {"include":["reasoning.encrypted_content"],\
+      "input":[\
+      {"content":[{"text":"hello","type":"input_text"}],"role":"user","type":"message"}],\
+      "instructions":"You are helpful.\\n\\nBe brief.",\
+      "model":"gpt-5",\
+      "prompt_cache_key":"swift-claw:cbcece245430edb08f8e6a62",\
+      "store":false,\
+      "stream":true}
+      """
     )
   }
 
   /// The whole body for a request carrying tools and a completed tool round trip. The tools are
   /// supplied unsorted so the array proves it keeps request order while the cache key does not.
-  @Test func requestWithToolsEncodesTheGoldenBody() throws {
+  @Test
+  func requestWithToolsEncodesTheGoldenBody() throws {
     // given
     let request = ChatRequest(
       model: "gpt-5",
@@ -54,7 +57,7 @@ private typealias Support = ChatGPTProviderTestSupport
           content: "thinking out loud",
           toolCalls: [ToolCall(id: "call_1", name: "clock", argumentsJSON: "{}")]
         ),
-        ChatMessage(role: .tool, content: "12:00", toolCallId: "call_1"),
+        ChatMessage(role: .tool, content: "12:00", toolCallID: "call_1"),
         ChatMessage(role: .assistant, content: "It is noon."),
       ],
       maxOutputTokens: 4096,
@@ -67,36 +70,37 @@ private typealias Support = ChatGPTProviderTestSupport
     // then
     #expect(
       body == """
-        {"include":["reasoning.encrypted_content"],\
-        "input":[\
-        {"content":[{"text":"u","type":"input_text"}],"role":"user","type":"message"},\
-        {"content":[{"text":"thinking out loud","type":"output_text"}],\
-        "role":"assistant","status":"completed","type":"message"},\
-        {"arguments":"{}","call_id":"call_1","name":"clock","type":"function_call"},\
-        {"call_id":"call_1","output":"12:00","type":"function_call_output"},\
-        {"content":[{"text":"It is noon.","type":"output_text"}],\
-        "role":"assistant","status":"completed","type":"message"}],\
-        "instructions":"S",\
-        "model":"gpt-5",\
-        "parallel_tool_calls":true,\
-        "prompt_cache_key":"swift-claw:fd25691adfb5ff2a3c9ef65a",\
-        "store":false,\
-        "stream":true,\
-        "tool_choice":"auto",\
-        "tools":[\
-        {"description":"Fetch a URL.","name":"web_fetch",\
-        "parameters":{"properties":{"url":{"type":"string"}},"required":["url"],"type":"object"},\
-        "strict":false,"type":"function"},\
-        {"description":"Read the clock.","name":"clock",\
-        "parameters":{"type":"object"},"strict":false,"type":"function"}]}
-        """
+      {"include":["reasoning.encrypted_content"],\
+      "input":[\
+      {"content":[{"text":"u","type":"input_text"}],"role":"user","type":"message"},\
+      {"content":[{"text":"thinking out loud","type":"output_text"}],\
+      "role":"assistant","status":"completed","type":"message"},\
+      {"arguments":"{}","call_id":"call_1","name":"clock","type":"function_call"},\
+      {"call_id":"call_1","output":"12:00","type":"function_call_output"},\
+      {"content":[{"text":"It is noon.","type":"output_text"}],\
+      "role":"assistant","status":"completed","type":"message"}],\
+      "instructions":"S",\
+      "model":"gpt-5",\
+      "parallel_tool_calls":true,\
+      "prompt_cache_key":"swift-claw:fd25691adfb5ff2a3c9ef65a",\
+      "store":false,\
+      "stream":true,\
+      "tool_choice":"auto",\
+      "tools":[\
+      {"description":"Fetch a URL.","name":"web_fetch",\
+      "parameters":{"properties":{"url":{"type":"string"}},"required":["url"],"type":"object"},\
+      "strict":false,"type":"function"},\
+      {"description":"Read the clock.","name":"clock",\
+      "parameters":{"type":"object"},"strict":false,"type":"function"}]}
+      """
     )
   }
 
   /// The three tool fields travel together. Both halves are asserted in one test because either one
   /// alone passes for the wrong reason: an encoder that emits nothing satisfies the absence, and one
   /// that always emits satisfies the presence.
-  @Test func toolFieldsAppearTogetherAndOnlyWhenToolsExist() throws {
+  @Test
+  func toolFieldsAppearTogetherAndOnlyWhenToolsExist() throws {
     // given
     let messages = [ChatMessage(role: .user, content: "hello")]
     let without = ChatRequest(model: "gpt-5", messages: messages, maxOutputTokens: 4096)
@@ -123,7 +127,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// A stop string cannot be honored here and must not be quietly dropped, which would change what
   /// the model was asked for. The paired nil case proves the refusal is the stop field's doing
   /// rather than an encoder that refuses everything.
-  @Test func nonNilStopStringsAreRefused() throws {
+  @Test
+  func nonNilStopStringsAreRefused() throws {
     // given
     let messages = [ChatMessage(role: .user, content: "hello")]
     let stopping = ChatRequest(
@@ -158,14 +163,15 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// The Codex path honors no output cap, offers no relied-upon stop contract, and is not asked for
   /// a reasoning configuration or a structured-output shape, so none of those fields may appear.
-  @Test func unsupportedFieldsAreOmitted() throws {
+  @Test
+  func unsupportedFieldsAreOmitted() throws {
     // given
     let request = ChatRequest(
       model: "gpt-5",
       messages: [ChatMessage(role: .user, content: "hello")],
       maxOutputTokens: 4096,
       responseFormat: .jsonSchema(name: "draft", schema: .object(["type": .string("object")])),
-      sessionId: "clawd-session-7"
+      sessionID: "clawd-session-7"
     )
 
     // when
@@ -189,7 +195,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// System text is joined wherever it appears in the history, in the order it appears — including
   /// after a user turn, which a filter that only reads a leading run would miss.
-  @Test func systemMessagesConcatenateInHistoryOrder() throws {
+  @Test
+  func systemMessagesConcatenateInHistoryOrder() throws {
     // given
     let request = ChatRequest(
       model: "gpt-5",
@@ -216,7 +223,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// A proposal whose text is empty still has to reach the route as calls: the adapter that replays
   /// reasoning material replaces assistant text, and function calls that rode on that text would
   /// vanish with it.
-  @Test func functionCallsSurviveAnAssistantMessageWithNoText() throws {
+  @Test
+  func functionCallsSurviveAnAssistantMessageWithNoText() throws {
     // given
     let request = ChatRequest(
       model: "gpt-5",
@@ -245,7 +253,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Replay state is the issuing adapter's alone. Rendering it into the prompt would hand opaque
   /// material to the model as text and put it somewhere the daemon promises it never goes.
-  @Test func providerStateIsNeverEncodedAsText() throws {
+  @Test
+  func providerStateIsNeverEncodedAsText() throws {
     // given
     let marker = "REPLAY-MARKER-9f2c"
     let request = ChatRequest(
@@ -278,7 +287,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// An over-cap eviction stamps a turn's replay state empty. Replaying that empty turn would emit no
   /// assistant text, so the ordinary answer the message still holds must fall back to normal encoding
   /// rather than being dropped — and its tool call has to survive the fallback too.
-  @Test func anEmptyStampedReplayTurnStillSendsItsAssistantAnswer() throws {
+  @Test
+  func anEmptyStampedReplayTurnStillSendsItsAssistantAnswer() throws {
     // given — a history whose assistant turn carries the empty-stamped payload but still holds its
     // answer and a tool call, decoded into the selection the provider would replay
     let profileID = UUID()
@@ -340,16 +350,17 @@ private typealias Support = ChatGPTProviderTestSupport
   /// A delta-only answer leaves the turn's replay state holding a reasoning item but no message item.
   /// Replaying that turn must carry BOTH — the reasoning for continuity and the synthesized answer
   /// from the message — or the visible reply, which lives only in `message.content`, is dropped.
-  @Test func aReasoningOnlyReplayTurnStillSendsItsSynthesizedAnswer() throws {
+  @Test
+  func aReasoningOnlyReplayTurnStillSendsItsSynthesizedAnswer() throws {
     // given — an assistant turn whose stored state holds reasoning but no message item, with its
     // visible answer only in the message content
     let profileID = UUID()
     let wireModel = "gpt-5"
     let codec = ChatGPTProviderStateCodec()
     let reasoningStamped = try codec.encodeResponseState(
-      items: ChatGPTReplayItems(
-        reasoning: [ChatGPTReasoningItem(encryptedContent: "ENCRYPTED-REASONING")]
-      ),
+      items: ChatGPTReplayItems(reasoning: [
+        ChatGPTReasoningItem(encryptedContent: "ENCRYPTED-REASONING"),
+      ]),
       identity: ChatGPTReplayIdentity(profileID: profileID, wireModel: wireModel, epoch: UUID())
     )
     let messages = [
@@ -397,13 +408,12 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// A tool result names the call it answers, so the route can pair it with the `function_call` it
   /// was given rather than guessing from position.
-  @Test func toolResultsCarryTheirCallIdentity() throws {
+  @Test
+  func toolResultsCarryTheirCallIdentity() throws {
     // given
     let request = ChatRequest(
       model: "gpt-5",
-      messages: [
-        ChatMessage(role: .tool, content: "12:00", toolCallId: "call_1")
-      ],
+      messages: [ChatMessage(role: .tool, content: "12:00", toolCallID: "call_1")],
       maxOutputTokens: 4096
     )
 

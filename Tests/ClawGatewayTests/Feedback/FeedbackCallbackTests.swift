@@ -8,8 +8,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct FeedbackCallbackTests {
-  @Test func parseIsStrictAndMapsEveryAction() throws {
+@Suite
+struct FeedbackCallbackTests {
+  @Test
+  func parseIsStrictAndMapsEveryAction() throws {
     // given — every compact wire action and representative forged envelopes
     let expected: [(String, FeedbackAction, OwnerSignal, FeedbackSubjectKind)] = [
       ("ru", .resultUseful, .resultUseful, .run),
@@ -39,7 +41,8 @@ import Testing
     #expect(FeedbackKeyboard.parse("fb:abc:ru:extra") == nil)
   }
 
-  @Test func allowlistRunsBeforeParsingAndEveryAuthRungFailsClosed() async throws {
+  @Test
+  func allowlistRunsBeforeParsingAndEveryAuthRungFailsClosed() async throws {
     // given — every case reaches a distinct auth branch before atomic consumption
     let cases: [FeedbackAuthFailure] = [
       .forbidden,
@@ -48,7 +51,7 @@ import Testing
       .ownerMismatch,
       .groupChat,
       .actionMismatch,
-      .guessableTargetId,
+      .guessableTargetID,
     ]
     var neutralToasts: [String?] = []
 
@@ -63,7 +66,7 @@ import Testing
       let callback = failure.callback(target: target)
 
       // when
-      let outcome = await env.handler.handle(callback, updateId: 10)
+      let outcome = await env.handler.handle(callback, updateID: 10)
 
       // then — bypassing the named rung would consume the real target or classify it differently
       #expect(outcome == .processed)
@@ -81,7 +84,8 @@ import Testing
     #expect(neutralToasts.first == "This action is no longer available.")
   }
 
-  @Test func knownAuthFailureAuditsTypedSubjectMetadataWithoutCallbackBytes() async throws {
+  @Test
+  func knownAuthFailureAuditsTypedSubjectMetadataWithoutCallbackBytes() async throws {
     // given — an allowlisted non-owner and a known target
     let env = try FeedbackCallbackEnvironment.make(allowed: [42, 43])
     let target = env.target(
@@ -98,7 +102,7 @@ import Testing
     )
 
     // when
-    _ = await env.handler.handle(callback, updateId: 11)
+    _ = await env.handler.handle(callback, updateID: 11)
 
     // then — dropping typed metadata or copying raw callback bytes into audit breaks this boundary
     let audit = try #require(env.handlerAudit.events.last)
@@ -111,7 +115,8 @@ import Testing
     #expect(audit.resultSize == 0)
   }
 
-  @Test func validTapClaimsOnceAndConsumedNonceCannotAppendTwice() async throws {
+  @Test
+  func validTapClaimsOnceAndConsumedNonceCannotAppendTwice() async throws {
     // given
     let env = try FeedbackCallbackEnvironment.make()
     let target = env.target(nonce: "single-use", signal: .resultUseful, subject: "41")
@@ -121,9 +126,9 @@ import Testing
     )
 
     // when — one transport replay, then a distinct update tapping the consumed nonce
-    let first = await env.handler.handle(callback, updateId: 7)
-    let replay = await env.handler.handle(callback, updateId: 7)
-    let secondTap = await env.handler.handle(callback, updateId: 8)
+    let first = await env.handler.handle(callback, updateID: 7)
+    let replay = await env.handler.handle(callback, updateID: 7)
+    let secondTap = await env.handler.handle(callback, updateID: 8)
 
     // then — claiming inside the store too would make the first valid tap a duplicate
     #expect(first == .processed)
@@ -136,10 +141,11 @@ import Testing
     #expect(answers.count == 2)
     #expect(answers.first?.text == "Feedback recorded.")
     #expect(answers.last?.text == "This action is no longer available.")
-    #expect(try env.eventTransportUpdateIds() == [7])
+    #expect(try env.eventTransportUpdateIDs() == [7])
   }
 
-  @Test func expiredTargetAnswersNeutrallyAndAuditsWithoutMutation() async throws {
+  @Test
+  func expiredTargetAnswersNeutrallyAndAuditsWithoutMutation() async throws {
     // given
     let env = try FeedbackCallbackEnvironment.make()
     let target = env.target(
@@ -154,7 +160,7 @@ import Testing
     )
 
     // when
-    let outcome = await env.handler.handle(callback, updateId: 12)
+    let outcome = await env.handler.handle(callback, updateID: 12)
 
     // then — removing the expiry CAS would append and advance the revision
     #expect(outcome == .processed)
@@ -167,10 +173,12 @@ import Testing
     #expect(await env.callbacks.answers.first?.text == "This action is no longer available.")
   }
 
-  @Test func payloadActionsRemainAvailableForTheFutureChallengeBranch() async throws {
+  @Test
+  func payloadActionsRemainAvailableForTheFutureChallengeBranch() async throws {
     // given — both pure payload-bearing buttons are valid and authenticated
     let actions: [(FeedbackAction, FeedbackSubjectKind)] = [
-      (.resultCorrection, .run), (.candidateEdit, .candidate),
+      (.resultCorrection, .run),
+      (.candidateEdit, .candidate),
     ]
 
     for (offset, entry) in actions.enumerated() {
@@ -187,7 +195,7 @@ import Testing
       )
 
       // when
-      let outcome = await env.handler.handle(callback, updateId: Int64(20 + offset))
+      let outcome = await env.handler.handle(callback, updateID: Int64(20 + offset))
 
       // then — routing rc/ce to immediate consumption would destroy Task 11's live target
       #expect(outcome == .processed)
@@ -199,11 +207,12 @@ import Testing
     }
   }
 
-  @Test func routerOwnsMalformedFeedbackDomainWithoutPreParsingIt() async throws {
+  @Test
+  func routerOwnsMalformedFeedbackDomainWithoutPreParsingIt() async throws {
     // given — a malformed fb envelope and a router with only the feedback callback handler wired
     let env = try FeedbackCallbackEnvironment.make(wireFeedbackRouter: true)
     let update = RawUpdate(
-      updateId: 30,
+      updateID: 30,
       message: nil,
       editedMessage: nil,
       callback: env.callback(data: "fb:known:unknown")
@@ -220,14 +229,15 @@ import Testing
     #expect(await env.callbacks.answers.first?.text == "This action is no longer available.")
   }
 
-  @Test func routerKeepsApprovalCallbacksBesideFeedbackCallbacks() async throws {
+  @Test
+  func routerKeepsApprovalCallbacksBesideFeedbackCallbacks() async throws {
     // given — one router has both callback domains wired to their real handlers
     let env = try FeedbackCallbackEnvironment.make(
       wireFeedbackRouter: true,
       wireApprovalRouter: true
     )
     let update = RawUpdate(
-      updateId: 31,
+      updateID: 31,
       message: nil,
       editedMessage: nil,
       callback: env.callback(
@@ -256,14 +266,12 @@ private enum FeedbackAuthFailure {
   case ownerMismatch
   case groupChat
   case actionMismatch
-  case guessableTargetId
+  case guessableTargetID
 
   var allowedUsers: [Int64] {
     switch self {
-    case .ownerMismatch:
-      [42, 43]
-    case .forbidden, .malformed, .unknown, .groupChat, .actionMismatch, .guessableTargetId:
-      [42]
+    case .ownerMismatch: [42, 43]
+    case .forbidden, .malformed, .unknown, .groupChat, .actionMismatch, .guessableTargetID: [42]
     }
   }
 
@@ -271,7 +279,7 @@ private enum FeedbackAuthFailure {
     switch self {
     case .forbidden: "forbidden"
     case .malformed: "malformed"
-    case .unknown, .guessableTargetId: "unknown"
+    case .unknown, .guessableTargetID: "unknown"
     case .ownerMismatch: "owner_mismatch"
     case .groupChat: "chat_mismatch"
     case .actionMismatch: "action_mismatch"
@@ -283,58 +291,58 @@ private enum FeedbackAuthFailure {
     switch self {
     case .forbidden:
       return RawCallback(
-        callbackId: "forbidden",
-        fromUserId: 999,
-        chatId: 999,
-        messageId: 1,
+        callbackID: "forbidden",
+        fromUserID: 999,
+        chatID: 999,
+        messageID: 1,
         data: "fb:malformed"
       )
     case .malformed:
       return RawCallback(
-        callbackId: "malformed",
-        fromUserId: 42,
-        chatId: 42,
-        messageId: 1,
+        callbackID: "malformed",
+        fromUserID: 42,
+        chatID: 42,
+        messageID: 1,
         data: "fb:malformed"
       )
     case .unknown:
       return RawCallback(
-        callbackId: "unknown",
-        fromUserId: 42,
-        chatId: 42,
-        messageId: 1,
+        callbackID: "unknown",
+        fromUserID: 42,
+        chatID: 42,
+        messageID: 1,
         data: FeedbackKeyboard.callbackData(nonce: "missing", action: .resultUseful)
       )
     case .ownerMismatch:
       return RawCallback(
-        callbackId: "owner",
-        fromUserId: 43,
-        chatId: 43,
-        messageId: 1,
+        callbackID: "owner",
+        fromUserID: 43,
+        chatID: 43,
+        messageID: 1,
         data: useful
       )
     case .groupChat:
       return RawCallback(
-        callbackId: "group",
-        fromUserId: 42,
-        chatId: -1_000,
-        messageId: 1,
+        callbackID: "group",
+        fromUserID: 42,
+        chatID: -1_000,
+        messageID: 1,
         data: useful
       )
     case .actionMismatch:
       return RawCallback(
-        callbackId: "action",
-        fromUserId: 42,
-        chatId: 42,
-        messageId: 1,
+        callbackID: "action",
+        fromUserID: 42,
+        chatID: 42,
+        messageID: 1,
         data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultNotUseful)
       )
-    case .guessableTargetId:
+    case .guessableTargetID:
       return RawCallback(
-        callbackId: "row-id",
-        fromUserId: 42,
-        chatId: 42,
-        messageId: 1,
+        callbackID: "row-id",
+        fromUserID: 42,
+        chatID: 42,
+        messageID: 1,
         data: FeedbackKeyboard.callbackData(nonce: "1", action: .resultUseful)
       )
     }
@@ -350,7 +358,7 @@ private struct FeedbackCallbackEnvironment {
   let queue: DatabaseQueue
   let learning: ScheduledLearningStoreGRDB
   let state: JobLearningState
-  let jobId: Int64
+  let jobID: Int64
   let now: Date
   let handlerAudit: RecordingAuditLog
   let callbacks: RecordingCallbacks
@@ -370,7 +378,7 @@ private struct FeedbackCallbackEnvironment {
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let job = try jobs.create(
       NewScheduledJob(
-        ownerChatId: 42,
+        ownerChatID: 42,
         label: "feedback",
         prompt: "Summarize updates",
         recurrence: nil,
@@ -380,9 +388,9 @@ private struct FeedbackCallbackEnvironment {
       now: now
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobID: job.id, now: now)
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: allowed)
+    try allowlist.seedAllowlist(userIDs: allowed)
     let access = AccessControl(allowlist: allowlist, groupChats: [])
     let handlerAudit = RecordingAuditLog()
     let callbacks = RecordingCallbacks()
@@ -394,25 +402,27 @@ private struct FeedbackCallbackEnvironment {
       learning: learning,
       audit: handlerAudit,
       callbacks: callbacks,
-      now: { now },
+      now: {
+        now
+      },
       logger: TestLog.silent
     )
     let approval = Approval(
       id: 7,
-      runId: 100,
-      sessionId: 200,
+      runID: 100,
+      sessionID: 200,
       state: .pending,
       tool: "file_write",
       canonicalArgsJSON: "{}",
       canonicalTarget: "/workspace/file",
       argsHash: "args-hash",
       policyVersion: "POLICYV1",
-      ownerUserId: 42,
+      ownerUserID: 42,
       nonce: approvalNonce,
-      observationMessageId: 300,
-      toolCallId: "approval-call",
+      observationMessageID: 300,
+      toolCallID: "approval-call",
       reason: .askTier,
-      promptMessageId: nil,
+      promptMessageID: nil,
       createdTs: now,
       expiresTs: now.addingTimeInterval(3_600),
       resolvedTs: nil
@@ -432,8 +442,12 @@ private struct FeedbackCallbackEnvironment {
       audit: handlerAudit,
       coordinator: coordinator,
       callbacks: callbacks,
-      currentPolicyVersion: { "POLICYV1" },
-      now: { now },
+      currentPolicyVersion: {
+        "POLICYV1"
+      },
+      now: {
+        now
+      },
       logger: TestLog.silent
     )
     let router = MessageRouter(
@@ -460,7 +474,7 @@ private struct FeedbackCallbackEnvironment {
       queue: queue,
       learning: learning,
       state: state,
-      jobId: job.id,
+      jobID: job.id,
       now: now,
       handlerAudit: handlerAudit,
       callbacks: callbacks,
@@ -479,32 +493,30 @@ private struct FeedbackCallbackEnvironment {
   ) -> NewFeedbackTarget {
     NewFeedbackTarget(
       nonce: nonce,
-      jobId: jobId,
+      jobID: jobID,
       epoch: state.epoch,
       subjectKind: kind,
       subjectDigest: subject,
       allowedActions: [signal],
-      ownerUserId: 42,
-      chatId: 42,
+      ownerUserID: 42,
+      chatID: 42,
       expiresAt: expiresAt ?? now.addingTimeInterval(3_600)
     )
   }
 
   func callback(data: String?, from: Int64 = 42, chat: Int64 = 42) -> RawCallback {
     RawCallback(
-      callbackId: "feedback-callback",
-      fromUserId: from,
-      chatId: chat,
-      messageId: 1,
+      callbackID: "feedback-callback",
+      fromUserID: from,
+      chatID: chat,
+      messageID: 1,
       data: data
     )
   }
 
-  func eventCount() throws -> Int {
-    try count(table: "feedback_events")
-  }
+  func eventCount() throws -> Int { try count(table: "feedback_events") }
 
-  func eventTransportUpdateIds() throws -> [Int64] {
+  func eventTransportUpdateIDs() throws -> [Int64] {
     try queue.read { db in
       try Int64.fetchAll(
         db,
@@ -513,9 +525,7 @@ private struct FeedbackCallbackEnvironment {
     }
   }
 
-  func processedCount() throws -> Int {
-    try count(table: "processed_updates")
-  }
+  func processedCount() throws -> Int { try count(table: "processed_updates") }
 
   func count(table: String) throws -> Int {
     try queue.read { db in
@@ -528,7 +538,7 @@ private struct FeedbackCallbackEnvironment {
       try Int64.fetchOne(
         db,
         sql: "SELECT feedback_revision FROM job_learning_state WHERE job_id = ?",
-        arguments: [jobId]
+        arguments: [jobID]
       ) ?? -1
     }
   }

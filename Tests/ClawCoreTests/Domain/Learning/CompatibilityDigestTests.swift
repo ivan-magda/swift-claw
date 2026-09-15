@@ -7,13 +7,15 @@ import Testing
 /// single reflection window — the unsoundness the whole compatibility rule exists to prevent — and
 /// a digest that added a per-run value would split every window down to one run and prevent
 /// reflection entirely.
-@Suite struct CompatibilityDigestTests {
-  @Test func everyCompatibilityInputChangesTheDigest() throws {
+@Suite
+struct CompatibilityDigestTests {
+  @Test
+  func everyCompatibilityInputChangesTheDigest() throws {
     // given — the baseline, then one variant per input the algorithm fixes, each differing in
     // exactly one of them
     let baseline = digest()
     let variants = [
-      digest(jobId: 99),
+      digest(jobID: 99),
       digest(epoch: LearningEpoch(7)),
       digest(jobDefinitionDigest: "job-definition-after-a-prompt-edit"),
       digest(stableDigest: "stable-set-after-a-promotion"),
@@ -42,7 +44,8 @@ import Testing
     #expect(Set(all).count == all.count)
   }
 
-  @Test func aColonInsideARouteCannotShiftAFieldBoundary() throws {
+  @Test
+  func aColonInsideARouteCannotShiftAFieldBoundary() throws {
     // given — two surfaces that split the same route text differently. Vendor-qualified model ids
     // are ordinary, and `configuredRoute` is the owner's `CLAW_LLM_MODEL` verbatim.
     let splitEarly = digest(configuredRoute: "vendor:model", terminalRoute: "fallback")
@@ -54,13 +57,14 @@ import Testing
     #expect(splitEarly != splitLate)
   }
 
-  @Test func provenanceOnlyValuesLeaveTheDigestAlone() throws {
+  @Test
+  func provenanceOnlyValuesLeaveTheDigestAlone() throws {
     // given — the same surface seen through a different run, occurrence and effective set
     let baseline = digest()
 
     // when
     let anotherRun = digest(
-      runId: 4_242,
+      runID: 4_242,
       effectiveDigest: "the-open-trials-candidate-set",
       occurrenceAt: Date(timeIntervalSince1970: 1_799_999_999)
     )
@@ -74,8 +78,8 @@ import Testing
 
 // swiftlint:disable:next function_default_parameter_at_end
 private func digest(
-  runId: Int64 = 41,
-  jobId: Int64 = 10,
+  runID: Int64 = 41,
+  jobID: Int64 = 10,
   epoch: LearningEpoch = LearningEpoch(1),
   jobDefinitionDigest: String = "job-definition-v1",
   stableDigest: String = "stable-set-v1",
@@ -95,8 +99,8 @@ private func digest(
   evaluatorRubricVersion: Int = 1
 ) -> CompatibilityDigest {
   let compatibility = RunCompatibility(
-    runId: runId,
-    jobId: jobId,
+    runID: runID,
+    jobID: jobID,
     epoch: epoch,
     contextSchemaVersion: contextSchemaVersion,
     toolCatalogDigest: toolCatalogDigest,
@@ -107,15 +111,15 @@ private func digest(
     classifierVersion: classifierVersion
   )
   let binding = RunLearningBinding(
-    runId: runId,
-    jobId: jobId,
+    runID: runID,
+    jobID: jobID,
     occurrenceAt: occurrenceAt,
     fireKind: .scheduledOccurrence,
     jobDefinitionDigest: JobDefinitionDigest(rawValue: jobDefinitionDigest),
     epoch: epoch,
     stableDigest: LessonSetDigest(rawValue: stableDigest),
     effectiveDigest: LessonSetDigest(rawValue: effectiveDigest),
-    trialId: nil,
+    trialID: nil,
     trialGeneration: nil
   )
   return compatibility.digest(

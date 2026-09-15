@@ -5,7 +5,8 @@ import Testing
 
 @testable import ClawLLM
 
-@Suite struct ToolWireCodingTests {
+@Suite
+struct ToolWireCodingTests {
   private func makeProvider() -> OpenAICompatibleProvider {
     OpenAICompatibleProvider(
       config: LLMConfig(
@@ -21,7 +22,9 @@ import Testing
       clock: ScriptedClock { _ in
         try? await Task.sleep(for: .milliseconds(1))
       },
-      jitter: { $0 }
+      jitter: {
+        $0
+      }
     )
   }
 
@@ -48,7 +51,8 @@ import Testing
     return object as? [String: Any] ?? [:]
   }
 
-  @Test func requestEncodesToolsArray() throws {
+  @Test
+  func requestEncodesToolsArray() throws {
     // given
     let definition = ToolDefinition(
       name: "web_fetch",
@@ -82,7 +86,8 @@ import Testing
     #expect(parameters["type"] as? String == "object")
   }
 
-  @Test func toollessRequestOmitsToolsKey() throws {
+  @Test
+  func toollessRequestOmitsToolsKey() throws {
     // given
     let request = ChatRequest(
       model: "m",
@@ -97,7 +102,8 @@ import Testing
     #expect(payload["tools"] == nil)
   }
 
-  @Test func assistantProposalAndToolResultEncodeTheExchangeShape() throws {
+  @Test
+  func assistantProposalAndToolResultEncodeTheExchangeShape() throws {
     // given — an assistant anchor (empty content) and its tool result message
     let request = ChatRequest(
       model: "m",
@@ -111,10 +117,10 @@ import Testing
               id: "call_1",
               name: "web_fetch",
               argumentsJSON: #"{"url":"https://e.example/"}"#
-            )
+            ),
           ]
         ),
-        ChatMessage(role: .tool, content: "page text", toolCallId: "call_1"),
+        ChatMessage(role: .tool, content: "page text", toolCallID: "call_1"),
       ],
       maxOutputTokens: 100
     )
@@ -139,24 +145,25 @@ import Testing
     #expect(toolMessage["content"] as? String == "page text")
   }
 
-  @Test func responseDecodesToolCallsAndFinishReason() throws {
+  @Test
+  func responseDecodesToolCallsAndFinishReason() throws {
     // given — a captured-shape tool-call response body
     let fixture = #"""
-      {
-        "choices": [{
-          "message": {
-            "content": null,
-            "tool_calls": [{
-              "id": "call_9",
-              "type": "function",
-              "function": {"name": "web_search", "arguments": "{\"query\":\"swift\"}"}
-            }]
-          },
-          "finish_reason": "tool_calls"
-        }],
-        "usage": {"prompt_tokens": 12, "completion_tokens": 7, "total_tokens": 19}
-      }
-      """#
+    {
+      "choices": [{
+        "message": {
+          "content": null,
+          "tool_calls": [{
+            "id": "call_9",
+            "type": "function",
+            "function": {"name": "web_search", "arguments": "{\"query\":\"swift\"}"}
+          }]
+        },
+        "finish_reason": "tool_calls"
+      }],
+      "usage": {"prompt_tokens": 12, "completion_tokens": 7, "total_tokens": 19}
+    }
+    """#
 
     // when
     let response = try makeProvider().parse(
@@ -169,12 +176,13 @@ import Testing
     #expect(response.content.isEmpty)
     #expect(
       response.toolCalls == [
-        ToolCall(id: "call_9", name: "web_search", argumentsJSON: #"{"query":"swift"}"#)
+        ToolCall(id: "call_9", name: "web_search", argumentsJSON: #"{"query":"swift"}"#),
       ]
     )
   }
 
-  @Test func plainResponseStillDecodesWithEmptyToolCalls() throws {
+  @Test
+  func plainResponseStillDecodesWithEmptyToolCalls() throws {
     // given
     let fixture = #"{"choices":[{"message":{"content":"hi"},"finish_reason":"stop"}]}"#
 
@@ -189,22 +197,23 @@ import Testing
     #expect(response.toolCalls.isEmpty)
   }
 
-  @Test func toolCallMissingIdIsDropped() throws {
+  @Test
+  func toolCallMissingIDIsDropped() throws {
     // given — a tool_calls entry that omits id (malformed provider response)
     let fixture = #"""
-      {
-        "choices": [{
-          "message": {
-            "content": null,
-            "tool_calls": [{
-              "type": "function",
-              "function": {"name": "web_search", "arguments": "{}"}
-            }]
-          },
-          "finish_reason": "tool_calls"
-        }]
-      }
-      """#
+    {
+      "choices": [{
+        "message": {
+          "content": null,
+          "tool_calls": [{
+            "type": "function",
+            "function": {"name": "web_search", "arguments": "{}"}
+          }]
+        },
+        "finish_reason": "tool_calls"
+      }]
+    }
+    """#
 
     // when
     let response = try makeProvider().parse(
@@ -216,23 +225,24 @@ import Testing
     #expect(response.toolCalls.isEmpty)
   }
 
-  @Test func toolCallMissingFunctionNameIsDropped() throws {
+  @Test
+  func toolCallMissingFunctionNameIsDropped() throws {
     // given — a tool_calls entry that omits function.name
     let fixture = #"""
-      {
-        "choices": [{
-          "message": {
-            "content": null,
-            "tool_calls": [{
-              "id": "call_1",
-              "type": "function",
-              "function": {"arguments": "{}"}
-            }]
-          },
-          "finish_reason": "tool_calls"
-        }]
-      }
-      """#
+    {
+      "choices": [{
+        "message": {
+          "content": null,
+          "tool_calls": [{
+            "id": "call_1",
+            "type": "function",
+            "function": {"arguments": "{}"}
+          }]
+        },
+        "finish_reason": "tool_calls"
+      }]
+    }
+    """#
 
     // when
     let response = try makeProvider().parse(
@@ -244,23 +254,24 @@ import Testing
     #expect(response.toolCalls.isEmpty)
   }
 
-  @Test func toolCallMissingArgumentsDefaultsToEmptyObject() throws {
+  @Test
+  func toolCallMissingArgumentsDefaultsToEmptyObject() throws {
     // given — id and name present but the arguments field is absent
     let fixture = #"""
-      {
-        "choices": [{
-          "message": {
-            "content": null,
-            "tool_calls": [{
-              "id": "call_9",
-              "type": "function",
-              "function": {"name": "web_search"}
-            }]
-          },
-          "finish_reason": "tool_calls"
-        }]
-      }
-      """#
+    {
+      "choices": [{
+        "message": {
+          "content": null,
+          "tool_calls": [{
+            "id": "call_9",
+            "type": "function",
+            "function": {"name": "web_search"}
+          }]
+        },
+        "finish_reason": "tool_calls"
+      }]
+    }
+    """#
 
     // when
     let response = try makeProvider().parse(
@@ -269,10 +280,6 @@ import Testing
     )
 
     // then
-    #expect(
-      response.toolCalls == [
-        ToolCall(id: "call_9", name: "web_search", argumentsJSON: "{}")
-      ]
-    )
+    #expect(response.toolCalls == [ToolCall(id: "call_9", name: "web_search", argumentsJSON: "{}")])
   }
 }

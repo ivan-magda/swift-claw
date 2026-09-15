@@ -1,8 +1,10 @@
 import ClawCore
 import Testing
 
-@Suite struct FeedbackEventDigestTests {
-  @Test func feedbackEventDigestChangesForEveryDurableEventField() throws {
+@Suite
+struct FeedbackEventDigestTests {
+  @Test
+  func feedbackEventDigestChangesForEveryDurableEventField() throws {
     // given
     let baseline = FeedbackDigestInput()
     let baselineDigest = try baseline.digest()
@@ -10,13 +12,13 @@ import Testing
       (
         "event id",
         baseline.changing { input in
-          input.eventId += 1
+          input.eventID += 1
         }
       ),
       (
         "job id",
         baseline.changing { input in
-          input.jobId += 1
+          input.jobID += 1
         }
       ),
       (
@@ -58,7 +60,7 @@ import Testing
       (
         "transport update",
         baseline.changing { input in
-          input.transportUpdateId += 1
+          input.transportUpdateID += 1
         }
       ),
       (
@@ -88,8 +90,7 @@ import Testing
 
     // then — omitting any one durable projection field would make that row mutation invisible
     #expect(
-      baselineDigest.rawValue
-        == "c64a1fa997dd7d4fabea90720d17b665efdbf2c84a6cae0c224c0ecd2689400f"
+      baselineDigest.rawValue == "c64a1fa997dd7d4fabea90720d17b665efdbf2c84a6cae0c224c0ecd2689400f"
     )
     for (label, digest) in changedDigests {
       #expect(digest != baselineDigest, "digest omitted \(label)")
@@ -100,20 +101,20 @@ import Testing
 // MARK: - Fixtures
 
 private struct FeedbackDigestInput {
-  var eventId: Int64 = 7
-  var jobId: Int64 = 11
+  var eventID: Int64 = 7
+  var jobID: Int64 = 11
   var epoch = LearningEpoch(2)
   var subjectKind = FeedbackSubjectKind.run
   var subjectDigest = "41"
   var signal = OwnerSignal.resultCorrection
   var payload = "owner correction"
   var actor = AuditActor.owner
-  var transportUpdateId: Int64 = 800
+  var transportUpdateID: Int64 = 800
   var revision = FeedbackRevision(3)
   var supersedes: Int64 = 6
   var occurredAtEpochSecond: Int64 = 1_782_000_600
 
-  func changing(_ transform: (inout FeedbackDigestInput) -> Void) -> FeedbackDigestInput {
+  func changing(_ transform: (_ input: inout FeedbackDigestInput) -> Void) -> FeedbackDigestInput {
     var copy = self
     transform(&copy)
     return copy
@@ -121,15 +122,15 @@ private struct FeedbackDigestInput {
 
   func digest() throws -> FeedbackEventDigest {
     try FeedbackEventDigest.of(
-      eventId: eventId,
-      jobId: jobId,
+      eventID: eventID,
+      jobID: jobID,
       epoch: epoch,
       subjectKind: subjectKind,
       subjectDigest: subjectDigest,
       signal: signal,
       payload: payload,
       actor: actor,
-      transportUpdateId: transportUpdateId,
+      transportUpdateID: transportUpdateID,
       revision: revision,
       supersedes: supersedes,
       occurredAtEpochSecond: occurredAtEpochSecond

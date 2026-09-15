@@ -9,16 +9,17 @@ import Testing
 /// owner's screen.
 private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
 
-@Suite struct AuthCommandResultMapperTests {
+@Suite
+struct AuthCommandResultMapperTests {
   // MARK: - Exit Codes
 
   /// The codes are literals here on purpose. Comparing against the same constant the mapper reads
   /// would move both sides together and pin nothing.
   @Test(arguments: [
-    (AuthCommandExit.success, Int32(0)),
-    (AuthCommandExit.cancelled, Int32(130)),
-    (AuthCommandExit.secretLoadFailure, Int32(11)),
-    (AuthCommandExit.commandFailure, Int32(1)),
+    (AuthCommandExit.success, (0 as Int32)),
+    (AuthCommandExit.cancelled, (130 as Int32)),
+    (AuthCommandExit.secretLoadFailure, (11 as Int32)),
+    (AuthCommandExit.commandFailure, (1 as Int32)),
   ])
   func eachExitCarriesItsProcessCode(exit: AuthCommandExit, code: Int32) {
     // given / when / then
@@ -27,7 +28,8 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
 
   /// The secret-load code is the daemon's existing one rather than a second number meaning the same
   /// thing: a supervisor already backs off on it.
-  @Test func theSecretLoadExitIsTheDaemonsOwnSecretLoadCode() {
+  @Test
+  func theSecretLoadExitIsTheDaemonsOwnSecretLoadCode() {
     // given / when / then
     #expect(
       AuthCommandExit.secretLoadFailure.processExitCode == ClawExitCode.secretLoadFailed.rawValue
@@ -36,7 +38,8 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
 
   // MARK: - Failure Table
 
-  @Test func cancellationIsItsOwnExitRatherThanAFailure() {
+  @Test
+  func cancellationIsItsOwnExitRatherThanAFailure() {
     // given / when
     let result = AuthCommandResultMapper.cancelled
 
@@ -59,12 +62,17 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
 
     // then
     #expect(result.exit == .secretLoadFailure)
-    #expect(result.events.allSatisfy { $0.destination == .standardError })
+    #expect(
+      result.events.allSatisfy {
+        $0.destination == .standardError
+      }
+    )
   }
 
   /// A preparer that failed for a reason no typed case names is still a runtime-secret failure. It
   /// must not fall through to an ordinary command failure and let a supervisor hot-loop on it.
-  @Test func anUntypedRuntimeSecretFailureStillUsesTheSecretLoadExit() {
+  @Test
+  func anUntypedRuntimeSecretFailureStillUsesTheSecretLoadExit() {
     // given
     struct Unnamed: Error {}
 
@@ -91,13 +99,14 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
 
   /// A seal cannot succeed until the owner supplies the token it would seal, so the guidance must not
   /// hand them a first step that lands back on this same failure.
-  @Test func aMissingTokenIsToldToSupplyItRatherThanToSealNothing() throws {
+  @Test
+  func aMissingTokenIsToldToSupplyItRatherThanToSealNothing() throws {
     // given
     let missing = SecretStoreError.missingTelegramToken
 
     // when
-    let rendered = AuthCommandResultMapper.runtimeSecretResult(for: missing)
-      .events.map(\.text).joined(separator: "\n")
+    let rendered = AuthCommandResultMapper.runtimeSecretResult(for: missing).events.map(\.text)
+      .joined(separator: "\n")
 
     // then
     #expect(rendered.contains("Telegram bot token"))
@@ -130,7 +139,11 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
 
     // then
     #expect(result.exit == .secretLoadFailure)
-    #expect(result.events.allSatisfy { $0.destination == .standardError })
+    #expect(
+      result.events.allSatisfy {
+        $0.destination == .standardError
+      }
+    )
   }
 
   /// A vendor that refused, stalled, or ran out the window is an ordinary command failure. None of
@@ -149,7 +162,11 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
 
     // then
     #expect(result.exit == .commandFailure)
-    #expect(result.events.allSatisfy { $0.destination == .standardError })
+    #expect(
+      result.events.allSatisfy {
+        $0.destination == .standardError
+      }
+    )
   }
 
   @Test(arguments: [
@@ -164,7 +181,8 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
     #expect(result.exit == .commandFailure)
   }
 
-  @Test func aHeldLockNamesTheDaemonAsTheThingToStop() {
+  @Test
+  func aHeldLockNamesTheDaemonAsTheThingToStop() {
     // given / when
     let held = AuthCommandResultMapper.result(for: AuthMutationLockFailure.held)
     let unavailable = AuthCommandResultMapper.result(
@@ -187,13 +205,15 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
   /// The mapper is the last thing between a vendor's answer and the owner's terminal. Remote text
   /// arrives sanitized by contract; sanitizing again here is what makes that a property of the thing
   /// that renders rather than a promise made upstream.
-  @Test func remoteDetailReachesTheOwnerStrippedOfTerminalControl() {
+  @Test
+  func remoteDetailReachesTheOwnerStrippedOfTerminalControl() {
     // given
     let failure = ChatGPTOAuthFailure.transport(detail: hostileDetail)
 
     // when
-    let rendered = AuthCommandResultMapper.result(for: failure)
-      .events.map(\.text).joined(separator: "\n")
+    let rendered = AuthCommandResultMapper.result(for: failure).events.map(\.text).joined(
+      separator: "\n"
+    )
 
     // then
     #expect(rendered.contains("\u{1B}") == false)
@@ -204,13 +224,14 @@ private let hostileDetail = "\u{1B}]0;pwned\u{7}the vendor\u{1B}[31m\n\nsaid no"
     #expect(rendered.contains("the vendor said no"))
   }
 
-  @Test func anOversizedRemoteDetailIsBoundedBeforeItIsShown() {
+  @Test
+  func anOversizedRemoteDetailIsBoundedBeforeItIsShown() {
     // given
     let flood = String(repeating: "A", count: ChatGPTProviderMetadata.maximumDiagnosticBytes * 4)
 
     // when
-    let rendered = AuthCommandResultMapper.result(for: .transport(detail: flood))
-      .events.map(\.text).joined(separator: "\n")
+    let rendered = AuthCommandResultMapper.result(for: .transport(detail: flood)).events.map(\.text)
+      .joined(separator: "\n")
 
     // then
     #expect(rendered.utf8.count < flood.utf8.count)

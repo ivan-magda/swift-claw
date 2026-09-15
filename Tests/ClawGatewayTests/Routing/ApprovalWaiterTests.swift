@@ -8,13 +8,15 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ApprovalWaiterTests {
+@Suite
+struct ApprovalWaiterTests {
   // MARK: - Doubles
 
   /// A `Tool` double the executor runs on the approve path.
   private struct StubTool: Tool {
     let toolName: String
     let result: String
+
     var definition: ToolDefinition {
       ToolDefinition(
         name: toolName,
@@ -25,9 +27,11 @@ import Testing
         riskLevel: .ask
       )
     }
+
     var timeout: Duration { .seconds(1) }
 
     func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       ToolPayload(content: result, status: .ok, ingestedUntrusted: false)
     }
@@ -37,9 +41,7 @@ import Testing
   private struct ScriptedExecutor: ApprovedActionExecuting {
     let commit: ApprovedCommitOutcome
 
-    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
-      commit
-    }
+    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome { commit }
   }
 
   /// An executor whose action only completes after `gate` releases — i.e. after typing fired once —
@@ -60,9 +62,7 @@ import Testing
     private(set) var executed = false
     private(set) var disarmedBeforeExecution = false
 
-    init(callbacks: RecordingCallbacks) {
-      self.callbacks = callbacks
-    }
+    init(callbacks: RecordingCallbacks) { self.callbacks = callbacks }
 
     func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
       executed = true
@@ -74,58 +74,43 @@ import Testing
   /// Records `resume` calls; `run` is unused on the waiter path.
   private actor ResumeRecorder: TurnDispatching {
     struct ResumeCall: Sendable, Equatable {
-      let runId: Int64
-      let contextBoundMessageId: Int64
+      let runID: Int64
+      let contextBoundMessageID: Int64
     }
 
     private(set) var resumeCalls: [ResumeCall] = []
 
-    func run(
-      runId: Int64,
-      sessionId: Int64,
-      chatId: Int64,
-      triggerMessageId: Int64
-    ) async throws {}
+    func run(runID: Int64, sessionID: Int64, chatID: Int64, triggerMessageID: Int64) async throws {}
 
-    func resume(
-      runId: Int64,
-      sessionId: Int64,
-      chatId: Int64,
-      contextBoundMessageId: Int64
-    ) async {
-      resumeCalls.append(ResumeCall(runId: runId, contextBoundMessageId: contextBoundMessageId))
+    func resume(runID: Int64, sessionID: Int64, chatID: Int64, contextBoundMessageID: Int64) async {
+      resumeCalls.append(ResumeCall(runID: runID, contextBoundMessageID: contextBoundMessageID))
     }
   }
 
   private actor RecordingDelivery: MessageDelivery {
     private(set) var texts: [String] = []
 
-    func sendMessage(
-      to target: DeliveryTarget,
-      text: String,
-      replyMarkup: String?
-    ) async throws -> Int64 {
+    func sendMessage(to target: DeliveryTarget, text: String, replyMarkup: String?) async throws
+      -> Int64
+    {
       texts.append(text)
       return 1
     }
-    func sendRichMessage(
-      to target: DeliveryTarget,
-      markdown: String,
-      replyMarkup: String?
-    ) async throws -> Int64 { 1 }
+
+    func sendRichMessage(to target: DeliveryTarget, markdown: String, replyMarkup: String?)
+      async throws -> Int64
+    { 1 }
   }
 
   private actor RecordingCallbacks: CallbackResponding {
     private(set) var disarmed: [Int64] = []
 
     func answerCallbackQuery(id: String, text: String?) async throws {}
-    func editMessageReplyMarkup(
-      chatId: Int64,
-      messageId: Int64,
-      replyMarkup: String?
-    ) async throws {
+
+    func editMessageReplyMarkup(chatID: Int64, messageID: Int64, replyMarkup: String?) async throws
+    {
       if replyMarkup == nil {
-        disarmed.append(messageId)
+        disarmed.append(messageID)
       }
     }
   }
@@ -137,11 +122,11 @@ import Testing
     let runs: RunStoreGRDB
     let approvals: ApprovalStoreGRDB
 
-    let sessionId: Int64
-    let runId: Int64
-    let approvalId: Int64
-    let observationMessageId: Int64
-    let promptMessageId: Int64
+    let sessionID: Int64
+    let runID: Int64
+    let approvalID: Int64
+    let observationMessageID: Int64
+    let promptMessageID: Int64
   }
 
   /// A suspended run with a placeholder observation and an APPROVED approvals row (seeded raw so
@@ -151,54 +136,59 @@ import Testing
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 7),
-        chatId: 7,
-        userId: 7,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 7),
+        chatID: 7,
+        userID: 7,
         text: "write",
         isEdited: false,
         ts: Date()
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
     let runs = RunStoreGRDB(writer: queue)
-    _ = try #require(try runs.pickUp(runId: runId, now: Date()))
+    _ = try #require(try runs.pickUp(runID: runID, now: Date()))
 
-    let promptMessageId: Int64 = 900
+    let promptMessageID: Int64 = 900
     let argsJSON = #"{"path":"plan.md"}"#
-    let observationMessageId = try queue.write { db -> Int64 in
+    let observationMessageID = try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
-          """,
-        arguments: [sessionId, runId, Date()]
+        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+        VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
+        """,
+        arguments: [sessionID, runID, Date()]
       )
-      let messageId = db.lastInsertedRowID
+      let messageID = db.lastInsertedRowID
       _ = try RunStoreGRDB.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .suspendForApproval,
         now: Date(),
         terminal: nil
       )
       try db.execute(
         sql: """
-          INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-            args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-            reason, prompt_message_id, created_ts, expires_ts)
-          VALUES (?, ?, 'APPROVED', 'file_write', ?, '/w/plan.md', ?, ?, 7, 'nonce-a', ?, 'c1',
-            'ask_tier', ?, 1782000000, 1782003600)
-          """,
+        INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+          args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+          reason, prompt_message_id, created_ts, expires_ts)
+        VALUES (?, ?, 'APPROVED', 'file_write', ?, '/w/plan.md', ?, ?, 7, 'nonce-a', ?, 'c1',
+          'ask_tier', ?, 1782000000, 1782003600)
+        """,
         arguments: [
-          runId, sessionId, argsJSON, ApprovalArgsHash.sha256Hex(argsJSON), policyVersion,
-          messageId, promptMessageId,
+          runID,
+          sessionID,
+          argsJSON,
+          ApprovalArgsHash.sha256Hex(argsJSON),
+          policyVersion,
+          messageID,
+          promptMessageID,
         ]
       )
-      return messageId
+      return messageID
     }
-    let approvalId = try queue.read { db in
+    let approvalID = try queue.read { db in
       try #require(try Int64.fetchOne(db, sql: "SELECT id FROM approvals WHERE nonce = 'nonce-a'"))
     }
 
@@ -206,11 +196,11 @@ import Testing
       queue: queue,
       runs: runs,
       approvals: ApprovalStoreGRDB(writer: queue),
-      sessionId: sessionId,
-      runId: runId,
-      approvalId: approvalId,
-      observationMessageId: observationMessageId,
-      promptMessageId: promptMessageId
+      sessionID: sessionID,
+      runID: runID,
+      approvalID: approvalID,
+      observationMessageID: observationMessageID,
+      promptMessageID: promptMessageID
     )
   }
 
@@ -220,7 +210,9 @@ import Testing
     turns: ResumeRecorder,
     delivery: RecordingDelivery,
     callbacks: RecordingCallbacks,
-    currentPolicyVersion: @escaping @Sendable () throws -> String = { "pv" },
+    currentPolicyVersion: @escaping @Sendable () throws -> String = {
+      "pv"
+    },
     executor: (any ApprovedActionExecuting)? = nil,
     typing: any TypingIndicator = NoopTyping(),
     clock: any Clock<Duration> = ContinuousClock()
@@ -233,8 +225,12 @@ import Testing
         ?? ApprovedActionExecutor(
           tools: ["file_write": StubTool(toolName: "file_write", result: "Wrote 12 B.")],
           runs: env.runs,
-          redactArguments: { $0 },
-          now: { Date() },
+          redactArguments: {
+            $0
+          },
+          now: {
+            Date()
+          },
           logger: Logger(label: "test")
         ),
       turns: turns,
@@ -243,14 +239,16 @@ import Testing
       typing: typing,
       clock: clock,
       currentPolicyVersion: currentPolicyVersion,
-      now: { Date() },
+      now: {
+        Date()
+      },
       logger: Logger(label: "test")
     )
   }
 
   private func runState(_ env: Fixture) throws -> String? {
     try env.queue.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runId])
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runID])
     }
   }
 
@@ -259,14 +257,15 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT state FROM approvals WHERE id = ?",
-        arguments: [env.approvalId]
+        arguments: [env.approvalID]
       )
     }
   }
 
   // MARK: - Tests
 
-  @Test func approveExecutesFillsResumesAndDisarms() async throws {
+  @Test
+  func approveExecutesFillsResumesAndDisarms() async throws {
     // given
     let env = try makeApprovedFixture()
     let coordinator = ApprovalCoordinator()
@@ -282,12 +281,12 @@ import Testing
     )
 
     // when — the coordinator buffers the signal, so park consumes it immediately (no polling)
-    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await coordinator.signal(.approved, forApprovalID: env.approvalID)
     await waiter.park(
-      approvalId: env.approvalId,
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      approvalID: env.approvalID,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       revalidatePolicyOnApprove: false
     )
 
@@ -298,19 +297,23 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT content FROM messages WHERE id = ?",
-        arguments: [env.observationMessageId]
+        arguments: [env.observationMessageID]
       )
     }
     #expect(observation == "Wrote 12 B.")
     #expect(
       await turns.resumeCalls == [
-        .init(runId: env.runId, contextBoundMessageId: env.observationMessageId)
+        ResumeRecorder.ResumeCall(
+          runID: env.runID,
+          contextBoundMessageID: env.observationMessageID
+        ),
       ]
     )
-    #expect(await callbacks.disarmed == [env.promptMessageId])
+    #expect(await callbacks.disarmed == [env.promptMessageID])
   }
 
-  @Test func approveDisarmsTheButtonsBeforeTheActionExecutes() async throws {
+  @Test
+  func approveDisarmsTheButtonsBeforeTheActionExecutes() async throws {
     // given — an executor that records whether the keyboard was already gone when it started
     let env = try makeApprovedFixture()
     let coordinator = ApprovalCoordinator()
@@ -328,12 +331,12 @@ import Testing
     )
 
     // when
-    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await coordinator.signal(.approved, forApprovalID: env.approvalID)
     await waiter.park(
-      approvalId: env.approvalId,
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      approvalID: env.approvalID,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       revalidatePolicyOnApprove: false
     )
 
@@ -341,7 +344,7 @@ import Testing
     // approve CAS already made re-taps no-ops, so the keyboard must not outlive the decision
     #expect(await executor.executed)
     #expect(await executor.disarmedBeforeExecution)
-    #expect(await callbacks.disarmed == [env.promptMessageId])
+    #expect(await callbacks.disarmed == [env.promptMessageID])
   }
 
   @Test(.timeLimit(.minutes(1)))
@@ -369,12 +372,12 @@ import Testing
     )
 
     // when
-    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await coordinator.signal(.approved, forApprovalID: env.approvalID)
     await waiter.park(
-      approvalId: env.approvalId,
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      approvalID: env.approvalID,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       revalidatePolicyOnApprove: false
     )
 
@@ -382,12 +385,16 @@ import Testing
     #expect(await typing.calls >= 1)
     #expect(
       await turns.resumeCalls == [
-        .init(runId: env.runId, contextBoundMessageId: env.observationMessageId)
+        ResumeRecorder.ResumeCall(
+          runID: env.runID,
+          contextBoundMessageID: env.observationMessageID
+        ),
       ]
     )
   }
 
-  @Test func aStoreFailedCommitNotifiesTheOwnerAndLeavesTheRunAwaiting() async throws {
+  @Test
+  func aStoreFailedCommitNotifiesTheOwnerAndLeavesTheRunAwaiting() async throws {
     // given — the executor reports the commit threw at the store seam (NOT a duplicate resume)
     let env = try makeApprovedFixture()
     let coordinator = ApprovalCoordinator()
@@ -404,12 +411,12 @@ import Testing
     )
 
     // when
-    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await coordinator.signal(.approved, forApprovalID: env.approvalID)
     await waiter.park(
-      approvalId: env.approvalId,
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      approvalID: env.approvalID,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       revalidatePolicyOnApprove: false
     )
 
@@ -422,13 +429,14 @@ import Testing
     #expect(await turns.resumeCalls.isEmpty)
     #expect(
       await delivery.texts == [
-        "The approved action could not be recorded; it will be retried after a restart."
+        "The approved action could not be recorded; it will be retried after a restart.",
       ]
     )
-    #expect(await callbacks.disarmed == [env.promptMessageId])
+    #expect(await callbacks.disarmed == [env.promptMessageID])
   }
 
-  @Test func aRunNotResumableOutcomeDisarmsWithoutNoticeOrResume() async throws {
+  @Test
+  func aRunNotResumableOutcomeDisarmsWithoutNoticeOrResume() async throws {
     // given — /stop won the claim race after the approve CAS; the executor reported it
     let env = try makeApprovedFixture()
     let coordinator = ApprovalCoordinator()
@@ -445,12 +453,12 @@ import Testing
     )
 
     // when
-    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await coordinator.signal(.approved, forApprovalID: env.approvalID)
     await waiter.park(
-      approvalId: env.approvalId,
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      approvalID: env.approvalID,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       revalidatePolicyOnApprove: false
     )
 
@@ -458,10 +466,11 @@ import Testing
     // it); the buttons still disarm
     #expect(await turns.resumeCalls.isEmpty)
     #expect(await delivery.texts.isEmpty)
-    #expect(await callbacks.disarmed == [env.promptMessageId])
+    #expect(await callbacks.disarmed == [env.promptMessageID])
   }
 
-  @Test func aRecordFailedOutcomeTellsTheOwnerTheActionRan() async throws {
+  @Test
+  func aRecordFailedOutcomeTellsTheOwnerTheActionRan() async throws {
     // given — the tool executed but recording its result threw; the copy must NOT promise a retry
     let env = try makeApprovedFixture()
     let coordinator = ApprovalCoordinator()
@@ -478,12 +487,12 @@ import Testing
     )
 
     // when
-    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await coordinator.signal(.approved, forApprovalID: env.approvalID)
     await waiter.park(
-      approvalId: env.approvalId,
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      approvalID: env.approvalID,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       revalidatePolicyOnApprove: false
     )
 
@@ -491,13 +500,14 @@ import Testing
     #expect(await turns.resumeCalls.isEmpty)
     #expect(
       await delivery.texts == [
-        "The approved action ran, but I couldn't record its result; a restart will settle things."
+        "The approved action ran, but I couldn't record its result; a restart will settle things.",
       ]
     )
-    #expect(await callbacks.disarmed == [env.promptMessageId])
+    #expect(await callbacks.disarmed == [env.promptMessageID])
   }
 
-  @Test func bootRevalidationOnPolicyMismatchFailsTheRunAndLeavesTheRowApproved() async throws {
+  @Test
+  func bootRevalidationOnPolicyMismatchFailsTheRunAndLeavesTheRowApproved() async throws {
     // given — the recorded policy_version no longer matches the current one (§6.5 crash window)
     let env = try makeApprovedFixture(policyVersion: "pv-old")
     let coordinator = ApprovalCoordinator()
@@ -510,16 +520,18 @@ import Testing
       turns: turns,
       delivery: delivery,
       callbacks: callbacks,
-      currentPolicyVersion: { "pv-new" }
+      currentPolicyVersion: {
+        "pv-new"
+      }
     )
 
     // when
-    await coordinator.signal(approvalId: env.approvalId, .approved)
+    await coordinator.signal(.approved, forApprovalID: env.approvalID)
     await waiter.park(
-      approvalId: env.approvalId,
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      approvalID: env.approvalID,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       revalidatePolicyOnApprove: true
     )
 
@@ -535,7 +547,7 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT content FROM messages WHERE id = ?",
-        arguments: [env.observationMessageId]
+        arguments: [env.observationMessageID]
       )
     }
     #expect(observation == "The approval was voided because the policy changed before it ran.")
@@ -543,13 +555,14 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT decision FROM audit_events WHERE action = ? AND run_id = ?",
-        arguments: [AuditAction.approvalDenied.rawValue, env.runId]
+        arguments: [AuditAction.approvalDenied.rawValue, env.runID]
       )
     }
     #expect(auditDecision == ApprovalDecision.stalePolicy.rawValue)
   }
 
-  @Test func denyFailsTheRunAndNotifiesTheOwner() async throws {
+  @Test
+  func denyFailsTheRunAndNotifiesTheOwner() async throws {
     // given — the deny half is a working stub here; Task 17 replaces the body with the synthetic
     // observation resolution. This asserts only the lane-freeing contract Task 16 must guarantee.
     let env = try makeApprovedFixture()
@@ -566,12 +579,12 @@ import Testing
     )
 
     // when
-    await coordinator.signal(approvalId: env.approvalId, .denied(.rejected))
+    await coordinator.signal(.denied(.rejected), forApprovalID: env.approvalID)
     await waiter.park(
-      approvalId: env.approvalId,
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      approvalID: env.approvalID,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       revalidatePolicyOnApprove: false
     )
 
@@ -579,10 +592,11 @@ import Testing
     #expect(try runState(env) == RunState.failed.rawValue)
     #expect(await turns.resumeCalls.isEmpty)
     #expect(await delivery.texts.isEmpty == false)
-    #expect(await callbacks.disarmed == [env.promptMessageId])
+    #expect(await callbacks.disarmed == [env.promptMessageID])
   }
 
-  @Test func denySignalFillsPlaceholderObservationInPlace() async throws {
+  @Test
+  func denySignalFillsPlaceholderObservationInPlace() async throws {
     // given — a parked waiter with the real deny half
     let env = try makeApprovedFixture()
     let coordinator = ApprovalCoordinator()
@@ -598,12 +612,12 @@ import Testing
     )
 
     // when — an owner reject lands and the parked waiter finalizes it
-    await coordinator.signal(approvalId: env.approvalId, .denied(.rejected))
+    await coordinator.signal(.denied(.rejected), forApprovalID: env.approvalID)
     await waiter.park(
-      approvalId: env.approvalId,
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      approvalID: env.approvalID,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       revalidatePolicyOnApprove: false
     )
 
@@ -613,14 +627,14 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT content FROM messages WHERE id = ?",
-        arguments: [env.observationMessageId]
+        arguments: [env.observationMessageID]
       )
     }
     #expect(observation == ApprovalWaiter.deniedObservationContent(for: .rejected))
     #expect(try runState(env) == RunState.failed.rawValue)
     #expect(await turns.resumeCalls.isEmpty)
     #expect(await delivery.texts.isEmpty == false)
-    #expect(await callbacks.disarmed == [env.promptMessageId])
+    #expect(await callbacks.disarmed == [env.promptMessageID])
   }
 
   // MARK: - Cancellation (carried-in liveness note #2)
@@ -646,10 +660,10 @@ import Testing
     // regression into a failure instead of a wedged suite.
     let task = Task {
       await waiter.park(
-        approvalId: env.approvalId,
-        runId: env.runId,
-        sessionId: env.sessionId,
-        chatId: 7,
+        approvalID: env.approvalID,
+        runID: env.runID,
+        sessionID: env.sessionID,
+        chatID: 7,
         revalidatePolicyOnApprove: false
       )
     }

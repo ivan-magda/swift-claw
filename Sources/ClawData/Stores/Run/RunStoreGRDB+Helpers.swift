@@ -6,18 +6,20 @@ import GRDB
 
 extension RunStoreGRDB {
   /// When a run that belongs to a scheduled job reaches FAILED, `jobFailed` rides the SAME
-  /// transaction as the state flip (house rule). No-op for job-less runs.
-  static func appendJobFailedIfJobRun(_ db: Database, runId: Int64, now: Date) throws {
+  /// transaction as the state flip (house rule).
+  ///
+  /// No-op for job-less runs.
+  static func appendJobFailedIfJobRun(_ db: Database, runID: Int64, now: Date) throws {
     let row = try Row.fetchOne(
       db,
       sql: "SELECT job_id, session_id FROM runs WHERE id = ?",
-      arguments: [runId]
+      arguments: [runID]
     )
     guard let row else {
       return
     }
 
-    guard let jobId: Int64 = row["job_id"] else {
+    guard let jobID: Int64 = row["job_id"] else {
       return
     }
 
@@ -26,78 +28,81 @@ extension RunStoreGRDB {
       AuditEvent(
         actor: .system,
         action: .jobFailed,
-        decision: "job:\(jobId)",
-        runId: runId,
-        sessionId: row["session_id"],
+        decision: "job:\(jobID)",
+        runID: runID,
+        sessionID: row["session_id"],
         ts: now
       )
     )
   }
 
-  /// True when the session already carries a non-terminal run (`RunState.liveStates`). The
-  /// proactive-fire path checks this before resetting the shared context window: firing into a
+  /// True when the session already carries a non-terminal run (`RunState.liveStates`).
+  ///
+  /// The proactive-fire path checks this before resetting the shared context window: firing into a
   /// live run would advance the window out from under it, emptying its context on resume.
-  static func hasLiveRun(_ db: Database, sessionId: Int64) throws -> Bool {
+  static func hasLiveRun(_ db: Database, sessionID: Int64) throws -> Bool {
     // databaseQuestionMarks is GRDB's public helper — it renders "?,?,?" for the IN clause.
     let placeholders = databaseQuestionMarks(count: RunState.liveStates.count)
-    var values: [DatabaseValueConvertible] = [sessionId]
+    var values: [DatabaseValueConvertible] = [sessionID]
     values.append(contentsOf: RunState.liveStates.map(\.rawValue))
     let found = try Int.fetchOne(
       db,
       sql: """
-        SELECT 1 FROM runs
-        WHERE session_id = ? AND state IN (\(placeholders))
-        LIMIT 1
-        """,
+      SELECT 1 FROM runs
+      WHERE session_id = ? AND state IN (\(placeholders))
+      LIMIT 1
+      """,
       arguments: StatementArguments(values)
     )
     return found != nil
   }
 
-  static func supersedeRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
-    try terminateActiveRuns(db, sessionId: sessionId, reason: .superseded, now: now)
+  static func supersedeRuns(_ db: Database, sessionID: Int64, now: Date) throws -> [Int64] {
+    try terminateActiveRuns(db, sessionID: sessionID, reason: .superseded, now: now)
   }
 
   /// `/stop`'s plural arm: every live (PENDING, RUNNING, AWAITING_APPROVAL) run → CANCELLED.
+  ///
   /// Mirrors `supersedeRuns` so `/stop` and `/new` share one definition of "active".
-  static func cancelRuns(_ db: Database, sessionId: Int64, now: Date) throws -> [Int64] {
-    try terminateActiveRuns(db, sessionId: sessionId, reason: .cancelled, now: now)
+  static func cancelRuns(_ db: Database, sessionID: Int64, now: Date) throws -> [Int64] {
+    try terminateActiveRuns(db, sessionID: sessionID, reason: .cancelled, now: now)
   }
 
-  /// Settlement is deliberately deferred on both arms: a provider call still in flight when the
-  /// command wins records its usage after the run is terminal, so freezing the evidence here would
-  /// either lose that usage or admit it against a frozen receipt. The lane tail settles instead.
+  /// Terminates live runs while leaving learning settlement to the lane tail.
+  ///
+  /// A provider call still in flight may record usage after the run becomes terminal. Deferring
+  /// settlement preserves that usage before the evidence is frozen.
   private static func terminateActiveRuns(
     _ db: Database,
-    sessionId: Int64,
+    sessionID: Int64,
     reason: CancelReason,
     now: Date
   ) throws -> [Int64] {
     let placeholders = databaseQuestionMarks(count: RunState.liveStates.count)
-    var values: [DatabaseValueConvertible] = [sessionId]
+    var values: [DatabaseValueConvertible] = [sessionID]
     values.append(contentsOf: RunState.liveStates.map(\.rawValue))
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT id FROM runs
-        WHERE session_id = ? AND state IN (\(placeholders))
-        ORDER BY id ASC
-        """,
+      SELECT id FROM runs
+      WHERE session_id = ? AND state IN (\(placeholders))
+      ORDER BY id ASC
+      """,
       arguments: StatementArguments(values)
     )
 
     var affected: [Int64] = []
     for row in rows {
-      let runId: Int64 = row["id"]
+      let runID: Int64 = row["id"]
       let transitioned = try transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: reason.runEvent,
         now: now,
         terminal: .deferred(reason.terminalCause)
       )
       if transitioned != nil {
-        affected.append(runId)
+        affected.append(runID)
       }
     }
 
@@ -114,14 +119,14 @@ extension RunStoreGRDB {
   /// rather than a cause guessed from `RunState`.
   public static func transitionRun(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     event: RunEvent,
     now: Date,
     policyVersion: String? = nil,
     terminal: TerminalDisposition?
   ) throws -> RunState? {
     guard
-      let state = try currentRunState(db, runId: runId),
+      let state = try currentRunState(db, runID: runID),
       let nextState = RunFSM.reduce(state: state, on: event)
     else {
       return nil
@@ -132,19 +137,19 @@ extension RunStoreGRDB {
     if let policyVersion {
       try db.execute(
         sql: "UPDATE runs SET state = ?, updated_ts = ?, policy_version = ? WHERE id = ?",
-        arguments: [nextState.rawValue, now, policyVersion, runId]
+        arguments: [nextState.rawValue, now, policyVersion, runID]
       )
     } else {
       try db.execute(
         sql: "UPDATE runs SET state = ?, updated_ts = ? WHERE id = ?",
-        arguments: [nextState.rawValue, now, runId]
+        arguments: [nextState.rawValue, now, runID]
       )
     }
 
     if nextState.isTerminal {
       try ScheduledLearningStoreGRDB.recordTerminalReceipt(
         db,
-        runId: runId,
+        runID: runID,
         state: nextState,
         disposition: terminal ?? .deferred(.unknown),
         now: now
@@ -154,11 +159,11 @@ extension RunStoreGRDB {
     return nextState
   }
 
-  static func currentRunState(_ db: Database, runId: Int64) throws -> RunState? {
+  static func currentRunState(_ db: Database, runID: Int64) throws -> RunState? {
     let rawState = try String.fetchOne(
       db,
       sql: "SELECT state FROM runs WHERE id = ?",
-      arguments: [runId]
+      arguments: [runID]
     )
 
     guard let rawState else {
@@ -168,28 +173,29 @@ extension RunStoreGRDB {
     return RunState(rawValue: rawState)
   }
 
-  /// The conflict target is named rather than left bare: an untargeted `DO NOTHING` silences every
-  /// uniqueness failure the row could hit, so a genuinely corrupt insert would return the same
-  /// "wrote nothing" the caller reads as a harmless replay. Naming `provider_call_id` silences
-  /// re-presentation of an already-recorded call and nothing else — a NOT NULL, CHECK, or foreign
-  /// key failure still raises.
+  /// Inserts usage once per provider-call identity without suppressing unrelated constraint
+  /// failures.
+  ///
+  /// The named `provider_call_id` conflict target ignores only an already-recorded call. Other
+  /// uniqueness, NOT NULL, CHECK, and foreign-key failures still raise.
   static let insertUsageStatement = """
-    INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-      cost_usd, cost_source, is_estimated, ts, provider_call_id,
-      learning_operation_id, learning_job_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(provider_call_id) DO NOTHING
-    """
+  INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+    cost_usd, cost_source, is_estimated, ts, provider_call_id,
+    learning_operation_id, learning_job_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(provider_call_id) DO NOTHING
+  """
 
-  /// - Returns: whether this call's row was newly stored. `false` means the identity was already
-  ///   recorded, so every total derived from these rows already counts it.
+  /// Stores a provider usage row once per call identity within the caller's transaction.
+  ///
+  /// - Returns: Whether the row was newly stored; false means existing totals already count it.
   @discardableResult
   static func insertUsage(_ db: Database, _ usage: ProviderUsage) throws -> Bool {
     try db.execute(
       sql: insertUsageStatement,
       arguments: [
-        usage.runId,
-        usage.sessionId,
+        usage.runID,
+        usage.sessionID,
         usage.model,
         usage.promptTokens,
         usage.completionTokens,
@@ -198,24 +204,24 @@ extension RunStoreGRDB {
         usage.isEstimated,
         usage.ts,
         usage.providerCallID.rawValue,
-        usage.learningScope?.operationId.rawValue,
-        usage.learningScope?.jobId,
+        usage.learningScope?.operationID.rawValue,
+        usage.learningScope?.jobID,
       ]
     )
     return db.changesCount > 0
   }
 
-  static func setSessionTainted(_ db: Database, sessionId: Int64, now: Date) throws {
+  static func setSessionTainted(_ db: Database, sessionID: Int64, now: Date) throws {
     try db.execute(
       sql: "UPDATE sessions SET tainted = 1, updated_ts = ? WHERE id = ?",
-      arguments: [now, sessionId]
+      arguments: [now, sessionID]
     )
   }
 
-  static func setSessionPrivateData(_ db: Database, sessionId: Int64, now: Date) throws {
+  static func setSessionPrivateData(_ db: Database, sessionID: Int64, now: Date) throws {
     try db.execute(
       sql: "UPDATE sessions SET has_private_data = 1, updated_ts = ? WHERE id = ?",
-      arguments: [now, sessionId]
+      arguments: [now, sessionID]
     )
   }
 }

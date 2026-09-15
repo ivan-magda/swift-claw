@@ -22,10 +22,8 @@ public struct WebSearchTool: Tool {
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
-          "query": .object([
-            "type": .string("string"),
-            "description": .string("The search query."),
-          ]),
+          "query": .object(["type": .string("string"), "description": .string("The search query.")]
+          ),
           "count": .object([
             "type": .string("number"),
             "description": .string("How many results (1-10, default 5)."),
@@ -46,10 +44,7 @@ public struct WebSearchTool: Tool {
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    guard
-      let query = arguments.objectValue?["query"]?.stringValue,
-      query.isEmpty == false
-    else {
+    guard let query = arguments.objectValue?["query"]?.stringValue, query.isEmpty == false else {
       return ToolPayload(
         content: "web_search needs a non-empty \"query\" argument.",
         status: .error,
@@ -58,8 +53,7 @@ public struct WebSearchTool: Tool {
     }
 
     let count =
-      arguments.objectValue?["count"]?.numberValue
-      .map { requested in
+      arguments.objectValue?["count"]?.numberValue.map { requested in
         Int(
           min(
             max(requested, Double(Self.countRange.lowerBound)),
@@ -69,15 +63,13 @@ public struct WebSearchTool: Tool {
       } ?? Self.defaultCount
 
     let results: [SearchResult]
-    do {
-      results = try await search.search(query: query, count: count)
-    } catch let searchError as SearchError {
+    do { results = try await search.search(query: query, count: count) } catch let searchError
+      as SearchError
+    {
       let reason =
         switch searchError {
-        case .terminal(_, let message), .retryable(_, let message):
-          message
-        case .transport(let message):
-          message
+        case .terminal(_, let message), .retryable(_, let message): message
+        case .transport(let message): message
         }
       return ToolPayload(
         content: "Search failed: \(reason)",

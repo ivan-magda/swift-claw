@@ -30,20 +30,20 @@ struct TurnDispatch: Sendable {
     image: ImagePart? = nil
   ) async throws(RoutingHalt) -> HandleOutcome {
     let inbound = InboundMessage(
-      updateId: rawUpdate.updateId,
+      updateID: rawUpdate.updateID,
       sessionKey: SessionKey.telegram(for: message, mode: mode),
-      chatId: message.chatId,
-      userId: message.userId,
+      chatID: message.chatID,
+      userID: message.userID,
       text: mode.transcriptText(text, author: TranscriptAuthor(message: message)),
       isEdited: message.isEdited,
       provenance: mode.storedProvenance(of: source),
-      telegramMessageId: message.messageId,
+      telegramMessageID: message.messageID,
       ts: now()
     )
 
     let claim = try await replies.perform(
       "inbound persist",
-      updateId: rawUpdate.updateId,
+      updateID: rawUpdate.updateID,
       target: .reply(to: message, mode: mode)
     ) {
       try sessionMessages.claimAndPersistInbound(inbound)
@@ -51,26 +51,26 @@ struct TurnDispatch: Sendable {
 
     guard
       claim.newlyClaimed,
-      let sessionId = claim.sessionId,
-      let runId = claim.runId,
-      let triggerMessageId = claim.triggerMessageId
+      let sessionID = claim.sessionID,
+      let runID = claim.runID,
+      let triggerMessageID = claim.triggerMessageID
     else {
-      return replies.skipDuplicate(updateId: rawUpdate.updateId)
+      return replies.skipDuplicate(updateID: rawUpdate.updateID)
     }
 
     // The claim is what mints the row id the bytes are keyed by, so the deposit can only happen
     // here — and it must land before the run is enqueued, or the turn it belongs to looks text-only.
     if let image {
-      await imageCache.store(image, sessionId: sessionId, messageId: triggerMessageId)
+      await imageCache.store(image, sessionID: sessionID, messageID: triggerMessageID)
     }
 
     // The inbound → run bridge: the one INFO line that shows a real message was accepted and
     // which run it became. run/session/update ride as metadata so the whole lifecycle greps by
     // `run=<id>`; only the message SIZE is logged, never its text.
     var runLog = logger
-    runLog[metadataKey: "run"] = "\(runId)"
-    runLog[metadataKey: "session"] = "\(sessionId)"
-    runLog[metadataKey: "update"] = "\(rawUpdate.updateId)"
+    runLog[metadataKey: "run"] = "\(runID)"
+    runLog[metadataKey: "session"] = "\(sessionID)"
+    runLog[metadataKey: "update"] = "\(rawUpdate.updateID)"
     runLog.info(
       """
       message accepted; dispatching run \
@@ -79,53 +79,49 @@ struct TurnDispatch: Sendable {
     )
 
     await enqueuer.enqueue(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: message.chatId,
-      triggerMessageId: triggerMessageId,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: message.chatID,
+      triggerMessageID: triggerMessageID,
       log: runLog
     )
 
     return .processed
   }
+
   /// Persists an overheard group message and returns, having said and run nothing. Silence is the
   /// contract even when the write fails: a room the bot was not talking to is told nothing about
   /// the daemon's disk, so the outcome alone carries the failure back to the poller.
-  func observe(
-    rawUpdate: RawUpdate,
-    message: IncomingMessage,
-    text: String,
-    mode: ChatMode
-  ) async -> HandleOutcome {
+  func observe(rawUpdate: RawUpdate, message: IncomingMessage, text: String, mode: ChatMode) async
+    -> HandleOutcome
+  {
     let inbound = InboundMessage(
-      updateId: rawUpdate.updateId,
+      updateID: rawUpdate.updateID,
       sessionKey: SessionKey.telegram(for: message, mode: mode),
-      chatId: message.chatId,
-      userId: message.userId,
+      chatID: message.chatID,
+      userID: message.userID,
       text: mode.transcriptText(text, author: TranscriptAuthor(message: message)),
       isEdited: message.isEdited,
       provenance: mode.storedProvenance(of: .trusted),
-      telegramMessageId: message.messageId,
+      telegramMessageID: message.messageID,
       ts: now()
     )
 
     let claim: ClaimResult
-    do {
-      claim = try sessionMessages.claimAndPersistObserved(inbound)
-    } catch StoreError.diskFull {
-      logger.error("observed persist hit a full disk on update \(rawUpdate.updateId)")
+    do { claim = try sessionMessages.claimAndPersistObserved(inbound) } catch StoreError.diskFull {
+      logger.error("observed persist hit a full disk on update \(rawUpdate.updateID)")
       return .storageFull
     } catch {
-      logger.error("observed persist failed for update \(rawUpdate.updateId): \(error)")
+      logger.error("observed persist failed for update \(rawUpdate.updateID): \(error)")
       return .transientFailure
     }
 
     guard claim.newlyClaimed else {
-      return replies.skipDuplicate(updateId: rawUpdate.updateId)
+      return replies.skipDuplicate(updateID: rawUpdate.updateID)
     }
 
     logger.debug(
-      "observed update \(rawUpdate.updateId) in chat \(message.chatId) (chars=\(text.count))"
+      "observed update \(rawUpdate.updateID) in chat \(message.chatID) (chars=\(text.count))"
     )
     return .processed
   }

@@ -3,10 +3,12 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct UsageResolverTests {
+@Suite
+struct UsageResolverTests {
   private let resolver = UsageResolver()
 
-  @Test func providerReportedUsageWinsAndIsNotEstimated() {
+  @Test
+  func providerReportedUsageWinsAndIsNotEstimated() {
     // given — the provider returned real token counts
     let response = ChatResponse(
       content: "hello",
@@ -26,7 +28,8 @@ import Testing
     #expect(resolved.isEstimated == false)
   }
 
-  @Test func omittedUsageIsEstimatedFromContextAndReply() {
+  @Test
+  func omittedUsageIsEstimatedFromContextAndReply() {
     // given — a provider that omits the usage object (some local servers do)
     let response = ChatResponse(
       content: "Hi!",
@@ -48,7 +51,8 @@ import Testing
     #expect(resolved.isEstimated == true)
   }
 
-  @Test func noResponseEstimateReservesTheOutputCap() {
+  @Test
+  func noResponseEstimateReservesTheOutputCap() {
     // given/when — a call that produced no response (deadline / exhausted retries)
     let resolved = resolver.estimate(
       context: [ChatMessage(role: .user, content: "hello world")],
@@ -62,7 +66,8 @@ import Testing
     #expect(resolved.isEstimated == true)
   }
 
-  @Test func rowIsEstimatedWhenEitherTokensOrCostAreGuessed() {
+  @Test
+  func rowIsEstimatedWhenEitherTokensOrCostAreGuessed() {
     // given — the four combinations of token/cost provenance
     let tokens = ChatUsage(promptTokens: 1, completionTokens: 1, totalTokens: 2)
     let realTokens = ResolvedUsage(usage: tokens, isEstimated: false)
@@ -73,8 +78,8 @@ import Testing
     func row(_ usage: ResolvedUsage, _ cost: ResolvedCost) -> ProviderUsage {
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-1"),
-        runId: 1,
-        sessionId: 2,
+        runID: 1,
+        sessionID: 2,
         model: "m",
         usage: usage,
         cost: cost,

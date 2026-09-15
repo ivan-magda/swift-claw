@@ -2,19 +2,20 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct LearningCommandParseTests {
+@Suite
+struct LearningCommandParseTests {
   @Test(arguments: [
     ("/learning", Command.learning(.list)),
     ("/learning list", .learning(.list)),
     ("/learning LIST", .learning(.list)),
     ("/LEARNING@CLAW_BOT list", .learning(.list)),
-    ("/learning 3", .learning(.detail(jobId: 3))),
-    ("/learning reset 3", .learning(.reset(jobId: 3))),
-    ("/learning RESET 3", .learning(.reset(jobId: 3))),
-    ("/learning reset", .learning(.reset(jobId: nil))),
-    ("/learning reset 0", .learning(.reset(jobId: nil))),
-    ("/learning reset junk", .learning(.reset(jobId: nil))),
-    ("/learning reset 3 extra", .learning(.reset(jobId: nil))),
+    ("/learning 3", .learning(.detail(jobID: 3))),
+    ("/learning reset 3", .learning(.reset(jobID: 3))),
+    ("/learning RESET 3", .learning(.reset(jobID: 3))),
+    ("/learning reset", .learning(.reset(jobID: nil))),
+    ("/learning reset 0", .learning(.reset(jobID: nil))),
+    ("/learning reset junk", .learning(.reset(jobID: nil))),
+    ("/learning reset 3 extra", .learning(.reset(jobID: nil))),
     ("/learning bogus", .learning(.list)),
     ("/learning 0", .learning(.list)),
     ("/learning -1", .learning(.list)),
@@ -30,11 +31,7 @@ import Testing
     #expect(command == expected)
   }
 
-  @Test(arguments: [
-    "please /learning",
-    " /learning",
-    "/learning@some_other_bot",
-  ])
+  @Test(arguments: ["please /learning", " /learning", "/learning@some_other_bot"])
   func nonLeadingOrMismatchedCommandsStayPlain(text: String) {
     // given
     let botUsername = "claw_bot"

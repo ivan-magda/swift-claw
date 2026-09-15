@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct FeedbackStoreTests {
-  @Test func challengeDeliveryIdentityIsOpaqueAndDomainSeparated() {
+@Suite
+struct FeedbackStoreTests {
+  @Test
+  func challengeDeliveryIdentityIsOpaqueAndDomainSeparated() {
     // given
     let nonce = "same bytes under two identity domains"
 
@@ -18,7 +20,8 @@ import Testing
     #expect(challenge != undomained)
   }
 
-  @Test func everyImmediateSignalConsumesAndAdvancesOneRevision() throws {
+  @Test
+  func everyImmediateSignalConsumesAndAdvancesOneRevision() throws {
     // given — all seven actions whose semantic event exists at tap time
     let env = try FeedbackStoreEnvironment.make()
     let signals: [(OwnerSignal, FeedbackSubjectKind)] = [
@@ -42,9 +45,7 @@ import Testing
 
     // when
     let outcomes = try zip(targets, signals).enumerated().map { offset, pair in
-      try env.consume(
-        env.tap(target: pair.0, signal: pair.1.0, updateId: Int64(offset + 1))
-      )
+      try env.consume(env.tap(target: pair.0, signal: pair.1.0, updateID: Int64(offset + 1)))
     }
 
     // then — hard-coding a signal or double-incrementing revision breaks the typed sequence
@@ -61,7 +62,12 @@ import Testing
     #expect(try env.eventCount() == signals.count)
     let events = try env.allFeedbackEvents()
     #expect(events.map(\.signal) == signals.map(\.0))
-    #expect(events.map(\.revision) == (1...7).map { FeedbackRevision(Int64($0)) })
+    #expect(
+      events.map(\.revision)
+        == (1...7).map {
+          FeedbackRevision(Int64($0))
+        }
+    )
     #expect(
       events.allSatisfy { event in
         event.payload == nil && event.occurredAt == env.now
@@ -85,22 +91,20 @@ import Testing
     )
     #expect(
       audits.allSatisfy { row in
-        row.actor == .owner
-          && row.decision == "recorded"
-          && row.resultSize == 0
+        row.actor == .owner && row.decision == "recorded" && row.resultSize == 0
           && row.ts == env.now
       }
     )
     #expect(
       zip(audits, targets).allSatisfy { audit, target in
         audit.args.contains(target.subjectKind.rawValue)
-          && audit.args.contains(target.subjectDigest)
-          && audit.args.contains(target.nonce) == false
+          && audit.args.contains(target.subjectDigest) && audit.args.contains(target.nonce) == false
       }
     )
   }
 
-  @Test func challengeActionsCannotConsumeOrAppendAnImmediateEvent() throws {
+  @Test
+  func challengeActionsCannotConsumeOrAppendAnImmediateEvent() throws {
     // given — correction and edit targets; FeedbackTap structurally has no text payload
     let env = try FeedbackStoreEnvironment.make()
     let correction = env.target(nonce: "correction", signal: .resultCorrection, subject: "41")
@@ -113,12 +117,8 @@ import Testing
     try env.seedTargets([correction, edit], chunks: [])
 
     // when
-    let first = try env.consume(
-      env.tap(target: correction, signal: .resultCorrection)
-    )
-    let second = try env.consume(
-      env.tap(target: edit, signal: .candidateEdit, updateId: 2)
-    )
+    let first = try env.consume(env.tap(target: correction, signal: .resultCorrection))
+    let second = try env.consume(env.tap(target: edit, signal: .candidateEdit, updateID: 2))
 
     // then — allowing rc/ce through the immediate path would consume, append, or bump revision
     #expect(first == .requiresPayloadChallenge)
@@ -136,7 +136,8 @@ import Testing
     )
   }
 
-  @Test func eachTargetCASPredicateFailsClosedWithoutConsuming() throws {
+  @Test
+  func eachTargetCASPredicateFailsClosedWithoutConsuming() throws {
     // given — one independently invalid owner, chat, expiry, action, or epoch per fresh database
     let cases: [FeedbackFailureCase] = [.owner, .chat, .expiry, .action, .epoch]
 
@@ -163,31 +164,31 @@ import Testing
     }
   }
 
-  @Test func consumedNonceCannotReplayAndRevisionAdvancesExactlyOnce() throws {
+  @Test
+  func consumedNonceCannotReplayAndRevisionAdvancesExactlyOnce() throws {
     // given
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "single-use", signal: .resultUseful, subject: "41")
     try env.seedTargets([target], chunks: [])
-    let tap = env.tap(target: target, signal: .resultUseful, updateId: 7)
+    let tap = env.tap(target: target, signal: .resultUseful, updateID: 7)
 
     // when — a fresh transport update reaches the already-consumed nonce a second time
     let first = try env.consume(tap)
-    let second = try env.consume(
-      env.tap(target: target, signal: .resultUseful, updateId: 8)
-    )
+    let second = try env.consume(env.tap(target: target, signal: .resultUseful, updateID: 8))
 
     // then — dropping `consumed_at IS NULL` would append twice and double-increment the revision
     guard case .recorded(let event) = first else {
       Issue.record("expected the first tap to record")
       return
     }
-    #expect(event.transportUpdateId == tap.transportUpdateId)
+    #expect(event.transportUpdateID == tap.transportUpdateID)
     #expect(second == .alreadyConsumed)
     #expect(try env.eventCount() == 1)
     #expect(try env.feedbackRevision() == 1)
   }
 
-  @Test func auditFailureRollsBackConsumptionEventAndRevision() throws {
+  @Test
+  func auditFailureRollsBackConsumptionEventAndRevision() throws {
     // given — a valid target and a database-level failure at the transaction's final audit insert
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "audit-rollback", signal: .resultUseful, subject: "41")
@@ -199,9 +200,7 @@ import Testing
     do {
       _ = try env.consume(env.tap(target: target, signal: .resultUseful))
       failure = nil
-    } catch let error {
-      failure = error
-    }
+    } catch let error { failure = error }
 
     // then — moving audit outside the write transaction would leave the preceding mutations behind
     #expect(failure != nil)
@@ -210,7 +209,8 @@ import Testing
     #expect(try env.feedbackRevision() == 0)
   }
 
-  @Test func newerSignalSupersedesTheExactPriorSubjectEvent() throws {
+  @Test
+  func newerSignalSupersedesTheExactPriorSubjectEvent() throws {
     // given — two targets for one run subject and an interleaved second subject
     let env = try FeedbackStoreEnvironment.make()
     let useful = env.target(nonce: "useful", signal: .resultUseful, subject: "41")
@@ -220,14 +220,12 @@ import Testing
 
     // when
     _ = try env.consume(env.tap(target: useful, signal: .resultUseful))
-    _ = try env.consume(env.tap(target: other, signal: .resultUseful, updateId: 2))
-    _ = try env.consume(
-      env.tap(target: notUseful, signal: .resultNotUseful, updateId: 3)
-    )
+    _ = try env.consume(env.tap(target: other, signal: .resultUseful, updateID: 2))
+    _ = try env.consume(env.tap(target: notUseful, signal: .resultNotUseful, updateID: 3))
 
     // then — omitting the supersedes edge leaves two effective signals for one exact subject
     let events = try env.feedbackEvents(
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: LearningEpoch(1),
       subjectKind: .run,
       subjectDigest: "41"
@@ -236,7 +234,7 @@ import Testing
     #expect(events.last?.supersedes == events.first?.id)
     let otherEvent = try #require(
       try env.feedbackEvents(
-        jobId: env.jobId,
+        jobID: env.jobID,
         epoch: LearningEpoch(1),
         subjectKind: .run,
         subjectDigest: "42"

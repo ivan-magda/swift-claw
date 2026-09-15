@@ -5,9 +5,7 @@ import GRDB
 public struct MemoryStoreGRDB: MemoryStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) {
-    database = MappedDatabase(writer: writer)
-  }
+  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
 
   public func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] {
     try database.readMapping { db in
@@ -16,11 +14,11 @@ public struct MemoryStoreGRDB: MemoryStore {
         rows = try Row.fetchAll(
           db,
           sql: """
-            SELECT * FROM memory_items
-            WHERE kind = ?
-            ORDER BY created_at DESC, id DESC
-            LIMIT ?
-            """,
+          SELECT * FROM memory_items
+          WHERE kind = ?
+          ORDER BY created_at DESC, id DESC
+          LIMIT ?
+          """,
           arguments: [kind.rawValue, limit]
         )
       } else {
@@ -56,11 +54,11 @@ public struct MemoryStoreGRDB: MemoryStore {
       let rows = try Row.fetchAll(
         db,
         sql: """
-          SELECT * FROM memory_items
-          \(sensitivityFilter)
-          ORDER BY importance DESC, created_at DESC, id DESC
-          LIMIT ?
-          """,
+        SELECT * FROM memory_items
+        \(sensitivityFilter)
+        ORDER BY importance DESC, created_at DESC, id DESC
+        LIMIT ?
+        """,
         arguments: [limit]
       )
       return try rows.map(Self.decodeItem)
@@ -71,17 +69,17 @@ public struct MemoryStoreGRDB: MemoryStore {
   static func insertItem(_ db: Database, item: NewMemoryItem, now: Date) throws -> MemoryItem {
     try db.execute(
       sql: """
-        INSERT INTO memory_items(text, kind, sensitivity, importance, \
-        source, session_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
+      INSERT INTO memory_items(text, kind, sensitivity, importance, \
+      source, session_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      """,
       arguments: [
         item.text,
         item.kind.rawValue,
         item.sensitivity.rawValue,
         item.importance.rawValue,
         item.source.rawValue,
-        item.sessionId,
+        item.sessionID,
         now,
       ]
     )
@@ -92,7 +90,7 @@ public struct MemoryStoreGRDB: MemoryStore {
       sensitivity: item.sensitivity,
       importance: item.importance,
       source: item.source,
-      sessionId: item.sessionId,
+      sessionID: item.sessionID,
       createdAt: now
     )
   }
@@ -102,7 +100,7 @@ public struct MemoryStoreGRDB: MemoryStore {
   /// and falsify the taint guard or `/memory` provenance. Context reads degrade by omitting the row
   /// at the assembler boundary, not by inventing a value here.
   static func decodeItem(_ row: Row) throws -> MemoryItem {
-    let rowId: Int64 = row["id"]
+    let rowID: Int64 = row["id"]
 
     guard
       let kind = MemoryKind(rawValue: row["kind"]),
@@ -110,17 +108,17 @@ public struct MemoryStoreGRDB: MemoryStore {
       let importance = Importance(rawValue: row["importance"]),
       let source = MemorySource(rawValue: row["source"])
     else {
-      throw StoreError.unexpected("memory_items row \(rowId) has an unrecognized enum value")
+      throw StoreError.unexpected("memory_items row \(rowID) has an unrecognized enum value")
     }
 
     return MemoryItem(
-      id: rowId,
+      id: rowID,
       text: row["text"],
       kind: kind,
       sensitivity: sensitivity,
       importance: importance,
       source: source,
-      sessionId: row["session_id"],
+      sessionID: row["session_id"],
       createdAt: row["created_at"]
     )
   }

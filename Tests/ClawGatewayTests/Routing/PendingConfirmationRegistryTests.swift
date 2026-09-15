@@ -4,71 +4,68 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct PendingConfirmationRegistryTests {
-  @Test func parkedEntryIsReadableUntilCleared() async throws {
+@Suite
+struct PendingConfirmationRegistryTests {
+  @Test
+  func parkedEntryIsReadableUntilCleared() async throws {
     // given
     let registry = PendingConfirmationRegistry()
-    let entry = try CommandConfirmation.rememberWrite(memoryWriteRequest(sessionId: 42))
+    let entry = try CommandConfirmation.rememberWrite(memoryWriteRequest(sessionID: 42))
 
     // when
-    await registry.park(entry, sessionId: 42)
-    let parked = await registry.pending(sessionId: 42)
-    await registry.clear(sessionId: 42)
-    let cleared = await registry.pending(sessionId: 42)
+    await registry.park(entry, sessionID: 42)
+    let parked = await registry.pending(sessionID: 42)
+    await registry.clear(sessionID: 42)
+    let cleared = await registry.pending(sessionID: 42)
 
     // then
     #expect(parked == entry)
     #expect(cleared == nil)
   }
 
-  @Test func reparkingReplacesPreviousEntryForSameSession() async throws {
+  @Test
+  func reparkingReplacesPreviousEntryForSameSession() async throws {
     // given
     let registry = PendingConfirmationRegistry()
-    let first = try CommandConfirmation.rememberWrite(memoryWriteRequest(sessionId: 42))
+    let first = try CommandConfirmation.rememberWrite(memoryWriteRequest(sessionID: 42))
     let second = CommandConfirmation.deleteItem(id: 7)
 
     // when
-    await registry.park(first, sessionId: 42)
-    await registry.park(second, sessionId: 42)
+    await registry.park(first, sessionID: 42)
+    await registry.park(second, sessionID: 42)
 
     // then
-    #expect(await registry.pending(sessionId: 42) == second)
+    #expect(await registry.pending(sessionID: 42) == second)
   }
 
-  @Test func sessionsAreIsolated() async throws {
+  @Test
+  func sessionsAreIsolated() async throws {
     // given
     let registry = PendingConfirmationRegistry()
-    let first = try CommandConfirmation.rememberWrite(memoryWriteRequest(sessionId: 42))
+    let first = try CommandConfirmation.rememberWrite(memoryWriteRequest(sessionID: 42))
     let second = CommandConfirmation.deleteItem(id: 7)
 
     // when
-    await registry.park(first, sessionId: 42)
-    await registry.park(second, sessionId: 43)
+    await registry.park(first, sessionID: 42)
+    await registry.park(second, sessionID: 43)
 
     // then
-    #expect(await registry.pending(sessionId: 42) == first)
-    #expect(await registry.pending(sessionId: 43) == second)
+    #expect(await registry.pending(sessionID: 42) == first)
+    #expect(await registry.pending(sessionID: 43) == second)
   }
 
-  private func memoryWriteRequest(sessionId: Int64) throws -> MemoryWriteRequest {
+  private func memoryWriteRequest(sessionID: Int64) throws -> MemoryWriteRequest {
     try MemoryWriteBuilder.build(
       rawText: "owner prefers concise replies",
       kind: .user,
-      sessionId: sessionId
+      sessionID: sessionID
     )
   }
 }
 
-@Suite struct ConfirmationReplyTests {
-  @Test(
-    "confirm keywords parse",
-    arguments: [
-      "yes",
-      "y",
-      " YES ",
-      "\ny\t",
-    ]
-  )
+@Suite
+struct ConfirmationReplyTests {
+  @Test("confirm keywords parse", arguments: ["yes", "y", " YES ", "\ny\t"])
   func confirmKeywordsParse(input: String) {
     // given
 
@@ -79,16 +76,7 @@ import Testing
     #expect(reply == .confirm)
   }
 
-  @Test(
-    "cancel keywords parse",
-    arguments: [
-      "no",
-      "n",
-      "cancel",
-      " NO ",
-      "\nCancel\t",
-    ]
-  )
+  @Test("cancel keywords parse", arguments: ["no", "n", "cancel", " NO ", "\nCancel\t"])
   func cancelKeywordsParse(input: String) {
     // given
 
@@ -99,16 +87,7 @@ import Testing
     #expect(reply == .cancel)
   }
 
-  @Test(
-    "other inputs parse",
-    arguments: [
-      "",
-      "yeah",
-      "nope",
-      "yes please",
-      "cancel this memory",
-    ]
-  )
+  @Test("other inputs parse", arguments: ["", "yeah", "nope", "yes please", "cancel this memory"])
   func otherInputsParse(input: String) {
     // given
 

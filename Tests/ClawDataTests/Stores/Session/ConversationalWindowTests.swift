@@ -6,78 +6,87 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct ConversationalWindowTests {
+@Suite
+struct ConversationalWindowTests {
   /// Seeds one session and returns (store, sessionId, writer). Rows are inserted raw so tests
   /// control ids/roles exactly.
   private func makeFixture() throws -> (
-    store: SessionMessageStoreGRDB, sessionId: Int64, queue: DatabaseQueue
+    store: SessionMessageStoreGRDB,
+    sessionID: Int64,
+    queue: DatabaseQueue
   ) {
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
-    let sessionId = try store.loadOrCreateSession(sessionKey: "tg:dm:1", now: Date())
-    return (store, sessionId, queue)
+    let sessionID = try store.loadOrCreateSession(sessionKey: "tg:dm:1", now: Date())
+    return (store, sessionID, queue)
   }
 
   private func insert(
     _ queue: DatabaseQueue,
-    sessionId: Int64,
+    sessionID: Int64,
     role: String,
     content: String,
     toolCalls: String? = nil,
-    toolCallId: String? = nil
+    toolCallID: String? = nil
   ) throws -> Int64 {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO messages(session_id, role, content, provenance, ts, tool_calls, tool_call_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          """,
+        INSERT INTO messages(session_id, role, content, provenance, ts, tool_calls, tool_call_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
         arguments: [
-          sessionId, role, content, role == "tool" ? "untrusted" : "trusted", Date(), toolCalls,
-          toolCallId,
+          sessionID,
+          role,
+          content,
+          role == "tool" ? "untrusted" : "trusted",
+          Date(),
+          toolCalls,
+          toolCallID,
         ]
       )
       return db.lastInsertedRowID
     }
   }
 
-  @Test func limitCountsOnlyConversationalRowsAndToolRowsRideAlong() throws {
+  @Test
+  func limitCountsOnlyConversationalRowsAndToolRowsRideAlong() throws {
     // given — u1, a1(anchor)+2 tool rows, u2, a2; a window of 3 conversational rows
     let fixture = try makeFixture()
-    _ = try insert(fixture.queue, sessionId: fixture.sessionId, role: "user", content: "u1")
+    _ = try insert(fixture.queue, sessionID: fixture.sessionID, role: "user", content: "u1")
     _ = try insert(
       fixture.queue,
-      sessionId: fixture.sessionId,
+      sessionID: fixture.sessionID,
       role: "assistant",
       content: "",
       toolCalls: #"[{"id":"c1","name":"web_fetch","arguments":"{}"}]"#
     )
     _ = try insert(
       fixture.queue,
-      sessionId: fixture.sessionId,
+      sessionID: fixture.sessionID,
       role: "tool",
       content: "page text",
-      toolCallId: "c1"
+      toolCallID: "c1"
     )
     _ = try insert(
       fixture.queue,
-      sessionId: fixture.sessionId,
+      sessionID: fixture.sessionID,
       role: "tool",
       content: "more text",
-      toolCallId: "c1b"
+      toolCallID: "c1b"
     )
-    _ = try insert(fixture.queue, sessionId: fixture.sessionId, role: "user", content: "u2")
-    let lastId = try insert(
+    _ = try insert(fixture.queue, sessionID: fixture.sessionID, role: "user", content: "u2")
+    let lastID = try insert(
       fixture.queue,
-      sessionId: fixture.sessionId,
+      sessionID: fixture.sessionID,
       role: "assistant",
       content: "a2"
     )
 
     // when
     let snapshot = try fixture.store.loadContextSnapshot(
-      sessionId: fixture.sessionId,
-      throughMessageId: lastId,
+      sessionID: fixture.sessionID,
+      throughMessageID: lastID,
       limit: 3
     )
 
@@ -85,17 +94,26 @@ import Testing
     #expect(snapshot.history.count == 5)
     #expect(snapshot.history.first?.role == .assistant)
     #expect(snapshot.history.first?.toolCallsJSON != nil)
-    #expect(snapshot.history.filter { stored in stored.role == .tool }.count == 2)
-    #expect(snapshot.history.contains { stored in stored.content == "u1" } == false)
+    #expect(
+      snapshot.history.filter { stored in
+        stored.role == .tool
+      }.count == 2
+    )
+    #expect(
+      snapshot.history.contains { stored in
+        stored.content == "u1"
+      } == false
+    )
   }
 
-  @Test func toolRowInflationCannotEvictConversationalHistory() throws {
+  @Test
+  func toolRowInflationCannotEvictConversationalHistory() throws {
     // given — u1, then an anchor with 30 tool rows, then a2; limit 3 conversational rows
     let fixture = try makeFixture()
-    _ = try insert(fixture.queue, sessionId: fixture.sessionId, role: "user", content: "u1")
+    _ = try insert(fixture.queue, sessionID: fixture.sessionID, role: "user", content: "u1")
     _ = try insert(
       fixture.queue,
-      sessionId: fixture.sessionId,
+      sessionID: fixture.sessionID,
       role: "assistant",
       content: "",
       toolCalls: #"[{"id":"c1","name":"web_search","arguments":"{}"}]"#
@@ -103,67 +121,72 @@ import Testing
     for index in 1...30 {
       _ = try insert(
         fixture.queue,
-        sessionId: fixture.sessionId,
+        sessionID: fixture.sessionID,
         role: "tool",
         content: "obs \(index)",
-        toolCallId: "c\(index)"
+        toolCallID: "c\(index)"
       )
     }
-    let lastId = try insert(
+    let lastID = try insert(
       fixture.queue,
-      sessionId: fixture.sessionId,
+      sessionID: fixture.sessionID,
       role: "assistant",
       content: "a2"
     )
 
     // when
     let snapshot = try fixture.store.loadContextSnapshot(
-      sessionId: fixture.sessionId,
-      throughMessageId: lastId,
+      sessionID: fixture.sessionID,
+      throughMessageID: lastID,
       limit: 3
     )
 
     // then — u1 still present: 3 conversational + 30 tool rows
-    #expect(snapshot.history.contains { stored in stored.content == "u1" })
+    #expect(
+      snapshot.history.contains { stored in
+        stored.content == "u1"
+      }
+    )
     #expect(snapshot.history.count == 33)
   }
 
-  @Test func windowNeverStartsOnAToolRow() throws {
+  @Test
+  func windowNeverStartsOnAToolRow() throws {
     // given — an exchange straddling the boundary: limit lands mid-exchange under the OLD cut
     let fixture = try makeFixture()
     for index in 1...5 {
       _ = try insert(
         fixture.queue,
-        sessionId: fixture.sessionId,
+        sessionID: fixture.sessionID,
         role: "user",
         content: "u\(index)"
       )
     }
     _ = try insert(
       fixture.queue,
-      sessionId: fixture.sessionId,
+      sessionID: fixture.sessionID,
       role: "assistant",
       content: "",
       toolCalls: #"[{"id":"c1","name":"web_fetch","arguments":"{}"}]"#
     )
     _ = try insert(
       fixture.queue,
-      sessionId: fixture.sessionId,
+      sessionID: fixture.sessionID,
       role: "tool",
       content: "obs",
-      toolCallId: "c1"
+      toolCallID: "c1"
     )
-    let lastId = try insert(
+    let lastID = try insert(
       fixture.queue,
-      sessionId: fixture.sessionId,
+      sessionID: fixture.sessionID,
       role: "user",
       content: "tail"
     )
 
     // when — a window that would have cut between anchor and tool row by raw row count
     let snapshot = try fixture.store.loadContextSnapshot(
-      sessionId: fixture.sessionId,
-      throughMessageId: lastId,
+      sessionID: fixture.sessionID,
+      throughMessageID: lastID,
       limit: 2
     )
 
@@ -172,20 +195,21 @@ import Testing
     #expect(snapshot.history.count == 3)  // anchor + tool + tail
   }
 
-  @Test func recallExcludesToolRows() throws {
+  @Test
+  func recallExcludesToolRows() throws {
     // given — a tool row and an assistant row both matching the query, in another session
     let fixture = try makeFixture()
     let otherSession = try fixture.store.loadOrCreateSession(sessionKey: "tg:dm:2", now: Date())
     _ = try insert(
       fixture.queue,
-      sessionId: otherSession,
+      sessionID: otherSession,
       role: "tool",
       content: "quokka page body",
-      toolCallId: "c1"
+      toolCallID: "c1"
     )
     _ = try insert(
       fixture.queue,
-      sessionId: otherSession,
+      sessionID: otherSession,
       role: "assistant",
       content: "the quokka answer"
     )
@@ -194,10 +218,10 @@ import Testing
     // when
     let hits = try retriever.searchRelevantMessages(
       query: "quokka",
-      currentSessionId: fixture.sessionId,
-      restrictToSessionId: nil,
-      windowStartMessageId: nil,
-      excludedMessageIds: [],
+      currentSessionID: fixture.sessionID,
+      restrictToSessionID: nil,
+      windowStartMessageID: nil,
+      excludedMessageIDs: [],
       limit: 10
     )
 

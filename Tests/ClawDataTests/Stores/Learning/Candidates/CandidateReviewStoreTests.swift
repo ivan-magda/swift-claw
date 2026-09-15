@@ -5,11 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct CandidateReviewStoreTests {
+@Suite
+struct CandidateReviewStoreTests {
   @Test(arguments: ReviewCarrierMutation.allCases)
-  func fabricatedReviewCapabilitiesAreRejectedAtomically(
-    _ mutation: ReviewCarrierMutation
-  ) throws {
+  func fabricatedReviewCapabilitiesAreRejectedAtomically(_ mutation: ReviewCarrierMutation) throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -32,7 +31,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 
-  @Test func reviewStateIsDerivedFromTheAuthoritativeLiveTrial() throws {
+  @Test
+  func reviewStateIsDerivedFromTheAuthoritativeLiveTrial() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -53,7 +53,7 @@ import Testing
     #expect(throws: StoreError.self) {
       _ = try fixture.env.learning.commitCandidateReview(wrongState, now: fixture.env.now)
     }
-    try fixture.setTrialStateForReview(receipt.trialId, state: .closed)
+    try fixture.setTrialStateForReview(receipt.trialID, state: .closed)
     let terminal = fixture.review(candidate: candidate, state: .admitted, now: fixture.env.now)
     #expect(throws: StoreError.self) {
       _ = try fixture.env.learning.commitCandidateReview(terminal, now: fixture.env.now)
@@ -62,7 +62,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 
-  @Test func admittedReviewRequiresTheExactImmutableReceipt() throws {
+  @Test
+  func admittedReviewRequiresTheExactImmutableReceipt() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -88,7 +89,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 
-  @Test func onlyACurrentUnadmittedOwnerEditCanUseAwaitingApprovalState() throws {
+  @Test
+  func onlyACurrentUnadmittedOwnerEditCanUseAwaitingApprovalState() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -102,18 +104,14 @@ import Testing
     let editedOutcome = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: editControl.eventId,
+        feedbackEventID: editControl.eventID,
         payload: Data(payload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
     let edited = try #require(editedOutcome.awaitingArtifact)
-    let review = fixture.review(
-      candidate: edited,
-      state: .awaitingApproval,
-      now: fixture.env.now
-    )
+    let review = fixture.review(candidate: edited, state: .awaitingApproval, now: fixture.env.now)
     let deliveries = try fixture.env.countRows(in: "outbound_deliveries")
 
     // when
@@ -127,7 +125,8 @@ import Testing
     )
   }
 
-  @Test func rawAndSupersededCandidatesCannotExposeAwaitingApproval() throws {
+  @Test
+  func rawAndSupersededCandidatesCannotExposeAwaitingApproval() throws {
     // given
     let rawFixture = try AdmissionStoreFixture.make()
     let raw = try rawFixture.persistedCandidate()
@@ -149,7 +148,7 @@ import Testing
     let editedOutcome = try supersededFixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: editControl.eventId,
+        feedbackEventID: editControl.eventID,
         payload: Data(payload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -162,10 +161,7 @@ import Testing
       signal: .candidateApprove
     )
     _ = try supersededFixture.env.learning.approveCandidate(
-      CandidateApproval(
-        predecessorDigest: edited.digest,
-        feedbackEventId: approval.eventId
-      ),
+      CandidateApproval(predecessorDigest: edited.digest, feedbackEventID: approval.eventID),
       redactor: SecretRedactor(secretValues: []),
       now: supersededFixture.env.now
     )
@@ -189,7 +185,8 @@ import Testing
     #expect(try supersededFixture.env.countRows(in: "feedback_targets") == 0)
   }
 
-  @Test func pausedRecurringJobCanCommitItsCurrentAdmittedReview() throws {
+  @Test
+  func pausedRecurringJobCanCommitItsCurrentAdmittedReview() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -201,7 +198,7 @@ import Testing
     try fixture.env.queue.write { db in
       try db.execute(
         sql: "UPDATE scheduled_jobs SET status = ? WHERE id = ?",
-        arguments: [ScheduledJobStatus.paused.rawValue, fixture.env.jobId]
+        arguments: [ScheduledJobStatus.paused.rawValue, fixture.env.jobID]
       )
     }
     let review = fixture.review(candidate: candidate, state: .admitted, now: fixture.env.now)
@@ -214,7 +211,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "feedback_targets") == review.targets.count)
   }
 
-  @Test func reviewCommitClosesStateAndSourceRacesBeforeWriting() throws {
+  @Test
+  func reviewCommitClosesStateAndSourceRacesBeforeWriting() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -235,7 +233,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 
-  @Test func committedReviewReplayPrecedesLaterMutableAuthorityChecks() throws {
+  @Test
+  func committedReviewReplayPrecedesLaterMutableAuthorityChecks() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -249,18 +248,18 @@ import Testing
     #expect(try fixture.env.learning.commitCandidateReview(first, now: fixture.env.now))
     let snapshot = try fixture.reviewSnapshot()
     try fixture.env.advanceFeedbackRevision()
-    try fixture.setTrialStateForReview(receipt.trialId, state: .closed)
+    try fixture.setTrialStateForReview(receipt.trialID, state: .closed)
     try fixture.env.queue.write { db in
       try db.execute(
         sql: """
-          UPDATE job_learning_state SET learning_epoch = 2, stable_revision = 1
-          WHERE job_id = ?
-          """,
-        arguments: [fixture.env.jobId]
+        UPDATE job_learning_state SET learning_epoch = 2, stable_revision = 1
+        WHERE job_id = ?
+        """,
+        arguments: [fixture.env.jobID]
       )
       try db.execute(
         sql: "UPDATE scheduled_jobs SET status = ? WHERE id = ?",
-        arguments: [ScheduledJobStatus.cancelled.rawValue, fixture.env.jobId]
+        arguments: [ScheduledJobStatus.cancelled.rawValue, fixture.env.jobID]
       )
     }
     let replayTime = fixture.env.now.addingTimeInterval(60)
@@ -280,7 +279,8 @@ import Testing
     #expect(try fixture.reviewSnapshot() == snapshot)
   }
 
-  @Test func subsecondReviewCommitReplaysAgainstOneNormalizedDeliveryInstant() throws {
+  @Test
+  func subsecondReviewCommitReplaysAgainstOneNormalizedDeliveryInstant() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -314,7 +314,8 @@ import Testing
     #expect(inserted == false)
     #expect(
       try fixture.reviewCreatedDates(subjectDigest: first.subjectDigest) == [
-        wholeSecond, wholeSecond,
+        wholeSecond,
+        wholeSecond,
       ]
     )
     #expect(try fixture.reviewSnapshot() == snapshot)
@@ -365,7 +366,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 
-  @Test func reviewCommitRevalidatesThePersistedSourceRows() throws {
+  @Test
+  func reviewCommitRevalidatesThePersistedSourceRows() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -391,7 +393,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 
-  @Test func reviewCommitRevalidatesAnExactCandidateHardVeto() throws {
+  @Test
+  func reviewCommitRevalidatesAnExactCandidateHardVeto() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -410,7 +413,7 @@ import Testing
     try fixture.env.queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET feedback_revision = 0 WHERE job_id = ?",
-        arguments: [fixture.env.jobId]
+        arguments: [fixture.env.jobID]
       )
     }
 
@@ -444,6 +447,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 }
+
+// MARK: - Admission Outcome Inspection
 
 private extension AdmissionOutcome {
   var admissionReceipt: AdmissionReceipt? {

@@ -37,11 +37,16 @@ swift build -c release
 ## Lint
 
 ```bash
-scripts/lint.sh --fix   # auto-apply layout, multiline conditional bodies, and SwiftLint fixes
+scripts/lint.sh --fix   # apply the canonical Google/local style pipeline
 scripts/lint.sh         # verify; must pass before committing
 ```
 
-CI runs the check step. Fix before pushing. SwiftLint rejects source lines over 100 characters,
+Install the pinned toolchain using [CODE_STYLE.md](CODE_STYLE.md#setup). That document also
+describes per-file checks, editor-buffer formatting, and the seven-section review checklist.
+The script reports the active stage and elapsed time; the first BuildTools build needs dependency
+access. CI calls the same script and configuration. Fix before pushing.
+
+SwiftLint rejects source lines over 100 characters,
 including interpolated and multiline strings; it exempts comments and URLs. Wrap long literals
 with continuations that preserve their runtime text. `--fix` does not perform that conversion.
 See [the formatting contract](ARCHITECTURE.md#192-source-formatting-and-lint) for exceptions.

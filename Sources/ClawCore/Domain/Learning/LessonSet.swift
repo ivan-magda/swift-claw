@@ -19,31 +19,23 @@ public enum LessonSetError: Error, Sendable, Equatable {
 /// digest covers content alone, so two jobs holding the same rules — the canonical empty set above
 /// all — share a digest and differ only by owner.
 public struct LessonSet: Sendable, Equatable {
-  public let jobId: Int64
+  public let jobID: Int64
   public let schemaVersion: Int
   public let lessons: [String]
   public let digest: LessonSetDigest
 
-  public var isEmpty: Bool {
-    lessons.isEmpty
+  public var isEmpty: Bool { lessons.isEmpty }
+
+  public static func empty(jobID: Int64) -> LessonSet {
+    LessonSet(jobID: jobID, schemaVersion: schemaVersion, lessons: [], digest: digest(of: []))
   }
 
-  public static func empty(jobId: Int64) -> LessonSet {
-    LessonSet(
-      jobId: jobId,
-      schemaVersion: schemaVersion,
-      lessons: [],
-      digest: digest(of: [])
-    )
-  }
-
-  public static func canonical(
-    jobId: Int64,
-    lessons raw: [String]
-  ) throws(LessonSetError) -> LessonSet {
+  public static func canonical(jobID: Int64, lessons raw: [String]) throws(LessonSetError)
+    -> LessonSet
+  {
     let normalized = try normalize(raw)
     return LessonSet(
-      jobId: jobId,
+      jobID: jobID,
       schemaVersion: schemaVersion,
       lessons: normalized,
       digest: digest(of: normalized)
@@ -53,21 +45,21 @@ public struct LessonSet: Sendable, Equatable {
 
 // MARK: - Storage Form
 
-package extension LessonSet {
+extension LessonSet {
   /// The exact bytes the digest is taken over, which is what `lesson_sets.canonical_bytes` holds:
   /// a stored set and its stored digest therefore cannot describe different content.
-  var canonicalBytes: Data {
+  package var canonicalBytes: Data {
     let payload = DigestPayload(lessons: lessons, schemaVersion: schemaVersion)
     return (try? CanonicalJSON.data(encoding: payload)) ?? Data()
   }
 
   /// Rebuilds a stored set from its canonical bytes, re-running validation and re-deriving the
   /// digest. Returns nil when the bytes are not a lesson set this version can read.
-  static func decoded(jobId: Int64, canonicalBytes: Data) -> LessonSet? {
+  package static func decoded(jobID: Int64, canonicalBytes: Data) -> LessonSet? {
     guard
       let payload = try? JSONDecoder().decode(DigestPayload.self, from: canonicalBytes),
       payload.schemaVersion == schemaVersion,
-      let set = try? canonical(jobId: jobId, lessons: payload.lessons)
+      let set = try? canonical(jobID: jobID, lessons: payload.lessons)
     else {
       return nil
     }
@@ -117,12 +109,13 @@ private extension LessonSet {
   /// Unicode normalization, line-ending normalization, surrounding-whitespace removal — the exact
   /// order the accepted algorithm fixes, applied before any digest or cap decision.
   static func canonicalText(_ lesson: String) -> String {
-    let unixLineEndings =
-      lesson
-      .replacingOccurrences(of: "\r\n", with: "\n")
-      .replacingOccurrences(of: "\r", with: "\n")
-    return unixLineEndings.precomposedStringWithCanonicalMapping
-      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let unixLineEndings = lesson.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(
+      of: "\r",
+      with: "\n"
+    )
+    return unixLineEndings.precomposedStringWithCanonicalMapping.trimmingCharacters(
+      in: .whitespacesAndNewlines
+    )
   }
 
   /// Every Unicode general category `Cc` or `Cf` scalar except newline. This is the exact rule the

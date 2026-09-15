@@ -6,22 +6,22 @@ import Foundation
 public struct EnvSecretStore: SecretStore {
   public enum EnvKey {
     public static let botToken = "CLAW_TELEGRAM_BOT_TOKEN"
-    public static let llmApiKey = "CLAW_LLM_API_KEY"
-    public static let searchApiKey = "CLAW_SEARCH_API_KEY"
-    public static let llmFallbackApiKey = "CLAW_LLM_FALLBACK_API_KEY"
+    public static let llmAPIKey = "CLAW_LLM_API_KEY"
+    public static let searchAPIKey = "CLAW_SEARCH_API_KEY"
+    public static let llmFallbackAPIKey = "CLAW_LLM_FALLBACK_API_KEY"
 
     /// Every variable `loadSecrets` seals, in the order an owner meets them in `.env.example`.
     /// `clawd secrets seal` blanks exactly this list and names exactly this list when it cannot,
     /// so a secret can never reach the envelope while its plaintext line survives unmentioned.
-    public static let sealed = [botToken, llmApiKey, searchApiKey, llmFallbackApiKey]
+    public static let sealed = [botToken, llmAPIKey, searchAPIKey, llmFallbackAPIKey]
   }
 
   private let environment: [String: String]
-  private let warn: @Sendable (String) -> Void
+  private let warn: @Sendable (_ message: String) -> Void
 
   public init(
     environment: [String: String],
-    warn: @escaping @Sendable (String) -> Void = EnvSecretStore.defaultWarn
+    warn: @escaping @Sendable (_ message: String) -> Void = EnvSecretStore.defaultWarn
   ) {
     self.environment = environment
     self.warn = warn
@@ -39,21 +39,27 @@ public struct EnvSecretStore: SecretStore {
       """
     )
 
-    let apiKey = environment[EnvKey.llmApiKey].flatMap { $0.isEmpty ? nil : $0 }
-    let searchKey = environment[EnvKey.searchApiKey].flatMap { $0.isEmpty ? nil : $0 }
-    let fallbackApiKey = environment[EnvKey.llmFallbackApiKey].flatMap { $0.isEmpty ? nil : $0 }
+    let apiKey = environment[EnvKey.llmAPIKey].flatMap {
+      $0.isEmpty ? nil : $0
+    }
+    let searchKey = environment[EnvKey.searchAPIKey].flatMap {
+      $0.isEmpty ? nil : $0
+    }
+    let fallbackAPIKey = environment[EnvKey.llmFallbackAPIKey].flatMap {
+      $0.isEmpty ? nil : $0
+    }
 
     return Secrets(
       telegramBotToken: botToken,
-      llmApiKey: apiKey,
-      searchApiKey: searchKey,
-      llmFallbackApiKey: fallbackApiKey
+      llmAPIKey: apiKey,
+      searchAPIKey: searchKey,
+      llmFallbackAPIKey: fallbackAPIKey
     )
   }
 
   /// Writes to stderr — used as the default warn so the daemon always emits the warning
   /// even when no custom handler is injected.
-  public static let defaultWarn: @Sendable (String) -> Void = { message in
+  public static let defaultWarn: @Sendable (_ message: String) -> Void = { message in
     FileHandle.standardError.write(Data("WARN: \(message)\n".utf8))
   }
 }

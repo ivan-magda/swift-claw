@@ -9,8 +9,8 @@ import Foundation
 /// resolves a conflict by doing nothing: a shared default would let a suite seed two rows, store
 /// one, and still pass. Tests that assert on the identity itself pass an explicit `callID`.
 func makeProviderUsage(
-  runId: Int64?,
-  sessionId: Int64,
+  runID: Int64?,
+  sessionID: Int64,
   callID: String = UUIDProviderCallIDGenerator().next().rawValue,
   model: String = "m",
   promptTokens: Int = 10,
@@ -22,8 +22,8 @@ func makeProviderUsage(
 ) -> ProviderUsage {
   ProviderUsage(
     providerCallID: ProviderCallID(rawValue: callID),
-    runId: runId,
-    sessionId: sessionId,
+    runID: runID,
+    sessionID: sessionID,
     model: model,
     promptTokens: promptTokens,
     completionTokens: completionTokens,

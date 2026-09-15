@@ -22,7 +22,7 @@ extension ContainerBackend {
 
       return identity.hasPrefix(ExecutionIdentity.namePrefix)
         && container.labels[ExecutionIdentity.ownershipLabelKey]
-          == ExecutionIdentity.ownershipLabelValue
+        == ExecutionIdentity.ownershipLabelValue
     }
   }
 
@@ -73,20 +73,13 @@ extension ContainerBackend {
       }
 
       guard
-        let children = try? manager.contentsOfDirectory(
-          at: root,
-          includingPropertiesForKeys: nil
-        )
+        let children = try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
       else {
         return false
       }
 
       for child in children {
-        do {
-          try manager.removeItem(at: child)
-        } catch {
-          return false
-        }
+        do { try manager.removeItem(at: child) } catch { return false }
       }
     }
 

@@ -117,9 +117,7 @@ public struct ExfilArgGuard: Sendable {
 
   // MARK: - Tiers 1 + 2 (always)
 
-  public func evaluateUnconditional(argsJSON: String) -> Verdict {
-    evaluate(text: argsJSON)
-  }
+  public func evaluateUnconditional(argsJSON: String) -> Verdict { evaluate(text: argsJSON) }
 
   public func evaluate(text: String) -> Verdict {
     let candidates = Self.matchCandidates(text)
@@ -156,20 +154,13 @@ public struct ExfilArgGuard: Sendable {
   // MARK: - Tier 3 (trifecta condition only)
 
   public func evaluateConditional(argsJSON: String, privateFileTexts: [String]) -> Verdict {
-    evaluateConditional(
-      text: argsJSON,
-      index: PrivateTextIndex(texts: privateFileTexts)
-    )
+    evaluateConditional(text: argsJSON, index: PrivateTextIndex(texts: privateFileTexts))
   }
 
   public func evaluateConditional(text: String, index: PrivateTextIndex) -> Verdict {
     for candidate in Self.matchCandidates(text) {
       if let window = index.firstMatch(in: candidate) {
-        return blockedVerdict(
-          rule: "private-file-substring",
-          raw: text,
-          spans: [window]
-        )
+        return blockedVerdict(rule: "private-file-substring", raw: text, spans: [window])
       }
     }
 
@@ -195,7 +186,7 @@ public struct ExfilArgGuard: Sendable {
       }
 
       for match in Self.regexMatches(shape.pattern, in: rendered)
-      where shape.rule != "high-entropy" || Self.looksHighEntropy(match) {
+        where shape.rule != "high-entropy" || Self.looksHighEntropy(match) {
         rendered = rendered.replacingOccurrences(of: match, with: "[REDACTED:\(shape.rule)]")
       }
     }
@@ -248,7 +239,9 @@ public struct ExfilArgGuard: Sendable {
     while index < scalars.count {
       let scalar = scalars[index]
 
-      guard scalar == "%", index + 2 < scalars.count,
+      guard
+        scalar == "%",
+        index + 2 < scalars.count,
         let high = Self.hexNibble(scalars[index + 1]),
         let low = Self.hexNibble(scalars[index + 2])
       else {
@@ -275,14 +268,10 @@ public struct ExfilArgGuard: Sendable {
   /// The numeric value 0...15 of a single hex digit, or nil for any non-hex scalar.
   private static func hexNibble(_ scalar: Unicode.Scalar) -> UInt8? {
     switch scalar {
-    case "0"..."9":
-      UInt8(scalar.value - Unicode.Scalar("0").value)
-    case "a"..."f":
-      UInt8(scalar.value - Unicode.Scalar("a").value + 10)
-    case "A"..."F":
-      UInt8(scalar.value - Unicode.Scalar("A").value + 10)
-    default:
-      nil
+    case "0"..."9": UInt8(scalar.value - ("0" as Unicode.Scalar).value)
+    case "a"..."f": UInt8(scalar.value - ("a" as Unicode.Scalar).value + 10)
+    case "A"..."F": UInt8(scalar.value - ("A" as Unicode.Scalar).value + 10)
+    default: nil
     }
   }
 
@@ -322,14 +311,10 @@ public struct ExfilArgGuard: Sendable {
 
     for byte in token.utf8 {
       switch byte {
-      case UInt8(ascii: "0")...UInt8(ascii: "9"):
-        hasDigit = true
-      case UInt8(ascii: "A")...UInt8(ascii: "Z"):
-        hasUppercase = true
-      case UInt8(ascii: "a")...UInt8(ascii: "z"):
-        hasLowercase = true
-      default:
-        continue
+      case UInt8(ascii: "0")...UInt8(ascii: "9"): hasDigit = true
+      case UInt8(ascii: "A")...UInt8(ascii: "Z"): hasUppercase = true
+      case UInt8(ascii: "a")...UInt8(ascii: "z"): hasLowercase = true
+      default: continue
       }
 
       if hasDigit, hasUppercase, hasLowercase {
@@ -344,6 +329,7 @@ public struct ExfilArgGuard: Sendable {
   /// arbitrary odd multiplier) and its precomputed weight for the window's leading grapheme,
   /// used to subtract that grapheme back out when the window slides one position right.
   private static let rollingBase: UInt64 = 0x0000_0100_0000_01b3
+
   private static let leadingGraphemeWeight: UInt64 = {
     var weight: UInt64 = 1
     for _ in 1..<substringThresholdGraphemes {
@@ -404,9 +390,12 @@ public struct ExfilArgGuard: Sendable {
     }
     // A span present only in a decoded candidate isn't in `raw`, so neither the sweep nor the
     // loop above could remove its still-one-decode-away encoded form — nuke the whole string.
-    if spans.contains(where: { span in
-      raw.contains(span) == false
-    }) {
+    if
+      spans.contains(
+        where: { span in
+          raw.contains(span) == false
+        }
+      ) {
       return Verdict(blockedRule: rule, redactedArgs: "[REDACTED:\(rule)]")
     }
 

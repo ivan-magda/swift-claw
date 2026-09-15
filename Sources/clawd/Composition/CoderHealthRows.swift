@@ -68,7 +68,8 @@ enum CoderHealthRows {
         setup.permitsSubmission ? "true (compatible CLI)" : "false",
         ok: setup.permitsSubmission
       ),
-      row(Key.executable, setup.executable, headline: true), row(Key.version, setup.version),
+      row(Key.executable, setup.executable, headline: true),
+      row(Key.version, setup.version),
       row(Key.configHome, setup.configHome ?? "default"),
       row(Key.profile, setup.profile ?? "default"),
       row(Key.authentication, authentication, ok: authOK),
@@ -98,7 +99,7 @@ enum CoderHealthRows {
   static func configuration(
     config: CoderConfig,
     live: Bool,
-    resolve: @Sendable (CoderConfig) async throws -> CoderBackendSetup
+    resolve: @Sendable (_ config: CoderConfig) async throws -> CoderBackendSetup
   ) async -> [DoctorReport.Check] {
     guard config.enabled else {
       return disabled
@@ -112,17 +113,13 @@ enum CoderHealthRows {
       ]
     }
 
-    do {
-      return rows(config: config, setup: try await resolve(config))
-    } catch {
+    do { return rows(config: config, setup: try await resolve(config)) } catch {
       return unavailable(config: config, error: error)
     }
   }
 
-  static func persisted(
-    store: any CoderJobStore,
-    redactor: SecretRedactor
-  ) -> [DoctorReport.Check] {
+  static func persisted(store: any CoderJobStore, redactor: SecretRedactor) -> [DoctorReport.Check]
+  {
     var rows: [DoctorReport.Check] = []
 
     do {
@@ -142,9 +139,7 @@ enum CoderHealthRows {
           ok: unresolved.isEmpty
         ),
       ]
-    } catch {
-      rows += [unreadable(Key.reserved), unreadable(Key.ownership)]
-    }
+    } catch { rows += [unreadable(Key.reserved), unreadable(Key.ownership)] }
 
     do {
       let job = try store.lastFailedJob()
@@ -156,9 +151,7 @@ enum CoderHealthRows {
           """
         } ?? "none"
       rows.append(row(Key.lastFailure, redactor.redact(value)))
-    } catch {
-      rows.append(unreadable(Key.lastFailure))
-    }
+    } catch { rows.append(unreadable(Key.lastFailure)) }
 
     return rows
   }
@@ -175,7 +168,7 @@ enum CoderHealthRows {
         Key.serviceFailure,
         failure == nil ? "none" : "fatal persistence/process cleanup failure",
         ok: failure == nil
-      )
+      ),
     ]
   }
 }
@@ -192,7 +185,8 @@ private extension CoderHealthRows {
 
   static func configurationRows(_ config: CoderConfig) -> [DoctorReport.Check] {
     [
-      row(Key.enabled, "true"), row(Key.executable, "\(config.executable) (configured)"),
+      row(Key.enabled, "true"),
+      row(Key.executable, "\(config.executable) (configured)"),
       row(Key.configHome, config.configHome ?? "inherited CODEX_HOME or daemon HOME/.codex"),
       row(Key.profile, config.profile ?? "default"),
       row(Key.capacity, String(config.maxConcurrentJobs)),
@@ -200,20 +194,9 @@ private extension CoderHealthRows {
     ]
   }
 
-  static func row(
-    _ key: String,
-    _ value: String,
-    ok: Bool = true,
-    headline: Bool = false
-  ) -> DoctorReport.Check {
-    DoctorReport.Check(
-      key: key,
-      value: value,
-      ok: ok,
-      group: .coder,
-      isHeadline: headline
-    )
-  }
+  static func row(_ key: String, _ value: String, ok: Bool = true, headline: Bool = false)
+    -> DoctorReport.Check
+  { DoctorReport.Check(key: key, value: value, ok: ok, group: .coder, isHeadline: headline) }
 
   static func unreadable(_ key: String) -> DoctorReport.Check {
     row(key, "unreadable (db read failed)", ok: false)

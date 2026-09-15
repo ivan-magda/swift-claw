@@ -12,9 +12,7 @@ import GRDB
 public struct ApprovalStoreGRDB: ApprovalStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) {
-    database = MappedDatabase(writer: writer)
-  }
+  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
 
   public func approval(nonce: String) throws(StoreError) -> Approval? {
     try database.readMapping { db in
@@ -54,7 +52,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           db,
           approval: approval,
           actor: actor?.actor ?? .owner,
-          actorUserId: actor?.userId,
+          actorUserID: actor?.userID,
           action: .approvalDenied,
           decision: .stalePolicy,
           now: now
@@ -75,7 +73,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         db,
         approval: approval,
         actor: actor?.actor ?? .owner,
-        actorUserId: actor?.userId,
+        actorUserID: actor?.userID,
         action: .approvalGranted,
         decision: nil,
         now: now
@@ -115,7 +113,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         db,
         approval: approval,
         actor: actor?.actor ?? auditActor,
-        actorUserId: actor?.userId,
+        actorUserID: actor?.userID,
         action: .approvalDenied,
         decision: decision,
         now: now
@@ -170,20 +168,20 @@ public struct ApprovalStoreGRDB: ApprovalStore {
       try Self.fetchApprovals(
         db,
         whereClause: """
-          state = ?
-          OR ((state = ?
-              OR (state IN (?, ?)
-                AND EXISTS (
-                  SELECT 1 FROM runs WHERE runs.id = approvals.run_id AND runs.state = ?
-                )))
-            AND EXISTS (
-              SELECT 1 FROM messages
-              WHERE messages.id = approvals.observation_message_id
-                AND messages.run_id = approvals.run_id
-                AND messages.role = '\(MessageRole.tool.rawValue)'
-                AND messages.content = ?
-            ))
-          """,
+        state = ?
+        OR ((state = ?
+            OR (state IN (?, ?)
+              AND EXISTS (
+                SELECT 1 FROM runs WHERE runs.id = approvals.run_id AND runs.state = ?
+              )))
+          AND EXISTS (
+            SELECT 1 FROM messages
+            WHERE messages.id = approvals.observation_message_id
+              AND messages.run_id = approvals.run_id
+              AND messages.role = '\(MessageRole.tool.rawValue)'
+              AND messages.content = ?
+          ))
+        """,
         arguments: [
           ApprovalState.pending.rawValue,
           ApprovalState.approved.rawValue,
@@ -201,11 +199,11 @@ public struct ApprovalStoreGRDB: ApprovalStore {
       let orphans = try Self.fetchApprovals(
         db,
         whereClause: """
-          state = ?
-          AND EXISTS (
-            SELECT 1 FROM runs WHERE runs.id = approvals.run_id AND runs.state IN (?, ?, ?, ?)
-          )
-          """,
+        state = ?
+        AND EXISTS (
+          SELECT 1 FROM runs WHERE runs.id = approvals.run_id AND runs.state IN (?, ?, ?, ?)
+        )
+        """,
         arguments: [
           ApprovalState.pending.rawValue,
           RunState.done.rawValue,
@@ -246,14 +244,13 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           arguments: [ApprovalState.pending.rawValue]
         ) ?? 0
 
-      let oldestPendingAgeSeconds =
-        try Int64.fetchOne(
-          db,
-          sql: "SELECT MIN(created_ts) FROM approvals WHERE state = ?",
-          arguments: [ApprovalState.pending.rawValue]
-        ).map { oldestEpoch in
-          Int(EpochSecondCodec.epoch(now) - oldestEpoch)
-        }
+      let oldestPendingAgeSeconds = try Int64.fetchOne(
+        db,
+        sql: "SELECT MIN(created_ts) FROM approvals WHERE state = ?",
+        arguments: [ApprovalState.pending.rawValue]
+      ).map { oldestEpoch in
+        Int(EpochSecondCodec.epoch(now) - oldestEpoch)
+      }
 
       return ApprovalsHealth(
         pendingCount: pendingCount,
@@ -271,24 +268,24 @@ extension ApprovalStoreGRDB {
   static func insertApproval(_ db: Database, _ approval: NewApproval) throws -> Int64 {
     try db.execute(
       sql: """
-        INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-          args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-          reason, created_ts, expires_ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+      INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+        args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+        reason, created_ts, expires_ts)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      """,
       arguments: [
-        approval.runId,
-        approval.sessionId,
+        approval.runID,
+        approval.sessionID,
         ApprovalState.pending.rawValue,
         approval.tool,
         approval.canonicalArgsJSON,
         approval.canonicalTarget,
         approval.argsHash,
         approval.policyVersion,
-        approval.ownerUserId,
+        approval.ownerUserID,
         approval.nonce,
-        approval.observationMessageId,
-        approval.toolCallId,
+        approval.observationMessageID,
+        approval.toolCallID,
         approval.reason.rawValue,
         EpochSecondCodec.epoch(approval.createdTs),
         EpochSecondCodec.epoch(approval.expiresTs),
@@ -299,12 +296,9 @@ extension ApprovalStoreGRDB {
 
   /// The single state-change seam — mirrors `RunStoreGRDB.transitionRun`, but every legal event
   /// resolves a PENDING row to a terminal state, so `resolved_ts` is always stamped here.
-  static func transitionApproval(
-    _ db: Database,
-    id: Int64,
-    on event: ApprovalEvent,
-    now: Date
-  ) throws -> ApprovalState? {
+  static func transitionApproval(_ db: Database, id: Int64, on event: ApprovalEvent, now: Date)
+    throws -> ApprovalState?
+  {
     guard
       let state = try currentApprovalState(db, id: id),
       let nextState = ApprovalFSM.reduce(state: state, on: event)
@@ -320,24 +314,24 @@ extension ApprovalStoreGRDB {
     return nextState
   }
 
-  /// Command-path resolution: CAS every PENDING approval of `runIds` → REJECTED (cancel and
+  /// Command-path resolution: CAS every PENDING approval of `runIDs` → REJECTED (cancel and
   /// supersede both land in REJECTED — the four-state rule; the audit `decision` records why) and
   /// append its `approvalDenied` audit inside the CALLER's transaction (the CAS is the
   /// recorded transition). Returns the resolved ids for the coordinator signals. Reused by
   /// `CommandStoreGRDB.applyStop`/`applyNew` so the run flip and the approval CAS share one commit.
   static func resolvePendingApprovals(
     _ db: Database,
-    runIds: [Int64],
+    runIDs: [Int64],
     decision: ApprovalDecision,
     now: Date
   ) throws -> [Int64] {
-    guard runIds.isEmpty == false else {
+    guard runIDs.isEmpty == false else {
       return []
     }
 
-    let placeholders = databaseQuestionMarks(count: runIds.count)
+    let placeholders = databaseQuestionMarks(count: runIDs.count)
     var arguments: [any DatabaseValueConvertible] = [ApprovalState.pending.rawValue]
-    arguments.append(contentsOf: runIds)
+    arguments.append(contentsOf: runIDs)
     let pending = try fetchApprovals(
       db,
       whereClause: "state = ? AND run_id IN (\(placeholders))",
@@ -367,17 +361,18 @@ extension ApprovalStoreGRDB {
 
 private extension ApprovalStoreGRDB {
   static let selectColumns = """
-    id, run_id, session_id, state, tool, canonical_args, canonical_target, args_hash,
-    policy_version, owner_user_id, nonce, observation_message_id, tool_call_id, reason,
-    prompt_message_id, created_ts, expires_ts, resolved_ts
-    """
+  id, run_id, session_id, state, tool, canonical_args, canonical_target, args_hash,
+  policy_version, owner_user_id, nonce, observation_message_id, tool_call_id, reason,
+  prompt_message_id, created_ts, expires_ts, resolved_ts
+  """
 
   static func currentApprovalState(_ db: Database, id: Int64) throws -> ApprovalState? {
-    if let rawState = try String.fetchOne(
-      db,
-      sql: "SELECT state FROM approvals WHERE id = ?",
-      arguments: [id]
-    ) {
+    if
+      let rawState = try String.fetchOne(
+        db,
+        sql: "SELECT state FROM approvals WHERE id = ?",
+        arguments: [id]
+      ) {
       return ApprovalState(rawValue: rawState)
     }
     return nil
@@ -387,32 +382,28 @@ private extension ApprovalStoreGRDB {
     try fetchApproval(db, whereClause: "id = ?", arguments: [id])
   }
 
-  static func fetchApproval(
-    _ db: Database,
-    whereClause: String,
-    arguments: StatementArguments
-  ) throws -> Approval? {
-    if let row = try Row.fetchOne(
-      db,
-      sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause)",
-      arguments: arguments
-    ) {
+  static func fetchApproval(_ db: Database, whereClause: String, arguments: StatementArguments)
+    throws -> Approval?
+  {
+    if
+      let row = try Row.fetchOne(
+        db,
+        sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause)",
+        arguments: arguments
+      ) {
       return try mapApproval(row)
     }
     return nil
   }
 
-  static func fetchApprovals(
-    _ db: Database,
-    whereClause: String,
-    arguments: StatementArguments
-  ) throws -> [Approval] {
+  static func fetchApprovals(_ db: Database, whereClause: String, arguments: StatementArguments)
+    throws -> [Approval]
+  {
     try Row.fetchAll(
       db,
       sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause) ORDER BY id ASC",
       arguments: arguments
-    )
-    .map(mapApproval)
+    ).map(mapApproval)
   }
 
   /// Fail closed on a corrupted enum column or missing epoch (same rule as `decodeItem`): a
@@ -435,20 +426,20 @@ private extension ApprovalStoreGRDB {
 
     return Approval(
       id: row["id"],
-      runId: row["run_id"],
-      sessionId: row["session_id"],
+      runID: row["run_id"],
+      sessionID: row["session_id"],
       state: state,
       tool: row["tool"],
       canonicalArgsJSON: row["canonical_args"],
       canonicalTarget: row["canonical_target"],
       argsHash: row["args_hash"],
       policyVersion: row["policy_version"],
-      ownerUserId: row["owner_user_id"],
+      ownerUserID: row["owner_user_id"],
       nonce: row["nonce"],
-      observationMessageId: row["observation_message_id"],
-      toolCallId: row["tool_call_id"],
+      observationMessageID: row["observation_message_id"],
+      toolCallID: row["tool_call_id"],
       reason: reason,
-      promptMessageId: row["prompt_message_id"],
+      promptMessageID: row["prompt_message_id"],
       createdTs: createdTs,
       expiresTs: expiresTs,
       resolvedTs: EpochSecondCodec.date(fromEpoch: row["resolved_ts"])
@@ -466,7 +457,7 @@ private extension ApprovalStoreGRDB {
     _ db: Database,
     approval: Approval,
     actor: AuditActor,
-    actorUserId: Int64? = nil,
+    actorUserID: Int64? = nil,
     action: AuditAction,
     decision: ApprovalDecision?,
     now: Date
@@ -475,12 +466,12 @@ private extension ApprovalStoreGRDB {
       db,
       AuditEvent(
         actor: actor,
-        actorUserId: actorUserId,
+        actorUserID: actorUserID,
         action: action,
         tool: approval.tool,
         decision: decision?.rawValue ?? "ok",
-        runId: approval.runId,
-        sessionId: approval.sessionId,
+        runID: approval.runID,
+        sessionID: approval.sessionID,
         ts: now
       )
     )

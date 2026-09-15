@@ -14,7 +14,8 @@ import Testing
 @testable import clawd
 
 /// Shutdown acceptance through the production builder and command orchestration.
-@Suite struct RuntimeShutdownAcceptanceTests {
+@Suite
+struct RuntimeShutdownAcceptanceTests {
   private struct HeldLane: Sendable {
     let coordination: DaemonBuilder.TurnCoordination
     let hold: ScriptedStreamHold
@@ -22,23 +23,20 @@ import Testing
     let credentialSource: any LLMCredentialSource
   }
 
-  private func startHeldLane(
-    sessionId: Int64,
-    runId: Int64
-  ) async throws -> HeldLane {
+  private func startHeldLane(sessionID: Int64, runID: Int64) async throws -> HeldLane {
     let hold = ScriptedStreamHold()
     let http = ScriptedHTTPExecutor([
       .blockedStream(
         CompositionAcceptance.okHead,
         CompositionAcceptance.terminalRound(tokens: (5, 2)),
         hold
-      )
+      ),
     ])
     let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
     let coordination = DaemonBuilder.TurnCoordination()
     let join = TerminationBox()
 
-    let admission = await coordination.lanes.enqueue(sessionID: sessionId, runID: runId) {
+    let admission = await coordination.lanes.enqueue(sessionID: sessionID, runID: runID) {
       let session = stack.binding.provider.stream(
         request: ChatRequest(
           model: stack.binding.wireModel,
@@ -63,15 +61,18 @@ import Testing
 
   // MARK: - Clean drain
 
-  @Test func cleanDrainThroughTheBundleJoinsTheProducerThenRunsCleanupInOrder() async throws {
+  @Test
+  func cleanDrainThroughTheBundleJoinsTheProducerThenRunsCleanupInOrder() async throws {
     // given
-    let lane = try await startHeldLane(sessionId: 1, runId: 10)
+    let lane = try await startHeldLane(sessionID: 1, runID: 10)
     let booted = AsyncGate()
     let recorder = StepRecorder()
     let composed = try Self.makeComposed(
       lane: lane,
       clock: ContinuousClock(),
-      boot: { booted.open() },
+      boot: {
+        booted.open()
+      },
       recorder: recorder
     )
 
@@ -98,15 +99,17 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func graceTimeoutThroughTheBundleSkipsCleanupReportsRunIDsAndLeavesARunningRow() async throws {
     // given
-    let (writer, sessionId, runId) = try Self.makeRunningRun()
-    let lane = try await startHeldLane(sessionId: sessionId, runId: runId)
+    let (writer, sessionID, runID) = try Self.makeRunningRun()
+    let lane = try await startHeldLane(sessionID: sessionID, runID: runID)
     let booted = AsyncGate()
     let recorder = StepRecorder()
     let logs = RecordingLogCapture()
     let composed = try Self.makeComposed(
       lane: lane,
       clock: ScriptedClock { _ in },
-      boot: { booted.open() },
+      boot: {
+        booted.open()
+      },
       recorder: recorder
     )
     let recordedCode = ExitCodeBox()
@@ -133,18 +136,20 @@ import Testing
     // then
     #expect(await recorder.events == [])
     #expect(recordedCode.value == 1)
-    #expect(logs.entries.contains { $0.message.contains(String(runId)) })
-    let state = try Self.runState(writer, runId: runId)
+    #expect(
+      logs.entries.contains {
+        $0.message.contains(String(runID))
+      }
+    )
+    let state = try Self.runState(writer, runID: runID)
     #expect(state == RunState.running.rawValue)
 
     lane.hold.release.open()
-    _ = await lane.coordination.lanes.drain(
-      timeout: .seconds(5),
-      clock: ContinuousClock()
-    )
+    _ = await lane.coordination.lanes.drain(timeout: .seconds(5), clock: ContinuousClock())
   }
 
-  @Test func coderBootWorkJoinsBeforeDependentCleanup() async throws {
+  @Test
+  func coderBootWorkJoinsBeforeDependentCleanup() async throws {
     // given
     let fixture = try CoderCompositionFixture(holdCleanup: true)
     defer { fixture.cleanup() }
@@ -170,15 +175,18 @@ import Testing
           try await service.start()
           let prepared = try await service.prepare(CoderCompositionFixture.request)
           let context = try fixture.approvedContext(prepared)
-          _ = await coordination.lanes.enqueue(sessionID: context.sessionId, runID: context.runId) {
+          _ = await coordination.lanes.enqueue(sessionID: context.sessionID, runID: context.runID) {
             do { _ = try await service.submit(prepared, context: context) } catch {
               Issue.record(error)
             }
-            await withTaskCancellationHandler {
-              await releaseLane.waitIgnoringCancellation()
-            } onCancel: {
-              laneCancelled.open()
-            }
+            await withTaskCancellationHandler(
+              operation: {
+                await releaseLane.waitIgnoringCancellation()
+              },
+              onCancel: {
+                laneCancelled.open()
+              }
+            )
             laneJoined.open()
           }
           _ = await fixture.backend.started.waitUntilOpen()
@@ -192,15 +200,12 @@ import Testing
     let composed = RunComposition.Composed(
       bundle: bundle,
       clients: RuntimeHTTPClients { _ in
-        RuntimeHTTPClient(
-          executor: AsyncHTTPExecutor(client: .shared),
-          close: {
-            #expect(laneJoined.isOpen)
-            #expect(fixture.backend.allowCleanup.isOpen)
-            #expect((try? fixture.builder.stores.coderJobs.reservedJobs().isEmpty) == true)
-            closed.open()
-          }
-        )
+        RuntimeHTTPClient(executor: AsyncHTTPExecutor(client: .shared)) {
+          #expect(laneJoined.isOpen)
+          #expect(fixture.backend.allowCleanup.isOpen)
+          #expect((try? fixture.builder.stores.coderJobs.reservedJobs().isEmpty) == true)
+          closed.open()
+        }
       }
     )
 
@@ -232,7 +237,8 @@ import Testing
     #expect(closed.isOpen)
   }
 
-  @Test func coderUnresolvedCleanupRefusesDependentTeardown() async throws {
+  @Test
+  func coderUnresolvedCleanupRefusesDependentTeardown() async throws {
     // given
     let fixture = try CoderCompositionFixture(unresolvedCleanup: true)
     defer { fixture.cleanup() }
@@ -255,12 +261,9 @@ import Testing
     let composed = RunComposition.Composed(
       bundle: bundle,
       clients: RuntimeHTTPClients { _ in
-        RuntimeHTTPClient(
-          executor: AsyncHTTPExecutor(client: .shared),
-          close: {
-            Issue.record("Unresolved Coder ownership closed a dependent client")
-          }
-        )
+        RuntimeHTTPClient(executor: AsyncHTTPExecutor(client: .shared)) {
+          Issue.record("Unresolved Coder ownership closed a dependent client")
+        }
       }
     )
 
@@ -297,7 +300,9 @@ import Testing
 
   // MARK: - Helpers
 
-  private static let silent = Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+  private static let silent = Logger(label: "test") { _ in
+    SwiftLogNoOpLogHandler()
+  }
 
   private static func makeComposed(
     lane: HeldLane,
@@ -311,7 +316,7 @@ import Testing
       services: [],
       coordination: lane.coordination,
       credentialSources: [
-        RecordingCredentialSource(base: lane.credentialSource, recorder: recorder)
+        RecordingCredentialSource(base: lane.credentialSource, recorder: recorder),
       ],
       boot: boot,
       laneDrainClock: clock,
@@ -320,10 +325,9 @@ import Testing
     return RunComposition.Composed(
       bundle: bundle,
       clients: RuntimeHTTPClients { role in
-        RuntimeHTTPClient(
-          executor: AsyncHTTPExecutor(client: .shared),
-          close: { await recorder.record(Self.event(for: role)) }
-        )
+        RuntimeHTTPClient(executor: AsyncHTTPExecutor(client: .shared)) {
+          await recorder.record(Self.event(for: role))
+        }
       }
     )
   }
@@ -337,33 +341,35 @@ import Testing
   }
 
   private static func makeRunningRun() throws -> (
-    writer: any DatabaseWriter, sessionId: Int64, runId: Int64
+    writer: any DatabaseWriter,
+    sessionID: Int64,
+    runID: Int64
   ) {
     let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let runs = RunStoreGRDB(writer: queue)
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let chatId: Int64 = 99
+    let chatID: Int64 = 99
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        chatId: chatId,
-        userId: chatId,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: chatID),
+        chatID: chatID,
+        userID: chatID,
         text: "hi",
         isEdited: false,
         ts: now
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
-    _ = try runs.pickUp(runId: runId, policyVersion: nil, now: now)  // PENDING → RUNNING
-    return (queue, sessionId, runId)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
+    _ = try runs.pickUp(runID: runID, policyVersion: nil, now: now)  // PENDING → RUNNING
+    return (queue, sessionID, runID)
   }
 
-  private static func runState(_ writer: any DatabaseWriter, runId: Int64) throws -> String? {
+  private static func runState(_ writer: any DatabaseWriter, runID: Int64) throws -> String? {
     try writer.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
     }
   }
 }
@@ -373,9 +379,7 @@ import Testing
 private actor TerminationBox {
   private var termination: LLMStreamTermination?
 
-  func set(_ value: LLMStreamTermination) {
-    termination = value
-  }
+  func set(_ value: LLMStreamTermination) { termination = value }
 
   var isCompleted: Bool {
     if case .completed = termination {
@@ -388,23 +392,16 @@ private actor TerminationBox {
 private actor StepRecorder {
   private(set) var events: [String] = []
 
-  func record(_ name: String) {
-    events.append(name)
-  }
+  func record(_ name: String) { events.append(name) }
 }
 
 private struct RecordingCredentialSource: LLMCredentialSource {
   let base: any LLMCredentialSource
   let recorder: StepRecorder
 
-  func authorization() async throws -> LLMRequestAuthorization {
-    try await base.authorization()
-  }
+  func authorization() async throws -> LLMRequestAuthorization { try await base.authorization() }
 
-  func reject(
-    generation: LLMCredentialGeneration,
-    disposition: LLMCredentialRejection
-  ) async {
+  func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {
     await base.reject(generation: generation, disposition: disposition)
   }
 

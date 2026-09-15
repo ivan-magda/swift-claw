@@ -121,7 +121,7 @@ public struct AppConfig: Sendable, Equatable {
   public let heartbeatMaxPerDay: Int
 
   /// The single allowlisted owner target, retained while heartbeat is off for crash reconciliation.
-  public var heartbeatOwnerChatId: Int64? {
+  public var heartbeatOwnerChatID: Int64? {
     guard allowlist.count == 1 else {
       return nil
     }
@@ -197,11 +197,11 @@ public struct AppConfig: Sendable, Equatable {
   /// are loaded separately via `SecretStore` and injected at the composition root. An empty
   /// allowlist is allowed so onboarding can still boot.
   public static func load(environment env: [String: String]) throws -> AppConfig {
-    let allowlist = try parseIdSet(
+    let allowlist = try parseIDSet(
       from: env[EnvKey.allowlist],
       invalid: ConfigError.invalidAllowlist
     )
-    let groupChats = try parseIdSet(
+    let groupChats = try parseIDSet(
       from: env[EnvKey.groupChats],
       invalid: ConfigError.invalidGroupChats
     )
@@ -266,7 +266,7 @@ public struct AppConfig: Sendable, Equatable {
 
 // MARK: - MCP Config Location
 
-public extension AppConfig {
+extension AppConfig {
   /// Resolves *where* the MCP catalog lives, not whether it is readable — the loader owns that, and
   /// the two answers differ: an owner-named path that is missing fails the boot, while the probed
   /// default being missing is just the feature staying off.
@@ -274,10 +274,8 @@ public extension AppConfig {
   /// Public because the CLI verbs that manage MCP tokens need the catalog's location without the
   /// rest of the daemon's configuration having to be valid: an owner repairing a token must not be
   /// stopped by an unrelated env var.
-  static func mcpConfigSource(
-    from env: [String: String],
-    stateRoot: URL
-  ) -> MCPConfigSource {
+  public static func mcpConfigSource(from env: [String: String], stateRoot: URL) -> MCPConfigSource
+  {
     let raw = env[EnvKey.mcpConfigPath]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard raw.isEmpty == false else {
       return .probed(stateRoot.appendingPathComponent(MCPLimits.configFileName))
@@ -297,23 +295,18 @@ private extension AppConfig {
 // MARK: - Generic Value Parsing
 
 extension AppConfig {
-  static func boolValue(
-    _ raw: String?,
-    key: String,
-    default fallback: Bool
-  ) throws(ConfigError) -> Bool {
+  static func boolValue(_ raw: String?, key: String, default fallback: Bool) throws(ConfigError)
+    -> Bool
+  {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !trimmed.isEmpty else {
       return fallback
     }
 
     switch trimmed.lowercased() {
-    case "1", "true", "yes", "on":
-      return true
-    case "0", "false", "no", "off":
-      return false
-    default:
-      throw ConfigError.invalidBool(key: key, value: trimmed)
+    case "1", "true", "yes", "on": return true
+    case "0", "false", "no", "off": return false
+    default: throw ConfigError.invalidBool(key: key, value: trimmed)
     }
   }
 }
@@ -324,10 +317,9 @@ private extension AppConfig {
   /// Parses one comma-separated list of Telegram ids. The caller names the error so a bad entry
   /// points at the variable it came from; both lists share this parser so they can never disagree
   /// about whitespace or emptiness.
-  static func parseIdSet(
-    from environmentValue: String?,
-    invalid: (String) -> ConfigError
-  ) throws -> Set<Int64> {
+  static func parseIDSet(from environmentValue: String?, invalid: (_ value: String) -> ConfigError)
+    throws -> Set<Int64>
+  {
     guard
       let environmentValue = environmentValue?.trimmingCharacters(in: .whitespaces),
       !environmentValue.isEmpty

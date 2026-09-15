@@ -6,8 +6,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct CoderToolPolicyTests {
+@Suite
+struct CoderToolPolicyTests {
   enum MissingIdentity: CaseIterable { case context, requester, proactive, modeMismatch }
+
   enum OutboundScope: CaseIterable { case source, startRef, baseBranch }
 
   @Test(arguments: MissingIdentity.allCases)
@@ -21,17 +23,17 @@ import Testing
       )
       let execution: ToolExecutionContext? =
         missing == .context
-        ? nil
-        : ToolExecutionContext(
-          runId: 1,
-          sessionId: 1,
-          chatId: 7,
-          requesterUserId: missing == .requester ? nil : 7,
-          origin: missing == .proactive ? .scheduled : .interactive,
-          mode: missing == .modeMismatch ? .group : .direct,
-          toolCallId: "status",
-          approvalId: nil
-        )
+          ? nil
+          : ToolExecutionContext(
+            runID: 1,
+            sessionID: 1,
+            chatID: 7,
+            requesterUserID: missing == .requester ? nil : 7,
+            origin: missing == .proactive ? .scheduled : .interactive,
+            mode: missing == .modeMismatch ? .group : .direct,
+            toolCallID: "status",
+            approvalID: nil
+          )
 
       // when
       let verdict = await gate().evaluate(
@@ -49,7 +51,8 @@ import Testing
     }
   }
 
-  @Test func coderEnabledDoesNotEnableVMExecution() async throws {
+  @Test
+  func coderEnabledDoesNotEnableVMExecution() async throws {
     // given
     let fixture = try CoderServiceFixture()
     try await fixture.withJoinedCleanup {
@@ -103,9 +106,11 @@ import Testing
   }
 
   @Test(arguments: [
-    #""owner":7"#, #""source":{"local":{"path":"/fixture/repository-1","credentials":"x"}}"#,
+    #""owner":7"#,
+    #""source":{"local":{"path":"/fixture/repository-1","credentials":"x"}}"#,
     #""source":{"other":{"path":"/fixture/repository-1"}}"#,
-    #""instructions":7"#, #""publish_existing_changes":"true""#,
+    #""instructions":7"#,
+    #""publish_existing_changes":"true""#,
   ])
   func strictWireShapeRejectsAuthorityAndMalformedFields(_ replacement: String) async throws {
     // given
@@ -131,7 +136,8 @@ import Testing
     }
   }
 
-  @Test func localInferenceScansInstructionsAgainstPrivateText() async throws {
+  @Test
+  func localInferenceScansInstructionsAgainstPrivateText() async throws {
     // given
     let fixture = try CoderServiceFixture()
     try await fixture.withJoinedCleanup {
@@ -167,17 +173,17 @@ import Testing
       switch scope {
       case .source:
         replacement = """
-          "source":{"local":{"path":"/fixture/sk-abcdefghijklmnop"}},
-          "workspace":"\(CoderWorkspaceMode.separate.rawValue)"
-          """
+        "source":{"local":{"path":"/fixture/sk-abcdefghijklmnop"}},
+        "workspace":"\(CoderWorkspaceMode.separate.rawValue)"
+        """
       case .startRef:
         replacement = """
-          "start_ref":"\(secretRef)","workspace":"\(CoderWorkspaceMode.separate.rawValue)"
-          """
+        "start_ref":"\(secretRef)","workspace":"\(CoderWorkspaceMode.separate.rawValue)"
+        """
       case .baseBranch:
         replacement = """
-          "base_branch":"\(privateBranch)","deliverable":"\(CoderDeliverable.pullRequest.rawValue)"
-          """
+        "base_branch":"\(privateBranch)","deliverable":"\(CoderDeliverable.pullRequest.rawValue)"
+        """
       }
 
       // when
@@ -196,7 +202,8 @@ import Testing
     }
   }
 
-  @Test func statusRedactsAndCapsWorkerResultAsUntrusted() async throws {
+  @Test
+  func statusRedactsAndCapsWorkerResultAsUntrusted() async throws {
     // given
     let secret = #"coder-status-"secret\value"# + "\nline"
     let result = CoderResult(
@@ -215,7 +222,9 @@ import Testing
       githubActor: nil,
       failure: nil
     )
-    let fixture = try CoderServiceFixture(scripts: [.init(result: result)])
+    let fixture = try CoderServiceFixture(
+      scripts: [ScriptedCoderBackend.Invocation(result: result)]
+    )
     try await fixture.withJoinedCleanup {
       try await fixture.service.start()
       let job = try await fixture.submitFirst()
@@ -259,7 +268,9 @@ private extension CoderToolPolicyTests {
   func gate(privateText: String = "", secretValues: [String] = []) -> ToolPolicyGate {
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: secretValues),
-      privateFileLoader: { [privateText] },
+      privateFileLoader: {
+        [privateText]
+      },
       enabledDangerousTools: [CoderToolNames.submit]
     )
   }

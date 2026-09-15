@@ -55,24 +55,16 @@ public indirect enum JSONValue: Sendable, Equatable {
 extension JSONValue {
   public static func == (left: JSONValue, right: JSONValue) -> Bool {
     switch (left, right) {
-    case (.null, .null):
-      return true
-    case (.bool(let leftValue), .bool(let rightValue)):
-      return leftValue == rightValue
-    case (.integer(let leftValue), .integer(let rightValue)):
-      return leftValue == rightValue
-    case (.number(let leftValue), .number(let rightValue)):
-      return leftValue == rightValue
+    case (.null, .null): return true
+    case (.bool(let leftValue), .bool(let rightValue)): return leftValue == rightValue
+    case (.integer(let leftValue), .integer(let rightValue)): return leftValue == rightValue
+    case (.number(let leftValue), .number(let rightValue)): return leftValue == rightValue
     case (.integer(let integer), .number(let number)), (.number(let number), .integer(let integer)):
       return Int(exactly: number) == integer
-    case (.string(let leftValue), .string(let rightValue)):
-      return leftValue == rightValue
-    case (.array(let leftValue), .array(let rightValue)):
-      return leftValue == rightValue
-    case (.object(let leftValue), .object(let rightValue)):
-      return leftValue == rightValue
-    default:
-      return false
+    case (.string(let leftValue), .string(let rightValue)): return leftValue == rightValue
+    case (.array(let leftValue), .array(let rightValue)): return leftValue == rightValue
+    case (.object(let leftValue), .object(let rightValue)): return leftValue == rightValue
+    default: return false
     }
   }
 }
@@ -104,20 +96,13 @@ extension JSONValue: Codable {
   public func encode(to encoder: any Encoder) throws {
     var container = encoder.singleValueContainer()
     switch self {
-    case .null:
-      try container.encodeNil()
-    case .bool(let boolValue):
-      try container.encode(boolValue)
-    case .integer(let integerValue):
-      try container.encode(integerValue)
-    case .number(let numberValue):
-      try container.encode(numberValue)
-    case .string(let stringValue):
-      try container.encode(stringValue)
-    case .array(let arrayValue):
-      try container.encode(arrayValue)
-    case .object(let objectValue):
-      try container.encode(objectValue)
+    case .null: try container.encodeNil()
+    case .bool(let boolValue): try container.encode(boolValue)
+    case .integer(let integerValue): try container.encode(integerValue)
+    case .number(let numberValue): try container.encode(numberValue)
+    case .string(let stringValue): try container.encode(stringValue)
+    case .array(let arrayValue): try container.encode(arrayValue)
+    case .object(let objectValue): try container.encode(objectValue)
     }
   }
 }
@@ -146,12 +131,9 @@ extension JSONValue {
 
   public var numberValue: Double? {
     switch self {
-    case .integer(let integerValue):
-      return Double(integerValue)
-    case .number(let numberValue):
-      return numberValue
-    case .null, .bool, .string, .array, .object:
-      return nil
+    case .integer(let integerValue): return Double(integerValue)
+    case .number(let numberValue): return numberValue
+    case .null, .bool, .string, .array, .object: return nil
     }
   }
 }
@@ -272,7 +254,7 @@ public struct ToolPayload: Sendable, Equatable {
 /// The uniform result of one dispatched call — success and failure are both observations
 /// (failures-as-observations), never a thrown error crossing the loop.
 public struct ToolObservation: Sendable, Equatable {
-  public let callId: String
+  public let callID: String
   public let toolName: String
   public let content: String
   public let status: ToolObservationStatus
@@ -280,14 +262,14 @@ public struct ToolObservation: Sendable, Equatable {
   public let readPrivateData: Bool
 
   public init(
-    callId: String,
+    callID: String,
     toolName: String,
     content: String,
     status: ToolObservationStatus,
     ingestedUntrusted: Bool,
     readPrivateData: Bool = false
   ) {
-    self.callId = callId
+    self.callID = callID
     self.toolName = toolName
     self.content = content
     self.status = status
@@ -297,7 +279,7 @@ public struct ToolObservation: Sendable, Equatable {
 
   public init(call: ToolCall, payload: ToolPayload) {
     self.init(
-      callId: call.id,
+      callID: call.id,
       toolName: call.name,
       content: payload.content,
       status: payload.status,
@@ -313,6 +295,7 @@ public struct ToolObservation: Sendable, Equatable {
 /// enforcement lives exclusively in the gate.
 public protocol Tool: Sendable {
   var definition: ToolDefinition { get }
+
   var timeout: Duration { get }
 
   /// The canonical, owner-visible target this call would act on — REQUIRED for
@@ -334,19 +317,14 @@ public protocol Tool: Sendable {
   /// exactly what was authorized, never re-derive it; `nil` for the other classes.
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload
 
-  func execute(
-    arguments: JSONValue,
-    canonicalTarget: String?,
-    context: ToolExecutionContext?
-  ) async -> ToolPayload
+  func execute(arguments: JSONValue, canonicalTarget: String?, context: ToolExecutionContext?) async
+    -> ToolPayload
 
   /// The prompt inputs for an ask-tier or trifecta approval, produced at gate time on the
   /// gate-resolved `canonicalTarget`. The default is a generic egress presentation; write tools
   /// override with blast radius, a redacted preview, and any scan warnings.
-  func approvalPresentation(
-    arguments: JSONValue,
-    canonicalTarget: String
-  ) -> ToolApprovalPresentation
+  func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
+    -> ToolApprovalPresentation
 }
 
 extension Tool {
@@ -354,22 +332,15 @@ extension Tool {
     arguments: JSONValue,
     canonicalTarget: String?,
     context: ToolExecutionContext?
-  ) async -> ToolPayload {
-    await execute(arguments: arguments, canonicalTarget: canonicalTarget)
-  }
+  ) async -> ToolPayload { await execute(arguments: arguments, canonicalTarget: canonicalTarget) }
 
-  public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
-    nil
-  }
+  public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? { nil }
 
-  public var executesOnlyViaApproval: Bool {
-    false
-  }
+  public var executesOnlyViaApproval: Bool { false }
 
-  public func approvalPresentation(
-    arguments: JSONValue,
-    canonicalTarget: String
-  ) -> ToolApprovalPresentation {
+  public func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
+    -> ToolApprovalPresentation
+  {
     ToolApprovalPresentation(
       blastRadius: "egress to \(canonicalTarget)",
       contentPreview: nil,

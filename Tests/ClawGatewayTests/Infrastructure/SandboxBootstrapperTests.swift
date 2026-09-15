@@ -4,15 +4,13 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct SandboxBootstrapperTests {
-  @Test func disabledExecutionSkipsPrepareAndReturnsNoBackend() async {
+@Suite
+struct SandboxBootstrapperTests {
+  @Test
+  func disabledExecutionSkipsPrepareAndReturnsNoBackend() async {
     // given
     let backend = FakeExecutionBackend()
-    let bootstrapper = SandboxBootstrapper(
-      enabled: false,
-      backend: backend,
-      maintenance: backend
-    )
+    let bootstrapper = SandboxBootstrapper(enabled: false, backend: backend, maintenance: backend)
 
     // when
     let result = await bootstrapper.prepare()
@@ -25,16 +23,13 @@ import Testing
     #expect(await backend.prepareCallCount() == 0)
   }
 
-  @Test func unavailableProbeFailsClosedWithoutRunningPrepare() async {
+  @Test
+  func unavailableProbeFailsClosedWithoutRunningPrepare() async {
     // given
     let backend = FakeExecutionBackend(
       availability: .unavailable(reason: "container engine is stopped")
     )
-    let bootstrapper = SandboxBootstrapper(
-      enabled: true,
-      backend: backend,
-      maintenance: backend
-    )
+    let bootstrapper = SandboxBootstrapper(enabled: true, backend: backend, maintenance: backend)
 
     // when
     let result = await bootstrapper.prepare()
@@ -47,7 +42,8 @@ import Testing
     #expect(await backend.prepareCallCount() == 0)
   }
 
-  @Test func failedCanaryKeepsMaintenanceButWithholdsBackend() async {
+  @Test
+  func failedCanaryKeepsMaintenanceButWithholdsBackend() async {
     // given
     let health = SandboxHealth(
       available: true,
@@ -65,11 +61,7 @@ import Testing
       lastError: "canary reached the network"
     )
     let backend = FakeExecutionBackend(health: health)
-    let bootstrapper = SandboxBootstrapper(
-      enabled: true,
-      backend: backend,
-      maintenance: backend
-    )
+    let bootstrapper = SandboxBootstrapper(enabled: true, backend: backend, maintenance: backend)
 
     // when
     let result = await bootstrapper.prepare()
@@ -82,14 +74,11 @@ import Testing
     #expect(await backend.prepareCallCount() == 1)
   }
 
-  @Test func passingProbeAndCanaryExposeTheBackend() async {
+  @Test
+  func passingProbeAndCanaryExposeTheBackend() async {
     // given
     let backend = FakeExecutionBackend()
-    let bootstrapper = SandboxBootstrapper(
-      enabled: true,
-      backend: backend,
-      maintenance: backend
-    )
+    let bootstrapper = SandboxBootstrapper(enabled: true, backend: backend, maintenance: backend)
 
     // when
     let result = await bootstrapper.prepare()

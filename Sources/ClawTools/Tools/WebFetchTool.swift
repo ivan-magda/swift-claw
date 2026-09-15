@@ -7,9 +7,13 @@ import Foundation
 /// TOCTOU (DNS rebinding) is the documented v1 residual.
 public struct WebFetchTool: Tool {
   static let contentTypeAllowlistPrefixes = ["text/"]
+
   static let contentTypeAllowlistExact = [
-    "application/json", "application/xml", "application/xhtml+xml",
+    "application/json",
+    "application/xml",
+    "application/xhtml+xml",
   ]
+
   static let userAgent = "swift-claw/1.0 (+https://github.com/ivan-magda/swift-claw)"
 
   private let http: any HTTPExecuting
@@ -49,16 +53,22 @@ public struct WebFetchTool: Tool {
     ToolDefinition(
       name: "web_fetch",
       description: "Fetch a public http(s) URL and return its readable text.",
-      parameters: .object([
-        "type": .string("object"),
-        "properties": .object([
-          "url": .object([
-            "type": .string("string"),
-            "description": .string("The absolute http(s) URL to fetch."),
-          ])
-        ]),
-        "required": .array([.string("url")]),
-      ]),
+      parameters: .object(
+        [
+          "type": .string("object"),
+          "properties": .object(
+            [
+              "url": .object(
+                [
+                  "type": .string("string"),
+                  "description": .string("The absolute http(s) URL to fetch."),
+                ]
+              ),
+            ]
+          ),
+          "required": .array([.string("url")]),
+        ]
+      ),
       metadataProvenance: .trusted,
       egressClass: .arbitraryDestination,
       riskLevel: .safe
@@ -73,10 +83,8 @@ public struct WebFetchTool: Tool {
     }
 
     switch CanonicalURL.canonicalize(rawURL) {
-    case .success(let canonical):
-      return .resolved(canonical)
-    case .failure(let policyError):
-      return .refused(reason: Self.describe(policyError))
+    case .success(let canonical): return .resolved(canonical)
+    case .failure(let policyError): return .refused(reason: Self.describe(policyError))
     }
   }
 
@@ -125,8 +133,7 @@ public struct WebFetchTool: Tool {
         case .follow(let nextURL):
           currentURL = nextURL
           continue
-        case .refused(let payload):
-          return payload
+        case .refused(let payload): return payload
         }
       }
 
@@ -156,9 +163,7 @@ private extension WebFetchTool {
   /// refused unconditionally.
   func refusalForNonPublicHost(_ host: String) async -> ToolPayload? {
     let addresses: [ResolvedAddress]
-    do {
-      addresses = try await resolver.resolve(host: host)
-    } catch {
+    do { addresses = try await resolver.resolve(host: host) } catch {
       return errorPayload("Could not resolve \(host).")
     }
 
@@ -171,7 +176,13 @@ private extension WebFetchTool {
     // Literals stay on the pure blocklist — including the legacy numeric spellings getaddrinfo
     // resolves without DNS (http://3323068500/), which strict IP-literal parsing would miss.
     if ResolvedAddress.denotesIPLiteral(host: host) {
-      guard addresses.allSatisfy({ SSRFGuard.isPublic($0) }) else {
+      guard
+        addresses.allSatisfy(
+          {
+            SSRFGuard.isPublic($0)
+          }
+        )
+      else {
         return refusalPayload("Refused: \(host) is a private or reserved address.")
       }
       return nil
@@ -215,25 +226,22 @@ private extension WebFetchTool {
 
   /// One 3xx hop: consumes a hop from the budget and re-canonicalizes the Location target so the
   /// next iteration re-runs the full per-hop policy on it.
-  func redirectStep(
-    after result: HTTPResult,
-    current: String,
-    hopsRemaining: inout Int
-  ) -> RedirectStep {
+  func redirectStep(after result: HTTPResult, current: String, hopsRemaining: inout Int)
+    -> RedirectStep
+  {
     guard hopsRemaining > 0 else {
       return .refused(errorPayload("Too many redirects (more than \(maxHops))."))
     }
     hopsRemaining -= 1
 
-    guard let location = result.getHeader(for: "Location") else {
+    guard let location = result.header(for: "Location") else {
       return .refused(
         errorPayload("Redirect (HTTP \(result.statusCode)) without a Location header.")
       )
     }
     let nextRaw = Self.resolveLocation(location, against: current)
     switch CanonicalURL.canonicalize(nextRaw) {
-    case .success(let canonical):
-      return .follow(canonical)
+    case .success(let canonical): return .follow(canonical)
     case .failure(let policyError):
       return .refused(errorPayload("Redirect target refused: \(Self.describe(policyError))"))
     }
@@ -244,15 +252,15 @@ private extension WebFetchTool {
 
 private extension WebFetchTool {
   func successPayload(_ result: HTTPResult) -> ToolPayload {
-    let contentType = (result.getHeader(for: "Content-Type") ?? "").lowercased()
+    let contentType = (result.header(for: "Content-Type") ?? "").lowercased()
     let mediaType = contentType.split(separator: ";").first.map(String.init) ?? ""
 
     let allowed =
       Self.contentTypeAllowlistPrefixes.contains { prefix in
         mediaType.hasPrefix(prefix)
       }
-      || Self.contentTypeAllowlistExact.contains(mediaType)
-      || mediaType.hasSuffix("+xml") || mediaType.hasSuffix("+json")
+      || Self.contentTypeAllowlistExact.contains(mediaType) || mediaType.hasSuffix("+xml")
+      || mediaType.hasSuffix("+json")
 
     guard allowed else {
       return errorPayload("Refused content type \(mediaType.isEmpty ? "unknown" : mediaType).")
@@ -279,9 +287,7 @@ private extension WebFetchTool {
       return location
     }
 
-    guard
-      let base = URL(string: current),
-      let resolved = URL(string: location, relativeTo: base)
+    guard let base = URL(string: current), let resolved = URL(string: location, relativeTo: base)
     else {
       return location
     }
@@ -291,16 +297,13 @@ private extension WebFetchTool {
 
   static func describe(_ policyError: CanonicalURLError) -> String {
     switch policyError {
-    case .unparseable:
-      return "That is not a valid URL."
+    case .unparseable: return "That is not a valid URL."
     case .unsupportedScheme(let scheme):
       return "Only http and https URLs are supported (got \(scheme))."
     case .nonASCIIHost:
       return "Internationalized (non-ASCII/punycode) hosts are not supported in v1."
-    case .userinfoPresent:
-      return "URLs with embedded credentials are not allowed."
-    case .unsupportedPort(let port):
-      return "Only ports 80 and 443 are allowed (got \(port))."
+    case .userinfoPresent: return "URLs with embedded credentials are not allowed."
+    case .unsupportedPort(let port): return "Only ports 80 and 443 are allowed (got \(port))."
     }
   }
 

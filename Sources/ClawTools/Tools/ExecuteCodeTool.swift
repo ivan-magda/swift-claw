@@ -21,6 +21,7 @@ public struct ExecuteCodeTool: Tool {
   public static let maxStagedFileBytes = ExecStagingLimits.standard.maxStagedFileBytes
   public static let maxStagedTotalBytes = ExecStagingLimits.standard.maxStagedTotalBytes
   public static let maxStagedFiles = ExecStagingLimits.standard.maxStagedFiles
+
   public static let rawOutputTruncationNotice =
     "[raw output truncated after the first 1 MiB of one or more streams]"
 
@@ -45,41 +46,39 @@ public struct ExecuteCodeTool: Tool {
     ToolDefinition(
       name: Self.name,
       description: """
-        Run a short Python or shell script in a locked-down, throwaway sandbox \
-        (owner approval required; no network unless explicitly requested).
-        """,
-      parameters: .object([
-        "type": .string("object"),
-        "properties": .object([
-          "language": .object([
-            "type": .string("string"),
-            "enum": .array([.string("python"), .string("sh")]),
-          ]),
-          "code": .object(["type": .string("string")]),
-          "stage": .object([
-            "type": .string("array"),
-            "items": .object(["type": .string("string")]),
-          ]),
-          "network": .object([
-            "type": .string("boolean"),
-            "default": .bool(false),
-          ]),
-        ]),
-        "required": .array([.string("language"), .string("code")]),
-      ]),
+      Run a short Python or shell script in a locked-down, throwaway sandbox \
+      (owner approval required; no network unless explicitly requested).
+      """,
+      parameters: .object(
+        [
+          "type": .string("object"),
+          "properties": .object(
+            [
+              "language": .object(
+                [
+                  "type": .string("string"),
+                  "enum": .array([.string("python"), .string("sh")]),
+                ]
+              ),
+              "code": .object(["type": .string("string")]),
+              "stage": .object(
+                ["type": .string("array"), "items": .object(["type": .string("string")])]
+              ),
+              "network": .object(["type": .string("boolean"), "default": .bool(false)]),
+            ]
+          ),
+          "required": .array([.string("language"), .string("code")]),
+        ]
+      ),
       metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .dangerous
     )
   }
 
-  public var timeout: Duration {
-    settings.timeout + .seconds(20)
-  }
+  public var timeout: Duration { settings.timeout + .seconds(20) }
 
-  public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
-    nil
-  }
+  public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
 
   public func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
     guard let raw = Self.decode(RawArguments.self, from: arguments) else {
@@ -104,8 +103,7 @@ public struct ExecuteCodeTool: Tool {
     }
 
     switch authorizeAndLoad(paths: paths) {
-    case .failure(let reason):
-      return .refused(reason: reason)
+    case .failure(let reason): return .refused(reason: reason)
     case .success(let loaded):
       let recorded = RecordedArguments(
         code: raw.code,
@@ -161,10 +159,8 @@ public struct ExecuteCodeTool: Tool {
 
     let loaded: [LoadedStage]
     switch reloadRecordedStages(recorded.stage) {
-    case .failure(let reason):
-      return errorPayload(reason)
-    case .success(let stages):
-      loaded = stages
+    case .failure(let reason): return errorPayload(reason)
+    case .success(let stages): loaded = stages
     }
 
     guard readsPrivateData(in: loaded) == recorded.readsPrivateData else {
@@ -266,10 +262,8 @@ private extension ExecuteCodeTool {
     }
 
     switch authorizeStages(paths) {
-    case .failure(let reason):
-      return .failure(reason)
-    case .success(let authorized):
-      return loadAuthorizedStages(authorized)
+    case .failure(let reason): return .failure(reason)
+    case .success(let authorized): return loadAuthorizedStages(authorized)
     }
   }
 
@@ -283,16 +277,12 @@ private extension ExecuteCodeTool {
     for path in paths {
       let realpath: String
       switch WorkspacePathContainment.resolveExisting(path: path, root: workspaceRoot.path) {
-      case .refused(let reason):
-        return .failure(reason)
-      case .resolved(let resolved):
-        realpath = resolved
+      case .refused(let reason): return .failure(reason)
+      case .resolved(let resolved): realpath = resolved
       }
 
       let attributes: [FileAttributeKey: Any]
-      do {
-        attributes = try FileManager.default.attributesOfItem(atPath: realpath)
-      } catch {
+      do { attributes = try FileManager.default.attributesOfItem(atPath: realpath) } catch {
         return .failure("A staged file became unavailable before it could be inspected.")
       }
 
@@ -326,19 +316,11 @@ private extension ExecuteCodeTool {
           \(ExecLanguage.reservedEntrypointPrefix)* namespace.
           """
         )
-      case .duplicate:
-        return .failure("Staged files must have unique flat basenames.")
-      case .accepted(let accepted):
-        basename = accepted
+      case .duplicate: return .failure("Staged files must have unique flat basenames.")
+      case .accepted(let accepted): basename = accepted
       }
 
-      authorized.append(
-        AuthorizedStage(
-          path: path,
-          realpath: realpath,
-          basename: basename
-        )
-      )
+      authorized.append(AuthorizedStage(path: path, realpath: realpath, basename: basename))
     }
 
     return .success(authorized)
@@ -353,18 +335,17 @@ private extension ExecuteCodeTool {
     for stage in authorized {
       let data: Data
       do {
-        if let bounded = try Self.readBoundedFile(
-          atPath: stage.realpath,
-          maxBytes: Self.maxStagedFileBytes
-        ) {
+        if
+          let bounded = try Self.readBoundedFile(
+            atPath: stage.realpath,
+            maxBytes: Self.maxStagedFileBytes
+          ) {
           data = bounded
         } else {
           let perFileMiB = Self.maxStagedFileBytes / (1024 * 1024)
           return .failure("A staged file grew past the \(perFileMiB) MiB cap while it was read.")
         }
-      } catch {
-        return .failure("A staged file became unreadable before it could be prepared.")
-      }
+      } catch { return .failure("A staged file became unreadable before it could be prepared.") }
 
       guard let nextTotal = Self.totalWithinCap(adding: data.count, to: totalReadBytes) else {
         let totalMiB = Self.maxStagedTotalBytes / (1024 * 1024)
@@ -412,6 +393,8 @@ extension ExecuteCodeTool {
   }
 }
 
+// MARK: - Staged File Validation
+
 private extension ExecuteCodeTool {
   enum BasenameValidation {
     case accepted(String)
@@ -419,10 +402,9 @@ private extension ExecuteCodeTool {
     case duplicate
   }
 
-  static func validateBasename(
-    of path: String,
-    claimed normalizedNames: inout Set<String>
-  ) -> BasenameValidation {
+  static func validateBasename(of path: String, claimed normalizedNames: inout Set<String>)
+    -> BasenameValidation
+  {
     let basename = (path as NSString).lastPathComponent
     let normalized = normalizedBasename(basename)
 
@@ -448,9 +430,9 @@ private extension ExecuteCodeTool {
   }
 
   static func normalizedBasename(_ basename: String) -> String {
-    basename.precomposedStringWithCanonicalMapping
-      .lowercased(with: Locale(identifier: "en_US_POSIX"))
-      .precomposedStringWithCanonicalMapping
+    basename.precomposedStringWithCanonicalMapping.lowercased(
+      with: Locale(identifier: "en_US_POSIX")
+    ).precomposedStringWithCanonicalMapping
   }
 
   func readsPrivateData(in stages: [LoadedStage]) -> Bool {
@@ -486,30 +468,28 @@ private extension ExecuteCodeTool {
       + String(SHA256Digest.hex(Data(canonicalArgsJSON.utf8)).prefix(16))
   }
 
-  func approvalPresentation(
-    raw: RawArguments,
-    recorded: RecordedArguments
-  ) -> ToolApprovalPresentation {
+  func approvalPresentation(raw: RawArguments, recorded: RecordedArguments)
+    -> ToolApprovalPresentation
+  {
     let codeBytes = raw.code.utf8.count
     let totalBytes = recorded.stage.reduce(0) { partial, stage in
       partial + stage.bytes
     }
     let preview = """
-      ```\(recorded.language.rawValue)
-      \(redactor.redact(raw.code))
-      ```
-      \(stagedInputsSummary(recorded.stage))
-      """
+    ```\(recorded.language.rawValue)
+    \(redactor.redact(raw.code))
+    ```
+    \(stagedInputsSummary(recorded.stage))
+    """
 
     return ToolApprovalPresentation(
       blastRadius: """
-        run \(recorded.language.rawValue) · egress: \(recorded.network ? "yes" : "no") · \
-        \(settings.cpus) CPU / \(settings.memoryMiB) MiB · code \(codeBytes) B · \
-        \(recorded.stage.count) staged file(s), \(totalBytes) B
-        """,
+      run \(recorded.language.rawValue) · egress: \(recorded.network ? "yes" : "no") · \
+      \(settings.cpus) CPU / \(settings.memoryMiB) MiB · code \(codeBytes) B · \
+      \(recorded.stage.count) staged file(s), \(totalBytes) B
+      """,
       contentPreview: preview,
-      warnings: recorded.network
-        ? ["network egress is enabled — this run can send data out"] : []
+      warnings: recorded.network ? ["network egress is enabled — this run can send data out"] : []
     )
   }
 
@@ -545,10 +525,8 @@ private extension ExecuteCodeTool {
     for record in records {
       let stage: LoadedStage
       switch revalidateRecordedStage(record, claimed: &normalizedNames) {
-      case .failure(let reason):
-        return .failure(reason)
-      case .success(let revalidated):
-        stage = revalidated
+      case .failure(let reason): return .failure(reason)
+      case .success(let revalidated): stage = revalidated
       }
 
       guard let nextTotal = Self.totalWithinCap(adding: stage.bytes.count, to: totalBytes) else {
@@ -581,19 +559,14 @@ private extension ExecuteCodeTool {
     return nil
   }
 
-  func revalidateRecordedStage(
-    _ record: RecordedStage,
-    claimed normalizedNames: inout Set<String>
-  ) -> StageOutcome<LoadedStage> {
+  func revalidateRecordedStage(_ record: RecordedStage, claimed normalizedNames: inout Set<String>)
+    -> StageOutcome<LoadedStage>
+  {
     let liveRealpath: String
-    switch WorkspacePathContainment.resolveExisting(
-      path: record.path,
-      root: workspaceRoot.path
-    ) {
+    switch WorkspacePathContainment.resolveExisting(path: record.path, root: workspaceRoot.path) {
     case .refused:
       return .failure("A staged path no longer resolves to its approved target; nothing ran.")
-    case .resolved(let resolved):
-      liveRealpath = resolved
+    case .resolved(let resolved): liveRealpath = resolved
     }
 
     guard liveRealpath == record.realpath else {
@@ -601,9 +574,7 @@ private extension ExecuteCodeTool {
     }
 
     let attributes: [FileAttributeKey: Any]
-    do {
-      attributes = try FileManager.default.attributesOfItem(atPath: liveRealpath)
-    } catch {
+    do { attributes = try FileManager.default.attributesOfItem(atPath: liveRealpath) } catch {
       return .failure("A staged file became unavailable after approval; nothing ran.")
     }
 
@@ -618,17 +589,16 @@ private extension ExecuteCodeTool {
 
     let data: Data
     do {
-      if let bounded = try Self.readBoundedFile(
-        atPath: liveRealpath,
-        maxBytes: Self.maxStagedFileBytes
-      ) {
+      if
+        let bounded = try Self.readBoundedFile(
+          atPath: liveRealpath,
+          maxBytes: Self.maxStagedFileBytes
+        ) {
         data = bounded
       } else {
         return .failure("A staged file grew past its approved cap; nothing ran.")
       }
-    } catch {
-      return .failure("A staged file became unreadable after approval; nothing ran.")
-    }
+    } catch { return .failure("A staged file became unreadable after approval; nothing ran.") }
 
     guard data.count == record.bytes, SHA256Digest.hex(data) == record.sha256 else {
       return .failure("A staged file no longer matches its approved bytes; nothing ran.")
@@ -640,17 +610,10 @@ private extension ExecuteCodeTool {
       return .failure(
         "The staged basename set no longer satisfies the approved layout; nothing ran."
       )
-    case .accepted(let accepted):
-      basename = accepted
+    case .accepted(let accepted): basename = accepted
     }
 
-    return .success(
-      LoadedStage(
-        record: record,
-        basename: basename,
-        bytes: data
-      )
-    )
+    return .success(LoadedStage(record: record, basename: basename, bytes: data))
   }
 }
 
@@ -667,12 +630,12 @@ private extension ExecuteCodeTool {
       let stdout = redactor.redact(result.stdout)
       let stderr = redactor.redact(result.stderr)
       var content = """
-        exit \(code)
-        --- stdout ---
-        \(stdout)
-        --- stderr ---
-        \(stderr)
-        """
+      exit \(code)
+      --- stdout ---
+      \(stdout)
+      --- stderr ---
+      \(stderr)
+      """
       if code == 137 {
         content += "\n" + Self.memoryCapHint
       }
@@ -685,14 +648,10 @@ private extension ExecuteCodeTool {
         ingestedUntrusted: true,
         readPrivateData: readsPrivateData
       )
-    case .timedOutKilled:
-      return errorPayload(Self.timeoutCopy)
-    case .cancelled:
-      return errorPayload(Self.cancellationCopy)
-    case .startFailed(let reason):
-      return errorPayload("The sandbox could not start: \(reason)")
-    case .unavailable(let reason):
-      return errorPayload("The sandbox is unavailable: \(reason)")
+    case .timedOutKilled: return errorPayload(Self.timeoutCopy)
+    case .cancelled: return errorPayload(Self.cancellationCopy)
+    case .startFailed(let reason): return errorPayload("The sandbox could not start: \(reason)")
+    case .unavailable(let reason): return errorPayload("The sandbox is unavailable: \(reason)")
     }
   }
 

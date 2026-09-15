@@ -37,9 +37,7 @@ public enum ContextTier: Sendable, Equatable {
 public struct ContextPriority: Sendable, Equatable, Comparable, Hashable {
   public let rawValue: Int
 
-  public init(_ rawValue: Int) {
-    self.rawValue = rawValue
-  }
+  public init(_ rawValue: Int) { self.rawValue = rawValue }
 
   public static func < (lhs: ContextPriority, rhs: ContextPriority) -> Bool {
     lhs.rawValue < rhs.rawValue
@@ -120,22 +118,16 @@ public struct BuildResult: Sendable, Equatable {
 public struct RecallScore: Sendable, Equatable, Comparable, Hashable {
   public let value: Double
 
-  public init(sqliteBM25: Double) {
-    value = -sqliteBM25
-  }
+  public init(sqliteBM25: Double) { value = -sqliteBM25 }
 
-  public init(value: Double) {
-    self.value = value
-  }
+  public init(value: Double) { self.value = value }
 
-  public static func < (lhs: RecallScore, rhs: RecallScore) -> Bool {
-    lhs.value < rhs.value
-  }
+  public static func < (lhs: RecallScore, rhs: RecallScore) -> Bool { lhs.value < rhs.value }
 }
 
 public struct RecallHit: Sendable, Equatable, Identifiable {
   public let id: Int64
-  public let sessionId: Int64
+  public let sessionID: Int64
   public let role: MessageRole
   public let content: String
   public let score: RecallScore
@@ -143,14 +135,14 @@ public struct RecallHit: Sendable, Equatable, Identifiable {
 
   public init(
     id: Int64,
-    sessionId: Int64,
+    sessionID: Int64,
     role: MessageRole,
     content: String,
     score: RecallScore,
     createdAt: Date
   ) {
     self.id = id
-    self.sessionId = sessionId
+    self.sessionID = sessionID
     self.role = role
     self.content = content
     self.score = score
@@ -181,10 +173,6 @@ public struct LabeledContext: Sendable, Equatable {
   }
 
   private static func defusingFenceTags(in content: String) -> String {
-    content.replacingOccurrences(
-      of: fenceTag,
-      with: defusedFenceTag,
-      options: [.caseInsensitive]
-    )
+    content.replacingOccurrences(of: fenceTag, with: defusedFenceTag, options: [.caseInsensitive])
   }
 }

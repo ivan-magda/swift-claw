@@ -32,9 +32,7 @@ struct DoctorCommand: AsyncParsableCommand {
 
     // Config/secret is checked first and printed first if it errored.
     let config: AppConfig
-    do {
-      config = try EnvironmentLoader.loadConfig()
-    } catch let error as ConfigError {
+    do { config = try EnvironmentLoader.loadConfig() } catch let error as ConfigError {
       report.add(key: "config", value: "FAIL: \(error)", ok: false, group: .config)
       emit(report)
       throw ExitCode(error.exitCode)
@@ -128,18 +126,16 @@ private extension DoctorCommand {
     )
     // The one route row a stopped daemon can answer for: whether a second route is configured at
     // all is a fact about the environment, unlike which route is currently carrying traffic.
-    report.add(
-      contentsOf: [
-        HealthRowsBuilder.fallbackConfiguredCheck(
-          fallbackReference: config.llm.fallbackRoute?.configuredReference
-        )
-      ]
-    )
+    report.add(contentsOf: [
+      HealthRowsBuilder.fallbackConfiguredCheck(
+        fallbackReference: config.llm.fallbackRoute?.configuredReference
+      ),
+    ])
     // Warn-not-fail: a proactive cap at/above the global cap is legal but inert —
     // the household kill-switch dominates.
     let proactiveNote =
       config.proactivePerDayUSD >= config.budget.perDayUSD
-      ? " (>= CLAW_PER_DAY_USD; the global cap dominates)" : ""
+        ? " (>= CLAW_PER_DAY_USD; the global cap dominates)" : ""
     report.add(
       key: "spend.proactive_per_day_usd",
       value: USD.display(config.proactivePerDayUSD) + proactiveNote,
@@ -202,15 +198,14 @@ private extension DoctorCommand {
   func addLLMAuthRow(to report: inout DoctorReport, config: AppConfig) {
     // The `secrets` row above owns the decrypt-failure diagnosis and fails loudly there, so an
     // undecryptable store degrades this row quietly to mode=none rather than double-reporting.
-    let staticAPIKey = (try? EnvironmentLoader.loadSecrets(config: config))?.llmApiKey
+    let staticAPIKey = (try? EnvironmentLoader.loadSecrets(config: config))?.llmAPIKey
     let result = LLMAuthDoctor.inspect(
       route: config.llm.route,
       staticAPIKey: staticAPIKey,
-      now: Date(),
-      makeManagedStore: {
-        EncryptedLLMCredentialStore(stateRoot: config.stateRoot)
-      }
-    )
+      now: Date()
+    ) {
+      EncryptedLLMCredentialStore(stateRoot: config.stateRoot)
+    }
     report.add(key: "llm.auth", value: result.value, ok: result.ok, group: .llmRuns)
   }
 }
@@ -224,14 +219,9 @@ extension DoctorCommand {
   ///
   /// Returns what it read so the live probe below contacts exactly the servers these rows describe,
   /// rather than re-reading the catalog and possibly answering about a different one.
-  static func addMCPRows(
-    to report: inout DoctorReport,
-    config: AppConfig
-  ) -> MCPDoctorLoadResult {
+  static func addMCPRows(to report: inout DoctorReport, config: AppConfig) -> MCPDoctorLoadResult {
     let catalog: MCPConfig
-    do {
-      catalog = try EnvironmentLoader.loadMCPConfig(config: config)
-    } catch {
+    do { catalog = try EnvironmentLoader.loadMCPConfig(config: config) } catch {
       report.add(contentsOf: [MCPDoctorRows.failureRow("config error: \(error)")])
       return .failed(exitCode: .configInvalid)
     }
@@ -255,6 +245,8 @@ extension DoctorCommand {
     }
   }
 }
+
+// MARK: - Live Health Checks
 
 private extension DoctorCommand {
   /// The live half, on a full run only: each enabled server is contacted over the same transport the
@@ -302,13 +294,12 @@ private extension DoctorCommand {
       report.add(
         key: "dns.fake_ip",
         value: """
-          detected (public hosts resolve into \(SSRFGuard.benchmarkRange), e.g. \(sample); \
-          web_fetch allows probe-confirmed answers in that range)
-          """,
+        detected (public hosts resolve into \(SSRFGuard.benchmarkRange), e.g. \(sample); \
+        web_fetch allows probe-confirmed answers in that range)
+        """,
         group: .connectivity
       )
-    case .inactive:
-      report.add(key: "dns.fake_ip", value: "not detected", group: .connectivity)
+    case .inactive: report.add(key: "dns.fake_ip", value: "not detected", group: .connectivity)
     }
 
     guard let secrets = try? EnvironmentLoader.loadSecrets(config: config) else {
@@ -318,8 +309,7 @@ private extension DoctorCommand {
     // Info, never a failed check: unconfigured search just means the tool is absent.
     report.add(
       key: "web_search",
-      value: secrets.searchApiKey != nil
-        ? "configured" : "not configured (web_search tool absent)",
+      value: secrets.searchAPIKey != nil ? "configured" : "not configured (web_search tool absent)",
       group: .connectivity
     )
 
@@ -346,10 +336,7 @@ private extension DoctorCommand {
 // MARK: - Sandbox Health
 
 private extension DoctorCommand {
-  func sandboxRows(
-    config: AppConfig,
-    live: Bool
-  ) async -> [DoctorReport.Check] {
+  func sandboxRows(config: AppConfig, live: Bool) async -> [DoctorReport.Check] {
     guard config.exec.enabled else {
       return SandboxHealthRows.rows(for: .disabled)
     }
@@ -390,9 +377,7 @@ private extension DoctorCommand {
         return SandboxHealthRows.rows(for: .live(health: health))
       }
       return SandboxHealthRows.rows(
-        for: .unavailable(
-          reason: bootstrap.unavailableReason ?? "sandbox health is unavailable"
-        )
+        for: .unavailable(reason: bootstrap.unavailableReason ?? "sandbox health is unavailable")
       )
     #endif
   }
@@ -435,10 +420,7 @@ private extension DoctorCommand {
 // MARK: - Service Hint
 
 private extension DoctorCommand {
-  func serviceStartHint(
-    report: DoctorReport,
-    config: AppConfig
-  ) -> String? {
+  func serviceStartHint(report: DoctorReport, config: AppConfig) -> String? {
     let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
     let daemonRunning: Bool
 
@@ -456,13 +438,10 @@ private extension DoctorCommand {
     #if os(Linux)
       let unitPath = NSHomeDirectory() + "/.config/systemd/user/swift-claw.service"
       let isLinux = true
-      let serviceManagerAvailable = FileManager.default.fileExists(
-        atPath: "/run/systemd/system"
-      )
+      let serviceManagerAvailable = FileManager.default.fileExists(atPath: "/run/systemd/system")
       let unitLoaded = false
     #else
-      let unitPath =
-        NSHomeDirectory() + "/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
+      let unitPath = NSHomeDirectory() + "/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
       let isLinux = false
       let serviceManagerAvailable = true
       let unitLoaded = launchAgentLoaded(uid: getuid())
@@ -488,11 +467,7 @@ private extension DoctorCommand {
       probe.arguments = ["print", "gui/\(uid)/com.ivanmagda.swift-claw"]
       probe.standardOutput = FileHandle.nullDevice
       probe.standardError = FileHandle.nullDevice
-      do {
-        try probe.run()
-      } catch {
-        return false
-      }
+      do { try probe.run() } catch { return false }
       probe.waitUntilExit()
       return probe.terminationStatus == 0
     }
@@ -513,7 +488,8 @@ private extension DoctorCommand {
 extension DoctorCommand {
   func coderRows(
     config: CoderConfig,
-    resolve: @Sendable (CoderConfig) async throws -> CoderBackendSetup = CoderBackendSetup.live
+    resolve: @Sendable (_ config: CoderConfig) async throws -> CoderBackendSetup = CoderBackendSetup
+      .live
   ) async -> [DoctorReport.Check] {
     let rows = await CoderHealthRows.configuration(
       config: config,

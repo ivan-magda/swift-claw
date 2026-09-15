@@ -158,7 +158,9 @@ extension DaemonBuilder {
       MemoryWriteTool(redactor: redactor),
       SkillLoadTool(
         workspaceRoot: workspace.root,
-        scanSkills: { workspace.scanSkills() },
+        scanSkills: {
+          workspace.scanSkills()
+        },
         redactor: redactor
       ),
       WebFetchTool(
@@ -169,9 +171,9 @@ extension DaemonBuilder {
       ),
     ]
 
-    if let searchApiKey = secrets.searchApiKey {
+    if let searchAPIKey = secrets.searchAPIKey {
       tools.append(
-        WebSearchTool(search: ExaSearchProvider(apiKey: searchApiKey, http: toolExecutor))
+        WebSearchTool(search: ExaSearchProvider(apiKey: searchAPIKey, http: toolExecutor))
       )
     }
 
@@ -209,22 +211,20 @@ extension DaemonBuilder {
         argGuard: ExfilArgGuard(secretValues: secretValues),
         privateFileLoader: privateFileLoader,
         enabledDangerousTools: Set(
-          (config.exec.enabled ? [ExecuteCodeTool.name] : [])
-            + coderTools.map(\.definition.name)
+          (config.exec.enabled ? [ExecuteCodeTool.name] : []) + coderTools.map(\.definition.name)
         )
       )
     )
   }
 
-  func policyStaticSubhash(
-    toolDispatcher: GatedToolDispatcher,
-    workspace: FileSystemWorkspace
-  ) -> String {
+  func policyStaticSubhash(toolDispatcher: GatedToolDispatcher, workspace: FileSystemWorkspace)
+    -> String
+  {
     PolicyFingerprint.staticSubhash(
       inputs: PolicyFingerprint.StaticInputs(
         tools: toolDispatcher.definitions,
         llmEgress: config.llm.route.descriptor.egress,
-        searchEndpointPresent: secrets.searchApiKey != nil,
+        searchEndpointPresent: secrets.searchAPIKey != nil,
         workspaceRoot: workspace.root.path,
         webFetchExemptCIDRs: config.webFetchExemptCIDRs,
         exec: config.exec

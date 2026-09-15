@@ -12,11 +12,11 @@ extension ScheduledLearningStoreGRDB {
     return ReflectionAuthorization(preparation: current) == authorization
   }
 
-  static func jobIsRepeatable(_ db: Database, jobId: Int64) throws -> Bool {
+  static func jobIsRepeatable(_ db: Database, jobID: Int64) throws -> Bool {
     let row = try Row.fetchOne(
       db,
       sql: "SELECT status, recurrence FROM scheduled_jobs WHERE id = ?",
-      arguments: [jobId]
+      arguments: [jobID]
     )
     guard
       let row,

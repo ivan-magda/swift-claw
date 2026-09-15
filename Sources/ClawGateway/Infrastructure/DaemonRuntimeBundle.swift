@@ -9,13 +9,9 @@ public actor LaneShutdownOutcome {
 
   public init() {}
 
-  public func record(_ result: SessionLaneDrainResult) {
-    self.result = result
-  }
+  public func record(_ result: SessionLaneDrainResult) { self.result = result }
 
-  public func value() -> SessionLaneDrainResult? {
-    result
-  }
+  public func value() -> SessionLaneDrainResult? { result }
 }
 
 /// Carries the exact live owners into command shutdown, including Coder work admitted by boot replay.

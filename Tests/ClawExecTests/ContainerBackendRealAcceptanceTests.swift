@@ -12,12 +12,17 @@ import Testing
   .enabled(if: ProcessInfo.processInfo.environment["CLAW_REAL_SANDBOX_TESTS"] == "1")
 )
 struct ContainerBackendRealAcceptanceTests {
-  @Test func helloWorldRoundTripsGuestStdout() async throws {
+  @Test
+  func helloWorldRoundTripsGuestStdout() async throws {
     // given
     let host = try RealSandboxHost()
     defer { host.remove() }
     let backend = try await host.readyBackend()
-    defer { Task { await backend.shutdown() } }
+    defer {
+      Task {
+        await backend.shutdown()
+      }
+    }
 
     // when
     let result = await backend.run(host.shellRequest("printf 'hello-from-guest\\n'"))
@@ -28,12 +33,17 @@ struct ContainerBackendRealAcceptanceTests {
     #expect(try await host.ownedNames(backend).isEmpty)
   }
 
-  @Test func runPastItsTimeoutIsKilledAndReapedWithinTheOuterDeadline() async throws {
+  @Test
+  func runPastItsTimeoutIsKilledAndReapedWithinTheOuterDeadline() async throws {
     // given
     let host = try RealSandboxHost()
     defer { host.remove() }
     let backend = try await host.readyBackend()
-    defer { Task { await backend.shutdown() } }
+    defer {
+      Task {
+        await backend.shutdown()
+      }
+    }
 
     // when
     let started = ContinuousClock.now
@@ -46,12 +56,17 @@ struct ContainerBackendRealAcceptanceTests {
     #expect(try await host.ownedNames(backend).isEmpty)
   }
 
-  @Test func freshInstanceIsNeverReusedBetweenRuns() async throws {
+  @Test
+  func freshInstanceIsNeverReusedBetweenRuns() async throws {
     // given
     let host = try RealSandboxHost()
     defer { host.remove() }
     let backend = try await host.readyBackend()
-    defer { Task { await backend.shutdown() } }
+    defer {
+      Task {
+        await backend.shutdown()
+      }
+    }
 
     // when — run N writes a marker into the disposable /tmp
     let first = await backend.run(
@@ -70,15 +85,21 @@ struct ContainerBackendRealAcceptanceTests {
     #expect(!second.stdout.contains("REUSED"))
   }
 
-  @Test func hostSecretsAndHostFilesAreUnreachableFromTheGuest() async throws {
+  @Test
+  func hostSecretsAndHostFilesAreUnreachableFromTheGuest() async throws {
     // given — a sentinel in the process environment and a sentinel file in the host home
     let host = try RealSandboxHost()
     defer { host.remove() }
     let backend = try await host.readyBackend()
-    defer { Task { await backend.shutdown() } }
+    defer {
+      Task {
+        await backend.shutdown()
+      }
+    }
     let sentinel = "layer-b-host-sentinel-\(UUID().uuidString)"
-    let homeSentinel = FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent(".claw-layerb-sentinel")
+    let homeSentinel = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+      ".claw-layerb-sentinel"
+    )
     try sentinel.write(to: homeSentinel, atomically: true, encoding: .utf8)
     defer { try? FileManager.default.removeItem(at: homeSentinel) }
     setenv("CLAW_LAYERB_HOST_SENTINEL", sentinel, 1)
@@ -86,11 +107,11 @@ struct ContainerBackendRealAcceptanceTests {
 
     // when — the guest dumps its env and tries to read the host file by absolute and $HOME path
     let script = """
-      env
-      cat \(homeSentinel.path) 2>/dev/null || true
-      cat "$HOME/.claw-layerb-sentinel" 2>/dev/null || true
-      echo probe-done
-      """
+    env
+    cat \(homeSentinel.path) 2>/dev/null || true
+    cat "$HOME/.claw-layerb-sentinel" 2>/dev/null || true
+    echo probe-done
+    """
     let result = await backend.run(host.shellRequest(script))
 
     // then — the fresh VM inherits no host env and mounts no host path, so the sentinel never leaks
@@ -99,23 +120,28 @@ struct ContainerBackendRealAcceptanceTests {
     #expect(!result.stderr.contains(sentinel))
   }
 
-  @Test func stagingMountIsReadOnlyFromInsideTheGuest() async throws {
+  @Test
+  func stagingMountIsReadOnlyFromInsideTheGuest() async throws {
     // given
     let host = try RealSandboxHost()
     defer { host.remove() }
     let backend = try await host.readyBackend()
-    defer { Task { await backend.shutdown() } }
+    defer {
+      Task {
+        await backend.shutdown()
+      }
+    }
     let staged = StagedFile(name: "input.txt", bytes: Data("staged-content".utf8), mode: .readOnly)
 
     // when — the guest reads the input, then tries to write, create, and chmod under /work
     let script = """
-      set -e
-      test "$(cat /work/input.txt)" = "staged-content"
-      if ( echo mutate > /work/input.txt ) 2>/dev/null; then echo FAIL-write; exit 11; fi
-      if ( : > /work/created ) 2>/dev/null; then echo FAIL-create; exit 12; fi
-      if chmod 0700 /work/input.txt 2>/dev/null; then echo FAIL-chmod; exit 13; fi
-      echo staging-readonly-ok
-      """
+    set -e
+    test "$(cat /work/input.txt)" = "staged-content"
+    if ( echo mutate > /work/input.txt ) 2>/dev/null; then echo FAIL-write; exit 11; fi
+    if ( : > /work/created ) 2>/dev/null; then echo FAIL-create; exit 12; fi
+    if chmod 0700 /work/input.txt 2>/dev/null; then echo FAIL-chmod; exit 13; fi
+    echo staging-readonly-ok
+    """
     let result = await backend.run(host.shellRequest(script, inputs: [staged]))
 
     // then — every mutation of the read-only bind fails; the read succeeds
@@ -124,25 +150,30 @@ struct ContainerBackendRealAcceptanceTests {
     #expect(!result.stdout.contains("FAIL"))
   }
 
-  @Test func networkIsDeniedWhenEgressIsOff() async throws {
+  @Test
+  func networkIsDeniedWhenEgressIsOff() async throws {
     // given
     let host = try RealSandboxHost()
     defer { host.remove() }
     let backend = try await host.readyBackend()
-    defer { Task { await backend.shutdown() } }
+    defer {
+      Task {
+        await backend.shutdown()
+      }
+    }
 
     // when — a network:false run attempts a raw outbound TCP connection (no DNS dependence)
     let script = """
-      /usr/bin/python - <<'PY'
-      import socket
-      socket.setdefaulttimeout(5)
-      try:
-          socket.create_connection(("1.1.1.1", 53))
-          print("NETWORK-REACHABLE")
-      except OSError:
-          print("network-denied-ok")
-      PY
-      """
+    /usr/bin/python - <<'PY'
+    import socket
+    socket.setdefaulttimeout(5)
+    try:
+        socket.create_connection(("1.1.1.1", 53))
+        print("NETWORK-REACHABLE")
+    except OSError:
+        print("network-denied-ok")
+    PY
+    """
     let result = await backend.run(host.shellRequest(script, network: false))
 
     // then
@@ -150,7 +181,8 @@ struct ContainerBackendRealAcceptanceTests {
     #expect(!result.stdout.contains("NETWORK-REACHABLE"))
   }
 
-  @Test func preparedCanaryProvesEveryHardeningBit() async throws {
+  @Test
+  func preparedCanaryProvesEveryHardeningBit() async throws {
     // given — non-default caps so the host inspect assertions exercise exact configured values
     let host = try RealSandboxHost()
     defer { host.remove() }
@@ -158,7 +190,11 @@ struct ContainerBackendRealAcceptanceTests {
 
     // when
     let health = await backend.prepare()
-    defer { Task { await backend.shutdown() } }
+    defer {
+      Task {
+        await backend.shutdown()
+      }
+    }
 
     // then — the seven §8 canary assertions plus the host/version gates all hold
     #expect(health.isReady)
@@ -177,12 +213,17 @@ struct ContainerBackendRealAcceptanceTests {
     await backend.shutdown()
   }
 
-  @Test func cleanupLeavesNoOwnedContainerAfterSuccessTimeoutAndCancellation() async throws {
+  @Test
+  func cleanupLeavesNoOwnedContainerAfterSuccessTimeoutAndCancellation() async throws {
     // given
     let host = try RealSandboxHost()
     defer { host.remove() }
     let backend = try await host.readyBackend()
-    defer { Task { await backend.shutdown() } }
+    defer {
+      Task {
+        await backend.shutdown()
+      }
+    }
 
     // when/then — success
     _ = await backend.run(host.shellRequest("true"))
@@ -193,7 +234,9 @@ struct ContainerBackendRealAcceptanceTests {
     #expect(try await host.ownedNames(backend).isEmpty)
 
     // when/then — cancellation while the guest is actually running (gate on real state, no sleeps)
-    let running = Task { await backend.run(host.shellRequest("sleep 600", timeout: .seconds(60))) }
+    let running = Task {
+      await backend.run(host.shellRequest("sleep 600", timeout: .seconds(60)))
+    }
     let appeared = await host.pollUntilTrue(timeout: .seconds(30)) {
       (await backend.ownedContainerNamesForTesting())?.isEmpty == false
     }
@@ -204,12 +247,17 @@ struct ContainerBackendRealAcceptanceTests {
     #expect(try await host.ownedNames(backend).isEmpty)
   }
 
-  @Test func bootReapRemovesADeliberatelyOrphanedOwnedInstance() async throws {
+  @Test
+  func bootReapRemovesADeliberatelyOrphanedOwnedInstance() async throws {
     // given — a ready backend and a hand-launched owned orphan the backend never tracked
     let host = try RealSandboxHost()
     defer { host.remove() }
     let backend = try await host.readyBackend()
-    defer { Task { await backend.shutdown() } }
+    defer {
+      Task {
+        await backend.shutdown()
+      }
+    }
     let initImage = try #require(await backend.preparedInitImageForTesting)
     let runner = SwiftSubprocessRunner(executablePath: ContainerBackend.cliPath)
     let identity = ExecutionIdentity()
@@ -256,25 +304,29 @@ private struct RealSandboxHost {
       "CLAW_EXEC_IMAGE must be a digest-pinned reference for Layer B"
     )
     self.settings = ExecSandboxSettings(workloadImage: image, memoryMiB: memoryMiB, cpus: cpus)
-    self.root = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-exec-layerb-\(UUID().uuidString)", isDirectory: true)
+    self.root = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "claw-exec-layerb-\(UUID().uuidString)",
+      isDirectory: true
+    )
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
   }
 
   func backend(memoryMiB: Int? = nil, cpus: Int? = nil) -> ContainerBackend {
     let resolved =
       memoryMiB == nil && cpus == nil
-      ? settings
-      : ExecSandboxSettings(
-        workloadImage: settings.workloadImage,
-        memoryMiB: memoryMiB ?? settings.memoryMiB,
-        cpus: cpus ?? settings.cpus
-      )
+        ? settings
+        : ExecSandboxSettings(
+          workloadImage: settings.workloadImage,
+          memoryMiB: memoryMiB ?? settings.memoryMiB,
+          cpus: cpus ?? settings.cpus
+        )
     return ContainerBackend(
       settings: resolved,
       stateRoot: root,
       commands: SwiftSubprocessRunner(executablePath: ContainerBackend.cliPath),
-      sanitizeReason: { $0 }
+      sanitizeReason: {
+        $0
+      }
     )
   }
 
@@ -310,10 +362,7 @@ private struct RealSandboxHost {
   // A nil result means the owned-container inspection itself failed; that is a Layer-B failure,
   // never a silent "empty".
   func ownedNames(_ backend: ContainerBackend) async throws -> [String] {
-    try #require(
-      await backend.ownedContainerNamesForTesting(),
-      "owned-container inspection failed"
-    )
+    try #require(await backend.ownedContainerNamesForTesting(), "owned-container inspection failed")
   }
 
   func pollUntilTrue(timeout: Duration, _ predicate: () async -> Bool) async -> Bool {
@@ -327,7 +376,5 @@ private struct RealSandboxHost {
     return false
   }
 
-  func remove() {
-    try? FileManager.default.removeItem(at: root)
-  }
+  func remove() { try? FileManager.default.removeItem(at: root) }
 }

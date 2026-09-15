@@ -4,13 +4,13 @@ import Foundation
 import Synchronization
 import Testing
 
-@testable import ClawCoder
-
 #if canImport(Darwin)
   import Darwin
 #else
   import Glibc
 #endif
+
+@testable import ClawCoder
 
 enum FixtureFailure: Error { case rejected }
 
@@ -25,25 +25,29 @@ final class ProcessFixture: Sendable {
       state.receipt?.pid
     }
   }
+
   var receipt: CoderProcessReceipt? {
     state.withLock { state in
       state.receipt
     }
   }
+
   var stoppedAfterReap: Bool {
     state.withLock { state in
       state.stoppedAfterReap
     }
   }
+
   var pids: [Int32] { get async { await capture.pids } }
+
   var text: String { get async { await capture.text } }
 
   var commandRunner: CoderCommandRunner {
-    CoderCommandRunner(now: {
+    CoderCommandRunner {
       self.clock.withLock { instant in
         instant
       }
-    })
+    }
   }
 
   func advanceClock(by duration: Duration) {
@@ -55,7 +59,7 @@ final class ProcessFixture: Sendable {
   func run(
     _ command: CoderCommand,
     tracking: CoderCommandTracking,
-    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+    onStandardOutput: @Sendable @escaping (_ bytes: Data) async throws -> Void
   ) async -> CoderCommandResult {
     await withTestWatchdog(
       onTimeout: {
@@ -133,7 +137,8 @@ final class ProcessFixture: Sendable {
       }
       return info.pbi_status != SZOMB
     #else
-      guard let stat = try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8),
+      guard
+        let stat = try? String(contentsOfFile: "/proc/\(pid)/stat", encoding: .utf8),
         let end = stat.lastIndex(of: ")")
       else {
         return false
@@ -145,6 +150,7 @@ final class ProcessFixture: Sendable {
 
 private actor FixtureCapture {
   var text = ""
+
   var pids: [Int32] {
     text.split(separator: "\n", omittingEmptySubsequences: false).dropLast().compactMap {
       Int32($0)

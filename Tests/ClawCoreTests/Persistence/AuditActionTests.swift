@@ -3,27 +3,30 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct AuditActionTests {
-  @Test func memoryActionsHaveStableRawValues() {
+@Suite
+struct AuditActionTests {
+  @Test
+  func memoryActionsHaveStableRawValues() {
     // given / when / then
     #expect(AuditAction.memoryWrite.rawValue == "memory_write")
     #expect(AuditAction.memoryDelete.rawValue == "memory_delete")
   }
 
-  @Test func memoryAuditEventUsesTypedAction() {
+  @Test
+  func memoryAuditEventUsesTypedAction() {
     // given
     let event = AuditEvent(
       actor: .owner,
       action: .memoryWrite,
       argsRedacted: "{}",
-      sessionId: 42,
-      ts: .init(timeIntervalSince1970: 10)
+      sessionID: 42,
+      ts: Date(timeIntervalSince1970: 10)
     )
 
     // then
     #expect(event.action == .memoryWrite)
     #expect(event.action.rawValue == "memory_write")
-    #expect(event.sessionId == 42)
+    #expect(event.sessionID == 42)
   }
 
   private static let schedulerActions: [(action: AuditAction, rawValue: String)] = [
@@ -57,7 +60,8 @@ import Testing
     #expect(fixture.action.rawValue == fixture.rawValue)
   }
 
-  @Test func learningResetVocabularyHasStableTypedRawValues() {
+  @Test
+  func learningResetVocabularyHasStableTypedRawValues() {
     // given / when / then — duplicated string literals at write sites would let one durable value
     // drift while the other values continue to pass their integration paths.
     #expect(AuditAction.learningReset.rawValue == "learning_reset")

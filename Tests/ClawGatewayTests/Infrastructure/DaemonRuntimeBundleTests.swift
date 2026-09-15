@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct DaemonRuntimeBundleTests {
-  @Test func outcomeExposesNothingUntilARecordLands() async {
+@Suite
+struct DaemonRuntimeBundleTests {
+  @Test
+  func outcomeExposesNothingUntilARecordLands() async {
     // given
     let outcome = LaneShutdownOutcome()
 
@@ -19,7 +21,8 @@ import Testing
     #expect(await outcome.value() == .timedOut(activeRunIDs: [4, 8]))
   }
 
-  @Test func outcomeExposesADrainedResult() async {
+  @Test
+  func outcomeExposesADrainedResult() async {
     // given
     let outcome = LaneShutdownOutcome()
 

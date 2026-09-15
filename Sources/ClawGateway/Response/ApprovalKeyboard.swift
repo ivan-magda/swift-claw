@@ -21,18 +21,17 @@ enum ApprovalKeyboard {
     let approve = callbackData(nonce: nonce, verdict: approveVerdict)
     let deny = callbackData(nonce: nonce, verdict: denyVerdict)
     return #"""
-      {"inline_keyboard":[[\#
-      {"callback_data":"\#(approve)","text":"Approve"},\#
-      {"callback_data":"\#(deny)","text":"Deny"}\#
-      ]]}
-      """#
+    {"inline_keyboard":[[\#
+    {"callback_data":"\#(approve)","text":"Approve"},\#
+    {"callback_data":"\#(deny)","text":"Deny"}\#
+    ]]}
+    """#
   }
 
   static func parse(_ callbackData: String) -> (nonce: String, approve: Bool)? {
-    let parts =
-      callbackData
-      .split(separator: ":", omittingEmptySubsequences: false)
-      .map(String.init)
+    let parts = callbackData.split(separator: ":", omittingEmptySubsequences: false).map(
+      String.init
+    )
 
     guard parts.count == 3, parts[0] == prefix else {
       return nil
@@ -44,12 +43,9 @@ enum ApprovalKeyboard {
     }
 
     switch parts[2] {
-    case approveVerdict:
-      return (nonce, true)
-    case denyVerdict:
-      return (nonce, false)
-    default:
-      return nil
+    case approveVerdict: return (nonce, true)
+    case denyVerdict: return (nonce, false)
+    default: return nil
     }
   }
 }

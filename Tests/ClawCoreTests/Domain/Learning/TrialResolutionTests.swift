@@ -2,18 +2,17 @@ import ClawCore
 import Foundation
 import Testing
 
-@Suite struct TrialResolutionTests {
-  @Test func assignmentAcceptanceUsesOccurrenceAndProcessingClocks() {
+@Suite
+struct TrialResolutionTests {
+  @Test
+  func assignmentAcceptanceUsesOccurrenceAndProcessingClocks() {
     // given
     let admittedAt = Date(timeIntervalSince1970: 1_000)
     let trial = fixtureTrial(admittedAt: admittedAt)
 
     // when / then
     #expect(
-      trial.acceptsAssignment(
-        occurrenceAt: admittedAt,
-        now: admittedAt.addingTimeInterval(1)
-      )
+      trial.acceptsAssignment(occurrenceAt: admittedAt, now: admittedAt.addingTimeInterval(1))
     )
     #expect(
       trial.acceptsAssignment(
@@ -22,10 +21,7 @@ import Testing
       ) == false
     )
     #expect(
-      trial.acceptsAssignment(
-        occurrenceAt: admittedAt,
-        now: trial.assignmentDeadline
-      ) == false
+      trial.acceptsAssignment(occurrenceAt: admittedAt, now: trial.assignmentDeadline) == false
     )
     // Removing either the open-state or capacity gate admits its matching invalid trial.
     #expect(
@@ -42,13 +38,14 @@ import Testing
     )
   }
 
-  @Test func twoPositivesWaitForTheLastUnresolvedAssignment() {
+  @Test
+  func twoPositivesWaitForTheLastUnresolvedAssignment() {
     // given
     let trial = fixtureTrial(consumed: 3)
     let assignments = [
-      fixtureAssignment(runId: 1, outcome: .positive),
-      fixtureAssignment(runId: 2, outcome: .positive),
-      fixtureAssignment(runId: 3),
+      fixtureAssignment(runID: 1, outcome: .positive),
+      fixtureAssignment(runID: 2, outcome: .positive),
+      fixtureAssignment(runID: 3),
     ]
 
     // when
@@ -58,13 +55,14 @@ import Testing
     #expect(decision == .closeAssignment(reason: .assignmentLimit))
   }
 
-  @Test func negativeAndHardVetoPrecedeUnresolvedAndPositiveInputs() {
+  @Test
+  func negativeAndHardVetoPrecedeUnresolvedAndPositiveInputs() {
     // given
     let trial = fixtureTrial(consumed: 3, hardVetoes: [.staleControlState])
     let assignments = [
-      fixtureAssignment(runId: 1, outcome: .positive),
-      fixtureAssignment(runId: 2, outcome: .negative(issueCodes: ["bad"])),
-      fixtureAssignment(runId: 3),
+      fixtureAssignment(runID: 1, outcome: .positive),
+      fixtureAssignment(runID: 2, outcome: .negative(issueCodes: ["bad"])),
+      fixtureAssignment(runID: 3),
     ]
 
     // when
@@ -84,16 +82,13 @@ import Testing
     #expect(withoutVeto == .fallback(reason: .negativeOutcome))
   }
 
-  @Test func assignmentHardVetoPrecedesAnOtherwisePromotableCohort() {
+  @Test
+  func assignmentHardVetoPrecedesAnOtherwisePromotableCohort() {
     // given
     let trial = fixtureTrial(consumed: 2)
     let assignments = [
-      fixtureAssignment(runId: 1, outcome: .positive),
-      fixtureAssignment(
-        runId: 2,
-        outcome: .positive,
-        hardVetoes: [.ownerDependencyRejected]
-      ),
+      fixtureAssignment(runID: 1, outcome: .positive),
+      fixtureAssignment(runID: 2, outcome: .positive, hardVetoes: [.ownerDependencyRejected]),
     ]
 
     // when
@@ -103,17 +98,14 @@ import Testing
     #expect(decision == .fallback(reason: .hardVeto))
   }
 
-  @Test func decisionDeadlinePreservesIncompleteWithoutPersistingNeutral() {
+  @Test
+  func decisionDeadlinePreservesIncompleteWithoutPersistingNeutral() {
     // given
     let trial = fixtureTrial(consumed: 1)
-    let assignments = [fixtureAssignment(runId: 1)]
+    let assignments = [fixtureAssignment(runID: 1)]
 
     // when
-    let before = TrialPolicy.decide(
-      trial: trial,
-      assignments: assignments,
-      now: trial.admittedAt
-    )
+    let before = TrialPolicy.decide(trial: trial, assignments: assignments, now: trial.admittedAt)
     let atDeadline = TrialPolicy.decide(
       trial: trial,
       assignments: assignments,
@@ -126,13 +118,14 @@ import Testing
     #expect(assignments[0].resolvedEvidence == nil)
   }
 
-  @Test func alreadyDrainingUnresolvedTrialWaitsWithoutInventingACloseReason() {
+  @Test
+  func alreadyDrainingUnresolvedTrialWaitsWithoutInventingACloseReason() {
     // given
     let trial = fixtureTrial(consumed: 3, state: .draining)
     let assignments = [
-      fixtureAssignment(runId: 1, outcome: .positive),
-      fixtureAssignment(runId: 2, outcome: .positive),
-      fixtureAssignment(runId: 3),
+      fixtureAssignment(runID: 1, outcome: .positive),
+      fixtureAssignment(runID: 2, outcome: .positive),
+      fixtureAssignment(runID: 3),
     ]
 
     // when
@@ -142,7 +135,8 @@ import Testing
     #expect(decision == .wait)
   }
 
-  @Test func emptyAndAllNeutralCohortsFallbackWhenAssignmentCloses() {
+  @Test
+  func emptyAndAllNeutralCohortsFallbackWhenAssignmentCloses() {
     // given
     let empty = fixtureTrial(consumed: 0)
     let neutral = fixtureTrial(consumed: 3)
@@ -156,9 +150,9 @@ import Testing
     let neutralDecision = TrialPolicy.decide(
       trial: neutral,
       assignments: [
-        fixtureAssignment(runId: 1, outcome: .neutral),
-        fixtureAssignment(runId: 2, outcome: .neutral),
-        fixtureAssignment(runId: 3, outcome: .neutral),
+        fixtureAssignment(runID: 1, outcome: .neutral),
+        fixtureAssignment(runID: 2, outcome: .neutral),
+        fixtureAssignment(runID: 3, outcome: .neutral),
       ],
       now: neutral.admittedAt
     )
@@ -168,7 +162,8 @@ import Testing
     #expect(neutralDecision == .fallback(reason: .insufficientSupport))
   }
 
-  @Test func oneOrTwoNeutralOutcomesConsumeExposureWithoutClosingIt() {
+  @Test
+  func oneOrTwoNeutralOutcomesConsumeExposureWithoutClosingIt() {
     // given
     let one = fixtureTrial(consumed: 1)
     let two = fixtureTrial(consumed: 2)
@@ -176,14 +171,14 @@ import Testing
     // when
     let oneDecision = TrialPolicy.decide(
       trial: one,
-      assignments: [fixtureAssignment(runId: 1, outcome: .neutral)],
+      assignments: [fixtureAssignment(runID: 1, outcome: .neutral)],
       now: one.admittedAt
     )
     let twoDecision = TrialPolicy.decide(
       trial: two,
       assignments: [
-        fixtureAssignment(runId: 1, outcome: .neutral),
-        fixtureAssignment(runId: 2, outcome: .neutral),
+        fixtureAssignment(runID: 1, outcome: .neutral),
+        fixtureAssignment(runID: 2, outcome: .neutral),
       ],
       now: two.admittedAt
     )
@@ -193,11 +188,12 @@ import Testing
     #expect(twoDecision == .wait)
   }
 
-  @Test func assignmentBoundsUseEqualityAndLimitWinsWhenBothAreReached() {
+  @Test
+  func assignmentBoundsUseEqualityAndLimitWinsWhenBothAreReached() {
     // given
     let atDeadline = fixtureTrial(consumed: 1)
     let atBoth = fixtureTrial(consumed: 3)
-    let unresolved = [fixtureAssignment(runId: 1)]
+    let unresolved = [fixtureAssignment(runID: 1)]
 
     // when
     let deadlineDecision = TrialPolicy.decide(
@@ -208,9 +204,9 @@ import Testing
     let bothDecision = TrialPolicy.decide(
       trial: atBoth,
       assignments: [
-        fixtureAssignment(runId: 1),
-        fixtureAssignment(runId: 2),
-        fixtureAssignment(runId: 3),
+        fixtureAssignment(runID: 1),
+        fixtureAssignment(runID: 2),
+        fixtureAssignment(runID: 3),
       ],
       now: atBoth.assignmentDeadline
     )
@@ -220,12 +216,13 @@ import Testing
     #expect(bothDecision == .closeAssignment(reason: .assignmentLimit))
   }
 
-  @Test func twoResolvedPositivesPromoteOnlyAfterTheWholeCohortResolves() {
+  @Test
+  func twoResolvedPositivesPromoteOnlyAfterTheWholeCohortResolves() {
     // given
     let trial = fixtureTrial(consumed: 2)
     let assignments = [
-      fixtureAssignment(runId: 1, outcome: .positive),
-      fixtureAssignment(runId: 2, outcome: .positive),
+      fixtureAssignment(runID: 1, outcome: .positive),
+      fixtureAssignment(runID: 2, outcome: .positive),
     ]
 
     // when
@@ -235,13 +232,14 @@ import Testing
     #expect(decision == .promote)
   }
 
-  @Test func onePositiveDoesNotMeetTheTwoRunPromotionThreshold() {
+  @Test
+  func onePositiveDoesNotMeetTheTwoRunPromotionThreshold() {
     // given
     let trial = fixtureTrial(consumed: 3)
     let assignments = [
-      fixtureAssignment(runId: 1, outcome: .positive),
-      fixtureAssignment(runId: 2, outcome: .neutral),
-      fixtureAssignment(runId: 3, outcome: .neutral),
+      fixtureAssignment(runID: 1, outcome: .positive),
+      fixtureAssignment(runID: 2, outcome: .neutral),
+      fixtureAssignment(runID: 3, outcome: .neutral),
     ]
 
     // when
@@ -251,7 +249,8 @@ import Testing
     #expect(decision == .fallback(reason: .insufficientSupport))
   }
 
-  @Test func resolvedEvidenceDerivesOneCanonicalOutcomeShape() {
+  @Test
+  func resolvedEvidenceDerivesOneCanonicalOutcomeShape() {
     // given
     let resolved = ResolvedRunEvidence(
       effective: ResolvedOutcome(
@@ -283,12 +282,7 @@ private func fixtureTrial(
   hardVetoes: Set<HardVeto> = []
 ) -> LearningTrial {
   LearningTrial(
-    identity: LearningTrialIdentity(
-      trialId: 11,
-      jobId: 7,
-      epoch: LearningEpoch(2),
-      generation: 3
-    ),
+    identity: LearningTrialIdentity(trialID: 11, jobID: 7, epoch: LearningEpoch(2), generation: 3),
     baseDigest: LessonSetDigest(rawValue: String(repeating: "a", count: 64)),
     baseRevision: StableRevision(4),
     candidateDigest: CandidateDigest(rawValue: String(repeating: "b", count: 64)),
@@ -306,7 +300,7 @@ private func fixtureTrial(
 }
 
 private func fixtureAssignment(
-  runId: Int64,
+  runID: Int64,
   outcome: EffectiveOutcome? = nil,
   hardVetoes: Set<HardVeto> = []
 ) -> TrialAssignment {
@@ -324,7 +318,7 @@ private func fixtureAssignment(
     )
   }
   return TrialAssignment(
-    identity: TrialAssignmentIdentity(trial: fixtureTrial().identity, runId: runId),
+    identity: TrialAssignmentIdentity(trial: fixtureTrial().identity, runID: runID),
     assignedAt: Date(timeIntervalSince1970: 1_001),
     state: evidence == nil ? .learningOutcomeUnresolved : .learningOutcomeResolved,
     resolvedEvidence: evidence,

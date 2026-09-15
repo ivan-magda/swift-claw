@@ -5,16 +5,18 @@ import Testing
 
 @testable import ClawSecrets
 
-@Suite struct SecretsDoctorRowTests {
+@Suite
+struct SecretsDoctorRowTests {
   private typealias EnvKey = EnvSecretStore.EnvKey
 
-  @Test func reportsEncryptedOkAfterDecrypt() throws {
+  @Test
+  func reportsEncryptedOkAfterDecrypt() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-doctor")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
 
@@ -26,7 +28,8 @@ import Testing
     #expect(row.value == "backend=encrypted")
   }
 
-  @Test func reportsEnvWarning() throws {
+  @Test
+  func reportsEnvWarning() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-doctor")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -42,13 +45,14 @@ import Testing
     #expect(row.value == "backend=env (WARN: plaintext)")
   }
 
-  @Test func reportsFailWhenEncryptedSetupIsBroken() throws {
+  @Test
+  func reportsFailWhenEncryptedSetupIsBroken() throws {
     // given — secrets.enc present, key missing → decrypt fails.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-doctor")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
     try FileManager.default.removeItem(at: stateRoot.appendingPathComponent(SecretFile.key))

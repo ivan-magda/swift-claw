@@ -12,8 +12,10 @@ import Testing
 /// ordinary turn — it queues FIFO behind the parked lane and leaves the approval untouched. Only an
 /// authenticated button callback resolves it (proven end-to-end in FileWriteApprovalFlowTests +
 /// Task 25's matrix).
-@Suite(.serialized) struct PlainReplyDoesNotApproveTests {
-  @Test func plainYesLeavesTheParkedApprovalPending() async throws {
+@Suite(.serialized)
+struct PlainReplyDoesNotApproveTests {
+  @Test
+  func plainYesLeavesTheParkedApprovalPending() async throws {
     // given — a file_write proposal suspends the run to a durable checkpoint
     let harness = try makeSC3Harness(
       scripts: [
@@ -23,10 +25,10 @@ import Testing
               id: "w1",
               name: "file_write",
               argumentsJSON: #"{"path":"notes/plan.md","content":"hello","overwrite":false}"#
-            )
+            ),
           ]),
           okResponse(content: "acknowledged the plain message"),
-        ]
+        ],
       ],
       httpResponses: [:]
     )
@@ -39,9 +41,7 @@ import Testing
     #expect(approval.state == ApprovalState.pending.rawValue)
 
     // when — the owner types a plain "yes" instead of tapping the button
-    let yesOutcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 2, from: 7, text: "yes")
-    )
+    let yesOutcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "yes"))
 
     // then — positive proof the "yes" was processed: it persisted as an ordinary SECOND run that
     // queues FIFO behind the held lane (PENDING — the lane task is parked on the approval, so the
@@ -58,15 +58,20 @@ import Testing
     // and — the approval is UNTOUCHED (a plain reply never approves, §8.3); the run is still
     // parked, the target file was never written, and no approvalGranted audit exists
     #expect(
-      try fetchApprovals(databasePath: harness.databasePath).map(\.state)
-        == [ApprovalState.pending.rawValue]
+      try fetchApprovals(databasePath: harness.databasePath).map(\.state) == [
+        ApprovalState.pending.rawValue,
+      ]
     )
     #expect(
-      try runState(databasePath: harness.databasePath, runId: approval.runId)
+      try runState(databasePath: harness.databasePath, runID: approval.runID)
         == RunState.awaitingApproval.rawValue
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
     let audits = try harness.auditRows()
-    #expect(audits.contains { row in row.action == AuditAction.approvalGranted.rawValue } == false)
+    #expect(
+      audits.contains { row in
+        row.action == AuditAction.approvalGranted.rawValue
+      } == false
+    )
   }
 }

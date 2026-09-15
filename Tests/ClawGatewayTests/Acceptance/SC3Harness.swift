@@ -82,7 +82,9 @@ struct SC3Harness {
       lanes: lanes,
       coordinator: coordinator,
       waiter: waiter,
-      now: { Date() },
+      now: {
+        Date()
+      },
       logger: TestLog.silent
     ).reconcile()
   }
@@ -96,18 +98,18 @@ struct SC3Harness {
     return try matched ?? stores.outbox.pendingOutbound().map(\.payload)
   }
 
-  func sessionId() throws -> Int64 {
+  func sessionID() throws -> Int64 {
     try stores.sessionMessages.findSession(sessionKey: sessionKey) ?? 0
   }
 
   func pending() async throws -> CommandConfirmation? {
-    await registry.pending(sessionId: try sessionId())
+    await registry.pending(sessionID: try sessionID())
   }
 
   func snapshot() throws -> SessionContextSnapshot {
     try stores.sessionMessages.loadContextSnapshot(
-      sessionId: try sessionId(),
-      throughMessageId: Int64.max,
+      sessionID: try sessionID(),
+      throughMessageID: Int64.max,
       limit: 50
     )
   }
@@ -136,7 +138,8 @@ struct SC3Harness {
 /// responses for that turn's round-trips). A non-re-proposing script is just a script whose
 /// yes-turn entry contains no tool calls.
 actor TurnScriptedProvider: LLMProvider {
-  typealias BeforeCompletion = @Sendable (Int, ChatRequest) async throws -> Void
+  typealias BeforeCompletion =
+    @Sendable (_ completionCount: Int, _ request: ChatRequest) async throws -> Void
 
   private var scripts: [[ChatResponse]]
   private var currentTurn: [ChatResponse] = []
@@ -146,10 +149,7 @@ actor TurnScriptedProvider: LLMProvider {
   private(set) var completions = 0
   private(set) var requests: [ChatRequest] = []
 
-  init(
-    scripts: [[ChatResponse]],
-    beforeCompletion: BeforeCompletion? = nil
-  ) {
+  init(scripts: [[ChatResponse]], beforeCompletion: BeforeCompletion? = nil) {
     self.scripts = scripts
 
     self.beforeCompletion = beforeCompletion
@@ -207,17 +207,20 @@ func makeSC3Harness(
   // 1. Temp-file stores. Reuse `databasePath` to model a restart against the SAME DB (spec §17).
   let resolvedDatabasePath =
     databasePath
-    ?? fileManager.temporaryDirectory
-    .appendingPathComponent("claw-sc3-\(UUID().uuidString).sqlite").path
+      ?? fileManager.temporaryDirectory
+      .appendingPathComponent("claw-sc3-\(UUID().uuidString).sqlite")
+      .path
   let stores = try ClawDatabase.openStores(path: resolvedDatabasePath)
-  try stores.allowlist.seedAllowlist(userIds: [7])
+  try stores.allowlist.seedAllowlist(userIDs: [7])
 
   // 2. Temp workspace dir; write `workspaceFiles` (relative path → content) into it. Reuse
   // `workspaceRoot` (with `databasePath`) to model a restart against the SAME disk (spec §17).
   let workspaceRoot =
     workspaceRoot
-    ?? fileManager.temporaryDirectory
-    .appendingPathComponent("claw-sc3-ws-\(UUID().uuidString)", isDirectory: true)
+      ?? fileManager.temporaryDirectory.appendingPathComponent(
+        "claw-sc3-ws-\(UUID().uuidString)",
+        isDirectory: true
+      )
   try fileManager.createDirectory(at: workspaceRoot, withIntermediateDirectories: true)
   for (relativePath, content) in workspaceFiles {
     let destination = workspaceRoot.appendingPathComponent(relativePath)
@@ -242,7 +245,9 @@ func makeSC3Harness(
     MemoryWriteTool(redactor: redactor),
     SkillLoadTool(
       workspaceRoot: workspaceRoot,
-      scanSkills: { workspace.scanSkills() },
+      scanSkills: {
+        workspace.scanSkills()
+      },
       redactor: redactor
     ),
     WebFetchTool(http: http, resolver: resolver, redactor: redactor),
@@ -319,7 +324,7 @@ func makeSC3Harness(
     budget: .default,
     fenceLabels: ToolFenceLabels(definitions: dispatcher.definitions),
     policyStaticSubhash: PolicyFingerprint.staticSubhash(
-      inputs: .init(
+      inputs: PolicyFingerprint.StaticInputs(
         tools: dispatcher.definitions,
         llmEgress: .configuredEndpoint("https://llm.example"),
         searchEndpointPresent: true,
@@ -331,10 +336,7 @@ func makeSC3Harness(
   )
 
   // 6. AgentRuntime over the per-turn scripted provider and the real gated dispatcher.
-  let provider = TurnScriptedProvider(
-    scripts: scripts,
-    beforeCompletion: beforeCompletion
-  )
+  let provider = TurnScriptedProvider(scripts: scripts, beforeCompletion: beforeCompletion)
   let agent = AgentRuntime(
     roster: makeSingleRouteRoster(provider: provider, wireModel: "test-model"),
     typingIndicator: NoopTyping(),
@@ -380,8 +382,12 @@ func makeSC3Harness(
   let approvedExecutor = ApprovedActionExecutor(
     tools: dispatcher.toolsByName,
     runs: stores.runs,
-    redactArguments: { $0 },
-    now: { Date() },
+    redactArguments: {
+      $0
+    },
+    now: {
+      Date()
+    },
     logger: logger
   )
   let waiter = ApprovalWaiter(
@@ -394,8 +400,12 @@ func makeSC3Harness(
     callbacks: transport,
     typing: NoopTyping(),
     clock: ContinuousClock(),
-    currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
-    now: { Date() },
+    currentPolicyVersion: {
+      contextBuilder.currentPolicyVersion()
+    },
+    now: {
+      Date()
+    },
     logger: logger
   )
   deferredParker.adopt(waiter)
@@ -409,8 +419,12 @@ func makeSC3Harness(
     audit: stores.audit,
     coordinator: coordinator,
     callbacks: transport,
-    currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
-    now: { Date() },
+    currentPolicyVersion: {
+      contextBuilder.currentPolicyVersion()
+    },
+    now: {
+      Date()
+    },
     logger: logger
   )
 
@@ -454,7 +468,7 @@ func makeSC3Harness(
     databasePath: resolvedDatabasePath,
     readPool: try ClawDatabase.makePool(path: resolvedDatabasePath),
     workspaceRoot: workspaceRoot,
-    sessionKey: SessionKey.telegramDM(chatId: 7),
+    sessionKey: SessionKey.telegramDM(chatID: 7),
     waiter: waiter,
     lanes: lanes,
     agent: agent,

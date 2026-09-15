@@ -29,23 +29,19 @@ struct MCPServerSessionTests {
   @Test("a server that pages forever is refused at the page cap")
   func pageCap() async throws {
     // given
-    let scripted = ScriptedMCPServer(
-      list: { parameters in
-        let page = parameters.cursor.flatMap { cursor in
-          Int(cursor)
-        }
-        return ListTools.Result(
-          tools: [ScriptedMCPServer.tool("page_\(page ?? 0)")],
-          nextCursor: String((page ?? 0) + 1)
-        )
+    let scripted = ScriptedMCPServer(list: { parameters in
+      let page = parameters.cursor.flatMap { cursor in
+        Int(cursor)
       }
-    )
+      return ListTools.Result(
+        tools: [ScriptedMCPServer.tool("page_\(page ?? 0)")],
+        nextCursor: String((page ?? 0) + 1)
+      )
+    })
     let session = try SessionFixture.session(against: scripted)
 
     // when / then
-    await #expect(
-      throws: MCPSessionError.tooManyPages(limit: MCPDiscoveryLimits.maxPages)
-    ) {
+    await #expect(throws: MCPSessionError.tooManyPages(limit: MCPDiscoveryLimits.maxPages)) {
       try await session.listAllTools()
     }
     await SessionFixture.tearDown(session, scripted)
@@ -54,11 +50,9 @@ struct MCPServerSessionTests {
   @Test("a server that repeats a cursor is refused")
   func repeatedCursor() async throws {
     // given
-    let scripted = ScriptedMCPServer(
-      list: { _ in
-        ListTools.Result(tools: [ScriptedMCPServer.tool("looping")], nextCursor: "same")
-      }
-    )
+    let scripted = ScriptedMCPServer(list: { _ in
+      ListTools.Result(tools: [ScriptedMCPServer.tool("looping")], nextCursor: "same")
+    })
     let session = try SessionFixture.session(against: scripted)
 
     // when / then
@@ -78,9 +72,7 @@ struct MCPServerSessionTests {
     let session = try SessionFixture.session(against: scripted)
 
     // when / then
-    await #expect(
-      throws: MCPSessionError.tooManyTools(limit: MCPDiscoveryLimits.maxTools)
-    ) {
+    await #expect(throws: MCPSessionError.tooManyTools(limit: MCPDiscoveryLimits.maxTools)) {
       try await session.listAllTools()
     }
     await SessionFixture.tearDown(session, scripted)
@@ -157,10 +149,7 @@ struct MCPServerSessionTests {
     #expect(result.content.isEmpty)
     #expect(
       result.structuredContent
-        == .object([
-          "count": .number(2),
-          "items": .array([.string("one"), .string("two")]),
-        ])
+        == .object(["count": .number(2), "items": .array([.string("one"), .string("two")])])
     )
     await SessionFixture.tearDown(session, scripted)
   }
@@ -191,19 +180,16 @@ struct MCPServerSessionTests {
   func reconnectsOnExpiredSession() async throws {
     // given the first connection drops our session on the call that follows its handshake
     let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
-    let session = try SessionFixture.session(
-      against: scripted,
-      transport: { transport, connection in
-        guard connection == 1 else {
-          return transport
-        }
-        return FaultyTransport(
-          wrapping: transport,
-          failingSend: FaultyTransport.firstCallSend,
-          with: .sessionExpired
-        )
+    let session = try SessionFixture.session(against: scripted) { transport, connection in
+      guard connection == 1 else {
+        return transport
       }
-    )
+      return FaultyTransport(
+        wrapping: transport,
+        failingSend: FaultyTransport.firstCallSend,
+        with: .sessionExpired
+      )
+    }
     try await session.connect()
 
     // when
@@ -221,19 +207,16 @@ struct MCPServerSessionTests {
   func doesNotRetryPossiblyExecutedCall() async throws {
     // given
     let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
-    let session = try SessionFixture.session(
-      against: scripted,
-      transport: { transport, connection in
-        guard connection == 1 else {
-          return transport
-        }
-        return FaultyTransport(
-          wrapping: transport,
-          failingSend: FaultyTransport.firstCallSend,
-          with: .httpStatus(500)
-        )
+    let session = try SessionFixture.session(against: scripted) { transport, connection in
+      guard connection == 1 else {
+        return transport
       }
-    )
+      return FaultyTransport(
+        wrapping: transport,
+        failingSend: FaultyTransport.firstCallSend,
+        with: .httpStatus(500)
+      )
+    }
     try await session.connect()
 
     // when / then
@@ -278,9 +261,8 @@ struct MCPServerSessionTests {
     )
 
     // when / then
-    await #expect(
-      throws: MCPSessionError.discoveryTimedOut(seconds: config.connectTimeoutSeconds)
-    ) {
+    await #expect(throws: MCPSessionError.discoveryTimedOut(seconds: config.connectTimeoutSeconds))
+    {
       try await session.connect()
     }
   }
@@ -294,9 +276,8 @@ struct MCPServerSessionTests {
     try await session.connect()
 
     // when / then
-    await #expect(
-      throws: MCPSessionError.discoveryTimedOut(seconds: config.requestTimeoutSeconds)
-    ) {
+    await #expect(throws: MCPSessionError.discoveryTimedOut(seconds: config.requestTimeoutSeconds))
+    {
       try await session.listAllTools()
     }
     await SessionFixture.tearDown(session, scripted)
@@ -311,9 +292,7 @@ struct MCPServerSessionTests {
     try await session.connect()
 
     // when / then
-    await #expect(
-      throws: MCPSessionError.callTimedOut(seconds: config.worstCaseCallSeconds)
-    ) {
+    await #expect(throws: MCPSessionError.callTimedOut(seconds: config.worstCaseCallSeconds)) {
       try await session.callTool(name: "create_issue", arguments: [:])
     }
     await SessionFixture.tearDown(session, scripted)
@@ -362,19 +341,16 @@ struct MCPServerSessionTests {
       let failure = MCPTransportError.requestFailed(
         HTTPTransportFailure(disposition: disposition, safeMessage: "call interrupted")
       )
-      let session = try SessionFixture.session(
-        against: scripted,
-        transport: { transport, connection in
-          guard connection == 1 else {
-            return transport
-          }
-          return FaultyTransport(
-            wrapping: transport,
-            failingSend: FaultyTransport.firstCallSend,
-            with: failure
-          )
+      let session = try SessionFixture.session(against: scripted) { transport, connection in
+        guard connection == 1 else {
+          return transport
         }
-      )
+        return FaultyTransport(
+          wrapping: transport,
+          failingSend: FaultyTransport.firstCallSend,
+          with: failure
+        )
+      }
       try await session.connect()
 
       // when
@@ -433,17 +409,13 @@ struct MCPServerSessionTests {
 private actor ArgumentRecorder {
   private(set) var arguments: [String: Value] = [:]
 
-  func record(_ arguments: [String: Value]) {
-    self.arguments = arguments
-  }
+  func record(_ arguments: [String: Value]) { self.arguments = arguments }
 }
 
 private actor MutedTransportRecorder {
   private(set) var last: MuteAfterHandshakeTransport?
 
-  func record(_ transport: MuteAfterHandshakeTransport) {
-    last = transport
-  }
+  func record(_ transport: MuteAfterHandshakeTransport) { last = transport }
 }
 
 private enum SessionFixture {
@@ -454,9 +426,7 @@ private enum SessionFixture {
   /// exchange that would otherwise never end, so the deadline is the only way out either way.
   static let mutedAllowance = Duration.milliseconds(200)
 
-  static func mutedAfterHandshake(
-    against scripted: ScriptedMCPServer
-  ) throws -> MCPServerSession {
+  static func mutedAfterHandshake(against scripted: ScriptedMCPServer) throws -> MCPServerSession {
     MCPServerSession(
       config: try config(),
       transportFactory: StubTransportFactory {
@@ -471,18 +441,17 @@ private enum SessionFixture {
     )
   }
 
-  static func config(
-    name: String = "linear",
-    tools: MCPToolFilter = .allowAll
-  ) throws -> MCPServerConfig {
-    try MCPServerConfig(name: name, url: "https://mcp.example.com/mcp", tools: tools)
-  }
+  static func config(name: String = "linear", tools: MCPToolFilter = .allowAll) throws
+    -> MCPServerConfig
+  { try MCPServerConfig(name: name, url: "https://mcp.example.com/mcp", tools: tools) }
 
   /// A session whose every connection is served by `scripted`, optionally wrapped per connection.
   static func session(
     against scripted: ScriptedMCPServer,
     config: MCPServerConfig? = nil,
-    transport: (@Sendable (InMemoryTransport, Int) async -> any Transport)? = nil
+    transport: (
+      @Sendable (_ transport: InMemoryTransport, _ connectionCount: Int) async -> any Transport
+    )? = nil
   ) throws -> MCPServerSession {
     MCPServerSession(
       config: try config ?? SessionFixture.config(),

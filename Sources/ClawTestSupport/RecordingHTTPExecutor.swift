@@ -116,30 +116,18 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
 
 // MARK: - Recorded fields
 
-public extension RecordingHTTPExecutor {
-  struct UnscriptedRequest: Error {
-    public let url: String
-  }
+extension RecordingHTTPExecutor {
+  public struct UnscriptedRequest: Error { public let url: String }
 
   /// URLs of every recorded call, in dispatch order.
-  var requestedURLs: [String] {
-    requests.map(\.url)
-  }
+  public var requestedURLs: [String] { requests.map(\.url) }
 
   /// Headers of every recorded call, in dispatch order.
-  var requestedHeaders: [[String: String]] {
-    requests.map(\.headers)
-  }
+  public var requestedHeaders: [[String: String]] { requests.map(\.headers) }
 
-  var lastURL: String? {
-    requests.last?.url
-  }
+  public var lastURL: String? { requests.last?.url }
 
-  var lastHeaders: [String: String] {
-    requests.last?.headers ?? [:]
-  }
+  public var lastHeaders: [String: String] { requests.last?.headers ?? [:] }
 
-  var lastBody: Data? {
-    requests.last?.body
-  }
+  public var lastBody: Data? { requests.last?.body }
 }

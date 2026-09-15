@@ -2,8 +2,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ExecutionContractsTests {
-  @Test func healthIsReadyWhenEveryGatePasses() {
+@Suite
+struct ExecutionContractsTests {
+  @Test
+  func healthIsReadyWhenEveryGatePasses() {
     // given
     let health = SandboxHealth.passingForTests
 
@@ -14,7 +16,8 @@ import Testing
     #expect(isReady)
   }
 
-  @Test func healthIsNotReadyWhenAnyGateFails() {
+  @Test
+  func healthIsNotReadyWhenAnyGateFails() {
     // given
     let failedHealth = HealthGate.allCases.map(Self.health(failing:))
 

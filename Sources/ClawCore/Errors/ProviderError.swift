@@ -53,10 +53,8 @@ extension ProviderError {
   /// cross-route switching; all new causes default to ineligible until they provide the same proof.
   package var allowsPreInferenceReissue: Bool {
     switch self {
-    case .connectFailed, .rejected:
-      return true
-    default:
-      return false
+    case .connectFailed, .rejected: return true
+    default: return false
     }
   }
 }
@@ -70,28 +68,18 @@ extension ProviderError {
   /// cannot disagree about which cases hold secret-bearing text.
   public func redacted(with redactor: SecretRedactor) -> ProviderError {
     switch self {
-    case .connectFailed(let message):
-      .connectFailed(message: redactor.redact(message))
-    case .transportFailure(let message):
-      .transportFailure(message: redactor.redact(message))
+    case .connectFailed(let message): .connectFailed(message: redactor.redact(message))
+    case .transportFailure(let message): .transportFailure(message: redactor.redact(message))
     case .retryable(let status, let message):
       .retryable(status: status, message: redactor.redact(message))
     case .rejected(let status, let message):
       .rejected(status: status, message: redactor.redact(message))
     case .terminal(let status, let message):
       .terminal(status: status, message: redactor.redact(message))
-    case .authenticationRequired,
-      .accessDenied,
-      .quotaLimited,
-      .cleanRejection,
-      .invalidProviderState,
-      .visionUnsupported,
-      .credentialRefreshCompleted,
-      .credentialRefreshExhausted,
-      .credentialStateUnavailable,
-      .partialStreamWithoutCompletedTerminal,
-      .localOutputLimit,
-      .modelIdentityMismatch:
+    case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
+         .invalidProviderState, .visionUnsupported, .credentialRefreshCompleted,
+         .credentialRefreshExhausted, .credentialStateUnavailable,
+         .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch:
       self
     }
   }
@@ -130,24 +118,12 @@ extension ProviderFailureAccounting {
     }
 
     switch providerError {
-    case .connectFailed,
-      .rejected,
-      .terminal,
-      .authenticationRequired,
-      .accessDenied,
-      .quotaLimited,
-      .cleanRejection,
-      .invalidProviderState,
-      .visionUnsupported,
-      .credentialStateUnavailable:
+    case .connectFailed, .rejected, .terminal, .authenticationRequired, .accessDenied,
+         .quotaLimited, .cleanRejection, .invalidProviderState, .visionUnsupported,
+         .credentialStateUnavailable:
       return .notStarted
-    case .transportFailure,
-      .retryable,
-      .credentialRefreshCompleted,
-      .credentialRefreshExhausted,
-      .partialStreamWithoutCompletedTerminal,
-      .localOutputLimit,
-      .modelIdentityMismatch:
+    case .transportFailure, .retryable, .credentialRefreshCompleted, .credentialRefreshExhausted,
+         .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch:
       return .mayHaveStarted(observing: 0)
     }
   }

@@ -4,6 +4,7 @@ import ClawAuth
 import ClawCore
 import ClawHTTP
 import ClawSecrets
+import Dispatch
 import Foundation
 
 #if canImport(Glibc)
@@ -88,7 +89,9 @@ private extension AuthCommand {
     executor: any HTTPExecuting
   ) -> AuthLoginWorkflow {
     let stateRoot = bootstrap.stateRoot
-    let oauth = ChatGPTOAuthClient(http: executor, wallDate: { Date() })
+    let oauth = ChatGPTOAuthClient(http: executor) {
+      Date()
+    }
 
     return AuthLoginWorkflow(
       bootstrap: bootstrap,
@@ -101,7 +104,9 @@ private extension AuthCommand {
       tokenExchange: oauth,
       catalog: ChatGPTModelCatalog(http: executor),
       terminal: StandardAuthTerminal(),
-      profileID: { UUID() }
+      profileID: {
+        UUID()
+      }
     )
   }
 
@@ -110,7 +115,9 @@ private extension AuthCommand {
     AuthStatusWorkflow(
       bootstrap: bootstrap,
       makeCredentialStore: credentialStore(in: bootstrap.stateRoot),
-      wallDate: { Date() }
+      wallDate: {
+        Date()
+      }
     )
   }
 
@@ -125,16 +132,17 @@ private extension AuthCommand {
   /// Deferred rather than built here, because opening the store touches the state root and a
   /// mutating command must not have touched it before the lock says it may.
   static func credentialStore(in stateRoot: URL) -> @Sendable () -> any LLMCredentialStore {
-    { EncryptedLLMCredentialStore(stateRoot: stateRoot) }
+    {
+      EncryptedLLMCredentialStore(stateRoot: stateRoot)
+    }
   }
 
   /// Resolves the state root and the raw model reference, and nothing else. Deliberately not
   /// `AppConfig`: an owner diagnosing their credentials most needs an answer on the installation
   /// whose other configuration the daemon would refuse to boot on.
   static func resolveBootstrapOrExit(environment: [String: String]) throws -> AuthBootstrap {
-    do {
-      return try AuthBootstrap.resolve(environment: environment)
-    } catch let error as ConfigError {
+    do { return try AuthBootstrap.resolve(environment: environment) } catch let error as ConfigError
+    {
       FileHandle.standardError.write(Data("auth: config error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
     }
@@ -166,10 +174,8 @@ private extension AuthCommand {
   static func write(_ event: AuthPresentationEvent) {
     let line = Data("\(event.text)\n".utf8)
     switch event.destination {
-    case .standardOutput:
-      FileHandle.standardOutput.write(line)
-    case .standardError:
-      FileHandle.standardError.write(line)
+    case .standardOutput: FileHandle.standardOutput.write(line)
+    case .standardError: FileHandle.standardError.write(line)
     }
   }
 }
@@ -195,9 +201,7 @@ private struct StandardAuthTerminal: AuthTerminal {
 
   /// Both ends are asked about, because a prompt is worth printing only if the owner is there to
   /// read it and worth waiting on only if they are there to answer it.
-  init() {
-    isInteractive = isatty(STDIN_FILENO) == 1 && isatty(STDOUT_FILENO) == 1
-  }
+  init() { isInteractive = isatty(STDIN_FILENO) == 1 && isatty(STDOUT_FILENO) == 1 }
 
   /// Read off the cooperative pool: `readLine` parks its thread until the owner types, and those
   /// threads are counted in cores. Blocking one to wait on a human is how a small host runs out.
@@ -209,10 +213,10 @@ private struct StandardAuthTerminal: AuthTerminal {
     }
   }
 
-  func write(_ event: AuthPresentationEvent) async {
-    AuthCommand.write(event)
-  }
+  func write(_ event: AuthPresentationEvent) async { AuthCommand.write(event) }
 }
+
+// MARK: - Terminal Input Queue
 
 private extension StandardAuthTerminal {
   static let input = DispatchQueue(label: "clawd.auth.stdin")

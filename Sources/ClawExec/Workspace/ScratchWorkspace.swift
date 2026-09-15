@@ -26,11 +26,9 @@ struct ScratchWorkspace: Sendable {
   let directory: URL
   let cidFile: URL
 
-  static func create(
-    stateRoot: URL,
-    identity: ExecutionIdentity,
-    request: ExecutionRequest
-  ) throws -> ScratchWorkspace {
+  static func create(stateRoot: URL, identity: ExecutionIdentity, request: ExecutionRequest) throws
+    -> ScratchWorkspace
+  {
     try validate(request)
 
     let scratchRoot = stateRoot.appending(path: scratchRootName, directoryHint: .isDirectory)
@@ -48,7 +46,11 @@ struct ScratchWorkspace: Sendable {
     try ensurePrivateDirectory(scratchRoot)
     try ensurePrivateDirectory(controlRoot)
 
-    guard directory.path.withCString({ mkdir($0, 0o700) }) == 0 else {
+    guard
+      directory.path.withCString({
+        mkdir($0, 0o700)
+      }) == 0
+    else {
       throw ScratchWorkspaceError.fileSystem("cannot create execution scratch")
     }
 
@@ -135,11 +137,7 @@ private extension ScratchWorkspace {
   }
 
   static func isBareName(_ name: String) -> Bool {
-    !name.isEmpty
-      && name != "."
-      && name != ".."
-      && !name.contains("/")
-      && !name.contains("\\")
+    !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains("\\")
       && URL(fileURLWithPath: name).lastPathComponent == name
   }
 
@@ -152,9 +150,7 @@ private extension ScratchWorkspace {
 
 private extension ScratchWorkspace {
   static func ensurePrivateDirectory(_ url: URL) throws {
-    do {
-      try PrivateDirectory.ensure(at: url)
-    } catch {
+    do { try PrivateDirectory.ensure(at: url) } catch {
       throw ScratchWorkspaceError.fileSystem("cannot create private directory")
     }
   }
@@ -168,9 +164,7 @@ private extension ScratchWorkspace {
     guard descriptor >= 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot create staged copy")
     }
-    defer {
-      _ = close(descriptor)
-    }
+    defer { _ = close(descriptor) }
 
     guard fchmod(descriptor, mode_t(file.mode.rawValue)) == 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot set staged copy mode")
@@ -195,11 +189,7 @@ private extension ScratchWorkspace {
     }
   }
 
-  static func systemWrite(
-    _ descriptor: Int32,
-    _ bytes: UnsafeRawPointer,
-    _ count: Int
-  ) -> Int {
+  static func systemWrite(_ descriptor: Int32, _ bytes: UnsafeRawPointer, _ count: Int) -> Int {
     #if canImport(Darwin)
       Darwin.write(descriptor, bytes, count)
     #elseif canImport(Glibc)

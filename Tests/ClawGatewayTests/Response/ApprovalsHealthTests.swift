@@ -3,12 +3,16 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ApprovalsHealthTests {
+@Suite
+struct ApprovalsHealthTests {
   private func value(_ rows: [DoctorReport.Check], _ key: String) -> String? {
-    rows.first { row in row.key == key }?.value
+    rows.first { row in
+      row.key == key
+    }?.value
   }
 
-  @Test func noPendingApprovalsRendersZeroAndNone() {
+  @Test
+  func noPendingApprovalsRendersZeroAndNone() {
     // given — a freshly-migrated approvals table: nothing pending
     let health = ApprovalsHealth(pendingCount: 0, oldestPendingAgeSeconds: nil)
 
@@ -20,7 +24,8 @@ import Testing
     #expect(value(rows, "approvals.oldest_age_s") == "none")
   }
 
-  @Test func pendingApprovalsRenderCountAndOldestAgeAgainstTheExpiry() {
+  @Test
+  func pendingApprovalsRenderCountAndOldestAgeAgainstTheExpiry() {
     // given — two pending approvals, the oldest 900s into its 3600s window
     let health = ApprovalsHealth(pendingCount: 2, oldestPendingAgeSeconds: 900)
 

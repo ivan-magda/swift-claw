@@ -8,15 +8,18 @@ public func withTestWatchdog<Result: Sendable>(
     defer { completed.open() }
     return await operation()
   }
-  return await withTaskCancellationHandler {
-    if !(await completed.waitUntilOpen()) {
-      task.cancel()
-      if !Task.isCancelled {
-        onTimeout()
+  return await withTaskCancellationHandler(
+    operation: {
+      if !(await completed.waitUntilOpen()) {
+        task.cancel()
+        if !Task.isCancelled {
+          onTimeout()
+        }
       }
+      return await task.value
+    },
+    onCancel: {
+      task.cancel()
     }
-    return await task.value
-  } onCancel: {
-    task.cancel()
-  }
+  )
 }

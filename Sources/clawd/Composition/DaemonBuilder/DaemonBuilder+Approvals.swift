@@ -34,7 +34,7 @@ extension DaemonBuilder {
     agentStack: AgentStack,
     costPolicy: LLMCostPolicy,
     imageCache: ImageCache,
-    freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void
+    freezeLearningSurface: @escaping @Sendable (_ runID: Int64, _ policyVersion: String) -> Void
   ) -> TurnRunner {
     let outboxSignal = coordination.outboxSignal
     return TurnRunner(
@@ -45,12 +45,14 @@ extension DaemonBuilder {
       agent: agentStack.agent,
       contextBuilder: agentStack.contextBuilder,
       imageCache: imageCache,
-      notifyOutbox: { outboxSignal.poke() },
+      notifyOutbox: {
+        outboxSignal.poke()
+      },
       // The resolved route's billing, not the init default: a subscription route must not fire a
       // daily USD-cap DM against dollars earlier metered usage rang up.
       breaker: BudgetBreaker(budget: config.budget, costPolicy: costPolicy),
       delivery: transport,
-      ownerChatId: config.heartbeatOwnerChatId,
+      ownerChatID: config.heartbeatOwnerChatID,
       now: now,
       freezeLearningSurface: freezeLearningSurface,
       learning: makePinnedLessonStore(),
@@ -62,10 +64,9 @@ extension DaemonBuilder {
 
   /// The handler that answers an owner's approve/deny tap. It reaches the router, so it is built
   /// ahead of the router it answers into.
-  func makeApprovalCallbackHandler(
-    coordination: TurnCoordination,
-    agentStack: AgentStack
-  ) -> ApprovalCallbackHandler {
+  func makeApprovalCallbackHandler(coordination: TurnCoordination, agentStack: AgentStack)
+    -> ApprovalCallbackHandler
+  {
     let contextBuilder = agentStack.contextBuilder
     return ApprovalCallbackHandler.make(
       processed: stores.processed,
@@ -77,8 +78,12 @@ extension DaemonBuilder {
       audit: stores.audit,
       coordinator: coordination.approvalCoordinator,
       callbacks: transport,
-      currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
-      now: { Date() },
+      currentPolicyVersion: {
+        contextBuilder.currentPolicyVersion()
+      },
+      now: {
+        Date()
+      },
       logger: logger
     )
   }
@@ -98,7 +103,9 @@ extension DaemonBuilder {
       redactArguments: { arguments in
         argumentGuard.renderRedacted(argsJSON: arguments)
       },
-      now: { Date() },
+      now: {
+        Date()
+      },
       logger: logger
     )
     let approvalWaiter = ApprovalWaiter(
@@ -111,8 +118,12 @@ extension DaemonBuilder {
       callbacks: transport,
       typing: TelegramTypingIndicator(transport: transport),
       clock: ContinuousClock(),
-      currentPolicyVersion: { contextBuilder.currentPolicyVersion() },
-      now: { Date() },
+      currentPolicyVersion: {
+        contextBuilder.currentPolicyVersion()
+      },
+      now: {
+        Date()
+      },
       logger: logger
     )
     coordination.deferredParker.adopt(approvalWaiter)
@@ -120,7 +131,9 @@ extension DaemonBuilder {
     let expiry = ApprovalExpiryService(
       approvals: stores.approvals,
       coordinator: coordination.approvalCoordinator,
-      now: { Date() },
+      now: {
+        Date()
+      },
       clock: ContinuousClock(),
       logger: logger
     )

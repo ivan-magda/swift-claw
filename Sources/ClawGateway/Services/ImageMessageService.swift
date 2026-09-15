@@ -19,14 +19,10 @@ public enum ImageMessageFailure: Error, Sendable, Equatable {
 
   public var ownerReplyText: String {
     switch self {
-    case .unavailable, .undecodable:
-      "I couldn't read that image — try sending it again."
-    case .tooLarge:
-      "That image is too large for me to look at. Try a smaller one."
-    case .fetchFailed:
-      "I couldn't download that image. Try sending it again."
-    case .cancelled:
-      "I stopped before I could look at that image."
+    case .unavailable, .undecodable: "I couldn't read that image — try sending it again."
+    case .tooLarge: "That image is too large for me to look at. Try a smaller one."
+    case .fetchFailed: "I couldn't download that image. Try sending it again."
+    case .cancelled: "I stopped before I could look at that image."
     }
   }
 }
@@ -53,9 +49,10 @@ public struct ImageMessageService: ImageMessageHandling {
     self.logger = logger
   }
 
-  public func materialize(
-    _ attachment: PhotoAttachment
-  ) async -> Result<ImagePart, ImageMessageFailure> {
+  public func materialize(_ attachment: PhotoAttachment) async -> Result<
+    ImagePart,
+    ImageMessageFailure
+  > {
     // Declared metadata picks the rung before anything is fetched, but a sender can forge it, so
     // the same ceiling goes to the transport as the ground truth that actually binds.
     guard let rung = attachment.best(withinBytes: Int64(maxBytes)) else {
@@ -63,9 +60,7 @@ public struct ImageMessageService: ImageMessageHandling {
     }
 
     let bytes: Data
-    do {
-      bytes = try await media.downloadFile(fileId: rung.fileId, maxBytes: maxBytes)
-    } catch {
+    do { bytes = try await media.downloadFile(fileID: rung.fileID, maxBytes: maxBytes) } catch {
       // Each transport spells cancellation in its own error type, so the task's own state decides
       // whether this was a shutdown rather than a download that genuinely failed.
       if Task.isCancelled || error is CancellationError {

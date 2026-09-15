@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawExec
 
-@Suite struct ContainerBackendCleanupTests {
-  @Test func failedCleanupDisarmsAdmissionUntilNextPrepare() async throws {
+@Suite
+struct ContainerBackendCleanupTests {
+  @Test
+  func failedCleanupDisarmsAdmissionUntilNextPrepare() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -59,10 +61,14 @@ import Testing
     }
     let backend = fixture.backend(commands: runner, executionAdmitted: admissions.record)
     await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
-    let first = Task { await backend.run(executionRequest()) }
+    let first = Task {
+      await backend.run(executionRequest())
+    }
     await admissions.waitForCount(1)
     await runner.waitForCount(1)
-    let second = Task { await backend.run(executionRequest()) }
+    let second = Task {
+      await backend.run(executionRequest())
+    }
     await admissions.waitForCount(2)
 
     // when
@@ -77,6 +83,10 @@ import Testing
     }
     #expect(reason.contains("could not confirm container removal"))
     #expect(secondResult.terminationReason == .unavailable(reason: "sandbox is not prepared"))
-    #expect(await runner.recorded().filter { $0.arguments.first == "run" }.count == 1)
+    #expect(
+      await runner.recorded().filter {
+        $0.arguments.first == "run"
+      }.count == 1
+    )
   }
 }

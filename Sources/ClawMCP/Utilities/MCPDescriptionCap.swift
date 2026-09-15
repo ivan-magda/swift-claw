@@ -9,10 +9,7 @@ import ClawCore
 public enum MCPDescriptionCap {
   public static let maxGraphemes = 1_200
 
-  public static func cap(
-    _ text: String,
-    maxGraphemes: Int = MCPDescriptionCap.maxGraphemes
-  ) -> String {
-    TextTruncation.cap(text, maxGraphemes: maxGraphemes)
-  }
+  public static func cap(_ text: String, maxGraphemes: Int = MCPDescriptionCap.maxGraphemes)
+    -> String
+  { TextTruncation.cap(text, maxGraphemes: maxGraphemes) }
 }

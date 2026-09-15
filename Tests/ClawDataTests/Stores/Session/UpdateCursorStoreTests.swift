@@ -5,13 +5,15 @@ import Testing
 @testable import ClawCore
 @testable import ClawData
 
-@Suite struct UpdateCursorStoreTests {
+@Suite
+struct UpdateCursorStoreTests {
   private func freshStore() throws -> UpdateCursorStoreGRDB {
     let queue = try TestDatabase.make()
     return UpdateCursorStoreGRDB(writer: queue)
   }
 
-  @Test func cursorStartsNil() throws {
+  @Test
+  func cursorStartsNil() throws {
     // given
     let store = try freshStore()
 
@@ -19,7 +21,8 @@ import Testing
     #expect(try store.loadCursor() == nil)
   }
 
-  @Test func advanceThenLoad() throws {
+  @Test
+  func advanceThenLoad() throws {
     // given
     let store = try freshStore()
 
@@ -30,7 +33,8 @@ import Testing
     #expect(try store.loadCursor() == 100)
   }
 
-  @Test func cursorIsMonotonic() throws {
+  @Test
+  func cursorIsMonotonic() throws {
     // given
     let store = try freshStore()
 
@@ -42,12 +46,11 @@ import Testing
     #expect(try store.loadCursor() == 100)
   }
 
-  @Test func cursorSurvivesReopen() throws {
+  @Test
+  func cursorSurvivesReopen() throws {
     // given: persist on one connection, read on a fresh one (stand-in for SIGTERM + restart)
     let path = makeTempDatabasePath(prefix: "claw-cursor")
-    defer {
-      try? FileManager.default.removeItem(atPath: path)
-    }
+    defer { try? FileManager.default.removeItem(atPath: path) }
 
     do {
       let pool = try ClawDatabase.makePool(path: path)

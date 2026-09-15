@@ -10,9 +10,7 @@ public enum RunOrigin: String, Sendable, Equatable {
 
   /// True for the origins that run with no owner present (a scheduled job or heartbeat fire) —
   /// the pair every proactive gate (budget, prompt selection, context isolation) keys on.
-  public var isProactive: Bool {
-    self != .interactive
-  }
+  public var isProactive: Bool { self != .interactive }
 
   /// The same pair as a value, for the queries that filter rows by origin rather than test one.
   /// The doctor gauge, the turn preflight and the learning authorization all charge the one pool,
@@ -63,7 +61,7 @@ public struct RecurrenceEnvelope: Sendable, Equatable, Codable {
 /// One row of `scheduled_jobs`.
 public struct ScheduledJob: Sendable, Equatable {
   public let id: Int64
-  public let ownerChatId: Int64
+  public let ownerChatID: Int64
   public let label: String
   public let prompt: String
   public let recurrence: RecurrenceEnvelope?  // nil ⇔ one-shot
@@ -71,13 +69,13 @@ public struct ScheduledJob: Sendable, Equatable {
   public let nextOccurrence: Date?  // nil once terminal
   public let lastFiredAt: Date?
   public let status: ScheduledJobStatus
-  public let sessionId: Int64?  // nil until first fire
+  public let sessionID: Int64?  // nil until first fire
   public let createdTs: Date  // row creation time (house convention)
   public let updatedTs: Date
 
   public init(
     id: Int64,
-    ownerChatId: Int64,
+    ownerChatID: Int64,
     label: String,
     prompt: String,
     recurrence: RecurrenceEnvelope?,
@@ -85,12 +83,12 @@ public struct ScheduledJob: Sendable, Equatable {
     nextOccurrence: Date?,
     lastFiredAt: Date?,
     status: ScheduledJobStatus,
-    sessionId: Int64?,
+    sessionID: Int64?,
     createdTs: Date,
     updatedTs: Date
   ) {
     self.id = id
-    self.ownerChatId = ownerChatId
+    self.ownerChatID = ownerChatID
     self.label = label
     self.prompt = prompt
     self.recurrence = recurrence
@@ -98,16 +96,16 @@ public struct ScheduledJob: Sendable, Equatable {
     self.nextOccurrence = nextOccurrence
     self.lastFiredAt = lastFiredAt
     self.status = status
-    self.sessionId = sessionId
+    self.sessionID = sessionID
     self.createdTs = createdTs
     self.updatedTs = updatedTs
   }
 }
 
-/// The arm-time insert payload. `ownerChatId` is set in code from the arming chat — never
+/// The arm-time insert payload. `ownerChatID` is set in code from the arming chat — never
 /// model- or prompt-controlled.
 public struct NewScheduledJob: Sendable, Equatable {
-  public let ownerChatId: Int64
+  public let ownerChatID: Int64
   public let label: String
   public let prompt: String
   public let recurrence: RecurrenceEnvelope?
@@ -115,14 +113,14 @@ public struct NewScheduledJob: Sendable, Equatable {
   public let nextOccurrence: Date
 
   public init(
-    ownerChatId: Int64,
+    ownerChatID: Int64,
     label: String,
     prompt: String,
     recurrence: RecurrenceEnvelope?,
     timezone: String,
     nextOccurrence: Date
   ) {
-    self.ownerChatId = ownerChatId
+    self.ownerChatID = ownerChatID
     self.label = label
     self.prompt = prompt
     self.recurrence = recurrence

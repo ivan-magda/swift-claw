@@ -15,32 +15,33 @@ private func voiceUpdate(
   durationSeconds: Int = 8,
   chat: Int64? = nil,
   chatKind: ChatKind = .private,
-  replyToUserId: Int64? = nil
+  replyToUserID: Int64? = nil
 ) -> RawUpdate {
   RawUpdate(
-    updateId: id,
+    updateID: id,
     message: RawMessage(
-      messageId: id,
-      fromUserId: from,
-      chatId: chat ?? from,
+      messageID: id,
+      fromUserID: from,
+      chatID: chat ?? from,
       text: nil,
       caption: nil,
       mediaKind: VoiceAttachment.mediaKindDescription,
       voice: VoiceAttachment(
-        fileId: "voice-\(id)",
+        fileID: "voice-\(id)",
         durationSeconds: durationSeconds,
         mimeType: "audio/ogg",
         fileSizeBytes: 4
       ),
       chatKind: chatKind,
-      replyToMessageId: replyToUserId == nil ? nil : 5,
-      replyToUserId: replyToUserId
+      replyToMessageID: replyToUserID == nil ? nil : 5,
+      replyToUserID: replyToUserID
     ),
     editedMessage: nil
   )
 }
 
-@Suite struct VoiceRoutingTests {
+@Suite
+struct VoiceRoutingTests {
   private struct Harness {
     let router: MessageRouter
     let transport: RecordingTransport
@@ -61,7 +62,7 @@ private func voiceUpdate(
   ) throws -> Harness {
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: allowed)
+    try allowlist.seedAllowlist(userIDs: allowed)
 
     let transport = RecordingTransport()
     let dispatcher = FakeTurnRunner()
@@ -71,15 +72,14 @@ private func voiceUpdate(
 
     let voice: (any VoiceMessageTranscribing)? =
       serviceOverride
-      ?? (voiceEnabled
-        ? VoiceMessageService(
-          fetcher: fetcher,
-          transcriber: transcriber,
-          stagingDirectory: staging,
-          redactor: SecretRedactor(secretValues: []),
-          logger: TestLog.silent
-        )
-        : nil)
+        ?? (voiceEnabled
+          ? VoiceMessageService(
+            fetcher: fetcher,
+            transcriber: transcriber,
+            stagingDirectory: staging,
+            redactor: SecretRedactor(secretValues: []),
+            logger: TestLog.silent
+          ) : nil)
 
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
@@ -112,7 +112,8 @@ private func voiceUpdate(
     )
   }
 
-  @Test func ownerVoiceDispatchesAnUntrustedTurnAndTaintsTheSession() async throws {
+  @Test
+  func ownerVoiceDispatchesAnUntrustedTurnAndTaintsTheSession() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
     defer { try? FileManager.default.removeItem(at: harness.staging) }
@@ -126,19 +127,20 @@ private func voiceUpdate(
     #expect(await harness.transport.sent.isEmpty)
     let call = try #require(await harness.dispatcher.calls.first)
     let snapshot = try harness.sessionMessages.loadContextSnapshot(
-      sessionId: call.sessionId,
-      throughMessageId: call.triggerMessageId,
+      sessionID: call.sessionID,
+      throughMessageID: call.triggerMessageID,
       limit: 10
     )
     #expect(
       snapshot.history == [
-        StoredMessage(role: .user, content: "spoken words", provenance: .untrusted)
+        StoredMessage(role: .user, content: "spoken words", provenance: .untrusted),
       ]
     )
     #expect(snapshot.isTainted)
   }
 
-  @Test func spokenCommandIsNeverParsedAsACommand() async throws {
+  @Test
+  func spokenCommandIsNeverParsedAsACommand() async throws {
     // given — a transcript that reads exactly like /stop
     let harness = try makeHarness(
       allowed: [42],
@@ -156,21 +158,19 @@ private func voiceUpdate(
     #expect(await harness.transport.sent.isEmpty)
   }
 
-  @Test func voiceTranscriptNeverResolvesAParkedConfirmation() async throws {
+  @Test
+  func voiceTranscriptNeverResolvesAParkedConfirmation() async throws {
     // given — a parked yes/no confirmation, and a voice note whose transcript is exactly "yes"
     let harness = try makeHarness(
       allowed: [42],
       transcriber: StubVoiceTranscriber(result: .success("yes"))
     )
     defer { try? FileManager.default.removeItem(at: harness.staging) }
-    let sessionId = try harness.sessionMessages.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+    let sessionID = try harness.sessionMessages.loadOrCreateSession(
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date()
     )
-    await harness.pendingConfirmations.park(
-      .deleteItem(id: 7),
-      sessionId: sessionId
-    )
+    await harness.pendingConfirmations.park(.deleteItem(id: 7), sessionID: sessionID)
 
     // when
     let outcome = await harness.router.handle(rawUpdate: voiceUpdate(id: 1, from: 42))
@@ -179,12 +179,13 @@ private func voiceUpdate(
     // then — machine-derived "yes" commits nothing: the confirmation stays parked and the
     // transcript became an ordinary untrusted turn
     #expect(outcome == .processed)
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) != nil)
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) != nil)
     #expect(await harness.dispatcher.calls.count == 1)
     #expect(await harness.transport.sent.isEmpty)
   }
 
-  @Test func storageFullDuringVoiceHandlingReturnsTheBackoffOutcome() async throws {
+  @Test
+  func storageFullDuringVoiceHandlingReturnsTheBackoffOutcome() async throws {
     // given — a service hitting a full disk while staging
     let harness = try makeHarness(
       allowed: [42],
@@ -203,7 +204,8 @@ private func voiceUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func voiceWithoutAServiceGetsTheCannedUnsupportedReply() async throws {
+  @Test
+  func voiceWithoutAServiceGetsTheCannedUnsupportedReply() async throws {
     // given — transcription off: exactly the pre-feature behavior
     let harness = try makeHarness(allowed: [42], voiceEnabled: false)
     defer { try? FileManager.default.removeItem(at: harness.staging) }
@@ -216,13 +218,14 @@ private func voiceUpdate(
     let sent = await harness.transport.sent
     #expect(
       sent.map(\.text) == [
-        MessageRouter.unsupportedMediaText(kind: VoiceAttachment.mediaKindDescription)
+        MessageRouter.unsupportedMediaText(kind: VoiceAttachment.mediaKindDescription),
       ]
     )
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func strangerVoiceGetsPrivateBotReplyAndNeverDownloads() async throws {
+  @Test
+  func strangerVoiceGetsPrivateBotReplyAndNeverDownloads() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
     defer { try? FileManager.default.removeItem(at: harness.staging) }
@@ -237,7 +240,8 @@ private func voiceUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func strangerVoiceWithTranscriptionDisabledStillGetsPrivateBotReply() async throws {
+  @Test
+  func strangerVoiceWithTranscriptionDisabledStillGetsPrivateBotReply() async throws {
     // given — the access check must outrank the service-availability check
     let harness = try makeHarness(allowed: [42], voiceEnabled: false)
     defer { try? FileManager.default.removeItem(at: harness.staging) }
@@ -251,7 +255,8 @@ private func voiceUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func transcriberFailureGetsItsMappedReplyAndNoTurn() async throws {
+  @Test
+  func transcriberFailureGetsItsMappedReplyAndNoTurn() async throws {
     // given
     let harness = try makeHarness(
       allowed: [42],
@@ -269,7 +274,8 @@ private func voiceUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func overlongVoiceIsRefusedBeforeAnyDownload() async throws {
+  @Test
+  func overlongVoiceIsRefusedBeforeAnyDownload() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
     defer { try? FileManager.default.removeItem(at: harness.staging) }
@@ -284,7 +290,8 @@ private func voiceUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func shutdownCancellationLeavesTheVoiceUpdateUnclaimedForRedelivery() async throws {
+  @Test
+  func shutdownCancellationLeavesTheVoiceUpdateUnclaimedForRedelivery() async throws {
     // given — an engine parked mid-transcription when graceful shutdown cancels the intake task
     let harness = try makeHarness(allowed: [42], transcriber: ParkUntilCancelledTranscriber())
     defer { try? FileManager.default.removeItem(at: harness.staging) }
@@ -307,7 +314,8 @@ private func voiceUpdate(
     #expect(redelivered == .processed)
   }
 
-  @Test func downloadFailureGetsItsMappedReply() async throws {
+  @Test
+  func downloadFailureGetsItsMappedReply() async throws {
     // given
     let harness = try makeHarness(allowed: [42], fetcher: StubMediaFetcher(audio: nil))
 
@@ -320,14 +328,11 @@ private func voiceUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func anUnaddressedGroupVoiceNoteIsNeverDownloadedOrTranscribed() async throws {
+  @Test
+  func anUnaddressedGroupVoiceNoteIsNeverDownloadedOrTranscribed() async throws {
     // given — an attendee talks to the room, not to the bot
     let transcriber = StubVoiceTranscriber()
-    let harness = try makeHarness(
-      allowed: [42],
-      groupChats: [-1_001],
-      transcriber: transcriber
-    )
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001], transcriber: transcriber)
     defer { try? FileManager.default.removeItem(at: harness.staging) }
 
     // when
@@ -343,14 +348,11 @@ private func voiceUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func aGroupVoiceNoteRepliedToTheBotIsTranscribed() async throws {
+  @Test
+  func aGroupVoiceNoteRepliedToTheBotIsTranscribed() async throws {
     // given — the same note, this time sent as a reply to something the bot said
     let transcriber = StubVoiceTranscriber()
-    let harness = try makeHarness(
-      allowed: [42],
-      groupChats: [-1_001],
-      transcriber: transcriber
-    )
+    let harness = try makeHarness(allowed: [42], groupChats: [-1_001], transcriber: transcriber)
     defer { try? FileManager.default.removeItem(at: harness.staging) }
 
     // when
@@ -360,7 +362,7 @@ private func voiceUpdate(
         from: 7,
         chat: -1_001,
         chatKind: .supergroup,
-        replyToUserId: 900
+        replyToUserID: 900
       )
     )
     await harness.dispatcher.waitForCalls(atLeast: 1)

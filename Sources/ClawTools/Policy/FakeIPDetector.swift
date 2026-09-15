@@ -11,9 +11,7 @@ public enum FakeIPDetection: Sendable, Equatable {
 
 /// The probe seam: lets the fetch path and doctor ask "is a fake-IP proxy rewriting DNS right
 /// now?" while tests script the answer.
-public protocol FakeIPDetecting: Sendable {
-  func detect() async -> FakeIPDetection
-}
+public protocol FakeIPDetecting: Sendable { func detect() async -> FakeIPDetection }
 
 /// Behavioral fake-IP fingerprinting. A fake-IP VPN/proxy (mihomo/Clash, sing-box, Surge-style)
 /// intercepts DNS and answers every query from a synthetic pool inside `198.18.0.0/15` — even
@@ -52,7 +50,9 @@ public struct FakeIPDetector: FakeIPDetecting {
       guard
         let addresses = try? await resolver.resolve(host: host),
         addresses.isEmpty == false,
-        addresses.allSatisfy({ SSRFGuard.benchmarkRange.contains($0) })
+        addresses.allSatisfy({
+          SSRFGuard.benchmarkRange.contains($0)
+        })
       else {
         return .inactive
       }

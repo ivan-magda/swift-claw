@@ -100,24 +100,19 @@ public enum OwnerSignal: String, Sendable, Equatable, CaseIterable {
 
   public var feedbackSubjectKind: FeedbackSubjectKind {
     switch self {
-    case .resultUseful, .resultNotUseful, .resultCorrection:
-      .run
-    case .evaluationConfirm, .evaluationDispute:
-      .evaluation
-    case .candidateApprove, .candidateReject, .candidateEdit:
-      .candidate
-    case .promotionRollback:
-      .promotion
+    case .resultUseful, .resultNotUseful, .resultCorrection: .run
+    case .evaluationConfirm, .evaluationDispute: .evaluation
+    case .candidateApprove, .candidateReject, .candidateEdit: .candidate
+    case .promotionRollback: .promotion
     }
   }
 
   /// Whether a tap opens the two-phase free-text flow instead of appending an immediate event.
   public var opensFeedbackChallenge: Bool {
     switch self {
-    case .resultCorrection, .candidateEdit:
-      true
-    case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute,
-      .candidateApprove, .candidateReject, .promotionRollback:
+    case .resultCorrection, .candidateEdit: true
+    case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute, .candidateApprove,
+         .candidateReject, .promotionRollback:
       false
     }
   }

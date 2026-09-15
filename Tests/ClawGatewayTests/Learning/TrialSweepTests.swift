@@ -7,14 +7,13 @@ import Testing
 @testable import ClawData
 @testable import ClawGateway
 
-@Suite struct TrialSweepTests {
-  @Test func periodicSweepDrainsPausedTrialAndReturnsDeadlineRecommendation() async throws {
+@Suite
+struct TrialSweepTests {
+  @Test
+  func periodicSweepDrainsPausedTrialAndReturnsDeadlineRecommendation() async throws {
     // given
     let fixture = try TrialSweepFixture.make()
-    let service = ScheduledLearningService(
-      store: fixture.learning,
-      logger: TestLog.silent
-    )
+    let service = ScheduledLearningService(store: fixture.learning, logger: TestLog.silent)
 
     // when
     let first = await service.reconcileTrials(now: fixture.assignmentDeadline)
@@ -31,10 +30,11 @@ import Testing
     #expect(try fixture.trialState() == .draining)
   }
 
-  @Test func periodicAndBootPassesKeepExactSealingAndOperationOrder() async throws {
+  @Test
+  func periodicAndBootPassesKeepExactSealingAndOperationOrder() async throws {
     // given
     let base = try emptyStore()
-    let identity = trialIdentity(id: 11, jobId: 4)
+    let identity = trialIdentity(id: 11, jobID: 4)
     let reconciliation = TrialReconciliation(
       identity: identity,
       didDrain: false,
@@ -43,9 +43,9 @@ import Testing
     )
     let behavior = RecordingLearningStore.ServiceBehavior(
       identities: [identity],
-      trialResults: [identity.trialId: .reconciled(reconciliation)],
-      unsealedRunIds: [91],
-      handledSealRunIds: [91]
+      trialResults: [identity.trialID: .reconciled(reconciliation)],
+      unsealedRunIDs: [91],
+      handledSealRunIDs: [91]
     )
     let recording = RecordingLearningStore(base: base, serviceBehavior: behavior)
     let service = ScheduledLearningService(store: recording, logger: TestLog.silent)
@@ -63,18 +63,16 @@ import Testing
     await service.sweep(now: Date(timeIntervalSince1970: 11))
 
     // then — operation failure is isolated; the runtime sweep still seals before its trial pass.
-    #expect(
-      recording.serviceCalls
-        == ["operations", "unsealed", "seal:91", "live", "trial:11"]
-    )
+    #expect(recording.serviceCalls == ["operations", "unsealed", "seal:91", "live", "trial:11"])
   }
 
-  @Test func oneTrialFailureDoesNotBlockLaterTrialsAndStaleIsDropped() async throws {
+  @Test
+  func oneTrialFailureDoesNotBlockLaterTrialsAndStaleIsDropped() async throws {
     // given
     let base = try emptyStore()
-    let first = trialIdentity(id: 21, jobId: 5)
-    let stale = trialIdentity(id: 22, jobId: 6)
-    let last = trialIdentity(id: 23, jobId: 7)
+    let first = trialIdentity(id: 21, jobID: 5)
+    let stale = trialIdentity(id: 22, jobID: 6)
+    let last = trialIdentity(id: 23, jobID: 7)
     let expected = TrialReconciliation(
       identity: last,
       didDrain: false,
@@ -83,11 +81,8 @@ import Testing
     )
     let behavior = RecordingLearningStore.ServiceBehavior(
       identities: [first, stale, last],
-      trialResults: [
-        stale.trialId: .stale,
-        last.trialId: .reconciled(expected),
-      ],
-      failingTrialIds: [first.trialId]
+      trialResults: [stale.trialID: .stale, last.trialID: .reconciled(expected)],
+      failingTrialIDs: [first.trialID]
     )
     let recording = RecordingLearningStore(base: base, serviceBehavior: behavior)
     let service = ScheduledLearningService(store: recording, logger: TestLog.silent)
@@ -100,7 +95,8 @@ import Testing
     #expect(recording.serviceCalls == ["live", "trial:21", "trial:22", "trial:23"])
   }
 
-  @Test func trialEnumerationFailureReturnsEmptyWithoutAttemptingAnIdentity() async throws {
+  @Test
+  func trialEnumerationFailureReturnsEmptyWithoutAttemptingAnIdentity() async throws {
     // given
     let recording = RecordingLearningStore(
       base: try emptyStore(),
@@ -125,13 +121,8 @@ private extension TrialSweepTests {
     return ScheduledLearningStoreGRDB(writer: queue)
   }
 
-  func trialIdentity(id: Int64, jobId: Int64) -> LearningTrialIdentity {
-    LearningTrialIdentity(
-      trialId: id,
-      jobId: jobId,
-      epoch: LearningEpoch(1),
-      generation: 1
-    )
+  func trialIdentity(id: Int64, jobID: Int64) -> LearningTrialIdentity {
+    LearningTrialIdentity(trialID: id, jobID: jobID, epoch: LearningEpoch(1), generation: 1)
   }
 }
 
@@ -148,7 +139,7 @@ private struct TrialSweepFixture {
     let admittedAt = deadline.addingTimeInterval(-TrialAdmissionPolicy.assignmentWindow)
     let job = try jobs.create(
       NewScheduledJob(
-        ownerChatId: 777,
+        ownerChatID: 777,
         label: "paused trial",
         prompt: "Summarize the archive",
         recurrence: nil,
@@ -158,12 +149,8 @@ private struct TrialSweepFixture {
       now: admittedAt
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: admittedAt)
-    let identity = try installTrial(
-      queue: queue,
-      state: state,
-      admittedAt: admittedAt
-    )
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobID: job.id, now: admittedAt)
+    let identity = try installTrial(queue: queue, state: state, admittedAt: admittedAt)
     try queue.write { db in
       try db.execute(
         sql: "UPDATE scheduled_jobs SET status = ? WHERE id = ?",
@@ -183,31 +170,31 @@ private struct TrialSweepFixture {
       try String.fetchOne(
         db,
         sql: "SELECT state FROM learning_trials WHERE trial_id = ?",
-        arguments: [identity.trialId]
+        arguments: [identity.trialID]
       ).flatMap(LearningTrialState.init(rawValue:))
     }
   }
 }
 
+// MARK: - Trial Installation
+
 private extension TrialSweepFixture {
-  static func installTrial(
-    queue: DatabaseQueue,
-    state: JobLearningState,
-    admittedAt: Date
-  ) throws -> LearningTrialIdentity {
+  static func installTrial(queue: DatabaseQueue, state: JobLearningState, admittedAt: Date) throws
+    -> LearningTrialIdentity
+  {
     let replacement = try LessonSet.canonical(
-      jobId: state.jobId,
+      jobID: state.jobID,
       lessons: ["Check the archive before answering."]
     )
     let manifest = CandidateSourceManifest(
       origin: .reflection,
       algorithm: .v1,
-      jobId: state.jobId,
+      jobID: state.jobID,
       epoch: state.epoch,
       triggerDigest: TriggerDigest(rawValue: SHA256Digest.hex("sweep-trigger")),
       triggerReason: .ownerCorrection,
       qualifyingIssueCodes: [],
-      operationId: LearningOperationID(rawValue: "sweep-operation"),
+      operationID: LearningOperationID(rawValue: "sweep-operation"),
       carrierDigest: CarrierDigest(rawValue: SHA256Digest.hex("sweep-carrier")),
       resultDigest: ReflectionResultDigest(rawValue: SHA256Digest.hex("sweep-result")),
       baseDigest: state.stableDigest,
@@ -228,13 +215,13 @@ private extension TrialSweepFixture {
       )
       try db.execute(
         sql: """
-          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-            consumed_assignments, cohort_cutoff, state, algorithm)
-          VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
-          """,
+        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+          consumed_assignments, cohort_cutoff, state, algorithm)
+        VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
+        """,
         arguments: [
-          state.jobId,
+          state.jobID,
           state.epoch.value,
           state.stableDigest.rawValue,
           artifact.digest.rawValue,
@@ -251,21 +238,21 @@ private extension TrialSweepFixture {
         ]
       )
       let identity = LearningTrialIdentity(
-        trialId: db.lastInsertedRowID,
-        jobId: state.jobId,
+        trialID: db.lastInsertedRowID,
+        jobID: state.jobID,
         epoch: state.epoch,
         generation: 1
       )
       try ScheduledLearningStoreGRDB.insertDecision(
         db,
         kind: AdmissionReceipt.kind,
-        jobId: state.jobId,
+        jobID: state.jobID,
         epoch: state.epoch,
         inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
         result: AdmissionReceipt(
           candidateDigest: artifact.digest,
           replacementDigest: replacement.digest,
-          trialId: identity.trialId,
+          trialID: identity.trialID,
           generation: identity.generation
         ),
         algorithm: .v1,

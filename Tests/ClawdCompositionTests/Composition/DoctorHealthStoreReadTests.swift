@@ -7,8 +7,10 @@ import Testing
 
 @testable import clawd
 
-@Suite struct DoctorHealthStoreReadTests {
-  @Test func failedStoreReadsProduceFailedRows() throws {
+@Suite
+struct DoctorHealthStoreReadTests {
+  @Test
+  func failedStoreReadsProduceFailedRows() throws {
     // given
     let fixture = try fixture(migrated: false)
     defer { try? FileManager.default.removeItem(at: fixture.config.stateRoot) }
@@ -44,7 +46,8 @@ import Testing
     }
   }
 
-  @Test func successfulEmptyReadsKeepZeroAndEmptyRendering() throws {
+  @Test
+  func successfulEmptyReadsKeepZeroAndEmptyRendering() throws {
     // given
     let fixture = try fixture(migrated: true)
     defer { try? FileManager.default.removeItem(at: fixture.config.stateRoot) }
@@ -67,8 +70,7 @@ import Testing
       "scheduler.last_tick_at": "never",
       "scheduler.due_count": "0",
       "scheduler.last_misfire": "none",
-      "spend.proactive_today_usd":
-        "0.00/\(USD.display(fixture.config.budget.proactivePerDayUSD))",
+      "spend.proactive_today_usd": "0.00/\(USD.display(fixture.config.budget.proactivePerDayUSD))",
       "heartbeat.last": "never",
       "heartbeat.today": "0/\(fixture.config.heartbeatMaxPerDay)",
       "approvals.pending": "0",
@@ -82,12 +84,15 @@ import Testing
   }
 }
 
+// MARK: - Health Store Fixtures
+
 private extension DoctorHealthStoreReadTests {
   func fixture(migrated: Bool) throws -> (stores: ClawStores, config: AppConfig) {
     let config = try AppConfig.load(environment: CompositionAcceptanceHarness.validEnv())
     try FileManager.default.createDirectory(
-      at: EnvironmentLoader.workspaceRoot(config: config)
-        .appendingPathComponent(WorkspaceSkills.directoryName),
+      at: EnvironmentLoader.workspaceRoot(config: config).appendingPathComponent(
+        WorkspaceSkills.directoryName
+      ),
       withIntermediateDirectories: true
     )
     let writer = try ClawDatabase.makeInMemoryQueue()
@@ -133,15 +138,14 @@ private extension DoctorHealthStoreReadTests {
     )
     let checks =
       HealthRowsBuilder.checks(inputs)
-      + DoctorHealth.schedulerChecks(stores: stores, config: config, now: now)
-      + DoctorHealth.approvalChecks(stores: stores, config: config, now: now)
+        + DoctorHealth.schedulerChecks(stores: stores, config: config, now: now)
+        + DoctorHealth.approvalChecks(stores: stores, config: config, now: now)
     return Dictionary(
       checks.map { check in
         (check.key, check)
-      },
-      uniquingKeysWith: { first, _ in
-        first
       }
-    )
+    ) { first, _ in
+      first
+    }
   }
 }

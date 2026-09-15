@@ -22,9 +22,7 @@ enum MCPDiscoveryLimits {
 /// finished `AsyncThrowingStream` cannot reopen — so reconnecting means building a new one. Making
 /// that a seam is also what lets the session suites run a real client against a real SDK server
 /// with no socket in between.
-public protocol MCPTransportFactory: Sendable {
-  func makeTransport() async throws -> any Transport
-}
+public protocol MCPTransportFactory: Sendable { func makeTransport() async throws -> any Transport }
 
 /// The production factory: one Streamable HTTP transport per connection, over the shared HTTP seam.
 public struct MCPStreamableHTTPTransportFactory: MCPTransportFactory {
@@ -58,11 +56,7 @@ public struct MCPToolCallResult: Sendable {
   /// The server's own report that the call failed, which is a result, not a transport failure.
   public let isError: Bool
 
-  public init(
-    content: [MCP.Tool.Content],
-    structuredContent: JSONValue? = nil,
-    isError: Bool
-  ) {
+  public init(content: [MCP.Tool.Content], structuredContent: JSONValue? = nil, isError: Bool) {
     self.content = content
     self.structuredContent = structuredContent
     self.isError = isError
@@ -82,7 +76,7 @@ public struct MCPToolCallResult: Sendable {
 public actor MCPServerSession {
   nonisolated public let config: MCPServerConfig
 
-  private let factory: any MCPTransportFactory
+  private let transportFactory: any MCPTransportFactory
   private let clientVersion: String
   private let logger: Logger
   private let connectAllowance: Duration
@@ -105,7 +99,7 @@ public actor MCPServerSession {
     callAllowance: Duration? = nil
   ) {
     self.config = config
-    self.factory = transportFactory
+    self.transportFactory = transportFactory
     self.clientVersion = clientVersion
     self.logger = logger
     self.connectAllowance = connectAllowance ?? .seconds(config.connectTimeoutSeconds)
@@ -114,9 +108,7 @@ public actor MCPServerSession {
   }
 
   /// Performs the initialize handshake if one is not already live.
-  public func connect() async throws {
-    _ = try await connected()
-  }
+  public func connect() async throws { _ = try await connected() }
 
   /// The server's whole tool list, paged under the discovery caps.
   public func listAllTools() async throws -> [MCP.Tool] {
@@ -136,8 +128,9 @@ public actor MCPServerSession {
       let requested = cursor
       let request =
         requested.map { cursor in
-          ListTools.request(.init(cursor: cursor))
-        } ?? ListTools.request(.init())
+          ListTools.request(ListTools.Parameters(cursor: cursor))
+        }
+        ?? ListTools.request(ListTools.Parameters())
       let cancellation = MCPRequestCancellation()
       let context: RequestContext<ListTools.Result> = try await client.send(request)
       await cancellation.track(client: client, requestID: context.requestID)
@@ -170,10 +163,9 @@ public actor MCPServerSession {
     }
   }
 
-  public func callTool(
-    name: String,
-    arguments: [String: JSONValue]
-  ) async throws -> MCPToolCallResult {
+  public func callTool(name: String, arguments: [String: JSONValue]) async throws
+    -> MCPToolCallResult
+  {
     let payload = arguments.mapValues(MCPValueBridge.value)
     let budget = config.worstCaseCallSeconds
 
@@ -188,9 +180,7 @@ public actor MCPServerSession {
   }
 
   /// Ends the session. The next call opens a fresh one.
-  public func disconnect() async {
-    await teardown()
-  }
+  public func disconnect() async { await teardown() }
 }
 
 /// Where a bounded operation leaves its result for the caller to collect.
@@ -208,21 +198,14 @@ private actor BoundedSlot<Value: Sendable> {
   private var outcome: Outcome = .pending
 
   func run(_ operation: @Sendable () async throws -> Value) async {
-    do {
-      outcome = .completed(try await operation())
-    } catch {
-      outcome = .failed(error)
-    }
+    do { outcome = .completed(try await operation()) } catch { outcome = .failed(error) }
   }
 
   func resolve(orTimingOutWith timeout: MCPSessionError) throws -> Value {
     switch outcome {
-    case .completed(let value):
-      return value
-    case .failed(let error):
-      throw error
-    case .pending:
-      throw timeout
+    case .completed(let value): return value
+    case .failed(let error): throw error
+    case .pending: throw timeout
     }
   }
 }
@@ -280,8 +263,7 @@ private extension MCPServerSession {
     }
 
     switch race {
-    case .operationReturned:
-      return try await slot.resolve(orTimingOutWith: timeout)
+    case .operationReturned: return try await slot.resolve(orTimingOutWith: timeout)
     case .deadlineExpired:
       await cancellation?.cancel()
       throw timeout
@@ -316,7 +298,7 @@ private extension MCPServerSession {
   }
 
   func open() async throws -> Client {
-    let transport = try await factory.makeTransport()
+    let transport = try await transportFactory.makeTransport()
     let client = Client(name: MCPProtocol.clientName, version: clientVersion)
     let budget = config.connectTimeoutSeconds
 
@@ -329,10 +311,7 @@ private extension MCPServerSession {
       }
       logger.debug(
         "MCP session established",
-        metadata: [
-          "server": .string(config.name),
-          "protocol": .string(result.protocolVersion),
-        ]
+        metadata: ["server": .string(config.name), "protocol": .string(result.protocolVersion)]
       )
       return client
     } catch {
@@ -354,11 +333,9 @@ private extension MCPServerSession {
 // MARK: - Calling
 
 private extension MCPServerSession {
-  func attempt(
-    name: String,
-    arguments: [String: Value],
-    cancellation: MCPRequestCancellation
-  ) async throws -> MCPToolCallResult {
+  func attempt(name: String, arguments: [String: Value], cancellation: MCPRequestCancellation)
+    async throws -> MCPToolCallResult
+  {
     do {
       return try await invoke(name: name, arguments: arguments, cancellation: cancellation)
     } catch {
@@ -370,11 +347,9 @@ private extension MCPServerSession {
     }
   }
 
-  func invoke(
-    name: String,
-    arguments: [String: Value],
-    cancellation: MCPRequestCancellation
-  ) async throws -> MCPToolCallResult {
+  func invoke(name: String, arguments: [String: Value], cancellation: MCPRequestCancellation)
+    async throws -> MCPToolCallResult
+  {
     let client = try await connected()
     let context: RequestContext<CallTool.Result> = try await client.callTool(
       name: name,

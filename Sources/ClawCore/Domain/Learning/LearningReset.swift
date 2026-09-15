@@ -6,20 +6,20 @@ public struct LearningResetDecisionInputs: Sendable, Equatable, Codable {
   public let oldStableDigest: LessonSetDigest
   public let oldStableRevision: StableRevision
   public let feedbackRevisionAtCut: FeedbackRevision
-  public let priorOpenTrialId: Int64?
+  public let priorOpenTrialID: Int64?
 
   public init(
     oldEpoch: LearningEpoch,
     oldStableDigest: LessonSetDigest,
     oldStableRevision: StableRevision,
     feedbackRevisionAtCut: FeedbackRevision,
-    priorOpenTrialId: Int64?
+    priorOpenTrialID: Int64?
   ) {
     self.oldEpoch = oldEpoch
     self.oldStableDigest = oldStableDigest
     self.oldStableRevision = oldStableRevision
     self.feedbackRevisionAtCut = feedbackRevisionAtCut
-    self.priorOpenTrialId = priorOpenTrialId
+    self.priorOpenTrialID = priorOpenTrialID
   }
 
   enum CodingKeys: String, CodingKey {
@@ -27,14 +27,14 @@ public struct LearningResetDecisionInputs: Sendable, Equatable, Codable {
     case oldStableDigest = "old_stable_digest"
     case oldStableRevision = "old_stable_revision"
     case feedbackRevisionAtCut = "feedback_revision_at_cut"
-    case priorOpenTrialId = "prior_open_trial_id"
+    case priorOpenTrialID = "prior_open_trial_id"
   }
 }
 
 /// The immutable identity of one live trial closed by a reset barrier.
 public struct ResetTrialIdentity: Sendable, Equatable, Codable {
-  public let trialId: Int64
-  public let jobId: Int64
+  public let trialID: Int64
+  public let jobID: Int64
   public let epoch: LearningEpoch
   public let generation: Int
   public let baseDigest: LessonSetDigest
@@ -42,16 +42,16 @@ public struct ResetTrialIdentity: Sendable, Equatable, Codable {
   public let algorithm: LearningAlgorithm
 
   public init(
-    trialId: Int64,
-    jobId: Int64,
+    trialID: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     generation: Int,
     baseDigest: LessonSetDigest,
     candidateDigest: CandidateDigest,
     algorithm: LearningAlgorithm
   ) {
-    self.trialId = trialId
-    self.jobId = jobId
+    self.trialID = trialID
+    self.jobID = jobID
     self.epoch = epoch
     self.generation = generation
     self.baseDigest = baseDigest
@@ -60,8 +60,8 @@ public struct ResetTrialIdentity: Sendable, Equatable, Codable {
   }
 
   enum CodingKeys: String, CodingKey {
-    case trialId = "trial_id"
-    case jobId = "job_id"
+    case trialID = "trial_id"
+    case jobID = "job_id"
     case epoch = "learning_epoch"
     case generation
     case baseDigest = "base_digest"
@@ -78,8 +78,8 @@ public struct LearningResetDecisionResult: Sendable, Equatable, Codable {
   public let closedTrials: [ResetTrialIdentity]
   public let invalidatedTargetCount: Int
   public let invalidatedChallengeCount: Int
-  public let staleNoCallOperationIds: [LearningOperationID]
-  public let inFlightOperationIds: [LearningOperationID]
+  public let staleNoCallOperationIDs: [LearningOperationID]
+  public let inFlightOperationIDs: [LearningOperationID]
 
   public init(  // swiftlint:disable:this function_parameter_count
     newEpoch: LearningEpoch,
@@ -88,8 +88,8 @@ public struct LearningResetDecisionResult: Sendable, Equatable, Codable {
     closedTrials: [ResetTrialIdentity],
     invalidatedTargetCount: Int,
     invalidatedChallengeCount: Int,
-    staleNoCallOperationIds: [LearningOperationID],
-    inFlightOperationIds: [LearningOperationID]
+    staleNoCallOperationIDs: [LearningOperationID],
+    inFlightOperationIDs: [LearningOperationID]
   ) {
     self.newEpoch = newEpoch
     self.emptyStableDigest = emptyStableDigest
@@ -97,8 +97,8 @@ public struct LearningResetDecisionResult: Sendable, Equatable, Codable {
     self.closedTrials = closedTrials
     self.invalidatedTargetCount = invalidatedTargetCount
     self.invalidatedChallengeCount = invalidatedChallengeCount
-    self.staleNoCallOperationIds = staleNoCallOperationIds
-    self.inFlightOperationIds = inFlightOperationIds
+    self.staleNoCallOperationIDs = staleNoCallOperationIDs
+    self.inFlightOperationIDs = inFlightOperationIDs
   }
 
   enum CodingKeys: String, CodingKey {
@@ -108,8 +108,8 @@ public struct LearningResetDecisionResult: Sendable, Equatable, Codable {
     case closedTrials = "closed_trials"
     case invalidatedTargetCount = "invalidated_target_count"
     case invalidatedChallengeCount = "invalidated_challenge_count"
-    case staleNoCallOperationIds = "stale_no_call_operation_ids"
-    case inFlightOperationIds = "in_flight_operation_ids"
+    case staleNoCallOperationIDs = "stale_no_call_operation_ids"
+    case inFlightOperationIDs = "in_flight_operation_ids"
   }
 }
 
@@ -117,23 +117,23 @@ public struct LearningResetDecisionResult: Sendable, Equatable, Codable {
 public struct ResetReceipt: Sendable, Equatable {
   public static let kind = "learning_reset"
 
-  public let decisionId: Int64
-  public let jobId: Int64
+  public let decisionID: Int64
+  public let jobID: Int64
   public let algorithm: LearningAlgorithm
   public let decidedAt: Date
   public let inputs: LearningResetDecisionInputs
   public let result: LearningResetDecisionResult
 
   public init(
-    decisionId: Int64,
-    jobId: Int64,
+    decisionID: Int64,
+    jobID: Int64,
     algorithm: LearningAlgorithm,
     decidedAt: Date,
     inputs: LearningResetDecisionInputs,
     result: LearningResetDecisionResult
   ) {
-    self.decisionId = decisionId
-    self.jobId = jobId
+    self.decisionID = decisionID
+    self.jobID = jobID
     self.algorithm = algorithm
     self.decidedAt = decidedAt
     self.inputs = inputs
@@ -168,9 +168,6 @@ public struct ConfirmedLearningResetResult: Sendable, Equatable {
 
 /// The narrow seam used by confirmation resolution to claim and apply a reset atomically.
 public protocol LearningResetApplying: Sendable {
-  func applyReset(
-    updateId: Int64,
-    jobId: Int64,
-    now: Date
-  ) throws(StoreError) -> ConfirmedLearningResetResult
+  func applyReset(updateID: Int64, jobID: Int64, now: Date) throws(StoreError)
+    -> ConfirmedLearningResetResult
 }

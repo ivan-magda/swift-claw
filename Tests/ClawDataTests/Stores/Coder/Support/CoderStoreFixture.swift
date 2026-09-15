@@ -40,13 +40,7 @@ struct CoderStoreFixture: Sendable {
   }
 
   func admit(id: UUID, limit: Int) throws -> CoderAdmission {
-    try store.admit(
-      id: id,
-      prepared: prepared,
-      origin: origin,
-      maxConcurrentJobs: limit,
-      now: now
-    )
+    try store.admit(id: id, prepared: prepared, origin: origin, maxConcurrentJobs: limit, now: now)
   }
 }
 
@@ -134,10 +128,10 @@ extension CoderStoreFixture {
       chunks: [
         OutboxChunk(
           stepIndex: 0,
-          chatId: -999,
+          chatID: -999,
           payload: "Coder report",
           payloadHash: ContentHash.fnv1a("Coder report")
-        )
+        ),
       ],
       releaseReservation: release,
       now: now

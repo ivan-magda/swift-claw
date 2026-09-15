@@ -41,9 +41,7 @@ struct AuthAcceptanceWorld: Sendable {
 
   /// The scripted transport shared by every real client the workflow drives, so a test can read the
   /// exact wire URLs that were reached — the proof that device egress happened (or did not).
-  func makeHTTP() -> RecordingHTTPExecutor {
-    RecordingHTTPExecutor(responses: responses)
-  }
+  func makeHTTP() -> RecordingHTTPExecutor { RecordingHTTPExecutor(responses: responses) }
 
   private var makeCredentialStore: @Sendable () -> any LLMCredentialStore {
     let stateRoot = root
@@ -59,7 +57,9 @@ struct AuthAcceptanceWorld: Sendable {
 
   func loginWorkflow(http: RecordingHTTPExecutor) -> AuthLoginWorkflow {
     let identity = profileID
-    let wallDate: @Sendable () -> Date = { AcceptanceAuthFixture.wallNow }
+    let wallDate: @Sendable () -> Date = {
+      AcceptanceAuthFixture.wallNow
+    }
     return AuthLoginWorkflow(
       bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
       runtimeSecrets: RealRuntimeSecrets(stateRoot: root, environment: environment, log: log),
@@ -76,7 +76,9 @@ struct AuthAcceptanceWorld: Sendable {
       tokenExchange: ChatGPTOAuthClient(http: http, wallDate: wallDate),
       catalog: ChatGPTModelCatalog(http: http),
       terminal: terminal,
-      profileID: { identity }
+      profileID: {
+        identity
+      }
     )
   }
 
@@ -84,7 +86,9 @@ struct AuthAcceptanceWorld: Sendable {
     AuthStatusWorkflow(
       bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
       makeCredentialStore: makeCredentialStore,
-      wallDate: { AcceptanceAuthFixture.wallNow }
+      wallDate: {
+        AcceptanceAuthFixture.wallNow
+      }
     )
   }
 
@@ -92,14 +96,16 @@ struct AuthAcceptanceWorld: Sendable {
   /// successful login would have.
   func seedPriorLogin() throws {
     _ = try RuntimeSecretPreparer.prepare(stateRoot: root, environment: environment)
-    try EncryptedLLMCredentialStore(stateRoot: root)
-      .save(AcceptanceAuthFixture.priorCredential, providerID: .openAIChatGPT)
+    try EncryptedLLMCredentialStore(stateRoot: root).save(
+      AcceptanceAuthFixture.priorCredential,
+      providerID: .openAIChatGPT
+    )
   }
 }
 
 func withAuthAcceptanceWorld<Value>(
   _ prefix: String,
-  _ body: (inout AuthAcceptanceWorld) async throws -> Value
+  _ body: (_ world: inout AuthAcceptanceWorld) async throws -> Value
 ) async throws -> Value {
   let root = try makeTemporaryRoot(prefix: prefix)
   defer { try? FileManager.default.removeItem(at: root) }

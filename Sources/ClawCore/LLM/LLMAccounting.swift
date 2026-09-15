@@ -6,21 +6,15 @@ import Foundation
 public struct ProviderCallID: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
-public protocol ProviderCallIDGenerating: Sendable {
-  func next() -> ProviderCallID
-}
+public protocol ProviderCallIDGenerating: Sendable { func next() -> ProviderCallID }
 
 public struct UUIDProviderCallIDGenerator: ProviderCallIDGenerating {
   public init() {}
 
-  public func next() -> ProviderCallID {
-    ProviderCallID(rawValue: UUID().uuidString.lowercased())
-  }
+  public func next() -> ProviderCallID { ProviderCallID(rawValue: UUID().uuidString.lowercased()) }
 }
 
 // MARK: - Cost policy
@@ -43,8 +37,7 @@ public enum LLMInputReservationPolicy: Sendable, Equatable {
     let imageTokens = Self.visualTokens(for: messages)
 
     switch self {
-    case .textOnly:
-      return imageTokens
+    case .textOnly: return imageTokens
     case .replayState(let tokensPerByte, let framingTokensPerState, let aggregateByteCap):
       return SaturatingArithmetic.sum(
         imageTokens,

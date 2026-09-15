@@ -2,7 +2,8 @@ import ClawCore
 import Foundation
 import Testing
 
-@Suite struct ResolvedAddressTests {
+@Suite
+struct ResolvedAddressTests {
   @Test(arguments: ["198.18.0.84", "10.0.0.5", "169.254.169.254", "2001:db8::1", "::1", "fe80::1"])
   func rendersParsedLiteralBackToText(_ text: String) throws {
     // given
@@ -15,9 +16,16 @@ import Testing
 
   @Test(arguments: [
     // canonical literals
-    "198.18.0.84", "10.0.0.5", "::1", "2001:db8::1",
+    "198.18.0.84",
+    "10.0.0.5",
+    "::1",
+    "2001:db8::1",
     // legacy numeric IPv4 spellings getaddrinfo resolves without DNS
-    "3323068500", "0xC6120054", "198.18.0.84", "198.18", "0300.0030.0000.0124",
+    "3323068500",
+    "0xC6120054",
+    "198.18.0.84",
+    "198.18",
+    "0300.0030.0000.0124",
   ])
   func denotesIPLiteralAcceptsEveryNumericHostForm(_ host: String) {
     // given / when / then — the classifier must catch the forms strict inet_pton misses, so a

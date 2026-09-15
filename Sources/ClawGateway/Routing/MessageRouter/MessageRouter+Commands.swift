@@ -3,12 +3,9 @@ import ClawCore
 // MARK: - Control Routing
 
 extension MessageRouter {
-  func routeText(
-    _ text: String,
-    rawUpdate: RawUpdate,
-    message: IncomingMessage,
-    mode: ChatMode
-  ) async throws(RoutingHalt) -> HandleOutcome {
+  func routeText(_ text: String, rawUpdate: RawUpdate, message: IncomingMessage, mode: ChatMode)
+    async throws(RoutingHalt) -> HandleOutcome
+  {
     if mode == .direct, let feedbackChallenges {
       let consumed = try await feedbackChallenges.consumeIfOpen(
         rawUpdate: rawUpdate,
@@ -22,19 +19,19 @@ extension MessageRouter {
     return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
   }
 
-  func routeCallback(_ callback: RawCallback, updateId: Int64) async -> HandleOutcome {
+  func routeCallback(_ callback: RawCallback, updateID: Int64) async -> HandleOutcome {
     if FeedbackKeyboard.belongsToDomain(callback.data) {
       guard let feedbackCallbacks else {
-        logger.debug("feedback callback update \(updateId) with no handler, skipping")
+        logger.debug("feedback callback update \(updateID) with no handler, skipping")
         return .skipped
       }
-      return await feedbackCallbacks.handle(callback, updateId: updateId)
+      return await feedbackCallbacks.handle(callback, updateID: updateID)
     }
     guard let approvalCallbacks else {
-      logger.debug("callback update \(updateId) with no approval handler, skipping")
+      logger.debug("callback update \(updateID) with no approval handler, skipping")
       return .skipped
     }
-    return await approvalCallbacks.handle(callback, updateId: updateId)
+    return await approvalCallbacks.handle(callback, updateID: updateID)
   }
 }
 
@@ -54,7 +51,7 @@ private extension MessageRouter {
     // confirmation: with nothing parked, the next plain line in the topic is only ever a message.
     if mode == .group, command.isDirectOnly {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
+        updateID: rawUpdate.updateID,
         target: .reply(to: message, mode: mode),
         text: CommandReplies.directOnly
       )
@@ -63,13 +60,13 @@ private extension MessageRouter {
     switch command {
     case .start:
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
+        updateID: rawUpdate.updateID,
         target: .reply(to: message, mode: mode),
         text: Self.welcomeText
       )
     case .help:
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
+        updateID: rawUpdate.updateID,
         target: .reply(to: message, mode: mode),
         text: CommandReplies.help(mode: mode)
       )
@@ -77,8 +74,7 @@ private extension MessageRouter {
       return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: nil)
     case .mcp:
       return await sendHealth(rawUpdate: rawUpdate, message: message, mode: mode, section: .mcp)
-    case .skills:
-      return await sendSkills(rawUpdate: rawUpdate, message: message, mode: mode)
+    case .skills: return await sendSkills(rawUpdate: rawUpdate, message: message, mode: mode)
     case .stop:
       return try await commandHandlers.stop(rawUpdate: rawUpdate, message: message, mode: mode)
     case .new:
@@ -100,30 +96,18 @@ private extension MessageRouter {
     case .schedule(let scheduleCommand):
       return try await routeSchedule(scheduleCommand, rawUpdate: rawUpdate, message: message)
     case .learning(let learningCommand):
-      return try await routeLearning(
-        learningCommand,
-        rawUpdate: rawUpdate,
-        message: message
-      )
-    case .pause(let jobId):
-      return try await scheduleHandlers.pause(rawUpdate: rawUpdate, message: message, jobId: jobId)
-    case .resume(let jobId):
-      return try await scheduleHandlers.resume(
-        rawUpdate: rawUpdate,
-        message: message,
-        jobId: jobId
-      )
-    case .runNow(let jobId):
-      return try await scheduleHandlers.runNow(
-        rawUpdate: rawUpdate,
-        message: message,
-        jobId: jobId
-      )
-    case .cancelJob(let jobId):
+      return try await routeLearning(learningCommand, rawUpdate: rawUpdate, message: message)
+    case .pause(let jobID):
+      return try await scheduleHandlers.pause(rawUpdate: rawUpdate, message: message, jobID: jobID)
+    case .resume(let jobID):
+      return try await scheduleHandlers.resume(rawUpdate: rawUpdate, message: message, jobID: jobID)
+    case .runNow(let jobID):
+      return try await scheduleHandlers.runNow(rawUpdate: rawUpdate, message: message, jobID: jobID)
+    case .cancelJob(let jobID):
       return try await scheduleHandlers.cancelJob(
         rawUpdate: rawUpdate,
         message: message,
-        jobId: jobId
+        jobID: jobID
       )
     case .plain(let plainText):
       return try await routePlain(plainText, rawUpdate: rawUpdate, message: message, mode: mode)
@@ -141,7 +125,7 @@ private extension MessageRouter {
   ) async -> HandleOutcome {
     let report = await doctor.report()
     return await replies.sendCanned(
-      updateId: rawUpdate.updateId,
+      updateID: rawUpdate.updateID,
       target: .reply(to: message, mode: mode),
       text: section.map(report.renderTelegramGroup) ?? report.renderTelegramSummary()
     )
@@ -149,15 +133,13 @@ private extension MessageRouter {
 
   /// A fresh scan on every request keeps the owner view aligned with the workspace on disk. The
   /// router only renders it; scanning and presentation remain owned by their existing seams.
-  func sendSkills(
-    rawUpdate: RawUpdate,
-    message: IncomingMessage,
-    mode: ChatMode
-  ) async -> HandleOutcome {
+  func sendSkills(rawUpdate: RawUpdate, message: IncomingMessage, mode: ChatMode) async
+    -> HandleOutcome
+  {
     let scan = await doctor.scanSkills()
     let diagnostics = SkillDiagnostics(scan: scan, skillsCap: ContextBudget.default.skillsCap)
     return await replies.sendCanned(
-      updateId: rawUpdate.updateId,
+      updateID: rawUpdate.updateID,
       target: .reply(to: message, mode: mode),
       text: diagnostics.render()
     )
@@ -171,20 +153,17 @@ private extension MessageRouter {
     switch scheduleCommand {
     case .create(let text):
       return try await scheduleHandlers.create(rawUpdate: rawUpdate, message: message, text: text)
-    case .list:
-      return try await scheduleHandlers.list(rawUpdate: rawUpdate, chatId: message.chatId)
+    case .list: return try await scheduleHandlers.list(rawUpdate: rawUpdate, chatID: message.chatID)
     }
   }
 
-  func routeLearning(
-    _ command: LearningCommand,
-    rawUpdate: RawUpdate,
-    message: IncomingMessage
-  ) async throws(RoutingHalt) -> HandleOutcome {
+  func routeLearning(_ command: LearningCommand, rawUpdate: RawUpdate, message: IncomingMessage)
+    async throws(RoutingHalt) -> HandleOutcome
+  {
     guard let learningHandlers else {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
         text: CommandReplies.learningUnavailable
       )
     }
@@ -197,12 +176,9 @@ private extension MessageRouter {
   /// A room skips the offer outright instead of being trusted to come up empty. Nothing can park
   /// there — all families that park are refused in `routeAllowed` — and skipping keeps it that
   /// way even if another one is ever added: a "yes" typed in a topic is just a word.
-  func routePlain(
-    _ text: String,
-    rawUpdate: RawUpdate,
-    message: IncomingMessage,
-    mode: ChatMode
-  ) async throws(RoutingHalt) -> HandleOutcome {
+  func routePlain(_ text: String, rawUpdate: RawUpdate, message: IncomingMessage, mode: ChatMode)
+    async throws(RoutingHalt) -> HandleOutcome
+  {
     if mode == .direct {
       let resolved = try await confirmations.resolve(
         rawUpdate: rawUpdate,

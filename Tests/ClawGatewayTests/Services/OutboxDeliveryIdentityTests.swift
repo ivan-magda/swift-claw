@@ -9,15 +9,14 @@ import Testing
 
 /// The delivery identity moved off the run and onto the row's own `dedup_key`, so a message that
 /// belongs to no run can be enqueued, sent and recorded like any other.
-@Suite struct OutboxDeliveryIdentityTests {
-  @Test func aLearningNoticeSurvivesInsertSendAndRestartWithoutDuplicating() async throws {
+@Suite
+struct OutboxDeliveryIdentityTests {
+  @Test
+  func aLearningNoticeSurvivesInsertSendAndRestartWithoutDuplicating() async throws {
     // given — a notice row with no run
     let queue = try TestDatabase.make()
     let outbox = OutboxStoreGRDB(writer: queue)
-    try OutboxFixture.seedNotice(
-      in: queue,
-      chunk: Self.notice(subjectDigest: "abc", ordinal: 0)
-    )
+    try OutboxFixture.seedNotice(in: queue, chunk: Self.notice(subjectDigest: "abc", ordinal: 0))
     let transport = RecordingTransport()
 
     // when — the dispatcher drains, then the process restarts and drains again
@@ -39,16 +38,15 @@ private extension OutboxDeliveryIdentityTests {
     LearningNoticeChunk(
       subjectDigest: subjectDigest,
       ordinal: ordinal,
-      chatId: 42,
+      chatID: 42,
       payload: "candidate ready",
       payloadHash: "hash"
     )
   }
 
-  static func dispatcher(
-    outbox: OutboxStoreGRDB,
-    transport: RecordingTransport
-  ) -> OutboxDispatcher<ContinuousClock> {
+  static func dispatcher(outbox: OutboxStoreGRDB, transport: RecordingTransport)
+    -> OutboxDispatcher<ContinuousClock>
+  {
     OutboxDispatcher(
       outbox: outbox,
       delivery: transport,

@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct DoctorReportTests {
-  @Test func okWhenAllChecksPass() {
+@Suite
+struct DoctorReportTests {
+  @Test
+  func okWhenAllChecksPass() {
     // given
     var report = DoctorReport()
 
@@ -17,7 +19,8 @@ import Testing
     #expect(report.ok)
   }
 
-  @Test func failsIfAnyCheckFails() {
+  @Test
+  func failsIfAnyCheckFails() {
     // given
     var report = DoctorReport()
 
@@ -29,7 +32,8 @@ import Testing
     #expect(report.ok == false)
   }
 
-  @Test func textRenderShowsGroupHeaderAndKeys() {
+  @Test
+  func textRenderShowsGroupHeaderAndKeys() {
     // given
     var report = DoctorReport()
     report.add(key: "config", value: "OK", group: .config)
@@ -42,7 +46,8 @@ import Testing
     #expect(text.contains("config"))
   }
 
-  @Test func passingGroupRendersRollupWithoutRowMarkers() {
+  @Test
+  func passingGroupRendersRollupWithoutRowMarkers() {
     // given
     var report = DoctorReport()
     report.add(key: "config", value: "OK", group: .config)
@@ -56,7 +61,8 @@ import Testing
     #expect(!text.contains("✗"))
   }
 
-  @Test func failingRowMarksRowAndGroupHeaderRollup() {
+  @Test
+  func failingRowMarksRowAndGroupHeaderRollup() {
     // given
     var report = DoctorReport()
     report.add(key: "spend.today_usd", value: "0.0", group: .spend)
@@ -70,7 +76,8 @@ import Testing
     #expect(text.contains("✗ spend.remaining_day_usd"))
   }
 
-  @Test func keyColumnIsAlignedPerGroupNotGlobally() {
+  @Test
+  func keyColumnIsAlignedPerGroupNotGlobally() {
     // given: a short-key group and a group with a much wider key
     var report = DoctorReport()
     report.add(key: "config", value: "OK", group: .config)
@@ -83,7 +90,8 @@ import Testing
     #expect(text.contains("    config  OK"))
   }
 
-  @Test func groupsRenderInCanonicalOrderNotInsertionOrder() throws {
+  @Test
+  func groupsRenderInCanonicalOrderNotInsertionOrder() throws {
     // given
     var report = DoctorReport()
     report.add(key: "sandbox.available", value: "true", group: .sandbox)
@@ -98,7 +106,8 @@ import Testing
     #expect(configIndex < sandboxIndex)
   }
 
-  @Test func emptyGroupsAreOmitted() {
+  @Test
+  func emptyGroupsAreOmitted() {
     // given
     var report = DoctorReport()
     report.add(key: "config", value: "OK", group: .config)
@@ -112,7 +121,8 @@ import Testing
     #expect(!text.contains("Spend"))
   }
 
-  @Test func llmRunsGroupUsesFriendlyTitleAndSnakeCaseJSON() {
+  @Test
+  func llmRunsGroupUsesFriendlyTitleAndSnakeCaseJSON() {
     // given
     var report = DoctorReport()
     report.add(key: "llm.last_success", value: "never", group: .llmRuns)
@@ -126,7 +136,8 @@ import Testing
     #expect(json.contains("\"llm_runs\""))
   }
 
-  @Test func telegramSummaryReportsHealthyPerGroup() {
+  @Test
+  func telegramSummaryReportsHealthyPerGroup() {
     // given
     var report = DoctorReport()
     report.add(key: "config", value: "OK", group: .config)
@@ -142,7 +153,8 @@ import Testing
     #expect(!summary.contains("FAIL"))
   }
 
-  @Test func telegramSummaryExpandsFailingRowsUnderTheirGroup() {
+  @Test
+  func telegramSummaryExpandsFailingRowsUnderTheirGroup() {
     // given
     var report = DoctorReport()
     report.add(key: "spend.today_usd", value: "0.0", group: .spend)
@@ -157,7 +169,8 @@ import Testing
     #expect(summary.contains("  spend.remaining_day_usd: 0.00"))
   }
 
-  @Test func telegramSummaryPluralizesFailingCount() {
+  @Test
+  func telegramSummaryPluralizesFailingCount() {
     // given
     var report = DoctorReport()
     report.add(key: "spend.remaining_day_usd", value: "0.00", ok: false, group: .spend)
@@ -170,7 +183,8 @@ import Testing
     #expect(summary.contains("2 checks failing"))
   }
 
-  @Test func telegramSummaryShowsHeadlineValuesOnHealthyGroupLines() {
+  @Test
+  func telegramSummaryShowsHeadlineValuesOnHealthyGroupLines() {
     // given — consecutive_failures is dynamic signal, streaming is static config
     var report = DoctorReport()
     report.add(key: "llm.consecutive_failures", value: "3", group: .llmRuns, headline: true)
@@ -184,7 +198,8 @@ import Testing
     #expect(!summary.contains("streaming"))
   }
 
-  @Test func telegramSummaryDoesNotRepeatFailingRowsInTheHeadline() {
+  @Test
+  func telegramSummaryDoesNotRepeatFailingRowsInTheHeadline() {
     // given
     var report = DoctorReport()
     report.add(
@@ -204,7 +219,8 @@ import Testing
     #expect(!summary.contains("FAIL · remaining_day_usd"))
   }
 
-  @Test func telegramSummaryTruncatesLongFailingValues() {
+  @Test
+  func telegramSummaryTruncatesLongFailingValues() {
     // given
     var report = DoctorReport()
     let longValue = String(repeating: "x", count: 500)
@@ -218,7 +234,8 @@ import Testing
     #expect(summary.contains("…"))
   }
 
-  @Test func telegramGroupRendersEveryRowOfThatGroupAndNothingElse() {
+  @Test
+  func telegramGroupRendersEveryRowOfThatGroupAndNothingElse() {
     // given
     var report = DoctorReport()
     report.add(key: "db.writable", value: "true", group: .database)
@@ -235,7 +252,8 @@ import Testing
     #expect(text.contains("db.writable") == false)
   }
 
-  @Test func telegramGroupMarksFailingRowsAndTruncatesLongValues() {
+  @Test
+  func telegramGroupMarksFailingRowsAndTruncatesLongValues() {
     // given
     var report = DoctorReport()
     let longValue = String(repeating: "x", count: 500)
@@ -251,7 +269,8 @@ import Testing
     #expect(text.contains("…"))
   }
 
-  @Test func telegramGroupSaysSoWhenTheGroupHasNoRows() {
+  @Test
+  func telegramGroupSaysSoWhenTheGroupHasNoRows() {
     // given — a report built before the subsystem reported anything.
     let report = DoctorReport()
 
@@ -259,7 +278,8 @@ import Testing
     #expect(report.renderTelegramGroup(.mcp) == "MCP: nothing reported")
   }
 
-  @Test func jsonIncludesGroupAndTopLevelOk() {
+  @Test
+  func jsonIncludesGroupAndTopLevelOk() {
     // given
     var report = DoctorReport()
     report.add(key: "config", value: "OK", group: .config)
@@ -275,13 +295,11 @@ import Testing
     #expect(json.contains("\"ok\""))
   }
 
-  @Test func jsonPreservesEverySkillHealthField() throws {
+  @Test
+  func jsonPreservesEverySkillHealthField() throws {
     // given
     let diagnostics = SkillDiagnostics(
-      scan: SkillScanResult(
-        descriptors: [],
-        warnings: [.invalidSkillManifest(skill: "broken")]
-      ),
+      scan: SkillScanResult(descriptors: [], warnings: [.invalidSkillManifest(skill: "broken")]),
       skillsCap: ContextBudget.default.skillsCap
     )
     var report = DoctorReport()
@@ -290,7 +308,11 @@ import Testing
     // when
     let data = try #require(report.renderJSON().data(using: .utf8))
     let payload = try JSONDecoder().decode(DoctorJSONPayload.self, from: data)
-    let row = try #require(payload.checks.first { $0.key == "context.skills" })
+    let row = try #require(
+      payload.checks.first {
+        $0.key == "context.skills"
+      }
+    )
 
     // then
     #expect(row.value.contains("accepted=0"))
@@ -302,6 +324,4 @@ import Testing
   }
 }
 
-private struct DoctorJSONPayload: Decodable {
-  let checks: [DoctorReport.Check]
-}
+private struct DoctorJSONPayload: Decodable { let checks: [DoctorReport.Check] }

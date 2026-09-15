@@ -23,8 +23,8 @@ extension AgentRuntime {
     _ error: any Error,
     callID: ProviderCallID,
     context: [ChatMessage],
-    runId: Int64,
-    sessionId: Int64,
+    runID: Int64,
+    sessionID: Int64,
     accountant: ProviderUsageAccountant,
     degradationKind: DegradationKind
   ) -> TurnResult {
@@ -37,8 +37,8 @@ extension AgentRuntime {
           callID: callID,
           context: context,
           tools: toolDefinitions,
-          runId: runId,
-          sessionId: sessionId
+          runID: runID,
+          sessionID: sessionID
         )
       )
     }
@@ -51,8 +51,8 @@ extension AgentRuntime {
           context: context,
           tools: toolDefinitions,
           observedCompletionTokens: cancellation.observedCompletionTokens,
-          runId: runId,
-          sessionId: sessionId
+          runID: runID,
+          sessionID: sessionID
         )
       )
     }
@@ -62,8 +62,7 @@ extension AgentRuntime {
     }
 
     switch ProviderFailureAccounting.classify(error) {
-    case .notStarted:
-      return .degraded(degradationKind, usage: nil)
+    case .notStarted: return .degraded(degradationKind, usage: nil)
     case .mayHaveStarted(let observedCompletionTokens):
       return .degraded(
         degradationKind,
@@ -72,8 +71,8 @@ extension AgentRuntime {
           context: context,
           tools: toolDefinitions,
           observedCompletionTokens: observedCompletionTokens,
-          runId: runId,
-          sessionId: sessionId
+          runID: runID,
+          sessionID: sessionID
         )
       )
     }
@@ -88,8 +87,8 @@ extension AgentRuntime {
     response: ChatResponse,
     callID: ProviderCallID,
     context: [ChatMessage],
-    runId: Int64,
-    sessionId: Int64,
+    runID: Int64,
+    sessionID: Int64,
     accountant: ProviderUsageAccountant
   ) -> TurnResult {
     let usage = accountant.reconciledRow(
@@ -97,8 +96,8 @@ extension AgentRuntime {
       callID: callID,
       context: context,
       tools: toolDefinitions,
-      runId: runId,
-      sessionId: sessionId
+      runID: runID,
+      sessionID: sessionID
     )
 
     if !response.content.isEmpty {

@@ -5,25 +5,18 @@ import GRDB
 // MARK: - Confirmed Reset
 
 extension ScheduledLearningStoreGRDB {
-  public func applyReset(
-    updateId: Int64,
-    jobId: Int64,
-    now: Date
-  ) throws(StoreError) -> ConfirmedLearningResetResult {
+  public func applyReset(updateID: Int64, jobID: Int64, now: Date) throws(StoreError)
+    -> ConfirmedLearningResetResult
+  {
     try database.writeMapping { db in
-      guard
-        try ProcessedUpdateStoreGRDB.claimUpdate(
-          db: db,
-          updateId: updateId,
-          claimedAt: now
-        )
+      guard try ProcessedUpdateStoreGRDB.claimUpdate(db: db, updateID: updateID, claimedAt: now)
       else {
         return .duplicate
       }
-      guard let job = try Self.resetJob(db, jobId: jobId) else {
+      guard let job = try Self.resetJob(db, jobID: jobID) else {
         return .claimed(.notFound)
       }
-      guard let state = try Self.readState(db, jobId: jobId) else {
+      guard let state = try Self.readState(db, jobID: jobID) else {
         return .claimed(.unarmed)
       }
       if let receipt = try Self.cleanResetReceipt(db, state: state) {
@@ -39,8 +32,8 @@ extension ScheduledLearningStoreGRDB {
 
 private extension ScheduledLearningStoreGRDB {
   struct ResetJob {
-    let jobId: Int64
-    let sessionId: Int64?
+    let jobID: Int64
+    let sessionID: Int64?
   }
 
   struct ResetOperationPlan {
@@ -49,18 +42,18 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   struct ResetAuditProjection: Encodable {
-    let decisionId: Int64
+    let decisionID: Int64
     let kind: String
-    let jobId: Int64
+    let jobID: Int64
     let algorithm: LearningAlgorithm
     let decidedAt: Int64
     let inputs: LearningResetDecisionInputs
     let result: LearningResetDecisionResult
 
     enum CodingKeys: String, CodingKey {
-      case decisionId = "decision_id"
+      case decisionID = "decision_id"
       case kind
-      case jobId = "job_id"
+      case jobID = "job_id"
       case algorithm
       case decidedAt = "decided_at"
       case inputs
@@ -68,33 +61,30 @@ private extension ScheduledLearningStoreGRDB {
     }
   }
 
-  static func resetJob(_ db: Database, jobId: Int64) throws -> ResetJob? {
+  static func resetJob(_ db: Database, jobID: Int64) throws -> ResetJob? {
     guard
       let row = try Row.fetchOne(
         db,
         sql: "SELECT id, session_id FROM scheduled_jobs WHERE id = ?",
-        arguments: [jobId]
+        arguments: [jobID]
       )
     else {
       return nil
     }
     guard
-      SQLiteStoredValue.int64(in: row, column: "id") == jobId,
-      let sessionId = SQLiteStoredValue.nullableInt64(in: row, column: "session_id")
+      SQLiteStoredValue.int64(in: row, column: "id") == jobID,
+      let sessionID = SQLiteStoredValue.nullableInt64(in: row, column: "session_id")
     else {
       throw StoreError.unexpected("scheduled job is unreadable for learning reset")
     }
-    return ResetJob(jobId: jobId, sessionId: sessionId.value)
+    return ResetJob(jobID: jobID, sessionID: sessionID.value)
   }
 
-  static func applyReset(
-    _ db: Database,
-    job: ResetJob,
-    state: JobLearningState,
-    now: Date
-  ) throws -> ResetReceipt {
+  static func applyReset(_ db: Database, job: ResetJob, state: JobLearningState, now: Date) throws
+    -> ResetReceipt
+  {
     try validateResetState(state, job: job)
-    let empty = LessonSet.empty(jobId: job.jobId)
+    let empty = LessonSet.empty(jobID: job.jobID)
     try ensureCanonicalEmptySet(db, empty, now: now)
     guard let decidedAt = EpochSecondCodec.date(fromEpoch: EpochSecondCodec.epoch(now)) else {
       throw StoreError.unexpected("learning reset time is out of range")
@@ -105,7 +95,7 @@ private extension ScheduledLearningStoreGRDB {
       oldStableDigest: state.stableDigest,
       oldStableRevision: state.stableRevision,
       feedbackRevisionAtCut: state.feedbackRevision,
-      priorOpenTrialId: state.openTrialId
+      priorOpenTrialID: state.openTrialID
     )
     let newEpoch = state.epoch.next()
     let newRevision = state.stableRevision.next()
@@ -116,10 +106,10 @@ private extension ScheduledLearningStoreGRDB {
       newRevision: newRevision,
       emptyDigest: empty.digest
     )
-    let trials = try resetLiveTrials(db, jobId: job.jobId)
-    let targetCount = try invalidateTargets(db, jobId: job.jobId, now: now)
-    let challengeCount = try invalidateChallenges(db, jobId: job.jobId, now: now)
-    let operations = try resetOperations(db, jobId: job.jobId, before: newEpoch)
+    let trials = try resetLiveTrials(db, jobID: job.jobID)
+    let targetCount = try invalidateTargets(db, jobID: job.jobID, now: now)
+    let challengeCount = try invalidateChallenges(db, jobID: job.jobID, now: now)
+    let operations = try resetOperations(db, jobID: job.jobID, before: newEpoch)
     let result = LearningResetDecisionResult(
       newEpoch: newEpoch,
       emptyStableDigest: empty.digest,
@@ -127,13 +117,13 @@ private extension ScheduledLearningStoreGRDB {
       closedTrials: trials,
       invalidatedTargetCount: targetCount,
       invalidatedChallengeCount: challengeCount,
-      staleNoCallOperationIds: operations.staleNoCall,
-      inFlightOperationIds: operations.inFlight
+      staleNoCallOperationIDs: operations.staleNoCall,
+      inFlightOperationIDs: operations.inFlight
     )
-    let decisionId = try insertDecision(
+    let decisionID = try insertDecision(
       db,
       kind: ResetReceipt.kind,
-      jobId: job.jobId,
+      jobID: job.jobID,
       epoch: newEpoch,
       inputs: inputs,
       result: result,
@@ -141,27 +131,29 @@ private extension ScheduledLearningStoreGRDB {
       now: decidedAt
     )
     let receipt = ResetReceipt(
-      decisionId: decisionId,
-      jobId: job.jobId,
+      decisionID: decisionID,
+      jobID: job.jobID,
       algorithm: .v1,
       decidedAt: decidedAt,
       inputs: inputs,
       result: result
     )
-    try insertResetAudit(db, receipt: receipt, sessionId: job.sessionId)
+    try insertResetAudit(db, receipt: receipt, sessionID: job.sessionID)
     return receipt
   }
 
   static func validateResetState(_ state: JobLearningState, job: ResetJob) throws {
     guard
-      state.jobId == job.jobId,
+      state.jobID == job.jobID,
       state.epoch.value > 0,
       state.epoch.value < Int64.max,
       isCanonicalDigest(state.stableDigest.rawValue),
       state.stableRevision.value >= 0,
       state.stableRevision.value < Int64.max,
       state.feedbackRevision.value >= 0,
-      state.openTrialId.map({ $0 > 0 }) ?? true
+      state.openTrialID.map({
+        $0 > 0
+      }) ?? true
     else {
       throw StoreError.unexpected("learning state cannot advance through reset")
     }
@@ -176,16 +168,16 @@ private extension ScheduledLearningStoreGRDB {
   ) throws {
     try db.execute(
       sql: """
-        UPDATE job_learning_state
-        SET learning_epoch = ?, stable_lesson_set_digest = ?, stable_revision = ?,
-          open_trial_id = NULL
-        WHERE job_id = ? AND learning_epoch = ? AND stable_revision = ?
-        """,
+      UPDATE job_learning_state
+      SET learning_epoch = ?, stable_lesson_set_digest = ?, stable_revision = ?,
+        open_trial_id = NULL
+      WHERE job_id = ? AND learning_epoch = ? AND stable_revision = ?
+      """,
       arguments: [
         newEpoch.value,
         emptyDigest.rawValue,
         newRevision.value,
-        state.jobId,
+        state.jobID,
         state.epoch.value,
         state.stableRevision.value,
       ]
@@ -195,34 +187,30 @@ private extension ScheduledLearningStoreGRDB {
     }
   }
 
-  static func resetLiveTrials(_ db: Database, jobId: Int64) throws -> [ResetTrialIdentity] {
+  static func resetLiveTrials(_ db: Database, jobID: Int64) throws -> [ResetTrialIdentity] {
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT trial_id, job_id, learning_epoch, generation, base_digest, candidate_digest,
-          algorithm
-        FROM learning_trials
-        WHERE job_id = ? AND state IN (?, ?)
-        ORDER BY trial_id
-        """,
-      arguments: [
-        jobId,
-        LearningTrialState.open.rawValue,
-        LearningTrialState.draining.rawValue,
-      ]
+      SELECT trial_id, job_id, learning_epoch, generation, base_digest, candidate_digest,
+        algorithm
+      FROM learning_trials
+      WHERE job_id = ? AND state IN (?, ?)
+      ORDER BY trial_id
+      """,
+      arguments: [jobID, LearningTrialState.open.rawValue, LearningTrialState.draining.rawValue]
     )
     let trials = try rows.map { row in
-      try resetTrialIdentity(row, expectedJobId: jobId)
+      try resetTrialIdentity(row, expectedJobID: jobID)
     }
     try db.execute(
       sql: """
-        UPDATE learning_trials SET state = ?, close_reason = ?
-        WHERE job_id = ? AND state IN (?, ?)
-        """,
+      UPDATE learning_trials SET state = ?, close_reason = ?
+      WHERE job_id = ? AND state IN (?, ?)
+      """,
       arguments: [
         LearningTrialState.closed.rawValue,
         LearningTrialCloseReason.learningReset.rawValue,
-        jobId,
+        jobID,
         LearningTrialState.open.rawValue,
         LearningTrialState.draining.rawValue,
       ]
@@ -233,12 +221,12 @@ private extension ScheduledLearningStoreGRDB {
     return trials
   }
 
-  static func resetTrialIdentity(_ row: Row, expectedJobId: Int64) throws -> ResetTrialIdentity {
+  static func resetTrialIdentity(_ row: Row, expectedJobID: Int64) throws -> ResetTrialIdentity {
     guard
-      let trialId = SQLiteStoredValue.int64(in: row, column: "trial_id"),
-      trialId > 0,
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      jobId == expectedJobId,
+      let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
+      trialID > 0,
+      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      jobID == expectedJobID,
       let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
       epoch > 0,
       let generation = SQLiteStoredValue.int(in: row, column: "generation"),
@@ -253,8 +241,8 @@ private extension ScheduledLearningStoreGRDB {
       throw StoreError.unexpected("live trial is unreadable for learning reset")
     }
     return ResetTrialIdentity(
-      trialId: trialId,
-      jobId: jobId,
+      trialID: trialID,
+      jobID: jobID,
       epoch: LearningEpoch(epoch),
       generation: generation,
       baseDigest: LessonSetDigest(rawValue: baseDigest),
@@ -263,54 +251,47 @@ private extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func invalidateTargets(_ db: Database, jobId: Int64, now: Date) throws -> Int {
+  static func invalidateTargets(_ db: Database, jobID: Int64, now: Date) throws -> Int {
     try db.execute(
       sql: "UPDATE feedback_targets SET consumed_at = ? WHERE job_id = ? AND consumed_at IS NULL",
-      arguments: [EpochSecondCodec.epoch(now), jobId]
+      arguments: [EpochSecondCodec.epoch(now), jobID]
     )
     return db.changesCount
   }
 
-  static func invalidateChallenges(_ db: Database, jobId: Int64, now: Date) throws -> Int {
+  static func invalidateChallenges(_ db: Database, jobID: Int64, now: Date) throws -> Int {
     try db.execute(
       sql: """
-        UPDATE feedback_challenges SET consumed_at = ?
-        WHERE job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL
-        """,
-      arguments: [EpochSecondCodec.epoch(now), jobId]
+      UPDATE feedback_challenges SET consumed_at = ?
+      WHERE job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL
+      """,
+      arguments: [EpochSecondCodec.epoch(now), jobID]
     )
     return db.changesCount
   }
 
-  static func resetOperations(
-    _ db: Database,
-    jobId: Int64,
-    before newEpoch: LearningEpoch
-  ) throws -> ResetOperationPlan {
+  static func resetOperations(_ db: Database, jobID: Int64, before newEpoch: LearningEpoch) throws
+    -> ResetOperationPlan
+  {
     let stale = try resetOperationIDs(
       db,
-      jobId: jobId,
+      jobID: jobID,
       before: newEpoch,
       states: [.pending, .claimed]
     )
-    let inFlight = try resetOperationIDs(
-      db,
-      jobId: jobId,
-      before: newEpoch,
-      states: [.started]
-    )
+    let inFlight = try resetOperationIDs(db, jobID: jobID, before: newEpoch, states: [.started])
     try db.execute(
       sql: """
-        UPDATE learning_operations
-        SET state = ?, failure_code = ?, reserved_tokens = 0, reserved_cost_usd = 0,
-          reservation_state = ?
-        WHERE job_id = ? AND learning_epoch < ? AND state IN (?, ?)
-        """,
+      UPDATE learning_operations
+      SET state = ?, failure_code = ?, reserved_tokens = 0, reserved_cost_usd = 0,
+        reservation_state = ?
+      WHERE job_id = ? AND learning_epoch < ? AND state IN (?, ?)
+      """,
       arguments: [
         LearningOperationState.failedNoCall.rawValue,
         LearningOperationFailure.staleEpoch.rawValue,
         LearningReservationState.closed.rawValue,
-        jobId,
+        jobID,
         newEpoch.value,
         LearningOperationState.pending.rawValue,
         LearningOperationState.claimed.rawValue,
@@ -326,7 +307,7 @@ private extension ScheduledLearningStoreGRDB {
 extension ScheduledLearningStoreGRDB {
   static func resetOperationIDs(
     _ db: Database,
-    jobId: Int64,
+    jobID: Int64,
     before newEpoch: LearningEpoch,
     states: [LearningOperationState]
   ) throws -> [LearningOperationID] {
@@ -335,24 +316,24 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT operation_id
-        FROM learning_operations
-        WHERE job_id = ? AND learning_epoch < ? AND state IN (\(placeholders))
-        ORDER BY operation_id
-        """,
-      arguments: [jobId, newEpoch.value] + StatementArguments(stateValues)
+      SELECT operation_id
+      FROM learning_operations
+      WHERE job_id = ? AND learning_epoch < ? AND state IN (\(placeholders))
+      ORDER BY operation_id
+      """,
+      arguments: [jobID, newEpoch.value] + StatementArguments(stateValues)
     )
     return try rows.map { row in
       guard
-        let operationId = SQLiteStoredValue.string(in: row, column: "operation_id"),
-        operationId.isEmpty == false
+        let operationID = SQLiteStoredValue.string(in: row, column: "operation_id"),
+        operationID.isEmpty == false
       else {
         throw StoreError.unexpected("learning operation is unreadable for reset")
       }
-      let id = LearningOperationID(rawValue: operationId)
+      let id = LearningOperationID(rawValue: operationID)
       guard
         let operation = try readOperation(db, id: id),
-        operation.jobId == jobId,
+        operation.jobID == jobID,
         operation.epoch.value < newEpoch.value,
         stateValues.contains(operation.state.rawValue)
       else {
@@ -366,16 +347,14 @@ extension ScheduledLearningStoreGRDB {
   }
 }
 
+// MARK: - Reset Audit Persistence
+
 private extension ScheduledLearningStoreGRDB {
-  static func insertResetAudit(
-    _ db: Database,
-    receipt: ResetReceipt,
-    sessionId: Int64?
-  ) throws {
+  static func insertResetAudit(_ db: Database, receipt: ResetReceipt, sessionID: Int64?) throws {
     let projection = ResetAuditProjection(
-      decisionId: receipt.decisionId,
+      decisionID: receipt.decisionID,
       kind: ResetReceipt.kind,
-      jobId: receipt.jobId,
+      jobID: receipt.jobID,
       algorithm: receipt.algorithm,
       decidedAt: EpochSecondCodec.epoch(receipt.decidedAt),
       inputs: receipt.inputs,
@@ -390,7 +369,7 @@ private extension ScheduledLearningStoreGRDB {
         argsRedacted: try canonicalDecisionJSON(projection),
         resultSize: 0,
         decision: "applied",
-        sessionId: sessionId,
+        sessionID: sessionID,
         ts: receipt.decidedAt
       )
     )

@@ -10,18 +10,16 @@ import Foundation
 public struct MemoryWriteTool: Tool {
   private let redactor: SecretRedactor
 
-  public init(redactor: SecretRedactor) {
-    self.redactor = redactor
-  }
+  public init(redactor: SecretRedactor) { self.redactor = redactor }
 
   public var definition: ToolDefinition {
     ToolDefinition(
       name: "memory_write",
       description: """
-        Save one durable memory item (owner approval required). kind is one of \
-        user|feedback|project|reference; importance low|normal|high (default normal); \
-        sensitivity normal|high (default normal).
-        """,
+      Save one durable memory item (owner approval required). kind is one of \
+      user|feedback|project|reference; importance low|normal|high (default normal); \
+      sensitivity normal|high (default normal).
+      """,
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
@@ -32,7 +30,10 @@ public struct MemoryWriteTool: Tool {
           "kind": .object([
             "type": .string("string"),
             "enum": .array([
-              .string("user"), .string("feedback"), .string("project"), .string("reference"),
+              .string("user"),
+              .string("feedback"),
+              .string("project"),
+              .string("reference"),
             ]),
           ]),
           "importance": .object([
@@ -57,34 +58,25 @@ public struct MemoryWriteTool: Tool {
   public var executesOnlyViaApproval: Bool { true }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
-    switch MemoryWriteArguments.parse(arguments, sessionId: nil) {
-    case .invalid(let reason):
-      .refused(reason: reason)
-    case .parsed(let request):
-      .resolved(MemoryWriteArguments.canonicalTarget(for: request))
+    switch MemoryWriteArguments.parse(arguments, sessionID: nil) {
+    case .invalid(let reason): .refused(reason: reason)
+    case .parsed(let request): .resolved(MemoryWriteArguments.canonicalTarget(for: request))
     }
   }
 
-  public func approvalPresentation(
-    arguments: JSONValue,
-    canonicalTarget: String
-  ) -> ToolApprovalPresentation {
-    guard
-      case .parsed(let request) = MemoryWriteArguments.parse(arguments, sessionId: nil)
-    else {
-      return ToolApprovalPresentation(
-        blastRadius: "memory item",
-        contentPreview: nil,
-        warnings: []
-      )
+  public func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
+    -> ToolApprovalPresentation
+  {
+    guard case .parsed(let request) = MemoryWriteArguments.parse(arguments, sessionID: nil) else {
+      return ToolApprovalPresentation(blastRadius: "memory item", contentPreview: nil, warnings: [])
     }
 
     return ToolApprovalPresentation(
       blastRadius: """
-        memory item, kind \(request.item.kind.rawValue), \
-        sensitivity \(request.item.sensitivity.rawValue), \
-        importance \(request.item.importance.wireLabel)
-        """,
+      memory item, kind \(request.item.kind.rawValue), \
+      sensitivity \(request.item.sensitivity.rawValue), \
+      importance \(request.item.importance.wireLabel)
+      """,
       // The preview is the capped normalized text so the owner judges exactly what would be
       // stored — except exact loaded secret values, which are barred from every outbound reply;
       // the scan warnings still flag secret/instruction SHAPES rather than hiding them.

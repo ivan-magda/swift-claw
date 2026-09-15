@@ -33,7 +33,7 @@ extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = NULL WHERE job_id = ?",
-        arguments: [env.jobId]
+        arguments: [env.jobID]
       )
     }
   }
@@ -42,12 +42,12 @@ extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-          UPDATE learning_trials SET base_digest = 'corrupt'
-          WHERE trial_id = (
-            SELECT trial_id FROM learning_trials WHERE job_id = ? ORDER BY trial_id LIMIT 1
-          )
-          """,
-        arguments: [env.jobId]
+        UPDATE learning_trials SET base_digest = 'corrupt'
+        WHERE trial_id = (
+          SELECT trial_id FROM learning_trials WHERE job_id = ? ORDER BY trial_id LIMIT 1
+        )
+        """,
+        arguments: [env.jobID]
       )
     }
   }
@@ -113,23 +113,23 @@ extension ResetFixture {
   }
 
   func corruptCanonicalEmpty(_ collision: ResetEmptyCollision) throws {
-    let empty = LessonSet.empty(jobId: env.jobId)
+    let empty = LessonSet.empty(jobID: env.jobID)
     try env.queue.write { db in
       switch collision {
       case .schemaVersion:
         try db.execute(
           sql: "UPDATE lesson_sets SET schema_version = ? WHERE job_id = ? AND digest = ?",
-          arguments: [empty.schemaVersion + 1, env.jobId, empty.digest.rawValue]
+          arguments: [empty.schemaVersion + 1, env.jobID, empty.digest.rawValue]
         )
       case .canonicalBytes:
         try db.execute(
           sql: "UPDATE lesson_sets SET canonical_bytes = ? WHERE job_id = ? AND digest = ?",
-          arguments: [Data("reset-corrupt".utf8), env.jobId, empty.digest.rawValue]
+          arguments: [Data("reset-corrupt".utf8), env.jobID, empty.digest.rawValue]
         )
       case .source:
         try db.execute(
           sql: "UPDATE lesson_sets SET source = ? WHERE job_id = ? AND digest = ?",
-          arguments: [LessonSetSource.ownerEdit.rawValue, env.jobId, empty.digest.rawValue]
+          arguments: [LessonSetSource.ownerEdit.rawValue, env.jobID, empty.digest.rawValue]
         )
       }
     }
@@ -145,10 +145,10 @@ extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-          CREATE TRIGGER fail_reset_audit BEFORE INSERT ON audit_events
-          WHEN NEW.action = '\(AuditAction.learningReset.rawValue)'
-          BEGIN SELECT RAISE(ABORT, 'forced reset audit failure'); END
-          """
+        CREATE TRIGGER fail_reset_audit BEFORE INSERT ON audit_events
+        WHEN NEW.action = '\(AuditAction.learningReset.rawValue)'
+        BEGIN SELECT RAISE(ABORT, 'forced reset audit failure'); END
+        """
       )
     }
   }
@@ -171,8 +171,7 @@ extension ResetFixture {
       }
       let corrupted: String
       switch corruption {
-      case .noncanonicalJSON:
-        corrupted = " \(result)"
+      case .noncanonicalJSON: corrupted = " \(result)"
       case .wrongStableRevision:
         let decoded: LearningResetDecisionResult =
           try ScheduledLearningStoreGRDB.decodeCanonicalDecision(result)
@@ -183,8 +182,8 @@ extension ResetFixture {
           closedTrials: decoded.closedTrials,
           invalidatedTargetCount: decoded.invalidatedTargetCount,
           invalidatedChallengeCount: decoded.invalidatedChallengeCount,
-          staleNoCallOperationIds: decoded.staleNoCallOperationIds,
-          inFlightOperationIds: decoded.inFlightOperationIds
+          staleNoCallOperationIDs: decoded.staleNoCallOperationIDs,
+          inFlightOperationIDs: decoded.inFlightOperationIDs
         )
         corrupted = try ScheduledLearningStoreGRDB.canonicalDecisionJSON(changed)
       }
@@ -199,11 +198,11 @@ extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
-            decided_at)
-          SELECT kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
-          FROM learning_decisions WHERE kind = ? ORDER BY decision_id DESC LIMIT 1
-          """,
+        INSERT INTO learning_decisions(kind, job_id, learning_epoch, inputs, result, algorithm,
+          decided_at)
+        SELECT kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
+        FROM learning_decisions WHERE kind = ? ORDER BY decision_id DESC LIMIT 1
+        """,
         arguments: [ResetReceipt.kind]
       )
     }

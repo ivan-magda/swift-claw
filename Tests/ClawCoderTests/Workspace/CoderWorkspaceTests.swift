@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawCoder
 
-@Suite struct CoderWorkspaceTests {
-  @Test func dirtyInPlace() async throws {
+@Suite
+struct CoderWorkspaceTests {
+  @Test
+  func dirtyInPlace() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -37,7 +39,8 @@ import Testing
     #expect(try await fixture.git(["branch", "--show-current"]) == "trunk")
   }
 
-  @Test func unbornInPlace() async throws {
+  @Test
+  func unbornInPlace() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -62,7 +65,8 @@ import Testing
     #expect(try await fixture.git(["branch", "--show-current"]) == "unborn")
   }
 
-  @Test func damagedHeadIsRefused() async throws {
+  @Test
+  func damagedHeadIsRefused() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -98,7 +102,8 @@ import Testing
     )
   }
 
-  @Test func separateRef() async throws {
+  @Test
+  func separateRef() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -168,7 +173,8 @@ import Testing
     #expect(sourceInodes.isDisjoint(with: copyInodes))
   }
 
-  @Test func canonicalIdentity() async throws {
+  @Test
+  func canonicalIdentity() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -198,7 +204,8 @@ import Testing
     )
   }
 
-  @Test func frozenPublication() async throws {
+  @Test
+  func frozenPublication() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -224,7 +231,9 @@ import Testing
   }
 
   @Test(arguments: [
-    [], ["https://example.com/owner/repo"], ["https://github.com/a/b", "https://github.com/c/d"],
+    [],
+    ["https://example.com/owner/repo"],
+    ["https://github.com/a/b", "https://github.com/c/d"],
     ["https://github.com/a/b/issues/4"],
   ])
   func invalidOrigin(urls: [String]) async throws {
@@ -249,14 +258,13 @@ import Testing
     }
   }
 
-  @Test func effectivePublicationOrigin() async throws {
+  @Test
+  func effectivePublicationOrigin() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     try await fixture.git(["remote", "add", "origin", "github:repo"])
-    try await fixture.git([
-      "config", "url.https://github.com/other/.insteadOf", "github:",
-    ])
+    try await fixture.git(["config", "url.https://github.com/other/.insteadOf", "github:"])
     try await fixture.git(["config", "remote.origin.pushurl", "git@github.com:other/repo.git"])
     let preparer = CoderRequestPreparer(executionPolicyID: "test")
 
@@ -271,7 +279,8 @@ import Testing
     }
   }
 
-  @Test func remoteAllocation() async throws {
+  @Test
+  func remoteAllocation() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -304,7 +313,8 @@ import Testing
     #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o700)
   }
 
-  @Test func inventoryKinds() async throws {
+  @Test
+  func inventoryKinds() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -341,7 +351,10 @@ import Testing
     // then
     #expect(
       current.changedPaths(comparedWith: baseline) == [
-        "executable", "file.txt", "link", "new\nfile",
+        "executable",
+        "file.txt",
+        "link",
+        "new\nfile",
       ]
     )
   }
@@ -376,7 +389,8 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: state.directory))
   }
 
-  @Test func rejectsFailedSupervision() async throws {
+  @Test
+  func rejectsFailedSupervision() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -412,7 +426,8 @@ import Testing
     #expect(result.supervisionFailed)
   }
 
-  @Test func exhaustedDeadline() async throws {
+  @Test
+  func exhaustedDeadline() async throws {
     // given
     let fixture = try await GitWorkspaceFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }

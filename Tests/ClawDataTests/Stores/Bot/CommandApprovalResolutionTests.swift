@@ -6,16 +6,17 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct CommandApprovalResolutionTests {
+@Suite
+struct CommandApprovalResolutionTests {
   private struct Fixture {
     let queue: DatabaseQueue
 
     let commands: CommandStoreGRDB
     let approvals: ApprovalStoreGRDB
 
-    let sessionId: Int64
-    let runId: Int64
-    let approvalId: Int64
+    let sessionID: Int64
+    let runID: Int64
+    let approvalID: Int64
   }
 
   /// One session, one run parked at AWAITING_APPROVAL through the real reducer, and one PENDING
@@ -25,25 +26,25 @@ import Testing
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 7),
-        chatId: 7,
-        userId: 7,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 7),
+        chatID: 7,
+        userID: 7,
         text: "write the plan",
         isEdited: false,
         ts: Date()
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
     let runs = RunStoreGRDB(writer: queue)
-    _ = try #require(try runs.pickUp(runId: runId, now: Date()))
+    _ = try #require(try runs.pickUp(runID: runID, now: Date()))
 
     let now = Date()
-    let approvalId = try queue.write { db -> Int64 in
+    let approvalID = try queue.write { db -> Int64 in
       _ = try RunStoreGRDB.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .suspendForApproval,
         now: now,
         terminal: nil
@@ -52,17 +53,17 @@ import Testing
       return try ApprovalStoreGRDB.insertApproval(
         db,
         NewApproval(
-          runId: runId,
-          sessionId: sessionId,
+          runID: runID,
+          sessionID: sessionID,
           tool: "file_write",
           canonicalArgsJSON: canonicalArgs,
           canonicalTarget: "/w/plan.md",
           argsHash: ApprovalArgsHash.sha256Hex(canonicalArgs),
           policyVersion: "pv16",
-          ownerUserId: 7,
+          ownerUserID: 7,
           nonce: "nonce-a",
-          observationMessageId: 1,
-          toolCallId: "c1",
+          observationMessageID: 1,
+          toolCallID: "c1",
           reason: .askTier,
           createdTs: now,
           expiresTs: now.addingTimeInterval(3600)
@@ -74,35 +75,38 @@ import Testing
       queue: queue,
       commands: CommandStoreGRDB(writer: queue),
       approvals: ApprovalStoreGRDB(writer: queue),
-      sessionId: sessionId,
-      runId: runId,
-      approvalId: approvalId
+      sessionID: sessionID,
+      runID: runID,
+      approvalID: approvalID
     )
   }
 
   private func audits(_ queue: DatabaseQueue) throws -> [(action: String, decision: String)] {
     try queue.read { db in
-      try Row.fetchAll(db, sql: "SELECT action, decision FROM audit_events ORDER BY id")
-        .map { row in (action: row["action"], decision: row["decision"]) }
+      try Row.fetchAll(db, sql: "SELECT action, decision FROM audit_events ORDER BY id").map {
+        (row) in
+        (action: row["action"], decision: row["decision"])
+      }
     }
   }
 
-  @Test func stopResolvesTheParkedApprovalToRejectedCancelled() throws {
+  @Test
+  func stopResolvesTheParkedApprovalToRejectedCancelled() throws {
     // given
     let env = try makeParkedFixture()
 
     // when
     let result = try env.commands.applyStop(
-      updateId: 2,
-      sessionKey: SessionKey.telegramDM(chatId: 7),
+      updateID: 2,
+      sessionKey: SessionKey.telegramDM(chatID: 7),
       now: Date()
     )
 
     // then — the suspended run is CANCELLED and its approval is REJECTED (decision cancelled),
     // reported for the coordinator signal — no second PENDING row, no orphan (§6.4)
-    #expect(result.cancelledRunIds == [env.runId])
-    #expect(result.resolvedApprovalIds == [env.approvalId])
-    #expect(try env.approvals.approval(id: env.approvalId)?.state == .rejected)
+    #expect(result.cancelledRunIDs == [env.runID])
+    #expect(result.resolvedApprovalIDs == [env.approvalID])
+    #expect(try env.approvals.approval(id: env.approvalID)?.state == .rejected)
     let pending = try env.queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM approvals WHERE state = 'PENDING'")
     }
@@ -115,21 +119,22 @@ import Testing
     )
   }
 
-  @Test func newResolvesTheParkedApprovalToRejectedSuperseded() throws {
+  @Test
+  func newResolvesTheParkedApprovalToRejectedSuperseded() throws {
     // given
     let env = try makeParkedFixture()
 
     // when
     let result = try env.commands.applyNew(
-      updateId: 2,
-      sessionKey: SessionKey.telegramDM(chatId: 7),
+      updateID: 2,
+      sessionKey: SessionKey.telegramDM(chatID: 7),
       now: Date()
     )
 
     // then
-    #expect(result.supersededRunIds == [env.runId])
-    #expect(result.resolvedApprovalIds == [env.approvalId])
-    #expect(try env.approvals.approval(id: env.approvalId)?.state == .rejected)
+    #expect(result.supersededRunIDs == [env.runID])
+    #expect(result.resolvedApprovalIDs == [env.approvalID])
+    #expect(try env.approvals.approval(id: env.approvalID)?.state == .rejected)
     #expect(
       try audits(env.queue).contains { row in
         row.action == AuditAction.approvalDenied.rawValue
@@ -138,20 +143,21 @@ import Testing
     )
   }
 
-  @Test func stopWithNoParkedApprovalResolvesNothing() throws {
+  @Test
+  func stopWithNoParkedApprovalResolvesNothing() throws {
     // given — a session with no runs at all
     let queue = try TestDatabase.make()
     let commands = CommandStoreGRDB(writer: queue)
 
     // when
     let result = try commands.applyStop(
-      updateId: 1,
-      sessionKey: SessionKey.telegramDM(chatId: 7),
+      updateID: 1,
+      sessionKey: SessionKey.telegramDM(chatID: 7),
       now: Date()
     )
 
     // then — nothing to resolve; the field is present and empty
-    #expect(result.cancelledRunIds.isEmpty)
-    #expect(result.resolvedApprovalIds.isEmpty)
+    #expect(result.cancelledRunIDs.isEmpty)
+    #expect(result.resolvedApprovalIDs.isEmpty)
   }
 }

@@ -37,10 +37,8 @@ private actor SequencedHTTP: HTTPExecuting {
       throw Exhausted()
     }
     switch outcome {
-    case .result(let result):
-      return result
-    case .failure(let makeFailure):
-      throw makeFailure()
+    case .result(let result): return result
+    case .failure(let makeFailure): throw makeFailure()
     }
   }
 }
@@ -95,22 +93,32 @@ private enum Poll {
   /// reach. Finite on purpose: a coordinator that stopped honoring the window would poll forever
   /// against an endless queue and wedge the run, where this exhausts the queue and fails the test.
   static let neverApproved: [SequencedHTTP.Outcome] = [
-    deviceCode(interval: 890), pending, pending, pending,
+    deviceCode(interval: 890),
+    pending,
+    pending,
+    pending,
   ]
 
   /// A vendor that only ever says "slow down", finite for the same reason `neverApproved` is.
   static let alwaysThrottling: [SequencedHTTP.Outcome] = [
-    deviceCode(interval: 5), throttled(retryAfter: "999999"), throttled(retryAfter: "999999"),
+    deviceCode(interval: 5),
+    throttled(retryAfter: "999999"),
+    throttled(retryAfter: "999999"),
   ]
 }
 
-@Suite struct ChatGPTDeviceAuthorizationTests {
+@Suite
+struct ChatGPTDeviceAuthorizationTests {
   // MARK: - Happy Path
 
-  @Test func authorizeReturnsTheGrantOnceTheOwnerHasApprovedTheDevice() async throws {
+  @Test
+  func authorizeReturnsTheGrantOnceTheOwnerHasApprovedTheDevice() async throws {
     // given
     let http = SequencedHTTP([
-      Poll.deviceCode(interval: 5), Poll.pending, Poll.pending, Poll.granted,
+      Poll.deviceCode(interval: 5),
+      Poll.pending,
+      Poll.pending,
+      Poll.granted,
     ])
     let log = SleepLog()
     let coordinator = ChatGPTDeviceAuthorization(
@@ -136,7 +144,8 @@ private enum Poll {
     )
   }
 
-  @Test func authorizeReportsTheDeviceCodeOnceBeforeItStartsPolling() async throws {
+  @Test
+  func authorizeReportsTheDeviceCodeOnceBeforeItStartsPolling() async throws {
     // given
     let http = SequencedHTTP([Poll.deviceCode(interval: 5), Poll.granted])
     let coordinator = ChatGPTDeviceAuthorization(
@@ -158,12 +167,21 @@ private enum Poll {
     }
 
     // then
-    #expect(reported.withLock { $0 } == [OAuthFixture.device])
+    #expect(
+      reported.withLock {
+        $0
+      } == [OAuthFixture.device]
+    )
     // Nothing had been polled yet: the owner learns the code before the wait for it begins.
-    #expect(dispatchedWhenReported.withLock { $0 } == [ChatGPTProviderMetadata.userCodeURL])
+    #expect(
+      dispatchedWhenReported.withLock {
+        $0
+      } == [ChatGPTProviderMetadata.userCodeURL]
+    )
   }
 
-  @Test func authorizeNeverSleepsWhenTheGrantArrivesOnTheFirstPoll() async throws {
+  @Test
+  func authorizeNeverSleepsWhenTheGrantArrivesOnTheFirstPoll() async throws {
     // given
     let http = SequencedHTTP([Poll.deviceCode(interval: 5), Poll.granted])
     let log = SleepLog()
@@ -183,10 +201,14 @@ private enum Poll {
 
   // MARK: - Pacing
 
-  @Test func authorizeSleepsTheIntervalTheServerNamedBetweenPolls() async throws {
+  @Test
+  func authorizeSleepsTheIntervalTheServerNamedBetweenPolls() async throws {
     // given
     let http = SequencedHTTP([
-      Poll.deviceCode(interval: 7), Poll.pending, Poll.pending, Poll.granted,
+      Poll.deviceCode(interval: 7),
+      Poll.pending,
+      Poll.pending,
+      Poll.granted,
     ])
     let log = SleepLog()
     let coordinator = ChatGPTDeviceAuthorization(
@@ -203,10 +225,13 @@ private enum Poll {
     #expect(log.recorded == [.seconds(7), .seconds(7)])
   }
 
-  @Test func authorizeWaitsOutAThrottleRatherThanSpinningOnIt() async throws {
+  @Test
+  func authorizeWaitsOutAThrottleRatherThanSpinningOnIt() async throws {
     // given
     let http = SequencedHTTP([
-      Poll.deviceCode(interval: 5), Poll.throttled(retryAfter: "30"), Poll.granted,
+      Poll.deviceCode(interval: 5),
+      Poll.throttled(retryAfter: "30"),
+      Poll.granted,
     ])
     let log = SleepLog()
     let coordinator = ChatGPTDeviceAuthorization(
@@ -242,7 +267,8 @@ private enum Poll {
 
   /// A stalled request must not be able to outrun the window the owner was promised, so each call's
   /// relative timeout is cut to what is left of the deadline.
-  @Test func authorizeCapsEachRequestTimeoutToWhatIsLeftOfTheWindow() async throws {
+  @Test
+  func authorizeCapsEachRequestTimeoutToWhatIsLeftOfTheWindow() async throws {
     // given
     let http = SequencedHTTP(Poll.neverApproved)
     let coordinator = ChatGPTDeviceAuthorization(
@@ -262,7 +288,8 @@ private enum Poll {
     #expect(timeouts == [.seconds(30), .seconds(30), .seconds(10)])
   }
 
-  @Test func authorizeClampsAPollDelayToWhatIsLeftOfTheWindow() async throws {
+  @Test
+  func authorizeClampsAPollDelayToWhatIsLeftOfTheWindow() async throws {
     // given
     let http = SequencedHTTP(Poll.neverApproved)
     let log = SleepLog()
@@ -282,7 +309,8 @@ private enum Poll {
     #expect(log.recorded == [.seconds(890), .seconds(10)])
   }
 
-  @Test func authorizeGivesUpOnceTheWindowHasClosed() async throws {
+  @Test
+  func authorizeGivesUpOnceTheWindowHasClosed() async throws {
     // given
     let http = SequencedHTTP(Poll.neverApproved)
     let coordinator = ChatGPTDeviceAuthorization(
@@ -299,7 +327,8 @@ private enum Poll {
     #expect(failure == .deadlineExceeded)
   }
 
-  @Test func aThrottleTooLongForTheWindowIsWaitedNoFurtherThanTheWindow() async throws {
+  @Test
+  func aThrottleTooLongForTheWindowIsWaitedNoFurtherThanTheWindow() async throws {
     // given
     let http = SequencedHTTP(Poll.alwaysThrottling)
     let log = SleepLog()
@@ -322,10 +351,12 @@ private enum Poll {
 
   // MARK: - Failure Propagation
 
-  @Test func authorizeStopsAtTheFirstTerminalPollFailure() async throws {
+  @Test
+  func authorizeStopsAtTheFirstTerminalPollFailure() async throws {
     // given
     let http = SequencedHTTP([
-      Poll.deviceCode(interval: 5), .result(OAuthFixture.result(400, #"{"error":"expired"}"#)),
+      Poll.deviceCode(interval: 5),
+      .result(OAuthFixture.result(400, #"{"error":"expired"}"#)),
     ])
     let coordinator = ChatGPTDeviceAuthorization(
       client: OAuthFixture.client(http),
@@ -343,7 +374,8 @@ private enum Poll {
     #expect(urls.count == 2)
   }
 
-  @Test func cancellingTheWaitCancelsTheLoginRatherThanFailingIt() async throws {
+  @Test
+  func cancellingTheWaitCancelsTheLoginRatherThanFailingIt() async throws {
     // given
     let http = SequencedHTTP([Poll.deviceCode(interval: 5)], repeatingLast: Poll.pending)
     let coordinator = ChatGPTDeviceAuthorization(
@@ -359,9 +391,14 @@ private enum Poll {
     }
   }
 
-  @Test func cancellingARequestCancelsTheLoginRatherThanFailingIt() async throws {
+  @Test
+  func cancellingARequestCancelsTheLoginRatherThanFailingIt() async throws {
     // given
-    let http = SequencedHTTP([.failure { CancellationError() }])
+    let http = SequencedHTTP([
+      .failure {
+        CancellationError()
+      },
+    ])
     let coordinator = ChatGPTDeviceAuthorization(
       client: OAuthFixture.client(http),
       clock: ScriptedClock { _ in }

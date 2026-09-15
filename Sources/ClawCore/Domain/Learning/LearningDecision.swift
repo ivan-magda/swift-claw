@@ -30,7 +30,17 @@ public enum LearningDecisionResult: String, Sendable, Equatable, Codable {
 
 /// Exact authoritative resolution retained with the complete promotion cohort.
 public struct DecisionSupport: Sendable, Equatable, Codable {
-  public let runId: Int64
+  private enum CodingKeys: String, CodingKey {
+    case runID = "runId"
+    case outcome
+    case evaluationDigest
+    case evaluationRequired
+    case feedbackRevision
+    case correctionEventDigest
+    case ownerConfirmed
+  }
+
+  public let runID: Int64
   public let outcome: TrialOutcomeKind?
   public let evaluationDigest: EvaluationDigest?
   public let evaluationRequired: Bool
@@ -39,7 +49,7 @@ public struct DecisionSupport: Sendable, Equatable, Codable {
   public let ownerConfirmed: Bool
 
   public init(assignment: TrialAssignment) {
-    runId = assignment.identity.runId
+    runID = assignment.identity.runID
     let evidence = assignment.resolvedEvidence
     outcome = evidence?.outcome
     evaluationDigest = evidence?.evaluationDigest
@@ -79,15 +89,18 @@ public struct LearningDecisionRecord: Sendable, Equatable, Codable {
 }
 
 public struct DecisionReceipt: Sendable, Equatable {
-  public let decisionId: Int64
+  public let decisionID: Int64
   public let inputs: TrialDecisionInputs
   public let record: LearningDecisionRecord
-  public var result: LearningDecisionResult { record.result }
-  public var cohort: [DecisionSupport] { record.cohort }
-  public var promotionSubject: String { String(decisionId) }
 
-  public init(decisionId: Int64, inputs: TrialDecisionInputs, record: LearningDecisionRecord) {
-    self.decisionId = decisionId
+  public var result: LearningDecisionResult { record.result }
+
+  public var cohort: [DecisionSupport] { record.cohort }
+
+  public var promotionSubject: String { String(decisionID) }
+
+  public init(decisionID: Int64, inputs: TrialDecisionInputs, record: LearningDecisionRecord) {
+    self.decisionID = decisionID
     self.inputs = inputs
     self.record = record
   }
@@ -108,15 +121,37 @@ public enum AdapterRollbackOutcome: String, Sendable, Equatable, Codable {
 /// Owner triggers name durable authenticated events. Safety receipts come from trusted code;
 /// the adapter branch remains inert while production freezes no adapter.
 public enum RollbackTrigger: Sendable, Equatable, Codable {
-  case ownerFeedback(promotionId: Int64, eventId: Int64)
-  case supportWithdrawal(promotionId: Int64, eventId: Int64)
-  case adapter(promotionId: Int64, adapterId: String, outcome: AdapterRollbackOutcome)
-  case safety(promotionId: Int64, receiptDigest: String, failure: LearningSafetyFailure)
+  private enum OwnerFeedbackCodingKeys: String, CodingKey {
+    case promotionID = "promotionId"
+    case eventID = "eventId"
+  }
 
-  public var promotionId: Int64 {
+  private enum SupportWithdrawalCodingKeys: String, CodingKey {
+    case promotionID = "promotionId"
+    case eventID = "eventId"
+  }
+
+  private enum AdapterCodingKeys: String, CodingKey {
+    case promotionID = "promotionId"
+    case adapterID = "adapterId"
+    case outcome
+  }
+
+  private enum SafetyCodingKeys: String, CodingKey {
+    case promotionID = "promotionId"
+    case receiptDigest
+    case failure
+  }
+
+  case ownerFeedback(promotionID: Int64, eventID: Int64)
+  case supportWithdrawal(promotionID: Int64, eventID: Int64)
+  case adapter(promotionID: Int64, adapterID: String, outcome: AdapterRollbackOutcome)
+  case safety(promotionID: Int64, receiptDigest: String, failure: LearningSafetyFailure)
+
+  public var promotionID: Int64 {
     switch self {
-    case .ownerFeedback(let id, _), .supportWithdrawal(let id, _),
-      .adapter(let id, _, _), .safety(let id, _, _):
+    case .ownerFeedback(let id, _), .supportWithdrawal(let id, _), .adapter(let id, _, _),
+         .safety(let id, _, _):
       id
     }
   }

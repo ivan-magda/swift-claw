@@ -78,12 +78,9 @@ actor MCPStreamableHTTPTransport: Transport {
   /// the SDK sends next is what reaches the server.
   func connect() async throws {
     switch lifecycle {
-    case .connected:
-      return
-    case .broken, .disconnected:
-      throw MCPTransportError.notConnected
-    case .idle:
-      lifecycle = .connected
+    case .connected: return
+    case .broken, .disconnected: throw MCPTransportError.notConnected
+    case .idle: lifecycle = .connected
     }
   }
 
@@ -92,13 +89,11 @@ actor MCPStreamableHTTPTransport: Transport {
   /// first means a slow teardown request cannot hold up a shutdown.
   func disconnect() async {
     switch lifecycle {
-    case .idle, .disconnected:
-      return
+    case .idle, .disconnected: return
     case .connected:
       lifecycle = .disconnected
       messageContinuation.finish()
-    case .broken:
-      lifecycle = .disconnected
+    case .broken: lifecycle = .disconnected
     }
 
     guard let session = sessionID else {
@@ -127,9 +122,7 @@ actor MCPStreamableHTTPTransport: Transport {
     handshakeCompleted = true
   }
 
-  func receive() -> AsyncThrowingStream<Data, any Error> {
-    messages
-  }
+  func receive() -> AsyncThrowingStream<Data, any Error> { messages }
 }
 
 // MARK: - Request shaping
@@ -191,11 +184,7 @@ private extension MCPStreamableHTTPTransport {
       )
     )
 
-    do {
-      return try await http.openStream(request)
-    } catch {
-      throw Self.mapped(error)
-    }
+    do { return try await http.openStream(request) } catch { throw Self.mapped(error) }
   }
 
   func exchangeTimeout(for body: Data) -> Duration {
@@ -211,9 +200,7 @@ private extension MCPStreamableHTTPTransport {
     return min(requestTimeout, MCPTransportLimits.cancellationTimeout)
   }
 
-  struct OutboundMethodEnvelope: Decodable {
-    let method: String?
-  }
+  struct OutboundMethodEnvelope: Decodable { let method: String? }
 
   /// Sends the spec's session teardown. Best effort by definition: the session is already gone as
   /// far as this process is concerned, and a server that refuses the DELETE cannot change that.
@@ -247,10 +234,7 @@ private extension MCPStreamableHTTPTransport {
 
 private extension MCPStreamableHTTPTransport {
   func capture(from head: HTTPStreamHead) {
-    guard
-      let session = head.getHeader(for: MCPHTTPHeader.session),
-      session.isEmpty == false
-    else {
+    guard let session = head.header(for: MCPHTTPHeader.session), session.isEmpty == false else {
       return
     }
     sessionID = session
@@ -276,13 +260,10 @@ private extension MCPStreamableHTTPTransport {
       return
     }
 
-    let rawContentType = exchange.head.getHeader(for: MCPHTTPHeader.contentType) ?? ""
+    let rawContentType = exchange.head.header(for: MCPHTTPHeader.contentType) ?? ""
     let contentType =
-      rawContentType
-      .split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
-      .first?
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-      .lowercased() ?? ""
+      rawContentType.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false).first?
+        .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
     if contentType == ContentType.eventStream {
       try await deliverEvents(exchange)
     } else if contentType == ContentType.json {
@@ -344,8 +325,7 @@ private extension MCPStreamableHTTPTransport {
     }
     adoptVersionFromHandshake(message)
     switch messageContinuation.yield(message) {
-    case .enqueued:
-      return
+    case .enqueued: return
     case .dropped:
       let error = MCPTransportError.receiveBufferOverflow(
         limitMessages: MCPTransportLimits.maxBufferedMessages
@@ -366,7 +346,8 @@ private extension MCPStreamableHTTPTransport {
   /// revision therefore has to reach the header here, before the initialize response is yielded to
   /// the SDK and unblocks that notification.
   func adoptVersionFromHandshake(_ message: Data) {
-    guard handshakeCompleted == false,
+    guard
+      handshakeCompleted == false,
       let envelope = try? JSONDecoder().decode(InitializeEnvelope.self, from: message),
       let version = envelope.result?.protocolVersion,
       Version.supported.contains(version)
@@ -377,19 +358,15 @@ private extension MCPStreamableHTTPTransport {
   }
 
   struct InitializeEnvelope: Decodable {
-    struct Result: Decodable {
-      let protocolVersion: String
-    }
+    struct Result: Decodable { let protocolVersion: String }
 
     let result: Result?
   }
 
   func check(_ termination: HTTPStreamTermination) throws {
     switch termination {
-    case .completed:
-      return
-    case .failed(let failure):
-      throw MCPTransportError.requestFailed(failure)
+    case .completed: return
+    case .failed(let failure): throw MCPTransportError.requestFailed(failure)
     case .cancelled(let disposition):
       throw MCPTransportError.requestFailed(
         HTTPTransportFailure(disposition: disposition, safeMessage: "response stream ended early")

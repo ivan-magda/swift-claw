@@ -7,18 +7,18 @@ public enum CandidateOrigin: String, Sendable, Equatable, Codable {
 }
 
 public struct CandidateEvidenceSource: Sendable, Equatable, Codable {
-  public let runId: Int64
+  public let runID: Int64
   public let digest: EvidenceDigest
   public let evaluationDigest: EvaluationDigest
   public let evaluationRequired: Bool
 
   public init(
-    runId: Int64,
+    runID: Int64,
     digest: EvidenceDigest,
     evaluationDigest: EvaluationDigest,
     evaluationRequired: Bool
   ) {
-    self.runId = runId
+    self.runID = runID
     self.digest = digest
     self.evaluationDigest = evaluationDigest
     self.evaluationRequired = evaluationRequired
@@ -27,14 +27,14 @@ public struct CandidateEvidenceSource: Sendable, Equatable, Codable {
   public init(from decoder: any Decoder) throws {
     try CandidateManifestDecoding.requireOnly(CodingKeys.self, in: decoder)
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    runId = try container.decode(Int64.self, forKey: .runId)
+    runID = try container.decode(Int64.self, forKey: .runID)
     digest = try container.decode(EvidenceDigest.self, forKey: .digest)
     evaluationDigest = try container.decode(EvaluationDigest.self, forKey: .evaluationDigest)
     evaluationRequired = try container.decode(Bool.self, forKey: .evaluationRequired)
   }
 
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case runId = "run_id"
+    case runID = "run_id"
     case digest = "evidence_digest"
     case evaluationDigest = "evaluation_digest"
     case evaluationRequired = "evaluation_required"
@@ -42,29 +42,29 @@ public struct CandidateEvidenceSource: Sendable, Equatable, Codable {
 }
 
 public struct CandidateEvaluationSource: Sendable, Equatable, Codable {
-  public let runId: Int64
+  public let runID: Int64
   public let digest: EvaluationDigest
 
-  public init(runId: Int64, digest: EvaluationDigest) {
-    self.runId = runId
+  public init(runID: Int64, digest: EvaluationDigest) {
+    self.runID = runID
     self.digest = digest
   }
 
   public init(from decoder: any Decoder) throws {
     try CandidateManifestDecoding.requireOnly(CodingKeys.self, in: decoder)
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    runId = try container.decode(Int64.self, forKey: .runId)
+    runID = try container.decode(Int64.self, forKey: .runID)
     digest = try container.decode(EvaluationDigest.self, forKey: .digest)
   }
 
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case runId = "run_id"
+    case runID = "run_id"
     case digest = "evaluation_digest"
   }
 }
 
 public struct CandidateFeedbackSource: Sendable, Equatable, Codable {
-  public let eventId: Int64
+  public let eventID: Int64
   public let digest: FeedbackEventDigest
   public let revision: FeedbackRevision
   public let subjectKind: FeedbackSubjectKind
@@ -72,14 +72,14 @@ public struct CandidateFeedbackSource: Sendable, Equatable, Codable {
   public let signal: OwnerSignal
 
   public init(
-    eventId: Int64,
+    eventID: Int64,
     digest: FeedbackEventDigest,
     revision: FeedbackRevision,
     subjectKind: FeedbackSubjectKind,
     subjectDigest: String,
     signal: OwnerSignal
   ) {
-    self.eventId = eventId
+    self.eventID = eventID
     self.digest = digest
     self.revision = revision
     self.subjectKind = subjectKind
@@ -103,7 +103,7 @@ public struct CandidateFeedbackSource: Sendable, Equatable, Codable {
         debugDescription: "feedback source carries an invalid subject or signal"
       )
     }
-    eventId = try container.decode(Int64.self, forKey: .eventId)
+    eventID = try container.decode(Int64.self, forKey: .eventID)
     digest = try container.decode(FeedbackEventDigest.self, forKey: .digest)
     revision = FeedbackRevision(try container.decode(Int64.self, forKey: .revision))
     self.subjectKind = subjectKind
@@ -113,7 +113,7 @@ public struct CandidateFeedbackSource: Sendable, Equatable, Codable {
 
   public func encode(to encoder: any Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
-    try container.encode(eventId, forKey: .eventId)
+    try container.encode(eventID, forKey: .eventID)
     try container.encode(digest, forKey: .digest)
     try container.encode(revision.value, forKey: .revision)
     try container.encode(subjectKind.rawValue, forKey: .subjectKind)
@@ -122,7 +122,7 @@ public struct CandidateFeedbackSource: Sendable, Equatable, Codable {
   }
 
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case eventId = "event_id"
+    case eventID = "event_id"
     case digest = "event_digest"
     case revision = "feedback_revision"
     case subjectKind = "subject_kind"
@@ -139,12 +139,12 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
   public let schemaVersion: Int
   public let origin: CandidateOrigin
   public let algorithm: LearningAlgorithm
-  public let jobId: Int64
+  public let jobID: Int64
   public let epoch: LearningEpoch
   public let triggerDigest: TriggerDigest
   public let triggerReason: LearningTriggerReason
   public let qualifyingIssueCodes: [String]
-  public let operationId: LearningOperationID
+  public let operationID: LearningOperationID
   public let carrierDigest: CarrierDigest
   public let resultDigest: ReflectionResultDigest
   public let baseDigest: LessonSetDigest
@@ -160,12 +160,12 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
     schemaVersion: Int = CandidateSourceManifest.currentSchemaVersion,
     origin: CandidateOrigin,
     algorithm: LearningAlgorithm,
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     triggerDigest: TriggerDigest,
     triggerReason: LearningTriggerReason,
     qualifyingIssueCodes: [String],
-    operationId: LearningOperationID,
+    operationID: LearningOperationID,
     carrierDigest: CarrierDigest,
     resultDigest: ReflectionResultDigest,
     baseDigest: LessonSetDigest,
@@ -180,12 +180,12 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
     self.schemaVersion = schemaVersion
     self.origin = origin
     self.algorithm = algorithm
-    self.jobId = jobId
+    self.jobID = jobID
     self.epoch = epoch
     self.triggerDigest = triggerDigest
     self.triggerReason = triggerReason
     self.qualifyingIssueCodes = qualifyingIssueCodes
-    self.operationId = operationId
+    self.operationID = operationID
     self.carrierDigest = carrierDigest
     self.resultDigest = resultDigest
     self.baseDigest = baseDigest
@@ -212,12 +212,12 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
     self.schemaVersion = schemaVersion
     origin = try container.decode(CandidateOrigin.self, forKey: .origin)
     algorithm = try container.decode(LearningAlgorithm.self, forKey: .algorithm)
-    jobId = try container.decode(Int64.self, forKey: .jobId)
+    jobID = try container.decode(Int64.self, forKey: .jobID)
     epoch = try container.decode(LearningEpoch.self, forKey: .epoch)
     triggerDigest = try container.decode(TriggerDigest.self, forKey: .triggerDigest)
     triggerReason = try container.decode(LearningTriggerReason.self, forKey: .triggerReason)
     qualifyingIssueCodes = try container.decode([String].self, forKey: .qualifyingIssueCodes)
-    operationId = try container.decode(LearningOperationID.self, forKey: .operationId)
+    operationID = try container.decode(LearningOperationID.self, forKey: .operationID)
     carrierDigest = try container.decode(CarrierDigest.self, forKey: .carrierDigest)
     resultDigest = try container.decode(ReflectionResultDigest.self, forKey: .resultDigest)
     baseDigest = try container.decode(LessonSetDigest.self, forKey: .baseDigest)
@@ -252,9 +252,7 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
   public var digest: CandidateSourceManifestDigest {
     get throws {
       let bytes = try CanonicalJSON.data(encoding: self)
-      let framed = CanonicalDigestInput.joined([
-        Self.digestDomain, bytes.base64EncodedString(),
-      ])
+      let framed = CanonicalDigestInput.joined([Self.digestDomain, bytes.base64EncodedString()])
       return CandidateSourceManifestDigest(rawValue: SHA256Digest.hex(framed))
     }
   }
@@ -265,12 +263,12 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
     case schemaVersion = "schema_version"
     case origin
     case algorithm
-    case jobId = "job_id"
+    case jobID = "job_id"
     case epoch = "learning_epoch"
     case triggerDigest = "trigger_digest"
     case triggerReason = "trigger_reason"
     case qualifyingIssueCodes = "qualifying_issue_codes"
-    case operationId = "operation_id"
+    case operationID = "operation_id"
     case carrierDigest = "carrier_digest"
     case resultDigest = "result_digest"
     case baseDigest = "base_digest"
@@ -287,10 +285,8 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
 // MARK: - Closed Manifest Decoding
 
 private enum CandidateManifestDecoding {
-  static func requireOnly<Key>(
-    _ keyType: Key.Type,
-    in decoder: any Decoder
-  ) throws where Key: CodingKey & CaseIterable {
+  static func requireOnly<Key>(_ keyType: Key.Type, in decoder: any Decoder) throws
+    where Key: CodingKey & CaseIterable {
     let container = try decoder.container(keyedBy: AnyKey.self)
     let allowed = Set(keyType.allCases.map(\.stringValue))
     let unknown = Set(container.allKeys.map(\.stringValue)).subtracting(allowed)
@@ -306,15 +302,12 @@ private enum CandidateManifestDecoding {
 
   struct AnyKey: CodingKey {
     let stringValue: String
+
     var intValue: Int? { nil }
 
-    init(stringValue: String) {
-      self.stringValue = stringValue
-    }
+    init(stringValue: String) { self.stringValue = stringValue }
 
-    init?(intValue: Int) {
-      nil
-    }
+    init?(intValue: Int) { nil }
   }
 }
 
@@ -366,13 +359,9 @@ public struct ReflectionPreparation: Sendable, Equatable {
     self.ownerPayloads = ownerPayloads
   }
 
-  public var evidenceSources: [CandidateEvidenceSource] {
-    evaluations.map(\.evidence)
-  }
+  public var evidenceSources: [CandidateEvidenceSource] { evaluations.map(\.evidence) }
 
-  public var evaluationSources: [CandidateEvaluationSource] {
-    evaluations.map(\.evaluation)
-  }
+  public var evaluationSources: [CandidateEvaluationSource] { evaluations.map(\.evaluation) }
 }
 
 public struct PreparedReflectionEvaluation: Sendable, Equatable {

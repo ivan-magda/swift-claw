@@ -11,11 +11,12 @@ import Testing
 /// replay state and per-call usage, and read back through the ordinary history seam. The pieces are
 /// covered apart elsewhere; what is only observable here is whether they still agree once they run
 /// over the same rows.
-@Suite struct V9PersistenceAcceptanceTests {
+@Suite
+struct V9PersistenceAcceptanceTests {
   private static let seededAt = Date(timeIntervalSince1970: 1_700_000_000)
   private static let legacySessionKey = "tg:dm:9"
   /// The run `seedLegacyVEight` writes first, so it takes the first autoincrement id.
-  private static let legacyRunId: Int64 = 1
+  private static let legacyRunID: Int64 = 1
 
   fileprivate struct Fixture {
     let root: URL
@@ -23,8 +24,8 @@ import Testing
     let sessions: SessionMessageStoreGRDB
     let runs: RunStoreGRDB
     let usage: UsageStoreGRDB
-    let sessionId: Int64
-    let runId: Int64
+    let sessionID: Int64
+    let runID: Int64
   }
 
   /// The state pair as SQLite actually holds it, so a coerced or half-written pair is visible
@@ -48,18 +49,18 @@ import Testing
     let sessions = SessionMessageStoreGRDB(writer: pool)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 10,
+        updateID: 10,
         sessionKey: Self.legacySessionKey,
-        chatId: 9,
-        userId: 9,
+        chatID: 9,
+        userID: 9,
         text: "save the plan",
         isEdited: false,
         ts: Self.seededAt
       )
     )
     let runs = RunStoreGRDB(writer: pool)
-    let runId = try #require(claim.runId)
-    _ = try #require(try runs.pickUp(runId: runId, now: Self.seededAt))
+    let runID = try #require(claim.runID)
+    _ = try #require(try runs.pickUp(runID: runID, now: Self.seededAt))
 
     return Fixture(
       root: root,
@@ -67,8 +68,8 @@ import Testing
       sessions: sessions,
       runs: runs,
       usage: UsageStoreGRDB(writer: pool),
-      sessionId: try #require(claim.sessionId),
-      runId: runId
+      sessionID: try #require(claim.sessionID),
+      runID: runID
     )
   }
 
@@ -81,22 +82,22 @@ import Testing
     try env.usage.recordUsage(Self.toolRoundUsage(env))
 
     let receipt = try env.runs.commitSuspendedTurn(
-      runId: env.runId,
-      sessionId: env.sessionId,
+      runID: env.runID,
+      sessionID: env.sessionID,
       commit: Self.suspendCommit(env),
       now: Self.seededAt
     )
     let claim = try env.runs.claimApprovedExecution(
-      runId: env.runId,
-      observationMessageId: receipt.observationMessageId,
+      runID: env.runID,
+      observationMessageID: receipt.observationMessageID,
       notResumableObservationContent: "the run stopped before this could run",
       now: Self.seededAt
     )
     #expect(claim == .committed)
 
     try env.runs.fillClaimedObservation(
-      runId: env.runId,
-      observationMessageId: receipt.observationMessageId,
+      runID: env.runID,
+      observationMessageID: receipt.observationMessageID,
       fill: ClaimedObservationFill(
         content: "wrote the file",
         status: .ok,
@@ -112,7 +113,8 @@ import Testing
 
   // MARK: - State Across The Migrated Paths
 
-  @Test func everyAssistantAnchorKeepsItsOwnStateAndNoToolRowReceivesAny() throws {
+  @Test
+  func everyAssistantAnchorKeepsItsOwnStateAndNoToolRowReceivesAny() throws {
     // given
     let env = try makeMigratedLegacyRun()
     defer { try? FileManager.default.removeItem(at: env.root) }
@@ -149,7 +151,8 @@ import Testing
     )
   }
 
-  @Test func ordinaryHistoryAndSearchAreUnchangedByTheStatePair() throws {
+  @Test
+  func ordinaryHistoryAndSearchAreUnchangedByTheStatePair() throws {
     // given — a session holding both eras: rows the migration carried across and rows written
     // through the v9 stores
     let env = try makeMigratedLegacyRun()
@@ -158,22 +161,35 @@ import Testing
 
     // when — the ordinary read seam, asked for nothing about state
     let history = try env.sessions.loadContextSnapshot(
-      sessionId: env.sessionId,
-      throughMessageId: Int64.max,
+      sessionID: env.sessionID,
+      throughMessageID: Int64.max,
       limit: 50
     ).history
 
     // then — the window reads exactly as a pre-v9 window did, state riding along on the anchors
     #expect(
       history.map(\.role) == [
-        .assistant, .user, .assistant, .tool, .tool, .assistant, .tool,
+        .assistant,
+        .user,
+        .assistant,
+        .tool,
+        .tool,
+        .assistant,
+        .tool,
         .assistant,
       ]
     )
     #expect(history.map(\.content).first == "the archived plan")
     #expect(
       history.map(\.providerState) == [
-        nil, nil, Self.suspendState, nil, nil, Self.exchangeState, nil, Self.terminalState,
+        nil,
+        nil,
+        Self.suspendState,
+        nil,
+        nil,
+        Self.exchangeState,
+        nil,
+        Self.terminalState,
       ]
     )
 
@@ -190,7 +206,8 @@ import Testing
 
   // MARK: - Usage Across The Migrated Paths
 
-  @Test func twoLogicalCallsRecomputeTheTotalsAndLeaveLegacyIdentitiesAlone() throws {
+  @Test
+  func twoLogicalCallsRecomputeTheTotalsAndLeaveLegacyIdentitiesAlone() throws {
     // given
     let env = try makeMigratedLegacyRun()
     defer { try? FileManager.default.removeItem(at: env.root) }
@@ -203,7 +220,7 @@ import Testing
     // those nor a repeat of any anchor: the parked one, the ungated round's, and the final one
     #expect(replay == .ignored)
     #expect(
-      try Self.callIdentities(env, runId: env.runId) == [Self.toolCallID, Self.terminalCallID]
+      try Self.callIdentities(env, runID: env.runID) == [Self.toolCallID, Self.terminalCallID]
     )
     #expect(try Self.assistantRowCount(env) == 3)
 
@@ -215,21 +232,22 @@ import Testing
     #expect(totals.costUSD == 0.04)
 
     // and the rows the migration derived identities for are untouched by any of it
-    #expect(try Self.callIdentities(env, runId: Self.legacyRunId) == ["legacy:1"])
+    #expect(try Self.callIdentities(env, runID: Self.legacyRunID) == ["legacy:1"])
     #expect(try Self.usageCount(env) == 4)
   }
 
-  @Test func aTerminalCommitAfterCancellationRecordsItsCallOnceAcrossReplays() throws {
+  @Test
+  func aTerminalCommitAfterCancellationRecordsItsCallOnceAcrossReplays() throws {
     // given — a run whose tool round already spent, cancelled out from under the turn in flight
     let env = try makeMigratedLegacyRun()
     defer { try? FileManager.default.removeItem(at: env.root) }
     try env.usage.recordUsage(Self.toolRoundUsage(env))
     #expect(
       try CommandStoreGRDB(writer: env.pool).applyStop(
-        updateId: 100,
+        updateID: 100,
         sessionKey: Self.legacySessionKey,
         now: Self.seededAt
-      ).cancelledRunIds == [env.runId]
+      ).cancelledRunIDs == [env.runID]
     )
 
     // when — the terminal commit lands late, then is replayed
@@ -240,7 +258,7 @@ import Testing
     #expect(first == .usageRecordedAfterTerminal)
     #expect(second == .ignored)
     #expect(
-      try Self.callIdentities(env, runId: env.runId) == [Self.toolCallID, Self.terminalCallID]
+      try Self.callIdentities(env, runID: env.runID) == [Self.toolCallID, Self.terminalCallID]
     )
 
     // and the totals still count the tool round the late row arrived after — a run-wide "has usage
@@ -254,7 +272,8 @@ import Testing
 
   // MARK: - Conflict Targeting At The Store Seam
 
-  @Test func aReplayedCallIdentityIsSilencedAtTheTypedSeamAndKeepsTheStoredRow() throws {
+  @Test
+  func aReplayedCallIdentityIsSilencedAtTheTypedSeamAndKeepsTheStoredRow() throws {
     // given
     let env = try makeMigratedLegacyRun()
     defer { try? FileManager.default.removeItem(at: env.root) }
@@ -263,8 +282,8 @@ import Testing
     // when — the same identity re-presented carrying different figures
     try env.usage.recordUsage(
       makeProviderUsage(
-        runId: env.runId,
-        sessionId: env.sessionId,
+        runID: env.runID,
+        sessionID: env.sessionID,
         callID: Self.toolCallID,
         promptTokens: 999,
         completionTokens: 999
@@ -279,7 +298,8 @@ import Testing
     #expect(stored.first?.completionTokens == 20)
   }
 
-  @Test func anUnrelatedNotNullFailureCrossesTheSeamAsATypedStoreError() throws {
+  @Test
+  func anUnrelatedNotNullFailureCrossesTheSeamAsATypedStoreError() throws {
     // given — a NULL is unreachable through `ProviderUsage`, whose fields are non-optional, so the
     // production statement is driven straight at the mapping seam every store write already uses.
     // An untargeted conflict clause would swallow this failure and hand the caller the same
@@ -301,7 +321,8 @@ import Testing
     #expect(try Self.usageCount(env) == 2)
   }
 
-  @Test func aMismatchedStatePairCrossesTheSeamAsATypedStoreError() throws {
+  @Test
+  func aMismatchedStatePairCrossesTheSeamAsATypedStoreError() throws {
     // given — likewise unreachable through `MessageRowInsert`, which binds both halves or neither;
     // a foreign writer is what the pair CHECK is there to stop
     let env = try makeMigratedLegacyRun()
@@ -312,11 +333,11 @@ import Testing
       try MappedDatabase(writer: env.pool).writeMapping { db in
         try db.execute(
           sql: """
-            INSERT INTO messages(session_id, role, content, provenance, ts,
-              provider_state_issuer, provider_state)
-            VALUES (?, 'assistant', 'half a pair', 'trusted', ?, 'openai-chatgpt', NULL)
-            """,
-          arguments: [env.sessionId, Self.seededAt]
+          INSERT INTO messages(session_id, role, content, provenance, ts,
+            provider_state_issuer, provider_state)
+          VALUES (?, 'assistant', 'half a pair', 'trusted', ?, 'openai-chatgpt', NULL)
+          """,
+          arguments: [env.sessionID, Self.seededAt]
         )
       }
     } throws: { error in
@@ -324,7 +345,8 @@ import Testing
     }
   }
 
-  @Test func anUnrelatedForeignKeyFailureCrossesTheSeamAsATypedStoreError() throws {
+  @Test
+  func anUnrelatedForeignKeyFailureCrossesTheSeamAsATypedStoreError() throws {
     // given — this one the typed store can express, so it is driven through the real constructor
     let env = try makeMigratedLegacyRun()
     defer { try? FileManager.default.removeItem(at: env.root) }
@@ -332,7 +354,7 @@ import Testing
     // when / then
     #expect {
       try env.usage.recordUsage(
-        makeProviderUsage(runId: 9999, sessionId: env.sessionId, callID: "call-orphan")
+        makeProviderUsage(runID: 9999, sessionID: env.sessionID, callID: "call-orphan")
       )
     } throws: { error in
       Self.isTypedFailure(error, mentioning: "FOREIGN KEY constraint failed")
@@ -367,10 +389,12 @@ extension V9PersistenceAcceptanceTests {
     issuer: "openai-chatgpt-responses-v1:suspend",
     payload: suspendPayload
   )
+
   static let exchangeState = ProviderExchangeState(
     issuer: "openai-chatgpt-responses-v1:exchange",
     payload: exchangePayload
   )
+
   static let terminalState = ProviderExchangeState(
     issuer: "openai-chatgpt-responses-v1:terminal",
     payload: terminalPayload
@@ -385,8 +409,8 @@ private extension V9PersistenceAcceptanceTests {
 
   static func toolRoundUsage(_ env: Fixture) -> ProviderUsage {
     makeProviderUsage(
-      runId: env.runId,
-      sessionId: env.sessionId,
+      runID: env.runID,
+      sessionID: env.sessionID,
       callID: toolCallID,
       promptTokens: 100,
       completionTokens: 20,
@@ -398,8 +422,8 @@ private extension V9PersistenceAcceptanceTests {
 
   static func terminalRoundUsage(_ env: Fixture) -> ProviderUsage {
     makeProviderUsage(
-      runId: env.runId,
-      sessionId: env.sessionId,
+      runID: env.runID,
+      sessionID: env.sessionID,
       callID: terminalCallID,
       promptTokens: 50,
       completionTokens: 10,
@@ -413,9 +437,9 @@ private extension V9PersistenceAcceptanceTests {
     SuspendedTurnCommit(
       assistantContent: "Let me save that.",
       toolCallsJSON: #"[{"id":"w1","name":"file_write","arguments":"{}"}]"#,
-      completedObservations: [ToolObservationRow(toolCallId: "w0", content: "already ran")],
+      completedObservations: [ToolObservationRow(toolCallID: "w0", content: "already ran")],
       pending: PendingToolAction(
-        toolCallId: "w1",
+        toolCallID: "w1",
         recorded: RecordedToolAction(
           tool: "file_write",
           canonicalArgsJSON: #"{"content":"hi","path":"notes/plan.md"}"#,
@@ -429,17 +453,17 @@ private extension V9PersistenceAcceptanceTests {
           )
         )
       ),
-      ownerUserId: 9,
+      ownerUserID: 9,
       nonce: "n0",
       promptChunks: [
         OutboxChunk(
           stepIndex: 0,
-          chatId: 9,
+          chatID: 9,
           payload: "Approve writing /workspace/notes/plan.md?",
           payloadHash: "hash",
-          approvalId: nil,
+          approvalID: nil,
           replyMarkup: #"{"inline_keyboard":[[{"text":"Approve","callback_data":"apr:n0:y"}]]}"#
-        )
+        ),
       ],
       setTainted: false,
       setPrivateData: false,
@@ -452,45 +476,49 @@ private extension V9PersistenceAcceptanceTests {
   /// the one path onto migrated rows that the suspend/resume fixtures never reach.
   static let statefulExchange = ToolExchange(
     assistantContent: "let me check the log",
-    toolCalls: [
-      ToolCall(id: "r1", name: "file_read", argumentsJSON: #"{"path":"notes/log.md"}"#)
-    ],
+    toolCalls: [ToolCall(id: "r1", name: "file_read", argumentsJSON: #"{"path":"notes/log.md"}"#)],
     observations: [
       ToolObservation(
-        callId: "r1",
+        callID: "r1",
         toolName: "file_read",
         content: "raw log text",
         status: .ok,
         ingestedUntrusted: true
-      )
+      ),
     ],
     providerState: exchangeState
   )
 
   static func terminalTurn(_ env: Fixture) -> AssistantTurn {
     AssistantTurn(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 9,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 9,
       content: "saved and confirmed",
       usage: terminalRoundUsage(env),
       chunks: [
-        OutboxChunk(stepIndex: 0, chatId: 9, payload: "saved and confirmed", payloadHash: "hash2")
+        OutboxChunk(stepIndex: 0, chatID: 9, payload: "saved and confirmed", payloadHash: "hash2"),
       ],
       exchanges: [statefulExchange],
       providerState: terminalState
     )
   }
 
-  static func usageArguments(
-    _ env: Fixture,
-    callID: String,
-    model: String?
-  ) -> StatementArguments {
+  static func usageArguments(_ env: Fixture, callID: String, model: String?) -> StatementArguments {
     // The trailing pair is the learning scope, null for every call a run made.
     [
-      env.runId, env.sessionId, model, 11, 5, 0.004, CostSource.priceFile.rawValue, false,
-      seededAt, callID, nil, nil,
+      env.runID,
+      env.sessionID,
+      model,
+      11,
+      5,
+      0.004,
+      CostSource.priceFile.rawValue,
+      false,
+      seededAt,
+      callID,
+      nil,
+      nil,
     ]
   }
 }
@@ -506,9 +534,9 @@ private extension V9PersistenceAcceptanceTests {
     try pool.write { db in
       try db.execute(
         sql: """
-          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-          VALUES (?, ?, ?, 0)
-          """,
+        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+        VALUES (?, ?, ?, 0)
+        """,
         arguments: [legacySessionKey, seededAt, seededAt]
       )
       try db.execute(
@@ -517,25 +545,25 @@ private extension V9PersistenceAcceptanceTests {
       )
       try db.execute(
         sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts)
-          VALUES (1, 1, 'assistant', 'the archived plan', 'trusted', ?)
-          """,
+        INSERT INTO messages(session_id, run_id, role, content, provenance, ts)
+        VALUES (1, 1, 'assistant', 'the archived plan', 'trusted', ?)
+        """,
         arguments: [seededAt]
       )
       try db.execute(
         sql: """
-          INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-            cost_usd, cost_source, is_estimated, ts)
-          VALUES (1, 1, 'gpt-4o', 11, 5, 0.004, 'price_file', 0, ?)
-          """,
+        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+          cost_usd, cost_source, is_estimated, ts)
+        VALUES (1, 1, 'gpt-4o', 11, 5, 0.004, 'price_file', 0, ?)
+        """,
         arguments: [seededAt]
       )
       try db.execute(
         sql: """
-          INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
-            cost_usd, cost_source, is_estimated, ts)
-          VALUES (NULL, 1, 'gpt-4o-mini', 7, 2, 0.001, 'heuristic', 1, ?)
-          """,
+        INSERT INTO provider_usage(run_id, session_id, model, prompt_tokens, completion_tokens,
+          cost_usd, cost_source, is_estimated, ts)
+        VALUES (NULL, 1, 'gpt-4o-mini', 7, 2, 0.001, 'heuristic', 1, ?)
+        """,
         arguments: [seededAt]
       )
     }
@@ -561,12 +589,11 @@ private extension V9PersistenceAcceptanceTests {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT role, \(ProviderStateCoding.selection) FROM messages
-          WHERE run_id = ? ORDER BY id ASC
-          """,
-        arguments: [env.runId]
-      )
-      .map { row in
+        SELECT role, \(ProviderStateCoding.selection) FROM messages
+        WHERE run_id = ? ORDER BY id ASC
+        """,
+        arguments: [env.runID]
+      ).map { row in
         StateRow(
           role: row["role"],
           issuer: row[ProviderStateCoding.issuerColumn],
@@ -576,12 +603,12 @@ private extension V9PersistenceAcceptanceTests {
     }
   }
 
-  static func callIdentities(_ env: Fixture, runId: Int64) throws -> [String] {
+  static func callIdentities(_ env: Fixture, runID: Int64) throws -> [String] {
     try env.pool.read { db in
       try String.fetchAll(
         db,
         sql: "SELECT provider_call_id FROM provider_usage WHERE run_id = ? ORDER BY id ASC",
-        arguments: [runId]
+        arguments: [runID]
       )
     }
   }
@@ -597,7 +624,7 @@ private extension V9PersistenceAcceptanceTests {
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = ?",
-        arguments: [env.runId, MessageRole.assistant.rawValue]
+        arguments: [env.runID, MessageRole.assistant.rawValue]
       ) ?? 0
     }
   }
@@ -607,12 +634,11 @@ private extension V9PersistenceAcceptanceTests {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT prompt_tokens, completion_tokens FROM provider_usage
-          WHERE run_id = ? ORDER BY id ASC
-          """,
-        arguments: [env.runId]
-      )
-      .map { row in
+        SELECT prompt_tokens, completion_tokens FROM provider_usage
+        WHERE run_id = ? ORDER BY id ASC
+        """,
+        arguments: [env.runID]
+      ).map { row in
         UsageFigures(promptTokens: row["prompt_tokens"], completionTokens: row["completion_tokens"])
       }
     }
@@ -623,10 +649,10 @@ private extension V9PersistenceAcceptanceTests {
       let row = try Row.fetchOne(
         db,
         sql: "SELECT input_tokens, output_tokens, cost_usd FROM runs WHERE id = ?",
-        arguments: [env.runId]
+        arguments: [env.runID]
       )
       guard let row else {
-        throw StoreError.unexpected("run \(env.runId) vanished")
+        throw StoreError.unexpected("run \(env.runID) vanished")
       }
       return RunTotals(
         inputTokens: row["input_tokens"],
@@ -649,10 +675,7 @@ private extension V9PersistenceAcceptanceTests {
   /// Matches the failure mode, not merely "a `StoreError` arrived": a seam that collapsed every
   /// failure into one opaque case would still throw, and that must not read as a pass.
   static func isTypedFailure(_ error: any Error, mentioning kind: String) -> Bool {
-    guard
-      let storeError = error as? StoreError,
-      case .unexpected(let message) = storeError
-    else {
+    guard let storeError = error as? StoreError, case .unexpected(let message) = storeError else {
       return false
     }
     return message.contains(kind)

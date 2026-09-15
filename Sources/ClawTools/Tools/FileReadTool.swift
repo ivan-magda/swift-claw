@@ -24,14 +24,14 @@ public struct FileReadTool: Tool {
     ToolDefinition(
       name: "file_read",
       description:
-        "Read a UTF-8 text file from the workspace. The path is relative to the workspace root.",
+      "Read a UTF-8 text file from the workspace. The path is relative to the workspace root.",
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
           "path": .object([
             "type": .string("string"),
             "description": .string("Workspace-relative file path, e.g. notes/plan.md"),
-          ])
+          ]),
         ]),
         "required": .array([.string("path")]),
       ]),
@@ -48,10 +48,7 @@ public struct FileReadTool: Tool {
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    guard
-      let path = arguments.objectValue?["path"]?.stringValue,
-      path.isEmpty == false
-    else {
+    guard let path = arguments.objectValue?["path"]?.stringValue, path.isEmpty == false else {
       return errorPayload("file_read needs a non-empty \"path\" argument.")
     }
     guard let canonicalRoot = WorkspacePathContainment.canonicalPath(workspaceRoot.path) else {
@@ -59,10 +56,8 @@ public struct FileReadTool: Tool {
     }
     let canonicalTarget: String
     switch WorkspacePathContainment.resolveExisting(path: path, root: workspaceRoot.path) {
-    case .refused(let reason):
-      return errorPayload(reason)
-    case .resolved(let resolved):
-      canonicalTarget = resolved
+    case .refused(let reason): return errorPayload(reason)
+    case .resolved(let resolved): canonicalTarget = resolved
     }
 
     guard let data = FileManager.default.contents(atPath: canonicalTarget) else {

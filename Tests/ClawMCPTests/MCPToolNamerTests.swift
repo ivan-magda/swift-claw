@@ -36,7 +36,7 @@ struct MCPToolNamerTests {
       MCPToolCoordinate(
         server: String(repeating: "s", count: 40),
         remoteName: String(repeating: "t", count: 90)
-      )
+      ),
     ]
 
     // when
@@ -62,7 +62,9 @@ struct MCPToolNamerTests {
     // then
     #expect(
       names == [
-        "mcp__linear__list_issues", "mcp__linear__list_issues_2", "mcp__linear__list_issues_3",
+        "mcp__linear__list_issues",
+        "mcp__linear__list_issues_2",
+        "mcp__linear__list_issues_3",
       ]
     )
     #expect(MCPToolNamer.assign(coordinates) == names)
@@ -81,7 +83,11 @@ struct MCPToolNamerTests {
     let names = MCPToolNamer.assign(coordinates)
 
     // then
-    #expect(names.allSatisfy { $0.count <= MCPToolNamer.nameLimit })
+    #expect(
+      names.allSatisfy {
+        $0.count <= MCPToolNamer.nameLimit
+      }
+    )
     #expect(names[1].hasSuffix("_2"))
     #expect(names[0] != names[1])
   }
@@ -120,7 +126,12 @@ struct MCPToolNamerTests {
   func neverCollidesWithBuiltIns() {
     // given — the built-in registry vocabulary a remote tool must not be able to shadow
     let builtIns = [
-      "file_read", "file_write", "web_fetch", "web_search", "memory_write", "execute_code",
+      "file_read",
+      "file_write",
+      "web_fetch",
+      "web_search",
+      "memory_write",
+      "execute_code",
     ]
     let coordinates = builtIns.map { name in
       MCPToolCoordinate(server: "linear", remoteName: name)
@@ -130,8 +141,16 @@ struct MCPToolNamerTests {
     let names = MCPToolNamer.assign(coordinates)
 
     // then
-    #expect(names.allSatisfy { $0.hasPrefix(MCPToolNamer.prefix) })
-    #expect(builtIns.allSatisfy { $0.hasPrefix(MCPToolNamer.prefix) == false })
+    #expect(
+      names.allSatisfy {
+        $0.hasPrefix(MCPToolNamer.prefix)
+      }
+    )
+    #expect(
+      builtIns.allSatisfy {
+        $0.hasPrefix(MCPToolNamer.prefix) == false
+      }
+    )
     #expect(Set(names).isDisjoint(with: Set(builtIns)))
   }
 }

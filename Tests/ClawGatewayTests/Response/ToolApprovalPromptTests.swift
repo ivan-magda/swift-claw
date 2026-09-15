@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ToolApprovalPromptTests {
+@Suite
+struct ToolApprovalPromptTests {
   private func recorded(
     tool: String,
     target: String,
@@ -27,7 +28,8 @@ import Testing
     )
   }
 
-  @Test func codeExecutionReasonGetsDedicatedOwnerCopy() {
+  @Test
+  func codeExecutionReasonGetsDedicatedOwnerCopy() {
     // given
     let input = ToolApprovalPrompt.Input(
       recorded: recorded(
@@ -49,7 +51,8 @@ import Testing
     #expect(text.contains("code_exec:python:0123456789abcdef"))
   }
 
-  @Test func richPromptCarriesToolFullTargetAndBlastRadius() {
+  @Test
+  func richPromptCarriesToolFullTargetAndBlastRadius() {
     // given
     let input = ToolApprovalPrompt.Input(
       recorded: recorded(
@@ -71,7 +74,8 @@ import Testing
     #expect(text.contains("create, 1.2 KB"))
   }
 
-  @Test func fullyResolvedUrlTargetIsNeverTruncated() {
+  @Test
+  func fullyResolvedURLTargetIsNeverTruncated() {
     // given — a long URL with a query string (§5.4: full URL, never model-truncated)
     let target = "https://example.com/a/b/c?token=abcdefghijklmnop&next=2&page=3"
     let input = ToolApprovalPrompt.Input(
@@ -92,7 +96,8 @@ import Testing
     #expect(text.contains(target))
   }
 
-  @Test func taintBannerAppearsOnlyWhenSet() {
+  @Test
+  func taintBannerAppearsOnlyWhenSet() {
     // given
     let withTaint = ToolApprovalPrompt.Input(
       recorded: recorded(
@@ -121,7 +126,8 @@ import Testing
     #expect(ToolApprovalPrompt.text(for: withoutTaint).contains("TAINT") == false)
   }
 
-  @Test func privilegedFileBannerAppearsOnlyWhenSet() {
+  @Test
+  func privilegedFileBannerAppearsOnlyWhenSet() {
     // given
     let privileged = ToolApprovalPrompt.Input(
       recorded: recorded(
@@ -149,7 +155,8 @@ import Testing
     #expect(ToolApprovalPrompt.text(for: ordinary).contains("PRIVILEGED") == false)
   }
 
-  @Test func contentPreviewRendersWhenPresentAndIsOmittedWhenNil() {
+  @Test
+  func contentPreviewRendersWhenPresentAndIsOmittedWhenNil() {
     // given — the preview is already size-capped + secret-redacted by the tool (§5.4)
     let withPreview = ToolApprovalPrompt.Input(
       recorded: recorded(
@@ -179,7 +186,8 @@ import Testing
     #expect(ToolApprovalPrompt.text(for: withoutPreview).contains("Preview") == false)
   }
 
-  @Test func memoryWriteScanWarningsSurfaceInThePrompt() {
+  @Test
+  func memoryWriteScanWarningsSurfaceInThePrompt() {
     // given
     let input = ToolApprovalPrompt.Input(
       recorded: recorded(
@@ -202,7 +210,8 @@ import Testing
     #expect(text.contains("instruction-shaped text"))
   }
 
-  @Test func aShortPromptIsOneKeyboardCarryingChunk() {
+  @Test
+  func aShortPromptIsOneKeyboardCarryingChunk() {
     // given
     let input = ToolApprovalPrompt.Input(
       recorded: recorded(
@@ -216,7 +225,7 @@ import Testing
     )
 
     // when
-    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "n-1")
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatID: 7, nonce: "n-1")
 
     // then — the common case: one chunk, keyboard attached, whole prompt as the payload
     #expect(chunks.count == 1)
@@ -225,7 +234,8 @@ import Testing
     #expect(chunks.first?.replyMarkup != nil)
   }
 
-  @Test func anOverlongPromptSplitsWithTheKeyboardOnTheFinalChunk() {
+  @Test
+  func anOverlongPromptSplitsWithTheKeyboardOnTheFinalChunk() {
     // given — a canonical URL longer than one Telegram message (FR-T5 forbids truncating it, so
     // the prompt must SPLIT instead of producing one undeliverable outbox row)
     let target =
@@ -242,19 +252,28 @@ import Testing
     )
 
     // when
-    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "n-1")
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatID: 7, nonce: "n-1")
 
     // then — every chunk is sendable, the full target survives across the split, step indexes are
     // sequential, and ONLY the final chunk (ending with the tap instruction) carries the keyboard
     #expect(chunks.count > 1)
-    #expect(chunks.allSatisfy { $0.payload.count <= ReplySplitter.limit })
+    #expect(
+      chunks.allSatisfy {
+        $0.payload.count <= ReplySplitter.limit
+      }
+    )
     #expect(chunks.map(\.payload).joined() == ToolApprovalPrompt.text(for: input))
     #expect(chunks.map(\.stepIndex) == Array(0..<chunks.count))
-    #expect(chunks.dropLast().allSatisfy { $0.replyMarkup == nil })
+    #expect(
+      chunks.dropLast().allSatisfy {
+        $0.replyMarkup == nil
+      }
+    )
     #expect(chunks.last?.replyMarkup != nil)
   }
 
-  @Test func fullCodeConsentSurvivesPromptChunking() {
+  @Test
+  func fullCodeConsentSurvivesPromptChunking() {
     // given
     let code = String(repeating: "print('x')\n", count: 4_000)
     let input = ToolApprovalPrompt.Input(
@@ -270,7 +289,7 @@ import Testing
     )
 
     // when
-    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "nonce")
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatID: 7, nonce: "nonce")
 
     // then
     #expect(chunks.count > 1)
@@ -284,7 +303,8 @@ import Testing
     #expect(chunks.last?.replyMarkup != nil)
   }
 
-  @Test func richPromptRendersForEveryApprovalReason() {
+  @Test
+  func richPromptRendersForEveryApprovalReason() {
     // given — the renderer is exhaustive over ApprovalReason; this pins that both reasons produce
     // owner-facing copy carrying the target at runtime (the compile-time guarantee is the switch)
     for reason in [ApprovalReason.askTier, .exfilTrifecta, .codeExec] {
@@ -308,18 +328,19 @@ import Testing
     }
   }
 
-  @Test func coderConsentChunksKeepKeyboardAfterAllArguments() {
+  @Test
+  func coderConsentChunksKeepKeyboardAfterAllArguments() {
     // given
     let task = String(repeating: "Complete task 👨‍👩‍👧‍👦\n", count: 3_000)
     let preview =
-      "### Task\n\n" + CoderCardMarkdown.literal(task)
-      + "\n\n### Instructions\n\n" + CoderCardMarkdown.literal("Last instruction <keep>")
+      "### Task\n\n" + CoderCardMarkdown.literal(task) + "\n\n### Instructions\n\n"
+        + CoderCardMarkdown.literal("Last instruction <keep>")
     let input = ToolApprovalPrompt.Input(
       recorded: recorded(
         tool: CoderToolNames.submit,
         target: "/workspace/repository",
         reason: .coderSubmit,
-        blastRadius: CoderCardMarkdown.field("Source", "/workspace/repository"),
+        blastRadius: CoderCardMarkdown.field(label: "Source", value: "/workspace/repository"),
         preview: preview
       ),
       taintBanner: false,
@@ -328,7 +349,7 @@ import Testing
     )
 
     // when
-    let chunks = ToolApprovalPrompt.chunks(for: input, chatId: 7, nonce: "coder-nonce")
+    let chunks = ToolApprovalPrompt.chunks(for: input, chatID: 7, nonce: "coder-nonce")
 
     // then
     #expect(chunks.count > 1)

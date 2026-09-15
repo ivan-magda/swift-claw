@@ -8,19 +8,15 @@ import GRDB
 public struct ScheduleCommandStoreGRDB: ScheduleCommandStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) {
-    database = MappedDatabase(writer: writer)
-  }
+  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
 
-  public func applyArm(
-    updateId: Int64,
-    job: NewScheduledJob,
-    now: Date
-  ) throws(StoreError) -> ScheduleArmResult {
+  public func applyArm(updateID: Int64, job: NewScheduledJob, now: Date) throws(StoreError)
+    -> ScheduleArmResult
+  {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
-        updateId: updateId,
+        updateID: updateID,
         claimedAt: now
       )
       guard newlyClaimed else {

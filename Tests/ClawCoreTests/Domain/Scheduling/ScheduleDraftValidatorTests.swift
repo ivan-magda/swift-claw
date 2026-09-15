@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ScheduleDraftValidatorTests {
+@Suite
+struct ScheduleDraftValidatorTests {
   /// Monday 2026-07-06 12:00:00 UTC == 14:00 Europe/Berlin (CEST). All expectations below are
   /// derived from this fixed instant — no real clocks.
   private let fixedNow = SchedulingTestClock.mondayNoonBerlin
@@ -49,7 +50,8 @@ import Testing
     )
   }
 
-  @Test func weekdaysDraftValidatesWithRuleWordsAndFirstOccurrence() throws {
+  @Test
+  func weekdaysDraftValidatesWithRuleWordsAndFirstOccurrence() throws {
     // given — 07:00 already passed today (it is 14:00 local)
     let validator = try makeValidator()
     let weekdayDraft = draft(kind: .weekdays, time: "07:00")
@@ -70,7 +72,8 @@ import Testing
     #expect(parts.second == 0)
   }
 
-  @Test func defaultTimezoneAppliesWhenDraftOmitsIt() throws {
+  @Test
+  func defaultTimezoneAppliesWhenDraftOmitsIt() throws {
     // given
     let validator = try makeValidator()
     let dailyDraft = draft(kind: .daily, time: "08:30", timezone: nil)
@@ -87,7 +90,8 @@ import Testing
     #expect(parts.minute == 30)
   }
 
-  @Test func weeklyDraftPinsTheNamedWeekday() throws {
+  @Test
+  func weeklyDraftPinsTheNamedWeekday() throws {
     // given — today IS Monday, but 09:00 has passed, so the fire is NEXT Monday
     let validator = try makeValidator()
     let weeklyDraft = draft(kind: .weekly, time: "09:00", weekday: "monday")
@@ -103,7 +107,8 @@ import Testing
     #expect(parts.hour == 9)
   }
 
-  @Test func everyNMinutesKeepsAnchorPhaseAndWords() throws {
+  @Test
+  func everyNMinutesKeepsAnchorPhaseAndWords() throws {
     // given
     let validator = try makeValidator()
     let intervalDraft = draft(kind: .everyNMinutes, intervalMinutes: 30)
@@ -116,7 +121,8 @@ import Testing
     #expect(validated.firstOccurrence == fixedNow.addingTimeInterval(1_800))
   }
 
-  @Test func everyNMinutesValidatedMidMinuteLandsOnWholeMinutes() throws {
+  @Test
+  func everyNMinutesValidatedMidMinuteLandsOnWholeMinutes() throws {
     // given — validation at hh:mm:23. The rule pins seconds [0] (the mapping's contract), so
     // fires land on the minute — the owner-facing words render minutes only, and a hidden
     // :23-second phase would make every delivery look 23 seconds late.
@@ -131,7 +137,8 @@ import Testing
     #expect(validated.firstOccurrence == fixedNow.addingTimeInterval(1_800))
   }
 
-  @Test func intervalBelowFloorIsRejected() throws {
+  @Test
+  func intervalBelowFloorIsRejected() throws {
     // given
     let validator = try makeValidator()
     let tooFast = draft(kind: .everyNMinutes, intervalMinutes: 1)
@@ -143,7 +150,8 @@ import Testing
     #expect(result == .failure(.intervalTooSmall(minutes: 1, floorMinutes: 5)))
   }
 
-  @Test func onceWithAbsoluteDateResolvesInTheZone() throws {
+  @Test
+  func onceWithAbsoluteDateResolvesInTheZone() throws {
     // given — 2026-07-08 07:00 Europe/Berlin == 05:00 UTC
     let validator = try makeValidator()
     let onceDraft = draft(kind: .once, time: "07:00", date: "2026-07-08")
@@ -157,7 +165,8 @@ import Testing
     #expect(validated.firstOccurrence == Date(timeIntervalSince1970: 1_783_486_800))
   }
 
-  @Test func onceWithoutDatePicksTheNextMatchingTime() throws {
+  @Test
+  func onceWithoutDatePicksTheNextMatchingTime() throws {
     // given — 23:15 tonight is still ahead: 2026-07-06 23:15 Berlin == 21:15 UTC
     let validator = try makeValidator()
     let onceDraft = draft(kind: .once, time: "23:15")
@@ -169,7 +178,8 @@ import Testing
     #expect(validated.firstOccurrence == Date(timeIntervalSince1970: 1_783_372_500))
   }
 
-  @Test func onceInThePastIsRejected() throws {
+  @Test
+  func onceInThePastIsRejected() throws {
     // given
     let validator = try makeValidator()
     let staleDraft = draft(kind: .once, time: "07:00", date: "2026-07-05")
@@ -178,7 +188,8 @@ import Testing
     #expect(validator.validate(staleDraft, now: fixedNow) == .failure(.onceInThePast))
   }
 
-  @Test func labelRulesAreEnforcedInGraphemes() throws {
+  @Test
+  func labelRulesAreEnforcedInGraphemes() throws {
     // given — 65 DECOMPOSED "é" graphemes (130 scalars): the cap counts graphemes, not scalars
     let validator = try makeValidator()
     let longLabel = String(repeating: "e\u{0301}", count: 65)
@@ -194,7 +205,8 @@ import Testing
     )
   }
 
-  @Test func emptyPromptIsRejected() throws {
+  @Test
+  func emptyPromptIsRejected() throws {
     // given
     let validator = try makeValidator()
     let promptless = draft(prompt: " ", kind: .daily, time: "07:00")
@@ -203,7 +215,8 @@ import Testing
     #expect(validator.validate(promptless, now: fixedNow) == .failure(.emptyPrompt))
   }
 
-  @Test func unknownTimezoneIsRejected() throws {
+  @Test
+  func unknownTimezoneIsRejected() throws {
     // given
     let validator = try makeValidator()
     let martian = draft(kind: .daily, time: "07:00", timezone: "Mars/Olympus")
@@ -214,7 +227,8 @@ import Testing
     )
   }
 
-  @Test func missingAndInvalidFieldsAreRejected() throws {
+  @Test
+  func missingAndInvalidFieldsAreRejected() throws {
     // given
     let validator = try makeValidator()
 
@@ -232,20 +246,16 @@ import Testing
         == .failure(.missingField(kind: .everyNMinutes, field: "intervalMinutes"))
     )
     #expect(
-      validator.validate(
-        draft(kind: .weekly, time: "09:00", weekday: "funday"),
-        now: fixedNow
-      ) == .failure(.invalidWeekday("funday"))
+      validator.validate(draft(kind: .weekly, time: "09:00", weekday: "funday"), now: fixedNow)
+        == .failure(.invalidWeekday("funday"))
     )
     #expect(
       validator.validate(draft(kind: .daily, time: "7 am"), now: fixedNow)
         == .failure(.invalidTime("7 am"))
     )
     #expect(
-      validator.validate(
-        draft(kind: .once, time: "07:00", date: "2026-02-31"),
-        now: fixedNow
-      ) == .failure(.invalidDate("2026-02-31"))
+      validator.validate(draft(kind: .once, time: "07:00", date: "2026-02-31"), now: fixedNow)
+        == .failure(.invalidDate("2026-02-31"))
     )
   }
 

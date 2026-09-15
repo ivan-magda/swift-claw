@@ -5,11 +5,13 @@ import Testing
 
 @testable import ClawSecrets
 
-@Suite struct SecureFilePublisherTests {
+@Suite
+struct SecureFilePublisherTests {
   private let ownerOnly = SecureFilePublisher.ReadPolicy(
     maximumByteCount: 1024,
     requiredPermissionBits: SecureFilePublisher.ownerOnlyPermissions
   )
+
   private let anyMode = SecureFilePublisher.ReadPolicy(
     maximumByteCount: 1024,
     requiredPermissionBits: nil
@@ -17,7 +19,8 @@ import Testing
 
   // MARK: - Publication
 
-  @Test func publishWritesAnOwnerOnlyRegularFileWithTheExactBytes() throws {
+  @Test
+  func publishWritesAnOwnerOnlyRegularFileWithTheExactBytes() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -34,7 +37,8 @@ import Testing
     #expect(try SecureFilePublisher.read(at: target, policy: ownerOnly) == payload)
   }
 
-  @Test func publishLeavesNoTemporaryEntryBehindOnSuccess() throws {
+  @Test
+  func publishLeavesNoTemporaryEntryBehindOnSuccess() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -47,7 +51,8 @@ import Testing
     #expect(try entryNames(in: stateRoot) == [SecretStatePaths.credentialEnvelopeName])
   }
 
-  @Test func publishedIdentityNamesTheInodeNowAtTheTarget() throws {
+  @Test
+  func publishedIdentityNamesTheInodeNowAtTheTarget() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -61,7 +66,8 @@ import Testing
     #expect(outcome.identity == onDisk.identity)
   }
 
-  @Test func publishReplacesAnExistingValueAtomically() throws {
+  @Test
+  func publishReplacesAnExistingValueAtomically() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -78,7 +84,8 @@ import Testing
 
   // MARK: - Exclusive publication
 
-  @Test func anExclusivePublishOntoAnExistingPathRefusesToClobberIt() throws {
+  @Test
+  func anExclusivePublishOntoAnExistingPathRefusesToClobberIt() throws {
     // given — the loser of a create race: an incumbent already holds the name.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-exclusive")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -98,7 +105,8 @@ import Testing
     #expect(try entryNames(in: stateRoot) == [SecretStatePaths.keyName])
   }
 
-  @Test func anExclusivePublishOntoAFreePathLandsAndLeavesNoTemporaryEntry() throws {
+  @Test
+  func anExclusivePublishOntoAFreePathLandsAndLeavesNoTemporaryEntry() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-exclusive")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -118,7 +126,8 @@ import Testing
     #expect(outcome.identity == onDisk.identity)
   }
 
-  @Test func anExclusivePublishRefusesASymlinkStandingAtTheTargetWithoutFollowingIt() throws {
+  @Test
+  func anExclusivePublishRefusesASymlinkStandingAtTheTargetWithoutFollowingIt() throws {
     // given — a symlink planted at the key path, aimed at a file elsewhere.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-exclusive")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -134,7 +143,8 @@ import Testing
     #expect(try Data(contentsOf: elsewhere) == Data("victim".utf8))
   }
 
-  @Test func aFailedExclusivePublishLeavesNoTemporaryEntryBehind() throws {
+  @Test
+  func aFailedExclusivePublishLeavesNoTemporaryEntryBehind() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-exclusive")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -152,13 +162,12 @@ import Testing
 
   // MARK: - Failpoints
 
-  @Test(
-    arguments: [
-      SecureFilePublisher.Failpoint.Step.tempWrite,
-      SecureFilePublisher.Failpoint.Step.fileSync,
-      SecureFilePublisher.Failpoint.Step.commit,
-    ]
-  ) func everyPreCommitFailpointLeavesTheOldValueAndNoTemporaryEntry(
+  @Test(arguments: [
+    SecureFilePublisher.Failpoint.Step.tempWrite,
+    SecureFilePublisher.Failpoint.Step.fileSync,
+    SecureFilePublisher.Failpoint.Step.commit,
+  ])
+  func everyPreCommitFailpointLeavesTheOldValueAndNoTemporaryEntry(
     step: SecureFilePublisher.Failpoint.Step
   ) throws {
     // given
@@ -178,7 +187,8 @@ import Testing
     #expect(try entryNames(in: stateRoot) == [SecretStatePaths.credentialEnvelopeName])
   }
 
-  @Test func aPreCommitFailpointOnAFreshTargetCreatesNothing() throws {
+  @Test
+  func aPreCommitFailpointOnAFreshTargetCreatesNothing() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -194,7 +204,8 @@ import Testing
     #expect(try entryNames(in: stateRoot).isEmpty)
   }
 
-  @Test func aDirectorySyncFailpointReportsCommitUncertainWithTheNewValueInPlace() throws {
+  @Test
+  func aDirectorySyncFailpointReportsCommitUncertainWithTheNewValueInPlace() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -210,17 +221,19 @@ import Testing
     #expect(try Data(contentsOf: target) == Data("new".utf8))
   }
 
-  @Test func durabilityRecoverySyncsTheExactCommittedIdentity() throws {
+  @Test
+  func durabilityRecoverySyncsTheExactCommittedIdentity() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
     let target = SecretStatePaths(stateRoot: stateRoot).credentialEnvelope
-    let outcome = try SecureFilePublisher(failpoint: .init(.directorySync))
+    let outcome = try SecureFilePublisher(failpoint: SecureFilePublisher.Failpoint(.directorySync))
       .publish(Data("committed".utf8), to: target)
 
     // when
-    let stillUnproven = SecureFilePublisher(failpoint: .init(.directorySync))
-      .proveDurable(outcome, at: target)
+    let stillUnproven = SecureFilePublisher(
+      failpoint: SecureFilePublisher.Failpoint(.directorySync)
+    ).proveDurable(outcome, at: target)
     let durable = SecureFilePublisher().proveDurable(outcome, at: target)
 
     // then
@@ -228,12 +241,13 @@ import Testing
     #expect(durable)
   }
 
-  @Test func durabilityRecoveryRefusesASubstitutedIdentity() throws {
+  @Test
+  func durabilityRecoveryRefusesASubstitutedIdentity() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-publish")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
     let target = SecretStatePaths(stateRoot: stateRoot).credentialEnvelope
-    let outcome = try SecureFilePublisher(failpoint: .init(.directorySync))
+    let outcome = try SecureFilePublisher(failpoint: SecureFilePublisher.Failpoint(.directorySync))
       .publish(Data("original".utf8), to: target)
     try FileManager.default.removeItem(at: target)
     _ = try SecureFilePublisher().publish(Data("substitute".utf8), to: target)
@@ -248,7 +262,8 @@ import Testing
 
   // MARK: - Bounded, no-follow reads
 
-  @Test func readRefusesASymlinkEvenWhenItsTargetIsWellFormed() throws {
+  @Test
+  func readRefusesASymlinkEvenWhenItsTargetIsWellFormed() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-read")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -263,7 +278,8 @@ import Testing
     }
   }
 
-  @Test func readRefusesANonRegularEntry() throws {
+  @Test
+  func readRefusesANonRegularEntry() throws {
     // given — a directory standing in for the envelope: open succeeds, fstat must reject it.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-read")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -276,7 +292,8 @@ import Testing
     }
   }
 
-  @Test func readRefusesAWorldReadableEntryWhenThePolicyDemandsOwnerOnly() throws {
+  @Test
+  func readRefusesAWorldReadableEntryWhenThePolicyDemandsOwnerOnly() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-read")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -290,7 +307,8 @@ import Testing
     }
   }
 
-  @Test func readAcceptsAWorldReadableEntryWhenThePolicyDoesNotDemandOwnerOnly() throws {
+  @Test
+  func readAcceptsAWorldReadableEntryWhenThePolicyDoesNotDemandOwnerOnly() throws {
     // given — Foundation's atomic write created `secrets.enc` 0644 in every installation sealed
     // before this protocol existed. That ciphertext's confidentiality rests on the mode-checked
     // key, so the runtime envelope's policy must keep opening it rather than lock the owner out.
@@ -306,7 +324,8 @@ import Testing
     )
   }
 
-  @Test func readRefusesAnEntryLargerThanTheCap() throws {
+  @Test
+  func readRefusesAnEntryLargerThanTheCap() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-read")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -319,7 +338,8 @@ import Testing
     }
   }
 
-  @Test func readAcceptsAnEntryExactlyAtTheCap() throws {
+  @Test
+  func readAcceptsAnEntryExactlyAtTheCap() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-read")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -331,7 +351,8 @@ import Testing
     #expect(try SecureFilePublisher.read(at: target, policy: ownerOnly) == payload)
   }
 
-  @Test func readRefusesAMissingEntry() throws {
+  @Test
+  func readRefusesAMissingEntry() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-read")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -352,34 +373,63 @@ import Testing
   // honest way to prove the rule exists.
   @Test(arguments: [
     (
-      name: "non-regular", isRegular: false, perms: UInt32(0o600), owner: UInt32(0), size: 8,
+      name: "non-regular",
+      isRegular: false,
+      perms: (0o600 as UInt32),
+      owner: (0 as UInt32),
+      size: 8,
       rejects: true
     ),
     (
-      name: "world-readable", isRegular: true, perms: UInt32(0o644), owner: UInt32(0), size: 8,
+      name: "world-readable",
+      isRegular: true,
+      perms: (0o644 as UInt32),
+      owner: (0 as UInt32),
+      size: 8,
       rejects: true
     ),
     (
-      name: "group-readable", isRegular: true, perms: UInt32(0o640), owner: UInt32(0), size: 8,
+      name: "group-readable",
+      isRegular: true,
+      perms: (0o640 as UInt32),
+      owner: (0 as UInt32),
+      size: 8,
       rejects: true
     ),
     (
-      name: "wrong-owner", isRegular: true, perms: UInt32(0o600), owner: UInt32(1), size: 8,
+      name: "wrong-owner",
+      isRegular: true,
+      perms: (0o600 as UInt32),
+      owner: (1 as UInt32),
+      size: 8,
       rejects: true
     ),
     (
-      name: "over-cap", isRegular: true, perms: UInt32(0o600), owner: UInt32(0), size: 1025,
+      name: "over-cap",
+      isRegular: true,
+      perms: (0o600 as UInt32),
+      owner: (0 as UInt32),
+      size: 1025,
       rejects: true
     ),
     (
-      name: "at-cap", isRegular: true, perms: UInt32(0o600), owner: UInt32(0), size: 1024,
+      name: "at-cap",
+      isRegular: true,
+      perms: (0o600 as UInt32),
+      owner: (0 as UInt32),
+      size: 1024,
       rejects: false
     ),
     (
-      name: "well-formed", isRegular: true, perms: UInt32(0o600), owner: UInt32(0), size: 8,
+      name: "well-formed",
+      isRegular: true,
+      perms: (0o600 as UInt32),
+      owner: (0 as UInt32),
+      size: 8,
       rejects: false
     ),
-  ]) func ownerOnlyMetadataPolicy(
+  ])
+  func ownerOnlyMetadataPolicy(
     name: String,
     isRegular: Bool,
     perms: UInt32,
@@ -393,6 +443,7 @@ import Testing
       inode: 2,
       isRegularFile: isRegular,
       permissionBits: perms,
+      // Offset zero keeps the owner; nonzero stays foreign across UInt32 wraparound.
       ownerUID: getuid() &+ owner,
       byteCount: size,
       modificationNanoseconds: 0
@@ -420,13 +471,15 @@ import Testing
     }
   }
 
-  @Test func aPolicyWithoutAModeRequirementStillRejectsAForeignOwner() {
+  @Test
+  func aPolicyWithoutAModeRequirementStillRejectsAForeignOwner() {
     // given
     let facts = SecureFileFacts(
       device: 1,
       inode: 2,
       isRegularFile: true,
       permissionBits: 0o644,
+      // Modular increment stays different even when the host UID is UInt32.max.
       ownerUID: getuid() &+ 1,
       byteCount: 8,
       modificationNanoseconds: 0
@@ -445,7 +498,8 @@ import Testing
 
   // MARK: - Identity-guarded removal
 
-  @Test func removalDeletesTheEntryWhoseIdentityWasRecorded() throws {
+  @Test
+  func removalDeletesTheEntryWhoseIdentityWasRecorded() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-rollback")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -460,7 +514,8 @@ import Testing
     #expect(try entryNames(in: stateRoot).isEmpty)
   }
 
-  @Test func removalSpareAnEntryWhoseInodeWasSubstituted() throws {
+  @Test
+  func removalSpareAnEntryWhoseInodeWasSubstituted() throws {
     // given — the recorded entry is replaced by a different file at the same path.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-rollback")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -477,7 +532,8 @@ import Testing
     #expect(try Data(contentsOf: target) == Data("someone-elses".utf8))
   }
 
-  @Test func removalSparesASymlinkStandingWhereTheRecordedEntryWas() throws {
+  @Test
+  func removalSparesASymlinkStandingWhereTheRecordedEntryWas() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-rollback")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -496,7 +552,8 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: elsewhere.path))
   }
 
-  @Test func removalSparesAPathThatIsNowEmpty() throws {
+  @Test
+  func removalSparesAPathThatIsNowEmpty() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-rollback")
     defer { try? FileManager.default.removeItem(at: stateRoot) }

@@ -3,13 +3,13 @@ import Foundation
 /// The scheduled-job fields the owner view may render. Prompt and recurrence bytes stay private
 /// to the scheduler; the learning surface needs only identity and display context.
 public struct LearningJobIdentity: Sendable, Equatable {
-  public let jobId: Int64
+  public let jobID: Int64
   public let label: String
   public let status: ScheduledJobStatus
   public let timezone: String
 
-  public init(jobId: Int64, label: String, status: ScheduledJobStatus, timezone: String) {
-    self.jobId = jobId
+  public init(jobID: Int64, label: String, status: ScheduledJobStatus, timezone: String) {
+    self.jobID = jobID
     self.label = label
     self.status = status
     self.timezone = timezone
@@ -18,19 +18,17 @@ public struct LearningJobIdentity: Sendable, Equatable {
 
 /// The bounded identity retained when a damaged job cannot be decoded safely.
 public struct UnreadableLearningJob: Sendable, Equatable {
-  public let jobId: Int64
+  public let jobID: Int64
   public let validatedLabel: String?
 
-  public init(jobId: Int64, validatedLabel: String?) {
-    self.jobId = jobId
+  public init(jobID: Int64, validatedLabel: String?) {
+    self.jobID = jobID
     self.validatedLabel = validatedLabel
   }
 }
 
 /// A non-authoritative mismatch that can be reported without hiding authoritative state.
-public enum LearningViewWarning: Sendable, Equatable {
-  case trialPointerMismatch
-}
+public enum LearningViewWarning: Sendable, Equatable { case trialPointerMismatch }
 
 /// Current assignment facts projected from authoritative source rows in one read snapshot.
 public struct LearningTrialCounts: Sendable, Equatable {
@@ -60,7 +58,7 @@ public struct LearningTrialCounts: Sendable, Equatable {
 
 /// One authoritative open-or-draining trial and the immutable candidate identities it exposes.
 public struct LearningTrialView: Sendable, Equatable {
-  public let trialId: Int64
+  public let trialID: Int64
   public let epoch: LearningEpoch
   public let generation: Int
   public let state: LearningTrialState
@@ -73,7 +71,7 @@ public struct LearningTrialView: Sendable, Equatable {
   public let decisionDeadline: Date
 
   public init(  // swiftlint:disable:this function_parameter_count
-    trialId: Int64,
+    trialID: Int64,
     epoch: LearningEpoch,
     generation: Int,
     state: LearningTrialState,
@@ -85,7 +83,7 @@ public struct LearningTrialView: Sendable, Equatable {
     assignmentDeadline: Date,
     decisionDeadline: Date
   ) {
-    self.trialId = trialId
+    self.trialID = trialID
     self.epoch = epoch
     self.generation = generation
     self.state = state
@@ -102,33 +100,29 @@ public struct LearningTrialView: Sendable, Equatable {
 public struct AdmissionDecisionInputs: Sendable, Equatable, Codable {
   public let candidateDigest: CandidateDigest
 
-  public init(candidateDigest: CandidateDigest) {
-    self.candidateDigest = candidateDigest
-  }
+  public init(candidateDigest: CandidateDigest) { self.candidateDigest = candidateDigest }
 
-  enum CodingKeys: String, CodingKey {
-    case candidateDigest = "candidate_digest"
-  }
+  enum CodingKeys: String, CodingKey { case candidateDigest = "candidate_digest" }
 }
 
 public struct ReflectionNoCandidateInputs: Sendable, Equatable, Codable {
   public let triggerDigest: TriggerDigest
-  public let operationId: LearningOperationID
+  public let operationID: LearningOperationID
   public let carrierDigest: CarrierDigest
 
   public init(
     triggerDigest: TriggerDigest,
-    operationId: LearningOperationID,
+    operationID: LearningOperationID,
     carrierDigest: CarrierDigest
   ) {
     self.triggerDigest = triggerDigest
-    self.operationId = operationId
+    self.operationID = operationID
     self.carrierDigest = carrierDigest
   }
 
   enum CodingKeys: String, CodingKey {
     case triggerDigest = "trigger_digest"
-    case operationId = "operation_id"
+    case operationID = "operation_id"
     case carrierDigest = "carrier_digest"
   }
 }
@@ -138,47 +132,42 @@ public struct ReflectionNoCandidateReceipt: Sendable, Equatable, Codable {
 
   public let resultDigest: ReflectionResultDigest
 
-  public init(resultDigest: ReflectionResultDigest) {
-    self.resultDigest = resultDigest
-  }
+  public init(resultDigest: ReflectionResultDigest) { self.resultDigest = resultDigest }
 
-  enum CodingKeys: String, CodingKey {
-    case resultDigest = "result_digest"
-  }
+  enum CodingKeys: String, CodingKey { case resultDigest = "result_digest" }
 }
 
 /// The immutable decision receipt shapes production can currently write.
 public enum LearningDecisionDetail: Sendable, Equatable {
   case terminal(DecisionReceipt)
   case candidateAdmission(inputs: AdmissionDecisionInputs, result: AdmissionReceipt)
+
   case reflectionNoCandidate(
     inputs: ReflectionNoCandidateInputs,
     result: ReflectionNoCandidateReceipt
   )
-  case learningReset(
-    inputs: LearningResetDecisionInputs,
-    result: LearningResetDecisionResult
-  )
+
+  case learningReset(inputs: LearningResetDecisionInputs, result: LearningResetDecisionResult)
 }
 
 public struct LearningDecisionView: Sendable, Equatable {
-  public let decisionId: Int64
-  public let jobId: Int64
+  public let decisionID: Int64
+  public let jobID: Int64
   public let epoch: LearningEpoch
   public let algorithm: LearningAlgorithm
   public let decidedAt: Date
   public let detail: LearningDecisionDetail
 
   public init(
-    decisionId: Int64,
-    jobId: Int64,
+    decisionID: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     algorithm: LearningAlgorithm,
     decidedAt: Date,
     detail: LearningDecisionDetail
   ) {
-    self.decisionId = decisionId
-    self.jobId = jobId
+    self.decisionID = decisionID
+    self.jobID = jobID
     self.epoch = epoch
     self.algorithm = algorithm
     self.decidedAt = decidedAt
@@ -219,6 +208,6 @@ public struct ReadableJobLearningView: Sendable, Equatable {
 public enum JobLearningView: Sendable, Equatable {
   case readable(ReadableJobLearningView)
   case unarmed(LearningJobIdentity)
-  case notFound(jobId: Int64)
+  case notFound(jobID: Int64)
   case unreadable(UnreadableLearningJob)
 }

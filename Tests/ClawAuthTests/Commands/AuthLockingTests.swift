@@ -15,13 +15,9 @@ struct RealInstanceLocking: AuthMutationLocking {
 
   func acquire() throws -> AuthMutationLease {
     let lock: InstanceLock
-    do {
-      lock = try InstanceLock(path: path)
-    } catch InstanceLock.LockError.alreadyLocked {
+    do { lock = try InstanceLock(path: path) } catch InstanceLock.LockError.alreadyLocked {
       throw AuthMutationLockFailure.held
-    } catch {
-      throw AuthMutationLockFailure.unavailable(detail: "\(error)")
-    }
+    } catch { throw AuthMutationLockFailure.unavailable(detail: "\(error)") }
 
     log.record(.lockAcquired)
     let effects = log
@@ -43,20 +39,19 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
   ]
 }
 
-@Suite struct AuthLockingTests {
+@Suite
+struct AuthLockingTests {
   // MARK: - Login
 
   /// The whole ordering claim in one case, and the reason it cannot pass vacuously: the second half
   /// runs the same workflow over the same doubles with nothing changed but the lock. A login broken
   /// for every input would fail the release phase.
-  @Test func loginWaitsForTheDaemonToStopAndThenProceeds() async throws {
+  @Test
+  func loginWaitsForTheDaemonToStopAndThenProceeds() async throws {
     try await withAuthWorld("auth-lock-login") { world in
       // given — a daemon holds the state root's instance lock
       let daemon = try InstanceLock(path: world.paths.instanceLock.path)
-      world.mutationLock = RealInstanceLocking(
-        path: world.paths.instanceLock.path,
-        log: world.log
-      )
+      world.mutationLock = RealInstanceLocking(path: world.paths.instanceLock.path, log: world.log)
       let workflow = world.loginWorkflow()
 
       // when
@@ -92,13 +87,11 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
 
   /// The lease is the daemon's way back in. A login that kept the lock would leave the owner unable
   /// to restart the very daemon the command told them to stop.
-  @Test func aFinishedLoginLeavesTheLockForTheDaemonToTake() async throws {
+  @Test
+  func aFinishedLoginLeavesTheLockForTheDaemonToTake() async throws {
     try await withAuthWorld("auth-lock-released") { world in
       // given
-      world.mutationLock = RealInstanceLocking(
-        path: world.paths.instanceLock.path,
-        log: world.log
-      )
+      world.mutationLock = RealInstanceLocking(path: world.paths.instanceLock.path, log: world.log)
       let workflow = world.loginWorkflow()
 
       // when
@@ -112,14 +105,14 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
   }
 
   /// A login that fails must give the lock back just as surely as one that succeeds.
-  @Test func aFailedLoginAlsoLeavesTheLockForTheDaemonToTake() async throws {
+  @Test
+  func aFailedLoginAlsoLeavesTheLockForTheDaemonToTake() async throws {
     try await withAuthWorld("auth-lock-released-on-failure") { world in
       // given
-      world.mutationLock = RealInstanceLocking(
-        path: world.paths.instanceLock.path,
-        log: world.log
-      )
-      world.deviceOutcome = .failure { ChatGPTOAuthFailure.deadlineExceeded }
+      world.mutationLock = RealInstanceLocking(path: world.paths.instanceLock.path, log: world.log)
+      world.deviceOutcome = .failure {
+        ChatGPTOAuthFailure.deadlineExceeded
+      }
       let workflow = world.loginWorkflow()
 
       // when
@@ -135,15 +128,13 @@ private func encryptedArtifacts(in world: AuthWorld) -> [Bool] {
 
   // MARK: - Logout
 
-  @Test func logoutWaitsForTheDaemonToStopAndThenProceeds() async throws {
+  @Test
+  func logoutWaitsForTheDaemonToStopAndThenProceeds() async throws {
     try await withAuthWorld("auth-lock-logout") { world in
       // given
       try world.seedPriorLogin()
       let daemon = try InstanceLock(path: world.paths.instanceLock.path)
-      world.mutationLock = RealInstanceLocking(
-        path: world.paths.instanceLock.path,
-        log: world.log
-      )
+      world.mutationLock = RealInstanceLocking(path: world.paths.instanceLock.path, log: world.log)
       let workflow = world.logoutWorkflow()
 
       // when

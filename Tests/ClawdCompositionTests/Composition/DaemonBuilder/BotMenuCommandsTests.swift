@@ -2,8 +2,10 @@ import Testing
 
 @testable import clawd
 
-@Suite struct BotMenuCommandsTests {
-  @Test func registeredCatalogIncludesOwnerSkillDiagnostics() throws {
+@Suite
+struct BotMenuCommandsTests {
+  @Test
+  func registeredCatalogIncludesOwnerSkillDiagnostics() throws {
     // given
     let catalog = DaemonBuilder.botMenuCommands
 
@@ -19,7 +21,8 @@ import Testing
     #expect(skills.description.contains("rejected"))
   }
 
-  @Test func registeredCatalogIncludesTheLearningView() throws {
+  @Test
+  func registeredCatalogIncludesTheLearningView() throws {
     // given
     let catalog = DaemonBuilder.botMenuCommands
 

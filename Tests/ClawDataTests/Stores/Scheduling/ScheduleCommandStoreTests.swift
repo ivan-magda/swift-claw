@@ -6,12 +6,11 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct ScheduleCommandStoreTests {
+@Suite
+struct ScheduleCommandStoreTests {
   private let fixedNow = SchedulingTestClock.mondayNoonBerlin
 
-  private func makeQueue() throws -> DatabaseQueue {
-    return try TestDatabase.make()
-  }
+  private func makeQueue() throws -> DatabaseQueue { return try TestDatabase.make() }
 
   private func makeNewJob() throws -> NewScheduledJob {
     var calendar = Calendar(identifier: .gregorian)
@@ -24,7 +23,7 @@ import Testing
       seconds: [0]
     )
     return NewScheduledJob(
-      ownerChatId: 42,
+      ownerChatID: 42,
       label: "morning digest",
       prompt: "Summarize my unread items",
       recurrence: RecurrenceEnvelope(schemaVersion: 1, rule: rule),
@@ -33,19 +32,20 @@ import Testing
     )
   }
 
-  @Test func applyArmClaimsInsertsAndAuditsInOneWrite() throws {
+  @Test
+  func applyArmClaimsInsertsAndAuditsInOneWrite() throws {
     // given
     let queue = try makeQueue()
     let store = ScheduleCommandStoreGRDB(writer: queue)
 
     // when
-    let result = try store.applyArm(updateId: 900, job: makeNewJob(), now: fixedNow)
+    let result = try store.applyArm(updateID: 900, job: makeNewJob(), now: fixedNow)
 
     // then — claim + job row + jobCreated audit landed together
     #expect(result.newlyClaimed)
     let job = try #require(result.job)
     #expect(job.label == "morning digest")
-    #expect(job.ownerChatId == 42)
+    #expect(job.ownerChatID == 42)
     #expect(job.status == .active)
     #expect(job.nextOccurrence == SchedulingTestClock.tuesdaySevenBerlin)
     let jobCount = try queue.read { db in
@@ -61,14 +61,15 @@ import Testing
     #expect(auditCount == 1)
   }
 
-  @Test func replayedUpdateIdCreatesNothing() throws {
+  @Test
+  func replayedUpdateIDCreatesNothing() throws {
     // given — the first "yes" armed the job
     let queue = try makeQueue()
     let store = ScheduleCommandStoreGRDB(writer: queue)
-    _ = try store.applyArm(updateId: 900, job: makeNewJob(), now: fixedNow)
+    _ = try store.applyArm(updateID: 900, job: makeNewJob(), now: fixedNow)
 
     // when — Telegram redelivers the same update
-    let replay = try store.applyArm(updateId: 900, job: makeNewJob(), now: fixedNow)
+    let replay = try store.applyArm(updateID: 900, job: makeNewJob(), now: fixedNow)
 
     // then — idempotent via the update_id claim (spec §8/§16 case 7)
     #expect(replay.newlyClaimed == false)

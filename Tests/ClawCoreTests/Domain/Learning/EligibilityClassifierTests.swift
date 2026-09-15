@@ -7,8 +7,10 @@ import Testing
 /// boundary this suite guards is that only a run that committed a model-authored answer to the task
 /// ever reaches the evaluator: feeding it a provider outage or a clipped answer would let
 /// infrastructure noise synthesize a behavioral lesson about the model.
-@Suite struct EligibilityClassifierTests {
-  @Test func onlyTaskEvidenceReachesTheEvaluator() {
+@Suite
+struct EligibilityClassifierTests {
+  @Test
+  func onlyTaskEvidenceReachesTheEvaluator() {
     // given
     let cases: [(TerminalCause, LearningEligibility)] = [
       (.taskCompleted, .eligibleTaskEvidence),
@@ -42,7 +44,8 @@ import Testing
     )
   }
 
-  @Test func anIncompleteTranscriptOverridesASuccessfulTerminal() {
+  @Test
+  func anIncompleteTranscriptOverridesASuccessfulTerminal() {
     // given — the run completed, but a proposed tool call has no observation row
     let transcript = EvidenceTranscript(proposedCalls: 2, observedCalls: 1, finalOutputBytes: 400)
 
@@ -56,7 +59,8 @@ import Testing
     #expect(actual == .insufficientEvidence)
   }
 
-  @Test func anOverCapFinalOutputIsRefusedRatherThanTruncated() {
+  @Test
+  func anOverCapFinalOutputIsRefusedRatherThanTruncated() {
     // given — a completed run whose answer is one byte past what evidence may carry whole
     let transcript = EvidenceTranscript(
       proposedCalls: 0,
@@ -80,7 +84,7 @@ import Testing
 private extension EligibilityClassifierTests {
   static func settlement(cause: TerminalCause) -> RunSettlement {
     RunSettlement(
-      runId: 1,
+      runID: 1,
       winningState: .done,
       terminalCause: cause,
       terminalAt: Date(timeIntervalSince1970: 1_782_000_600),

@@ -5,11 +5,11 @@ import GRDB
 // MARK: - Owner Learning View
 
 extension ScheduledLearningStoreGRDB {
-  public func learningView(jobId: Int64?) throws(StoreError) -> [JobLearningView] {
+  public func learningView(jobID: Int64?) throws(StoreError) -> [JobLearningView] {
     try database.readMapping { db in
-      if let jobId {
-        guard let job = try Self.viewJob(db, jobId: jobId) else {
-          return [.notFound(jobId: jobId)]
+      if let jobID {
+        guard let job = try Self.viewJob(db, jobID: jobID) else {
+          return [.notFound(jobID: jobID)]
         }
         return [try Self.view(db, job: job)]
       }
@@ -26,7 +26,7 @@ extension ScheduledLearningStoreGRDB {
 
 private extension ScheduledLearningStoreGRDB {
   struct ViewJobRow {
-    let jobId: Int64
+    let jobID: Int64
     let label: String?
     let status: String?
     let timezone: String?
@@ -34,75 +34,68 @@ private extension ScheduledLearningStoreGRDB {
     let primitivesAreValid: Bool
   }
 
-  enum ViewCorruption: Error {
-    case invalid
-  }
+  enum ViewCorruption: Error { case invalid }
 
   static func armedViewJobs(_ db: Database) throws -> [ViewJobRow] {
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT state.job_id AS selected_job_id, job.id, job.label, job.status, job.timezone,
-          job.recurrence
-        FROM job_learning_state AS state
-        JOIN scheduled_jobs AS job ON job.id = state.job_id
-        ORDER BY job.id
-        """
+      SELECT state.job_id AS selected_job_id, job.id, job.label, job.status, job.timezone,
+        job.recurrence
+      FROM job_learning_state AS state
+      JOIN scheduled_jobs AS job ON job.id = state.job_id
+      ORDER BY job.id
+      """
     )
     return rows.map { row in
-      viewJob(row: row, requestedJobId: nil)
+      viewJob(row: row, requestedJobID: nil)
     }
   }
 
-  static func viewJob(_ db: Database, jobId: Int64) throws -> ViewJobRow? {
+  static func viewJob(_ db: Database, jobID: Int64) throws -> ViewJobRow? {
     try Row.fetchOne(
       db,
       sql: """
-        SELECT id, label, status, timezone, recurrence
-        FROM scheduled_jobs WHERE id = ?
-        """,
-      arguments: [jobId]
+      SELECT id, label, status, timezone, recurrence
+      FROM scheduled_jobs WHERE id = ?
+      """,
+      arguments: [jobID]
     ).map { row in
-      viewJob(row: row, requestedJobId: jobId)
+      viewJob(row: row, requestedJobID: jobID)
     }
   }
 
-  static func viewJob(row: Row, requestedJobId: Int64?) -> ViewJobRow {
-    let storedJobId = SQLiteStoredValue.int64(in: row, column: "id")
-    let selectedJobId = SQLiteStoredValue.int64(in: row, column: "selected_job_id")
-    let jobId = requestedJobId ?? selectedJobId ?? storedJobId ?? 0
+  static func viewJob(row: Row, requestedJobID: Int64?) -> ViewJobRow {
+    let storedJobID = SQLiteStoredValue.int64(in: row, column: "id")
+    let selectedJobID = SQLiteStoredValue.int64(in: row, column: "selected_job_id")
+    let jobID = requestedJobID ?? selectedJobID ?? storedJobID ?? 0
     let label = SQLiteStoredValue.string(in: row, column: "label")
     let status = SQLiteStoredValue.string(in: row, column: "status")
     let timezone = SQLiteStoredValue.string(in: row, column: "timezone")
     let recurrence = SQLiteStoredValue.nullableString(in: row, column: "recurrence")
     return ViewJobRow(
-      jobId: jobId,
+      jobID: jobID,
       label: label,
       status: status,
       timezone: timezone,
       hasRecurrence: recurrence?.value != nil,
-      primitivesAreValid: storedJobId == jobId
-        && label != nil
-        && status != nil
-        && timezone != nil
+      primitivesAreValid: storedJobID == jobID && label != nil && status != nil && timezone != nil
         && recurrence != nil
     )
   }
 
   static func view(_ db: Database, job: ViewJobRow) throws -> JobLearningView {
     let fallback = UnreadableLearningJob(
-      jobId: job.jobId,
+      jobID: job.jobID,
       validatedLabel: job.label.flatMap(validatedLabel)
     )
     do {
       let identity = try jobIdentity(job)
-      guard let state = try readState(db, jobId: job.jobId) else {
+      guard let state = try readState(db, jobID: job.jobID) else {
         return .unarmed(identity)
       }
       return .readable(try readableView(db, job: job, identity: identity, state: state))
-    } catch ViewCorruption.invalid {
-      return .unreadable(fallback)
-    } catch let error as StoreError {
+    } catch ViewCorruption.invalid { return .unreadable(fallback) } catch let error as StoreError {
       guard case .unexpected = error else {
         throw error
       }
@@ -113,7 +106,7 @@ private extension ScheduledLearningStoreGRDB {
   static func jobIdentity(_ row: ViewJobRow) throws -> LearningJobIdentity {
     guard
       row.primitivesAreValid,
-      row.jobId > 0,
+      row.jobID > 0,
       let rawLabel = row.label,
       let label = validatedLabel(rawLabel),
       let rawStatus = row.status,
@@ -123,12 +116,7 @@ private extension ScheduledLearningStoreGRDB {
     else {
       throw ViewCorruption.invalid
     }
-    return LearningJobIdentity(
-      jobId: row.jobId,
-      label: label,
-      status: status,
-      timezone: timezone
-    )
+    return LearningJobIdentity(jobID: row.jobID, label: label, status: status, timezone: timezone)
   }
 
   static func validatedLabel(_ raw: String) -> String? {
@@ -150,13 +138,13 @@ private extension ScheduledLearningStoreGRDB {
     state: JobLearningState
   ) throws -> ReadableJobLearningView {
     guard
-      state.jobId == job.jobId,
+      state.jobID == job.jobID,
       state.epoch.value > 0,
       state.stableRevision.value >= 0,
       state.feedbackRevision.value >= 0,
       isCanonicalDigest(state.stableDigest.rawValue),
-      let stable = try readLessonSet(db, jobId: job.jobId, digest: state.stableDigest),
-      stable.jobId == job.jobId,
+      let stable = try readLessonSet(db, jobID: job.jobID, digest: state.stableDigest),
+      stable.jobID == job.jobID,
       stable.digest == state.stableDigest
     else {
       throw ViewCorruption.invalid
@@ -164,7 +152,7 @@ private extension ScheduledLearningStoreGRDB {
 
     let liveTrial = try liveTrialView(db, job: job, state: state)
     var warnings: [LearningViewWarning] = []
-    if state.openTrialId != liveTrial?.trialId {
+    if state.openTrialID != liveTrial?.trialID {
       warnings.append(.trialPointerMismatch)
     }
     let decision = try lastDecisionView(db, state: state)
@@ -183,26 +171,24 @@ private extension ScheduledLearningStoreGRDB {
 // MARK: - Trial Projection
 
 private extension ScheduledLearningStoreGRDB {
-  static func liveTrialView(
-    _ db: Database,
-    job: ViewJobRow,
-    state: JobLearningState
-  ) throws -> LearningTrialView? {
+  static func liveTrialView(_ db: Database, job: ViewJobRow, state: JobLearningState) throws
+    -> LearningTrialView?
+  {
     guard try currentEpochHasOnlyKnownTrialStates(db, state: state) else {
       throw ViewCorruption.invalid
     }
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-          admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
-        FROM learning_trials
-        WHERE job_id = ? AND state IN (?, ?)
-        ORDER BY trial_id
-        """,
+      SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+        admitted_at, assignment_deadline, decision_deadline, max_assignments,
+        consumed_assignments, cohort_cutoff, state, close_reason, algorithm
+      FROM learning_trials
+      WHERE job_id = ? AND state IN (?, ?)
+      ORDER BY trial_id
+      """,
       arguments: [
-        job.jobId,
+        job.jobID,
         LearningTrialState.open.rawValue,
         LearningTrialState.draining.rawValue,
       ]
@@ -228,56 +214,46 @@ private extension ScheduledLearningStoreGRDB {
     return try projectedTrialView(db, trial: trial, state: state)
   }
 
-  static func currentEpochHasOnlyKnownTrialStates(
-    _ db: Database,
-    state: JobLearningState
-  ) throws -> Bool {
+  static func currentEpochHasOnlyKnownTrialStates(_ db: Database, state: JobLearningState) throws
+    -> Bool
+  {
     let known = LearningTrialState.allCases.map(\.rawValue)
     return try Bool.fetchOne(
       db,
       sql: """
-        SELECT NOT EXISTS(
-          SELECT 1 FROM learning_trials
-          WHERE job_id = ? AND learning_epoch = ?
-            AND state NOT IN (?, ?, ?, ?, ?)
-        )
-        """,
-      arguments: [state.jobId, state.epoch.value] + StatementArguments(known)
+      SELECT NOT EXISTS(
+        SELECT 1 FROM learning_trials
+        WHERE job_id = ? AND learning_epoch = ?
+          AND state NOT IN (?, ?, ?, ?, ?)
+      )
+      """,
+      arguments: [state.jobID, state.epoch.value] + StatementArguments(known)
     ) ?? false
   }
 
-  static func projectedTrialView(
-    _ db: Database,
-    trial: LearningTrial,
-    state: JobLearningState
-  ) throws -> LearningTrialView {
-    let runIds = try assignmentRunIds(db, trialId: trial.trialId)
-    guard
-      runIds.count == trial.consumedAssignments,
-      Set(runIds).count == runIds.count
-    else {
+  static func projectedTrialView(_ db: Database, trial: LearningTrial, state: JobLearningState)
+    throws -> LearningTrialView
+  {
+    let runIDs = try assignmentRunIDs(db, trialID: trial.trialID)
+    guard runIDs.count == trial.consumedAssignments, Set(runIDs).count == runIDs.count else {
       throw ViewCorruption.invalid
     }
     var positive = 0
     var negative = 0
     var neutral = 0
     var unresolved = 0
-    for runId in runIds {
+    for runID in runIDs {
       let assignment = try authoritativeAssignment(
         db,
-        runId: runId,
+        runID: runID,
         trial: trial,
         currentState: state
       )
       switch assignment.resolvedEvidence?.outcome {
-      case .positive:
-        positive += 1
-      case .negative:
-        negative += 1
-      case .neutral:
-        neutral += 1
-      case nil:
-        unresolved += 1
+      case .positive: positive += 1
+      case .negative: negative += 1
+      case .neutral: neutral += 1
+      case nil: unresolved += 1
       }
     }
     guard positive + negative + neutral + unresolved == trial.consumedAssignments else {
@@ -292,7 +268,7 @@ private extension ScheduledLearningStoreGRDB {
       unresolved: unresolved
     )
     return LearningTrialView(
-      trialId: trial.trialId,
+      trialID: trial.trialID,
       epoch: trial.epoch,
       generation: trial.generation,
       state: trial.state,
@@ -311,7 +287,7 @@ private extension ScheduledLearningStoreGRDB {
 
 private extension ScheduledLearningStoreGRDB {
   struct ViewDecisionRecord {
-    let decisionId: Int64
+    let decisionID: Int64
     let kind: String
     let inputsJSON: String
     let resultJSON: String
@@ -319,30 +295,29 @@ private extension ScheduledLearningStoreGRDB {
     let decidedAt: Date
   }
 
-  static func lastDecisionView(
-    _ db: Database,
-    state: JobLearningState
-  ) throws -> LearningDecisionView? {
+  static func lastDecisionView(_ db: Database, state: JobLearningState) throws
+    -> LearningDecisionView?
+  {
     guard
       let row = try Row.fetchOne(
         db,
         sql: """
-          SELECT decision_id, kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
-          FROM learning_decisions
-          WHERE job_id = ? AND learning_epoch = ?
-          ORDER BY decided_at DESC, decision_id DESC
-          LIMIT 1
-          """,
-        arguments: [state.jobId, state.epoch.value]
+        SELECT decision_id, kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
+        FROM learning_decisions
+        WHERE job_id = ? AND learning_epoch = ?
+        ORDER BY decided_at DESC, decision_id DESC
+        LIMIT 1
+        """,
+        arguments: [state.jobID, state.epoch.value]
       )
     else {
       return nil
     }
     guard
-      let decisionId = SQLiteStoredValue.int64(in: row, column: "decision_id"),
-      decisionId > 0,
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      jobId == state.jobId,
+      let decisionID = SQLiteStoredValue.int64(in: row, column: "decision_id"),
+      decisionID > 0,
+      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      jobID == state.jobID,
       let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
       LearningEpoch(epoch) == state.epoch,
       let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm"),
@@ -359,7 +334,7 @@ private extension ScheduledLearningStoreGRDB {
       throw ViewCorruption.invalid
     }
     let record = ViewDecisionRecord(
-      decisionId: decisionId,
+      decisionID: decisionID,
       kind: kind,
       inputsJSON: inputsJSON,
       resultJSON: resultJSON,
@@ -368,8 +343,8 @@ private extension ScheduledLearningStoreGRDB {
     )
     let detail = try decisionDetail(db, record: record, state: state)
     return LearningDecisionView(
-      decisionId: record.decisionId,
-      jobId: state.jobId,
+      decisionID: record.decisionID,
+      jobID: state.jobID,
       epoch: state.epoch,
       algorithm: record.algorithm,
       decidedAt: record.decidedAt,
@@ -377,22 +352,22 @@ private extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func decisionDetail(
-    _ db: Database,
-    record: ViewDecisionRecord,
-    state: JobLearningState
-  ) throws -> LearningDecisionDetail {
+  static func decisionDetail(_ db: Database, record: ViewDecisionRecord, state: JobLearningState)
+    throws -> LearningDecisionDetail
+  {
     switch record.kind {
     case LearningDecisionKind.trial.rawValue, LearningDecisionKind.rollback.rawValue:
       let inputs: TrialDecisionInputs = try decodeCanonicalDecision(record.inputsJSON)
       let result: LearningDecisionRecord = try decodeCanonicalDecision(record.resultJSON)
-      guard inputs.identity.jobId == state.jobId, inputs.identity.epoch == state.epoch,
+      guard
+        inputs.identity.jobID == state.jobID,
+        inputs.identity.epoch == state.epoch,
         inputs.algorithm == record.algorithm
       else {
         throw ViewCorruption.invalid
       }
       return .terminal(
-        DecisionReceipt(decisionId: record.decisionId, inputs: inputs, record: result)
+        DecisionReceipt(decisionID: record.decisionID, inputs: inputs, record: result)
       )
     case AdmissionReceipt.kind:
       let inputs: AdmissionDecisionInputs = try decodeCanonicalDecision(record.inputsJSON)
@@ -400,7 +375,7 @@ private extension ScheduledLearningStoreGRDB {
       guard
         inputs.candidateDigest == result.candidateDigest,
         let artifact = try readCandidateArtifact(db, digest: inputs.candidateDigest),
-        artifact.manifest.jobId == state.jobId,
+        artifact.manifest.jobID == state.jobID,
         artifact.manifest.epoch == state.epoch,
         artifact.manifest.algorithm == .v1,
         let trial = try trialRow(db, candidate: inputs.candidateDigest),
@@ -416,8 +391,8 @@ private extension ScheduledLearningStoreGRDB {
         isCanonicalDigest(inputs.triggerDigest.rawValue),
         isCanonicalDigest(inputs.carrierDigest.rawValue),
         isCanonicalDigest(result.resultDigest.rawValue),
-        let operation = try readOperation(db, id: inputs.operationId),
-        operation.jobId == state.jobId,
+        let operation = try readOperation(db, id: inputs.operationID),
+        operation.jobID == state.jobID,
         operation.epoch == state.epoch,
         operation.phase == .reflector,
         operation.sourceDigest == inputs.triggerDigest.rawValue,
@@ -432,8 +407,8 @@ private extension ScheduledLearningStoreGRDB {
         let receipt = try resetReceipt(
           db,
           record: ResetDecisionRecord(
-            decisionId: record.decisionId,
-            jobId: state.jobId,
+            decisionID: record.decisionID,
+            jobID: state.jobID,
             epoch: state.epoch,
             inputsJSON: record.inputsJSON,
             resultJSON: record.resultJSON,
@@ -445,8 +420,7 @@ private extension ScheduledLearningStoreGRDB {
         throw ViewCorruption.invalid
       }
       return .learningReset(inputs: receipt.inputs, result: receipt.result)
-    default:
-      throw ViewCorruption.invalid
+    default: throw ViewCorruption.invalid
     }
   }
 }

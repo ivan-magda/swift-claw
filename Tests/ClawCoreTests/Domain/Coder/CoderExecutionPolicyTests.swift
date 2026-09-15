@@ -2,15 +2,22 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct CoderExecutionPolicyTests {
-  @Test func everyResolvedExecutionFactChangesTheIdentity() {
+@Suite
+struct CoderExecutionPolicyTests {
+  @Test
+  func everyResolvedExecutionFactChangesTheIdentity() {
     // given
     let original = policy()
     let changes = [
-      policy(executable: "/other/codex"), policy(profile: "review"), policy(profile: nil),
-      policy(configHome: "/other/home"), policy(configHome: nil),
-      policy(approvalPolicy: "other"), policy(sources: ["github": "GITHUB_TOKEN"]),
-      policy(sources: ["other": "GH_TOKEN"]), policy(sources: [:]),
+      policy(executable: "/other/codex"),
+      policy(profile: "review"),
+      policy(profile: nil),
+      policy(configHome: "/other/home"),
+      policy(configHome: nil),
+      policy(approvalPolicy: "other"),
+      policy(sources: ["github": "GITHUB_TOKEN"]),
+      policy(sources: ["other": "GH_TOKEN"]),
+      policy(sources: [:]),
     ]
 
     // when / then
@@ -19,7 +26,8 @@ import Testing
     }
   }
 
-  @Test func credentialSourceOrderDoesNotChangeIdentity() {
+  @Test
+  func credentialSourceOrderDoesNotChangeIdentity() {
     // given
     let first = policy(sources: ["github": "GH_TOKEN", "codex": "/config/auth"])
     let second = policy(sources: ["codex": "/config/auth", "github": "GH_TOKEN"])
@@ -28,6 +36,8 @@ import Testing
     #expect(first.id == second.id)
   }
 }
+
+// MARK: - Execution Policy Fixtures
 
 private extension CoderExecutionPolicyTests {
   func policy(

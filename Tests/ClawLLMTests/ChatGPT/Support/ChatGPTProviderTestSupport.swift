@@ -71,28 +71,23 @@ enum ChatGPTProviderTestSupport {
   /// The accounting a stream termination carries, or nil when it completed cleanly.
   static func accounting(of terminal: LLMStreamTermination) -> ProviderFailureAccounting? {
     switch terminal {
-    case .failed(let failure):
-      return failure.accounting
-    case .cancelled(let disposition):
-      return disposition
-    case .completed:
-      return nil
+    case .failed(let failure): return failure.accounting
+    case .cancelled(let disposition): return disposition
+    case .completed: return nil
     }
   }
 
   /// The owner-facing message a provider error carries, or nil for the errors that carry none.
   static func message(of failure: ProviderError) -> String? {
     switch failure {
-    case .connectFailed(let message):
-      return message
-    case .transportFailure(let message):
-      return message
+    case .connectFailed(let message): return message
+    case .transportFailure(let message): return message
     case .retryable(_, let message), .rejected(_, let message), .terminal(_, let message):
       return message
     case .authenticationRequired, .accessDenied, .quotaLimited, .cleanRejection,
-      .credentialRefreshCompleted, .credentialRefreshExhausted, .credentialStateUnavailable,
-      .invalidProviderState, .visionUnsupported, .partialStreamWithoutCompletedTerminal,
-      .localOutputLimit, .modelIdentityMismatch:
+         .credentialRefreshCompleted, .credentialRefreshExhausted, .credentialStateUnavailable,
+         .invalidProviderState, .visionUnsupported, .partialStreamWithoutCompletedTerminal,
+         .localOutputLimit, .modelIdentityMismatch:
       return nil
     }
   }
@@ -104,8 +99,7 @@ enum ChatGPTProviderTestSupport {
         return nil
       }
       return response
-    }
-    .last
+    }.last
   }
 
   static let plainRequest = ChatRequest(
@@ -118,7 +112,7 @@ enum ChatGPTProviderTestSupport {
     model: "gpt-5",
     messages: [ChatMessage(role: .user, content: "hello")],
     maxOutputTokens: 256,
-    sessionId: "sess-1"
+    sessionID: "sess-1"
   )
 
   static var defaultCredentials: ScriptedLLMCredentialSource {
@@ -141,7 +135,9 @@ enum ChatGPTProviderTestSupport {
       credentials: any LLMCredentialSource = ChatGPTProviderTestSupport.defaultCredentials,
       credentialProfileID: UUID? = ChatGPTProviderTestSupport.fixedProfileID,
       retryBudget: Int = 3,
-      logger: Logger = Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+      logger: Logger = Logger(label: "test") { _ in
+        SwiftLogNoOpLogHandler()
+      }
     ) {
       let http = ScriptedHTTPExecutor(steps)
       self.http = http
@@ -156,8 +152,12 @@ enum ChatGPTProviderTestSupport {
         clock: ScriptedClock { delay in
           await sleeps.record(delay / .seconds(1))
         },
-        jitter: { duration in duration },
-        epochID: { ChatGPTProviderTestSupport.fixedEpoch },
+        jitter: { duration in
+          duration
+        },
+        epochID: {
+          ChatGPTProviderTestSupport.fixedEpoch
+        },
         logger: logger
       )
     }
@@ -166,9 +166,7 @@ enum ChatGPTProviderTestSupport {
   /// Scripted SSE bodies for the provider suites. Each `event` is one `data:` frame; the fixtures
   /// assemble the frames a given outcome needs.
   enum Fixtures {
-    static func event(_ json: String) -> Data {
-      Data("data: \(json)\n\n".utf8)
-    }
+    static func event(_ json: String) -> Data { Data("data: \(json)\n\n".utf8) }
 
     /// A minimal success: an announced message, one visible delta, its done item, and a completed
     /// terminal with usage.
@@ -277,7 +275,10 @@ enum ChatGPTProviderTestSupport {
 
     /// A non-success diagnostic body, carrying an optional error code alongside the message.
     static func errorBody(_ message: String, code: String? = nil) -> [Data] {
-      let codeField = code.map { "\"code\":\"\($0)\"," } ?? ""
+      let codeField =
+        code.map {
+          "\"code\":\"\($0)\","
+        } ?? ""
       return [Data(#"{"error":{\#(codeField)"message":"\#(message)"}}"#.utf8)]
     }
 

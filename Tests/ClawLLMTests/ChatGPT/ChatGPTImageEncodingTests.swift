@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawLLM
 
-@Suite struct ChatGPTImageEncodingTests {
-  @Test func textOnlyUserMessagesStillEncodeAsInputText() throws {
+@Suite
+struct ChatGPTImageEncodingTests {
+  @Test
+  func textOnlyUserMessagesStillEncodeAsInputText() throws {
     // given
     let request = ChatRequest(
       model: "gpt-5.6-sol",
@@ -25,7 +27,8 @@ import Testing
     #expect(parts[0]["image_url"] == nil)
   }
 
-  @Test func imagePartsEncodeAsInputImageWithAStringUrl() throws {
+  @Test
+  func imagePartsEncodeAsInputImageWithAStringURL() throws {
     // given
     let content = MessageContent(parts: [.image(samplePixel), .text("what is this?")])
     let request = ChatRequest(
@@ -58,7 +61,8 @@ import Testing
 
   /// Several text parts are still one `input_text` part, and carry no image machinery: the branch is
   /// on whether images exist, not on whether the content is a lone text part.
-  @Test func multipleTextPartsWithoutAnImageStayOneInputText() throws {
+  @Test
+  func multipleTextPartsWithoutAnImageStayOneInputText() throws {
     // given
     let content = MessageContent(parts: [.text("first"), .text("second")])
     let request = ChatRequest(

@@ -3,7 +3,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ApprovalKeyboardTests {
+@Suite
+struct ApprovalKeyboardTests {
   private static let malformedCallbacks: [String] = [
     "",  // empty
     "apr:",  // no nonce, no verdict
@@ -18,7 +19,8 @@ import Testing
     "apr:no:nce:y",  // a colon inside the nonce region — never valid base64url
   ]
 
-  @Test func callbackDataUsesThePinnedFraming() {
+  @Test
+  func callbackDataUsesThePinnedFraming() {
     // given / when
     let approve = ApprovalKeyboard.callbackData(
       nonce: "AbC-1_dEfG",
@@ -34,7 +36,8 @@ import Testing
     #expect(deny == "apr:AbC-1_dEfG:n")
   }
 
-  @Test func callbackDataStaysUnderTelegramsSixtyFourByteCap() {
+  @Test
+  func callbackDataStaysUnderTelegramsSixtyFourByteCap() {
     // given — a real 22-char base64url nonce is the production width
     let nonce = ApprovalNonce.generate()
 
@@ -50,7 +53,8 @@ import Testing
     #expect(deny.utf8.count <= 64)
   }
 
-  @Test func parseRoundTripsBothVerdicts() {
+  @Test
+  func parseRoundTripsBothVerdicts() {
     // given
     let nonce = "AbC-1_dEfG"
 
@@ -75,7 +79,8 @@ import Testing
     #expect(ApprovalKeyboard.parse(callbackData) == nil)
   }
 
-  @Test func markupIsDeterministicAndCarriesBothCallbacks() {
+  @Test
+  func markupIsDeterministicAndCarriesBothCallbacks() {
     // given
     let nonce = "AbC-1_dEfG"
 
@@ -90,7 +95,8 @@ import Testing
     #expect(first.contains("\"inline_keyboard\""))
   }
 
-  @Test func markupEmbedsCallbacksThatParseAccepts() {
+  @Test
+  func markupEmbedsCallbacksThatParseAccepts() {
     // given — a real nonce, to prove the button data the client echoes back is exactly what
     // parse validates (the suspend→callback round trip closes here)
     let nonce = ApprovalNonce.generate()

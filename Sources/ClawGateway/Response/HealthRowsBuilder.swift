@@ -43,7 +43,9 @@ public struct LLMRouteHealth: Sendable, Equatable {
     return LLMRouteHealth(
       primaryReference: primaryReference,
       fallbackReference: fallbackReference,
-      cooldown: remaining.map { .cooling(remainingSeconds: $0) } ?? .clear
+      cooldown: remaining.map {
+        .cooling(remainingSeconds: $0)
+      } ?? .clear
     )
   }
 }
@@ -99,19 +101,14 @@ public enum HealthRowsBuilder {
   }
 
   public static func checks(_ inputs: Inputs) -> [DoctorReport.Check] {
-    databaseChecks(inputs)
-      + runChecks(inputs)
-      + routeChecks(inputs.routeHealth)
-      + contextChecks(inputs)
-      + spendChecks(inputs)
-      + storageChecks(inputs)
+    databaseChecks(inputs) + runChecks(inputs) + routeChecks(inputs.routeHealth)
+      + contextChecks(inputs) + spendChecks(inputs) + storageChecks(inputs)
   }
 
   /// The one spelling of the group-mode row, so a stopped daemon's doctor and a running one report
   /// the mode in the same words.
   public static func groupModeCheck(chatCount: Int) -> DoctorReport.Check {
-    let value =
-      chatCount == 0 ? "off" : "on (\(chatCount) chat\(chatCount == 1 ? "" : "s"))"
+    let value = chatCount == 0 ? "off" : "on (\(chatCount) chat\(chatCount == 1 ? "" : "s"))"
     return check("group.mode", value, .config)
   }
 
@@ -120,7 +117,9 @@ public enum HealthRowsBuilder {
   public static func fallbackConfiguredCheck(fallbackReference: String?) -> DoctorReport.Check {
     check(
       "llm.fallback_configured",
-      fallbackReference.map { "yes (\($0))" } ?? "no",
+      fallbackReference.map {
+        "yes (\($0))"
+      } ?? "no",
       .llmRuns
     )
   }
@@ -129,9 +128,9 @@ public enum HealthRowsBuilder {
     DoctorReport.Check(
       key: "context.skills",
       value: """
-        accepted=\(diagnostics.acceptedCount) rejected=\(diagnostics.rejectedCount) \
-        fits_cap=\(diagnostics.fitsSkillsCap)
-        """,
+      accepted=\(diagnostics.acceptedCount) rejected=\(diagnostics.rejectedCount) \
+      fits_cap=\(diagnostics.fitsSkillsCap)
+      """,
       ok: diagnostics.rejectedCount == 0 && diagnostics.fitsSkillsCap,
       group: .context,
       isHeadline: true
@@ -191,16 +190,14 @@ private extension HealthRowsBuilder {
       },
       check("llm.retry_budget", "\(inputs.retryBudget)", .llmRuns),
       check("llm.streaming", inputs.streamingEnabled ? "on" : "off", .llmRuns),
-      .storeRead(
-        inputs.runsHealth,
-        key: "runs.in_flight",
-        group: .llmRuns,
-        isHeadline: true
-      ) { health in
+      .storeRead(inputs.runsHealth, key: "runs.in_flight", group: .llmRuns, isHeadline: true) {
+        (health) in
         "\(health.inFlight)"
       },
       .storeRead(inputs.runsHealth, key: "runs.oldest_age_s", group: .llmRuns) { health in
-        health.oldestRunAgeSeconds.map { String(format: "%.0f", $0) } ?? "none"
+        health.oldestRunAgeSeconds.map {
+          String(format: "%.0f", $0)
+        } ?? "none"
       },
       .storeRead(inputs.runsHealth, key: "runs.last_FAILED", group: .llmRuns) { health in
         health.lastFailedAt.map(String.init(describing:)) ?? "none"
@@ -237,13 +234,11 @@ private extension HealthRowsBuilder {
   /// are what report that.
   static func activeRoute(_ health: LLMRouteHealth) -> String {
     switch health.cooldown {
-    case .clear:
-      return health.primaryReference
+    case .clear: return health.primaryReference
     case .cooling:
       let answering = health.fallbackReference ?? health.primaryReference
       return "\(answering) (primary \(health.primaryReference) cooling)"
-    case .unobservable:
-      return "\(health.primaryReference) (configured primary)"
+    case .unobservable: return "\(health.primaryReference) (configured primary)"
     }
   }
 
@@ -265,8 +260,8 @@ private extension HealthRowsBuilder {
       ) { latestContext in
         latestContext.map { context in
           let tokens = "\(context.isEstimated ? "~" : "")\(context.promptTokens)"
-          return context.runId.map { runId in
-            "\(tokens) (run \(runId))"
+          return context.runID.map { runID in
+            "\(tokens) (run \(runID))"
           } ?? tokens
         } ?? "none"
       },
@@ -276,34 +271,24 @@ private extension HealthRowsBuilder {
 
   static func spendChecks(_ inputs: Inputs) -> [DoctorReport.Check] {
     [
-      .storeRead(
-        inputs.todayUsage,
-        key: "spend.today_usd",
-        group: .spend,
-        isHeadline: true
-      ) { usage in
+      .storeRead(inputs.todayUsage, key: "spend.today_usd", group: .spend, isHeadline: true) {
+        (usage) in
         USD.precise(usage.costUSD)
       },
       .storeRead(inputs.todayUsage, key: "spend.today_tokens", group: .spend) { usage in
         "\(usage.tokens)"
       },
-      .storeRead(
-        inputs.todayUsage,
-        key: "spend.remaining_day_usd",
-        group: .spend,
-        isHeadline: true
-      ) { usage in
-        USD.display(max(0, inputs.perDayUSD - usage.costUSD))
-      },
+      .storeRead(inputs.todayUsage, key: "spend.remaining_day_usd", group: .spend, isHeadline: true)
+        { usage in
+          USD.display(max(0, inputs.perDayUSD - usage.costUSD))
+        },
       check("spend.per_run_cap_usd", USD.display(inputs.perRunUSD), .spend),
       .storeRead(inputs.costMix, key: "spend.cost_source_mix", group: .spend) { costMix in
-        let text =
-          costMix
-          .map { entry in
-            "\(entry.key.rawValue)=\(entry.value)"
-          }
-          .sorted()
-          .joined(separator: " ")
+        let text = costMix.map { entry in
+          "\(entry.key.rawValue)=\(entry.value)"
+        }.sorted().joined(
+          separator: " "
+        )
         return text.isEmpty ? "none" : text
       },
     ]
@@ -321,12 +306,7 @@ private extension HealthRowsBuilder {
     ]
   }
 
-  static func check(
-    _ key: String,
-    _ value: String,
-    _ group: DoctorGroup,
-    headline: Bool = false
-  ) -> DoctorReport.Check {
-    DoctorReport.Check(key: key, value: value, ok: true, group: group, isHeadline: headline)
-  }
+  static func check(_ key: String, _ value: String, _ group: DoctorGroup, headline: Bool = false)
+    -> DoctorReport.Check
+  { DoctorReport.Check(key: key, value: value, ok: true, group: group, isHeadline: headline) }
 }

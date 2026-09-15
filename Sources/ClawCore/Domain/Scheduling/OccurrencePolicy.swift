@@ -14,11 +14,9 @@ public struct OccurrencePolicy: Sendable {
 
   /// The confirm preview's fire times. The SAME `nowDate` that validation used seeds the
   /// calculator, so the preview's first entry IS the parked `firstOccurrence`.
-  public func confirmPreview(
-    for validated: ValidatedSchedule,
-    from nowDate: Date,
-    limit: Int
-  ) -> [Date] {
+  public func confirmPreview(for validated: ValidatedSchedule, from nowDate: Date, limit: Int)
+    -> [Date]
+  {
     guard
       let envelope = validated.recurrence,
       let timezone = TimeZone(identifier: validated.timezone)
@@ -67,10 +65,7 @@ public struct OccurrencePolicy: Sendable {
   /// everyNMinutes keeps its phase — while `after: nowDate` skips everything inside the paused
   /// window (pause = "be quiet", never catch up).
   public func resumeOccurrence(for job: ScheduledJob, from nowDate: Date) -> Date? {
-    guard
-      let envelope = job.recurrence,
-      let timezone = TimeZone(identifier: job.timezone)
-    else {
+    guard let envelope = job.recurrence, let timezone = TimeZone(identifier: job.timezone) else {
       guard let instant = job.nextOccurrence, instant > nowDate else {
         return nil
       }
@@ -89,12 +84,8 @@ public struct OccurrencePolicy: Sendable {
   /// one-shot (→ COMPLETED). `anchor` is the occurrence being advanced from (the claimed or
   /// skipped due) — advances stay on the armed chain, so /schedule's confirm preview can never
   /// disagree with actual fires.
-  public func advance(
-    for job: ScheduledJob,
-    timezone: TimeZone,
-    anchor: Date,
-    after: Date
-  ) -> Date? {
+  public func advance(for job: ScheduledJob, timezone: TimeZone, anchor: Date, after: Date) -> Date?
+  {
     job.recurrence.flatMap { envelope in
       calculator.occurrences(
         rule: envelope.rule,

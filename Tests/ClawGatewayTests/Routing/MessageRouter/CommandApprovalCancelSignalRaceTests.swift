@@ -9,7 +9,8 @@ import Testing
 @testable import ClawData
 @testable import ClawGateway
 
-@Suite struct CommandApprovalCancelSignalRaceTests {
+@Suite
+struct CommandApprovalCancelSignalRaceTests {
   private static let paddingRuns = 96
 
   private static let cycles = 6
@@ -17,9 +18,7 @@ import Testing
   // MARK: - Doubles
 
   private struct InertExecutor: ApprovedActionExecuting {
-    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
-      .ignored
-    }
+    func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome { .ignored }
   }
 
   private actor Latch {
@@ -51,11 +50,11 @@ import Testing
     let queue: DatabaseQueue
     let lanes: SessionLaneRegistry
     let coordinator: ApprovalCoordinator
-    let sessionId: Int64
-    let runId: Int64
-    let approvalId: Int64
-    let observationMessageId: Int64
-    let chatId: Int64
+    let sessionID: Int64
+    let runID: Int64
+    let approvalID: Int64
+    let observationMessageID: Int64
+    let chatID: Int64
   }
 
   // MARK: - Tests
@@ -98,18 +97,18 @@ private extension CommandApprovalCancelSignalRaceTests {
     let waiter = makeWaiter(harness)
     let laneFreed = Latch()
 
-    _ = await harness.lanes.enqueue(sessionID: harness.sessionId, runID: harness.runId) {
+    _ = await harness.lanes.enqueue(sessionID: harness.sessionID, runID: harness.runID) {
       await waiter.park(
-        approvalId: harness.approvalId,
-        runId: harness.runId,
-        sessionId: harness.sessionId,
-        chatId: harness.chatId,
+        approvalID: harness.approvalID,
+        runID: harness.runID,
+        sessionID: harness.sessionID,
+        chatID: harness.chatID,
         revalidatePolicyOnApprove: false
       )
     }
 
-    let trailingRunId = harness.runId + 1_000_000
-    _ = await harness.lanes.enqueue(sessionID: harness.sessionId, runID: trailingRunId) {
+    let trailingRunID = harness.runID + 1_000_000
+    _ = await harness.lanes.enqueue(sessionID: harness.sessionID, runID: trailingRunID) {
       await laneFreed.open()
     }
 
@@ -118,7 +117,7 @@ private extension CommandApprovalCancelSignalRaceTests {
     }
 
     let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 9_999, from: harness.chatId, text: command)
+      rawUpdate: textUpdate(id: 9_999, from: harness.chatID, text: command)
     )
     #expect(outcome == .processed)
 
@@ -128,7 +127,7 @@ private extension CommandApprovalCancelSignalRaceTests {
       try String.fetchOne(
         db,
         sql: "SELECT content FROM messages WHERE id = ?",
-        arguments: [harness.observationMessageId]
+        arguments: [harness.observationMessageID]
       )
     }
   }
@@ -138,37 +137,37 @@ private extension CommandApprovalCancelSignalRaceTests {
 
 private extension CommandApprovalCancelSignalRaceTests {
   private func makeHarness() throws -> Harness {
-    let chatId: Int64 = 42
+    let chatID: Int64 = 42
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: [chatId])
+    try allowlist.seedAllowlist(userIDs: [chatID])
 
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let runs = RunStoreGRDB(writer: queue)
 
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        chatId: chatId,
-        userId: chatId,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: chatID),
+        chatID: chatID,
+        userID: chatID,
         text: "write the plan",
         isEdited: false,
         ts: Date()
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
-    _ = try #require(try runs.pickUp(runId: runId, now: Date()))
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
+    _ = try #require(try runs.pickUp(runID: runID, now: Date()))
 
-    try seedPadding(queue: queue, sessionId: sessionId)
+    try seedPadding(queue: queue, sessionID: sessionID)
 
-    let observationMessageId = try seedParkedApproval(
+    let observationMessageID = try seedParkedApproval(
       queue: queue,
-      sessionId: sessionId,
-      runId: runId
+      sessionID: sessionID,
+      runID: runID
     )
-    let approvalId = try queue.read { db in
+    let approvalID = try queue.read { db in
       try #require(try Int64.fetchOne(db, sql: "SELECT id FROM approvals WHERE nonce = 'nonce-a'"))
     }
 
@@ -198,15 +197,15 @@ private extension CommandApprovalCancelSignalRaceTests {
       queue: queue,
       lanes: lanes,
       coordinator: coordinator,
-      sessionId: sessionId,
-      runId: runId,
-      approvalId: approvalId,
-      observationMessageId: observationMessageId,
-      chatId: chatId
+      sessionID: sessionID,
+      runID: runID,
+      approvalID: approvalID,
+      observationMessageID: observationMessageID,
+      chatID: chatID
     )
   }
 
-  func seedPadding(queue: DatabaseQueue, sessionId: Int64) throws {
+  func seedPadding(queue: DatabaseQueue, sessionID: Int64) throws {
     let now = Date()
     let argsJSON = #"{"path":"/w/pad.md"}"#
     let argsHash = ApprovalArgsHash.sha256Hex(argsJSON)
@@ -214,60 +213,62 @@ private extension CommandApprovalCancelSignalRaceTests {
       for index in 0..<Self.paddingRuns {
         try db.execute(
           sql: """
-            INSERT INTO runs(session_id, state, created_ts, updated_ts)
-            VALUES (?, ?, ?, ?)
-            """,
-          arguments: [sessionId, RunState.running.rawValue, now, now]
+          INSERT INTO runs(session_id, state, created_ts, updated_ts)
+          VALUES (?, ?, ?, ?)
+          """,
+          arguments: [sessionID, RunState.running.rawValue, now, now]
         )
-        let paddingRunId = db.lastInsertedRowID
+        let paddingRunID = db.lastInsertedRowID
         try db.execute(
           sql: """
-            INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-              args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-              reason, created_ts, expires_ts)
-            VALUES (?, ?, 'PENDING', 'file_write', ?, '/w/pad.md', ?, 'pv', 42, ?, 0, ?,
-              'ask_tier', 1782000000, 1782003600)
-            """,
-          arguments: [
-            paddingRunId, sessionId, argsJSON, argsHash, "pad-\(index)", "pad-c\(index)",
-          ]
+          INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+            args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+            reason, created_ts, expires_ts)
+          VALUES (?, ?, 'PENDING', 'file_write', ?, '/w/pad.md', ?, 'pv', 42, ?, 0, ?,
+            'ask_tier', 1782000000, 1782003600)
+          """,
+          arguments: [paddingRunID, sessionID, argsJSON, argsHash, "pad-\(index)", "pad-c\(index)"]
         )
       }
     }
   }
 
-  func seedParkedApproval(queue: DatabaseQueue, sessionId: Int64, runId: Int64) throws -> Int64 {
+  func seedParkedApproval(queue: DatabaseQueue, sessionID: Int64, runID: Int64) throws -> Int64 {
     let now = Date()
     let argsJSON = #"{"path":"/w/plan.md"}"#
     return try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
-          """,
-        arguments: [sessionId, runId, RunStoreGRDB.placeholderObservationContent, now]
+        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+        VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
+        """,
+        arguments: [sessionID, runID, RunStoreGRDB.placeholderObservationContent, now]
       )
-      let observationMessageId = db.lastInsertedRowID
+      let observationMessageID = db.lastInsertedRowID
       _ = try RunStoreGRDB.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .suspendForApproval,
         now: now,
         terminal: nil
       )
       try db.execute(
         sql: """
-          INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-            args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-            reason, prompt_message_id, created_ts, expires_ts)
-          VALUES (?, ?, 'PENDING', 'file_write', ?, '/w/plan.md', ?, 'pv', 42, 'nonce-a', ?, 'c1',
-            'ask_tier', 900, 1782000000, 1782003600)
-          """,
+        INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+          args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+          reason, prompt_message_id, created_ts, expires_ts)
+        VALUES (?, ?, 'PENDING', 'file_write', ?, '/w/plan.md', ?, 'pv', 42, 'nonce-a', ?, 'c1',
+          'ask_tier', 900, 1782000000, 1782003600)
+        """,
         arguments: [
-          runId, sessionId, argsJSON, ApprovalArgsHash.sha256Hex(argsJSON), observationMessageId,
+          runID,
+          sessionID,
+          argsJSON,
+          ApprovalArgsHash.sha256Hex(argsJSON),
+          observationMessageID,
         ]
       )
-      return observationMessageId
+      return observationMessageID
     }
   }
 
@@ -283,8 +284,12 @@ private extension CommandApprovalCancelSignalRaceTests {
       callbacks: transport,
       typing: NoopTyping(),
       clock: ContinuousClock(),
-      currentPolicyVersion: { "pv" },
-      now: { Date() },
+      currentPolicyVersion: {
+        "pv"
+      },
+      now: {
+        Date()
+      },
       logger: TestLog.silent
     )
   }

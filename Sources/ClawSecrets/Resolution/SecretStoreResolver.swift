@@ -25,7 +25,7 @@ public enum SecretStoreResolver {
   public static func resolve(
     stateRoot: URL,
     environment: [String: String],
-    warn: @escaping @Sendable (String) -> Void = EnvSecretStore.defaultWarn
+    warn: @escaping @Sendable (_ message: String) -> Void = EnvSecretStore.defaultWarn
   ) -> ResolvedSecretStore {
     let paths = SecretStatePaths(stateRoot: stateRoot)
     let hasKey = SecureFilePublisher.entryExists(at: paths.key)
@@ -50,26 +50,15 @@ public enum SecretStoreResolver {
 extension SecretStoreResolver {
   /// The doctor "secrets" row: backend label + an `ok` flag, computed by a **real decrypt without
   /// booting**. Used by `doctor --check-config` to validate decrypt early.
-  public static func doctorRow(
-    stateRoot: URL,
-    environment: [String: String]
-  ) -> DoctorRowResult {
-    let resolution = resolve(
-      stateRoot: stateRoot,
-      environment: environment,
-      warn: { _ in }
-    )
+  public static func doctorRow(stateRoot: URL, environment: [String: String]) -> DoctorRowResult {
+    let resolution = resolve(stateRoot: stateRoot, environment: environment) { _ in }
 
     do {
       _ = try resolution.store.loadSecrets()
       switch resolution.backend {
-      case .encrypted:
-        return DoctorRowResult(value: "backend=encrypted", ok: true)
-      case .env:
-        return DoctorRowResult(value: "backend=env (WARN: plaintext)", ok: true)
+      case .encrypted: return DoctorRowResult(value: "backend=encrypted", ok: true)
+      case .env: return DoctorRowResult(value: "backend=env (WARN: plaintext)", ok: true)
       }
-    } catch {
-      return DoctorRowResult(value: "FAIL: \(error)", ok: false)
-    }
+    } catch { return DoctorRowResult(value: "FAIL: \(error)", ok: false) }
   }
 }

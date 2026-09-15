@@ -8,9 +8,7 @@ extension LearningOperationRunner {
   /// One reflection for one frozen trigger, or no call. The trigger cannot affect ordinary task
   /// delivery, so every store and provider failure is contained and logged here.
   public func runReflection(trigger: TriggerIdentity, now: Date) async {
-    do {
-      try await reflect(trigger: trigger, now: now)
-    } catch {
+    do { try await reflect(trigger: trigger, now: now) } catch {
       logger.error("trigger \(trigger.digest.rawValue) could not be reflected: \(error)")
     }
   }
@@ -42,7 +40,7 @@ private extension LearningOperationRunner {
     let messages = reflectionMessages(carrier: serialized)
     let route = roster.startingRoute(primaryIsCooling: await cooldown?.isCooling() == true)
     let call = ReflectionCall(
-      operationId: claim.id,
+      operationID: claim.id,
       callID: providerCallIDGenerator.next(),
       carrierDigest: CarrierDigest(rawValue: SHA256Digest.hex(bytes)),
       authorization: ReflectionAuthorization(preparation: preparation),
@@ -64,7 +62,7 @@ private extension LearningOperationRunner {
       context: call.messages
     )
     let authorization = LearningAuthorization(
-      operationId: call.operationId,
+      operationID: call.operationID,
       carrier: CarrierAuthorization(
         sourceDigest: call.authorization.trigger.digest.rawValue,
         digest: call.carrierDigest,
@@ -78,13 +76,11 @@ private extension LearningOperationRunner {
       context: .reflection(call.authorization)
     )
     switch try learning.authorizeAndStartOperation(authorization, now: now) {
-    case .started:
-      return true
+    case .started: return true
     case .deniedNoCall(let failure):
-      logger.info("reflection \(call.operationId.rawValue) refused: \(failure.rawValue)")
+      logger.info("reflection \(call.operationID.rawValue) refused: \(failure.rawValue)")
       return false
-    case .superseded:
-      return false
+    case .superseded: return false
     }
   }
 }
@@ -158,66 +154,11 @@ private extension LearningOperationRunner {
         preparation: preparation
       )
     } catch {
-      logger.info("reflection \(call.operationId.rawValue) returned an unusable reply: \(error)")
+      logger.info("reflection \(call.operationID.rawValue) returned an unusable reply: \(error)")
       finishReflection(call, usage: usage, product: .failure(.schemaInvalid), now: now)
       return
     }
     finishReflection(call, usage: usage, product: product, now: now)
-  }
-
-  func reflectionProduct(
-    output: ReflectorOutput,
-    reply: String,
-    call: ReflectionCall,
-    preparation: ReflectionPreparation
-  ) throws -> LearningOperationProduct {
-    let resultDigest = ReflectionResultDigest.of(Data(reply.utf8))
-    guard let candidate = output.candidate else {
-      let result = NoCandidateResult(
-        algorithm: preparation.trigger.algorithm,
-        triggerDigest: preparation.trigger.digest,
-        operationId: call.operationId,
-        carrierDigest: call.carrierDigest,
-        resultDigest: resultDigest,
-        authorization: call.authorization
-      )
-      return .noCandidate(result)
-    }
-    let replacement = try LessonSet.canonical(
-      jobId: preparation.trigger.jobId,
-      lessons: candidate.lessons
-    )
-    for lesson in replacement.lessons {
-      guard redactor.redact(lesson) == lesson else {
-        throw ReflectionValidationError.secretLeak
-      }
-    }
-    // swiftlint:disable:next optional_data_string_conversion
-    let replacementBytes = String(decoding: replacement.canonicalBytes, as: UTF8.self)
-    guard redactor.redact(replacementBytes) == replacementBytes else {
-      throw ReflectionValidationError.secretLeak
-    }
-    let manifest = CandidateSourceManifest(
-      origin: .reflection,
-      algorithm: preparation.trigger.algorithm,
-      jobId: preparation.trigger.jobId,
-      epoch: preparation.trigger.epoch,
-      triggerDigest: preparation.trigger.digest,
-      triggerReason: preparation.trigger.reason,
-      qualifyingIssueCodes: preparation.trigger.issueCodes,
-      operationId: call.operationId,
-      carrierDigest: call.carrierDigest,
-      resultDigest: resultDigest,
-      baseDigest: preparation.trigger.stableDigest,
-      baseRevision: preparation.stableRevision,
-      feedbackRevision: preparation.trigger.feedbackRevision,
-      evidence: preparation.evidenceSources,
-      evaluations: preparation.evaluationSources,
-      feedback: preparation.feedbackSources,
-      predecessorCandidate: nil,
-      predecessorFeedback: nil
-    )
-    return .candidate(try CandidateArtifact(replacement: replacement, manifest: manifest))
   }
 
   func commitReflection(
@@ -246,8 +187,63 @@ private extension LearningOperationRunner {
         isEstimated: false
       )
     }
-    logger.info("reflection \(call.operationId.rawValue) failed at the provider: \(error)")
+    logger.info("reflection \(call.operationID.rawValue) failed at the provider: \(error)")
     finishReflection(call, usage: usage, product: .failure(.providerTerminal), now: now)
+  }
+
+  func reflectionProduct(
+    output: ReflectorOutput,
+    reply: String,
+    call: ReflectionCall,
+    preparation: ReflectionPreparation
+  ) throws -> LearningOperationProduct {
+    let resultDigest = ReflectionResultDigest.of(Data(reply.utf8))
+    guard let candidate = output.candidate else {
+      let result = NoCandidateResult(
+        algorithm: preparation.trigger.algorithm,
+        triggerDigest: preparation.trigger.digest,
+        operationID: call.operationID,
+        carrierDigest: call.carrierDigest,
+        resultDigest: resultDigest,
+        authorization: call.authorization
+      )
+      return .noCandidate(result)
+    }
+    let replacement = try LessonSet.canonical(
+      jobID: preparation.trigger.jobID,
+      lessons: candidate.lessons
+    )
+    for lesson in replacement.lessons {
+      guard redactor.redact(lesson) == lesson else {
+        throw ReflectionValidationError.secretLeak
+      }
+    }
+    // swiftlint:disable:next optional_data_string_conversion
+    let replacementBytes = String(decoding: replacement.canonicalBytes, as: UTF8.self)
+    guard redactor.redact(replacementBytes) == replacementBytes else {
+      throw ReflectionValidationError.secretLeak
+    }
+    let manifest = CandidateSourceManifest(
+      origin: .reflection,
+      algorithm: preparation.trigger.algorithm,
+      jobID: preparation.trigger.jobID,
+      epoch: preparation.trigger.epoch,
+      triggerDigest: preparation.trigger.digest,
+      triggerReason: preparation.trigger.reason,
+      qualifyingIssueCodes: preparation.trigger.issueCodes,
+      operationID: call.operationID,
+      carrierDigest: call.carrierDigest,
+      resultDigest: resultDigest,
+      baseDigest: preparation.trigger.stableDigest,
+      baseRevision: preparation.stableRevision,
+      feedbackRevision: preparation.trigger.feedbackRevision,
+      evidence: preparation.evidenceSources,
+      evaluations: preparation.evaluationSources,
+      feedback: preparation.feedbackSources,
+      predecessorCandidate: nil,
+      predecessorFeedback: nil
+    )
+    return .candidate(try CandidateArtifact(replacement: replacement, manifest: manifest))
   }
 
   func finishReflection(
@@ -259,11 +255,11 @@ private extension LearningOperationRunner {
     let committed: Bool
     do {
       committed = try learning.finishOperation(
-        LearningOperationResult(operationId: call.operationId, usage: usage, product: product),
+        LearningOperationResult(operationID: call.operationID, usage: usage, product: product),
         now: now
       )
     } catch {
-      logger.error("reflection \(call.operationId.rawValue) could not be committed: \(error)")
+      logger.error("reflection \(call.operationID.rawValue) could not be committed: \(error)")
       return
     }
     guard committed, case .candidate(let artifact) = product else {
@@ -272,7 +268,7 @@ private extension LearningOperationRunner {
     do {
       _ = try learning.admitCandidate(digest: artifact.digest, redactor: redactor, now: now)
     } catch {
-      logger.error("reflection \(call.operationId.rawValue) admission was deferred: \(error)")
+      logger.error("reflection \(call.operationID.rawValue) admission was deferred: \(error)")
     }
   }
 }
@@ -281,20 +277,18 @@ private extension LearningOperationRunner {
 
 private extension LearningOperationRunner {
   struct ReflectionCall {
-    let operationId: LearningOperationID
+    let operationID: LearningOperationID
     let callID: ProviderCallID
     let carrierDigest: CarrierDigest
     let authorization: ReflectionAuthorization
     let messages: [ChatMessage]
   }
 
-  enum ReflectionValidationError: Error {
-    case secretLeak
-  }
+  enum ReflectionValidationError: Error { case secretLeak }
 
   func reflectionKey(for trigger: TriggerIdentity) -> LearningOperationKey {
     LearningOperationKey(
-      jobId: trigger.jobId,
+      jobID: trigger.jobID,
       epoch: trigger.epoch,
       phase: .reflector,
       sourceDigest: trigger.digest.rawValue,

@@ -3,9 +3,10 @@ import Foundation
 import Logging
 
 public protocol VoiceMessageTranscribing: Sendable {
-  func transcribe(
-    _ attachment: VoiceAttachment
-  ) async -> Result<String, VoiceMessageService.Failure>
+  func transcribe(_ attachment: VoiceAttachment) async -> Result<
+    String,
+    VoiceMessageService.Failure
+  >
 }
 
 public struct VoiceMessageService: VoiceMessageTranscribing {
@@ -22,24 +23,17 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
 
     public var ownerReplyText: String {
       switch self {
-      case .tooLong:
-        "That voice message is too long for me to transcribe."
-      case .downloadFailed:
-        "I couldn't download that voice message. Please try again."
-      case .transcriptionUnavailable:
-        "I can't transcribe voice messages on this machine yet."
-      case .undecodableAudio:
-        "I couldn't decode that voice message's audio."
+      case .tooLong: "That voice message is too long for me to transcribe."
+      case .downloadFailed: "I couldn't download that voice message. Please try again."
+      case .transcriptionUnavailable: "I can't transcribe voice messages on this machine yet."
+      case .undecodableAudio: "I couldn't decode that voice message's audio."
       case .transcriptionFailed:
         "Something went wrong transcribing that voice message. Please try again."
-      case .timedOut:
-        "Transcribing that voice message took too long, so I gave up."
-      case .emptyTranscript:
-        "I couldn't hear any speech in that voice message."
+      case .timedOut: "Transcribing that voice message took too long, so I gave up."
+      case .emptyTranscript: "I couldn't hear any speech in that voice message."
       case .lowConfidence:
         "I couldn't make out that voice message in any of my configured languages."
-      case .storageFull:
-        Degradation.storageFull
+      case .storageFull: Degradation.storageFull
       }
     }
   }
@@ -96,7 +90,7 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
     let audioData: Data
     do {
       audioData = try await fetcher.downloadFile(
-        fileId: attachment.fileId,
+        fileID: attachment.fileID,
         maxBytes: maxDownloadBytes
       )
     } catch {
@@ -105,22 +99,16 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
     }
 
     let stagedFileURL: URL
-    do {
-      stagedFileURL = try stageAudioData(audioData)
-    } catch {
+    do { stagedFileURL = try stageAudioData(audioData) } catch {
       logger.error("voice staging failed: \(error)")
       return .failure(Self.classifyStagingError(error))
     }
-    defer {
-      try? FileManager.default.removeItem(at: stagedFileURL)
-    }
+    defer { try? FileManager.default.removeItem(at: stagedFileURL) }
 
     let transcript: String
     switch await transcribeWithDeadline(audioFileAt: stagedFileURL) {
-    case .success(let engineTranscript):
-      transcript = engineTranscript
-    case .failure(let failure):
-      return .failure(failure)
+    case .success(let engineTranscript): transcript = engineTranscript
+    case .failure(let failure): return .failure(failure)
     }
 
     logger.info(
@@ -136,31 +124,24 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
 // MARK: - Deadline
 
 private extension VoiceMessageService {
-  func transcribeWithDeadline(
-    audioFileAt staged: URL
-  ) async -> Result<String, Failure> {
+  func transcribeWithDeadline(audioFileAt staged: URL) async -> Result<String, Failure> {
     let transcriber = self.transcriber
     let logger = self.logger
 
-    let outcome = await DeadlineRace.race(
-      allowance: transcriptionDeadline
-    ) { () async -> Result<String, Failure> in
-      do {
-        return .success(try await transcriber.transcribe(audioFileAt: staged))
-      } catch {
+    let outcome = await DeadlineRace.race(allowance: transcriptionDeadline) {
+      () async -> Result<String, Failure> in
+      do { return .success(try await transcriber.transcribe(audioFileAt: staged)) } catch {
         logger.error("voice transcription failed: \(error)")
         return .failure(Self.mapTranscriptionError(error))
       }
     }
 
     switch outcome {
-    case .operationReturned(let result):
-      return result
+    case .operationReturned(let result): return result
     case .deadlineExpired:
       logger.error("voice transcription exceeded its \(transcriptionDeadline) deadline")
       return .failure(.timedOut)
-    case .callerCancelled:
-      return .failure(.transcriptionFailed)
+    case .callerCancelled: return .failure(.transcriptionFailed)
     }
   }
 }
@@ -174,10 +155,7 @@ private extension VoiceMessageService {
     let file = stagingDirectory.appendingPathComponent("\(UUID().uuidString).oga")
     do {
       try data.write(to: file, options: [.withoutOverwriting])
-      try FileManager.default.setAttributes(
-        [.posixPermissions: 0o600],
-        ofItemAtPath: file.path
-      )
+      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     } catch {
       try? FileManager.default.removeItem(at: file)
       throw error
@@ -187,8 +165,7 @@ private extension VoiceMessageService {
   }
 
   func normalize(_ transcript: String) -> Result<String, Failure> {
-    let redacted = redactor.redact(transcript)
-      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let redacted = redactor.redact(transcript).trimmingCharacters(in: .whitespacesAndNewlines)
 
     guard !redacted.isEmpty else {
       return .failure(.emptyTranscript)
@@ -203,16 +180,11 @@ private extension VoiceMessageService {
     }
 
     switch transcriptionError {
-    case .unavailable, .localeUnsupported, .assetsUnavailable:
-      return .transcriptionUnavailable
-    case .undecodableAudio:
-      return .undecodableAudio
-    case .audioTooLong:
-      return .tooLong
-    case .transcriptionFailed, .cancelled:
-      return .transcriptionFailed
-    case .lowConfidence:
-      return .lowConfidence
+    case .unavailable, .localeUnsupported, .assetsUnavailable: return .transcriptionUnavailable
+    case .undecodableAudio: return .undecodableAudio
+    case .audioTooLong: return .tooLong
+    case .transcriptionFailed, .cancelled: return .transcriptionFailed
+    case .lowConfidence: return .lowConfidence
     }
   }
 }
@@ -226,7 +198,7 @@ extension VoiceMessageService {
     while let current = candidate {
       let isCocoaDiskFull =
         current.domain == NSCocoaErrorDomain
-        && current.code == CocoaError.fileWriteOutOfSpace.rawValue
+          && current.code == CocoaError.fileWriteOutOfSpace.rawValue
       let isPOSIXDiskFull = current.domain == NSPOSIXErrorDomain && current.code == Int(ENOSPC)
 
       if isCocoaDiskFull || isPOSIXDiskFull {

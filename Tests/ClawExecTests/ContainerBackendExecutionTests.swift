@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawExec
 
-@Suite struct ContainerBackendExecutionTests {
+@Suite
+struct ContainerBackendExecutionTests {
   @Test(.timeLimit(.minutes(1)))
   func concurrentRunsStayNonOverlappingAndExecuteFIFO() async throws {
     // given
@@ -16,17 +17,16 @@ import Testing
       switch command.arguments.first {
       case "run":
         writeCidfile(from: command.arguments)
-        let runNumber = history.filter { $0.arguments.first == "run" }.count
+        let runNumber = history.filter {
+          $0.arguments.first == "run"
+        }.count
         if runNumber == 1 {
           await firstRunGate.wait()
         }
         return commandResult(.exited(Int32(runNumber)))
-      case "system":
-        return jsonCommandResult(#"{"status":"running"}"#)
-      case "list":
-        return jsonCommandResult("[]")
-      default:
-        return commandResult(.exited(0))
+      case "system": return jsonCommandResult(#"{"status":"running"}"#)
+      case "list": return jsonCommandResult("[]")
+      default: return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner, executionAdmitted: admissions.record)
@@ -46,7 +46,9 @@ import Testing
     await admissions.waitForCount(3)
 
     // then
-    let blockedRunCommands = await runner.recorded().filter { $0.arguments.first == "run" }
+    let blockedRunCommands = await runner.recorded().filter {
+      $0.arguments.first == "run"
+    }
     #expect(blockedRunCommands.count == 1)
 
     // when
@@ -57,11 +59,14 @@ import Testing
     #expect(
       results.map(\.terminationReason) == [.exited(code: 1), .exited(code: 2), .exited(code: 3)]
     )
-    let runCommands = await runner.recorded().filter { $0.arguments.first == "run" }
+    let runCommands = await runner.recorded().filter {
+      $0.arguments.first == "run"
+    }
     #expect(runCommands.map(\.timeout) == [.seconds(1), .seconds(2), .seconds(3)])
   }
 
-  @Test func runRequiresPreparedRuntimeInitImageWithoutStartingACommand() async throws {
+  @Test
+  func runRequiresPreparedRuntimeInitImageWithoutStartingACommand() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -78,7 +83,8 @@ import Testing
     #expect(await runner.recorded().isEmpty)
   }
 
-  @Test func cidBackedNonzeroExitIsGuestResultWithLossyBoundedStreams() async throws {
+  @Test
+  func cidBackedNonzeroExitIsGuestResultWithLossyBoundedStreams() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -93,12 +99,9 @@ import Testing
           stdoutTotal: 2_000_000,
           stdoutTruncated: true
         )
-      case "system":
-        return jsonCommandResult(#"{"status":"running"}"#)
-      case "list":
-        return jsonCommandResult("[]")
-      default:
-        return commandResult(.exited(0))
+      case "system": return jsonCommandResult(#"{"status":"running"}"#)
+      case "list": return jsonCommandResult("[]")
+      default: return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner)
@@ -114,9 +117,21 @@ import Testing
     #expect(result.truncatedRawBytes)
     let arguments = await runner.recorded().map(\.arguments)
     #expect(arguments[0].first == "run")
-    #expect(arguments.contains { $0.first == "stop" })
-    #expect(arguments.contains { $0.first == "kill" })
-    #expect(arguments.contains { $0.first == "rm" })
+    #expect(
+      arguments.contains {
+        $0.first == "stop"
+      }
+    )
+    #expect(
+      arguments.contains {
+        $0.first == "kill"
+      }
+    )
+    #expect(
+      arguments.contains {
+        $0.first == "rm"
+      }
+    )
     #expect(arguments.last == ContainerInvocation.listAll())
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
@@ -124,7 +139,8 @@ import Testing
   /// The runner deletes whatever keys its command names, so the ambient sanitization is only ever
   /// as good as the list this backend attaches: an agent-forwarding socket or a `container` debug
   /// flag inherited into `container run` would reach the guest launch.
-  @Test func everyContainerCommandDeletesTheAmbientSensitiveEnvironment() async throws {
+  @Test
+  func everyContainerCommandDeletesTheAmbientSensitiveEnvironment() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -133,12 +149,9 @@ import Testing
       case "run":
         writeCidfile(from: command.arguments)
         return commandResult(.exited(0))
-      case "system":
-        return jsonCommandResult(#"{"status":"running"}"#)
-      case "list":
-        return jsonCommandResult("[]")
-      default:
-        return commandResult(.exited(0))
+      case "system": return jsonCommandResult(#"{"status":"running"}"#)
+      case "list": return jsonCommandResult("[]")
+      default: return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner)
@@ -159,7 +172,8 @@ import Testing
     )
   }
 
-  @Test func nonzeroExitWithoutCidfileIsStartFailureAndHidesGuestStreams() async throws {
+  @Test
+  func nonzeroExitWithoutCidfileIsStartFailureAndHidesGuestStreams() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -174,7 +188,9 @@ import Testing
     }
     let backend = fixture.backend(
       commands: runner,
-      sanitizeReason: { $0.replacingOccurrences(of: "secret", with: "[REDACTED]") }
+      sanitizeReason: {
+        $0.replacingOccurrences(of: "secret", with: "[REDACTED]")
+      }
     )
     await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
 
@@ -191,7 +207,8 @@ import Testing
     #expect(result.stderr.isEmpty)
   }
 
-  @Test func engineFailureOrSurvivingNameOverridesAnExitedCli() async throws {
+  @Test
+  func engineFailureOrSurvivingNameOverridesAnExitedCLI() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -200,8 +217,7 @@ import Testing
       case "run":
         writeCidfile(from: command.arguments)
         return commandResult(.exited(0))
-      case "system":
-        return jsonCommandResult(#"{"status":"running"}"#)
+      case "system": return jsonCommandResult(#"{"status":"running"}"#)
       case "list" where history.count < 5:
         let name = value(after: "--name", in: history[0].arguments) ?? "missing-name"
         return jsonCommandResult(
@@ -210,10 +226,8 @@ import Testing
           "labels":{"clawd.exec":"1"}}}]
           """
         )
-      case "list":
-        return jsonCommandResult("[]")
-      default:
-        return commandResult(.exited(0))
+      case "list": return jsonCommandResult("[]")
+      default: return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner)
@@ -229,7 +243,8 @@ import Testing
     )
   }
 
-  @Test func timeoutUsesProgramBudgetThenRunsShieldedIdentityLadder() async throws {
+  @Test
+  func timeoutUsesProgramBudgetThenRunsShieldedIdentityLadder() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -238,10 +253,8 @@ import Testing
       case "run":
         writeCidfile(from: command.arguments)
         return commandResult(.timedOut, stdout: Data("partial".utf8))
-      case "list":
-        return jsonCommandResult("[]")
-      default:
-        return commandResult(.exited(0))
+      case "list": return jsonCommandResult("[]")
+      default: return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner)
@@ -263,7 +276,9 @@ import Testing
     let commands = await runner.recorded()
     #expect(commands[0].timeout == .seconds(3))
     #expect(
-      commands.dropFirst().allSatisfy { $0.timeout <= ContainerBackend.lifecycleCommandTimeout }
+      commands.dropFirst().allSatisfy {
+        $0.timeout <= ContainerBackend.lifecycleCommandTimeout
+      }
     )
     #expect(
       commands.allSatisfy {
@@ -277,7 +292,8 @@ import Testing
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
 
-  @Test func cancellationWhileRunningStillCleansIdentityAndScratch() async throws {
+  @Test
+  func cancellationWhileRunningStillCleansIdentityAndScratch() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -289,9 +305,7 @@ import Testing
         }
         return commandResult(.cancelled)
       }
-      return command.arguments.first == "list"
-        ? jsonCommandResult("[]")
-        : commandResult(.exited(0))
+      return command.arguments.first == "list" ? jsonCommandResult("[]") : commandResult(.exited(0))
     }
     let backend = fixture.backend(commands: runner)
     await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
@@ -307,14 +321,27 @@ import Testing
     // then
     #expect(result.terminationReason == .cancelled)
     let arguments = await runner.recorded().map(\.arguments)
-    #expect(arguments.contains { $0.first == "stop" })
-    #expect(arguments.contains { $0.first == "kill" })
-    #expect(arguments.contains { $0.first == "rm" })
+    #expect(
+      arguments.contains {
+        $0.first == "stop"
+      }
+    )
+    #expect(
+      arguments.contains {
+        $0.first == "kill"
+      }
+    )
+    #expect(
+      arguments.contains {
+        $0.first == "rm"
+      }
+    )
     #expect(arguments.last == ContainerInvocation.listAll())
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
 
-  @Test func finalPresenceFailureOverridesGuestOrCancellationResult() async throws {
+  @Test
+  func finalPresenceFailureOverridesGuestOrCancellationResult() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -354,17 +381,16 @@ import Testing
       switch command.arguments.first {
       case "run":
         writeCidfile(from: command.arguments)
-        let runNumber = history.filter { $0.arguments.first == "run" }.count
+        let runNumber = history.filter {
+          $0.arguments.first == "run"
+        }.count
         if runNumber == 1 {
           await firstRunGate.wait()
         }
         return commandResult(.exited(Int32(runNumber)))
-      case "system":
-        return jsonCommandResult(#"{"status":"running"}"#)
-      case "list":
-        return jsonCommandResult("[]")
-      default:
-        return commandResult(.exited(0))
+      case "system": return jsonCommandResult(#"{"status":"running"}"#)
+      case "list": return jsonCommandResult("[]")
+      default: return commandResult(.exited(0))
       }
     }
     let backend = fixture.backend(commands: runner, executionAdmitted: admissions.record)
@@ -387,7 +413,9 @@ import Testing
 
     // then
     #expect(result.terminationReason == .cancelled)
-    let runCommands = await runner.recorded().filter { $0.arguments.first == "run" }
+    let runCommands = await runner.recorded().filter {
+      $0.arguments.first == "run"
+    }
     #expect(runCommands.count == 1)
   }
 }

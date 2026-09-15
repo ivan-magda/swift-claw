@@ -7,8 +7,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct LearningNoticeTests {
-  @Test func reviewTargetsExactEvaluationsWithDistinctNoncesAndStatefulCandidateActions() throws {
+@Suite
+struct LearningNoticeTests {
+  @Test
+  func reviewTargetsExactEvaluationsWithDistinctNoncesAndStatefulCandidateActions() throws {
     // given
     let candidate = try ReviewFixture.candidate(evaluationCount: 5)
     let admitted = LearningNotices(
@@ -28,15 +30,15 @@ import Testing
     let admittedNotice = try admitted.reviewNotice(
       candidate: candidate,
       state: .admitted,
-      ownerUserId: 42,
-      chatId: 777,
+      ownerUserID: 42,
+      chatID: 777,
       now: ReviewFixture.now
     )
     let awaitingNotice = try awaiting.reviewNotice(
       candidate: candidate,
       state: .awaitingApproval,
-      ownerUserId: 42,
-      chatId: 777,
+      ownerUserID: 42,
+      chatID: 777,
       now: ReviewFixture.now
     )
 
@@ -50,12 +52,17 @@ import Testing
     )
     #expect(admittedNotice.targets.first?.allowedActions == [.candidateReject, .candidateEdit])
     #expect(
-      awaitingNotice.targets.first?.allowedActions
-        == [.candidateApprove, .candidateReject, .candidateEdit]
+      awaitingNotice.targets.first?.allowedActions == [
+        .candidateApprove,
+        .candidateReject,
+        .candidateEdit,
+      ]
     )
     #expect(
       admittedNotice.targets.dropFirst().map(\.subjectDigest)
-        == candidate.manifest.evaluations.map { source in source.digest.rawValue }
+        == candidate.manifest.evaluations.map { source in
+          source.digest.rawValue
+        }
     )
     #expect(
       admittedNotice.targets.dropFirst().allSatisfy { target in
@@ -67,7 +74,11 @@ import Testing
       let rows = try FeedbackKeyboard.parseMarkup(markup)
       #expect(rows.count == notice.targets.count)
       for (row, target) in zip(rows, notice.targets) {
-        #expect(row.map(\.nonce).allSatisfy { nonce in nonce == target.nonce })
+        #expect(
+          row.map(\.nonce).allSatisfy { nonce in
+            nonce == target.nonce
+          }
+        )
         #expect(row.map(\.action.signal) == target.allowedActions)
       }
     }
@@ -76,13 +87,14 @@ import Testing
       _ = try FeedbackKeyboard.parseMarkup(" \(markup)")
     }
     let labels = try ReviewFixture.buttonLabels(markup)
-    for runId in [41, 44, 47, 50, 53] {
-      #expect(labels.contains("Eval #\(runId) correct"))
-      #expect(labels.contains("Eval #\(runId) wrong"))
+    for runID in [41, 44, 47, 50, 53] {
+      #expect(labels.contains("Eval #\(runID) correct"))
+      #expect(labels.contains("Eval #\(runID) wrong"))
     }
   }
 
-  @Test func aCandidateWithMoreThanFiveEvaluationsHasNoReviewCarrier() throws {
+  @Test
+  func aCandidateWithMoreThanFiveEvaluationsHasNoReviewCarrier() throws {
     // given
     let candidate = try ReviewFixture.candidate(evaluationCount: 6)
     let notices = LearningNotices(
@@ -97,24 +109,22 @@ import Testing
       _ = try notices.reviewNotice(
         candidate: candidate,
         state: .admitted,
-        ownerUserId: 42,
-        chatId: 777,
+        ownerUserID: 42,
+        chatID: 777,
         now: ReviewFixture.now
       )
     }
   }
 
-  @Test func malformedInjectedNoncesCannotProduceAReviewKeyboard() throws {
+  @Test
+  func malformedInjectedNoncesCannotProduceAReviewKeyboard() throws {
     // given
     let candidate = try ReviewFixture.candidate(evaluationCount: 1)
     let boundaryStem = String(repeating: "é", count: 28)
     let boundaryNonces = ["\(boundaryStem)00", "\(boundaryStem)01"]
     let overLimitStem = String(repeating: "é", count: 29)
     let overLimitNonces = ["\(overLimitStem)0", "\(overLimitStem)1"]
-    let invalidNonceSets = [
-      ["nonce:delimiter-0", "nonce:delimiter-1"],
-      overLimitNonces,
-    ]
+    let invalidNonceSets = [["nonce:delimiter-0", "nonce:delimiter-1"], overLimitNonces]
 
     // when
     let boundaryNotice = try LearningNotices(
@@ -125,8 +135,8 @@ import Testing
     ).reviewNotice(
       candidate: candidate,
       state: .admitted,
-      ownerUserId: 42,
-      chatId: 777,
+      ownerUserID: 42,
+      chatID: 777,
       now: ReviewFixture.now
     )
 
@@ -153,15 +163,16 @@ import Testing
         _ = try notices.reviewNotice(
           candidate: candidate,
           state: .admitted,
-          ownerUserId: 42,
-          chatId: 777,
+          ownerUserID: 42,
+          chatID: 777,
           now: ReviewFixture.now
         )
       }
     }
   }
 
-  @Test func multipartReviewPlacesMarkupOnlyOnTheFinalRunlessChunk() throws {
+  @Test
+  func multipartReviewPlacesMarkupOnlyOnTheFinalRunlessChunk() throws {
     // given
     let candidate = try ReviewFixture.candidate(evaluationCount: 2)
     let notices = LearningNotices(
@@ -175,27 +186,36 @@ import Testing
     let notice = try notices.reviewNotice(
       candidate: candidate,
       state: .admitted,
-      ownerUserId: 42,
-      chatId: 777,
+      ownerUserID: 42,
+      chatID: 777,
       now: ReviewFixture.now
     )
 
     // then — putting markup on an earlier part makes a partial notice actionable.
     #expect(notice.chunks.count > 1)
-    #expect(notice.chunks.dropLast().allSatisfy { chunk in chunk.replyMarkup == nil })
+    #expect(
+      notice.chunks.dropLast().allSatisfy { chunk in
+        chunk.replyMarkup == nil
+      }
+    )
     let markup = try #require(notice.chunks.last?.replyMarkup)
     let markupObject = try JSONSerialization.jsonObject(with: Data(markup.utf8))
     #expect(markupObject is [String: Any])
-    #expect(notice.chunks.allSatisfy { chunk in chunk.subjectDigest == notice.subjectDigest })
+    #expect(
+      notice.chunks.allSatisfy { chunk in
+        chunk.subjectDigest == notice.subjectDigest
+      }
+    )
   }
 
-  @Test func enqueuePokesExactlyOnceAfterNewCommitAndNeverOnReplayOrFailure() throws {
+  @Test
+  func enqueuePokesExactlyOnceAfterNewCommitAndNeverOnReplayOrFailure() throws {
     // given
     let queue = try TestDatabase.make()
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    let jobId = try ReviewFixture.seedArmedJob(queue: queue)
-    let candidate = try ReviewFixture.candidate(jobId: jobId, evaluationCount: 2)
-    let other = try ReviewFixture.candidate(jobId: jobId, evaluationCount: 1, suffix: "other")
+    let jobID = try ReviewFixture.seedArmedJob(queue: queue)
+    let candidate = try ReviewFixture.candidate(jobID: jobID, evaluationCount: 2)
+    let other = try ReviewFixture.candidate(jobID: jobID, evaluationCount: 1, suffix: "other")
     let recording = RecordingLearningStore(
       base: learning,
       recordsReviewCommits: true,
@@ -213,23 +233,23 @@ import Testing
     let inserted = try notices.enqueueReview(
       candidate: candidate,
       state: .admitted,
-      ownerUserId: 42,
-      chatId: 777,
+      ownerUserID: 42,
+      chatID: 777,
       now: ReviewFixture.now
     )
     let replay = try notices.enqueueReview(
       candidate: candidate,
       state: .admitted,
-      ownerUserId: 42,
-      chatId: 777,
+      ownerUserID: 42,
+      chatID: 777,
       now: ReviewFixture.now
     )
     #expect(throws: StoreError.self) {
       _ = try notices.enqueueReview(
         candidate: other,
         state: .admitted,
-        ownerUserId: 42,
-        chatId: 777,
+        ownerUserID: 42,
+        chatID: 777,
         now: ReviewFixture.now
       )
     }
@@ -240,7 +260,8 @@ import Testing
     #expect(pokes.count == 1)
   }
 
-  @Test func committedReviewReplayAfterStateMovementNeverPokesAgain() async throws {
+  @Test
+  func committedReviewReplayAfterStateMovementNeverPokesAgain() async throws {
     // given
     let env = try ReflectionRunEnvironment.make()
     await env.runner.runReflection(trigger: env.trigger, now: env.now)
@@ -256,8 +277,8 @@ import Testing
       try notices.enqueueReview(
         candidate: candidate,
         state: .admitted,
-        ownerUserId: 777,
-        chatId: 777,
+        ownerUserID: 777,
+        chatID: 777,
         now: env.now
       )
     )
@@ -270,8 +291,8 @@ import Testing
     let replay = try notices.enqueueReview(
       candidate: candidate,
       state: .admitted,
-      ownerUserId: 777,
-      chatId: 777,
+      ownerUserID: 777,
+      chatID: 777,
       now: replayTime
     )
 
@@ -289,9 +310,7 @@ private final class ReviewNonceSequence: @unchecked Sendable {
   private var nonces: [String]
   private var value = 0
 
-  init(nonces: [String] = []) {
-    self.nonces = nonces
-  }
+  init(nonces: [String] = []) { self.nonces = nonces }
 
   func next() -> String {
     lock.lock()
@@ -333,7 +352,7 @@ private enum ReviewFixture {
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let job = try jobs.create(
       NewScheduledJob(
-        ownerChatId: 777,
+        ownerChatID: 777,
         label: "review",
         prompt: "Review this task",
         recurrence: nil,
@@ -342,24 +361,22 @@ private enum ReviewFixture {
       ),
       now: now
     )
-    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
+    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobID: job.id, now: now)
     return job.id
   }
 
-  static func candidate(
-    jobId: Int64 = 41,
-    evaluationCount: Int,
-    suffix: String = "base"
-  ) throws -> CandidateArtifact {
-    let base = LessonSet.empty(jobId: jobId)
+  static func candidate(jobID: Int64 = 41, evaluationCount: Int, suffix: String = "base") throws
+    -> CandidateArtifact
+  {
+    let base = LessonSet.empty(jobID: jobID)
     let replacement = try LessonSet.canonical(
-      jobId: jobId,
+      jobID: jobID,
       lessons: ["Report every material change for review \(suffix)."]
     )
     let evidence = (0..<evaluationCount).map { index in
-      let runId = Int64(41 + index * 3)
+      let runID = Int64(41 + index * 3)
       return CandidateEvidenceSource(
-        runId: runId,
+        runID: runID,
         digest: EvidenceDigest(rawValue: "evidence-\(suffix)-\(index)"),
         evaluationDigest: EvaluationDigest(rawValue: "evaluation-\(suffix)-\(index)"),
         evaluationRequired: true
@@ -368,12 +385,12 @@ private enum ReviewFixture {
     let manifest = CandidateSourceManifest(
       origin: .reflection,
       algorithm: .v1,
-      jobId: jobId,
+      jobID: jobID,
       epoch: LearningEpoch(1),
       triggerDigest: TriggerDigest(rawValue: "trigger-\(suffix)"),
       triggerReason: .recurringIssue,
       qualifyingIssueCodes: ["material.missed"],
-      operationId: LearningOperationID(rawValue: "operation-\(suffix)"),
+      operationID: LearningOperationID(rawValue: "operation-\(suffix)"),
       carrierDigest: CarrierDigest(rawValue: "carrier-\(suffix)"),
       resultDigest: ReflectionResultDigest(rawValue: "result-\(suffix)"),
       baseDigest: base.digest,
@@ -381,7 +398,7 @@ private enum ReviewFixture {
       feedbackRevision: FeedbackRevision(0),
       evidence: evidence,
       evaluations: evidence.map { source in
-        CandidateEvaluationSource(runId: source.runId, digest: source.evaluationDigest)
+        CandidateEvaluationSource(runID: source.runID, digest: source.evaluationDigest)
       },
       feedback: [],
       predecessorCandidate: nil,
@@ -392,8 +409,7 @@ private enum ReviewFixture {
 
   static func buttonLabels(_ markup: String) throws -> [String] {
     guard
-      let object = try JSONSerialization.jsonObject(with: Data(markup.utf8))
-        as? [String: Any],
+      let object = try JSONSerialization.jsonObject(with: Data(markup.utf8)) as? [String: Any],
       let rows = object["inline_keyboard"] as? [[Any]]
     else {
       throw LearningReviewError.invalidCandidate

@@ -1,8 +1,6 @@
 import Foundation
 
-public enum FeedbackKeyboardError: Error, Sendable, Equatable {
-  case invalidMarkup
-}
+public enum FeedbackKeyboardError: Error, Sendable, Equatable { case invalidMarkup }
 
 /// The compact action vocabulary carried by Telegram's bounded `callback_data` field.
 public enum FeedbackAction: String, Sendable, Equatable, CaseIterable {
@@ -44,13 +42,9 @@ public enum FeedbackAction: String, Sendable, Equatable, CaseIterable {
     }
   }
 
-  public var subjectKind: FeedbackSubjectKind {
-    signal.feedbackSubjectKind
-  }
+  public var subjectKind: FeedbackSubjectKind { signal.feedbackSubjectKind }
 
-  public var opensChallenge: Bool {
-    signal.opensFeedbackChallenge
-  }
+  public var opensChallenge: Bool { signal.opensFeedbackChallenge }
 }
 
 /// A strict feedback envelope and canonical inline-keyboard representation.
@@ -98,7 +92,12 @@ public enum FeedbackKeyboard {
   }
 
   public static func markup(rows: [[Button]]) -> String? {
-    guard rows.isEmpty == false, rows.allSatisfy({ $0.isEmpty == false }) else {
+    guard
+      rows.isEmpty == false,
+      rows.allSatisfy({
+        $0.isEmpty == false
+      })
+    else {
       return nil
     }
     var wireRows: [[WireButton]] = []
@@ -121,15 +120,15 @@ public enum FeedbackKeyboard {
     return CanonicalJSON.encode(wire)
   }
 
-  public static func parseMarkup(
-    _ markup: String
-  ) throws(FeedbackKeyboardError) -> [[Button]] {
+  public static func parseMarkup(_ markup: String) throws(FeedbackKeyboardError) -> [[Button]] {
     guard
       let data = markup.data(using: .utf8),
       let wire = try? JSONDecoder().decode(WireMarkup.self, from: data),
       CanonicalJSON.encode(wire) == markup,
       wire.inlineKeyboard.isEmpty == false,
-      wire.inlineKeyboard.allSatisfy({ $0.isEmpty == false })
+      wire.inlineKeyboard.allSatisfy({
+        $0.isEmpty == false
+      })
     else {
       throw .invalidMarkup
     }
@@ -140,9 +139,7 @@ public enum FeedbackKeyboard {
         guard let callback = parse(button.callbackData) else {
           throw .invalidMarkup
         }
-        buttons.append(
-          Button(text: button.text, nonce: callback.nonce, action: callback.action)
-        )
+        buttons.append(Button(text: button.text, nonce: callback.nonce, action: callback.action))
       }
       rows.append(buttons)
     }
@@ -157,10 +154,10 @@ public enum FeedbackKeyboard {
       return nil
     }
     let rows = targets.enumerated().map { index, target in
-      let evaluationRunId = index > 0 ? evaluations[index - 1].runId : nil
+      let evaluationRunID = index > 0 ? evaluations[index - 1].runID : nil
       return target.allowedActions.map { signal in
         Button(
-          text: reviewLabel(signal, evaluationRunId: evaluationRunId),
+          text: reviewLabel(signal, evaluationRunID: evaluationRunID),
           nonce: target.nonce,
           action: FeedbackAction(signal: signal)
         )
@@ -169,26 +166,25 @@ public enum FeedbackKeyboard {
     return markup(rows: rows)
   }
 
-  private static func reviewLabel(_ signal: OwnerSignal, evaluationRunId: Int64?) -> String {
+  private static func reviewLabel(_ signal: OwnerSignal, evaluationRunID: Int64?) -> String {
     switch signal {
     case .candidateApprove: "Approve"
     case .candidateReject: "Reject"
     case .candidateEdit: "Edit"
-    case .evaluationConfirm: "Eval #\(evaluationRunId ?? 0) correct"
-    case .evaluationDispute: "Eval #\(evaluationRunId ?? 0) wrong"
-    case .resultUseful, .resultNotUseful, .resultCorrection, .promotionRollback:
-      signal.rawValue
+    case .evaluationConfirm: "Eval #\(evaluationRunID ?? 0) correct"
+    case .evaluationDispute: "Eval #\(evaluationRunID ?? 0) wrong"
+    case .resultUseful, .resultNotUseful, .resultCorrection, .promotionRollback: signal.rawValue
     }
   }
 }
+
+// MARK: - Telegram Wire Markup
 
 private extension FeedbackKeyboard {
   struct WireMarkup: Codable {
     let inlineKeyboard: [[WireButton]]
 
-    enum CodingKeys: String, CodingKey {
-      case inlineKeyboard = "inline_keyboard"
-    }
+    enum CodingKeys: String, CodingKey { case inlineKeyboard = "inline_keyboard" }
   }
 
   struct WireButton: Codable {

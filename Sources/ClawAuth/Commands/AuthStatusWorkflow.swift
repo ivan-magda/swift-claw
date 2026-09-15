@@ -18,21 +18,17 @@ public struct AuthStatusWorkflow: Sendable {
 
   public func status() -> AuthCommandResult {
     let store: any LLMCredentialStore
-    do {
-      store = try makeCredentialStore()
-    } catch {
+    do { store = try makeCredentialStore() } catch {
       return AuthCommandResultMapper.credentialStoreResult(for: error)
     }
 
     let stored: StoredOAuthCredential?
-    do {
-      stored = try store.load(providerID: ChatGPTProviderMetadata.providerID)
-    } catch {
+    do { stored = try store.load(providerID: ChatGPTProviderMetadata.providerID) } catch {
       return AuthCommandResultMapper.result(for: error)
     }
 
     var events: [AuthPresentationEvent] = [
-      .output("provider: \(ChatGPTProviderMetadata.providerID.rawValue)")
+      .output("provider: \(ChatGPTProviderMetadata.providerID.rawValue)"),
     ]
 
     guard let stored else {
@@ -76,12 +72,9 @@ private extension AuthStatusWorkflow {
 
   static func label(for freshness: ChatGPTCredentialFreshness) -> String {
     switch freshness {
-    case .fresh:
-      "fresh"
-    case .expiring:
-      "expiring"
-    case .expired:
-      "expired"
+    case .fresh: "fresh"
+    case .expiring: "expiring"
+    case .expired: "expired"
     }
   }
 }

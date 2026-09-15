@@ -6,9 +6,15 @@ public enum CoderToolNames {
   public static let cancel = "coder_cancel"
 }
 
-public enum CoderWorkspaceMode: String, Sendable, Codable { case inPlace, separate }
+public enum CoderWorkspaceMode: String, Sendable, Codable {
+  case inPlace
+  case separate
+}
 
-public enum CoderDeliverable: String, Sendable, Codable { case localChanges, pullRequest }
+public enum CoderDeliverable: String, Sendable, Codable {
+  case localChanges
+  case pullRequest
+}
 
 public enum CoderSource: Sendable, Equatable, Codable {
   case local(path: String)
@@ -81,9 +87,9 @@ public struct CoderPreparedRequest: Sendable, Equatable, Codable {
 
 // MARK: - Validation
 
-public extension CoderRequest {
+extension CoderRequest {
   /// Validates task shape without reading the checkout or interpreting task text as commands.
-  func validated() throws(CoderError) -> CoderRequest {
+  public func validated() throws(CoderError) -> CoderRequest {
     if workspace == .inPlace, startRef != nil {
       throw .invalidRequest("startRef requires a separate copy; in-place keeps its current branch.")
     }
@@ -127,9 +133,13 @@ private extension CoderRequest {
   static func validateGitHubURL(_ raw: String, issue: Bool) throws(CoderError) {
     guard
       let url = URLComponents(string: raw),
-      url.scheme == "https", url.host == "github.com",
-      url.user == nil, url.password == nil, url.port == nil,
-      url.query == nil, url.fragment == nil,
+      url.scheme == "https",
+      url.host == "github.com",
+      url.user == nil,
+      url.password == nil,
+      url.port == nil,
+      url.query == nil,
+      url.fragment == nil,
       url.percentEncodedPath == url.path
     else {
       throw .invalidRequest("Use a GitHub HTTPS URL without credentials, port, query or fragment.")
@@ -137,18 +147,22 @@ private extension CoderRequest {
     let parts = url.path.split(separator: "/", omittingEmptySubsequences: false)
     let expectedCount = issue ? 5 : 3
     guard
-      parts.count == expectedCount, parts[0].isEmpty,
-      validRepositoryComponent(parts[1]), validRepositoryComponent(parts[2])
+      parts.count == expectedCount,
+      parts[0].isEmpty,
+      validRepositoryComponent(parts[1]),
+      validRepositoryComponent(parts[2])
     else {
       throw .invalidRequest("Use github.com/{owner}/{repo} or its /issues/{number} URL.")
     }
     if issue {
       guard
-        parts[3] == "issues", !parts[4].isEmpty,
+        parts[3] == "issues",
+        !parts[4].isEmpty,
         parts[4].utf8.allSatisfy({ byte in
           (48...57).contains(byte)
         }),
-        let number = Int(parts[4]), number > 0
+        let number = Int(parts[4]),
+        number > 0
       else {
         throw .invalidRequest("A GitHub issue URL requires a positive issue number.")
       }

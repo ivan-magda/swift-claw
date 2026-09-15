@@ -6,10 +6,12 @@ import Testing
 
 @testable import ClawAuth
 
-@Suite struct AuthStatusWorkflowTests {
+@Suite
+struct AuthStatusWorkflowTests {
   /// Status is a read. It takes no lock and refreshes nothing — which is what lets an owner run it
   /// against a live daemon without fighting it for the state root.
-  @Test func statusTakesNoLockAndContactsNobody() async throws {
+  @Test
+  func statusTakesNoLockAndContactsNobody() async throws {
     try await withAuthWorld("auth-status-quiet") { world in
       // given
       try world.seedPriorLogin()
@@ -29,7 +31,8 @@ import Testing
     }
   }
 
-  @Test func statusReportsPresenceExpiryAndFreshnessWithoutAnyTokenText() async throws {
+  @Test
+  func statusReportsPresenceExpiryAndFreshnessWithoutAnyTokenText() async throws {
     try await withAuthWorld("auth-status-present") { world in
       // given
       try world.seedPriorLogin()
@@ -61,9 +64,7 @@ import Testing
   ) async throws {
     try await withAuthWorld("auth-status-freshness") { world in
       // given
-      let expiresAt = AuthFixture.now.addingTimeInterval(
-        TimeInterval(remaining.components.seconds)
-      )
+      let expiresAt = AuthFixture.now.addingTimeInterval(TimeInterval(remaining.components.seconds))
       _ = try RuntimeSecretPreparer.prepare(stateRoot: world.root, environment: world.environment)
       try EncryptedLLMCredentialStore(stateRoot: world.root).save(
         StoredOAuthCredential(
@@ -88,7 +89,8 @@ import Testing
     }
   }
 
-  @Test func aLoggedOutStatusIsDescriptiveAndSucceeds() async throws {
+  @Test
+  func aLoggedOutStatusIsDescriptiveAndSucceeds() async throws {
     try await withAuthWorld("auth-status-logged-out") { world in
       // given — nothing has ever been stored here
       let workflow = world.statusWorkflow()
@@ -102,7 +104,8 @@ import Testing
     }
   }
 
-  @Test func statusShowsTheConfiguredChatGPTModelWhenTheEnvironmentNamesOne() async throws {
+  @Test
+  func statusShowsTheConfiguredChatGPTModelWhenTheEnvironmentNamesOne() async throws {
     try await withAuthWorld("auth-status-model") { world in
       // given
       try world.seedPriorLogin()
@@ -119,7 +122,8 @@ import Testing
 
   /// A model belonging to the fallback route says nothing about this provider's credential, so
   /// status must not present it as though it did.
-  @Test func statusShowsNoModelWhenTheEnvironmentNamesAnotherRoutesModel() async throws {
+  @Test
+  func statusShowsNoModelWhenTheEnvironmentNamesAnotherRoutesModel() async throws {
     try await withAuthWorld("auth-status-other-model") { world in
       // given
       try world.seedPriorLogin()
@@ -136,7 +140,8 @@ import Testing
 
   /// An envelope that exists but cannot be opened is not a logged-out state; it is a secret-load
   /// failure, and it must not read as "just log in again".
-  @Test func anUnreadableCredentialEnvelopeIsASecretLoadFailure() async throws {
+  @Test
+  func anUnreadableCredentialEnvelopeIsASecretLoadFailure() async throws {
     try await withAuthWorld("auth-status-corrupt") { world in
       // given
       try world.seedPriorLogin()

@@ -20,12 +20,9 @@ extension AppConfig {
 
   /// An `Int` override with a lower bound: `fallback` when absent/blank, else
   /// `invalidScheduling` on a non-numeric or below-minimum value.
-  static func boundedInt(
-    _ raw: String?,
-    key: String,
-    default fallback: Int,
-    minimum: Int
-  ) throws -> Int {
+  static func boundedInt(_ raw: String?, key: String, default fallback: Int, minimum: Int) throws
+    -> Int
+  {
     try ConfigParse.boundedInt(raw, default: fallback, range: minimum...Int.max) { value in
       ConfigError.invalidScheduling(key: key, value: value)
     }
@@ -38,10 +35,9 @@ extension AppConfig {
     let maxPerDay: Int
   }
 
-  static func parseHeartbeat(
-    from env: [String: String],
-    allowlist: Set<Int64>
-  ) throws -> HeartbeatSettings {
+  static func parseHeartbeat(from env: [String: String], allowlist: Set<Int64>) throws
+    -> HeartbeatSettings
+  {
     let enabled = try boolValue(
       env[EnvKey.heartbeatEnabled],
       key: EnvKey.heartbeatEnabled,

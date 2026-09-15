@@ -9,8 +9,10 @@ import Testing
 /// Every legal terminal transition of a bound run records why it ended, in the transaction that
 /// won the state. The cause is always the one the commit carrier supplied — never reconstructed
 /// from `RunState`, which cannot tell a task failure apart from a provider, policy or approval one.
-@Suite struct TerminalReceiptTests {
-  @Test func eachTerminalPathRecordsItsOwnCause() throws {
+@Suite
+struct TerminalReceiptTests {
+  @Test
+  func eachTerminalPathRecordsItsOwnCause() throws {
     // given
     let env = try BoundRunEnvironment.make()
 
@@ -21,48 +23,52 @@ import Testing
     #expect(try env.causeAfterBootReconciliation() == .incomplete)
   }
 
-  @Test func aTerminalReceiptRecordsTheWinningStateAndInstant() throws {
+  @Test
+  func aTerminalReceiptRecordsTheWinningStateAndInstant() throws {
     // given — a bound run about to fail at a known instant
     let env = try BoundRunEnvironment.make()
-    let runId = try env.runningBoundRun()
+    let runID = try env.runningBoundRun()
     let failedAt = env.now.addingTimeInterval(90)
 
     // when
-    try env.runs.failRun(runId: runId, cause: .storageFailure, now: failedAt)
+    try env.runs.failRun(runID: runID, cause: .storageFailure, now: failedAt)
 
     // then — the receipt names the state the transition won, not the state the run started in
-    let receipt = try #require(try TestLearningFixtures(writer: env.queue).settlement(runId: runId))
-    #expect(receipt.runId == runId)
+    let receipt = try #require(try TestLearningFixtures(writer: env.queue).settlement(runID: runID))
+    #expect(receipt.runID == runID)
     #expect(receipt.winningState == .failed)
     #expect(receipt.terminalAt == failedAt)
   }
 
-  @Test func anUnboundRunRecordsNoReceiptAtAll() throws {
+  @Test
+  func anUnboundRunRecordsNoReceiptAtAll() throws {
     // given — a run created without a learning binding (a heartbeat, or a pre-upgrade run)
     let env = try BoundRunEnvironment.make()
-    let runId = try env.unboundRun()
+    let runID = try env.unboundRun()
 
     // when
-    try env.runs.failRun(runId: runId, cause: .providerFailure, now: env.now)
+    try env.runs.failRun(runID: runID, cause: .providerFailure, now: env.now)
 
     // then
-    #expect(try TestLearningFixtures(writer: env.queue).settlement(runId: runId) == nil)
+    #expect(try TestLearningFixtures(writer: env.queue).settlement(runID: runID) == nil)
     #expect(try env.settlementRowCount() == 0)
   }
 
-  @Test func aDisarmedDaemonWritesNoTerminalReceipt() throws {
+  @Test
+  func aDisarmedDaemonWritesNoTerminalReceipt() throws {
     // given — CLAW_LEARNING_ENABLED unset, so the fire binds nothing
     let env = try BoundRunEnvironment.make(learningEnabled: false)
-    let runId = try env.runningBoundRun()
+    let runID = try env.runningBoundRun()
 
     // when
-    _ = try env.runs.commitAssistantTurn(env.assistantTurn(runId: runId), now: env.now)
+    _ = try env.runs.commitAssistantTurn(env.assistantTurn(runID: runID), now: env.now)
 
     // then
     #expect(try env.settlementRowCount() == 0)
   }
 
-  @Test func theApprovalCrashWindowKeepsTheCauseItsResolutionStored() throws {
+  @Test
+  func theApprovalCrashWindowKeepsTheCauseItsResolutionStored() throws {
     // given — a bound run whose approval was granted and claimed before the process died
     let env = try BoundRunEnvironment.make()
     let claimed = try env.claimedApprovalCrashWindow()
@@ -71,16 +77,16 @@ import Testing
     _ = try env.runs.reconcileRunsAtBoot(
       now: env.now,
       degradationText: "unfinished",
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
     let afterReconcile = try #require(
-      try TestLearningFixtures(writer: env.queue).settlement(runId: claimed.runId)
+      try TestLearningFixtures(writer: env.queue).settlement(runID: claimed.runID)
     )
     let outcome = try env.runs.settleClaimedApprovalAtBoot(
-      runId: claimed.runId,
-      observationMessageId: claimed.observationMessageId,
+      runID: claimed.runID,
+      observationMessageID: claimed.observationMessageID,
       observationContent: "the action may have run",
-      noticeChatId: 777,
+      noticeChatID: 777,
       noticeText: "notice",
       now: env.now
     )
@@ -89,21 +95,22 @@ import Testing
     #expect(outcome == .settled)
     #expect(afterReconcile.terminalCause == .approvalUnresolved)
     let receipt = try #require(
-      try TestLearningFixtures(writer: env.queue).settlement(runId: claimed.runId)
+      try TestLearningFixtures(writer: env.queue).settlement(runID: claimed.runID)
     )
     #expect(receipt.terminalCause == .approvalUnresolved)
     #expect(receipt.winningState == .failed)
   }
 
-  @Test func aDeniedApprovalRecordsItsOwnCauseRatherThanAPlainFailure() throws {
+  @Test
+  func aDeniedApprovalRecordsItsOwnCauseRatherThanAPlainFailure() throws {
     // given — a bound run parked on an approval the owner is about to reject
     let env = try BoundRunEnvironment.make()
     let claimed = try env.suspendedApproval()
 
     // when
     let result = try env.runs.resolveDeniedObservation(
-      runId: claimed.runId,
-      observationMessageId: claimed.observationMessageId,
+      runID: claimed.runID,
+      observationMessageID: claimed.observationMessageID,
       content: "denied by owner",
       cancel: nil,
       now: env.now
@@ -112,7 +119,7 @@ import Testing
     // then — FAILED alone could not tell this apart from a provider outage
     #expect(result == .committed)
     let receipt = try #require(
-      try TestLearningFixtures(writer: env.queue).settlement(runId: claimed.runId)
+      try TestLearningFixtures(writer: env.queue).settlement(runID: claimed.runID)
     )
     #expect(receipt.terminalCause == .approvalDenied)
   }
@@ -122,30 +129,30 @@ import Testing
 
 private extension BoundRunEnvironment {
   func causeAfterCompletion() throws -> TerminalCause? {
-    let runId = try runningBoundRun()
-    _ = try runs.commitAssistantTurn(assistantTurn(runId: runId), now: now)
-    return try TestLearningFixtures(writer: queue).settlement(runId: runId)?.terminalCause
+    let runID = try runningBoundRun()
+    _ = try runs.commitAssistantTurn(assistantTurn(runID: runID), now: now)
+    return try TestLearningFixtures(writer: queue).settlement(runID: runID)?.terminalCause
   }
 
   func causeAfterDegradation(cause: TerminalCause) throws -> TerminalCause? {
-    let runId = try runningBoundRun()
-    _ = try runs.commitDegradedTurn(degradedTurn(runId: runId, cause: cause), now: now)
-    return try TestLearningFixtures(writer: queue).settlement(runId: runId)?.terminalCause
+    let runID = try runningBoundRun()
+    _ = try runs.commitDegradedTurn(degradedTurn(runID: runID, cause: cause), now: now)
+    return try TestLearningFixtures(writer: queue).settlement(runID: runID)?.terminalCause
   }
 
   func causeAfterFailure(cause: TerminalCause) throws -> TerminalCause? {
-    let runId = try runningBoundRun()
-    try runs.failRun(runId: runId, cause: cause, now: now)
-    return try TestLearningFixtures(writer: queue).settlement(runId: runId)?.terminalCause
+    let runID = try runningBoundRun()
+    try runs.failRun(runID: runID, cause: cause, now: now)
+    return try TestLearningFixtures(writer: queue).settlement(runID: runID)?.terminalCause
   }
 
   func causeAfterBootReconciliation() throws -> TerminalCause? {
-    let runId = try runningBoundRun()
+    let runID = try runningBoundRun()
     _ = try runs.reconcileRunsAtBoot(
       now: now,
       degradationText: "unfinished",
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
-    return try TestLearningFixtures(writer: queue).settlement(runId: runId)?.terminalCause
+    return try TestLearningFixtures(writer: queue).settlement(runID: runID)?.terminalCause
   }
 }

@@ -13,13 +13,9 @@ import Synchronization
 final class StreamAbandonmentLease: Sendable {
   private let onAbandon: @Sendable () -> Void
 
-  init(_ onAbandon: @escaping @Sendable () -> Void) {
-    self.onAbandon = onAbandon
-  }
+  init(_ onAbandon: @escaping @Sendable () -> Void) { self.onAbandon = onAbandon }
 
-  deinit {
-    onAbandon()
-  }
+  deinit { onAbandon() }
 }
 
 // MARK: - Termination owner
@@ -52,14 +48,15 @@ final class StreamTerminationOwner<Element: Sendable, Termination: Sendable>: Se
   private let channel: BoundedAsyncChannel<Element>
   /// Settles what the producer reported against a pending cancellation and whatever else the
   /// consumer's policy weighs. Reads only immutable configuration, so `commit` runs it under the lock.
-  private let resolve: @Sendable (Termination, _ isCancelRequested: Bool) -> Termination
+  private let resolve: @Sendable (_ reported: Termination, _ isCancelRequested: Bool) -> Termination
   /// The error the decided terminal closes the channel with, or nil to close it cleanly.
-  private let channelError: @Sendable (Termination) -> (any Error)?
+  private let channelError: @Sendable (_ termination: Termination) -> (any Error)?
 
   init(
     channel: BoundedAsyncChannel<Element>,
-    resolve: @escaping @Sendable (Termination, Bool) -> Termination,
-    channelError: @escaping @Sendable (Termination) -> (any Error)?
+    resolve:
+    @escaping @Sendable (_ reported: Termination, _ isCancelRequested: Bool) -> Termination,
+    channelError: @escaping @Sendable (_ termination: Termination) -> (any Error)?
   ) {
     self.channel = channel
     self.resolve = resolve

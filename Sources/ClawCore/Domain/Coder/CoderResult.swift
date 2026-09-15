@@ -7,17 +7,21 @@ public enum CoderPublication: Sendable, Equatable, Codable {
 }
 
 public enum CoderFailureStage: String, Sendable, Codable {
-  case preparation, launch, permission, execution, protocolOutput, inspection, cleanup, interrupted
+  case preparation
+  case launch
+  case permission
+  case execution
+  case protocolOutput
+  case inspection
+  case cleanup
+  case interrupted
 }
 
 public struct CoderFailure: Sendable, Equatable, Codable {
   public let stage: CoderFailureStage
   public let message: String
 
-  public init(
-    stage: CoderFailureStage,
-    message: String
-  ) {
+  public init(stage: CoderFailureStage, message: String) {
     self.stage = stage
     self.message = message
   }

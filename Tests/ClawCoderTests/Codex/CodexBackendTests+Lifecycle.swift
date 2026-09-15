@@ -6,7 +6,8 @@ import Testing
 @testable import ClawCoder
 
 extension CodexBackendTests {
-  @Test func compatibilityRefusal() async throws {
+  @Test
+  func compatibilityRefusal() async throws {
     // given
     let fixture = try await CodexFixture()
     defer { try? FileManager.default.removeItem(at: fixture.git.root) }
@@ -20,7 +21,9 @@ extension CodexBackendTests {
 
     // when
     let result = await backend.run(invocation) { _ in }
-    let failure = await #expect(throws: CoderError.self) { try await backend.compatibility() }
+    let failure = await #expect(throws: CoderError.self) {
+      try await backend.compatibility()
+    }
 
     // then
     #expect(result.state == .failed)
@@ -31,7 +34,8 @@ extension CodexBackendTests {
     #expect(!FileManager.default.fileExists(atPath: fixture.git.root.path + "/argv"))
   }
 
-  @Test func missingAbsolute() async throws {
+  @Test
+  func missingAbsolute() async throws {
     // given
     let fixture = try await CodexFixture()
     defer { try? FileManager.default.removeItem(at: fixture.git.root) }
@@ -162,13 +166,15 @@ extension CodexBackendTests {
 }
 
 extension CodexBackendTests {
-  @Test func retainedPreparationFailure() async throws {
+  @Test
+  func retainedPreparationFailure() async throws {
     // given
     let fixture = try await CodexFixture()
     defer { try? FileManager.default.removeItem(at: fixture.git.root) }
     let invocation = try await fixture.invocation(fixture.git.request(mode: .separate))
-    let destination = URL(fileURLWithPath: invocation.jobDirectory)
-      .appendingPathComponent("repository").path
+    let destination = URL(fileURLWithPath: invocation.jobDirectory).appendingPathComponent(
+      "repository"
+    ).path
 
     // when
     let result = await (try fixture.backend()).run(invocation) { event in

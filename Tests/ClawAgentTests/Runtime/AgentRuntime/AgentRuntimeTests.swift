@@ -18,9 +18,9 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hi")],
         ownerNotices: [],
@@ -53,9 +53,9 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hello world")],
         ownerNotices: [],
@@ -82,16 +82,16 @@ struct AgentRuntimeTests {
   }
 
   @Test("a turn stamps the request with the namespaced session trace id")
-  func turnStampsRequestWithSessionTraceId() async throws {
+  func turnStampsRequestWithSessionTraceID() async throws {
     // given
     let provider = StubProvider(.respond(okResponse(content: "hi")))
     let runtime = makeRuntime(provider: provider)
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 42,
-      chatId: 3,
+      runID: 1,
+      sessionID: 42,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hi")],
         ownerNotices: [],
@@ -106,7 +106,7 @@ struct AgentRuntimeTests {
 
     // then — the request carries the OpenRouter-grouping id derived from the session id
     _ = try requireCompleted(outcome.result)
-    #expect(await provider.lastRequest?.sessionId == "clawd-session-42")
+    #expect(await provider.lastRequest?.sessionID == "clawd-session-42")
   }
 
   @Test("a turn issues a typing pulse before the provider answers")
@@ -120,9 +120,9 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hi")],
         ownerNotices: [],
@@ -153,9 +153,9 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hi")],
         ownerNotices: [],
@@ -187,9 +187,9 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hi")],
         ownerNotices: [],
@@ -213,9 +213,11 @@ struct AgentRuntimeTests {
     // given — a model whose output token is far dearer than its input token. Folding the reserved
     // output into the prompt (the old bug) estimates ~$0.004 at the input rate and clears the $0.50
     // cap; pricing the 4096 reserved tokens at the output rate estimates ~$0.82 and must trip it.
-    let priceTable = PriceTable(prices: [
-      "dear-output": ModelPrice(inputUSDPerMTok: 1.0, outputUSDPerMTok: 200.0)
-    ])
+    let priceTable = PriceTable(
+      prices: [
+        "dear-output": ModelPrice(inputUSDPerMTok: 1.0, outputUSDPerMTok: 200.0),
+      ]
+    )
     let provider = StubProvider(.respond(okResponse()))
     let typing = RecordingTyping()
     let runtime = makeRuntime(
@@ -227,9 +229,9 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hi")],
         ownerNotices: [],
@@ -253,9 +255,11 @@ struct AgentRuntimeTests {
     // given — the mirror case: input is the dear token. Pricing all 4098 tokens at the input rate
     // (the old bug) estimates ~$0.82 and would wrongly deny; pricing the 4096 reserved tokens at the
     // cheaper output rate estimates ~$0.004 and must let the run proceed to the provider.
-    let priceTable = PriceTable(prices: [
-      "dear-input": ModelPrice(inputUSDPerMTok: 200.0, outputUSDPerMTok: 1.0)
-    ])
+    let priceTable = PriceTable(
+      prices: [
+        "dear-input": ModelPrice(inputUSDPerMTok: 200.0, outputUSDPerMTok: 1.0),
+      ]
+    )
     let provider = StubProvider(.respond(okResponse()))
     let runtime = makeRuntime(
       provider: provider,
@@ -265,9 +269,9 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hi")],
         ownerNotices: [],
@@ -292,9 +296,9 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hi")],
         ownerNotices: [],
@@ -320,9 +324,9 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hello world")],
         ownerNotices: [],
@@ -351,14 +355,16 @@ struct AgentRuntimeTests {
     // sleep makes the 180s deadline fire immediately.
     let runtime = makeRuntime(
       provider: HangingInferenceProvider(),
-      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
+      clock: ScriptedClock { _ in
+        try? await Task.sleep(for: .milliseconds(1))
+      }
     )
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hello world")],
         ownerNotices: [],
@@ -391,14 +397,16 @@ struct AgentRuntimeTests {
     let runtime = makeRuntime(
       provider: HangingProvider(),
       usageStore: store,
-      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
+      clock: ScriptedClock { _ in
+        try? await Task.sleep(for: .milliseconds(1))
+      }
     )
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hello world")],
         ownerNotices: [],
@@ -433,14 +441,16 @@ struct AgentRuntimeTests {
     let runtime = makeRuntime(
       provider: RacedSuccessProvider(response: response),
       usageStore: store,
-      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
+      clock: ScriptedClock { _ in
+        try? await Task.sleep(for: .milliseconds(1))
+      }
     )
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "hello world")],
         ownerNotices: [],
@@ -474,6 +484,7 @@ extension AgentRuntimeTests {
     issuer: "openai-chatgpt-responses-v1:round-one",
     payload: Data([0x00, 0xC3, 0x28, 0xFF])
   )
+
   static let roundTwoState = ProviderExchangeState(
     issuer: "openai-chatgpt-responses-v1:round-two",
     payload: Data([0x80, 0xFE, 0x01])
@@ -482,22 +493,24 @@ extension AgentRuntimeTests {
   @Test("every assistant anchor of a loop carries the state produced with it")
   func loopCarriesEachRoundsProviderState() async throws {
     // given — round one proposes a tool call with its own state; round two answers with another
-    let provider = SequenceProvider([
-      toolCallResponse(
-        [fetchProposal()],
-        content: "let me check",
-        providerState: Self.roundOneState
-      ),
-      okResponse(content: "the page says hello", providerState: Self.roundTwoState),
-    ])
+    let provider = SequenceProvider(
+      [
+        toolCallResponse(
+          [fetchProposal()],
+          content: "let me check",
+          providerState: Self.roundOneState
+        ),
+        okResponse(content: "the page says hello", providerState: Self.roundTwoState),
+      ]
+    )
     let dispatcher = ScriptedDispatcher(respond: okOutcome(content: "page text"))
     let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -515,28 +528,36 @@ extension AgentRuntimeTests {
     // and the next round-trip replays round one's anchor state back to the route that minted it,
     // on the assistant message alone
     let secondRequest = try #require(await provider.requests.last)
-    let anchor = try #require(secondRequest.messages.last { message in message.role == .assistant })
+    let anchor = try #require(
+      secondRequest.messages.last { message in
+        message.role == .assistant
+      }
+    )
     #expect(anchor.providerState == Self.roundOneState)
     #expect(
-      secondRequest.messages.filter { message in message.providerState != nil }.count == 1
+      secondRequest.messages.filter { message in
+        message.providerState != nil
+      }.count == 1
     )
   }
 
   @Test("a route that mints no state leaves every anchor stateless")
   func aStatelessRouteProducesNoAnchorState() async throws {
     // given — the Chat Completions contract, which mints nothing
-    let provider = SequenceProvider([
-      toolCallResponse([fetchProposal()], content: "let me check"),
-      okResponse(content: "done"),
-    ])
+    let provider = SequenceProvider(
+      [
+        toolCallResponse([fetchProposal()], content: "let me check"),
+        okResponse(content: "done"),
+      ]
+    )
     let dispatcher = ScriptedDispatcher(respond: okOutcome(content: "page text"))
     let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -547,10 +568,16 @@ extension AgentRuntimeTests {
 
     // then
     #expect(try requireCompleted(outcome.result).providerState == nil)
-    #expect(outcome.exchanges.allSatisfy { exchange in exchange.providerState == nil })
+    #expect(
+      outcome.exchanges.allSatisfy { exchange in
+        exchange.providerState == nil
+      }
+    )
     #expect(
       await provider.requests.allSatisfy { request in
-        request.messages.allSatisfy { message in message.providerState == nil }
+        request.messages.allSatisfy { message in
+          message.providerState == nil
+        }
       }
     )
   }
@@ -559,16 +586,18 @@ extension AgentRuntimeTests {
   func roundTripAdmissionGateStopsBetweenProviderRoundTrips() async throws {
     // given
     let deniedCap = "test-accounted-token-threshold"
-    let provider = SequenceProvider([
-      ChatResponse(
-        content: "checking",
-        finishReason: "tool_calls",
-        usage: nil,
-        costFromProvider: nil,
-        toolCalls: [fetchProposal()]
-      ),
-      okResponse(content: "must not be sent"),
-    ])
+    let provider = SequenceProvider(
+      [
+        ChatResponse(
+          content: "checking",
+          finishReason: "tool_calls",
+          usage: nil,
+          costFromProvider: nil,
+          toolCalls: [fetchProposal()]
+        ),
+        okResponse(content: "must not be sent"),
+      ]
+    )
     let runtime = makeRuntime(
       provider: provider,
       providerRoundTripAdmission: { context in
@@ -588,9 +617,9 @@ extension AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -600,10 +629,7 @@ extension AgentRuntimeTests {
     )
 
     // then
-    #expect(
-      outcome.result
-        == .budgetStopped(cap: deniedCap)
-    )
+    #expect(outcome.result == .budgetStopped(cap: deniedCap))
     #expect(await provider.requests.count == 1)
   }
 
@@ -627,18 +653,17 @@ extension AgentRuntimeTests {
       now: {
         expired.withLock { value in
           value
-            ? start.advanced(
-              by: .seconds(RunBudget.default.wallClockDeadlineSeconds) - remaining
-            ) : start
+            ? start.advanced(by: .seconds(RunBudget.default.wallClockDeadlineSeconds) - remaining)
+            : start
         }
       }
     )
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -672,9 +697,9 @@ extension AgentRuntimeTests {
     )
     let turn = Task {
       try await runtime.runTurn(
-        runId: 1,
-        sessionId: 2,
-        chatId: 3,
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
         buildResult: makeBuildResult(),
         sessionTainted: false,
         hasPinnedLessons: false,
@@ -701,22 +726,24 @@ extension AgentRuntimeTests {
   @Test("tool observations never carry replay state onto the wire")
   func toolObservationsNeverCarryState() async throws {
     // given
-    let provider = SequenceProvider([
-      toolCallResponse(
-        [fetchProposal()],
-        content: "let me check",
-        providerState: Self.roundOneState
-      ),
-      okResponse(content: "done", providerState: Self.roundTwoState),
-    ])
+    let provider = SequenceProvider(
+      [
+        toolCallResponse(
+          [fetchProposal()],
+          content: "let me check",
+          providerState: Self.roundOneState
+        ),
+        okResponse(content: "done", providerState: Self.roundTwoState),
+      ]
+    )
     let dispatcher = ScriptedDispatcher(respond: okOutcome(content: "page text"))
     let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
 
     // when
     _ = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: makeBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -731,7 +758,11 @@ extension AgentRuntimeTests {
     for message in secondRequest.messages where message.role != .assistant {
       #expect(message.providerState == nil)
     }
-    let toolRow = try #require(secondRequest.messages.last { message in message.role == .tool })
+    let toolRow = try #require(
+      secondRequest.messages.last { message in
+        message.role == .tool
+      }
+    )
     #expect(toolRow.content.text.contains("round-one") == false)
   }
 }
@@ -763,9 +794,9 @@ struct AgentRuntimePolicyTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -800,9 +831,9 @@ struct AgentRuntimePolicyTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -829,9 +860,9 @@ struct AgentRuntimePolicyTests {
     // when — a metered run is refused before any call
     let meteredProvider = StubProvider(.respond(okResponse()))
     let meteredOutcome = try await makeRuntime(provider: meteredProvider).runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -848,40 +879,36 @@ struct AgentRuntimePolicyTests {
 
     // when — the same day under the included-plan policy reaches the provider
     let planProvider = StubProvider(.respond(okResponse(content: "answer")))
-    let planOutcome = try await makeRuntime(
-      provider: planProvider,
-      costPolicy: .includedPlan
-    ).runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
-      buildResult: Self.userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: overUSD
-    )
+    let planOutcome = try await makeRuntime(provider: planProvider, costPolicy: .includedPlan)
+      .runTurn(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        buildResult: Self.userBuildResult(),
+        sessionTainted: false,
+        hasPinnedLessons: false,
+        sessionHasPrivateData: false,
+        todayTokens: 0,
+        todayUSD: overUSD
+      )
     // then — a subscription USD figure is not a gate
     _ = try requireCompleted(planOutcome.result)
     #expect(await planProvider.calls == 1)
 
     // when — but the hard daily token ceiling still binds under the subscription policy
     let tokenProvider = StubProvider(.respond(okResponse()))
-    let tokenOutcome = try await makeRuntime(
-      provider: tokenProvider,
-      costPolicy: .includedPlan
-    ).runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
-      buildResult: Self.userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: RunBudget.default.dayTokenCeiling,
-      todayUSD: 0
-    )
+    let tokenOutcome = try await makeRuntime(provider: tokenProvider, costPolicy: .includedPlan)
+      .runTurn(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        buildResult: Self.userBuildResult(),
+        sessionTainted: false,
+        hasPinnedLessons: false,
+        sessionHasPrivateData: false,
+        todayTokens: RunBudget.default.dayTokenCeiling,
+        todayUSD: 0
+      )
     // then — a token cap is not a USD cap, so it still stops the subscription call
     #expect(tokenOutcome.result == .budgetStopped(cap: BudgetGate.perDayTokenCap))
     #expect(await tokenProvider.calls == 0)
@@ -895,9 +922,9 @@ struct AgentRuntimePolicyTests {
     // when — under text-only estimation the tiny wire clears the gate
     let textOnlyProvider = StubProvider(.respond(okResponse(content: "answer")))
     let textOnlyOutcome = try await makeRuntime(provider: textOnlyProvider).runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: buildResultCarryingState(bytes: stateBytes),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -915,9 +942,9 @@ struct AgentRuntimePolicyTests {
       provider: reservedProvider,
       reservationPolicy: .chatGPTReplayState
     ).runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: buildResultCarryingState(bytes: stateBytes),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -941,9 +968,9 @@ struct AgentRuntimePolicyTests {
         provider: StubProvider(.respond(okResponse(content: "hi", usage: nil))),
         reservationPolicy: reservation
       ).runTurn(
-        runId: 1,
-        sessionId: 2,
-        chatId: 3,
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
         buildResult: buildResultCarryingState(bytes: stateBytes),
         sessionTainted: false,
         hasPinnedLessons: false,
@@ -975,17 +1002,13 @@ struct AgentRuntimeFailureAccountingTests {
     )
   }
 
-  private static func runDegraded(
-    _ outcome: StubProvider.Outcome,
-    store: RecordingUsageStore
-  ) async throws -> (kind: DegradationKind, usage: ProviderUsage?) {
-    let outcome = try await makeRuntime(
-      provider: StubProvider(outcome),
-      usageStore: store
-    ).runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+  private static func runDegraded(_ outcome: StubProvider.Outcome, store: RecordingUsageStore)
+    async throws -> (kind: DegradationKind, usage: ProviderUsage?)
+  {
+    let outcome = try await makeRuntime(provider: StubProvider(outcome), usageStore: store).runTurn(
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -1181,9 +1204,9 @@ struct AgentRuntimeFailureAccountingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: Self.userBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,

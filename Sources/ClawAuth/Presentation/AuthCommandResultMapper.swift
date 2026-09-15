@@ -21,14 +21,10 @@ public enum AuthCommandExit: Sendable, Equatable {
   /// second number for the same condition — a supervisor already knows to back off on that one.
   public var processExitCode: Int32 {
     switch self {
-    case .success:
-      return 0
-    case .cancelled:
-      return 130
-    case .secretLoadFailure:
-      return ClawExitCode.secretLoadFailed.rawValue
-    case .commandFailure:
-      return 1
+    case .success: return 0
+    case .cancelled: return 130
+    case .secretLoadFailure: return ClawExitCode.secretLoadFailed.rawValue
+    case .commandFailure: return 1
     }
   }
 }
@@ -75,7 +71,7 @@ enum AuthCommandResultMapper {
             clawd is running for this state root. Stop the daemon before changing the stored \
             credential, then run this again.
             """
-          )
+          ),
         ]
       )
     case .unavailable(let detail):
@@ -84,28 +80,6 @@ enum AuthCommandResultMapper {
         events: [.error("The state root's lock could not be opened: \(safe(detail))")]
       )
     }
-  }
-
-  /// Every runtime-secret failure, named or not, is a secret-load failure. Falling through to an
-  /// ordinary command failure on an error no case happens to name would be the one mistake that
-  /// matters here: it would tell a supervisor to try again on a condition that will never fix
-  /// itself.
-  static func runtimeSecretResult(for error: any Error) -> AuthCommandResult {
-    let named = error as? SecretStoreError
-    let cause =
-      if let named {
-        describe(named)
-      } else {
-        "the runtime secrets could not be prepared"
-      }
-
-    return AuthCommandResult(
-      exit: .secretLoadFailure,
-      events: [
-        .error("Login stopped before touching your credentials: \(cause)."),
-        .error(repair(for: named)),
-      ]
-    )
   }
 
   /// Worded for a read and a write alike: login saves through this seam, status and logout read
@@ -117,18 +91,36 @@ enum AuthCommandResultMapper {
     )
   }
 
-  static func credentialStoreResult(for error: any Error) -> AuthCommandResult {
-    guard let named = error as? LLMCredentialStoreError else {
-      return unexpected()
-    }
-    return result(for: named)
-  }
-
   static func result(for failure: ChatGPTOAuthFailure) -> AuthCommandResult {
     AuthCommandResult(
       exit: .commandFailure,
       events: [.error("Login failed: \(describe(failure)).")]
     )
+  }
+
+  /// Every runtime-secret failure, named or not, is a secret-load failure. Falling through to an
+  /// ordinary command failure on an error no case happens to name would be the one mistake that
+  /// matters here: it would tell a supervisor to try again on a condition that will never fix
+  /// itself.
+  static func runtimeSecretResult(for error: any Error) -> AuthCommandResult {
+    let named = error as? SecretStoreError
+    let cause =
+      if let named { describe(named) } else { "the runtime secrets could not be prepared" }
+
+    return AuthCommandResult(
+      exit: .secretLoadFailure,
+      events: [
+        .error("Login stopped before touching your credentials: \(cause)."),
+        .error(repair(for: named)),
+      ]
+    )
+  }
+
+  static func credentialStoreResult(for error: any Error) -> AuthCommandResult {
+    guard let named = error as? LLMCredentialStoreError else {
+      return unexpected()
+    }
+    return result(for: named)
   }
 
   /// A failure no seam named. It is an ordinary command failure, and it says nothing about the error
@@ -153,30 +145,24 @@ private extension AuthCommandResultMapper {
   static func repair(for error: SecretStoreError?) -> String {
     if error == .missingTelegramToken {
       return """
-        Put the Telegram bot token in the daemon's environment first — there is nothing to seal \
-        without it — then run `clawd secrets seal` and log in again.
-        """
+      Put the Telegram bot token in the daemon's environment first — there is nothing to seal \
+      without it — then run `clawd secrets seal` and log in again.
+      """
     }
     return """
-      Both \(SecretFile.key) and \(SecretFile.envelope) must be present and readable. \
-      Run `clawd secrets seal` to repair the encrypted secret backend, then log in again.
-      """
+    Both \(SecretFile.key) and \(SecretFile.envelope) must be present and readable. \
+    Run `clawd secrets seal` to repair the encrypted secret backend, then log in again.
+    """
   }
 
   static func describe(_ error: SecretStoreError) -> String {
     switch error {
-    case .missingTelegramToken:
-      return "no Telegram bot token is configured to seal"
-    case .keyFileInsecure(let detail):
-      return safe(detail)
-    case .malformedEnvelope:
-      return "\(SecretFile.envelope) is not an envelope this build can read"
-    case .decryptionFailed:
-      return "\(SecretFile.envelope) did not decrypt under \(SecretFile.key)"
-    case .unreadable(let name):
-      return "\(safe(name)) could not be read"
-    case .publicationFailed(let detail):
-      return safe(detail)
+    case .missingTelegramToken: return "no Telegram bot token is configured to seal"
+    case .keyFileInsecure(let detail): return safe(detail)
+    case .malformedEnvelope: return "\(SecretFile.envelope) is not an envelope this build can read"
+    case .decryptionFailed: return "\(SecretFile.envelope) did not decrypt under \(SecretFile.key)"
+    case .unreadable(let name): return "\(safe(name)) could not be read"
+    case .publicationFailed(let detail): return safe(detail)
     }
   }
 
@@ -184,27 +170,19 @@ private extension AuthCommandResultMapper {
   /// to the concrete store, which this module does not — and must not — depend on.
   static func describe(_ error: LLMCredentialStoreError) -> String {
     switch error {
-    case .missingRuntimeKey:
-      return "\(SecretFile.key) is missing"
-    case .insecureStorage:
-      return "its envelope is not owner-only, or is not a regular file"
-    case .malformedStorage:
-      return "its envelope is not one this build can open"
-    case .unsupportedVersion:
-      return "its envelope was written by a newer build"
-    case .oversizedStorage:
-      return "its envelope is larger than this build will read"
-    case .publicationFailed:
-      return "its envelope could not be written"
-    case .commitUncertain:
-      return "its envelope was written but not proven durable"
+    case .missingRuntimeKey: return "\(SecretFile.key) is missing"
+    case .insecureStorage: return "its envelope is not owner-only, or is not a regular file"
+    case .malformedStorage: return "its envelope is not one this build can open"
+    case .unsupportedVersion: return "its envelope was written by a newer build"
+    case .oversizedStorage: return "its envelope is larger than this build will read"
+    case .publicationFailed: return "its envelope could not be written"
+    case .commitUncertain: return "its envelope was written but not proven durable"
     }
   }
 
   static func describe(_ failure: ChatGPTOAuthFailure) -> String {
     switch failure {
-    case .deadlineExceeded:
-      return "the approval window closed before the device was approved"
+    case .deadlineExceeded: return "the approval window closed before the device was approved"
     case .throttled(let retryAfter):
       guard let retryAfter else {
         return "the provider asked to be left alone for a while"
@@ -214,8 +192,7 @@ private extension AuthCommandResultMapper {
       return "the provider answered with something this build cannot use — \(safe(detail))"
     case .grantRejected(let detail):
       return "the provider refused the authorization — \(safe(detail))"
-    case .transport(let detail):
-      return "the attempt did not complete — \(safe(detail))"
+    case .transport(let detail): return "the attempt did not complete — \(safe(detail))"
     }
   }
 

@@ -26,50 +26,45 @@ public enum ApprovalApproveOutcome: Sendable, Equatable {
 public protocol ApprovalStore: Sendable {
   /// Lookup by nonce ONLY (the callback's single-use credential), never by id.
   func approval(nonce: String) throws(StoreError) -> Approval?
+
   func approval(id: Int64) throws(StoreError) -> Approval?
+
   /// One transaction: still PENDING, unexpired, stored argsHash ==
   /// `ApprovalArgsHash.sha256Hex(canonicalArgsJSON)`, and storedPolicyVersion ==
   /// `currentPolicyVersion`. All satisfied → APPROVED + `approvalGranted`. Hash/version mismatch
   /// → REJECTED + decision `stale_policy` + `approvalDenied`, returns `.stalePolicy`.
-  func approve(
-    id: Int64,
-    currentPolicyVersion: String,
-    actor: ApprovalResolutionActor?,
-    now: Date
-  ) throws(StoreError) -> ApprovalApproveOutcome
+  func approve(id: Int64, currentPolicyVersion: String, actor: ApprovalResolutionActor?, now: Date)
+    throws(StoreError) -> ApprovalApproveOutcome
+
   /// CAS PENDING→(EXPIRED when decision is `.expired`, else REJECTED) + `approvalDenied` audit in
   /// the same txn. false when the row is no longer PENDING (a racing resolver won).
-  func deny(
-    id: Int64,
-    decision: ApprovalDecision,
-    actor: ApprovalResolutionActor?,
-    now: Date
-  ) throws(StoreError) -> Bool
+  func deny(id: Int64, decision: ApprovalDecision, actor: ApprovalResolutionActor?, now: Date)
+    throws(StoreError) -> Bool
+
   /// Ticker/boot sweep: CAS every PENDING row with `expires_ts <= now` → EXPIRED (+ `approvalDenied`
   /// audit, decision `expired`) and return the swept rows for the waiter signals.
   func sweepExpired(now: Date) throws(StoreError) -> [Approval]
+
   /// Boot: PENDING rows (any expiry), plus resolved rows whose observation is still the placeholder
   /// — APPROVED for any run state (the grant crash window, or a claimed window if the run left
   /// AWAITING_APPROVAL) and REJECTED/EXPIRED only while the run is still AWAITING_APPROVAL (the
   /// deny-side twin: the deny CAS + audit committed but the waiter's run-fail commit did not).
   func unresolvedAtBoot() throws(StoreError) -> [Approval]
+
   /// Boot hygiene: a terminal run holding a PENDING approval → REJECTED + `approvalDenied`
   /// (decision `cancelled`). Returns the count cleaned.
   func resolveOrphans(now: Date) throws(StoreError) -> Int
+
   /// Doctor: outstanding PENDING count + the oldest pending row's age.
   func approvalsHealth(now: Date) throws(StoreError) -> ApprovalsHealth
 }
 
-public extension ApprovalStore {
-  func approve(
-    id: Int64,
-    currentPolicyVersion: String,
-    now: Date
-  ) throws(StoreError) -> ApprovalApproveOutcome {
-    try approve(id: id, currentPolicyVersion: currentPolicyVersion, actor: nil, now: now)
-  }
+extension ApprovalStore {
+  public func approve(id: Int64, currentPolicyVersion: String, now: Date) throws(StoreError)
+    -> ApprovalApproveOutcome
+  { try approve(id: id, currentPolicyVersion: currentPolicyVersion, actor: nil, now: now) }
 
-  func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool {
+  public func deny(id: Int64, decision: ApprovalDecision, now: Date) throws(StoreError) -> Bool {
     try deny(id: id, decision: decision, actor: nil, now: now)
   }
 }

@@ -84,10 +84,9 @@ public struct OccurrenceCalculator: Sendable {
   /// The job's IANA zone lives in its own column; installing it on the rule's
   /// calendar here is what makes the rule's wall-clock components mean "local time in the
   /// job's zone", wherever the rule was built.
-  private static func installing(
-    _ timezone: TimeZone,
-    on rule: Calendar.RecurrenceRule
-  ) -> Calendar.RecurrenceRule {
+  private static func installing(_ timezone: TimeZone, on rule: Calendar.RecurrenceRule)
+    -> Calendar.RecurrenceRule
+  {
     var localized = rule
     var calendar = localized.calendar
 

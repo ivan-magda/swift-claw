@@ -6,8 +6,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct RuntimeShutdownCoordinatorTests {
-  @Test func runsCleanupInMandatedOrderOnCleanDrain() async throws {
+@Suite
+struct RuntimeShutdownCoordinatorTests {
+  @Test
+  func runsCleanupInMandatedOrderOnCleanDrain() async throws {
     // given
     let recorder = StepRecorder()
     let coordinator = Self.coordinator()
@@ -24,7 +26,8 @@ import Testing
     #expect(Self.isClean(outcome))
   }
 
-  @Test func skipsDependentCleanupAndReturnsRunIDsOnLaneTimeout() async throws {
+  @Test
+  func skipsDependentCleanupAndReturnsRunIDsOnLaneTimeout() async throws {
     // given
     let recorder = StepRecorder()
     let coordinator = Self.coordinator()
@@ -45,7 +48,8 @@ import Testing
     #expect(activeRunIDs == [5, 9])
   }
 
-  @Test func credentialErrorBecomesTheFailureWhenNoDaemonErrorExists() async throws {
+  @Test
+  func credentialErrorBecomesTheFailureWhenNoDaemonErrorExists() async throws {
     // given
     let recorder = StepRecorder()
     let coordinator = Self.coordinator()
@@ -66,7 +70,8 @@ import Testing
     #expect(error is CredentialFault)
   }
 
-  @Test func credentialErrorDoesNotDisplaceAnEarlierDaemonError() async throws {
+  @Test
+  func credentialErrorDoesNotDisplaceAnEarlierDaemonError() async throws {
     // given
     let recorder = StepRecorder()
     let coordinator = Self.coordinator()
@@ -87,7 +92,8 @@ import Testing
     #expect(error is DaemonFault)
   }
 
-  @Test func eachCleanupClosureRunsOnceEvenWhenAnEarlierOneThrows() async throws {
+  @Test
+  func eachCleanupClosureRunsOnceEvenWhenAnEarlierOneThrows() async throws {
     // given
     let recorder = StepRecorder()
     let coordinator = Self.coordinator()
@@ -104,7 +110,8 @@ import Testing
     #expect(Self.isClean(outcome))
   }
 
-  @Test func redactsTheCredentialErrorBeforeLogging() async throws {
+  @Test
+  func redactsTheCredentialErrorBeforeLogging() async throws {
     // given
     let secret = "sk-live-credential-secret-xyz"
     let capture = RecordingLogCapture()
@@ -118,7 +125,9 @@ import Testing
       daemonError: nil,
       laneDrain: .drained,
       dependent: RuntimeShutdownCoordinator.DependentCleanup(
-        commitCredentials: { throw SecretBearingFault(secret: secret) },
+        commitCredentials: {
+          throw SecretBearingFault(secret: secret)
+        },
         closeLLMClient: {},
         closeTelegramClient: {},
         closeToolClient: {}
@@ -159,8 +168,12 @@ import Testing
           throw llmError
         }
       },
-      closeTelegramClient: { await recorder.record("telegram") },
-      closeToolClient: { await recorder.record("tool") }
+      closeTelegramClient: {
+        await recorder.record("telegram")
+      },
+      closeToolClient: {
+        await recorder.record("tool")
+      }
     )
   }
 
@@ -175,9 +188,7 @@ import Testing
 private actor StepRecorder {
   private(set) var events: [String] = []
 
-  func record(_ name: String) {
-    events.append(name)
-  }
+  func record(_ name: String) { events.append(name) }
 }
 
 private struct CredentialFault: Error {}
@@ -186,5 +197,6 @@ private struct ClientFault: Error {}
 
 private struct SecretBearingFault: Error, CustomStringConvertible {
   let secret: String
+
   var description: String { "rotation publish failed with token \(secret)" }
 }

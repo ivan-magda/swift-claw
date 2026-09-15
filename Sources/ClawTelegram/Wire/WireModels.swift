@@ -12,9 +12,8 @@ struct TResponse<R: Decodable>: Decodable {
   let description: String?
   let parameters: TResponseParameters?
 }
-struct TResponseParameters: Decodable {
-  let retry_after: Int?
-}
+
+struct TResponseParameters: Decodable { let retry_after: Int? }
 
 struct TUser: Decodable {
   let id: Int64
@@ -28,10 +27,13 @@ struct TUser: Decodable {
     let parts = [first_name, last_name].compactMap { part in
       part?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    let name = parts.filter { !$0.isEmpty }.joined(separator: " ")
+    let name = parts.filter {
+      !$0.isEmpty
+    }.joined(separator: " ")
     return name.isEmpty ? username : name
   }
 }
+
 struct TChat: Decodable {
   let id: Int64
   let type: String?
@@ -40,9 +42,7 @@ struct TChat: Decodable {
   /// Bot API always sends `type`; an absent one is malformed. It maps to `.private` so a
   /// malformed payload keeps the pre-group-mode DM behavior — group mode additionally requires an
   /// allowlisted chat id, so this default can never promote a chat into it.
-  var kind: ChatKind {
-    type.map(ChatKind.init(apiValue:)) ?? .private
-  }
+  var kind: ChatKind { type.map(ChatKind.init(apiValue:)) ?? .private }
 }
 
 /// The `reply_to_message` target, decoded as its own shape rather than a nested `TMessage`
@@ -70,7 +70,7 @@ struct TVoice: Decodable {
       return nil
     }
     return VoiceAttachment(
-      fileId: file_id,
+      fileID: file_id,
       durationSeconds: duration ?? 0,
       mimeType: mime_type,
       fileSizeBytes: file_size
@@ -92,8 +92,8 @@ struct TPhotoSize: Decodable {
       return nil
     }
     return PhotoSize(
-      fileId: file_id,
-      fileUniqueId: file_unique_id,
+      fileID: file_id,
+      fileUniqueID: file_unique_id,
       width: width,
       height: height,
       fileSizeBytes: file_size
@@ -158,9 +158,9 @@ struct TMessage: Decodable {
 
   func toRawMessage() -> RawMessage {
     RawMessage(
-      messageId: message_id,
-      fromUserId: from?.id,
-      chatId: chat.id,
+      messageID: message_id,
+      fromUserID: from?.id,
+      chatID: chat.id,
       text: text,
       caption: caption,
       mediaKind: mediaKind,
@@ -168,33 +168,36 @@ struct TMessage: Decodable {
       photo: photoAttachment,
       chatKind: chat.kind,
       chatTitle: chat.title,
-      messageThreadId: message_thread_id,
-      replyToMessageId: reply_to_message?.message_id,
-      replyToUserId: reply_to_message?.from?.id,
+      messageThreadID: message_thread_id,
+      replyToMessageID: reply_to_message?.message_id,
+      replyToUserID: reply_to_message?.from?.id,
       senderDisplayName: from?.displayName,
       hasSenderChat: sender_chat != nil,
       isForwarded: forward_origin != nil,
-      migratedToChatId: migrate_to_chat_id
+      migratedToChatID: migrate_to_chat_id
     )
   }
 }
 
 /// The rich-content payload of `sendRichMessage` (Bot API 10.1). Telegram accepts exactly one of
 /// `markdown`/`html`; we only ever send `markdown` (rendered server-side, no escaper/converter).
-struct InputRichMessage: Encodable {
-  let markdown: String
-}
+struct InputRichMessage: Encodable { let markdown: String }
 
 /// Bot API 7.0+ `link_preview_options` (outbound controls strip auto-fetching link elements).
 /// Sent unconditionally disabled so Telegram's servers never fetch a URL embedded
 /// in outbound text — including attacker-chosen URLs quoted back in a tool-approval prompt.
-struct LinkPreviewOptions: Encodable {
-  let isDisabled: Bool
-}
+struct LinkPreviewOptions: Encodable { let isDisabled: Bool }
 
 struct SendRichMessageDraftRequest: Encodable {
-  let chatId: Int64
-  let draftId: Int64
+  private enum CodingKeys: String, CodingKey {
+    case chatID = "chatId"
+    case draftID = "draftId"
+    case richMessage
+    case linkPreviewOptions
+  }
+
+  let chatID: Int64
+  let draftID: Int64
   let richMessage: InputRichMessage
   let linkPreviewOptions: LinkPreviewOptions
 }
@@ -211,9 +214,7 @@ struct TCallbackQuery: Decodable {
 
 /// Bot API `ChatMember` — only the status is read; the rights bitfield is not, because the log
 /// this feeds says what changed, not what the bot may now do.
-struct TChatMember: Decodable {
-  let status: String?
-}
+struct TChatMember: Decodable { let status: String? }
 
 /// `getChatMember` must identify its subject and status before it can prove current membership.
 struct TChatMemberLookup: Decodable {
@@ -238,10 +239,10 @@ struct TChatMemberUpdated: Decodable {
 
   func toRawChatMemberUpdate() -> RawChatMemberUpdate {
     RawChatMemberUpdate(
-      chatId: chat.id,
+      chatID: chat.id,
       chatKind: chat.kind,
       chatTitle: chat.title,
-      actorUserId: from?.id,
+      actorUserID: from?.id,
       actorDisplayName: from?.displayName,
       oldStatus: Self.status(old_chat_member),
       newStatus: Self.status(new_chat_member)
@@ -261,20 +262,19 @@ struct TUpdate: Decodable {
   // an inline-keyboard tap.
   func toRawUpdate() -> RawUpdate {
     RawUpdate(
-      updateId: update_id,
+      updateID: update_id,
       message: message?.toRawMessage(),
       editedMessage: edited_message?.toRawMessage(),
       callback: callback_query.map { query in
         RawCallback(
-          callbackId: query.id,
-          fromUserId: query.from.id,
-          chatId: query.message?.chat.id,
-          messageId: query.message?.message_id,
+          callbackID: query.id,
+          fromUserID: query.from.id,
+          chatID: query.message?.chat.id,
+          messageID: query.message?.message_id,
           data: query.data
         )
       },
       myChatMember: my_chat_member?.toRawChatMemberUpdate()
     )
   }
-}
-// swiftlint:enable identifier_name discouraged_optional_boolean discouraged_optional_collection
+}  // swiftlint:enable identifier_name discouraged_optional_boolean discouraged_optional_collection

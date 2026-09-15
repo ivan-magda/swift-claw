@@ -7,11 +7,11 @@ import NIOPosix
 import Synchronization
 import Testing
 
-@testable import ClawHTTP
-
 #if canImport(Network)
   import Network
 #endif
+
+@testable import ClawHTTP
 
 // MARK: - Loopback harness
 
@@ -35,9 +35,7 @@ struct ReceivedRequest: Sendable, Equatable {
   let headers: [String: [String]]
   let body: Data
 
-  func values(for name: String) -> [String] {
-    headers[name.lowercased()] ?? []
-  }
+  func values(for name: String) -> [String] { headers[name.lowercased()] ?? [] }
 }
 
 /// Lock-backed rather than an actor so the handler records before it writes the response: by the
@@ -73,9 +71,7 @@ final class ScriptedHTTPServer: @unchecked Sendable {
     port = channel.localAddress?.port ?? 0
   }
 
-  func url(_ path: String) -> String {
-    "http://127.0.0.1:\(port)\(path)"
-  }
+  func url(_ path: String) -> String { "http://127.0.0.1:\(port)\(path)" }
 
   // Async bind/shutdown only: NIO's blocking `wait()`/`syncShutdownGracefully()` would park a Swift
   // concurrency cooperative thread, and enough of those in flight starve the pool and deadlock the
@@ -83,13 +79,14 @@ final class ScriptedHTTPServer: @unchecked Sendable {
   static func start(routes: [String: ScriptedResponse]) async throws -> ScriptedHTTPServer {
     let recorder = RequestRecorder()
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-    let bootstrap = ServerBootstrap(group: group)
-      .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-      .childChannelInitializer { channel in
-        channel.pipeline.configureHTTPServerPipeline().flatMap {
-          channel.pipeline.addHandler(ScriptedHandler(routes: routes, recorder: recorder))
-        }
+    let bootstrap = ServerBootstrap(group: group).serverChannelOption(
+      ChannelOptions.socketOption(.so_reuseaddr),
+      value: 1
+    ).childChannelInitializer { channel in
+      channel.pipeline.configureHTTPServerPipeline().flatMap {
+        channel.pipeline.addHandler(ScriptedHandler(routes: routes, recorder: recorder))
       }
+    }
     let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
     return ScriptedHTTPServer(group: group, channel: channel, recorder: recorder)
   }
@@ -102,6 +99,7 @@ final class ScriptedHTTPServer: @unchecked Sendable {
 
 private final class ScriptedHandler: ChannelInboundHandler, @unchecked Sendable {
   typealias InboundIn = HTTPServerRequestPart
+
   typealias OutboundOut = HTTPServerResponsePart
 
   private let routes: [String: ScriptedResponse]
@@ -144,8 +142,7 @@ private final class ScriptedHandler: ChannelInboundHandler, @unchecked Sendable 
   }
 
   private func respond(context: ChannelHandlerContext, uri: String) {
-    let scripted =
-      routes[uri] ?? ScriptedResponse(status: .notFound, body: "missing")
+    let scripted = routes[uri] ?? ScriptedResponse(status: .notFound, body: "missing")
 
     var responseHeaders = HTTPHeaders()
     responseHeaders.add(name: "content-length", value: "\(scripted.body.utf8.count)")
@@ -170,7 +167,7 @@ private final class ScriptedHandler: ChannelInboundHandler, @unchecked Sendable 
 
 func withScriptedServer<Result>(
   routes: [String: ScriptedResponse],
-  _ operation: (ScriptedHTTPServer) async throws -> Result
+  _ operation: (_ server: ScriptedHTTPServer) async throws -> Result
 ) async throws -> Result {
   let server = try await ScriptedHTTPServer.start(routes: routes)
   do {
@@ -220,24 +217,21 @@ final class BehaviourHTTPServer: @unchecked Sendable {
     port = channel.localAddress?.port ?? 0
   }
 
-  func url(_ path: String) -> String {
-    "http://127.0.0.1:\(port)\(path)"
-  }
+  func url(_ path: String) -> String { "http://127.0.0.1:\(port)\(path)" }
 
   static func start(behaviour: Behaviour) async throws -> BehaviourHTTPServer {
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-    let bootstrap = ServerBootstrap(group: group)
-      .serverChannelOption(ChannelOptions.backlog, value: 16)
-      .childChannelInitializer { channel in
-        channel.pipeline.configureHTTPServerPipeline().flatMap {
-          switch behaviour {
-          case .neverResponds:
-            return channel.pipeline.addHandler(SilentHandler())
-          case .closesBeforeHead:
-            return channel.pipeline.addHandler(CloseAfterRequestHandler())
-          }
+    let bootstrap = ServerBootstrap(group: group).serverChannelOption(
+      ChannelOptions.backlog,
+      value: 16
+    ).childChannelInitializer { channel in
+      channel.pipeline.configureHTTPServerPipeline().flatMap {
+        switch behaviour {
+        case .neverResponds: return channel.pipeline.addHandler(SilentHandler())
+        case .closesBeforeHead: return channel.pipeline.addHandler(CloseAfterRequestHandler())
         }
       }
+    }
     let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
     return BehaviourHTTPServer(group: group, channel: channel)
   }
@@ -250,7 +244,7 @@ final class BehaviourHTTPServer: @unchecked Sendable {
 
 func withBehaviourServer<Result>(
   _ behaviour: BehaviourHTTPServer.Behaviour,
-  _ operation: (BehaviourHTTPServer) async throws -> Result
+  _ operation: (_ server: BehaviourHTTPServer) async throws -> Result
 ) async throws -> Result {
   let server = try await BehaviourHTTPServer.start(behaviour: behaviour)
   do {
@@ -268,7 +262,7 @@ func withBehaviourServer<Result>(
 /// a client is dropped un-shut-down).
 func withHTTPClient<Result>(
   configuration: HTTPClient.Configuration = HTTPClient.Configuration(),
-  _ operation: (HTTPClient) async throws -> Result
+  _ operation: (_ client: HTTPClient) async throws -> Result
 ) async throws -> Result {
   let client = HTTPClient(eventLoopGroupProvider: .singleton, configuration: configuration)
   do {
@@ -283,7 +277,7 @@ func withHTTPClient<Result>(
 
 func withExecutor<Result>(
   configuration: HTTPClient.Configuration = HTTPClient.Configuration(),
-  _ operation: (AsyncHTTPExecutor) async throws -> Result
+  _ operation: (_ executor: AsyncHTTPExecutor) async throws -> Result
 ) async throws -> Result {
   try await withHTTPClient(configuration: configuration) { client in
     try await operation(AsyncHTTPExecutor(client: client))
@@ -330,24 +324,24 @@ final class HandoffCounter: Sendable {
 
 // MARK: - Tests
 
-@Suite(.serialized) struct AsyncHTTPExecutorGeneralRequestTests {
-  private func buffered(
-    successBytes: Int = 1024 * 1024,
-    errorBytes: Int = 1024 * 1024
-  ) -> HTTPResponseBodyPolicy {
-    .buffered(successBytes: successBytes, errorBytes: errorBytes)
-  }
+@Suite(.serialized)
+struct AsyncHTTPExecutorGeneralRequestTests {
+  private func buffered(successBytes: Int = 1024 * 1024, errorBytes: Int = 1024 * 1024)
+    -> HTTPResponseBodyPolicy
+  { .buffered(successBytes: successBytes, errorBytes: errorBytes) }
 
   @Test(.timeLimit(.minutes(1)))
   func getCarriesMethodAndHeadersAndReturnsTheBody() async throws {
     // given
-    try await withScriptedServer(routes: [
-      "/page": ScriptedResponse(
-        status: .ok,
-        headers: [("content-type", "text/html")],
-        body: "<html>hello</html>"
-      )
-    ]) { server in
+    try await withScriptedServer(
+      routes: [
+        "/page": ScriptedResponse(
+          status: .ok,
+          headers: [("content-type", "text/html")],
+          body: "<html>hello</html>"
+        ),
+      ]
+    ) { server in
       // when
       let result = try await withExecutor { executor in
         try await executor.execute(
@@ -368,7 +362,7 @@ final class HandoffCounter: Sendable {
       #expect(received.uri == "/page")
       #expect(received.values(for: "X-Probe") == ["probe-value"])
       #expect(result.statusCode == 200)
-      #expect(result.getHeader(for: "Content-Type") == "text/html")
+      #expect(result.header(for: "Content-Type") == "text/html")
       #expect(String(data: result.body, encoding: .utf8) == "<html>hello</html>")
     }
   }
@@ -377,9 +371,8 @@ final class HandoffCounter: Sendable {
   func jsonPostConvenienceSendsTheBodyUnderOneContentType() async throws {
     // given
     let payload = Data(#"{"hello":"world"}"#.utf8)
-    try await withScriptedServer(routes: [
-      "/rpc": ScriptedResponse(status: .ok, body: "{}")
-    ]) { server in
+    try await withScriptedServer(routes: ["/rpc": ScriptedResponse(status: .ok, body: "{}")]) {
+      (server) in
       // when
       _ = try await withExecutor { executor in
         try await executor.post(
@@ -403,9 +396,8 @@ final class HandoffCounter: Sendable {
   func rawFormPostKeepsTheCallersContentTypeAsTheOnlyOne() async throws {
     // given — the shape an OAuth token exchange needs: a form body, not JSON
     let form = Data("grant_type=refresh_token&refresh_token=abc".utf8)
-    try await withScriptedServer(routes: [
-      "/token": ScriptedResponse(status: .ok, body: "{}")
-    ]) { server in
+    try await withScriptedServer(routes: ["/token": ScriptedResponse(status: .ok, body: "{}")]) {
+      (server) in
       // when
       _ = try await withExecutor { executor in
         try await executor.execute(
@@ -430,9 +422,8 @@ final class HandoffCounter: Sendable {
   @Test(.timeLimit(.minutes(1)))
   func deleteReachesTheWireAsDeleteAndCarriesNoBody() async throws {
     // given — the shape a session teardown needs: a bodyless DELETE the peer answers with 204
-    try await withScriptedServer(routes: [
-      "/session": ScriptedResponse(status: .noContent)
-    ]) { server in
+    try await withScriptedServer(routes: ["/session": ScriptedResponse(status: .noContent)]) {
+      (server) in
       // when
       let result = try await withExecutor { executor in
         try await executor.execute(
@@ -460,9 +451,11 @@ final class HandoffCounter: Sendable {
   @Test(.timeLimit(.minutes(1)))
   func successBodyBeyondTheSuccessCapFailsRatherThanArrivingShort() async throws {
     // given
-    try await withScriptedServer(routes: [
-      "/big": ScriptedResponse(status: .ok, body: String(repeating: "a", count: 4096))
-    ]) { server in
+    try await withScriptedServer(
+      routes: [
+        "/big": ScriptedResponse(status: .ok, body: String(repeating: "a", count: 4096)),
+      ]
+    ) { server in
       // when
       let failure = await #expect(throws: HTTPTransportFailure.self) {
         try await withExecutor { executor in
@@ -489,9 +482,11 @@ final class HandoffCounter: Sendable {
   @Test(.timeLimit(.minutes(1)))
   func successBodyExactlyAtTheSuccessCapIsDeliveredWhole() async throws {
     // given
-    try await withScriptedServer(routes: [
-      "/exact": ScriptedResponse(status: .ok, body: String(repeating: "a", count: 128))
-    ]) { server in
+    try await withScriptedServer(
+      routes: [
+        "/exact": ScriptedResponse(status: .ok, body: String(repeating: "a", count: 128)),
+      ]
+    ) { server in
       // when
       let result = try await withExecutor { executor in
         try await executor.execute(
@@ -515,12 +510,14 @@ final class HandoffCounter: Sendable {
   @Test(.timeLimit(.minutes(1)))
   func errorBodyStopsAtTheErrorCap() async throws {
     // given
-    try await withScriptedServer(routes: [
-      "/boom": ScriptedResponse(
-        status: .internalServerError,
-        body: String(repeating: "b", count: 4096)
-      )
-    ]) { server in
+    try await withScriptedServer(
+      routes: [
+        "/boom": ScriptedResponse(
+          status: .internalServerError,
+          body: String(repeating: "b", count: 4096)
+        ),
+      ]
+    ) { server in
       // when
       let result = try await withExecutor { executor in
         try await executor.execute(
@@ -546,13 +543,15 @@ final class HandoffCounter: Sendable {
     // given — SSRF policy requires the 3xx come back rather than be followed
     var configuration = HTTPClient.Configuration()
     configuration.redirectConfiguration = .disallow
-    try await withScriptedServer(routes: [
-      "/hop": ScriptedResponse(
-        status: .movedPermanently,
-        headers: [("location", "http://127.0.0.1:1/private")],
-        body: String(repeating: "c", count: 512)
-      )
-    ]) { server in
+    try await withScriptedServer(
+      routes: [
+        "/hop": ScriptedResponse(
+          status: .movedPermanently,
+          headers: [("location", "http://127.0.0.1:1/private")],
+          body: String(repeating: "c", count: 512)
+        ),
+      ]
+    ) { server in
       // when
       let result = try await withExecutor(configuration: configuration) { executor in
         try await executor.execute(
@@ -569,7 +568,7 @@ final class HandoffCounter: Sendable {
 
       // then — nothing fetched the Location target, and a 3xx is not a success for cap purposes
       #expect(result.statusCode == 301)
-      #expect(result.getHeader(for: "Location") == "http://127.0.0.1:1/private")
+      #expect(result.header(for: "Location") == "http://127.0.0.1:1/private")
       #expect(result.body.count == 32)
       #expect(server.recorder.received.count == 1)
     }
@@ -748,7 +747,8 @@ final class HandoffCounter: Sendable {
 /// The disposition rules driven directly. A response head is what separates the two classifiers, and
 /// no loopback peer can raise a connection-refused while a body is already arriving — the one error
 /// that would prove the distinction — so the functions themselves are the honest witness here.
-@Suite struct AsyncHTTPExecutorClassificationTests {
+@Suite
+struct AsyncHTTPExecutorClassificationTests {
   @Test(arguments: connectionRefusals)
   func connectionRefusedBeforeAnyHeadIsTheSoleProofOfACleanRequest(_ refused: any Error) {
     // given — the transport typed the failure as a refusal: no channel to write a request on existed

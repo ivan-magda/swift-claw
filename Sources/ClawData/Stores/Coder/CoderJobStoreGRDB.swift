@@ -5,9 +5,7 @@ import GRDB
 public struct CoderJobStoreGRDB: CoderJobStore {
   let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) {
-    database = MappedDatabase(writer: writer)
-  }
+  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
 
   public func admit(
     id: UUID,
@@ -17,11 +15,12 @@ public struct CoderJobStoreGRDB: CoderJobStore {
     now: Date
   ) throws(StoreError) -> CoderAdmission {
     try database.writeMapping { db in
-      if let row = try Row.fetchOne(
-        db,
-        sql: "SELECT * FROM coder_jobs WHERE origin_run_id = ? AND tool_call_id = ?",
-        arguments: [origin.runID, origin.toolCallID]
-      ) {
+      if
+        let row = try Row.fetchOne(
+          db,
+          sql: "SELECT * FROM coder_jobs WHERE origin_run_id = ? AND tool_call_id = ?",
+          arguments: [origin.runID, origin.toolCallID]
+        ) {
         return .existing(try CoderJobRecord.decode(row))
       }
       let unresolved =
@@ -44,13 +43,7 @@ public struct CoderJobStoreGRDB: CoderJobStore {
         return .workspaceBusy
       }
       return .admitted(
-        try CoderJobRecord.insert(
-          db,
-          id: id,
-          prepared: prepared,
-          origin: origin,
-          now: now
-        )
+        try CoderJobRecord.insert(db, id: id, prepared: prepared, origin: origin, now: now)
       )
     }
   }
@@ -66,11 +59,12 @@ public struct CoderJobStoreGRDB: CoderJobStore {
       try Row.fetchOne(
         db,
         sql: """
-          SELECT * FROM coder_jobs WHERE state IN (?, ?, ?)
-          ORDER BY updated_ts DESC, id DESC LIMIT 1
-          """,
+        SELECT * FROM coder_jobs WHERE state IN (?, ?, ?)
+        ORDER BY updated_ts DESC, id DESC LIMIT 1
+        """,
         arguments: [
-          CoderJobState.failed.rawValue, CoderJobState.timedOut.rawValue,
+          CoderJobState.failed.rawValue,
+          CoderJobState.timedOut.rawValue,
           CoderJobState.interrupted.rawValue,
         ]
       ).map(CoderJobRecord.decode)
@@ -88,7 +82,9 @@ public struct CoderJobStoreGRDB: CoderJobStore {
       try db.execute(
         sql: "UPDATE coder_jobs SET state = ?, updated_ts = ? WHERE id = ? AND state = ?",
         arguments: [
-          CoderJobState.running.rawValue, EpochSecondCodec.epoch(now), id.uuidString,
+          CoderJobState.running.rawValue,
+          EpochSecondCodec.epoch(now),
+          id.uuidString,
           CoderJobState.admitted.rawValue,
         ]
       )
@@ -101,8 +97,11 @@ public struct CoderJobStoreGRDB: CoderJobStore {
       try db.execute(
         sql: "UPDATE coder_jobs SET state = ?, updated_ts = ? WHERE id = ? AND state IN (?, ?)",
         arguments: [
-          CoderJobState.stopping.rawValue, EpochSecondCodec.epoch(now), id.uuidString,
-          CoderJobState.admitted.rawValue, CoderJobState.running.rawValue,
+          CoderJobState.stopping.rawValue,
+          EpochSecondCodec.epoch(now),
+          id.uuidString,
+          CoderJobState.admitted.rawValue,
+          CoderJobState.running.rawValue,
         ]
       )
       return try CoderJobRecord.fetch(db, id: id)
@@ -114,14 +113,14 @@ public struct CoderJobStoreGRDB: CoderJobStore {
 
 private extension CoderJobStoreGRDB {
   static func reservedJobs(_ db: Database) throws -> [CoderJob] {
-    try Row.fetchAll(db, sql: "SELECT * FROM coder_jobs WHERE slot_reserved = 1 ORDER BY id")
-      .map(CoderJobRecord.decode)
+    try Row.fetchAll(db, sql: "SELECT * FROM coder_jobs WHERE slot_reserved = 1 ORDER BY id").map(
+      CoderJobRecord.decode
+    )
   }
 
-  static func conflicts(
-    _ reserved: CoderPreparedRequest,
-    with proposed: CoderPreparedRequest
-  ) -> Bool {
+  static func conflicts(_ reserved: CoderPreparedRequest, with proposed: CoderPreparedRequest)
+    -> Bool
+  {
     guard reserved.request.workspace == .inPlace else {
       return false
     }

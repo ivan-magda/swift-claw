@@ -5,29 +5,27 @@ import GRDB
 // MARK: - Strict Trial Rows
 
 extension ScheduledLearningStoreGRDB {
-  static func trialRow(_ db: Database, trialId: Int64) throws -> Row? {
+  static func trialRow(_ db: Database, trialID: Int64) throws -> Row? {
     try Row.fetchOne(
       db,
       sql: """
-        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-          admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
-        FROM learning_trials WHERE trial_id = ?
-        """,
-      arguments: [trialId]
+      SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+        admitted_at, assignment_deadline, decision_deadline, max_assignments,
+        consumed_assignments, cohort_cutoff, state, close_reason, algorithm
+      FROM learning_trials WHERE trial_id = ?
+      """,
+      arguments: [trialID]
     )
   }
 
-  static func strictTrial(
-    _ db: Database,
-    row: Row,
-    currentState: JobLearningState?
-  ) throws -> LearningTrial {
+  static func strictTrial(_ db: Database, row: Row, currentState: JobLearningState?) throws
+    -> LearningTrial
+  {
     guard
-      let trialId = SQLiteStoredValue.int64(in: row, column: "trial_id"),
-      trialId > 0,
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      jobId > 0,
+      let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
+      trialID > 0,
+      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      jobID > 0,
       let epochRaw = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
       epochRaw > 0,
       let baseRaw = SQLiteStoredValue.string(in: row, column: "base_digest"),
@@ -50,8 +48,7 @@ extension ScheduledLearningStoreGRDB {
       let cutoffRaw = SQLiteStoredValue.int64(in: row, column: "cohort_cutoff"),
       let cohortCutoff = EpochSecondCodec.date(fromEpoch: cutoffRaw),
       cohortCutoff == admittedAt,
-      assignmentDeadline
-        == admittedAt.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow),
+      assignmentDeadline == admittedAt.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow),
       decisionDeadline == admittedAt.addingTimeInterval(TrialAdmissionPolicy.decisionWindow),
       let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
       let state = LearningTrialState(rawValue: stateRaw),
@@ -69,17 +66,17 @@ extension ScheduledLearningStoreGRDB {
       state == .open || state == .draining || closeReason.value != nil,
       (state == .open || state == .draining) == (closeReason.value == nil),
       let artifact = try readCandidateArtifact(db, digest: candidateDigest),
-      artifact.manifest.jobId == jobId,
+      artifact.manifest.jobID == jobID,
       artifact.manifest.epoch == epoch,
       artifact.manifest.baseDigest == baseDigest,
       artifact.manifest.algorithm == algorithm,
-      artifact.replacement.jobId == jobId
+      artifact.replacement.jobID == jobID
     else {
-      throw StoreError.unexpected("trial \(trialId) does not match its candidate artifact")
+      throw StoreError.unexpected("trial \(trialID) does not match its candidate artifact")
     }
     let admission = TrialRow(
-      id: trialId,
-      jobId: jobId,
+      id: trialID,
+      jobID: jobID,
       epoch: epoch,
       baseDigest: baseDigest,
       candidateDigest: candidateDigest,
@@ -90,7 +87,7 @@ extension ScheduledLearningStoreGRDB {
     _ = try admissionReceipt(db, artifact: artifact, trial: admission)
     if let currentState {
       guard
-        currentState.jobId == jobId,
+        currentState.jobID == jobID,
         currentState.epoch == epoch,
         currentState.stableDigest == baseDigest,
         currentState.stableRevision == artifact.manifest.baseRevision
@@ -100,8 +97,8 @@ extension ScheduledLearningStoreGRDB {
     }
     return LearningTrial(
       identity: LearningTrialIdentity(
-        trialId: trialId,
-        jobId: jobId,
+        trialID: trialID,
+        jobID: jobID,
         epoch: epoch,
         generation: generation
       ),

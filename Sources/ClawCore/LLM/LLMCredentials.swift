@@ -8,9 +8,7 @@ import Foundation
 public struct LLMCredentialGeneration: Sendable, Hashable, Equatable {
   public let value: UInt64
 
-  public init(value: UInt64) {
-    self.value = value
-  }
+  public init(value: UInt64) { self.value = value }
 
   /// The generation of a source that never rotates. A refreshable source starts above this, so a
   /// constant generation can never be mistaken for a snapshot that could go stale.
@@ -83,9 +81,9 @@ public typealias LLMCredentialStoreError = CredentialStoreError
 /// the seam rather than trusting every implementation to remember to map its errors.
 public protocol LLMCredentialStore: Sendable {
   func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential?
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError)
+
+  func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
+    throws(LLMCredentialStoreError)
+
   func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError)
 }

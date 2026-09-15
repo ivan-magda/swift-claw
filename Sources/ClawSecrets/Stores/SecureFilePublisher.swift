@@ -131,8 +131,7 @@ package struct SecureFilePublisher: Sendable {
 
     var identity: SecureFileIdentity {
       switch self {
-      case .published(let identity), .commitUncertain(let identity):
-        return identity
+      case .published(let identity), .commitUncertain(let identity): return identity
       }
     }
 
@@ -146,9 +145,7 @@ package struct SecureFilePublisher: Sendable {
 
   private let failpoint: Failpoint?
 
-  package init(failpoint: Failpoint? = nil) {
-    self.failpoint = failpoint
-  }
+  package init(failpoint: Failpoint? = nil) { self.failpoint = failpoint }
 
   /// Publishes `bytes` at `url`: same-directory 0600 temp file, all bytes written, `fsync` the
   /// file, claim the target name, `fsync` the parent directory. The temp entry is unlinked on every
@@ -156,11 +153,9 @@ package struct SecureFilePublisher: Sendable {
   /// ever points at them, so no crash can expose a half-written entry under the target name.
   ///
   /// `mode` decides only how the name is claimed; everything above it is identical.
-  package func publish(
-    _ bytes: Data,
-    to url: URL,
-    mode: PublicationMode = .replace
-  ) throws(SecureFileError) -> PublicationOutcome {
+  package func publish(_ bytes: Data, to url: URL, mode: PublicationMode = .replace)
+    throws(SecureFileError) -> PublicationOutcome
+  {
     let name = url.lastPathComponent
     let directory = url.deletingLastPathComponent()
     let temporary = directory.appendingPathComponent(
@@ -203,9 +198,7 @@ package struct SecureFilePublisher: Sendable {
     // Captured before the commit: claiming the name attaches it to this inode without moving the
     // inode, so this is the identity that will be sitting at the target.
     let identity: SecureFileIdentity
-    do {
-      identity = try Self.facts(ofDescriptor: descriptor, name: name).identity
-    } catch {
+    do { identity = try Self.facts(ofDescriptor: descriptor, name: name).identity } catch {
       // `facts` speaks the read path's vocabulary; here the failure is a failure to publish, and
       // pointing the owner at a read they never asked for would misdirect them.
       throw .publicationFailed("stat \(name)")
@@ -244,18 +237,26 @@ package struct SecureFilePublisher: Sendable {
     return Self.syncDirectory(directory)
   }
 
+  /// `fsync` on the directory, which is what makes a rename survive a crash. Returns whether it
+  /// was proven durable.
+  @discardableResult
+  static func syncDirectory(_ url: URL) -> Bool {
+    let descriptor = open(url.path, O_RDONLY | O_DIRECTORY)
+    guard descriptor >= 0 else {
+      return false
+    }
+    defer { close(descriptor) }
+    return fsync(descriptor) == 0
+  }
+
   /// Resolves the only recoverable publication ambiguity without following the target name. The
   /// file was already fsynced before it was committed; matching the returned inode identity proves
   /// that the exact published file still owns the name, so only the parent directory sync remains.
   package func proveDurable(_ outcome: PublicationOutcome, at url: URL) -> Bool {
     switch outcome {
-    case .published:
-      return true
+    case .published: return true
     case .commitUncertain(let identity):
-      guard
-        let facts = Self.facts(ofEntryAt: url),
-        facts.isRegularFile,
-        facts.identity == identity
+      guard let facts = Self.facts(ofEntryAt: url), facts.isRegularFile, facts.identity == identity
       else {
         return false
       }
@@ -292,26 +293,10 @@ package struct SecureFilePublisher: Sendable {
   /// remove its own work. Returns whether the entry was removed.
   @discardableResult
   static func removeCreatedEntry(_ identity: SecureFileIdentity, at url: URL) -> Bool {
-    guard
-      let facts = facts(ofEntryAt: url),
-      facts.isRegularFile,
-      facts.identity == identity
-    else {
+    guard let facts = facts(ofEntryAt: url), facts.isRegularFile, facts.identity == identity else {
       return false
     }
     return unlink(url.path) == 0
-  }
-
-  /// `fsync` on the directory, which is what makes a rename survive a crash. Returns whether it
-  /// was proven durable.
-  @discardableResult
-  static func syncDirectory(_ url: URL) -> Bool {
-    let descriptor = open(url.path, O_RDONLY | O_DIRECTORY)
-    guard descriptor >= 0 else {
-      return false
-    }
-    defer { close(descriptor) }
-    return fsync(descriptor) == 0
   }
 
   /// `lstat`, not `stat`: a dangling symlink is an entry that exists, and must force the encrypted
@@ -356,12 +341,9 @@ private extension SecureFilePublisher {
   /// `link` is what makes exclusivity real rather than advisory: a check-then-`rename` can only
   /// narrow the race window, while `link` is refused by the kernel the instant the name is taken —
   /// no lock between the racing processes required.
-  static func claim(
-    _ temporary: URL,
-    as url: URL,
-    mode: PublicationMode,
-    name: String
-  ) throws(SecureFileError) {
+  static func claim(_ temporary: URL, as url: URL, mode: PublicationMode, name: String)
+    throws(SecureFileError)
+  {
     switch mode {
     case .replace:
       guard rename(temporary.path, url.path) == 0 else {
@@ -383,10 +365,9 @@ private extension SecureFilePublisher {
 // MARK: - Facts
 
 extension SecureFilePublisher {
-  static func facts(
-    ofDescriptor descriptor: Int32,
-    name: String
-  ) throws(SecureFileError) -> SecureFileFacts {
+  static func facts(ofDescriptor descriptor: Int32, name: String) throws(SecureFileError)
+    -> SecureFileFacts
+  {
     var status = stat()
     guard fstat(descriptor, &status) == 0 else {
       throw .unreadable("stat \(name)")

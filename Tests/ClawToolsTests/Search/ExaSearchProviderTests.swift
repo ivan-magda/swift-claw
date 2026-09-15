@@ -5,32 +5,34 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct ExaSearchProviderTests {
+@Suite
+struct ExaSearchProviderTests {
   /// A captured-shape /search response (§20 item 7 — the mapping fixture).
   private static let fixtureBody = #"""
-    {
-      "requestId": "r1",
-      "results": [
-        {
-          "title": "Swift.org - Welcome",
-          "url": "https://swift.org/",
-          "highlights": ["Swift is a general-purpose programming language."],
-          "text": "full page text here"
-        },
-        {
-          "title": "Swift Forums",
-          "url": "https://forums.swift.org/",
-          "summary": "Community discussion for Swift."
-        },
-        {
-          "title": "Bare Result",
-          "url": "https://example.com/bare"
-        }
-      ]
-    }
-    """#
+  {
+    "requestId": "r1",
+    "results": [
+      {
+        "title": "Swift.org - Welcome",
+        "url": "https://swift.org/",
+        "highlights": ["Swift is a general-purpose programming language."],
+        "text": "full page text here"
+      },
+      {
+        "title": "Swift Forums",
+        "url": "https://forums.swift.org/",
+        "summary": "Community discussion for Swift."
+      },
+      {
+        "title": "Bare Result",
+        "url": "https://example.com/bare"
+      }
+    ]
+  }
+  """#
 
-  @Test func mapsResultsWithThePinnedSnippetFallback() async throws {
+  @Test
+  func mapsResultsWithThePinnedSnippetFallback() async throws {
     // given
     let http = RecordingHTTPExecutor(
       cannedResult: HTTPResult(statusCode: 200, headers: [:], body: Data(Self.fixtureBody.utf8))
@@ -58,7 +60,8 @@ import Testing
     #expect((body?["contents"] as? [String: Any])?["highlights"] as? Bool == true)
   }
 
-  @Test func fourOhTwoIsTerminalWithTheCreditsMessage() async throws {
+  @Test
+  func fourOhTwoIsTerminalWithTheCreditsMessage() async throws {
     // given — 402 = credits exhausted (verified live 2026-07-03)
     let http = RecordingHTTPExecutor(
       cannedResult: HTTPResult(
@@ -80,7 +83,8 @@ import Testing
     }
   }
 
-  @Test func retryableStatusesClassifyAsRetryable() async throws {
+  @Test
+  func retryableStatusesClassifyAsRetryable() async throws {
     // given
     let http = RecordingHTTPExecutor(
       cannedResult: HTTPResult(statusCode: 503, headers: [:], body: Data())
@@ -98,7 +102,8 @@ import Testing
     }
   }
 
-  @Test func errorMessagesNeverEchoTheKey() async throws {
+  @Test
+  func errorMessagesNeverEchoTheKey() async throws {
     // given — an error body that reflects the key back
     let http = RecordingHTTPExecutor(
       cannedResult: HTTPResult(

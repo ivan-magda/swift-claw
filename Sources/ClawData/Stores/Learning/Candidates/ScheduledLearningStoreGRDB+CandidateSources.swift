@@ -56,7 +56,7 @@ extension ScheduledLearningStoreGRDB {
   ) throws -> ReflectionPreparation? {
     let manifest = artifact.manifest
     let trigger = TriggerIdentity(
-      jobId: manifest.jobId,
+      jobID: manifest.jobID,
       epoch: manifest.epoch,
       algorithm: manifest.algorithm,
       stableDigest: manifest.baseDigest,
@@ -85,10 +85,9 @@ extension ScheduledLearningStoreGRDB {
     let triggerFeedbackRevision: FeedbackRevision
   }
 
-  static func candidateAncestry(
-    _ db: Database,
-    artifact: CandidateArtifact
-  ) throws -> CandidateAncestry? {
+  static func candidateAncestry(_ db: Database, artifact: CandidateArtifact) throws
+    -> CandidateAncestry?
+  {
     var current = artifact
     var tipToRoot: [CandidateArtifact] = []
     var visited: Set<CandidateDigest> = []
@@ -158,7 +157,7 @@ extension ScheduledLearningStoreGRDB {
       manifest.predecessorCandidate == nil,
       manifest.predecessorFeedback == nil,
       manifest.feedbackRevision == triggerFeedbackRevision,
-      let operation = try readOperation(db, id: manifest.operationId),
+      let operation = try readOperation(db, id: manifest.operationID),
       reflectionTrigger(artifact: artifact, operation: operation) != nil,
       let preparation = try preparation(
         db,
@@ -191,7 +190,7 @@ extension ScheduledLearningStoreGRDB {
       predecessor.digest != artifact.digest,
       let storedControl = try storedCandidateControl(
         db,
-        eventId: claimedControl.eventId,
+        eventID: claimedControl.eventID,
         candidate: predecessor,
         signal: manifest.origin == .ownerApproval ? .candidateApprove : .candidateEdit
       ),
@@ -240,7 +239,7 @@ extension ScheduledLearningStoreGRDB {
           let payload = control.payload,
           let lessons = CandidateEditPayload.decode(Data(payload.utf8)),
           let replacement = try? LessonSet.canonical(
-            jobId: predecessor.manifest.jobId,
+            jobID: predecessor.manifest.jobID,
             lessons: lessons
           ),
           replacement == artifact.replacement
@@ -254,18 +253,12 @@ extension ScheduledLearningStoreGRDB {
           feedbackRevision: manifest.feedbackRevision,
           effectiveFeedback: effectiveFeedback
         )
-      case .reflection:
-        return nil
+      case .reflection: return nil
       }
-    } catch {
-      return nil
-    }
+    } catch { return nil }
   }
 
-  static func hardVetoes(
-    _ db: Database,
-    artifact: CandidateArtifact
-  ) throws -> Set<HardVeto> {
+  static func hardVetoes(_ db: Database, artifact: CandidateArtifact) throws -> Set<HardVeto> {
     var vetoes: Set<HardVeto> = []
     if try hasEffectiveCandidateVeto(db, artifact: artifact) {
       vetoes.insert(.ownerDependencyRejected)
@@ -276,25 +269,23 @@ extension ScheduledLearningStoreGRDB {
     return vetoes
   }
 
-  static func hasEffectiveCandidateVeto(
-    _ db: Database,
-    artifact: CandidateArtifact
-  ) throws -> Bool {
+  static func hasEffectiveCandidateVeto(_ db: Database, artifact: CandidateArtifact) throws -> Bool
+  {
     try Bool.fetchOne(
       db,
       sql: """
-        SELECT EXISTS(
-          SELECT 1 FROM feedback_events AS event
-          WHERE event.job_id = ? AND event.learning_epoch = ?
-            AND event.subject_kind = ? AND event.subject_digest = ?
-            AND event.signal IN (?, ?)
-            AND NOT EXISTS(
-              SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
-            )
-        )
-        """,
+      SELECT EXISTS(
+        SELECT 1 FROM feedback_events AS event
+        WHERE event.job_id = ? AND event.learning_epoch = ?
+          AND event.subject_kind = ? AND event.subject_digest = ?
+          AND event.signal IN (?, ?)
+          AND NOT EXISTS(
+            SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
+          )
+      )
+      """,
       arguments: [
-        artifact.manifest.jobId,
+        artifact.manifest.jobID,
         artifact.manifest.epoch.value,
         FeedbackSubjectKind.candidate.rawValue,
         artifact.digest.rawValue,
@@ -304,26 +295,25 @@ extension ScheduledLearningStoreGRDB {
     ) ?? false
   }
 
-  static func hasRequiredEvaluationDispute(
-    _ db: Database,
-    artifact: CandidateArtifact
-  ) throws -> Bool {
+  static func hasRequiredEvaluationDispute(_ db: Database, artifact: CandidateArtifact) throws
+    -> Bool
+  {
     for source in artifact.manifest.evidence where source.evaluationRequired {
       let disputed =
         try Bool.fetchOne(
           db,
           sql: """
-            SELECT EXISTS(
-              SELECT 1 FROM feedback_events AS event
-              WHERE event.job_id = ? AND event.learning_epoch = ?
-                AND event.subject_kind = ? AND event.subject_digest = ? AND event.signal = ?
-                AND NOT EXISTS(
-                  SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
-                )
-            )
-            """,
+          SELECT EXISTS(
+            SELECT 1 FROM feedback_events AS event
+            WHERE event.job_id = ? AND event.learning_epoch = ?
+              AND event.subject_kind = ? AND event.subject_digest = ? AND event.signal = ?
+              AND NOT EXISTS(
+                SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
+              )
+          )
+          """,
           arguments: [
-            artifact.manifest.jobId,
+            artifact.manifest.jobID,
             artifact.manifest.epoch.value,
             FeedbackSubjectKind.evaluation.rawValue,
             source.evaluationDigest.rawValue,
@@ -348,7 +338,7 @@ extension ScheduledLearningStoreGRDB {
 
   static func candidateControl(
     _ db: Database,
-    eventId: Int64,
+    eventID: Int64,
     candidate: CandidateArtifact,
     signal: OwnerSignal,
     expectedPayload: Data?
@@ -356,7 +346,7 @@ extension ScheduledLearningStoreGRDB {
     guard
       let stored = try storedCandidateControl(
         db,
-        eventId: eventId,
+        eventID: eventID,
         candidate: candidate,
         signal: signal
       ),
@@ -369,7 +359,7 @@ extension ScheduledLearningStoreGRDB {
 
   static func storedCandidateControl(
     _ db: Database,
-    eventId: Int64,
+    eventID: Int64,
     candidate: CandidateArtifact,
     signal: OwnerSignal
   ) throws -> StoredCandidateControl? {
@@ -377,15 +367,15 @@ extension ScheduledLearningStoreGRDB {
       let row = try Row.fetchOne(
         db,
         sql: """
-          SELECT event_id, subject_kind, subject_digest, signal, payload, actor,
-            transport_update_id, feedback_revision, supersedes, occurred_at
-          FROM feedback_events AS event
-          WHERE event_id = ? AND job_id = ? AND learning_epoch = ?
-            AND NOT EXISTS(
-              SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
-            )
-          """,
-        arguments: [eventId, candidate.manifest.jobId, candidate.manifest.epoch.value]
+        SELECT event_id, subject_kind, subject_digest, signal, payload, actor,
+          transport_update_id, feedback_revision, supersedes, occurred_at
+        FROM feedback_events AS event
+        WHERE event_id = ? AND job_id = ? AND learning_epoch = ?
+          AND NOT EXISTS(
+            SELECT 1 FROM feedback_events AS newer WHERE newer.supersedes = event.event_id
+          )
+        """,
+        arguments: [eventID, candidate.manifest.jobID, candidate.manifest.epoch.value]
       ),
       let subject = FeedbackSubjectKind(rawValue: row["subject_kind"]),
       let storedSignal = OwnerSignal(rawValue: row["signal"]),
@@ -400,17 +390,17 @@ extension ScheduledLearningStoreGRDB {
     let revision = FeedbackRevision(row["feedback_revision"])
     return StoredCandidateControl(
       source: CandidateFeedbackSource(
-        eventId: eventId,
+        eventID: eventID,
         digest: try FeedbackEventDigest.of(
-          eventId: eventId,
-          jobId: candidate.manifest.jobId,
+          eventID: eventID,
+          jobID: candidate.manifest.jobID,
           epoch: candidate.manifest.epoch,
           subjectKind: subject,
           subjectDigest: row["subject_digest"],
           signal: storedSignal,
           payload: row["payload"],
           actor: actor,
-          transportUpdateId: row["transport_update_id"],
+          transportUpdateID: row["transport_update_id"],
           revision: revision,
           supersedes: row["supersedes"],
           occurredAtEpochSecond: row["occurred_at"]
@@ -426,12 +416,9 @@ extension ScheduledLearningStoreGRDB {
 
   static func payloadMatches(_ stored: String?, expected: Data?) -> Bool {
     switch (stored, expected) {
-    case (nil, nil):
-      true
-    case (.some(let stored), .some(let expected)):
-      Data(stored.utf8) == expected
-    case (.none, .some), (.some, .none):
-      false
+    case (nil, nil): true
+    case (.some(let stored), .some(let expected)): Data(stored.utf8) == expected
+    case (.none, .some), (.some, .none): false
     }
   }
 
@@ -444,9 +431,9 @@ extension ScheduledLearningStoreGRDB {
     let digests = try String.fetchAll(
       db,
       sql: """
-        SELECT candidate_digest FROM learning_candidates
-        WHERE predecessor_digest = ? AND origin = ? ORDER BY candidate_digest
-        """,
+      SELECT candidate_digest FROM learning_candidates
+      WHERE predecessor_digest = ? AND origin = ? ORDER BY candidate_digest
+      """,
       arguments: [predecessor.rawValue, origin.rawValue]
     )
     for raw in digests {
@@ -469,17 +456,16 @@ extension ScheduledLearningStoreGRDB {
     ) ?? false
   }
 
-  static func closeCandidateTrial(
-    _ db: Database,
-    candidate: CandidateArtifact,
-    now: Date
-  ) throws -> Int64? {
-    guard let trial = try trialRow(db, candidate: candidate.digest),
+  static func closeCandidateTrial(_ db: Database, candidate: CandidateArtifact, now: Date) throws
+    -> Int64?
+  {
+    guard
+      let trial = try trialRow(db, candidate: candidate.digest),
       trial.state == .open || trial.state == .draining
     else {
       return nil
     }
-    try terminalFallback(db, trialId: trial.id, now: now)
+    try terminalFallback(db, trialID: trial.id, now: now)
     return trial.id
   }
 }

@@ -8,9 +8,9 @@ extension TurnRunner {
   /// Identifiers plus the single commit-time clock, threaded through the per-result commit helpers
   /// so every write in one turn's commit shares the same timestamp.
   struct CommitContext {
-    let runId: Int64
-    let sessionId: Int64
-    let chatId: Int64
+    let runID: Int64
+    let sessionID: Int64
+    let chatID: Int64
     let mode: ChatMode
     let ownerNotices: [String]
     let origin: RunOrigin
@@ -26,17 +26,17 @@ extension TurnRunner {
   /// Only `StoreError.diskFull` may propagate; every other failure is handled in-band here.
   func commit(  // swiftlint:disable:this function_parameter_count
     _ outcome: TurnOutcome,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     mode: ChatMode,
     ownerNotices: [String],
     origin: RunOrigin
   ) async throws {
     let context = CommitContext(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: chatId,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: chatID,
       mode: mode,
       ownerNotices: ownerNotices,
       origin: origin,
@@ -64,16 +64,16 @@ extension TurnRunner {
   /// The "the turn could not even assemble" fallback: a degradation commit with no usage and no
   /// exchanges, carrying the canned context-unavailable reply.
   func commitContextUnavailable(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     setTainted: Bool,
     at committedAt: Date
   ) throws {
     _ = try commitDegradation(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: chatId,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: chatID,
       usage: nil,
       exchanges: [],
       setTainted: setTainted,
@@ -98,34 +98,33 @@ private extension TurnRunner {
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
-    let appendedNotices = outcome.routeNotice.map { [Degradation.message(for: $0)] } ?? []
+    let appendedNotices =
+      outcome.routeNotice.map {
+        [Degradation.message(for: $0)]
+      } ?? []
     // Ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
     // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
     let suppressHeartbeatAck = context.origin == .heartbeat && HeartbeatAck.isAck(content)
     let feedbackTarget =
       suppressHeartbeatAck
-      ? nil
-      : resultFeedbackTarget(
-        runId: context.runId,
-        chatId: context.chatId,
-        origin: context.origin
-      )
+        ? nil
+        : resultFeedbackTarget(runID: context.runID, chatID: context.chatID, origin: context.origin)
     let chunks =
       suppressHeartbeatAck
-      ? []
-      : outboxChunks(
-        for: ownerVisiblePayload(
-          reply: content,
-          ownerNotices: context.ownerNotices,
-          appendedNotices: appendedNotices
-        ),
-        chatId: context.chatId,
-        finalReplyMarkup: feedbackTarget.map(LearningNotices.resultKeyboard)
-      )
+        ? []
+        : outboxChunks(
+          for: ownerVisiblePayload(
+            reply: content,
+            ownerNotices: context.ownerNotices,
+            appendedNotices: appendedNotices
+          ),
+          chatID: context.chatID,
+          finalReplyMarkup: feedbackTarget.map(LearningNotices.resultKeyboard)
+        )
     let turn = AssistantTurn(
-      runId: context.runId,
-      sessionId: context.sessionId,
-      chatId: context.chatId,
+      runID: context.runID,
+      sessionID: context.sessionID,
+      chatID: context.chatID,
       content: content,
       usage: usage,
       chunks: chunks,
@@ -141,42 +140,36 @@ private extension TurnRunner {
       try auditCompleted(content: content, suppressedAck: suppressHeartbeatAck, in: context)
       notifyOutbox()
       await notifyDailyCapIfTripped(in: context)
-    case .usageRecordedAfterTerminal:
-      await notifyDailyCapIfTripped(in: context)
-    case .ignored:
-      return
+    case .usageRecordedAfterTerminal: await notifyDailyCapIfTripped(in: context)
+    case .ignored: return
     }
   }
 
   /// Best-effort pre-resolution. The store repeats these predicates in the terminal transaction,
   /// which closes races without making owner delivery depend on learning availability.
-  func resultFeedbackTarget(
-    runId: Int64,
-    chatId: Int64,
-    origin: RunOrigin
-  ) -> NewFeedbackTarget? {
+  func resultFeedbackTarget(runID: Int64, chatID: Int64, origin: RunOrigin) -> NewFeedbackTarget? {
     guard origin == .scheduled, let learning else {
       return nil
     }
-    guard let binding = try? learning.binding(runId: runId) else {
+    guard let binding = try? learning.binding(runID: runID) else {
       return nil
     }
-    guard (try? runs.jobId(runId: runId)) == binding.jobId else {
+    guard (try? runs.jobID(runID: runID)) == binding.jobID else {
       return nil
     }
-    guard (try? learning.lessonSet(jobId: binding.jobId, digest: binding.effectiveDigest)) != nil
+    guard (try? learning.lessonSet(jobID: binding.jobID, digest: binding.effectiveDigest)) != nil
     else {
       return nil
     }
     return NewFeedbackTarget(
       nonce: makeFeedbackNonce(),
-      jobId: binding.jobId,
+      jobID: binding.jobID,
       epoch: binding.epoch,
       subjectKind: .run,
-      subjectDigest: String(runId),
+      subjectDigest: String(runID),
       allowedActions: [.resultUseful, .resultNotUseful, .resultCorrection],
-      ownerUserId: chatId,
-      chatId: chatId,
+      ownerUserID: chatID,
+      chatID: chatID,
       expiresAt: binding.occurrenceAt.addingTimeInterval(EvidenceWindow.maximumAge)
     )
   }
@@ -187,8 +180,8 @@ private extension TurnRunner {
     try audit.appendAudit(
       turnAudit(
         action: .turnCompleted,
-        runId: context.runId,
-        sessionId: context.sessionId,
+        runID: context.runID,
+        sessionID: context.sessionID,
         resultSize: content.utf8.count,
         at: context.committedAt
       )
@@ -202,8 +195,8 @@ private extension TurnRunner {
         action: suppressedAck ? .heartbeatSuppressed : .heartbeatFired,
         resultSize: content.utf8.count,
         decision: suppressedAck ? "ack" : "delivered",
-        runId: context.runId,
-        sessionId: context.sessionId,
+        runID: context.runID,
+        sessionID: context.sessionID,
         ts: context.committedAt
       )
     )
@@ -224,9 +217,9 @@ private extension TurnRunner {
       appendedNotices = [Degradation.fallbackAlsoFailed]
     }
     let commitResult = try commitDegradation(
-      runId: context.runId,
-      sessionId: context.sessionId,
-      chatId: context.chatId,
+      runID: context.runID,
+      sessionID: context.sessionID,
+      chatID: context.chatID,
       usage: usage,
       exchanges: outcome.exchanges,
       setTainted: outcome.ingestedUntrusted,
@@ -246,18 +239,19 @@ private extension TurnRunner {
     }
   }
 
-  func commitBudgetStopped(
-    cap: String,
-    outcome: TurnOutcome,
-    in context: CommitContext
-  ) async throws {
+  func commitBudgetStopped(cap: String, outcome: TurnOutcome, in context: CommitContext)
+    async throws
+  {
     // `routeNotice` is turn-scoped (set once, before the cap tripped), so a switch earlier in this
     // same turn still owes the owner its notice even though this round produced no answer.
-    let appendedNotices = outcome.routeNotice.map { [Degradation.message(for: $0)] } ?? []
+    let appendedNotices =
+      outcome.routeNotice.map {
+        [Degradation.message(for: $0)]
+      } ?? []
     _ = try commitDegradation(
-      runId: context.runId,
-      sessionId: context.sessionId,
-      chatId: context.chatId,
+      runID: context.runID,
+      sessionID: context.sessionID,
+      chatID: context.chatID,
       usage: nil,
       exchanges: outcome.exchanges,
       setTainted: outcome.ingestedUntrusted,
@@ -280,9 +274,9 @@ private extension TurnRunner {
   /// The shared failure tail. The store owns the run-state arbitration and writes usage, FAILED,
   /// and the degradation outbox row in one transaction so `/stop`/`/new` cannot interleave.
   func commitDegradation(  // swiftlint:disable:this function_parameter_count
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     usage: ProviderUsage?,
     exchanges: [ToolExchange],
     setTainted: Bool,
@@ -295,16 +289,16 @@ private extension TurnRunner {
   ) throws -> RunCommitResult {
     let chunk = OutboxChunk(
       stepIndex: 0,
-      chatId: chatId,
+      chatID: chatID,
       payload: message,
       payloadHash: ContentHash.fnv1a(message)
     )
 
     let commitResult = try runs.commitDegradedTurn(
       DegradedTurn(
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
         usage: usage,
         chunk: chunk,
         exchanges: exchanges,
@@ -321,8 +315,8 @@ private extension TurnRunner {
     try audit.appendAudit(
       turnAudit(
         action: action,
-        runId: runId,
-        sessionId: sessionId,
+        runID: runID,
+        sessionID: sessionID,
         decision: decision,
         at: committedAt
       )
@@ -360,15 +354,15 @@ private extension TurnRunner {
     }
 
     if let target = ownerNoticeTarget(for: context) {
-      _ = try? await delivery.sendMessage(chatId: target, text: Degradation.dailyCapTripped)
+      _ = try? await delivery.sendMessage(chatID: target, text: Degradation.dailyCapTripped)
     }
     try? audit.appendAudit(
       AuditEvent(
         actor: .system,
         action: .budgetTripped,
         decision: "daily_cap",
-        runId: context.runId,
-        sessionId: context.sessionId,
+        runID: context.runID,
+        sessionID: context.sessionID,
         ts: Date()
       )
     )
@@ -388,21 +382,21 @@ private extension TurnRunner {
     }
 
     if let target = ownerNoticeTarget(for: context) {
-      _ = try? await delivery.sendMessage(chatId: target, text: Degradation.proactiveCapTripped)
+      _ = try? await delivery.sendMessage(chatID: target, text: Degradation.proactiveCapTripped)
     }
     try? audit.appendAudit(
       AuditEvent(
         actor: .system,
         action: .budgetTripped,
         decision: "proactive_per_day",
-        runId: context.runId,
-        sessionId: context.sessionId,
+        runID: context.runID,
+        sessionID: context.sessionID,
         ts: Date()
       )
     )
   }
 
   func ownerNoticeTarget(for context: CommitContext) -> Int64? {
-    context.mode == .group ? ownerChatId : context.chatId
+    context.mode == .group ? ownerChatID : context.chatID
   }
 }

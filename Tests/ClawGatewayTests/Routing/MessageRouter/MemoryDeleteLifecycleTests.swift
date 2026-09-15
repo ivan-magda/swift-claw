@@ -6,8 +6,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct MemoryDeleteLifecycleTests {
-  @Test func deleteLifecycleRemovesTheRowWithAuditAndAck() async throws {
+@Suite
+struct MemoryDeleteLifecycleTests {
+  @Test
+  func deleteLifecycleRemovesTheRowWithAuditAndAck() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     let item = try harness.seedItem(text: "obsolete fact", kind: .user, day: 86_400)
@@ -41,7 +43,8 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func redeliveredDeleteYesIsSkippedWithoutASecondAudit() async throws {
+  @Test
+  func redeliveredDeleteYesIsSkippedWithoutASecondAudit() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     let item = try harness.seedItem(text: "obsolete fact", kind: .user, day: 86_400)
@@ -59,12 +62,15 @@ import Testing
     #expect(secondOutcome == .skipped)
     #expect(try harness.memory.get(id: item.id) == nil)
     #expect(
-      try harness.auditActions().filter { $0 == AuditAction.memoryDelete.rawValue }.count == 1
+      try harness.auditActions().filter {
+        $0 == AuditAction.memoryDelete.rawValue
+      }.count == 1
     )
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func deleteCancelledKeepsTheRow() async throws {
+  @Test
+  func deleteCancelledKeepsTheRow() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     let item = try harness.seedItem(text: "obsolete fact", kind: .user, day: 86_400)
@@ -86,7 +92,8 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func deleteParkedAfterRememberReplacesItSoYesDeletesInsteadOfSaving() async throws {
+  @Test
+  func deleteParkedAfterRememberReplacesItSoYesDeletesInsteadOfSaving() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     let seeded = try harness.seedItem(text: "seeded fact", kind: .user, day: 86_400)
@@ -108,7 +115,8 @@ import Testing
     #expect(
       try harness.auditActions().filter { action in
         action == AuditAction.memoryWrite.rawValue
-      }.count == 1
+      }
+      .count == 1
     )
     let sent = await harness.transport.sent
     #expect(sent.last?.text == MemoryReplies.deleted(id: seeded.id))

@@ -120,8 +120,11 @@ private extension RepositoryInventory {
       throw Failure.unavailable
     }
     defer { close(file) }
-    guard fstat(file, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG,
-      metadata.st_size >= 0, metadata.st_size <= remaining
+    guard
+      fstat(file, &metadata) == 0,
+      metadata.st_mode & S_IFMT == S_IFREG,
+      metadata.st_size >= 0,
+      metadata.st_size <= remaining
     else {
       throw Failure.unavailable
     }

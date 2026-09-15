@@ -13,27 +13,22 @@ public struct ScriptedClock: Clock {
 
     let offset: Duration
 
-    public func advanced(by duration: Duration) -> Instant {
-      Instant(offset: offset + duration)
-    }
+    public func advanced(by duration: Duration) -> Instant { Instant(offset: offset + duration) }
 
-    public func duration(to other: Instant) -> Duration {
-      other.offset - offset
-    }
+    public func duration(to other: Instant) -> Duration { other.offset - offset }
 
-    public static func < (lhs: Instant, rhs: Instant) -> Bool {
-      lhs.offset < rhs.offset
-    }
+    public static func < (lhs: Instant, rhs: Instant) -> Bool { lhs.offset < rhs.offset }
   }
 
-  private let script: @Sendable (Duration) async throws -> Void
+  private let script: @Sendable (_ duration: Duration) async throws -> Void
   private let elapsed = Elapsed()
 
-  public init(_ script: @escaping @Sendable (Duration) async throws -> Void) {
+  public init(_ script: @escaping @Sendable (_ duration: Duration) async throws -> Void) {
     self.script = script
   }
 
   public var now: Instant { Instant(offset: elapsed.value) }
+
   public var minimumResolution: Duration { .zero }
 
   /// The script receives the delay remaining until the deadline rather than the deadline itself, so
@@ -53,12 +48,12 @@ public struct ScriptedClock: Clock {
 
 // MARK: - Compressed Time
 
-public extension ScriptedClock {
+extension ScriptedClock {
   /// A clock that parks any sleep of `parkingThreshold` or longer (for ~an hour of real time —
   /// the park ends with its task's cancellation) while every shorter tick elapses in ~1ms:
   /// deadlines stay pending, pacing intervals fire immediately, and a test asserts ordering
   /// instead of waiting out wall-clock time.
-  static func compressed(parkingAt parkingThreshold: Duration) -> ScriptedClock {
+  public static func compressed(parkingAt parkingThreshold: Duration) -> ScriptedClock {
     ScriptedClock { delay in
       if delay >= parkingThreshold {
         try await Task.sleep(for: .seconds(3600))

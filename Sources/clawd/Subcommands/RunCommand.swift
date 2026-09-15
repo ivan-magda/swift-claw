@@ -8,10 +8,7 @@ import Foundation
 import Logging
 
 struct RunCommand: AsyncParsableCommand {
-  static let configuration = CommandConfiguration(
-    commandName: "run",
-    abstract: "Start the daemon."
-  )
+  static let configuration = CommandConfiguration(commandName: "run", abstract: "Start the daemon.")
 
   func run() async throws {
     let config = try Self.loadConfigOrExit()
@@ -73,9 +70,7 @@ extension RunCommand {
     let clients = composed.clients
 
     var runFailure: Error?
-    do {
-      try await bundle.daemon.run()
-    } catch {
+    do { try await bundle.daemon.run() } catch {
       // A graceful shutdown returns without throwing; an error here means a service failed
       // unexpectedly. Re-raise after cleanup so the supervisor restarts the process.
       runFailure = error
@@ -99,28 +94,30 @@ extension RunCommand {
       laneDrain: laneDrain,
       coder: bundle.coder,
       dependent: RuntimeShutdownCoordinator.DependentCleanup(
-        commitCredentials: { try await Self.commitCredentials(bundle.credentialSources) },
+        commitCredentials: {
+          try await Self.commitCredentials(bundle.credentialSources)
+        },
         // The dedicated redirect-disabled LLM client, now its own resource rather than the Telegram
         // client it shared: its transport stays alive across the credential commit above so a
         // refresh's token rotation can finish, then closes here.
-        closeLLMClient: { try await clients.llm.close() },
-        closeTelegramClient: { try await clients.telegram.close() },
-        closeToolClient: { try await clients.tool.close() }
+        closeLLMClient: {
+          try await clients.llm.close()
+        },
+        closeTelegramClient: {
+          try await clients.telegram.close()
+        },
+        closeToolClient: {
+          try await clients.tool.close()
+        }
       )
     )
 
     switch outcome {
-    case .clean:
-      logger.info("clawd stopped")
-    case .failed(let error):
-      throw error
-    case .fatalCoderCleanup:
-      try terminator.fatalCoderCleanup(logger: logger)
+    case .clean: logger.info("clawd stopped")
+    case .failed(let error): throw error
+    case .fatalCoderCleanup: try terminator.fatalCoderCleanup(logger: logger)
     case .fatalLaneTimeout(let activeRunIDs):
-      try terminator.fatalLaneDrainTimeout(
-        activeRunIDs: activeRunIDs,
-        logger: logger
-      )
+      try terminator.fatalLaneDrainTimeout(activeRunIDs: activeRunIDs, logger: logger)
     }
   }
 
@@ -131,11 +128,7 @@ extension RunCommand {
     var firstFailure: (any Error)?
 
     for source in sources {
-      do {
-        try await source.shutdown()
-      } catch {
-        firstFailure = firstFailure ?? error
-      }
+      do { try await source.shutdown() } catch { firstFailure = firstFailure ?? error }
     }
 
     if let firstFailure {
@@ -147,23 +140,18 @@ extension RunCommand {
 // MARK: - Environment Bootstrap
 
 extension RunCommand {
-  typealias LoggerBootstrap = @Sendable ([String]) -> Logger
+  typealias LoggerBootstrap = @Sendable (_ redactionValues: [String]) -> Logger
 
   struct BootLogging {
     let logger: Logger
     let redactionValues: [String]
   }
 
-  static func makeBootLogging(
-    secrets: Secrets,
-    mcp: MCPBootInputs,
-    bootstrap: LoggerBootstrap
-  ) -> BootLogging {
+  static func makeBootLogging(secrets: Secrets, mcp: MCPBootInputs, bootstrap: LoggerBootstrap)
+    -> BootLogging
+  {
     let redactionValues = mcp.redactionValues(with: secrets)
-    return BootLogging(
-      logger: bootstrap(redactionValues),
-      redactionValues: redactionValues
-    )
+    return BootLogging(logger: bootstrap(redactionValues), redactionValues: redactionValues)
   }
 
   static func makeBootLogging(secrets: Secrets, mcp: MCPBootInputs) -> BootLogging {
@@ -172,6 +160,8 @@ extension RunCommand {
     }
   }
 }
+
+// MARK: - Daemon Bootstrap
 
 private extension RunCommand {
   /// Installs the redacting swift-log backend (level from `CLAW_LOG_LEVEL`, default `.info`) over
@@ -183,9 +173,10 @@ private extension RunCommand {
     let redactor = SecretRedactor(secretValues: redactionValues)
 
     DeveloperLogging.bootstrap(
-      level: DeveloperLogging.level(from: environment[DeveloperLogging.levelEnvKey]),
-      redact: { redactor.redact($0) }
-    )
+      level: DeveloperLogging.level(from: environment[DeveloperLogging.levelEnvKey])
+    ) {
+      redactor.redact($0)
+    }
 
     return Logger(label: "clawd")
   }
@@ -193,9 +184,7 @@ private extension RunCommand {
   /// Loads config from the process environment, printing a diagnostic and exiting with the
   /// error's distinct code so the supervisor backs off instead of hot-looping.
   static func loadConfigOrExit() throws -> AppConfig {
-    do {
-      return try EnvironmentLoader.loadConfig()
-    } catch let error as ConfigError {
+    do { return try EnvironmentLoader.loadConfig() } catch let error as ConfigError {
       FileHandle.standardError.write(Data("config error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
     }
@@ -203,9 +192,9 @@ private extension RunCommand {
 
   /// Loads secrets via the fail-closed resolver; a secret-load failure exits 11 (non-retryable).
   static func loadSecretsOrExit(config: AppConfig) throws -> Secrets {
-    do {
-      return try EnvironmentLoader.loadSecrets(config: config)
-    } catch let error as SecretStoreError {
+    do { return try EnvironmentLoader.loadSecrets(config: config) } catch let error
+      as SecretStoreError
+    {
       FileHandle.standardError.write(Data("secret error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
     }
@@ -215,9 +204,7 @@ private extension RunCommand {
   /// distinct already-running code instead of corrupting shared state.
   static func acquireInstanceLockOrExit(config: AppConfig) throws -> InstanceLock {
     let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
-    do {
-      return try InstanceLock(path: lockPath)
-    } catch InstanceLock.LockError.alreadyLocked {
+    do { return try InstanceLock(path: lockPath) } catch InstanceLock.LockError.alreadyLocked {
       FileHandle.standardError.write(
         Data("another clawd is already running for this state root\n".utf8)
       )
@@ -226,9 +213,7 @@ private extension RunCommand {
   }
 
   static func ensureWorkspaceDirectoryOrExit(config: AppConfig) throws {
-    do {
-      try EnvironmentLoader.ensureWorkspaceDirectory(config: config)
-    } catch {
+    do { try EnvironmentLoader.ensureWorkspaceDirectory(config: config) } catch {
       FileHandle.standardError.write(Data("workspace error: \(error)\n".utf8))
       throw ExitCode(ClawExitCode.configInvalid.rawValue)
     }
@@ -238,18 +223,14 @@ private extension RunCommand {
   /// open fails or if seeding configured owners fails.
   static func openStoresOrExit(config: AppConfig, logger: Logger) throws -> ClawStores {
     let stores: ClawStores
-    do {
-      stores = try EnvironmentLoader.openStores(config: config)
-    } catch {
+    do { stores = try EnvironmentLoader.openStores(config: config) } catch {
       FileHandle.standardError.write(Data("database error: \(error)\n".utf8))
       throw ExitCode(ClawExitCode.storeError.rawValue)
     }
 
     switch AllowlistSeeding.seed(into: stores.allowlist, owners: config.allowlist) {
-    case .seeded:
-      break
-    case .toleratedFailure(let error):
-      logger.error("failed to seed allowlist: \(error)")
+    case .seeded: break
+    case .toleratedFailure(let error): logger.error("failed to seed allowlist: \(error)")
     case .strandedOwners(let error):
       FileHandle.standardError.write(Data("allowlist seed failed: \(error)\n".utf8))
       throw ExitCode(ClawExitCode.storeError.rawValue)
@@ -269,9 +250,9 @@ extension RunCommand {
   /// credential envelope joins `secrets.enc`'s family rather than booting with silent no-auth.
   static func loadMCPOrExit(config: AppConfig) throws -> MCPBootInputs {
     let catalog: MCPConfig
-    do {
-      catalog = try EnvironmentLoader.loadMCPConfig(config: config)
-    } catch let error as MCPConfigError {
+    do { catalog = try EnvironmentLoader.loadMCPConfig(config: config) } catch let error
+      as MCPConfigError
+    {
       FileHandle.standardError.write(Data("mcp config error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
     } catch {

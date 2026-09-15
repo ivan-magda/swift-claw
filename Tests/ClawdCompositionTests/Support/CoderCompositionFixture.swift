@@ -35,7 +35,11 @@ struct CoderCompositionFixture {
     let config = try AppConfig.load(environment: environment)
     http = ScriptedHTTPExecutor([])
     backend = ScriptedCoderBackend(invocations: [
-      .init(result: Self.result, holdCleanup: holdCleanup, unresolvedCleanup: unresolvedCleanup)
+      ScriptedCoderBackend.Invocation(
+        result: Self.result,
+        holdCleanup: holdCleanup,
+        unresolvedCleanup: unresolvedCleanup
+      ),
     ])
     var builder = try CompositionAcceptance.makeBuilder(http: http, config: config)
     let backend = backend
@@ -62,14 +66,14 @@ struct CoderCompositionFixture {
       now: Date()
     )
     return ToolExecutionContext(
-      runId: origin.runID,
-      sessionId: origin.sessionID,
-      chatId: origin.chatID,
-      requesterUserId: origin.requesterUserID,
+      runID: origin.runID,
+      sessionID: origin.sessionID,
+      chatID: origin.chatID,
+      requesterUserID: origin.requesterUserID,
       origin: .interactive,
       mode: .direct,
-      toolCallId: origin.toolCallID,
-      approvalId: origin.approvalID
+      toolCallID: origin.toolCallID,
+      approvalID: origin.approvalID
     )
   }
 

@@ -39,23 +39,20 @@ public struct CIDR: Sendable, Equatable {
       value & CIDR.v4Mask(prefixLength) == networkValue
     case (.ipv6(let networkBytes), .ipv6(let bytes)):
       bytes.count == 16 && CIDR.maskedV6(bytes, prefixLength) == networkBytes
-    default:
-      false
+    default: false
     }
   }
 }
 
 extension CIDR: CustomStringConvertible {
-  public var description: String {
-    "\(network)/\(prefixLength)"
-  }
+  public var description: String { "\(network)/\(prefixLength)" }
 }
 
 // MARK: - Bit Masking
 
 private extension CIDR {
   static func v4Mask(_ prefixLength: Int) -> UInt32 {
-    prefixLength == 0 ? 0 : ~UInt32(0) << (32 - prefixLength)
+    prefixLength == 0 ? 0 : ~(0 as UInt32) << (32 - prefixLength)
   }
 
   static func maskedV6(_ bytes: [UInt8], _ prefixLength: Int) -> [UInt8] {
@@ -67,7 +64,7 @@ private extension CIDR {
       masked[index] = bytes[index]
     }
     if remainderBits > 0, fullBytes < 16 {
-      masked[fullBytes] = bytes[fullBytes] & (~UInt8(0) << (8 - remainderBits))
+      masked[fullBytes] = bytes[fullBytes] & (~(0 as UInt8) << (8 - remainderBits))
     }
 
     return masked

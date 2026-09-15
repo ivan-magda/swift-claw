@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawAgent
 
-@Suite struct AgentRuntimeAccountingTests {
-  @Test func attemptFailureCauseMatrixIsClosed() {
+@Suite
+struct AgentRuntimeAccountingTests {
+  @Test
+  func attemptFailureCauseMatrixIsClosed() {
     // given — every provider cause is represented once; the wrapper is the shape provider runtimes
     // actually throw, so losing `ProviderError.cause(of:)` unwrapping cannot pass this matrix.
     let providerCases: [(ProviderError, AttemptFailureCause?)] = [
@@ -29,9 +31,8 @@ import Testing
 
     // when
     let observed = providerCases.map { cause, _ in
-      AgentFailureClassification(
-        error: ProviderFailure(cause: cause, accounting: .notStarted)
-      ).attemptFailureCause
+      AgentFailureClassification(error: ProviderFailure(cause: cause, accounting: .notStarted))
+        .attemptFailureCause
     }
 
     // then — provider causes remain descriptive and payload-free; retry policy belongs to the caller
@@ -46,9 +47,8 @@ import Testing
         == .processInterruption
     )
     #expect(
-      AgentFailureClassification(
-        error: ProviderInferenceCancellation(observing: 1)
-      ).attemptFailureCause == .deadline
+      AgentFailureClassification(error: ProviderInferenceCancellation(observing: 1))
+        .attemptFailureCause == .deadline
     )
     let racedResponse = ChatResponse(
       content: "finished",
@@ -57,9 +57,8 @@ import Testing
       costFromProvider: nil
     )
     #expect(
-      AgentFailureClassification(
-        error: RacedDeadlineSuccess(response: racedResponse)
-      ).attemptFailureCause == .deadline
+      AgentFailureClassification(error: RacedDeadlineSuccess(response: racedResponse))
+        .attemptFailureCause == .deadline
     )
 
     struct ForeignFailure: Error {}

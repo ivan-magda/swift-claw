@@ -8,7 +8,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ScheduleVerbRoutingTests {
+@Suite
+struct ScheduleVerbRoutingTests {
   /// Monday 2026-07-06 12:00:00 UTC == 14:00 Europe/Berlin.
   private static let fixedNow = SchedulingTestClock.mondayNoonBerlin
   /// Tuesday 2026-07-07 07:00 Europe/Berlin == 05:00 UTC — the next daily-07:00 fire.
@@ -26,7 +27,7 @@ import Testing
 
   private func makeHarness() throws -> Harness {
     let queue = try TestDatabase.make()
-    try AllowlistStoreGRDB(writer: queue).seedAllowlist(userIds: [42])
+    try AllowlistStoreGRDB(writer: queue).seedAllowlist(userIDs: [42])
     let transport = RecordingTransport()
     let dispatcher = FakeTurnRunner()
     let router = MessageRouter(
@@ -37,10 +38,7 @@ import Testing
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: PendingConfirmationRegistry(),
       botIdentity: BotIdentity(id: 900, username: "claw_bot"),
-      accessControl: AccessControl(
-        allowlist: AllowlistStoreGRDB(writer: queue),
-        groupChats: []
-      ),
+      accessControl: AccessControl(allowlist: AllowlistStoreGRDB(writer: queue), groupChats: []),
       delivery: transport,
       turnRunner: dispatcher,
       imageCache: ImageCache(),
@@ -48,7 +46,9 @@ import Testing
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
       doctor: StubDoctorReporter(),
-      now: { Self.fixedNow },
+      now: {
+        Self.fixedNow
+      },
       logger: TestLog.silent
     )
     return Harness(
@@ -78,7 +78,7 @@ import Testing
     )
     return try harness.jobs.create(
       NewScheduledJob(
-        ownerChatId: 42,
+        ownerChatID: 42,
         label: "morning digest",
         prompt: "Summarize my unread items",
         recurrence: RecurrenceEnvelope(schemaVersion: 1, rule: rule),
@@ -90,13 +90,10 @@ import Testing
   }
 
   @discardableResult
-  private func seedOneShot(
-    _ harness: Harness,
-    nextOccurrence: Date
-  ) throws -> ScheduledJob {
+  private func seedOneShot(_ harness: Harness, nextOccurrence: Date) throws -> ScheduledJob {
     try harness.jobs.create(
       NewScheduledJob(
-        ownerChatId: 42,
+        ownerChatID: 42,
         label: "one reminder",
         prompt: "Send the report reminder",
         recurrence: nil,
@@ -107,7 +104,8 @@ import Testing
     )
   }
 
-  @Test func pauseFlipsStatusAndAuditsInTheStoreTransaction() async throws {
+  @Test
+  func pauseFlipsStatusAndAuditsInTheStoreTransaction() async throws {
     // given
     let harness = try makeHarness()
     let seeded = try seedDailyJob(harness)
@@ -133,7 +131,8 @@ import Testing
     #expect(auditCount == 1)
   }
 
-  @Test func pauseIsIdempotent() async throws {
+  @Test
+  func pauseIsIdempotent() async throws {
     // given
     let harness = try makeHarness()
     let seeded = try seedDailyJob(harness)
@@ -150,7 +149,8 @@ import Testing
     #expect(job.status == .paused)
   }
 
-  @Test func resumeRecomputesNextFromNowSkippingMissedOccurrences() async throws {
+  @Test
+  func resumeRecomputesNextFromNowSkippingMissedOccurrences() async throws {
     // given — the job was due YESTERDAY-morning while paused; resume must NOT catch that up
     let harness = try makeHarness()
     let pastDue = Date(timeIntervalSince1970: 1_783_314_000)  // Mon 2026-07-06 05:00 UTC
@@ -171,7 +171,8 @@ import Testing
     #expect(reply.contains("2026-07-07 07:00"))
   }
 
-  @Test func resumeOfAOneShotWhoseInstantPassedHasNothingLeftToFire() async throws {
+  @Test
+  func resumeOfAOneShotWhoseInstantPassedHasNothingLeftToFire() async throws {
     // given — a one-shot whose moment passed while paused: skipped, never caught up (§5.4)
     let harness = try makeHarness()
     let pastInstant = Date(timeIntervalSince1970: 1_783_314_000)
@@ -190,7 +191,8 @@ import Testing
     #expect(reply.contains("Nothing left to fire"))
   }
 
-  @Test func runNowFiresThroughTheLaneWithoutMovingTheSchedule() async throws {
+  @Test
+  func runNowFiresThroughTheLaneWithoutMovingTheSchedule() async throws {
     // given
     let harness = try makeHarness()
     let seeded = try seedDailyJob(harness)
@@ -206,14 +208,15 @@ import Testing
     let calls = await harness.dispatcher.calls
     #expect(calls.count == 1)
     let call = try #require(calls.first)
-    #expect(call.chatId == 42)
+    #expect(call.chatID == 42)
     let job = try #require(try harness.jobs.job(id: seeded.id))
     #expect(job.nextOccurrence == Self.nextDailyFire)
     let reply = await harness.transport.sent.last?.text ?? ""
     #expect(reply.contains("Running schedule \(seeded.id) now"))
   }
 
-  @Test func runNowWorksOnAPausedJobWithoutUnmutingIt() async throws {
+  @Test
+  func runNowWorksOnAPausedJobWithoutUnmutingIt() async throws {
     // given — the deliberate test-without-unmute semantic (spec §5.4 / §20)
     let harness = try makeHarness()
     let seeded = try seedDailyJob(harness)
@@ -231,7 +234,8 @@ import Testing
     #expect(job.status == .paused)
   }
 
-  @Test func redeliveredRunNowFiresOnlyOnce() async throws {
+  @Test
+  func redeliveredRunNowFiresOnlyOnce() async throws {
     // given
     let harness = try makeHarness()
     let seeded = try seedDailyJob(harness)
@@ -250,7 +254,8 @@ import Testing
     #expect(await harness.dispatcher.calls.count == 1)
   }
 
-  @Test func runNowOnAJobWithALiveRunTellsTheOwnerItIsAlreadyRunning() async throws {
+  @Test
+  func runNowOnAJobWithALiveRunTellsTheOwnerItIsAlreadyRunning() async throws {
     // given — a first /runnow left a live PENDING run on the job's session (the fake dispatcher
     // never drives it terminal, so it stays live)
     let harness = try makeHarness()
@@ -272,7 +277,8 @@ import Testing
     #expect(reply == ScheduleReplies.alreadyRunning(id: seeded.id))
   }
 
-  @Test func cancelRetainsTheRowAndStopsFutureFires() async throws {
+  @Test
+  func cancelRetainsTheRowAndStopsFutureFires() async throws {
     // given
     let harness = try makeHarness()
     let seeded = try seedDailyJob(harness)
@@ -290,7 +296,8 @@ import Testing
     #expect(reply.contains("Cancelled schedule \(seeded.id)"))
   }
 
-  @Test func unknownIdGetsAHelpfulErrorWithTheListHint() async throws {
+  @Test
+  func unknownIDGetsAHelpfulErrorWithTheListHint() async throws {
     // given
     let harness = try makeHarness()
 
@@ -301,7 +308,8 @@ import Testing
     #expect(await harness.transport.sent.last?.text == ScheduleReplies.notFound(id: 99))
   }
 
-  @Test func missingIdGetsUsageWithTheListHint() async throws {
+  @Test
+  func missingIDGetsUsageWithTheListHint() async throws {
     // given
     let harness = try makeHarness()
 
@@ -314,7 +322,8 @@ import Testing
     #expect(sent.map(\.text) == [ScheduleReplies.cancelUsage, ScheduleReplies.pauseUsage])
   }
 
-  @Test func strangersNeverReachTheVerbs() async throws {
+  @Test
+  func strangersNeverReachTheVerbs() async throws {
     // given
     let harness = try makeHarness()
     let seeded = try seedDailyJob(harness)
@@ -325,7 +334,11 @@ import Testing
 
     // then — private-bot replies; the job is untouched and nothing ran
     let sent = await harness.transport.sent
-    #expect(sent.allSatisfy { reply in reply.text == MessageRouter.privateBotText })
+    #expect(
+      sent.allSatisfy { reply in
+        reply.text == MessageRouter.privateBotText
+      }
+    )
     let job = try #require(try harness.jobs.job(id: seeded.id))
     #expect(job.status == .active)
     #expect(await harness.dispatcher.calls.isEmpty)

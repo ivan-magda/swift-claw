@@ -35,7 +35,7 @@ public actor CoderService: CoderServing, Service {
     config: CoderConfig,
     jobRoot: String,
     executionPolicyID: String,
-    redact: @escaping @Sendable (String) -> String,
+    redact: @escaping @Sendable (_ text: String) -> String,
     notifyOutbox: @escaping @Sendable () async -> Void
   ) {
     self.store = store
@@ -117,10 +117,9 @@ public actor CoderService: CoderServing, Service {
     return try await preparer.prepare(request)
   }
 
-  public func submit(
-    _ prepared: CoderPreparedRequest,
-    context: ToolExecutionContext
-  ) async throws -> CoderJob {
+  public func submit(_ prepared: CoderPreparedRequest, context: ToolExecutionContext) async throws
+    -> CoderJob
+  {
     let origin = try approvedOrigin(context)
     _ = try requireAdmission()
     guard prepared.executionPolicyID == executionPolicyID else {
@@ -198,27 +197,31 @@ private extension CoderService {
   }
 
   func approvedOrigin(_ context: ToolExecutionContext) throws -> CoderOrigin {
-    guard context.origin == .interactive,
-      let requester = context.requesterUserId, requester > 0,
-      context.mode == .group || requester == context.chatId,
-      let approval = context.approvalId
+    guard
+      context.origin == .interactive,
+      let requester = context.requesterUserID,
+      requester > 0,
+      context.mode == .group || requester == context.chatID,
+      let approval = context.approvalID
     else {
       throw CoderError.forbidden
     }
     return CoderOrigin(
-      runID: context.runId,
-      sessionID: context.sessionId,
+      runID: context.runID,
+      sessionID: context.sessionID,
       requesterUserID: requester,
-      chatID: context.chatId,
-      toolCallID: context.toolCallId,
+      chatID: context.chatID,
+      toolCallID: context.toolCallID,
       approvalID: approval
     )
   }
 
   func scopedJob(id: UUID, context: ToolExecutionContext) throws -> CoderJob {
-    guard context.origin == .interactive,
-      let requester = context.requesterUserId, requester > 0,
-      context.mode == .group || requester == context.chatId
+    guard
+      context.origin == .interactive,
+      let requester = context.requesterUserID,
+      requester > 0,
+      context.mode == .group || requester == context.chatID
     else {
       throw CoderError.forbidden
     }
@@ -226,9 +229,10 @@ private extension CoderService {
       guard let job = try store.job(id: id) else {
         throw CoderError.invalidRequest("Coder job was not found.")
       }
-      guard job.origin.requesterUserID == requester,
-        job.origin.chatID == context.chatId,
-        context.mode == .direct || job.origin.sessionID == context.sessionId
+      guard
+        job.origin.requesterUserID == requester,
+        job.origin.chatID == context.chatID,
+        context.mode == .direct || job.origin.sessionID == context.sessionID
       else {
         throw CoderError.forbidden
       }

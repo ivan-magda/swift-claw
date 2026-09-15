@@ -6,9 +6,7 @@ public enum CanonicalJSON {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
 
-    guard
-      let data = try? encoder.encode(value),
-      let json = String(data: data, encoding: .utf8)
+    guard let data = try? encoder.encode(value), let json = String(data: data, encoding: .utf8)
     else {
       return nil
     }
@@ -38,10 +36,7 @@ public enum CanonicalJSON {
   /// JSONSerialization bridges booleans through NSNumber; exclude CFBoolean before accepting an
   /// integer so strict frozen schemas cannot treat `true` as `1`.
   package static func integer(_ value: Any?) -> Int? {
-    guard
-      let number = value as? NSNumber,
-      CFGetTypeID(number) != CFBooleanGetTypeID()
-    else {
+    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
       return nil
     }
 
@@ -68,17 +63,11 @@ public enum CanonicalJSON {
 
   // swiftlint:disable discouraged_optional_boolean
   package static func boolean(_ value: Any?) -> Bool? {
-    guard
-      let number = value as? NSNumber,
-      CFGetTypeID(number) == CFBooleanGetTypeID()
-    else {
+    guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
       return nil
     }
     return number.boolValue
-  }
-  // swiftlint:enable discouraged_optional_boolean
+  }  // swiftlint:enable discouraged_optional_boolean
 }
 
-package enum CanonicalJSONError: Error, Sendable, Equatable {
-  case invalidJSONObject
-}
+package enum CanonicalJSONError: Error, Sendable, Equatable { case invalidJSONObject }

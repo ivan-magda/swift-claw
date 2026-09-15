@@ -15,10 +15,12 @@ private final class InvocationFlag: @unchecked Sendable {
   func mark() { invoked = true }
 }
 
-@Suite struct ProviderStackFactoryTests {
+@Suite
+struct ProviderStackFactoryTests {
   // MARK: - Current route
 
-  @Test func currentRouteBuildsTheMeteredStaticStackAndOpensNoOAuthEnvelope() throws {
+  @Test
+  func currentRouteBuildsTheMeteredStaticStackAndOpensNoOAuthEnvelope() throws {
     // given — the current route, a managed-store factory that fails if the route ever opens it
     let route = makeCurrentRoute(endpoint: "https://api.test/v1", model: "gpt-4o")
     let managedOpened = InvocationFlag()
@@ -27,7 +29,9 @@ private final class InvocationFlag: @unchecked Sendable {
     let stack = try ProviderStackFactory.make(
       route: route,
       settings: settings(route: route),
-      loadStaticBearer: { "sk-test" },
+      loadStaticBearer: {
+        "sk-test"
+      },
       makeManagedCredentialStore: {
         managedOpened.mark()
         return ScriptedCredentialStore(.value(nil))
@@ -46,15 +50,20 @@ private final class InvocationFlag: @unchecked Sendable {
     #expect(managedOpened.invoked == false)
   }
 
-  @Test func currentRouteSendsToTheResolvedChatCompletionsURL() async throws {
+  @Test
+  func currentRouteSendsToTheResolvedChatCompletionsURL() async throws {
     // given — the composed current-route provider and a scripted 200
     let route = makeCurrentRoute(endpoint: "https://api.test/v1", model: "gpt-4o")
     let http = ScriptedHTTPExecutor([okStep()])
     let stack = try ProviderStackFactory.make(
       route: route,
       settings: settings(route: route),
-      loadStaticBearer: { "sk-test" },
-      makeManagedCredentialStore: { ScriptedCredentialStore(.value(nil)) },
+      loadStaticBearer: {
+        "sk-test"
+      },
+      makeManagedCredentialStore: {
+        ScriptedCredentialStore(.value(nil))
+      },
       http: http,
       buildVersion: "0.0.0-test"
     )
@@ -69,7 +78,8 @@ private final class InvocationFlag: @unchecked Sendable {
 
   // MARK: - Registry defects fail closed
 
-  @Test func aCurrentRouteWithoutAConfiguredEndpointFailsClosedRatherThanComposing() {
+  @Test
+  func aCurrentRouteWithoutAConfiguredEndpointFailsClosedRatherThanComposing() {
     // given — a static-bearer route carrying a managed egress: impossible for a registered descriptor,
     // so a registry defect, not configuration
     let route = currentRouteWithEgress(
@@ -87,7 +97,8 @@ private final class InvocationFlag: @unchecked Sendable {
     }
   }
 
-  @Test func aCurrentRouteWithoutAConfiguredOutputFieldFailsClosedRatherThanComposing() {
+  @Test
+  func aCurrentRouteWithoutAConfiguredOutputFieldFailsClosedRatherThanComposing() {
     // given — a static-bearer route whose output-token field is omitted: again a registry defect
     let route = currentRouteWithOutputField(.omitted)
 
@@ -103,7 +114,8 @@ private final class InvocationFlag: @unchecked Sendable {
 
   // MARK: - ChatGPT route
 
-  @Test func chatGPTRouteBuildsTheIncludedPlanResponsesStackAndReadsNoStaticBearer() throws {
+  @Test
+  func chatGPTRouteBuildsTheIncludedPlanResponsesStackAndReadsNoStaticBearer() throws {
     // given — the managed route, a static-bearer closure that fails if the route ever reads it
     let bearerRead = InvocationFlag()
     let store = ScriptedCredentialStore(.value(storedCredential()))
@@ -116,7 +128,9 @@ private final class InvocationFlag: @unchecked Sendable {
         bearerRead.mark()
         return "unused"
       },
-      makeManagedCredentialStore: { store },
+      makeManagedCredentialStore: {
+        store
+      },
       http: ScriptedHTTPExecutor([]),
       buildVersion: "0.0.0-test"
     )
@@ -132,7 +146,8 @@ private final class InvocationFlag: @unchecked Sendable {
     #expect(bearerRead.invoked == false)
   }
 
-  @Test func chatGPTRouteWithNoRecordBootsLoggedOut() throws {
+  @Test
+  func chatGPTRouteWithNoRecordBootsLoggedOut() throws {
     // given — an absent record: a valid logged-out state, not a failure
     let store = ScriptedCredentialStore(.value(nil))
 
@@ -140,8 +155,12 @@ private final class InvocationFlag: @unchecked Sendable {
     let stack = try ProviderStackFactory.make(
       route: chatGPTRoute(),
       settings: settings(route: chatGPTRoute()),
-      loadStaticBearer: { nil },
-      makeManagedCredentialStore: { store },
+      loadStaticBearer: {
+        nil
+      },
+      makeManagedCredentialStore: {
+        store
+      },
       http: ScriptedHTTPExecutor([]),
       buildVersion: "0.0.0-test"
     )
@@ -149,7 +168,8 @@ private final class InvocationFlag: @unchecked Sendable {
     #expect(store.loadCount == 1)
   }
 
-  @Test func chatGPTRouteWithMalformedEnvelopeThrowsTheStoreError() {
+  @Test
+  func chatGPTRouteWithMalformedEnvelopeThrowsTheStoreError() {
     // given — a malformed envelope: fatal, not logged out
     let store = ScriptedCredentialStore(.failure(.malformedStorage))
 
@@ -158,26 +178,38 @@ private final class InvocationFlag: @unchecked Sendable {
       _ = try ProviderStackFactory.make(
         route: chatGPTRoute(),
         settings: settings(route: chatGPTRoute()),
-        loadStaticBearer: { nil },
-        makeManagedCredentialStore: { store },
+        loadStaticBearer: {
+          nil
+        },
+        makeManagedCredentialStore: {
+          store
+        },
         http: ScriptedHTTPExecutor([]),
         buildVersion: "0.0.0-test"
       )
     }
   }
 
-  @Test func chatGPTRouteSendsToTheFixedResponsesURLWithTheStoreSeededBearer() async throws {
+  @Test
+  func chatGPTRouteSendsToTheFixedResponsesURLWithTheStoreSeededBearer() async throws {
     // given — the composed managed provider over a store-seeded credential and a scripted success. The
     // seeded token is unexpired, so the source spends it directly rather than opening a refresh flight.
     let credential = storedCredential()
     let http = ScriptedHTTPExecutor([
-      .stream(ChatGPTProviderTestSupport.okHead, ChatGPTProviderTestSupport.Fixtures.basicSuccess())
+      .stream(
+        ChatGPTProviderTestSupport.okHead,
+        ChatGPTProviderTestSupport.Fixtures.basicSuccess()
+      ),
     ])
     let stack = try ProviderStackFactory.make(
       route: chatGPTRoute(),
       settings: settings(route: chatGPTRoute()),
-      loadStaticBearer: { nil },
-      makeManagedCredentialStore: { ScriptedCredentialStore(.value(credential)) },
+      loadStaticBearer: {
+        nil
+      },
+      makeManagedCredentialStore: {
+        ScriptedCredentialStore(.value(credential))
+      },
       http: http,
       buildVersion: "0.0.0-test"
     )
@@ -201,8 +233,12 @@ private extension ProviderStackFactoryTests {
     try ProviderStackFactory.make(
       route: route,
       settings: settings(route: route),
-      loadStaticBearer: { "sk-test" },
-      makeManagedCredentialStore: { ScriptedCredentialStore(.value(nil)) },
+      loadStaticBearer: {
+        "sk-test"
+      },
+      makeManagedCredentialStore: {
+        ScriptedCredentialStore(.value(nil))
+      },
       http: ScriptedHTTPExecutor([]),
       buildVersion: "0.0.0-test"
     )

@@ -8,7 +8,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ScheduleRoutingTests {
+@Suite
+struct ScheduleRoutingTests {
   /// Monday 2026-07-06 12:00:00 UTC == 14:00 Europe/Berlin. Injected — no real clocks.
   private static let fixedNow = SchedulingTestClock.mondayNoonBerlin
 
@@ -31,11 +32,11 @@ import Testing
     let queue: DatabaseQueue
   }
 
-  private func makeHarness(
-    parseResults: [ScheduleDraftParseResult] = [.draft(Self.weekdayDraft)]
-  ) throws -> Harness {
+  private func makeHarness(parseResults: [ScheduleDraftParseResult] = [.draft(Self.weekdayDraft)])
+    throws -> Harness
+  {
     let queue = try TestDatabase.make()
-    try AllowlistStoreGRDB(writer: queue).seedAllowlist(userIds: [42])
+    try AllowlistStoreGRDB(writer: queue).seedAllowlist(userIDs: [42])
     let transport = RecordingTransport()
     let dispatcher = FakeTurnRunner()
     let parser = FakeDraftParser(results: parseResults)
@@ -75,10 +76,7 @@ import Testing
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: pending,
       botIdentity: BotIdentity(id: 900, username: "claw_bot"),
-      accessControl: AccessControl(
-        allowlist: AllowlistStoreGRDB(writer: queue),
-        groupChats: []
-      ),
+      accessControl: AccessControl(allowlist: AllowlistStoreGRDB(writer: queue), groupChats: []),
       delivery: transport,
       turnRunner: dispatcher,
       imageCache: ImageCache(),
@@ -92,16 +90,17 @@ import Testing
       ),
       coordinator: ApprovalCoordinator(),
       doctor: StubDoctorReporter(),
-      now: { Self.fixedNow },
+      now: {
+        Self.fixedNow
+      },
       logger: TestLog.silent
     )
   }
 
-  private func jobCount(_ harness: Harness) throws -> Int {
-    try harness.jobs.listAll().count
-  }
+  private func jobCount(_ harness: Harness) throws -> Int { try harness.jobs.listAll().count }
 
-  @Test func scheduleCreateParksAndSendsTheConfirmPrompt() async throws {
+  @Test
+  func scheduleCreateParksAndSendsTheConfirmPrompt() async throws {
     // given
     let harness = try makeHarness()
 
@@ -123,15 +122,16 @@ import Testing
     #expect(prompt.contains("2026-07-09 07:00"))
     #expect(try jobCount(harness) == 0)
     #expect(await harness.parser.ownerTexts == ["every weekday at 7am Berlin"])
-    let sessionId = try #require(
+    let sessionID = try #require(
       try SessionMessageStoreGRDB(writer: harness.queue).findSession(
-        sessionKey: SessionKey.telegramDM(chatId: 42)
+        sessionKey: SessionKey.telegramDM(chatID: 42)
       )
     )
-    #expect(await harness.pending.pending(sessionId: sessionId) != nil)
+    #expect(await harness.pending.pending(sessionID: sessionID) != nil)
   }
 
-  @Test func yesArmsTheExactParkedDraftOnce() async throws {
+  @Test
+  func yesArmsTheExactParkedDraftOnce() async throws {
     // given
     let harness = try makeHarness()
     await harness.router.handle(
@@ -148,7 +148,7 @@ import Testing
     let job = try #require(jobs.first)
     #expect(job.label == "morning digest")
     #expect(job.prompt == "Summarize my unread items")
-    #expect(job.ownerChatId == 42)
+    #expect(job.ownerChatID == 42)
     #expect(job.status == .active)
     #expect(job.timezone == "Europe/Berlin")
     #expect(job.nextOccurrence == SchedulingTestClock.tuesdaySevenBerlin)
@@ -161,15 +161,16 @@ import Testing
   /// A draft confirmed long after its preview must arm the NEXT occurrence from the arm-time
   /// clock, not the stale parked `firstOccurrence` (M1): the validator/parser can never produce
   /// this shape (it anchors recurring drafts at park-now), so the stale draft is parked directly.
-  @Test func armRecomputesNextOccurrenceForADraftParkedInThePast() async throws {
+  @Test
+  func armRecomputesNextOccurrenceForADraftParkedInThePast() async throws {
     // given — a recurring draft whose parked firstOccurrence (last Sunday) is long past
     let harness = try makeHarness()
     await harness.router.handle(
       rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule every weekday at 7am Berlin")
     )
-    let sessionId = try #require(
+    let sessionID = try #require(
       try SessionMessageStoreGRDB(writer: harness.queue).findSession(
-        sessionKey: SessionKey.telegramDM(chatId: 42)
+        sessionKey: SessionKey.telegramDM(chatID: 42)
       )
     )
     let rule = Calendar.RecurrenceRule(
@@ -180,7 +181,10 @@ import Testing
       }(),
       frequency: .weekly,
       weekdays: [
-        .every(.monday), .every(.tuesday), .every(.wednesday), .every(.thursday),
+        .every(.monday),
+        .every(.tuesday),
+        .every(.wednesday),
+        .every(.thursday),
         .every(.friday),
       ],
       hours: [7],
@@ -194,7 +198,7 @@ import Testing
       timezone: "Europe/Berlin",
       firstOccurrence: Self.fixedNow.addingTimeInterval(-86_400)
     )
-    await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
+    await harness.pending.park(.scheduleArm(stale), sessionID: sessionID)
 
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "yes"))
@@ -210,15 +214,16 @@ import Testing
   /// The confirm preview anchors on the parked draft's `firstOccurrence`, so arming must too —
   /// anchoring on arm-time `now` instead would re-phase the whole everyNMinutes chain off what
   /// the owner just confirmed (preamble deviation #1: phase-continuous from preview to fire).
-  @Test func armPreservesEveryNMinutesPhaseFromThePreview() async throws {
+  @Test
+  func armPreservesEveryNMinutesPhaseFromThePreview() async throws {
     // given — a 30-minute draft parked with a past, off-now-phase firstOccurrence (:05/:35)
     let harness = try makeHarness()
     await harness.router.handle(
       rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule every weekday at 7am Berlin")
     )
-    let sessionId = try #require(
+    let sessionID = try #require(
       try SessionMessageStoreGRDB(writer: harness.queue).findSession(
-        sessionKey: SessionKey.telegramDM(chatId: 42)
+        sessionKey: SessionKey.telegramDM(chatID: 42)
       )
     )
     let calendar: Calendar = try {
@@ -239,7 +244,7 @@ import Testing
       timezone: "Europe/Berlin",
       firstOccurrence: Date(timeIntervalSince1970: 1_783_337_700)
     )
-    await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
+    await harness.pending.park(.scheduleArm(stale), sessionID: sessionID)
 
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "yes"))
@@ -254,15 +259,16 @@ import Testing
 
   /// A parked one-shot confirmed after its only instant already passed cannot be salvaged: arming
   /// it would silently misfire to COMPLETED with no run, so it is rejected instead (M1).
-  @Test func armOfAOneShotWhoseInstantPassedIsRejected() async throws {
+  @Test
+  func armOfAOneShotWhoseInstantPassedIsRejected() async throws {
     // given — a one-shot draft whose parked firstOccurrence is an hour in the past
     let harness = try makeHarness()
     await harness.router.handle(
       rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule every weekday at 7am Berlin")
     )
-    let sessionId = try #require(
+    let sessionID = try #require(
       try SessionMessageStoreGRDB(writer: harness.queue).findSession(
-        sessionKey: SessionKey.telegramDM(chatId: 42)
+        sessionKey: SessionKey.telegramDM(chatID: 42)
       )
     )
     let stale = ValidatedSchedule(
@@ -272,7 +278,7 @@ import Testing
       timezone: "Europe/Berlin",
       firstOccurrence: Self.fixedNow.addingTimeInterval(-3_600)
     )
-    await harness.pending.park(.scheduleArm(stale), sessionId: sessionId)
+    await harness.pending.park(.scheduleArm(stale), sessionID: sessionID)
 
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "yes"))
@@ -281,10 +287,11 @@ import Testing
     #expect(outcome == .processed)
     #expect(try jobCount(harness) == 0)
     #expect(await harness.transport.sent.last?.text == ScheduleReplies.armExpired)
-    #expect(await harness.pending.pending(sessionId: sessionId) == nil)
+    #expect(await harness.pending.pending(sessionID: sessionID) == nil)
   }
 
-  @Test func replayedYesIsIdempotent() async throws {
+  @Test
+  func replayedYesIsIdempotent() async throws {
     // given
     let harness = try makeHarness()
     await harness.router.handle(
@@ -300,7 +307,8 @@ import Testing
     #expect(try jobCount(harness) == 1)
   }
 
-  @Test func noCancelsAndNothingIsArmed() async throws {
+  @Test
+  func noCancelsAndNothingIsArmed() async throws {
     // given
     let harness = try makeHarness()
     await harness.router.handle(
@@ -318,7 +326,8 @@ import Testing
     #expect(try jobCount(harness) == 0)
   }
 
-  @Test func otherTextClearsTheDraftAndFallsThroughToATurn() async throws {
+  @Test
+  func otherTextClearsTheDraftAndFallsThroughToATurn() async throws {
     // given
     let harness = try makeHarness()
     await harness.router.handle(
@@ -326,23 +335,22 @@ import Testing
     )
 
     // when
-    await harness.router.handle(
-      rawUpdate: textUpdate(id: 2, from: 42, text: "what's the weather?")
-    )
+    await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 42, text: "what's the weather?"))
     await harness.dispatcher.waitForCalls(atLeast: 1)
 
     // then — the text became an ordinary turn and the slot is empty
     #expect(await harness.dispatcher.calls.count == 1)
     #expect(try jobCount(harness) == 0)
-    let sessionId = try #require(
+    let sessionID = try #require(
       try SessionMessageStoreGRDB(writer: harness.queue).findSession(
-        sessionKey: SessionKey.telegramDM(chatId: 42)
+        sessionKey: SessionKey.telegramDM(chatID: 42)
       )
     )
-    #expect(await harness.pending.pending(sessionId: sessionId) == nil)
+    #expect(await harness.pending.pending(sessionID: sessionID) == nil)
   }
 
-  @Test func restartDropsTheParkedDraft() async throws {
+  @Test
+  func restartDropsTheParkedDraft() async throws {
     // given — a draft parked, then the daemon restarts (fresh ephemeral registry, same DB; D10)
     let harness = try makeHarness()
     await harness.router.handle(
@@ -364,7 +372,8 @@ import Testing
     #expect(try jobCount(harness) == 0)
   }
 
-  @Test func providerFailureRepliesDegradationAndArmsNothing() async throws {
+  @Test
+  func providerFailureRepliesDegradationAndArmsNothing() async throws {
     // given
     let harness = try makeHarness(parseResults: [.providerUnavailable])
 
@@ -376,29 +385,29 @@ import Testing
     // then — the DEG-01 reply, nothing parked, nothing armed
     #expect(await harness.transport.sent.last?.text == Degradation.providerUnavailable)
     #expect(try jobCount(harness) == 0)
-    let sessionId = try #require(
+    let sessionID = try #require(
       try SessionMessageStoreGRDB(writer: harness.queue).findSession(
-        sessionKey: SessionKey.telegramDM(chatId: 42)
+        sessionKey: SessionKey.telegramDM(chatID: 42)
       )
     )
-    #expect(await harness.pending.pending(sessionId: sessionId) == nil)
+    #expect(await harness.pending.pending(sessionID: sessionID) == nil)
   }
 
-  @Test func unparseableTextGetsTheExampleRephrase() async throws {
+  @Test
+  func unparseableTextGetsTheExampleRephrase() async throws {
     // given
     let harness = try makeHarness(parseResults: [.unparseable])
 
     // when
-    await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule gibberish")
-    )
+    await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule gibberish"))
 
     // then
     #expect(await harness.transport.sent.last?.text == ScheduleReplies.parseFailed)
     #expect(try jobCount(harness) == 0)
   }
 
-  @Test func validationFailureRepliesThePlainLanguageProblem() async throws {
+  @Test
+  func validationFailureRepliesThePlainLanguageProblem() async throws {
     // given — the model proposed a below-floor interval; deterministic code rejects it
     let fastDraft = ScheduleDraft(
       label: "spammer",
@@ -414,13 +423,12 @@ import Testing
 
     // then — the problem's own reply (with example), nothing parked or armed
     let reply = await harness.transport.sent.last?.text ?? ""
-    #expect(
-      reply == ScheduleDraftProblem.intervalTooSmall(minutes: 1, floorMinutes: 5).ownerReply
-    )
+    #expect(reply == ScheduleDraftProblem.intervalTooSmall(minutes: 1, floorMinutes: 5).ownerReply)
     #expect(try jobCount(harness) == 0)
   }
 
-  @Test func listShowsEmptyHintThenArmedJobs() async throws {
+  @Test
+  func listShowsEmptyHintThenArmedJobs() async throws {
     // given
     let harness = try makeHarness()
 
@@ -446,7 +454,8 @@ import Testing
     #expect(line.contains("next 2026-07-07 07:00"))
   }
 
-  @Test func strangersNeverReachTheScheduleSurface() async throws {
+  @Test
+  func strangersNeverReachTheScheduleSurface() async throws {
     // given
     let harness = try makeHarness()
 
@@ -459,7 +468,11 @@ import Testing
     // then — private-bot replies only; the parser was never invoked; nothing exists
     let sent = await harness.transport.sent
     #expect(sent.count == 2)
-    #expect(sent.allSatisfy { reply in reply.text == MessageRouter.privateBotText })
+    #expect(
+      sent.allSatisfy { reply in
+        reply.text == MessageRouter.privateBotText
+      }
+    )
     #expect(await harness.parser.ownerTexts.isEmpty)
     #expect(try jobCount(harness) == 0)
   }

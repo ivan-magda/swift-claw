@@ -5,11 +5,9 @@ import GRDB
 // MARK: - Candidate Admission
 
 extension ScheduledLearningStoreGRDB {
-  public func admitCandidate(
-    digest: CandidateDigest,
-    redactor: SecretRedactor,
-    now: Date
-  ) throws(StoreError) -> AdmissionOutcome {
+  public func admitCandidate(digest: CandidateDigest, redactor: SecretRedactor, now: Date)
+    throws(StoreError) -> AdmissionOutcome
+  {
     try database.writeMapping { db in
       guard let artifact = try Self.readCandidateArtifact(db, digest: digest) else {
         return .rejected(.sourceBindingsChanged)
@@ -49,9 +47,7 @@ extension ScheduledLearningStoreGRDB {
     permitsClosedReplacement: Bool = false
   ) throws -> AdmissionPlan {
     if persisted {
-      guard
-        let exact = try readCandidateArtifact(db, digest: artifact.digest),
-        exact == artifact
+      guard let exact = try readCandidateArtifact(db, digest: artifact.digest), exact == artifact
       else {
         throw StoreError.unexpected("candidate changed during admission reload")
       }
@@ -63,12 +59,12 @@ extension ScheduledLearningStoreGRDB {
       throw StoreError.unexpected("candidate admission decision has no matching trial")
     }
     guard
-      let state = try readState(db, jobId: artifact.manifest.jobId),
-      let job = try admissionJob(db, jobId: artifact.manifest.jobId)
+      let state = try readState(db, jobID: artifact.manifest.jobID),
+      let job = try admissionJob(db, jobID: artifact.manifest.jobID)
     else {
       return .rejected(.jobNotRepeatable)
     }
-    let live = try liveTrial(db, jobId: artifact.manifest.jobId)
+    let live = try liveTrial(db, jobID: artifact.manifest.jobID)
     let hasCompetingLiveTrial =
       live.map { trial in
         trial.candidateDigest != permittedLiveCandidate
@@ -104,29 +100,22 @@ extension ScheduledLearningStoreGRDB {
     now: Date
   ) throws -> AdmissionOutcome {
     switch plan {
-    case .replay(let receipt):
-      return .admitted(receipt)
-    case .awaitingApproval:
-      return .awaitingApproval(artifact)
+    case .replay(let receipt): return .admitted(receipt)
+    case .awaitingApproval: return .awaitingApproval(artifact)
     case .insert(let job, let generation):
       return .admitted(
         try insertTrial(db, artifact: artifact, job: job, generation: generation, now: now)
       )
-    case .rejected(let rejection):
-      return .rejected(rejection)
+    case .rejected(let rejection): return .rejected(rejection)
     }
   }
 
   static func outcome(for plan: AdmissionPlan, artifact: CandidateArtifact) -> AdmissionOutcome {
     switch plan {
-    case .replay(let receipt):
-      return .admitted(receipt)
-    case .awaitingApproval:
-      return .awaitingApproval(artifact)
-    case .rejected(let rejection):
-      return .rejected(rejection)
-    case .insert:
-      return .rejected(.sourceBindingsChanged)
+    case .replay(let receipt): return .admitted(receipt)
+    case .awaitingApproval: return .awaitingApproval(artifact)
+    case .rejected(let rejection): return .rejected(rejection)
+    case .insert: return .rejected(.sourceBindingsChanged)
     }
   }
 }
@@ -143,13 +132,13 @@ private extension ScheduledLearningStoreGRDB {
   ) throws -> AdmissionReceipt {
     try db.execute(
       sql: """
-        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, algorithm)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-        """,
+      INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+        generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+        consumed_assignments, cohort_cutoff, state, algorithm)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+      """,
       arguments: [
-        artifact.manifest.jobId,
+        artifact.manifest.jobID,
         artifact.manifest.epoch.value,
         artifact.manifest.baseDigest.rawValue,
         artifact.digest.rawValue,
@@ -166,15 +155,15 @@ private extension ScheduledLearningStoreGRDB {
     let receipt = AdmissionReceipt(
       candidateDigest: artifact.digest,
       replacementDigest: artifact.replacement.digest,
-      trialId: db.lastInsertedRowID,
+      trialID: db.lastInsertedRowID,
       generation: generation
     )
     try db.execute(
       sql: """
-        UPDATE job_learning_state SET open_trial_id = ?
-        WHERE job_id = ? AND learning_epoch = ?
-        """,
-      arguments: [receipt.trialId, artifact.manifest.jobId, artifact.manifest.epoch.value]
+      UPDATE job_learning_state SET open_trial_id = ?
+      WHERE job_id = ? AND learning_epoch = ?
+      """,
+      arguments: [receipt.trialID, artifact.manifest.jobID, artifact.manifest.epoch.value]
     )
     try insertAdmissionReceipt(db, artifact: artifact, receipt: receipt, now: now)
     try AuditLogGRDB.insertAudit(
@@ -183,7 +172,7 @@ private extension ScheduledLearningStoreGRDB {
         actor: .system,
         action: .learningCandidateAdmitted,
         decision: "admitted",
-        sessionId: job.sessionId,
+        sessionID: job.sessionID,
         ts: now
       )
     )
@@ -197,10 +186,8 @@ private extension ScheduledLearningStoreGRDB {
       case .recurringIssue: .recurringIssue
       case .ownerCorrection: .ownerCorrection
       }
-    case .ownerApproval:
-      .ownerApproval
-    case .ownerEdit:
-      nil
+    case .ownerApproval: .ownerApproval
+    case .ownerEdit: nil
     }
   }
 
@@ -209,10 +196,10 @@ private extension ScheduledLearningStoreGRDB {
       try Int.fetchOne(
         db,
         sql: """
-          SELECT MAX(generation) FROM learning_trials
-          WHERE job_id = ? AND learning_epoch = ?
-          """,
-        arguments: [artifact.manifest.jobId, artifact.manifest.epoch.value]
+        SELECT MAX(generation) FROM learning_trials
+        WHERE job_id = ? AND learning_epoch = ?
+        """,
+        arguments: [artifact.manifest.jobID, artifact.manifest.epoch.value]
       ) ?? 0
     return latest + 1
   }
@@ -221,17 +208,17 @@ private extension ScheduledLearningStoreGRDB {
     try Bool.fetchOne(
       db,
       sql: """
-        SELECT EXISTS(
-          SELECT 1 FROM learning_trials AS trial
-          JOIN learning_candidates AS candidate
-            ON candidate.candidate_digest = trial.candidate_digest
-          WHERE trial.job_id = ? AND trial.learning_epoch = ? AND trial.base_digest = ?
-            AND candidate.replacement_digest = ? AND trial.algorithm = ?
-            AND trial.state NOT IN (?, ?)
-        )
-        """,
+      SELECT EXISTS(
+        SELECT 1 FROM learning_trials AS trial
+        JOIN learning_candidates AS candidate
+          ON candidate.candidate_digest = trial.candidate_digest
+        WHERE trial.job_id = ? AND trial.learning_epoch = ? AND trial.base_digest = ?
+          AND candidate.replacement_digest = ? AND trial.algorithm = ?
+          AND trial.state NOT IN (?, ?)
+      )
+      """,
       arguments: [
-        artifact.manifest.jobId,
+        artifact.manifest.jobID,
         artifact.manifest.epoch.value,
         artifact.manifest.baseDigest.rawValue,
         artifact.replacement.digest.rawValue,
@@ -251,7 +238,7 @@ private extension ScheduledLearningStoreGRDB {
     try insertDecision(
       db,
       kind: AdmissionReceipt.kind,
-      jobId: artifact.manifest.jobId,
+      jobID: artifact.manifest.jobID,
       epoch: artifact.manifest.epoch,
       inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
       result: receipt,

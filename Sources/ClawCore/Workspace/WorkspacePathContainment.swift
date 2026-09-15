@@ -53,7 +53,11 @@ public enum WorkspacePathContainment {
     guard components.isEmpty == false else {
       return .refused(reason: "The path is empty.")
     }
-    guard components.contains(where: { $0 == ".." || $0 == "." }) == false else {
+    guard
+      components.contains(where: {
+        $0 == ".." || $0 == "."
+      }) == false
+    else {
       return .refused(
         reason: "Paths with \".\" or \"..\" components can't be written; name the target directly."
       )
@@ -68,9 +72,7 @@ public enum WorkspacePathContainment {
       }
 
       guard isContained(target: resolvedCandidate, root: canonicalRoot) else {
-        return .refused(
-          reason: "That path resolves outside the workspace, so I can't write it."
-        )
+        return .refused(reason: "That path resolves outside the workspace, so I can't write it.")
       }
 
       resolvedPrefix = resolvedCandidate

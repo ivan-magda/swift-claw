@@ -96,14 +96,12 @@ public struct ApprovalCallbackHandler: Sendable {
   /// Step 1 (claim), then the auth chain. Returns a `HandleOutcome` so the poller's
   /// cursor-advance semantics are identical to the message path: a redelivered update is deduped by
   /// the shared `processed_updates` claim and skipped.
-  public func handle(_ callback: RawCallback, updateId: Int64) async -> HandleOutcome {
-    let noticeChatId = callback.chatId ?? callback.fromUserId
+  public func handle(_ callback: RawCallback, updateID: Int64) async -> HandleOutcome {
+    let noticeChatID = callback.chatID ?? callback.fromUserID
 
     do throws(RoutingHalt) {
-      try await replies.claimUpdate(updateId: updateId, target: .chat(noticeChatId))
-    } catch {
-      return error.outcome
-    }
+      try await replies.claimUpdate(updateID: updateID, target: .chat(noticeChatID))
+    } catch { return error.outcome }
 
     return await resolve(callback)
   }
@@ -119,9 +117,7 @@ private extension ApprovalCallbackHandler {
     }
 
     let found: Approval?
-    do {
-      found = try approvals.approval(nonce: parsed.nonce)
-    } catch {
+    do { found = try approvals.approval(nonce: parsed.nonce) } catch {
       return await storeFailure(callback, error)
     }
 
@@ -141,35 +137,32 @@ private extension ApprovalCallbackHandler {
     )
   }
 
-  func authorizedActor(
-    _ callback: RawCallback,
-    approval: Approval
-  ) async -> ApprovalResolutionActor? {
+  func authorizedActor(_ callback: RawCallback, approval: Approval) async
+    -> ApprovalResolutionActor?
+  {
     let context: RunExecutionContext?
     do {
       context = try runs.executionContext(
-        runId: approval.runId,
-        fallbackChatId: approval.ownerUserId
+        runID: approval.runID,
+        fallbackChatID: approval.ownerUserID
       )
-    } catch {
-      return nil
-    }
+    } catch { return nil }
 
     if let context, context.mode == .group {
       guard
         context.origin == .interactive,
-        context.requesterUserId != nil,
-        context.sessionId == approval.sessionId,
-        context.deliveryTarget.chatId == approval.ownerUserId,
+        context.requesterUserID != nil,
+        context.sessionID == approval.sessionID,
+        context.deliveryTarget.chatID == approval.ownerUserID,
         approval.reason == .coderSubmit,
         approval.tool == CoderToolNames.submit,
-        callback.chatId == context.deliveryTarget.chatId,
-        let promptMessageId = approval.promptMessageId,
-        callback.messageId == promptMessageId,
+        callback.chatID == context.deliveryTarget.chatID,
+        let promptMessageID = approval.promptMessageID,
+        callback.messageID == promptMessageID,
         accessControl.decide(
           chatKind: .supergroup,
-          chatId: context.deliveryTarget.chatId,
-          userId: callback.fromUserId
+          chatID: context.deliveryTarget.chatID,
+          userID: callback.fromUserID
         ) == .allowed(.group)
       else {
         return nil
@@ -178,27 +171,25 @@ private extension ApprovalCallbackHandler {
       do {
         guard
           try await membership.isCurrentMember(
-            chatId: context.deliveryTarget.chatId,
-            userId: callback.fromUserId
+            chatID: context.deliveryTarget.chatID,
+            userID: callback.fromUserID
           )
         else {
           return nil
         }
-      } catch {
-        return nil
-      }
+      } catch { return nil }
 
-      return ApprovalResolutionActor(actor: .groupMember, userId: callback.fromUserId)
+      return ApprovalResolutionActor(actor: .groupMember, userID: callback.fromUserID)
     }
 
     guard
-      accessControl.isAllowed(userId: callback.fromUserId),
-      callback.fromUserId == approval.ownerUserId
+      accessControl.isAllowed(userID: callback.fromUserID),
+      callback.fromUserID == approval.ownerUserID
     else {
       return nil
     }
 
-    return ApprovalResolutionActor(actor: .owner, userId: callback.fromUserId)
+    return ApprovalResolutionActor(actor: .owner, userID: callback.fromUserID)
   }
 }
 
@@ -217,15 +208,11 @@ private extension ApprovalCallbackHandler {
     return await commitDeny(callback, approval: approval, actor: actor)
   }
 
-  func commitApprove(
-    _ callback: RawCallback,
-    approval: Approval,
-    actor: ApprovalResolutionActor
-  ) async -> HandleOutcome {
+  func commitApprove(_ callback: RawCallback, approval: Approval, actor: ApprovalResolutionActor)
+    async -> HandleOutcome
+  {
     let policyVersion: String
-    do {
-      policyVersion = try currentPolicyVersion()
-    } catch {
+    do { policyVersion = try currentPolicyVersion() } catch {
       return await storeFailure(callback, error)
     }
 
@@ -237,21 +224,17 @@ private extension ApprovalCallbackHandler {
         actor: actor,
         now: now()
       )
-    } catch {
-      return await storeFailure(callback, error)
-    }
+    } catch { return await storeFailure(callback, error) }
 
     switch outcome {
     case .approved:
-      await coordinator.signal(approvalId: approval.id, .approved)
+      await coordinator.signal(.approved, forApprovalID: approval.id)
       return await finish(callback, toast: Self.approvedToast)
     case .stalePolicy:
-      await coordinator.signal(approvalId: approval.id, .denied(.stalePolicy))
+      await coordinator.signal(.denied(.stalePolicy), forApprovalID: approval.id)
       return await finish(callback, toast: Self.stalePolicyToast)
-    case .notPending:
-      return await finish(callback, toast: Self.alreadyHandledToast)
-    case .expiredRow:
-      return await commitExpiry(callback, approval: approval)
+    case .notPending: return await finish(callback, toast: Self.alreadyHandledToast)
+    case .expiredRow: return await commitExpiry(callback, approval: approval)
     }
   }
 
@@ -259,41 +242,30 @@ private extension ApprovalCallbackHandler {
   /// waiter fails the run exactly as the ticker would.
   func commitExpiry(_ callback: RawCallback, approval: Approval) async -> HandleOutcome {
     let denied: Bool
-    do {
-      denied = try approvals.deny(id: approval.id, decision: .expired, now: now())
-    } catch {
+    do { denied = try approvals.deny(id: approval.id, decision: .expired, now: now()) } catch {
       return await storeFailure(callback, error)
     }
 
     if denied {
-      await coordinator.signal(approvalId: approval.id, .denied(.expired))
+      await coordinator.signal(.denied(.expired), forApprovalID: approval.id)
     }
 
     return await finish(callback, toast: Self.expiredToast)
   }
 
-  func commitDeny(
-    _ callback: RawCallback,
-    approval: Approval,
-    actor: ApprovalResolutionActor
-  ) async -> HandleOutcome {
+  func commitDeny(_ callback: RawCallback, approval: Approval, actor: ApprovalResolutionActor) async
+    -> HandleOutcome
+  {
     let denied: Bool
     do {
-      denied = try approvals.deny(
-        id: approval.id,
-        decision: .rejected,
-        actor: actor,
-        now: now()
-      )
-    } catch {
-      return await storeFailure(callback, error)
-    }
+      denied = try approvals.deny(id: approval.id, decision: .rejected, actor: actor, now: now())
+    } catch { return await storeFailure(callback, error) }
 
     guard denied else {
       // A racing resolver (ticker/duplicate) already won; nothing to signal, answer neutrally.
       return await finish(callback, toast: Self.alreadyHandledToast)
     }
-    await coordinator.signal(approvalId: approval.id, .denied(.rejected))
+    await coordinator.signal(.denied(.rejected), forApprovalID: approval.id)
 
     return await finish(callback, toast: Self.deniedToast)
   }
@@ -306,20 +278,18 @@ private extension ApprovalCallbackHandler {
   /// `forbidden` (actor `owner` only when the sender IS the owner, else `system`), answer a neutral
   /// toast, leave the row untouched.
   func denyAuth(_ callback: RawCallback, approval: Approval?) async -> HandleOutcome {
-    let auditActor: AuditActor = approval?.ownerUserId == callback.fromUserId ? .owner : .system
+    let auditActor: AuditActor = approval?.ownerUserID == callback.fromUserID ? .owner : .system
     let event = AuditEvent(
       actor: auditActor,
-      actorUserId: callback.fromUserId,
+      actorUserID: callback.fromUserID,
       action: .messageIn,
       decision: Self.forbiddenDecision,
-      runId: approval?.runId,
-      sessionId: approval?.sessionId,
+      runID: approval?.runID,
+      sessionID: approval?.sessionID,
       ts: now()
     )
 
-    do {
-      try audit.appendAudit(event)
-    } catch {
+    do { try audit.appendAudit(event) } catch {
       logger.error("failed to audit forbidden callback: \(error)")
     }
 
@@ -338,10 +308,8 @@ private extension ApprovalCallbackHandler {
   /// Answer the callback (stop the client spinner) and report the update durably handled. The answer
   /// is best-effort: a lost toast must not re-run the resolution.
   func finish(_ callback: RawCallback, toast: String) async -> HandleOutcome {
-    do {
-      try await callbacks.answerCallbackQuery(id: callback.callbackId, text: toast)
-    } catch {
-      logger.warning("failed to answer callback \(callback.callbackId): \(error)")
+    do { try await callbacks.answerCallbackQuery(id: callback.callbackID, text: toast) } catch {
+      logger.warning("failed to answer callback \(callback.callbackID): \(error)")
     }
     return .processed
   }

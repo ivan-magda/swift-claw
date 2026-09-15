@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ApprovalDomainTests {
-  @Test func stateRawValuesMatchTheDBVocabulary() {
+@Suite
+struct ApprovalDomainTests {
+  @Test
+  func stateRawValuesMatchTheDBVocabulary() {
     // given / when / then — exactly four states, per ARCHITECTURE.md §7.1/§19.1
     #expect(ApprovalState.pending.rawValue == "PENDING")
     #expect(ApprovalState.approved.rawValue == "APPROVED")
@@ -12,7 +14,8 @@ import Testing
     #expect(ApprovalState.expired.rawValue == "EXPIRED")
   }
 
-  @Test func decisionRawValuesMatchTheAuditVocabulary() {
+  @Test
+  func decisionRawValuesMatchTheAuditVocabulary() {
     // given / when / then — the audit `decision` column vocabulary (spec §3.1, preamble D9)
     #expect(ApprovalDecision.rejected.rawValue == "rejected")
     #expect(ApprovalDecision.expired.rawValue == "expired")
@@ -21,7 +24,8 @@ import Testing
     #expect(ApprovalDecision.stalePolicy.rawValue == "stale_policy")
   }
 
-  @Test func nonceIsTwentyTwoURLSafeCharacters() {
+  @Test
+  func nonceIsTwentyTwoURLSafeCharacters() {
     // given
     let urlSafeAlphabet = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
 
@@ -31,18 +35,28 @@ import Testing
     // then — 16 bytes → base64url unpadded is exactly 22 chars, ≤ Telegram's 64-byte cap
     // with the "apr:<nonce>:y" framing
     #expect(nonce.count == 22)
-    #expect(nonce.allSatisfy { character in urlSafeAlphabet.contains(character) })
+    #expect(
+      nonce.allSatisfy { character in
+        urlSafeAlphabet.contains(character)
+      }
+    )
   }
 
-  @Test func noncesDoNotRepeat() {
+  @Test
+  func noncesDoNotRepeat() {
     // given / when — 128 bits of CSPRNG output cannot collide over a small sample
-    let nonces = Set((0..<100).map { _ in ApprovalNonce.generate() })
+    let nonces = Set(
+      (0..<100).map { _ in
+        ApprovalNonce.generate()
+      }
+    )
 
     // then
     #expect(nonces.count == 100)
   }
 
-  @Test func argsHashMatchesTheKnownSHA256Vectors() {
+  @Test
+  func argsHashMatchesTheKnownSHA256Vectors() {
     // given / when / then — pins the digest algorithm + hex rendering the approve CAS
     // recomputes against (spec §6.2 step 5)
     #expect(

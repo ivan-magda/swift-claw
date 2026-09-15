@@ -30,10 +30,8 @@ public struct StaticLLMCredentialSource: LLMCredentialSource {
     )
   }
 
-  public func reject(
-    generation: LLMCredentialGeneration,
-    disposition: LLMCredentialRejection
-  ) async {}
+  public func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async
+  {}
 
   public func shutdown() async throws {}
 }

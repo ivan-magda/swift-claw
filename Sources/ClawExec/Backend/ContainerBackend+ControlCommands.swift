@@ -21,10 +21,7 @@ extension ContainerBackend {
   }
 
   // swiftlint:disable discouraged_optional_boolean
-  func containerPresent(
-    _ identity: String,
-    deadline: ContinuousClock.Instant
-  ) async -> Bool? {
+  func containerPresent(_ identity: String, deadline: ContinuousClock.Instant) async -> Bool? {
     guard
       let containers = await listedContainers(
         limit: Self.lifecycleCommandTimeout,
@@ -33,8 +30,11 @@ extension ContainerBackend {
     else {
       return nil
     }
-    return containers.contains { $0.resolvedIdentifier == identity }
+    return containers.contains {
+      $0.resolvedIdentifier == identity
+    }
   }
+
   // swiftlint:enable discouraged_optional_boolean
 
   func cidMatches(_ identity: ExecutionIdentity, at url: URL) -> Bool {
@@ -71,11 +71,9 @@ extension ContainerBackend {
   }
 
   /// Fail-closed evidence: stdout only when the command exited 0 with neither stream truncated.
-  func boundedCommandData(
-    _ arguments: [String],
-    limit: Duration,
-    deadline: ContinuousClock.Instant
-  ) async -> Data? {
+  func boundedCommandData(_ arguments: [String], limit: Duration, deadline: ContinuousClock.Instant)
+    async -> Data?
+  {
     if let result = await boundedCommandResult(arguments, limit: limit, deadline: deadline) {
       return Self.successOutput(of: result)
     }
@@ -86,15 +84,12 @@ extension ContainerBackend {
     _ arguments: [String],
     limit: Duration,
     deadline: ContinuousClock.Instant
-  ) async -> Bool {
-    await boundedCommandData(arguments, limit: limit, deadline: deadline) != nil
-  }
+  ) async -> Bool { await boundedCommandData(arguments, limit: limit, deadline: deadline) != nil }
 
   // swiftlint:disable discouraged_optional_collection
-  func listedContainers(
-    limit: Duration,
-    deadline: ContinuousClock.Instant
-  ) async -> [ListedContainer]? {
+  func listedContainers(limit: Duration, deadline: ContinuousClock.Instant) async
+    -> [ListedContainer]?
+  {
     if let timeout = clampedTimeout(limit: limit, deadline: deadline) {
       return await Self.fetchContainerList(
         timeout: timeout,
@@ -104,13 +99,14 @@ extension ContainerBackend {
     }
     return nil
   }
+
   // swiftlint:enable discouraged_optional_collection
 
   // swiftlint:disable discouraged_optional_collection
   static func fetchContainerList(
     timeout: Duration,
     commands: any SubprocessRunning,
-    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void
+    watchdogSleep: @escaping @Sendable (_ duration: Duration) async throws -> Void
   ) async -> [ListedContainer]? {
     let result = await runControlCommand(
       ContainerInvocation.listAll(),
@@ -125,6 +121,7 @@ extension ContainerBackend {
 
     return try? JSONDecoder().decode([ListedContainer].self, from: data)
   }
+
   // swiftlint:enable discouraged_optional_collection
 
   // Control commands (stop/kill/rm/list/probe/pull) get the same host-side watchdog as the
@@ -136,7 +133,7 @@ extension ContainerBackend {
     _ arguments: [String],
     timeout: Duration,
     commands: any SubprocessRunning,
-    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void
+    watchdogSleep: @escaping @Sendable (_ duration: Duration) async throws -> Void
   ) async -> SubprocessResult {
     let command = SubprocessCommand(
       arguments: arguments,
@@ -155,20 +152,15 @@ extension ContainerBackend {
         await commands.run(command)
       }
     ) {
-    case .operationReturned(let result):
-      return result
-    case .deadlineExpired:
-      return failClosedResult(.timedOut)
-    case .callerCancelled:
-      return failClosedResult(.cancelled)
+    case .operationReturned(let result): return result
+    case .deadlineExpired: return failClosedResult(.timedOut)
+    case .callerCancelled: return failClosedResult(.cancelled)
     }
   }
 
   // Synthesized when the runner never reported: every consumer treats it fail-closed
   // (successOutput → nil, lifecycle/absence checks → false, bounded helpers → nil).
-  private static func failClosedResult(
-    _ termination: SubprocessTermination
-  ) -> SubprocessResult {
+  private static func failClosedResult(_ termination: SubprocessTermination) -> SubprocessResult {
     let empty = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
     return SubprocessResult(
       termination: termination,
@@ -179,16 +171,15 @@ extension ContainerBackend {
   }
 
   static func successOutput(of result: SubprocessResult) -> Data? {
-    guard
-      case .exited(0) = result.termination,
-      !result.stdout.truncated,
-      !result.stderr.truncated
+    guard case .exited(0) = result.termination, !result.stdout.truncated, !result.stderr.truncated
     else {
       return nil
     }
     return result.stdout.bytes
   }
 }
+
+// MARK: - Command Deadlines
 
 private extension ContainerBackend {
   func clampedTimeout(limit: Duration, deadline: ContinuousClock.Instant) -> Duration? {

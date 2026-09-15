@@ -4,13 +4,15 @@ import Testing
 
 @testable import ClawAuth
 
-@Suite struct ChatGPTProviderMetadataTests {
+@Suite
+struct ChatGPTProviderMetadataTests {
   // MARK: - Pinned Protocol Values
 
   /// The values observed in the studied clients. They are provider implementation constants, not
   /// configuration: this test is the diff a reviewer reads, so each literal is spelled out here
   /// rather than derived from the source under test.
-  @Test func protocolValuesMatchTheStudiedClients() {
+  @Test
+  func protocolValuesMatchTheStudiedClients() {
     // given / when / then
     #expect(ChatGPTProviderMetadata.issuer == "https://auth.openai.com")
     #expect(ChatGPTProviderMetadata.clientID == "app_EMoamEEZ73f0CkXaXp7hrann")
@@ -24,9 +26,7 @@ import Testing
     )
     #expect(ChatGPTProviderMetadata.tokenURL == "https://auth.openai.com/oauth/token")
     #expect(ChatGPTProviderMetadata.verificationURL == "https://auth.openai.com/codex/device")
-    #expect(
-      ChatGPTProviderMetadata.redirectURI == "https://auth.openai.com/deviceauth/callback"
-    )
+    #expect(ChatGPTProviderMetadata.redirectURI == "https://auth.openai.com/deviceauth/callback")
     #expect(
       ChatGPTProviderMetadata.responsesURL == "https://chatgpt.com/backend-api/codex/responses"
     )
@@ -37,7 +37,8 @@ import Testing
     #expect(ChatGPTProviderMetadata.accountHeaderName == "ChatGPT-Account-ID")
   }
 
-  @Test func pinnedDurationsMatchTheStudiedClients() {
+  @Test
+  func pinnedDurationsMatchTheStudiedClients() {
     // given / when / then
     #expect(ChatGPTProviderMetadata.maximumLoginWait == .seconds(15 * 60))
     #expect(ChatGPTProviderMetadata.defaultPollInterval == .seconds(5))
@@ -45,7 +46,8 @@ import Testing
     #expect(ChatGPTProviderMetadata.credentialFreshnessSkew == .seconds(120))
   }
 
-  @Test func everyDeviceAuthUrlIsBuiltOnThePinnedIssuer() {
+  @Test
+  func everyDeviceAuthURLIsBuiltOnThePinnedIssuer() {
     // given
     let issued = [
       ChatGPTProviderMetadata.userCodeURL,
@@ -63,7 +65,8 @@ import Testing
 
   // MARK: - Reused Identity
 
-  @Test func identityIsTheRegisteredRouteRatherThanASecondDeclaration() {
+  @Test
+  func identityIsTheRegisteredRouteRatherThanASecondDeclaration() {
     // given / when / then
     #expect(ChatGPTProviderMetadata.providerID == .openAIChatGPT)
     #expect(ChatGPTProviderMetadata.providerID == LLMProviderDescriptor.openAIChatGPT.providerID)
@@ -76,7 +79,8 @@ import Testing
 
   // MARK: - Authorization: Bearer
 
-  @Test func authorizationCarriesTheBearerAndTheCallersGeneration() {
+  @Test
+  func authorizationCarriesTheBearerAndTheCallersGeneration() {
     // given
     let token = TokenBuilder.accessToken(accountID: nil)
 
@@ -91,15 +95,13 @@ import Testing
     #expect(authorization.generation == LLMCredentialGeneration(value: 7))
   }
 
-  @Test func authorizationRedactsTheAccessTokenItPutsOnTheWire() {
+  @Test
+  func authorizationRedactsTheAccessTokenItPutsOnTheWire() {
     // given
     let token = TokenBuilder.accessToken(accountID: nil)
 
     // when
-    let authorization = ChatGPTProviderMetadata.authorization(
-      accessToken: token,
-      generation: .zero
-    )
+    let authorization = ChatGPTProviderMetadata.authorization(accessToken: token, generation: .zero)
 
     // then
     #expect(authorization.redactionValues.contains(token))
@@ -107,15 +109,13 @@ import Testing
 
   // MARK: - Authorization: Account Header
 
-  @Test func authorizationAddsAndRedactsAUsableAccountClaim() {
+  @Test
+  func authorizationAddsAndRedactsAUsableAccountClaim() {
     // given
     let token = TokenBuilder.accessToken(accountID: "acct-abc-123")
 
     // when
-    let authorization = ChatGPTProviderMetadata.authorization(
-      accessToken: token,
-      generation: .zero
-    )
+    let authorization = ChatGPTProviderMetadata.authorization(accessToken: token, generation: .zero)
 
     // then
     #expect(authorization.headers["ChatGPT-Account-ID"] == "acct-abc-123")
@@ -144,27 +144,22 @@ import Testing
   ])
   func authorizationOmitsTheAccountHeaderForAnUnusableClaim(token: String) {
     // given / when
-    let authorization = ChatGPTProviderMetadata.authorization(
-      accessToken: token,
-      generation: .zero
-    )
+    let authorization = ChatGPTProviderMetadata.authorization(accessToken: token, generation: .zero)
 
     // then
     #expect(authorization.headers["ChatGPT-Account-ID"] == nil)
     #expect(authorization.headers["Authorization"] == "Bearer \(token)")
   }
 
-  @Test func authorizationComposesFromAMalformedTokenRatherThanFailing() {
+  @Test
+  func authorizationComposesFromAMalformedTokenRatherThanFailing() {
     // given
     // A token the parser cannot read is still handed to the server, which is the only party that
     // can judge it. Composition must not treat an unreadable claim as a credential failure.
     let token = "garbage.not-base64url.at-all"
 
     // when
-    let authorization = ChatGPTProviderMetadata.authorization(
-      accessToken: token,
-      generation: .zero
-    )
+    let authorization = ChatGPTProviderMetadata.authorization(accessToken: token, generation: .zero)
 
     // then
     #expect(authorization.headers["Authorization"] == "Bearer \(token)")
@@ -173,17 +168,15 @@ import Testing
 
   // MARK: - Authorization: Header Surface
 
-  @Test func authorizationReturnsOnlyCredentialDependentHeaders() {
+  @Test
+  func authorizationReturnsOnlyCredentialDependentHeaders() {
     // given
     // Content type, originator, and user agent belong to the wire adapter; a credential source
     // that also owned them would leak provider transport concerns into the auth seam.
     let token = TokenBuilder.accessToken(accountID: "acct-1")
 
     // when
-    let authorization = ChatGPTProviderMetadata.authorization(
-      accessToken: token,
-      generation: .zero
-    )
+    let authorization = ChatGPTProviderMetadata.authorization(accessToken: token, generation: .zero)
 
     // then
     #expect(Set(authorization.headers.keys) == ["Authorization", "ChatGPT-Account-ID"])

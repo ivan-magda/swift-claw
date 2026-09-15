@@ -7,7 +7,9 @@ import Foundation
 #endif
 
 enum CodexReportStatus: String, Sendable, Codable {
-  case succeeded, blocked, failed
+  case succeeded
+  case blocked
+  case failed
 }
 
 // swiftlint:disable discouraged_optional_collection
@@ -25,7 +27,12 @@ struct CodexReport: Sendable, Decodable {
   let error: String?
 
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case status, summary, branch, commit, checks, error
+    case status
+    case summary
+    case branch
+    case commit
+    case checks
+    case error
     case startingCommit = "starting_commit"
     case baseBranch = "base_branch"
     case changedFiles = "changed_files"
@@ -39,8 +46,11 @@ struct CodexReport: Sendable, Decodable {
     }
     defer { close(descriptor) }
     var metadata = stat()
-    guard fstat(descriptor, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG,
-      metadata.st_size >= 0, metadata.st_size <= byteLimit
+    guard
+      fstat(descriptor, &metadata) == 0,
+      metadata.st_mode & S_IFMT == S_IFREG,
+      metadata.st_size >= 0,
+      metadata.st_size <= byteLimit
     else {
       throw CodexProtocolFailure.invalidReport
     }
@@ -59,7 +69,8 @@ struct CodexReport: Sendable, Decodable {
       }
       data.append(contentsOf: buffer.prefix(count))
     }
-    guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+    guard
+      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       Set(object.keys) == Set(CodingKeys.allCases.map(\.rawValue))
     else {
       throw CodexProtocolFailure.invalidReport
@@ -67,8 +78,7 @@ struct CodexReport: Sendable, Decodable {
     return try JSONDecoder().decode(Self.self, from: data)
   }
 }
+
 // swiftlint:enable discouraged_optional_collection
 
-enum CodexProtocolFailure: Error {
-  case invalidReport, invalidEvents
-}
+enum CodexProtocolFailure: Error { case invalidReport, invalidEvents }

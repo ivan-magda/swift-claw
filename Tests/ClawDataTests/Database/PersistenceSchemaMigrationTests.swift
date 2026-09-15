@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct PersistenceSchemaMigrationTests {
-  @Test func createsPersistenceTables() throws {
+@Suite
+struct PersistenceSchemaMigrationTests {
+  @Test
+  func createsPersistenceTables() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -18,20 +20,26 @@ import Testing
         try String.fetchAll(
           db,
           sql: """
-            SELECT name FROM sqlite_master WHERE type='table' \
-            AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
-            """
+          SELECT name FROM sqlite_master WHERE type='table' \
+          AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'grdb_%'
+          """
         )
       )
     }
     #expect(
       tables.isSuperset(of: [
-        "sessions", "messages", "runs", "provider_usage", "outbound_deliveries", "audit_events",
+        "sessions",
+        "messages",
+        "runs",
+        "provider_usage",
+        "outbound_deliveries",
+        "audit_events",
       ])
     )
   }
 
-  @Test func foreignKeysAreEnforced() throws {
+  @Test
+  func foreignKeysAreEnforced() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -41,9 +49,9 @@ import Testing
       try queue.write { db in
         try db.execute(
           sql: """
-            INSERT INTO messages(session_id, role, content, provenance, ts) \
-            VALUES (9999,'user','x','trusted',?)
-            """,
+          INSERT INTO messages(session_id, role, content, provenance, ts) \
+          VALUES (9999,'user','x','trusted',?)
+          """,
           arguments: [Date()]
         )
       }
@@ -56,7 +64,8 @@ import Testing
     }
   }
 
-  @Test func migrationV3AddsLaneLifecycleColumns() throws {
+  @Test
+  func migrationV3AddsLaneLifecycleColumns() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 

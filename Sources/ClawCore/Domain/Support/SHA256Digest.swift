@@ -3,16 +3,15 @@ import Foundation
 
 public enum SHA256Digest {
   package static func isCanonicalHex(_ value: String) -> Bool {
-    value.count == 64 && value.allSatisfy { "0123456789abcdef".contains($0) }
+    value.count == 64
+      && value.allSatisfy {
+        "0123456789abcdef".contains($0)
+      }
   }
 
-  public static func hex(_ data: Data) -> String {
-    hex(digest: SHA256.hash(data: data))
-  }
+  public static func hex(_ data: Data) -> String { hex(digest: SHA256.hash(data: data)) }
 
-  public static func hex(_ text: String) -> String {
-    hex(Data(text.utf8))
-  }
+  public static func hex(_ text: String) -> String { hex(Data(text.utf8)) }
 
   /// Lowercase hex of an already-computed digest (or any byte sequence), so a caller that streams
   /// its own `SHA256` hasher can finish through the same rendering the `Data` overload uses.

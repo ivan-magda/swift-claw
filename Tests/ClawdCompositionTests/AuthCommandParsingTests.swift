@@ -4,8 +4,10 @@ import Testing
 
 @testable import clawd
 
-@Suite struct AuthCommandParsingTests {
-  @Test func authSubcommandsParseWithoutAProviderOption() throws {
+@Suite
+struct AuthCommandParsingTests {
+  @Test
+  func authSubcommandsParseWithoutAProviderOption() throws {
     // given
     let loginArguments = ["auth", "login"]
     let statusArguments = ["auth", "status"]
@@ -22,7 +24,8 @@ import Testing
     #expect(logout is AuthCommand.Logout)
   }
 
-  @Test func authHelpDoesNotAdvertiseAProviderOption() {
+  @Test
+  func authHelpDoesNotAdvertiseAProviderOption() {
     // given
     let removedOption = "--provider"
 
@@ -41,12 +44,11 @@ import Testing
     )
   }
 
-  @Test func providerOptionIsRejectedAsUnknown() {
+  @Test
+  func providerOptionIsRejectedAsUnknown() {
     // given
     let removedOption = "--provider"
-    let arguments = [
-      "auth", "status", removedOption, ChatGPTProviderMetadata.providerID.rawValue,
-    ]
+    let arguments = ["auth", "status", removedOption, ChatGPTProviderMetadata.providerID.rawValue]
 
     // when
     do {

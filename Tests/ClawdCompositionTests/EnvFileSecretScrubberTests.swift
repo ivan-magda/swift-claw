@@ -5,17 +5,19 @@ import Testing
 
 @testable import clawd
 
-@Suite struct EnvFileSecretScrubberTests {
-  @Test func blanksOnlyTheListedSecretKeysAndKeepsEverythingElse() {
+@Suite
+struct EnvFileSecretScrubberTests {
+  @Test
+  func blanksOnlyTheListedSecretKeysAndKeepsEverythingElse() {
     // given — an env file with secrets, comments, and non-secret assignments
     let contents = """
-      # --- SECRETS ---
-      CLAW_TELEGRAM_BOT_TOKEN=123456:real-token
-      CLAW_ALLOWLIST=12345678
-      export CLAW_LLM_API_KEY=sk-live-key
-        CLAW_SEARCH_API_KEY=exa-key
-      CLAW_LLM_MODEL=claude-sonnet-4-6
-      """
+    # --- SECRETS ---
+    CLAW_TELEGRAM_BOT_TOKEN=123456:real-token
+    CLAW_ALLOWLIST=12345678
+    export CLAW_LLM_API_KEY=sk-live-key
+      CLAW_SEARCH_API_KEY=exa-key
+    CLAW_LLM_MODEL=claude-sonnet-4-6
+    """
 
     // when
     let result = EnvFileSecretScrubber.scrub(
@@ -26,56 +28,53 @@ import Testing
     // then — secret values are blanked in place; structure, comments, other keys untouched
     #expect(
       result.contents == """
-        # --- SECRETS ---
-        CLAW_TELEGRAM_BOT_TOKEN=
-        CLAW_ALLOWLIST=12345678
-        export CLAW_LLM_API_KEY=
-          CLAW_SEARCH_API_KEY=
-        CLAW_LLM_MODEL=claude-sonnet-4-6
-        """
+      # --- SECRETS ---
+      CLAW_TELEGRAM_BOT_TOKEN=
+      CLAW_ALLOWLIST=12345678
+      export CLAW_LLM_API_KEY=
+        CLAW_SEARCH_API_KEY=
+      CLAW_LLM_MODEL=claude-sonnet-4-6
+      """
     )
     #expect(
-      result.scrubbedKeys == [
-        "CLAW_TELEGRAM_BOT_TOKEN", "CLAW_LLM_API_KEY", "CLAW_SEARCH_API_KEY",
-      ]
+      result.scrubbedKeys == ["CLAW_TELEGRAM_BOT_TOKEN", "CLAW_LLM_API_KEY", "CLAW_SEARCH_API_KEY"]
     )
   }
 
-  @Test func sealBlanksEverySecretItSeals() {
+  @Test
+  func sealBlanksEverySecretItSeals() {
     // given — an env file carrying every sealed secret, the fallback key among them
     let contents = """
-      CLAW_TELEGRAM_BOT_TOKEN=123456:real-token
-      CLAW_LLM_API_KEY=sk-live-key
-      CLAW_LLM_FALLBACK_API_KEY=sk-fallback-key
-      CLAW_SEARCH_API_KEY=exa-key
-      CLAW_LLM_MODEL=claude-sonnet-4-6
-      """
+    CLAW_TELEGRAM_BOT_TOKEN=123456:real-token
+    CLAW_LLM_API_KEY=sk-live-key
+    CLAW_LLM_FALLBACK_API_KEY=sk-fallback-key
+    CLAW_SEARCH_API_KEY=exa-key
+    CLAW_LLM_MODEL=claude-sonnet-4-6
+    """
 
     // when — scrubbing with the very list `secrets seal` passes
-    let result = EnvFileSecretScrubber.scrub(
-      contents: contents,
-      keys: EnvSecretStore.EnvKey.sealed
-    )
+    let result = EnvFileSecretScrubber.scrub(contents: contents, keys: EnvSecretStore.EnvKey.sealed)
 
     // then — nothing the envelope now holds is left in plaintext
     #expect(
       result.contents == """
-        CLAW_TELEGRAM_BOT_TOKEN=
-        CLAW_LLM_API_KEY=
-        CLAW_LLM_FALLBACK_API_KEY=
-        CLAW_SEARCH_API_KEY=
-        CLAW_LLM_MODEL=claude-sonnet-4-6
-        """
-    )
-    #expect(result.scrubbedKeys.contains(EnvSecretStore.EnvKey.llmFallbackApiKey))
-  }
-
-  @Test func reportsNothingScrubbedWhenValuesAreAlreadyBlankOrKeysAbsent() {
-    // given — secrets already blank or missing entirely
-    let contents = """
       CLAW_TELEGRAM_BOT_TOKEN=
+      CLAW_LLM_API_KEY=
+      CLAW_LLM_FALLBACK_API_KEY=
+      CLAW_SEARCH_API_KEY=
       CLAW_LLM_MODEL=claude-sonnet-4-6
       """
+    )
+    #expect(result.scrubbedKeys.contains(EnvSecretStore.EnvKey.llmFallbackAPIKey))
+  }
+
+  @Test
+  func reportsNothingScrubbedWhenValuesAreAlreadyBlankOrKeysAbsent() {
+    // given — secrets already blank or missing entirely
+    let contents = """
+    CLAW_TELEGRAM_BOT_TOKEN=
+    CLAW_LLM_MODEL=claude-sonnet-4-6
+    """
 
     // when
     let result = EnvFileSecretScrubber.scrub(
@@ -89,21 +88,23 @@ import Testing
   }
 }
 
-@Suite struct SealScrubFileTests {
-  @Test func scrubsTheFileInPlacePreservingMode0600() throws {
+@Suite
+struct SealScrubFileTests {
+  @Test
+  func scrubsTheFileInPlacePreservingMode0600() throws {
     // given — a 0600 env file holding real-looking secrets
     let dir = try makeTemporaryRoot(prefix: "claw-scrub")
     defer { try? FileManager.default.removeItem(at: dir) }
     let filePath = dir.appendingPathComponent("clawd.env").path
-    try "CLAW_TELEGRAM_BOT_TOKEN=123:abc\nCLAW_LLM_MODEL=m\n"
-      .write(toFile: filePath, atomically: true, encoding: .utf8)
+    try "CLAW_TELEGRAM_BOT_TOKEN=123:abc\nCLAW_LLM_MODEL=m\n".write(
+      toFile: filePath,
+      atomically: true,
+      encoding: .utf8
+    )
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath)
 
     // when
-    let outcome = SecretsCommand.Seal.scrubEnvFile(
-      at: filePath,
-      keys: ["CLAW_TELEGRAM_BOT_TOKEN"]
-    )
+    let outcome = SecretsCommand.Seal.scrubEnvFile(at: filePath, keys: ["CLAW_TELEGRAM_BOT_TOKEN"])
 
     // then — value blanked, mode preserved, outcome names the key
     #expect(outcome == .scrubbed(keys: ["CLAW_TELEGRAM_BOT_TOKEN"], path: filePath))
@@ -113,24 +114,22 @@ import Testing
     #expect((mode as? NSNumber)?.intValue == 0o600)
   }
 
-  @Test func scrubbingViaSymlinkRewritesTheTargetAndPreservesTheLink() throws {
+  @Test
+  func scrubbingViaSymlinkRewritesTheTargetAndPreservesTheLink() throws {
     // given — a real env file plus a symlink pointing at it
     let dir = try makeTemporaryRoot(prefix: "claw-scrub-link")
     defer { try? FileManager.default.removeItem(at: dir) }
     let targetPath = dir.appendingPathComponent("clawd.env").path
     let linkPath = dir.appendingPathComponent("clawd.env.link").path
-    try "CLAW_TELEGRAM_BOT_TOKEN=123:abc\nCLAW_LLM_MODEL=m\n"
-      .write(toFile: targetPath, atomically: true, encoding: .utf8)
-    try FileManager.default.createSymbolicLink(
-      atPath: linkPath,
-      withDestinationPath: targetPath
+    try "CLAW_TELEGRAM_BOT_TOKEN=123:abc\nCLAW_LLM_MODEL=m\n".write(
+      toFile: targetPath,
+      atomically: true,
+      encoding: .utf8
     )
+    try FileManager.default.createSymbolicLink(atPath: linkPath, withDestinationPath: targetPath)
 
     // when — scrubbing through the symlink path
-    let outcome = SecretsCommand.Seal.scrubEnvFile(
-      at: linkPath,
-      keys: ["CLAW_TELEGRAM_BOT_TOKEN"]
-    )
+    let outcome = SecretsCommand.Seal.scrubEnvFile(at: linkPath, keys: ["CLAW_TELEGRAM_BOT_TOKEN"])
 
     // then — the outcome names the resolved path, the target is blanked, the link survives
     let resolvedPath = URL(fileURLWithPath: linkPath).resolvingSymlinksInPath().path
@@ -142,7 +141,8 @@ import Testing
     #expect(linkType as? FileAttributeType == .typeSymbolicLink)
   }
 
-  @Test func absentFileYieldsFileAbsentNotAnError() {
+  @Test
+  func absentFileYieldsFileAbsentNotAnError() {
     // given / when
     let outcome = SecretsCommand.Seal.scrubEnvFile(
       at: "/nonexistent/clawd.env",
@@ -153,7 +153,8 @@ import Testing
     #expect(outcome == .fileAbsent(path: "/nonexistent/clawd.env"))
   }
 
-  @Test func summaryWarnsLoudlyWhenScrubFailed() {
+  @Test
+  func summaryWarnsLoudlyWhenScrubFailed() {
     // given / when — a failed scrub must tell the user plaintext is still on disk
     let summary = SecretsCommand.Seal.sealSummary(
       envelopePath: "/root/secrets.enc",

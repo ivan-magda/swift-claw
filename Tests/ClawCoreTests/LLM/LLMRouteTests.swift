@@ -8,9 +8,7 @@ private final class BaseURLProbe {
   private(set) var accessCount = 0
   private let value: String?
 
-  init(returning value: String? = nil) {
-    self.value = value
-  }
+  init(returning value: String? = nil) { self.value = value }
 
   func read() throws -> String {
     accessCount += 1
@@ -21,14 +19,14 @@ private final class BaseURLProbe {
   }
 }
 
-private enum ProbeFailure: Error, Equatable {
-  case evaluated
-}
+private enum ProbeFailure: Error, Equatable { case evaluated }
 
-@Suite struct LLMRouteTests {
+@Suite
+struct LLMRouteTests {
   // MARK: - Provider Identity
 
-  @Test func providerIdentitiesAreStableStrings() {
+  @Test
+  func providerIdentitiesAreStableStrings() {
     // given / when / then
     #expect(LLMProviderID.openAICompatible.rawValue == "openai-compatible")
     #expect(LLMProviderID.openAIChatGPT.rawValue == "openai-chatgpt")
@@ -61,7 +59,8 @@ private enum ProbeFailure: Error, Equatable {
     #expect(probe.accessCount == 0)
   }
 
-  @Test func theManagedRouteNeitherReadsNorEmbedsTheConfiguredBaseURL() throws {
+  @Test
+  func theManagedRouteNeitherReadsNorEmbedsTheConfiguredBaseURL() throws {
     // given — a base URL that would resolve successfully if the route ever read it
     let probe = BaseURLProbe(returning: "https://poison.example/v1")
 
@@ -82,7 +81,8 @@ private enum ProbeFailure: Error, Equatable {
     #expect(probe.accessCount == 0)
   }
 
-  @Test func theManagedDescriptorEncodesTheCodexResponsesCapabilities() throws {
+  @Test
+  func theManagedDescriptorEncodesTheCodexResponsesCapabilities() throws {
     // given
     let probe = BaseURLProbe()
 
@@ -102,7 +102,8 @@ private enum ProbeFailure: Error, Equatable {
 
   // MARK: - Managed Suffix Validation
 
-  @Test func anEmptyQualifiedSuffixIsAConfigurationError() {
+  @Test
+  func anEmptyQualifiedSuffixIsAConfigurationError() {
     // given
     let probe = BaseURLProbe(returning: "https://api.example.com/v1")
 
@@ -116,22 +117,21 @@ private enum ProbeFailure: Error, Equatable {
     #expect(probe.accessCount == 0)
   }
 
-  @Test func aQualifiedSuffixPastTwoHundredScalarsIsRejected() {
+  @Test
+  func aQualifiedSuffixPastTwoHundredScalarsIsRejected() {
     // given
     let reference = "openai-chatgpt/" + String(repeating: "a", count: 201)
     let probe = BaseURLProbe(returning: "https://api.example.com/v1")
 
     // when / then
     #expect(throws: ConfigError.oversizedQualifiedModelSuffix(reference: reference)) {
-      try LLMProviderRegistry.resolve(
-        modelReference: reference,
-        configuredBaseURL: probe.read()
-      )
+      try LLMProviderRegistry.resolve(modelReference: reference, configuredBaseURL: probe.read())
     }
     #expect(probe.accessCount == 0)
   }
 
-  @Test func aQualifiedSuffixOfExactlyTwoHundredScalarsIsAccepted() throws {
+  @Test
+  func aQualifiedSuffixOfExactlyTwoHundredScalarsIsAccepted() throws {
     // given
     let suffix = String(repeating: "a", count: 200)
     let probe = BaseURLProbe()
@@ -148,9 +148,9 @@ private enum ProbeFailure: Error, Equatable {
 
   @Test(arguments: [
     "openai-chatgpt/gpt 5",
-    "openai-chatgpt/gpt\u{0009}5",
+    "openai-chatgpt/gpt\t5",
     "openai-chatgpt/gpt\n5",
-    "openai-chatgpt/gpt\u{0000}5",
+    "openai-chatgpt/gpt\05",
     "openai-chatgpt/gpt;rm -rf /",
     "openai-chatgpt/$(id)",
     "openai-chatgpt/gpt&5",
@@ -167,10 +167,7 @@ private enum ProbeFailure: Error, Equatable {
 
     // when / then
     #expect(throws: ConfigError.unsafeQualifiedModelSuffix(reference: reference)) {
-      try LLMProviderRegistry.resolve(
-        modelReference: reference,
-        configuredBaseURL: probe.read()
-      )
+      try LLMProviderRegistry.resolve(modelReference: reference, configuredBaseURL: probe.read())
     }
     #expect(probe.accessCount == 0)
   }
@@ -228,11 +225,7 @@ private enum ProbeFailure: Error, Equatable {
     #expect(probe.accessCount == 1)
   }
 
-  @Test(arguments: [
-    "local model 1",
-    "-leading-dash",
-    "gpt-5.4\u{00E9}",
-  ])
+  @Test(arguments: ["local model 1", "-leading-dash", "gpt-5.4\u{00E9}"])
   func rawModelsKeepTheirExistingValidationBehavior(reference: String) throws {
     // given — bytes the managed route rejects; the current route has never validated them
     let probe = BaseURLProbe(returning: "https://api.example.com/v1")
@@ -247,7 +240,8 @@ private enum ProbeFailure: Error, Equatable {
     #expect(route.wireModel == reference)
   }
 
-  @Test func aRawModelLongerThanTheManagedSuffixCapIsPreservedWhole() throws {
+  @Test
+  func aRawModelLongerThanTheManagedSuffixCapIsPreservedWhole() throws {
     // given
     let reference = String(repeating: "z", count: 201)
     let probe = BaseURLProbe(returning: "https://api.example.com/v1")
@@ -262,7 +256,8 @@ private enum ProbeFailure: Error, Equatable {
     #expect(route.wireModel == reference)
   }
 
-  @Test func theCurrentDescriptorKeepsTodaysChatCompletionsCapabilities() throws {
+  @Test
+  func theCurrentDescriptorKeepsTodaysChatCompletionsCapabilities() throws {
     // given
     let probe = BaseURLProbe(returning: "https://api.example.com/v1")
 
@@ -288,10 +283,9 @@ private enum ProbeFailure: Error, Equatable {
     ("https://api.example.com/v1///", "https://api.example.com/v1"),
     ("  https://api.example.com/v1/  ", "https://api.example.com/v1"),
   ])
-  func theCurrentRouteCanonicalizesTheConfiguredEndpoint(
-    configured: String,
-    expected: String
-  ) throws {
+  func theCurrentRouteCanonicalizesTheConfiguredEndpoint(configured: String, expected: String)
+    throws
+  {
     // given
     let probe = BaseURLProbe(returning: configured)
 
@@ -306,16 +300,14 @@ private enum ProbeFailure: Error, Equatable {
     #expect(probe.accessCount == 1)
   }
 
-  @Test func theCurrentRouteSurfacesAnUnresolvableBaseURL() {
+  @Test
+  func theCurrentRouteSurfacesAnUnresolvableBaseURL() {
     // given
     let probe = BaseURLProbe()
 
     // when / then
     #expect(throws: ProbeFailure.evaluated) {
-      try LLMProviderRegistry.resolve(
-        modelReference: "gpt-5.4",
-        configuredBaseURL: probe.read()
-      )
+      try LLMProviderRegistry.resolve(modelReference: "gpt-5.4", configuredBaseURL: probe.read())
     }
     #expect(probe.accessCount == 1)
   }

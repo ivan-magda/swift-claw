@@ -6,7 +6,12 @@ import Testing
 
 extension CodexBackendTests {
   @Test(arguments: [
-    "confirmed", "wrongRepository", "wrongHead", "wrongHeadOID", "wrongBase", "defaultMismatch",
+    "confirmed",
+    "wrongRepository",
+    "wrongHead",
+    "wrongHeadOID",
+    "wrongBase",
+    "defaultMismatch",
     "unavailable",
     "missingURL",
   ])
@@ -19,7 +24,9 @@ extension CodexBackendTests {
     let url = "https://github.com/owner/project/pull/42"
     try fixture.report([
       "pr_url": mode == "missingURL" ? NSNull() : url,
-      "branch": "trunk", "base_branch": "release", "commit": commit,
+      "branch": "trunk",
+      "base_branch": "release",
+      "commit": commit,
     ])
     let pull: [String: Any] = [
       "url": mode == "wrongRepository" ? "https://github.com/other/project/pull/42" : url,
@@ -70,7 +77,8 @@ extension CodexBackendTests {
     }
   }
 
-  @Test(arguments: [true, false]) func remoteEvidence(cloned: Bool) async throws {
+  @Test(arguments: [true, false])
+  func remoteEvidence(cloned: Bool) async throws {
     // given
     let fixture = try await CodexFixture()
     defer { try? FileManager.default.removeItem(at: fixture.git.root) }
@@ -107,7 +115,8 @@ extension CodexBackendTests {
 }
 
 extension CodexBackendTests {
-  @Test(arguments: [false, true]) func localUnavailableInventory(unborn: Bool) async throws {
+  @Test(arguments: [false, true])
+  func localUnavailableInventory(unborn: Bool) async throws {
     // given
     let fixture = try await CodexFixture()
     defer { try? FileManager.default.removeItem(at: fixture.git.root) }

@@ -5,11 +5,9 @@ import GRDB
 // MARK: - Boot Reconciliation & Health
 
 extension RunStoreGRDB {
-  public func reconcileRunsAtBoot(
-    now: Date,
-    degradationText: String,
-    heartbeatNoticeChatId: Int64?
-  ) throws(StoreError) -> [DegradationReply] {
+  public func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
+    throws(StoreError) -> [DegradationReply]
+  {
     try database.writeMapping { db in
       // AWAITING_APPROVAL is deliberately excluded, not merely omitted: a suspended run is a live
       // durable checkpoint, not a crash orphan. The approval boot reconciliation
@@ -19,37 +17,33 @@ extension RunStoreGRDB {
       let stale = try Row.fetchAll(
         db,
         sql: """
-          SELECT r.id AS run_id, r.job_id AS job_id, s.session_key AS session_key FROM runs r
-          JOIN sessions s ON s.id = r.session_id
-          WHERE r.state IN (?, ?)
-          ORDER BY r.id ASC
-          """,
+        SELECT r.id AS run_id, r.job_id AS job_id, s.session_key AS session_key FROM runs r
+        JOIN sessions s ON s.id = r.session_id
+        WHERE r.state IN (?, ?)
+        ORDER BY r.id ASC
+        """,
         arguments: StatementArguments(orphanFailStates)
       )
 
       var replies: [DegradationReply] = []
       for row in stale {
-        let runId: Int64 = row["run_id"]
-        let disposition = try Self.orphanDisposition(db, runId: runId)
+        let runID: Int64 = row["run_id"]
+        let disposition = try Self.orphanDisposition(db, runID: runID)
         guard
-          try Self.transitionRun(
-            db,
-            runId: runId,
-            event: .fail,
-            now: now,
-            terminal: disposition
-          ) != nil
+          try Self
+            .transitionRun(db, runID: runID, event: .fail, now: now, terminal: disposition)
+            != nil
         else {
           continue
         }
 
-        try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+        try Self.appendJobFailedIfJobRun(db, runID: runID, now: now)
 
         let reply = try Self.enqueueOrphanNotice(
           db,
           orphan: row,
           degradationText: degradationText,
-          heartbeatNoticeChatId: heartbeatNoticeChatId,
+          heartbeatNoticeChatID: heartbeatNoticeChatID,
           now: now
         )
         if let reply {
@@ -77,25 +71,25 @@ extension RunStoreGRDB {
     _ db: Database,
     orphan row: Row,
     degradationText: String,
-    heartbeatNoticeChatId: Int64?,
+    heartbeatNoticeChatID: Int64?,
     now: Date
   ) throws -> DegradationReply? {
-    let runId: Int64 = row["run_id"]
-    let jobId: Int64? = row["job_id"]
+    let runID: Int64 = row["run_id"]
+    let jobID: Int64? = row["job_id"]
     let sessionKey: String = row["session_key"]
-    let noticeChatId: Int64?
-    if let jobId {
-      noticeChatId = try Int64.fetchOne(
+    let noticeChatID: Int64?
+    if let jobID {
+      noticeChatID = try Int64.fetchOne(
         db,
         sql: "SELECT owner_chat_id FROM scheduled_jobs WHERE id = ?",
-        arguments: [jobId]
+        arguments: [jobID]
       )
     } else if sessionKey == SessionKey.heartbeat {
       // The heartbeat session has no chat id anywhere in the DB — the notice rides the
       // config-derived owner target the boot caller resolved.
-      noticeChatId = heartbeatNoticeChatId
+      noticeChatID = heartbeatNoticeChatID
     } else {
-      noticeChatId = SessionKey.chatId(from: sessionKey)
+      noticeChatID = SessionKey.chatID(from: sessionKey)
     }
 
     // Suppress the notice only when the owner already saw a genuine REPLY. The newest SENT
@@ -107,14 +101,14 @@ extension RunStoreGRDB {
     let newestSent = try Row.fetchOne(
       db,
       sql: """
-        SELECT approval_id FROM outbound_deliveries
-        WHERE run_id = ? AND status = 'SENT'
-        ORDER BY step_index DESC LIMIT 1
-        """,
-      arguments: [runId]
+      SELECT approval_id FROM outbound_deliveries
+      WHERE run_id = ? AND status = 'SENT'
+      ORDER BY step_index DESC LIMIT 1
+      """,
+      arguments: [runID]
     )
     let ownerSawAReply = newestSent != nil && (newestSent?["approval_id"] as Int64?) == nil
-    guard ownerSawAReply == false, let chatId = noticeChatId else {
+    guard ownerSawAReply == false, let chatID = noticeChatID else {
       return nil
     }
 
@@ -122,15 +116,15 @@ extension RunStoreGRDB {
     // holds its approval prompt at step 0, and a raw step-0 notice would be dropped silently
     // by the dedup key.
     let chunk = OutboxChunk(
-      stepIndex: try OutboxInsertion.nextOutboxStepBase(db, runId: runId),
-      chatId: chatId,
+      stepIndex: try OutboxInsertion.nextOutboxStepBase(db, runID: runID),
+      chatID: chatID,
       payload: degradationText,
       payloadHash: ContentHash.fnv1a(degradationText)
     )
-    guard try OutboxInsertion.insertOutbox(db, runId: runId, chunk: chunk, now: now) else {
+    guard try OutboxInsertion.insertOutbox(db, runID: runID, chunk: chunk, now: now) else {
       return nil
     }
-    return DegradationReply(chatId: chatId, runId: runId, text: degradationText)
+    return DegradationReply(chatID: chatID, runID: runID, text: degradationText)
   }
 
   /// A crashed orphan is `incomplete`: the turn stopped mid-flight and `RunState` alone cannot say
@@ -138,33 +132,32 @@ extension RunStoreGRDB {
   /// approval was granted and claimed, and `settleClaimedApprovalAtBoot` still owes it the
   /// observation, so its evidence must not freeze here. The predicate is shared with the backstop
   /// sweep below, which must exclude exactly the same runs.
-  static func orphanDisposition(_ db: Database, runId: Int64) throws -> TerminalDisposition {
+  static func orphanDisposition(_ db: Database, runID: Int64) throws -> TerminalDisposition {
     let owed = try ScheduledLearningStoreGRDB.owesUnresolvedFact(
       db,
-      runId: runId,
+      runID: runID,
       unresolvedObservationContent: Self.placeholderObservationContent
     )
     return owed ? .deferred(.approvalUnresolved) : .settled(.incomplete)
   }
 
   public func settleClaimedApprovalAtBoot(  // swiftlint:disable:this function_parameter_count
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
-    noticeChatId: Int64,
+    noticeChatID: Int64,
     noticeText: String,
     now: Date
   ) throws(StoreError) -> ClaimedApprovalBootOutcome {
     try database.writeMapping { db in
-      guard
-        try Self.observationIsPlaceholder(db, runId: runId, messageId: observationMessageId)
+      guard try Self.observationIsPlaceholder(db, runID: runID, messageID: observationMessageID)
       else {
         return .alreadyResolved
       }
       let state = try String.fetchOne(
         db,
         sql: "SELECT state FROM runs WHERE id = ?",
-        arguments: [runId]
+        arguments: [runID]
       )
       if state == RunState.awaitingApproval.rawValue {
         return .reparkForReplay
@@ -175,18 +168,18 @@ extension RunStoreGRDB {
       // terminal state.
       let transitioned = try Self.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .fail,
         now: now,
         terminal: .deferred(.approvalUnresolved)
       )
       if transitioned != nil {
-        try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+        try Self.appendJobFailedIfJobRun(db, runID: runID, now: now)
       }
       try Self.fillApprovedObservation(
         db,
-        runId: runId,
-        messageId: observationMessageId,
+        runID: runID,
+        messageID: observationMessageID,
         content: observationContent
       )
       // The placeholder was the last fact this run was owed; resolving it is what earns the right
@@ -194,14 +187,14 @@ extension RunStoreGRDB {
       // The fill above must stay ahead of this line: `fillClaimedObservation` and
       // `fillApprovedObservation` carry no settled-run predicate of their own, so ordering — not a
       // guard — is what keeps an observation from landing against frozen evidence.
-      _ = try ScheduledLearningStoreGRDB.freezeEvidence(db, runId: runId, now: now)
+      _ = try ScheduledLearningStoreGRDB.freezeEvidence(db, runID: runID, now: now)
       let chunk = OutboxChunk(
-        stepIndex: try OutboxInsertion.nextOutboxStepBase(db, runId: runId),
-        chatId: noticeChatId,
+        stepIndex: try OutboxInsertion.nextOutboxStepBase(db, runID: runID),
+        chatID: noticeChatID,
         payload: noticeText,
         payloadHash: ContentHash.fnv1a(noticeText)
       )
-      _ = try OutboxInsertion.insertOutbox(db, runId: runId, chunk: chunk, now: now)
+      _ = try OutboxInsertion.insertOutbox(db, runID: runID, chunk: chunk, now: now)
       return .settled
     }
   }
@@ -219,12 +212,13 @@ extension RunStoreGRDB {
           arguments: StatementArguments(liveStates)
         ) ?? 0
 
-      let oldestRunAgeSeconds: Double? =
-        try Date.fetchOne(
-          db,
-          sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (\(placeholders))",
-          arguments: StatementArguments(liveStates)
-        ).map { now.timeIntervalSince($0) }
+      let oldestRunAgeSeconds: Double? = try Date.fetchOne(
+        db,
+        sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (\(placeholders))",
+        arguments: StatementArguments(liveStates)
+      ).map {
+        now.timeIntervalSince($0)
+      }
 
       let lastFailedAt = try Date.fetchOne(
         db,

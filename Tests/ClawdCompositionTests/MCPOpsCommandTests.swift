@@ -12,8 +12,10 @@ import Testing
 
 /// `clawd mcp list` — the static half of the ops surface. It contacts nothing, so it answers the
 /// same way whether the daemon is up, down, or every server is unreachable.
-@Suite struct MCPListCommandTests {
-  @Test func listReportsEachServerWithItsTokenStateAndEffectiveFilter() throws {
+@Suite
+struct MCPListCommandTests {
+  @Test
+  func listReportsEachServerWithItsTokenStateAndEffectiveFilter() throws {
     // given — one server carrying a token, one filtered and holding none
     let stateRoot = try makeSealedStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -34,7 +36,11 @@ import Testing
 
     // then
     #expect(report.ok)
-    let rows = Dictionary(uniqueKeysWithValues: report.checks.map { ($0.key, $0.value) })
+    let rows = Dictionary(
+      uniqueKeysWithValues: report.checks.map {
+        ($0.key, $0.value)
+      }
+    )
     #expect(rows["mcp"] == "2 configured, 2 enabled")
     #expect(try #require(rows["mcp.linear"]).contains("token set"))
     #expect(try #require(rows["mcp.linear"]).contains("all tools"))
@@ -42,7 +48,8 @@ import Testing
     #expect(try #require(rows["mcp.notion"]).contains("include: search"))
   }
 
-  @Test func listNeverPrintsTheTokenItReportsOn() throws {
+  @Test
+  func listNeverPrintsTheTokenItReportsOn() throws {
     // given
     let stateRoot = try makeSealedStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -58,7 +65,8 @@ import Testing
     #expect(report.renderText().contains("linear-token") == false)
   }
 
-  @Test func listFailsTheRowForATokenBoundToAnotherURL() throws {
+  @Test
+  func listFailsTheRowForATokenBoundToAnotherURL() throws {
     // given — the server was re-pointed after its token was issued
     let stateRoot = try makeSealedStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -75,11 +83,16 @@ import Testing
 
     // then — only the owner can repair it, so it has to read as a failure
     #expect(report.ok == false)
-    let row = try #require(report.checks.first { $0.key == "mcp.linear" })
+    let row = try #require(
+      report.checks.first {
+        $0.key == "mcp.linear"
+      }
+    )
     #expect(row.value.contains("clawd mcp set-token"))
   }
 
-  @Test func listNamesATokenLeftBehindByAServerTheConfigNoLongerDeclares() throws {
+  @Test
+  func listNamesATokenLeftBehindByAServerTheConfigNoLongerDeclares() throws {
     // given — the server was deleted from the catalog, leaving its record behind
     let stateRoot = try makeSealedStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -95,14 +108,19 @@ import Testing
     )
 
     // then — nothing can send it, so it is a cleanup hint rather than a failure
-    let row = try #require(report.checks.first { $0.key == "mcp.unbound_tokens" })
+    let row = try #require(
+      report.checks.first {
+        $0.key == "mcp.unbound_tokens"
+      }
+    )
     #expect(row.ok)
     #expect(row.value.contains("retired"))
     #expect(row.value.contains("clear-token"))
     #expect(report.ok)
   }
 
-  @Test func listOnAnEmptyCatalogSaysSoRatherThanPrintingNothing() throws {
+  @Test
+  func listOnAnEmptyCatalogSaysSoRatherThanPrintingNothing() throws {
     // given
     let stateRoot = try makeSealedStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -120,10 +138,12 @@ import Testing
 
 /// `clawd mcp probe` — the live half. It runs the same transport, session, and discovery path the
 /// daemon takes at boot, so a server that probes clean is a server that will load.
-@Suite struct MCPProbeCommandTests {
+@Suite
+struct MCPProbeCommandTests {
   // MARK: - Target selection
 
-  @Test func probeWithNoNameTakesEveryEnabledServer() throws {
+  @Test
+  func probeWithNoNameTakesEveryEnabledServer() throws {
     // given
     let config = try MCPConfig(servers: [
       try server(named: "linear"),
@@ -137,7 +157,8 @@ import Testing
     #expect(targets.map(\.name) == ["linear"])
   }
 
-  @Test func probeContactsANamedServerEvenWhenItIsDisabled() throws {
+  @Test
+  func probeContactsANamedServerEvenWhenItIsDisabled() throws {
     // given — the owner asked about that one, which is the whole reason to name it
     let config = try MCPConfig(servers: [try server(named: "notion", enabled: false)])
 
@@ -148,7 +169,8 @@ import Testing
     #expect(targets.map(\.name) == ["notion"])
   }
 
-  @Test func probeRefusesAServerTheConfigDoesNotDeclare() throws {
+  @Test
+  func probeRefusesAServerTheConfigDoesNotDeclare() throws {
     // given
     let config = try MCPConfig(servers: [try server(named: "linear")])
 
@@ -161,7 +183,8 @@ import Testing
     #expect(thrown == ExitCode(ClawExitCode.configInvalid.rawValue))
   }
 
-  @Test func probeWithNothingEnabledSaysWhyRatherThanReportingNothing() throws {
+  @Test
+  func probeWithNothingEnabledSaysWhyRatherThanReportingNothing() throws {
     // given
     let config = try MCPConfig(servers: [try server(named: "linear", enabled: false)])
 
@@ -175,7 +198,8 @@ import Testing
 
   // MARK: - Live path
 
-  @Test func probeReportsTheToolCountEachServerWouldContribute() async throws {
+  @Test
+  func probeReportsTheToolCountEachServerWouldContribute() async throws {
     // given — a real SDK server behind the HTTP seam
     let remote = ScriptedMCPHTTPServer(tools: [
       RemoteTool(name: "list_issues"),
@@ -197,7 +221,8 @@ import Testing
     #expect(MCPDoctorRows.bootRows(outcomes: outcomes).map(\.value) == ["2"])
   }
 
-  @Test func probeCountsWhatTheFilterActuallyAdmits() async throws {
+  @Test
+  func probeCountsWhatTheFilterActuallyAdmits() async throws {
     // given — the server offers two tools, the owner admitted one
     let remote = ScriptedMCPHTTPServer(tools: [
       RemoteTool(name: "list_issues"),
@@ -221,7 +246,8 @@ import Testing
     #expect(outcomes[0].status == .ok(toolCount: 1))
   }
 
-  @Test func probeReportsAnUnreachableServerAsSkippedAndFailsTheReport() async throws {
+  @Test
+  func probeReportsAnUnreachableServerAsSkippedAndFailsTheReport() async throws {
     // given — an executor with nothing scripted refuses every attempt, as an unreachable host would
     let outcomes = await MCPProbe.run(
       servers: [try server(named: "linear")],
@@ -240,7 +266,8 @@ import Testing
     #expect(row.value.hasPrefix("skipped: "))
   }
 
-  @Test func probeSendsTheBoundTokenAndOnlyReportsTheCount() async throws {
+  @Test
+  func probeSendsTheBoundTokenAndOnlyReportsTheCount() async throws {
     // given
     let remote = ScriptedMCPHTTPServer(tools: [RemoteTool(name: "list_issues")])
 
@@ -265,8 +292,12 @@ import Testing
 
 private typealias RemoteTool = ScriptedMCPHTTPServer.RemoteTool
 
+// MARK: - MCP Probe Fixtures
+
 private extension MCPProbeCommandTests {
-  static let silentLogger = Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+  static let silentLogger = Logger(label: "test") { _ in
+    SwiftLogNoOpLogHandler()
+  }
 
   func server(named name: String, enabled: Bool = true) throws -> MCPServerConfig {
     try MCPServerConfig(name: name, url: "https://\(name).test.invalid/mcp", enabled: enabled)
@@ -277,7 +308,7 @@ private extension MCPProbeCommandTests {
 private func makeSealedStateRoot() throws -> URL {
   let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-ops")
   try EncryptedFileSecretStore.seal(
-    Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+    Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
     stateRoot: stateRoot
   )
   return stateRoot

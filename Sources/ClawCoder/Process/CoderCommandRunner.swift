@@ -15,14 +15,18 @@ struct CoderCommandRunner: Sendable {
 
   private let now: @Sendable () -> ContinuousClock.Instant
 
-  init(now: @Sendable @escaping () -> ContinuousClock.Instant = { ContinuousClock.now }) {
+  init(
+    now: @Sendable @escaping () -> ContinuousClock.Instant = {
+      ContinuousClock.now
+    }
+  ) {
     self.now = now
   }
 
   func run(
     _ command: CoderCommand,
     tracking: CoderCommandTracking,
-    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+    onStandardOutput: @Sendable @escaping (_ bytes: Data) async throws -> Void
   ) async -> CoderCommandResult {
     let control = CoderCommandControl(now: now)
     if Task.isCancelled {
@@ -41,11 +45,14 @@ struct CoderCommandRunner: Sendable {
         onStandardOutput: onStandardOutput
       )
     }
-    return await withTaskCancellationHandler {
-      await operation.value
-    } onCancel: {
-      control.requestCancellation()
-    }
+    return await withTaskCancellationHandler(
+      operation: {
+        await operation.value
+      },
+      onCancel: {
+        control.requestCancellation()
+      }
+    )
   }
 }
 
@@ -56,7 +63,7 @@ private struct CoderCommandOperation: Sendable {
   func run(
     _ command: CoderCommand,
     tracking: CoderCommandTracking,
-    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+    onStandardOutput: @Sendable @escaping (_ bytes: Data) async throws -> Void
   ) async -> CoderCommandResult {
     let launchID = UUID()
     do {
@@ -73,22 +80,14 @@ private struct CoderCommandOperation: Sendable {
         throw CancellationError()
       }
       await control.setReceipt(receipt)
-      let result = try await spawn(
-        command,
-        tracking: tracking,
-        onStandardOutput: onStandardOutput
-      )
+      let result = try await spawn(command, tracking: tracking, onStandardOutput: onStandardOutput)
       let resolved = await finish(
         tracking,
         launchID: launchID,
         resolved: result.closureResult.cleanupResolved
       )
       let capture = await control.capture(resolved: resolved)
-      return .completed(
-        result.terminationStatus,
-        capture: capture,
-        cleanupResolved: resolved
-      )
+      return .completed(result.terminationStatus, capture: capture, cleanupResolved: resolved)
     } catch {
       if !(await control.stopping) {
         await control.fail("Coder process launch failed.")
@@ -156,7 +155,7 @@ private extension CoderCommandOperation {
   func spawn(
     _ command: CoderCommand,
     tracking: CoderCommandTracking,
-    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+    onStandardOutput: @Sendable @escaping (_ bytes: Data) async throws -> Void
   ) async throws -> Subprocess.ExecutionResult<CoderScopedCapture, SequenceOutput, SequenceOutput> {
     let environment = Dictionary(
       uniqueKeysWithValues: command.environment.map { key, value in
@@ -166,7 +165,7 @@ private extension CoderCommandOperation {
     var options = PlatformOptions()
     options.createSession = true
     options.teardownSequence = [
-      .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(2))
+      .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(2)),
     ]
     if control.cancellationRequested {
       await control.latchCancelled()
@@ -182,18 +181,14 @@ private extension CoderCommandOperation {
       output: .sequence,
       error: .sequence
     ) { execution in
-      await runScoped(
-        execution: execution,
-        tracking: tracking,
-        onStandardOutput: onStandardOutput
-      )
+      await runScoped(execution: execution, tracking: tracking, onStandardOutput: onStandardOutput)
     }
   }
 
   func runScoped<Input: InputProtocol>(
     execution: Execution<Input, SequenceOutput, SequenceOutput>,
     tracking: CoderCommandTracking,
-    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+    onStandardOutput: @Sendable @escaping (_ bytes: Data) async throws -> Void
   ) async -> CoderScopedCapture {
     let pid = Int32(execution.processIdentifier.value)
     await control.markSpawned()
@@ -246,11 +241,9 @@ private extension CoderCommandOperation {
     return resolved
   }
 
-  func observe(
-    pid: Int32,
-    group: ManagedCoderProcessGroup,
-    deadline: ContinuousClock.Instant
-  ) async -> Bool {
+  func observe(pid: Int32, group: ManagedCoderProcessGroup, deadline: ContinuousClock.Instant) async
+    -> Bool
+  {
     while true {
       if await control.callbackStopNeeded(deadline: deadline) {
         return await group.terminate()
@@ -269,7 +262,7 @@ private extension CoderCommandOperation {
 
   func readOutput(
     _ sequence: SubprocessOutputSequence,
-    consumer: @Sendable (Data) async throws -> Void
+    consumer: @Sendable (_ bytes: Data) async throws -> Void
   ) async {
     do {
       for try await buffer in sequence {
@@ -346,16 +339,16 @@ private actor CoderCommandControl {
   private var diagnostics = Data()
   private let now: @Sendable () -> ContinuousClock.Instant
 
-  init(now: @Sendable @escaping () -> ContinuousClock.Instant) {
-    self.now = now
-  }
+  init(now: @Sendable @escaping () -> ContinuousClock.Instant) { self.now = now }
 
   var stopping: Bool { cancelled || timedOut || failed }
 
   nonisolated var cancellationRequested: Bool { cancellation.load(ordering: .acquiring) }
 
   nonisolated func requestCancellation() { cancellation.store(true, ordering: .releasing) }
+
   func setReceipt(_ value: CoderProcessReceipt) { receipt = value }
+
   func markSpawned() { spawned = true }
 
   func latchCancelled() {
@@ -363,6 +356,7 @@ private actor CoderCommandControl {
       cancelled = true
     }
   }
+
   func callbackStopNeeded(deadline: ContinuousClock.Instant) -> Bool {
     guard !Task.isCancelled else {
       return false
@@ -378,6 +372,7 @@ private actor CoderCommandControl {
     }
     return stopping
   }
+
   func recordCallbackFailure(_ error: any Error, message: String) {
     if error is CancellationError, Task.isCancelled, stopping {
       return
@@ -389,12 +384,15 @@ private actor CoderCommandControl {
     failed = true
     appendDiagnostics(Data(message.utf8))
   }
+
   func noteStreamError() { fail("Coder process stream failed.") }
+
   func appendDiagnostics(_ bytes: Data) {
     diagnostics.append(
       bytes.prefix(max(0, CoderCommandRunner.diagnosticByteLimit - diagnostics.count))
     )
   }
+
   func capture(resolved: Bool) -> CoderScopedCapture {
     CoderScopedCapture(
       cancelled: cancelled,
@@ -412,8 +410,9 @@ private extension CoderCommandControl {
   func renderedDiagnostics() -> String {
     // Malformed stderr remains diagnostic text through replacement of invalid UTF-8.
     // swiftlint:disable:next optional_data_string_conversion
-    var prefix = String(decoding: diagnostics, as: UTF8.self).utf8
-      .prefix(CoderCommandRunner.diagnosticByteLimit)
+    var prefix = String(decoding: diagnostics, as: UTF8.self).utf8.prefix(
+      CoderCommandRunner.diagnosticByteLimit
+    )
     while true {
       if let text = String(bytes: prefix, encoding: .utf8) {
         return text

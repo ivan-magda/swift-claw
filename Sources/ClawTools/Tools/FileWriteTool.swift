@@ -31,9 +31,9 @@ public struct FileWriteTool: Tool {
     ToolDefinition(
       name: "file_write",
       description: """
-        Write a UTF-8 text file inside the workspace (owner approval required). The path is \
-        relative to the workspace root; set overwrite to true to replace an existing file.
-        """,
+      Write a UTF-8 text file inside the workspace (owner approval required). The path is \
+      relative to the workspace root; set overwrite to true to replace an existing file.
+      """,
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
@@ -63,10 +63,7 @@ public struct FileWriteTool: Tool {
   /// Gate-time resolution: the approval binds to the fully-resolved contained path.
   /// Overwrite policy and the size cap refuse HERE — a doomed write must never park an approval.
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
-    guard
-      let path = arguments.objectValue?["path"]?.stringValue,
-      path.isEmpty == false
-    else {
+    guard let path = arguments.objectValue?["path"]?.stringValue, path.isEmpty == false else {
       return .refused(reason: "file_write needs a non-empty \"path\" argument.")
     }
 
@@ -77,15 +74,14 @@ public struct FileWriteTool: Tool {
     guard content.utf8.count <= Self.maxContentBytes else {
       return .refused(
         reason: """
-          That write is \(ByteCount.text(content.utf8.count)) — the cap is \
-          \(ByteCount.text(Self.maxContentBytes)).
-          """
+        That write is \(ByteCount.text(content.utf8.count)) — the cap is \
+        \(ByteCount.text(Self.maxContentBytes)).
+        """
       )
     }
 
     switch WorkspacePathContainment.resolveForCreation(path: path, root: workspaceRoot.path) {
-    case .refused(let reason):
-      return .refused(reason: reason)
+    case .refused(let reason): return .refused(reason: reason)
     case .resolved(let target):
       var isDirectory = ObjCBool(false)
       let exists = FileManager.default.fileExists(atPath: target, isDirectory: &isDirectory)
@@ -109,10 +105,9 @@ public struct FileWriteTool: Tool {
     }
   }
 
-  public func approvalPresentation(
-    arguments: JSONValue,
-    canonicalTarget: String
-  ) -> ToolApprovalPresentation {
+  public func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
+    -> ToolApprovalPresentation
+  {
     let content = arguments.objectValue?["content"]?.stringValue ?? ""
     let exists = FileManager.default.fileExists(atPath: canonicalTarget)
     return ToolApprovalPresentation(
@@ -187,9 +182,9 @@ public struct FileWriteTool: Tool {
 
     return ToolPayload(
       content: """
-        Wrote \(ByteCount.text(content.utf8.count)) to \(target) \
-        (\(overwriting ? "overwritten" : "created")).
-        """,
+      Wrote \(ByteCount.text(content.utf8.count)) to \(target) \
+      (\(overwriting ? "overwritten" : "created")).
+      """,
       status: .ok,
       ingestedUntrusted: false
     )
@@ -199,9 +194,7 @@ public struct FileWriteTool: Tool {
 // MARK: - Atomic Write Steps
 
 private extension FileWriteTool {
-  struct RenameFailed: Error {
-    let code: Int32
-  }
+  struct RenameFailed: Error { let code: Int32 }
 
   /// The target appeared between approval and execution of a CREATE-approved write: the owner
   /// approved "create", so replacing is off the table — fail closed.

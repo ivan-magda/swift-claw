@@ -21,8 +21,8 @@ struct MCPCatalogResolverTests {
               "properties": .object(["team": .object(["type": .string("string")])]),
               "required": .array([.string("team"), .string("absent")]),
             ])
-          )
-        ]
+          ),
+        ],
       ])
     )
     let notion = ScriptedMCPServer(
@@ -71,8 +71,8 @@ struct MCPCatalogResolverTests {
           ScriptedMCPServer.tool(
             "verbose",
             description: String(repeating: "a", count: MCPDescriptionCap.maxGraphemes + 50)
-          )
-        ]
+          ),
+        ],
       ])
     )
     let sessions = [try CatalogFixture.session(named: "linear", against: scripted)]
@@ -99,12 +99,10 @@ struct MCPCatalogResolverTests {
             description: "uses \(secret)",
             schema: .object([
               "type": .string("object"),
-              "properties": .object([
-                "\(secret)_query": .object(["description": .string(secret)])
-              ]),
+              "properties": .object(["\(secret)_query": .object(["description": .string(secret)])]),
             ])
-          )
-        ]
+          ),
+        ],
       ])
     )
     let sessions = [try CatalogFixture.session(named: "docs", against: scripted)]
@@ -136,7 +134,7 @@ struct MCPCatalogResolverTests {
           ScriptedMCPServer.tool("keep"),
           ScriptedMCPServer.tool("drop"),
           ScriptedMCPServer.tool("also_keep"),
-        ]
+        ],
       ])
     )
     let filter = MCPToolFilter(include: ["keep", "also_keep"], exclude: ["keep"])
@@ -163,7 +161,7 @@ struct MCPCatalogResolverTests {
         named: "docs",
         against: scripted,
         tools: MCPToolFilter(include: [])
-      )
+      ),
     ]
 
     // when
@@ -181,7 +179,7 @@ struct MCPCatalogResolverTests {
     // given
     let scripted = ScriptedMCPServer(
       list: ScriptedMCPServer.paged([
-        [ScriptedMCPServer.tool("keep"), ScriptedMCPServer.tool("drop")]
+        [ScriptedMCPServer.tool("keep"), ScriptedMCPServer.tool("drop")],
       ])
     )
     let filter = MCPToolFilter(exclude: ["drop"])
@@ -201,7 +199,7 @@ struct MCPCatalogResolverTests {
     // given
     let scripted = ScriptedMCPServer(
       list: ScriptedMCPServer.paged([
-        [ScriptedMCPServer.tool("read_only"), ScriptedMCPServer.tool("write_thing")]
+        [ScriptedMCPServer.tool("read_only"), ScriptedMCPServer.tool("write_thing")],
       ])
     )
     let filter = MCPToolFilter(risk: ["read_only": .safe])
@@ -283,17 +281,15 @@ struct MCPCatalogResolverTests {
   @Test("a server that blows a discovery cap is skipped, not fatal")
   func oversizedServerSkipped() async throws {
     // given a server that pages without end
-    let endless = ScriptedMCPServer(
-      list: { parameters in
-        let page = parameters.cursor.flatMap { cursor in
-          Int(cursor)
-        }
-        return ListTools.Result(
-          tools: [ScriptedMCPServer.tool("page_\(page ?? 0)")],
-          nextCursor: String((page ?? 0) + 1)
-        )
+    let endless = ScriptedMCPServer(list: { parameters in
+      let page = parameters.cursor.flatMap { cursor in
+        Int(cursor)
       }
-    )
+      return ListTools.Result(
+        tools: [ScriptedMCPServer.tool("page_\(page ?? 0)")],
+        nextCursor: String((page ?? 0) + 1)
+      )
+    })
     let sessions = [try CatalogFixture.session(named: "endless", against: endless)]
 
     // when
@@ -308,7 +304,7 @@ struct MCPCatalogResolverTests {
           status: .skipped(
             reason: "\(MCPSessionError.tooManyPages(limit: MCPDiscoveryLimits.maxPages))"
           )
-        )
+        ),
       ]
     )
 
@@ -367,7 +363,12 @@ struct MCPCatalogResolverTests {
           "mcp__server_\(index)__tool_\(index)"
         }
     )
-    #expect(catalog.outcomes.map(\.server) == (0..<count).map { index in "server_\(index)" })
+    #expect(
+      catalog.outcomes.map(\.server)
+        == (0..<count).map { index in
+          "server_\(index)"
+        }
+    )
 
     for session in sessions {
       await session.disconnect()
@@ -447,20 +448,14 @@ private actor DiscoveryConcurrencyProbe {
     active -= 1
   }
 
-  func waitUntilFull() async {
-    await full.wait()
-  }
+  func waitUntilFull() async { await full.wait() }
 }
 
 private enum CatalogFixture {
   static let clientVersion = "0.0.0-test"
 
-  static func config(
-    named name: String,
-    tools: MCPToolFilter = .allowAll
-  ) throws -> MCPServerConfig {
-    try MCPServerConfig(name: name, url: "https://mcp.example.com/mcp", tools: tools)
-  }
+  static func config(named name: String, tools: MCPToolFilter = .allowAll) throws -> MCPServerConfig
+  { try MCPServerConfig(name: name, url: "https://mcp.example.com/mcp", tools: tools) }
 
   static func session(
     named name: String,

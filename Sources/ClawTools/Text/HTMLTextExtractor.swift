@@ -82,10 +82,10 @@ private extension HTMLTextExtractor {
 
   /// The raw element whose opening tag starts at `index`, else nil. The name must be followed by a
   /// real terminator, so `<scripting>` is an ordinary tag rather than a `script` raw element.
-  static func rawElementOpening(
-    _ scalars: [Unicode.Scalar],
-    tagAt index: Int
-  ) -> (name: [Unicode.Scalar], close: [Unicode.Scalar])? {
+  static func rawElementOpening(_ scalars: [Unicode.Scalar], tagAt index: Int) -> (
+    name: [Unicode.Scalar],
+    close: [Unicode.Scalar]
+  )? {
     let nameStart = index + 1
 
     guard nameStart < scalars.count, scalars[nameStart] != "/" else {
@@ -154,11 +154,9 @@ private extension HTMLTextExtractor {
   }
 
   /// Advance from `start` to just past the next occurrence of `keyword`, or to EOF if absent.
-  static func skip(
-    _ scalars: [Unicode.Scalar],
-    from start: Int,
-    past keyword: [Unicode.Scalar]
-  ) -> Int {
+  static func skip(_ scalars: [Unicode.Scalar], from start: Int, past keyword: [Unicode.Scalar])
+    -> Int
+  {
     let count = scalars.count
     var index = start
 
@@ -227,7 +225,10 @@ private extension HTMLTextExtractor {
         continue
       }
 
-      if let entity = entities.first(where: { matchesExact($0.token, in: scalars, at: index) }) {
+      if
+        let entity = entities.first(where: {
+          matchesExact($0.token, in: scalars, at: index)
+        }) {
         output.append(entity.replacement)
         index += entity.token.count
       } else {
@@ -280,11 +281,9 @@ private extension HTMLTextExtractor {
 
 private extension HTMLTextExtractor {
   /// Case-insensitive (ASCII-folded) match of a lowercase `keyword` against `scalars` at `pos`.
-  static func matchesFolded(
-    _ keyword: [Unicode.Scalar],
-    in scalars: [Unicode.Scalar],
-    at pos: Int
-  ) -> Bool {
+  static func matchesFolded(_ keyword: [Unicode.Scalar], in scalars: [Unicode.Scalar], at pos: Int)
+    -> Bool
+  {
     guard pos + keyword.count <= scalars.count else {
       return false
     }
@@ -297,11 +296,9 @@ private extension HTMLTextExtractor {
   }
 
   /// Case-sensitive match — HTML entity names are case-sensitive (`&AMP;` is not `&amp;`).
-  static func matchesExact(
-    _ keyword: [Unicode.Scalar],
-    in scalars: [Unicode.Scalar],
-    at pos: Int
-  ) -> Bool {
+  static func matchesExact(_ keyword: [Unicode.Scalar], in scalars: [Unicode.Scalar], at pos: Int)
+    -> Bool
+  {
     guard pos + keyword.count <= scalars.count else {
       return false
     }
@@ -315,10 +312,8 @@ private extension HTMLTextExtractor {
 
   static func isASCIIWhitespace(_ scalar: Unicode.Scalar) -> Bool {
     switch scalar {
-    case " ", "\t", "\n", "\r", "\u{0B}", "\u{0C}":
-      true
-    default:
-      false
+    case " ", "\t", "\n", "\r", "\u{0B}", "\u{0C}": true
+    default: false
     }
   }
 

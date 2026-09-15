@@ -55,9 +55,7 @@ private extension CodexEvents {
     }
   }
 
-  struct Event: Decodable {
-    let type: String
-  }
+  struct Event: Decodable { let type: String }
 
   struct Completion: Decodable {
     // swiftlint:disable:next discouraged_optional_collection

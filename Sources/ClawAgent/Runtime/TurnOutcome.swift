@@ -30,10 +30,9 @@ public enum DegradationKind: Sendable, Equatable {
   public var terminalCause: TerminalCause {
     switch self {
     case .providerUnavailable, .authenticationRequired, .accessDenied, .quotaLimited,
-      .invalidProviderState, .accountingFailed:
+         .invalidProviderState, .accountingFailed:
       .providerFailure
-    case .outputTruncated, .contextUnavailable, .visionUnsupported:
-      .incomplete
+    case .outputTruncated, .contextUnavailable, .visionUnsupported: .incomplete
     }
   }
 

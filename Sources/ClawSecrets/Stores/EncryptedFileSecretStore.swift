@@ -53,6 +53,7 @@ public struct EncryptedFileSecretStore: SecretStore {
     maximumByteCount: keyByteCount,
     requiredPermissionBits: SecureFilePublisher.ownerOnlyPermissions
   )
+
   static let envelopeReadPolicy = SecureFilePublisher.ReadPolicy(
     maximumByteCount: maximumEnvelopeByteCount,
     requiredPermissionBits: nil
@@ -60,15 +61,11 @@ public struct EncryptedFileSecretStore: SecretStore {
 
   private let paths: SecretStatePaths
 
-  public init(stateRoot: URL) {
-    paths = SecretStatePaths(stateRoot: stateRoot)
-  }
+  public init(stateRoot: URL) { paths = SecretStatePaths(stateRoot: stateRoot) }
 
   // MARK: - SecretStore
 
-  public func loadSecrets() throws -> Secrets {
-    try load()
-  }
+  public func loadSecrets() throws -> Secrets { try load() }
 
   /// The typed twin of `loadSecrets`. `SecretStore` cannot declare an error type, so this is where
   /// "only `SecretStoreError` leaves the seam" stops being a convention and becomes a signature —
@@ -93,11 +90,9 @@ public struct EncryptedFileSecretStore: SecretStore {
   }
 
   @discardableResult
-  static func seal(
-    _ secrets: Secrets,
-    stateRoot: URL,
-    publisher: SecureFilePublisher
-  ) throws(SecretStoreError) -> Secrets {
+  static func seal(_ secrets: Secrets, stateRoot: URL, publisher: SecureFilePublisher)
+    throws(SecretStoreError) -> Secrets
+  {
     let paths = SecretStatePaths(stateRoot: stateRoot)
     var created = CreatedRuntimeArtifacts()
     var sealed = false
@@ -142,9 +137,7 @@ public struct EncryptedFileSecretStore: SecretStore {
 
 extension EncryptedFileSecretStore {
   static func sealEnvelope(_ plaintext: Data, key: SymmetricKey) throws(SecretStoreError) -> Data {
-    do {
-      return try envelopeCodec.seal(plaintext, key: key)
-    } catch {
+    do { return try envelopeCodec.seal(plaintext, key: key) } catch {
       throw .publicationFailed("seal \(SecretStatePaths.runtimeEnvelopeName)")
     }
   }
@@ -152,13 +145,9 @@ extension EncryptedFileSecretStore {
   /// This seam does not tell an absent version byte from a wrong one — an older installation's disk
   /// carries neither remedy the credential store distinguishes, so both frame the same malformed row.
   static func openEnvelope(_ envelope: Data, key: SymmetricKey) throws(SecretStoreError) -> Data {
-    do {
-      return try envelopeCodec.open(envelope, key: key)
-    } catch AESGCMEnvelopeError.missingVersion, AESGCMEnvelopeError.unsupportedVersion {
-      throw .malformedEnvelope
-    } catch {
-      throw .decryptionFailed
-    }
+    do { return try envelopeCodec.open(envelope, key: key) } catch AESGCMEnvelopeError
+      .missingVersion, AESGCMEnvelopeError.unsupportedVersion
+    { throw .malformedEnvelope } catch { throw .decryptionFailed }
   }
 }
 
@@ -168,15 +157,15 @@ private extension EncryptedFileSecretStore {
   /// The JSON shape stored inside the encrypted envelope.
   struct Payload: Codable {
     let telegramBotToken: String
-    let llmApiKey: String?
-    let searchApiKey: String?
-    let llmFallbackApiKey: String?
+    let llmAPIKey: String?
+    let searchAPIKey: String?
+    let llmFallbackAPIKey: String?
 
     enum CodingKeys: String, CodingKey {
       case telegramBotToken = "telegram_bot_token"
-      case llmApiKey = "llm_api_key"
-      case searchApiKey = "search_api_key"
-      case llmFallbackApiKey = "llm_fallback_api_key"
+      case llmAPIKey = "llm_api_key"
+      case searchAPIKey = "search_api_key"
+      case llmFallbackAPIKey = "llm_fallback_api_key"
     }
   }
 }
@@ -185,9 +174,9 @@ extension EncryptedFileSecretStore {
   static func encode(_ secrets: Secrets) throws(SecretStoreError) -> Data {
     let payload = Payload(
       telegramBotToken: secrets.telegramBotToken,
-      llmApiKey: secrets.llmApiKey,
-      searchApiKey: secrets.searchApiKey,
-      llmFallbackApiKey: secrets.llmFallbackApiKey
+      llmAPIKey: secrets.llmAPIKey,
+      searchAPIKey: secrets.searchAPIKey,
+      llmFallbackAPIKey: secrets.llmFallbackAPIKey
     )
 
     guard let encoded = try? JSONEncoder().encode(payload) else {
@@ -204,21 +193,21 @@ extension EncryptedFileSecretStore {
     guard !payload.telegramBotToken.isEmpty else {
       throw .missingTelegramToken
     }
-    let apiKey = payload.llmApiKey.flatMap { value in
+    let apiKey = payload.llmAPIKey.flatMap { value in
       value.isEmpty ? nil : value
     }
-    let searchKey = payload.searchApiKey.flatMap { value in
+    let searchKey = payload.searchAPIKey.flatMap { value in
       value.isEmpty ? nil : value
     }
-    let fallbackApiKey = payload.llmFallbackApiKey.flatMap { value in
+    let fallbackAPIKey = payload.llmFallbackAPIKey.flatMap { value in
       value.isEmpty ? nil : value
     }
 
     return Secrets(
       telegramBotToken: payload.telegramBotToken,
-      llmApiKey: apiKey,
-      searchApiKey: searchKey,
-      llmFallbackApiKey: fallbackApiKey
+      llmAPIKey: apiKey,
+      searchAPIKey: searchKey,
+      llmFallbackAPIKey: fallbackAPIKey
     )
   }
 }
@@ -229,9 +218,7 @@ extension EncryptedFileSecretStore {
   /// Opens an existing key through the no-follow, regular-file, owner-uid, mode-0600 checks.
   static func openKey(at url: URL) throws(SecretStoreError) -> SymmetricKey {
     let data: Data
-    do {
-      data = try SecureFilePublisher.read(at: url, policy: keyReadPolicy)
-    } catch {
+    do { data = try SecureFilePublisher.read(at: url, policy: keyReadPolicy) } catch {
       throw mapKeyError(error)
     }
 
@@ -267,14 +254,9 @@ extension EncryptedFileSecretStore {
       // The name was already taken — by an older seal, or by whoever won this race. Their key is the
       // one any envelope beside it is sealed under; ours was never linked and simply evaporates.
       return try openKey(at: url)
-    } catch {
-      throw mapKeyError(error)
-    }
+    } catch { throw mapKeyError(error) }
 
-    created.key = CreatedRuntimeArtifacts.Step(
-      url: url,
-      identity: outcome.identity
-    )
+    created.key = CreatedRuntimeArtifacts.Step(url: url, identity: outcome.identity)
 
     guard !outcome.isCommitUncertain else {
       throw .publicationFailed(uncertainCommitGuidance(SecretStatePaths.keyName))
@@ -288,9 +270,7 @@ extension EncryptedFileSecretStore {
 extension EncryptedFileSecretStore {
   static func readEnvelope(at url: URL) throws(SecretStoreError) -> Data {
     let bytes: Data
-    do {
-      bytes = try SecureFilePublisher.read(at: url, policy: envelopeReadPolicy)
-    } catch {
+    do { bytes = try SecureFilePublisher.read(at: url, policy: envelopeReadPolicy) } catch {
       throw mapEnvelopeError(error)
     }
 
@@ -310,18 +290,13 @@ extension EncryptedFileSecretStore {
     let existed = SecureFilePublisher.entryExists(at: url)
 
     let outcome: SecureFilePublisher.PublicationOutcome
-    do {
-      outcome = try publisher.publish(envelope, to: url)
-    } catch {
+    do { outcome = try publisher.publish(envelope, to: url) } catch {
       // Nothing was renamed, so whatever the owner had is still whole.
       throw mapEnvelopeError(error)
     }
 
     if !existed {
-      created.envelope = CreatedRuntimeArtifacts.Step(
-        url: url,
-        identity: outcome.identity
-      )
+      created.envelope = CreatedRuntimeArtifacts.Step(url: url, identity: outcome.identity)
     }
 
     guard !outcome.isCommitUncertain else {
@@ -346,27 +321,20 @@ private extension EncryptedFileSecretStore {
   /// into a wrong diagnosis.
   static func mapKeyError(_ error: SecureFileError) -> SecretStoreError {
     switch error {
-    case .insecure(let reason), .unreadable(let reason):
-      return .keyFileInsecure(reason)
+    case .insecure(let reason), .unreadable(let reason): return .keyFileInsecure(reason)
     case .oversized:
       return .keyFileInsecure("\(SecretStatePaths.keyName) must be \(keyByteCount) bytes")
-    case .publicationFailed(let reason):
-      return .publicationFailed(reason)
-    case .alreadyExists(let name):
-      return .publicationFailed("\(name) already exists")
+    case .publicationFailed(let reason): return .publicationFailed(reason)
+    case .alreadyExists(let name): return .publicationFailed("\(name) already exists")
     }
   }
 
   static func mapEnvelopeError(_ error: SecureFileError) -> SecretStoreError {
     switch error {
-    case .insecure(let reason), .unreadable(let reason):
-      return .unreadable(reason)
-    case .oversized:
-      return .malformedEnvelope
-    case .publicationFailed(let reason):
-      return .publicationFailed(reason)
-    case .alreadyExists(let name):
-      return .publicationFailed("\(name) already exists")
+    case .insecure(let reason), .unreadable(let reason): return .unreadable(reason)
+    case .oversized: return .malformedEnvelope
+    case .publicationFailed(let reason): return .publicationFailed(reason)
+    case .alreadyExists(let name): return .publicationFailed("\(name) already exists")
     }
   }
 }

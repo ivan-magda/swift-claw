@@ -3,13 +3,15 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct MemoryCommandRoutingTests {
-  @Test func memoryReviewListsGroupedByKindWithProvenance() async throws {
+@Suite
+struct MemoryCommandRoutingTests {
+  @Test
+  func memoryReviewListsGroupedByKindWithProvenance() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     _ = try harness.seedItem(text: "ship 3a", kind: .project, day: 86_400)
-    _ = try harness.seedItem(text: "prefers dark mode", kind: .user, updateId: -2, day: 172_800)
-    _ = try harness.seedItem(text: "cite sources", kind: .reference, updateId: -3, day: 259_200)
+    _ = try harness.seedItem(text: "prefers dark mode", kind: .user, updateID: -2, day: 172_800)
+    _ = try harness.seedItem(text: "cite sources", kind: .reference, updateID: -3, day: 259_200)
 
     // when
     let outcome = await harness.router.handle(
@@ -21,20 +23,20 @@ import Testing
     let sent = await harness.transport.sent
     #expect(sent.count == 1)
     #expect(
-      sent.first?.text
-        == """
-        user:
-        2 · «prefers dark mode» · owner · 1970-01-03
-        project:
-        1 · «ship 3a» · owner · 1970-01-02
-        reference:
-        3 · «cite sources» · owner · 1970-01-04
-        """
+      sent.first?.text == """
+      user:
+      2 · «prefers dark mode» · owner · 1970-01-03
+      project:
+      1 · «ship 3a» · owner · 1970-01-02
+      reference:
+      3 · «cite sources» · owner · 1970-01-04
+      """
     )
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func emptyMemoryReviewUsesTheCannedEmptyReply() async throws {
+  @Test
+  func emptyMemoryReviewUsesTheCannedEmptyReply() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -49,12 +51,13 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func memoryFilterListsOnlyTheRequestedKind() async throws {
+  @Test
+  func memoryFilterListsOnlyTheRequestedKind() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     _ = try harness.seedItem(text: "ship 3a", kind: .project, day: 86_400)
-    _ = try harness.seedItem(text: "ship 3b", kind: .project, updateId: -2, day: 172_800)
-    _ = try harness.seedItem(text: "prefers dark mode", kind: .user, updateId: -3, day: 259_200)
+    _ = try harness.seedItem(text: "ship 3b", kind: .project, updateID: -2, day: 172_800)
+    _ = try harness.seedItem(text: "prefers dark mode", kind: .user, updateID: -3, day: 259_200)
 
     // when
     let outcome = await harness.router.handle(
@@ -66,16 +69,16 @@ import Testing
     let sent = await harness.transport.sent
     #expect(sent.count == 1)
     #expect(
-      sent.first?.text
-        == """
-        project:
-        2 · «ship 3b» · owner · 1970-01-03
-        1 · «ship 3a» · owner · 1970-01-02
-        """
+      sent.first?.text == """
+      project:
+      2 · «ship 3b» · owner · 1970-01-03
+      1 · «ship 3a» · owner · 1970-01-02
+      """
     )
   }
 
-  @Test func memoryShowPrintsTheFullItemReply() async throws {
+  @Test
+  func memoryShowPrintsTheFullItemReply() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     let item = try harness.seedItem(text: "ship 3a", kind: .project, day: 86_400)
@@ -90,7 +93,8 @@ import Testing
     #expect(await harness.transport.sent.map(\.text) == [MemoryReplies.showItem(item)])
   }
 
-  @Test func unknownMemoryShowIdRepliesNotFound() async throws {
+  @Test
+  func unknownMemoryShowIDRepliesNotFound() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -104,7 +108,8 @@ import Testing
     #expect(await harness.transport.sent.map(\.text) == [MemoryReplies.notFound(id: 999)])
   }
 
-  @Test func invalidMemoryArgumentsReplyWithUsage() async throws {
+  @Test
+  func invalidMemoryArgumentsReplyWithUsage() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -118,7 +123,8 @@ import Testing
     #expect(await harness.transport.sent.map(\.text) == [MemoryReplies.memoryUsage])
   }
 
-  @Test func memoryDeleteParksAConfirmationWithoutDeleting() async throws {
+  @Test
+  func memoryDeleteParksAConfirmationWithoutDeleting() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     let item = try harness.seedItem(text: "obsolete fact", kind: .user, day: 86_400)
@@ -134,18 +140,18 @@ import Testing
     #expect(
       await harness.transport.sent.map(\.text) == [MemoryReplies.deleteConfirmPrompt(item: item)]
     )
-    let sessionId = try harness.ownerSessionId()
+    let sessionID = try harness.ownerSessionID()
     #expect(
-      await harness.pendingConfirmations.pending(sessionId: sessionId)
-        == .deleteItem(id: item.id)
+      await harness.pendingConfirmations.pending(sessionID: sessionID) == .deleteItem(id: item.id)
     )
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func deletingAnUnknownMemoryRepliesNotFoundAndParksNothing() async throws {
+  @Test
+  func deletingAnUnknownMemoryRepliesNotFoundAndParksNothing() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
-    let sessionId = try harness.ownerSessionId()
+    let sessionID = try harness.ownerSessionID()
 
     // when
     let outcome = await harness.router.handle(
@@ -155,11 +161,12 @@ import Testing
     // then
     #expect(outcome == .processed)
     #expect(await harness.transport.sent.map(\.text) == [MemoryReplies.notFound(id: 999)])
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func strangerMemoryReviewGetsPrivateBotReplyWithoutLeakingMemory() async throws {
+  @Test
+  func strangerMemoryReviewGetsPrivateBotReplyWithoutLeakingMemory() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     _ = try harness.seedItem(text: "secret fact", kind: .user, day: 86_400)

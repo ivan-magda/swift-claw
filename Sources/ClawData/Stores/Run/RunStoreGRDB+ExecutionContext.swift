@@ -2,58 +2,58 @@ import ClawCore
 import GRDB
 
 extension RunStoreGRDB {
-  public func executionContext(
-    runId: Int64,
-    fallbackChatId: Int64
-  ) throws(StoreError) -> RunExecutionContext? {
+  public func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
+    -> RunExecutionContext?
+  {
     try database.readMapping { db in
       guard
         let row = try Row.fetchOne(
           db,
           sql: """
-            SELECT runs.session_id, runs.origin, runs.requester_user_id, sessions.session_key
-            FROM runs JOIN sessions ON sessions.id = runs.session_id WHERE runs.id = ?
-            """,
-          arguments: [runId]
+          SELECT runs.session_id, runs.origin, runs.requester_user_id, sessions.session_key
+          FROM runs JOIN sessions ON sessions.id = runs.session_id WHERE runs.id = ?
+          """,
+          arguments: [runID]
         )
       else {
         return nil
       }
       guard let origin = RunOrigin(rawValue: row["origin"]) else {
-        throw StoreError.unexpected("runs row \(runId) has an unrecognized origin")
+        throw StoreError.unexpected("runs row \(runID) has an unrecognized origin")
       }
       let sessionKey: String = row["session_key"]
       let mode = SessionKey.mode(from: sessionKey)
-      let storedChatId = SessionKey.chatId(from: sessionKey)
+      let storedChatID = SessionKey.chatID(from: sessionKey)
       if mode == .group {
-        guard let storedChatId,
+        guard
+          let storedChatID,
           SessionKey.telegramTopic(
-            chatId: storedChatId,
-            threadId: SessionKey.threadId(from: sessionKey)
+            chatID: storedChatID,
+            threadID: SessionKey.threadID(from: sessionKey)
           ) == sessionKey
         else {
-          throw StoreError.unexpected("runs row \(runId) has an invalid group session key")
+          throw StoreError.unexpected("runs row \(runID) has an invalid group session key")
         }
       } else if origin == .interactive {
-        guard let storedChatId, SessionKey.telegramDM(chatId: storedChatId) == sessionKey else {
-          throw StoreError.unexpected("runs row \(runId) has an invalid interactive session key")
+        guard let storedChatID, SessionKey.telegramDM(chatID: storedChatID) == sessionKey else {
+          throw StoreError.unexpected("runs row \(runID) has an invalid interactive session key")
         }
       }
-      let chatId = storedChatId ?? fallbackChatId
-      let requesterUserId: Int64?
+      let chatID = storedChatID ?? fallbackChatID
+      let requesterUserID: Int64?
       if origin == .interactive {
         let persistedRequester: Int64? = row["requester_user_id"]
-        let legacyRequester = mode == .direct ? SessionKey.chatId(from: sessionKey) : nil
-        requesterUserId = persistedRequester ?? legacyRequester
+        let legacyRequester = mode == .direct ? SessionKey.chatID(from: sessionKey) : nil
+        requesterUserID = persistedRequester ?? legacyRequester
       } else {
-        requesterUserId = nil
+        requesterUserID = nil
       }
       return RunExecutionContext(
-        sessionId: row["session_id"],
+        sessionID: row["session_id"],
         origin: origin,
-        requesterUserId: requesterUserId,
+        requesterUserID: requesterUserID,
         mode: mode,
-        deliveryTarget: try OutboxInsertion.outboxTarget(db, runId: runId, chatId: chatId)
+        deliveryTarget: try OutboxInsertion.outboxTarget(db, runID: runID, chatID: chatID)
       )
     }
   }

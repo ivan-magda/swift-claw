@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct CoderSubmitSchemaTests {
-  @Test func advertisesStrictSourceAndPublicationScope() throws {
+@Suite
+struct CoderSubmitSchemaTests {
+  @Test
+  func advertisesStrictSourceAndPublicationScope() throws {
     // given
     let schema = CoderSubmitArguments.schema
 
@@ -19,8 +21,14 @@ import Testing
     // then
     #expect(
       Set(properties.keys) == [
-        "source", "task", "workspace", "start_ref", "deliverable", "base_branch",
-        "instructions", "publish_existing_changes",
+        "source",
+        "task",
+        "workspace",
+        "start_ref",
+        "deliverable",
+        "base_branch",
+        "instructions",
+        "publish_existing_changes",
       ]
     )
     let expectedFields = ["local": "path", "githubRepository": "url", "githubIssue": "url"]
@@ -45,13 +53,15 @@ import Testing
     #expect(properties["workspace"]?.objectValue?["type"] == .string("string"))
     #expect(
       try stringSet(properties["workspace"]?.objectValue?["enum"]) == [
-        CoderWorkspaceMode.inPlace.rawValue, CoderWorkspaceMode.separate.rawValue,
+        CoderWorkspaceMode.inPlace.rawValue,
+        CoderWorkspaceMode.separate.rawValue,
       ]
     )
     #expect(properties["deliverable"]?.objectValue?["type"] == .string("string"))
     #expect(
       try stringSet(properties["deliverable"]?.objectValue?["enum"]) == [
-        CoderDeliverable.localChanges.rawValue, CoderDeliverable.pullRequest.rawValue,
+        CoderDeliverable.localChanges.rawValue,
+        CoderDeliverable.pullRequest.rawValue,
       ]
     )
     let publication = try #require(properties["publish_existing_changes"]?.objectValue)

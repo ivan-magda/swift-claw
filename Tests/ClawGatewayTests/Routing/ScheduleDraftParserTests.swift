@@ -7,15 +7,16 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ScheduleDraftParserTests {
+@Suite
+struct ScheduleDraftParserTests {
   private func jsonResponse(_ content: String) -> ChatResponse {
     ChatResponse(content: content, finishReason: "stop", usage: nil, costFromProvider: nil)
   }
 
   private static let draftJSON = """
-    {"label":"morning digest","prompt":"Summarize my unread items",\
-    "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
-    """
+  {"label":"morning digest","prompt":"Summarize my unread items",\
+  "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
+  """
 
   private static let expectedDraft = ScheduleDraft(
     label: "morning digest",
@@ -25,7 +26,7 @@ import Testing
 
   private struct Fixture {
     let parser: ScheduleDraftParser
-    let sessionId: Int64
+    let sessionID: Int64
     let queue: DatabaseQueue
   }
 
@@ -40,10 +41,10 @@ import Testing
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
+        updateID: 1,
         sessionKey: "tg:dm:7",
-        chatId: 7,
-        userId: 7,
+        chatID: 7,
+        userID: 7,
         text: "/schedule",
         isEdited: false,
         ts: Date()
@@ -62,7 +63,7 @@ import Testing
       clock: clock,
       logger: TestLog.silent
     )
-    return Fixture(parser: parser, sessionId: claim.sessionId ?? 0, queue: queue)
+    return Fixture(parser: parser, sessionID: claim.sessionID ?? 0, queue: queue)
   }
 
   private func usageRowCount(_ fixture: Fixture) throws -> Int {
@@ -71,7 +72,8 @@ import Testing
     }
   }
 
-  @Test func decodesASingleJSONObjectIntoADraft() async throws {
+  @Test
+  func decodesASingleJSONObjectIntoADraft() async throws {
     // given
     let provider = SequenceProvider([jsonResponse(Self.draftJSON)])
     let fixture = try makeFixture(provider: provider)
@@ -79,20 +81,21 @@ import Testing
     // when
     let result = await fixture.parser.parse(
       ownerText: "every weekday at 7am Berlin, summarize unread",
-      sessionId: fixture.sessionId
+      sessionID: fixture.sessionID
     )
 
     // then
     #expect(result == .draft(Self.expectedDraft))
   }
 
-  @Test func sendsOneBoundedSystemPromptedRequestWithOwnerTextAsData() async throws {
+  @Test
+  func sendsOneBoundedSystemPromptedRequestWithOwnerTextAsData() async throws {
     // given
     let provider = SequenceProvider([jsonResponse(Self.draftJSON)])
     let fixture = try makeFixture(provider: provider)
 
     // when
-    _ = await fixture.parser.parse(ownerText: "every weekday at 7am", sessionId: fixture.sessionId)
+    _ = await fixture.parser.parse(ownerText: "every weekday at 7am", sessionID: fixture.sessionID)
 
     // then — one call; system-authored prompt first; owner text is a plain user message; no
     // tools; the pinned output cap bounds the call in place of a preflight
@@ -109,7 +112,8 @@ import Testing
     #expect(request.maxOutputTokens == ScheduleDraftParser.maxParseOutputTokens)
   }
 
-  @Test func stripsAStrayCodeFenceBeforeDecoding() async throws {
+  @Test
+  func stripsAStrayCodeFenceBeforeDecoding() async throws {
     // given — models fence JSON despite instructions; the fence is cosmetic, not schema
     let fenced = "```json\n\(Self.draftJSON)\n```"
     let provider = SequenceProvider([jsonResponse(fenced)])
@@ -117,23 +121,25 @@ import Testing
 
     // when / then
     #expect(
-      await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+      await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID)
         == .draft(Self.expectedDraft)
     )
   }
 
-  @Test func rejectsNonJSONAndUnknownEnumValues() async {
+  @Test
+  func rejectsNonJSONAndUnknownEnumValues() async {
     // given / when / then — strict decode: no guessing, no partial acceptance
     #expect(ScheduleDraftParser.decode("UNPARSEABLE") == .unparseable)
     #expect(ScheduleDraftParser.decode("Sure! Here is the plan…") == .unparseable)
     #expect(ScheduleDraftParser.decode("") == .unparseable)
     let badKind = """
-      {"label":"x","prompt":"y","schedule":{"kind":"fortnightly","time":"07:00"}}
-      """
+    {"label":"x","prompt":"y","schedule":{"kind":"fortnightly","time":"07:00"}}
+    """
     #expect(ScheduleDraftParser.decode(badKind) == .unparseable)
   }
 
-  @Test func honorsTheUnparseableMarkerButDecodesADraftThatCarriesTheFlag() async {
+  @Test
+  func honorsTheUnparseableMarkerButDecodesADraftThatCarriesTheFlag() async {
     // given / when / then — the model's explicit {"unparseable": true} decline is unparseable,
     // while a real draft that also carries unparseable:false still decodes (the flag is not part
     // of the stored draft) — the shape json_schema mode returns for a valid request
@@ -144,32 +150,34 @@ import Testing
       ) == .unparseable
     )
     let flagged = """
-      {"unparseable":false,"label":"morning digest","prompt":"Summarize my unread items",\
-      "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
-      """
+    {"unparseable":false,"label":"morning digest","prompt":"Summarize my unread items",\
+    "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
+    """
     #expect(ScheduleDraftParser.decode(flagged) == .draft(Self.expectedDraft))
   }
 
-  @Test func offModeSendsNoResponseFormat() async throws {
+  @Test
+  func offModeSendsNoResponseFormat() async throws {
     // given
     let provider = SequenceProvider([jsonResponse(Self.draftJSON)])
     let fixture = try makeFixture(provider: provider, structuredOutput: .off)
 
     // when
-    _ = await fixture.parser.parse(ownerText: "every weekday at 7am", sessionId: fixture.sessionId)
+    _ = await fixture.parser.parse(ownerText: "every weekday at 7am", sessionID: fixture.sessionID)
 
     // then — today's behavior: the parse request carries no structured-output directive
     let request = try #require(await provider.requests.first)
     #expect(request.responseFormat == nil)
   }
 
-  @Test func jsonSchemaModeConstrainsTheReplyToTheDraftSchema() async throws {
+  @Test
+  func jsonSchemaModeConstrainsTheReplyToTheDraftSchema() async throws {
     // given
     let provider = SequenceProvider([jsonResponse(Self.draftJSON)])
     let fixture = try makeFixture(provider: provider, structuredOutput: .jsonSchema)
 
     // when
-    _ = await fixture.parser.parse(ownerText: "every weekday at 7am", sessionId: fixture.sessionId)
+    _ = await fixture.parser.parse(ownerText: "every weekday at 7am", sessionID: fixture.sessionID)
 
     // then — the request pins the reply to the named schedule_draft schema
     let request = try #require(await provider.requests.first)
@@ -180,14 +188,15 @@ import Testing
     #expect(name == "schedule_draft")
   }
 
-  @Test func providerFailureDegradesWithoutArming() async throws {
+  @Test
+  func providerFailureDegradesWithoutArming() async throws {
     // given — an empty script makes SequenceProvider throw a terminal ProviderError
     let provider = SequenceProvider([])
     let fixture = try makeFixture(provider: provider)
 
     // when / then — terminal: the provider generated and billed nothing, so no usage row
     #expect(
-      await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+      await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID)
         == .providerUnavailable
     )
     let rows = try await fixture.queue.read { db in
@@ -196,14 +205,15 @@ import Testing
     #expect(rows == 0)
   }
 
-  @Test func exhaustedRetriesDebitAnEstimate() async throws {
+  @Test
+  func exhaustedRetriesDebitAnEstimate() async throws {
     // given — a brownout: `complete` retries and exhausts, throwing `.retryable` (not terminal)
     let fixture = try makeFixture(provider: RetryExhaustedProvider())
 
     // when
     let result = await fixture.parser.parse(
       ownerText: "every weekday at 7am",
-      sessionId: fixture.sessionId
+      sessionID: fixture.sessionID
     )
 
     // then — parity with a turn's degradedForCaughtError (§15): the day cap sees an estimate so
@@ -215,7 +225,8 @@ import Testing
     #expect(estimated == true)
   }
 
-  @Test func dayCapDenialRefusesBeforeAnyProviderCall() async throws {
+  @Test
+  func dayCapDenialRefusesBeforeAnyProviderCall() async throws {
     // given — a day token ceiling the parse estimate alone exceeds
     let provider = SequenceProvider([jsonResponse(Self.draftJSON)])
     let tinyBudget = RunBudget(
@@ -234,7 +245,7 @@ import Testing
     // when
     let result = await fixture.parser.parse(
       ownerText: "every weekday at 7am",
-      sessionId: fixture.sessionId
+      sessionID: fixture.sessionID
     )
 
     // then — denied by the offline gate; the provider was never called, nothing was spent
@@ -242,7 +253,8 @@ import Testing
     #expect(await provider.requests.isEmpty)
   }
 
-  @Test func successfulParseRecordsARunlessUsageRow() async throws {
+  @Test
+  func successfulParseRecordsARunlessUsageRow() async throws {
     // given
     let provider = SequenceProvider([jsonResponse(Self.draftJSON)])
     let fixture = try makeFixture(provider: provider)
@@ -250,7 +262,7 @@ import Testing
     // when
     let result = await fixture.parser.parse(
       ownerText: "every weekday at 7am",
-      sessionId: fixture.sessionId
+      sessionID: fixture.sessionID
     )
 
     // then — spend is durable (§6): one provider_usage row, attributed to the session, no run
@@ -263,11 +275,12 @@ import Testing
     }
     let usageRow = try #require(row)
     #expect(usageRow["run_id"] == nil as Int64?)
-    #expect(usageRow["session_id"] == fixture.sessionId)
+    #expect(usageRow["session_id"] == fixture.sessionID)
     #expect(usageRow["model"] == "test-model")
   }
 
-  @Test func deadlineWinsOverAHungProviderAndDebitsAnEstimate() async throws {
+  @Test
+  func deadlineWinsOverAHungProviderAndDebitsAnEstimate() async throws {
     // given — an instant deadline child (the injected sleep returns immediately) over a provider that
     // reached transport, so its cancel proves the attempt may have started and may be billing
     let fixture = try makeFixture(
@@ -278,7 +291,7 @@ import Testing
     // when
     let result = await fixture.parser.parse(
       ownerText: "every weekday at 7am",
-      sessionId: fixture.sessionId
+      sessionID: fixture.sessionID
     )
 
     // then — the poller regains control and the maybe-billing request is debited as an estimate
@@ -289,7 +302,8 @@ import Testing
     #expect(estimated == true)
   }
 
-  @Test func aProvenNoStartDeadlineLoserWritesNoUsageRow() async throws {
+  @Test
+  func aProvenNoStartDeadlineLoserWritesNoUsageRow() async throws {
     // given — an instant deadline child over a provider cancelled before it reached transport, so its
     // `complete` surfaces the bare CancellationError that proves no start. A no-start owes nothing,
     // exactly as the turn path books it.
@@ -298,7 +312,7 @@ import Testing
     // when
     let result = await fixture.parser.parse(
       ownerText: "every weekday at 7am",
-      sessionId: fixture.sessionId
+      sessionID: fixture.sessionID
     )
 
     // then — the poller still sees the timeout degradation, but nothing is billed
@@ -306,7 +320,8 @@ import Testing
     #expect(try usageRowCount(fixture) == 0)
   }
 
-  @Test func racedSuccessUnderTheDeadlineRecordsAuthoritativeUsage() async throws {
+  @Test
+  func racedSuccessUnderTheDeadlineRecordsAuthoritativeUsage() async throws {
     // given — the deadline fires first, but the provider lands a real, usage-bearing reply anyway.
     // Its usage is authoritative, so the recorded row must be reconciled, not the timeout estimate.
     let response = ChatResponse(
@@ -317,55 +332,57 @@ import Testing
     )
     let fixture = try makeFixture(
       provider: RacedSuccessProvider(response: response),
-      clock: ScriptedClock { _ in try? await Task.sleep(for: .milliseconds(1)) }
+      clock: ScriptedClock { _ in
+        try? await Task.sleep(for: .milliseconds(1))
+      }
     )
 
     // when
     let result = await fixture.parser.parse(
       ownerText: "every weekday at 7am",
-      sessionId: fixture.sessionId
+      sessionID: fixture.sessionID
     )
 
     // then — the owner still sees the timeout, but the recorded row is authoritative (not estimated)
     #expect(result == .providerUnavailable)
     let row = try #require(
       try fixture.queue.read { db in
-        try Row.fetchOne(
-          db,
-          sql: "SELECT is_estimated, completion_tokens FROM provider_usage"
-        )
+        try Row.fetchOne(db, sql: "SELECT is_estimated, completion_tokens FROM provider_usage")
       }
     )
     #expect(row["is_estimated"] == false)
     #expect(row["completion_tokens"] == 13)
   }
 
-  @Test func authenticationFailureReturnsTheTypedResultWithoutDebiting() async throws {
+  @Test
+  func authenticationFailureReturnsTheTypedResultWithoutDebiting() async throws {
     // given — the credential is refused before any inference (a clean, not-started head)
     let fixture = try makeFixture(
       provider: SequenceProvider([], then: ProviderError.authenticationRequired)
     )
 
     // when
-    let result = await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+    let result = await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID)
 
     // then — the router gets the typed outcome, not a collapsed providerUnavailable, and no row
     #expect(result == .authenticationRequired)
     #expect(try usageRowCount(fixture) == 0)
   }
 
-  @Test func accessDenialReturnsTheTypedResultWithoutDebiting() async throws {
+  @Test
+  func accessDenialReturnsTheTypedResultWithoutDebiting() async throws {
     // given
     let fixture = try makeFixture(provider: SequenceProvider([], then: ProviderError.accessDenied))
 
     // when / then
     #expect(
-      await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId) == .accessDenied
+      await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID) == .accessDenied
     )
     #expect(try usageRowCount(fixture) == 0)
   }
 
-  @Test func quotaLimitReturnsTheRetryHintWithoutDebiting() async throws {
+  @Test
+  func quotaLimitReturnsTheRetryHintWithoutDebiting() async throws {
     // given
     let fixture = try makeFixture(
       provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 15))
@@ -373,18 +390,19 @@ import Testing
 
     // when / then — the bounded hint rides the typed outcome; nothing was generated, nothing debited
     #expect(
-      await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+      await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID)
         == .quotaLimited(retryAfterSeconds: 15)
     )
     #expect(try usageRowCount(fixture) == 0)
   }
 
-  @Test func cancelledParseWritesNoUsageRowAndStaysTheGenericOutage() async throws {
+  @Test
+  func cancelledParseWritesNoUsageRowAndStaysTheGenericOutage() async throws {
     // given — the command was cancelled once the call reached the provider, before anything billed
     let fixture = try makeFixture(provider: CancellingProvider())
 
     // when
-    let result = await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+    let result = await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID)
 
     // then — a cancel is never an owner-facing outage escalation and bills nothing: the plain
     // unavailable result the run-cancellation UX suppresses, and no usage row (the arm's whole point)
@@ -392,7 +410,8 @@ import Testing
     #expect(try usageRowCount(fixture) == 0)
   }
 
-  @Test func terminalRejectStaysTheGenericOutageWithoutDebiting() async throws {
+  @Test
+  func terminalRejectStaysTheGenericOutageWithoutDebiting() async throws {
     // given — a message-carrying terminal reject; its remote text must never reach a typed reply
     let fixture = try makeFixture(
       provider: SequenceProvider(
@@ -402,14 +421,15 @@ import Testing
     )
 
     // when
-    let result = await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+    let result = await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID)
 
     // then — the schedule twin of the turn's terminal reject: generic outage, no leaked text, no row
     #expect(result == .providerUnavailable)
     #expect(try usageRowCount(fixture) == 0)
   }
 
-  @Test func includedPlanParseSkipsUSDButRecordsConfirmedZero() async throws {
+  @Test
+  func includedPlanParseSkipsUSDButRecordsConfirmedZero() async throws {
     // given — a per-run USD ceiling the parse estimate exceeds, but a token ceiling it clears
     let budget = RunBudget(
       maxInputTokens: 100_000,
@@ -429,7 +449,7 @@ import Testing
       budget: budget,
       costPolicy: .metered
     )
-    let meteredResult = await metered.parser.parse(ownerText: "x", sessionId: metered.sessionId)
+    let meteredResult = await metered.parser.parse(ownerText: "x", sessionID: metered.sessionID)
 
     // and — the included-plan route proceeds and records a confirmed (not guessed) zero
     let plan = try makeFixture(
@@ -437,7 +457,7 @@ import Testing
       budget: budget,
       costPolicy: .includedPlan
     )
-    let planResult = await plan.parser.parse(ownerText: "x", sessionId: plan.sessionId)
+    let planResult = await plan.parser.parse(ownerText: "x", sessionID: plan.sessionID)
 
     // then
     #expect(meteredResult == .budgetDenied(cap: BudgetGate.perRunSpendCap))
@@ -453,7 +473,8 @@ import Testing
     #expect(row["cost_source"] == CostSource.includedPlan.rawValue)
   }
 
-  @Test func includedPlanParseStillHonorsTheDayTokenCeiling() async throws {
+  @Test
+  func includedPlanParseStillHonorsTheDayTokenCeiling() async throws {
     // given — a token ceiling the parse estimate alone exceeds; a subscription must not outrun it
     let budget = RunBudget(
       maxInputTokens: 100_000,
@@ -470,7 +491,7 @@ import Testing
     let fixture = try makeFixture(provider: provider, budget: budget, costPolicy: .includedPlan)
 
     // when
-    let result = await fixture.parser.parse(ownerText: "x", sessionId: fixture.sessionId)
+    let result = await fixture.parser.parse(ownerText: "x", sessionID: fixture.sessionID)
 
     // then — the token failsafe still binds under includedPlan, and the provider was never called
     #expect(result == .budgetDenied(cap: BudgetGate.perDayTokenCap))

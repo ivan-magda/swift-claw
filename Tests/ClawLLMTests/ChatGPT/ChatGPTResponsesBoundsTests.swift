@@ -9,7 +9,8 @@ private typealias Support = ChatGPTProviderTestSupport
 /// Every bound the route reads a stream under, exercised exactly at its cap and one byte, event, or
 /// item over it. The pairs matter more than the values: a cap tested only from the failing side
 /// passes just as well when the guard rejects everything.
-@Suite struct ChatGPTResponsesBoundsTests {
+@Suite
+struct ChatGPTResponsesBoundsTests {
   private static let compactBounds = ChatGPTResponsesBounds(
     maximumEventBytes: 16 * 1024,
     maximumBufferedBytes: 32 * 1024,
@@ -20,7 +21,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   // MARK: - Event Bytes
 
-  @Test func anEventOfExactlyTheEventCapIsParsed() throws {
+  @Test
+  func anEventOfExactlyTheEventCapIsParsed() throws {
     // given
     var parser = Self.parser()
     let event = Self.paddedEvent(totalBytes: Self.compactBounds.maximumEventBytes)
@@ -32,7 +34,8 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(events.count == 1)
   }
 
-  @Test func anEventOneByteOverTheEventCapIsRejected() throws {
+  @Test
+  func anEventOneByteOverTheEventCapIsRejected() throws {
     // given
     var parser = Self.parser()
     let event = Self.paddedEvent(totalBytes: Self.compactBounds.maximumEventBytes + 1)
@@ -45,7 +48,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// An event that has not been delimited yet is still bounded, so a server can neither stall a
   /// stream nor grow the buffer by simply never ending its event.
-  @Test func anUndelimitedEventOverTheEventCapIsRejectedBeforeItEnds() throws {
+  @Test
+  func anUndelimitedEventOverTheEventCapIsRejectedBeforeItEnds() throws {
     // given
     var parser = Self.parser()
     let partial = Self.paddedEvent(totalBytes: Self.compactBounds.maximumEventBytes + 1)
@@ -61,7 +65,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// The one-over case is well-framed data the parser would happily have drained. It is refused
   /// anyway, which is what proves the raw buffer is bounded *before* the delimiter search rather
   /// than after it.
-  @Test func aPushOfExactlyTheBufferCapIsParsed() throws {
+  @Test
+  func aPushOfExactlyTheBufferCapIsParsed() throws {
     // given
     var parser = Self.parser()
     let stream = Self.framedFiller(totalBytes: Self.compactBounds.maximumBufferedBytes)
@@ -73,7 +78,8 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(events.isEmpty == false)
   }
 
-  @Test func aPushOneByteOverTheBufferCapIsRejectedEvenThoughItIsWellFramed() throws {
+  @Test
+  func aPushOneByteOverTheBufferCapIsRejectedEvenThoughItIsWellFramed() throws {
     // given
     var parser = Self.parser()
     let stream = Self.framedFiller(totalBytes: Self.compactBounds.maximumBufferedBytes + 1)
@@ -86,22 +92,21 @@ private typealias Support = ChatGPTProviderTestSupport
 
   // MARK: - Data Event Count
 
-  @Test func exactlyTheDataEventCapIsParsed() throws {
+  @Test
+  func exactlyTheDataEventCapIsParsed() throws {
     // given
     var parser = Self.parser()
 
     // when
-    let count = try Self.pushUnknownEvents(
-      Self.compactBounds.maximumDataEvents,
-      through: &parser
-    )
+    let count = try Self.pushUnknownEvents(Self.compactBounds.maximumDataEvents, through: &parser)
 
     // then
     #expect(count == 0)
     #expect(parser.hasSeenDataFieldByte)
   }
 
-  @Test func oneDataEventOverTheCapIsRejected() throws {
+  @Test
+  func oneDataEventOverTheCapIsRejected() throws {
     // given
     var parser = Self.parser()
 
@@ -113,7 +118,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   // MARK: - Output Item Count
 
-  @Test func exactlyTheOutputItemCapIsAccumulated() throws {
+  @Test
+  func exactlyTheOutputItemCapIsAccumulated() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = Self.parser()
@@ -126,7 +132,8 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(Support.finished(events) != nil)
   }
 
-  @Test func oneOutputItemOverTheCapIsRejected() throws {
+  @Test
+  func oneOutputItemOverTheCapIsRejected() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = Self.parser()
@@ -140,7 +147,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   // MARK: - Accumulated Output Bytes
 
-  @Test func visibleTextOfExactlyTheAccumulatedOutputCapIsAccepted() throws {
+  @Test
+  func visibleTextOfExactlyTheAccumulatedOutputCapIsAccepted() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = Self.parser()
@@ -154,13 +162,12 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(response.content.utf8.count == Self.compactBounds.maximumAccumulatedOutputBytes)
   }
 
-  @Test func visibleTextOneByteOverTheAccumulatedOutputCapIsRejected() throws {
+  @Test
+  func visibleTextOneByteOverTheAccumulatedOutputCapIsRejected() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = Self.parser()
-    let stream = Self.visibleTextStream(
-      bytes: Self.compactBounds.maximumAccumulatedOutputBytes + 1
-    )
+    let stream = Self.visibleTextStream(bytes: Self.compactBounds.maximumAccumulatedOutputBytes + 1)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -170,14 +177,15 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Tool arguments share the visible text's budget, so a stream cannot double the accumulated
   /// output by splitting it between an answer and a call.
-  @Test func toolArgumentsShareTheAccumulatedOutputBudgetWithVisibleText() throws {
+  @Test
+  func toolArgumentsShareTheAccumulatedOutputBudgetWithVisibleText() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = Self.parser()
     let half = Self.compactBounds.maximumAccumulatedOutputBytes / 2
     let stream =
       Self.visibleTextEvents(bytes: half + 1) + Self.argumentEvents(bytes: half)
-      + Self.event(Self.completed())
+        + Self.event(Self.completed())
 
     // then
     #expect(throws: ProviderError.self) {
@@ -192,7 +200,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// a stream materialize megabytes of write-only text under the per-event and buffer caps, which
   /// charge only text that can reach the owner. So they are dropped as they arrive: the retained
   /// buffers stay empty across a flood that would weigh megabytes if it were kept.
-  @Test func textDeltasForANonVisibleItemAreDroppedNotRetained() throws {
+  @Test
+  func textDeltasForANonVisibleItemAreDroppedNotRetained() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = Self.parser()
@@ -213,7 +222,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// Arguments streamed at a non-function-call item are dispatched by no path, so like non-visible
   /// text they are dropped rather than buffered. The carrier is a visible message item, which proves
   /// the drop turns on the item's type and not on its phase.
-  @Test func argumentDeltasForANonFunctionCallItemAreDroppedNotRetained() throws {
+  @Test
+  func argumentDeltasForANonFunctionCallItemAreDroppedNotRetained() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = Self.parser()
@@ -235,14 +245,13 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Replay state that fits is kept whole. The payload weighs exactly the cap, which is the boundary
   /// the codec owns and this asserts the accumulator hands it material it can still store.
-  @Test func replayStateOfExactlyTheStateCapSurvives() throws {
+  @Test
+  func replayStateOfExactlyTheStateCapSurvives() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = ChatGPTResponsesSSEParser()
     let stream = Self.reasoningStream(
-      encryptedBytes: Self.encryptedBytesForPayload(
-        of: ChatGPTProviderStateCodec.maximumStateBytes
-      )
+      encryptedBytes: Self.encryptedBytesForPayload(of: ChatGPTProviderStateCodec.maximumStateBytes)
     )
 
     // when
@@ -257,7 +266,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// State one byte too large costs the session its reasoning continuity and nothing else: the
   /// answer still lands, stamped with the epoch, carrying an empty payload.
-  @Test func replayStateOneByteOverTheStateCapDegradesToAnEmptyPayload() throws {
+  @Test
+  func replayStateOneByteOverTheStateCapDegradesToAnEmptyPayload() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = ChatGPTResponsesSSEParser()
@@ -282,7 +292,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// Replay material is bounded as it is retained, not only once it is encoded, so a stream of very
   /// large reasoning items cannot be materialized whole on its way to being discarded. Crossing the
   /// bound costs the session its continuity and never its answer.
-  @Test func replayMaterialOverTheStateCapIsDroppedAsItArrivesWithoutFailingTheTurn() throws {
+  @Test
+  func replayMaterialOverTheStateCapIsDroppedAsItArrivesWithoutFailingTheTurn() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = ChatGPTResponsesSSEParser()
@@ -304,7 +315,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Every bound reports a class and a count. A cap failure that quoted the bytes it refused would
   /// be a leak the cap was there to prevent.
-  @Test func aCapFailureReportsOnlyItsClassAndCountsAndNeverTheRefusedBytes() throws {
+  @Test
+  func aCapFailureReportsOnlyItsClassAndCountsAndNeverTheRefusedBytes() throws {
     // given
     var accumulator = Self.accumulator()
     var parser = Self.parser()
@@ -316,9 +328,7 @@ private typealias Support = ChatGPTProviderTestSupport
 
     // when
     var thrown: (any Error)?
-    do {
-      _ = try Self.deliver(stream, through: &parser, into: &accumulator)
-    } catch {
+    do { _ = try Self.deliver(stream, through: &parser, into: &accumulator) } catch {
       thrown = error
     }
     let failure = try #require(thrown as? ProviderError)
@@ -333,7 +343,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// The byte budget is summed with saturating arithmetic, so a stream that contrives an overflow is
   /// refused at the cap rather than wrapping into a negative total that would read as headroom.
-  @Test func anAccumulatedByteCountThatWouldOverflowSaturatesRatherThanWrapping() {
+  @Test
+  func anAccumulatedByteCountThatWouldOverflowSaturatesRatherThanWrapping() {
     // given
     let running = Int.max - 1
 
@@ -361,9 +372,7 @@ extension ChatGPTResponsesBoundsTests {
     ChatGPTResponsesSSEParser(bounds: compactBounds)
   }
 
-  fileprivate static func event(_ payload: String) -> String {
-    "data: \(payload)\n\n"
-  }
+  fileprivate static func event(_ payload: String) -> String { "data: \(payload)\n\n" }
 
   /// Delivers a stream the way a transport does — in chunks the parser drains as it goes — so that a
   /// test about an accumulation bound cannot trip the raw-buffer bound on its way there.
@@ -426,10 +435,7 @@ extension ChatGPTResponsesBoundsTests {
     var emitted = 0
     let batchSize = compactBounds.maximumDataEvents / 2
     for start in stride(from: 0, to: count, by: batchSize) {
-      let batch = String(
-        repeating: event(#"{"type":"u"}"#),
-        count: min(batchSize, count - start)
-      )
+      let batch = String(repeating: event(#"{"type":"u"}"#), count: min(batchSize, count - start))
       emitted += try parser.push(Data(batch.utf8)).count
     }
     return emitted
@@ -452,11 +458,8 @@ extension ChatGPTResponsesBoundsTests {
     )
   }
 
-  fileprivate static func argumentDeltaEvent(
-    index: Int,
-    callID: String,
-    fragment: String
-  ) -> String {
+  fileprivate static func argumentDeltaEvent(index: Int, callID: String, fragment: String) -> String
+  {
     event(
       #"{"type":"response.function_call_arguments.delta","output_index":\#(index),"#
         + #""call_id":"\#(callID)","delta":"\#(fragment)"}"#
@@ -529,7 +532,7 @@ extension ChatGPTResponsesBoundsTests {
       let width = min(chunkBytes, bytes - written)
       let item =
         #"{"id":"fc_\#(index)","type":"function_call","call_id":"call_\#(index)","#
-        + #""name":"clock","arguments":"\#(String(repeating: "a", count: width))"}"#
+          + #""name":"clock","arguments":"\#(String(repeating: "a", count: width))"}"#
       stream +=
         event(#"{"type":"response.output_item.added","output_index":\#(index),"item":\#(item)}"#)
         + event(#"{"type":"response.output_item.done","output_index":\#(index),"item":\#(item)}"#)
@@ -546,11 +549,9 @@ extension ChatGPTResponsesBoundsTests {
     for index in 0..<items {
       let item =
         #"{"id":"rs_\#(index)","type":"reasoning","#
-        + #""encrypted_content":"\#(String(repeating: "a", count: encryptedBytes))"}"#
+          + #""encrypted_content":"\#(String(repeating: "a", count: encryptedBytes))"}"#
       stream +=
-        event(
-          #"{"type":"response.output_item.added","output_index":\#(index),"item":\#(item)}"#
-        )
+        event(#"{"type":"response.output_item.added","output_index":\#(index),"item":\#(item)}"#)
         + event(#"{"type":"response.output_item.done","output_index":\#(index),"item":\#(item)}"#)
     }
     // The answer follows the reasoning items rather than sharing an index with one.
@@ -565,8 +566,7 @@ extension ChatGPTResponsesBoundsTests {
           + #""item":{"id":"msg_1","type":"message","role":"assistant","#
           + #""status":"completed","phase":"final","#
           + #""content":[{"type":"output_text","text":"answer"}]}}"#
-      )
-      + event(completed())
+      ) + event(completed())
   }
 
   /// How much encrypted content makes the canonical payload weigh exactly `payloadBytes`. Derived
@@ -575,7 +575,7 @@ extension ChatGPTResponsesBoundsTests {
     let empty = ChatGPTReplayItems(
       reasoning: [ChatGPTReasoningItem(encryptedContent: "")],
       assistantMessages: [
-        ChatGPTAssistantMessageItem(status: "completed", phase: "final", outputText: ["answer"])
+        ChatGPTAssistantMessageItem(status: "completed", phase: "final", outputText: ["answer"]),
       ]
     )
     let baseline = CanonicalJSON.encode(ChatGPTDurableReplayPayload(empty))?.utf8.count ?? 0

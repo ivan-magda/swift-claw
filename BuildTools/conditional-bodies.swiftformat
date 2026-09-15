@@ -1,6 +1,18 @@
-# Apple swift-format owns general layout. This pass supplies only the
-# conditional- and loop-body rules that Apple swift-format cannot express.
---rules wrapGuardStatementBodies,wrapIfStatementBodies,wrapLoopBodies
+# Final layout owners that supplement Apple swift-format (ARCHITECTURE.md §19.2).
+--rules blankLinesBetweenScopes,trailingCommas,trailingSpace,wrapAttributes,wrapGuardStatementBodies,wrapIfStatementBodies,wrapLoopBodies,wrap,wrapArguments,indent
 --indent 2
 --linebreaks lf
 --swift-version 6.3
+--trailing-commas collections-only
+--func-attributes prev-line
+--type-attributes prev-line
+--stored-var-attributes prev-line
+--computed-var-attributes prev-line
+--max-width 100
+--wrap-arguments before-first
+--wrap-parameters before-first
+--wrap-collections before-first
+--wrap-conditions before-first
+--allow-partial-wrapping false
+--indent-strings false
+--wrap-string-interpolation preserve

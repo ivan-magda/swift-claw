@@ -49,23 +49,21 @@ extension DaemonBuilder {
   /// catalog, the skills root and the resolved primary route only exist at the composition root;
   /// the policy version arrives from the caller, so the frozen value is byte-identical to the one
   /// the same pickup stamped on the run.
-  func makeLearningSurfaceFreeze(
-    toolDefinitions: [ToolDefinition],
-    workspace: FileSystemWorkspace
-  ) -> @Sendable (_ runId: Int64, _ policyVersion: String) -> Void {
+  func makeLearningSurfaceFreeze(toolDefinitions: [ToolDefinition], workspace: FileSystemWorkspace)
+    -> @Sendable (_ runID: Int64, _ policyVersion: String) -> Void
+  {
     guard config.learningEnabled else {
-      return { _, _ in
-      }
+      return { _, _ in }
     }
     let learning = stores.learning
     let toolCatalogDigest = Self.toolCatalogDigest(toolDefinitions)
     let configuredRoute = config.llm.route.configuredReference
     let logger = logger
-    return { runId, policyVersion in
+    return { runID, policyVersion in
       do {
         // Bound runs only. The skills scan is filesystem work, and an inbound turn — which can
         // never carry a binding — must not pay for a surface that would be discarded anyway.
-        guard try learning.binding(runId: runId) != nil else {
+        guard try learning.binding(runID: runID) != nil else {
           return
         }
         let surface = RunSurface(
@@ -74,10 +72,8 @@ extension DaemonBuilder {
           skillSetDigest: Self.skillSetDigest(workspace.scanSkills().descriptors),
           configuredRoute: configuredRoute
         )
-        try learning.freezeCompatibility(runId: runId, surface: surface)
-      } catch {
-        logger.error("run \(runId) compatibility freeze failed: \(error)")
-      }
+        try learning.freezeCompatibility(runID: runID, surface: surface)
+      } catch { logger.error("run \(runID) compatibility freeze failed: \(error)") }
     }
   }
 
@@ -87,8 +83,7 @@ extension DaemonBuilder {
   static func toolCatalogDigest(_ tools: [ToolDefinition]) -> String {
     let parts = tools.sorted { lhs, rhs in
       lhs.name < rhs.name
-    }
-    .flatMap { tool in
+    }.flatMap { tool in
       [tool.name, tool.riskLevel.rawValue]
     }
     return String(PolicyFingerprint.hash(parts: parts).prefix(16))
@@ -99,8 +94,7 @@ extension DaemonBuilder {
   static func skillSetDigest(_ skills: [SkillDescriptor]) -> String {
     let parts = skills.sorted { lhs, rhs in
       lhs.name < rhs.name
-    }
-    .flatMap { skill in
+    }.flatMap { skill in
       [skill.name, skill.description]
     }
     return String(PolicyFingerprint.hash(parts: parts).prefix(16))
@@ -156,7 +150,9 @@ extension DaemonBuilder {
       delivery: transport,
       learning: stores.learning,
       workflow: learning,
-      notifyOutbox: { signal.poke() },
+      notifyOutbox: {
+        signal.poke()
+      },
       now: now,
       logger: logger
     )

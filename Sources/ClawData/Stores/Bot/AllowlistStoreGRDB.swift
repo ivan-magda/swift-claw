@@ -5,27 +5,25 @@ import GRDB
 public struct AllowlistStoreGRDB: AllowlistStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) {
-    database = MappedDatabase(writer: writer)
-  }
+  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
 
-  public func seedAllowlist(userIds: [Int64]) throws(StoreError) {
+  public func seedAllowlist(userIDs: [Int64]) throws(StoreError) {
     try database.writeMapping { db in
-      for userId in userIds {
+      for userID in userIDs {
         try db.execute(
           sql: "INSERT OR IGNORE INTO allowlist(user_id, added_at) VALUES (?, ?)",
-          arguments: [userId, Date()]
+          arguments: [userID, Date()]
         )
       }
     }
   }
 
-  public func allowlistContains(userId: Int64) throws(StoreError) -> Bool {
+  public func allowlistContains(userID: Int64) throws(StoreError) -> Bool {
     try database.readMapping { db in
       try Bool.fetchOne(
         db,
         sql: "SELECT EXISTS(SELECT 1 FROM allowlist WHERE user_id = ?)",
-        arguments: [userId]
+        arguments: [userID]
       ) ?? false
     }
   }

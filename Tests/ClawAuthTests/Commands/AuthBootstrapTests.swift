@@ -17,19 +17,19 @@ private enum HostileDaemonConfig {
   ]
 }
 
-@Suite struct AuthBootstrapTests {
+@Suite
+struct AuthBootstrapTests {
   // MARK: - The State Root
 
-  @Test func theStateRootIsCreatedAtTheModeDaemonConfigWouldHaveUsed() throws {
+  @Test
+  func theStateRootIsCreatedAtTheModeDaemonConfigWouldHaveUsed() throws {
     // given
     let parent = try makeTemporaryRoot(prefix: "auth-bootstrap-root")
     defer { try? FileManager.default.removeItem(at: parent) }
     let named = parent.appendingPathComponent("root", isDirectory: true)
 
     // when
-    let bootstrap = try AuthBootstrap.resolve(environment: [
-      AppConfig.EnvKey.stateRoot: named.path
-    ])
+    let bootstrap = try AuthBootstrap.resolve(environment: [AppConfig.EnvKey.stateRoot: named.path])
 
     // then
     #expect(bootstrap.stateRoot.standardizedFileURL == named.standardizedFileURL)
@@ -37,7 +37,8 @@ private enum HostileDaemonConfig {
     #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o700)
   }
 
-  @Test func anAbsentStateRootResolvesToTheSameDefaultDaemonConfigUses() throws {
+  @Test
+  func anAbsentStateRootResolvesToTheSameDefaultDaemonConfigUses() throws {
     // given / when
     let bootstrap = try AuthBootstrap.resolve(environment: [:])
 
@@ -51,13 +52,15 @@ private enum HostileDaemonConfig {
   /// The reason the bootstrap exists: status has to be able to diagnose auth on an installation
   /// whose daemon config is broken, and login has to be able to discover a model before any model is
   /// configured. Both die if this ever starts loading `AppConfig`.
-  @Test func resolvingSucceedsOnConfigTheDaemonWouldRefuseToBootOn() throws {
+  @Test
+  func resolvingSucceedsOnConfigTheDaemonWouldRefuseToBootOn() throws {
     // given
     let root = try makeTemporaryRoot(prefix: "auth-bootstrap-narrow")
     defer { try? FileManager.default.removeItem(at: root) }
-    let environment = HostileDaemonConfig.entries.merging([
-      AppConfig.EnvKey.stateRoot: root.path
-    ]) { existing, _ in existing }
+    let environment = HostileDaemonConfig.entries.merging([AppConfig.EnvKey.stateRoot: root.path]) {
+      (existing, _) in
+      existing
+    }
 
     // when
     let bootstrap = try AuthBootstrap.resolve(environment: environment)
@@ -72,15 +75,14 @@ private enum HostileDaemonConfig {
     }
   }
 
-  @Test func resolvingNeedsNoAllowlistBaseURLModelBudgetOrScheduler() throws {
+  @Test
+  func resolvingNeedsNoAllowlistBaseURLModelBudgetOrScheduler() throws {
     // given
     let root = try makeTemporaryRoot(prefix: "auth-bootstrap-bare")
     defer { try? FileManager.default.removeItem(at: root) }
 
     // when
-    let bootstrap = try AuthBootstrap.resolve(environment: [
-      AppConfig.EnvKey.stateRoot: root.path
-    ])
+    let bootstrap = try AuthBootstrap.resolve(environment: [AppConfig.EnvKey.stateRoot: root.path])
 
     // then
     #expect(bootstrap.configuredModel == nil)
@@ -120,13 +122,16 @@ private enum HostileDaemonConfig {
 
   /// The supplied dictionary is the whole environment. A bootstrap that read or exported the
   /// process's own would make every auth command depend on how its shell happened to be started.
-  @Test func resolvingReadsTheSuppliedDictionaryAndExportsNothing() throws {
+  @Test
+  func resolvingReadsTheSuppliedDictionaryAndExportsNothing() throws {
     // given — snapshot only the keys a bootstrap could plausibly write, so the assertion is about
     // what resolve() exports, not about whatever the ambient shell happens to have set.
     let root = try makeTemporaryRoot(prefix: "auth-bootstrap-isolation")
     defer { try? FileManager.default.removeItem(at: root) }
     let writableKeys = [AppConfig.EnvKey.stateRoot, AppConfig.EnvKey.llmModel]
-    let before = writableKeys.map { ProcessInfo.processInfo.environment[$0] }
+    let before = writableKeys.map {
+      ProcessInfo.processInfo.environment[$0]
+    }
 
     // when
     let bootstrap = try AuthBootstrap.resolve(environment: [
@@ -137,7 +142,9 @@ private enum HostileDaemonConfig {
     // then
     #expect(bootstrap.stateRoot.standardizedFileURL == root.standardizedFileURL)
     #expect(bootstrap.configuredModel == "openai-chatgpt/gpt-5.4")
-    let after = writableKeys.map { ProcessInfo.processInfo.environment[$0] }
+    let after = writableKeys.map {
+      ProcessInfo.processInfo.environment[$0]
+    }
     #expect(after == before)
   }
 }

@@ -29,9 +29,7 @@ extension ScheduledJobStoreGRDB {
   static func insertJob(_ db: Database, _ job: NewScheduledJob, now: Date) throws -> ScheduledJob {
     let recurrenceJSON: String?
     if let envelope = job.recurrence {
-      do {
-        recurrenceJSON = try envelope.encodedJSON()
-      } catch {
+      do { recurrenceJSON = try envelope.encodedJSON() } catch {
         // Domain-typed at the seam: an EncodingError must not leak past the store either
         // (mirrors jobFromRow's decode wrap).
         throw StoreError.unexpected("unencodable recurrence envelope: \(error)")
@@ -42,12 +40,12 @@ extension ScheduledJobStoreGRDB {
 
     try db.execute(
       sql: """
-        INSERT INTO scheduled_jobs(owner_chat_id, label, prompt, recurrence, timezone,
-          next_occurrence, status, created_ts, updated_ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+      INSERT INTO scheduled_jobs(owner_chat_id, label, prompt, recurrence, timezone,
+        next_occurrence, status, created_ts, updated_ts)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      """,
       arguments: [
-        job.ownerChatId,
+        job.ownerChatID,
         job.label,
         job.prompt,
         recurrenceJSON,
@@ -84,10 +82,10 @@ extension ScheduledJobStoreGRDB {
       let rows = try Row.fetchAll(
         db,
         sql: """
-          SELECT * FROM scheduled_jobs
-          WHERE status = ? AND next_occurrence IS NOT NULL AND next_occurrence <= ?
-          ORDER BY next_occurrence ASC, id ASC
-          """,
+        SELECT * FROM scheduled_jobs
+        WHERE status = ? AND next_occurrence IS NOT NULL AND next_occurrence <= ?
+        ORDER BY next_occurrence ASC, id ASC
+        """,
         arguments: [ScheduledJobStatus.active.rawValue, EpochSecondCodec.epoch(now)]
       )
       return try rows.map { row in
@@ -116,9 +114,7 @@ extension ScheduledJobStoreGRDB {
   static func jobFromRow(_ row: Row) throws -> ScheduledJob {
     let recurrence: RecurrenceEnvelope?
     if let json = row["recurrence"] as String? {
-      do {
-        recurrence = try RecurrenceEnvelope.decode(fromJSON: json)
-      } catch {
+      do { recurrence = try RecurrenceEnvelope.decode(fromJSON: json) } catch {
         // Domain-typed at the seam: a DecodingError must not leak past the store either.
         throw StoreError.unexpected("undecodable recurrence envelope: \(error)")
       }
@@ -138,7 +134,7 @@ extension ScheduledJobStoreGRDB {
 
     return ScheduledJob(
       id: row["id"],
-      ownerChatId: row["owner_chat_id"],
+      ownerChatID: row["owner_chat_id"],
       label: row["label"],
       prompt: row["prompt"],
       recurrence: recurrence,
@@ -146,7 +142,7 @@ extension ScheduledJobStoreGRDB {
       nextOccurrence: EpochSecondCodec.date(fromEpoch: row["next_occurrence"]),
       lastFiredAt: EpochSecondCodec.date(fromEpoch: row["last_fired_at"]),
       status: status,
-      sessionId: row["session_id"],
+      sessionID: row["session_id"],
       createdTs: createdTs,
       updatedTs: updatedTs
     )
@@ -162,12 +158,9 @@ extension ScheduledJobStoreGRDB {
         return nil
       }
       switch current.status {
-      case .paused:
-        return current  // idempotent re-pause: no write, no duplicate audit
-      case .completed, .cancelled:
-        return nil  // terminal — the FSM has no exit
-      case .active:
-        break
+      case .paused: return current  // idempotent re-pause: no write, no duplicate audit
+      case .completed, .cancelled: return nil  // terminal — the FSM has no exit
+      case .active: break
       }
 
       try db.execute(
@@ -182,37 +175,32 @@ extension ScheduledJobStoreGRDB {
       try Self.insertVerbAudit(
         db,
         action: .jobPaused,
-        jobId: id,
-        sessionId: current.sessionId,
+        jobID: id,
+        sessionID: current.sessionID,
         now: now
       )
       return try Self.fetchJob(db, id: id)
     }
   }
 
-  public func resume(
-    id: Int64,
-    nextOccurrence: Date?,
-    now: Date
-  ) throws(StoreError) -> ScheduledJob? {
+  public func resume(id: Int64, nextOccurrence: Date?, now: Date) throws(StoreError)
+    -> ScheduledJob?
+  {
     try database.writeMapping { db in
       guard let current = try Self.fetchJob(db, id: id) else {
         return nil
       }
       switch current.status {
-      case .active:
-        return current  // idempotent: an already-running schedule is never re-aimed
-      case .completed, .cancelled:
-        return nil
-      case .paused:
-        break
+      case .active: return current  // idempotent: an already-running schedule is never re-aimed
+      case .completed, .cancelled: return nil
+      case .paused: break
       }
 
       try db.execute(
         sql: """
-          UPDATE scheduled_jobs SET status = ?, next_occurrence = ?, updated_ts = ?
-          WHERE id = ? AND status = ?
-          """,
+        UPDATE scheduled_jobs SET status = ?, next_occurrence = ?, updated_ts = ?
+        WHERE id = ? AND status = ?
+        """,
         arguments: [
           ScheduledJobStatus.active.rawValue,
           nextOccurrence.map(EpochSecondCodec.epoch),
@@ -224,8 +212,8 @@ extension ScheduledJobStoreGRDB {
       try Self.insertVerbAudit(
         db,
         action: .jobResumed,
-        jobId: id,
-        sessionId: current.sessionId,
+        jobID: id,
+        sessionID: current.sessionID,
         now: now
       )
       return try Self.fetchJob(db, id: id)
@@ -244,9 +232,9 @@ extension ScheduledJobStoreGRDB {
       // Terminal, row retained for audit; NULL next keeps it out of the ticker index forever.
       try db.execute(
         sql: """
-          UPDATE scheduled_jobs SET status = ?, next_occurrence = NULL, updated_ts = ?
-          WHERE id = ? AND status IN (?, ?)
-          """,
+        UPDATE scheduled_jobs SET status = ?, next_occurrence = NULL, updated_ts = ?
+        WHERE id = ? AND status IN (?, ?)
+        """,
         arguments: [
           ScheduledJobStatus.cancelled.rawValue,
           EpochSecondCodec.epoch(now),
@@ -258,8 +246,8 @@ extension ScheduledJobStoreGRDB {
       try Self.insertVerbAudit(
         db,
         action: .jobCancelled,
-        jobId: id,
-        sessionId: current.sessionId,
+        jobID: id,
+        sessionID: current.sessionID,
         now: now
       )
       return try Self.fetchJob(db, id: id)
@@ -273,8 +261,8 @@ private extension ScheduledJobStoreGRDB {
   static func insertVerbAudit(
     _ db: Database,
     action: AuditAction,
-    jobId: Int64,
-    sessionId: Int64?,
+    jobID: Int64,
+    sessionID: Int64?,
     now: Date
   ) throws {
     try AuditLogGRDB.insertAudit(
@@ -282,8 +270,8 @@ private extension ScheduledJobStoreGRDB {
       AuditEvent(
         actor: .owner,
         action: action,
-        argsRedacted: "{\"job_id\":\(jobId)}",
-        sessionId: sessionId,
+        argsRedacted: "{\"job_id\":\(jobID)}",
+        sessionID: sessionID,
         ts: now
       )
     )

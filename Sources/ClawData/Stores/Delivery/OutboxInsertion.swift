@@ -3,31 +3,28 @@ import Foundation
 import GRDB
 
 enum OutboxInsertion {
-  static func insertOutbox(
-    _ db: Database,
-    runId: Int64,
-    chunk: OutboxChunk,
-    now: Date
-  ) throws -> Bool {
-    let target = try outboxTarget(db, runId: runId, chatId: chunk.chatId)
+  static func insertOutbox(_ db: Database, runID: Int64, chunk: OutboxChunk, now: Date) throws
+    -> Bool
+  {
+    let target = try outboxTarget(db, runID: runID, chatID: chunk.chatID)
     try db.execute(
       sql: """
-        INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-          payload_hash, approval_id, reply_markup, message_thread_id, reply_to_message_id,
-          status, created_ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
-        """,
+      INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+        payload_hash, approval_id, reply_markup, message_thread_id, reply_to_message_id,
+        status, created_ts)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
+      """,
       arguments: [
-        runId,
+        runID,
         chunk.stepIndex,
-        chunk.chatId,
-        OutboxDedupKey.make(runId: runId, stepIndex: chunk.stepIndex),
+        chunk.chatID,
+        OutboxDedupKey.make(runID: runID, stepIndex: chunk.stepIndex),
         chunk.payload,
         chunk.payloadHash,
-        chunk.approvalId,
+        chunk.approvalID,
         chunk.replyMarkup,
-        target.messageThreadId,
-        target.replyToMessageId,
+        target.messageThreadID,
+        target.replyToMessageID,
         now,
       ]
     )
@@ -35,38 +32,34 @@ enum OutboxInsertion {
   }
 
   /// Resolves topic and reply metadata from the originating run; plain chats retain their target.
-  static func outboxTarget(
-    _ db: Database,
-    runId: Int64,
-    chatId: Int64
-  ) throws -> DeliveryTarget {
+  static func outboxTarget(_ db: Database, runID: Int64, chatID: Int64) throws -> DeliveryTarget {
     let row = try Row.fetchOne(
       db,
       sql: """
-        SELECT sessions.session_key AS session_key,
-          runs.trigger_telegram_message_id AS trigger_telegram_message_id
-        FROM runs JOIN sessions ON sessions.id = runs.session_id
-        WHERE runs.id = ?
-        """,
-      arguments: [runId]
+      SELECT sessions.session_key AS session_key,
+        runs.trigger_telegram_message_id AS trigger_telegram_message_id
+      FROM runs JOIN sessions ON sessions.id = runs.session_id
+      WHERE runs.id = ?
+      """,
+      arguments: [runID]
     )
     guard let row, SessionKey.mode(from: row["session_key"]) == .group else {
-      return .chat(chatId)
+      return .chat(chatID)
     }
     return DeliveryTarget(
-      chatId: chatId,
-      messageThreadId: SessionKey.threadId(from: row["session_key"]),
-      replyToMessageId: row["trigger_telegram_message_id"]
+      chatID: chatID,
+      messageThreadID: SessionKey.threadID(from: row["session_key"]),
+      replyToMessageID: row["trigger_telegram_message_id"]
     )
   }
 
   /// Appended notices start after earlier deliveries, including a suspended turn's approval prompt.
   /// Reusing a step would silently drop the notice under the outbox's dedup constraint.
-  static func nextOutboxStepBase(_ db: Database, runId: Int64) throws -> Int {
+  static func nextOutboxStepBase(_ db: Database, runID: Int64) throws -> Int {
     try Int.fetchOne(
       db,
       sql: "SELECT COALESCE(MAX(step_index) + 1, 0) FROM outbound_deliveries WHERE run_id = ?",
-      arguments: [runId]
+      arguments: [runID]
     ) ?? 0
   }
 
@@ -77,10 +70,10 @@ enum OutboxInsertion {
     }
     return OutboxChunk(
       stepIndex: chunk.stepIndex + base,
-      chatId: chunk.chatId,
+      chatID: chunk.chatID,
       payload: chunk.payload,
       payloadHash: chunk.payloadHash,
-      approvalId: chunk.approvalId,
+      approvalID: chunk.approvalID,
       replyMarkup: chunk.replyMarkup
     )
   }

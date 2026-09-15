@@ -10,11 +10,8 @@ public enum MemoryWriteArguments {
     case invalid(reason: String)
   }
 
-  public static func parse(_ arguments: JSONValue, sessionId: Int64?) -> Outcome {
-    guard
-      let text = arguments.objectValue?["text"]?.stringValue,
-      text.isEmpty == false
-    else {
+  public static func parse(_ arguments: JSONValue, sessionID: Int64?) -> Outcome {
+    guard let text = arguments.objectValue?["text"]?.stringValue, text.isEmpty == false else {
       return .invalid(reason: "memory_write needs a non-empty \"text\" argument.")
     }
 
@@ -29,8 +26,7 @@ public enum MemoryWriteArguments {
 
     let importance: Importance
     switch arguments.objectValue?["importance"]?.stringValue {
-    case nil:
-      importance = .normal
+    case nil: importance = .normal
     case .some(let raw):
       guard let parsed = Importance(wireLabel: raw) else {
         return .invalid(reason: "importance must be low, normal, or high.")
@@ -40,8 +36,7 @@ public enum MemoryWriteArguments {
 
     let sensitivity: Sensitivity
     switch arguments.objectValue?["sensitivity"]?.stringValue {
-    case nil:
-      sensitivity = .normal
+    case nil: sensitivity = .normal
     case .some(let raw):
       guard let parsed = Sensitivity(rawValue: raw) else {
         return .invalid(reason: "sensitivity must be normal or high.")
@@ -53,7 +48,7 @@ public enum MemoryWriteArguments {
       let request = try MemoryWriteBuilder.build(
         rawText: text,
         kind: kind,
-        sessionId: sessionId,
+        sessionID: sessionID,
         source: .assistant,
         importance: importance,
         sensitivity: sensitivity

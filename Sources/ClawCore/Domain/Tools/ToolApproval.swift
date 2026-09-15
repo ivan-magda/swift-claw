@@ -111,11 +111,11 @@ public struct RecordedToolAction: Sendable, Equatable {
 /// in ClawCore so the suspend commit (`RunStore`) and its GRDB store can bind to it without a
 /// dependency on ClawAgent.
 public struct PendingToolAction: Sendable, Equatable {
-  public let toolCallId: String
+  public let toolCallID: String
   public let recorded: RecordedToolAction
 
-  public init(toolCallId: String, recorded: RecordedToolAction) {
-    self.toolCallId = toolCallId
+  public init(toolCallID: String, recorded: RecordedToolAction) {
+    self.toolCallID = toolCallID
     self.recorded = recorded
   }
 }

@@ -76,11 +76,7 @@ public struct SchedulerService: Service {
       // Tick immediately on start (restart recovery), then sleep between ticks.
       while !Task.isCancelled {
         await tick()
-        do {
-          try await clock.sleep(for: Self.tickInterval)
-        } catch {
-          break
-        }
+        do { try await clock.sleep(for: Self.tickInterval) } catch { break }
       }
     }
     logger.info("scheduler stopped")
@@ -90,16 +86,12 @@ public struct SchedulerService: Service {
   /// failure (a failed tick is retried by the next one) rather than crash the service group.
   func tick() async {
     let tickTime = now()
-    do {
-      try jobs.recordTick(at: tickTime)
-    } catch {
+    do { try jobs.recordTick(at: tickTime) } catch {
       logger.error("scheduler recordTick failed: \(error)")
     }
 
     let dueJobs: [ScheduledJob]
-    do {
-      dueJobs = try jobs.dueJobs(now: tickTime)
-    } catch {
+    do { dueJobs = try jobs.dueJobs(now: tickTime) } catch {
       logger.error("scheduler due scan failed: \(error)")
       return
     }
@@ -152,7 +144,7 @@ private extension SchedulerService {
 
       guard
         let fire = try jobs.claimAndFire(
-          jobId: job.id,
+          jobID: job.id,
           due: due,
           fireAt: fireAt,
           nextOccurrence: policy.advance(
@@ -170,17 +162,10 @@ private extension SchedulerService {
       }
 
       await enqueuer.enqueue(fire: fire)
-    } catch {
-      logger.error("scheduler fire failed for job \(job.id): \(error)")
-    }
+    } catch { logger.error("scheduler fire failed for job \(job.id): \(error)") }
   }
 
-  func skipMisfire(
-    job: ScheduledJob,
-    due: Date,
-    timezone: TimeZone,
-    tickTime: Date
-  ) throws {
+  func skipMisfire(job: ScheduledJob, due: Date, timezone: TimeZone, tickTime: Date) throws {
     let skippedCount = policy.missedOccurrenceCount(
       for: job,
       timezone: timezone,
@@ -190,7 +175,7 @@ private extension SchedulerService {
     )
 
     _ = try jobs.skipMisfire(
-      jobId: job.id,
+      jobID: job.id,
       due: due,
       nextOccurrence: policy.advance(for: job, timezone: timezone, anchor: due, after: tickTime),
       skippedCount: skippedCount,
@@ -216,9 +201,7 @@ private extension SchedulerService {
     }
 
     let state: SchedulerState
-    do {
-      state = try jobs.schedulerState()
-    } catch {
+    do { state = try jobs.schedulerState() } catch {
       logger.error("heartbeat state read failed: \(error)")
       return
     }
@@ -256,7 +239,7 @@ private extension SchedulerService {
       guard
         let fire = try jobs.fireHeartbeat(
           prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
-          ownerChatId: heartbeat.ownerChatId,
+          ownerChatID: heartbeat.ownerChatID,
           now: tickTime,
           day: day
         )
@@ -268,9 +251,7 @@ private extension SchedulerService {
       }
       await skipEpisode.end()
       await enqueuer.enqueue(fire: fire)
-    } catch {
-      logger.error("heartbeat fire failed: \(error)")
-    }
+    } catch { logger.error("heartbeat fire failed: \(error)") }
   }
 
   /// A skip changes no durable state, so its audit row stands alone (no co-transaction to
@@ -290,9 +271,7 @@ private extension SchedulerService {
           ts: tickTime
         )
       )
-    } catch {
-      logger.error("heartbeatSkipped audit failed: \(error)")
-    }
+    } catch { logger.error("heartbeatSkipped audit failed: \(error)") }
   }
 }
 
@@ -320,7 +299,5 @@ actor HeartbeatSkipEpisode {
     return reason != lastReason
   }
 
-  func end() {
-    lastReason = nil
-  }
+  func end() { lastReason = nil }
 }

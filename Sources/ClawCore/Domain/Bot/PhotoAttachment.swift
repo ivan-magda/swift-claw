@@ -2,21 +2,16 @@ import Foundation
 
 /// One rung of Telegram's server-rendered size ladder.
 public struct PhotoSize: Sendable, Equatable {
-  public let fileId: String
-  public let fileUniqueId: String?
+  public let fileID: String
+  public let fileUniqueID: String?
   public let width: Int
   public let height: Int
   public let fileSizeBytes: Int64?
 
-  public init(
-    fileId: String,
-    fileUniqueId: String?,
-    width: Int,
-    height: Int,
-    fileSizeBytes: Int64?
-  ) {
-    self.fileId = fileId
-    self.fileUniqueId = fileUniqueId
+  public init(fileID: String, fileUniqueID: String?, width: Int, height: Int, fileSizeBytes: Int64?)
+  {
+    self.fileID = fileID
+    self.fileUniqueID = fileUniqueID
     self.width = width
     self.height = height
     self.fileSizeBytes = fileSizeBytes
@@ -31,9 +26,7 @@ public struct PhotoAttachment: Sendable, Equatable {
 
   public let sizes: [PhotoSize]
 
-  public init(sizes: [PhotoSize]) {
-    self.sizes = sizes
-  }
+  public init(sizes: [PhotoSize]) { self.sizes = sizes }
 
   /// The largest rung whose declared size fits, falling back to the largest overall so the transport
   /// cap stays the ground truth. Telegram documents no ordering for the array and its reference

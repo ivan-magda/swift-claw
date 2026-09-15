@@ -11,9 +11,15 @@ import ClawCore
 /// second casing of a name already merged is refused rather than seated — and every refusal quotes
 /// only the offending name, never the value it arrived with.
 enum CredentialHeaderMerge {
-  /// - Parameter adapterHeaders: the headers the adapter frames the request with and owns outright.
-  /// - Parameter allowlist: normalized (lowercased) credential-header name → the single spelling
-  ///   that reaches the wire.
+  /// Adds allowed credential headers without replacing adapter-owned headers.
+  ///
+  /// - Parameters:
+  ///   - adapterHeaders: The headers owned by the adapter's request framing.
+  ///   - allowlist: Lowercase credential-header names mapped to their canonical wire spelling.
+  ///   - authorization: Credential headers and exact values that must be redacted.
+  /// - Returns: The adapter headers combined with the accepted credential headers.
+  /// - Throws: A terminal `ProviderError` for an unapproved name, an adapter-header collision,
+  ///   or duplicate names that differ only in case; the error never includes a header value.
   static func merged(
     into adapterHeaders: [String: String],
     allowing allowlist: [String: String],

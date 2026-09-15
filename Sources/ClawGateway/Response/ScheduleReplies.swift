@@ -8,12 +8,9 @@ enum ScheduleReplies {
   /// The confirm prompt previews the next 3 fire times.
   static let confirmPreviewCount = 3
 
-  static let exampleLine =
-    "Example: /schedule every weekday at 07:00, summarize my unread items"
+  static let exampleLine = "Example: /schedule every weekday at 07:00, summarize my unread items"
 
-  static var parseFailed: String {
-    "I couldn't turn that into a schedule. \(exampleLine)"
-  }
+  static var parseFailed: String { "I couldn't turn that into a schedule. \(exampleLine)" }
 
   // The provider-failure copy for a `/schedule` parse delegates to `Degradation` so a scheduled
   // parse and an interactive turn hand the owner byte-identical guidance for the same failure — the
@@ -38,24 +35,18 @@ enum ScheduleReplies {
   /// router only routes provider-failure results here, so the fallback is never reached in practice).
   static func providerFailure(_ result: ScheduleDraftParseResult) -> String {
     switch result {
-    case .authenticationRequired:
-      return authenticationRequired
-    case .accessDenied:
-      return accessDenied
+    case .authenticationRequired: return authenticationRequired
+    case .accessDenied: return accessDenied
     case .quotaLimited(let retryAfterSeconds):
       return quotaLimited(retryAfterSeconds: retryAfterSeconds)
-    case .providerUnavailable, .draft, .unparseable, .budgetDenied:
-      return providerUnavailable
+    case .providerUnavailable, .draft, .unparseable, .budgetDenied: return providerUnavailable
     }
   }
 
-  static var emptyList: String {
-    "No schedules yet. \(exampleLine)"
-  }
+  static var emptyList: String { "No schedules yet. \(exampleLine)" }
 
   /// Terminal arm failure: the pending intent was cleared; re-issue.
-  static let armFailed =
-    "Couldn't arm the schedule. Nothing was created. Run /schedule again."
+  static let armFailed = "Couldn't arm the schedule. Nothing was created. Run /schedule again."
 
   /// A parked one-shot confirmed after its instant already passed — nothing left to arm.
   static let armExpired =
@@ -72,7 +63,7 @@ enum ScheduleReplies {
     ]
 
     for fire in nextFires {
-      lines.append("  \(fireTime(fire, timezoneId: schedule.timezone))")
+      lines.append("  \(fireTime(fire, timezoneID: schedule.timezone))")
     }
     lines.append("Reply yes to arm, no to cancel.")
 
@@ -88,7 +79,7 @@ enum ScheduleReplies {
 
     var text = "Armed schedule \(job.id) · «\(job.label)»"
     if let next = job.nextOccurrence {
-      text += " · next fire \(fireTime(next, timezoneId: job.timezone))"
+      text += " · next fire \(fireTime(next, timezoneID: job.timezone))"
     }
 
     return text + "."
@@ -99,18 +90,16 @@ enum ScheduleReplies {
     rows.map { row in
       let fire =
         row.nextFire.map { date in
-          fireTime(date, timezoneId: row.job.timezone)
+          fireTime(date, timezoneID: row.job.timezone)
         } ?? "—"
       return """
-        \(row.job.id) · \(row.job.label) · \(row.job.status.rawValue) · \
-        \(RecurrenceWords.describe(row.job.recurrence)) · \(row.job.timezone) · next \(fire)
-        """
+      \(row.job.id) · \(row.job.label) · \(row.job.status.rawValue) · \
+      \(RecurrenceWords.describe(row.job.recurrence)) · \(row.job.timezone) · next \(fire)
+      """
     }.joined(separator: "\n")
   }
 
-  static func notFound(id: Int64) -> String {
-    "No schedule with id \(id). See /schedule list."
-  }
+  static func notFound(id: Int64) -> String { "No schedule with id \(id). See /schedule list." }
 
   /// Terminal verb failure after the update was already claimed: nothing changed; re-issue.
   static let verbFailed = "Couldn't update the schedule. Nothing changed. Try again."
@@ -129,9 +118,9 @@ enum ScheduleReplies {
       return "Resumed schedule \(job.id) · «\(job.label)». Nothing left to fire."
     }
     return """
-      Resumed schedule \(job.id) · «\(job.label)». Next fire \
-      \(fireTime(next, timezoneId: job.timezone)).
-      """
+    Resumed schedule \(job.id) · «\(job.label)». Next fire \
+    \(fireTime(next, timezoneID: job.timezone)).
+    """
   }
 
   static func cancelled(job: ScheduledJob) -> String {
@@ -150,8 +139,8 @@ enum ScheduleReplies {
     "Schedule \(id) already has a run in progress. Wait for it to finish, then try again."
   }
 
-  static func fireTime(_ date: Date, timezoneId: String) -> String {
-    let zone = TimeZone(identifier: timezoneId) ?? .gmt  // id was validated upstream
+  static func fireTime(_ date: Date, timezoneID: String) -> String {
+    let zone = TimeZone(identifier: timezoneID) ?? .gmt  // id was validated upstream
     return date.wallClockMinute(in: zone)
   }
 }

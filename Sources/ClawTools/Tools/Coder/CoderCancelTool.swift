@@ -49,8 +49,6 @@ public struct CoderCancelTool: Tool {
         try await service.cancel(id: id, context: context),
         redactor: redactor
       )
-    } catch {
-      return CoderToolOutput.failure(error, redactor: redactor)
-    }
+    } catch { return CoderToolOutput.failure(error, redactor: redactor) }
   }
 }

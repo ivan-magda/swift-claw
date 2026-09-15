@@ -11,9 +11,7 @@ public enum ClawDatabase {
   }
 
   public static func makePool(path: String) throws -> DatabasePool {
-    do {
-      return try DatabasePool(path: path, configuration: makeConfiguration())
-    } catch {
+    do { return try DatabasePool(path: path, configuration: makeConfiguration()) } catch {
       throw StoreError.openFailed("\(error)")
     }
   }
@@ -24,11 +22,7 @@ public enum ClawDatabase {
   }
 
   public static func migrate(_ writer: any DatabaseWriter) throws {
-    do {
-      try migrator.migrate(writer)
-    } catch {
-      throw StoreError.migrationFailed("\(error)")
-    }
+    do { try migrator.migrate(writer) } catch { throw StoreError.migrationFailed("\(error)") }
   }
 
   static var migrator: DatabaseMigrator {
@@ -58,8 +52,7 @@ public enum ClawDatabase {
       }
       try db.create(table: "runs") { table in
         table.autoIncrementedPrimaryKey("id")
-        table.column("session_id", .integer).notNull()
-          .references("sessions", onDelete: .cascade)
+        table.column("session_id", .integer).notNull().references("sessions", onDelete: .cascade)
         table.column("state", .text).notNull()
         table.column("created_ts", .datetime).notNull()
         table.column("updated_ts", .datetime).notNull()
@@ -69,8 +62,7 @@ public enum ClawDatabase {
       }
       try db.create(table: "messages") { table in
         table.autoIncrementedPrimaryKey("id")
-        table.column("session_id", .integer).notNull()
-          .references("sessions", onDelete: .cascade)
+        table.column("session_id", .integer).notNull().references("sessions", onDelete: .cascade)
         table.column("run_id", .integer).references("runs", onDelete: .setNull)
         table.column("role", .text).notNull()
         table.column("content", .text).notNull()
@@ -82,8 +74,7 @@ public enum ClawDatabase {
       try db.create(table: "provider_usage") { table in
         table.autoIncrementedPrimaryKey("id")
         table.column("run_id", .integer).notNull().references("runs", onDelete: .cascade)
-        table.column("session_id", .integer).notNull()
-          .references("sessions", onDelete: .cascade)
+        table.column("session_id", .integer).notNull().references("sessions", onDelete: .cascade)
         table.column("model", .text).notNull()
         table.column("prompt_tokens", .integer).notNull()
         table.column("completion_tokens", .integer).notNull()
@@ -133,8 +124,7 @@ public enum ClawDatabase {
         table.column("sensitivity", .text).notNull()
         table.column("importance", .integer).notNull()
         table.column("source", .text).notNull()
-        table.column("session_id", .integer)
-          .references("sessions", onDelete: .setNull)
+        table.column("session_id", .integer).references("sessions", onDelete: .setNull)
         table.column("created_at", .datetime).notNull()
       }
       try db.create(
@@ -196,8 +186,7 @@ public enum ClawDatabase {
       try db.create(table: "provider_usage_new") { table in
         table.autoIncrementedPrimaryKey("id")
         table.column("run_id", .integer).references("runs", onDelete: .cascade)
-        table.column("session_id", .integer).notNull()
-          .references("sessions", onDelete: .cascade)
+        table.column("session_id", .integer).notNull().references("sessions", onDelete: .cascade)
         table.column("model", .text).notNull()
         table.column("prompt_tokens", .integer).notNull()
         table.column("completion_tokens", .integer).notNull()
@@ -214,8 +203,7 @@ public enum ClawDatabase {
       try db.create(table: "approvals") { table in
         table.autoIncrementedPrimaryKey("id")
         table.column("run_id", .integer).notNull().references("runs", onDelete: .cascade)
-        table.column("session_id", .integer).notNull()
-          .references("sessions", onDelete: .cascade)
+        table.column("session_id", .integer).notNull().references("sessions", onDelete: .cascade)
         table.column("state", .text).notNull()
         table.column("tool", .text).notNull()
         table.column("canonical_args", .text).notNull()
@@ -312,10 +300,8 @@ public enum ClawDatabase {
     }
 
     switch databaseError.resultCode.primaryResultCode {
-    case .SQLITE_FULL:
-      return StoreError.diskFull
-    default:
-      return StoreError.unexpected("\(databaseError)")
+    case .SQLITE_FULL: return StoreError.diskFull
+    default: return StoreError.unexpected("\(databaseError)")
     }
   }
 }

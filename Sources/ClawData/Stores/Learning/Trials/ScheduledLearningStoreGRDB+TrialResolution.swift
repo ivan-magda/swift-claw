@@ -17,74 +17,61 @@ extension ScheduledLearningStoreGRDB {
     let resolvedAt: Date?
   }
 
-  static func recomputeAssignment(
-    _ db: Database,
-    runId: Int64,
-    now: Date
-  ) throws -> AssignmentRecomputation {
-    guard let cached = try cachedAssignment(db, runId: runId) else {
+  static func recomputeAssignment(_ db: Database, runID: Int64, now: Date) throws
+    -> AssignmentRecomputation
+  {
+    guard let cached = try cachedAssignment(db, runID: runID) else {
       return .notAssigned
     }
-    guard let trialRow = try trialRow(db, trialId: cached.identity.trial.trialId) else {
-      throw StoreError.unexpected("assignment \(runId) names a missing trial")
+    guard let trialRow = try trialRow(db, trialID: cached.identity.trial.trialID) else {
+      throw StoreError.unexpected("assignment \(runID) names a missing trial")
     }
     var trial = try strictTrial(db, row: trialRow, currentState: nil)
     try validateAssignmentIdentity(db, cached: cached, trial: trial)
-    guard let current = try readState(db, jobId: trial.jobId) else {
-      throw StoreError.unexpected("assignment \(runId) belongs to a job without learning state")
+    guard let current = try readState(db, jobID: trial.jobID) else {
+      throw StoreError.unexpected("assignment \(runID) belongs to a job without learning state")
     }
     if trial.epoch < current.epoch {
       return .stale
     }
     guard trial.epoch == current.epoch else {
-      throw StoreError.unexpected("assignment \(runId) is ahead of the job learning epoch")
+      throw StoreError.unexpected("assignment \(runID) is ahead of the job learning epoch")
     }
     if trial.state == .open || trial.state == .draining {
       trial = try strictTrial(db, row: trialRow, currentState: current)
     }
 
-    let projected = try projectAssignment(
-      db,
-      cached: cached,
-      trial: trial,
-      currentState: current
-    )
+    let projected = try projectAssignment(db, cached: cached, trial: trial, currentState: current)
     if cached.state == .learningOutcomeResolved, projected.resolvedEvidence == nil {
       throw StoreError.unexpected("resolved assignment cache has no authoritative resolution event")
     }
     if cacheMatches(cached, projected: projected) {
       return .unchanged(withResolvedAt(projected, cached.resolvedAt))
     }
-    let updated = withResolvedAt(
-      projected,
-      projected.resolvedEvidence == nil ? nil : now
-    )
+    let updated = withResolvedAt(projected, projected.resolvedEvidence == nil ? nil : now)
     try persistAssignment(db, cached: cached, assignment: updated)
     return .updated(updated)
   }
 
-  static func assignmentRunIds(_ db: Database, trialId: Int64) throws -> [Int64] {
+  static func assignmentRunIDs(_ db: Database, trialID: Int64) throws -> [Int64] {
     try Int64.fetchAll(
       db,
       sql: "SELECT run_id FROM trial_assignments WHERE trial_id = ? ORDER BY run_id",
-      arguments: [trialId]
+      arguments: [trialID]
     )
   }
 
   static func authoritativeAssignment(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     trial: LearningTrial,
     currentState: JobLearningState
   ) throws -> TrialAssignment {
-    guard let cached = try cachedAssignment(db, runId: runId) else {
+    guard let cached = try cachedAssignment(db, runID: runID) else {
       throw StoreError.unexpected("trial cohort names a missing assignment")
     }
     try validateAssignmentIdentity(db, cached: cached, trial: trial)
-    guard
-      trial.epoch == currentState.epoch,
-      trial.jobId == currentState.jobId
-    else {
+    guard trial.epoch == currentState.epoch, trial.jobID == currentState.jobID else {
       throw StoreError.unexpected("live assignment projection crossed a learning epoch")
     }
     let projected = try projectAssignment(
@@ -99,28 +86,28 @@ extension ScheduledLearningStoreGRDB {
     return projected
   }
 
-  private static func cachedAssignment(_ db: Database, runId: Int64) throws -> CachedAssignment? {
+  private static func cachedAssignment(_ db: Database, runID: Int64) throws -> CachedAssignment? {
     guard
       let row = try Row.fetchOne(
         db,
         sql: """
-          SELECT run_id, trial_id, job_id, learning_epoch, trial_generation, assigned_at, state,
-            outcome, issue_codes, evaluation_digest, evaluation_required,
-            effective_feedback_revision, resolved_at
-          FROM trial_assignments WHERE run_id = ?
-          """,
-        arguments: [runId]
+        SELECT run_id, trial_id, job_id, learning_epoch, trial_generation, assigned_at, state,
+          outcome, issue_codes, evaluation_digest, evaluation_required,
+          effective_feedback_revision, resolved_at
+        FROM trial_assignments WHERE run_id = ?
+        """,
+        arguments: [runID]
       )
     else {
       return nil
     }
     guard
-      let storedRunId = SQLiteStoredValue.int64(in: row, column: "run_id"),
-      storedRunId == runId,
-      let trialId = SQLiteStoredValue.int64(in: row, column: "trial_id"),
-      trialId > 0,
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      jobId > 0,
+      let storedRunID = SQLiteStoredValue.int64(in: row, column: "run_id"),
+      storedRunID == runID,
+      let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
+      trialID > 0,
+      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      jobID > 0,
       let epochRaw = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
       epochRaw > 0,
       let generation = SQLiteStoredValue.int(in: row, column: "trial_generation"),
@@ -131,10 +118,7 @@ extension ScheduledLearningStoreGRDB {
       let state = TrialAssignmentState(rawValue: stateRaw),
       let outcomeRaw = SQLiteStoredValue.nullableString(in: row, column: "outcome"),
       let issueJSON = SQLiteStoredValue.nullableString(in: row, column: "issue_codes"),
-      let evaluationRaw = SQLiteStoredValue.nullableString(
-        in: row,
-        column: "evaluation_digest"
-      ),
+      let evaluationRaw = SQLiteStoredValue.nullableString(in: row, column: "evaluation_digest"),
       let evaluationRequiredRaw = SQLiteStoredValue.boolean(
         in: row,
         column: "evaluation_required"
@@ -145,11 +129,11 @@ extension ScheduledLearningStoreGRDB {
       ),
       let resolvedRaw = SQLiteStoredValue.nullableInt64(in: row, column: "resolved_at")
     else {
-      throw StoreError.unexpected("assignment \(runId) has unreadable stored values")
+      throw StoreError.unexpected("assignment \(runID) has unreadable stored values")
     }
     let outcome = outcomeRaw.value.flatMap(TrialOutcomeKind.init(rawValue:))
     guard outcomeRaw.value == nil || outcome != nil else {
-      throw StoreError.unexpected("assignment \(runId) has an unknown outcome")
+      throw StoreError.unexpected("assignment \(runID) has an unknown outcome")
     }
     let issueCodes = try issueJSON.value.map(decodeCanonicalIssueCodes)
     let feedback = feedbackRaw.value.map(FeedbackRevision.init)
@@ -165,7 +149,7 @@ extension ScheduledLearningStoreGRDB {
         resolvedAt != nil,
         issueCodesMatchOutcome(issueCodes, outcome: outcome)
       else {
-        throw StoreError.unexpected("assignment \(runId) has an invalid resolved cache shape")
+        throw StoreError.unexpected("assignment \(runID) has an invalid resolved cache shape")
       }
     } else {
       guard
@@ -176,18 +160,18 @@ extension ScheduledLearningStoreGRDB {
         feedback == nil,
         resolvedAt == nil
       else {
-        throw StoreError.unexpected("assignment \(runId) has an invalid unresolved cache shape")
+        throw StoreError.unexpected("assignment \(runID) has an invalid unresolved cache shape")
       }
     }
     return CachedAssignment(
       identity: TrialAssignmentIdentity(
         trial: LearningTrialIdentity(
-          trialId: trialId,
-          jobId: jobId,
+          trialID: trialID,
+          jobID: jobID,
           epoch: LearningEpoch(epochRaw),
           generation: generation
         ),
-        runId: runId
+        runID: runID
       ),
       assignedAt: assignedAt,
       state: state,
@@ -208,25 +192,22 @@ extension ScheduledLearningStoreGRDB {
     let identity = cached.identity
     guard
       identity.trial == trial.identity,
-      let binding = try readBinding(db, runId: identity.runId),
-      binding.runId == identity.runId,
-      binding.jobId == trial.jobId,
+      let binding = try readBinding(db, runID: identity.runID),
+      binding.runID == identity.runID,
+      binding.jobID == trial.jobID,
       binding.epoch == trial.epoch,
-      binding.trialId == trial.trialId,
+      binding.trialID == trial.trialID,
       binding.trialGeneration == trial.generation,
       binding.stableDigest == trial.baseDigest,
       binding.effectiveDigest == trial.replacementDigest
     else {
       throw StoreError.unexpected(
-        "assignment \(identity.runId) has inconsistent five-part identity"
+        "assignment \(identity.runID) has inconsistent five-part identity"
       )
     }
   }
 
-  private static func cacheMatches(
-    _ cached: CachedAssignment,
-    projected: TrialAssignment
-  ) -> Bool {
+  private static func cacheMatches(_ cached: CachedAssignment, projected: TrialAssignment) -> Bool {
     guard
       cached.identity == projected.identity,
       cached.assignedAt == projected.assignedAt,
@@ -235,19 +216,13 @@ extension ScheduledLearningStoreGRDB {
       return false
     }
     guard let evidence = projected.resolvedEvidence else {
-      return cached.outcome == nil
-        && cached.issueCodes == nil
-        && cached.evaluationDigest == nil
-        && cached.evaluationRequired
-        && cached.feedbackRevision == nil
-        && cached.resolvedAt == nil
+      return cached.outcome == nil && cached.issueCodes == nil && cached.evaluationDigest == nil
+        && cached.evaluationRequired && cached.feedbackRevision == nil && cached.resolvedAt == nil
     }
-    return cached.outcome == evidence.outcome
-      && cached.issueCodes == evidence.issueCodes
+    return cached.outcome == evidence.outcome && cached.issueCodes == evidence.issueCodes
       && cached.evaluationDigest == evidence.evaluationDigest
       && cached.evaluationRequired == evidence.evaluationRequired
-      && cached.feedbackRevision == evidence.effectiveFeedbackRevision
-      && cached.resolvedAt != nil
+      && cached.feedbackRevision == evidence.effectiveFeedbackRevision && cached.resolvedAt != nil
   }
 
   private static func persistAssignment(
@@ -261,12 +236,12 @@ extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: """
-        UPDATE trial_assignments
-        SET state = ?, outcome = ?, issue_codes = ?, evaluation_digest = ?,
-          evaluation_required = ?, effective_feedback_revision = ?, resolved_at = ?
-        WHERE run_id = ? AND trial_id = ? AND job_id = ? AND learning_epoch = ?
-          AND trial_generation = ?
-        """,
+      UPDATE trial_assignments
+      SET state = ?, outcome = ?, issue_codes = ?, evaluation_digest = ?,
+        evaluation_required = ?, effective_feedback_revision = ?, resolved_at = ?
+      WHERE run_id = ? AND trial_id = ? AND job_id = ? AND learning_epoch = ?
+        AND trial_generation = ?
+      """,
       arguments: [
         assignment.state.rawValue,
         evidence?.outcome.rawValue,
@@ -275,9 +250,9 @@ extension ScheduledLearningStoreGRDB {
         evidence?.evaluationRequired ?? true,
         evidence?.effectiveFeedbackRevision.value,
         assignment.resolvedAt.map(EpochSecondCodec.epoch),
-        cached.identity.runId,
-        cached.identity.trial.trialId,
-        cached.identity.trial.jobId,
+        cached.identity.runID,
+        cached.identity.trial.trialID,
+        cached.identity.trial.jobID,
         cached.identity.trial.epoch.value,
         cached.identity.trial.generation,
       ]
@@ -287,10 +262,9 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  private static func withResolvedAt(
-    _ assignment: TrialAssignment,
-    _ resolvedAt: Date?
-  ) -> TrialAssignment {
+  private static func withResolvedAt(_ assignment: TrialAssignment, _ resolvedAt: Date?)
+    -> TrialAssignment
+  {
     TrialAssignment(
       identity: assignment.identity,
       assignedAt: assignment.assignedAt,
@@ -300,15 +274,12 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  private static func issueCodesMatchOutcome(
-    _ issueCodes: [String],
-    outcome: TrialOutcomeKind
-  ) -> Bool {
+  private static func issueCodesMatchOutcome(_ issueCodes: [String], outcome: TrialOutcomeKind)
+    -> Bool
+  {
     switch outcome {
-    case .positive, .neutral:
-      return issueCodes.isEmpty
-    case .negative:
-      return true
+    case .positive, .neutral: return issueCodes.isEmpty
+    case .negative: return true
     }
   }
 }
@@ -322,16 +293,15 @@ extension ScheduledLearningStoreGRDB {
     trial: LearningTrial,
     currentState: JobLearningState
   ) throws -> TrialAssignment {
-    let runId = cached.identity.runId
-    if let cachedRevision = cached.feedbackRevision,
-      cachedRevision > currentState.feedbackRevision
+    let runID = cached.identity.runID
+    if let cachedRevision = cached.feedbackRevision, cachedRevision > currentState.feedbackRevision
     {
-      throw StoreError.unexpected("assignment \(runId) names a future feedback revision")
+      throw StoreError.unexpected("assignment \(runID) names a future feedback revision")
     }
-    guard let settlement = try readSettlement(db, runId: runId), settlement.settledAt != nil else {
+    guard let settlement = try readSettlement(db, runID: runID), settlement.settledAt != nil else {
       return unresolvedAssignment(cached, state: .created)
     }
-    guard let evidence = try strictEvidence(db, runId: runId, trial: trial) else {
+    guard let evidence = try strictEvidence(db, runID: runID, trial: trial) else {
       return unresolvedAssignment(cached, state: .primaryRunSettled)
     }
     guard evidence.eligibility.reachesEvaluator else {
@@ -349,12 +319,7 @@ extension ScheduledLearningStoreGRDB {
       )
     }
 
-    let source = try strictEvaluatorSource(
-      db,
-      runId: runId,
-      trial: trial,
-      evidence: evidence
-    )
+    let source = try strictEvaluatorSource(db, runID: runID, trial: trial, evidence: evidence)
     guard let attempt = source.attempt else {
       return unresolvedAssignment(cached, state: .primaryRunSettled)
     }
@@ -364,9 +329,9 @@ extension ScheduledLearningStoreGRDB {
     case .failed, .failedNoCall:
       let feedback = try assignmentFeedback(
         db,
-        jobId: trial.jobId,
+        jobID: trial.jobID,
         epoch: trial.epoch,
-        runIds: [runId],
+        runIDs: [runID],
         evaluationRuns: [:],
         currentRevision: currentState.feedbackRevision
       )
@@ -393,10 +358,10 @@ extension ScheduledLearningStoreGRDB {
       }
       let feedback = try assignmentFeedback(
         db,
-        jobId: trial.jobId,
+        jobID: trial.jobID,
         epoch: trial.epoch,
-        runIds: [runId],
-        evaluationRuns: [evaluation.digest.rawValue: runId],
+        runIDs: [runID],
+        evaluationRuns: [evaluation.digest.rawValue: runID],
         currentRevision: currentState.feedbackRevision
       )
       let resolved = OwnerPrecedence.resolve(
@@ -414,10 +379,9 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  private static func unresolvedAssignment(
-    _ cached: CachedAssignment,
-    state: TrialAssignmentState
-  ) -> TrialAssignment {
+  private static func unresolvedAssignment(_ cached: CachedAssignment, state: TrialAssignmentState)
+    -> TrialAssignment
+  {
     TrialAssignment(
       identity: cached.identity,
       assignedAt: cached.assignedAt,
@@ -449,7 +413,8 @@ extension ScheduledLearningStoreGRDB {
     let revision =
       cached.feedbackRevision.map { stored in
         max(stored, latestRelevant ?? stored)
-      } ?? currentState.feedbackRevision
+      }
+      ?? currentState.feedbackRevision
     return TrialAssignment(
       identity: cached.identity,
       assignedAt: cached.assignedAt,
@@ -466,17 +431,17 @@ extension ScheduledLearningStoreGRDB {
 
   private static func assignmentFeedback(
     _ db: Database,
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
-    runIds: Set<Int64>,
+    runIDs: Set<Int64>,
     evaluationRuns: [String: Int64],
     currentRevision: FeedbackRevision
   ) throws -> [StoredFeedbackProjection] {
     let feedback = try storedFeedback(
       db,
-      jobId: jobId,
+      jobID: jobID,
       epoch: epoch,
-      runIds: runIds,
+      runIDs: runIDs,
       evaluationRuns: evaluationRuns
     )
     guard

@@ -22,8 +22,16 @@ public enum MCPConfigLoader {
     static let connectTimeoutSeconds = "connectTimeoutSeconds"
     static let requestTimeoutSeconds = "requestTimeoutSeconds"
     static let tools = "tools"
+
     static let all: Set<String> = [
-      name, url, enabled, headers, authHeader, connectTimeoutSeconds, requestTimeoutSeconds, tools,
+      name,
+      url,
+      enabled,
+      headers,
+      authHeader,
+      connectTimeoutSeconds,
+      requestTimeoutSeconds,
+      tools,
     ]
   }
 
@@ -36,10 +44,9 @@ public enum MCPConfigLoader {
 
   /// Reads and decodes the catalog. An absent probed file means the feature is off; an absent file
   /// the owner named by env var is their error.
-  public static func load(
-    from source: MCPConfigSource,
-    fileManager: FileManager = .default
-  ) throws -> MCPConfig {
+  public static func load(from source: MCPConfigSource, fileManager: FileManager = .default) throws
+    -> MCPConfig
+  {
     let path = source.url.path
 
     guard fileManager.fileExists(atPath: path) else {
@@ -61,9 +68,7 @@ public enum MCPConfigLoader {
 
   public static func parse(yaml: String) throws -> MCPConfig {
     let loaded: Any?
-    do {
-      loaded = try Yams.load(yaml: yaml)
-    } catch {
+    do { loaded = try Yams.load(yaml: yaml) } catch {
       throw MCPConfigError.malformed(reason: "\(error)")
     }
 
@@ -143,10 +148,7 @@ private extension MCPConfigLoader {
         mapping[ToolsKey.include],
         key: "\(context).\(ToolsKey.include)"
       ),
-      exclude: try stringList(
-        mapping[ToolsKey.exclude],
-        key: "\(context).\(ToolsKey.exclude)"
-      ),
+      exclude: try stringList(mapping[ToolsKey.exclude], key: "\(context).\(ToolsKey.exclude)"),
       risk: try parseRisk(mapping[ToolsKey.risk], context: "\(context).\(ToolsKey.risk)")
     )
   }
@@ -178,13 +180,15 @@ private extension MCPConfigLoader {
     return raw
   }
 
-  static func requireKnownKeys(
-    in mapping: [String: Any],
-    allowed: Set<String>,
-    context: String?
-  ) throws {
+  static func requireKnownKeys(in mapping: [String: Any], allowed: Set<String>, context: String?)
+    throws
+  {
     for key in mapping.keys.sorted() where allowed.contains(key) == false {
-      throw MCPConfigError.unknownKey(context.map { "\($0).\(key)" } ?? key)
+      throw MCPConfigError.unknownKey(
+        context.map {
+          "\($0).\(key)"
+        } ?? key
+      )
     }
   }
 

@@ -19,8 +19,7 @@ extension ClawDatabase {
 
     try db.create(table: "messages_new") { table in
       table.autoIncrementedPrimaryKey("id")
-      table.column("session_id", .integer).notNull()
-        .references("sessions", onDelete: .cascade)
+      table.column("session_id", .integer).notNull().references("sessions", onDelete: .cascade)
       table.column("run_id", .integer).references("runs", onDelete: .setNull)
       table.column("role", .text).notNull()
       table.column("content", .text).notNull()
@@ -40,12 +39,12 @@ extension ClawDatabase {
     // mis-seat every value if either table's column order ever drifted.
     try db.execute(
       sql: """
-        INSERT INTO messages_new (id, session_id, run_id, role, content, provenance, ts,
-          prompt_tokens, completion_tokens, tool_calls, tool_call_id)
-        SELECT id, session_id, run_id, role, content, provenance, ts, prompt_tokens,
-          completion_tokens, tool_calls, tool_call_id
-        FROM messages
-        """
+      INSERT INTO messages_new (id, session_id, run_id, role, content, provenance, ts,
+        prompt_tokens, completion_tokens, tool_calls, tool_call_id)
+      SELECT id, session_id, run_id, role, content, provenance, ts, prompt_tokens,
+        completion_tokens, tool_calls, tool_call_id
+      FROM messages
+      """
     )
     try db.drop(table: "messages")
     try db.rename(table: "messages_new", to: "messages")
@@ -67,8 +66,7 @@ extension ClawDatabase {
     try db.create(table: "provider_usage_new") { table in
       table.autoIncrementedPrimaryKey("id")
       table.column("run_id", .integer).references("runs", onDelete: .cascade)
-      table.column("session_id", .integer).notNull()
-        .references("sessions", onDelete: .cascade)
+      table.column("session_id", .integer).notNull().references("sessions", onDelete: .cascade)
       table.column("model", .text).notNull()
       table.column("prompt_tokens", .integer).notNull()
       table.column("completion_tokens", .integer).notNull()
@@ -80,12 +78,12 @@ extension ClawDatabase {
     }
     try db.execute(
       sql: """
-        INSERT INTO provider_usage_new (id, run_id, session_id, model, prompt_tokens,
-          completion_tokens, cost_usd, cost_source, is_estimated, ts, provider_call_id)
-        SELECT id, run_id, session_id, model, prompt_tokens, completion_tokens, cost_usd,
-          cost_source, is_estimated, ts, 'legacy:' || id
-        FROM provider_usage
-        """
+      INSERT INTO provider_usage_new (id, run_id, session_id, model, prompt_tokens,
+        completion_tokens, cost_usd, cost_source, is_estimated, ts, provider_call_id)
+      SELECT id, run_id, session_id, model, prompt_tokens, completion_tokens, cost_usd,
+        cost_source, is_estimated, ts, 'legacy:' || id
+      FROM provider_usage
+      """
     )
     try db.drop(table: "provider_usage")
     try db.rename(table: "provider_usage_new", to: "provider_usage")

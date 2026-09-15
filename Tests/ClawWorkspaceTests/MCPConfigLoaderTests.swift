@@ -4,24 +4,26 @@ import Testing
 
 @testable import ClawWorkspace
 
-@Suite struct MCPConfigLoaderTests {
-  @Test func decodesServerListWithEveryFieldSet() throws {
+@Suite
+struct MCPConfigLoaderTests {
+  @Test
+  func decodesServerListWithEveryFieldSet() throws {
     // given
     let yaml = """
-      servers:
-        - name: linear
-          url: https://mcp.linear.app/mcp
-          enabled: false
-          authHeader: X-Api-Key
-          headers:
-            X-Client: swift-claw
-          connectTimeoutSeconds: 5
-          requestTimeoutSeconds: 60
-          tools:
-            include: [list_issues, create_issue]
-            risk:
-              list_issues: safe
-      """
+    servers:
+      - name: linear
+        url: https://mcp.linear.app/mcp
+        enabled: false
+        authHeader: X-Api-Key
+        headers:
+          X-Client: swift-claw
+        connectTimeoutSeconds: 5
+        requestTimeoutSeconds: 60
+        tools:
+          include: [list_issues, create_issue]
+          risk:
+            list_issues: safe
+    """
 
     // when
     let config = try MCPConfigLoader.parse(yaml: yaml)
@@ -42,13 +44,14 @@ import Testing
     #expect(server.tools.riskLevel(for: "create_issue") == .ask)
   }
 
-  @Test func appliesDefaultsWhenOnlyNameAndURLAreGiven() throws {
+  @Test
+  func appliesDefaultsWhenOnlyNameAndURLAreGiven() throws {
     // given
     let yaml = """
-      servers:
-        - name: docs
-          url: http://127.0.0.1:8080/mcp
-      """
+    servers:
+      - name: docs
+        url: http://127.0.0.1:8080/mcp
+    """
 
     // when
     let config = try MCPConfigLoader.parse(yaml: yaml)
@@ -64,16 +67,17 @@ import Testing
     #expect(server.worstCaseCallSeconds == 40)
   }
 
-  @Test func includeWinsWhenBothFiltersArePresent() throws {
+  @Test
+  func includeWinsWhenBothFiltersArePresent() throws {
     // given
     let yaml = """
-      servers:
-        - name: docs
-          url: https://example.com/mcp
-          tools:
-            include: [search]
-            exclude: [search, write]
-      """
+    servers:
+      - name: docs
+        url: https://example.com/mcp
+        tools:
+          include: [search]
+          exclude: [search, write]
+    """
 
     // when
     let server = try #require(MCPConfigLoader.parse(yaml: yaml).servers.first)
@@ -83,15 +87,16 @@ import Testing
     #expect(server.tools.allows("write") == false)
   }
 
-  @Test func explicitEmptyIncludeExposesNoRemoteTools() throws {
+  @Test
+  func explicitEmptyIncludeExposesNoRemoteTools() throws {
     // given
     let yaml = """
-      servers:
-        - name: docs
-          url: https://example.com/mcp
-          tools:
-            include: []
-      """
+    servers:
+      - name: docs
+        url: https://example.com/mcp
+        tools:
+          include: []
+    """
 
     // when
     let server = try #require(MCPConfigLoader.parse(yaml: yaml).servers.first)
@@ -101,15 +106,22 @@ import Testing
     #expect(server.tools.allows("search") == false)
   }
 
-  @Test func emptyDocumentAndAbsentServerListBothYieldNoServers() throws {
+  @Test
+  func emptyDocumentAndAbsentServerListBothYieldNoServers() throws {
     // given
     let documents = ["", "# only a comment\n", "servers:\n"]
 
     // when
-    let configs = try documents.map { try MCPConfigLoader.parse(yaml: $0) }
+    let configs = try documents.map {
+      try MCPConfigLoader.parse(yaml: $0)
+    }
 
     // then
-    #expect(configs.allSatisfy { $0.servers.isEmpty })
+    #expect(
+      configs.allSatisfy {
+        $0.servers.isEmpty
+      }
+    )
   }
 
   @Test(arguments: [
@@ -126,7 +138,7 @@ import Testing
     (
       "unknown tools key",
       yaml:
-        "servers:\n  - name: docs\n    url: https://example.com/mcp\n    tools:\n      only: []\n",
+      "servers:\n  - name: docs\n    url: https://example.com/mcp\n    tools:\n      only: []\n",
       expected: MCPConfigError.unknownKey("servers[0].tools.only")
     ),
     (
@@ -210,18 +222,16 @@ import Testing
       yaml: "servers: docs\n",
       expected: MCPConfigError.invalidValue(key: "servers", value: "expected a list")
     ),
-  ]) func rejectsInvalidConfig(
-    description: String,
-    yaml: String,
-    expected: MCPConfigError
-  ) {
+  ])
+  func rejectsInvalidConfig(description: String, yaml: String, expected: MCPConfigError) {
     // given / when / then
     #expect(throws: expected) {
       try MCPConfigLoader.parse(yaml: yaml)
     }
   }
 
-  @Test func malformedYAMLIsReportedAsMalformed() {
+  @Test
+  func malformedYAMLIsReportedAsMalformed() {
     // given
     let yaml = "servers:\n  - name: docs\n   url: [unclosed\n"
 
@@ -237,7 +247,8 @@ import Testing
     }
   }
 
-  @Test func missingProbedFileLeavesTheFeatureOff() throws {
+  @Test
+  func missingProbedFileLeavesTheFeatureOff() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -250,7 +261,8 @@ import Testing
     #expect(config.servers.isEmpty)
   }
 
-  @Test func missingExplicitFileIsAnOwnerError() throws {
+  @Test
+  func missingExplicitFileIsAnOwnerError() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -262,7 +274,8 @@ import Testing
     }
   }
 
-  @Test func readsAPresentFileFromDisk() throws {
+  @Test
+  func readsAPresentFileFromDisk() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -280,7 +293,8 @@ import Testing
     #expect(config.servers.map(\.name) == ["docs"])
   }
 
-  @Test func presentButNonUTF8FileIsUnreadable() throws {
+  @Test
+  func presentButNonUTF8FileIsUnreadable() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }

@@ -11,6 +11,7 @@ struct ReflectionRunEnvironment {
   static let route = "openai-compatible/reflection-model"
   static let fallbackRoute = "openai-compatible/reflection-fallback"
   static let issueCode = "material.missed"
+
   static let candidateReply =
     #"{"schema_version":1,"candidate":{"lessons":["Report only material changes."]}}"#
 
@@ -22,7 +23,7 @@ struct ReflectionRunEnvironment {
   let fallbackProvider: SequenceProvider
   let callIDs: RecordingProviderCallIDGenerator
   let runner: LearningOperationRunner
-  let jobId: Int64
+  let jobID: Int64
   let trigger: TriggerIdentity
   let now: Date
 
@@ -41,11 +42,10 @@ struct ReflectionRunEnvironment {
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let recurrence =
       repeatable
-      ? SchedulingRuleFixtures.weekdayEnvelope(zone: TimeZone(secondsFromGMT: 0) ?? .gmt)
-      : nil
+        ? SchedulingRuleFixtures.weekdayEnvelope(zone: TimeZone(secondsFromGMT: 0) ?? .gmt) : nil
     let job = try jobs.create(
       NewScheduledJob(
-        ownerChatId: 777,
+        ownerChatID: 777,
         label: "digest",
         prompt: "Check the page for material changes.",
         recurrence: recurrence,
@@ -55,13 +55,13 @@ struct ReflectionRunEnvironment {
       now: now
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
+    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobID: job.id, now: now)
     let runs = RunStoreGRDB(writer: queue)
     let first = try evaluatedEvidence(
       jobs: jobs,
       runs: runs,
       learning: learning,
-      jobId: job.id,
+      jobID: job.id,
       output: finalOutput,
       now: now
     )
@@ -69,7 +69,7 @@ struct ReflectionRunEnvironment {
       jobs: jobs,
       runs: runs,
       learning: learning,
-      jobId: job.id,
+      jobID: job.id,
       output: finalOutput,
       now: now
     )
@@ -77,7 +77,7 @@ struct ReflectionRunEnvironment {
       throw StoreError.unexpected("reflection fixture evidence has no stable lesson digest")
     }
     let trigger = TriggerIdentity(
-      jobId: job.id,
+      jobID: job.id,
       epoch: first.epoch,
       algorithm: .v1,
       stableDigest: LessonSetDigest(rawValue: stableDigest),
@@ -95,19 +95,15 @@ struct ReflectionRunEnvironment {
     let provider =
       primaryFailure.map { failure in
         SequenceProvider([], then: failure)
-      } ?? SequenceProvider([response])
+      }
+      ?? SequenceProvider([response])
     let fallbackProvider = SequenceProvider(primaryFailure == nil ? [] : [response])
     let callIDs = RecordingProviderCallIDGenerator()
-    let runnerLearning = RecordingLearningStore(
-      base: learning,
-      admissionFails: admissionFails
-    )
+    let runnerLearning = RecordingLearningStore(base: learning, admissionFails: admissionFails)
     let roster = ProviderRoster(
       primary: routeBinding(provider: provider, reference: route),
-      fallback:
-        primaryFailure == nil
-        ? nil
-        : routeBinding(provider: fallbackProvider, reference: fallbackRoute)
+      fallback: primaryFailure == nil
+        ? nil : routeBinding(provider: fallbackProvider, reference: fallbackRoute)
     )
     return ReflectionRunEnvironment(
       queue: queue,
@@ -130,7 +126,7 @@ struct ReflectionRunEnvironment {
         providerCallIDGenerator: callIDs,
         logger: logger
       ),
-      jobId: job.id,
+      jobID: job.id,
       trigger: trigger,
       now: now
     )
@@ -149,7 +145,9 @@ final class RecordingProviderCallIDGenerator: ProviderCallIDGenerating, @uncheck
   }
 
   var count: Int {
-    lock.withLock { issued }
+    lock.withLock {
+      issued
+    }
   }
 }
 
@@ -160,9 +158,9 @@ extension ReflectionRunEnvironment {
     try stringColumn("state").flatMap(LearningOperationState.init(rawValue:))
   }
 
-  func reflectorOperationId() -> LearningOperationID {
+  func reflectorOperationID() -> LearningOperationID {
     let key = LearningOperationKey(
-      jobId: jobId,
+      jobID: jobID,
       epoch: trigger.epoch,
       phase: .reflector,
       sourceDigest: trigger.digest.rawValue,
@@ -216,7 +214,7 @@ extension ReflectionRunEnvironment {
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM provider_usage WHERE learning_operation_id = ?",
-        arguments: [reflectorOperationId().rawValue]
+        arguments: [reflectorOperationID().rawValue]
       ) ?? -1
     }
   }
@@ -226,7 +224,7 @@ extension ReflectionRunEnvironment {
       try String.fetchOne(
         db,
         sql: "SELECT model FROM provider_usage WHERE learning_operation_id = ?",
-        arguments: [reflectorOperationId().rawValue]
+        arguments: [reflectorOperationID().rawValue]
       )
     }
   }
@@ -242,7 +240,7 @@ extension ReflectionRunEnvironment {
   }
 
   func cancelJob() throws {
-    guard try jobs.cancel(id: jobId, now: now) != nil else {
+    guard try jobs.cancel(id: jobID, now: now) != nil else {
       throw StoreError.unexpected("reflection fixture job refused cancellation")
     }
   }
@@ -251,22 +249,22 @@ extension ReflectionRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET feedback_revision = ? WHERE job_id = ?",
-        arguments: [revision.value, jobId]
+        arguments: [revision.value, jobID]
       )
     }
   }
 
   func openLiveTrialWithoutPointer() throws {
-    let replacement = try LessonSet.canonical(jobId: jobId, lessons: ["trial lesson"])
+    let replacement = try LessonSet.canonical(jobID: jobID, lessons: ["trial lesson"])
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO lesson_sets(job_id, digest, schema_version, \
-          canonical_bytes, source, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-          """,
+        INSERT INTO lesson_sets(job_id, digest, schema_version, \
+        canonical_bytes, source, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
         arguments: [
-          jobId,
+          jobID,
           replacement.digest.rawValue,
           replacement.schemaVersion,
           replacement.canonicalBytes,
@@ -276,13 +274,13 @@ extension ReflectionRunEnvironment {
       )
       try db.execute(
         sql: """
-          INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
-            replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
-            source_manifest, algorithm, created_at)
-          VALUES ('live-candidate', ?, ?, ?, ?, 0, 0, ?, '{}', ?, ?)
-          """,
+        INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
+          replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
+          source_manifest, algorithm, created_at)
+        VALUES ('live-candidate', ?, ?, ?, ?, 0, 0, ?, '{}', ?, ?)
+        """,
         arguments: [
-          jobId,
+          jobID,
           trigger.epoch.value,
           replacement.digest.rawValue,
           trigger.stableDigest.rawValue,
@@ -293,13 +291,13 @@ extension ReflectionRunEnvironment {
       )
       try db.execute(
         sql: """
-          INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
-            generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
-            consumed_assignments, cohort_cutoff, state, algorithm)
-          VALUES (?, ?, ?, 'live-candidate', 1, ?, ?, ?, 5, 0, ?, ?, ?)
-          """,
+        INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
+          generation, admitted_at, assignment_deadline, decision_deadline, max_assignments,
+          consumed_assignments, cohort_cutoff, state, algorithm)
+        VALUES (?, ?, ?, 'live-candidate', 1, ?, ?, ?, 5, 0, ?, ?, ?)
+        """,
         arguments: [
-          jobId,
+          jobID,
           trigger.epoch.value,
           trigger.stableDigest.rawValue,
           EpochSecondCodec.epoch(now),
@@ -318,10 +316,10 @@ extension ReflectionRunEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT evaluation_digest, run_id FROM learning_evaluations
-          WHERE job_id = ? ORDER BY created_at, run_id LIMIT 2
-          """,
-        arguments: [jobId]
+        SELECT evaluation_digest, run_id FROM learning_evaluations
+        WHERE job_id = ? ORDER BY created_at, run_id LIMIT 2
+        """,
+        arguments: [jobID]
       )
     }
     guard sources.count == 2 else {
@@ -332,12 +330,12 @@ extension ReflectionRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
-            actor, feedback_revision, occurred_at)
-          VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-          """,
+        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
+          actor, feedback_revision, occurred_at)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+        """,
         arguments: [
-          jobId,
+          jobID,
           trigger.epoch.value,
           FeedbackSubjectKind.evaluation.rawValue,
           disputed["evaluation_digest"] as String,
@@ -348,12 +346,12 @@ extension ReflectionRunEnvironment {
       )
       try db.execute(
         sql: """
-          INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
-            payload, actor, feedback_revision, occurred_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 2, ?)
-          """,
+        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
+          payload, actor, feedback_revision, occurred_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 2, ?)
+        """,
         arguments: [
-          jobId,
+          jobID,
           trigger.epoch.value,
           FeedbackSubjectKind.run.rawValue,
           String(corrected["run_id"] as Int64),
@@ -365,11 +363,11 @@ extension ReflectionRunEnvironment {
       )
       try db.execute(
         sql: "UPDATE job_learning_state SET feedback_revision = 2 WHERE job_id = ?",
-        arguments: [jobId]
+        arguments: [jobID]
       )
     }
     return TriggerIdentity(
-      jobId: trigger.jobId,
+      jobID: trigger.jobID,
       epoch: trigger.epoch,
       algorithm: trigger.algorithm,
       stableDigest: trigger.stableDigest,
@@ -388,16 +386,16 @@ private extension ReflectionRunEnvironment {
     jobs: ScheduledJobStoreGRDB,
     runs: RunStoreGRDB,
     learning: ScheduledLearningStoreGRDB,
-    jobId: Int64,
+    jobID: Int64,
     output: String,
     now: Date
   ) throws -> SealedEvidence {
-    guard case .fired(let fire) = try jobs.fireNow(jobId: jobId, now: now) else {
+    guard case .fired(let fire) = try jobs.fireNow(jobID: jobID, now: now) else {
       throw StoreError.unexpected("reflection fixture job refused to fire")
     }
-    _ = try runs.pickUp(runId: fire.runId, now: now)
+    _ = try runs.pickUp(runID: fire.runID, now: now)
     try learning.freezeCompatibility(
-      runId: fire.runId,
+      runID: fire.runID,
       surface: RunSurface(
         toolCatalogDigest: "tools-v1",
         policyVersion: "pv16",
@@ -406,15 +404,15 @@ private extension ReflectionRunEnvironment {
       )
     )
     _ = try runs.commitAssistantTurn(
-      assistantTurn(runId: fire.runId, sessionId: fire.sessionId, output: output),
+      assistantTurn(runID: fire.runID, sessionID: fire.sessionID, output: output),
       now: now
     )
-    _ = try learning.sealEvidence(runId: fire.runId, now: now)
-    guard let evidence = try learning.evidence(runId: fire.runId) else {
+    _ = try learning.sealEvidence(runID: fire.runID, now: now)
+    guard let evidence = try learning.evidence(runID: fire.runID) else {
       throw StoreError.unexpected("reflection fixture failed to seal evidence")
     }
     let key = LearningOperationKey(
-      jobId: jobId,
+      jobID: jobID,
       epoch: evidence.epoch,
       phase: .evaluator,
       sourceDigest: evidence.digest.rawValue,
@@ -426,10 +424,10 @@ private extension ReflectionRunEnvironment {
       throw StoreError.unexpected("reflection fixture failed to claim evaluator")
     }
     let authorization = LearningAuthorization(
-      operationId: claim.id,
+      operationID: claim.id,
       carrier: CarrierAuthorization(
         sourceDigest: evidence.digest.rawValue,
-        digest: CarrierDigest(rawValue: "fixture-\(fire.runId)"),
+        digest: CarrierDigest(rawValue: "fixture-\(fire.runID)"),
         isPermitted: true
       ),
       estimatedTokens: 100,
@@ -442,7 +440,7 @@ private extension ReflectionRunEnvironment {
       throw StoreError.unexpected("reflection fixture failed to start evaluator")
     }
     let result = LearningOperationResult(
-      operationId: claim.id,
+      operationID: claim.id,
       usage: LearningCallUsage(
         model: route,
         promptTokens: 100,
@@ -470,24 +468,20 @@ private extension ReflectionRunEnvironment {
     return evidence
   }
 
-  static func assistantTurn(
-    runId: Int64,
-    sessionId: Int64,
-    output: String
-  ) -> AssistantTurn {
+  static func assistantTurn(runID: Int64, sessionID: Int64, output: String) -> AssistantTurn {
     AssistantTurn(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: 777,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: 777,
       content: output,
-      usage: usageFixture(sessionId: sessionId, runId: runId, model: route),
+      usage: usageFixture(sessionID: sessionID, runID: runID, model: route),
       chunks: [
         OutboxChunk(
           stepIndex: 0,
-          chatId: 777,
+          chatID: 777,
           payload: output,
           payloadHash: ContentHash.fnv1a(output)
-        )
+        ),
       ]
     )
   }
@@ -521,7 +515,7 @@ private extension ReflectionRunEnvironment {
       try String.fetchOne(
         db,
         sql: "SELECT \(column) FROM learning_operations WHERE operation_id = ?",
-        arguments: [reflectorOperationId().rawValue]
+        arguments: [reflectorOperationID().rawValue]
       )
     }
   }

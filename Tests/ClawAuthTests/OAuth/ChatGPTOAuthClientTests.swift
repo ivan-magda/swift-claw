@@ -13,9 +13,7 @@ import Testing
 struct FailingHTTP: HTTPExecuting {
   let makeFailure: @Sendable () -> any Error
 
-  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
-    throw makeFailure()
-  }
+  func execute(_ request: HTTPRequest) async throws -> HTTPResult { throw makeFailure() }
 }
 
 /// The shared scripted values for both ChatGPT OAuth suites: the wire client's and the device
@@ -45,25 +43,21 @@ enum OAuthFixture {
   )
 
   static func client(_ http: any HTTPExecuting) -> ChatGPTOAuthClient {
-    ChatGPTOAuthClient(http: http) { wallNow }
+    ChatGPTOAuthClient(http: http) {
+      wallNow
+    }
   }
 
-  static func result(
-    _ statusCode: Int,
-    _ body: String,
-    headers: [String: String] = [:]
-  ) -> HTTPResult {
-    HTTPResult(statusCode: statusCode, headers: headers, body: Data(body.utf8))
-  }
+  static func result(_ statusCode: Int, _ body: String, headers: [String: String] = [:])
+    -> HTTPResult
+  { HTTPResult(statusCode: statusCode, headers: headers, body: Data(body.utf8)) }
 
   static func executor(_ url: String, _ result: HTTPResult) -> RecordingHTTPExecutor {
     RecordingHTTPExecutor(responses: [url: result])
   }
 
   /// Wraps scripted fields into a JSON object, so a case can state only the fields it varies.
-  static func json(_ fields: String) -> String {
-    "{\(fields)}"
-  }
+  static func json(_ fields: String) -> String { "{\(fields)}" }
 
   /// A JWT-shaped access token whose only claim is the expiry the fallback path reads.
   static func token(expiringAt seconds: Int) -> String {
@@ -99,11 +93,12 @@ extension ChatGPTOAuthFailure {
     switch self {
     case .malformedResponse(let detail), .grantRejected(let detail), .transport(let detail):
       return detail
-    case .throttled, .deadlineExceeded:
-      return nil
+    case .throttled, .deadlineExceeded: return nil
     }
   }
 }
+
+// MARK: - Request Body Inspection
 
 private extension RecordedHTTPRequest {
   /// The bytes this request actually carried, read back as the text they were built from.
@@ -114,10 +109,12 @@ private extension RecordedHTTPRequest {
   }
 }
 
-@Suite struct ChatGPTOAuthClientTests {
+@Suite
+struct ChatGPTOAuthClientTests {
   // MARK: - Device Code: Request Shape
 
-  @Test func deviceCodeRequestCarriesExactlyTheClientID() async throws {
+  @Test
+  func deviceCodeRequestCarriesExactlyTheClientID() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.userCodeURL,
@@ -132,13 +129,11 @@ private extension RecordedHTTPRequest {
     #expect(sent.method == .post)
     #expect(sent.url == ChatGPTProviderMetadata.userCodeURL)
     #expect(sent.headers["Content-Type"] == "application/json")
-    #expect(
-      sent.bodyText
-        == #"{"client_id":"\#(ChatGPTProviderMetadata.clientID)"}"#
-    )
+    #expect(sent.bodyText == #"{"client_id":"\#(ChatGPTProviderMetadata.clientID)"}"#)
   }
 
-  @Test func anAuthRequestCapsItsSuccessAndDiagnosticBodiesAtReadTime() async throws {
+  @Test
+  func anAuthRequestCapsItsSuccessAndDiagnosticBodiesAtReadTime() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.userCodeURL,
@@ -188,7 +183,8 @@ private extension RecordedHTTPRequest {
 
   // MARK: - Device Code: Response Reading
 
-  @Test func deviceCodeReadsTheIdentifiersAndTheServerInterval() async throws {
+  @Test
+  func deviceCodeReadsTheIdentifiersAndTheServerInterval() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.userCodeURL,
@@ -207,7 +203,8 @@ private extension RecordedHTTPRequest {
     #expect(device.pollInterval == .seconds(7))
   }
 
-  @Test func deviceCodeAcceptsTheObservedUserCodeAlias() async throws {
+  @Test
+  func deviceCodeAcceptsTheObservedUserCodeAlias() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.userCodeURL,
@@ -253,9 +250,9 @@ private extension RecordedHTTPRequest {
     #","interval":"soon""#,
     #","interval":null"#,
   ])
-  func deviceCodeFallsBackToThePinnedIntervalWhenTheServerNamesNoUsableOne(
-    field: String
-  ) async throws {
+  func deviceCodeFallsBackToThePinnedIntervalWhenTheServerNamesNoUsableOne(field: String)
+    async throws
+  {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.userCodeURL,
@@ -311,10 +308,9 @@ private extension RecordedHTTPRequest {
     // One byte past the device-auth-ID bound, alongside a user code that is fine.
     (8, ChatGPTProviderMetadata.maximumDeviceAuthIDBytes + 1),
   ])
-  func deviceCodeRefusesAnIdentifierPastItsByteBound(
-    userCodeBytes: Int,
-    deviceAuthIDBytes: Int
-  ) async throws {
+  func deviceCodeRefusesAnIdentifierPastItsByteBound(userCodeBytes: Int, deviceAuthIDBytes: Int)
+    async throws
+  {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.userCodeURL,
@@ -338,7 +334,8 @@ private extension RecordedHTTPRequest {
 
   /// The other side of the bound. Without it, the rejections above could be the decoder choking on
   /// the size of the body rather than the guard under test refusing the value.
-  @Test func deviceCodeAcceptsIdentifiersSittingExactlyOnTheirByteBound() async throws {
+  @Test
+  func deviceCodeAcceptsIdentifiersSittingExactlyOnTheirByteBound() async throws {
     // given
     let codeAtBound = String(repeating: "u", count: ChatGPTProviderMetadata.maximumUserCodeBytes)
     let idAtBound = String(repeating: "d", count: ChatGPTProviderMetadata.maximumDeviceAuthIDBytes)
@@ -360,7 +357,8 @@ private extension RecordedHTTPRequest {
 
   // MARK: - Redaction
 
-  @Test func aDeviceCodeNeverPrintsItsDeviceAuthID() {
+  @Test
+  func aDeviceCodeNeverPrintsItsDeviceAuthID() {
     // given
     let device = OAuthFixture.device
 
@@ -372,7 +370,8 @@ private extension RecordedHTTPRequest {
     #expect(printed.contains(OAuthFixture.userCode))
   }
 
-  @Test func anAuthorizationGrantNeverPrintsTheCodeOrTheVerifier() {
+  @Test
+  func anAuthorizationGrantNeverPrintsTheCodeOrTheVerifier() {
     // given
     let grant = OAuthFixture.grant
 
@@ -386,7 +385,8 @@ private extension RecordedHTTPRequest {
 
   /// Built through the wire client rather than by hand, because the pair's memberwise init is the
   /// one the safety gate stands in front of and this suite keeps that the only call to it.
-  @Test func aTokenPairNeverPrintsEitherOfItsTokens() async throws {
+  @Test
+  func aTokenPairNeverPrintsEitherOfItsTokens() async throws {
     // given
     let rotated = "rotated-value"
     let http = OAuthFixture.executor(
@@ -401,8 +401,10 @@ private extension RecordedHTTPRequest {
         )
       )
     )
-    let pair = try await OAuthFixture.client(http)
-      .refresh(refreshToken: OAuthFixture.refreshToken, timeout: .seconds(30))
+    let pair = try await OAuthFixture.client(http).refresh(
+      refreshToken: OAuthFixture.refreshToken,
+      timeout: .seconds(30)
+    )
 
     // when
     let printed = "\(pair) \(String(describing: pair)) \(String(reflecting: pair))"
@@ -415,7 +417,8 @@ private extension RecordedHTTPRequest {
 
   // MARK: - Poll: Request Shape
 
-  @Test func pollCarriesTheDeviceAuthIDAndUserCode() async throws {
+  @Test
+  func pollCarriesTheDeviceAuthIDAndUserCode() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.devicePollURL,
@@ -433,10 +436,7 @@ private extension RecordedHTTPRequest {
     #expect(sent.method == .post)
     #expect(sent.url == ChatGPTProviderMetadata.devicePollURL)
     #expect(sent.headers["Content-Type"] == "application/json")
-    #expect(
-      sent.bodyText
-        == #"{"device_auth_id":"device-auth-id-1","user_code":"ABCD-1234"}"#
-    )
+    #expect(sent.bodyText == #"{"device_auth_id":"device-auth-id-1","user_code":"ABCD-1234"}"#)
   }
 
   // MARK: - Poll: Status Rules
@@ -450,8 +450,10 @@ private extension RecordedHTTPRequest {
     )
 
     // when
-    let result = try await OAuthFixture.client(http)
-      .pollOnce(device: OAuthFixture.device, timeout: .seconds(30))
+    let result = try await OAuthFixture.client(http).pollOnce(
+      device: OAuthFixture.device,
+      timeout: .seconds(30)
+    )
 
     // then
     #expect(result == .pending)
@@ -486,8 +488,10 @@ private extension RecordedHTTPRequest {
 
     // when
     let failure = await #expect(throws: ChatGPTOAuthFailure.self) {
-      try await OAuthFixture.client(http)
-        .refresh(refreshToken: OAuthFixture.refreshToken, timeout: .seconds(30))
+      try await OAuthFixture.client(http).refresh(
+        refreshToken: OAuthFixture.refreshToken,
+        timeout: .seconds(30)
+      )
     }
 
     // then
@@ -504,8 +508,10 @@ private extension RecordedHTTPRequest {
 
     // when
     let failure = await #expect(throws: ChatGPTOAuthFailure.self) {
-      try await OAuthFixture.client(http)
-        .refresh(refreshToken: OAuthFixture.refreshToken, timeout: .seconds(30))
+      try await OAuthFixture.client(http).refresh(
+        refreshToken: OAuthFixture.refreshToken,
+        timeout: .seconds(30)
+      )
     }
 
     // then
@@ -524,10 +530,9 @@ private extension RecordedHTTPRequest {
     // Bounded: a wait no login window could ever spend is cut back to the window itself.
     ("999999", ChatGPTProviderMetadata.maximumLoginWait),
   ])
-  func pollReturnsATypedThrottleWithABoundedRetryAfter(
-    header: String,
-    expected: Duration
-  ) async throws {
+  func pollReturnsATypedThrottleWithABoundedRetryAfter(header: String, expected: Duration)
+    async throws
+  {
     // given
     let headers = header.isEmpty ? [:] : ["Retry-After": header]
     let http = OAuthFixture.executor(
@@ -536,14 +541,17 @@ private extension RecordedHTTPRequest {
     )
 
     // when
-    let result = try await OAuthFixture.client(http)
-      .pollOnce(device: OAuthFixture.device, timeout: .seconds(30))
+    let result = try await OAuthFixture.client(http).pollOnce(
+      device: OAuthFixture.device,
+      timeout: .seconds(30)
+    )
 
     // then
     #expect(result == .throttled(retryAfter: expected))
   }
 
-  @Test func aThrottledTokenRequestCarriesItsRetryAfterAsATypedFailure() async throws {
+  @Test
+  func aThrottledTokenRequestCarriesItsRetryAfterAsATypedFailure() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.tokenURL,
@@ -561,7 +569,8 @@ private extension RecordedHTTPRequest {
 
   // MARK: - Poll: Grant
 
-  @Test func pollReturnsTheGrantTheServerIssued() async throws {
+  @Test
+  func pollReturnsTheGrantTheServerIssued() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.devicePollURL,
@@ -572,8 +581,10 @@ private extension RecordedHTTPRequest {
     )
 
     // when
-    let result = try await OAuthFixture.client(http)
-      .pollOnce(device: OAuthFixture.device, timeout: .seconds(30))
+    let result = try await OAuthFixture.client(http).pollOnce(
+      device: OAuthFixture.device,
+      timeout: .seconds(30)
+    )
 
     // then
     #expect(result == .granted(OAuthFixture.grant))
@@ -610,7 +621,8 @@ private extension RecordedHTTPRequest {
     #expect(failure?.isMalformed == true)
   }
 
-  @Test func pollRefusesAGrantValuePastItsByteBound() async throws {
+  @Test
+  func pollRefusesAGrantValuePastItsByteBound() async throws {
     // given
     let oversized = String(
       repeating: "c",
@@ -640,7 +652,8 @@ private extension RecordedHTTPRequest {
 
   // MARK: - Exchange: Form Shape
 
-  @Test func exchangePostsTheDeterministicPercentEncodedForm() async throws {
+  @Test
+  func exchangePostsTheDeterministicPercentEncodedForm() async throws {
     // given
     let grant = ChatGPTAuthorizationGrant(
       authorizationCode: "code with space&amp",
@@ -662,16 +675,15 @@ private extension RecordedHTTPRequest {
     // The redirect URI is spelled out in its encoded form on purpose: rebuilding it from the
     // constant would assert the encoder against itself.
     #expect(
-      sent.bodyText
-        == "grant_type=authorization_code"
-        + "&code=code%20with%20space%26amp"
+      sent.bodyText == "grant_type=authorization_code" + "&code=code%20with%20space%26amp"
         + "&redirect_uri=https%3A%2F%2Fauth.openai.com%2Fdeviceauth%2Fcallback"
         + "&client_id=\(ChatGPTProviderMetadata.clientID)"
         + "&code_verifier=verifier%2F%2B%3D~-_.plain"
     )
   }
 
-  @Test func refreshPostsTheRefreshFormWithThePinnedClientID() async throws {
+  @Test
+  func refreshPostsTheRefreshFormWithThePinnedClientID() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.tokenURL,
@@ -679,17 +691,17 @@ private extension RecordedHTTPRequest {
     )
 
     // when
-    _ = try await OAuthFixture.client(http)
-      .refresh(refreshToken: "refresh/token+value", timeout: .seconds(30))
+    _ = try await OAuthFixture.client(http).refresh(
+      refreshToken: "refresh/token+value",
+      timeout: .seconds(30)
+    )
 
     // then
     let sent = try #require(await http.requests.first)
     #expect(sent.url == ChatGPTProviderMetadata.tokenURL)
     #expect(sent.headers["Content-Type"] == "application/x-www-form-urlencoded")
     #expect(
-      sent.bodyText
-        == "grant_type=refresh_token"
-        + "&refresh_token=refresh%2Ftoken%2Bvalue"
+      sent.bodyText == "grant_type=refresh_token" + "&refresh_token=refresh%2Ftoken%2Bvalue"
         + "&client_id=\(ChatGPTProviderMetadata.clientID)"
     )
   }
@@ -725,7 +737,7 @@ private extension RecordedHTTPRequest {
   @Test(arguments: [
     String(repeating: "r", count: ChatGPTProviderMetadata.maximumTokenBytes + 1),
     "refresh token with space",
-    "refresh\u{0}null",
+    "refresh\0null",
     "",
   ])
   func refreshRefusesAnUnsafeRefreshTokenWithoutReachingTheWire(token: String) async throws {
@@ -781,7 +793,8 @@ private extension RecordedHTTPRequest {
     #expect(failure?.isMalformed == true)
   }
 
-  @Test func anAccessTokenPastItsByteBoundNeverBecomesATokenPair() async throws {
+  @Test
+  func anAccessTokenPastItsByteBoundNeverBecomesATokenPair() async throws {
     // given
     let oversized = String(repeating: "a", count: ChatGPTProviderMetadata.maximumTokenBytes + 1)
     let http = OAuthFixture.executor(
@@ -804,7 +817,8 @@ private extension RecordedHTTPRequest {
   /// Proves the gate rejects for the reason it claims. The same request shape, carrying a token that
   /// is merely long rather than unsafe, is accepted — so a rejection above is the guard talking and
   /// not the decoder failing on every large body it is handed.
-  @Test func aHeaderSafeAccessTokenSittingOnItsByteBoundBecomesATokenPair() async throws {
+  @Test
+  func aHeaderSafeAccessTokenSittingOnItsByteBoundBecomesATokenPair() async throws {
     // given
     let atBound = String(repeating: "a", count: ChatGPTProviderMetadata.maximumTokenBytes)
     let http = OAuthFixture.executor(
@@ -858,10 +872,9 @@ private extension RecordedHTTPRequest {
     (#""expires_in":"3600""#, 3600),
     (#""expires_in":1"#, 1),
   ])
-  func expiryComesFromAPositiveExpiresInMeasuredOnTheInjectedWallDate(
-    field: String,
-    seconds: Int
-  ) async throws {
+  func expiryComesFromAPositiveExpiresInMeasuredOnTheInjectedWallDate(field: String, seconds: Int)
+    async throws
+  {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.tokenURL,
@@ -906,7 +919,8 @@ private extension RecordedHTTPRequest {
     #expect(pair.expiresAt == Date(timeIntervalSince1970: TimeInterval(expiry)))
   }
 
-  @Test func aPositiveExpiresInOutranksTheExpClaim() async throws {
+  @Test
+  func aPositiveExpiresInOutranksTheExpClaim() async throws {
     // given
     let token = OAuthFixture.token(
       expiringAt: Int(OAuthFixture.wallNow.timeIntervalSince1970) + 99_999
@@ -926,7 +940,8 @@ private extension RecordedHTTPRequest {
     #expect(pair.expiresAt == OAuthFixture.wallNow.addingTimeInterval(60))
   }
 
-  @Test func aTokenWithNoUsableFutureExpiryIsMalformedRatherThanStored() async throws {
+  @Test
+  func aTokenWithNoUsableFutureExpiryIsMalformedRatherThanStored() async throws {
     // given
     // No expires_in, and an access token carrying no readable exp claim of its own.
     let http = OAuthFixture.executor(
@@ -943,7 +958,8 @@ private extension RecordedHTTPRequest {
     #expect(failure?.isMalformed == true)
   }
 
-  @Test func anExpClaimAlreadyInThePastIsMalformedRatherThanStored() async throws {
+  @Test
+  func anExpClaimAlreadyInThePastIsMalformedRatherThanStored() async throws {
     // given
     let token = OAuthFixture.token(expiringAt: Int(OAuthFixture.wallNow.timeIntervalSince1970) - 1)
     let http = OAuthFixture.executor(
@@ -962,7 +978,8 @@ private extension RecordedHTTPRequest {
 
   // MARK: - Token Pair: Rotation
 
-  @Test func aRefreshResponseThatRotatesNoTokenReportsNoneRatherThanAnEmptyOne() async throws {
+  @Test
+  func aRefreshResponseThatRotatesNoTokenReportsNoneRatherThanAnEmptyOne() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.tokenURL,
@@ -973,14 +990,17 @@ private extension RecordedHTTPRequest {
     )
 
     // when
-    let pair = try await OAuthFixture.client(http)
-      .refresh(refreshToken: OAuthFixture.refreshToken, timeout: .seconds(30))
+    let pair = try await OAuthFixture.client(http).refresh(
+      refreshToken: OAuthFixture.refreshToken,
+      timeout: .seconds(30)
+    )
 
     // then
     #expect(pair.refreshToken == nil)
   }
 
-  @Test func aRotatedRefreshTokenIsCarriedBack() async throws {
+  @Test
+  func aRotatedRefreshTokenIsCarriedBack() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.tokenURL,
@@ -993,8 +1013,10 @@ private extension RecordedHTTPRequest {
     )
 
     // when
-    let pair = try await OAuthFixture.client(http)
-      .refresh(refreshToken: OAuthFixture.refreshToken, timeout: .seconds(30))
+    let pair = try await OAuthFixture.client(http).refresh(
+      refreshToken: OAuthFixture.refreshToken,
+      timeout: .seconds(30)
+    )
 
     // then
     #expect(pair.refreshToken == "rotated-value")
@@ -1002,7 +1024,8 @@ private extension RecordedHTTPRequest {
 
   // MARK: - Bodies
 
-  @Test func aSuccessBodyPastTheReadCapFailsRatherThanArrivingShort() async throws {
+  @Test
+  func aSuccessBodyPastTheReadCapFailsRatherThanArrivingShort() async throws {
     // given
     let filler = String(repeating: "x", count: ChatGPTProviderMetadata.maximumAuthResponseBytes)
     let http = OAuthFixture.executor(
@@ -1024,7 +1047,8 @@ private extension RecordedHTTPRequest {
     #expect(failure?.isTransport == true)
   }
 
-  @Test func anErrorBodyIsReadAndReportedNoWiderThanTheDiagnosticCap() async throws {
+  @Test
+  func anErrorBodyIsReadAndReportedNoWiderThanTheDiagnosticCap() async throws {
     // given
     let oversized = String(
       repeating: "e",
@@ -1047,7 +1071,8 @@ private extension RecordedHTTPRequest {
     #expect(detail.utf8.count <= ChatGPTProviderMetadata.maximumDiagnosticBytes)
   }
 
-  @Test func aRemoteDiagnosticIsSanitizedAndRedactedBeforeItCanBeShown() async throws {
+  @Test
+  func aRemoteDiagnosticIsSanitizedAndRedactedBeforeItCanBeShown() async throws {
     // given
     // Remote text that repaints the terminal it lands on and quotes the credential back at us.
     let hostile = "\u{1b}[31mdenied\u{1b}[0m for \(OAuthFixture.refreshToken)\nline two"
@@ -1058,8 +1083,10 @@ private extension RecordedHTTPRequest {
 
     // when
     let failure = await #expect(throws: ChatGPTOAuthFailure.self) {
-      try await OAuthFixture.client(http)
-        .refresh(refreshToken: OAuthFixture.refreshToken, timeout: .seconds(30))
+      try await OAuthFixture.client(http).refresh(
+        refreshToken: OAuthFixture.refreshToken,
+        timeout: .seconds(30)
+      )
     }
 
     // then
@@ -1070,7 +1097,8 @@ private extension RecordedHTTPRequest {
     #expect(detail.contains("denied"))
   }
 
-  @Test func aPollDiagnosticNeverQuotesTheSubmittedIdentifiersBack() async throws {
+  @Test
+  func aPollDiagnosticNeverQuotesTheSubmittedIdentifiersBack() async throws {
     // given — a body that echoes both submitted values, either of which a diagnostic must scrub
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.devicePollURL,
@@ -1097,7 +1125,8 @@ private extension RecordedHTTPRequest {
 
   // MARK: - Transport and Cancellation
 
-  @Test func aTransportFailureIsReportedAsRetryableTransport() async throws {
+  @Test
+  func aTransportFailureIsReportedAsRetryableTransport() async throws {
     // given
     let http = FailingHTTP {
       HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "connection reset")
@@ -1115,9 +1144,14 @@ private extension RecordedHTTPRequest {
 
   /// Cancellation is the owner walking away, not the vendor failing. Sanitizing it into a transport
   /// error would make an abandoned login look retryable to every caller above this seam.
-  @Test func cancellationIsPreservedRatherThanSanitizedIntoATransportFailure() async throws {
+  @Test
+  func cancellationIsPreservedRatherThanSanitizedIntoATransportFailure() async throws {
     // given
-    let client = OAuthFixture.client(FailingHTTP { CancellationError() })
+    let client = OAuthFixture.client(
+      FailingHTTP {
+        CancellationError()
+      }
+    )
 
     // when / then
     await #expect(throws: CancellationError.self) {
@@ -1134,7 +1168,8 @@ private extension RecordedHTTPRequest {
     }
   }
 
-  @Test func aResponseThatIsNotJSONAtAllIsMalformed() async throws {
+  @Test
+  func aResponseThatIsNotJSONAtAllIsMalformed() async throws {
     // given
     let http = OAuthFixture.executor(
       ChatGPTProviderMetadata.userCodeURL,

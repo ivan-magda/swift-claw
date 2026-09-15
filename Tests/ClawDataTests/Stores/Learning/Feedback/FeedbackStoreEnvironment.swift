@@ -36,7 +36,7 @@ enum FeedbackFailureCase: CaseIterable {
 struct FeedbackStoreEnvironment {
   struct DeliveryRow {
     let deliveryKey: String
-    let runId: Int64?
+    let runID: Int64?
     let source: String
     let payload: String
     let replyMarkup: String?
@@ -67,14 +67,17 @@ struct FeedbackStoreEnvironment {
   let state: JobLearningState
 
   var queue: any DatabaseWriter { base.queue }
+
   var learning: ScheduledLearningStoreGRDB { base.learning }
-  var jobId: Int64 { base.jobId }
+
+  var jobID: Int64 { base.jobID }
+
   var now: Date { base.now }
 
   static func make() throws -> FeedbackStoreEnvironment {
     let base = try BoundRunEnvironment.make()
     let state = try TestLearningFixtures(writer: base.queue).seedArmedJob(
-      jobId: base.jobId,
+      jobID: base.jobID,
       now: base.now
     )
     return FeedbackStoreEnvironment(base: base, state: state)
@@ -89,13 +92,13 @@ struct FeedbackStoreEnvironment {
   ) -> NewFeedbackTarget {
     NewFeedbackTarget(
       nonce: nonce,
-      jobId: jobId,
+      jobID: jobID,
       epoch: state.epoch,
       subjectKind: kind,
       subjectDigest: subject,
       allowedActions: [signal],
-      ownerUserId: 42,
-      chatId: 42,
+      ownerUserID: 42,
+      chatID: 42,
       expiresAt: expiresAt ?? now.addingTimeInterval(3_600)
     )
   }
@@ -105,24 +108,20 @@ struct FeedbackStoreEnvironment {
     return LearningNoticeChunk(
       subjectDigest: subject,
       ordinal: ordinal,
-      chatId: 42,
+      chatID: 42,
       payload: payload,
       payloadHash: ContentHash.fnv1a(payload),
       replyMarkup: markup
     )
   }
 
-  func tap(
-    target: NewFeedbackTarget,
-    signal: OwnerSignal,
-    updateId: Int64 = 1
-  ) -> FeedbackTap {
+  func tap(target: NewFeedbackTarget, signal: OwnerSignal, updateID: Int64 = 1) -> FeedbackTap {
     FeedbackTap(
       nonce: target.nonce,
       signal: signal,
-      ownerUserId: target.ownerUserId,
-      chatId: target.chatId,
-      transportUpdateId: updateId
+      ownerUserID: target.ownerUserID,
+      chatID: target.chatID,
+      transportUpdateID: updateID
     )
   }
 
@@ -130,35 +129,24 @@ struct FeedbackStoreEnvironment {
     FeedbackTap(
       nonce: target.nonce,
       signal: failure == .action ? .resultNotUseful : .resultUseful,
-      ownerUserId: failure == .owner ? 43 : target.ownerUserId,
-      chatId: failure == .chat ? 43 : target.chatId,
-      transportUpdateId: 1
+      ownerUserID: failure == .owner ? 43 : target.ownerUserID,
+      chatID: failure == .chat ? 43 : target.chatID,
+      transportUpdateID: 1
     )
   }
 
-  func seedTargets(
-    _ targets: [NewFeedbackTarget],
-    chunks: [LearningNoticeChunk]
-  ) throws {
+  func seedTargets(_ targets: [NewFeedbackTarget], chunks: [LearningNoticeChunk]) throws {
     try TestLearningFixtures(writer: queue).seedTargets(targets)
     for chunk in chunks {
       let deliveryKey = OutboxDedupKey.make(
         subjectDigest: chunk.subjectDigest,
         ordinal: chunk.ordinal
       )
-      try OutboxFixture.seedNotice(
-        in: queue,
-        chunk: chunk,
-        deliveryKey: deliveryKey,
-        now: now
-      )
+      try OutboxFixture.seedNotice(in: queue, chunk: chunk, deliveryKey: deliveryKey, now: now)
     }
   }
 
-  func consume(
-    _ tap: FeedbackTap,
-    now: Date? = nil
-  ) throws(StoreError) -> FeedbackOutcome {
+  func consume(_ tap: FeedbackTap, now: Date? = nil) throws(StoreError) -> FeedbackOutcome {
     try learning.consumeAndAppendEvent(tap, now: now ?? self.now)
   }
 
@@ -168,19 +156,18 @@ struct FeedbackStoreEnvironment {
       LearningNoticeChunk(
         subjectDigest: FeedbackChallengeDeliveryIdentity.digest(targetNonce: target.nonce),
         ordinal: 0,
-        chatId: target.chatId,
+        chatID: target.chatID,
         payload: payload,
         payloadHash: ContentHash.fnv1a(payload)
-      )
+      ),
     ]
   }
 
-  func openChallenge(
-    _ target: NewFeedbackTarget,
-    updateId: Int64 = 1
-  ) throws(StoreError) -> FeedbackOutcome {
+  func openChallenge(_ target: NewFeedbackTarget, updateID: Int64 = 1) throws(StoreError)
+    -> FeedbackOutcome
+  {
     try learning.consumeAndOpenChallenge(
-      tap(target: target, signal: target.allowedActions[0], updateId: updateId),
+      tap(target: target, signal: target.allowedActions[0], updateID: updateID),
       prompt: challengePrompt(target),
       now: now
     )
@@ -206,9 +193,9 @@ struct FeedbackStoreEnvironment {
       let consumedEpoch: Int64? = row["consumed_at"]
       return FeedbackChallenge(
         id: row["challenge_id"],
-        ownerUserId: row["owner_user_id"],
-        chatId: row["chat_id"],
-        jobId: row["job_id"],
+        ownerUserID: row["owner_user_id"],
+        chatID: row["chat_id"],
+        jobID: row["job_id"],
         epoch: LearningEpoch(row["learning_epoch"]),
         subjectKind: kind,
         subjectDigest: row["subject_digest"],
@@ -220,14 +207,14 @@ struct FeedbackStoreEnvironment {
   }
 
   func feedbackEvents(
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     subjectKind: FeedbackSubjectKind,
     subjectDigest: String
   ) throws -> [EventRow] {
     try readFeedbackEvents(
       whereClause: "job_id = ? AND learning_epoch = ? AND subject_kind = ? AND subject_digest = ?",
-      arguments: [jobId, epoch.value, subjectKind.rawValue, subjectDigest]
+      arguments: [jobID, epoch.value, subjectKind.rawValue, subjectDigest]
     )
   }
 
@@ -239,7 +226,7 @@ struct FeedbackStoreEnvironment {
     try queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET learning_epoch = ? WHERE job_id = ?",
-        arguments: [epoch, jobId]
+        arguments: [epoch, jobID]
       )
     }
   }
@@ -248,10 +235,10 @@ struct FeedbackStoreEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-          CREATE TRIGGER fail_feedback_audit BEFORE INSERT ON audit_events
-          WHEN NEW.action = '\(AuditAction.learningFeedback.rawValue)'
-          BEGIN SELECT RAISE(ABORT, 'forced feedback audit failure'); END
-          """
+        CREATE TRIGGER fail_feedback_audit BEFORE INSERT ON audit_events
+        WHEN NEW.action = '\(AuditAction.learningFeedback.rawValue)'
+        BEGIN SELECT RAISE(ABORT, 'forced feedback audit failure'); END
+        """
       )
     }
   }
@@ -261,18 +248,14 @@ struct FeedbackStoreEnvironment {
       try Int64.fetchOne(
         db,
         sql: "SELECT feedback_revision FROM job_learning_state WHERE job_id = ?",
-        arguments: [jobId]
+        arguments: [jobID]
       ) ?? -1
     }
   }
 
-  func targetCount() throws -> Int {
-    try rowCount(table: "feedback_targets")
-  }
+  func targetCount() throws -> Int { try rowCount(table: "feedback_targets") }
 
-  func eventCount() throws -> Int {
-    try rowCount(table: "feedback_events")
-  }
+  func eventCount() throws -> Int { try rowCount(table: "feedback_events") }
 
   func rowCount(table: String) throws -> Int {
     try queue.read { db in
@@ -285,15 +268,15 @@ struct FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT dedup_key, run_id, delivery_source, payload, reply_markup, created_ts
-          FROM outbound_deliveries
-          ORDER BY step_index
-          """
+        SELECT dedup_key, run_id, delivery_source, payload, reply_markup, created_ts
+        FROM outbound_deliveries
+        ORDER BY step_index
+        """
       ).map { row in
         let createdAt: Date = row["created_ts"]
         return DeliveryRow(
           deliveryKey: row["dedup_key"],
-          runId: row["run_id"],
+          runID: row["run_id"],
           source: row["delivery_source"],
           payload: row["payload"],
           replyMarkup: row["reply_markup"],
@@ -308,9 +291,9 @@ struct FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT ts, actor, action, tool, args_redacted, result_size, decision FROM audit_events
-          WHERE action = ? ORDER BY id
-          """,
+        SELECT ts, actor, action, tool, args_redacted, result_size, decision FROM audit_events
+        WHERE action = ? ORDER BY id
+        """,
         arguments: [AuditAction.learningFeedback.rawValue]
       ).map { row in
         let ts: Date = row["ts"]
@@ -335,12 +318,17 @@ struct FeedbackStoreEnvironment {
       for subject in ["41", "42"] {
         try db.execute(
           sql: """
-            INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
-              subject_kind, subject_digest, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
+          INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
+            subject_kind, subject_digest, expires_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          """,
           arguments: [
-            42, 42, jobId, state.epoch.value, FeedbackSubjectKind.run.rawValue, subject,
+            42,
+            42,
+            jobID,
+            state.epoch.value,
+            FeedbackSubjectKind.run.rawValue,
+            subject,
             EpochSecondCodec.epoch(now.addingTimeInterval(3_600)),
           ]
         )
@@ -352,12 +340,17 @@ struct FeedbackStoreEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
-            subject_kind, subject_digest, expires_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          """,
+        INSERT INTO feedback_challenges(owner_user_id, chat_id, job_id, learning_epoch,
+          subject_kind, subject_digest, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
         arguments: [
-          42, 42, jobId, state.epoch.value, kind.rawValue, "unsupported",
+          42,
+          42,
+          jobID,
+          state.epoch.value,
+          kind.rawValue,
+          "unsupported",
           EpochSecondCodec.epoch(now.addingTimeInterval(3_600)),
         ]
       )
@@ -377,20 +370,17 @@ struct FeedbackStoreEnvironment {
 // MARK: - Feedback Event Rows
 
 private extension FeedbackStoreEnvironment {
-  func readFeedbackEvents(
-    whereClause: String,
-    arguments: StatementArguments
-  ) throws -> [EventRow] {
+  func readFeedbackEvents(whereClause: String, arguments: StatementArguments) throws -> [EventRow] {
     try queue.read { db in
       try Row.fetchAll(
         db,
         sql: """
-          SELECT event_id, signal, feedback_revision, supersedes, subject_digest, payload,
-            occurred_at
-          FROM feedback_events
-          WHERE \(whereClause)
-          ORDER BY feedback_revision, event_id
-          """,
+        SELECT event_id, signal, feedback_revision, supersedes, subject_digest, payload,
+          occurred_at
+        FROM feedback_events
+        WHERE \(whereClause)
+        ORDER BY feedback_revision, event_id
+        """,
         arguments: arguments
       ).map { row in
         guard

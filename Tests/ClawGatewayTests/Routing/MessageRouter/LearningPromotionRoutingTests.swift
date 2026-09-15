@@ -7,13 +7,15 @@ import Testing
 @testable import ClawData
 @testable import ClawGateway
 
-@Suite struct LearningPromotionRoutingTests {
-  @Test func currentPromotionReplyUsesOutboxAndPokesAfterCommit() async throws {
+@Suite
+struct LearningPromotionRoutingTests {
+  @Test
+  func currentPromotionReplyUsesOutboxAndPokesAfterCommit() async throws {
     // given
     let signal = OutboxSignal()
     let harness = try LearningRoutingTests.Harness.make(outboxSignal: signal)
     let job = try harness.createJob(label: "current promotion")
-    let promotionId = try harness.seedCurrentPromotion(jobId: job.id)
+    let promotionID = try harness.seedCurrentPromotion(jobID: job.id)
 
     // when
     let outcome = await harness.router.handle(
@@ -38,18 +40,20 @@ import Testing
     let button = try #require(try FeedbackKeyboard.parseMarkup(markup).first?.first)
     #expect(button.action == .promotionRollback)
     let target = try #require(try harness.learning.feedbackTarget(nonce: button.nonce))
-    #expect(target.subjectDigest == String(promotionId))
-    #expect(target.ownerUserId == 42)
-    #expect(target.chatId == 42)
+    #expect(target.subjectDigest == String(promotionID))
+    #expect(target.ownerUserID == 42)
+    #expect(target.chatID == 42)
     #expect((last["payload"] as String).contains(LearningDecisionResult.stale.rawValue))
   }
 }
 
+// MARK: - Promotion Routing Fixtures
+
 private extension LearningRoutingTests.Harness {
-  func seedCurrentPromotion(jobId: Int64) throws -> Int64 {
-    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: jobId, now: now)
+  func seedCurrentPromotion(jobID: Int64) throws -> Int64 {
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobID: jobID, now: now)
     let trial = LearningTrial(
-      identity: LearningTrialIdentity(trialId: 1, jobId: jobId, epoch: state.epoch, generation: 1),
+      identity: LearningTrialIdentity(trialID: 1, jobID: jobID, epoch: state.epoch, generation: 1),
       baseDigest: LessonSetDigest(rawValue: SHA256Digest.hex("retained predecessor")),
       baseRevision: StableRevision(0),
       candidateDigest: CandidateDigest(rawValue: SHA256Digest.hex("empty replacement candidate")),
@@ -68,7 +72,7 @@ private extension LearningRoutingTests.Harness {
     return try queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET stable_revision = 1 WHERE job_id = ?",
-        arguments: [jobId]
+        arguments: [jobID]
       )
       let promoted = LearningDecisionRecord(
         result: .promoted,
@@ -77,20 +81,20 @@ private extension LearningRoutingTests.Harness {
         stableRevision: StableRevision(1)
       )
       try insertDecisionProjection(db, inputs: inputs, record: promoted, kind: .trial)
-      let promotionId = db.lastInsertedRowID
+      let promotionID = db.lastInsertedRowID
       let stale = LearningDecisionRecord(
         result: .stale,
         reason: LearningDecisionResult.stale.rawValue,
         cohort: [],
         stableRevision: StableRevision(1),
         rollbackTrigger: .adapter(
-          promotionId: promotionId,
-          adapterId: "unfrozen",
+          promotionID: promotionID,
+          adapterID: "unfrozen",
           outcome: .regression
         )
       )
       try insertDecisionProjection(db, inputs: inputs, record: stale, kind: .rollback)
-      return promotionId
+      return promotionID
     }
   }
 
@@ -102,14 +106,17 @@ private extension LearningRoutingTests.Harness {
   ) throws {
     try db.execute(
       sql: """
-        INSERT INTO learning_decisions(kind, job_id, learning_epoch, \
-        inputs, result, algorithm, decided_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
+      INSERT INTO learning_decisions(kind, job_id, learning_epoch, \
+      inputs, result, algorithm, decided_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      """,
       arguments: [
-        kind.rawValue, inputs.identity.jobId, inputs.identity.epoch.value,
+        kind.rawValue,
+        inputs.identity.jobID,
+        inputs.identity.epoch.value,
         try ScheduledLearningStoreGRDB.canonicalDecisionJSON(inputs),
-        try ScheduledLearningStoreGRDB.canonicalDecisionJSON(record), LearningAlgorithm.v1.rawValue,
+        try ScheduledLearningStoreGRDB.canonicalDecisionJSON(record),
+        LearningAlgorithm.v1.rawValue,
         EpochSecondCodec.epoch(now),
       ]
     )

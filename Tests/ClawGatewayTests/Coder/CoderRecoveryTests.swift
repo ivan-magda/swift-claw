@@ -6,7 +6,8 @@ import Testing
 @testable import ClawGateway
 
 struct CoderRecoveryTests {
-  @Test func interruptionIsReportedOnceWithoutRerun() async throws {
+  @Test
+  func interruptionIsReportedOnceWithoutRerun() async throws {
     // given
     let fixture = try CoderServiceFixture()
     defer { fixture.cleanup() }
@@ -26,7 +27,8 @@ struct CoderRecoveryTests {
     try await next.shutdown()
   }
 
-  @Test func recoveryRetainsAmbiguousOwnershipAcrossRestarts() async throws {
+  @Test
+  func recoveryRetainsAmbiguousOwnershipAcrossRestarts() async throws {
     // given
     let fixture = try CoderServiceFixture(inspection: .liveOwned)
     defer { fixture.cleanup() }
@@ -51,7 +53,8 @@ struct CoderRecoveryTests {
     try await next.shutdown()
   }
 
-  @Test func recoveryReleasesVerifiedStoppedOwnership() async throws {
+  @Test
+  func recoveryReleasesVerifiedStoppedOwnership() async throws {
     // given
     let fixture = try CoderServiceFixture(inspection: .unresolved)
     defer { fixture.cleanup() }

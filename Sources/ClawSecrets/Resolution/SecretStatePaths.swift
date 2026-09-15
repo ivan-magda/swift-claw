@@ -12,10 +12,8 @@ public enum SecretCredentialEntry: Sendable, Equatable, CaseIterable {
 
   public var name: String {
     switch self {
-    case .llmCredentials:
-      return SecretStatePaths.credentialEnvelopeName
-    case .mcpCredentials:
-      return SecretStatePaths.mcpCredentialEnvelopeName
+    case .llmCredentials: return SecretStatePaths.credentialEnvelopeName
+    case .mcpCredentials: return SecretStatePaths.mcpCredentialEnvelopeName
     }
   }
 }
@@ -47,26 +45,26 @@ public struct SecretStatePaths: Sendable, Equatable {
 
   private let stateRoot: URL
 
-  public init(stateRoot: URL) {
-    self.stateRoot = stateRoot
-  }
+  public init(stateRoot: URL) { self.stateRoot = stateRoot }
 
   public var key: URL { stateRoot.appendingPathComponent(Self.keyName) }
+
   public var runtimeEnvelope: URL { stateRoot.appendingPathComponent(Self.runtimeEnvelopeName) }
+
   public var credentialEnvelope: URL {
     stateRoot.appendingPathComponent(Self.credentialEnvelopeName)
   }
+
   public var mcpCredentialEnvelope: URL {
     stateRoot.appendingPathComponent(Self.mcpCredentialEnvelopeName)
   }
+
   public var instanceLock: URL { stateRoot.appendingPathComponent(Self.instanceLockName) }
 
   public func url(for entry: SecretCredentialEntry) -> URL {
     switch entry {
-    case .llmCredentials:
-      return credentialEnvelope
-    case .mcpCredentials:
-      return mcpCredentialEnvelope
+    case .llmCredentials: return credentialEnvelope
+    case .mcpCredentials: return mcpCredentialEnvelope
     }
   }
 

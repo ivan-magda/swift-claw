@@ -11,25 +11,17 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
       let engineVersion = try await probeAndReap(deadline: deadline)
       let initImage = try await resolveInitImage(engineVersion: engineVersion, deadline: deadline)
 
-      try await stageImages(
-        engineVersion: engineVersion,
-        initImage: initImage,
-        deadline: deadline
-      )
+      try await stageImages(engineVersion: engineVersion, initImage: initImage, deadline: deadline)
 
       return await verifyCanaryAndArm(
         engineVersion: engineVersion,
         initImage: initImage,
         deadline: deadline
       )
-    } catch {
-      return error.health
-    }
+    } catch { return error.health }
   }
 
-  public func isAdmitting() -> Bool {
-    preparedInitImage != nil
-  }
+  public func isAdmitting() -> Bool { preparedInitImage != nil }
 
   public func shutdown() async {
     shuttingDown = true
@@ -54,9 +46,7 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
     _ = sweepScratchRoots()
   }
 
-  var preparedInitImageForTesting: String? {
-    preparedInitImage
-  }
+  var preparedInitImageForTesting: String? { preparedInitImage }
 
   func reapOwnedContainersForTesting() async -> Bool {
     await reapOwnedContainers(deadline: now().advanced(by: Self.prepareTimeout))
@@ -64,17 +54,18 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
 
   // swiftlint:disable:next discouraged_optional_collection
   func ownedContainerNamesForTesting() async -> [String]? {
-    await ownedContainers(deadline: now().advanced(by: Self.prepareTimeout))?
-      .compactMap(\.resolvedIdentifier)
+    await ownedContainers(deadline: now().advanced(by: Self.prepareTimeout))?.compactMap(
+      \.resolvedIdentifier
+    )
   }
 }
 
 // MARK: - Prepare Phases
 
 /// Aborts the prepare pipeline carrying the failed health to report.
-private struct PrepareAbort: Error {
-  let health: SandboxHealth
-}
+private struct PrepareAbort: Error { let health: SandboxHealth }
+
+// MARK: - Sandbox Preparation
 
 private extension ContainerBackend {
   func refuseIfBusy() throws(PrepareAbort) {
@@ -115,10 +106,9 @@ private extension ContainerBackend {
     return engineVersion
   }
 
-  func resolveInitImage(
-    engineVersion: String,
-    deadline: ContinuousClock.Instant
-  ) async throws(PrepareAbort) -> String {
+  func resolveInitImage(engineVersion: String, deadline: ContinuousClock.Instant)
+    async throws(PrepareAbort) -> String
+  {
     guard
       let propertyData = await boundedCommandData(
         ContainerInvocation.systemPropertyList(),
@@ -151,11 +141,9 @@ private extension ContainerBackend {
     return initImage
   }
 
-  func stageImages(
-    engineVersion: String,
-    initImage: String,
-    deadline: ContinuousClock.Instant
-  ) async throws(PrepareAbort) {
+  func stageImages(engineVersion: String, initImage: String, deadline: ContinuousClock.Instant)
+    async throws(PrepareAbort)
+  {
     // Shutdown may complete while prepare is suspended; re-check before pulling images,
     // before launching the canary container, and before re-arming the init image so a
     // finished shutdown leaves no sandbox activity or prepared state behind.

@@ -1,12 +1,12 @@
 import Crypto
 import Foundation
 
-/// The per-run prompt/workspace fingerprint approvals bind to. `policy_version` =
-/// `combined(...)` = first 16 hex of SHA-256 over an order-pinned, length-prefixed concatenation of
-/// the policy-relevant inputs at run start. Each part is length-prefixed so boundaries cannot be
-/// confused ("ab"+"c" ≠ "a"+"bc"). Secret values are NEVER hashed — only surface/config identity.
-/// A strict-inequality voider: any change to prompt files, tool surface, or egress config between
-/// an approval's request and its resolution voids the approval with `stale_policy`.
+/// The per-run prompt and workspace fingerprint that binds an approval to its policy inputs.
+///
+/// `combined(...)` produces `policy_version`: the first 16 hexadecimal characters of SHA-256 over
+/// the order-pinned, length-prefixed inputs at run start. Length prefixes distinguish input
+/// boundaries; only surface and configuration identity is hashed, never secret values.
+/// A changed fingerprint voids a pending approval with `stale_policy`.
 public enum PolicyFingerprint {
   /// SHA-256 over length-prefixed parts (each part: 8-byte big-endian UInt64 UTF-8 byte count, then
   /// the UTF-8 bytes), rendered as the full 64-char lowercase hex digest.
@@ -24,14 +24,18 @@ public enum PolicyFingerprint {
     return SHA256Digest.hex(digest: hasher.finalize())
   }
 
-  /// The policy-relevant surface the static sub-hash is computed over: the tool-registry surface,
-  /// the LLM egress identity, the search-endpoint presence, the canonical workspace root, the
-  /// web_fetch SSRF exemption list, and the exec block. Secret values are never included.
+  /// The credential-free configuration surface used by the static policy subhash.
+  ///
+  /// Includes the tool registry, LLM egress identity, search-endpoint presence, canonical workspace
+  /// root, web-fetch SSRF exemptions, and execution configuration. Secret values are never
+  /// included.
   public struct StaticInputs: Sendable {
     public let tools: [ToolDefinition]
-    /// Where inference leaves for — a configured endpoint or a managed provider's fixed one — never a
-    /// credential. Folded in so switching sinks (current ↔ managed, or one configured endpoint to
-    /// another) voids a parked approval even when no base URL is configured at all.
+    /// Where inference leaves for — a configured endpoint or a managed provider's fixed one — never
+    /// a credential.
+    ///
+    /// Folded in so switching sinks (current ↔ managed, or one configured endpoint to another)
+    /// voids a parked approval even when no base URL is configured at all.
     public let llmEgress: LLMEgressIdentity
     public let searchEndpointPresent: Bool
     public let workspaceRoot: String
@@ -55,20 +59,21 @@ public enum PolicyFingerprint {
     }
   }
 
-  /// Hashes the static inputs: the tool surface sorted by name (each tool contributes name,
-  /// canonical `.sortedKeys` parameter JSON, metadata provenance, `riskLevel.rawValue`, its fence
-  /// label — a trust declaration on par with risk, since it selects the prompt carve-out its output
-  /// renders under — the egress label, and any declared invocation identity), then the remaining
-  /// config identity with the exec block normalized (enabled state, pinned image, sorted registry
-  /// allowlist, caps, timeout, and egress switch). Sorted lists mean config order cannot move the
-  /// hash; a change to any egress-policy input voids an outstanding approval. Computed once at the
-  /// composition root and injected into `ContextBuilder`.
+  /// Hashes the tool and execution policy surfaces in a canonical order.
+  ///
+  /// Each tool contributes its name, canonical parameter JSON, metadata provenance, risk, fence
+  /// label, egress label, and invocation identity. Tools are sorted by name; the remaining
+  /// configuration includes normalized execution settings and sorted allowlists. Configuration
+  /// order cannot move the hash, but a changed egress-policy input voids an outstanding approval.
+  /// Composition computes this once and injects it into `ContextBuilder`.
   public static func staticSubhash(inputs: StaticInputs) -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
 
     var parts: [String] = []
-    for tool in inputs.tools.sorted(by: { $0.name < $1.name }) {
+    for tool in inputs.tools.sorted(by: {
+      $0.name < $1.name
+    }) {
       let canonicalParameters: String
       if let data = try? encoder.encode(tool.parameters) {
         canonicalParameters = String(data: data, encoding: .utf8) ?? ""
@@ -97,9 +102,7 @@ public enum PolicyFingerprint {
     let exec = inputs.exec
     parts.append("exec.enabled:\(exec.enabled)")
     parts.append("exec.image:\(exec.image?.description ?? "absent")")
-    parts.append(
-      "exec.registries:" + exec.imageRegistryAllowlist.sorted().joined(separator: ",")
-    )
+    parts.append("exec.registries:" + exec.imageRegistryAllowlist.sorted().joined(separator: ","))
     parts.append("exec.memory_mib:\(exec.memoryMiB)")
     parts.append("exec.cpus:\(exec.cpus)")
     parts.append("exec.timeout_s:\(exec.timeoutSeconds)")
@@ -108,9 +111,10 @@ public enum PolicyFingerprint {
     return hash(parts: parts)
   }
 
-  /// The combined fingerprint stored as `policy_version`: first 16 hex of the digest over the
-  /// static sub-hash followed by the prompt materials in the pinned order [systemPrompt,
-  /// proactiveSystemPrompt, soul, agents, tools]. A missing/unreadable file folds in as "".
+  /// Returns the 16-character policy fingerprint for the static hash and ordered prompt materials.
+  ///
+  /// Callers supply prompt materials in the pinned order: system prompt, proactive system prompt,
+  /// soul, agents, tools. Missing or unreadable files contribute empty strings.
   public static func combined(staticSubhash: String, promptMaterials: [String]) -> String {
     String(hash(parts: [staticSubhash] + promptMaterials).prefix(16))
   }
@@ -130,13 +134,14 @@ private extension PolicyFingerprint {
   }
 
   /// A stable, credential-free label for the LLM egress identity: the case, the provider id for a
-  /// managed sink, and the endpoint (already canonical from route resolution). The current and
-  /// managed cases carry distinct prefixes so no configured endpoint can ever collide with a managed
-  /// one, which is what makes switching between them void an outstanding approval.
+  /// managed sink, and the endpoint (already canonical from route resolution).
+  ///
+  /// The current and managed cases carry distinct prefixes so no configured endpoint can ever
+  /// collide with a managed one, which is what makes switching between them void an outstanding
+  /// approval.
   static func egressIdentityLabel(_ egress: LLMEgressIdentity) -> String {
     switch egress {
-    case .configuredEndpoint(let endpoint):
-      return "llm_egress:configured:\(endpoint)"
+    case .configuredEndpoint(let endpoint): return "llm_egress:configured:\(endpoint)"
     case .managed(let providerID, let endpoint):
       return "llm_egress:managed:\(providerID.rawValue):\(endpoint)"
     }

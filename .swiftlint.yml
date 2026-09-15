@@ -1,19 +1,47 @@
-# swift-format owns layout/cosmetic style;
-# SwiftLint owns complexity, correctness smells, idiom rules, and the hard line-length limit.
-# Formatting rules both tools would touch are disabled below so they never disagree.
+# The canonical formatter pipeline owns layout (ARCHITECTURE.md §19.2).
+# SwiftLint owns correctness, idiom, complexity and the hard line-length limit.
 
 included:
   - Sources
   - Tests
+  - Package.swift
+  - BuildTools/Package.swift
+  - BuildTools/Sources
 excluded:
   - .build
 
 disabled_rules:
+  # Layout belongs to Apple swift-format and the targeted final pass.
+  - attribute_name_spacing
+  - closing_brace
+  - closure_parameter_position
+  - colon
+  - comma
+  - comment_spacing
+  - control_statement
+  - empty_parentheses_with_trailing_closure
+  - function_name_whitespace
+  - leading_whitespace
+  - no_space_in_method_call
   - opening_brace
-  - trailing_comma # swift-format adds multi-element trailing commas;
+  - return_arrow_whitespace
+  - sorted_imports
+  - statement_position
+  - switch_case_alignment
+  - trailing_comma
+  - trailing_newline
+  - trailing_semicolon
   - trailing_whitespace
+  - vertical_parameter_alignment
   - vertical_whitespace
-  - sorted_imports # swift-format's OrderedImports owns import order, case-sensitively;
+  # These semantic rewrites are already owned by Apple swift-format.
+  - duplicate_imports
+  - no_fallthrough_only
+  - private_over_fileprivate
+  - redundant_void_return
+  - syntactic_sugar
+  - unneeded_synthesized_initializer
+  - void_return
   - superfluous_disable_command
 
 opt_in_rules:
@@ -42,17 +70,9 @@ opt_in_rules:
   - shorthand_optional_binding
   - direct_return
   # Readability
-  - closure_spacing
   - closure_body_length
-  - collection_alignment
-  - operator_usage_whitespace
-  - let_var_whitespace
   - modifier_order
-  - vertical_whitespace_opening_braces
-  - vertical_whitespace_closing_braces
   - superfluous_else
-  - multiline_arguments
-  - multiline_parameters
   - redundant_nil_coalescing
   - fatal_error_message
   - yoda_condition
@@ -60,8 +80,6 @@ opt_in_rules:
 force_cast: error
 force_try: error
 force_unwrapping: error
-trailing_semicolon: error
-duplicate_imports: error
 
 line_length:
   warning: 100

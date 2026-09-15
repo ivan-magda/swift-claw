@@ -6,28 +6,20 @@ public enum MemoryWriteWarning: Sendable, Equatable {
 
   public var confirmationSummary: String {
     switch self {
-    case .possibleSecret:
-      "possible secret-shaped text"
-    case .possibleInstruction:
-      "possible instruction-shaped text"
+    case .possibleSecret: "possible secret-shaped text"
+    case .possibleInstruction: "possible instruction-shaped text"
     }
   }
 }
 
-enum MemoryWriteBuildError: Error, Sendable, Equatable {
-  case emptyAfterNormalization
-}
+enum MemoryWriteBuildError: Error, Sendable, Equatable { case emptyAfterNormalization }
 
 public struct MemoryWriteRequest: Sendable, Equatable {
   public let item: NewMemoryItem
   public let confirmationText: String
   public let warnings: [MemoryWriteWarning]
 
-  public init(
-    item: NewMemoryItem,
-    confirmationText: String,
-    warnings: [MemoryWriteWarning]
-  ) {
+  public init(item: NewMemoryItem, confirmationText: String, warnings: [MemoryWriteWarning]) {
     self.item = item
     self.confirmationText = confirmationText
     self.warnings = warnings
@@ -38,7 +30,7 @@ public enum MemoryWriteBuilder {
   public static func build(
     rawText: String,
     kind: MemoryKind,
-    sessionId: Int64?,
+    sessionID: Int64?,
     source: MemorySource = .owner,
     importance: Importance = .normal,
     sensitivity: Sensitivity = .normal
@@ -59,16 +51,13 @@ public enum MemoryWriteBuilder {
       sensitivity: sensitivity,
       importance: importance,
       source: source,
-      sessionId: sessionId
+      sessionID: sessionID
     )
 
     let visibleText = renderVisibleControls(in: normalizedText).trimmingCharacters(
       in: .whitespacesAndNewlines
     )
-    var lines = [
-      "Remember as \(kind.rawValue):",
-      visibleText,
-    ]
+    var lines = ["Remember as \(kind.rawValue):", visibleText]
 
     if warnings.isEmpty == false {
       let summaries = warnings.map(\.confirmationSummary).joined(separator: ", ")
@@ -93,12 +82,18 @@ private extension MemoryWriteBuilder {
     var warnings: [MemoryWriteWarning] = []
 
     let secretWarningPatterns: Set<String> = ["sk-", "api_key", "token"]
-    if secretWarningPatterns.contains(where: { loweredText.contains($0) }) {
+    if
+      secretWarningPatterns.contains(where: {
+        loweredText.contains($0)
+      }) {
       warnings.append(.possibleSecret)
     }
 
     let instructionWarningPatterns: Set<String> = ["ignore previous", "system prompt"]
-    if instructionWarningPatterns.contains(where: { loweredText.contains($0) }) {
+    if
+      instructionWarningPatterns.contains(where: {
+        loweredText.contains($0)
+      }) {
       warnings.append(.possibleInstruction)
     }
 
@@ -110,7 +105,11 @@ private extension MemoryWriteBuilder {
 
 private extension MemoryWriteBuilder {
   static func stripBlockedControls(from text: String) -> String {
-    String(text.unicodeScalars.filter { blockedControls.contains($0.value) == false })
+    String(
+      text.unicodeScalars.filter {
+        blockedControls.contains($0.value) == false
+      }
+    )
   }
 
   static func renderVisibleControls(in text: String) -> String {
@@ -135,16 +134,7 @@ private extension MemoryWriteBuilder {
   }
 
   static let blockedControls: Set<UInt32> = {
-    var scalars: Set<UInt32> = [
-      0x061C,
-      0x200B,
-      0x200C,
-      0x200D,
-      0x200E,
-      0x200F,
-      0x2060,
-      0xFEFF,
-    ]
+    var scalars: Set<UInt32> = [0x061C, 0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2060, 0xFEFF]
 
     for value in 0x202A...0x202E {
       scalars.insert(UInt32(value))

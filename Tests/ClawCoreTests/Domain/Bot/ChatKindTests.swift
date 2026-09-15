@@ -2,8 +2,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ChatKindTests {
-  @Test func knownApiValuesMapToTheirCase() {
+@Suite
+struct ChatKindTests {
+  @Test
+  func knownAPIValuesMapToTheirCase() {
     // given / when / then
     #expect(ChatKind(apiValue: "private") == .private)
     #expect(ChatKind(apiValue: "group") == .group)
@@ -11,7 +13,8 @@ import Testing
     #expect(ChatKind(apiValue: "channel") == .channel)
   }
 
-  @Test func unrecognizedApiValueIsNeverPrivate() {
+  @Test
+  func unrecognizedAPIValueIsNeverPrivate() {
     // given — a chat type this build has never heard of
     let kind = ChatKind(apiValue: "hyperforum")
 
@@ -20,7 +23,8 @@ import Testing
     #expect(kind != .private)
   }
 
-  @Test func apiValueRoundTrips() {
+  @Test
+  func apiValueRoundTrips() {
     // given
     let kinds: [ChatKind] = [.private, .group, .supergroup, .channel, .other("hyperforum")]
 

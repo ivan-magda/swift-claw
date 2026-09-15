@@ -63,31 +63,31 @@ public struct ApprovalWaiter: ApprovalParking {
   /// Awaits the coordinator resolution (buffered if it already landed), then runs the resume/deny
   /// steps. `revalidatePolicyOnApprove` is true ONLY for the boot crash-window re-park.
   public func park(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
-    chatId _: Int64,
+    approvalID: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID _: Int64,
     revalidatePolicyOnApprove: Bool
   ) async {
-    guard let signal = await coordinator.awaitResolution(approvalId: approvalId) else {
+    guard let signal = await coordinator.awaitResolution(approvalID: approvalID) else {
       // Cancelled while parked (graceful shutdown / lane cancel) with no resolution: exit cleanly.
       // The durable approval row is untouched; the boot re-park rebuilds the hold on restart.
-      logger.debug("approval \(approvalId) park cancelled before resolution; exiting cleanly")
+      logger.debug("approval \(approvalID) park cancelled before resolution; exiting cleanly")
       return
     }
     switch signal {
     case .approved:
       await resolveApproved(
-        approvalId: approvalId,
-        runId: runId,
-        sessionId: sessionId,
+        approvalID: approvalID,
+        runID: runID,
+        sessionID: sessionID,
         revalidatePolicyOnApprove: revalidatePolicyOnApprove
       )
     case .denied(let decision):
-      guard let approval = loadApproval(approvalId) else {
+      guard let approval = loadApproval(approvalID) else {
         // The nonce is never consumed, so a nil row means a resolver already drove the run
         // terminal; the durable state is settled and the lane is free.
-        logger.debug("approval \(approvalId) absent at deny resume; nothing to finalize")
+        logger.debug("approval \(approvalID) absent at deny resume; nothing to finalize")
         return
       }
       await resolveDenied(approval: approval, decision: decision)
@@ -99,13 +99,13 @@ public struct ApprovalWaiter: ApprovalParking {
 
 private extension ApprovalWaiter {
   func resolveApproved(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
+    approvalID: Int64,
+    runID: Int64,
+    sessionID: Int64,
     revalidatePolicyOnApprove: Bool
   ) async {
-    guard let approval = loadApproval(approvalId), approval.state == .approved else {
-      logger.warning("approval \(approvalId) was not APPROVED at resume; skipping")
+    guard let approval = loadApproval(approvalID), approval.state == .approved else {
+      logger.warning("approval \(approvalID) was not APPROVED at resume; skipping")
       return
     }
 
@@ -123,8 +123,8 @@ private extension ApprovalWaiter {
     }
 
     let commit = await withTypingPulse(
-      chatId: target.chatId,
-      messageThreadId: target.messageThreadId,
+      chatID: target.chatID,
+      messageThreadID: target.messageThreadID,
       indicator: typing,
       clock: clock
     ) {
@@ -133,12 +133,12 @@ private extension ApprovalWaiter {
     switch commit {
     case .ignored:
       // A duplicate signal already resumed the run; do not run the continuation twice.
-      logger.debug("approved resume for run \(runId) was a no-op (duplicate signal)")
+      logger.debug("approved resume for run \(runID) was a no-op (duplicate signal)")
       return
     case .runNotResumable:
       // `/stop`//`new` drove the run terminal after the approve CAS: nothing executed, the claim
       // txn resolved the observation, and the command already acked the owner — nothing to do.
-      logger.debug("approved action for run \(runId) skipped; the run was cancelled first")
+      logger.debug("approved action for run \(runID) skipped; the run was cancelled first")
       return
     case .storeFailed:
       // The pre-execution claim threw at the store seam — nothing ran. Leave the run
@@ -163,23 +163,20 @@ private extension ApprovalWaiter {
       )
       await notifyParticipant(target: target, text: Self.recordFailureNotice)
       return
-    case .committed:
-      break
+    case .committed: break
     }
 
     await turns.resume(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: target.chatId,
-      contextBoundMessageId: approval.observationMessageId
+      runID: runID,
+      sessionID: sessionID,
+      chatID: target.chatID,
+      contextBoundMessageID: approval.observationMessageID
     )
   }
 
   func policyStillMatches(_ approval: Approval) -> Bool {
-    do {
-      return try currentPolicyVersion() == approval.policyVersion
-    } catch {
-      logger.error("policy recompute failed at resume for run \(approval.runId): \(error)")
+    do { return try currentPolicyVersion() == approval.policyVersion } catch {
+      logger.error("policy recompute failed at resume for run \(approval.runID): \(error)")
       return false  // fail closed
     }
   }
@@ -187,15 +184,13 @@ private extension ApprovalWaiter {
   func failOnStalePolicy(_ approval: Approval, target: DeliveryTarget) async {
     do {
       _ = try runs.failRunStalePolicy(
-        runId: approval.runId,
-        sessionId: approval.sessionId,
-        observationMessageId: approval.observationMessageId,
+        runID: approval.runID,
+        sessionID: approval.sessionID,
+        observationMessageID: approval.observationMessageID,
         observationContent: Self.deniedObservationContent(for: .stalePolicy),
         now: now()
       )
-    } catch {
-      logger.error("failRunStalePolicy failed for run \(approval.runId): \(error)")
-    }
+    } catch { logger.error("failRunStalePolicy failed for run \(approval.runID): \(error)") }
     await notifyParticipant(target: target, text: Self.stalePolicyNotice)
   }
 }
@@ -210,10 +205,7 @@ extension ApprovalWaiter {
   /// terminal state, (3) sends the plain-language owner notice for a reject/expiry (the `/stop`//
   /// `new` command already acked the owner), and (4) disarms the buttons. Steps 3–4 are best-effort
   /// transport over already-committed durable state — a transport failure must not strand the lane.
-  func resolveDenied(
-    approval: Approval,
-    decision: ApprovalDecision
-  ) async {
+  func resolveDenied(approval: Approval, decision: ApprovalDecision) async {
     let cancel: CancelReason? =
       switch decision {
       case .cancelled: .cancelled
@@ -223,15 +215,13 @@ extension ApprovalWaiter {
 
     do {
       _ = try runs.resolveDeniedObservation(
-        runId: approval.runId,
-        observationMessageId: approval.observationMessageId,
+        runID: approval.runID,
+        observationMessageID: approval.observationMessageID,
         content: Self.deniedObservationContent(for: decision),
         cancel: cancel,
         now: now()
       )
-    } catch {
-      logger.error("approval \(approval.id) deny-observation commit failed: \(error)")
-    }
+    } catch { logger.error("approval \(approval.id) deny-observation commit failed: \(error)") }
 
     if cancel == nil, let target = deliveryTarget(for: approval) {
       await notifyParticipant(target: target, text: Self.ownerNotice(for: decision))
@@ -271,9 +261,9 @@ extension ApprovalWaiter {
 
 private extension ApprovalWaiter {
   static let stalePolicyNotice = """
-    My instructions or tools changed since you were asked, \
-    so I can't run that now — please re-run.
-    """
+  My instructions or tools changed since you were asked, \
+  so I can't run that now — please re-run.
+  """
 
   static let storeFailureNotice =
     "The approved action could not be recorded; it will be retried after a restart."
@@ -282,9 +272,7 @@ private extension ApprovalWaiter {
     "The approved action ran, but I couldn't record its result; a restart will settle things."
 
   func loadApproval(_ id: Int64) -> Approval? {
-    do {
-      return try approvals.approval(id: id)
-    } catch {
+    do { return try approvals.approval(id: id) } catch {
       logger.error("approval \(id) load failed: \(error)")
       return nil
     }
@@ -294,11 +282,11 @@ private extension ApprovalWaiter {
     do {
       guard
         let context = try runs.executionContext(
-          runId: approval.runId,
-          fallbackChatId: approval.ownerUserId
+          runID: approval.runID,
+          fallbackChatID: approval.ownerUserID
         ),
-        context.sessionId == approval.sessionId,
-        context.deliveryTarget.chatId == approval.ownerUserId
+        context.sessionID == approval.sessionID,
+        context.deliveryTarget.chatID == approval.ownerUserID
       else {
         logger.error("approval \(approval.id) has no matching durable destination")
         return nil
@@ -315,12 +303,12 @@ private extension ApprovalWaiter {
   }
 
   func disarm(_ approval: Approval) async {
-    guard let promptMessageId = approval.promptMessageId else {
+    guard let promptMessageID = approval.promptMessageID else {
       return
     }
     try? await callbacks.editMessageReplyMarkup(
-      chatId: approval.ownerUserId,
-      messageId: promptMessageId,
+      chatID: approval.ownerUserID,
+      messageID: promptMessageID,
       replyMarkup: nil
     )
   }

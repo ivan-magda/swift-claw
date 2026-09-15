@@ -62,11 +62,9 @@ public actor SessionLaneRegistry {
   /// are one uninterrupted turn, so a call that observes admission closed is always rejected and a
   /// post-close call can never be accepted. The new task cannot service its own finalize callback
   /// until this turn ends, so its operation is always registered first.
-  public func enqueue(
-    sessionID: Int64,
-    runID: Int64,
-    work: @escaping @Sendable () async -> Void
-  ) -> LaneEnqueueResult {
+  public func enqueue(sessionID: Int64, runID: Int64, work: @escaping @Sendable () async -> Void)
+    -> LaneEnqueueResult
+  {
     let admitted = admissionOpen.withLock { open in
       open
     }
@@ -75,6 +73,7 @@ public actor SessionLaneRegistry {
     }
 
     let operationID = nextOperationID
+    // IDs are process-local opaque bits, not an ordered count, so overflow continues the cycle.
     nextOperationID &+= 1
     let predecessor = sessionTails[sessionID]?.task
 
@@ -91,11 +90,7 @@ public actor SessionLaneRegistry {
       await work()
     }
 
-    operations[operationID] = ActiveOperation(
-      runID: runID,
-      sessionID: sessionID,
-      task: task
-    )
+    operations[operationID] = ActiveOperation(runID: runID, sessionID: sessionID, task: task)
     sessionTails[sessionID] = SessionTail(operationID: operationID, task: task)
     return .accepted
   }
@@ -139,10 +134,9 @@ public actor SessionLaneRegistry {
   /// deadline child ignores caller cancellation and always fires, keeping the bound intact. Assumes
   /// a single concurrent drain: a timeout resumes every parked waiter, so two overlapping drains
   /// with different deadlines could resume each other early.
-  public func drain<ClockType: Clock>(
-    timeout: Duration,
-    clock: ClockType
-  ) async -> SessionLaneDrainResult where ClockType.Duration == Duration {
+  public func drain<ClockType: Clock>(timeout: Duration, clock: ClockType) async
+    -> SessionLaneDrainResult where ClockType.Duration == Duration
+  {
     if operations.isEmpty {
       return .drained
     }
@@ -164,17 +158,13 @@ public actor SessionLaneRegistry {
     await deadline.value
 
     switch signal {
-    case .drained:
-      return .drained
-    case .timedOut:
-      return .timedOut(activeRunIDs: activeRunIDs())
+    case .drained: return .drained
+    case .timedOut: return .timedOut(activeRunIDs: activeRunIDs())
     }
   }
 
   /// The run ids of every turn still registered, sorted for a stable report.
-  func activeRunIDs() -> [Int64] {
-    operations.values.map(\.runID).sorted()
-  }
+  func activeRunIDs() -> [Int64] { operations.values.map(\.runID).sorted() }
 }
 
 // MARK: - Finalization
@@ -211,9 +201,7 @@ private extension SessionLaneRegistry {
 
   /// The deadline child's callback: resumes any still-parked waiter with `.timedOut`. A no-op once
   /// the finalizer already resumed them, since resumption takes and clears the waiters atomically.
-  private func signalDrainTimeout() {
-    resumeDrainWaiters(with: .timedOut)
-  }
+  private func signalDrainTimeout() { resumeDrainWaiters(with: .timedOut) }
 
   private func resumeDrainWaiters(with signal: DrainSignal) {
     let waiters = drainWaiters

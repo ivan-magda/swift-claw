@@ -5,9 +5,7 @@ import GRDB
 public struct UsageStoreGRDB: UsageStore {
   private let database: MappedDatabase
 
-  public init(writer: any DatabaseWriter) {
-    database = MappedDatabase(writer: writer)
-  }
+  public init(writer: any DatabaseWriter) { database = MappedDatabase(writer: writer) }
 
   public func recordUsage(_ usage: ProviderUsage) throws(StoreError) {
     _ = try database.writeMapping { db in
@@ -21,10 +19,10 @@ public struct UsageStoreGRDB: UsageStore {
     }
   }
 
-  public func todayTokensAndCost(
-    origins: [RunOrigin],
-    now: Date
-  ) throws(StoreError) -> (tokens: Int, costUSD: Double) {
+  public func todayTokensAndCost(origins: [RunOrigin], now: Date) throws(StoreError) -> (
+    tokens: Int,
+    costUSD: Double
+  ) {
     try database.readMapping { db in
       try Self.dayTotals(db, origins: origins, now: now)
     }
@@ -43,10 +41,10 @@ extension UsageStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-        SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
-               COALESCE(SUM(cost_usd), 0) AS cost
-        FROM provider_usage WHERE ts >= ?
-        """,
+      SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens,
+             COALESCE(SUM(cost_usd), 0) AS cost
+      FROM provider_usage WHERE ts >= ?
+      """,
       arguments: [now.startOfUTCDay]
     )
     guard let row else {
@@ -55,11 +53,10 @@ extension UsageStoreGRDB {
     return (row["tokens"], row["cost"])
   }
 
-  static func dayTotals(
-    _ db: Database,
-    origins: [RunOrigin],
-    now: Date
-  ) throws -> (tokens: Int, costUSD: Double) {
+  static func dayTotals(_ db: Database, origins: [RunOrigin], now: Date) throws -> (
+    tokens: Int,
+    costUSD: Double
+  ) {
     guard origins.isEmpty == false else {
       return (0, 0)
     }
@@ -74,12 +71,12 @@ extension UsageStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-        SELECT COALESCE(SUM(u.prompt_tokens + u.completion_tokens), 0) AS tokens,
-               COALESCE(SUM(u.cost_usd), 0) AS cost
-        FROM provider_usage u
-        LEFT JOIN runs r ON r.id = u.run_id
-        WHERE (r.origin IN (\(placeholders)) \(learningClause)) AND u.ts >= ?
-        """,
+      SELECT COALESCE(SUM(u.prompt_tokens + u.completion_tokens), 0) AS tokens,
+             COALESCE(SUM(u.cost_usd), 0) AS cost
+      FROM provider_usage u
+      LEFT JOIN runs r ON r.id = u.run_id
+      WHERE (r.origin IN (\(placeholders)) \(learningClause)) AND u.ts >= ?
+      """,
       arguments: arguments
     )
     guard let row else {
@@ -95,9 +92,9 @@ extension UsageStoreGRDB {
       let row = try Row.fetchOne(
         db,
         sql: """
-          SELECT prompt_tokens, run_id, is_estimated FROM provider_usage
-          ORDER BY id DESC LIMIT 1
-          """
+        SELECT prompt_tokens, run_id, is_estimated FROM provider_usage
+        ORDER BY id DESC LIMIT 1
+        """
       )
 
       guard let row else {
@@ -106,7 +103,7 @@ extension UsageStoreGRDB {
 
       return LatestPromptUsage(
         promptTokens: row["prompt_tokens"],
-        runId: row["run_id"],
+        runID: row["run_id"],
         isEstimated: row["is_estimated"]
       )
     }
@@ -118,9 +115,9 @@ extension UsageStoreGRDB {
       let rows = try Row.fetchAll(
         db,
         sql: """
-          SELECT cost_source, COUNT(*) AS n FROM provider_usage WHERE ts >= ?
-          GROUP BY cost_source
-          """,
+        SELECT cost_source, COUNT(*) AS n FROM provider_usage WHERE ts >= ?
+        GROUP BY cost_source
+        """,
         arguments: [dayStart]
       )
       var result: [CostSource: Int] = [:]

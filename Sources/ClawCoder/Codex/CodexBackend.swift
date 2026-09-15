@@ -40,9 +40,9 @@ public struct CodexBackend: CoderBackend {
     profile = config.profile
     configHome =
       child["CODEX_HOME"]
-      ?? child["HOME"].map {
-        URL(fileURLWithPath: $0).appendingPathComponent(".codex").path
-      }
+        ?? child["HOME"].map {
+          URL(fileURLWithPath: $0).appendingPathComponent(".codex").path
+        }
 
     var sources = child.filter {
       ["GH_CONFIG_DIR", "GH_HOST", "SSH_AUTH_SOCK"].contains($0.key)
@@ -50,9 +50,9 @@ public struct CodexBackend: CoderBackend {
     sources["CODEX_HOME"] = configHome
     sources["GH_CONFIG_DIR"] =
       sources["GH_CONFIG_DIR"]
-      ?? child["HOME"].map {
-        URL(fileURLWithPath: $0).appendingPathComponent(".config/gh").path
-      }
+        ?? child["HOME"].map {
+          URL(fileURLWithPath: $0).appendingPathComponent(".config/gh").path
+        }
     sources["GH_HOST"] = sources["GH_HOST"] ?? "github.com"
 
     for key in CodexInvocation.credentialKeys where child[key] != nil {
@@ -69,9 +69,7 @@ public struct CodexBackend: CoderBackend {
   public static func effectivePath(
     config: CoderConfig,
     environment: [String: String] = ProcessInfo.processInfo.environment
-  ) -> String {
-    config.searchPath ?? environment["PATH"] ?? "/usr/bin:/bin"
-  }
+  ) -> String { config.searchPath ?? environment["PATH"] ?? "/usr/bin:/bin" }
 
   /// Checks fixed local CLI capabilities without inference or reading its authentication cache.
   public func compatibility() async throws -> String {
@@ -82,11 +80,9 @@ public struct CodexBackend: CoderBackend {
       phase: .prepare,
       deadline: ContinuousClock.now.advanced(by: CoderCommandRunner.readOnlyTimeout)
     )
-    do {
-      return redactor.redact(try await context.compatibility(executable: executable))
-    } catch let error as CoderError {
-      throw error
-    } catch {
+    do { return redactor.redact(try await context.compatibility(executable: executable)) } catch let
+      error as CoderError
+    { throw error } catch {
       throw CoderError.unavailable(
         """
         Codex CLI could not complete its compatibility checks. \
@@ -111,8 +107,12 @@ public struct CodexBackend: CoderBackend {
       timeout: CoderCommandRunner.readOnlyTimeout
     )
     let result = await CoderCommandRunner().run(command, tracking: .preApprovalReadOnly) { _ in }
-    guard !result.supervisionFailed, result.cleanupResolved, !result.cancelled,
-      !result.timedOut, result.signal == nil
+    guard
+      !result.supervisionFailed,
+      result.cleanupResolved,
+      !result.cancelled,
+      !result.timedOut,
+      result.signal == nil
     else {
       return .unavailable
     }
@@ -127,7 +127,7 @@ public struct CodexBackend: CoderBackend {
 
   public func run(
     _ invocation: CoderInvocation,
-    recordProcess: @Sendable (CoderProcessEvent) async throws -> Void
+    recordProcess: @Sendable (_ event: CoderProcessEvent) async throws -> Void
   ) async -> CoderResult {
     await run(invocation, workerRunner: CoderCommandRunner(), recordProcess: recordProcess)
   }
@@ -135,7 +135,7 @@ public struct CodexBackend: CoderBackend {
   func run(
     _ invocation: CoderInvocation,
     workerRunner: CoderCommandRunner,
-    recordProcess: @Sendable (CoderProcessEvent) async throws -> Void
+    recordProcess: @Sendable (_ event: CoderProcessEvent) async throws -> Void
   ) async -> CoderResult {
     await withoutActuallyEscaping(recordProcess) { recordProcess in
       await execute(invocation, workerRunner: workerRunner, recordProcess: recordProcess)
@@ -149,12 +149,13 @@ private extension CodexBackend {
   func execute(
     _ invocation: CoderInvocation,
     workerRunner: CoderCommandRunner,
-    recordProcess: @Sendable @escaping (CoderProcessEvent) async throws -> Void
+    recordProcess: @Sendable @escaping (_ event: CoderProcessEvent) async throws -> Void
   ) async -> CoderResult {
     let deadline = ContinuousClock.now.advanced(by: invocation.timeout)
     var outcome = CodexOutcome()
-    let protocolDirectory = URL(fileURLWithPath: invocation.jobDirectory)
-      .appendingPathComponent("protocol-\(UUID().uuidString)")
+    let protocolDirectory = URL(fileURLWithPath: invocation.jobDirectory).appendingPathComponent(
+      "protocol-\(UUID().uuidString)"
+    )
     var stage = CoderFailureStage.preparation
     do {
       try PrivateDirectory.ensure(at: protocolDirectory)
@@ -263,11 +264,8 @@ private extension CodexBackend {
     }
   }
 
-  func classify(
-    process: CoderCommandResult,
-    events: CodexEvents,
-    outcome: inout CodexOutcome
-  ) async {
+  func classify(process: CoderCommandResult, events: CodexEvents, outcome: inout CodexOutcome) async
+  {
     if process.cancelled {
       outcome.state = .cancelled
     } else if process.timedOut {

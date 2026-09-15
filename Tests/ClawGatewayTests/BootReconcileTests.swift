@@ -9,8 +9,10 @@ import Testing
 /// Proves the no-silence guarantee (F22) end-to-end: a run that crashed mid-turn (left RUNNING with
 /// nothing delivered) is swept to FAILED at boot, which enqueues a degradation reply, and the
 /// dispatcher's boot drain then delivers it to the owner.
-@Suite struct BootReconcileTests {
-  @Test func crashMidTurnYieldsABootDegradationReply() async throws {
+@Suite
+struct BootReconcileTests {
+  @Test
+  func crashMidTurnYieldsABootDegradationReply() async throws {
     // given — a RUNNING run with no outbox row: the daemon died mid-turn, owner heard nothing
     let fixture = try makeSeededFixture()
     let transport = RecordingTransport()
@@ -27,11 +29,13 @@ import Testing
     let replies = try fixture.runs.reconcileRunsAtBoot(
       now: Date(),
       degradationText: Degradation.unfinished,
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
     #expect(replies.count == 1)
 
-    let task = Task { try await dispatcher.run() }
+    let task = Task {
+      try await dispatcher.run()
+    }
     await transport.waitForSends(atLeast: 1)
     signal.finish()
     task.cancel()
@@ -40,7 +44,8 @@ import Testing
     #expect(await transport.richSends.first?.markdown == Degradation.unfinished)
   }
 
-  @Test func reconcileLeavesDeliveredAndCompletedRunsUntouched() async throws {
+  @Test
+  func reconcileLeavesDeliveredAndCompletedRunsUntouched() async throws {
     // given — a terminal DONE run and a RUNNING run whose only outbox row was already SENT; neither
     // is an unfinished orphan, so the no-silence sweep has nothing to announce
     let fixture = try makeHealthyRunsFixture()
@@ -51,7 +56,7 @@ import Testing
     let replies = try fixture.runs.reconcileRunsAtBoot(
       now: reconcileNow,
       degradationText: Degradation.unfinished,
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
 
     // then — no degradation reply is produced or persisted for either healthy run, and the DONE

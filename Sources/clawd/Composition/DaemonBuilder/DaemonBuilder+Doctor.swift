@@ -19,7 +19,7 @@ extension DaemonBuilder {
       config: config,
       sandbox: sandbox,
       cooldown: cooldown,
-      staticAPIKey: secrets.llmApiKey,
+      staticAPIKey: secrets.llmAPIKey,
       makeManagedStore: makeManagedStore,
       mcp: mcp,
       mcpOutcomes: mcpOutcomes,
@@ -43,9 +43,7 @@ struct DaemonDoctorReporter: DoctorReporting {
   let coder: CoderComposition?
   let redactor: SecretRedactor
 
-  func scanSkills() async -> SkillScanResult {
-    DoctorHealth.skillScan(config: config)
-  }
+  func scanSkills() async -> SkillScanResult { DoctorHealth.skillScan(config: config) }
 
   func report() async -> DoctorReport {
     var report = DoctorReport()

@@ -175,10 +175,12 @@ struct MCPToolTests {
       list: ScriptedMCPServer.paged([[]]),
       call: { _, _ in
         CallTool.Result(
-          structuredContent: .object([
-            "token": .string("s3cr3t"),
-            "items": .array([.string("one"), .string("two")]),
-          ])
+          structuredContent: .object(
+            [
+              "token": .string("s3cr3t"),
+              "items": .array([.string("one"), .string("two")]),
+            ]
+          )
         )
       }
     )
@@ -191,10 +193,7 @@ struct MCPToolTests {
     )
 
     // then
-    #expect(
-      payload.content
-        == #"{"items":["one","two"],"token":"\#(SecretRedactor.replacement)"}"#
-    )
+    #expect(payload.content == #"{"items":["one","two"],"token":"\#(SecretRedactor.replacement)"}"#)
     #expect(payload.status == .ok)
     #expect(payload.ingestedUntrusted)
 
@@ -281,12 +280,12 @@ struct MCPToolTests {
     // then
     #expect(
       payload.content == """
-        chart below
-        [image: image/png]
-        [audio: audio/wav]
-        [resource: file:///report.bin (application/octet-stream)]
-        [resource link: doc at https://example.com/doc]
-        """
+      chart below
+      [image: image/png]
+      [audio: audio/wav]
+      [resource: file:///report.bin (application/octet-stream)]
+      [resource link: doc at https://example.com/doc]
+      """
     )
 
     await harness.tearDown()
@@ -300,7 +299,7 @@ struct MCPToolTests {
       call: { _, _ in
         CallTool.Result(
           content: [
-            .resource(resource: Resource.Content.text("issue body", uri: "linear://issue/1"))
+            .resource(resource: Resource.Content.text("issue body", uri: "linear://issue/1")),
           ]
         )
       }
@@ -378,7 +377,7 @@ struct MCPToolTests {
       call: { _, _ in
         CallTool.Result(
           content: [
-            .text(text: String(repeating: "x", count: 500), annotations: nil, _meta: nil)
+            .text(text: String(repeating: "x", count: 500), annotations: nil, _meta: nil),
           ]
         )
       }
@@ -430,16 +429,13 @@ struct MCPToolTests {
     // given a transport that fails the first call the way a spent budget would
     let timedOut = MCPSessionError.callTimedOut(seconds: 40)
     let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
-    let harness = try ToolFixture.harness(
-      against: scripted,
-      transport: { transport, _ in
-        ThrowingTransport(
-          wrapping: transport,
-          failingSend: ThrowingTransport.firstCallSend,
-          with: timedOut
-        )
-      }
-    )
+    let harness = try ToolFixture.harness(against: scripted) { transport, _ in
+      ThrowingTransport(
+        wrapping: transport,
+        failingSend: ThrowingTransport.firstCallSend,
+        with: timedOut
+      )
+    }
 
     // when
     let payload = await harness.tool.execute(
@@ -464,16 +460,13 @@ struct MCPToolTests {
       HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "connection lost")
     )
     let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
-    let harness = try ToolFixture.harness(
-      against: scripted,
-      transport: { transport, _ in
-        ThrowingTransport(
-          wrapping: transport,
-          failingSend: ThrowingTransport.firstCallSend,
-          with: failure
-        )
-      }
-    )
+    let harness = try ToolFixture.harness(against: scripted) { transport, _ in
+      ThrowingTransport(
+        wrapping: transport,
+        failingSend: ThrowingTransport.firstCallSend,
+        with: failure
+      )
+    }
 
     // when
     let payload = await harness.tool.execute(
@@ -512,11 +505,10 @@ struct MCPToolTests {
     #expect(payload.ingestedUntrusted == false)
     #expect(payload.content.contains("IGNORE PREVIOUS INSTRUCTIONS") == false)
     #expect(
-      payload.content
-        == """
-        mcp__linear__list_issues may have completed remotely; \
-        verify its effects before retrying: the server did not complete the call.
-        """
+      payload.content == """
+      mcp__linear__list_issues may have completed remotely; \
+      verify its effects before retrying: the server did not complete the call.
+      """
     )
 
     await harness.tearDown()
@@ -526,19 +518,16 @@ struct MCPToolTests {
   func executeReconnects() async throws {
     // given the first connection drops our session on the call that follows its handshake
     let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
-    let harness = try ToolFixture.harness(
-      against: scripted,
-      transport: { transport, connection in
-        guard connection == 1 else {
-          return transport
-        }
-        return ThrowingTransport(
-          wrapping: transport,
-          failingSend: ThrowingTransport.firstCallSend,
-          with: MCPTransportError.sessionExpired
-        )
+    let harness = try ToolFixture.harness(against: scripted) { transport, connection in
+      guard connection == 1 else {
+        return transport
       }
-    )
+      return ThrowingTransport(
+        wrapping: transport,
+        failingSend: ThrowingTransport.firstCallSend,
+        with: MCPTransportError.sessionExpired
+      )
+    }
 
     // when
     let payload = await harness.tool.execute(
@@ -616,9 +605,7 @@ private actor ThrowingTransport: Transport {
     stream = await inner.receive()
   }
 
-  func disconnect() async {
-    await inner.disconnect()
-  }
+  func disconnect() async { await inner.disconnect() }
 
   func send(_ data: Data) async throws {
     sends += 1
@@ -652,10 +639,13 @@ private struct ToolHarness {
 private enum ToolFixture {
   static let clientVersion = "0.0.0-test"
   static let target = "linear (https://mcp.example.com/mcp)"
-  static let schema: JSONValue = .object([
-    "type": .string("object"),
-    "properties": .object(["team": .object(["type": .string("string")])]),
-  ])
+
+  static let schema: JSONValue = .object(
+    [
+      "type": .string("object"),
+      "properties": .object(["team": .object(["type": .string("string")])]),
+    ]
+  )
 
   static func config(
     name: String = "linear",
@@ -670,10 +660,9 @@ private enum ToolFixture {
     )
   }
 
-  static func resolved(
-    remoteName: String = "list_issues",
-    riskLevel: RiskLevel = .ask
-  ) -> ResolvedMCPTool {
+  static func resolved(remoteName: String = "list_issues", riskLevel: RiskLevel = .ask)
+    -> ResolvedMCPTool
+  {
     ResolvedMCPTool(
       coordinate: MCPToolCoordinate(server: "linear", remoteName: remoteName),
       localName: "mcp__linear__list_issues",
@@ -690,7 +679,9 @@ private enum ToolFixture {
     riskLevel: RiskLevel = .ask,
     secrets: [String] = [],
     outputCapGraphemes: Int = ToolOutputCap.maxGraphemes,
-    transport: (@Sendable (InMemoryTransport, Int) async -> any Transport)? = nil
+    transport: (
+      @Sendable (_ transport: InMemoryTransport, _ connectionCount: Int) async -> any Transport
+    )? = nil
   ) throws -> ToolHarness {
     let session = MCPServerSession(
       config: try config ?? ToolFixture.config(),

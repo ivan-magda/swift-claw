@@ -16,16 +16,16 @@ struct InertApprovalParker: ApprovalParking {
   }
 
   func park(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    approvalID: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     revalidatePolicyOnApprove: Bool
   ) async {
-    let signal = await coordinator.awaitResolution(approvalId: approvalId)
+    let signal = await coordinator.awaitResolution(approvalID: approvalID)
     logger.debug(
       """
-      approval \(approvalId) resolved as \(String(describing: signal)); \
+      approval \(approvalID) resolved as \(String(describing: signal)); \
       the waiter completes the run
       """
     )

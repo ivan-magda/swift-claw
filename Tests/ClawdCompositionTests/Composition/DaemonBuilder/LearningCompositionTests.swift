@@ -12,22 +12,24 @@ import Testing
 /// The composition root is the only production writer of three of the five frozen compatibility
 /// fields, and the only place the learning flag decides whether the loop exists at all. The
 /// `TurnRunner` hop is tested against a double, so without this suite the real closure never runs.
-@Suite struct LearningCompositionTests {
-  @Test func theArmedRootFreezesTheSurfaceABoundRunRanOn() throws {
+@Suite
+struct LearningCompositionTests {
+  @Test
+  func theArmedRootFreezesTheSurfaceABoundRunRanOn() throws {
     // given — a real builder over real stores, learning armed, and one bound run from its own
     // fire
     let builder = try LearningComposition.makeBuilder(learningEnabled: true)
-    let runId = try LearningComposition.fireBoundRun(builder)
+    let runID = try LearningComposition.fireBoundRun(builder)
     let freeze = builder.makeLearningSurfaceFreeze(
       toolDefinitions: LearningComposition.toolDefinitions,
       workspace: LearningComposition.workspace()
     )
 
     // when
-    freeze(runId, "pv-at-pickup")
+    freeze(runID, "pv-at-pickup")
 
     // then — all five fields, from the values in force at pickup
-    let frozen = try #require(try builder.stores.learning.compatibility(runId: runId))
+    let frozen = try #require(try builder.stores.learning.compatibility(runID: runID))
     #expect(frozen.policyVersion == "pv-at-pickup")
     #expect(frozen.contextSchemaVersion == RunSurface.currentContextSchemaVersion)
     #expect(
@@ -40,27 +42,29 @@ import Testing
     #expect(builder.makePinnedLessonStore() != nil)
   }
 
-  @Test func theDisarmedRootComposesNoServiceAndFreezesNothing() throws {
+  @Test
+  func theDisarmedRootComposesNoServiceAndFreezesNothing() throws {
     // given — the same root with `CLAW_LEARNING_ENABLED` unset
     let builder = try LearningComposition.makeBuilder(learningEnabled: false)
-    let runId = try LearningComposition.fireBoundRun(builder)
+    let runID = try LearningComposition.fireBoundRun(builder)
     let freeze = builder.makeLearningSurfaceFreeze(
       toolDefinitions: LearningComposition.toolDefinitions,
       workspace: LearningComposition.workspace()
     )
 
     // when
-    freeze(runId, "pv-at-pickup")
+    freeze(runID, "pv-at-pickup")
 
     // then — the daemon behaves exactly as it does today: nothing to sweep, nothing frozen
     #expect(LearningComposition.learningService(builder) == nil)
-    #expect(try builder.stores.learning.compatibility(runId: runId) == nil)
+    #expect(try builder.stores.learning.compatibility(runID: runID) == nil)
     // The turn path must refuse the pinned read too: a binding written before the flag came off
     // outlives the flag, and an approval parked on it can resume under a disarmed daemon.
     #expect(builder.makePinnedLessonStore() == nil)
   }
 
-  @Test func theDisarmedRootStillComposesTheRedactedLearningReaderAndReset() async throws {
+  @Test
+  func theDisarmedRootStillComposesTheRedactedLearningReaderAndReset() async throws {
     // given — retained learning state exists although the optional worker service is disabled.
     let response = HTTPResult(
       statusCode: 200,
@@ -69,10 +73,10 @@ import Testing
     )
     let http = ScriptedHTTPExecutor([.ok(response), .ok(response), .ok(response)])
     let builder = try LearningComposition.makeBuilder(learningEnabled: false, http: http)
-    try builder.stores.allowlist.seedAllowlist(userIds: [777])
+    try builder.stores.allowlist.seedAllowlist(userIDs: [777])
     let now = Date(timeIntervalSince1970: 1_782_000_600)
     let job = try LearningComposition.createJob(builder, now: now, label: "tg-token")
-    _ = try LearningComposition.fixtures(builder).seedArmedJob(jobId: job.id, now: now)
+    _ = try LearningComposition.fixtures(builder).seedArmedJob(jobID: job.id, now: now)
     let router = builder.makeIntakeRouter(
       coordination: DaemonBuilder.TurnCoordination(),
       turnRunner: IdleCompositionTurns(),
@@ -86,17 +90,17 @@ import Testing
     // when
     let outcome = await router.handle(
       rawUpdate: RawUpdate(
-        updateId: 70,
+        updateID: 70,
         message: RawMessage(
-          messageId: 70,
-          fromUserId: 777,
-          chatId: 777,
+          messageID: 70,
+          fromUserID: 777,
+          chatID: 777,
           text: "/learning \(job.id)",
           caption: nil,
           mediaKind: nil,
           chatKind: .private,
           chatTitle: nil,
-          messageThreadId: nil,
+          messageThreadID: nil,
           senderDisplayName: nil
         ),
         editedMessage: nil
@@ -104,17 +108,17 @@ import Testing
     )
     let resetPrompt = await router.handle(
       rawUpdate: RawUpdate(
-        updateId: 71,
+        updateID: 71,
         message: RawMessage(
-          messageId: 71,
-          fromUserId: 777,
-          chatId: 777,
+          messageID: 71,
+          fromUserID: 777,
+          chatID: 777,
           text: "/learning reset \(job.id)",
           caption: nil,
           mediaKind: nil,
           chatKind: .private,
           chatTitle: nil,
-          messageThreadId: nil,
+          messageThreadID: nil,
           senderDisplayName: nil
         ),
         editedMessage: nil
@@ -122,17 +126,17 @@ import Testing
     )
     let reset = await router.handle(
       rawUpdate: RawUpdate(
-        updateId: 72,
+        updateID: 72,
         message: RawMessage(
-          messageId: 72,
-          fromUserId: 777,
-          chatId: 777,
+          messageID: 72,
+          fromUserID: 777,
+          chatID: 777,
           text: "yes",
           caption: nil,
           mediaKind: nil,
           chatKind: .private,
           chatTitle: nil,
-          messageThreadId: nil,
+          messageThreadID: nil,
           senderDisplayName: nil
         ),
         editedMessage: nil
@@ -157,7 +161,7 @@ import Testing
     let prompt = try #require(promptBody["text"] as? String)
     #expect(prompt.contains(SecretRedactor.replacement))
     #expect(prompt.contains("tg-token") == false)
-    let view = try #require(try builder.stores.learning.learningView(jobId: job.id).first)
+    let view = try #require(try builder.stores.learning.learningView(jobID: job.id).first)
     guard case .readable(let readable) = view else {
       Issue.record("expected reset learning state")
       return
@@ -165,23 +169,24 @@ import Testing
     #expect(readable.epoch == LearningEpoch(2))
   }
 
-  @Test func feedbackRouterIsComposedOnlyWhileLearningIsArmed() async throws {
+  @Test
+  func feedbackRouterIsComposedOnlyWhileLearningIsArmed() async throws {
     // given — each real root owns a live target, but only one has the learning feature armed
     for learningEnabled in [true, false] {
       let builder = try LearningComposition.makeBuilder(learningEnabled: learningEnabled)
-      try builder.stores.allowlist.seedAllowlist(userIds: [777])
+      try builder.stores.allowlist.seedAllowlist(userIDs: [777])
       let now = Date(timeIntervalSince1970: 1_782_000_600)
       let job = try LearningComposition.createJob(builder, now: now)
-      let state = try LearningComposition.fixtures(builder).seedArmedJob(jobId: job.id, now: now)
+      let state = try LearningComposition.fixtures(builder).seedArmedJob(jobID: job.id, now: now)
       let target = NewFeedbackTarget(
         nonce: "composition-\(learningEnabled)",
-        jobId: job.id,
+        jobID: job.id,
         epoch: state.epoch,
         subjectKind: .run,
         subjectDigest: "41",
         allowedActions: [.resultUseful],
-        ownerUserId: 777,
-        chatId: 777,
+        ownerUserID: 777,
+        chatID: 777,
         expiresAt: .distantFuture
       )
       try LearningComposition.fixtures(builder).seedTargets([target])
@@ -195,18 +200,15 @@ import Testing
         learning: nil
       )
       let update = RawUpdate(
-        updateId: learningEnabled ? 80 : 81,
+        updateID: learningEnabled ? 80 : 81,
         message: nil,
         editedMessage: nil,
         callback: RawCallback(
-          callbackId: "composition-feedback",
-          fromUserId: 777,
-          chatId: 777,
-          messageId: 1,
-          data: FeedbackKeyboard.callbackData(
-            nonce: target.nonce,
-            action: .resultUseful
-          )
+          callbackID: "composition-feedback",
+          fromUserID: 777,
+          chatID: 777,
+          messageID: 1,
+          data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultUseful)
         )
       )
 
@@ -220,45 +222,46 @@ import Testing
     }
   }
 
-  @Test func freeTextChallengeOpeningAndInterceptionShareTheLearningFeatureGate() async throws {
+  @Test
+  func freeTextChallengeOpeningAndInterceptionShareTheLearningFeatureGate() async throws {
     // given — both roots hold the same kind of payload-bearing target
     for learningEnabled in [true, false] {
       let builder = try LearningComposition.makeBuilder(learningEnabled: learningEnabled)
-      try builder.stores.allowlist.seedAllowlist(userIds: [777])
+      try builder.stores.allowlist.seedAllowlist(userIDs: [777])
       let now = Date(timeIntervalSince1970: 1_782_000_600)
       let job = try LearningComposition.createJob(builder, now: now)
-      let state = try LearningComposition.fixtures(builder).seedArmedJob(jobId: job.id, now: now)
+      let state = try LearningComposition.fixtures(builder).seedArmedJob(jobID: job.id, now: now)
       let target = NewFeedbackTarget(
         nonce: "composition-challenge-\(learningEnabled)",
-        jobId: job.id,
+        jobID: job.id,
         epoch: state.epoch,
         subjectKind: .run,
         subjectDigest: "41",
         allowedActions: [.resultCorrection],
-        ownerUserId: 777,
-        chatId: 777,
+        ownerUserID: 777,
+        chatID: 777,
         expiresAt: .distantFuture
       )
       try LearningComposition.fixtures(builder).seedTargets([target])
       if !learningEnabled {
         let residual = NewFeedbackTarget(
           nonce: "residual-disabled-challenge",
-          jobId: job.id,
+          jobID: job.id,
           epoch: state.epoch,
           subjectKind: .run,
           subjectDigest: "43",
           allowedActions: [.resultCorrection],
-          ownerUserId: 777,
-          chatId: 777,
+          ownerUserID: 777,
+          chatID: 777,
           expiresAt: .distantFuture
         )
         try LearningComposition.fixtures(builder).seedTargets([residual])
         let tap = FeedbackTap(
           nonce: residual.nonce,
           signal: .resultCorrection,
-          ownerUserId: 777,
-          chatId: 777,
-          transportUpdateId: 89
+          ownerUserID: 777,
+          chatID: 777,
+          transportUpdateID: 89
         )
         let opened = try builder.stores.learning.consumeAndOpenChallenge(
           tap,
@@ -284,51 +287,48 @@ import Testing
       // when — correction tap, then its free-text payload
       let callbackOutcome = await router.handle(
         rawUpdate: RawUpdate(
-          updateId: learningEnabled ? 90 : 91,
+          updateID: learningEnabled ? 90 : 91,
           message: nil,
           editedMessage: nil,
           callback: RawCallback(
-            callbackId: "composition-challenge",
-            fromUserId: 777,
-            chatId: 777,
-            messageId: 1,
-            data: FeedbackKeyboard.callbackData(
-              nonce: target.nonce,
-              action: .resultCorrection
-            )
+            callbackID: "composition-challenge",
+            fromUserID: 777,
+            chatID: 777,
+            messageID: 1,
+            data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultCorrection)
           )
         )
       )
-      let opened = try builder.stores.learning.liveChallenge(ownerUserId: 777, chatId: 777)
+      let opened = try builder.stores.learning.liveChallenge(ownerUserID: 777, chatID: 777)
       #expect(opened?.subjectDigest == (learningEnabled ? "41" : "43"))
       let ownerText = "The result omitted the price change."
       let messageOutcome = await router.handle(
         rawUpdate: RawUpdate(
-          updateId: learningEnabled ? 92 : 93,
+          updateID: learningEnabled ? 92 : 93,
           message: RawMessage(
-            messageId: 2,
-            fromUserId: 777,
-            chatId: 777,
+            messageID: 2,
+            fromUserID: 777,
+            chatID: 777,
             text: ownerText,
             caption: nil,
             mediaKind: nil,
             chatKind: .private,
             chatTitle: nil,
-            messageThreadId: nil,
+            messageThreadID: nil,
             senderDisplayName: nil
           ),
           editedMessage: nil
         )
       )
-      let remaining = try builder.stores.learning.liveChallenge(ownerUserId: 777, chatId: 777)
-      let sessionId = try builder.stores.sessionMessages.findSession(
-        sessionKey: SessionKey.telegramDM(chatId: 777)
+      let remaining = try builder.stores.learning.liveChallenge(ownerUserID: 777, chatID: 777)
+      let sessionID = try builder.stores.sessionMessages.findSession(
+        sessionKey: SessionKey.telegramDM(chatID: 777)
       )
       var ordinaryHistory: [StoredMessage] = []
-      if let sessionId {
+      if let sessionID {
         ordinaryHistory = try builder.stores.sessionMessages.loadContextSnapshot(
-          sessionId: sessionId,
-          throughMessageId: .max,
+          sessionID: sessionID,
+          throughMessageID: .max,
           limit: 10
         ).history
       }
@@ -345,7 +345,8 @@ import Testing
     }
   }
 
-  @Test func theToolCatalogDigestCoversRiskAndIgnoresCatalogOrder() {
+  @Test
+  func theToolCatalogDigestCoversRiskAndIgnoresCatalogOrder() {
     // given — the same two tools at different risk tiers, and the same pair reordered
     let safe = LearningComposition.tool(name: "file_read", risk: .safe)
     let ask = LearningComposition.tool(name: "file_write", risk: .ask)
@@ -360,7 +361,8 @@ import Testing
     #expect(DaemonBuilder.toolCatalogDigest([safe]) != digest)
   }
 
-  @Test func theSkillSetDigestCoversDescriptionsAndIgnoresScanOrder() {
+  @Test
+  func theSkillSetDigestCoversDescriptionsAndIgnoresScanOrder() {
     // given — the index rows the context injects, which is name plus description
     let plan = LearningComposition.skill(name: "plan", description: "Draft a plan")
     let ship = LearningComposition.skill(name: "ship", description: "Cut a release")
@@ -406,11 +408,11 @@ private enum LearningComposition {
   static func fireBoundRun(_ builder: DaemonBuilder) throws -> Int64 {
     let now = Date(timeIntervalSince1970: 1_782_000_600)
     let job = try createJob(builder, now: now)
-    guard case .fired(let fired) = try builder.stores.scheduledJobs.fireNow(jobId: job.id, now: now)
+    guard case .fired(let fired) = try builder.stores.scheduledJobs.fireNow(jobID: job.id, now: now)
     else {
       throw StoreError.unexpected("job \(job.id) refused to fire")
     }
-    return fired.runId
+    return fired.runID
   }
 
   static func fixtures(_ builder: DaemonBuilder) throws -> TestLearningFixtures {
@@ -418,14 +420,12 @@ private enum LearningComposition {
     return TestLearningFixtures(writer: queue)
   }
 
-  static func createJob(
-    _ builder: DaemonBuilder,
-    now: Date,
-    label: String = "digest"
-  ) throws -> ScheduledJob {
+  static func createJob(_ builder: DaemonBuilder, now: Date, label: String = "digest") throws
+    -> ScheduledJob
+  {
     try builder.stores.scheduledJobs.create(
       NewScheduledJob(
-        ownerChatId: 777,
+        ownerChatID: 777,
         label: label,
         prompt: "Summarize my unread items",
         recurrence: nil,
@@ -494,35 +494,24 @@ private enum LearningComposition {
       LearningNoticeChunk(
         subjectDigest: FeedbackChallengeDeliveryIdentity.digest(targetNonce: tap.nonce),
         ordinal: 0,
-        chatId: tap.chatId,
+        chatID: tap.chatID,
         payload: payload,
         payloadHash: ContentHash.fnv1a(payload)
-      )
+      ),
     ]
   }
 }
 
 private actor IdleCompositionTurns: TurnDispatching {
-  func run(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    triggerMessageId: Int64
-  ) async throws {}
+  func run(runID: Int64, sessionID: Int64, chatID: Int64, triggerMessageID: Int64) async throws {}
 }
 
 private struct IdleCompositionScheduleParser: ScheduleDraftParsing {
-  func parse(ownerText: String, sessionId: Int64) async -> ScheduleDraftParseResult {
-    .unparseable
-  }
+  func parse(ownerText: String, sessionID: Int64) async -> ScheduleDraftParseResult { .unparseable }
 }
 
 private struct IdleCompositionDoctor: DoctorReporting {
-  func report() async -> DoctorReport {
-    DoctorReport()
-  }
+  func report() async -> DoctorReport { DoctorReport() }
 
-  func scanSkills() async -> SkillScanResult {
-    SkillScanResult(descriptors: [], warnings: [])
-  }
+  func scanSkills() async -> SkillScanResult { SkillScanResult(descriptors: [], warnings: []) }
 }

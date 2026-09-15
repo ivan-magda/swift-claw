@@ -1,5 +1,3 @@
-import Foundation
-
 /// The shared per-tool output cap (ARCHITECTURE.md §5.3): 25 000 tokens enforced in the grapheme
 /// domain as 80 000 graphemes (`TokenEstimator.graphemeBudget(forInputTokens: 25_000)`), cut
 /// with the canonical truncation marker (not copied).

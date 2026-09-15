@@ -2,14 +2,16 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ApprovalFSMTests {
+@Suite
+struct ApprovalFSMTests {
   private struct Transition {
     let state: ApprovalState
     let event: ApprovalEvent
     let expected: ApprovalState
   }
 
-  @Test func legalTransitions() {
+  @Test
+  func legalTransitions() {
     // given — the full legal set of ARCHITECTURE.md §19.1's ApprovalState table
     let legal = [
       Transition(state: .pending, event: .approve, expected: .approved),
@@ -26,7 +28,8 @@ import Testing
     }
   }
 
-  @Test func illegalTransitionsHaveNoDefaultArm() {
+  @Test
+  func illegalTransitionsHaveNoDefaultArm() {
     // given — every remaining state×event cell: resolved rows never move again
     let illegal: [(state: ApprovalState, event: ApprovalEvent)] = [
       (.approved, .approve),

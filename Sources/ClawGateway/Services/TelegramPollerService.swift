@@ -22,7 +22,10 @@ public struct TelegramPollerService: Service {
   /// asked for by name because Telegram never sends it otherwise, and being added to a room is the
   /// only moment that room's chat id is announced to an operator who has to configure it.
   private static let allowedUpdates = [
-    "message", "edited_message", "callback_query", "my_chat_member",
+    "message",
+    "edited_message",
+    "callback_query",
+    "my_chat_member",
   ]
 
   /// Back-off windows that stop a persistent fault from becoming a tight re-poll loop.
@@ -57,7 +60,9 @@ public struct TelegramPollerService: Service {
     try await cancelWhenGracefulShutdown {
       while !Task.isCancelled {
         do {
-          let offset = try cursor.loadCursor().map { $0 + 1 }
+          let offset = try cursor.loadCursor().map {
+            $0 + 1
+          }
           let updates = try await intake.getUpdates(
             offset: offset,
             timeout: pollTimeout,
@@ -65,13 +70,12 @@ public struct TelegramPollerService: Service {
           )
           batch: for rawUpdate in updates {
             switch await router.handle(rawUpdate: rawUpdate) {
-            case .processed, .skipped:
-              try cursor.advanceCursor(to: rawUpdate.updateId)
+            case .processed, .skipped: try cursor.advanceCursor(to: rawUpdate.updateID)
             case .transientFailure:
               // Leave the offset untouched and re-poll the same window; the synchronous
               // claim dedups the redelivery. Stop the batch so later updates don't jump ahead.
               logger.warning(
-                "transient failure on update \(rawUpdate.updateId); re-polling, not advancing"
+                "transient failure on update \(rawUpdate.updateID); re-polling, not advancing"
               )
               try? await clock.sleep(for: Backoff.transientFailure)
               break batch
@@ -79,15 +83,13 @@ public struct TelegramPollerService: Service {
               // Disk full: the user already got the notice. Back off long and don't advance, so we
               // re-poll once there's room rather than acking an update we couldn't durably handle.
               logger.error(
-                "storage full on update \(rawUpdate.updateId); backing off, not advancing"
+                "storage full on update \(rawUpdate.updateID); backing off, not advancing"
               )
               try? await clock.sleep(for: Backoff.storageFull)
               break batch
             }
           }
-        } catch is CancellationError {
-          break
-        } catch let error as TelegramError {
+        } catch is CancellationError { break } catch let error as TelegramError {
           try await react(to: error)
         } catch {
           logger.error("poll loop error: \(error)")

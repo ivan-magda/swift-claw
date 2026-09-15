@@ -8,9 +8,7 @@ public enum ImageMediaType: String, Sendable, Equatable, CaseIterable {
   case gif
   case webp
 
-  public var mimeType: String {
-    "image/\(rawValue)"
-  }
+  public var mimeType: String { "image/\(rawValue)" }
 
   /// Identifies a payload by its leading bytes. Telegram's `mime_type` is sender-declared and the
   /// download is an opaque body, so the bytes themselves are the only trustworthy signal — and a
@@ -76,7 +74,5 @@ public struct ImagePart: Sendable, Equatable {
 
   /// The `data:` URL both wire adapters embed. A remote URL is never sent: the Telegram file URL
   /// carries the bot token, and providers will happily fetch what they are handed.
-  public var dataURL: String {
-    "data:\(mediaType.mimeType);base64,\(data.base64EncodedString())"
-  }
+  public var dataURL: String { "data:\(mediaType.mimeType);base64,\(data.base64EncodedString())" }
 }

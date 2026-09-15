@@ -4,16 +4,13 @@ import Foundation
 // MARK: - Seams
 
 /// Bringing the encrypted secret backend up to something the daemon could boot from, and proving it.
-public protocol AuthRuntimeSecretPreparing: Sendable {
-  func prepare() throws
-}
+public protocol AuthRuntimeSecretPreparing: Sendable { func prepare() throws }
 
 /// The device flow from the first request to an approved grant, as one call. The login sequence
 /// depends on the outcome, not on the poll loop that produced it.
 public protocol ChatGPTDeviceAuthorizing: Sendable {
-  func authorize(
-    onDeviceCode: @escaping @Sendable (ChatGPTDeviceCode) async -> Void
-  ) async throws -> ChatGPTAuthorizationGrant
+  func authorize(onDeviceCode: @escaping @Sendable (_ deviceCode: ChatGPTDeviceCode) async -> Void)
+    async throws -> ChatGPTAuthorizationGrant
 }
 
 // MARK: - Workflow
@@ -71,9 +68,7 @@ public struct AuthLoginWorkflow: Sendable {
 private extension AuthLoginWorkflow {
   /// Streams everything an owner should see through `transcript` as it happens, and returns only the ending.
   func runLogin(_ transcript: AuthTranscript) async -> AuthCommandResult {
-    do {
-      try runtimeSecrets.prepare()
-    } catch {
+    do { try runtimeSecrets.prepare() } catch {
       return AuthCommandResultMapper.runtimeSecretResult(for: error)
     }
 
@@ -82,11 +77,9 @@ private extension AuthLoginWorkflow {
       grant = try await makeDeviceAuthorization().authorize { device in
         await transcript.emit(Self.deviceEvents(for: device))
       }
-    } catch is CancellationError {
-      return AuthCommandResultMapper.cancelled
-    } catch let failure as ChatGPTOAuthFailure {
-      return AuthCommandResultMapper.result(for: failure)
-    } catch {
+    } catch is CancellationError { return AuthCommandResultMapper.cancelled } catch let failure
+      as ChatGPTOAuthFailure
+    { return AuthCommandResultMapper.result(for: failure) } catch {
       return AuthCommandResultMapper.unexpected()
     }
 
@@ -96,11 +89,9 @@ private extension AuthLoginWorkflow {
         grant: grant,
         timeout: ChatGPTProviderMetadata.requestTimeout
       )
-    } catch is CancellationError {
-      return AuthCommandResultMapper.cancelled
-    } catch let failure as ChatGPTOAuthFailure {
-      return AuthCommandResultMapper.result(for: failure)
-    } catch {
+    } catch is CancellationError { return AuthCommandResultMapper.cancelled } catch let failure
+      as ChatGPTOAuthFailure
+    { return AuthCommandResultMapper.result(for: failure) } catch {
       return AuthCommandResultMapper.unexpected()
     }
 
@@ -123,13 +114,9 @@ private extension AuthLoginWorkflow {
         ),
         providerID: ChatGPTProviderMetadata.providerID
       )
-    } catch {
-      return AuthCommandResultMapper.credentialStoreResult(for: error)
-    }
+    } catch { return AuthCommandResultMapper.credentialStoreResult(for: error) }
 
-    await transcript.emit([
-      .output("Logged in to \(ChatGPTProviderMetadata.providerID.rawValue).")
-    ])
+    await transcript.emit([.output("Logged in to \(ChatGPTProviderMetadata.providerID.rawValue).")])
     await selectModel(pair: pair, transcript: transcript)
 
     return AuthCommandResult(exit: .success, events: [])
@@ -162,10 +149,9 @@ private extension AuthLoginWorkflow {
     await transcript.emit(Self.assignmentEvents(for: choice))
   }
 
-  func chooseModel(
-    from models: [ChatGPTCatalogModel],
-    transcript: AuthTranscript
-  ) async -> ChatGPTModelChoice? {
+  func chooseModel(from models: [ChatGPTCatalogModel], transcript: AuthTranscript) async
+    -> ChatGPTModelChoice?
+  {
     let configuredSuffix = ModelSelection.configuredChatGPTSuffix(in: bootstrap.configuredModel)
 
     // The default is computed by the same pure selector the prompt uses, with the terminal denied.
@@ -206,14 +192,12 @@ private extension AuthLoginWorkflow {
         isInteractive: true,
         chosenIndex: index
       ) {
-      case .chose(let choice):
-        return choice
+      case .chose(let choice): return choice
       case .indexOutOfRange:
         await transcript.emit([
-          .error("There is no row \(index). Enter a number from 1 to \(models.count).")
+          .error("There is no row \(index). Enter a number from 1 to \(models.count)."),
         ])
-      case .noEligibleModels:
-        return nil
+      case .noEligibleModels: return nil
       }
     }
 
@@ -242,10 +226,9 @@ private extension AuthLoginWorkflow {
     ]
   }
 
-  static func catalogEvents(
-    for models: [ChatGPTCatalogModel],
-    default fallback: ChatGPTModelChoice
-  ) -> [AuthPresentationEvent] {
+  static func catalogEvents(for models: [ChatGPTCatalogModel], default fallback: ChatGPTModelChoice)
+    -> [AuthPresentationEvent]
+  {
     var events: [AuthPresentationEvent] = [.output("Available models:")]
     for (offset, model) in models.enumerated() {
       events.append(.output("  \(offset + 1). \(model.slug)"))
@@ -266,10 +249,8 @@ private extension AuthLoginWorkflow {
     switch origin {
     case .configuredDefault:
       "Keeping the model you already had configured, which the provider still offers."
-    case .firstReturnedDefault:
-      "Choosing the first model the provider returned."
-    case .owner:
-      "Choosing the model you picked."
+    case .firstReturnedDefault: "Choosing the first model the provider returned."
+    case .owner: "Choosing the model you picked."
     }
   }
 
@@ -299,9 +280,7 @@ private extension AuthLoginWorkflow {
 private struct AuthTranscript: Sendable {
   private let terminal: any AuthTerminal
 
-  init(terminal: any AuthTerminal) {
-    self.terminal = terminal
-  }
+  init(terminal: any AuthTerminal) { self.terminal = terminal }
 
   func emit(_ events: [AuthPresentationEvent]) async {
     for event in events {

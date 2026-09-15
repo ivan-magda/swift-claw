@@ -5,12 +5,9 @@ import ClawWorkspace
 import Foundation
 
 enum DoctorHealth {
-  static func inputs(
-    stores: ClawStores,
-    config: AppConfig,
-    now: Date,
-    routeHealth: LLMRouteHealth
-  ) -> HealthRowsBuilder.Inputs {
+  static func inputs(stores: ClawStores, config: AppConfig, now: Date, routeHealth: LLMRouteHealth)
+    -> HealthRowsBuilder.Inputs
+  {
     let skillDiagnostics = SkillDiagnostics(
       scan: skillScan(config: config),
       skillsCap: ContextBudget.default.skillsCap
@@ -28,17 +25,25 @@ enum DoctorHealth {
         configured: config.allowlist.count
       ),
       lastOffset: try? stores.cursor.loadCursor(),
-      runsHealth: read { try stores.runs.runsHealth(now: now) },
+      runsHealth: read {
+        try stores.runs.runsHealth(now: now)
+      },
       routeHealth: routeHealth,
       retryBudget: config.llm.retryBudget,
       streamingEnabled: config.llm.streamingEnabled,
-      todayUsage: read { try stores.usage.todayTokensAndCost(now: now) },
-      costMix: read { try stores.usage.costSourceMix(now: now) },
+      todayUsage: read {
+        try stores.usage.todayTokensAndCost(now: now)
+      },
+      costMix: read {
+        try stores.usage.costSourceMix(now: now)
+      },
       perDayUSD: config.budget.perDayUSD,
       perRunUSD: config.budget.perRunUSD,
       walBytes: walBytes,
       freeBytes: freeBytes,
-      latestContext: read { try stores.usage.latestPromptUsage() },
+      latestContext: read {
+        try stores.usage.latestPromptUsage()
+      },
       skillDiagnostics: skillDiagnostics
     )
   }
@@ -47,19 +52,18 @@ enum DoctorHealth {
     FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config)).scanSkills()
   }
 
-  static func schedulerChecks(
-    stores: ClawStores,
-    config: AppConfig,
-    now: Date
-  ) -> [DoctorReport.Check] {
+  static func schedulerChecks(stores: ClawStores, config: AppConfig, now: Date) -> [DoctorReport
+    .Check]
+  {
     let snapshot = SchedulerHealth.Snapshot(
-      state: read { try stores.scheduledJobs.schedulerState() },
-      dueCount: read { try stores.scheduledJobs.dueJobs(now: now).count },
+      state: read {
+        try stores.scheduledJobs.schedulerState()
+      },
+      dueCount: read {
+        try stores.scheduledJobs.dueJobs(now: now).count
+      },
       proactiveTodayUSD: read {
-        try stores.usage.todayTokensAndCost(
-          origins: RunOrigin.proactiveOrigins,
-          now: now
-        ).costUSD
+        try stores.usage.todayTokensAndCost(origins: RunOrigin.proactiveOrigins, now: now).costUSD
       },
       proactivePerDayUSD: config.budget.proactivePerDayUSD,
       heartbeatEnabled: config.heartbeatEnabled,
@@ -71,13 +75,13 @@ enum DoctorHealth {
     return SchedulerHealth.rows(snapshot)
   }
 
-  static func approvalChecks(
-    stores: ClawStores,
-    config: AppConfig,
-    now: Date
-  ) -> [DoctorReport.Check] {
+  static func approvalChecks(stores: ClawStores, config: AppConfig, now: Date) -> [DoctorReport
+    .Check]
+  {
     return ApprovalsHealthRows.rows(
-      health: read { try stores.approvals.approvalsHealth(now: now) },
+      health: read {
+        try stores.approvals.approvalsHealth(now: now)
+      },
       approvalExpirySeconds: config.approvalExpirySeconds
     )
   }
@@ -96,14 +100,10 @@ enum DoctorHealth {
   }
 }
 
+// MARK: - Health Store Reads
+
 private extension DoctorHealth {
-  static func read<Value: Sendable>(
-    _ load: () throws -> Value
-  ) -> HealthValue<Value> {
-    do {
-      return .available(try load())
-    } catch {
-      return .unavailable
-    }
+  static func read<Value: Sendable>(_ load: () throws -> Value) -> HealthValue<Value> {
+    do { return .available(try load()) } catch { return .unavailable }
   }
 }

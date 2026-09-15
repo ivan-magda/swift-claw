@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawExec
 
-@Suite struct ContainerInvocationTests {
-  @Test func semanticVersionAcceptsExactlyThreeNumericComponents() {
+@Suite
+struct ContainerInvocationTests {
+  @Test
+  func semanticVersionAcceptsExactlyThreeNumericComponents() {
     // given
     let valid = ["0.0.0", "1.0.0", "12.34.56"]
     let invalid = ["", "1", "1.2", "1.2.3.4", "v1.2.3", "1.2.3-beta", "1.-2.3", "١.٢.٣"]
@@ -18,10 +20,15 @@ import Testing
     #expect(
       parsed == [SemanticVersion(0, 0, 0), SemanticVersion(1, 0, 0), SemanticVersion(12, 34, 56)]
     )
-    #expect(invalid.allSatisfy { SemanticVersion($0) == nil })
+    #expect(
+      invalid.allSatisfy {
+        SemanticVersion($0) == nil
+      }
+    )
   }
 
-  @Test func semanticVersionUsesLexicographicNumericOrdering() {
+  @Test
+  func semanticVersionUsesLexicographicNumericOrdering() {
     // given
     let versions = [
       SemanticVersion(2, 0, 0),
@@ -44,7 +51,8 @@ import Testing
     )
   }
 
-  @Test func settingsKeepOnePinnedAuthority() throws {
+  @Test
+  func settingsKeepOnePinnedAuthority() throws {
     // given
     let image = try #require(
       PinnedImageReference.parse(
@@ -66,7 +74,8 @@ import Testing
     #expect(ExecSandboxSettings.platform == "linux/arm64")
   }
 
-  @Test func commandResultCarriesRawPrefixesAndTypedTermination() {
+  @Test
+  func commandResultCarriesRawPrefixesAndTypedTermination() {
     // given
     let output = CapturedCommandStream(
       bytes: Data([0x66, 0x6f, 0x6f]),
@@ -96,7 +105,8 @@ import Testing
     #expect(result.processIdentifier == 42)
   }
 
-  @Test func identityUsesDeterministicLowercaseUUIDName() throws {
+  @Test
+  func identityUsesDeterministicLowercaseUUIDName() throws {
     // given
     let uuid = try #require(UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
 
@@ -109,9 +119,7 @@ import Testing
   }
 
   private func makeIdentity() throws -> ExecutionIdentity {
-    ExecutionIdentity(
-      uuid: try #require(UUID(uuidString: "11111111-2222-3333-4444-555555555555"))
-    )
+    ExecutionIdentity(uuid: try #require(UUID(uuidString: "11111111-2222-3333-4444-555555555555")))
   }
 
   private func makeSettings() throws -> ExecSandboxSettings {
@@ -127,7 +135,8 @@ import Testing
     )
   }
 
-  @Test func noEgressRunArgvIsExactAndFullyExplicit() throws {
+  @Test
+  func noEgressRunArgvIsExactAndFullyExplicit() throws {
     // given / when
     let arguments = ContainerInvocation.run(
       context: ContainerLaunchContext(
@@ -144,18 +153,42 @@ import Testing
     // then
     #expect(
       arguments == [
-        "run", "--scheme", "https", "--progress", "none", "--platform", "linux/arm64",
-        "--rm", "--name", "clawd-exec-11111111-2222-3333-4444-555555555555",
-        "--label", "clawd.exec=1", "--cidfile",
+        "run",
+        "--scheme",
+        "https",
+        "--progress",
+        "none",
+        "--platform",
+        "linux/arm64",
+        "--rm",
+        "--name",
+        "clawd-exec-11111111-2222-3333-4444-555555555555",
+        "--label",
+        "clawd.exec=1",
+        "--cidfile",
         "/state/exec-control/11111111-2222-3333-4444-555555555555.cid",
-        "--cap-drop", "ALL", "--init", "--init-image",
-        "ghcr.io/apple/containerization/vminit:1.1.0", "--read-only", "--tmpfs", "/tmp",
-        "--cpus", "4", "--memory", "1024M", "--mount",
+        "--cap-drop",
+        "ALL",
+        "--init",
+        "--init-image",
+        "ghcr.io/apple/containerization/vminit:1.1.0",
+        "--read-only",
+        "--tmpfs",
+        "/tmp",
+        "--cpus",
+        "4",
+        "--memory",
+        "1024M",
+        "--mount",
         """
         type=bind,source=/state/exec-scratch/11111111-2222-3333-4444-555555555555,\
         target=/work,readonly
         """,
-        "--network", "none", "--no-dns", "--entrypoint", "/usr/bin/python",
+        "--network",
+        "none",
+        "--no-dns",
+        "--entrypoint",
+        "/usr/bin/python",
         // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "/work/.clawd-entrypoint.py",
@@ -163,7 +196,8 @@ import Testing
     )
   }
 
-  @Test func optedInEgressRunArgvIsExactAndHasNoNoDNSFlag() throws {
+  @Test
+  func optedInEgressRunArgvIsExactAndHasNoNoDNSFlag() throws {
     // given / when
     let arguments = ContainerInvocation.run(
       context: ContainerLaunchContext(
@@ -184,7 +218,8 @@ import Testing
     #expect(arguments.last == "/work/.clawd-entrypoint.sh")
   }
 
-  @Test func runArgvCannotEmitForbiddenExposureFlagsOrAmbientMounts() throws {
+  @Test
+  func runArgvCannotEmitForbiddenExposureFlagsOrAmbientMounts() throws {
     // given
     let arguments = ContainerInvocation.run(
       context: ContainerLaunchContext(
@@ -203,16 +238,25 @@ import Testing
     let joined = arguments.joined(separator: " ")
 
     // then
-    #expect(forbidden.allSatisfy { !arguments.contains($0) })
+    #expect(
+      forbidden.allSatisfy {
+        !arguments.contains($0)
+      }
+    )
     #expect(!joined.contains(FileManager.default.homeDirectoryForCurrentUser.path))
-    #expect(arguments.filter { $0 == "--mount" }.count == 1)
+    #expect(
+      arguments.filter {
+        $0 == "--mount"
+      }.count == 1
+    )
     #expect(arguments.contains("type=bind,source=/approved-scratch,target=/work,readonly"))
     #expect(arguments.containsSubsequence(["--scheme", "https"]))
     #expect(arguments.containsSubsequence(["--progress", "none"]))
     #expect(arguments.containsSubsequence(["--platform", "linux/arm64"]))
   }
 
-  @Test func detachedCanaryUsesTheSameHardeningAuthority() throws {
+  @Test
+  func detachedCanaryUsesTheSameHardeningAuthority() throws {
     // given
     let settings = try makeSettings()
 
@@ -242,24 +286,44 @@ import Testing
     )
   }
 
-  @Test func controlInvocationsAreExact() {
+  @Test
+  func controlInvocationsAreExact() {
     // given / when / then
     #expect(ContainerInvocation.systemStatus() == ["system", "status", "--format", "json"])
     #expect(ContainerInvocation.systemVersion() == ["system", "version", "--format", "json"])
     #expect(
-      ContainerInvocation.systemPropertyList()
-        == ["system", "property", "list", "--format", "json"]
+      ContainerInvocation.systemPropertyList() == [
+        "system",
+        "property",
+        "list",
+        "--format",
+        "json",
+      ]
     )
     #expect(ContainerInvocation.listAll() == ["list", "--all", "--format", "json"])
     #expect(ContainerInvocation.inspect("owned") == ["inspect", "owned"])
     #expect(ContainerInvocation.inspectImage("image") == ["image", "inspect", "image"])
     #expect(
-      ContainerInvocation.execCanary("owned", script: "probe")
-        == ["exec", "--user", "0", "owned", "/bin/sh", "-c", "probe"]
+      ContainerInvocation.execCanary("owned", script: "probe") == [
+        "exec",
+        "--user",
+        "0",
+        "owned",
+        "/bin/sh",
+        "-c",
+        "probe",
+      ]
     )
     #expect(
-      ContainerInvocation.pull("registry/repo:tag")
-        == ["image", "pull", "--scheme", "https", "--progress", "none", "registry/repo:tag"]
+      ContainerInvocation.pull("registry/repo:tag") == [
+        "image",
+        "pull",
+        "--scheme",
+        "https",
+        "--progress",
+        "none",
+        "registry/repo:tag",
+      ]
     )
     #expect(ContainerInvocation.stop("owned") == ["stop", "--time", "1", "owned"])
     #expect(ContainerInvocation.kill("owned") == ["kill", "--signal", "KILL", "owned"])

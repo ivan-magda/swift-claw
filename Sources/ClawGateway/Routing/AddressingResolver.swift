@@ -11,16 +11,12 @@ import Foundation
 struct AddressingResolver: Sendable {
   private let identity: BotIdentity?
 
-  init(identity: BotIdentity?) {
-    self.identity = identity
-  }
+  init(identity: BotIdentity?) { self.identity = identity }
 
   func isAddressed(_ message: IncomingMessage, mode: ChatMode) -> Bool {
     switch mode {
-    case .direct:
-      return true
-    case .group:
-      return isAddressedInGroup(message)
+    case .direct: return true
+    case .group: return isAddressedInGroup(message)
     }
   }
 }
@@ -32,7 +28,7 @@ private extension AddressingResolver {
     guard let identity else {
       return false
     }
-    if message.replyToUserId == identity.id {
+    if message.replyToUserID == identity.id {
       return true
     }
     guard let written = writtenText(message.content) else {
@@ -45,12 +41,9 @@ private extension AddressingResolver {
   /// carry none, so only a reply can address the bot with them.
   func writtenText(_ content: IncomingMessage.Content) -> String? {
     switch content {
-    case .text(let text):
-      text
-    case .photo(_, let caption):
-      caption
-    case .voice, .unsupported:
-      nil
+    case .text(let text): text
+    case .photo(_, let caption): caption
+    case .voice, .unsupported: nil
     }
   }
 
@@ -75,8 +68,7 @@ private extension AddressingResolver {
     var searched = text.startIndex..<text.endIndex
     while let hit = text.range(of: handle, options: .caseInsensitive, range: searched) {
       let leading =
-        hit.lowerBound == text.startIndex
-        ? nil : text[text.index(before: hit.lowerBound)]
+        hit.lowerBound == text.startIndex ? nil : text[text.index(before: hit.lowerBound)]
       let trailing = hit.upperBound == text.endIndex ? nil : text[hit.upperBound]
       if isHandleCharacter(leading) == false, isHandleCharacter(trailing) == false {
         return true

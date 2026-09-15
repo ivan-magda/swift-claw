@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ConfirmationResolutionTests {
-  @Test func yesCommitsTheMemoryRowWithAuditAndAcks() async throws {
+@Suite
+struct ConfirmationResolutionTests {
+  @Test
+  func yesCommitsTheMemoryRowWithAuditAndAcks() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     _ = await harness.router.handle(
@@ -22,12 +24,13 @@ import Testing
     #expect(try harness.auditActions().contains(AuditAction.memoryWrite.rawValue))
     let sent = await harness.transport.sent
     #expect(sent.last?.text.hasPrefix("Saved memory") == true)
-    let sessionId = try harness.ownerSessionId()
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
+    let sessionID = try harness.ownerSessionID()
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func redeliveredYesDoesNotDoubleWrite() async throws {
+  @Test
+  func redeliveredYesDoesNotDoubleWrite() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     _ = await harness.router.handle(
@@ -42,11 +45,16 @@ import Testing
     // then
     #expect(secondOutcome == .skipped)
     #expect(try harness.memoryItemCount() == 1)
-    #expect(try harness.auditActions().filter { $0 == AuditAction.memoryWrite.rawValue }.count == 1)
+    #expect(
+      try harness.auditActions().filter {
+        $0 == AuditAction.memoryWrite.rawValue
+      }.count == 1
+    )
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func noCancelsWithoutWriting() async throws {
+  @Test
+  func noCancelsWithoutWriting() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     _ = await harness.router.handle(
@@ -61,13 +69,14 @@ import Testing
     #expect(try harness.memoryItemCount() == 0)
     let sent = await harness.transport.sent
     #expect(sent.last?.text == MemoryReplies.cancelled)
-    let sessionId = try harness.ownerSessionId()
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
+    let sessionID = try harness.ownerSessionID()
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
     #expect(try harness.messageCount(content: "no") == 0)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func otherTextClearsPendingAndRunsANormalTurnUnclaimedAsACommand() async throws {
+  @Test
+  func otherTextClearsPendingAndRunsANormalTurnUnclaimedAsACommand() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     _ = await harness.router.handle(
@@ -85,11 +94,12 @@ import Testing
     #expect(await harness.dispatcher.calls.count == 1)
     #expect(try harness.messageCount(content: "what's the weather") == 1)
     #expect(try harness.memoryItemCount() == 0)
-    let sessionId = try harness.ownerSessionId()
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
+    let sessionID = try harness.ownerSessionID()
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
   }
 
-  @Test func yesWithNoPendingEntryIsJustANormalTurn() async throws {
+  @Test
+  func yesWithNoPendingEntryIsJustANormalTurn() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -102,15 +112,13 @@ import Testing
     #expect(await harness.dispatcher.calls.count == 1)
   }
 
-  @Test func confirmedDeleteEntryCommitsForgetWithAudit() async throws {
+  @Test
+  func confirmedDeleteEntryCommitsForgetWithAudit() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     let seeded = try harness.seedItem(text: "obsolete fact", kind: .user)
-    let sessionId = try harness.ownerSessionId()
-    await harness.pendingConfirmations.park(
-      .deleteItem(id: seeded.id),
-      sessionId: sessionId
-    )
+    let sessionID = try harness.ownerSessionID()
+    await harness.pendingConfirmations.park(.deleteItem(id: seeded.id), sessionID: sessionID)
 
     // when
     let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 9, from: 42, text: "yes"))
@@ -121,27 +129,20 @@ import Testing
     #expect(try harness.auditActions().contains(AuditAction.memoryDelete.rawValue))
     let sent = await harness.transport.sent
     #expect(sent.last?.text == MemoryReplies.deleted(id: seeded.id))
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
   }
 
-  @Test func nonDiskCommitFailureSurfacesAnOwnerErrorAndClearsThePending() async throws {
+  @Test
+  func nonDiskCommitFailureSurfacesAnOwnerErrorAndClearsThePending() async throws {
     // given
     struct FailingMemoryCommands: MemoryCommandStore {
-      func applyRemember(
-        updateId: Int64,
-        item: NewMemoryItem,
-        now: Date
-      ) throws(StoreError) -> MemoryCommandResult {
-        throw StoreError.unexpected("commit lost")
-      }
+      func applyRemember(updateID: Int64, item: NewMemoryItem, now: Date) throws(StoreError)
+        -> MemoryCommandResult
+      { throw StoreError.unexpected("commit lost") }
 
-      func applyForget(
-        updateId: Int64,
-        itemId: Int64,
-        now: Date
-      ) throws(StoreError) -> MemoryCommandResult {
-        throw StoreError.unexpected("commit lost")
-      }
+      func applyForget(updateID: Int64, itemID: Int64, now: Date) throws(StoreError)
+        -> MemoryCommandResult
+      { throw StoreError.unexpected("commit lost") }
     }
 
     let harness = try MemoryRoutingHarness.make(memoryCommands: FailingMemoryCommands())
@@ -158,8 +159,8 @@ import Testing
     let sent = await harness.transport.sent
     #expect(sent.last?.text == MemoryReplies.saveFailed)
     #expect(try harness.memoryItemCount() == 0)
-    let sessionId = try harness.ownerSessionId()
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
+    let sessionID = try harness.ownerSessionID()
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
     #expect(await harness.dispatcher.calls.isEmpty)
 
     // when
@@ -170,24 +171,17 @@ import Testing
     #expect(try harness.messageCount(content: "yes") == 0)
   }
 
-  @Test func diskFullCommitFailureKeepsThePendingEntryForRetryAfterCleanup() async throws {
+  @Test
+  func diskFullCommitFailureKeepsThePendingEntryForRetryAfterCleanup() async throws {
     // given
     struct DiskFullMemoryCommands: MemoryCommandStore {
-      func applyRemember(
-        updateId: Int64,
-        item: NewMemoryItem,
-        now: Date
-      ) throws(StoreError) -> MemoryCommandResult {
-        throw StoreError.diskFull
-      }
+      func applyRemember(updateID: Int64, item: NewMemoryItem, now: Date) throws(StoreError)
+        -> MemoryCommandResult
+      { throw StoreError.diskFull }
 
-      func applyForget(
-        updateId: Int64,
-        itemId: Int64,
-        now: Date
-      ) throws(StoreError) -> MemoryCommandResult {
-        throw StoreError.diskFull
-      }
+      func applyForget(updateID: Int64, itemID: Int64, now: Date) throws(StoreError)
+        -> MemoryCommandResult
+      { throw StoreError.diskFull }
     }
 
     let harness = try MemoryRoutingHarness.make(memoryCommands: DiskFullMemoryCommands())
@@ -202,20 +196,19 @@ import Testing
     #expect(outcome == .storageFull)
     let sent = await harness.transport.sent
     #expect(sent.last?.text == Degradation.storageFull)
-    let sessionId = try harness.ownerSessionId()
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) != nil)
+    let sessionID = try harness.ownerSessionID()
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) != nil)
   }
 
-  @Test func pendingLookupFailureFailsClosedInsteadOfLeakingAYesIntoATurn() async throws {
+  @Test
+  func pendingLookupFailureFailsClosedInsteadOfLeakingAYesIntoATurn() async throws {
     // given
-    let harness = try MemoryRoutingHarness.make(
-      routerSessionMessages: {
-        FakeSessionMessageStore(
-          failures: [.findSession: .unexpected("lookup lost")],
-          delegatingTo: $0
-        )
-      }
-    )
+    let harness = try MemoryRoutingHarness.make {
+      FakeSessionMessageStore(
+        failures: [.findSession: .unexpected("lookup lost")],
+        delegatingTo: $0
+      )
+    }
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 1, from: 42, text: "/remember project: ship 3a")
     )
@@ -227,8 +220,8 @@ import Testing
     #expect(outcome == .transientFailure)
     #expect(try harness.messageCount(content: "yes") == 0)
     #expect(try harness.memoryItemCount() == 0)
-    let sessionId = try harness.ownerSessionId()
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) != nil)
+    let sessionID = try harness.ownerSessionID()
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) != nil)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 }

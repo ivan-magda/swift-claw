@@ -12,7 +12,7 @@ extension ResetFixture {
     let reservedTokens: Int?
     let reservedCostUSD: Double?
     let route: String?
-    let providerCallId: String?
+    let providerCallID: String?
 
     static let staleNoCall = OperationProjection(
       state: .failedNoCall,
@@ -21,7 +21,7 @@ extension ResetFixture {
       reservedTokens: 0,
       reservedCostUSD: 0,
       route: nil,
-      providerCallId: nil
+      providerCallID: nil
     )
 
     static let started = OperationProjection(
@@ -31,7 +31,7 @@ extension ResetFixture {
       reservedTokens: 300,
       reservedCostUSD: 0.5,
       route: "route",
-      providerCallId: "provider-secret-call"
+      providerCallID: "provider-secret-call"
     )
 
     static let claimed = OperationProjection(
@@ -41,7 +41,7 @@ extension ResetFixture {
       reservedTokens: nil,
       reservedCostUSD: nil,
       route: nil,
-      providerCallId: nil
+      providerCallID: nil
     )
   }
 
@@ -52,12 +52,12 @@ extension ResetFixture {
     let args: String
     let resultSize: Int
     let decision: String
-    let runId: Int64?
-    let sessionId: Int64?
+    let runID: Int64?
+    let sessionID: Int64?
   }
 
   struct ProcessedUpdateProjection: Equatable {
-    let updateId: Int64
+    let updateID: Int64
     let claimedAt: Date
   }
 
@@ -69,9 +69,7 @@ extension ResetFixture {
     let resetAuditCount: Int
   }
 
-  struct DurableProjection: Equatable {
-    let tables: [DurableTableProjection]
-  }
+  struct DurableProjection: Equatable { let tables: [DurableTableProjection] }
 
   struct DurableTableProjection: Equatable {
     let name: String
@@ -79,20 +77,16 @@ extension ResetFixture {
     let rows: [[DatabaseValue]]
   }
 
-  func state() throws -> JobLearningState {
-    try env.currentLearningState()
-  }
+  func state() throws -> JobLearningState { try env.currentLearningState() }
 
-  func closedTrialIds() throws -> [Int64] {
-    try trialIds(state: .closed)
-  }
+  func closedTrialIDs() throws -> [Int64] { try trialIDs(state: .closed) }
 
   func closedTrialReasons() throws -> [String] {
     try env.queue.read { db in
       let rows = try Row.fetchAll(
         db,
         sql: "SELECT close_reason FROM learning_trials WHERE job_id = ? ORDER BY trial_id",
-        arguments: [env.jobId]
+        arguments: [env.jobID]
       )
       return try rows.map { row in
         guard let reason = SQLiteStoredValue.string(in: row, column: "close_reason") else {
@@ -103,16 +97,16 @@ extension ResetFixture {
     }
   }
 
-  func liveTrialIds() throws -> [Int64] {
+  func liveTrialIDs() throws -> [Int64] {
     try env.queue.read { db in
       try Int64.fetchAll(
         db,
         sql: """
-          SELECT trial_id FROM learning_trials
-          WHERE job_id = ? AND state IN (?, ?) ORDER BY trial_id
-          """,
+        SELECT trial_id FROM learning_trials
+        WHERE job_id = ? AND state IN (?, ?) ORDER BY trial_id
+        """,
         arguments: [
-          env.jobId,
+          env.jobID,
           LearningTrialState.open.rawValue,
           LearningTrialState.draining.rawValue,
         ]
@@ -120,50 +114,50 @@ extension ResetFixture {
     }
   }
 
-  func trialIds(state: LearningTrialState) throws -> [Int64] {
+  func trialIDs(state: LearningTrialState) throws -> [Int64] {
     try env.queue.read { db in
       try Int64.fetchAll(
         db,
         sql: """
-          SELECT trial_id FROM learning_trials
-          WHERE job_id = ? AND state = ? ORDER BY trial_id
-          """,
-        arguments: [env.jobId, state.rawValue]
+        SELECT trial_id FROM learning_trials
+        WHERE job_id = ? AND state = ? ORDER BY trial_id
+        """,
+        arguments: [env.jobID, state.rawValue]
       )
     }
   }
 
-  func unconsumedTargetCount(jobId: Int64) throws -> Int {
+  func unconsumedTargetCount(jobID: Int64) throws -> Int {
     try count(
       "feedback_targets",
       predicate: "job_id = ? AND consumed_at IS NULL",
-      arguments: [jobId]
+      arguments: [jobID]
     )
   }
 
-  func targetConsumptionEpochs(jobId: Int64) throws -> [Int64] {
+  func targetConsumptionEpochs(jobID: Int64) throws -> [Int64] {
     try consumptionEpochs(
       table: "feedback_targets",
       id: "nonce",
       predicate: "job_id = ?",
-      arguments: [jobId]
+      arguments: [jobID]
     )
   }
 
-  func liveChallengeCount(jobId: Int64) throws -> Int {
+  func liveChallengeCount(jobID: Int64) throws -> Int {
     try count(
       "feedback_challenges",
       predicate: "job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL",
-      arguments: [jobId]
+      arguments: [jobID]
     )
   }
 
-  func challengeConsumptionEpochs(jobId: Int64) throws -> [Int64] {
+  func challengeConsumptionEpochs(jobID: Int64) throws -> [Int64] {
     try consumptionEpochs(
       table: "feedback_challenges",
       id: "challenge_id",
       predicate: "job_id = ? AND superseded_by IS NULL",
-      arguments: [jobId]
+      arguments: [jobID]
     )
   }
 
@@ -171,7 +165,7 @@ extension ResetFixture {
     try count(
       "feedback_challenges",
       predicate: "job_id = ? AND superseded_by IS NOT NULL AND consumed_at IS NULL",
-      arguments: [env.jobId]
+      arguments: [env.jobID]
     )
   }
 
@@ -181,10 +175,10 @@ extension ResetFixture {
         let row = try Row.fetchOne(
           db,
           sql: """
-            SELECT state, failure_code, reservation_state, reserved_tokens, reserved_cost_usd,
-              route, provider_call_id
-            FROM learning_operations WHERE operation_id = ?
-            """,
+          SELECT state, failure_code, reservation_state, reserved_tokens, reserved_cost_usd,
+            route, provider_call_id
+          FROM learning_operations WHERE operation_id = ?
+          """,
           arguments: [id]
         ),
         let state = LearningOperationState(rawValue: row["state"])
@@ -200,7 +194,7 @@ extension ResetFixture {
         reservedTokens: row["reserved_tokens"],
         reservedCostUSD: row["reserved_cost_usd"],
         route: row["route"],
-        providerCallId: row["provider_call_id"]
+        providerCallID: row["provider_call_id"]
       )
     }
   }
@@ -210,9 +204,9 @@ extension ResetFixture {
       try Row.fetchOne(
         db,
         sql: """
-          SELECT actor, action, tool, args_redacted, result_size, decision, run_id, session_id
-          FROM audit_events WHERE action = ?
-          """,
+        SELECT actor, action, tool, args_redacted, result_size, decision, run_id, session_id
+        FROM audit_events WHERE action = ?
+        """,
         arguments: [AuditAction.learningReset.rawValue]
       )
     }
@@ -226,13 +220,13 @@ extension ResetFixture {
       args: row["args_redacted"],
       resultSize: row["result_size"],
       decision: row["decision"],
-      runId: row["run_id"],
-      sessionId: row["session_id"]
+      runID: row["run_id"],
+      sessionID: row["session_id"]
     )
   }
 
-  func processed(updateId: Int64) throws -> Bool {
-    try count("processed_updates", predicate: "update_id = ?", arguments: [updateId]) == 1
+  func processed(updateID: Int64) throws -> Bool {
+    try count("processed_updates", predicate: "update_id = ?", arguments: [updateID]) == 1
   }
 
   func absenceProjection() throws -> AbsenceProjection {
@@ -243,12 +237,12 @@ extension ResetFixture {
       )
       return try rows.map { row in
         guard
-          let updateId = SQLiteStoredValue.int64(in: row, column: "update_id"),
+          let updateID = SQLiteStoredValue.int64(in: row, column: "update_id"),
           let claimedAt: Date = row["claimed_at"]
         else {
           throw StoreError.unexpected("fixture processed update is unreadable")
         }
-        return ProcessedUpdateProjection(updateId: updateId, claimedAt: claimedAt)
+        return ProcessedUpdateProjection(updateID: updateID, claimedAt: claimedAt)
       }
     }
     return AbsenceProjection(
@@ -285,10 +279,8 @@ extension ResetFixture {
         let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(tableName))").map { row in
           row["name"] as String
         }
-        let rows = try Row.fetchAll(
-          db,
-          sql: "SELECT * FROM \(tableName) ORDER BY rowid"
-        ).map { row in
+        let rows = try Row.fetchAll(db, sql: "SELECT * FROM \(tableName) ORDER BY rowid").map {
+          (row) in
           columns.map { column in
             row[column] as DatabaseValue
           }
@@ -300,11 +292,7 @@ extension ResetFixture {
   }
 
   func resetDecisionCount() throws -> Int {
-    try count(
-      "learning_decisions",
-      predicate: "kind = ?",
-      arguments: [ResetReceipt.kind]
-    )
+    try count("learning_decisions", predicate: "kind = ?", arguments: [ResetReceipt.kind])
   }
 
   func resetAuditCount() throws -> Int {
@@ -319,9 +307,7 @@ extension ResetFixture {
     try count("job_learning_state", predicate: "1", arguments: [])
   }
 
-  func lessonSetCount() throws -> Int {
-    try count("lesson_sets", predicate: "1", arguments: [])
-  }
+  func lessonSetCount() throws -> Int { try count("lesson_sets", predicate: "1", arguments: []) }
 
   func consumptionEpochs(
     table: String,
@@ -344,11 +330,7 @@ extension ResetFixture {
     }
   }
 
-  func count(
-    _ table: String,
-    predicate: String,
-    arguments: StatementArguments
-  ) throws -> Int {
+  func count(_ table: String, predicate: String, arguments: StatementArguments) throws -> Int {
     try env.queue.read { db in
       try Int.fetchOne(
         db,

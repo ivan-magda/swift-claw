@@ -5,8 +5,10 @@ import Testing
 @testable import ClawCore
 @testable import ClawTelegram
 
-@Suite struct RichMessageTests {
-  @Test func sendRichMessagePostsMarkdownInputRichMessage() async throws {
+@Suite
+struct RichMessageTests {
+  @Test
+  func sendRichMessagePostsMarkdownInputRichMessage() async throws {
     // given — a transport whose executor records the request body and returns message_id 99
     let executor = ClawTestSupport.RecordingHTTPExecutor(
       cannedResult: HTTPResult(
@@ -18,10 +20,10 @@ import Testing
     let telegram = TelegramClient(token: "T", http: executor, baseURL: "https://example.test")
 
     // when
-    let messageId = try await telegram.sendRichMessage(chatId: 42, markdown: "**hi**")
+    let messageID = try await telegram.sendRichMessage(chatID: 42, markdown: "**hi**")
 
     // then — the assigned id comes back, and the markdown rode inside `rich_message` verbatim
-    #expect(messageId == 99)
+    #expect(messageID == 99)
     let body = try #require(await executor.lastBody)
     let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
     let richMessage = try #require(json["rich_message"] as? [String: Any])

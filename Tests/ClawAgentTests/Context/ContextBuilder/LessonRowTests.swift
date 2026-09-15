@@ -10,14 +10,15 @@ import Testing
 /// never froze, and emitting the row at the system tier would turn advisory data into authority.
 @Suite("Lesson row")
 struct LessonRowTests {
-  @Test func lessonsRenderInsideTheFenceAndAreNeverSplitAcrossTiers() throws {
+  @Test
+  func lessonsRenderInsideTheFenceAndAreNeverSplitAcrossTiers() throws {
     // given — a set at the algorithm's per-lesson ceiling, and a workspace whose own untrusted
     // rows share the fence, so the assertion is about this row and not about being the only one
     let lessons = [
       String(repeating: "a", count: LessonSetLimits.maxLessonBytes),
       String(repeating: "b", count: LessonSetLimits.maxLessonBytes),
     ]
-    let set = try LessonSet.canonical(jobId: 7, lessons: lessons)
+    let set = try LessonSet.canonical(jobID: 7, lessons: lessons)
     let builder = makeLessonBuilder(
       workspace: FakeWorkspace(files: [.user: .present("owner profile")])
     )
@@ -25,7 +26,7 @@ struct LessonRowTests {
     // when
     let result = try builder.assemble(
       snapshot: lessonSnapshot(),
-      sessionId: 1,
+      sessionID: 1,
       origin: .scheduled,
       lessons: set
     )
@@ -33,16 +34,24 @@ struct LessonRowTests {
     // then — one untrusted user message carries the whole set behind the label, and no system row
     // ever repeats it
     let untrusted = try #require(
-      result.messages.first { message in message.role == .user }
-    ).content.text
+      result.messages.first { message in
+        message.role == .user
+      }
+    ).content
+      .text
     #expect(untrusted.contains("label=\"\(ContextBuilder.lessonsLabel)\""))
     #expect(untrusted.contains(lessons[0]))
     #expect(untrusted.contains(lessons[1]))
-    let system = try #require(result.messages.first { message in message.role == .system })
+    let system = try #require(
+      result.messages.first { message in
+        message.role == .system
+      }
+    )
     #expect(system.content.text.contains(lessons[0]) == false)
   }
 
-  @Test func anEmptySetEmitsNoRowAndLeavesSensitiveMemoryReachable() throws {
+  @Test
+  func anEmptySetEmitsNoRowAndLeavesSensitiveMemoryReachable() throws {
     // given
     let memoryStore = FakeMemoryStore(items: [lessonMemory()])
     let builder = makeLessonBuilder(memoryStore: memoryStore)
@@ -50,9 +59,9 @@ struct LessonRowTests {
     // when
     let result = try builder.assemble(
       snapshot: lessonSnapshot(),
-      sessionId: 1,
+      sessionID: 1,
       origin: .scheduled,
-      lessons: LessonSet.empty(jobId: 7)
+      lessons: LessonSet.empty(jobID: 7)
     )
 
     // then — an empty set is not a row, and it raises no taint of its own
@@ -62,24 +71,25 @@ struct LessonRowTests {
     #expect(rendered.contains("clearance code"))
   }
 
-  @Test func lessonTaintAugmentsPersistedSessionTaintInsteadOfReplacingIt() throws {
+  @Test
+  func lessonTaintAugmentsPersistedSessionTaintInsteadOfReplacingIt() throws {
     // given — an untainted session with lessons, and a tainted session without them
-    let set = try LessonSet.canonical(jobId: 7, lessons: ["Report only price changes."])
+    let set = try LessonSet.canonical(jobID: 7, lessons: ["Report only price changes."])
     let withLessonsMemory = FakeMemoryStore(items: [lessonMemory()])
     let withoutLessonsMemory = FakeMemoryStore(items: [lessonMemory()])
 
     // when
     let withLessons = try makeLessonBuilder(memoryStore: withLessonsMemory).assemble(
       snapshot: lessonSnapshot(isTainted: false),
-      sessionId: 1,
+      sessionID: 1,
       origin: .scheduled,
       lessons: set
     )
     let withoutLessons = try makeLessonBuilder(memoryStore: withoutLessonsMemory).assemble(
       snapshot: lessonSnapshot(isTainted: true),
-      sessionId: 1,
+      sessionID: 1,
       origin: .scheduled,
-      lessons: LessonSet.empty(jobId: 7)
+      lessons: LessonSet.empty(jobID: 7)
     )
 
     // then — each input excludes sensitive memory on its own; neither replaces the other
@@ -89,16 +99,17 @@ struct LessonRowTests {
     #expect(withoutLessons.messages.joinedText.contains("clearance code") == false)
   }
 
-  @Test func aSetTheBudgetCannotHoldFailsTheAssemblyInsteadOfTruncating() throws {
+  @Test
+  func aSetTheBudgetCannotHoldFailsTheAssemblyInsteadOfTruncating() throws {
     // given — an input cap every other row of this run fits inside, with no room for a lesson
     let set = try LessonSet.canonical(
-      jobId: 7,
+      jobID: 7,
       lessons: [String(repeating: "a", count: LessonSetLimits.maxLessonBytes)]
     )
     let builder = makeLessonBuilder(budget: lessonBudget(inputCapGraphemes: 200))
     let unbound = try builder.assemble(
       snapshot: lessonSnapshot(),
-      sessionId: 1,
+      sessionID: 1,
       origin: .scheduled,
       lessons: nil
     )
@@ -108,7 +119,7 @@ struct LessonRowTests {
     #expect(throws: BudgetFitterError.self) {
       try builder.assemble(
         snapshot: lessonSnapshot(),
-        sessionId: 1,
+        sessionID: 1,
         origin: .scheduled,
         lessons: set
       )
@@ -119,9 +130,7 @@ struct LessonRowTests {
 // MARK: - Fixture
 
 private extension [ChatMessage] {
-  var joinedText: String {
-    map(\.content.text).joined(separator: "\n")
-  }
+  var joinedText: String { map(\.content.text).joined(separator: "\n") }
 }
 
 private func lessonBudget(inputCapGraphemes: Int) -> ContextBudget {
@@ -149,7 +158,9 @@ private func makeLessonBuilder(
     memoryStore: memoryStore,
     retriever: EmptyRetriever(),
     budget: budget,
-    now: { Date(timeIntervalSince1970: 0) }
+    now: {
+      Date(timeIntervalSince1970: 0)
+    }
   )
 }
 
@@ -157,8 +168,8 @@ private func lessonSnapshot(isTainted: Bool = false) -> SessionContextSnapshot {
   SessionContextSnapshot(
     sessionKey: SessionKey.scheduledJob(id: 7),
     history: [StoredMessage(role: .user, content: "run the job", provenance: .trusted)],
-    historyMessageIds: [1],
-    windowStartMessageId: 0,
+    historyMessageIDs: [1],
+    windowStartMessageID: 0,
     isTainted: isTainted,
     hasPrivateData: false
   )
@@ -173,7 +184,7 @@ private func lessonMemory() -> MemoryItem {
     sensitivity: .high,
     importance: .high,
     source: .owner,
-    sessionId: nil,
+    sessionID: nil,
     createdAt: Date(timeIntervalSince1970: 1)
   )
 }

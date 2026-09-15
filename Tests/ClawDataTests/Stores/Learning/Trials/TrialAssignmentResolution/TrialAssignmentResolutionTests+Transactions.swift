@@ -17,20 +17,16 @@ extension TrialAssignmentResolutionTests {
     let key = env.evaluatorKey(for: evidence)
     let operation: ClaimedOperation?
     switch fault {
-    case .claim:
-      operation = nil
-    case .start, .denial, .bootClaimed:
-      operation = try env.claim(key)
-    case .bootStarted:
-      operation = try env.startedOperation(key)
+    case .claim: operation = nil
+    case .start, .denial, .bootClaimed: operation = try env.claim(key)
+    case .bootStarted: operation = try env.startedOperation(key)
     }
-    try env.corruptAssignmentGeneration(runId: evidence.runId)
+    try env.corruptAssignmentGeneration(runID: evidence.runID)
 
     // when / then
     #expect {
       switch fault {
-      case .claim:
-        _ = try env.learning.claimOperation(key, now: env.now)
+      case .claim: _ = try env.learning.claimOperation(key, now: env.now)
       case .start:
         _ = try env.learning.authorizeAndStartOperation(
           env.authorization(for: try #require(operation)),
@@ -49,8 +45,7 @@ extension TrialAssignmentResolutionTests {
           ),
           now: env.now
         )
-      case .bootClaimed, .bootStarted:
-        _ = try env.learning.reconcileOperationsAtBoot(now: env.now)
+      case .bootClaimed, .bootStarted: _ = try env.learning.reconcileOperationsAtBoot(now: env.now)
       }
     } throws: { error in
       guard case StoreError.unexpected = error else {
@@ -60,25 +55,24 @@ extension TrialAssignmentResolutionTests {
     }
 
     switch fault {
-    case .claim:
-      #expect(try env.countRows(in: "learning_operations") == 0)
+    case .claim: #expect(try env.countRows(in: "learning_operations") == 0)
     case .start, .denial, .bootClaimed:
       #expect(try env.operationState(try #require(operation).id) == .claimed)
-    case .bootStarted:
-      #expect(try env.operationState(try #require(operation).id) == .started)
+    case .bootStarted: #expect(try env.operationState(try #require(operation).id) == .started)
     }
   }
 
-  @Test func evidenceRecomputeFailureRollsBackReceiptVersionsAndCache() throws {
+  @Test
+  func evidenceRecomputeFailureRollsBackReceiptVersionsAndCache() throws {
     // given
     let env = try trialEnvironment()
-    let runId = try env.settledBoundRun()
-    try env.corruptAssignmentGeneration(runId: runId)
-    let versionsBefore = try env.sealingVersionSnapshot(runId: runId)
+    let runID = try env.settledBoundRun()
+    try env.corruptAssignmentGeneration(runID: runID)
+    let versionsBefore = try env.sealingVersionSnapshot(runID: runID)
 
     // when
     #expect {
-      _ = try env.learning.sealEvidence(runId: runId, now: env.now)
+      _ = try env.learning.sealEvidence(runID: runID, now: env.now)
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
@@ -87,17 +81,18 @@ extension TrialAssignmentResolutionTests {
     }
 
     // then — a post-commit hook would leave an authoritative receipt behind a rejected cache.
-    #expect(try env.learning.evidence(runId: runId) == nil)
-    #expect(try env.assignmentState(runId: runId) == .created)
-    #expect(try env.sealingVersionSnapshot(runId: runId) == versionsBefore)
+    #expect(try env.learning.evidence(runID: runID) == nil)
+    #expect(try env.assignmentState(runID: runID) == .created)
+    #expect(try env.sealingVersionSnapshot(runID: runID) == versionsBefore)
   }
 
-  @Test func recomputeFailureRollsBackOperationUsageEvaluationAndCache() throws {
+  @Test
+  func recomputeFailureRollsBackOperationUsageEvaluationAndCache() throws {
     // given
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
     let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
-    try env.corruptAssignmentGeneration(runId: sealed.runId)
+    try env.corruptAssignmentGeneration(runID: sealed.runID)
 
     // when
     #expect {
@@ -111,26 +106,27 @@ extension TrialAssignmentResolutionTests {
 
     // then — evaluation and spend cannot commit ahead of the exact assignment projection.
     #expect(try env.operationState(operation.id) == .started)
-    #expect(try env.learningUsage(operationId: operation.id).isEmpty)
-    #expect(try env.learning.evaluation(runId: sealed.runId) == nil)
-    #expect(try env.assignmentState(runId: sealed.runId) == .learningOutcomeUnresolved)
+    #expect(try env.learningUsage(operationID: operation.id).isEmpty)
+    #expect(try env.learning.evaluation(runID: sealed.runID) == nil)
+    #expect(try env.assignmentState(runID: sealed.runID) == .learningOutcomeUnresolved)
   }
 
-  @Test func feedbackRecomputeFailureRollsBackTargetRevisionEventAndCache() throws {
+  @Test
+  func feedbackRecomputeFailureRollsBackTargetRevisionEventAndCache() throws {
     // given
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
     let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
     _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
-    let target = env.runFeedbackTarget(runId: sealed.runId, signal: .resultNotUseful)
+    let target = env.runFeedbackTarget(runID: sealed.runID, signal: .resultNotUseful)
     try TestLearningFixtures(writer: env.queue).seedTargets([target])
-    try env.corruptAssignmentGeneration(runId: sealed.runId)
-    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+    try env.corruptAssignmentGeneration(runID: sealed.runID)
+    let cacheBefore = try env.assignmentCacheSnapshot(runID: sealed.runID)
 
     // when
     #expect {
       _ = try env.learning.consumeAndAppendEvent(
-        env.feedbackTap(target, updateId: 7),
+        env.feedbackTap(target, updateID: 7),
         now: env.now.addingTimeInterval(1)
       )
     } throws: { error in
@@ -144,19 +140,20 @@ extension TrialAssignmentResolutionTests {
     #expect(try env.learning.feedbackTarget(nonce: target.nonce)?.consumedAt == nil)
     #expect(try env.currentLearningState().feedbackRevision == FeedbackRevision(0))
     #expect(try env.feedbackEventCount() == 0)
-    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+    #expect(try env.assignmentCacheSnapshot(runID: sealed.runID) == cacheBefore)
   }
 
-  @Test func correctionRecomputeFailureRollsBackChallengeRevisionEventAndAudit() throws {
+  @Test
+  func correctionRecomputeFailureRollsBackChallengeRevisionEventAndAudit() throws {
     // given
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
     let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
     _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
-    let target = env.runFeedbackTarget(runId: sealed.runId, signal: .resultCorrection)
+    let target = env.runFeedbackTarget(runID: sealed.runID, signal: .resultCorrection)
     try TestLearningFixtures(writer: env.queue).seedTargets([target])
     let opened = try env.learning.consumeAndOpenChallenge(
-      env.feedbackTap(target, updateId: 8),
+      env.feedbackTap(target, updateID: 8),
       prompt: env.challengePrompt(target),
       now: env.now
     )
@@ -165,7 +162,7 @@ extension TrialAssignmentResolutionTests {
       return
     }
     let auditCount = try env.learningAuditCount()
-    try env.corruptAssignmentGeneration(runId: sealed.runId)
+    try env.corruptAssignmentGeneration(runID: sealed.runID)
 
     // when
     #expect {
@@ -182,7 +179,7 @@ extension TrialAssignmentResolutionTests {
     }
 
     // then — challenge payload, consumption, event, revision and audit roll back together.
-    let live = try env.learning.liveChallenge(ownerUserId: 42, chatId: 777)
+    let live = try env.learning.liveChallenge(ownerUserID: 42, chatID: 777)
     #expect(live?.id == challenge.id)
     #expect(live?.consumedAt == nil)
     #expect(try env.currentLearningState().feedbackRevision == FeedbackRevision(0))
@@ -190,7 +187,8 @@ extension TrialAssignmentResolutionTests {
     #expect(try env.learningAuditCount() == auditCount)
   }
 
-  @Test func evaluationAndFeedbackWritersConvergeInBothCommitOrders() throws {
+  @Test
+  func evaluationAndFeedbackWritersConvergeInBothCommitOrders() throws {
     // given
     let evaluationFirst = try trialEnvironment()
     let firstEvidence = try evaluationFirst.sealedTrialEvidence()
@@ -202,17 +200,17 @@ extension TrialAssignmentResolutionTests {
       now: evaluationFirst.now
     )
     try evaluationFirst.recordRunFeedback(
-      runId: firstEvidence.runId,
+      runID: firstEvidence.runID,
       signal: .resultNotUseful,
-      updateId: 9
+      updateID: 9
     )
 
     let feedbackFirst = try trialEnvironment()
     let secondEvidence = try feedbackFirst.sealedTrialEvidence()
     try feedbackFirst.recordRunFeedback(
-      runId: secondEvidence.runId,
+      runID: secondEvidence.runID,
       signal: .resultNotUseful,
-      updateId: 10
+      updateID: 10
     )
     let secondOperation = try feedbackFirst.startedOperation(
       feedbackFirst.evaluatorKey(for: secondEvidence)
@@ -223,8 +221,8 @@ extension TrialAssignmentResolutionTests {
       feedbackFirst.result(for: secondOperation.id),
       now: feedbackFirst.now
     )
-    let first = try #require(try evaluationFirst.assignment(runId: firstEvidence.runId))
-    let second = try #require(try feedbackFirst.assignment(runId: secondEvidence.runId))
+    let first = try #require(try evaluationFirst.assignment(runID: firstEvidence.runID))
+    let second = try #require(try feedbackFirst.assignment(runID: secondEvidence.runID))
 
     // then — projecting outside either writer makes the last commit order observable.
     #expect(first.resolvedEvidence?.outcome == .negative)
@@ -254,16 +252,16 @@ private struct SealingVersionSnapshot: Equatable {
 // MARK: - Assignment Reads
 
 private extension BoundRunEnvironment {
-  func sealingVersionSnapshot(runId: Int64) throws -> SealingVersionSnapshot {
+  func sealingVersionSnapshot(runID: Int64) throws -> SealingVersionSnapshot {
     try queue.read { db in
       guard
         let row = try Row.fetchOne(
           db,
           sql: """
-            SELECT evidence_schema_version, classifier_version
-            FROM run_compatibility WHERE run_id = ?
-            """,
-          arguments: [runId]
+          SELECT evidence_schema_version, classifier_version
+          FROM run_compatibility WHERE run_id = ?
+          """,
+          arguments: [runID]
         )
       else {
         throw StoreError.unexpected("fixture compatibility is missing")

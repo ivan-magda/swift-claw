@@ -80,9 +80,9 @@ enum MessageRowInsert {
 
     try db.execute(
       sql: """
-        INSERT INTO messages(\(allColumns.joined(separator: ", ")))
-        VALUES (\(placeholders))
-        """,
+      INSERT INTO messages(\(allColumns.joined(separator: ", ")))
+      VALUES (\(placeholders))
+      """,
       arguments: StatementArguments(values + ProviderStateCoding.values(providerState))
     )
   }

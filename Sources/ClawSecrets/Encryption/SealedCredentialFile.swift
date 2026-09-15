@@ -11,6 +11,7 @@ import Foundation
 /// nothing on disk yet.
 protocol SealedCredentialMap: Codable, Equatable, Sendable {
   static var currentVersion: Int { get }
+
   static var empty: Self { get }
 
   var version: Int { get }
@@ -78,7 +79,7 @@ struct SealedCredentialFile<Map: SealedCredentialMap>: Sendable {
   ///
   /// The lock is held across the entire cycle and never across an `await`: every step is a bounded
   /// synchronous syscall, so there is no suspension point at which a second mutation could interleave.
-  func mutate(_ body: (inout Map) -> Bool) throws(CredentialStoreError) {
+  func mutate(_ body: (_ map: inout Map) -> Bool) throws(CredentialStoreError) {
     mutation.lock()
     defer { mutation.unlock() }
 
@@ -130,14 +131,11 @@ extension SealedCredentialFile {
     }
   }
 
-  func publishEnvelope(
-    _ map: Map,
-    key: SymmetricKey
-  ) throws(CredentialStoreError) -> SecureFilePublisher.PublicationOutcome {
+  func publishEnvelope(_ map: Map, key: SymmetricKey) throws(CredentialStoreError)
+    -> SecureFilePublisher.PublicationOutcome
+  {
     let envelope = try codec.sealCredential(try Self.encode(map), key: key)
-    do {
-      return try publisher.publish(envelope, to: url, mode: .replace)
-    } catch {
+    do { return try publisher.publish(envelope, to: url, mode: .replace) } catch {
       // Throwing from `publish` means the name was never claimed, so whatever the owner had is still
       // whole and the caller may retry as though nothing happened.
       throw Self.mapEnvelopeError(error)
@@ -166,9 +164,7 @@ private extension SealedCredentialFile {
     guard SecureFilePublisher.entryExists(at: paths.key) else {
       throw .missingRuntimeKey
     }
-    do {
-      return try EncryptedFileSecretStore.openKey(at: paths.key)
-    } catch {
+    do { return try EncryptedFileSecretStore.openKey(at: paths.key) } catch {
       // Opening an existing key fails for exactly one reason: the protocol refuses its metadata or
       // its length.
       throw .insecureStorage
@@ -181,9 +177,7 @@ private extension SealedCredentialFile {
     }
 
     let envelope: Data
-    do {
-      envelope = try SecureFilePublisher.read(at: url, policy: Self.readPolicy)
-    } catch {
+    do { envelope = try SecureFilePublisher.read(at: url, policy: Self.readPolicy) } catch {
       throw Self.mapEnvelopeError(error)
     }
     return try Self.decode(try codec.openCredential(envelope, key: key))
@@ -195,8 +189,7 @@ private extension SealedCredentialFile {
       // Reached only once something has been seen standing at the path, so a no-follow open that
       // fails is the protocol refusing a planted symlink — not an absent file.
       return .insecureStorage
-    case .oversized:
-      return .oversizedStorage
+    case .oversized: return .oversizedStorage
     case .publicationFailed, .alreadyExists:
       // `.alreadyExists` is unreachable: these files are published to be replaced. Folding it in
       // rather than assuming it away keeps a future exclusive caller from being misdiagnosed.
@@ -240,17 +233,11 @@ extension AESGCMEnvelope {
   /// because the runtime secret store maps the same failures differently, and one shared mapping
   /// would have to lose whichever distinction the other store depends on.
   func sealCredential(_ plaintext: Data, key: SymmetricKey) throws(CredentialStoreError) -> Data {
-    do {
-      return try seal(plaintext, key: key)
-    } catch {
-      throw .publicationFailed
-    }
+    do { return try seal(plaintext, key: key) } catch { throw .publicationFailed }
   }
 
   func openCredential(_ envelope: Data, key: SymmetricKey) throws(CredentialStoreError) -> Data {
-    do {
-      return try open(envelope, key: key)
-    } catch AESGCMEnvelopeError.unsupportedVersion {
+    do { return try open(envelope, key: key) } catch AESGCMEnvelopeError.unsupportedVersion {
       // An unknown version is a build that cannot read this file — a different thing to tell an
       // owner than a tampered file, so it keeps its own remedy.
       throw .unsupportedVersion

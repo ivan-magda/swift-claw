@@ -1,5 +1,4 @@
 import AsyncHTTPClient
-import Foundation
 
 /// The egress posture for an AsyncHTTPClient-backed client.
 public enum HTTPClientProfile: Sendable, Equatable {
@@ -16,9 +15,7 @@ public enum HTTPClientProfile: Sendable, Equatable {
   /// The AsyncHTTPClient settings this posture resolves to.
   public var configuration: HTTPClient.Configuration {
     var configuration = HTTPClient.Configuration()
-    configuration.decompression = .enabled(
-      limit: .size(Self.maximumDecompressedResponseBytes)
-    )
+    configuration.decompression = .enabled(limit: .size(Self.maximumDecompressedResponseBytes))
 
     if self == .protectedEgress {
       configuration.redirectConfiguration = .disallow

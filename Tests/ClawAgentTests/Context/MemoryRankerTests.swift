@@ -4,8 +4,10 @@ import Testing
 @testable import ClawAgent
 @testable import ClawCore
 
-@Suite struct MemoryRankerTests {
-  @Test func ranksByImportanceThenRecency() throws {
+@Suite
+struct MemoryRankerTests {
+  @Test
+  func ranksByImportanceThenRecency() throws {
     // given
     let olderHigh = try memory(id: 1, text: "older high", importance: .high, dayOffset: -2)
     let newerNormal = try memory(id: 2, text: "newer normal", importance: .normal, dayOffset: 0)
@@ -22,7 +24,8 @@ import Testing
     #expect(ranked.map(\.id) == [3, 1, 2])
   }
 
-  @Test func breaksExactTiesByNewestDatabaseId() throws {
+  @Test
+  func breaksExactTiesByNewestDatabaseID() throws {
     // given
     let first = try memory(id: 1, text: "first", importance: .normal, dayOffset: 0)
     let second = try memory(id: 2, text: "second", importance: .normal, dayOffset: 0)
@@ -39,7 +42,8 @@ import Testing
     #expect(ranked.map(\.id) == [3, 2, 1])
   }
 
-  @Test func fillsCapAtItemBoundariesWithoutMidFactTruncation() throws {
+  @Test
+  func fillsCapAtItemBoundariesWithoutMidFactTruncation() throws {
     // given
     let first = try memory(id: 1, text: "alpha", importance: .high, dayOffset: 0)
     let second = try memory(id: 2, text: "bravo", importance: .normal, dayOffset: 0)
@@ -52,7 +56,8 @@ import Testing
     #expect(ranked.map(\.text) == ["alpha", "bravo"])
   }
 
-  @Test func skipsOversizedHigherRankedItemAndKeepsSmallerFittingItem() throws {
+  @Test
+  func skipsOversizedHigherRankedItemAndKeepsSmallerFittingItem() throws {
     // given
     let oversized = try memory(
       id: 1,
@@ -69,7 +74,8 @@ import Testing
     #expect(ranked.map(\.id) == [2])
   }
 
-  @Test func excludesHighSensitivityWhenRequested() throws {
+  @Test
+  func excludesHighSensitivityWhenRequested() throws {
     // given
     let normal = try memory(
       id: 1,
@@ -116,7 +122,7 @@ private func memory(
     sensitivity: sensitivity,
     importance: importance,
     source: .owner,
-    sessionId: 42,
+    sessionID: 42,
     createdAt: createdAt
   )
 }

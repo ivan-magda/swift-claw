@@ -23,20 +23,16 @@ private final class InvocationFlag: @unchecked Sendable {
   func mark() { invoked = true }
 }
 
-@Suite struct ProviderCompositionTests {
+@Suite
+struct ProviderCompositionTests {
   private static let baseURLKey = "CLAW_LLM_BASE_URL"
   private static let groupChatsKey = "CLAW_GROUP_CHATS"
 
-  private func config(
-    model: String,
-    baseURL: String?,
-    groupChats: String? = nil
-  ) throws -> AppConfig {
+  private func config(model: String, baseURL: String?, groupChats: String? = nil) throws
+    -> AppConfig
+  {
     let root = NSTemporaryDirectory() + "clawd-composition-" + UUID().uuidString
-    var env = [
-      AppConfig.EnvKey.stateRoot: root,
-      AppConfig.EnvKey.llmModel: model,
-    ]
+    var env = [AppConfig.EnvKey.stateRoot: root, AppConfig.EnvKey.llmModel: model]
     if let baseURL {
       env[Self.baseURLKey] = baseURL
     }
@@ -47,32 +43,41 @@ private final class InvocationFlag: @unchecked Sendable {
   }
 
   private var silentLogger: Logger {
-    Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+    Logger(label: "test") { _ in
+      SwiftLogNoOpLogHandler()
+    }
   }
 
   private func composition(
     config: AppConfig,
     recorder: CloseRecorder,
-    makeManagedStore: @escaping @Sendable (URL) -> any LLMCredentialStore,
+    makeManagedStore: @escaping @Sendable (_ stateRoot: URL) -> any LLMCredentialStore,
     buildDaemon:
-      @escaping @Sendable (DaemonBuilder, RosterStack, PrimaryRouteCooldown<ContinuousClock>)
-      async throws
-      -> DaemonRuntimeBundle
+    @escaping @Sendable (
+      _ builder: DaemonBuilder,
+      _ stack: RosterStack,
+      _ cooldown: PrimaryRouteCooldown<ContinuousClock>
+    ) async throws -> DaemonRuntimeBundle
   ) throws -> RunComposition {
     var composition = RunComposition(
       config: config,
-      secrets: Secrets(telegramBotToken: "token", llmApiKey: "sk-static", searchApiKey: nil),
+      secrets: Secrets(telegramBotToken: "token", llmAPIKey: "sk-static", searchAPIKey: nil),
       stores: try EnvironmentLoader.openStores(config: config),
       logger: silentLogger
     )
-    composition.makeClients = { instrumentedClients(recorder: recorder) }
+    composition.makeClients = {
+      instrumentedClients(recorder: recorder)
+    }
     composition.makeManagedStore = makeManagedStore
-    composition.fetchBotIdentity = { _, _ in nil }
+    composition.fetchBotIdentity = { _, _ in
+      nil
+    }
     composition.buildDaemon = buildDaemon
     return composition
   }
 
-  @Test func currentRouteOpensNoEnvelopeAndClosesAllOnFailure() async throws {
+  @Test
+  func currentRouteOpensNoEnvelopeAndClosesAllOnFailure() async throws {
     // given — the current route, an assembler that stops after capturing the resolved stack, and a
     // managed-store factory that must never be built
     let recorder = CloseRecorder()
@@ -103,23 +108,24 @@ private final class InvocationFlag: @unchecked Sendable {
     #expect(await recorder.order == [.llm, .telegram, .tool])
   }
 
-  @Test func groupModeWithAUsernameLessBotIdentityFailsTheBootAndClosesAll() async throws {
+  @Test
+  func groupModeWithAUsernameLessBotIdentityFailsTheBootAndClosesAll() async throws {
     // given — group mode configured, and `getMe` returned a bot with no username
     let recorder = CloseRecorder()
     var composition = try composition(
-      config: config(
-        model: "gpt-4o",
-        baseURL: "https://api.test/v1",
-        groupChats: "-1001234567890"
-      ),
+      config: config(model: "gpt-4o", baseURL: "https://api.test/v1", groupChats: "-1001234567890"),
       recorder: recorder,
-      makeManagedStore: { _ in FreshCredentialStore(present: false) },
+      makeManagedStore: { _ in
+        FreshCredentialStore(present: false)
+      },
       buildDaemon: { _, _, _ in
         Issue.record("assembly must not run when group mode has no bot identity")
         throw BuildStopped()
       }
     )
-    composition.fetchBotIdentity = { _, _ in BotIdentity(id: 900, username: nil) }
+    composition.fetchBotIdentity = { _, _ in
+      BotIdentity(id: 900, username: nil)
+    }
 
     // when / then — the boot fails loudly rather than sitting in a group deaf to every mention,
     // and every already-created client is closed
@@ -129,13 +135,16 @@ private final class InvocationFlag: @unchecked Sendable {
     #expect(await recorder.order == [.llm, .telegram, .tool])
   }
 
-  @Test func chatGPTMalformedEnvelopePropagatesAndClosesAll() async throws {
+  @Test
+  func chatGPTMalformedEnvelopePropagatesAndClosesAll() async throws {
     // given — the managed route with a malformed envelope; assembly must never be reached
     let recorder = CloseRecorder()
     let composition = try composition(
       config: config(model: "openai-chatgpt/gpt-5.4", baseURL: nil),
       recorder: recorder,
-      makeManagedStore: { _ in FreshCredentialStore(failure: .malformedStorage) },
+      makeManagedStore: { _ in
+        FreshCredentialStore(failure: .malformedStorage)
+      },
       buildDaemon: { _, _, _ in
         Issue.record("assembly must not run when the stack build fails")
         throw BuildStopped()

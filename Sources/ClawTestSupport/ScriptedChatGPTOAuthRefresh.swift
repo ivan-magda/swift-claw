@@ -15,10 +15,7 @@ public actor ScriptedChatGPTOAuthRefresh: ChatGPTOAuthRefreshing {
   public private(set) var tokensSeen: [String] = []
   public let started = AsyncGate()
 
-  public init(
-    _ script: [Result<ChatGPTTokenPair, ChatGPTOAuthFailure>] = [],
-    hold: Hold = .none
-  ) {
+  public init(_ script: [Result<ChatGPTTokenPair, ChatGPTOAuthFailure>] = [], hold: Hold = .none) {
     self.script = script
     self.hold = hold
   }
@@ -29,15 +26,12 @@ public actor ScriptedChatGPTOAuthRefresh: ChatGPTOAuthRefreshing {
     tokensSeen.append(refreshToken)
     started.open()
     switch hold {
-    case .none:
-      break
+    case .none: break
     case .reportingCancellation(let gate):
       await Self.waitWithBackstop(on: gate)
       try Task.checkCancellation()
-    case .answeringAfterCancellation(let gate):
-      await Self.waitWithBackstop(on: gate)
-    case .ignoringCancellation(let gate):
-      await gate.waitIgnoringCancellation()
+    case .answeringAfterCancellation(let gate): await Self.waitWithBackstop(on: gate)
+    case .ignoringCancellation(let gate): await gate.waitIgnoringCancellation()
     }
     guard script.isEmpty == false else {
       throw ChatGPTOAuthFailure.grantRejected(detail: "unscripted refresh")

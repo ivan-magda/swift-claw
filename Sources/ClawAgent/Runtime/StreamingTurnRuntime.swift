@@ -62,10 +62,7 @@ struct StreamingTurnRuntime: Sendable {
     self.clock = clock
   }
 
-  func run(
-    target: TurnProgressTarget,
-    request: ChatRequest
-  ) async throws -> ChatResponse {
+  func run(target: TurnProgressTarget, request: ChatRequest) async throws -> ChatResponse {
     let snapshot = DraftSnapshot()
     // Built before the race children start, so the runtime holds the cancel-and-join handle before
     // any authorization or network work can race the deadline.
@@ -87,10 +84,8 @@ struct StreamingTurnRuntime: Sendable {
     case .response(let response):
       await sendFinalDraft(response.content, target: target)
       return response
-    case .failed(let error):
-      throw error
-    case .timedOut(.notStarted):
-      throw ProviderNoStartDeadline()
+    case .failed(let error): throw error
+    case .timedOut(.notStarted): throw ProviderNoStartDeadline()
     case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
       // The interrupted attempt may already owe tokens, so the typed marker carries the observed
       // lower bound for the runtime's conservative row.
@@ -112,11 +107,9 @@ private extension StreamingTurnRuntime {
   /// so the accumulation here feeds live drafts and the overflow check only, never the final reply. A
   /// cut iteration and a failed terminal both defer to that join, which carries the disposition; an
   /// overrun is flagged so the coordinator can refuse it locally.
-  func consumeStream(
-    _ stream: LLMEventStream,
-    snapshot: DraftSnapshot,
-    box: ProviderRaceBox
-  ) async -> StreamConsumerOutcome {
+  func consumeStream(_ stream: LLMEventStream, snapshot: DraftSnapshot, box: ProviderRaceBox) async
+    -> StreamConsumerOutcome
+  {
     var content = ""
     var contentBytes = 0
 
@@ -137,9 +130,7 @@ private extension StreamingTurnRuntime {
         }
       }
       return .cut
-    } catch is AccumulatedStreamContentTooLarge {
-      return .overflowed
-    } catch {
+    } catch is AccumulatedStreamContentTooLarge { return .overflowed } catch {
       // A cancelled consumer ends here (checkCancellation), and a failed terminal throws its cause.
       // Either way the authoritative outcome is the stream's own termination, read by the coordinator
       // — a cut reply is never surfaced as a whole one.
@@ -147,11 +138,7 @@ private extension StreamingTurnRuntime {
     }
   }
 
-  func append(
-    delta: String,
-    to content: inout String,
-    contentBytes: inout Int
-  ) throws {
+  func append(delta: String, to content: inout String, contentBytes: inout Int) throws {
     let deltaBytes = delta.utf8.count
     guard deltaBytes <= LLMStreamLimits.maxAccumulatedContentBytes - contentBytes else {
       throw AccumulatedStreamContentTooLarge()
@@ -196,15 +183,11 @@ private extension StreamingTurnRuntime {
       // than on having attempted a send, because a group chat is a sink that accepts no draft at
       // all — assuming the bubble appeared there would leave the topic with no signal whatever.
       if !sentAnyDraft, ticksSinceTyping >= Self.ticksBetweenTyping {
-        await typingIndicator.sendTyping(chatId: target.chatId, messageThreadId: target.threadId)
+        await typingIndicator.sendTyping(chatID: target.chatID, messageThreadID: target.threadID)
         ticksSinceTyping = 0
       }
 
-      do {
-        try await clock.sleep(for: Self.probeInterval)
-      } catch {
-        return
-      }
+      do { try await clock.sleep(for: Self.probeInterval) } catch { return }
       ticksSinceDraft += 1
       ticksSinceTyping += 1
     }
@@ -227,8 +210,8 @@ private extension StreamingTurnRuntime {
       clock: clock
     ) {
       await draftStreamer.sendDraft(
-        chatId: target.chatId,
-        draftId: target.draftId,
+        chatID: target.chatID,
+        draftID: target.draftID,
         markdown: markdown
       )
     }

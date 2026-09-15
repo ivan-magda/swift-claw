@@ -10,9 +10,7 @@ import ServiceLifecycle
 struct MCPSessionLifecycleService: Service {
   private let sessions: [MCPServerSession]
 
-  init(sessions: [MCPServerSession]) {
-    self.sessions = sessions
-  }
+  init(sessions: [MCPServerSession]) { self.sessions = sessions }
 
   func run() async throws {
     // Parks until the group shuts down or the task is cancelled; both exits hang up the sessions.

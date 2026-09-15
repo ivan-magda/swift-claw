@@ -49,8 +49,6 @@ public struct CoderStatusTool: Tool {
         try await service.status(id: id, context: context),
         redactor: redactor
       )
-    } catch {
-      return CoderToolOutput.failure(error, redactor: redactor)
-    }
+    } catch { return CoderToolOutput.failure(error, redactor: redactor) }
   }
 }

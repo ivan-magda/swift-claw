@@ -12,9 +12,9 @@ import Logging
 /// returns. Modelling it as `-> Never` is what forces every caller to end control flow here rather
 /// than fall through.
 struct FatalProcessTerminator: Sendable {
-  private let terminate: @Sendable (Int32) throws -> Never
+  private let terminate: @Sendable (_ code: Int32) throws -> Never
 
-  init(terminate: @escaping @Sendable (Int32) throws -> Never) {
+  init(terminate: @escaping @Sendable (_ code: Int32) throws -> Never) {
     self.terminate = terminate
   }
 

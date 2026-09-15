@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct RememberRoutingTests {
-  @Test func rememberParksAPendingWriteAndSendsTheConfirmPrompt() async throws {
+@Suite
+struct RememberRoutingTests {
+  @Test
+  func rememberParksAPendingWriteAndSendsTheConfirmPrompt() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -23,8 +25,8 @@ import Testing
     #expect(prompt.text.contains("Remember as project:"))
     #expect(prompt.text.contains("ship 3a"))
     #expect(try harness.memoryItemCount() == 0)
-    let sessionId = try harness.ownerSessionId()
-    let entry = await harness.pendingConfirmations.pending(sessionId: sessionId)
+    let sessionID = try harness.ownerSessionID()
+    let entry = await harness.pendingConfirmations.pending(sessionID: sessionID)
     guard case .rememberWrite(let request) = try #require(entry) else {
       Issue.record("expected a parked remember entry, got \(String(describing: entry))")
       return
@@ -32,10 +34,11 @@ import Testing
     #expect(request.item.text == "ship 3a")
     #expect(request.item.kind == .project)
     #expect(request.item.source == .owner)
-    #expect(request.item.sessionId == sessionId)
+    #expect(request.item.sessionID == sessionID)
   }
 
-  @Test func rememberWithoutKindPrefixDefaultsToUser() async throws {
+  @Test
+  func rememberWithoutKindPrefixDefaultsToUser() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -45,8 +48,8 @@ import Testing
     )
 
     // then
-    let sessionId = try harness.ownerSessionId()
-    let entry = await harness.pendingConfirmations.pending(sessionId: sessionId)
+    let sessionID = try harness.ownerSessionID()
+    let entry = await harness.pendingConfirmations.pending(sessionID: sessionID)
     guard case .rememberWrite(let request) = try #require(entry) else {
       Issue.record("expected a parked remember entry, got \(String(describing: entry))")
       return
@@ -55,7 +58,8 @@ import Testing
     #expect(request.item.text == "buy milk")
   }
 
-  @Test func duplicateRememberPromptsOnlyOnceAndDoesNotTouchTheSession() async throws {
+  @Test
+  func duplicateRememberPromptsOnlyOnceAndDoesNotTouchTheSession() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
     let update = textUpdate(id: 1, from: 42, text: "/remember buy milk")
@@ -71,7 +75,8 @@ import Testing
     #expect(try sessionUpdatedTs(harness) == firstUpdatedTs)
   }
 
-  @Test func rememberWithoutTextSendsUsage() async throws {
+  @Test
+  func rememberWithoutTextSendsUsage() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -84,11 +89,12 @@ import Testing
     #expect(outcome == .processed)
     let sent = await harness.transport.sent
     #expect(sent.map(\.text) == [MemoryReplies.rememberUsage])
-    let sessionId = try harness.ownerSessionId()
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
+    let sessionID = try harness.ownerSessionID()
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
   }
 
-  @Test func rememberStrippedToEmptyIsRejected() async throws {
+  @Test
+  func rememberStrippedToEmptyIsRejected() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -101,12 +107,13 @@ import Testing
     #expect(outcome == .processed)
     let sent = await harness.transport.sent
     #expect(sent.map(\.text) == [MemoryReplies.nothingToSave])
-    let sessionId = try harness.ownerSessionId()
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
+    let sessionID = try harness.ownerSessionID()
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
     #expect(try harness.memoryItemCount() == 0)
   }
 
-  @Test func rememberFromStrangerGetsPrivateBotReply() async throws {
+  @Test
+  func rememberFromStrangerGetsPrivateBotReply() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -121,7 +128,8 @@ import Testing
     #expect(try harness.memoryItemCount() == 0)
   }
 
-  @Test func newRememberReplacesTheEarlierPendingOne() async throws {
+  @Test
+  func newRememberReplacesTheEarlierPendingOne() async throws {
     // given
     let harness = try MemoryRoutingHarness.make()
 
@@ -134,8 +142,8 @@ import Testing
     )
 
     // then
-    let sessionId = try harness.ownerSessionId()
-    let entry = await harness.pendingConfirmations.pending(sessionId: sessionId)
+    let sessionID = try harness.ownerSessionID()
+    let entry = await harness.pendingConfirmations.pending(sessionID: sessionID)
     guard case .rememberWrite(let request) = try #require(entry) else {
       Issue.record("expected a parked remember entry, got \(String(describing: entry))")
       return
@@ -148,7 +156,7 @@ import Testing
       try Date.fetchOne(
         db,
         sql: "SELECT updated_ts FROM sessions WHERE session_key = ?",
-        arguments: [SessionKey.telegramDM(chatId: 42)]
+        arguments: [SessionKey.telegramDM(chatID: 42)]
       )
     }
   }

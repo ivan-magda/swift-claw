@@ -23,13 +23,9 @@ public actor FakeExecutionBackend: ExecutionBackend, SandboxMaintenance {
     self.results = results
   }
 
-  public func enqueue(_ result: ExecutionResult) {
-    results.append(result)
-  }
+  public func enqueue(_ result: ExecutionResult) { results.append(result) }
 
-  public func probe() async -> BackendAvailability {
-    availability
-  }
+  public func probe() async -> BackendAvailability { availability }
 
   public func run(_ request: ExecutionRequest) async -> ExecutionResult {
     requests.append(request)
@@ -49,23 +45,13 @@ public actor FakeExecutionBackend: ExecutionBackend, SandboxMaintenance {
     return health
   }
 
-  public func shutdown() async {
-    shutdownCalls += 1
-  }
+  public func shutdown() async { shutdownCalls += 1 }
 
-  public func isAdmitting() -> Bool {
-    admitting
-  }
+  public func isAdmitting() -> Bool { admitting }
 
-  public func recordedRequests() -> [ExecutionRequest] {
-    requests
-  }
+  public func recordedRequests() -> [ExecutionRequest] { requests }
 
-  public func prepareCallCount() -> Int {
-    prepareCalls
-  }
+  public func prepareCallCount() -> Int { prepareCalls }
 
-  public func shutdownCallCount() -> Int {
-    shutdownCalls
-  }
+  public func shutdownCallCount() -> Int { shutdownCalls }
 }

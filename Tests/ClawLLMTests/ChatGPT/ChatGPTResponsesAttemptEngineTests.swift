@@ -11,7 +11,8 @@ import Testing
 /// retry class, and a retry boundary that closes at the first SSE `data:` byte. Every HTTP outcome is
 /// scripted at the unmanaged seam and every delay runs on a manual clock, so nothing here waits on
 /// real time.
-@Suite struct ChatGPTResponsesAttemptEngineTests {
+@Suite
+struct ChatGPTResponsesAttemptEngineTests {
   // MARK: - Success
 
   @Test(.timeLimit(.minutes(1)))
@@ -35,12 +36,10 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func aClean401RefreshesWithTheRequestGenerationThenRetriesOnce() async throws {
     // given — the first attempt's head is a clean 401, the retry succeeds
-    let harness = Harness(
-      steps: [
-        .stream(Support.head(401), Fixtures.errorBody("expired")),
-        .stream(okHead, Fixtures.basicSuccess()),
-      ]
-    )
+    let harness = Harness(steps: [
+      .stream(Support.head(401), Fixtures.errorBody("expired")),
+      .stream(okHead, Fixtures.basicSuccess()),
+    ])
 
     // when
     let outcome = await harness.run()
@@ -48,19 +47,24 @@ import Testing
     // then — one refresh rejection carrying the first request's generation, then a second attempt
     #expect(await harness.attemptCount == 2)
     let rejections = await harness.credentialRejections
-    #expect(rejections == [.init(generation: .init(value: 1), disposition: .refresh)])
+    #expect(
+      rejections == [
+        GenerationRecordingCredentialSource.Rejection(
+          generation: LLMCredentialGeneration(value: 1),
+          disposition: .refresh
+        ),
+      ]
+    )
     _ = try requireCompleted(outcome)
   }
 
   @Test(.timeLimit(.minutes(1)))
   func aSecondClean401LatchesAuthenticationRequired() async throws {
     // given — both attempts answer with a clean 401
-    let harness = Harness(
-      steps: [
-        .stream(Support.head(401), Fixtures.errorBody("expired")),
-        .stream(Support.head(401), Fixtures.errorBody("still expired")),
-      ]
-    )
+    let harness = Harness(steps: [
+      .stream(Support.head(401), Fixtures.errorBody("expired")),
+      .stream(Support.head(401), Fixtures.errorBody("still expired")),
+    ])
 
     // when
     let outcome = await harness.run()
@@ -70,8 +74,14 @@ import Testing
     let rejections = await harness.credentialRejections
     #expect(
       rejections == [
-        .init(generation: .init(value: 1), disposition: .refresh),
-        .init(generation: .init(value: 2), disposition: .authenticationRequired),
+        GenerationRecordingCredentialSource.Rejection(
+          generation: LLMCredentialGeneration(value: 1),
+          disposition: .refresh
+        ),
+        GenerationRecordingCredentialSource.Rejection(
+          generation: LLMCredentialGeneration(value: 2),
+          disposition: .authenticationRequired
+        ),
       ]
     )
     #expect(failureCause(outcome) == .authenticationRequired)
@@ -175,10 +185,9 @@ import Testing
   }
 
   @Test(.timeLimit(.minutes(1)), arguments: [(60, 30), (10, 10)])
-  func aClean429IsQuotaLimitedHonoringTheClampedRetryAfter(
-    timeout: Int,
-    expectedClamp: Int
-  ) async throws {
+  func aClean429IsQuotaLimitedHonoringTheClampedRetryAfter(timeout: Int, expectedClamp: Int)
+    async throws
+  {
     // given — a 429 asks for 300 seconds, retried once then exhausted at budget 2
     let harness = Harness(
       steps: [
@@ -246,12 +255,10 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func a408RetriesWithBoundedBackoffThenSucceeds() async throws {
     // given
-    let harness = Harness(
-      steps: [
-        .stream(Support.head(408), Fixtures.errorBody("timeout")),
-        .stream(okHead, Fixtures.basicSuccess()),
-      ]
-    )
+    let harness = Harness(steps: [
+      .stream(Support.head(408), Fixtures.errorBody("timeout")),
+      .stream(okHead, Fixtures.basicSuccess()),
+    ])
 
     // when
     let outcome = await harness.run()
@@ -285,14 +292,12 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func aDefinitelyNotSentTransportFailureRetries() async throws {
     // given — nothing could have been written, so the attempt is replayable
-    let harness = Harness(
-      steps: [
-        .transportFailure(
-          HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: "refused")
-        ),
-        .stream(okHead, Fixtures.basicSuccess()),
-      ]
-    )
+    let harness = Harness(steps: [
+      .transportFailure(
+        HTTPTransportFailure(disposition: .definitelyNotSent, safeMessage: "refused")
+      ),
+      .stream(okHead, Fixtures.basicSuccess()),
+    ])
 
     // when
     let outcome = await harness.run()
@@ -307,17 +312,12 @@ import Testing
   func aMayHaveBeenSentTransportFailureIsNotRetried() async throws {
     // given — an ambiguous send that a retry could double-charge
     let token = GenerationRecordingCredentialSource.accessToken
-    let harness = Harness(
-      steps: [
-        .transportFailure(
-          HTTPTransportFailure(
-            disposition: .mayHaveBeenSent,
-            safeMessage: "dropped \(token)"
-          )
-        ),
-        .stream(okHead, Fixtures.basicSuccess()),
-      ]
-    )
+    let harness = Harness(steps: [
+      .transportFailure(
+        HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: "dropped \(token)")
+      ),
+      .stream(okHead, Fixtures.basicSuccess()),
+    ])
 
     // when
     let outcome = await harness.run()
@@ -326,10 +326,7 @@ import Testing
     #expect(await harness.attemptCount == 1)
     #expect(await harness.delays.isEmpty)
     let failure = try #require(failureCause(outcome))
-    #expect(
-      failure
-        == .transportFailure(message: "dropped \(SecretRedactor.replacement)")
-    )
+    #expect(failure == .transportFailure(message: "dropped \(SecretRedactor.replacement)"))
     #expect(Support.message(of: failure)?.contains(token) == false)
     #expect(Support.accounting(of: outcome) == .mayHaveStarted(observedCompletionTokens: 0))
   }
@@ -372,7 +369,7 @@ import Testing
           {"type":"response.done","response":{"id":"resp_1","status":"completed",\#
           "model":"gpt-5.6-sol"}}
           """#
-        )
+        ),
       ]
     let harness = Harness(
       steps: [.stream(okHead, body)],
@@ -428,15 +425,13 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func aCleanInvalidEncryptedContentRetriesOnceStateFreeInANewEpoch() async throws {
     // given — a clean head rejection naming poisoned replay state, then a success
-    let harness = Harness(
-      steps: [
-        .stream(
-          Support.head(400),
-          Fixtures.errorBody("bad state", code: "invalid_encrypted_content")
-        ),
-        .stream(okHead, Fixtures.basicSuccess()),
-      ]
-    )
+    let harness = Harness(steps: [
+      .stream(
+        Support.head(400),
+        Fixtures.errorBody("bad state", code: "invalid_encrypted_content")
+      ),
+      .stream(okHead, Fixtures.basicSuccess()),
+    ])
 
     // when
     let outcome = await harness.run()
@@ -526,16 +521,14 @@ import Testing
   func aFailureAfterTheFirstDataByteIsNeverReplayed() async throws {
     // given — a 2xx stream that emits a data event and then drops the connection
     let token = GenerationRecordingCredentialSource.accessToken
-    let harness = Harness(
-      steps: [
-        .streamFailure(
-          okHead,
-          Fixtures.slowSuccess(),
-          ScriptedTransportFailure(message: "dropped mid-stream \(token)")
-        ),
-        .stream(okHead, Fixtures.basicSuccess()),
-      ]
-    )
+    let harness = Harness(steps: [
+      .streamFailure(
+        okHead,
+        Fixtures.slowSuccess(),
+        ScriptedTransportFailure(message: "dropped mid-stream \(token)")
+      ),
+      .stream(okHead, Fixtures.basicSuccess()),
+    ])
 
     // when
     let outcome = await harness.run()
@@ -545,8 +538,7 @@ import Testing
     #expect(await harness.attemptCount == 1)
     let failure = try #require(failureCause(outcome))
     #expect(
-      failure
-        == .transportFailure(message: "dropped mid-stream \(SecretRedactor.replacement)")
+      failure == .transportFailure(message: "dropped mid-stream \(SecretRedactor.replacement)")
     )
     #expect(Support.message(of: failure)?.contains(token) == false)
     #expect(Support.isConservative(Support.accounting(of: outcome)))
@@ -555,12 +547,10 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func anInvalidEncryptedContentAfterDataDoesNotTriggerRecovery() async throws {
     // given — the poisoned-state error arrives in-band, after a data byte has streamed
-    let harness = Harness(
-      steps: [
-        .stream(okHead, Fixtures.dataThenError(code: "invalid_encrypted_content")),
-        .stream(okHead, Fixtures.basicSuccess()),
-      ]
-    )
+    let harness = Harness(steps: [
+      .stream(okHead, Fixtures.dataThenError(code: "invalid_encrypted_content")),
+      .stream(okHead, Fixtures.basicSuccess()),
+    ])
 
     // when
     let outcome = await harness.run()
@@ -574,12 +564,10 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func aTerminalFreeStreamEOFIsConservativeAndNotRetried() async throws {
     // given — a 2xx stream that ends without ever stating an outcome
-    let harness = Harness(
-      steps: [
-        .stream(okHead, Fixtures.slowSuccess()),
-        .stream(okHead, Fixtures.basicSuccess()),
-      ]
-    )
+    let harness = Harness(steps: [
+      .stream(okHead, Fixtures.slowSuccess()),
+      .stream(okHead, Fixtures.basicSuccess()),
+    ])
 
     // when
     let outcome = await harness.run()
@@ -603,8 +591,7 @@ import Testing
         task?.cancel()
       }
       return await harness.run()
-    }
-    .value
+    }.value
 
     // then — no wire attempt, no debit
     #expect(await harness.attemptCount == 0)
@@ -725,7 +712,9 @@ private func runCredentialFailure(_ error: ChatGPTCredentialError) async -> LLMS
     credentials: ThrowingCredentialSource(error),
     http: ScriptedHTTPExecutor([]),
     clock: ScriptedClock { _ in },
-    jitter: { $0 },
+    jitter: {
+      $0
+    },
     retryBudget: 3,
     requestTimeoutSeconds: 30
   )
@@ -735,12 +724,11 @@ private func runCredentialFailure(_ error: ChatGPTCredentialError) async -> LLMS
     profileID: profileID,
     wireModel: "gpt-5",
     outputScope: nil,
-    terminalValidationPolicy: .firstTerminal,
-    encodeRequest: { _, _, _ in
-      Issue.record("no request should be encoded when authorization fails")
-      throw CancellationError()
-    }
-  )
+    terminalValidationPolicy: .firstTerminal
+  ) { _, _, _ in
+    Issue.record("no request should be encoded when authorization fails")
+    throw CancellationError()
+  }
   return await engine.run(plan: plan) { _ in }
 }
 
@@ -796,7 +784,9 @@ private struct Harness: Sendable {
     let normalEpoch = Support.fixedUUID("11111111-1111-1111-1111-111111111111")
     let recoveryEpoch = Support.fixedUUID("22222222-2222-2222-2222-222222222222")
 
-    let codec = ChatGPTProviderStateCodec(newEpoch: { recoveryEpoch })
+    let codec = ChatGPTProviderStateCodec {
+      recoveryEpoch
+    }
     self.normalIdentity = ChatGPTReplayIdentity(
       profileID: profileID,
       wireModel: wireModel,
@@ -830,23 +820,22 @@ private struct Harness: Sendable {
       profileID: profileID,
       wireModel: wireModel,
       outputScope: nil,
-      terminalValidationPolicy: terminalValidationPolicy,
-      encodeRequest: { authorization, includePriorState, beginHandoff in
-        stateLog.record(includePriorState)
-        return HTTPRequest(
-          method: .post,
-          url: "https://chatgpt.test/responses",
-          headers: authorization.headers,
-          body: Data("{}".utf8),
-          timeout: .seconds(requestTimeoutSeconds),
-          responseBodyPolicy: .streaming(
-            maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
-            errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
-          ),
-          beginHandoff: beginHandoff
-        )
-      }
-    )
+      terminalValidationPolicy: terminalValidationPolicy
+    ) { authorization, includePriorState, beginHandoff in
+      stateLog.record(includePriorState)
+      return HTTPRequest(
+        method: .post,
+        url: "https://chatgpt.test/responses",
+        headers: authorization.headers,
+        body: Data("{}".utf8),
+        timeout: .seconds(requestTimeoutSeconds),
+        responseBodyPolicy: .streaming(
+          maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
+          errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
+        ),
+        beginHandoff: beginHandoff
+      )
+    }
     self.stateLog = stateLog
 
     let clock = ScriptedClock { delay in
@@ -859,7 +848,9 @@ private struct Harness: Sendable {
       credentials: resolvedCredentials,
       http: http,
       clock: clock,
-      jitter: { $0 },
+      jitter: {
+        $0
+      },
       retryBudget: retryBudget,
       requestTimeoutSeconds: requestTimeoutSeconds,
       treatsQuotaAsTerminal: treatsQuotaAsTerminal
@@ -874,21 +865,13 @@ private struct Harness: Sendable {
     }
   }
 
-  var attemptCount: Int {
-    get async { await http.recorded.count }
-  }
+  var attemptCount: Int { get async { await http.recorded.count } }
 
-  var deltas: [String] {
-    get async { await sink.received }
-  }
+  var deltas: [String] { get async { await sink.received } }
 
-  var delays: [Double] {
-    get async { await sleeps.delays }
-  }
+  var delays: [Double] { get async { await sleeps.delays } }
 
-  var includePriorStateLog: [Bool] {
-    stateLog.values
-  }
+  var includePriorStateLog: [Bool] { stateLog.values }
 
   var credentialRejections: [GenerationRecordingCredentialSource.Rejection] {
     get async {
@@ -938,13 +921,9 @@ private actor GenerationRecordingCredentialSource: LLMCredentialSource {
 private struct ThrowingCredentialSource: LLMCredentialSource {
   private let error: ChatGPTCredentialError
 
-  init(_ error: ChatGPTCredentialError) {
-    self.error = error
-  }
+  init(_ error: ChatGPTCredentialError) { self.error = error }
 
-  func authorization() async throws -> LLMRequestAuthorization {
-    throw error
-  }
+  func authorization() async throws -> LLMRequestAuthorization { throw error }
 
   func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {}
 
@@ -957,9 +936,7 @@ private actor DeltaSink {
   private(set) var received: [String] = []
   private var firstFailure: (any Error)?
 
-  init(failOnFirstDelta: (any Error)?) {
-    self.firstFailure = failOnFirstDelta
-  }
+  init(failOnFirstDelta firstFailure: (any Error)?) { self.firstFailure = firstFailure }
 
   func emit(_ text: String) throws {
     if let failure = firstFailure {

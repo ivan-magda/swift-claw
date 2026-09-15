@@ -33,13 +33,11 @@ enum MCPTransportError: Error, Sendable, Equatable {
   /// The side-effect disposition the session retry classifier and owner-facing observation share.
   var callExecutionDisposition: MCPCallExecutionDisposition {
     switch self {
-    case .notConnected, .sessionExpired:
-      return .definitelyNotExecuted
+    case .notConnected, .sessionExpired: return .definitelyNotExecuted
     case .requestFailed(let failure):
-      return failure.disposition == .definitelyNotSent
-        ? .definitelyNotExecuted : .mayHaveExecuted
+      return failure.disposition == .definitelyNotSent ? .definitelyNotExecuted : .mayHaveExecuted
     case .httpStatus, .unsupportedContentType, .oversizedMessage, .receiveBufferOverflow,
-      .receiveStreamTerminated:
+         .receiveStreamTerminated:
       return .mayHaveExecuted
     }
   }
@@ -48,12 +46,9 @@ enum MCPTransportError: Error, Sendable, Equatable {
 extension MCPTransportError: CustomStringConvertible {
   var description: String {
     switch self {
-    case .notConnected:
-      return "MCP transport is not connected"
-    case .sessionExpired:
-      return "MCP session expired"
-    case .httpStatus(let code):
-      return "MCP server returned HTTP \(code)"
+    case .notConnected: return "MCP transport is not connected"
+    case .sessionExpired: return "MCP session expired"
+    case .httpStatus(let code): return "MCP server returned HTTP \(code)"
     case .unsupportedContentType(let value):
       return "MCP server returned an unsupported content type: \(Self.mediaTypeDescription(value))"
     case .oversizedMessage(let limitBytes):
@@ -62,8 +57,7 @@ extension MCPTransportError: CustomStringConvertible {
       return "MCP receive buffer exceeds the \(limitMessages)-message limit"
     case .receiveStreamTerminated:
       return "MCP receive stream ended before the response could be delivered"
-    case .requestFailed(let failure):
-      return "MCP request failed: \(failure.safeMessage)"
+    case .requestFailed(let failure): return "MCP request failed: \(failure.safeMessage)"
     }
   }
 
@@ -72,11 +66,15 @@ extension MCPTransportError: CustomStringConvertible {
   /// when it is shaped like a media type; anything else is named rather than quoted, and a server
   /// gets no channel for arbitrary text through a diagnostic.
   private static func mediaTypeDescription(_ raw: String) -> String {
-    let mediaType = raw.prefix { $0 != ";" }.trimmingCharacters(in: .whitespaces)
+    let mediaType = raw.prefix {
+      $0 != ";"
+    }.trimmingCharacters(in: .whitespaces)
     let parts = mediaType.split(separator: "/", omittingEmptySubsequences: false)
     let wellFormed =
       parts.count == 2 && mediaType.count <= 64
-      && parts.allSatisfy { $0.isEmpty == false && $0.allSatisfy(isMediaTypeCharacter) }
+        && parts.allSatisfy {
+          $0.isEmpty == false && $0.allSatisfy(isMediaTypeCharacter)
+        }
 
     return wellFormed ? mediaType : "unrecognized"
   }

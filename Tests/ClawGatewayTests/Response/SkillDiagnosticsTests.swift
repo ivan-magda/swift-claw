@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct SkillDiagnosticsTests {
-  @Test func renderIncludesAcceptedDescriptorsAndEveryRejectedWarning() throws {
+@Suite
+struct SkillDiagnosticsTests {
+  @Test
+  func renderIncludesAcceptedDescriptorsAndEveryRejectedWarning() throws {
     // given
     let scan = SkillScanResult(
       descriptors: [
@@ -43,7 +45,8 @@ import Testing
     }
   }
 
-  @Test func duplicateWarningNamesEveryClaimant() {
+  @Test
+  func duplicateWarningNamesEveryClaimant() {
     // given
     let warning = WorkspaceWarning.duplicateSkillName(
       name: "deploy",
@@ -63,7 +66,8 @@ import Testing
     #expect(rendered.contains("all of them skipped"))
   }
 
-  @Test func emptyScanRendersExplicitEmptySections() {
+  @Test
+  func emptyScanRendersExplicitEmptySections() {
     // given
     let diagnostics = SkillDiagnostics(
       scan: SkillScanResult(descriptors: [], warnings: []),
@@ -82,7 +86,8 @@ import Testing
     #expect(rendered.contains("Rejected (0)\nNone."))
   }
 
-  @Test func completeIndexEqualToTheCapFits() {
+  @Test
+  func completeIndexEqualToTheCapFits() {
     // given
     let scan = SkillScanResult(
       descriptors: [descriptor(name: "emoji", description: "Family 👨‍👩‍👧‍👦")],
@@ -98,7 +103,8 @@ import Testing
     #expect(diagnostics.fitsSkillsCap)
   }
 
-  @Test func completeIndexOneGraphemeOverTheCapDoesNotFit() {
+  @Test
+  func completeIndexOneGraphemeOverTheCapDoesNotFit() {
     // given
     let scan = SkillScanResult(
       descriptors: [descriptor(name: "emoji", description: "Family 👨‍👩‍👧‍👦")],
@@ -114,6 +120,8 @@ import Testing
     #expect(diagnostics.fitsSkillsCap == false)
   }
 }
+
+// MARK: - Skill Descriptor Fixtures
 
 private extension SkillDiagnosticsTests {
   func descriptor(name: String, description: String) -> SkillDescriptor {

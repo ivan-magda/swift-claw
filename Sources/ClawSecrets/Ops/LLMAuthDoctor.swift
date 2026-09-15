@@ -20,10 +20,8 @@ public enum LLMAuthDoctor {
   ) -> DoctorRowResult {
     let provider = "provider=\(route.descriptor.providerID)"
     switch route.descriptor.credentialMode {
-    case .noneOrStaticBearer:
-      return staticRow(provider: provider, staticAPIKey: staticAPIKey)
-    case .managedOAuth:
-      return oauthRow(provider: provider, store: credentialStore, now: now)
+    case .noneOrStaticBearer: return staticRow(provider: provider, staticAPIKey: staticAPIKey)
+    case .managedOAuth: return oauthRow(provider: provider, store: credentialStore, now: now)
     }
   }
 
@@ -38,12 +36,7 @@ public enum LLMAuthDoctor {
   ) -> DoctorRowResult {
     let store: (any LLMCredentialStore)? =
       route.descriptor.credentialMode == .managedOAuth ? makeManagedStore() : nil
-    return inspect(
-      route: route,
-      staticAPIKey: staticAPIKey,
-      credentialStore: store,
-      now: now
-    )
+    return inspect(route: route, staticAPIKey: staticAPIKey, credentialStore: store, now: now)
   }
 }
 
@@ -61,18 +54,14 @@ private extension LLMAuthDoctor {
 // MARK: - ChatGPT Route
 
 private extension LLMAuthDoctor {
-  static func oauthRow(
-    provider: String,
-    store: (any LLMCredentialStore)?,
-    now: Date
-  ) -> DoctorRowResult {
+  static func oauthRow(provider: String, store: (any LLMCredentialStore)?, now: Date)
+    -> DoctorRowResult
+  {
     guard let store else {
       return loggedOut(provider: provider)
     }
     let stored: StoredOAuthCredential?
-    do {
-      stored = try store.load(providerID: ChatGPTProviderMetadata.providerID)
-    } catch {
+    do { stored = try store.load(providerID: ChatGPTProviderMetadata.providerID) } catch {
       return unreadable(provider: provider, error: error)
     }
     guard let stored else {
@@ -99,21 +88,15 @@ private extension LLMAuthDoctor {
 
 private extension LLMAuthDoctor {
   static func loggedOut(provider: String) -> DoctorRowResult {
-    DoctorRowResult(
-      value: "\(provider) mode=oauth not logged in; run: clawd auth login",
-      ok: false
-    )
+    DoctorRowResult(value: "\(provider) mode=oauth not logged in; run: clawd auth login", ok: false)
   }
 
   /// A failing decrypt row. The store's error taxonomy is closed and path-free, so naming the reason
   /// is safe; the stored bytes never reach here, so nothing an owner should not see can.
-  static func unreadable(
-    provider: String,
-    error: LLMCredentialStoreError
-  ) -> DoctorRowResult {
+  static func unreadable(provider: String, error: LLMCredentialStoreError) -> DoctorRowResult {
     DoctorRowResult(
       value:
-        "\(provider) mode=oauth credential unreadable (\(reason(error))); run: clawd auth login",
+      "\(provider) mode=oauth credential unreadable (\(reason(error))); run: clawd auth login",
       ok: false
     )
   }

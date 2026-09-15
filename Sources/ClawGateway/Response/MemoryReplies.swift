@@ -9,9 +9,7 @@ enum MemoryReplies {
 
   static let snippetCapGraphemes = 60
 
-  static var rememberUsage: String {
-    "Usage: /remember [\(kindNames):] <text>"
-  }
+  static var rememberUsage: String { "Usage: /remember [\(kindNames):] <text>" }
 
   static var memoryUsage: String {
     "Usage: /memory [\(kindNames)] | /memory show <id> | /memory delete <id>"
@@ -21,10 +19,8 @@ enum MemoryReplies {
   static let cancelled = "Cancelled."
 
   /// Terminal owner-write failure copy: the pending intent was cleared; re-issue.
-  static let saveFailed =
-    "Couldn't save it. Nothing was written. Run /remember again."
-  static let deleteFailed =
-    "Couldn't delete it. Nothing changed. Run /memory delete <id> again."
+  static let saveFailed = "Couldn't save it. Nothing was written. Run /remember again."
+  static let deleteFailed = "Couldn't delete it. Nothing changed. Run /memory delete <id> again."
 
   /// `id` is nil only if a `MemoryCommandStore` violates its newlyClaimed-implies-item contract;
   /// the ack degrades instead of crashing the router.
@@ -35,13 +31,9 @@ enum MemoryReplies {
     return "Saved."
   }
 
-  static func deleted(id: Int64) -> String {
-    "Deleted memory \(id)."
-  }
+  static func deleted(id: Int64) -> String { "Deleted memory \(id)." }
 
-  static func notFound(id: Int64) -> String {
-    "No memory with id \(id)."
-  }
+  static func notFound(id: Int64) -> String { "No memory with id \(id)." }
 
   static func emptyReview(kind: MemoryKind?) -> String {
     if let kind {
@@ -57,7 +49,9 @@ enum MemoryReplies {
     var lines: [String] = []
 
     for kind in MemoryKind.allCases {
-      let groupedItems = limitedItems.filter { $0.kind == kind }
+      let groupedItems = limitedItems.filter {
+        $0.kind == kind
+      }
       guard groupedItems.isEmpty == false else {
         continue
       }
@@ -73,7 +67,7 @@ enum MemoryReplies {
 
   /// Full text and full provenance: kind, source, session, created, sensitivity.
   static func showItem(_ item: MemoryItem) -> String {
-    let sessionText = item.sessionId.map(String.init) ?? "none"
+    let sessionText = item.sessionID.map(String.init) ?? "none"
     let lines = [
       "Memory \(item.id): \(item.kind.rawValue)",
       "source: \(item.source.rawValue) · session: \(sessionText)",
@@ -115,7 +109,5 @@ enum MemoryReplies {
     return String(text.prefix(snippetCapGraphemes)) + "…"
   }
 
-  private static func formattedDayString(_ date: Date) -> String {
-    date.wallClockDay(in: .gmt)
-  }
+  private static func formattedDayString(_ date: Date) -> String { date.wallClockDay(in: .gmt) }
 }

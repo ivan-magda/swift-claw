@@ -14,24 +14,21 @@ struct SkillDiagnosticsCompositionTests {
     )
     defer { try? FileManager.default.removeItem(at: harness.config.stateRoot) }
     let workspaceRoot = EnvironmentLoader.workspaceRoot(config: harness.config)
-    let skillDirectory =
-      workspaceRoot
-      .appendingPathComponent(WorkspaceSkills.directoryName, isDirectory: true)
-      .appendingPathComponent("summarize", isDirectory: true)
+    let skillDirectory = workspaceRoot.appendingPathComponent(
+      WorkspaceSkills.directoryName,
+      isDirectory: true
+    ).appendingPathComponent("summarize", isDirectory: true)
 
     // when
     let before = harness.healthRow("context.skills")
-    try FileManager.default.createDirectory(
-      at: skillDirectory,
-      withIntermediateDirectories: true
-    )
+    try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
     let manifest = """
-      ---
-      name: summarize
-      description: Summarize owner-provided text.
-      ---
-      Follow the owner's requested summary format.
-      """
+    ---
+    name: summarize
+    description: Summarize owner-provided text.
+    ---
+    Follow the owner's requested summary format.
+    """
     try Data(manifest.utf8).write(
       to: skillDirectory.appendingPathComponent(WorkspaceSkills.manifestName)
     )

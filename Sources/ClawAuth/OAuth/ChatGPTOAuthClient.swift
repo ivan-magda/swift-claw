@@ -16,10 +16,7 @@ public struct ChatGPTOAuthClient: Sendable, ChatGPTOAuthRefreshing, ChatGPTOAuth
   private let http: any HTTPExecuting
   private let wallDate: @Sendable () -> Date
 
-  public init(
-    http: any HTTPExecuting,
-    wallDate: @escaping @Sendable () -> Date
-  ) {
+  public init(http: any HTTPExecuting, wallDate: @escaping @Sendable () -> Date) {
     self.http = http
     self.wallDate = wallDate
   }
@@ -42,10 +39,9 @@ public struct ChatGPTOAuthClient: Sendable, ChatGPTOAuthRefreshing, ChatGPTOAuth
   /// Both statuses the vendor answers a waiting device with are ordinary "not yet" — 403 alongside
   /// the 404 the endpoint returns before the authorization exists. Everything else is an answer, and
   /// answers are not waited on.
-  public func pollOnce(
-    device: ChatGPTDeviceCode,
-    timeout: Duration
-  ) async throws -> ChatGPTPollResult {
+  public func pollOnce(device: ChatGPTDeviceCode, timeout: Duration) async throws
+    -> ChatGPTPollResult
+  {
     // Both submitted values are redacted: a 4xx/5xx body may echo either, and either reaching a
     // diagnostic is a leak.
     let secrets = [device.deviceAuthID, device.userCode]
@@ -77,10 +73,9 @@ public struct ChatGPTOAuthClient: Sendable, ChatGPTOAuthRefreshing, ChatGPTOAuth
   }
 
   /// Spends an approved grant for the credential pair it stands for.
-  public func exchange(
-    grant: ChatGPTAuthorizationGrant,
-    timeout: Duration
-  ) async throws -> ChatGPTTokenPair {
+  public func exchange(grant: ChatGPTAuthorizationGrant, timeout: Duration) async throws
+    -> ChatGPTTokenPair
+  {
     guard
       let code = ChatGPTWireValues.controlFree(
         grant.authorizationCode,
@@ -107,10 +102,7 @@ public struct ChatGPTOAuthClient: Sendable, ChatGPTOAuthRefreshing, ChatGPTOAuth
   }
 
   /// Redeems a refresh token for a fresh pair.
-  public func refresh(
-    refreshToken: String,
-    timeout: Duration
-  ) async throws -> ChatGPTTokenPair {
+  public func refresh(refreshToken: String, timeout: Duration) async throws -> ChatGPTTokenPair {
     guard
       let token = ChatGPTWireValues.headerSafeToken(
         refreshToken,
@@ -188,11 +180,8 @@ private extension ChatGPTOAuthClient {
       )
     )
 
-    return try await ChatGPTProviderMetadata.execute(
-      request,
-      on: http,
-      redacting: secrets
-    ) { detail in
+    return try await ChatGPTProviderMetadata.execute(request, on: http, redacting: secrets) {
+      (detail) in
       ChatGPTOAuthFailure.transport(detail: detail)
     }
   }
@@ -215,12 +204,9 @@ private extension ChatGPTOAuthClient {
   /// sets describe what a *URL component* may hold rather than what a form field must escape: it
   /// leaves `+` alone, and a `+` inside a token would arrive at the server as a space.
   static func formBody(_ fields: [(name: String, value: String)]) -> Data {
-    let encoded =
-      fields
-      .map { field in
-        "\(percentEncoded(field.name))=\(percentEncoded(field.value))"
-      }
-      .joined(separator: "&")
+    let encoded = fields.map { field in
+      "\(percentEncoded(field.name))=\(percentEncoded(field.value))"
+    }.joined(separator: "&")
     return Data(encoded.utf8)
   }
 
@@ -238,14 +224,11 @@ private extension ChatGPTOAuthClient {
 
   static func isUnreserved(_ byte: UInt8) -> Bool {
     switch byte {
-    case UInt8(ascii: "A")...UInt8(ascii: "Z"),
-      UInt8(ascii: "a")...UInt8(ascii: "z"),
-      UInt8(ascii: "0")...UInt8(ascii: "9"):
+    case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"),
+         UInt8(ascii: "0")...UInt8(ascii: "9"):
       return true
-    case UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "_"), UInt8(ascii: "~"):
-      return true
-    default:
-      return false
+    case UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "_"), UInt8(ascii: "~"): return true
+    default: return false
     }
   }
 }
@@ -254,10 +237,9 @@ private extension ChatGPTOAuthClient {
 
 private extension ChatGPTOAuthClient {
   /// The decoded object of a successful response, or the typed failure a non-success one stands for.
-  static func successFields(
-    of response: HTTPResult,
-    redacting secrets: [String]
-  ) throws -> [String: JSONValue] {
+  static func successFields(of response: HTTPResult, redacting secrets: [String]) throws -> [String:
+    JSONValue]
+  {
     guard HTTPResponseBodyPolicy.isSuccess(response.statusCode) else {
       throw failure(for: response, redacting: secrets)
     }
@@ -273,10 +255,8 @@ private extension ChatGPTOAuthClient {
   /// What a non-success status means to a caller, which is not the same question as what it says.
   /// The status line is folded into the diagnostic before sanitizing, so one bound covers the whole
   /// text and the part we wrote cannot be the part that gets truncated away.
-  static func failure(
-    for response: HTTPResult,
-    redacting secrets: [String]
-  ) -> ChatGPTOAuthFailure {
+  static func failure(for response: HTTPResult, redacting secrets: [String]) -> ChatGPTOAuthFailure
+  {
     // Lossy on purpose: a diagnostic body that is not valid UTF-8 is still a diagnostic, and a
     // failable read would answer a broken vendor with silence.
     // swiftlint:disable:next optional_data_string_conversion
@@ -287,12 +267,9 @@ private extension ChatGPTOAuthClient {
     )
 
     switch response.statusCode {
-    case Wire.throttledStatus:
-      return .throttled(retryAfter: retryAfter(of: response))
-    case Wire.timeoutStatus, Wire.serverErrorStatuses:
-      return .transport(detail: detail)
-    default:
-      return .grantRejected(detail: detail)
+    case Wire.throttledStatus: return .throttled(retryAfter: retryAfter(of: response))
+    case Wire.timeoutStatus, Wire.serverErrorStatuses: return .transport(detail: detail)
+    default: return .grantRejected(detail: detail)
     }
   }
 
@@ -305,7 +282,7 @@ private extension ChatGPTOAuthClient {
   /// them.
   static func retryAfter(of response: HTTPResult) -> Duration? {
     guard
-      let raw = response.getHeader(for: Wire.retryAfterHeader),
+      let raw = response.header(for: Wire.retryAfterHeader),
       let seconds = ChatGPTWireValues.positiveInteger(.string(raw))
     else {
       return nil
@@ -361,9 +338,7 @@ private extension ChatGPTOAuthClient {
   /// What the vendor asked for, or the pinned interval when it asked for nothing this flow can act
   /// on. How much of it is actually waited is the caller's decision, not this one's.
   static func pollInterval(from fields: [String: JSONValue]) -> Duration {
-    guard
-      let value = fields[Wire.interval],
-      let seconds = ChatGPTWireValues.positiveInteger(value)
+    guard let value = fields[Wire.interval], let seconds = ChatGPTWireValues.positiveInteger(value)
     else {
       return ChatGPTProviderMetadata.defaultPollInterval
     }
@@ -383,11 +358,9 @@ private extension ChatGPTOAuthClient {
 // MARK: - Token Pairs
 
 private extension ChatGPTOAuthClient {
-  func tokenPair(
-    from body: Data,
-    redacting secrets: [String],
-    timeout: Duration
-  ) async throws -> ChatGPTTokenPair {
+  func tokenPair(from body: Data, redacting secrets: [String], timeout: Duration) async throws
+    -> ChatGPTTokenPair
+  {
     let response = try await send(
       to: ChatGPTProviderMetadata.tokenURL,
       contentType: Wire.formContentType,
@@ -422,11 +395,7 @@ private extension ChatGPTOAuthClient {
       )
     }
 
-    return ChatGPTTokenPair(
-      accessToken: accessToken,
-      refreshToken: rotated,
-      expiresAt: expiresAt
-    )
+    return ChatGPTTokenPair(accessToken: accessToken, refreshToken: rotated, expiresAt: expiresAt)
   }
 
   /// A rotated token, or none. Absent means "the one you hold still stands"; present but unusable is
@@ -434,8 +403,7 @@ private extension ChatGPTOAuthClient {
   /// already retired what the caller holds.
   static func rotatedRefreshToken(from fields: [String: JSONValue]) throws -> String? {
     switch fields[Wire.refreshToken] {
-    case nil, .null?:
-      return nil
+    case nil, .null?: return nil
     case .string(let raw)?:
       guard
         let token = ChatGPTWireValues.headerSafeToken(
@@ -475,9 +443,7 @@ private extension ChatGPTOAuthClient {
 
   /// How long the vendor says the token has, when it says anything this flow can act on.
   static func statedLifetime(from fields: [String: JSONValue]) -> TimeInterval? {
-    guard
-      let value = fields[Wire.expiresIn],
-      let seconds = ChatGPTWireValues.positiveInteger(value)
+    guard let value = fields[Wire.expiresIn], let seconds = ChatGPTWireValues.positiveInteger(value)
     else {
       return nil
     }

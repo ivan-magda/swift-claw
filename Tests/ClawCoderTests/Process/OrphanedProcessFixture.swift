@@ -3,13 +3,13 @@ import Foundation
 import Subprocess
 import Testing
 
-@testable import ClawCoder
-
 #if canImport(System)
   import System
 #else
   import SystemPackage
 #endif
+
+@testable import ClawCoder
 
 enum OrphanedProcessFixture {
   static func reapLeader(of fixture: ProcessFixture) async throws -> CoderProcessReceipt {

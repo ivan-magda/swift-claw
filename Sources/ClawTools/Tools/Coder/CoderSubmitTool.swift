@@ -15,12 +15,11 @@ public struct CoderSubmitTool: Tool {
   public var definition: ToolDefinition {
     ToolDefinition(
       name: CoderToolNames.submit,
-      description:
-        """
-        Request approval to delegate a repository task to the owner's native Codex \
-        as a background job.
-        Select workspace and publication scope through the structured fields.
-        """,
+      description: """
+      Request approval to delegate a repository task to the owner's native Codex \
+      as a background job.
+      Select workspace and publication scope through the structured fields.
+      """,
       parameters: CoderSubmitArguments.schema,
       metadataProvenance: .trusted,
       egressClass: .none,
@@ -57,15 +56,10 @@ public struct CoderSubmitTool: Tool {
           approvalReason: .coderSubmit
         )
       )
-    } catch {
-      return .refused(reason: CoderToolOutput.failure(error, redactor: redactor).content)
-    }
+    } catch { return .refused(reason: CoderToolOutput.failure(error, redactor: redactor).content) }
   }
 
-  public func execute(
-    arguments: JSONValue,
-    canonicalTarget: String?
-  ) async -> ToolPayload {
+  public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     CoderToolOutput.missingContext
   }
 
@@ -74,11 +68,12 @@ public struct CoderSubmitTool: Tool {
     canonicalTarget: String?,
     context: ToolExecutionContext?
   ) async -> ToolPayload {
-    guard let context, context.approvalId != nil else {
+    guard let context, context.approvalID != nil else {
       return CoderToolOutput.missingContext
     }
 
-    guard let canonical = CanonicalJSON.encode(arguments),
+    guard
+      let canonical = CanonicalJSON.encode(arguments),
       let prepared = try? JSONDecoder().decode(
         CoderPreparedRequest.self,
         from: Data(canonical.utf8)
@@ -92,9 +87,7 @@ public struct CoderSubmitTool: Tool {
     do {
       let job = try await service.submit(prepared, context: context)
       return CoderToolOutput.job(job, redactor: redactor)
-    } catch {
-      return CoderToolOutput.failure(error, redactor: redactor)
-    }
+    } catch { return CoderToolOutput.failure(error, redactor: redactor) }
   }
 }
 
@@ -106,10 +99,7 @@ private extension CoderSubmitTool {
 
     let source: String
     switch request.source {
-    case .local(let value),
-      .githubRepository(let value),
-      .githubIssue(let value):
-      source = value
+    case .local(let value), .githubRepository(let value), .githubIssue(let value): source = value
     }
 
     var texts = [source, request.task, request.instructions, request.startRef]
@@ -129,10 +119,9 @@ private extension CoderSubmitTool {
 // MARK: - Approval Presentation
 
 extension CoderSubmitTool {
-  static func presentation(
-    _ prepared: CoderPreparedRequest,
-    redactor: SecretRedactor
-  ) -> ToolApprovalPresentation {
+  static func presentation(_ prepared: CoderPreparedRequest, redactor: SecretRedactor)
+    -> ToolApprovalPresentation
+  {
     let request = prepared.request
 
     let source: String
@@ -144,13 +133,11 @@ extension CoderSubmitTool {
 
     let workspace =
       request.workspace == .inPlace
-      ? "In place — existing branch and working files"
-      : "Separate copy — committed history only"
+        ? "In place — existing branch and working files" : "Separate copy — committed history only"
 
     let start =
       request.workspace == .inPlace
-      ? "Current checkout HEAD"
-      : request.startRef ?? "Source HEAD / remote default branch"
+        ? "Current checkout HEAD" : request.startRef ?? "Source HEAD / remote default branch"
 
     let fields = [
       ("Source", source),
@@ -171,13 +158,14 @@ extension CoderSubmitTool {
     ]
 
     let scope = fields.map { label, value in
-      CoderCardMarkdown.field(label, redactor.redact(value))
+      CoderCardMarkdown.field(label: label, value: redactor.redact(value))
     }.joined(separator: "\n\n")
 
     let task =
       request.task.map { value in
         CoderCardMarkdown.literal(redactor.redact(value))
-      } ?? "Use the selected GitHub issue as the task; no additional task text supplied."
+      }
+      ?? "Use the selected GitHub issue as the task; no additional task text supplied."
 
     var preview = "### Task\n\n\(task)"
     let instructions = request.instructions ?? ""
@@ -193,7 +181,7 @@ extension CoderSubmitTool {
         """
         Uses your trusted native Codex installation, credentials and configured integrations. \
         Inference leaves this machine; the working directory is not a security sandbox.
-        """
+        """,
       ]
     )
   }

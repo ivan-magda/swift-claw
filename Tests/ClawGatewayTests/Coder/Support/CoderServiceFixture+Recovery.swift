@@ -18,12 +18,12 @@ extension CoderServiceFixture {
   func seedUnfinished(receipt: CoderProcessReceipt? = nil) throws -> UUID {
     let id = UUID()
     let origin = CoderOrigin(
-      runID: ownerContext.runId,
-      sessionID: ownerContext.sessionId,
-      requesterUserID: try #require(ownerContext.requesterUserId),
-      chatID: ownerContext.chatId,
-      toolCallID: ownerContext.toolCallId,
-      approvalID: try #require(ownerContext.approvalId)
+      runID: ownerContext.runID,
+      sessionID: ownerContext.sessionID,
+      requesterUserID: try #require(ownerContext.requesterUserID),
+      chatID: ownerContext.chatID,
+      toolCallID: ownerContext.toolCallID,
+      approvalID: try #require(ownerContext.approvalID)
     )
     let admission = try store.admit(
       id: id,

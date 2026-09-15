@@ -6,27 +6,20 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
   private let database: MappedDatabase
   private let afterClaimForTesting: @Sendable () throws -> Void
 
-  public init(writer: any DatabaseWriter) {
-    self.init(writer: writer, afterClaimForTesting: {})
-  }
+  public init(writer: any DatabaseWriter) { self.init(writer: writer) {} }
 
-  init(
-    writer: any DatabaseWriter,
-    afterClaimForTesting: @Sendable @escaping () throws -> Void
-  ) {
+  init(writer: any DatabaseWriter, afterClaimForTesting: @Sendable @escaping () throws -> Void) {
     database = MappedDatabase(writer: writer)
     self.afterClaimForTesting = afterClaimForTesting
   }
 
-  public func applyRemember(
-    updateId: Int64,
-    item: NewMemoryItem,
-    now: Date
-  ) throws(StoreError) -> MemoryCommandResult {
+  public func applyRemember(updateID: Int64, item: NewMemoryItem, now: Date) throws(StoreError)
+    -> MemoryCommandResult
+  {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
-        updateId: updateId,
+        updateID: updateID,
         claimedAt: now
       )
       guard newlyClaimed else {
@@ -44,7 +37,7 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
           action: .memoryWrite,
           argsRedacted: "/remember",
           decision: "remembered",
-          sessionId: item.sessionId,
+          sessionID: item.sessionID,
           ts: now
         )
       )
@@ -53,15 +46,13 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
     }
   }
 
-  public func applyForget(
-    updateId: Int64,
-    itemId: Int64,
-    now: Date
-  ) throws(StoreError) -> MemoryCommandResult {
+  public func applyForget(updateID: Int64, itemID: Int64, now: Date) throws(StoreError)
+    -> MemoryCommandResult
+  {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
-        updateId: updateId,
+        updateID: updateID,
         claimedAt: now
       )
       guard newlyClaimed else {
@@ -70,7 +61,7 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
 
       try afterClaimForTesting()
 
-      try db.execute(sql: "DELETE FROM memory_items WHERE id = ?", arguments: [itemId])
+      try db.execute(sql: "DELETE FROM memory_items WHERE id = ?", arguments: [itemID])
       let didDelete = db.changesCount > 0
 
       try AuditLogGRDB.insertAudit(
@@ -80,7 +71,7 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
           action: .memoryDelete,
           argsRedacted: "/memory delete",
           decision: didDelete ? "deleted" : "absent",
-          sessionId: nil,
+          sessionID: nil,
           ts: now
         )
       )

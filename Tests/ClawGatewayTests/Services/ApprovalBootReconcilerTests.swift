@@ -12,16 +12,17 @@ import Testing
 
 // The time limit converts a rendezvous regression (a park that never happens) into a bounded
 // failure — the spy's continuation waits would otherwise hang the whole test run silently.
-@Suite(.timeLimit(.minutes(1))) struct ApprovalBootReconcilerTests {
+@Suite(.timeLimit(.minutes(1)))
+struct ApprovalBootReconcilerTests {
   /// Records every `park` and models the real waiter: it registers with the coordinator and awaits
   /// resolution, so the lane stays held until the row resolves. All rendezvous are continuation-based
   /// (never a sleep or a spin) so the suite is deterministic at nproc=1.
   private actor ParkingSpy: ApprovalParking {
     struct Call: Sendable, Equatable {
-      let approvalId: Int64
-      let runId: Int64
-      let sessionId: Int64
-      let chatId: Int64
+      let approvalID: Int64
+      let runID: Int64
+      let sessionID: Int64
+      let chatID: Int64
       let revalidate: Bool
     }
 
@@ -33,31 +34,29 @@ import Testing
     private var resolvedSignals: [Int64: ApprovalSignal] = [:]
     private var resolutionWaiters: [Int64: [CheckedContinuation<ApprovalSignal, Never>]] = [:]
 
-    init(coordinator: ApprovalCoordinator) {
-      self.coordinator = coordinator
-    }
+    init(coordinator: ApprovalCoordinator) { self.coordinator = coordinator }
 
     func park(
-      approvalId: Int64,
-      runId: Int64,
-      sessionId: Int64,
-      chatId: Int64,
+      approvalID: Int64,
+      runID: Int64,
+      sessionID: Int64,
+      chatID: Int64,
       revalidatePolicyOnApprove: Bool
     ) async {
       let call = Call(
-        approvalId: approvalId,
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
+        approvalID: approvalID,
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
         revalidate: revalidatePolicyOnApprove
       )
       deliver(call)
       // `awaitResolution` returns nil only on cancellation (never in these tests); guard mirrors the
       // real `ApprovalWaiter.park`, which exits cleanly on a nil resolution.
-      guard let signal = await coordinator.awaitResolution(approvalId: approvalId) else {
+      guard let signal = await coordinator.awaitResolution(approvalID: approvalID) else {
         return
       }
-      recordResolution(signal, for: approvalId)
+      recordResolution(signal, for: approvalID)
     }
 
     /// Suspends until the next `park` lands — the deterministic "the boot-parked waiter registered
@@ -71,13 +70,13 @@ import Testing
       }
     }
 
-    /// Suspends until the parked waiter for `approvalId` observes its coordinator resolution.
-    func awaitParkResolution(of approvalId: Int64) async -> ApprovalSignal {
-      if let signal = resolvedSignals[approvalId] {
+    /// Suspends until the parked waiter for `approvalID` observes its coordinator resolution.
+    func awaitParkResolution(of approvalID: Int64) async -> ApprovalSignal {
+      if let signal = resolvedSignals[approvalID] {
         return signal
       }
       return await withCheckedContinuation { continuation in
-        resolutionWaiters[approvalId, default: []].append(continuation)
+        resolutionWaiters[approvalID, default: []].append(continuation)
       }
     }
 
@@ -92,10 +91,10 @@ import Testing
       }
     }
 
-    private func recordResolution(_ signal: ApprovalSignal, for approvalId: Int64) {
-      resolvedSignals[approvalId] = signal
-      let waiters = resolutionWaiters[approvalId] ?? []
-      resolutionWaiters[approvalId] = nil
+    private func recordResolution(_ signal: ApprovalSignal, for approvalID: Int64) {
+      resolvedSignals[approvalID] = signal
+      let waiters = resolutionWaiters[approvalID] ?? []
+      resolutionWaiters[approvalID] = nil
       for waiter in waiters {
         waiter.resume(returning: signal)
       }
@@ -129,7 +128,7 @@ import Testing
     let queue: DatabaseQueue
     let store: ApprovalStoreGRDB
 
-    let sessionId: Int64
+    let sessionID: Int64
 
     let lanes: SessionLaneRegistry
     let coordinator: ApprovalCoordinator
@@ -143,7 +142,9 @@ import Testing
         lanes: lanes,
         coordinator: coordinator,
         waiter: spy,
-        now: { instant },
+        now: {
+          instant
+        },
         logger: TestLog.silent
       )
     }
@@ -159,12 +160,9 @@ import Testing
     }
 
     @discardableResult
-    func insertApproval(
-      runId: Int64,
-      nonce: String,
-      createdTs: Date,
-      expiresTs: Date
-    ) throws -> Int64 {
+    func insertApproval(runID: Int64, nonce: String, createdTs: Date, expiresTs: Date) throws
+      -> Int64
+    {
       let canonicalArgsJSON = #"{"path":"/w/plan.md"}"#
       // Production's suspend commit always inserts the placeholder observation row the approval
       // points back at (§5.3), and `unresolvedAtBoot`'s crash-window arm keys on that placeholder
@@ -172,24 +170,24 @@ import Testing
       return try queue.write { db in
         try db.execute(
           sql: """
-            INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-            VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
-            """,
-          arguments: [runId, RunStoreGRDB.placeholderObservationContent, Date()]
+          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+          VALUES (1, ?, 'tool', ?, 'untrusted', ?, 'c1')
+          """,
+          arguments: [runID, RunStoreGRDB.placeholderObservationContent, Date()]
         )
-        let observationMessageId = db.lastInsertedRowID
+        let observationMessageID = db.lastInsertedRowID
         let newApproval = NewApproval(
-          runId: runId,
-          sessionId: 1,
+          runID: runID,
+          sessionID: 1,
           tool: "file_write",
           canonicalArgsJSON: canonicalArgsJSON,
           canonicalTarget: "/w/plan.md",
           argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
           policyVersion: "pv16",
-          ownerUserId: 7,
+          ownerUserID: 7,
           nonce: nonce,
-          observationMessageId: observationMessageId,
-          toolCallId: "c1",
+          observationMessageID: observationMessageID,
+          toolCallID: "c1",
           reason: .askTier,
           createdTs: createdTs,
           expiresTs: expiresTs
@@ -200,14 +198,14 @@ import Testing
 
     func audits() throws -> [(action: String, decision: String)] {
       try queue.read { db in
-        try Row.fetchAll(db, sql: "SELECT action, decision FROM audit_events ORDER BY id")
-          .map { row in (action: row["action"], decision: row["decision"]) }
+        try Row.fetchAll(db, sql: "SELECT action, decision FROM audit_events ORDER BY id").map {
+          (row) in
+          (action: row["action"], decision: row["decision"])
+        }
       }
     }
 
-    func approvalState(_ id: Int64) throws -> ApprovalState? {
-      try store.approval(id: id)?.state
-    }
+    func approvalState(_ id: Int64) throws -> ApprovalState? { try store.approval(id: id)?.state }
   }
 
   private func makeFixture() throws -> Fixture {
@@ -215,9 +213,9 @@ import Testing
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-          VALUES ('tg:dm:7', ?, ?, 0)
-          """,
+        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+        VALUES ('tg:dm:7', ?, ?, 0)
+        """,
         arguments: [Date(), Date()]
       )
     }
@@ -225,21 +223,22 @@ import Testing
     return Fixture(
       queue: queue,
       store: ApprovalStoreGRDB(writer: queue),
-      sessionId: 1,
+      sessionID: 1,
       lanes: SessionLaneRegistry(),
       coordinator: coordinator,
       spy: ParkingSpy(coordinator: coordinator)
     )
   }
 
-  @Test func approvedClaimedRunIsSettledInPlaceWithoutAPark() async throws {
+  @Test
+  func approvedClaimedRunIsSettledInPlaceWithoutAPark() async throws {
     // given — the §6.6 claimed crash window after the orphan sweep: the claim committed and the
     // process died before the result record, so boot finds run FAILED + APPROVED row + placeholder
     let env = try makeFixture()
     let claimedRun = try env.seedRun(state: RunState.failed.rawValue)
     let now = Date(timeIntervalSince1970: 1_782_000_000)
-    let approvalId = try env.insertApproval(
-      runId: claimedRun,
+    let approvalID = try env.insertApproval(
+      runID: claimedRun,
       nonce: "n-claimed",
       createdTs: now,
       expiresTs: now.addingTimeInterval(3600)
@@ -247,7 +246,7 @@ import Testing
     try await env.queue.write { db in
       try db.execute(
         sql: "UPDATE approvals SET state = 'APPROVED' WHERE id = ?",
-        arguments: [approvalId]
+        arguments: [approvalID]
       )
     }
 
@@ -277,21 +276,22 @@ import Testing
     #expect(notice?.contains("file_write") == true)
   }
 
-  @Test func terminalRunPendingApprovalIsResolvedWithNoOrphan() async throws {
+  @Test
+  func terminalRunPendingApprovalIsResolvedWithNoOrphan() async throws {
     // given — a PENDING approval whose run already FAILED (a restart orphan) plus one genuinely
     // parked approval, so we prove only the orphan is cleaned and the parked row is left alone
     let env = try makeFixture()
     let failedRun = try env.seedRun(state: RunState.failed.rawValue)
     let parkedRun = try env.seedRun(state: RunState.awaitingApproval.rawValue)
     let now = Date(timeIntervalSince1970: 1_782_000_000)
-    let orphanId = try env.insertApproval(
-      runId: failedRun,
+    let orphanID = try env.insertApproval(
+      runID: failedRun,
       nonce: "n-orphan",
       createdTs: now,
       expiresTs: now.addingTimeInterval(3600)
     )
-    let keptId = try env.insertApproval(
-      runId: parkedRun,
+    let keptID = try env.insertApproval(
+      runID: parkedRun,
       nonce: "n-kept",
       createdTs: now,
       expiresTs: now.addingTimeInterval(3600)
@@ -302,23 +302,23 @@ import Testing
     _ = await env.spy.nextParkCall()
 
     // then — the terminal-run orphan is REJECTED/cancelled; the parked row stays PENDING for re-park
-    #expect(try env.approvalState(orphanId) == .rejected)
-    #expect(try env.approvalState(keptId) == .pending)
+    #expect(try env.approvalState(orphanID) == .rejected)
+    #expect(try env.approvalState(keptID) == .pending)
     #expect(
-      try env.audits()
-        .contains {
-          $0 == (AuditAction.approvalDenied.rawValue, ApprovalDecision.cancelled.rawValue)
-        }
+      try env.audits().contains {
+        $0 == (AuditAction.approvalDenied.rawValue, ApprovalDecision.cancelled.rawValue)
+      }
     )
   }
 
-  @Test func unexpiredPendingReParksAndResolvesViaTheBootParkedWaiter() async throws {
+  @Test
+  func unexpiredPendingReParksAndResolvesViaTheBootParkedWaiter() async throws {
     // given — one unexpired PENDING approval on an AWAITING_APPROVAL run (the reopened suspended DB)
     let env = try makeFixture()
-    let runId = try env.seedRun(state: RunState.awaitingApproval.rawValue)
+    let runID = try env.seedRun(state: RunState.awaitingApproval.rawValue)
     let now = Date(timeIntervalSince1970: 1_782_000_000)
-    let approvalId = try env.insertApproval(
-      runId: runId,
+    let approvalID = try env.insertApproval(
+      runID: runID,
       nonce: "n-live",
       createdTs: now,
       expiresTs: now.addingTimeInterval(3600)
@@ -330,31 +330,32 @@ import Testing
 
     // then — re-parked on the run's session lane, chatId = the approval's delivery chat (§4.4), and
     // NOT under crash-window re-validation (the row is still PENDING)
-    #expect(call.approvalId == approvalId)
-    #expect(call.runId == runId)
-    #expect(call.sessionId == env.sessionId)
-    #expect(call.chatId == 7)
+    #expect(call.approvalID == approvalID)
+    #expect(call.runID == runID)
+    #expect(call.sessionID == env.sessionID)
+    #expect(call.chatID == 7)
     #expect(call.revalidate == false)
-    #expect(try env.approvalState(approvalId) == .pending)
+    #expect(try env.approvalState(approvalID) == .pending)
 
     // and — a live callback (approve CAS + coordinator signal) still resolves through the
     // boot-parked waiter after restart: buttons survive the reboot
-    let outcome = try env.store.approve(id: approvalId, currentPolicyVersion: "pv16", now: now)
+    let outcome = try env.store.approve(id: approvalID, currentPolicyVersion: "pv16", now: now)
     guard case .approved = outcome else {
       Issue.record("expected the callback approve CAS to commit, got \(outcome)")
       return
     }
-    await env.coordinator.signal(approvalId: approvalId, .approved)
-    #expect(await env.spy.awaitParkResolution(of: approvalId) == .approved)
+    await env.coordinator.signal(.approved, forApprovalID: approvalID)
+    #expect(await env.spy.awaitParkResolution(of: approvalID) == .approved)
   }
 
-  @Test func aPlainMessageQueuesBehindTheReParkedLane() async throws {
+  @Test
+  func aPlainMessageQueuesBehindTheReParkedLane() async throws {
     // given — an unexpired parked approval, re-parked at boot; the waiter now holds the session lane
     let env = try makeFixture()
-    let runId = try env.seedRun(state: RunState.awaitingApproval.rawValue)
+    let runID = try env.seedRun(state: RunState.awaitingApproval.rawValue)
     let now = Date(timeIntervalSince1970: 1_782_000_000)
-    let approvalId = try env.insertApproval(
-      runId: runId,
+    let approvalID = try env.insertApproval(
+      runID: runID,
       nonce: "n-fifo",
       createdTs: now,
       expiresTs: now.addingTimeInterval(3600)
@@ -364,7 +365,7 @@ import Testing
 
     // when — a plain message lands on the SAME session lane after the restart
     let follower = FollowerFlag()
-    _ = await env.lanes.enqueue(sessionID: env.sessionId, runID: runId &+ 1_000) {
+    _ = await env.lanes.enqueue(sessionID: env.sessionID, runID: runID + 1_000) {
       await follower.markRan()
     }
 
@@ -373,18 +374,19 @@ import Testing
     #expect(await follower.ran == false)
 
     // and — once the approval resolves, the queued message runs
-    await env.coordinator.signal(approvalId: approvalId, .approved)
+    await env.coordinator.signal(.approved, forApprovalID: approvalID)
     await follower.awaitRan()
     #expect(await follower.ran == true)
   }
 
-  @Test func expiredPendingIsSweptToDenyAndDrivesTheParkedWaiter() async throws {
+  @Test
+  func expiredPendingIsSweptToDenyAndDrivesTheParkedWaiter() async throws {
     // given — a PENDING approval whose expires_ts already passed while the process was down
     let env = try makeFixture()
-    let runId = try env.seedRun(state: RunState.awaitingApproval.rawValue)
+    let runID = try env.seedRun(state: RunState.awaitingApproval.rawValue)
     let now = Date(timeIntervalSince1970: 1_782_010_000)
-    let approvalId = try env.insertApproval(
-      runId: runId,
+    let approvalID = try env.insertApproval(
+      runID: runID,
       nonce: "n-expired",
       createdTs: now.addingTimeInterval(-7200),
       expiresTs: now.addingTimeInterval(-60)
@@ -397,22 +399,24 @@ import Testing
     // then — the §6.4 expiry path: CAS PENDING→EXPIRED + approvalDenied/expired audited here, and the
     // parked waiter consumes the buffered denial so it can drive the run AWAITING_APPROVAL→FAILED
     #expect(call.revalidate == false)
-    #expect(try env.approvalState(approvalId) == .expired)
-    #expect(await env.spy.awaitParkResolution(of: approvalId) == .denied(.expired))
+    #expect(try env.approvalState(approvalID) == .expired)
+    #expect(await env.spy.awaitParkResolution(of: approvalID) == .denied(.expired))
     #expect(
-      try env.audits()
-        .contains { $0 == (AuditAction.approvalDenied.rawValue, ApprovalDecision.expired.rawValue) }
+      try env.audits().contains {
+        $0 == (AuditAction.approvalDenied.rawValue, ApprovalDecision.expired.rawValue)
+      }
     )
   }
 
-  @Test func approvedAwaitingRunReParksUnderCrashWindowRevalidation() async throws {
+  @Test
+  func approvedAwaitingRunReParksUnderCrashWindowRevalidation() async throws {
     // given — the §6.5 crash window: the row was granted, the process died before execution, so boot
     // finds an APPROVED row on an AWAITING_APPROVAL run
     let env = try makeFixture()
-    let runId = try env.seedRun(state: RunState.awaitingApproval.rawValue)
+    let runID = try env.seedRun(state: RunState.awaitingApproval.rawValue)
     let now = Date(timeIntervalSince1970: 1_782_000_000)
-    let approvalId = try env.insertApproval(
-      runId: runId,
+    let approvalID = try env.insertApproval(
+      runID: runID,
       nonce: "n-crash",
       createdTs: now,
       expiresTs: now.addingTimeInterval(3600)
@@ -420,7 +424,7 @@ import Testing
     try await env.queue.write { db in
       try db.execute(
         sql: "UPDATE approvals SET state = 'APPROVED' WHERE id = ?",
-        arguments: [approvalId]
+        arguments: [approvalID]
       )
     }
 
@@ -432,23 +436,24 @@ import Testing
     // waiter re-validates policy_version before executing (or fails the RUN on mismatch, §6.5). The
     // row STAYS APPROVED — the boot re-validation is the waiter's job, never the reconciler's
     #expect(call.revalidate == true)
-    #expect(try env.approvalState(approvalId) == .approved)
-    #expect(await env.spy.awaitParkResolution(of: approvalId) == .approved)
+    #expect(try env.approvalState(approvalID) == .approved)
+    #expect(await env.spy.awaitParkResolution(of: approvalID) == .approved)
   }
 }
 
 // MARK: - Deny-Side Crash Window
 
 extension ApprovalBootReconcilerTests {
-  @Test func rejectedAwaitingRunIsReParkedWithTheBufferedDenial() async throws {
+  @Test
+  func rejectedAwaitingRunIsReParkedWithTheBufferedDenial() async throws {
     // given — the deny-side crash window: the reject CAS (+ its approvalDenied audit) committed,
     // but the process died before the waiter's observation-fill/run-fail commit, so boot finds a
     // REJECTED approval on a still-AWAITING_APPROVAL run
     let env = try makeFixture()
-    let runId = try env.seedRun(state: RunState.awaitingApproval.rawValue)
+    let runID = try env.seedRun(state: RunState.awaitingApproval.rawValue)
     let now = Date(timeIntervalSince1970: 1_782_000_000)
-    let approvalId = try env.insertApproval(
-      runId: runId,
+    let approvalID = try env.insertApproval(
+      runID: runID,
       nonce: "n-rejected",
       createdTs: now,
       expiresTs: now.addingTimeInterval(3600)
@@ -456,7 +461,7 @@ extension ApprovalBootReconcilerTests {
     try await env.queue.write { db in
       try db.execute(
         sql: "UPDATE approvals SET state = 'REJECTED' WHERE id = ?",
-        arguments: [approvalId]
+        arguments: [approvalID]
       )
     }
 
@@ -467,21 +472,22 @@ extension ApprovalBootReconcilerTests {
     // then — finalized, not ignored: re-parked without re-validation and the generic denial
     // buffered so the waiter drives the run AWAITING_APPROVAL→FAILED. The row STAYS REJECTED and
     // no new audit lands — the pre-crash CAS already recorded both
-    #expect(call.approvalId == approvalId)
+    #expect(call.approvalID == approvalID)
     #expect(call.revalidate == false)
-    #expect(await env.spy.awaitParkResolution(of: approvalId) == .denied(.rejected))
-    #expect(try env.approvalState(approvalId) == .rejected)
+    #expect(await env.spy.awaitParkResolution(of: approvalID) == .denied(.rejected))
+    #expect(try env.approvalState(approvalID) == .rejected)
     #expect(try env.audits().isEmpty)
   }
 
-  @Test func expiredAwaitingRunIsReParkedWithTheBufferedDenial() async throws {
+  @Test
+  func expiredAwaitingRunIsReParkedWithTheBufferedDenial() async throws {
     // given — the same deny-side crash window for a row the expiry CAS resolved before the crash:
     // an EXPIRED approval on a still-AWAITING_APPROVAL run
     let env = try makeFixture()
-    let runId = try env.seedRun(state: RunState.awaitingApproval.rawValue)
+    let runID = try env.seedRun(state: RunState.awaitingApproval.rawValue)
     let now = Date(timeIntervalSince1970: 1_782_010_000)
-    let approvalId = try env.insertApproval(
-      runId: runId,
+    let approvalID = try env.insertApproval(
+      runID: runID,
       nonce: "n-expired-cas",
       createdTs: now.addingTimeInterval(-7200),
       expiresTs: now.addingTimeInterval(-60)
@@ -489,7 +495,7 @@ extension ApprovalBootReconcilerTests {
     try await env.queue.write { db in
       try db.execute(
         sql: "UPDATE approvals SET state = 'EXPIRED' WHERE id = ?",
-        arguments: [approvalId]
+        arguments: [approvalID]
       )
     }
 
@@ -498,10 +504,10 @@ extension ApprovalBootReconcilerTests {
     let call = await env.spy.nextParkCall()
 
     // then — the buffered denial carries .expired; the row stays EXPIRED with no re-CAS/re-audit
-    #expect(call.approvalId == approvalId)
+    #expect(call.approvalID == approvalID)
     #expect(call.revalidate == false)
-    #expect(await env.spy.awaitParkResolution(of: approvalId) == .denied(.expired))
-    #expect(try env.approvalState(approvalId) == .expired)
+    #expect(await env.spy.awaitParkResolution(of: approvalID) == .denied(.expired))
+    #expect(try env.approvalState(approvalID) == .expired)
     #expect(try env.audits().isEmpty)
   }
 }

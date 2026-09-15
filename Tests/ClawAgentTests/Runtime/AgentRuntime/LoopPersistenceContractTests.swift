@@ -5,14 +5,13 @@ import Testing
 @testable import ClawAgent
 @testable import ClawCore
 
-@Suite struct LoopPersistenceContractTests {
-  private func run(
-    _ runtime: AgentRuntime
-  ) async throws -> TurnOutcome {
+@Suite
+struct LoopPersistenceContractTests {
+  private func run(_ runtime: AgentRuntime) async throws -> TurnOutcome {
     try await runtime.runTurn(
-      runId: 1,
-      sessionId: 1,
-      chatId: 1,
+      runID: 1,
+      sessionID: 1,
+      chatID: 1,
       buildResult: makeBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -22,7 +21,8 @@ import Testing
     )
   }
 
-  @Test func intermediateRoundTripsWriteUsageImmediatelyFinalRidesTheCommit() async throws {
+  @Test
+  func intermediateRoundTripsWriteUsageImmediatelyFinalRidesTheCommit() async throws {
     // given — two tool round-trips then a final answer (D6)
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal(id: "c1")]),
@@ -45,7 +45,8 @@ import Testing
     #expect(completed.usage.promptTokens > 0)
   }
 
-  @Test func eachToolLoopRoundRecordsItsSpendUnderItsOwnCallIdentity() async throws {
+  @Test
+  func eachToolLoopRoundRecordsItsSpendUnderItsOwnCallIdentity() async throws {
     // given — two tool round-trips then a final answer, so one run spends three times
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal(id: "c1")]),
@@ -70,7 +71,8 @@ import Testing
     #expect(completed.usage.providerCallID == ProviderCallID(rawValue: "call-3"))
   }
 
-  @Test func usageWriteFailureHaltsProviderCallsAndDegradesAccountingFailed() async throws {
+  @Test
+  func usageWriteFailureHaltsProviderCallsAndDegradesAccountingFailed() async throws {
     // given — the first intermediate write fails (non-diskFull)
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal(id: "c1")]),
@@ -93,12 +95,10 @@ import Testing
     #expect(await provider.requests.count == 1)
   }
 
-  @Test func usageWriteDiskFullPropagates() async throws {
+  @Test
+  func usageWriteDiskFullPropagates() async throws {
     // given — the ONLY error runTurn may throw (§6)
-    let provider = SequenceProvider([
-      toolCallResponse([fetchProposal(id: "c1")]),
-      okResponse(),
-    ])
+    let provider = SequenceProvider([toolCallResponse([fetchProposal(id: "c1")]), okResponse()])
     let usageStore = RecordingUsageStore(failOnWrite: 1, thrown: StoreError.diskFull)
     let runtime = makeRuntime(
       provider: provider,
@@ -112,7 +112,8 @@ import Testing
     }
   }
 
-  @Test func everyDispatchGetsOneAuditRowBlockedIncluded() async throws {
+  @Test
+  func everyDispatchGetsOneAuditRowBlockedIncluded() async throws {
     // given — one executed call and one blocked call in the same batch (FR-T1/§6)
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal(id: "c1"), fetchProposal(id: "c2")]),
@@ -125,7 +126,7 @@ import Testing
       }
       return ToolDispatchOutcome(
         observation: ToolObservation(
-          callId: call.id,
+          callID: call.id,
           toolName: call.name,
           content: "blocked",
           status: .blockedArgs,
@@ -142,14 +143,19 @@ import Testing
     // then — two rows, the pinned shape: action .toolCall, decision = status rawValue, args redacted
     let events = auditLog.events
     #expect(events.count == 2)
-    #expect(events.allSatisfy { event in event.action == .toolCall })
+    #expect(
+      events.allSatisfy { event in
+        event.action == .toolCall
+      }
+    )
     #expect(events[0].decision == "ok")
     #expect(events[1].decision == "blocked_args")
     #expect(events[1].argsRedacted == "[REDACTED:openai-key]")
     #expect(events[1].tool == "web_fetch")
   }
 
-  @Test func auditWriteFailureLogsAndContinues() async throws {
+  @Test
+  func auditWriteFailureLogsAndContinues() async throws {
     // given — audit is observability, not a gate
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal(id: "c1")]),
@@ -180,12 +186,10 @@ import Testing
     #expect(warning.metadata["session"]?.description == "1")
   }
 
-  @Test func auditWriteDiskFullPropagates() async throws {
+  @Test
+  func auditWriteDiskFullPropagates() async throws {
     // given
-    let provider = SequenceProvider([
-      toolCallResponse([fetchProposal(id: "c1")]),
-      okResponse(),
-    ])
+    let provider = SequenceProvider([toolCallResponse([fetchProposal(id: "c1")]), okResponse()])
     let auditLog = RecordingAuditLog(thrown: StoreError.diskFull)
     let runtime = makeRuntime(
       provider: provider,

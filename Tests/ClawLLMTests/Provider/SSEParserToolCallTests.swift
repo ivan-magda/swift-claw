@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawLLM
 
-@Suite struct SSEParserToolCallTests {
+@Suite
+struct SSEParserToolCallTests {
   private func pushAll(_ parser: inout SSEParser, _ events: [String]) throws -> [StreamEvent] {
     var collected: [StreamEvent] = []
     for event in events {
@@ -22,7 +23,8 @@ import Testing
     return []
   }
 
-  @Test func assemblesSplitIdAndArgumentFragments() throws {
+  @Test
+  func assemblesSplitIDAndArgumentFragments() throws {
     // given — id/name arrive first; arguments arrive as concatenatable pieces
     var parser = SSEParser()
     let events = try pushAll(
@@ -49,7 +51,7 @@ import Testing
     let toolCalls = finishedToolCalls(events)
     #expect(
       toolCalls == [
-        ToolCall(id: "call_1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#)
+        ToolCall(id: "call_1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#),
       ]
     )
     let sawDelta = events.contains { event in
@@ -62,7 +64,8 @@ import Testing
     #expect(!sawDelta)
   }
 
-  @Test func assemblesMultipleIndicesInOrder() throws {
+  @Test
+  func assemblesMultipleIndicesInOrder() throws {
     // given
     var parser = SSEParser()
     let events = try pushAll(
@@ -81,7 +84,8 @@ import Testing
     #expect(finishedToolCalls(events).map(\.id) == ["a", "b"])
   }
 
-  @Test func accumulatedArgumentBytesRespectTheStreamLimit() throws {
+  @Test
+  func accumulatedArgumentBytesRespectTheStreamLimit() throws {
     // given — a parser with a tiny accumulation limit
     var parser = SSEParser(maxAccumulatedContentBytes: 64)
     let hugeArguments = String(repeating: "x", count: 128)
@@ -90,18 +94,17 @@ import Testing
     #expect(throws: SSEParserError.accumulatedContentTooLarge) {
       _ = try parser.push(
         Data(
-          ("data: "
-            + #"""
-            {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a",\#
-            "function":{"name":"n","arguments":"\#(hugeArguments)"}}]}}]}
-            """#
-            + "\n\n").utf8
+          ("data: " + #"""
+          {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a",\#
+          "function":{"name":"n","arguments":"\#(hugeArguments)"}}]}}]}
+          """# + "\n\n").utf8
         )
       )
     }
   }
 
-  @Test func textDeltasStillStreamAlongsideToolFragments() throws {
+  @Test
+  func textDeltasStillStreamAlongsideToolFragments() throws {
     // given
     var parser = SSEParser()
     let events = try pushAll(
@@ -121,7 +124,8 @@ import Testing
     #expect(finishedToolCalls(events).count == 1)
   }
 
-  @Test func eofWithoutFinishedYieldsNoToolCalls() throws {
+  @Test
+  func eofWithoutFinishedYieldsNoToolCalls() throws {
     // given — deltas then EOF (no [DONE]): the runtime treats this as a complete text reply
     var parser = SSEParser()
     _ = try parser.push(Data("data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n".utf8))
@@ -138,7 +142,8 @@ import Testing
     }
   }
 
-  @Test func fragmentMissingIdAndNameIsDropped() throws {
+  @Test
+  func fragmentMissingIDAndNameIsDropped() throws {
     // given — an arguments fragment arrives but the header carrying id/name never does
     // (a malformed stream) — this must drop the same way the blocking path does
     var parser = SSEParser()
@@ -158,7 +163,8 @@ import Testing
     #expect(toolCalls == [])
   }
 
-  @Test func missingArgumentsFragmentAssemblesToEmptyObject() throws {
+  @Test
+  func missingArgumentsFragmentAssemblesToEmptyObject() throws {
     // given — id/name arrive but no arguments fragment is ever sent
     var parser = SSEParser()
     let events = try pushAll(

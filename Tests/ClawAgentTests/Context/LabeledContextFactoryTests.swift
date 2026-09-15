@@ -4,8 +4,10 @@ import Testing
 @testable import ClawAgent
 @testable import ClawCore
 
-@Suite struct LabeledContextFactoryTests {
-  @Test func factoryGeneratesFreshNonceForEachWrapper() throws {
+@Suite
+struct LabeledContextFactoryTests {
+  @Test
+  func factoryGeneratesFreshNonceForEachWrapper() throws {
     // given
     let first = LabeledContextFactory.make(label: "memory_items", content: "same")
     let second = LabeledContextFactory.make(label: "memory_items", content: "same")
@@ -18,7 +20,8 @@ import Testing
     #expect(first.nonce != second.nonce)
   }
 
-  @Test func renderedContextOnlyHasOneMatchingCloseForGeneratedNonce() {
+  @Test
+  func renderedContextOnlyHasOneMatchingCloseForGeneratedNonce() {
     // given
     let staleClose = "</claw-untrusted nonce=\"stale-nonce\">"
     let context = LabeledContextFactory.make(

@@ -56,9 +56,7 @@ struct CoderProcessIdentity: Sendable {
     #else
       let path = "/proc/\(pid)/stat"
       let text: String
-      do {
-        text = try String(contentsOfFile: path, encoding: .utf8)
-      } catch {
+      do { text = try String(contentsOfFile: path, encoding: .utf8) } catch {
         if kill(pid, 0) == -1 && errno == ESRCH {
           return nil
         }
@@ -100,14 +98,13 @@ struct CoderProcessIdentity: Sendable {
         }
       }
     #else
-      return try FileManager.default.contentsOfDirectory(atPath: "/proc")
-        .compactMap { entry in
-          Int32(entry)
-        }.compactMap { pid in
-          try read(pid)
-        }.filter { member in
-          member.pgid == pgid
-        }
+      return try FileManager.default.contentsOfDirectory(atPath: "/proc").compactMap { entry in
+        Int32(entry)
+      }.compactMap { pid in
+        try read(pid)
+      }.filter { member in
+        member.pgid == pgid
+      }
     #endif
   }
 

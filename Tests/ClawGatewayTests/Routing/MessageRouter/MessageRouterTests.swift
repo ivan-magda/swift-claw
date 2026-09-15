@@ -9,7 +9,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct MessageRouterTests {
+@Suite
+struct MessageRouterTests {
   private struct Harness {
     let router: MessageRouter
     let transport: RecordingTransport
@@ -19,14 +20,14 @@ import Testing
     let queue: DatabaseQueue
 
     /// What a forum topic's session remembers, whether the bot answered any of it or not.
-    func topicHistory(chatId: Int64, threadId: Int64?) throws -> [StoredMessage] {
-      let key = SessionKey.telegramTopic(chatId: chatId, threadId: threadId)
-      guard let sessionId = try sessionMessages.findSession(sessionKey: key) else {
+    func topicHistory(chatID: Int64, threadID: Int64?) throws -> [StoredMessage] {
+      let key = SessionKey.telegramTopic(chatID: chatID, threadID: threadID)
+      guard let sessionID = try sessionMessages.findSession(sessionKey: key) else {
         return []
       }
       return try sessionMessages.loadContextSnapshot(
-        sessionId: sessionId,
-        throughMessageId: Int64.max,
+        sessionID: sessionID,
+        throughMessageID: Int64.max,
         limit: 50
       ).history
     }
@@ -39,9 +40,9 @@ import Testing
   }
 
   private struct SeededRun {
-    let sessionId: Int64
-    let runId: Int64
-    let messageId: Int64
+    let sessionID: Int64
+    let runID: Int64
+    let messageID: Int64
   }
 
   private func makeHarness(
@@ -52,7 +53,7 @@ import Testing
   ) throws -> Harness {
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: allowed)
+    try allowlist.seedAllowlist(userIDs: allowed)
 
     let transport = RecordingTransport()
     let dispatcher = FakeTurnRunner()
@@ -87,7 +88,8 @@ import Testing
     )
   }
 
-  @Test func allowlistedTextDispatchesATurnAndPersistsTheMessage() async throws {
+  @Test
+  func allowlistedTextDispatchesATurnAndPersistsTheMessage() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -103,14 +105,19 @@ import Testing
     #expect(sent.isEmpty)
     let firstCall = try #require(calls.first)
     let history = try harness.sessionMessages.loadContextSnapshot(
-      sessionId: firstCall.sessionId,
-      throughMessageId: firstCall.triggerMessageId,
+      sessionID: firstCall.sessionID,
+      throughMessageID: firstCall.triggerMessageID,
       limit: 50
     ).history
-    #expect(history.contains { $0.role == .user && $0.content == "hello" })
+    #expect(
+      history.contains {
+        $0.role == .user && $0.content == "hello"
+      }
+    )
   }
 
-  @Test func duplicateTextDispatchesOnlyOnce() async throws {
+  @Test
+  func duplicateTextDispatchesOnlyOnce() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -123,7 +130,8 @@ import Testing
     #expect(await harness.dispatcher.calls.count == 1)
   }
 
-  @Test func unknownSenderGetsPrivateBotReply() async throws {
+  @Test
+  func unknownSenderGetsPrivateBotReply() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -138,16 +146,17 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func messageSentOnBehalfOfAChatIsSkippedWithItsOwnReason() async throws {
+  @Test
+  func messageSentOnBehalfOfAChatIsSkippedWithItsOwnReason() async throws {
     // given — an anonymous admin post: normalization drops it, and the log has to say why
     let capture = RecordingLogCapture()
     let harness = try makeHarness(allowed: [42], logger: capture.logger())
     let onBehalfOfTheGroup = RawUpdate(
-      updateId: 9,
+      updateID: 9,
       message: RawMessage(
-        messageId: 9,
-        fromUserId: 1_087_968_824,
-        chatId: -1_001_234,
+        messageID: 9,
+        fromUserID: 1087968824,
+        chatID: -1001234,
         text: "announcement",
         caption: nil,
         mediaKind: nil,
@@ -165,11 +174,20 @@ import Testing
     #expect(await harness.transport.sent.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
     let reasons = capture.entries.map(\.message)
-    #expect(reasons.contains { $0.contains("sent on behalf of a chat") })
-    #expect(reasons.allSatisfy { !$0.contains("nothing actionable") })
+    #expect(
+      reasons.contains {
+        $0.contains("sent on behalf of a chat")
+      }
+    )
+    #expect(
+      reasons.allSatisfy {
+        !$0.contains("nothing actionable")
+      }
+    )
   }
 
-  @Test func nonAllowlistedSenderPersistsNoRunOrMessage() async throws {
+  @Test
+  func nonAllowlistedSenderPersistsNoRunOrMessage() async throws {
     // given — the sender's id (7) is never seeded into the allowlist
     let harness = try makeHarness(allowed: [42])
 
@@ -182,7 +200,8 @@ import Testing
     #expect(try messageCount(harness.queue, content: "let me in") == 0)
   }
 
-  @Test func unknownSenderStartEchoesTheirOwnId() async throws {
+  @Test
+  func unknownSenderStartEchoesTheirOwnID() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -197,7 +216,8 @@ import Testing
     #expect(reply.text.contains("42") == false)
   }
 
-  @Test func unlistedGroupMessageSendsNothingAndLogsTheChatId() async throws {
+  @Test
+  func unlistedGroupMessageSendsNothingAndLogsTheChatID() async throws {
     // given — the bot was added to a group nobody put in CLAW_GROUP_CHATS
     let capture = RecordingLogCapture()
     let harness = try makeHarness(allowed: [42], logger: capture.logger())
@@ -218,12 +238,17 @@ import Testing
     #expect(outcome == .skipped)
     #expect(await harness.transport.sent.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
-    let logged = try #require(capture.entries.first { entry in entry.level == .info })
+    let logged = try #require(
+      capture.entries.first { entry in
+        entry.level == .info
+      }
+    )
     #expect(logged.message.contains("-1001"))
     #expect(logged.message.contains("Podlodka iOS Crew"))
   }
 
-  @Test func anUntitledUnlistedGroupStillLogsItsChatId() async throws {
+  @Test
+  func anUntitledUnlistedGroupStillLogsItsChatID() async throws {
     // given
     let capture = RecordingLogCapture()
     let harness = try makeHarness(allowed: [42], logger: capture.logger())
@@ -234,12 +259,17 @@ import Testing
     )
 
     // then
-    let logged = try #require(capture.entries.first { entry in entry.level == .info })
+    let logged = try #require(
+      capture.entries.first { entry in
+        entry.level == .info
+      }
+    )
     #expect(logged.message.contains("-1002"))
     #expect(await harness.transport.sent.isEmpty)
   }
 
-  @Test func anAddressedGroupTextIsRouted() async throws {
+  @Test
+  func anAddressedGroupTextIsRouted() async throws {
     // given
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
 
@@ -261,7 +291,8 @@ import Testing
     #expect(await harness.transport.sent.isEmpty)
   }
 
-  @Test func unaddressedGroupChatterIsStoredButRunsNoTurnAndSaysNothing() async throws {
+  @Test
+  func unaddressedGroupChatterIsStoredButRunsNoTurnAndSaysNothing() async throws {
     // given
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
 
@@ -273,7 +304,7 @@ import Testing
         chat: -1_001,
         text: "anyone else stuck on the wifi",
         chatKind: .supergroup,
-        messageThreadId: 5,
+        messageThreadID: 5,
         senderDisplayName: "Ada"
       )
     )
@@ -283,13 +314,15 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
     #expect(await harness.transport.sent.isEmpty)
     #expect(
-      try harness.topicHistory(chatId: -1_001, threadId: 5).map(\.content)
-        == ["Ada: anyone else stuck on the wifi"]
+      try harness.topicHistory(chatID: -1_001, threadID: 5).map(\.content) == [
+        "Ada: anyone else stuck on the wifi",
+      ]
     )
     #expect(try harness.runCount() == 0)
   }
 
-  @Test func aRedeliveredUnaddressedGroupMessageIsStoredOnlyOnce() async throws {
+  @Test
+  func aRedeliveredUnaddressedGroupMessageIsStoredOnlyOnce() async throws {
     // given
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
     let chatter = textUpdate(
@@ -298,7 +331,7 @@ import Testing
       chat: -1_001,
       text: "the wifi password is on the badge",
       chatKind: .supergroup,
-      messageThreadId: 5
+      messageThreadID: 5
     )
     await harness.router.handle(rawUpdate: chatter)
 
@@ -307,10 +340,11 @@ import Testing
 
     // then
     #expect(outcome == .skipped)
-    #expect(try harness.topicHistory(chatId: -1_001, threadId: 5).count == 1)
+    #expect(try harness.topicHistory(chatID: -1_001, threadID: 5).count == 1)
   }
 
-  @Test func anAddressedGroupMessageStillRunsATurnAfterOverheardOnes() async throws {
+  @Test
+  func anAddressedGroupMessageStillRunsATurnAfterOverheardOnes() async throws {
     // given — the room has been talking past the bot
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
     await harness.router.handle(
@@ -320,7 +354,7 @@ import Testing
         chat: -1_001,
         text: "the talk starts at ten",
         chatKind: .supergroup,
-        messageThreadId: 5,
+        messageThreadID: 5,
         senderDisplayName: "Ada"
       )
     )
@@ -333,7 +367,7 @@ import Testing
         chat: -1_001,
         text: "@claw_bot which room",
         chatKind: .supergroup,
-        messageThreadId: 5,
+        messageThreadID: 5,
         senderDisplayName: "Grace"
       )
     )
@@ -344,16 +378,19 @@ import Testing
     #expect(await harness.dispatcher.calls.count == 1)
     #expect(try harness.runCount() == 1)
     #expect(
-      try harness.topicHistory(chatId: -1_001, threadId: 5).map(\.content)
-        == ["Ada: the talk starts at ten", "Grace: @claw_bot which room"]
+      try harness.topicHistory(chatID: -1_001, threadID: 5).map(\.content) == [
+        "Ada: the talk starts at ten",
+        "Grace: @claw_bot which room",
+      ]
     )
   }
 
-  @Test func aFullDiskWhileObservingStaysSilentAndBacksThePollerOff() async throws {
+  @Test
+  func aFullDiskWhileObservingStaysSilentAndBacksThePollerOff() async throws {
     // given — the observe write reports a full disk in a room the bot was not talking to
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: [42])
+    try allowlist.seedAllowlist(userIDs: [42])
     let transport = RecordingTransport()
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
@@ -382,7 +419,7 @@ import Testing
         chat: -1_001,
         text: "anyone else stuck on the wifi",
         chatKind: .supergroup,
-        messageThreadId: 5,
+        messageThreadID: 5,
         senderDisplayName: "Ada"
       )
     )
@@ -392,20 +429,21 @@ import Testing
     #expect(await transport.sent.isEmpty)
   }
 
-  @Test func anUnaddressedGroupStickerIsNotAnsweredWithTheCannedLine() async throws {
+  @Test
+  func anUnaddressedGroupStickerIsNotAnsweredWithTheCannedLine() async throws {
     // given — unsupported media, which in a DM earns the "I can't read X yet" reply
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
     let sticker = RawUpdate(
-      updateId: 1,
+      updateID: 1,
       message: RawMessage(
-        messageId: 1,
-        fromUserId: 7,
-        chatId: -1_001,
+        messageID: 1,
+        fromUserID: 7,
+        chatID: -1_001,
         text: nil,
         caption: nil,
         mediaKind: "stickers",
         chatKind: .supergroup,
-        messageThreadId: 5
+        messageThreadID: 5
       ),
       editedMessage: nil
     )
@@ -417,24 +455,25 @@ import Testing
     #expect(outcome == .skipped)
     #expect(await harness.transport.sent.isEmpty)
     #expect(await harness.dispatcher.calls.isEmpty)
-    #expect(try harness.topicHistory(chatId: -1_001, threadId: 5).isEmpty)
+    #expect(try harness.topicHistory(chatID: -1_001, threadID: 5).isEmpty)
   }
 
-  @Test func anAddressedGroupStickerStillGetsTheUnsupportedLine() async throws {
+  @Test
+  func anAddressedGroupStickerStillGetsTheUnsupportedLine() async throws {
     // given — a sticker sent as a reply to the bot, which is how a group addresses media
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
     let sticker = RawUpdate(
-      updateId: 1,
+      updateID: 1,
       message: RawMessage(
-        messageId: 1,
-        fromUserId: 7,
-        chatId: -1_001,
+        messageID: 1,
+        fromUserID: 7,
+        chatID: -1_001,
         text: nil,
         caption: nil,
         mediaKind: "stickers",
         chatKind: .supergroup,
-        replyToMessageId: 9,
-        replyToUserId: 900
+        replyToMessageID: 9,
+        replyToUserID: 900
       ),
       editedMessage: nil
     )
@@ -447,7 +486,8 @@ import Testing
     #expect(reply.text.contains("stickers"))
   }
 
-  @Test func aChannelPostIsRefusedEvenFromAnAllowlistedChat() async throws {
+  @Test
+  func aChannelPostIsRefusedEvenFromAnAllowlistedChat() async throws {
     // given — the same id is configured, but the update arrives as a channel
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001])
 
@@ -462,7 +502,8 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func aStrangersGroupStartIsNeverAnsweredWithTheirUserId() async throws {
+  @Test
+  func aStrangersGroupStartIsNeverAnsweredWithTheirUserID() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -475,7 +516,8 @@ import Testing
     #expect(await harness.transport.sent.isEmpty)
   }
 
-  @Test func allowlistedStartGetsWelcomeNotATurn() async throws {
+  @Test
+  func allowlistedStartGetsWelcomeNotATurn() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -490,12 +532,13 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func allowlistedStopCancelsActiveRunAndSendsStopped() async throws {
+  @Test
+  func allowlistedStopCancelsActiveRunAndSendsStopped() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
-    let seeded = try seedPendingRun(harness, updateId: 10, text: "working")
+    let seeded = try seedPendingRun(harness, updateID: 10, text: "working")
     _ = try #require(
-      try harness.runs.pickUp(runId: seeded.runId, now: Date(timeIntervalSince1970: 10))
+      try harness.runs.pickUp(runID: seeded.runID, now: Date(timeIntervalSince1970: 10))
     )
 
     // when
@@ -509,10 +552,11 @@ import Testing
     #expect(sent.map(\.text) == [CommandReplies.stopped])
     #expect(await harness.dispatcher.calls.isEmpty)
     #expect(try messageCount(harness.queue, content: "/stop") == 0)
-    #expect(try runStates(harness.queue)[seeded.runId] == RunState.cancelled.rawValue)
+    #expect(try runStates(harness.queue)[seeded.runID] == RunState.cancelled.rawValue)
   }
 
-  @Test func allowlistedStopWithNoActiveRunSendsNothingToStop() async throws {
+  @Test
+  func allowlistedStopWithNoActiveRunSendsNothingToStop() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -528,7 +572,8 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func allowlistedNewForThisBotSendsFreshAckAndDoesNotDispatch() async throws {
+  @Test
+  func allowlistedNewForThisBotSendsFreshAckAndDoesNotDispatch() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -544,7 +589,8 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func newForSomeOtherBotIsPlainTextAndDispatchesTurn() async throws {
+  @Test
+  func newForSomeOtherBotIsPlainTextAndDispatchesTurn() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -560,33 +606,38 @@ import Testing
     let calls = await harness.dispatcher.calls
     let firstCall = try #require(calls.first)
     let history = try harness.sessionMessages.loadContextSnapshot(
-      sessionId: firstCall.sessionId,
-      throughMessageId: firstCall.triggerMessageId,
+      sessionID: firstCall.sessionID,
+      throughMessageID: firstCall.triggerMessageID,
       limit: 50
     ).history
-    #expect(history.contains { $0.role == .user && $0.content == "/new@some_other_bot" })
+    #expect(
+      history.contains {
+        $0.role == .user && $0.content == "/new@some_other_bot"
+      }
+    )
   }
 
-  @Test func commandAckFailureStillProcessesAndKeepsDurableStopEffect() async throws {
+  @Test
+  func commandAckFailureStillProcessesAndKeepsDurableStopEffect() async throws {
     // given
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: [42])
+    try allowlist.seedAllowlist(userIDs: [42])
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
     let runs = RunStoreGRDB(writer: queue)
     let claim = try sessionMessages.claimAndPersistInbound(
       InboundMessage(
-        updateId: 50,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 50,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "working",
         isEdited: false,
         ts: Date(timeIntervalSince1970: 50)
       )
     )
-    let runId = try #require(claim.runId)
-    _ = try #require(try runs.pickUp(runId: runId, now: Date(timeIntervalSince1970: 51)))
+    let runID = try #require(claim.runID)
+    _ = try #require(try runs.pickUp(runID: runID, now: Date(timeIntervalSince1970: 51)))
     let transport = RecordingTransport(sendError: .transport("ack down"))
     let dispatcher = FakeTurnRunner()
     let router = MessageRouter(
@@ -615,41 +666,42 @@ import Testing
     #expect(outcome == .processed)
     #expect(await transport.sendAttempts == 1)
     #expect(await dispatcher.calls.isEmpty)
-    #expect(try runStates(queue)[runId] == RunState.cancelled.rawValue)
+    #expect(try runStates(queue)[runID] == RunState.cancelled.rawValue)
   }
 
-  @Test func failedNewAckDoesNotUndoCommittedEffect() async throws {
+  @Test
+  func failedNewAckDoesNotUndoCommittedEffect() async throws {
     // given
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: [42])
+    try allowlist.seedAllowlist(userIDs: [42])
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
     let runs = RunStoreGRDB(writer: queue)
     let firstClaim = try sessionMessages.claimAndPersistInbound(
       InboundMessage(
-        updateId: 60,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 60,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "running",
         isEdited: false,
         ts: Date(timeIntervalSince1970: 60)
       )
     )
-    let runningRunId = try #require(firstClaim.runId)
-    _ = try #require(try runs.pickUp(runId: runningRunId, now: Date(timeIntervalSince1970: 61)))
+    let runningRunID = try #require(firstClaim.runID)
+    _ = try #require(try runs.pickUp(runID: runningRunID, now: Date(timeIntervalSince1970: 61)))
     let secondClaim = try sessionMessages.claimAndPersistInbound(
       InboundMessage(
-        updateId: 61,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 61,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "queued",
         isEdited: false,
         ts: Date(timeIntervalSince1970: 61)
       )
     )
-    let queuedRunId = try #require(secondClaim.runId)
+    let queuedRunID = try #require(secondClaim.runID)
     let transport = RecordingTransport(sendError: .transport("ack down"))
     let dispatcher = FakeTurnRunner()
     let router = MessageRouter(
@@ -680,11 +732,12 @@ import Testing
     #expect(await dispatcher.calls.isEmpty)
     #expect(try messageCount(queue, content: "/new") == 0)
     let states = try runStates(queue)
-    #expect(states[runningRunId] == RunState.superseded.rawValue)
-    #expect(states[queuedRunId] == RunState.superseded.rawValue)
+    #expect(states[runningRunID] == RunState.superseded.rawValue)
+    #expect(states[queuedRunID] == RunState.superseded.rawValue)
   }
 
-  @Test func allowlistedDoctorSendsHealthSummary() async throws {
+  @Test
+  func allowlistedDoctorSendsHealthSummary() async throws {
     // given — a stub reporter standing in for the daemon's live health report
     var report = DoctorReport()
     report.add(key: "db.writable", value: "true", group: .database)
@@ -703,7 +756,8 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func allowlistedMCPSendsOnlyTheMCPSectionOfTheHealthReport() async throws {
+  @Test
+  func allowlistedMCPSendsOnlyTheMCPSectionOfTheHealthReport() async throws {
     // given — a report carrying both an MCP row and an unrelated one
     var report = DoctorReport()
     report.add(key: "db.writable", value: "true", group: .database)
@@ -711,9 +765,7 @@ import Testing
     let harness = try makeHarness(allowed: [42], doctor: StubDoctorReporter(stubbed: report))
 
     // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 1, from: 42, text: "/mcp")
-    )
+    let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 42, text: "/mcp"))
 
     // then — status only: the reply renders the snapshot the daemon already holds, and no turn runs
     #expect(outcome == .processed)
@@ -724,7 +776,8 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func mcpArgumentsAreIgnoredSoNoChatMessageCanManageAServer() async throws {
+  @Test
+  func mcpArgumentsAreIgnoredSoNoChatMessageCanManageAServer() async throws {
     // given
     var report = DoctorReport()
     report.add(key: "mcp", value: "no servers configured", group: .mcp)
@@ -742,7 +795,8 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func allowlistedSkillsUsesAFreshScanAndDoesNotDispatchATurn() async throws {
+  @Test
+  func allowlistedSkillsUsesAFreshScanAndDoesNotDispatchATurn() async throws {
     // given
     let firstScan = SkillScanResult(
       descriptors: [skillDescriptor(name: "alpha", description: "First skill.")],
@@ -776,16 +830,14 @@ import Testing
     #expect(try messageCount(harness.queue, content: "/skills") == 0)
   }
 
-  @Test func duplicateSkillsUpdateSendsDiagnosticsOnlyOnce() async throws {
+  @Test
+  func duplicateSkillsUpdateSendsDiagnosticsOnlyOnce() async throws {
     // given
     let scan = SkillScanResult(
       descriptors: [skillDescriptor(name: "alpha", description: "First skill.")],
       warnings: []
     )
-    let harness = try makeHarness(
-      allowed: [42],
-      doctor: StubDoctorReporter(skillScans: [scan])
-    )
+    let harness = try makeHarness(allowed: [42], doctor: StubDoctorReporter(skillScans: [scan]))
     let update = textUpdate(id: 1, from: 42, text: "/skills")
 
     // when
@@ -799,16 +851,14 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func nonAllowlistedSkillsRevealsNoSkillDiagnostics() async throws {
+  @Test
+  func nonAllowlistedSkillsRevealsNoSkillDiagnostics() async throws {
     // given
     let scan = SkillScanResult(
       descriptors: [skillDescriptor(name: "private-skill", description: "Owner only.")],
       warnings: [.invalidSkillManifest(skill: "private-broken")]
     )
-    let harness = try makeHarness(
-      allowed: [42],
-      doctor: StubDoctorReporter(skillScans: [scan])
-    )
+    let harness = try makeHarness(allowed: [42], doctor: StubDoctorReporter(skillScans: [scan]))
 
     // when
     let outcome = await harness.router.handle(
@@ -824,15 +874,16 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func unsupportedMediaGetsFriendlyReply() async throws {
+  @Test
+  func unsupportedMediaGetsFriendlyReply() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
     let photo = RawUpdate(
-      updateId: 1,
+      updateID: 1,
       message: RawMessage(
-        messageId: 1,
-        fromUserId: 42,
-        chatId: 42,
+        messageID: 1,
+        fromUserID: 42,
+        chatID: 42,
         text: nil,
         caption: nil,
         mediaKind: "photos"
@@ -850,11 +901,12 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func diskFullOnPersistSendsNoticeAndSignalsStorageFull() async throws {
+  @Test
+  func diskFullOnPersistSendsNoticeAndSignalsStorageFull() async throws {
     // given — the fused persist reports a full disk
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: [42])
+    try allowlist.seedAllowlist(userIDs: [42])
     let transport = RecordingTransport()
     let router = MessageRouter(
       processed: ProcessedUpdateStoreGRDB(writer: queue),
@@ -881,29 +933,30 @@ import Testing
     // then — the owner gets the storage-full notice and the poller is told to back off
     #expect(outcome == .storageFull)
     let sent = await transport.sent
-    #expect(sent.contains { $0.text == Degradation.storageFull })
+    #expect(
+      sent.contains {
+        $0.text == Degradation.storageFull
+      }
+    )
   }
 
-  private func seedPendingRun(
-    _ harness: Harness,
-    updateId: Int64,
-    text: String
-  ) throws -> SeededRun {
+  private func seedPendingRun(_ harness: Harness, updateID: Int64, text: String) throws -> SeededRun
+  {
     let claim = try harness.sessionMessages.claimAndPersistInbound(
       InboundMessage(
-        updateId: updateId,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: updateID,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: text,
         isEdited: false,
-        ts: Date(timeIntervalSince1970: Double(updateId))
+        ts: Date(timeIntervalSince1970: Double(updateID))
       )
     )
     return SeededRun(
-      sessionId: try #require(claim.sessionId),
-      runId: try #require(claim.runId),
-      messageId: try #require(claim.triggerMessageId)
+      sessionID: try #require(claim.sessionID),
+      runID: try #require(claim.runID),
+      messageID: try #require(claim.triggerMessageID)
     )
   }
 
@@ -911,7 +964,9 @@ import Testing
     try queue.read { db in
       let rows = try Row.fetchAll(db, sql: "SELECT id, state FROM runs")
       return Dictionary(
-        uniqueKeysWithValues: rows.map { row in (row["id"] as Int64, row["state"] as String) }
+        uniqueKeysWithValues: rows.map { row in
+          (row["id"] as Int64, row["state"] as String)
+        }
       )
     }
   }

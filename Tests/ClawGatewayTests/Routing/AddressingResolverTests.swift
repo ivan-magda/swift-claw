@@ -3,7 +3,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct AddressingResolverTests {
+@Suite
+struct AddressingResolverTests {
   private let identity = BotIdentity(id: 900, username: "claw_bot")
 
   private func resolver(identity: BotIdentity?) -> AddressingResolver {
@@ -16,19 +17,19 @@ import Testing
     photo: Bool = false,
     voice: Bool = false,
     unsupported: String? = nil,
-    replyToUserId: Int64? = nil
+    replyToUserID: Int64? = nil
   ) -> IncomingMessage {
     let content: IncomingMessage.Content
     if photo {
       content = .photo(
         PhotoAttachment(sizes: [
-          PhotoSize(fileId: "photo-1", fileUniqueId: "u-1", width: 8, height: 8, fileSizeBytes: 64)
+          PhotoSize(fileID: "photo-1", fileUniqueID: "u-1", width: 8, height: 8, fileSizeBytes: 64),
         ]),
         caption: caption
       )
     } else if voice {
       content = .voice(
-        VoiceAttachment(fileId: "voice-1", durationSeconds: 3, mimeType: nil, fileSizeBytes: 64)
+        VoiceAttachment(fileID: "voice-1", durationSeconds: 3, mimeType: nil, fileSizeBytes: 64)
       )
     } else if let unsupported {
       content = .unsupported(kind: unsupported)
@@ -37,22 +38,23 @@ import Testing
     }
 
     return IncomingMessage(
-      updateId: 1,
-      messageId: 1,
-      userId: 7,
-      chatId: -1_001,
+      updateID: 1,
+      messageID: 1,
+      userID: 7,
+      chatID: -1_001,
       content: content,
       isEdited: false,
       chatKind: .supergroup,
       chatTitle: "Podlodka iOS Crew",
-      messageThreadId: 12,
-      replyToMessageId: replyToUserId == nil ? nil : 5,
-      replyToUserId: replyToUserId,
+      messageThreadID: 12,
+      replyToMessageID: replyToUserID == nil ? nil : 5,
+      replyToUserID: replyToUserID,
       senderDisplayName: "Attendee"
     )
   }
 
-  @Test func directModeAddressesEveryMessage() {
+  @Test
+  func directModeAddressesEveryMessage() {
     // given — the shapes a group would ignore
     let shapes = [
       groupMessage(text: "just chatter"),
@@ -67,7 +69,8 @@ import Testing
     }
   }
 
-  @Test func aMentionInTextAddressesTheBot() {
+  @Test
+  func aMentionInTextAddressesTheBot() {
     // given
     let message = groupMessage(text: "hey @claw_bot what is the schedule")
 
@@ -75,7 +78,8 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(message, mode: .group))
   }
 
-  @Test func aMentionInACaptionAddressesTheBot() {
+  @Test
+  func aMentionInACaptionAddressesTheBot() {
     // given
     let message = groupMessage(caption: "@claw_bot read this slide", photo: true)
 
@@ -83,7 +87,8 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(message, mode: .group))
   }
 
-  @Test func aMentionIsMatchedCaseInsensitively() {
+  @Test
+  func aMentionIsMatchedCaseInsensitively() {
     // given — Telegram renders the handle however the sender typed it
     let message = groupMessage(text: "@Claw_Bot ping")
 
@@ -91,23 +96,26 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(message, mode: .group))
   }
 
-  @Test func aReplyToTheBotAddressesIt() {
+  @Test
+  func aReplyToTheBotAddressesIt() {
     // given — no mention at all, only a reply to something the bot said
-    let message = groupMessage(text: "and the second one?", replyToUserId: 900)
+    let message = groupMessage(text: "and the second one?", replyToUserID: 900)
 
     // when / then
     #expect(resolver(identity: identity).isAddressed(message, mode: .group))
   }
 
-  @Test func aReplyToTheBotAddressesItEvenWithoutText() {
+  @Test
+  func aReplyToTheBotAddressesItEvenWithoutText() {
     // given — a voice note replying to the bot carries no text to mention it in
-    let message = groupMessage(voice: true, replyToUserId: 900)
+    let message = groupMessage(voice: true, replyToUserID: 900)
 
     // when / then
     #expect(resolver(identity: identity).isAddressed(message, mode: .group))
   }
 
-  @Test func aCommandAddressedToTheBotAddressesIt() {
+  @Test
+  func aCommandAddressedToTheBotAddressesIt() {
     // given
     let message = groupMessage(text: "/doctor@claw_bot")
 
@@ -115,7 +123,8 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(message, mode: .group))
   }
 
-  @Test func aBareCommandAddressesTheBot() {
+  @Test
+  func aBareCommandAddressesTheBot() {
     // given — Telegram delivers an unqualified slash command to every bot in the room
     let message = groupMessage(text: "/help")
 
@@ -123,7 +132,8 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(message, mode: .group))
   }
 
-  @Test func plainChatterDoesNotAddressTheBot() {
+  @Test
+  func plainChatterDoesNotAddressTheBot() {
     // given
     let message = groupMessage(text: "anyone else stuck on the wifi")
 
@@ -131,7 +141,8 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(message, mode: .group) == false)
   }
 
-  @Test func bareMediaDoesNotAddressTheBot() {
+  @Test
+  func bareMediaDoesNotAddressTheBot() {
     // given — a sticker, a bare photo and a voice note, none of them naming the bot
     let shapes = [
       groupMessage(unsupported: "stickers"),
@@ -145,7 +156,8 @@ import Testing
     }
   }
 
-  @Test func aCommandForAnotherBotDoesNotAddressUs() {
+  @Test
+  func aCommandForAnotherBotDoesNotAddressUs() {
     // given
     let message = groupMessage(text: "/doctor@other_bot")
 
@@ -153,7 +165,8 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(message, mode: .group) == false)
   }
 
-  @Test func aMentionOfAnotherBotDoesNotAddressUs() {
+  @Test
+  func aMentionOfAnotherBotDoesNotAddressUs() {
     // given
     let message = groupMessage(text: "ask @other_bot about it")
 
@@ -161,7 +174,8 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(message, mode: .group) == false)
   }
 
-  @Test func theHandleInsideALongerWordDoesNotAddressTheBot() {
+  @Test
+  func theHandleInsideALongerWordDoesNotAddressTheBot() {
     // given — a longer handle that merely starts with ours, and one that merely ends with it
     let longerHandle = groupMessage(text: "@claw_botanist posts plants")
     let trailingHandle = groupMessage(text: "mail me at hello@claw_bot")
@@ -171,7 +185,8 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(trailingHandle, mode: .group) == false)
   }
 
-  @Test func theHandleFollowedByPunctuationStillAddressesTheBot() {
+  @Test
+  func theHandleFollowedByPunctuationStillAddressesTheBot() {
     // given
     let message = groupMessage(text: "@claw_bot, can you summarize?")
 
@@ -179,15 +194,17 @@ import Testing
     #expect(resolver(identity: identity).isAddressed(message, mode: .group))
   }
 
-  @Test func aReplyToAnotherAttendeeDoesNotAddressTheBot() {
+  @Test
+  func aReplyToAnotherAttendeeDoesNotAddressTheBot() {
     // given
-    let message = groupMessage(text: "same here", replyToUserId: 8)
+    let message = groupMessage(text: "same here", replyToUserID: 8)
 
     // when / then
     #expect(resolver(identity: identity).isAddressed(message, mode: .group) == false)
   }
 
-  @Test func withoutAnIdentityNoGroupMessageIsAddressed() {
+  @Test
+  func withoutAnIdentityNoGroupMessageIsAddressed() {
     // given — `getMe` answered nothing, which the boot guard rejects; the resolver still fails shut
     let message = groupMessage(text: "@claw_bot hello")
 

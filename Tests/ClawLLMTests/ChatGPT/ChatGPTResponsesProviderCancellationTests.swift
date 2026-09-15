@@ -10,7 +10,8 @@ import Testing
 /// synchronously, cancellation before the handoff owes no debit, consumer abandonment is
 /// conservative, a committed completion wins a later cancellation, and repeated joins agree. Every
 /// wait is a manual gate or a scripted clock, so nothing here races real time.
-@Suite struct ChatGPTResponsesProviderCancellationTests {
+@Suite
+struct ChatGPTResponsesProviderCancellationTests {
   @Test(.timeLimit(.minutes(1)))
   func cancellationBeforeAuthorizationOwesNoDebitAndDispatchesNothing() async {
     // given — authorization parks on a gate, so cancellation lands before any handoff
@@ -36,9 +37,9 @@ import Testing
     // given — the transport is held open behind a gate, so the producer cannot have finished when
     // `stream` returns
     let gate = AsyncGate()
-    let harness = ProviderHarness(
-      steps: [.blockedStream(okHead, Fixtures.basicSuccess(), ScriptedStreamHold(release: gate))]
-    )
+    let harness = ProviderHarness(steps: [
+      .blockedStream(okHead, Fixtures.basicSuccess(), ScriptedStreamHold(release: gate)),
+    ])
 
     // when
     let stream = harness.provider.stream(request: plainRequest)
@@ -56,9 +57,7 @@ import Testing
     // given — the HTTP producer emits a delta, then remains live until the test releases it
     let hold = ScriptedStreamHold()
     defer { hold.release.open() }
-    let harness = ProviderHarness(
-      steps: [.streamThenBlock(okHead, Fixtures.slowSuccess(), hold)]
-    )
+    let harness = ProviderHarness(steps: [.streamThenBlock(okHead, Fixtures.slowSuccess(), hold)])
     let stream = harness.provider.stream(request: plainRequest)
 
     // when — the helper returns only after reading a real delta while the transfer is held open;

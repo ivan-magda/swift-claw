@@ -8,9 +8,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
   public let root: URL
 
-  public init(root: URL) {
-    self.root = root
-  }
+  public init(root: URL) { self.root = root }
 
   public func ensureRootExists() throws {
     try FileManager.default.createDirectory(
@@ -26,10 +24,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
   public func scanSkills() -> SkillScanResult {
     let fileManager = FileManager.default
-    let skillsRoot = root.appendingPathComponent(
-      WorkspaceSkills.directoryName,
-      isDirectory: true
-    )
+    let skillsRoot = root.appendingPathComponent(WorkspaceSkills.directoryName, isDirectory: true)
 
     var skillsIsDirectory: ObjCBool = false
     guard fileManager.fileExists(atPath: skillsRoot.path, isDirectory: &skillsIsDirectory) else {
@@ -58,14 +53,13 @@ public struct FileSystemWorkspace: WorkspaceReading {
     var descriptors: [SkillDescriptor] = []
     var warnings: [WorkspaceWarning] = []
 
-    for subdir in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+    for subdir in entries.sorted(by: {
+      $0.lastPathComponent < $1.lastPathComponent
+    }) {
       switch Self.entry(at: subdir, under: containmentRoot) {
-      case .notASkill:
-        continue
-      case .rejected(let warning):
-        warnings.append(warning)
-      case .usable(let descriptor):
-        descriptors.append(descriptor)
+      case .notASkill: continue
+      case .rejected(let warning): warnings.append(warning)
+      case .usable(let descriptor): descriptors.append(descriptor)
       }
     }
 
@@ -112,10 +106,8 @@ public struct FileSystemWorkspace: WorkspaceReading {
       path: "\(directoryName)/\(WorkspaceSkills.manifestName)",
       root: skillsRoot.path
     ) {
-    case .refused:
-      return .rejected(.escapingSkillDirectory(directory: directoryName))
-    case .resolved(let resolved):
-      manifestPath = resolved
+    case .refused: return .rejected(.escapingSkillDirectory(directory: directoryName))
+    case .resolved(let resolved): manifestPath = resolved
     }
 
     // An unreadable manifest folds to "" → empty frontmatter → the same invalid-manifest warning.
@@ -123,10 +115,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
     let frontmatter = Self.frontmatter(in: manifestText)
     let description = Self.singleLine(frontmatter["description"] ?? "")
 
-    guard
-      let name = frontmatter["name"], name.isEmpty == false,
-      description.isEmpty == false
-    else {
+    guard let name = frontmatter["name"], name.isEmpty == false, description.isEmpty == false else {
       return .rejected(.invalidSkillManifest(skill: directoryName))
     }
 
@@ -141,10 +130,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
     return .usable(
       SkillDescriptor(
         name: name,
-        description: TextTruncation.cap(
-          description,
-          maxGraphemes: Self.maxDescriptionGraphemes
-        ),
+        description: TextTruncation.cap(description, maxGraphemes: Self.maxDescriptionGraphemes),
         directory: subdir
       )
     )
@@ -152,15 +138,20 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
   /// Drops every claimant of a duplicated name: two directories asserting one identity leave no
   /// principled winner, and shadowing one silently is exactly what the loader must never do.
-  static func withoutCollidingNames(
-    _ descriptors: [SkillDescriptor]
-  ) -> (descriptors: [SkillDescriptor], warnings: [WorkspaceWarning]) {
+  static func withoutCollidingNames(_ descriptors: [SkillDescriptor]) -> (
+    descriptors: [SkillDescriptor],
+    warnings: [WorkspaceWarning]
+  ) {
     var directoriesByName: [String: [String]] = [:]
     for descriptor in descriptors {
       directoriesByName[descriptor.name, default: []].append(descriptor.directory.lastPathComponent)
     }
 
-    let collidingNames = Set(directoriesByName.filter { $0.value.count > 1 }.keys)
+    let collidingNames = Set(
+      directoriesByName.filter {
+        $0.value.count > 1
+      }.keys
+    )
     guard collidingNames.isEmpty == false else {
       return (descriptors, [])
     }
@@ -170,7 +161,9 @@ public struct FileSystemWorkspace: WorkspaceReading {
     }
 
     return (
-      descriptors.filter { collidingNames.contains($0.name) == false },
+      descriptors.filter {
+        collidingNames.contains($0.name) == false
+      },
       warnings
     )
   }
@@ -197,7 +190,9 @@ public struct FileSystemWorkspace: WorkspaceReading {
     let segments = name.split(separator: "-", omittingEmptySubsequences: false)
     return segments.allSatisfy { segment in
       segment.isEmpty == false
-        && segment.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) }
+        && segment.allSatisfy {
+          ("a"..."z").contains($0) || ("0"..."9").contains($0)
+        }
     }
   }
 

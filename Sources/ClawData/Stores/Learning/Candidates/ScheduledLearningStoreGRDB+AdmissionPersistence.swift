@@ -8,13 +8,13 @@ extension ScheduledLearningStoreGRDB {
   struct AdmissionJob {
     let status: ScheduledJobStatus
     let hasRecurrence: Bool
-    let sessionId: Int64?
-    let ownerChatId: Int64
+    let sessionID: Int64?
+    let ownerChatID: Int64
   }
 
   struct TrialRow {
     let id: Int64
-    let jobId: Int64
+    let jobID: Int64
     let epoch: LearningEpoch
     let baseDigest: LessonSetDigest
     let candidateDigest: CandidateDigest
@@ -23,13 +23,13 @@ extension ScheduledLearningStoreGRDB {
     let algorithm: LearningAlgorithm
   }
 
-  static func admissionJob(_ db: Database, jobId: Int64) throws -> AdmissionJob? {
+  static func admissionJob(_ db: Database, jobID: Int64) throws -> AdmissionJob? {
     guard
       let row = try Row.fetchOne(
         db,
         sql:
-          "SELECT status, recurrence, session_id, owner_chat_id FROM scheduled_jobs WHERE id = ?",
-        arguments: [jobId]
+        "SELECT status, recurrence, session_id, owner_chat_id FROM scheduled_jobs WHERE id = ?",
+        arguments: [jobID]
       ),
       let status = ScheduledJobStatus(rawValue: row["status"])
     else {
@@ -38,8 +38,8 @@ extension ScheduledLearningStoreGRDB {
     return AdmissionJob(
       status: status,
       hasRecurrence: (row["recurrence"] as String?) != nil,
-      sessionId: row["session_id"],
-      ownerChatId: row["owner_chat_id"]
+      sessionID: row["session_id"],
+      ownerChatID: row["owner_chat_id"]
     )
   }
 
@@ -47,10 +47,10 @@ extension ScheduledLearningStoreGRDB {
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-          state, algorithm
-        FROM learning_trials WHERE candidate_digest = ? ORDER BY trial_id
-        """,
+      SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+        state, algorithm
+      FROM learning_trials WHERE candidate_digest = ? ORDER BY trial_id
+      """,
       arguments: [candidate.rawValue]
     )
     guard rows.count <= 1 else {
@@ -60,8 +60,8 @@ extension ScheduledLearningStoreGRDB {
       return nil
     }
     guard
-      let trialId = SQLiteStoredValue.int64(in: row, column: "trial_id"),
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
+      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
       let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
       let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
       let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
@@ -73,8 +73,8 @@ extension ScheduledLearningStoreGRDB {
       throw StoreError.unexpected("candidate admission trial is unreadable")
     }
     return TrialRow(
-      id: trialId,
-      jobId: jobId,
+      id: trialID,
+      jobID: jobID,
       epoch: LearningEpoch(epoch),
       baseDigest: LessonSetDigest(rawValue: baseDigest),
       candidateDigest: CandidateDigest(rawValue: candidateDigest),
@@ -84,13 +84,11 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func admissionReceipt(
-    _ db: Database,
-    artifact: CandidateArtifact,
-    trial: TrialRow
-  ) throws -> AdmissionReceipt {
+  static func admissionReceipt(_ db: Database, artifact: CandidateArtifact, trial: TrialRow) throws
+    -> AdmissionReceipt
+  {
     guard
-      trial.jobId == artifact.manifest.jobId,
+      trial.jobID == artifact.manifest.jobID,
       trial.epoch == artifact.manifest.epoch,
       trial.baseDigest == artifact.manifest.baseDigest,
       trial.candidateDigest == artifact.digest,
@@ -105,7 +103,7 @@ extension ScheduledLearningStoreGRDB {
     guard
       receipt.candidateDigest == artifact.digest,
       receipt.replacementDigest == artifact.replacement.digest,
-      receipt.trialId == trial.id,
+      receipt.trialID == trial.id,
       receipt.generation == trial.generation
     else {
       throw StoreError.unexpected("candidate admission receipt identity is inconsistent")
@@ -113,31 +111,25 @@ extension ScheduledLearningStoreGRDB {
     return receipt
   }
 
-  static func admissionDecisionExists(
-    _ db: Database,
-    artifact: CandidateArtifact
-  ) throws -> Bool {
+  static func admissionDecisionExists(_ db: Database, artifact: CandidateArtifact) throws -> Bool {
     try admissionReceipts(db, artifact: artifact).isEmpty == false
   }
 }
 
+// MARK: - Admission Receipt Lookup
+
 private extension ScheduledLearningStoreGRDB {
-  static func admissionReceipts(
-    _ db: Database,
-    artifact: CandidateArtifact
-  ) throws -> [AdmissionReceipt] {
+  static func admissionReceipts(_ db: Database, artifact: CandidateArtifact) throws
+    -> [AdmissionReceipt]
+  {
     let rows = try Row.fetchAll(
       db,
       sql: """
-        SELECT inputs, result, algorithm FROM learning_decisions
-        WHERE kind = ? AND job_id = ? AND learning_epoch = ?
-        ORDER BY decision_id
-        """,
-      arguments: [
-        AdmissionReceipt.kind,
-        artifact.manifest.jobId,
-        artifact.manifest.epoch.value,
-      ]
+      SELECT inputs, result, algorithm FROM learning_decisions
+      WHERE kind = ? AND job_id = ? AND learning_epoch = ?
+      ORDER BY decision_id
+      """,
+      arguments: [AdmissionReceipt.kind, artifact.manifest.jobID, artifact.manifest.epoch.value]
     )
     var matches: [AdmissionReceipt] = []
     for row in rows {

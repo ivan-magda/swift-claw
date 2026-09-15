@@ -11,7 +11,7 @@ struct CoderWorkspace: Sendable {
   func prepare(
     _ invocation: CoderInvocation,
     deadline: ContinuousClock.Instant? = nil,
-    recordProcess: @Sendable @escaping (CoderProcessEvent) async throws -> Void
+    recordProcess: @Sendable @escaping (_ event: CoderProcessEvent) async throws -> Void
   ) async throws -> CoderWorkspaceState {
     let git = CoderGit(
       tracking: .job(record: recordProcess),
@@ -60,13 +60,8 @@ struct CoderWorkspace: Sendable {
     let baseline: RepositoryInventory?
     do {
       baseline = try await RepositoryInventory.capture(at: directory, git: git)
-    } catch RepositoryInventory.Failure.unavailable {
-      baseline = nil
-    } catch CoderGitFailure.command {
-      baseline = nil
-    } catch CoderGitFailure.output {
-      baseline = nil
-    }
+    } catch RepositoryInventory.Failure.unavailable { baseline = nil } catch CoderGitFailure.command
+    { baseline = nil } catch CoderGitFailure.output { baseline = nil }
     return CoderWorkspaceState(
       directory: directory,
       baseline: baseline,

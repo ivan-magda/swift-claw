@@ -35,7 +35,9 @@ enum RuntimeInitImageReference {
 
     let components = repository.split(separator: "/", omittingEmptySubsequences: false)
     guard
-      components.allSatisfy({ PinnedImageReference.isValidRepositoryComponent(String($0)) })
+      components.allSatisfy({
+        PinnedImageReference.isValidRepositoryComponent(String($0))
+      })
     else {
       return false
     }
@@ -48,9 +50,7 @@ enum RuntimeInitImageReference {
   }
 
   private static func isTagStartByte(_ byte: UInt8) -> Bool {
-    (byte >= 0x41 && byte <= 0x5a)
-      || (byte >= 0x61 && byte <= 0x7a)
-      || (byte >= 0x30 && byte <= 0x39)
-      || byte == 0x5f
+    (byte >= 0x41 && byte <= 0x5a) || (byte >= 0x61 && byte <= 0x7a)
+      || (byte >= 0x30 && byte <= 0x39) || byte == 0x5f
   }
 }

@@ -6,13 +6,14 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct AwaitingApprovalSeamTests {
+@Suite
+struct AwaitingApprovalSeamTests {
   private struct Fixture {
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
 
-    let sessionId: Int64
-    let runId: Int64
+    let sessionID: Int64
+    let runID: Int64
   }
 
   /// One run suspended to AWAITING_APPROVAL through the real reducer (pickUp → suspend).
@@ -21,43 +22,39 @@ import Testing
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 7),
-        chatId: 7,
-        userId: 7,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 7),
+        chatID: 7,
+        userID: 7,
         text: "write the plan",
         isEdited: false,
         ts: Date()
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
     let runs = RunStoreGRDB(writer: queue)
-    _ = try #require(try runs.pickUp(runId: runId, now: Date()))
+    _ = try #require(try runs.pickUp(runID: runID, now: Date()))
     try queue.write { db in
       _ = try RunStoreGRDB.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .suspendForApproval,
         now: Date(),
         terminal: nil
       )
     }
-    return Fixture(
-      queue: queue,
-      runs: runs,
-      sessionId: sessionId,
-      runId: runId
-    )
+    return Fixture(queue: queue, runs: runs, sessionID: sessionID, runID: runID)
   }
 
-  private func runState(_ queue: DatabaseQueue, runId: Int64) throws -> String? {
+  private func runState(_ queue: DatabaseQueue, runID: Int64) throws -> String? {
     try queue.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
     }
   }
 
-  @Test func runsHealthCountsASuspendedRunAsInFlight() throws {
+  @Test
+  func runsHealthCountsASuspendedRunAsInFlight() throws {
     // given
     let env = try makeSuspendedFixture()
 
@@ -69,18 +66,19 @@ import Testing
     #expect(health.oldestRunAgeSeconds != nil)
   }
 
-  @Test func assistantCommitOnASuspendedRunLosesArbitration() throws {
+  @Test
+  func assistantCommitOnASuspendedRunLosesArbitration() throws {
     // given
     let env = try makeSuspendedFixture()
     let turn = AssistantTurn(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       content: "late reply",
       usage: ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-late"),
-        runId: env.runId,
-        sessionId: env.sessionId,
+        runID: env.runID,
+        sessionID: env.sessionID,
         model: "m",
         promptTokens: 1,
         completionTokens: 1,
@@ -98,26 +96,27 @@ import Testing
     // then — same as terminal states: the suspended run owns no commit (spec §4.2); no
     // assistant row lands and the state is untouched
     #expect(result == .ignored)
-    #expect(try runState(env.queue, runId: env.runId) == RunState.awaitingApproval.rawValue)
+    #expect(try runState(env.queue, runID: env.runID) == RunState.awaitingApproval.rawValue)
     let assistantRows = try env.queue.read { db in
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = 'assistant'",
-        arguments: [env.runId]
+        arguments: [env.runID]
       )
     }
     #expect(assistantRows == 0)
   }
 
-  @Test func degradedCommitOnASuspendedRunLosesArbitration() throws {
+  @Test
+  func degradedCommitOnASuspendedRunLosesArbitration() throws {
     // given
     let env = try makeSuspendedFixture()
     let turn = DegradedTurn(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: 7,
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: 7,
       usage: nil,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
+      chunk: OutboxChunk(stepIndex: 0, chatID: 7, payload: "degraded", payloadHash: "h"),
       cause: .providerFailure
     )
 
@@ -126,6 +125,6 @@ import Testing
 
     // then
     #expect(result == .ignored)
-    #expect(try runState(env.queue, runId: env.runId) == RunState.awaitingApproval.rawValue)
+    #expect(try runState(env.queue, runID: env.runID) == RunState.awaitingApproval.rawValue)
   }
 }

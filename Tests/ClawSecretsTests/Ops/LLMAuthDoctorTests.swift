@@ -18,24 +18,19 @@ private final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Send
   let behavior: Behavior
   private(set) var loadCount = 0
 
-  init(_ behavior: Behavior) {
-    self.behavior = behavior
-  }
+  init(_ behavior: Behavior) { self.behavior = behavior }
 
   func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
     loadCount += 1
     switch behavior {
-    case .value(let credential):
-      return credential
-    case .failure(let error):
-      throw error
+    case .value(let credential): return credential
+    case .failure(let error): throw error
     }
   }
 
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) {}
+  func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
+    throws(LLMCredentialStoreError)
+  {}
 
   func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
 }
@@ -51,7 +46,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
   }
 }
 
-@Suite struct LLMAuthDoctorTests {
+@Suite
+struct LLMAuthDoctorTests {
   // MARK: - Fixtures
 
   private static let chatGPTProvider = "provider=openai-chatgpt"
@@ -83,7 +79,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
 
   // MARK: - Current route
 
-  @Test func currentRouteWithStaticKeyReportsModeStatic() {
+  @Test
+  func currentRouteWithStaticKeyReportsModeStatic() {
     // given
     let store = ScriptedCredentialStore(.value(nil))
 
@@ -101,7 +98,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     #expect(store.loadCount == 0)
   }
 
-  @Test func currentRouteWithoutKeyReportsModeNone() {
+  @Test
+  func currentRouteWithoutKeyReportsModeNone() {
     // given / when
     let result = LLMAuthDoctor.inspect(
       route: currentRoute(),
@@ -115,7 +113,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     #expect(result.ok)
   }
 
-  @Test func currentRouteNeverOpensAnUnrelatedMalformedEnvelope() {
+  @Test
+  func currentRouteNeverOpensAnUnrelatedMalformedEnvelope() {
     // given — a malformed OAuth envelope stands on disk while the current route is configured
     let store = ScriptedCredentialStore(.failure(.malformedStorage))
 
@@ -133,7 +132,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     #expect(store.loadCount == 0)
   }
 
-  @Test func currentRouteConstructsNoStore() {
+  @Test
+  func currentRouteConstructsNoStore() {
     // given — a factory that fails the assertion if it is ever built
     let factory = TrappingStoreFactory()
 
@@ -153,7 +153,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
 
   // MARK: - ChatGPT route load
 
-  @Test func chatGPTRouteConstructsAndLoadsExactlyOneRecord() {
+  @Test
+  func chatGPTRouteConstructsAndLoadsExactlyOneRecord() {
     // given — the positive pairing: the ChatGPT route DOES build and read the store
     let store = ScriptedCredentialStore(
       .value(credential(expiresAt: Date().addingTimeInterval(3600)))
@@ -161,15 +162,10 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     var built = 0
 
     // when
-    let result = LLMAuthDoctor.inspect(
-      route: chatGPTRoute(),
-      staticAPIKey: nil,
-      now: Date(),
-      makeManagedStore: {
-        built += 1
-        return store
-      }
-    )
+    let result = LLMAuthDoctor.inspect(route: chatGPTRoute(), staticAPIKey: nil, now: Date()) {
+      built += 1
+      return store
+    }
 
     // then
     #expect(built == 1)
@@ -179,7 +175,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
 
   // MARK: - ChatGPT freshness
 
-  @Test func chatGPTFreshCredentialReportsFresh() {
+  @Test
+  func chatGPTFreshCredentialReportsFresh() {
     // given — comfortably beyond the skew window
     let now = Date()
     let store = ScriptedCredentialStore(.value(credential(expiresAt: now.addingTimeInterval(3600))))
@@ -197,7 +194,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     #expect(result.ok)
   }
 
-  @Test func chatGPTExpiringWithinSkewReportsExpiring() {
+  @Test
+  func chatGPTExpiringWithinSkewReportsExpiring() {
     // given — valid, but inside the 120-second skew window
     let now = Date()
     let store = ScriptedCredentialStore(.value(credential(expiresAt: now.addingTimeInterval(60))))
@@ -215,7 +213,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     #expect(result.ok)
   }
 
-  @Test func chatGPTExpiredReportsExpiredRefreshOnUse() {
+  @Test
+  func chatGPTExpiredReportsExpiredRefreshOnUse() {
     // given — already past expiry; the daemon refreshes on next use, doctor does not
     let now = Date()
     let store = ScriptedCredentialStore(.value(credential(expiresAt: now.addingTimeInterval(-60))))
@@ -235,13 +234,7 @@ private final class TrappingStoreFactory: @unchecked Sendable {
 
   /// Pins the skew boundary to exactly 120 seconds, sourced from `ChatGPTCredentialFreshness` rather
   /// than re-derived here: a mutant that shifts the window would break exactly one of these.
-  @Test(
-    arguments: [
-      (119.0, "expiring"),
-      (120.0, "expiring"),
-      (121.0, "fresh"),
-    ]
-  )
+  @Test(arguments: [(119.0, "expiring"), (120.0, "expiring"), (121.0, "fresh")])
   func chatGPTSkewBoundaryIsExactlyOneHundredTwentySeconds(
     offsetSeconds: Double,
     expectedStatus: String
@@ -265,7 +258,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     #expect(result.ok)
   }
 
-  @Test func chatGPTOkRowLeaksNoTokenAccountOrProfile() {
+  @Test
+  func chatGPTOkRowLeaksNoTokenAccountOrProfile() {
     // given — distinctive secret material and a fixed expiry to look for in the value
     let now = Date()
     let expiresAt = now.addingTimeInterval(3600)
@@ -288,7 +282,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
 
   // MARK: - ChatGPT missing credential
 
-  @Test func chatGPTMissingRecordIsFailingLoginRow() {
+  @Test
+  func chatGPTMissingRecordIsFailingLoginRow() {
     // given — the envelope decrypts but holds no ChatGPT record
     let store = ScriptedCredentialStore(.value(nil))
 
@@ -306,7 +301,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     #expect(result.value.hasPrefix(Self.chatGPTProvider))
   }
 
-  @Test func chatGPTNilStoreIsFailingLoginRow() {
+  @Test
+  func chatGPTNilStoreIsFailingLoginRow() {
     // given / when — no store at all is treated as no usable credential
     let result = LLMAuthDoctor.inspect(
       route: chatGPTRoute(),
@@ -351,7 +347,8 @@ private final class TrappingStoreFactory: @unchecked Sendable {
     #expect(result.value.hasPrefix(Self.chatGPTProvider))
   }
 
-  @Test func chatGPTMalformedEnvelopeRowNamesTheProblem() {
+  @Test
+  func chatGPTMalformedEnvelopeRowNamesTheProblem() {
     // given — a positive that a decrypt row is distinct from a logged-out row
     let store = ScriptedCredentialStore(.failure(.malformedStorage))
 

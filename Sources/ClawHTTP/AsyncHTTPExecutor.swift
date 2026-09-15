@@ -19,9 +19,7 @@ import NIOPosix
 public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
   private let client: HTTPClient
 
-  public init(client: HTTPClient) {
-    self.client = client
-  }
+  public init(client: HTTPClient) { self.client = client }
 
   public func execute(_ request: HTTPRequest) async throws -> HTTPResult {
     guard case .buffered(let successBytes, let errorBytes) = request.responseBodyPolicy else {
@@ -44,16 +42,13 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
           whenOversized: isSuccess ? .fails : .truncates
         )
       )
-    } catch let oversized as HTTPTransportFailure {
-      throw oversized
-    } catch {
+    } catch let oversized as HTTPTransportFailure { throw oversized } catch {
       throw Self.classifyPostHead(error)
     }
   }
 
   public func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {
-    guard
-      case .streaming(let maximumUnreadBytes, let errorBytes) = request.responseBodyPolicy
+    guard case .streaming(let maximumUnreadBytes, let errorBytes) = request.responseBodyPolicy
     else {
       throw HTTPTransportFailure.policyMismatch(
         HTTPResponseBodyPolicy.streamingPolicyRequiredMessage
@@ -66,10 +61,7 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
     let body = response.body
 
     return HTTPStreamExchange.make(
-      head: HTTPStreamHead(
-        statusCode: statusCode,
-        headers: Self.responseHeaders(response)
-      ),
+      head: HTTPStreamHead(statusCode: statusCode, headers: Self.responseHeaders(response)),
       maximumUnreadBodyBytes: isSuccess ? maximumUnreadBytes : errorBytes
     ) { sink in
       await Self.forward(body, into: sink, totalBytes: isSuccess ? nil : errorBytes)
@@ -85,24 +77,16 @@ private extension AsyncHTTPExecutor {
     try request.beginHandoff?()
 
     do {
-      return try await client.execute(
-        clientRequest,
-        timeout: TimeAmount(request.timeout)
-      )
-    } catch {
-      throw Self.classify(error)
-    }
+      return try await client.execute(clientRequest, timeout: TimeAmount(request.timeout))
+    } catch { throw Self.classify(error) }
   }
 
   func makeClientRequest(_ request: HTTPRequest) -> HTTPClientRequest {
     var clientRequest = HTTPClientRequest(url: request.url)
     switch request.method {
-    case .get:
-      clientRequest.method = .GET
-    case .post:
-      clientRequest.method = .POST
-    case .delete:
-      clientRequest.method = .DELETE
+    case .get: clientRequest.method = .GET
+    case .post: clientRequest.method = .POST
+    case .delete: clientRequest.method = .DELETE
     }
 
     for (name, value) in request.headers {
@@ -153,8 +137,7 @@ private extension AsyncHTTPExecutor {
 
       guard view.count <= remaining else {
         switch handling {
-        case .fails:
-          throw HTTPTransportFailure.oversizedBody(cap: cap)
+        case .fails: throw HTTPTransportFailure.oversizedBody(cap: cap)
         case .truncates:
           collected.append(contentsOf: view.prefix(remaining))
           return collected
@@ -169,13 +152,14 @@ private extension AsyncHTTPExecutor {
 
   /// Pumps the response body into the exchange, suspending whenever the consumer is behind.
   ///
-  /// - Parameter totalBytes: a ceiling on the whole transfer, for a diagnostic body that is read to
-  ///   the end rather than streamed. `nil` streams everything, dropping nothing.
-  static func forward(
-    _ body: HTTPClientResponse.Body,
-    into sink: HTTPBodySink,
-    totalBytes: Int?
-  ) async -> HTTPStreamTermination {
+  /// - Parameters:
+  ///   - body: The response body received from the HTTP client.
+  ///   - sink: The bounded exchange sink that receives each forwarded chunk.
+  ///   - totalBytes: The diagnostic body's total transfer cap, or nil to stream the entire body.
+  /// - Returns: Completion, cancellation, or the classified transfer failure.
+  static func forward(_ body: HTTPClientResponse.Body, into sink: HTTPBodySink, totalBytes: Int?)
+    async -> HTTPStreamTermination
+  {
     var forwarded = 0
 
     do {
@@ -190,10 +174,7 @@ private extension AsyncHTTPExecutor {
             break
           }
 
-          chunk =
-            view.count > remaining
-            ? Data(view.prefix(remaining))
-            : Data(view)
+          chunk = view.count > remaining ? Data(view.prefix(remaining)) : Data(view)
         } else {
           chunk = Data(view)
         }
@@ -203,13 +184,9 @@ private extension AsyncHTTPExecutor {
         try await sink.send(chunk)
       }
       return .completed
-    } catch is CancellationError {
-      return .cancelled(.mayHaveBeenSent)
-    } catch let error as BoundedAsyncChannelError {
-      return terminationForSink(error)
-    } catch {
-      return .failed(classifyPostHead(error))
-    }
+    } catch is CancellationError { return .cancelled(.mayHaveBeenSent) } catch let error
+      as BoundedAsyncChannelError
+    { return terminationForSink(error) } catch { return .failed(classifyPostHead(error)) }
   }
 
   static func terminationForSink(_ error: BoundedAsyncChannelError) -> HTTPStreamTermination {
@@ -219,11 +196,10 @@ private extension AsyncHTTPExecutor {
         HTTPTransportFailure(
           disposition: .mayHaveBeenSent,
           safeMessage:
-            "response body chunk of \(weight) bytes exceeds the \(capacity)-byte unread limit"
+          "response body chunk of \(weight) bytes exceeds the \(capacity)-byte unread limit"
         )
       )
-    case .channelFinished:
-      return .cancelled(.mayHaveBeenSent)
+    case .channelFinished: return .cancelled(.mayHaveBeenSent)
     case .negativeWeight, .multipleIterators:
       return .failed(
         HTTPTransportFailure(
@@ -265,7 +241,9 @@ extension AsyncHTTPExecutor {
 
     if let connectionError = error as? NIOConnectionError {
       return !connectionError.connectionErrors.isEmpty
-        && connectionError.connectionErrors.allSatisfy { isConnectionRefused($0.error) }
+        && connectionError.connectionErrors.allSatisfy {
+          isConnectionRefused($0.error)
+        }
     }
 
     return false

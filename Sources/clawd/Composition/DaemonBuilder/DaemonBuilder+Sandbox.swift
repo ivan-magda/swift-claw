@@ -10,31 +10,21 @@ extension DaemonBuilder {
   typealias SandboxStack = SandboxBootstrapResult
 
   func prepareSandbox() async -> SandboxStack {
-    let backend = SandboxBackendFactory.make(
-      config: config,
-      redactionValues: redactionValues
-    )
+    let backend = SandboxBackendFactory.make(config: config, redactionValues: redactionValues)
 
     return await SandboxBootstrapper(
       enabled: config.exec.enabled,
       backend: backend,
       maintenance: backend
-    )
-    .prepare()
+    ).prepare()
   }
 }
 
 // MARK: - Backend Factory
 
 enum SandboxBackendFactory {
-  static func make(
-    config: AppConfig,
-    redactionValues: [String]
-  ) -> ContainerBackend? {
-    guard
-      config.exec.enabled,
-      let image = config.exec.image
-    else {
+  static func make(config: AppConfig, redactionValues: [String]) -> ContainerBackend? {
+    guard config.exec.enabled, let image = config.exec.image else {
       return nil
     }
 

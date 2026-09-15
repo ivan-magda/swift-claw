@@ -1,16 +1,30 @@
 public protocol AllowlistStore: Sendable {
-  func seedAllowlist(userIds: [Int64]) throws(StoreError)
-  func allowlistContains(userId: Int64) throws(StoreError) -> Bool
+  func seedAllowlist(userIDs: [Int64]) throws(StoreError)
+
+  func allowlistContains(userID: Int64) throws(StoreError) -> Bool
+
   func allowlistCount() throws(StoreError) -> Int
 }
 
 public protocol ProcessedUpdateStore: Sendable {
-  /// INSERT OR IGNORE → true if newly claimed, false if already seen.
-  /// Synchronous: no await may span the check, so the dedup claim can't interleave.
-  func claimUpdate(updateId: Int64) throws(StoreError) -> Bool
+  /// Returns whether this update was newly claimed rather than already seen.
+  ///
+  /// The deduplication claim is synchronous: no suspension may split the check from the write.
+  func claimUpdate(updateID: Int64) throws(StoreError) -> Bool
 }
 
 public protocol UpdateCursorStore: Sendable {
+  /// Returns the last confirmed update ID, or nil before any cursor has been stored.
+  ///
+  /// The next polling offset is one greater than this value.
+  ///
+  /// - Throws: A `StoreError` if the cursor cannot be read.
   func loadCursor() throws(StoreError) -> Int64?
-  func advanceCursor(to updateId: Int64) throws(StoreError)
+
+  /// Records a confirmed update ID without moving an existing cursor backward.
+  ///
+  /// Advance only after routing has safely completed; any required inbound write must commit first.
+  ///
+  /// - Throws: A `StoreError` if the cursor cannot be persisted.
+  func advanceCursor(to updateID: Int64) throws(StoreError)
 }

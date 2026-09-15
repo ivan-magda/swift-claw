@@ -1,7 +1,14 @@
 import Foundation
 
 public enum CoderJobState: String, Sendable, Codable {
-  case admitted, running, stopping, succeeded, failed, cancelled, timedOut, interrupted
+  case admitted
+  case running
+  case stopping
+  case succeeded
+  case failed
+  case cancelled
+  case timedOut
+  case interrupted
 
   public var isTerminal: Bool {
     switch self {
@@ -36,10 +43,18 @@ public struct CoderOrigin: Sendable, Equatable, Codable {
   }
 }
 
-public enum CoderProcessPhase: String, Sendable, Codable { case prepare, codex, inspect }
+public enum CoderProcessPhase: String, Sendable, Codable {
+  case prepare
+  case codex
+  case inspect
+}
 
 public enum CoderProcessOwnership: String, Sendable, Codable {
-  case none, launching, owned, stopped, unresolved
+  case none
+  case launching
+  case owned
+  case stopped
+  case unresolved
 }
 
 public struct CoderProcessReceipt: Sendable, Equatable, Codable {

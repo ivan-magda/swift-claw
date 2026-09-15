@@ -30,23 +30,23 @@ private func probe(_ url: String) -> HTTPRequest {
   )
 }
 
-@Suite(.serialized) struct HTTPClientProfileTests {
+@Suite(.serialized)
+struct HTTPClientProfileTests {
   /// The property the profile exists for. A redirect is an answer, not an instruction: following
   /// one would send this daemon's next request to a host the *response* named.
-  @Test func refusesToFollowARedirectToAnotherOrigin() async throws {
+  @Test
+  func refusesToFollowARedirectToAnotherOrigin() async throws {
     // given — a second origin, ready to record anything that reaches it
-    try await withScriptedServer(
-      routes: [stolenPath: ScriptedResponse(status: .ok, body: arrivedBody)]
-    ) { elsewhere in
+    try await withScriptedServer(routes: [
+      stolenPath: ScriptedResponse(status: .ok, body: arrivedBody),
+    ]) { elsewhere in
       // given — an origin that answers a credential-bearing request by pointing at the second
-      try await withScriptedServer(
-        routes: [
-          redirectPath: ScriptedResponse(
-            status: .found,
-            headers: [("location", elsewhere.url(stolenPath))]
-          )
-        ]
-      ) { origin in
+      try await withScriptedServer(routes: [
+        redirectPath: ScriptedResponse(
+          status: .found,
+          headers: [("location", elsewhere.url(stolenPath))]
+        ),
+      ]) { origin in
         // when
         let profile = HTTPClientProfile.protectedEgress.configuration
         let result = try await withExecutor(configuration: profile) { executor in
@@ -68,11 +68,12 @@ private func probe(_ url: String) -> HTTPRequest {
   /// The pair to the refusal above. Without it, "the second origin recorded nothing" would be just
   /// as true of an origin that was never reachable or a route that never existed, and the case
   /// above would pass on a client that could not fetch anything at all.
-  @Test func reachesTheSameTargetWhenItIsAskedForDirectly() async throws {
+  @Test
+  func reachesTheSameTargetWhenItIsAskedForDirectly() async throws {
     // given — the very server and route the refused redirect pointed at
-    try await withScriptedServer(
-      routes: [stolenPath: ScriptedResponse(status: .ok, body: arrivedBody)]
-    ) { elsewhere in
+    try await withScriptedServer(routes: [
+      stolenPath: ScriptedResponse(status: .ok, body: arrivedBody),
+    ]) { elsewhere in
       // when
       let profile = HTTPClientProfile.protectedEgress.configuration
       let result = try await withExecutor(configuration: profile) { executor in

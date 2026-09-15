@@ -3,20 +3,28 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct SandboxHealthRowsTests {
-  @Test func disabledExecutionIsInformational() {
+@Suite
+struct SandboxHealthRowsTests {
+  @Test
+  func disabledExecutionIsInformational() {
     // given / when
     let rows = SandboxHealthRows.rows(for: .disabled)
 
     // then
     #expect(
       rows == [
-        .init(key: "sandbox", value: "disabled by CLAW_EXEC_ENABLED", ok: true, group: .sandbox)
+        DoctorReport.Check(
+          key: "sandbox",
+          value: "disabled by CLAW_EXEC_ENABLED",
+          ok: true,
+          group: .sandbox
+        ),
       ]
     )
   }
 
-  @Test func linuxDeferralIsInformational() {
+  @Test
+  func linuxDeferralIsInformational() {
     // given / when
     let rows = SandboxHealthRows.rows(for: .linuxDeferred)
 
@@ -27,7 +35,8 @@ import Testing
     #expect(rows[0].ok)
   }
 
-  @Test func bootStatusDisabledWinsOverEverything() {
+  @Test
+  func bootStatusDisabledWinsOverEverything() {
     // given / when
     let status = SandboxDoctorStatus.atBoot(
       execEnabled: false,
@@ -39,7 +48,8 @@ import Testing
     #expect(status == .disabled)
   }
 
-  @Test func bootStatusWithHealthIsLive() {
+  @Test
+  func bootStatusWithHealthIsLive() {
     // given / when
     let status = SandboxDoctorStatus.atBoot(
       execEnabled: true,
@@ -51,7 +61,8 @@ import Testing
     #expect(status == .live(health: .passingForTests))
   }
 
-  @Test func bootStatusWithoutHealthKeepsTheBootstrapReason() {
+  @Test
+  func bootStatusWithoutHealthKeepsTheBootstrapReason() {
     // given / when
     let status = SandboxDoctorStatus.atBoot(
       execEnabled: true,
@@ -63,29 +74,34 @@ import Testing
     #expect(status == .unavailable(reason: "container engine is stopped"))
   }
 
-  @Test func bootStatusWithoutHealthOrReasonFallsBackToGeneric() {
+  @Test
+  func bootStatusWithoutHealthOrReasonFallsBackToGeneric() {
     // given / when
-    let status = SandboxDoctorStatus.atBoot(
-      execEnabled: true,
-      health: nil,
-      unavailableReason: nil
-    )
+    let status = SandboxDoctorStatus.atBoot(execEnabled: true, health: nil, unavailableReason: nil)
 
     // then
     #expect(status == .unavailable(reason: "sandbox was not ready at daemon startup"))
   }
 
-  @Test func admittingRowFailsWhenRuntimeDisarmed() {
+  @Test
+  func admittingRowFailsWhenRuntimeDisarmed() {
     // given / when — a failed cleanup disarms admissions after a green boot
     let disarmed = SandboxHealthRows.admittingRow(false)
     let armed = SandboxHealthRows.admittingRow(true)
 
     // then
-    #expect(disarmed == .init(key: "sandbox.admitting", value: "false", ok: false, group: .sandbox))
-    #expect(armed == .init(key: "sandbox.admitting", value: "true", ok: true, group: .sandbox))
+    #expect(
+      disarmed
+        == DoctorReport.Check(key: "sandbox.admitting", value: "false", ok: false, group: .sandbox)
+    )
+    #expect(
+      armed
+        == DoctorReport.Check(key: "sandbox.admitting", value: "true", ok: true, group: .sandbox)
+    )
   }
 
-  @Test func configOnlyReportsVersionAndDefersTheCanary() {
+  @Test
+  func configOnlyReportsVersionAndDefersTheCanary() {
     // given / when
     let rows = SandboxHealthRows.rows(
       for: .configOnly(availability: .available(engineVersion: "1.1.0"))
@@ -101,16 +117,19 @@ import Testing
         "sandbox.canary",
       ]
     )
-    #expect(rows.allSatisfy { $0.ok })
+    #expect(
+      rows.allSatisfy {
+        $0.ok
+      }
+    )
     #expect(rows.last?.value == "deferred until live daemon startup")
   }
 
-  @Test func configOnlyBelowFloorFailsClosed() {
+  @Test
+  func configOnlyBelowFloorFailsClosed() {
     // given / when
     let rows = SandboxHealthRows.rows(
-      for: .configOnly(
-        availability: .unavailable(reason: "container 0.9.0 is below minimum 1.0.0")
-      )
+      for: .configOnly(availability: .unavailable(reason: "container 0.9.0 is below minimum 1.0.0"))
     )
 
     // then
@@ -123,11 +142,16 @@ import Testing
         "sandbox.last_error",
       ]
     )
-    #expect(rows.allSatisfy { $0.ok == false })
+    #expect(
+      rows.allSatisfy {
+        $0.ok == false
+      }
+    )
     #expect(rows.last?.value.contains("0.9.0") == true)
   }
 
-  @Test func daemonManagedAvailableReportsVersionAndDaemonOwnedCanary() {
+  @Test
+  func daemonManagedAvailableReportsVersionAndDaemonOwnedCanary() {
     // given / when
     let rows = SandboxHealthRows.rows(
       for: .daemonManaged(availability: .available(engineVersion: "1.1.0"))
@@ -143,11 +167,16 @@ import Testing
         "sandbox.canary",
       ]
     )
-    #expect(rows.allSatisfy { $0.ok })
+    #expect(
+      rows.allSatisfy {
+        $0.ok
+      }
+    )
     #expect(rows.last?.value == "owned by the running daemon")
   }
 
-  @Test func daemonManagedBelowFloorFailsClosed() {
+  @Test
+  func daemonManagedBelowFloorFailsClosed() {
     // given / when
     let rows = SandboxHealthRows.rows(
       for: .daemonManaged(
@@ -165,11 +194,16 @@ import Testing
         "sandbox.last_error",
       ]
     )
-    #expect(rows.allSatisfy { $0.ok == false })
+    #expect(
+      rows.allSatisfy {
+        $0.ok == false
+      }
+    )
     #expect(rows.last?.value.contains("0.9.0") == true)
   }
 
-  @Test func passingLiveSnapshotRendersEveryGateGreen() {
+  @Test
+  func passingLiveSnapshotRendersEveryGateGreen() {
     // given / when
     let rows = SandboxHealthRows.rows(for: .live(health: .passingForTests))
 
@@ -191,10 +225,15 @@ import Testing
         "sandbox.last_error",
       ]
     )
-    #expect(rows.allSatisfy { $0.ok })
+    #expect(
+      rows.allSatisfy {
+        $0.ok
+      }
+    )
   }
 
-  @Test func failedLiveAssertionAndErrorAreBothLoud() {
+  @Test
+  func failedLiveAssertionAndErrorAreBothLoud() {
     // given
     let health = SandboxHealth(
       available: true,
@@ -216,16 +255,27 @@ import Testing
     let rows = SandboxHealthRows.rows(for: .live(health: health))
 
     // then
-    #expect(rows.first { $0.key == "sandbox.net_isolated" }?.ok == false)
-    #expect(rows.first { $0.key == "sandbox.last_error" }?.ok == false)
-    #expect(rows.first { $0.key == "sandbox.last_error" }?.value == health.lastError)
+    #expect(
+      rows.first {
+        $0.key == "sandbox.net_isolated"
+      }?.ok == false
+    )
+    #expect(
+      rows.first {
+        $0.key == "sandbox.last_error"
+      }?.ok == false
+    )
+    #expect(
+      rows.first {
+        $0.key == "sandbox.last_error"
+      }?.value == health.lastError
+    )
   }
 
-  @Test func unavailableBootstrapIsLoud() {
+  @Test
+  func unavailableBootstrapIsLoud() {
     // given / when
-    let rows = SandboxHealthRows.rows(
-      for: .unavailable(reason: "container engine is stopped")
-    )
+    let rows = SandboxHealthRows.rows(for: .unavailable(reason: "container engine is stopped"))
 
     // then
     #expect(
@@ -245,7 +295,11 @@ import Testing
         "sandbox.last_error",
       ]
     )
-    #expect(rows.allSatisfy { $0.ok == false })
+    #expect(
+      rows.allSatisfy {
+        $0.ok == false
+      }
+    )
     #expect(rows.last?.value == "container engine is stopped")
   }
 }

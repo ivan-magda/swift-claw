@@ -2,8 +2,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct AttemptOutputLimiterTests {
-  @Test func exactCapIsAcceptedAndOneMoreUnitIsRejectedAtBothInputSeams() throws {
+@Suite
+struct AttemptOutputLimiterTests {
+  @Test
+  func exactCapIsAcceptedAndOneMoreUnitIsRejectedAtBothInputSeams() throws {
     // given
     let streamedLimiter = AttemptOutputLimiter(
       limits: AttemptOutputLimits(maximumUTF8Bytes: 4, maximumGraphemes: 4)
@@ -17,12 +19,7 @@ import Testing
     // when — both the incremental provider seam and terminal reconciliation land exactly at cap.
     try streamedRound.observe(fields: [AttemptOutputField(key: "visible", value: "1234")])
     try terminalRound.finalize(
-      ChatResponse(
-        content: "1234",
-        finishReason: "stop",
-        usage: nil,
-        costFromProvider: nil
-      )
+      ChatResponse(content: "1234", finishReason: "stop", usage: nil, costFromProvider: nil)
     )
 
     // then — `>=` would reject the two calls above; omitting either `>` check would accept these.
@@ -31,17 +28,13 @@ import Testing
     }
     #expect(throws: ProviderError.localOutputLimit) {
       try terminalRound.finalize(
-        ChatResponse(
-          content: "12345",
-          finishReason: "stop",
-          usage: nil,
-          costFromProvider: nil
-        )
+        ChatResponse(content: "12345", finishReason: "stop", usage: nil, costFromProvider: nil)
       )
     }
   }
 
-  @Test func toolArgumentsAndVisibleTextAccumulateAcrossRoundTrips() throws {
+  @Test
+  func toolArgumentsAndVisibleTextAccumulateAcrossRoundTrips() throws {
     // given
     let limiter = AttemptOutputLimiter(
       limits: AttemptOutputLimits(maximumUTF8Bytes: 8, maximumGraphemes: 8)
@@ -56,13 +49,11 @@ import Testing
     }
 
     // then
-    #expect(
-      limiter.counts
-        == AttemptOutputCounts(utf8Bytes: 9, graphemes: 9, limitExceeded: true)
-    )
+    #expect(limiter.counts == AttemptOutputCounts(utf8Bytes: 9, graphemes: 9, limitExceeded: true))
   }
 
-  @Test func graphemeAndUTF8LimitsRemainIndependent() throws {
+  @Test
+  func graphemeAndUTF8LimitsRemainIndependent() throws {
     // given — one extended grapheme made from two UTF-8 scalars crosses only the byte bound
     let limiter = AttemptOutputLimiter(
       limits: AttemptOutputLimits(maximumUTF8Bytes: 2, maximumGraphemes: 1)
@@ -81,7 +72,8 @@ import Testing
 
   /// A shorter terminal restatement cannot refund streamed output to the next round. This kills a
   /// replace-with-latest counter while still avoiding double charging an ordinary restatement.
-  @Test func shorterTerminalRestatementCannotReleaseTheRoundHighWaterMark() throws {
+  @Test
+  func shorterTerminalRestatementCannotReleaseTheRoundHighWaterMark() throws {
     // given
     let limiter = AttemptOutputLimiter(
       limits: AttemptOutputLimits(maximumUTF8Bytes: 8, maximumGraphemes: 8)
@@ -92,12 +84,7 @@ import Testing
 
     // when — the terminal response restates less than the stream emitted
     try firstRound.finalize(
-      ChatResponse(
-        content: "1",
-        finishReason: "stop",
-        usage: nil,
-        costFromProvider: nil
-      )
+      ChatResponse(content: "1", finishReason: "stop", usage: nil, costFromProvider: nil)
     )
 
     // then — round two sees the retained high-water mark and crosses the attempt cap
@@ -110,15 +97,14 @@ import Testing
 
   /// Field-local high waters prevent a shrinking visible field from funding a growing tool field.
   /// This kills a whole-snapshot `max(previousTotal, newTotal)` implementation.
-  @Test func shrinkingVisibleTextCannotRefundGrowingToolArgumentsInTheSameRound() throws {
+  @Test
+  func shrinkingVisibleTextCannotRefundGrowingToolArgumentsInTheSameRound() throws {
     // given
     let limiter = AttemptOutputLimiter(
       limits: AttemptOutputLimits(maximumUTF8Bytes: 12, maximumGraphemes: 12)
     )
     let round = limiter.beginRound()
-    try round.observe(fields: [
-      AttemptOutputField(key: "visible", value: "1234567890")
-    ])
+    try round.observe(fields: [AttemptOutputField(key: "visible", value: "1234567890")])
 
     // when
     #expect(throws: ProviderError.localOutputLimit) {
@@ -130,13 +116,13 @@ import Testing
 
     // then
     #expect(
-      limiter.counts
-        == AttemptOutputCounts(utf8Bytes: 20, graphemes: 20, limitExceeded: true)
+      limiter.counts == AttemptOutputCounts(utf8Bytes: 20, graphemes: 20, limitExceeded: true)
     )
   }
 
   /// Stable keys keep a late lower-index field from inheriting an older field's array slot.
-  @Test func lateFieldInsertionCannotShiftAndRefundAnExistingField() throws {
+  @Test
+  func lateFieldInsertionCannotShiftAndRefundAnExistingField() throws {
     // given
     let limiter = AttemptOutputLimiter(
       limits: AttemptOutputLimits(maximumUTF8Bytes: 12, maximumGraphemes: 12)
@@ -157,7 +143,8 @@ import Testing
     #expect(limiter.counts.graphemes == 20)
   }
 
-  @Test func graphemeLimitCanTripWhileTheByteLimitStillAllowsTheOutput() throws {
+  @Test
+  func graphemeLimitCanTripWhileTheByteLimitStillAllowsTheOutput() throws {
     // given
     let limiter = AttemptOutputLimiter(
       limits: AttemptOutputLimits(maximumUTF8Bytes: 100, maximumGraphemes: 2)

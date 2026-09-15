@@ -47,12 +47,11 @@ public enum RunFSM {
     case (.awaitingApproval, .cancel): .cancelled
     case (.awaitingApproval, .supersede): .superseded
     case (.pending, .complete), (.pending, .suspendForApproval), (.pending, .resumeApproved),
-      (.pending, .resolveDenied), (.running, .pickUp), (.running, .resumeApproved),
-      (.running, .resolveDenied), (.awaitingApproval, .pickUp), (.awaitingApproval, .complete),
-      (.awaitingApproval, .suspendForApproval):
+         (.pending, .resolveDenied), (.running, .pickUp), (.running, .resumeApproved),
+         (.running, .resolveDenied), (.awaitingApproval, .pickUp), (.awaitingApproval, .complete),
+         (.awaitingApproval, .suspendForApproval):
       nil
     case (.done, _), (.failed, _), (.cancelled, _), (.superseded, _): nil
     }
-  }
-  // swiftlint:enable cyclomatic_complexity
+  }  // swiftlint:enable cyclomatic_complexity
 }

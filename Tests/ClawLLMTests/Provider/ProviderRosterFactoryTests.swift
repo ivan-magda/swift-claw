@@ -16,9 +16,15 @@ struct ProviderRosterFactoryTests {
       primaryRoute: primary,
       fallbackRoute: nil,
       settings: settings(route: primary),
-      loadStaticBearer: { nil },
-      loadFallbackBearer: { nil },
-      makeManagedCredentialStore: { ScriptedCredentialStore(.value(nil)) },
+      loadStaticBearer: {
+        nil
+      },
+      loadFallbackBearer: {
+        nil
+      },
+      makeManagedCredentialStore: {
+        ScriptedCredentialStore(.value(nil))
+      },
       http: ScriptedHTTPExecutor([]),
       buildVersion: "test"
     )
@@ -39,9 +45,15 @@ struct ProviderRosterFactoryTests {
       primaryRoute: primary,
       fallbackRoute: fallback,
       settings: settings(route: primary),
-      loadStaticBearer: { nil },
-      loadFallbackBearer: { "fallback-key" },
-      makeManagedCredentialStore: { ScriptedCredentialStore(.value(nil)) },
+      loadStaticBearer: {
+        nil
+      },
+      loadFallbackBearer: {
+        "fallback-key"
+      },
+      makeManagedCredentialStore: {
+        ScriptedCredentialStore(.value(nil))
+      },
       http: ScriptedHTTPExecutor([]),
       buildVersion: "test"
     )
@@ -73,9 +85,15 @@ struct ProviderRosterFactoryTests {
         primaryRoute: primary,
         fallbackRoute: malformed,
         settings: settings(route: primary),
-        loadStaticBearer: { nil },
-        loadFallbackBearer: { nil },
-        makeManagedCredentialStore: { ScriptedCredentialStore(.value(nil)) },
+        loadStaticBearer: {
+          nil
+        },
+        loadFallbackBearer: {
+          nil
+        },
+        makeManagedCredentialStore: {
+          ScriptedCredentialStore(.value(nil))
+        },
         http: ScriptedHTTPExecutor([]),
         buildVersion: "test"
       )
@@ -103,7 +121,9 @@ struct ProviderRosterFactoryTests {
         fallbackBearerReads += 1
         return "fallback-key"
       },
-      makeManagedCredentialStore: { ScriptedCredentialStore(.value(nil)) },
+      makeManagedCredentialStore: {
+        ScriptedCredentialStore(.value(nil))
+      },
       http: ScriptedHTTPExecutor([]),
       buildVersion: "test"
     )
@@ -121,18 +141,20 @@ struct ProviderRosterFactoryTests {
     // 2 is wide enough that only the flag, not an exhausted budget, can explain a single attempt
     let primary = chatGPTRoute()
     let fallback = chatGPTRoute()
-    let http = ScriptedHTTPExecutor([
-      quotaWallStep(),
-      quotaWallStep(),
-      quotaWallStep(),
-    ])
+    let http = ScriptedHTTPExecutor([quotaWallStep(), quotaWallStep(), quotaWallStep()])
     let stack = try ProviderStackFactory.makeRoster(
       primaryRoute: primary,
       fallbackRoute: fallback,
       settings: settings(route: primary, retryBudget: 2),
-      loadStaticBearer: { nil },
-      loadFallbackBearer: { nil },
-      makeManagedCredentialStore: { ScriptedCredentialStore(.value(storedCredential())) },
+      loadStaticBearer: {
+        nil
+      },
+      loadFallbackBearer: {
+        nil
+      },
+      makeManagedCredentialStore: {
+        ScriptedCredentialStore(.value(storedCredential()))
+      },
       http: http,
       buildVersion: "test"
     )
@@ -161,9 +183,15 @@ struct ProviderRosterFactoryTests {
       primaryRoute: primary,
       fallbackRoute: nil,
       settings: settings(route: primary, retryBudget: 2),
-      loadStaticBearer: { nil },
-      loadFallbackBearer: { nil },
-      makeManagedCredentialStore: { ScriptedCredentialStore(.value(storedCredential())) },
+      loadStaticBearer: {
+        nil
+      },
+      loadFallbackBearer: {
+        nil
+      },
+      makeManagedCredentialStore: {
+        ScriptedCredentialStore(.value(storedCredential()))
+      },
       http: http,
       buildVersion: "test"
     )

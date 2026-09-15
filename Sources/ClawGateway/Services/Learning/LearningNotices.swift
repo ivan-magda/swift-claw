@@ -37,14 +37,14 @@ public struct LearningNotices: Sendable {
   public func reviewNotice(
     candidate: CandidateArtifact,
     state: CandidateReviewState,
-    ownerUserId: Int64,
-    chatId: Int64,
+    ownerUserID: Int64,
+    chatID: Int64,
     now: Date
   ) throws -> CandidateReviewNotice {
     guard
       candidate.manifest.evaluations.count <= EvidenceWindow.maximumCount,
       Set(candidate.manifest.evaluations.map(\.digest)).count
-        == candidate.manifest.evaluations.count
+      == candidate.manifest.evaluations.count
     else {
       throw LearningReviewError.invalidCandidate
     }
@@ -52,34 +52,33 @@ public struct LearningNotices: Sendable {
     let expiry = now.addingTimeInterval(EvidenceWindow.maximumAge)
     let candidateActions: [OwnerSignal]
     switch state {
-    case .admitted:
-      candidateActions = [.candidateReject, .candidateEdit]
+    case .admitted: candidateActions = [.candidateReject, .candidateEdit]
     case .awaitingApproval:
       candidateActions = [.candidateApprove, .candidateReject, .candidateEdit]
     }
     var targets = [
       NewFeedbackTarget(
         nonce: nonces[0],
-        jobId: candidate.manifest.jobId,
+        jobID: candidate.manifest.jobID,
         epoch: candidate.manifest.epoch,
         subjectKind: .candidate,
         subjectDigest: candidate.digest.rawValue,
         allowedActions: candidateActions,
-        ownerUserId: ownerUserId,
-        chatId: chatId,
+        ownerUserID: ownerUserID,
+        chatID: chatID,
         expiresAt: expiry
-      )
+      ),
     ]
     targets += candidate.manifest.evaluations.enumerated().map { index, evaluation in
       NewFeedbackTarget(
         nonce: nonces[index + 1],
-        jobId: candidate.manifest.jobId,
+        jobID: candidate.manifest.jobID,
         epoch: candidate.manifest.epoch,
         subjectKind: .evaluation,
         subjectDigest: evaluation.digest.rawValue,
         allowedActions: [.evaluationConfirm, .evaluationDispute],
-        ownerUserId: ownerUserId,
-        chatId: chatId,
+        ownerUserID: ownerUserID,
+        chatID: chatID,
         expiresAt: expiry
       )
     }
@@ -100,7 +99,7 @@ public struct LearningNotices: Sendable {
       LearningNoticeChunk(
         subjectDigest: subject,
         ordinal: ordinal,
-        chatId: chatId,
+        chatID: chatID,
         payload: payload,
         payloadHash: ContentHash.fnv1a(payload),
         replyMarkup: ordinal == parts.count - 1 ? markup : nil
@@ -119,15 +118,15 @@ public struct LearningNotices: Sendable {
   public func enqueueReview(
     candidate: CandidateArtifact,
     state: CandidateReviewState,
-    ownerUserId: Int64,
-    chatId: Int64,
+    ownerUserID: Int64,
+    chatID: Int64,
     now: Date
   ) throws -> Bool {
     let review = try reviewNotice(
       candidate: candidate,
       state: state,
-      ownerUserId: ownerUserId,
-      chatId: chatId,
+      ownerUserID: ownerUserID,
+      chatID: chatID,
       now: now
     )
     let inserted = try learning.commitCandidateReview(review, now: now)
@@ -143,33 +142,32 @@ public struct LearningNotices: Sendable {
     let notUseful = FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultNotUseful)
     let correction = FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultCorrection)
     return #"""
-      {"inline_keyboard":[[\#
-      {"callback_data":"\#(useful)","text":"Useful"},\#
-      {"callback_data":"\#(notUseful)","text":"Not useful"},\#
-      {"callback_data":"\#(correction)","text":"Correct it"}\#
-      ]]}
-      """#
+    {"inline_keyboard":[[\#
+    {"callback_data":"\#(useful)","text":"Useful"},\#
+    {"callback_data":"\#(notUseful)","text":"Not useful"},\#
+    {"callback_data":"\#(correction)","text":"Correct it"}\#
+    ]]}
+    """#
   }
 
   static func challengePrompt(for tap: FeedbackTap) -> [LearningNoticeChunk] {
     let payload: String
     switch tap.signal {
-    case .resultCorrection:
-      payload = "Reply with what this result should have done differently."
+    case .resultCorrection: payload = "Reply with what this result should have done differently."
     case .candidateEdit:
       payload = #"Reply with one JSON object: {"lessons":["..."]} (zero to three lessons)."#
-    case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute,
-      .candidateApprove, .candidateReject, .promotionRollback:
+    case .resultUseful, .resultNotUseful, .evaluationConfirm, .evaluationDispute, .candidateApprove,
+         .candidateReject, .promotionRollback:
       payload = "Reply with your feedback."
     }
     return [
       LearningNoticeChunk(
         subjectDigest: FeedbackChallengeDeliveryIdentity.digest(targetNonce: tap.nonce),
         ordinal: 0,
-        chatId: tap.chatId,
+        chatID: tap.chatID,
         payload: payload,
         payloadHash: ContentHash.fnv1a(payload)
-      )
+      ),
     ]
   }
 }
@@ -199,10 +197,12 @@ private extension LearningNotices {
     let lessons = candidate.replacement.lessons
     let body =
       lessons.isEmpty
-      ? "- Remove all learned lessons."
-      : lessons.enumerated().map { index, lesson in
-        "\(index + 1). \(lesson)"
-      }.joined(separator: "\n")
+        ? "- Remove all learned lessons."
+        : lessons.enumerated().map { index, lesson in
+          "\(index + 1). \(lesson)"
+        }.joined(
+          separator: "\n"
+        )
     return "Candidate lessons for review:\n\(body)"
   }
 }

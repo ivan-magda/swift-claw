@@ -1,11 +1,12 @@
 import ClawCore
 import Testing
 
-@Suite struct SessionTraceIDTests {
+@Suite
+struct SessionTraceIDTests {
   @Test(arguments: [
-    (Int64(42), "clawd-session-42"),
-    (Int64(0), "clawd-session-0"),
-    (Int64(-1), "clawd-session--1"),
+    ((42 as Int64), "clawd-session-42"),
+    ((0 as Int64), "clawd-session-0"),
+    ((-1 as Int64), "clawd-session--1"),
     (Int64.max, "clawd-session-9223372036854775807"),
     (Int64.min, "clawd-session--9223372036854775808"),
   ])

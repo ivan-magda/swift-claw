@@ -13,14 +13,13 @@ private let accountClaimName = "https://api.openai.com/auth"
 /// test, so the third segment is arbitrary text rather than a real MAC. Module-scoped, so the suites
 /// that need a token with a given claim share one notion of what a token looks like.
 enum TokenBuilder {
-  static func segment(_ json: String) -> String {
-    base64URL(Data(json.utf8))
-  }
+  static func segment(_ json: String) -> String { base64URL(Data(json.utf8)) }
 
   static func base64URL(_ data: Data) -> String {
-    standardBase64(data)
-      .replacingOccurrences(of: "+", with: "-")
-      .replacingOccurrences(of: "/", with: "_")
+    standardBase64(data).replacingOccurrences(of: "+", with: "-").replacingOccurrences(
+      of: "/",
+      with: "_"
+    )
   }
 
   /// Unpadded base64 in the *standard* alphabet, which differs from base64url only in the two
@@ -58,10 +57,12 @@ enum TokenBuilder {
   }
 }
 
-@Suite struct ChatGPTTokenMetadataTests {
+@Suite
+struct ChatGPTTokenMetadataTests {
   // MARK: - Positive Extraction
 
-  @Test func extractReadsExpiryAndAccountFromAWellFormedToken() {
+  @Test
+  func extractReadsExpiryAndAccountFromAWellFormedToken() {
     // given
     let token = TokenBuilder.token(
       payload: #"{"exp":1893456000,"\#(accountClaimName)":{"chatgpt_account_id":"acct-123"}}"#
@@ -91,7 +92,8 @@ enum TokenBuilder {
     #expect(metadata.expiresAt == Date(timeIntervalSince1970: expected))
   }
 
-  @Test func extractReadsAnAccountIdWithoutAnExpiryClaim() {
+  @Test
+  func extractReadsAnAccountIDWithoutAnExpiryClaim() {
     // given
     let token = TokenBuilder.token(
       payload: #"{"\#(accountClaimName)":{"chatgpt_account_id":"solo-account"}}"#
@@ -105,7 +107,8 @@ enum TokenBuilder {
     #expect(metadata.accountID == "solo-account")
   }
 
-  @Test func extractReadsAnExpiryWithoutAnAccountClaim() {
+  @Test
+  func extractReadsAnExpiryWithoutAnAccountClaim() {
     // given
     let token = TokenBuilder.token(payload: #"{"exp":1893456000,"sub":"user"}"#)
 
@@ -117,7 +120,8 @@ enum TokenBuilder {
     #expect(metadata.accountID == nil)
   }
 
-  @Test func extractAcceptsAnAccountIdExactlyAtThe256ByteBar() {
+  @Test
+  func extractAcceptsAnAccountIDExactlyAtThe256ByteBar() {
     // given
     let exact = String(repeating: "a", count: 256)
     let token = TokenBuilder.token(
@@ -131,7 +135,8 @@ enum TokenBuilder {
     #expect(metadata.accountID == exact)
   }
 
-  @Test func extractAcceptsAPayloadExactlyAtThe64KiBBound() {
+  @Test
+  func extractAcceptsAPayloadExactlyAtThe64KiBBound() {
     // given
     let payload = TokenBuilder.payload(paddedTo: 65_536, accountID: "large-but-legal")
     let token = TokenBuilder.token(payload: payload)
@@ -146,7 +151,8 @@ enum TokenBuilder {
 
   // MARK: - Payload Bound
 
-  @Test func extractRejectsAPayloadOneByteOverThe64KiBBound() {
+  @Test
+  func extractRejectsAPayloadOneByteOverThe64KiBBound() {
     // given
     let payload = TokenBuilder.payload(paddedTo: 65_537, accountID: "over-the-bound")
     let token = TokenBuilder.token(payload: payload)
@@ -159,7 +165,8 @@ enum TokenBuilder {
     #expect(metadata == ChatGPTTokenMetadata(expiresAt: nil, accountID: nil))
   }
 
-  @Test func extractRejectsAGrosslyOversizedPayload() {
+  @Test
+  func extractRejectsAGrosslyOversizedPayload() {
     // given — several times the cap; the exact 64 KiB boundary is pinned by its own pair above
     let payload = TokenBuilder.payload(paddedTo: 256 * 1024, accountID: "huge")
     let token = TokenBuilder.token(payload: payload)
@@ -204,7 +211,7 @@ enum TokenBuilder {
     "42",
     "null",
   ])
-  func extractYieldsEmptyMetadataForPayloadsThatAreNotJsonObjects(payload: String) {
+  func extractYieldsEmptyMetadataForPayloadsThatAreNotJSONObjects(payload: String) {
     // given
     let token = TokenBuilder.token(payload: payload)
 
@@ -221,10 +228,11 @@ enum TokenBuilder {
   /// both, which would make a strictness test vacuous; the `?` forces a 63 sextet, so the standard
   /// form carries `/` exactly where the base64url form carries `_`.
   static let divergentPayload = #"""
-    {"exp":1893456000,"https://api.openai.com/auth":{"chatgpt_account_id":"acct-123"},"pad":"?"}
-    """#
+  {"exp":1893456000,"https://api.openai.com/auth":{"chatgpt_account_id":"acct-123"},"pad":"?"}
+  """#
 
-  @Test func extractReadsAPayloadEncodedInBase64url() {
+  @Test
+  func extractReadsAPayloadEncodedInBase64url() {
     // given
     let segment = TokenBuilder.base64URL(Data(Self.divergentPayload.utf8))
     let token = TokenBuilder.token(rawPayloadSegment: segment)
@@ -238,7 +246,8 @@ enum TokenBuilder {
     #expect(metadata.expiresAt == Date(timeIntervalSince1970: 1_893_456_000))
   }
 
-  @Test func extractRejectsTheSamePayloadEncodedInStandardBase64() {
+  @Test
+  func extractRejectsTheSamePayloadEncodedInStandardBase64() {
     // given
     // The identical bytes, in the wrong alphabet. Decoding this leniently would succeed and yield
     // a perfectly readable account, so only a strict alphabet check can turn it away.
@@ -254,7 +263,8 @@ enum TokenBuilder {
     #expect(metadata == ChatGPTTokenMetadata(expiresAt: nil, accountID: nil))
   }
 
-  @Test func extractYieldsEmptyMetadataForAPayloadThatIsNotValidUtf8() {
+  @Test
+  func extractYieldsEmptyMetadataForAPayloadThatIsNotValidUTF8() {
     // given
     let invalidUTF8 = Data([0xFF, 0xFE, 0xFD, 0xFC])
     let token = TokenBuilder.token(rawPayloadSegment: TokenBuilder.base64URL(invalidUTF8))
@@ -334,7 +344,7 @@ enum TokenBuilder {
     " leading-space",
     "trailing-space ",
   ])
-  func extractOmitsAnAccountIdThatCannotSafelyBecomeAHeaderValue(accountID: String) {
+  func extractOmitsAnAccountIDThatCannotSafelyBecomeAHeaderValue(accountID: String) {
     // given
     let token = TokenBuilder.token(
       payload: #"{"\#(accountClaimName)":{"chatgpt_account_id":"\#(accountID)"}}"#
@@ -347,7 +357,8 @@ enum TokenBuilder {
     #expect(metadata.accountID == nil)
   }
 
-  @Test func extractOmitsAnAccountIdOneByteOverThe256ByteBar() {
+  @Test
+  func extractOmitsAnAccountIDOneByteOverThe256ByteBar() {
     // given
     let oversized = String(repeating: "a", count: 257)
     let token = TokenBuilder.token(
@@ -363,13 +374,14 @@ enum TokenBuilder {
 
   // MARK: - Independence Of Claims
 
-  @Test func aRejectedAccountClaimDoesNotDiscardAUsableExpiry() {
+  @Test
+  func aRejectedAccountClaimDoesNotDiscardAUsableExpiry() {
     // given
     // A malformed account is not a credential failure; the expiry beside it must still be read.
     let token = TokenBuilder.token(
       payload: #"""
-        {"exp":1893456000,"\#(accountClaimName)":{"chatgpt_account_id":"bad account"}}
-        """#
+      {"exp":1893456000,"\#(accountClaimName)":{"chatgpt_account_id":"bad account"}}
+      """#
     )
 
     // when
@@ -380,7 +392,8 @@ enum TokenBuilder {
     #expect(metadata.accountID == nil)
   }
 
-  @Test func aRejectedExpiryClaimDoesNotDiscardAUsableAccount() {
+  @Test
+  func aRejectedExpiryClaimDoesNotDiscardAUsableAccount() {
     // given
     let token = TokenBuilder.token(
       payload: #"{"exp":"never","\#(accountClaimName)":{"chatgpt_account_id":"acct-9"}}"#

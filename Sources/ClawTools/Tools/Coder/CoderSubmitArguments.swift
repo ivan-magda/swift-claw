@@ -24,7 +24,7 @@ enum CoderSubmitArguments {
           name: objectSchema(
             properties: [field: .object(["type": .string("string")])],
             required: [field]
-          )
+          ),
         ],
         required: [name]
       )
@@ -78,8 +78,10 @@ enum CoderSubmitArguments {
 
   static func decode(_ value: JSONValue) throws -> CoderRequest {
     guard
-      let object = value.objectValue, Set(object.keys).isSubset(of: fields),
-      let sourceObject = object["source"]?.objectValue, sourceObject.count == 1,
+      let object = value.objectValue,
+      Set(object.keys).isSubset(of: fields),
+      let sourceObject = object["source"]?.objectValue,
+      sourceObject.count == 1,
       let sourceCase = sourceObject.first,
       let sourceFields = sourceCase.value.objectValue,
       let workspaceText = object["workspace"]?.stringValue,
@@ -92,24 +94,18 @@ enum CoderSubmitArguments {
 
     let source: CoderSource
     switch sourceCase.key {
-    case "local":
-      source = .local(path: try sourceText(sourceFields, field: "path"))
+    case "local": source = .local(path: try sourceText(sourceFields, field: "path"))
     case "githubRepository":
       source = .githubRepository(url: try sourceText(sourceFields, field: "url"))
-    case "githubIssue":
-      source = .githubIssue(url: try sourceText(sourceFields, field: "url"))
-    default:
-      throw CoderError.invalidRequest("Unknown Coder source.")
+    case "githubIssue": source = .githubIssue(url: try sourceText(sourceFields, field: "url"))
+    default: throw CoderError.invalidRequest("Unknown Coder source.")
     }
 
     let publish: Bool
     switch object["publish_existing_changes"] {
-    case nil:
-      publish = false
-    case .bool(let value):
-      publish = value
-    default:
-      throw CoderError.invalidRequest("publish_existing_changes must be a boolean.")
+    case nil: publish = false
+    case .bool(let value): publish = value
+    default: throw CoderError.invalidRequest("publish_existing_changes must be a boolean.")
     }
 
     return try CoderRequest(
@@ -121,22 +117,15 @@ enum CoderSubmitArguments {
       baseBranch: optionalText(object, field: "base_branch"),
       instructions: optionalText(object, field: "instructions"),
       publishExistingChanges: publish
-    )
-    .validated()
+    ).validated()
   }
 }
 
 // MARK: - Wire Fields
 
 private extension CoderSubmitArguments {
-  static func sourceText(
-    _ fields: [String: JSONValue],
-    field: String
-  ) throws -> String {
-    guard
-      Set(fields.keys) == [field],
-      let value = fields[field]?.stringValue
-    else {
+  static func sourceText(_ fields: [String: JSONValue], field: String) throws -> String {
+    guard Set(fields.keys) == [field], let value = fields[field]?.stringValue else {
       throw CoderError.invalidRequest("The source requires only its declared \(field) string.")
     }
     return value
@@ -144,12 +133,9 @@ private extension CoderSubmitArguments {
 
   static func optionalText(_ object: [String: JSONValue], field: String) throws -> String? {
     switch object[field] {
-    case nil, .null:
-      return nil
-    case .string(let text):
-      return text
-    default:
-      throw CoderError.invalidRequest("\(field) must be a string or null.")
+    case nil, .null: return nil
+    case .string(let text): return text
+    default: throw CoderError.invalidRequest("\(field) must be a string or null.")
     }
   }
 
@@ -158,8 +144,10 @@ private extension CoderSubmitArguments {
       JSONValue.string(field)
     }
     return .object([
-      "type": .string("object"), "properties": .object(properties),
-      "required": .array(requiredFields), "additionalProperties": .bool(false),
+      "type": .string("object"),
+      "properties": .object(properties),
+      "required": .array(requiredFields),
+      "additionalProperties": .bool(false),
     ])
   }
 }

@@ -19,24 +19,19 @@ final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Sendable {
   let behavior: Behavior
   private(set) var loadCount = 0
 
-  init(_ behavior: Behavior) {
-    self.behavior = behavior
-  }
+  init(_ behavior: Behavior) { self.behavior = behavior }
 
   func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
     loadCount += 1
     switch behavior {
-    case .value(let credential):
-      return credential
-    case .failure(let error):
-      throw error
+    case .value(let credential): return credential
+    case .failure(let error): throw error
     }
   }
 
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) {}
+  func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
+    throws(LLMCredentialStoreError)
+  {}
 
   func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
 }
@@ -60,10 +55,7 @@ struct ScriptedLLMCredentialSource: LLMCredentialSource {
     )
   }
 
-  func reject(
-    generation: LLMCredentialGeneration,
-    disposition: LLMCredentialRejection
-  ) async {}
+  func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {}
 
   func shutdown() async throws {}
 }
@@ -75,9 +67,7 @@ struct CredentialUnavailable: Error {}
 actor SleepRecorder {
   private(set) var delays: [Double] = []
 
-  func record(_ seconds: Double) {
-    delays.append(seconds)
-  }
+  func record(_ seconds: Double) { delays.append(seconds) }
 }
 
 // MARK: - Builders
@@ -94,10 +84,9 @@ struct TestProviderConfig {
 
 /// A current-route resolution for a configured endpoint, so a test needing only the wire adapter does
 /// not restate the descriptor.
-func makeCurrentRoute(
-  endpoint: String = "https://api.test/v1",
-  model: String = "gpt-4o"
-) -> ResolvedLLMRoute {
+func makeCurrentRoute(endpoint: String = "https://api.test/v1", model: String = "gpt-4o")
+  -> ResolvedLLMRoute
+{
   ResolvedLLMRoute(
     descriptor: .openAICompatible(endpoint: endpoint),
     configuredReference: model,
@@ -178,7 +167,9 @@ func makeProvider(
   http: any HTTPExecuting & HTTPStreaming,
   credentials: (any LLMCredentialSource)? = nil,
   recorder: SleepRecorder = SleepRecorder(),
-  jitter: @escaping @Sendable (Duration) -> Duration = { _ in .zero }
+  jitter: @escaping @Sendable (_ duration: Duration) -> Duration = { _ in
+    .zero
+  }
 ) -> OpenAICompatibleProvider {
   OpenAICompatibleProvider(
     config: config.config,
@@ -195,31 +186,29 @@ func makeProvider(
 
 /// Drains a session and joins it, the way every consumer must. Returns the events and the terminal
 /// so a test can assert on both without repeating the join.
-func drain(
-  _ stream: LLMEventStream
-) async -> (events: [StreamEvent], thrown: (any Error)?, terminal: LLMStreamTermination) {
+func drain(_ stream: LLMEventStream) async -> (
+  events: [StreamEvent],
+  thrown: (any Error)?,
+  terminal: LLMStreamTermination
+) {
   var events: [StreamEvent] = []
   var thrown: (any Error)?
   do {
     for try await event in stream {
       events.append(event)
     }
-  } catch {
-    thrown = error
-  }
+  } catch { thrown = error }
   return (events, thrown, await stream.awaitTermination())
 }
 
-func okStep(
-  content: String = "hi",
-  finishReason: String = "stop",
-  headers: [String: String] = [:]
-) -> ScriptedHTTPExecutor.Step {
+func okStep(content: String = "hi", finishReason: String = "stop", headers: [String: String] = [:])
+  -> ScriptedHTTPExecutor.Step
+{
   let json = """
-    {"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"\(content)"},
-    "finish_reason":"\(finishReason)"}],
-    "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
-    """
+  {"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"\(content)"},
+  "finish_reason":"\(finishReason)"}],
+  "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+  """
   return .ok(HTTPResult(statusCode: 200, headers: headers, body: Data(json.utf8)))
 }
 

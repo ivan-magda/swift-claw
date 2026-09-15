@@ -25,11 +25,13 @@ public struct LLMEventBufferLimits: Sendable, Equatable {
   public let maximumDeltaBytes: Int
   public let reservedTerminalBytes: Int
 
-  /// - Parameter maximumDeltaCount: how many deltas may sit unread. Enforced by charging every delta
-  ///   at least its share of `maximumDeltaBytes`, so both delta bounds come out of one budget.
-  /// - Parameter maximumDeltaBytes: the UTF-8 payload those deltas may hold between them.
-  /// - Parameter reservedTerminalBytes: what the terminal reply may weigh. A reply past it is
-  ///   refused rather than held.
+  /// Defines positive buffering limits for unread deltas and the reserved terminal reply.
+  ///
+  /// - Parameters:
+  ///   - maximumDeltaCount: The target unread delta count used to derive a minimum byte charge.
+  ///     Custom byte/count ratios round that charge down and may admit more deltas than requested.
+  ///   - maximumDeltaBytes: The maximum combined UTF-8 payload of unread deltas.
+  ///   - reservedTerminalBytes: The terminal reply's maximum weight; larger replies are refused.
   public init(maximumDeltaCount: Int, maximumDeltaBytes: Int, reservedTerminalBytes: Int) {
     precondition(maximumDeltaCount > 0, "a stream needs room for a delta, got \(maximumDeltaCount)")
     precondition(maximumDeltaBytes > 0, "a stream needs delta bytes, got \(maximumDeltaBytes)")
@@ -57,7 +59,9 @@ public struct LLMEventBufferLimits: Sendable, Equatable {
 // MARK: - Event stream
 
 /// An owning, bounded stream of inference events: the events themselves and the producer that fills
-/// them. The stream owns that producer's lifetime, so joining the stream joins the inference — and
+/// them.
+///
+/// The stream owns that producer's lifetime, so joining the stream joins the inference — and
 /// transitively whatever the producer nests inside itself, an HTTP exchange included.
 ///
 /// Every consumer exit path joins — `awaitTermination()` after a full read, `cancelAndAwait()`
@@ -70,11 +74,12 @@ public struct LLMEventStream: AsyncSequence, Sendable {
   private let owner: LLMStreamOwner
 
   /// Builds a stream around `operation`, which fills the sink and reports how the inference ended.
+  ///
   /// It returns without suspending, so the caller holds the cancellation-and-join handle before any
   /// authorization or network work can race a deadline.
   public static func make(
     limits: LLMEventBufferLimits = .providerDefault,
-    operation: @escaping @Sendable (LLMEventSink) async -> LLMStreamTermination
+    operation: @escaping @Sendable (_ sink: LLMEventSink) async -> LLMStreamTermination
   ) -> LLMEventStream {
     let channel = BoundedAsyncChannel<String>(capacity: limits.maximumDeltaBytes) { text in
       limits.deltaCharge(forTextBytes: text.utf8.count)
@@ -102,24 +107,22 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     return LLMEventStream(channel: channel, owner: owner)
   }
 
-  public func cancel() {
-    owner.cancel()
-  }
+  public func cancel() { owner.cancel() }
 
   public func cancelAndAwait() async -> LLMStreamTermination {
     owner.cancel()
     return await owner.awaitTermination()
   }
 
-  public func awaitTermination() async -> LLMStreamTermination {
-    await owner.awaitTermination()
-  }
+  public func awaitTermination() async -> LLMStreamTermination { await owner.awaitTermination() }
 
   public func makeAsyncIterator() -> AsyncIterator {
     AsyncIterator(
       base: channel.makeAsyncIterator(),
       owner: owner,
-      lease: StreamAbandonmentLease { owner.cancel() }
+      lease: StreamAbandonmentLease {
+        owner.cancel()
+      }
     )
   }
 
@@ -153,20 +156,17 @@ public struct LLMEventStream: AsyncSequence, Sendable {
 // MARK: - Suspension observation
 
 extension LLMEventStream {
-  var suspendedDeltaSenderCount: Int {
-    channel.suspendedSenderCount
-  }
+  var suspendedDeltaSenderCount: Int { channel.suspendedSenderCount }
 
-  var parkedJoinerCount: Int {
-    owner.parkedJoinerCount
-  }
+  var parkedJoinerCount: Int { owner.parkedJoinerCount }
 }
 
 // MARK: - Event sink
 
-/// The write end of a stream. Deltas only: the terminal is not something a producer sends, it is
-/// something a producer reports, which is what removes any window between the last event and the
-/// outcome that explains it.
+/// The write end of a stream.
+///
+/// Deltas only: the terminal is not something a producer sends, it is something a producer reports,
+/// which is what removes any window between the last event and the outcome that explains it.
 public struct LLMEventSink: Sendable {
   fileprivate let channel: BoundedAsyncChannel<String>
 
@@ -175,24 +175,19 @@ public struct LLMEventSink: Sendable {
   /// - Throws: `CancellationError` or `BoundedAsyncChannelError.channelFinished` once the stream is
   ///   cancelled or its terminal has landed, or `BoundedAsyncChannelError.elementExceedsCapacity`
   ///   for a delta larger than the whole delta budget, which no amount of draining could admit.
-  public func sendDelta(_ text: String) async throws {
-    try await channel.send(text)
-  }
+  public func sendDelta(_ text: String) async throws { try await channel.send(text) }
 }
 
 // MARK: - Weighing
 
 extension LLMEventBufferLimits {
-  /// The least a delta may charge. Raising the floor from one byte to one slot is what makes a
-  /// single byte budget carry both delta bounds: a flood of empty deltas exhausts it at the count
-  /// bound, a few large ones at the byte bound.
-  private var deltaSlotBytes: Int {
-    max(1, maximumDeltaBytes / maximumDeltaCount)
-  }
+  /// The least a delta may charge.
+  ///
+  /// The default byte budget divides evenly into slots, bounding both count and bytes.
+  /// Custom ratios round down; their count cap can therefore exceed the requested target.
+  private var deltaSlotBytes: Int { max(1, maximumDeltaBytes / maximumDeltaCount) }
 
-  func deltaCharge(forTextBytes textBytes: Int) -> Int {
-    max(textBytes, deltaSlotBytes)
-  }
+  func deltaCharge(forTextBytes textBytes: Int) -> Int { max(textBytes, deltaSlotBytes) }
 
   /// What holding `response` costs against the reservation: every byte a consumer can read back off
   /// it, not just the visible text, because replay state and tool arguments are held just as long.
@@ -214,12 +209,12 @@ extension LLMEventBufferLimits {
   }
 
   /// Settles what the producer reported against what the holder asked for and what the reservation
-  /// can hold. Reads only immutable configuration, which is what lets the owner run it under its
-  /// commit lock.
-  func resolvedTermination(
-    _ termination: LLMStreamTermination,
-    isCancelRequested: Bool
-  ) -> LLMStreamTermination {
+  /// can hold.
+  ///
+  /// Reads only immutable configuration, which is what lets the owner run it under its commit lock.
+  func resolvedTermination(_ termination: LLMStreamTermination, isCancelRequested: Bool)
+    -> LLMStreamTermination
+  {
     guard case .completed(let response) = termination else {
       return termination
     }
@@ -236,7 +231,7 @@ extension LLMEventBufferLimits {
           cause: .terminal(
             status: nil,
             message:
-              "streamed reply exceeded the \(reservedTerminalBytes)-byte terminal reservation"
+            "streamed reply exceeded the \(reservedTerminalBytes)-byte terminal reservation"
           ),
           accounting: .mayHaveStarted(observing: observedTokens)
         )

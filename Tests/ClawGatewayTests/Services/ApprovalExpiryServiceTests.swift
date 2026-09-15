@@ -37,23 +37,13 @@ private final class RecordingApprovalStore: ApprovalStore, @unchecked Sendable {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
   }
 
-  func approve(
-    id: Int64,
-    currentPolicyVersion: String,
-    actor: ApprovalResolutionActor?,
-    now: Date
-  ) throws(StoreError) -> ApprovalApproveOutcome {
-    throw StoreError.unexpected("unused by ApprovalExpiryService")
-  }
+  func approve(id: Int64, currentPolicyVersion: String, actor: ApprovalResolutionActor?, now: Date)
+    throws(StoreError) -> ApprovalApproveOutcome
+  { throw StoreError.unexpected("unused by ApprovalExpiryService") }
 
-  func deny(
-    id: Int64,
-    decision: ApprovalDecision,
-    actor: ApprovalResolutionActor?,
-    now: Date
-  ) throws(StoreError) -> Bool {
-    throw StoreError.unexpected("unused by ApprovalExpiryService")
-  }
+  func deny(id: Int64, decision: ApprovalDecision, actor: ApprovalResolutionActor?, now: Date)
+    throws(StoreError) -> Bool
+  { throw StoreError.unexpected("unused by ApprovalExpiryService") }
 
   func unresolvedAtBoot() throws(StoreError) -> [Approval] {
     throw StoreError.unexpected("unused by ApprovalExpiryService")
@@ -87,7 +77,8 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
   }
 }
 
-@Suite struct ApprovalExpiryServiceTests {
+@Suite
+struct ApprovalExpiryServiceTests {
   private struct TickFixture {
     let queue: DatabaseQueue
     let store: ApprovalStoreGRDB
@@ -103,9 +94,9 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-          VALUES ('tg:dm:7', ?, ?, 0)
-          """,
+        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+        VALUES ('tg:dm:7', ?, ?, 0)
+        """,
         arguments: [Date(), Date()]
       )
     }
@@ -114,7 +105,9 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
     let service = ApprovalExpiryService(
       approvals: store,
       coordinator: coordinator,
-      now: { now },
+      now: {
+        now
+      },
       clock: ScriptedClock { _ in
         try? await Task.sleep(for: .milliseconds(1))
         throw CancellationError()
@@ -129,9 +122,9 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO runs(session_id, state, created_ts, updated_ts)
-          VALUES (1, ?, ?, ?)
-          """,
+        INSERT INTO runs(session_id, state, created_ts, updated_ts)
+        VALUES (1, ?, ?, ?)
+        """,
         arguments: [RunState.awaitingApproval.rawValue, Date(), Date()]
       )
       return db.lastInsertedRowID
@@ -143,7 +136,7 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
   @discardableResult
   private func seedApproval(
     _ queue: DatabaseQueue,
-    runId: Int64,
+    runID: Int64,
     nonce: String,
     createdEpoch: Int64,
     expiresEpoch: Int64
@@ -151,35 +144,36 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
-            args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
-            reason, created_ts, expires_ts)
-          VALUES (?, 1, 'PENDING', 'file_write', '{}', '/w/plan.md', 'h16', 'pv16', 7, ?, 1, 'c1',
-            'ask_tier', ?, ?)
-          """,
-        arguments: [runId, nonce, createdEpoch, expiresEpoch]
+        INSERT INTO approvals(run_id, session_id, state, tool, canonical_args, canonical_target,
+          args_hash, policy_version, owner_user_id, nonce, observation_message_id, tool_call_id,
+          reason, created_ts, expires_ts)
+        VALUES (?, 1, 'PENDING', 'file_write', '{}', '/w/plan.md', 'h16', 'pv16', 7, ?, 1, 'c1',
+          'ask_tier', ?, ?)
+        """,
+        arguments: [runID, nonce, createdEpoch, expiresEpoch]
       )
       return db.lastInsertedRowID
     }
   }
 
-  @Test func tickExpiresPastDuePendingRowsAndSignalsTheirWaiters() async throws {
+  @Test
+  func tickExpiresPastDuePendingRowsAndSignalsTheirWaiters() async throws {
     // given — two runs: one approval already past its deadline, one still live (distinct runs so
     // the partial UNIQUE-PENDING index permits both)
     let now = Date(timeIntervalSince1970: 1_782_003_600)
     let fixture = try makeTickFixture(now: now)
     let expiredRun = try seedRun(fixture.queue)
     let liveRun = try seedRun(fixture.queue)
-    let expiredId = try seedApproval(
+    let expiredID = try seedApproval(
       fixture.queue,
-      runId: expiredRun,
+      runID: expiredRun,
       nonce: "n-expired",
       createdEpoch: 1_781_996_400,
       expiresEpoch: 1_782_000_000
     )
-    let liveId = try seedApproval(
+    let liveID = try seedApproval(
       fixture.queue,
-      runId: liveRun,
+      runID: liveRun,
       nonce: "n-live",
       createdEpoch: 1_782_003_000,
       expiresEpoch: 1_782_007_200
@@ -190,27 +184,28 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
 
     // then — the past-due row is EXPIRED in the DB and its waiter received denied(.expired); the
     // live row is untouched
-    #expect(try fixture.store.approval(id: expiredId)?.state == .expired)
-    #expect(try fixture.store.approval(id: liveId)?.state == .pending)
-    #expect(await fixture.coordinator.awaitResolution(approvalId: expiredId) == .denied(.expired))
+    #expect(try fixture.store.approval(id: expiredID)?.state == .expired)
+    #expect(try fixture.store.approval(id: liveID)?.state == .pending)
+    #expect(await fixture.coordinator.awaitResolution(approvalID: expiredID) == .denied(.expired))
   }
 
-  @Test func tickSignalsEverySweptRow() async throws {
+  @Test
+  func tickSignalsEverySweptRow() async throws {
     // given — two independently past-due approvals on distinct runs
     let now = Date(timeIntervalSince1970: 1_782_003_600)
     let fixture = try makeTickFixture(now: now)
     let firstRun = try seedRun(fixture.queue)
     let secondRun = try seedRun(fixture.queue)
-    let firstId = try seedApproval(
+    let firstID = try seedApproval(
       fixture.queue,
-      runId: firstRun,
+      runID: firstRun,
       nonce: "n-1",
       createdEpoch: 1_781_996_400,
       expiresEpoch: 1_782_000_000
     )
-    let secondId = try seedApproval(
+    let secondID = try seedApproval(
       fixture.queue,
-      runId: secondRun,
+      runID: secondRun,
       nonce: "n-2",
       createdEpoch: 1_781_996_400,
       expiresEpoch: 1_782_000_060
@@ -220,20 +215,21 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
     await fixture.service.tick()
 
     // then — every swept row got its own denied(.expired) signal and is EXPIRED in the DB
-    #expect(await fixture.coordinator.awaitResolution(approvalId: firstId) == .denied(.expired))
-    #expect(await fixture.coordinator.awaitResolution(approvalId: secondId) == .denied(.expired))
-    #expect(try fixture.store.approval(id: firstId)?.state == .expired)
-    #expect(try fixture.store.approval(id: secondId)?.state == .expired)
+    #expect(await fixture.coordinator.awaitResolution(approvalID: firstID) == .denied(.expired))
+    #expect(await fixture.coordinator.awaitResolution(approvalID: secondID) == .denied(.expired))
+    #expect(try fixture.store.approval(id: firstID)?.state == .expired)
+    #expect(try fixture.store.approval(id: secondID)?.state == .expired)
   }
 
-  @Test func tickLeavesLiveRowsPendingAndSignalsNoOne() async throws {
+  @Test
+  func tickLeavesLiveRowsPendingAndSignalsNoOne() async throws {
     // given — a single approval whose deadline is still in the future
     let now = Date(timeIntervalSince1970: 1_782_003_600)
     let fixture = try makeTickFixture(now: now)
     let run = try seedRun(fixture.queue)
-    let liveId = try seedApproval(
+    let liveID = try seedApproval(
       fixture.queue,
-      runId: run,
+      runID: run,
       nonce: "n-live",
       createdEpoch: 1_782_003_000,
       expiresEpoch: 1_782_007_200
@@ -244,10 +240,11 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
 
     // then — nothing swept: the row stays PENDING (a never-signaled id cannot be awaited without
     // hanging, so the untouched persisted row is the observable proof no waiter was signaled)
-    #expect(try fixture.store.approval(id: liveId)?.state == .pending)
+    #expect(try fixture.store.approval(id: liveID)?.state == .pending)
   }
 
-  @Test func runTicksImmediatelyThenSleepsTheTickInterval() async throws {
+  @Test
+  func runTicksImmediatelyThenSleepsTheTickInterval() async throws {
     // given — a recording store and a sleep that SUSPENDS (never blocks the cooperative thread,
     // TESTING §8) then throws to end the loop like a graceful shutdown
     let store = RecordingApprovalStore()
@@ -255,7 +252,9 @@ private final class ExpirySleepRecorder: @unchecked Sendable {
     let service = ApprovalExpiryService(
       approvals: store,
       coordinator: ApprovalCoordinator(),
-      now: { Date(timeIntervalSince1970: 1_782_003_600) },
+      now: {
+        Date(timeIntervalSince1970: 1_782_003_600)
+      },
       clock: ScriptedClock { duration in
         try? await Task.sleep(for: .milliseconds(1))
         recorder.append(duration)

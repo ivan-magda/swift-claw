@@ -17,26 +17,26 @@ public struct ProviderExchangeState: Sendable, Equatable, Codable {
 // MARK: - Chat contract
 
 /// One message in an OpenAI-compatible chat exchange. `toolCalls` carries assistant proposals
-/// ([] otherwise); `toolCallId` is set iff `role == .tool`. The `String` overload wraps its text in
+/// ([] otherwise); `toolCallID` is set iff `role == .tool`. The `String` overload wraps its text in
 /// a `MessageContent`, so a caller with nothing to say about images never names that type.
 public struct ChatMessage: Sendable, Equatable {
   public let role: MessageRole
   public let content: MessageContent
   public let toolCalls: [ToolCall]
-  public let toolCallId: String?
+  public let toolCallID: String?
   public let providerState: ProviderExchangeState?
 
   public init(
     role: MessageRole,
     content: MessageContent,
     toolCalls: [ToolCall] = [],
-    toolCallId: String? = nil,
+    toolCallID: String? = nil,
     providerState: ProviderExchangeState? = nil
   ) {
     self.role = role
     self.content = content
     self.toolCalls = toolCalls
-    self.toolCallId = toolCallId
+    self.toolCallID = toolCallID
     self.providerState = providerState
   }
 
@@ -44,14 +44,14 @@ public struct ChatMessage: Sendable, Equatable {
     role: MessageRole,
     content: String,
     toolCalls: [ToolCall] = [],
-    toolCallId: String? = nil,
+    toolCallID: String? = nil,
     providerState: ProviderExchangeState? = nil
   ) {
     self.init(
       role: role,
       content: MessageContent(content),
       toolCalls: toolCalls,
-      toolCallId: toolCallId,
+      toolCallID: toolCallID,
       providerState: providerState
     )
   }
@@ -79,7 +79,7 @@ public struct ChatRequest: Sendable, Equatable {
   public let stop: [String]?
   public let tools: [ToolDefinition]
   public let responseFormat: ResponseFormat?
-  public let sessionId: String?
+  public let sessionID: String?
   /// Optional, attempt-owned local guard. Providers that can observe streamed tool arguments update
   /// it incrementally; every runtime still reconciles the terminal response. Nil preserves the
   /// production surface and limits.
@@ -94,7 +94,7 @@ public struct ChatRequest: Sendable, Equatable {
     stop: [String]? = nil,
     tools: [ToolDefinition] = [],
     responseFormat: ResponseFormat? = nil,
-    sessionId: String? = nil
+    sessionID: String? = nil
   ) {
     self.init(
       model: model,
@@ -103,7 +103,7 @@ public struct ChatRequest: Sendable, Equatable {
       stop: stop,
       tools: tools,
       responseFormat: responseFormat,
-      sessionId: sessionId,
+      sessionID: sessionID,
       outputScope: nil,
       terminalValidationPolicy: .firstTerminal
     )
@@ -117,7 +117,7 @@ public struct ChatRequest: Sendable, Equatable {
     stop: [String]? = nil,
     tools: [ToolDefinition] = [],
     responseFormat: ResponseFormat? = nil,
-    sessionId: String? = nil,
+    sessionID: String? = nil,
     outputScope: AttemptOutputScope?,
     terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal
   ) {
@@ -127,7 +127,7 @@ public struct ChatRequest: Sendable, Equatable {
     self.stop = stop
     self.tools = tools
     self.responseFormat = responseFormat
-    self.sessionId = sessionId
+    self.sessionID = sessionID
     self.outputScope = outputScope
     self.terminalValidationPolicy = terminalValidationPolicy
   }
@@ -222,6 +222,7 @@ public enum LLMStreamLimits {
 /// whether inference started — the session's own terminal says.
 public protocol LLMProvider: Sendable {
   func complete(request: ChatRequest) async throws -> ChatResponse
+
   func stream(request: ChatRequest) -> LLMEventStream
 }
 
@@ -319,9 +320,7 @@ public struct ModelPrice: Sendable, Equatable, Codable {
 public struct PriceTable: Sendable, Equatable {
   public let prices: [String: ModelPrice]
 
-  public init(prices: [String: ModelPrice]) {
-    self.prices = prices
-  }
+  public init(prices: [String: ModelPrice]) { self.prices = prices }
 
   public func price(for model: String) -> ModelPrice? {
     prices[model] ?? prices["openrouter/\(model)"]
@@ -338,10 +337,9 @@ public struct PriceTable: Sendable, Equatable {
 public enum TokenEstimator {
   /// Estimated input tokens, with messages rounded separately for headroom and the advertised tool
   /// array charged in its provider-wire shape. Re-sent assistant `tool_calls` count as message input.
-  public static func estimateInputTokens(
-    _ messages: [ChatMessage],
-    tools: [ToolDefinition] = []
-  ) -> Int {
+  public static func estimateInputTokens(_ messages: [ChatMessage], tools: [ToolDefinition] = [])
+    -> Int
+  {
     let messageTokens = messages.reduce(0) { running, message in
       running + estimateTokens(forText: message.content.text) + toolCallTokens(for: message)
     }
@@ -350,10 +348,7 @@ public enum TokenEstimator {
 
   /// Message-side share of the provider input cap after the immutable tool array is charged. Context
   /// assembly uses this value so its own fitting cannot consume space already reserved for tools.
-  public static func messageInputBudget(
-    maxInputTokens: Int,
-    tools: [ToolDefinition]
-  ) -> Int {
+  public static func messageInputBudget(maxInputTokens: Int, tools: [ToolDefinition]) -> Int {
     max(0, maxInputTokens - toolDefinitionTokens(tools))
   }
 
@@ -448,10 +443,8 @@ public struct CostResolver: Sendable {
     policy: LLMCostPolicy = .metered
   ) -> ResolvedCost {
     switch policy {
-    case .metered:
-      break
-    case .includedPlan:
-      return ResolvedCost(costUSD: 0, source: .includedPlan, isEstimated: false)
+    case .metered: break
+    case .includedPlan: return ResolvedCost(costUSD: 0, source: .includedPlan, isEstimated: false)
     }
 
     if let providerCost {
@@ -460,8 +453,9 @@ public struct CostResolver: Sendable {
 
     if let price = priceTable.price(for: model) {
       let cost =
-        Double(usage.promptTokens) / 1_000_000 * price.inputUSDPerMTok
-        + Double(usage.completionTokens) / 1_000_000 * price.outputUSDPerMTok
+        Double(usage.promptTokens) / 1_000_000 * price.inputUSDPerMTok + Double(
+          usage.completionTokens
+        ) / 1_000_000 * price.outputUSDPerMTok
       return ResolvedCost(costUSD: cost, source: .priceFile, isEstimated: false)
     }
 
@@ -514,11 +508,9 @@ public struct UsageResolver: Sendable {
 
   /// Provider-returned usage wins; when the response omits it, estimate prompt from the sent
   /// `context` and completion from the returned `response.content`.
-  public func resolve(
-    response: ChatResponse,
-    context: [ChatMessage],
-    tools: [ToolDefinition] = []
-  ) -> ResolvedUsage {
+  public func resolve(response: ChatResponse, context: [ChatMessage], tools: [ToolDefinition] = [])
+    -> ResolvedUsage
+  {
     if let reported = response.usage {
       return ResolvedUsage(usage: reported, isEstimated: false)
     }
@@ -530,11 +522,9 @@ public struct UsageResolver: Sendable {
 
   /// The estimate for a call that produced no response (deadline / exhausted retries): prompt from
   /// `context`, completion reserved at the output cap since no reply exists to measure.
-  public func estimate(
-    context: [ChatMessage],
-    tools: [ToolDefinition] = [],
-    maxOutputTokens: Int
-  ) -> ResolvedUsage {
+  public func estimate(context: [ChatMessage], tools: [ToolDefinition] = [], maxOutputTokens: Int)
+    -> ResolvedUsage
+  {
     estimated(
       promptTokens: TokenEstimator.estimateInputTokens(context, tools: tools),
       completionTokens: maxOutputTokens

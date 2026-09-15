@@ -16,25 +16,18 @@ public enum RuntimeSecretPreparer {
   /// first if this installation has no encrypted artifacts yet. Throws before creating anything if
   /// a required secret is missing, and refuses to repair a partial encrypted setup by minting its
   /// missing half.
-  public static func prepare(
-    stateRoot: URL,
-    environment: [String: String]
-  ) throws(SecretStoreError) -> Secrets {
-    try prepare(stateRoot: stateRoot, environment: environment, publisher: SecureFilePublisher())
-  }
+  public static func prepare(stateRoot: URL, environment: [String: String]) throws(SecretStoreError)
+    -> Secrets
+  { try prepare(stateRoot: stateRoot, environment: environment, publisher: SecureFilePublisher()) }
 
-  static func prepare(
-    stateRoot: URL,
-    environment: [String: String],
-    publisher: SecureFilePublisher
-  ) throws(SecretStoreError) -> Secrets {
+  static func prepare(stateRoot: URL, environment: [String: String], publisher: SecureFilePublisher)
+    throws(SecretStoreError) -> Secrets
+  {
     // The resolver already owns the fail-closed rule for which backend a state root is on; asking
     // it keeps login and daemon startup from ever disagreeing about that.
-    let resolution = SecretStoreResolver.resolve(
-      stateRoot: stateRoot,
-      environment: environment,
-      warn: { _ in }
-    )
+    let resolution = SecretStoreResolver.resolve(stateRoot: stateRoot, environment: environment) {
+      _ in
+    }
 
     switch resolution.backend {
     case .encrypted:
@@ -57,12 +50,7 @@ public enum RuntimeSecretPreparer {
   /// module throws only `SecretStoreError` — this is where that contract is enforced rather than
   /// assumed.
   private static func load(_ store: any SecretStore) throws(SecretStoreError) -> Secrets {
-    do {
-      return try store.loadSecrets()
-    } catch let error as SecretStoreError {
-      throw error
-    } catch {
-      throw .unreadable("load runtime secrets")
-    }
+    do { return try store.loadSecrets() } catch let error as SecretStoreError { throw error } catch
+    { throw .unreadable("load runtime secrets") }
   }
 }

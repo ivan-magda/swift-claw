@@ -35,11 +35,9 @@ public struct ToolPolicyGate: Sendable {
     self.enabledDangerousTools = enabledDangerousTools
   }
 
-  public func evaluate(
-    call: ToolCall,
-    tool: any Tool,
-    context: ToolDispatchContext
-  ) async -> Verdict {
+  public func evaluate(call: ToolCall, tool: any Tool, context: ToolDispatchContext) async
+    -> Verdict
+  {
     if let refusal = requesterAdmissionRefusal(call: call, tool: tool, context: context) {
       return refusal
     }
@@ -47,12 +45,9 @@ public struct ToolPolicyGate: Sendable {
     // ask tool (file_write) still parks; dangerous consumes only a tool-prepared action; safe
     // egress falls through to the unconditional/trifecta tiers below.
     switch tool.definition.riskLevel {
-    case .ask:
-      return evaluateAskTier(call: call, tool: tool, context: context)
-    case .dangerous:
-      return await evaluateDangerousTier(call: call, tool: tool, context: context)
-    case .safe:
-      break
+    case .ask: return evaluateAskTier(call: call, tool: tool, context: context)
+    case .dangerous: return await evaluateDangerousTier(call: call, tool: tool, context: context)
+    case .safe: break
     }
 
     // .none-egress fast path — a safe non-egress read (file_read): audit-render only.
@@ -65,8 +60,7 @@ public struct ToolPolicyGate: Sendable {
 
     let argsRedacted: String
     switch scanArguments(call: call, context: context) {
-    case .blocked(let verdict):
-      return verdict
+    case .blocked(let verdict): return verdict
     case .cleared(let redacted, let trifectaHeld):
       // A group topic has nobody to hold the approval, so a held trifecta allows: the
       // unconditional and conditional argument scans above already ran and still block.
@@ -80,10 +74,8 @@ public struct ToolPolicyGate: Sendable {
     // runs take the SAME park (→ EXPIRED → DENY), never an immediate gate DENY.
     let action: ToolAction?
     switch resolveAction(call: call, tool: tool) {
-    case .action(let resolved):
-      action = resolved
-    case .blocked(let payload):
-      return .block(payload: payload, argsRedacted: argsRedacted)
+    case .action(let resolved): action = resolved
+    case .blocked(let payload): return .block(payload: payload, argsRedacted: argsRedacted)
     }
     guard let action else {
       return .allow(argsRedacted: argsRedacted, action: nil)
@@ -135,8 +127,7 @@ public struct ToolPolicyGate: Sendable {
     }
 
     switch tool.canonicalTarget(arguments: arguments) {
-    case .resolved(let target):
-      return .action(ToolAction(tool: call.name, target: target))
+    case .resolved(let target): return .action(ToolAction(tool: call.name, target: target))
     case .refused(let reason):
       return .blocked(ToolPayload(content: reason, status: .error, ingestedUntrusted: false))
     case nil:
@@ -166,19 +157,19 @@ public struct ToolPolicyGate: Sendable {
 // MARK: - Requester Admission
 
 private extension ToolPolicyGate {
-  func requesterAdmissionRefusal(
-    call: ToolCall,
-    tool: any Tool,
-    context: ToolDispatchContext
-  ) -> Verdict? {
+  func requesterAdmissionRefusal(call: ToolCall, tool: any Tool, context: ToolDispatchContext)
+    -> Verdict?
+  {
     guard tool.definition.requiresInteractiveRequester else {
       return nil
     }
-    guard let execution = context.executionContext,
+    guard
+      let execution = context.executionContext,
       context.mode == execution.mode,
       execution.origin == .interactive,
-      let requester = execution.requesterUserId, requester > 0,
-      execution.mode == .group || requester == execution.chatId
+      let requester = execution.requesterUserID,
+      requester > 0,
+      execution.mode == .group || requester == execution.chatID
     else {
       return dangerousBlock(
         reason: "\(call.name) requires an interactive message with a known requester.",
@@ -238,10 +229,8 @@ private extension ToolPolicyGate {
   /// gate-authorized canonical target, but no approval parks.
   func resolveAndAllow(call: ToolCall, tool: any Tool, argsRedacted: String) -> Verdict {
     switch resolveAction(call: call, tool: tool) {
-    case .action(let action):
-      return .allow(argsRedacted: argsRedacted, action: action)
-    case .blocked(let payload):
-      return .block(payload: payload, argsRedacted: argsRedacted)
+    case .action(let action): return .allow(argsRedacted: argsRedacted, action: action)
+    case .blocked(let payload): return .block(payload: payload, argsRedacted: argsRedacted)
     }
   }
 }
@@ -252,11 +241,7 @@ private extension ToolPolicyGate {
   /// An ask-tier tool MUST resolve a canonical target regardless of egress class —
   /// the approval binds to the resolved form. Malformed args or a `.refused` resolution block as
   /// they do for web_fetch; a `nil` resolution is a contract violation and fails CLOSED.
-  func evaluateAskTier(
-    call: ToolCall,
-    tool: any Tool,
-    context: ToolDispatchContext
-  ) -> Verdict {
+  func evaluateAskTier(call: ToolCall, tool: any Tool, context: ToolDispatchContext) -> Verdict {
     let argsRedacted: String
     if tool.definition.egressClass == .none {
       argsRedacted = argGuard.renderRedacted(argsJSON: call.argumentsJSON)
@@ -264,10 +249,8 @@ private extension ToolPolicyGate {
       // Ask-tier parks on the approval fabric whether or not the trifecta holds, so only the
       // redaction matters here.
       switch scanArguments(call: call, context: context) {
-      case .blocked(let verdict):
-        return verdict
-      case .cleared(let redacted, _):
-        argsRedacted = redacted
+      case .blocked(let verdict): return verdict
+      case .cleared(let redacted, _): argsRedacted = redacted
       }
     }
 
@@ -280,10 +263,8 @@ private extension ToolPolicyGate {
 
     let target: String
     switch tool.canonicalTarget(arguments: arguments) {
-    case .resolved(let resolved):
-      target = resolved
-    case .refused(let reason):
-      return askTierBlock(reason: reason, argsRedacted: argsRedacted)
+    case .resolved(let resolved): target = resolved
+    case .refused(let reason): return askTierBlock(reason: reason, argsRedacted: argsRedacted)
     case nil:
       return askTierBlock(
         reason: "\(call.name) is ask-tier but resolved no canonical target.",
@@ -292,12 +273,7 @@ private extension ToolPolicyGate {
     }
 
     if context.mode == .group {
-      return groupAskTierVerdict(
-        call: call,
-        tool: tool,
-        target: target,
-        argsRedacted: argsRedacted
-      )
+      return groupAskTierVerdict(call: call, tool: tool, target: target, argsRedacted: argsRedacted)
     }
 
     // The run holds one approval slot: a further ask-tier call while one is pending gets the
@@ -313,12 +289,9 @@ private extension ToolPolicyGate {
   /// Records the trifecta action as well as the ask-tier one. Canonicalizes
   /// the call arguments to sorted-keys JSON, hashes via `ApprovalArgsHash`, and asks the tool for
   /// its presentation on the gate-resolved target.
-  func recordedAction(
-    call: ToolCall,
-    tool: any Tool,
-    target: String,
-    reason: ApprovalReason
-  ) -> RecordedToolAction {
+  func recordedAction(call: ToolCall, tool: any Tool, target: String, reason: ApprovalReason)
+    -> RecordedToolAction
+  {
     let canonicalArgsJSON = Self.canonicalArgs(call.argumentsJSON)
     let presentation: ToolApprovalPresentation
 
@@ -346,16 +319,13 @@ private extension ToolPolicyGate {
   /// here instead: a tool whose real work only ever happens on the approval waiter, and a write
   /// that would rewrite a prompt file steering every later turn for everyone in the topic.
   /// Everything else executes on the gate-resolved target, which its `execute` requires.
-  func groupAskTierVerdict(
-    call: ToolCall,
-    tool: any Tool,
-    target: String,
-    argsRedacted: String
-  ) -> Verdict {
+  func groupAskTierVerdict(call: ToolCall, tool: any Tool, target: String, argsRedacted: String)
+    -> Verdict
+  {
     guard tool.executesOnlyViaApproval == false else {
       return askTierBlock(
         reason:
-          "\(call.name) needs the owner's approval, which a group chat has no way to ask for.",
+        "\(call.name) needs the owner's approval, which a group chat has no way to ask for.",
         argsRedacted: argsRedacted
       )
     }
@@ -368,10 +338,7 @@ private extension ToolPolicyGate {
       )
     }
 
-    return .allow(
-      argsRedacted: argsRedacted,
-      action: ToolAction(tool: call.name, target: target)
-    )
+    return .allow(argsRedacted: argsRedacted, action: ToolAction(tool: call.name, target: target))
   }
 
   func askTierBlock(reason: String, argsRedacted: String) -> Verdict {
@@ -405,11 +372,9 @@ private extension ToolPolicyGate {
   /// Dangerous tools park ONLY over a tool-prepared canonical action. The `enabledDangerousTools` backstop
   /// fails closed; the arg-guard scans run over the prepared `guardTexts` (never the model's raw
   /// arguments), and the recorded action binds the prepared canonical JSON verbatim.
-  func evaluateDangerousTier(
-    call: ToolCall,
-    tool: any Tool,
-    context: ToolDispatchContext
-  ) async -> Verdict {
+  func evaluateDangerousTier(call: ToolCall, tool: any Tool, context: ToolDispatchContext) async
+    -> Verdict
+  {
     guard enabledDangerousTools.contains(tool.definition.name) else {
       return dangerousBlock(reason: "\(tool.definition.name) is disabled.", call: call)
     }
@@ -432,10 +397,8 @@ private extension ToolPolicyGate {
 
     let prepared: PreparedToolAction
     switch resolution {
-    case .prepared(let action):
-      prepared = action
-    case .refused(let reason):
-      return dangerousBlock(reason: reason, call: call)
+    case .prepared(let action): prepared = action
+    case .refused(let reason): return dangerousBlock(reason: reason, call: call)
     }
 
     for text in prepared.guardTexts {
@@ -502,15 +465,11 @@ public struct GatedToolDispatcher: ToolDispatching {
     self.clock = clock
   }
 
-  public var definitions: [ToolDefinition] {
-    registry.definitions
-  }
+  public var definitions: [ToolDefinition] { registry.definitions }
 
   /// The same name-keyed catalog `dispatch` gates through, surfaced so the composition root
   /// can build `ApprovedActionExecutor` against the identical tool instances.
-  public var toolsByName: [String: any Tool] {
-    registry.toolsByName
-  }
+  public var toolsByName: [String: any Tool] { registry.toolsByName }
 
   public func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
     // (0) unknown tool → error observation, never a crash
@@ -534,7 +493,7 @@ public struct GatedToolDispatcher: ToolDispatching {
       // persists in place and updates at resolution — the pending call itself does not execute now.
       return ToolDispatchOutcome(
         observation: ToolObservation(
-          callId: call.id,
+          callID: call.id,
           toolName: call.name,
           content: "awaiting owner approval",
           status: .blockedPendingApproval,
@@ -609,8 +568,7 @@ public struct GatedToolDispatcher: ToolDispatching {
     )
 
     switch outcome {
-    case .operationReturned(let payload):
-      return payload
+    case .operationReturned(let payload): return payload
     case .deadlineExpired, .callerCancelled:
       return ToolPayload(
         content: "The \(tool.definition.name) call timed out.",
@@ -623,7 +581,7 @@ public struct GatedToolDispatcher: ToolDispatching {
   private func errorOutcome(call: ToolCall, reason: String) -> ToolDispatchOutcome {
     ToolDispatchOutcome(
       observation: ToolObservation(
-        callId: call.id,
+        callID: call.id,
         toolName: call.name,
         content: reason,
         status: .error,

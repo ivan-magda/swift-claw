@@ -32,9 +32,7 @@ actor StubProvider: LLMProvider {
   private(set) var calls = 0
   private(set) var lastRequest: ChatRequest?
 
-  init(_ outcome: Outcome) {
-    self.outcome = outcome
-  }
+  init(_ outcome: Outcome) { self.outcome = outcome }
 
   func complete(request: ChatRequest) async throws -> ChatResponse {
     calls += 1
@@ -57,14 +55,14 @@ actor StubProvider: LLMProvider {
 /// into isolated state, which Swift 6 strict concurrency now flags at the conformance itself.
 final class RecordingUsageStore: UsageStore, @unchecked Sendable {
   private let lock = NSLock()
-  private var _recorded: [ProviderUsage] = []
+  private var recordedUsage: [ProviderUsage] = []
   private let failOnWrite: Int?
   private let thrown: StoreError
 
   var recorded: [ProviderUsage] {
     lock.lock()
     defer { lock.unlock() }
-    return _recorded
+    return recordedUsage
   }
 
   init(failOnWrite: Int? = nil, thrown: StoreError = StoreError.unexpected("scripted")) {
@@ -75,34 +73,28 @@ final class RecordingUsageStore: UsageStore, @unchecked Sendable {
   func recordUsage(_ usage: ProviderUsage) throws(StoreError) {
     lock.lock()
     defer { lock.unlock() }
-    if let failOnWrite, _recorded.count + 1 == failOnWrite {
+    if let failOnWrite, recordedUsage.count + 1 == failOnWrite {
       throw thrown
     }
-    _recorded.append(usage)
+    recordedUsage.append(usage)
   }
 
-  func todayTokensAndCost(now: Date) throws(StoreError) -> (tokens: Int, costUSD: Double) {
-    (0, 0)
-  }
+  func todayTokensAndCost(now: Date) throws(StoreError) -> (tokens: Int, costUSD: Double) { (0, 0) }
 
-  func todayTokensAndCost(
-    origins: [RunOrigin],
-    now: Date
-  ) throws(StoreError) -> (tokens: Int, costUSD: Double) {
-    (0, 0)
-  }
+  func todayTokensAndCost(origins: [RunOrigin], now: Date) throws(StoreError) -> (
+    tokens: Int,
+    costUSD: Double
+  ) { (0, 0) }
 
-  func costSourceMix(now: Date) throws(StoreError) -> [CostSource: Int] {
-    [:]
-  }
+  func costSourceMix(now: Date) throws(StoreError) -> [CostSource: Int] { [:] }
 
   func latestPromptUsage() throws(StoreError) -> LatestPromptUsage? {
     lock.lock()
     defer { lock.unlock() }
-    return _recorded.last.map { last in
+    return recordedUsage.last.map { last in
       LatestPromptUsage(
         promptTokens: last.promptTokens,
-        runId: last.runId,
+        runID: last.runID,
         isEstimated: last.isEstimated
       )
     }
@@ -133,15 +125,20 @@ func makeRuntime(
   terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal,
   attemptOutputLimits: AttemptOutputLimits? = nil,
   expectedWireModel: String? = nil,
-  providerRoundTripAdmission:
-    (@Sendable (ProviderRoundTripAdmissionContext) async -> ProviderRoundTripAdmission)? = nil,
+  providerRoundTripAdmission: (
+    @Sendable (_ context: ProviderRoundTripAdmissionContext) async -> ProviderRoundTripAdmission
+  )? = nil,
   toolDispatcher: (any ToolDispatching)? = nil,
   usageStore: any UsageStore = RecordingUsageStore(),
   auditLog: any AuditLog = RecordingAuditLog(),
   providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
-  logger: Logger = Logger(label: "test.silent", factory: { _ in SwiftLogNoOpLogHandler() }),
+  logger: Logger = Logger(label: "test.silent") { _ in
+    SwiftLogNoOpLogHandler()
+  },
   clock: any Clock<Duration> = ContinuousClock(),
-  now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
+  now: @escaping @Sendable () -> ContinuousClock.Instant = {
+    ContinuousClock.now
+  }
 ) -> AgentRuntime {
   AgentRuntime(
     roster: makeSingleRouteRoster(
@@ -235,12 +232,15 @@ func makeBudget(maxTurns: Int) -> RunBudget {
   )
 }
 
-func requireCompleted(
-  _ result: TurnResult
-) throws -> (content: String, usage: ProviderUsage, providerState: ProviderExchangeState?) {
+func requireCompleted(_ result: TurnResult) throws -> (
+  content: String,
+  usage: ProviderUsage,
+  providerState: ProviderExchangeState?
+) {
   guard case .completed(let content, let usage, let providerState) = result else {
     struct Mismatch: Error, CustomStringConvertible {
       let result: TurnResult
+
       var description: String { "expected TurnResult.completed, got \(result)" }
     }
     throw Mismatch(result: result)
@@ -248,12 +248,12 @@ func requireCompleted(
   return (content, usage, providerState)
 }
 
-func requireDegraded(
-  _ result: TurnResult
-) throws -> (kind: DegradationKind, usage: ProviderUsage?) {
+func requireDegraded(_ result: TurnResult) throws -> (kind: DegradationKind, usage: ProviderUsage?)
+{
   guard case .degraded(let kind, let usage) = result else {
     struct Mismatch: Error, CustomStringConvertible {
       let result: TurnResult
+
       var description: String { "expected TurnResult.degraded, got \(result)" }
     }
     throw Mismatch(result: result)
@@ -283,9 +283,7 @@ func replayState(issuer: String = "openai-chatgpt", bytes: Int) -> ProviderExcha
 /// input reservation in the runtime's gates and estimated rows.
 func buildResultCarryingState(bytes: Int) -> BuildResult {
   BuildResult(
-    messages: [
-      ChatMessage(role: .user, content: "go", providerState: replayState(bytes: bytes))
-    ],
+    messages: [ChatMessage(role: .user, content: "go", providerState: replayState(bytes: bytes))],
     ownerNotices: [],
     hasPrivateDataAccess: false
   )
@@ -303,10 +301,8 @@ final class FakeWorkspace: WorkspaceReading, @unchecked Sendable {
 
     var loadedFile: LoadedFile {
       switch self {
-      case .present(let text):
-        LoadedFile(outcome: .present, text: text, graphemeCount: text.count)
-      case .overCap(let count):
-        LoadedFile(outcome: .overCap, text: "", graphemeCount: count)
+      case .present(let text): LoadedFile(outcome: .present, text: text, graphemeCount: text.count)
+      case .overCap(let count): LoadedFile(outcome: .overCap, text: "", graphemeCount: count)
       }
     }
   }
@@ -340,11 +336,10 @@ final class FakeMemoryStore: MemoryStore, @unchecked Sendable {
   private let items: [MemoryItem]
   private(set) var fetchRankedCalls: [Bool] = []
 
-  init(items: [MemoryItem] = []) {
-    self.items = items
-  }
+  init(items: [MemoryItem] = []) { self.items = items }
 
   func list(kind: MemoryKind?, limit: Int) throws(StoreError) -> [MemoryItem] { [] }
+
   func get(id: Int64) throws(StoreError) -> MemoryItem? { nil }
 
   func fetchRanked(excludeSensitive: Bool, limit: Int) throws(StoreError) -> [MemoryItem] {

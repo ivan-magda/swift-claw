@@ -23,9 +23,7 @@ import Foundation
       self.maxAudioDurationSeconds = maxAudioDurationSeconds
     }
 
-    func transcribe(
-      audioFileAt url: URL
-    ) async throws(VoiceTranscriptionError) -> String {
+    func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String {
       let lanes = await Self.resolveLanes(for: localeIdentifiers)
 
       if lanes.isEmpty {
@@ -39,24 +37,24 @@ import Foundation
       }
 
       let probeFile: AVAudioFile
-      do {
-        probeFile = try AVAudioFile(forReading: url)
-      } catch {
+      do { probeFile = try AVAudioFile(forReading: url) } catch {
         throw VoiceTranscriptionError.undecodableAudio("\(error)")
       }
       try Self.enforceDecodedDuration(of: probeFile, capSeconds: maxAudioDurationSeconds)
 
       // Lanes run in configured priority order; a clear early match skips the remaining lanes,
       // and one lane's engine failure must not take down a language that still works.
-      let configuredTags = Set(lanes.map { $0.locale.bcp47Tag })
+      let configuredTags = Set(
+        lanes.map {
+          $0.locale.bcp47Tag
+        }
+      )
       var candidates: [ScoredTranscript] = []
       var firstFailure: VoiceTranscriptionError?
 
       for lane in lanes {
         let transcript: ScoredTranscript
-        do {
-          transcript = try await run(lane, configuredTags: configuredTags, url: url)
-        } catch {
+        do { transcript = try await run(lane, configuredTags: configuredTags, url: url) } catch {
           if case .cancelled = error {
             throw VoiceTranscriptionError.cancelled
           }
@@ -72,17 +70,14 @@ import Foundation
       }
 
       switch Self.settle(candidates: candidates, firstFailure: firstFailure) {
-      case .success(let transcript):
-        return transcript
-      case .failure(let failure):
-        throw failure
+      case .success(let transcript): return transcript
+      case .failure(let failure): throw failure
       }
     }
 
-    static func settle(
-      candidates: [ScoredTranscript],
-      firstFailure: VoiceTranscriptionError?
-    ) -> Result<String, VoiceTranscriptionError> {
+    static func settle(candidates: [ScoredTranscript], firstFailure: VoiceTranscriptionError?)
+      -> Result<String, VoiceTranscriptionError>
+    {
       if let winner = VoiceTranscriptArbiter.winner(among: candidates) {
         return .success(winner.text)
       }
@@ -103,10 +98,9 @@ import Foundation
 
   @available(macOS 26.0, *)
   extension AppleSpeechTranscriber {
-    static func enforceDecodedDuration(
-      of audioFile: AVAudioFile,
-      capSeconds: Int?
-    ) throws(VoiceTranscriptionError) {
+    static func enforceDecodedDuration(of audioFile: AVAudioFile, capSeconds: Int?)
+      throws(VoiceTranscriptionError)
+    {
       guard let capSeconds else {
         return
       }
@@ -129,8 +123,7 @@ import Foundation
 
       var locale: Locale {
         switch self {
-        case .speech(let locale), .dictation(let locale):
-          return locale
+        case .speech(let locale), .dictation(let locale): return locale
         }
       }
     }
@@ -144,17 +137,19 @@ import Foundation
       for identifier in identifiers {
         let requestedLocale = Locale(identifier: identifier)
 
-        if let locale = await resolve(
-          requestedLocale,
-          in: speechLocales,
-          via: SpeechTranscriber.supportedLocale(equivalentTo:)
-        ) {
+        if
+          let locale = await resolve(
+            requestedLocale,
+            in: speechLocales,
+            via: SpeechTranscriber.supportedLocale(equivalentTo:)
+          ) {
           lanes.append(.speech(locale))
-        } else if let locale = await resolve(
-          requestedLocale,
-          in: dictationLocales,
-          via: DictationTranscriber.supportedLocale(equivalentTo:)
-        ) {
+        } else if
+          let locale = await resolve(
+            requestedLocale,
+            in: dictationLocales,
+            via: DictationTranscriber.supportedLocale(equivalentTo:)
+          ) {
           lanes.append(.dictation(locale))
         }
       }
@@ -165,10 +160,13 @@ import Foundation
     static func resolve(
       _ requestedLocale: Locale,
       in supportedLocales: [Locale],
-      via equivalent: (Locale) async -> Locale?
+      via equivalent: (_ locale: Locale) async -> Locale?
     ) async -> Locale? {
       let requestedTag = requestedLocale.bcp47Tag
-      if let exactMatch = supportedLocales.first(where: { $0.bcp47Tag == requestedTag }) {
+      if
+        let exactMatch = supportedLocales.first(where: {
+          $0.bcp47Tag == requestedTag
+        }) {
         return exactMatch
       }
 
@@ -176,7 +174,9 @@ import Foundation
         return nil
       }
 
-      return supportedLocales.first { $0.bcp47Tag == normalized.bcp47Tag }
+      return supportedLocales.first {
+        $0.bcp47Tag == normalized.bcp47Tag
+      }
     }
   }
 
@@ -184,11 +184,9 @@ import Foundation
 
   @available(macOS 26.0, *)
   private extension AppleSpeechTranscriber {
-    func run(
-      _ lane: Lane,
-      configuredTags: Set<String>,
-      url: URL
-    ) async throws(VoiceTranscriptionError) -> ScoredTranscript {
+    func run(_ lane: Lane, configuredTags: Set<String>, url: URL)
+      async throws(VoiceTranscriptionError) -> ScoredTranscript
+    {
       switch lane {
       case .speech(let locale):
         let transcriber = SpeechTranscriber(
@@ -249,9 +247,7 @@ import Foundation
           text: transcript,
           confidence: VoiceTranscriptArbiter.averageConfidence(confidences)
         )
-      } catch is CancellationError {
-        throw VoiceTranscriptionError.cancelled
-      } catch {
+      } catch is CancellationError { throw VoiceTranscriptionError.cancelled } catch {
         throw VoiceTranscriptionError.transcriptionFailed("\(error)")
       }
     }
@@ -273,24 +269,27 @@ import Foundation
 
   @available(macOS 26.0, *)
   private extension AppleSpeechTranscriber {
-    func ensureAssets(
-      for module: some SpeechModule,
-      locale: Locale,
-      configuredTags: Set<String>
-    ) async throws(VoiceTranscriptionError) {
+    func ensureAssets(for module: some SpeechModule, locale: Locale, configuredTags: Set<String>)
+      async throws(VoiceTranscriptionError)
+    {
       do {
         let reserved = await AssetInventory.reservedLocales
-        if !reserved.contains(where: { $0.bcp47Tag == locale.bcp47Tag }) {
+        if
+          !reserved.contains(where: {
+            $0.bcp47Tag == locale.bcp47Tag
+          }) {
           for stale in reserved where !configuredTags.contains(stale.bcp47Tag) {
             await AssetInventory.release(reservedLocale: stale)
           }
 
-          do {
-            try await AssetInventory.reserve(locale: locale)
-          } catch {
+          do { try await AssetInventory.reserve(locale: locale) } catch {
             let occupied = await AssetInventory.reservedLocales
 
-            guard let evictable = occupied.first(where: { $0.bcp47Tag != locale.bcp47Tag }) else {
+            guard
+              let evictable = occupied.first(where: {
+                $0.bcp47Tag != locale.bcp47Tag
+              })
+            else {
               throw error
             }
             await AssetInventory.release(reservedLocale: evictable)
@@ -305,9 +304,7 @@ import Foundation
         }
 
         try await request.downloadAndInstall()
-      } catch is CancellationError {
-        throw VoiceTranscriptionError.cancelled
-      } catch {
+      } catch is CancellationError { throw VoiceTranscriptionError.cancelled } catch {
         throw VoiceTranscriptionError.assetsUnavailable("\(error)")
       }
     }
@@ -315,18 +312,13 @@ import Foundation
 
   // MARK: - Locale Identity
 
-  extension Locale {
-    fileprivate var bcp47Tag: String {
-      identifier(.bcp47).lowercased()
-    }
-  }
+  extension Locale { fileprivate var bcp47Tag: String { identifier(.bcp47).lowercased() } }
 #endif
 
 public enum SystemVoiceTranscriber {
-  public static func make(
-    localeIdentifiers: [String],
-    maxAudioDurationSeconds: Int? = nil
-  ) -> (any VoiceTranscribing)? {
+  public static func make(localeIdentifiers: [String], maxAudioDurationSeconds: Int? = nil) -> (
+    any VoiceTranscribing
+  )? {
     #if canImport(Speech) && canImport(AVFAudio)
       guard #available(macOS 26.0, *) else {
         return nil

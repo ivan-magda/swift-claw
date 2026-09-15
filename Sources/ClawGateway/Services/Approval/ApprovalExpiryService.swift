@@ -51,11 +51,7 @@ public struct ApprovalExpiryService: Service {
       // sweeps at once), then sleep between ticks; a thrown sleep is graceful shutdown, so break.
       while !Task.isCancelled {
         await tick()
-        do {
-          try await clock.sleep(for: Self.tickInterval)
-        } catch {
-          break
-        }
+        do { try await clock.sleep(for: Self.tickInterval) } catch { break }
       }
     }
     logger.info("approval-expiry stopped")
@@ -68,14 +64,12 @@ public struct ApprovalExpiryService: Service {
   func tick() async {
     let sweepTime = now()
     let expired: [Approval]
-    do {
-      expired = try approvals.sweepExpired(now: sweepTime)
-    } catch {
+    do { expired = try approvals.sweepExpired(now: sweepTime) } catch {
       logger.error("approval-expiry sweep failed: \(error)")
       return
     }
     for approval in expired {
-      await coordinator.signal(approvalId: approval.id, .denied(.expired))
+      await coordinator.signal(.denied(.expired), forApprovalID: approval.id)
     }
   }
 }

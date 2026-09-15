@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct SchedulerHealthTests {
+@Suite
+struct SchedulerHealthTests {
   /// 2026-07-06 05:00:00 UTC — 07:00 in Europe/Berlin (CEST), so the local day is 2026-07-06.
   private let now = Date(timeIntervalSince1970: 1_783_314_000)
   // force_unwrapping is `error` project-wide with no Tests exclusion (.swiftlint.yml); `Europe/
@@ -12,10 +13,13 @@ import Testing
   private let berlin = TimeZone(identifier: "Europe/Berlin") ?? .gmt
 
   private func value(_ rows: [DoctorReport.Check], _ key: String) -> String? {
-    rows.first { row in row.key == key }?.value
+    rows.first { row in
+      row.key == key
+    }?.value
   }
 
-  @Test func emptyStateRendersNeverAndZeroCounts() {
+  @Test
+  func emptyStateRendersNeverAndZeroCounts() {
     // given — a freshly-migrated scheduler_state: nothing has ever ticked
     let state = SchedulerState(
       lastTickAt: nil,
@@ -50,7 +54,8 @@ import Testing
     #expect(value(rows, "heartbeat.today") == "0/8")
   }
 
-  @Test func populatedStateRendersTimestampsMisfireCountAndTodayCount() {
+  @Test
+  func populatedStateRendersTimestampsMisfireCountAndTodayCount() {
     // given — a tick a minute ago, one misfire that skipped 5, 3 heartbeats stamped for TODAY
     // in the configured zone
     let state = SchedulerState(
@@ -87,7 +92,8 @@ import Testing
     #expect(value(rows, "heartbeat.today") == "3/8")
   }
 
-  @Test func staleHeartbeatDayStampReadsAsZero() {
+  @Test
+  func staleHeartbeatDayStampReadsAsZero() {
     // given — the counter belongs to a PREVIOUS local day: the cap has rolled over (§4.3)
     let state = SchedulerState(
       lastTickAt: nil,
@@ -116,11 +122,20 @@ import Testing
     #expect(value(rows, "heartbeat.today") == "0/8")
     #expect(value(rows, "scheduler.due_count") == "unreadable (db read failed)")
     #expect(value(rows, "spend.proactive_today_usd") == "unreadable (db read failed)")
-    #expect(rows.first { $0.key == "scheduler.due_count" }?.ok == false)
-    #expect(rows.first { $0.key == "spend.proactive_today_usd" }?.ok == false)
+    #expect(
+      rows.first {
+        $0.key == "scheduler.due_count"
+      }?.ok == false
+    )
+    #expect(
+      rows.first {
+        $0.key == "spend.proactive_today_usd"
+      }?.ok == false
+    )
   }
 
-  @Test func dayBoundaryUsesTheConfiguredZoneNotUTC() {
+  @Test
+  func dayBoundaryUsesTheConfiguredZoneNotUTC() {
     // given — 2026-07-06 23:30 UTC is already 2026-07-07 01:30 in Berlin (CEST, UTC+2)
     let lateEvening = Date(timeIntervalSince1970: 1_783_380_600)
     let state = SchedulerState(

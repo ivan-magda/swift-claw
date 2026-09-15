@@ -25,9 +25,7 @@ public struct ChatGPTCatalogModel: Sendable, Equatable {
 /// print the assignment for the owner to set by hand — so the type names one outcome rather than a
 /// taxonomy nobody branches on. What it must never be is a login failure: the credential is already
 /// stored and valid by the time anything asks what models exist.
-enum ChatGPTCatalogFailure: Error, Sendable, Equatable {
-  case unavailable(detail: String)
-}
+enum ChatGPTCatalogFailure: Error, Sendable, Equatable { case unavailable(detail: String) }
 
 public protocol ChatGPTModelCatalogFetching: Sendable {
   func fetch(authorization: LLMRequestAuthorization) async throws -> [ChatGPTCatalogModel]
@@ -41,9 +39,7 @@ public protocol ChatGPTModelCatalogFetching: Sendable {
 public struct ChatGPTModelCatalog: Sendable, ChatGPTModelCatalogFetching {
   private let http: any HTTPExecuting
 
-  public init(http: any HTTPExecuting) {
-    self.http = http
-  }
+  public init(http: any HTTPExecuting) { self.http = http }
 
   /// Asks the vendor which models this credential may use.
   ///
@@ -132,20 +128,14 @@ extension ChatGPTModelCatalog {
   /// duplicate are all gone before a caller can print one. Deduplication runs before the cap, so a
   /// response repeating one slug cannot spend the whole allowance and hide the models behind it.
   static func eligibleModels(in payload: JSONValue) throws -> [ChatGPTCatalogModel] {
-    guard
-      case .object(let fields) = payload,
-      case .array(let rows)? = fields[Catalog.models]
-    else {
+    guard case .object(let fields) = payload, case .array(let rows)? = fields[Catalog.models] else {
       throw ChatGPTCatalogFailure.unavailable(detail: "the model list named no models array")
     }
 
     var seen: Set<String> = []
     var models: [ChatGPTCatalogModel] = []
     for row in rows {
-      guard
-        let model = eligibleModel(in: row),
-        seen.insert(model.slug).inserted
-      else {
+      guard let model = eligibleModel(in: row), seen.insert(model.slug).inserted else {
         continue
       }
       models.append(model)
@@ -153,8 +143,7 @@ extension ChatGPTModelCatalog {
 
     models.sort { first, second in
       first.priority == second.priority
-        ? first.slug < second.slug
-        : first.priority < second.priority
+        ? first.slug < second.slug : first.priority < second.priority
     }
     return Array(models.prefix(maximumRetainedModels))
   }
@@ -182,13 +171,11 @@ private extension ChatGPTModelCatalog {
   /// really did mean to list costs nothing worse than being absent until this list learns its word.
   static func isListed(_ value: JSONValue?) -> Bool {
     switch value {
-    case nil, .null?:
-      return true
+    case nil, .null?: return true
     case .string(let raw)?:
       let stated = raw.trimmingCharacters(in: .whitespaces)
       return stated.isEmpty || stated.lowercased() == Catalog.listedVisibility
-    case .bool, .integer, .number, .array, .object:
-      return false
+    case .bool, .integer, .number, .array, .object: return false
     }
   }
 
@@ -197,12 +184,9 @@ private extension ChatGPTModelCatalog {
   /// response may be trying to say "do not show this" is not one to show on a coin toss.
   static func isOfferedInPicker(_ value: JSONValue?) -> Bool {
     switch value {
-    case nil, .null?:
-      return true
-    case .bool(let isOffered)?:
-      return isOffered
-    case .string, .integer, .number, .array, .object:
-      return false
+    case nil, .null?: return true
+    case .bool(let isOffered)?: return isOffered
+    case .string, .integer, .number, .array, .object: return false
     }
   }
 
@@ -210,10 +194,8 @@ private extension ChatGPTModelCatalog {
   /// row unranked rather than coerced into a place it did not earn.
   static func priority(_ value: JSONValue?) -> Double {
     switch value {
-    case .integer(let stated)?:
-      return Double(stated)
-    case .number(let stated)? where stated.isFinite:
-      return stated
+    case .integer(let stated)?: return Double(stated)
+    case .number(let stated)? where stated.isFinite: return stated
     case nil, .null?, .bool?, .string?, .number?, .array?, .object?:
       return ChatGPTCatalogModel.unrankedPriority
     }

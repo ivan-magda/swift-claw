@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawWorkspace
 
-@Suite struct WorkspaceEnsureRootTests {
-  @Test func ensureRootExistsCreatesAMissingWorkspaceDirectory() throws {
+@Suite
+struct WorkspaceEnsureRootTests {
+  @Test
+  func ensureRootExistsCreatesAMissingWorkspaceDirectory() throws {
     // given — a workspace root under a not-yet-created parent, mirroring a fresh install where
     // the state root exists but its `workspace/` sandbox does not
     let parent = try makeTemporaryRoot()
@@ -21,7 +23,8 @@ import Testing
     #expect(isDirectory.boolValue)
   }
 
-  @Test func ensureRootExistsIsIdempotentAndPreservesExistingContent() throws {
+  @Test
+  func ensureRootExistsIsIdempotentAndPreservesExistingContent() throws {
     // given — the sandbox already exists with a file the owner wrote earlier
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -36,7 +39,8 @@ import Testing
     )
   }
 
-  @Test func ensureRootExistsCreatesAnOwnerOnlyDirectory() throws {
+  @Test
+  func ensureRootExistsCreatesAnOwnerOnlyDirectory() throws {
     // given
     let parent = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: parent) }

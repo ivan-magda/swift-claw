@@ -10,10 +10,9 @@ import ClawSecrets
 /// `rows` reports the catalog and token store without contacting a server. A full doctor appends a
 /// live probe, while the daemon appends the catalog outcome it pinned at boot for `/mcp`.
 enum MCPDoctorRows {
-  static func rows(
-    config: MCPConfig,
-    credentials: [String: MCPCredentialLoad]
-  ) -> [DoctorReport.Check] {
+  static func rows(config: MCPConfig, credentials: [String: MCPCredentialLoad]) -> [DoctorReport
+    .Check]
+  {
     guard config.servers.isEmpty == false else {
       return [row(key: "mcp", value: "no servers configured", ok: true)]
     }
@@ -57,14 +56,16 @@ enum MCPDoctorRows {
   /// needs the names because `clear-token` is the only thing that removes them.
   static func orphanTokenRow(storedServers: [String], config: MCPConfig) -> DoctorReport.Check? {
     let configured = Set(config.servers.map(\.name))
-    let orphans = storedServers.filter { configured.contains($0) == false }.sorted()
+    let orphans = storedServers.filter {
+      configured.contains($0) == false
+    }.sorted()
     guard orphans.isEmpty == false else {
       return nil
     }
     return row(
       key: "mcp.unbound_tokens",
       value:
-        "\(orphans.joined(separator: ", ")) — not in the config; clawd mcp clear-token removes",
+      "\(orphans.joined(separator: ", ")) — not in the config; clawd mcp clear-token removes",
       ok: true
     )
   }
@@ -91,12 +92,9 @@ private extension MCPDoctorRows {
   /// URL is: it will never be sent, and only the owner can repair it.
   static func tokenState(_ load: MCPCredentialLoad) -> String {
     switch load {
-    case .absent:
-      return "no token"
-    case .token:
-      return "token set"
-    case .boundToDifferentURL:
-      return "token bound to a different URL; re-run clawd mcp set-token"
+    case .absent: return "no token"
+    case .token: return "token set"
+    case .boundToDifferentURL: return "token bound to a different URL; re-run clawd mcp set-token"
     }
   }
 

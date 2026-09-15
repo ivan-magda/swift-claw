@@ -24,8 +24,10 @@ private struct DefaultPrepareTool: Tool {
   }
 }
 
-@Suite struct ToolContractsTests {
-  @Test func jsonValueParsesObjectsAndAccessors() throws {
+@Suite
+struct ToolContractsTests {
+  @Test
+  func jsonValueParsesObjectsAndAccessors() throws {
     // given
     let raw = #"{"url": "https://example.com/a?q=1", "count": 5, "deep": {"flag": true}}"#
 
@@ -39,7 +41,8 @@ private struct DefaultPrepareTool: Tool {
     #expect(object["deep"]?.objectValue?["flag"] == .bool(true))
   }
 
-  @Test func jsonValuePreservesIntegersBeyondDoublePrecision() throws {
+  @Test
+  func jsonValuePreservesIntegersBeyondDoublePrecision() throws {
     // given
     let raw = #"{"record_id":9007199254740993}"#
 
@@ -52,24 +55,24 @@ private struct DefaultPrepareTool: Tool {
     #expect(encoded == raw)
   }
 
-  @Test func integerAndExactDoubleCasesHaveTheSameJSONNumericValue() {
+  @Test
+  func integerAndExactDoubleCasesHaveTheSameJSONNumericValue() {
     // given / when / then
     #expect(JSONValue.integer(5) == .number(5))
     #expect(JSONValue.integer(9_007_199_254_740_993) != .number(9_007_199_254_740_992))
   }
 
-  @Test func jsonValueParseRejectsMalformedJSON() {
+  @Test
+  func jsonValueParseRejectsMalformedJSON() {
     // given / when / then
     #expect(JSONValue.parse(#"{"url": "#) == nil)
     #expect(JSONValue.parse("") == nil)
   }
 
-  @Test func jsonValueEncodesBackToJSON() throws {
+  @Test
+  func jsonValueEncodesBackToJSON() throws {
     // given
-    let value = JSONValue.object([
-      "type": .string("object"),
-      "required": .array([.string("url")]),
-    ])
+    let value = JSONValue.object(["type": .string("object"), "required": .array([.string("url")])])
 
     // when
     let data = try JSONEncoder().encode(value)
@@ -79,7 +82,8 @@ private struct DefaultPrepareTool: Tool {
     #expect(decoded == value)
   }
 
-  @Test func toolCallCodingRoundTripsThePersistedShape() throws {
+  @Test
+  func toolCallCodingRoundTripsThePersistedShape() throws {
     // given
     let calls = [
       ToolCall(
@@ -99,13 +103,15 @@ private struct DefaultPrepareTool: Tool {
     #expect(encoded.contains(#""arguments""#))  // the pinned column shape
   }
 
-  @Test func toolCallCodingDecodeReturnsEmptyOnMalformedJSON() {
+  @Test
+  func toolCallCodingDecodeReturnsEmptyOnMalformedJSON() {
     // given / when / then
     #expect(ToolCallCoding.decode("not json") == [])
     #expect(ToolCallCoding.decode("") == [])
   }
 
-  @Test func observationStampsCallIdentityOntoPayload() {
+  @Test
+  func observationStampsCallIdentityOntoPayload() {
     // given
     let call = ToolCall(id: "call_9", name: "web_search", argumentsJSON: #"{"query":"swift"}"#)
     let payload = ToolPayload(
@@ -118,14 +124,15 @@ private struct DefaultPrepareTool: Tool {
     let observation = ToolObservation(call: call, payload: payload)
 
     // then
-    #expect(observation.callId == "call_9")
+    #expect(observation.callID == "call_9")
     #expect(observation.toolName == "web_search")
     #expect(observation.status == .ok)
     #expect(observation.ingestedUntrusted)
     #expect(observation.readPrivateData == false)
   }
 
-  @Test func observationStatusRawValuesArePinned() {
+  @Test
+  func observationStatusRawValuesArePinned() {
     // given / when / then — audit rows persist these raw values
     #expect(ToolObservationStatus.ok.rawValue == "ok")
     #expect(ToolObservationStatus.error.rawValue == "error")
@@ -134,7 +141,8 @@ private struct DefaultPrepareTool: Tool {
     #expect(ToolObservationStatus.blockedPendingApproval.rawValue == "blocked_pending_approval")
   }
 
-  @Test func dispatchContextIsAValueType() {
+  @Test
+  func dispatchContextIsAValueType() {
     // given / when — the per-call policy inputs are a Sendable value type (no grant since Inc 5a)
     let context = ToolDispatchContext(
       sessionTainted: true,
@@ -150,7 +158,8 @@ private struct DefaultPrepareTool: Tool {
     #expect(context.approvalAlreadyPending == false)
   }
 
-  @Test func preparedActionCarriesReplacementArgsAndPerCallEgress() {
+  @Test
+  func preparedActionCarriesReplacementArgsAndPerCallEgress() {
     // given
     let presentation = ToolApprovalPresentation(
       blastRadius: "run python",
@@ -178,7 +187,8 @@ private struct DefaultPrepareTool: Tool {
     #expect(PreparedActionResolution.refused(reason: "no") == .refused(reason: "no"))
   }
 
-  @Test func ordinaryToolsDefaultToNoPreparedAction() async {
+  @Test
+  func ordinaryToolsDefaultToNoPreparedAction() async {
     // given
     let tool = DefaultPrepareTool()
 

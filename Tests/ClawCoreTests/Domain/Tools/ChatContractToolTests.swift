@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ChatContractToolTests {
-  @Test func existingCallSiteShapesStillCompileAndDefaultEmpty() {
+@Suite
+struct ChatContractToolTests {
+  @Test
+  func existingCallSiteShapesStillCompileAndDefaultEmpty() {
     // given / when
     let message = ChatMessage(role: .user, content: "hi")
     let request = ChatRequest(model: "m", messages: [message], maxOutputTokens: 100)
@@ -17,21 +19,23 @@ import Testing
 
     // then
     #expect(message.toolCalls.isEmpty)
-    #expect(message.toolCallId == nil)
+    #expect(message.toolCallID == nil)
     #expect(request.tools.isEmpty)
     #expect(response.toolCalls.isEmpty)
   }
 
-  @Test func toolRoleAndToolMessageShape() {
+  @Test
+  func toolRoleAndToolMessageShape() {
     // given
-    let observationMessage = ChatMessage(role: .tool, content: "fetched text", toolCallId: "call_1")
+    let observationMessage = ChatMessage(role: .tool, content: "fetched text", toolCallID: "call_1")
 
     // then
     #expect(MessageRole.tool.rawValue == "tool")
-    #expect(observationMessage.toolCallId == "call_1")
+    #expect(observationMessage.toolCallID == "call_1")
   }
 
-  @Test func estimatorCountsToolCallArgumentsText() {
+  @Test
+  func estimatorCountsToolCallArgumentsText() {
     // given — identical content; one message re-sends a large tool-call arguments blob
     let argumentsBlob = String(repeating: "x", count: 4_000)
     let plain = ChatMessage(role: .assistant, content: "same")

@@ -3,7 +3,8 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct CostAndTokenTests {
+@Suite
+struct CostAndTokenTests {
   private static let referenceUSDPerToken = 0.000_015
 
   private func resolver(_ prices: [String: ModelPrice] = [:]) -> CostResolver {
@@ -13,7 +14,8 @@ import Testing
     )
   }
 
-  @Test func providerCostWinsIncludingConfirmedZero() {
+  @Test
+  func providerCostWinsIncludingConfirmedZero() {
     // given
     let usage = ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15)
 
@@ -82,11 +84,7 @@ import Testing
     let resolver = resolver(testCase.prices)
 
     // when
-    let resolved = resolver.resolve(
-      model: testCase.model,
-      usage: testCase.usage,
-      providerCost: nil
-    )
+    let resolved = resolver.resolve(model: testCase.model, usage: testCase.usage, providerCost: nil)
 
     // then
     #expect(abs(resolved.costUSD - testCase.expectedCostUSD) <= testCase.tolerance)
@@ -94,7 +92,8 @@ import Testing
     #expect(resolved.isEstimated == testCase.expectedIsEstimated)
   }
 
-  @Test func tokenEstimateMatchesTheFormula() {
+  @Test
+  func tokenEstimateMatchesTheFormula() {
     // given — 8 graphemes; double-ceil → ceil(ceil(8/4) * 1.25) = 3 input tokens
     let messages = [ChatMessage(role: .user, content: "abcdefgh")]
 

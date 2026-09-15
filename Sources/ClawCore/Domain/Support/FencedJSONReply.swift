@@ -16,10 +16,9 @@ public enum FencedJSONReply {
     guard trimmed.hasPrefix(fence) else {
       return trimmed
     }
-    return
-      trimmed
-      .replacingOccurrences(of: "\(fence)json", with: "")
-      .replacingOccurrences(of: fence, with: "")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.replacingOccurrences(of: "\(fence)json", with: "").replacingOccurrences(
+      of: fence,
+      with: ""
+    ).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

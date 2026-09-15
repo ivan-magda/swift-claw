@@ -31,7 +31,7 @@ public enum DeveloperLogging {
   /// every message and string metadata value — wire `SecretRedactor.redact` here.
   public static func bootstrap(
     level: Logger.Level,
-    redact: @escaping @Sendable (String) -> String
+    redact: @escaping @Sendable (_ text: String) -> String
   ) {
     LoggingSystem.bootstrap { label in
       var handler = RedactingLogHandler(
@@ -51,15 +51,18 @@ public enum DeveloperLogging {
 /// existing call sites. The durable audit trail does not flow through swift-log and is unaffected.
 struct RedactingLogHandler: LogHandler {
   private var base: any LogHandler
-  private let redact: @Sendable (String) -> String
+  private let redact: @Sendable (_ text: String) -> String
 
-  init(base: any LogHandler, redact: @escaping @Sendable (String) -> String) {
+  init(base: any LogHandler, redact: @escaping @Sendable (_ text: String) -> String) {
     self.base = base
     self.redact = redact
   }
 
   func log(event: LogEvent) {
-    var metadata = event.metadata.map { Self.redacted($0, using: redact) } ?? [:]
+    var metadata =
+      event.metadata.map {
+        Self.redacted($0, using: redact)
+      } ?? [:]
 
     if let error = event.error {
       // `StreamLogHandler` renders `event.error` into these two keys. Do it here (redacted) and pass
@@ -71,7 +74,7 @@ struct RedactingLogHandler: LogHandler {
     base.log(
       event: LogEvent(
         level: event.level,
-        message: Logger.Message(stringLiteral: redact(event.message.description)),
+        message: "\(redact(event.message.description))",
         metadata: metadata.isEmpty ? nil : metadata,
         source: event.source,
         file: event.file,
@@ -99,36 +102,45 @@ struct RedactingLogHandler: LogHandler {
     set {
       let redact = self.redact
       base.metadataProvider = newValue.map { provider in
-        Logger.MetadataProvider { Self.redacted(provider.get(), using: redact) }
+        Logger.MetadataProvider {
+          Self.redacted(provider.get(), using: redact)
+        }
       }
     }
   }
 
   subscript(metadataKey key: String) -> Logger.Metadata.Value? {
     get { base[metadataKey: key] }
-    set { base[metadataKey: key] = newValue.map { Self.redacted($0, using: redact) } }
+    set {
+      base[metadataKey: key] = newValue.map {
+        Self.redacted($0, using: redact)
+      }
+    }
   }
 
   private static func redacted(
     _ metadata: Logger.Metadata,
-    using redact: (String) -> String
+    using redact: (_ text: String) -> String
   ) -> Logger.Metadata {
-    metadata.mapValues { redacted($0, using: redact) }
+    metadata.mapValues {
+      redacted($0, using: redact)
+    }
   }
 
   private static func redacted(
     _ value: Logger.MetadataValue,
-    using redact: (String) -> String
+    using redact: (_ text: String) -> String
   ) -> Logger.MetadataValue {
     switch value {
-    case .string(let text):
-      .string(redact(text))
-    case .stringConvertible(let convertible):
-      .string(redact("\(convertible)"))
+    case .string(let text): .string(redact(text))
+    case .stringConvertible(let convertible): .string(redact("\(convertible)"))
     case .array(let values):
-      .array(values.map { redacted($0, using: redact) })
-    case .dictionary(let nested):
-      .dictionary(redacted(nested, using: redact))
+      .array(
+        values.map {
+          redacted($0, using: redact)
+        }
+      )
+    case .dictionary(let nested): .dictionary(redacted(nested, using: redact))
     }
   }
 }

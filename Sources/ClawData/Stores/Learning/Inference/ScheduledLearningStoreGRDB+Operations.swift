@@ -5,37 +5,32 @@ import GRDB
 // MARK: - Operation Lifecycle
 
 extension ScheduledLearningStoreGRDB {
-  public func claimOperation(
-    _ key: LearningOperationKey,
-    now: Date
-  ) throws(StoreError) -> ClaimedOperation? {
+  public func claimOperation(_ key: LearningOperationKey, now: Date) throws(StoreError)
+    -> ClaimedOperation?
+  {
     try database.writeMapping { db in
       try Self.claim(db, key: key, now: now)
     }
   }
 
-  public func authorizeAndStartOperation(
-    _ authorization: LearningAuthorization,
-    now: Date
-  ) throws(StoreError) -> AuthorizeOutcome {
+  public func authorizeAndStartOperation(_ authorization: LearningAuthorization, now: Date)
+    throws(StoreError) -> AuthorizeOutcome
+  {
     try database.writeMapping { db in
       try Self.authorize(db, authorization, now: now)
     }
   }
 
-  public func finishOperation(
-    _ result: LearningOperationResult,
-    now: Date
-  ) throws(StoreError) -> Bool {
+  public func finishOperation(_ result: LearningOperationResult, now: Date) throws(StoreError)
+    -> Bool
+  {
     try database.writeMapping { db in
       try Self.finish(db, result, now: now)
     }
   }
 
   @discardableResult
-  public func reconcileOperationsAtBoot(
-    now: Date
-  ) throws(StoreError) -> OperationReconciliation {
+  public func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation {
     try database.writeMapping { db in
       try Self.reconcile(db, now: now)
     }
@@ -48,15 +43,13 @@ private extension ScheduledLearningStoreGRDB {
   /// Refuses far more often than it claims, and every refusal is the same nil: a claim is only
   /// worth taking when the job is still in the epoch the key names, the source is still work the
   /// evaluator may do, and no other attempt at this key is live or already finished.
-  static func claim(
-    _ db: Database,
-    key: LearningOperationKey,
-    now: Date
-  ) throws -> ClaimedOperation? {
-    guard try readState(db, jobId: key.jobId)?.epoch == key.epoch else {
+  static func claim(_ db: Database, key: LearningOperationKey, now: Date) throws
+    -> ClaimedOperation?
+  {
+    guard try readState(db, jobID: key.jobID)?.epoch == key.epoch else {
       return nil
     }
-    guard try jobPermitsLearningCalls(db, jobId: key.jobId) else {
+    guard try jobPermitsLearningCalls(db, jobID: key.jobID) else {
       return nil
     }
     guard try sourceIsClaimable(db, key: key) else {
@@ -77,8 +70,7 @@ private extension ScheduledLearningStoreGRDB {
           supersedes: latest.id,
           now: now
         )
-      case .claimed, .started, .succeeded, .failed, .failedNoCall:
-        claimed = nil
+      case .claimed, .started, .succeeded, .failed, .failedNoCall: claimed = nil
       }
     } else {
       claimed = try insertClaim(db, key: key, generation: 1, supersedes: nil, now: now)
@@ -86,7 +78,7 @@ private extension ScheduledLearningStoreGRDB {
     if claimed != nil, key.phase == .evaluator {
       try recomputeEvaluatorSource(
         db,
-        jobId: key.jobId,
+        jobID: key.jobID,
         epoch: key.epoch,
         evidenceDigest: key.sourceDigest,
         now: now
@@ -105,11 +97,11 @@ private extension ScheduledLearningStoreGRDB {
       return try Bool.fetchOne(
         db,
         sql: """
-          SELECT NOT EXISTS(
-            SELECT 1 FROM learning_evaluations WHERE job_id = ? AND evidence_digest = ?
-          )
-          """,
-        arguments: [key.jobId, key.sourceDigest]
+        SELECT NOT EXISTS(
+          SELECT 1 FROM learning_evaluations WHERE job_id = ? AND evidence_digest = ?
+        )
+        """,
+        arguments: [key.jobID, key.sourceDigest]
       ) ?? false
     case .reflector:
       // The reflector's source is a frozen trigger identity, not a run receipt. What makes a
@@ -125,10 +117,10 @@ private extension ScheduledLearningStoreGRDB {
     let raw = try String.fetchOne(
       db,
       sql: """
-        SELECT eligibility FROM learning_evidence
-        WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
-        """,
-      arguments: [key.jobId, key.epoch.value, key.sourceDigest]
+      SELECT eligibility FROM learning_evidence
+      WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
+      """,
+      arguments: [key.jobID, key.epoch.value, key.sourceDigest]
     )
     guard let eligibility = raw.flatMap(LearningEligibility.init(rawValue:)) else {
       return false
@@ -146,13 +138,13 @@ private extension ScheduledLearningStoreGRDB {
     let id = LearningOperationID(key: key.digest, attemptGeneration: generation)
     try db.execute(
       sql: """
-        INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase, source_digest,
-          attempt_generation, supersedes, state, key_digest, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+      INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase, source_digest,
+        attempt_generation, supersedes, state, key_digest, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      """,
       arguments: [
         id.rawValue,
-        key.jobId,
+        key.jobID,
         key.epoch.value,
         key.phase.rawValue,
         key.sourceDigest,
@@ -163,19 +155,12 @@ private extension ScheduledLearningStoreGRDB {
         EpochSecondCodec.epoch(now),
       ]
     )
-    return ClaimedOperation(
-      id: id,
-      key: key,
-      attemptGeneration: generation,
-      supersedes: supersedes
-    )
+    return ClaimedOperation(id: id, key: key, attemptGeneration: generation, supersedes: supersedes)
   }
 
-  static func reclaim(
-    _ db: Database,
-    _ attempt: AttemptRow,
-    key: LearningOperationKey
-  ) throws -> ClaimedOperation? {
+  static func reclaim(_ db: Database, _ attempt: AttemptRow, key: LearningOperationKey) throws
+    -> ClaimedOperation?
+  {
     try db.execute(
       sql: "UPDATE learning_operations SET state = ? WHERE operation_id = ? AND state = ?",
       arguments: [
@@ -203,11 +188,11 @@ extension ScheduledLearningStoreGRDB {
   /// blocks here: a paused or completed job's settled evidence is still evidence, and the wider
   /// "repeatable, non-cancelled" rule belongs to candidate admission rather than to one inference.
   /// A job row that has gone missing fails closed — nothing may be spent on a job that is not there.
-  static func jobPermitsLearningCalls(_ db: Database, jobId: Int64) throws -> Bool {
+  static func jobPermitsLearningCalls(_ db: Database, jobID: Int64) throws -> Bool {
     let status = try String.fetchOne(
       db,
       sql: "SELECT status FROM scheduled_jobs WHERE id = ?",
-      arguments: [jobId]
+      arguments: [jobID]
     )
     guard let status else {
       return false
@@ -225,10 +210,10 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-        SELECT operation_id, attempt_generation, state, supersedes
-        FROM learning_operations WHERE key_digest = ?
-        ORDER BY attempt_generation DESC LIMIT 1
-        """,
+      SELECT operation_id, attempt_generation, state, supersedes
+      FROM learning_operations WHERE key_digest = ?
+      ORDER BY attempt_generation DESC LIMIT 1
+      """,
       arguments: [key.rawValue]
     )
     guard let row else {
@@ -247,18 +232,18 @@ extension ScheduledLearningStoreGRDB {
     let row = try Row.fetchOne(
       db,
       sql: """
-        SELECT job_id, learning_epoch, phase, source_digest, key_digest, carrier_digest, state,
-          failure_code, route, provider_call_id, reserved_tokens, reserved_cost_usd,
-          reservation_state
-        FROM learning_operations WHERE operation_id = ?
-        """,
+      SELECT job_id, learning_epoch, phase, source_digest, key_digest, carrier_digest, state,
+        failure_code, route, provider_call_id, reserved_tokens, reserved_cost_usd,
+        reservation_state
+      FROM learning_operations WHERE operation_id = ?
+      """,
       arguments: [id.rawValue]
     )
     guard let row else {
       return nil
     }
     guard
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
       let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
       let phaseRaw = SQLiteStoredValue.string(in: row, column: "phase"),
       let sourceDigest = SQLiteStoredValue.string(in: row, column: "source_digest"),
@@ -270,7 +255,10 @@ extension ScheduledLearningStoreGRDB {
       let providerCall = SQLiteStoredValue.nullableString(in: row, column: "provider_call_id"),
       let reservedTokens = SQLiteStoredValue.nullableInt(in: row, column: "reserved_tokens"),
       let reservedCost = SQLiteStoredValue.nullableDouble(in: row, column: "reserved_cost_usd"),
-      let reservationState = SQLiteStoredValue.nullableString(in: row, column: "reservation_state")
+      let reservationState = SQLiteStoredValue.nullableString(
+        in: row,
+        column: "reservation_state"
+      )
     else {
       throw StoreError.unexpected("operation \(id.rawValue) holds unreadable stored values")
     }
@@ -280,7 +268,7 @@ extension ScheduledLearningStoreGRDB {
     }
     return OperationRow(
       id: id,
-      jobId: jobId,
+      jobID: jobID,
       epoch: LearningEpoch(epoch),
       phase: try learningPhase(phaseRaw, of: id),
       sourceDigest: sourceDigest,
@@ -296,9 +284,9 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func startedOperationReservation(
-    _ operation: OperationRow
-  ) throws -> StartedOperationReservation {
+  static func startedOperationReservation(_ operation: OperationRow) throws
+    -> StartedOperationReservation
+  {
     guard
       let providerCallID = operation.providerCallID,
       providerCallID.rawValue.isEmpty == false,
@@ -323,10 +311,9 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func operationState(
-    _ raw: String,
-    of id: LearningOperationID
-  ) throws -> LearningOperationState {
+  static func operationState(_ raw: String, of id: LearningOperationID) throws
+    -> LearningOperationState
+  {
     guard let state = LearningOperationState(rawValue: raw) else {
       throw StoreError.unexpected("operation \(id.rawValue) holds an unreadable state '\(raw)'")
     }
@@ -349,7 +336,7 @@ extension ScheduledLearningStoreGRDB {
 
   struct OperationRow {
     let id: LearningOperationID
-    let jobId: Int64
+    let jobID: Int64
     let epoch: LearningEpoch
     let phase: LearningPhase
     let sourceDigest: String

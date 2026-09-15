@@ -10,7 +10,7 @@ import GRDB
 extension EvaluationRunEnvironment {
   func workflowRouter(service: ScheduledLearningService) throws -> MessageRouter {
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: [Self.chatId])
+    try allowlist.seedAllowlist(userIDs: [Self.chatID])
     let access = AccessControl(allowlist: allowlist, groupChats: [])
     let transport = RecordingTransport()
     let processed = ProcessedUpdateStoreGRDB(writer: queue)
@@ -20,7 +20,9 @@ extension EvaluationRunEnvironment {
       learning: learning,
       workflow: service,
       notifyOutbox: {},
-      now: { now },
+      now: {
+        now
+      },
       logger: TestLog.silent
     )
     let callbacks = FeedbackCallbackHandler.make(
@@ -32,7 +34,9 @@ extension EvaluationRunEnvironment {
       callbacks: transport,
       challenges: challenges,
       workflow: service,
-      now: { now },
+      now: {
+        now
+      },
       logger: TestLog.silent
     )
     return MessageRouter(
@@ -57,21 +61,23 @@ extension EvaluationRunEnvironment {
       feedbackChallenges: challenges,
       coordinator: ApprovalCoordinator(),
       doctor: StubDoctorReporter(),
-      now: { now },
+      now: {
+        now
+      },
       logger: TestLog.silent
     )
   }
 
   func callback(target: FeedbackTarget, action: FeedbackAction, id: Int64) -> RawUpdate {
     RawUpdate(
-      updateId: id,
+      updateID: id,
       message: nil,
       editedMessage: nil,
       callback: RawCallback(
-        callbackId: "workflow-\(id)",
-        fromUserId: Self.chatId,
-        chatId: Self.chatId,
-        messageId: 100,
+        callbackID: "workflow-\(id)",
+        fromUserID: Self.chatID,
+        chatID: Self.chatID,
+        messageID: 100,
         data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: action)
       )
     )

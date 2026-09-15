@@ -79,17 +79,14 @@ struct ObservedCredentialStore: LLMCredentialStore {
   let inner: EncryptedLLMCredentialStore
   let log: AuthEffectLog
 
-  func load(
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
+  func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
     log.record(.credentialLoaded)
     return try inner.load(providerID: providerID)
   }
 
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) {
+  func save(_ credential: StoredOAuthCredential, providerID: LLMProviderID)
+    throws(LLMCredentialStoreError)
+  {
     log.record(.credentialSaved)
     try inner.save(credential, providerID: providerID)
   }
@@ -110,18 +107,16 @@ struct ScriptedDeviceAuthorization: ChatGPTDeviceAuthorizing {
   let outcome: Outcome
   let log: AuthEffectLog
 
-  func authorize(
-    onDeviceCode: @escaping @Sendable (ChatGPTDeviceCode) async -> Void
-  ) async throws -> ChatGPTAuthorizationGrant {
+  func authorize(onDeviceCode: @escaping @Sendable (_ deviceCode: ChatGPTDeviceCode) async -> Void)
+    async throws -> ChatGPTAuthorizationGrant
+  {
     // Recorded before anything is reported: the question this marker answers is whether login
     // reached the vendor at all, not whether it got an answer.
     log.record(.deviceAuthorizationStarted)
     await onDeviceCode(device)
     switch outcome {
-    case .granted(let grant):
-      return grant
-    case .failure(let makeFailure):
-      throw makeFailure()
+    case .granted(let grant): return grant
+    case .failure(let makeFailure): throw makeFailure()
     }
   }
 }
@@ -135,16 +130,13 @@ struct ScriptedExchange: ChatGPTOAuthExchanging {
   let outcome: Outcome
   let log: AuthEffectLog
 
-  func exchange(
-    grant: ChatGPTAuthorizationGrant,
-    timeout: Duration
-  ) async throws -> ChatGPTTokenPair {
+  func exchange(grant: ChatGPTAuthorizationGrant, timeout: Duration) async throws
+    -> ChatGPTTokenPair
+  {
     log.record(.tokenExchanged)
     switch outcome {
-    case .pair(let pair):
-      return pair
-    case .failure(let makeFailure):
-      throw makeFailure()
+    case .pair(let pair): return pair
+    case .failure(let makeFailure): throw makeFailure()
     }
   }
 }
@@ -170,10 +162,8 @@ final class ScriptedCatalog: ChatGPTModelCatalogFetching {
       seen = authorization
     }
     switch outcome {
-    case .models(let models):
-      return models
-    case .failure(let failure):
-      throw failure
+    case .models(let models): return models
+    case .failure(let failure): throw failure
     }
   }
 }
@@ -193,7 +183,9 @@ final class CatalogSpyBox: @unchecked Sendable {
   var seenAuthorization: LLMRequestAuthorization? {
     lock.lock()
     defer { lock.unlock() }
-    return catalog?.seenAuthorization.withLock { $0 }
+    return catalog?.seenAuthorization.withLock {
+      $0
+    }
   }
 }
 
@@ -249,15 +241,18 @@ enum AuthFixture {
     userCode: "WDJB-MJHT",
     pollInterval: .seconds(5)
   )
+
   static let grant = ChatGPTAuthorizationGrant(
     authorizationCode: "authorization-code-value",
     codeVerifier: "code-verifier-value"
   )
+
   static let pair = ChatGPTTokenPair(
     accessToken: accessToken,
     refreshToken: refreshToken,
     expiresAt: expiry
   )
+
   static let catalog = [
     ChatGPTCatalogModel(slug: "gpt-5.4", priority: 1),
     ChatGPTCatalogModel(slug: "gpt-5.4-mini", priority: 2),
@@ -305,9 +300,7 @@ struct AuthWorld: Sendable {
   var paths: SecretStatePaths { SecretStatePaths(stateRoot: root) }
 
   /// The authorization the catalog fetch saw during the most recent `loginWorkflow().login()`.
-  var seenCatalogAuthorization: LLMRequestAuthorization? {
-    builtCatalog.seenAuthorization
-  }
+  var seenCatalogAuthorization: LLMRequestAuthorization? { builtCatalog.seenAuthorization }
 
   /// Loads the store as the owner's disk actually holds it, unrecorded. Read failures remain test
   /// failures rather than being mistaken for an absent credential.
@@ -338,24 +331,18 @@ struct AuthWorld: Sendable {
     builtCatalog.set(catalog)
     return AuthLoginWorkflow(
       bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
-      runtimeSecrets: RealRuntimeSecrets(
-        stateRoot: root,
-        environment: environment,
-        log: log
-      ),
+      runtimeSecrets: RealRuntimeSecrets(stateRoot: root, environment: environment, log: log),
       mutationLock: mutationLock ?? ScriptedLock(failure: lockFailure, log: log),
       makeCredentialStore: makeCredentialStore,
       makeDeviceAuthorization: {
-        ScriptedDeviceAuthorization(
-          device: AuthFixture.device,
-          outcome: device,
-          log: effects
-        )
+        ScriptedDeviceAuthorization(device: AuthFixture.device, outcome: device, log: effects)
       },
       tokenExchange: ScriptedExchange(outcome: exchangeOutcome, log: log),
       catalog: catalog,
       terminal: terminal,
-      profileID: { identity }
+      profileID: {
+        identity
+      }
     )
   }
 
@@ -363,7 +350,9 @@ struct AuthWorld: Sendable {
     AuthStatusWorkflow(
       bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
       makeCredentialStore: makeCredentialStore,
-      wallDate: { AuthFixture.now }
+      wallDate: {
+        AuthFixture.now
+      }
     )
   }
 
@@ -378,14 +367,16 @@ struct AuthWorld: Sendable {
   /// a previous successful login would have.
   func seedPriorLogin() throws {
     _ = try RuntimeSecretPreparer.prepare(stateRoot: root, environment: environment)
-    try EncryptedLLMCredentialStore(stateRoot: root)
-      .save(AuthFixture.priorCredential, providerID: .openAIChatGPT)
+    try EncryptedLLMCredentialStore(stateRoot: root).save(
+      AuthFixture.priorCredential,
+      providerID: .openAIChatGPT
+    )
   }
 }
 
 func withAuthWorld<Value>(
   _ prefix: String,
-  _ body: (inout AuthWorld) async throws -> Value
+  _ body: (_ world: inout AuthWorld) async throws -> Value
 ) async throws -> Value {
   let root = try makeTemporaryRoot(prefix: prefix)
   defer { try? FileManager.default.removeItem(at: root) }
@@ -397,16 +388,12 @@ func withAuthWorld<Value>(
 /// are asserted against everything the command emitted rather than a line a test picked. Only status
 /// and logout answer through here: login has already presented its lines, and returns none.
 extension AuthCommandResult {
-  var transcript: String {
-    events.map(\.text).joined(separator: "\n")
-  }
+  var transcript: String { events.map(\.text).joined(separator: "\n") }
 }
 
 /// Everything the owner actually saw, in order — which for login is the whole of it, since login
 /// streams rather than returns. The two spellings are deliberately the same word: a test asserts
 /// against whichever end the command in question presents through.
 extension RecordingTerminal {
-  var transcript: String {
-    written.map(\.text).joined(separator: "\n")
-  }
+  var transcript: String { written.map(\.text).joined(separator: "\n") }
 }

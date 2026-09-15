@@ -14,10 +14,8 @@ public enum AllowlistSeeding {
 
   public static func seed(into allowlist: any AllowlistStore, owners: Set<Int64>) -> Outcome {
     do {
-      try allowlist.seedAllowlist(userIds: Array(owners))
+      try allowlist.seedAllowlist(userIDs: Array(owners))
       return .seeded
-    } catch {
-      return owners.isEmpty ? .toleratedFailure(error) : .strandedOwners(error)
-    }
+    } catch { return owners.isEmpty ? .toleratedFailure(error) : .strandedOwners(error) }
   }
 }

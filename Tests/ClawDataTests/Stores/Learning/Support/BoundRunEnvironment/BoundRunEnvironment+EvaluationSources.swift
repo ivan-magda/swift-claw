@@ -58,86 +58,66 @@ enum EvaluatorSourceCorruption: CaseIterable {
 }
 
 extension BoundRunEnvironment {
-  func apply(
-    _ corruption: EvaluationCorruption,
-    runId: Int64
-  ) throws {
+  func apply(_ corruption: EvaluationCorruption, runID: Int64) throws {
     try queue.write { db in
       switch corruption {
       case .missing:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
       case .duplicate:
         try db.execute(
           sql: """
-            INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
-              evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
-              evaluator_schema_version, compatibility_digest, created_at)
-            SELECT ?, job_id, learning_epoch, run_id, evidence_digest, outcome, issue_codes,
-              rubric_version, evaluator_prompt_version, evaluator_schema_version,
-              compatibility_digest, created_at
-            FROM learning_evaluations WHERE run_id = ?
-            """,
-          arguments: [String(repeating: "f", count: 64), runId]
+          INSERT INTO learning_evaluations(evaluation_digest, job_id, learning_epoch, run_id,
+            evidence_digest, outcome, issue_codes, rubric_version, evaluator_prompt_version,
+            evaluator_schema_version, compatibility_digest, created_at)
+          SELECT ?, job_id, learning_epoch, run_id, evidence_digest, outcome, issue_codes,
+            rubric_version, evaluator_prompt_version, evaluator_schema_version,
+            compatibility_digest, created_at
+          FROM learning_evaluations WHERE run_id = ?
+          """,
+          arguments: [String(repeating: "f", count: 64), runID]
         )
       case .digest:
         try updateEvaluation(
           db,
-          runId: runId,
+          runID: runID,
           column: "evaluation_digest",
           value: String(repeating: "f", count: 64)
         )
-      case .job:
-        try updateEvaluation(db, runId: runId, column: "job_id", value: 999)
-      case .epoch:
-        try updateEvaluation(db, runId: runId, column: "learning_epoch", value: 999)
+      case .job: try updateEvaluation(db, runID: runID, column: "job_id", value: 999)
+      case .epoch: try updateEvaluation(db, runID: runID, column: "learning_epoch", value: 999)
       case .evidence:
         try updateEvaluation(
           db,
-          runId: runId,
+          runID: runID,
           column: "evidence_digest",
           value: String(repeating: "f", count: 64)
         )
-      case .outcome:
-        try updateEvaluation(db, runId: runId, column: "outcome", value: "unknown")
+      case .outcome: try updateEvaluation(db, runID: runID, column: "outcome", value: "unknown")
       case .issueCodes:
-        try updateEvaluation(db, runId: runId, column: "issue_codes", value: "[\"z\",\"a\"]")
+        try updateEvaluation(db, runID: runID, column: "issue_codes", value: "[\"z\",\"a\"]")
       case .duplicateIssueCode:
         try updateEvaluation(
           db,
-          runId: runId,
+          runID: runID,
           column: "issue_codes",
           value: "[\"duplicate\",\"duplicate\"]"
         )
-      case .rubric:
-        try updateEvaluation(db, runId: runId, column: "rubric_version", value: "999")
+      case .rubric: try updateEvaluation(db, runID: runID, column: "rubric_version", value: "999")
       case .prompt:
-        try updateEvaluation(
-          db,
-          runId: runId,
-          column: "evaluator_prompt_version",
-          value: "999"
-        )
+        try updateEvaluation(db, runID: runID, column: "evaluator_prompt_version", value: "999")
       case .schema:
-        try updateEvaluation(
-          db,
-          runId: runId,
-          column: "evaluator_schema_version",
-          value: "999"
-        )
+        try updateEvaluation(db, runID: runID, column: "evaluator_schema_version", value: "999")
       case .compatibility:
         try updateEvaluation(
           db,
-          runId: runId,
+          runID: runID,
           column: "compatibility_digest",
           value: String(repeating: "f", count: 64)
         )
       case .createdAt:
         try db.execute(
           sql: "UPDATE learning_evaluations SET created_at = X'00' WHERE run_id = ?",
-          arguments: [runId]
+          arguments: [runID]
         )
       }
     }
@@ -145,20 +125,20 @@ extension BoundRunEnvironment {
 
   func apply(
     _ corruption: EvaluatorSourceCorruption,
-    operationId: LearningOperationID,
-    runId: Int64
+    operationID: LearningOperationID,
+    runID: Int64
   ) throws {
     try queue.write { db in
       switch corruption {
       case .orphanEvaluation:
         try db.execute(
           sql: "DELETE FROM learning_operations WHERE operation_id = ?",
-          arguments: [operationId.rawValue]
+          arguments: [operationID.rawValue]
         )
       case .startedWithEvaluation:
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: [
             "state": LearningOperationState.started.rawValue,
             "reservation_state": LearningReservationState.open.rawValue,
@@ -169,7 +149,7 @@ extension BoundRunEnvironment {
       case .failedWithEvaluation:
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: [
             "state": LearningOperationState.failed.rawValue,
             "failure_code": LearningOperationFailure.providerTerminal.rawValue,
@@ -178,30 +158,24 @@ extension BoundRunEnvironment {
       case .pendingFailure:
         try makeNoCallOperation(
           db,
-          id: operationId,
-          runId: runId,
+          id: operationID,
+          runID: runID,
           state: .pending,
           failure: .budgetDenied,
           retainEvaluation: false
         )
       case .claimedCallIdentity:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: ["state": LearningOperationState.claimed.rawValue]
         )
       case .startedMissingCarrier:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: [
             "state": LearningOperationState.started.rawValue,
             "carrier_digest": nil,
@@ -211,86 +185,74 @@ extension BoundRunEnvironment {
       case .startedMissingRoute:
         try makeStartedOperationCorruption(
           db,
-          id: operationId,
-          runId: runId,
+          id: operationID,
+          runID: runID,
           assignments: ["route": nil]
         )
       case .startedMissingProviderCall:
         try makeStartedOperationCorruption(
           db,
-          id: operationId,
-          runId: runId,
+          id: operationID,
+          runID: runID,
           assignments: ["provider_call_id": nil]
         )
       case .startedNegativeTokens:
         try makeStartedOperationCorruption(
           db,
-          id: operationId,
-          runId: runId,
+          id: operationID,
+          runID: runID,
           assignments: ["reserved_tokens": -1]
         )
       case .startedNegativeCost:
         try makeStartedOperationCorruption(
           db,
-          id: operationId,
-          runId: runId,
+          id: operationID,
+          runID: runID,
           assignments: ["reserved_cost_usd": -1.0]
         )
       case .startedClosedReservation:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: ["state": LearningOperationState.started.rawValue]
         )
       case .succeededFailure:
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: ["failure_code": LearningOperationFailure.providerTerminal.rawValue]
         )
       case .succeededMissingCarrier:
-        try updateOperation(db, id: operationId, assignments: ["carrier_digest": nil])
+        try updateOperation(db, id: operationID, assignments: ["carrier_digest": nil])
       case .succeededMissingRoute:
-        try updateOperation(db, id: operationId, assignments: ["route": nil])
+        try updateOperation(db, id: operationID, assignments: ["route": nil])
       case .succeededMissingProviderCall:
-        try updateOperation(db, id: operationId, assignments: ["provider_call_id": nil])
+        try updateOperation(db, id: operationID, assignments: ["provider_call_id": nil])
       case .succeededNonzeroTokens:
-        try updateOperation(db, id: operationId, assignments: ["reserved_tokens": 1])
+        try updateOperation(db, id: operationID, assignments: ["reserved_tokens": 1])
       case .succeededNonzeroCost:
-        try updateOperation(db, id: operationId, assignments: ["reserved_cost_usd": 1.0])
+        try updateOperation(db, id: operationID, assignments: ["reserved_cost_usd": 1.0])
       case .succeededMissingReservation:
-        try updateOperation(db, id: operationId, assignments: ["reservation_state": nil])
+        try updateOperation(db, id: operationID, assignments: ["reservation_state": nil])
       case .succeededOpenReservation:
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: ["reservation_state": LearningReservationState.open.rawValue]
         )
       case .failedMissingFailure:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
         try updateOperation(
           db,
-          id: operationId,
-          assignments: [
-            "state": LearningOperationState.failed.rawValue,
-            "failure_code": nil,
-          ]
+          id: operationID,
+          assignments: ["state": LearningOperationState.failed.rawValue, "failure_code": nil]
         )
       case .failedWrongFailure:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: [
             "state": LearningOperationState.failed.rawValue,
             "failure_code": LearningOperationFailure.budgetDenied.rawValue,
@@ -299,90 +261,73 @@ extension BoundRunEnvironment {
       case .failedNoCallWrongFailure:
         try makeNoCallOperation(
           db,
-          id: operationId,
-          runId: runId,
+          id: operationID,
+          runID: runID,
           state: .failedNoCall,
           failure: .providerTerminal,
           retainEvaluation: false
         )
       case .failedNoCallCallIdentity:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: [
             "state": LearningOperationState.failedNoCall.rawValue,
             "failure_code": LearningOperationFailure.budgetDenied.rawValue,
           ]
         )
       case .interruptedFailure:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: [
             "state": LearningOperationState.interruptedUnknown.rawValue,
             "failure_code": LearningOperationFailure.providerTerminal.rawValue,
           ]
         )
       case .interruptedOpenReservation:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: [
             "state": LearningOperationState.interruptedUnknown.rawValue,
             "reservation_state": LearningReservationState.open.rawValue,
           ]
         )
       case .unknownFailure:
-        try db.execute(
-          sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-          arguments: [runId]
-        )
+        try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
         try updateOperation(
           db,
-          id: operationId,
-          assignments: [
-            "state": LearningOperationState.failed.rawValue,
-            "failure_code": "unknown",
-          ]
+          id: operationID,
+          assignments: ["state": LearningOperationState.failed.rawValue, "failure_code": "unknown"]
         )
-      case .job:
-        try updateOperation(db, id: operationId, assignments: ["job_id": jobId + 1])
-      case .epoch:
-        try updateOperation(db, id: operationId, assignments: ["learning_epoch": 2])
+      case .job: try updateOperation(db, id: operationID, assignments: ["job_id": jobID + 1])
+      case .epoch: try updateOperation(db, id: operationID, assignments: ["learning_epoch": 2])
       case .phase:
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: ["phase": LearningPhase.reflector.rawValue]
         )
       case .sourceDigest:
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: ["source_digest": String(repeating: "f", count: 64)]
         )
       case .keyDigest:
         try updateOperation(
           db,
-          id: operationId,
+          id: operationID,
           assignments: ["key_digest": String(repeating: "f", count: 64)]
         )
       case .attemptGeneration:
-        try updateOperation(db, id: operationId, assignments: ["attempt_generation": 2])
+        try updateOperation(db, id: operationID, assignments: ["attempt_generation": 2])
       case .supersedes:
-        try updateOperation(db, id: operationId, assignments: ["supersedes": operationId.rawValue])
+        try updateOperation(db, id: operationID, assignments: ["supersedes": operationID.rawValue])
       }
     }
   }
@@ -406,29 +351,26 @@ extension BoundRunEnvironment {
 private extension BoundRunEnvironment {
   func updateEvaluation(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     column: String,
     value: (any DatabaseValueConvertible)?
   ) throws {
     try db.execute(
       sql: "UPDATE learning_evaluations SET \(column) = ? WHERE run_id = ?",
-      arguments: [value, runId]
+      arguments: [value, runID]
     )
   }
 
   func makeNoCallOperation(
     _ db: Database,
     id: LearningOperationID,
-    runId: Int64,
+    runID: Int64,
     state: LearningOperationState,
     failure: LearningOperationFailure,
     retainEvaluation: Bool
   ) throws {
     if retainEvaluation == false {
-      try db.execute(
-        sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-        arguments: [runId]
-      )
+      try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
     }
     try updateOperation(
       db,
@@ -449,13 +391,10 @@ private extension BoundRunEnvironment {
   func makeStartedOperationCorruption(
     _ db: Database,
     id: LearningOperationID,
-    runId: Int64,
+    runID: Int64,
     assignments: [String: (any DatabaseValueConvertible)?]
   ) throws {
-    try db.execute(
-      sql: "DELETE FROM learning_evaluations WHERE run_id = ?",
-      arguments: [runId]
-    )
+    try db.execute(sql: "DELETE FROM learning_evaluations WHERE run_id = ?", arguments: [runID])
     var source = assignments
     source["state"] = LearningOperationState.started.rawValue
     source["reservation_state"] =

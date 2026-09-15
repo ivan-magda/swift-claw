@@ -5,34 +5,40 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct V12MigrationTests {
-  @Test func upgradePreservesLegacyRowsWithoutInventingIdentity() throws {
+@Suite
+struct V12MigrationTests {
+  @Test
+  func upgradePreservesLegacyRowsWithoutInventingIdentity() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrator.migrate(queue, upTo: "v11")
     let ids = try queue.write { db in
       try db.execute(
         sql: "INSERT INTO sessions(session_key, created_ts, updated_ts) VALUES (?, ?, ?)",
-        arguments: [SessionKey.telegramDM(chatId: 42), Date(), Date()]
+        arguments: [SessionKey.telegramDM(chatID: 42), Date(), Date()]
       )
-      let sessionId = db.lastInsertedRowID
+      let sessionID = db.lastInsertedRowID
       try db.execute(
         sql: "INSERT INTO runs(session_id, state, created_ts, updated_ts) VALUES (?, ?, ?, ?)",
-        arguments: [sessionId, RunState.awaitingApproval.rawValue, Date(), Date()]
+        arguments: [sessionID, RunState.awaitingApproval.rawValue, Date(), Date()]
       )
-      let runId = db.lastInsertedRowID
+      let runID = db.lastInsertedRowID
       try db.execute(
         sql: """
-          INSERT INTO audit_events(ts, actor, action, args_redacted, result_size, decision,
-            run_id, session_id)
-          VALUES (?, ?, ?, '', 0, ?, ?, ?)
-          """,
+        INSERT INTO audit_events(ts, actor, action, args_redacted, result_size, decision,
+          run_id, session_id)
+        VALUES (?, ?, ?, '', 0, ?, ?, ?)
+        """,
         arguments: [
-          Date(), AuditActor.owner.rawValue, AuditAction.approvalGranted.rawValue,
-          "ok", runId, sessionId,
+          Date(),
+          AuditActor.owner.rawValue,
+          AuditAction.approvalGranted.rawValue,
+          "ok",
+          runID,
+          sessionID,
         ]
       )
-      return (runId, db.lastInsertedRowID)
+      return (runID, db.lastInsertedRowID)
     }
 
     // when

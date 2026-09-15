@@ -17,7 +17,7 @@ struct EvaluationRunEnvironment {
   /// The run's own answer. Named because a test asserts it reached the evaluator, and the carrier
   /// is the only thing that could have carried it there.
   static let defaultFinalOutput = "The price changed from 10 to 12."
-  static let chatId: Int64 = 777
+  static let chatID: Int64 = 777
 
   let queue: DatabaseQueue
   let jobs: ScheduledJobStoreGRDB
@@ -26,15 +26,15 @@ struct EvaluationRunEnvironment {
   let provider: SequenceProvider
   let authorizing: RecordingLearningStore
   let runner: LearningOperationRunner
-  let jobId: Int64
-  let sessionId: Int64
-  let runId: Int64
+  let jobID: Int64
+  let sessionID: Int64
+  let runID: Int64
   let now: Date
 
   struct UsageRow: Equatable {
     let model: String
-    let runId: Int64?
-    let jobId: Int64?
+    let runID: Int64?
+    let jobID: Int64?
     let tokens: Int
     let costUSD: Double
     let costSource: String
@@ -65,24 +65,23 @@ struct EvaluationRunEnvironment {
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let job = try jobs.create(
       NewScheduledJob(
-        ownerChatId: chatId,
+        ownerChatID: chatID,
         label: "digest",
         prompt: "Check the page for material changes.",
-        recurrence: repeatable
-          ? SchedulingRuleFixtures.weekdayEnvelope(zone: .gmt) : nil,
+        recurrence: repeatable ? SchedulingRuleFixtures.weekdayEnvelope(zone: .gmt) : nil,
         timezone: "Europe/Berlin",
         nextOccurrence: now
       ),
       now: now
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
+    _ = try TestLearningFixtures(writer: queue).seedArmedJob(jobID: job.id, now: now)
     let runs = RunStoreGRDB(writer: queue)
 
-    let fired = try fire(jobs, jobId: job.id, now: now)
-    _ = try runs.pickUp(runId: fired.runId, now: now)
+    let fired = try fire(jobs, jobID: job.id, now: now)
+    _ = try runs.pickUp(runID: fired.runID, now: now)
     try learning.freezeCompatibility(
-      runId: fired.runId,
+      runID: fired.runID,
       surface: RunSurface(
         toolCatalogDigest: "tools-v1",
         policyVersion: "pv16",
@@ -91,15 +90,11 @@ struct EvaluationRunEnvironment {
       )
     )
     _ = try runs.commitAssistantTurn(
-      answeredTurn(
-        runId: fired.runId,
-        sessionId: fired.sessionId,
-        finalOutput: finalOutput
-      ),
+      answeredTurn(runID: fired.runID, sessionID: fired.sessionID, finalOutput: finalOutput),
       now: now
     )
     if sealsEvidence {
-      _ = try learning.sealEvidence(runId: fired.runId, now: now)
+      _ = try learning.sealEvidence(runID: fired.runID, now: now)
     }
 
     let answer = ChatResponse(
@@ -154,9 +149,9 @@ struct EvaluationRunEnvironment {
         redactor: SecretRedactor(secretValues: secretValues),
         logger: logger
       ),
-      jobId: job.id,
-      sessionId: fired.sessionId,
-      runId: fired.runId,
+      jobID: job.id,
+      sessionID: fired.sessionID,
+      runID: fired.runID,
       now: now
     )
   }
@@ -167,12 +162,12 @@ struct EvaluationRunEnvironment {
 extension EvaluationRunEnvironment {
   /// Rebuilt from the production constants the runner itself keys on, so a runner that claimed
   /// under another prompt, schema or rubric version resolves to no row at all.
-  func operationId() throws -> LearningOperationID {
-    guard let evidence = try learning.evidence(runId: runId) else {
-      throw StoreError.unexpected("run \(runId) sealed no evidence to evaluate")
+  func operationID() throws -> LearningOperationID {
+    guard let evidence = try learning.evidence(runID: runID) else {
+      throw StoreError.unexpected("run \(runID) sealed no evidence to evaluate")
     }
     let key = LearningOperationKey(
-      jobId: jobId,
+      jobID: jobID,
       epoch: evidence.epoch,
       phase: .evaluator,
       sourceDigest: evidence.digest.rawValue,
@@ -191,9 +186,7 @@ extension EvaluationRunEnvironment {
     try operationColumn("failure_code").flatMap(LearningOperationFailure.init(rawValue:))
   }
 
-  func operationRoute() throws -> String? {
-    try operationColumn("route")
-  }
+  func operationRoute() throws -> String? { try operationColumn("route") }
 
   func evaluationRowCount() throws -> Int {
     try queue.read { db in
@@ -206,14 +199,12 @@ extension EvaluationRunEnvironment {
       try String.fetchOne(
         db,
         sql: "SELECT evaluator_route FROM run_compatibility WHERE run_id = ?",
-        arguments: [runId]
+        arguments: [runID]
       )
     }
   }
 
-  func runUsage() throws -> [UsageRow] {
-    try usageRows(where: "run_id = \(runId)")
-  }
+  func runUsage() throws -> [UsageRow] { try usageRows(where: "run_id = \(runID)") }
 
   func learningUsage() throws -> [UsageRow] {
     try usageRows(where: "learning_operation_id IS NOT NULL")
@@ -223,31 +214,27 @@ extension EvaluationRunEnvironment {
 // MARK: - Fixture Plumbing
 
 private extension EvaluationRunEnvironment {
-  static func fire(
-    _ jobs: ScheduledJobStoreGRDB,
-    jobId: Int64,
-    now: Date
-  ) throws -> ClaimedFire {
-    guard case .fired(let fired) = try jobs.fireNow(jobId: jobId, now: now) else {
-      throw StoreError.unexpected("job \(jobId) refused to fire")
+  static func fire(_ jobs: ScheduledJobStoreGRDB, jobID: Int64, now: Date) throws -> ClaimedFire {
+    guard case .fired(let fired) = try jobs.fireNow(jobID: jobID, now: now) else {
+      throw StoreError.unexpected("job \(jobID) refused to fire")
     }
     return fired
   }
 
-  static func answeredTurn(runId: Int64, sessionId: Int64, finalOutput: String) -> AssistantTurn {
+  static func answeredTurn(runID: Int64, sessionID: Int64, finalOutput: String) -> AssistantTurn {
     AssistantTurn(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: chatId,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: chatID,
       content: finalOutput,
-      usage: usageFixture(sessionId: sessionId, runId: runId, model: primaryRoute),
+      usage: usageFixture(sessionID: sessionID, runID: runID, model: primaryRoute),
       chunks: [
         OutboxChunk(
           stepIndex: 0,
-          chatId: chatId,
+          chatID: chatID,
           payload: finalOutput,
           payloadHash: ContentHash.fnv1a(finalOutput)
-        )
+        ),
       ]
     )
   }
@@ -277,7 +264,7 @@ private extension EvaluationRunEnvironment {
   }
 
   func operationColumn(_ column: String) throws -> String? {
-    let id = try operationId()
+    let id = try operationID()
     return try queue.read { db in
       try String.fetchOne(
         db,
@@ -292,16 +279,15 @@ private extension EvaluationRunEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT model, run_id, learning_job_id, cost_usd, cost_source,
-            prompt_tokens + completion_tokens AS tokens
-          FROM provider_usage WHERE \(predicate) ORDER BY id
-          """
-      )
-      .map { row in
+        SELECT model, run_id, learning_job_id, cost_usd, cost_source,
+          prompt_tokens + completion_tokens AS tokens
+        FROM provider_usage WHERE \(predicate) ORDER BY id
+        """
+      ).map { row in
         UsageRow(
           model: row["model"],
-          runId: row["run_id"],
-          jobId: row["learning_job_id"],
+          runID: row["run_id"],
+          jobID: row["learning_job_id"],
           tokens: row["tokens"],
           costUSD: row["cost_usd"],
           costSource: row["cost_source"]
@@ -314,10 +300,10 @@ private extension EvaluationRunEnvironment {
 extension EvaluationRunEnvironment {
   func settledBoundRun(at date: Date? = nil, toolCatalog: String = "tools-v1") throws -> Int64 {
     let instant = date ?? now
-    let fired = try Self.fire(jobs, jobId: jobId, now: instant)
-    _ = try runs.pickUp(runId: fired.runId, now: instant)
+    let fired = try Self.fire(jobs, jobID: jobID, now: instant)
+    _ = try runs.pickUp(runID: fired.runID, now: instant)
     try learning.freezeCompatibility(
-      runId: fired.runId,
+      runID: fired.runID,
       surface: RunSurface(
         toolCatalogDigest: toolCatalog,
         policyVersion: "pv16",
@@ -327,13 +313,13 @@ extension EvaluationRunEnvironment {
     )
     _ = try runs.commitAssistantTurn(
       Self.answeredTurn(
-        runId: fired.runId,
-        sessionId: fired.sessionId,
+        runID: fired.runID,
+        sessionID: fired.sessionID,
         finalOutput: Self.defaultFinalOutput
       ),
       now: instant
     )
-    return fired.runId
+    return fired.runID
   }
 }
 
@@ -358,7 +344,7 @@ extension EvaluationRunEnvironment {
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM audit_events WHERE action = ? AND run_id = ?",
-        arguments: [AuditAction.learningEvaluated.rawValue, runId]
+        arguments: [AuditAction.learningEvaluated.rawValue, runID]
       ) ?? 0
     }
   }

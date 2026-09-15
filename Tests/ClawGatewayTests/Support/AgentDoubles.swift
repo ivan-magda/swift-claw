@@ -14,6 +14,8 @@ func makeEmptyContextBuilder() -> ContextBuilder {
     memoryStore: EmptyMemoryStore(),
     retriever: EmptyRetriever(),
     budget: .default,
-    now: { Date(timeIntervalSince1970: 0) }
+    now: {
+      Date(timeIntervalSince1970: 0)
+    }
   )
 }

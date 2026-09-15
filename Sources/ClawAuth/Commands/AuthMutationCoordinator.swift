@@ -16,21 +16,15 @@ public enum AuthMutationLockFailure: Error, Sendable, Equatable {
 public struct AuthMutationLease: Sendable {
   private let box: ReleaseBox
 
-  public init(release: @escaping @Sendable () -> Void) {
-    box = ReleaseBox(release)
-  }
+  public init(release: @escaping @Sendable () -> Void) { box = ReleaseBox(release) }
 
-  public func release() {
-    box.releaseOnce()
-  }
+  public func release() { box.releaseOnce() }
 }
 
 private final class ReleaseBox: Sendable {
   private let stored: Mutex<(@Sendable () -> Void)?>
 
-  init(_ release: @escaping @Sendable () -> Void) {
-    stored = Mutex(release)
-  }
+  init(_ release: @escaping @Sendable () -> Void) { stored = Mutex(release) }
 
   /// Takes the action out under the lock and runs it outside: two racing releases cannot both find
   /// one, and the release itself never runs while the lock is held.
@@ -46,26 +40,18 @@ private final class ReleaseBox: Sendable {
 
 // MARK: - Locking
 
-public protocol AuthMutationLocking: Sendable {
-  func acquire() throws -> AuthMutationLease
-}
+public protocol AuthMutationLocking: Sendable { func acquire() throws -> AuthMutationLease }
 
 // MARK: - Coordinator
 
 struct AuthMutationCoordinator: Sendable {
   private let lock: any AuthMutationLocking
 
-  init(lock: any AuthMutationLocking) {
-    self.lock = lock
-  }
+  init(lock: any AuthMutationLocking) { self.lock = lock }
 
   func acquire() -> Result<AuthMutationLease, AuthMutationLockFailure> {
-    do {
-      return .success(try lock.acquire())
-    } catch let failure as AuthMutationLockFailure {
+    do { return .success(try lock.acquire()) } catch let failure as AuthMutationLockFailure {
       return .failure(failure)
-    } catch {
-      return .failure(.unavailable(detail: "\(error)"))
-    }
+    } catch { return .failure(.unavailable(detail: "\(error)")) }
   }
 }

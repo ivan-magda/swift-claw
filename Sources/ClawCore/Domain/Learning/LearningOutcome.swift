@@ -4,35 +4,35 @@ import Foundation
 /// Persistence owns authentication and nonce validation; this value is the pure reducer's input.
 public struct FeedbackEvent: Sendable, Equatable {
   public let id: Int64
-  public let runId: Int64?
+  public let runID: Int64?
   public let signal: OwnerSignal
   public let payload: String?
   public let revision: FeedbackRevision
   public let supersedes: Int64?
   public let occurredAt: Date
   public let actor: AuditActor
-  public let transportUpdateId: Int64?
+  public let transportUpdateID: Int64?
 
   public init(
     id: Int64,
-    runId: Int64?,
+    runID: Int64?,
     signal: OwnerSignal,
     payload: String?,
     revision: FeedbackRevision,
     supersedes: Int64?,
     occurredAt: Date,
     actor: AuditActor = .owner,
-    transportUpdateId: Int64? = nil
+    transportUpdateID: Int64? = nil
   ) {
     self.id = id
-    self.runId = runId
+    self.runID = runID
     self.signal = signal
     self.payload = payload
     self.revision = revision
     self.supersedes = supersedes
     self.occurredAt = occurredAt
     self.actor = actor
-    self.transportUpdateId = transportUpdateId
+    self.transportUpdateID = transportUpdateID
   }
 }
 
@@ -65,9 +65,7 @@ public struct ResolvedOutcome: Sendable, Equatable {
     self.hardVetoes = hardVetoes
   }
 
-  public var permitsDependentDecision: Bool {
-    hardVetoes.isEmpty
-  }
+  public var permitsDependentDecision: Bool { hardVetoes.isEmpty }
 }
 
 public enum OwnerPrecedence {
@@ -90,12 +88,10 @@ public enum OwnerPrecedence {
     let evaluationRequired: Bool
     if let resultSignal {
       switch resultSignal.signal {
-      case .resultNotUseful, .resultCorrection:
-        evaluationRequired = usesEvaluatorCodes
-      case .resultUseful:
-        evaluationRequired = false
+      case .resultNotUseful, .resultCorrection: evaluationRequired = usesEvaluatorCodes
+      case .resultUseful: evaluationRequired = false
       case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
-        .candidateEdit, .promotionRollback:
+           .candidateEdit, .promotionRollback:
         evaluationRequired = false
       }
     } else {
@@ -112,17 +108,12 @@ public enum OwnerPrecedence {
           signal: event.signal,
           evaluatorIssueCodes: usesEvaluatorCodes ? issueCodes : []
         )
-      }
-      ?? Self.evaluatorOutcome(
-        evaluator,
-        issueCodes: issueCodes,
-        isDisputed: evaluationDisputed
-      )
+      } ?? Self.evaluatorOutcome(evaluator, issueCodes: issueCodes, isDisputed: evaluationDisputed)
     let ownerConfirmed =
       resultSignal == nil && evaluationDisputed == false
-      && effectiveSignals.contains { event in
-        event.signal == .evaluationConfirm
-      }
+        && effectiveSignals.contains { event in
+          event.signal == .evaluationConfirm
+        }
     return ResolvedOutcome(
       outcome: outcome,
       ownerConfirmed: ownerConfirmed,
@@ -135,23 +126,16 @@ public enum OwnerPrecedence {
 // MARK: - Resolution
 
 private extension OwnerPrecedence {
-  static func ownerOutcome(
-    signal: OwnerSignal,
-    evaluatorIssueCodes: [String]
-  ) -> EffectiveOutcome {
+  static func ownerOutcome(signal: OwnerSignal, evaluatorIssueCodes: [String]) -> EffectiveOutcome {
     switch signal {
-    case .resultUseful:
-      return .positive
+    case .resultUseful: return .positive
     case .resultNotUseful:
       let codes =
-        evaluatorIssueCodes.isEmpty
-        ? [syntheticNotUsefulCode]
-        : evaluatorIssueCodes.sorted()
+        evaluatorIssueCodes.isEmpty ? [syntheticNotUsefulCode] : evaluatorIssueCodes.sorted()
       return .negative(issueCodes: codes)
-    case .resultCorrection:
-      return .negative(issueCodes: evaluatorIssueCodes.sorted())
+    case .resultCorrection: return .negative(issueCodes: evaluatorIssueCodes.sorted())
     case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
-      .candidateEdit, .promotionRollback:
+         .candidateEdit, .promotionRollback:
       return .neutral
     }
   }
@@ -165,12 +149,9 @@ private extension OwnerPrecedence {
       return .neutral
     }
     switch evaluator {
-    case .noIssue:
-      return .positive
-    case .reusableIssue:
-      return .negative(issueCodes: issueCodes.sorted())
-    case .transientIssue, .uncertain, nil:
-      return .neutral
+    case .noIssue: return .positive
+    case .reusableIssue: return .negative(issueCodes: issueCodes.sorted())
+    case .transientIssue, .uncertain, nil: return .neutral
     }
   }
 }
@@ -179,11 +160,9 @@ private extension OwnerPrecedence {
 
 extension FeedbackEvent {
   package static func latestUnsupersededResult(in events: [FeedbackEvent]) -> FeedbackEvent? {
-    unsuperseded(events)
-      .filter { event in
-        event.signal.isResultSignal
-      }
-      .max(by: precedes)
+    unsuperseded(events).filter { event in
+      event.signal.isResultSignal
+    }.max(by: precedes)
   }
 
   package static func unsuperseded(_ events: [FeedbackEvent]) -> [FeedbackEvent] {
@@ -204,13 +183,14 @@ extension FeedbackEvent {
   }
 }
 
+// MARK: - Result Signal Classification
+
 private extension OwnerSignal {
   var isResultSignal: Bool {
     switch self {
-    case .resultUseful, .resultNotUseful, .resultCorrection:
-      true
+    case .resultUseful, .resultNotUseful, .resultCorrection: true
     case .evaluationConfirm, .evaluationDispute, .candidateApprove, .candidateReject,
-      .candidateEdit, .promotionRollback:
+         .candidateEdit, .promotionRollback:
       false
     }
   }

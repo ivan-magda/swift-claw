@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct AdmissionStateStoreTests {
+@Suite
+struct AdmissionStateStoreTests {
   @Test(arguments: LearningTrialState.allCases)
   func everyExistingTrialStateReplaysTheImmutableReceipt(_ state: LearningTrialState) throws {
     // given
@@ -16,7 +17,7 @@ import Testing
       now: fixture.env.now
     )
     let receipt = try #require(admitted.admissionReceipt)
-    try fixture.setTrialState(receipt.trialId, state: state)
+    try fixture.setTrialState(receipt.trialID, state: state)
     let before = try fixture.rowCounts()
 
     // when
@@ -31,7 +32,8 @@ import Testing
     #expect(try fixture.rowCounts() == before)
   }
 
-  @Test func corruptedAdmissionReceiptFailsClosedWithoutWriting() throws {
+  @Test
+  func corruptedAdmissionReceiptFailsClosedWithoutWriting() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -55,7 +57,8 @@ import Testing
     #expect(try fixture.rowCounts() == before)
   }
 
-  @Test func admissionDecisionWithoutItsTrialFailsClosedWithoutWriting() throws {
+  @Test
+  func admissionDecisionWithoutItsTrialFailsClosedWithoutWriting() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -65,7 +68,7 @@ import Testing
       now: fixture.env.now
     )
     let receipt = try #require(admitted.admissionReceipt)
-    try fixture.removeTrial(receipt.trialId)
+    try fixture.removeTrial(receipt.trialID)
     let before = try fixture.rowCounts()
 
     // when / then — skipping the orphan-decision gate would reinterpret a damaged replay.
@@ -79,7 +82,8 @@ import Testing
     #expect(try fixture.rowCounts() == before)
   }
 
-  @Test func noncanonicalAdmissionInputsFailClosedWithoutWriting() throws {
+  @Test
+  func noncanonicalAdmissionInputsFailClosedWithoutWriting() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -147,7 +151,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "learning_trials") == 0)
   }
 
-  @Test func aPausedRecurringJobStillAdmitsThroughTheDurableSeam() throws {
+  @Test
+  func aPausedRecurringJobStillAdmitsThroughTheDurableSeam() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -176,18 +181,12 @@ enum AdmissionBindingMutation: CaseIterable, Sendable {
 
   var expected: AdmissionRejection {
     switch self {
-    case .noRecurrence, .cancelled:
-      .jobNotRepeatable
-    case .epoch:
-      .staleEpoch
-    case .baseDigest:
-      .staleBaseDigest
-    case .baseRevision:
-      .staleBaseRevision
-    case .feedbackRevision:
-      .staleFeedbackRevision
-    case .sourceSupport:
-      .sourceBindingsChanged
+    case .noRecurrence, .cancelled: .jobNotRepeatable
+    case .epoch: .staleEpoch
+    case .baseDigest: .staleBaseDigest
+    case .baseRevision: .staleBaseRevision
+    case .feedbackRevision: .staleFeedbackRevision
+    case .sourceSupport: .sourceBindingsChanged
     }
   }
 }
@@ -207,6 +206,8 @@ enum AdmissionReplayCorruption: CaseIterable, Sendable {
   case resultTrial
   case resultGeneration
 }
+
+// MARK: - Admission Receipt Inspection
 
 private extension AdmissionOutcome {
   var admissionReceipt: AdmissionReceipt? {
@@ -237,14 +238,16 @@ extension AdmissionStoreFixture {
   }
 }
 
+// MARK: - Admission State Mutations
+
 private extension AdmissionStoreFixture {
-  func removeTrial(_ trialId: Int64) throws {
+  func removeTrial(_ trialID: Int64) throws {
     try env.queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = NULL WHERE job_id = ?",
-        arguments: [env.jobId]
+        arguments: [env.jobID]
       )
-      try db.execute(sql: "DELETE FROM learning_trials WHERE trial_id = ?", arguments: [trialId])
+      try db.execute(sql: "DELETE FROM learning_trials WHERE trial_id = ?", arguments: [trialID])
     }
   }
 
@@ -258,11 +261,11 @@ private extension AdmissionStoreFixture {
     }
   }
 
-  func setTrialState(_ trialId: Int64, state: LearningTrialState) throws {
+  func setTrialState(_ trialID: Int64, state: LearningTrialState) throws {
     try env.queue.write { db in
       try db.execute(
         sql: "UPDATE learning_trials SET state = ? WHERE trial_id = ?",
-        arguments: [state.rawValue, trialId]
+        arguments: [state.rawValue, trialID]
       )
     }
   }
@@ -276,10 +279,9 @@ private extension AdmissionStoreFixture {
     }
   }
 
-  func applyReplayCorruption(
-    _ corruption: AdmissionReplayCorruption,
-    receipt: AdmissionReceipt
-  ) throws {
+  func applyReplayCorruption(_ corruption: AdmissionReplayCorruption, receipt: AdmissionReceipt)
+    throws
+  {
     try env.queue.writeWithoutTransaction { db in
       try db.execute(sql: "PRAGMA foreign_keys = OFF")
       defer { try? db.execute(sql: "PRAGMA foreign_keys = ON") }
@@ -287,27 +289,27 @@ private extension AdmissionStoreFixture {
       case .trialJob:
         try db.execute(
           sql: "UPDATE learning_trials SET job_id = job_id + 1 WHERE trial_id = ?",
-          arguments: [receipt.trialId]
+          arguments: [receipt.trialID]
         )
       case .trialEpoch:
         try db.execute(
           sql: "UPDATE learning_trials SET learning_epoch = 2 WHERE trial_id = ?",
-          arguments: [receipt.trialId]
+          arguments: [receipt.trialID]
         )
       case .trialBase:
         try db.execute(
           sql: "UPDATE learning_trials SET base_digest = ? WHERE trial_id = ?",
-          arguments: ["wrong-base", receipt.trialId]
+          arguments: ["wrong-base", receipt.trialID]
         )
       case .trialCandidate:
         try db.execute(
           sql: "UPDATE learning_trials SET candidate_digest = ? WHERE trial_id = ?",
-          arguments: ["wrong-candidate", receipt.trialId]
+          arguments: ["wrong-candidate", receipt.trialID]
         )
       case .trialAlgorithm:
         try db.execute(
           sql: "UPDATE learning_trials SET algorithm = ? WHERE trial_id = ?",
-          arguments: ["wrong-algorithm", receipt.trialId]
+          arguments: ["wrong-algorithm", receipt.trialID]
         )
       case .decisionJob:
         try db.execute(
@@ -331,13 +333,11 @@ private extension AdmissionStoreFixture {
         )
       case .resultCandidate, .resultReplacement, .resultTrial, .resultGeneration:
         let altered = AdmissionReceipt(
-          candidateDigest:
-            corruption == .resultCandidate
+          candidateDigest: corruption == .resultCandidate
             ? CandidateDigest(rawValue: "wrong-candidate") : receipt.candidateDigest,
-          replacementDigest:
-            corruption == .resultReplacement
+          replacementDigest: corruption == .resultReplacement
             ? LessonSetDigest(rawValue: "wrong-replacement") : receipt.replacementDigest,
-          trialId: corruption == .resultTrial ? receipt.trialId + 1 : receipt.trialId,
+          trialID: corruption == .resultTrial ? receipt.trialID + 1 : receipt.trialID,
           generation: corruption == .resultGeneration ? receipt.generation + 1 : receipt.generation
         )
         let bytes = try CanonicalJSON.data(encoding: altered)
@@ -356,7 +356,7 @@ private extension AdmissionStoreFixture {
     try env.queue.write { db in
       try db.execute(
         sql: "UPDATE scheduled_jobs SET status = ? WHERE id = ?",
-        arguments: [status.rawValue, env.jobId]
+        arguments: [status.rawValue, env.jobID]
       )
     }
   }
@@ -367,37 +367,37 @@ private extension AdmissionStoreFixture {
       case .noRecurrence:
         try db.execute(
           sql: "UPDATE scheduled_jobs SET recurrence = NULL WHERE id = ?",
-          arguments: [env.jobId]
+          arguments: [env.jobID]
         )
       case .cancelled:
         try db.execute(
           sql: "UPDATE scheduled_jobs SET status = ? WHERE id = ?",
-          arguments: [ScheduledJobStatus.cancelled.rawValue, env.jobId]
+          arguments: [ScheduledJobStatus.cancelled.rawValue, env.jobID]
         )
       case .epoch:
         try db.execute(
           sql: "UPDATE job_learning_state SET learning_epoch = 2 WHERE job_id = ?",
-          arguments: [env.jobId]
+          arguments: [env.jobID]
         )
       case .baseDigest:
         try db.execute(
           sql: "UPDATE job_learning_state SET stable_lesson_set_digest = ? WHERE job_id = ?",
-          arguments: [artifact.replacement.digest.rawValue, env.jobId]
+          arguments: [artifact.replacement.digest.rawValue, env.jobID]
         )
       case .baseRevision:
         try db.execute(
           sql: "UPDATE job_learning_state SET stable_revision = 1 WHERE job_id = ?",
-          arguments: [env.jobId]
+          arguments: [env.jobID]
         )
       case .feedbackRevision:
         try db.execute(
           sql: "UPDATE job_learning_state SET feedback_revision = 1 WHERE job_id = ?",
-          arguments: [env.jobId]
+          arguments: [env.jobID]
         )
       case .sourceSupport:
         try db.execute(
           sql: "UPDATE learning_evaluations SET outcome = ?, issue_codes = '[]' WHERE job_id = ?",
-          arguments: [EvaluatorOutcome.noIssue.rawValue, env.jobId]
+          arguments: [EvaluatorOutcome.noIssue.rawValue, env.jobID]
         )
       }
     }

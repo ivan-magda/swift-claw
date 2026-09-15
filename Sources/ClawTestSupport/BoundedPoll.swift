@@ -30,10 +30,7 @@ public func pollUntilTrue(
   interval: Duration = .milliseconds(10),
   _ probe: () throws -> Bool
 ) async rethrows -> Bool {
-  try await pollUntil(
-    timeout: timeout,
-    interval: interval
-  ) {
+  try await pollUntil(timeout: timeout, interval: interval) {
     try probe() ? true : nil
   } ?? false
 }

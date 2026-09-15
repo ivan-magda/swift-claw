@@ -21,15 +21,17 @@ import Testing
 /// gate, or fingerprint, so a booted daemon could not be asked any of the questions below. What runs
 /// here is otherwise production: the real Streamable HTTP transport, the real SDK client, the real
 /// resolver and adapter, the real gate, and real in-memory GRDB stores.
-@Suite struct MCPCompositionAcceptanceTests {
+@Suite
+struct MCPCompositionAcceptanceTests {
   // MARK: - Catalog → registry
 
   @Test("resolved MCP tools follow the built-ins into the registry, at the ask tier")
   func mcpToolsFollowTheBuiltIns() async throws {
     // given
-    let server = ScriptedMCPHTTPServer(
-      tools: [RemoteTool(name: "list_issues"), RemoteTool(name: "create_issue")]
-    )
+    let server = ScriptedMCPHTTPServer(tools: [
+      RemoteTool(name: "list_issues"),
+      RemoteTool(name: "create_issue"),
+    ])
     let builder = try makeBuilder(http: server, servers: [try serverConfig()])
 
     // when
@@ -43,7 +45,11 @@ import Testing
     )
     #expect(names.suffix(2) == ["mcp__linear__list_issues", "mcp__linear__create_issue"])
 
-    let remote = try #require(dispatcher.definitions.first { $0.name.hasPrefix("mcp__") })
+    let remote = try #require(
+      dispatcher.definitions.first {
+        $0.name.hasPrefix("mcp__")
+      }
+    )
     #expect(remote.riskLevel == .ask)
     #expect(remote.egressClass == .arbitraryDestination)
   }
@@ -63,7 +69,9 @@ import Testing
 
     // then
     let remote = try #require(
-      dispatcher.definitions.first { $0.name == "mcp__linear__list_issues" }
+      dispatcher.definitions.first {
+        $0.name == "mcp__linear__list_issues"
+      }
     )
     #expect(remote.riskLevel == .safe)
     #expect(remote.egressClass == .arbitraryDestination)
@@ -73,16 +81,14 @@ import Testing
   func remoteMetadataIsRedactedWithTheBootUnion() async throws {
     // given the credential appears in every metadata position a hostile server controls
     let secret = "linear-token"
-    let server = ScriptedMCPHTTPServer(
-      tools: [
-        RemoteTool(
-          name: "search_\(secret)",
-          description: "uses \(secret)",
-          schemaJSON:
-            #"{"type":"object","properties":{"linear-token":{"description":"linear-token"}}}"#
-        )
-      ]
-    )
+    let server = ScriptedMCPHTTPServer(tools: [
+      RemoteTool(
+        name: "search_\(secret)",
+        description: "uses \(secret)",
+        schemaJSON:
+        #"{"type":"object","properties":{"linear-token":{"description":"linear-token"}}}"#
+      ),
+    ])
     let builder = try makeBuilder(
       http: server,
       servers: [try serverConfig()],
@@ -94,7 +100,11 @@ import Testing
     let dispatcher = try makeDispatcher(builder, mcpTools: stack.tools)
 
     // then
-    let definition = try #require(dispatcher.definitions.first { $0.name.hasPrefix("mcp__") })
+    let definition = try #require(
+      dispatcher.definitions.first {
+        $0.name.hasPrefix("mcp__")
+      }
+    )
     let parameters = try #require(CanonicalJSON.encode(definition.parameters))
     let providerSurface = definition.name + definition.description + parameters
     #expect(providerSurface.contains(secret) == false)
@@ -174,42 +184,22 @@ import Testing
     let first = try await subhash(
       ScriptedMCPHTTPServer(tools: tools),
       config,
-      [
-        try serverConfig(
-          headers: ["X-Workspace": "alpha"],
-          authHeader: "X-API-Key"
-        )
-      ]
+      [try serverConfig(headers: ["X-Workspace": "alpha"], authHeader: "X-API-Key")]
     )
     let caseOnlyChange = try await subhash(
       ScriptedMCPHTTPServer(tools: tools),
       config,
-      [
-        try serverConfig(
-          headers: ["x-workspace": "alpha"],
-          authHeader: "x-api-key"
-        )
-      ]
+      [try serverConfig(headers: ["x-workspace": "alpha"], authHeader: "x-api-key")]
     )
     let movedWorkspace = try await subhash(
       ScriptedMCPHTTPServer(tools: tools),
       config,
-      [
-        try serverConfig(
-          headers: ["X-Workspace": "beta"],
-          authHeader: "X-API-Key"
-        )
-      ]
+      [try serverConfig(headers: ["X-Workspace": "beta"], authHeader: "X-API-Key")]
     )
     let movedAuthentication = try await subhash(
       ScriptedMCPHTTPServer(tools: tools),
       config,
-      [
-        try serverConfig(
-          headers: ["X-Workspace": "alpha"],
-          authHeader: "X-Auth-Token"
-        )
-      ]
+      [try serverConfig(headers: ["X-Workspace": "alpha"], authHeader: "X-Auth-Token")]
     )
 
     // then
@@ -228,10 +218,7 @@ import Testing
       outcome: .text("ISSUE-1: the roof leaks")
     )
     let builder = try makeBuilder(http: server, servers: [try serverConfig()])
-    let dispatcher = try makeDispatcher(
-      builder,
-      mcpTools: await builder.resolveMCPStack().tools
-    )
+    let dispatcher = try makeDispatcher(builder, mcpTools: await builder.resolveMCPStack().tools)
     let call = ToolCall(
       id: "c1",
       name: "mcp__linear__list_issues",
@@ -253,8 +240,12 @@ import Testing
     let commit = await ApprovedActionExecutor(
       tools: dispatcher.toolsByName,
       runs: run.runs,
-      redactArguments: { $0 },
-      now: { Date() },
+      redactArguments: {
+        $0
+      },
+      now: {
+        Date()
+      },
       logger: Self.silentLogger
     ).executeApproved(approval(run, recorded: recorded))
 
@@ -277,10 +268,7 @@ import Testing
       servers: [try serverConfig()],
       credentials: ["linear": .token("linear-token")]
     )
-    let dispatcher = try makeDispatcher(
-      builder,
-      mcpTools: await builder.resolveMCPStack().tools
-    )
+    let dispatcher = try makeDispatcher(builder, mcpTools: await builder.resolveMCPStack().tools)
     let tool = try #require(dispatcher.toolsByName["mcp__linear__list_issues"])
 
     // when
@@ -309,7 +297,11 @@ import Testing
     #expect(stack.tools.isEmpty)
     #expect(
       dispatcher.definitions.map(\.name) == [
-        "file_read", "file_write", "memory_write", "skill_load", "web_fetch",
+        "file_read",
+        "file_write",
+        "memory_write",
+        "skill_load",
+        "web_fetch",
       ]
     )
 
@@ -320,9 +312,7 @@ import Testing
       return
     }
 
-    let row = try #require(
-      MCPDoctorRows.bootRows(outcomes: stack.catalog.outcomes).first
-    )
+    let row = try #require(MCPDoctorRows.bootRows(outcomes: stack.catalog.outcomes).first)
     #expect(row.key == "mcp.linear.tools")
     #expect(row.ok == false)
     #expect(row.value.hasPrefix("skipped: "))
@@ -341,7 +331,11 @@ import Testing
     #expect(stack.catalog == .empty)
     #expect(
       dispatcher.definitions.map(\.name) == [
-        "file_read", "file_write", "memory_write", "skill_load", "web_fetch",
+        "file_read",
+        "file_write",
+        "memory_write",
+        "skill_load",
+        "web_fetch",
       ]
     )
     #expect(MCPDoctorRows.rows(config: .empty, credentials: [:]).map(\.key) == ["mcp"])
@@ -352,8 +346,12 @@ import Testing
 
 private typealias RemoteTool = ScriptedMCPHTTPServer.RemoteTool
 
+// MARK: - MCP Composition Fixtures
+
 private extension MCPCompositionAcceptanceTests {
-  static let silentLogger = Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+  static let silentLogger = Logger(label: "test") { _ in
+    SwiftLogNoOpLogHandler()
+  }
 
   /// A taint-free, no-private-data context: the ask tier is then the only thing that can park a
   /// call, which is what makes the approval below an assertion about the MCP tier and nothing else.
@@ -394,7 +392,7 @@ private extension MCPCompositionAcceptanceTests {
       credentials: credentials,
       credentialRedactionValues: credentials.values.compactMap(\.token)
     )
-    let secrets = Secrets(telegramBotToken: "tg-token", llmApiKey: nil, searchApiKey: nil)
+    let secrets = Secrets(telegramBotToken: "tg-token", llmAPIKey: nil, searchAPIKey: nil)
 
     return try CompositionAcceptance.makeBuilder(
       http: http,
@@ -404,14 +402,10 @@ private extension MCPCompositionAcceptanceTests {
     )
   }
 
-  func makeDispatcher(
-    _ builder: DaemonBuilder,
-    mcpTools: [any Tool]
-  ) throws -> GatedToolDispatcher {
+  func makeDispatcher(_ builder: DaemonBuilder, mcpTools: [any Tool]) throws -> GatedToolDispatcher
+  {
     builder.makeToolDispatcher(
-      workspace: FileSystemWorkspace(
-        root: EnvironmentLoader.workspaceRoot(config: builder.config)
-      ),
+      workspace: FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: builder.config)),
       sandbox: SandboxBootstrapResult(
         backend: nil,
         maintenance: nil,
@@ -422,18 +416,14 @@ private extension MCPCompositionAcceptanceTests {
     )
   }
 
-  func subhash(
-    _ server: ScriptedMCPHTTPServer,
-    _ config: AppConfig,
-    _ servers: [MCPServerConfig]
-  ) async throws -> String {
+  func subhash(_ server: ScriptedMCPHTTPServer, _ config: AppConfig, _ servers: [MCPServerConfig])
+    async throws -> String
+  {
     let builder = try makeBuilder(http: server, servers: servers, config: config)
     let dispatcher = try makeDispatcher(builder, mcpTools: await builder.resolveMCPStack().tools)
     return builder.policyStaticSubhash(
       toolDispatcher: dispatcher,
-      workspace: FileSystemWorkspace(
-        root: EnvironmentLoader.workspaceRoot(config: builder.config)
-      )
+      workspace: FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: builder.config))
     )
   }
 }
@@ -445,9 +435,9 @@ private extension MCPCompositionAcceptanceTests {
 private struct SuspendedRun {
   let queue: DatabaseQueue
   let runs: RunStoreGRDB
-  let sessionId: Int64
-  let runId: Int64
-  let observationMessageId: Int64
+  let sessionID: Int64
+  let runID: Int64
+  let observationMessageID: Int64
 
   /// Whether the executed result tainted the session — the durable half of `ingestedUntrusted`,
   /// which is what keeps the trifecta gate armed for the rest of the session.
@@ -456,7 +446,7 @@ private struct SuspendedRun {
       try Bool.fetchOne(
         database,
         sql: "SELECT tainted FROM sessions WHERE id = ?",
-        arguments: [sessionId]
+        arguments: [sessionID]
       ) ?? false
     }
   }
@@ -466,11 +456,13 @@ private struct SuspendedRun {
       try String.fetchOne(
         database,
         sql: "SELECT content FROM messages WHERE id = ?",
-        arguments: [observationMessageId]
+        arguments: [observationMessageID]
       )
     }
   }
 }
+
+// MARK: - Suspended Approval Fixtures
 
 private extension MCPCompositionAcceptanceTests {
   func makeSuspendedRun() throws -> SuspendedRun {
@@ -478,65 +470,65 @@ private extension MCPCompositionAcceptanceTests {
 
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 7),
-        chatId: 7,
-        userId: 7,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 7),
+        chatID: 7,
+        userID: 7,
         text: "list the open issues",
         isEdited: false,
         ts: Date()
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
     let runs = RunStoreGRDB(writer: queue)
-    _ = try #require(try runs.pickUp(runId: runId, now: Date()))
+    _ = try #require(try runs.pickUp(runID: runID, now: Date()))
 
-    let observationMessageId = try queue.write { database -> Int64 in
+    let observationMessageID = try queue.write { database -> Int64 in
       try database.execute(
         sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, 'tool', 'awaiting owner approval', 'trusted', ?, 'c1')
-          """,
-        arguments: [sessionId, runId, Date()]
+        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+        VALUES (?, ?, 'tool', 'awaiting owner approval', 'trusted', ?, 'c1')
+        """,
+        arguments: [sessionID, runID, Date()]
       )
-      let messageId = database.lastInsertedRowID
+      let messageID = database.lastInsertedRowID
       _ = try RunStoreGRDB.transitionRun(
         database,
-        runId: runId,
+        runID: runID,
         event: .suspendForApproval,
         now: Date(),
         terminal: nil
       )
-      return messageId
+      return messageID
     }
 
     return SuspendedRun(
       queue: queue,
       runs: runs,
-      sessionId: sessionId,
-      runId: runId,
-      observationMessageId: observationMessageId
+      sessionID: sessionID,
+      runID: runID,
+      observationMessageID: observationMessageID
     )
   }
 
   func approval(_ run: SuspendedRun, recorded: RecordedToolAction) -> Approval {
     Approval(
       id: 1,
-      runId: run.runId,
-      sessionId: run.sessionId,
+      runID: run.runID,
+      sessionID: run.sessionID,
       state: .approved,
       tool: recorded.tool,
       canonicalArgsJSON: recorded.canonicalArgsJSON,
       canonicalTarget: recorded.canonicalTarget,
       argsHash: recorded.argsHash,
       policyVersion: "pv",
-      ownerUserId: 7,
+      ownerUserID: 7,
       nonce: "nonce-a",
-      observationMessageId: run.observationMessageId,
-      toolCallId: "c1",
+      observationMessageID: run.observationMessageID,
+      toolCallID: "c1",
       reason: recorded.reason,
-      promptMessageId: 900,
+      promptMessageID: 900,
       createdTs: Date(),
       expiresTs: Date(),
       resolvedTs: Date()

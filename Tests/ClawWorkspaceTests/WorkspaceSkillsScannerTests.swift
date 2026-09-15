@@ -4,18 +4,20 @@ import Testing
 
 @testable import ClawWorkspace
 
-@Suite struct WorkspaceSkillsScannerTests {
+@Suite
+struct WorkspaceSkillsScannerTests {
   private static let validManifest = """
-    ---
-    name: summarize
-    description: Summarize owner-provided text.
-    ---
-    # Summarize
+  ---
+  name: summarize
+  description: Summarize owner-provided text.
+  ---
+  # Summarize
 
-    Body content the index ignores.
-    """
+  Body content the index ignores.
+  """
 
-  @Test func missingSkillsDirectoryYieldsEmptyResult() throws {
+  @Test
+  func missingSkillsDirectoryYieldsEmptyResult() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -29,7 +31,8 @@ import Testing
     #expect(result.warnings.isEmpty)
   }
 
-  @Test func unlistableSkillsDirectoryWarnsAndIsDistinctFromMissing() throws {
+  @Test
+  func unlistableSkillsDirectoryWarnsAndIsDistinctFromMissing() throws {
     // given - "skills" exists as a regular file, so listing it as a directory reliably fails.
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -44,7 +47,8 @@ import Testing
     #expect(result.warnings == [.unreadableSkillsDirectory])
   }
 
-  @Test func validManifestBecomesDescriptorWithNameDescriptionAndDirectory() throws {
+  @Test
+  func validManifestBecomesDescriptorWithNameDescriptionAndDirectory() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -62,7 +66,8 @@ import Testing
     #expect(descriptor.directory.lastPathComponent == "summarize")
   }
 
-  @Test func manifestWrittenWithCRLFLineEndingsIsIndexed() throws {
+  @Test
+  func manifestWrittenWithCRLFLineEndingsIsIndexed() throws {
     // given - an editor that writes CRLF; the fences and the YAML are otherwise identical
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -80,13 +85,12 @@ import Testing
     #expect(descriptor.description == "Summarize owner-provided text.")
   }
 
-  @Test func subdirectoryWithoutManifestIsSkippedSilently() throws {
+  @Test
+  func subdirectoryWithoutManifestIsSkippedSilently() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
-    let emptySkillDir =
-      root
-      .appendingPathComponent("skills", isDirectory: true)
+    let emptySkillDir = root.appendingPathComponent("skills", isDirectory: true)
       .appendingPathComponent("empty", isDirectory: true)
     try FileManager.default.createDirectory(at: emptySkillDir, withIntermediateDirectories: true)
     let workspace = FileSystemWorkspace(root: root)
@@ -99,16 +103,17 @@ import Testing
     #expect(result.warnings.isEmpty)
   }
 
-  @Test func manifestMissingDescriptionIsSkippedWithWarning() throws {
+  @Test
+  func manifestMissingDescriptionIsSkippedWithWarning() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let manifest = """
-      ---
-      name: partial
-      ---
-      body
-      """
+    ---
+    name: partial
+    ---
+    body
+    """
     try writeSkill(named: "partial", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
@@ -120,7 +125,8 @@ import Testing
     #expect(result.warnings == [.invalidSkillManifest(skill: "partial")])
   }
 
-  @Test func manifestWithoutFrontmatterFenceIsSkippedWithWarning() throws {
+  @Test
+  func manifestWithoutFrontmatterFenceIsSkippedWithWarning() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -136,17 +142,18 @@ import Testing
     #expect(result.warnings == [.invalidSkillManifest(skill: "nofence")])
   }
 
-  @Test func malformedFrontmatterYamlIsSkippedWithWarning() throws {
+  @Test
+  func malformedFrontmatterYamlIsSkippedWithWarning() throws {
     // given - an unterminated flow sequence makes the YAML block unparseable.
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let manifest = """
-      ---
-      name: [unterminated
-      description: x
-      ---
-      body
-      """
+    ---
+    name: [unterminated
+    description: x
+    ---
+    body
+    """
     try writeSkill(named: "broken", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
@@ -158,19 +165,20 @@ import Testing
     #expect(result.warnings == [.invalidSkillManifest(skill: "broken")])
   }
 
-  @Test func extraFrontmatterKeysAreIgnored() throws {
+  @Test
+  func extraFrontmatterKeysAreIgnored() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let manifest = """
-      ---
-      name: rich
-      description: Rich skill.
-      version: 3
-      tags: [a, b]
-      ---
-      body
-      """
+    ---
+    name: rich
+    description: Rich skill.
+    version: 3
+    tags: [a, b]
+    ---
+    body
+    """
     try writeSkill(named: "rich", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
@@ -201,7 +209,8 @@ import Testing
     #expect(result.descriptors.map(\.name) == [name])
   }
 
-  @Test func longDescriptionIsCappedAtScanTime() throws {
+  @Test
+  func longDescriptionIsCappedAtScanTime() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -219,7 +228,8 @@ import Testing
     #expect(descriptor.description.hasSuffix(TextTruncation.marker))
   }
 
-  @Test func descriptionAtTheCapIsKeptWhole() throws {
+  @Test
+  func descriptionAtTheCapIsKeptWhole() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -235,18 +245,19 @@ import Testing
     #expect(result.descriptors.first?.description == description)
   }
 
-  @Test func multiLineDescriptionCollapsesToOneIndexLine() throws {
+  @Test
+  func multiLineDescriptionCollapsesToOneIndexLine() throws {
     // given - a YAML block scalar the index would otherwise print across several lines
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let manifest = """
-      ---
-      name: verbose
-      description: |
-        First line.
-        Second line.
-      ---
-      """
+    ---
+    name: verbose
+    description: |
+      First line.
+      Second line.
+    ---
+    """
     try writeSkill(named: "verbose", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
@@ -258,7 +269,8 @@ import Testing
     #expect(result.descriptors.first?.description == "First line. Second line.")
   }
 
-  @Test func whitespaceOnlyDescriptionIsSkippedWithWarning() throws {
+  @Test
+  func whitespaceOnlyDescriptionIsSkippedWithWarning() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -274,15 +286,13 @@ import Testing
     #expect(result.warnings == [.invalidSkillManifest(skill: "blank")])
   }
 
-  @Test(
-    arguments: [
-      "Summarize",
-      "sum--marize",
-      "-summarize",
-      "summarize-",
-      String(repeating: "s", count: 65),
-    ]
-  )
+  @Test(arguments: [
+    "Summarize",
+    "sum--marize",
+    "-summarize",
+    "summarize-",
+    String(repeating: "s", count: 65),
+  ])
   func manifestWithNameOutsideTheIdentifierShapeIsSkippedWithWarning(name: String) throws {
     // given - directory and name agree, so only the shape can reject the skill.
     let root = try makeTemporaryRoot()
@@ -298,25 +308,26 @@ import Testing
     #expect(result.descriptors.isEmpty)
     #expect(
       result.warnings == [
-        .invalidSkillName(directory: name, name: TextTruncation.cap(name, maxGraphemes: 64))
+        .invalidSkillName(directory: name, name: TextTruncation.cap(name, maxGraphemes: 64)),
       ]
     )
   }
 
-  @Test func aRejectedNameReachesTheOwnerAsOneBoundedLine() throws {
+  @Test
+  func aRejectedNameReachesTheOwnerAsOneBoundedLine() throws {
     // given - a block scalar name: unbounded and multi-line, and the notice it produces is
     // prepended to every reply until the manifest is fixed
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
     let runaway = String(repeating: "A", count: 500)
     let manifest = """
-      ---
-      name: |
-        \(runaway)
-        second line
-      description: An unbounded name.
-      ---
-      """
+    ---
+    name: |
+      \(runaway)
+      second line
+    description: An unbounded name.
+    ---
+    """
     try writeSkill(named: "runaway", manifest: manifest, under: root)
     let workspace = FileSystemWorkspace(root: root)
 
@@ -330,12 +341,13 @@ import Testing
         .invalidSkillName(
           directory: "runaway",
           name: TextTruncation.cap("\(runaway) second line", maxGraphemes: 64)
-        )
+        ),
       ]
     )
   }
 
-  @Test func manifestNameDisagreeingWithDirectoryIsSkippedWithWarning() throws {
+  @Test
+  func manifestNameDisagreeingWithDirectoryIsSkippedWithWarning() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -351,7 +363,8 @@ import Testing
     #expect(result.warnings == [.skillNameDirectoryMismatch(directory: "alpha", name: "beta")])
   }
 
-  @Test func collidingNamesDropEveryClaimantAndWarn() {
+  @Test
+  func collidingNamesDropEveryClaimantAndWarn() {
     // given - unreachable through one scan root once name == directory holds; guarded anyway.
     let skillsRoot = URL(fileURLWithPath: "/tmp/skills", isDirectory: true)
     let directory = { (name: String) in
@@ -373,7 +386,8 @@ import Testing
     )
   }
 
-  @Test func aSkillDirectorySymlinkedOutsideTheWorkspaceIsDroppedWithAWarning() throws {
+  @Test
+  func aSkillDirectorySymlinkedOutsideTheWorkspaceIsDroppedWithAWarning() throws {
     // given - the outside directory holds a perfectly valid manifest; only its location disqualifies it.
     let root = try makeTemporaryRoot()
     let outside = try makeTemporaryRoot()
@@ -400,7 +414,8 @@ import Testing
     #expect(result.warnings == [.escapingSkillDirectory(directory: "summarize")])
   }
 
-  @Test func aSkillsDirectorySymlinkedOutsideTheWorkspaceScansNothing() throws {
+  @Test
+  func aSkillsDirectorySymlinkedOutsideTheWorkspaceScansNothing() throws {
     // given - the whole skills/ directory is a link out, holding an otherwise valid skill.
     let root = try makeTemporaryRoot()
     let outside = try makeTemporaryRoot()
@@ -427,7 +442,8 @@ import Testing
     #expect(result.warnings == [.skillsDirectoryOutsideWorkspace])
   }
 
-  @Test func aSkillsDirectorySymlinkedWithinTheWorkspaceStillScans() throws {
+  @Test
+  func aSkillsDirectorySymlinkedWithinTheWorkspaceStillScans() throws {
     // given - linking skills/ at a sibling inside the workspace keeps every manifest contained.
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -450,7 +466,8 @@ import Testing
     #expect(result.warnings.isEmpty)
   }
 
-  @Test func aSkillDirectorySymlinkedWithinTheSkillsTreeStillScans() throws {
+  @Test
+  func aSkillDirectorySymlinkedWithinTheSkillsTreeStillScans() throws {
     // given - "store" holds no SKILL.md of its own, so it scans as an ordinary skipped subdirectory.
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -473,7 +490,8 @@ import Testing
     #expect(result.warnings.isEmpty)
   }
 
-  @Test func multipleSkillsAreReturnedInDirectoryNameOrder() throws {
+  @Test
+  func multipleSkillsAreReturnedInDirectoryNameOrder() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }

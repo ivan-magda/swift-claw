@@ -1,0 +1,56 @@
+import Foundation
+import Testing
+
+#if canImport(Darwin)
+  import Darwin
+#elseif canImport(Glibc)
+  import Glibc
+#endif
+
+@testable import ClawCore
+
+struct StyleFixture {
+  @available(macOS 13, *) func display(_ values: [Int]) -> String {
+    guard let first = values.first,
+      first > 0 else { return "" }
+    for value in values { _ = value }
+    if first > 1 { return String(first) }
+    return ""
+  }
+  func singleton() -> [String] {
+    return [
+      "An especially long indivisible value that keeps this singleton collection literal vertical"
+    ]
+  }
+
+  @Test(arguments: [
+    "An especially long indivisible value that keeps this singleton collection literal vertical",
+    "second"
+  ]) func attributed() {}
+
+  func mapped(_ values: [String]) -> [Int] {
+    values.map { value in
+      value.count
+    }
+  }
+
+  func literal() -> String {
+    #"""
+    { value in value }
+
+    if ready &&
+      stillReady { work() }
+    """#
+  }
+
+  // swiftlint:disable cyclomatic_complexity
+  func records(_ env: RecordContext, enabled: Bool) -> [ResumeRecorder.ResumeCall] {
+    if enabled {
+      return [
+        ResumeRecorder.ResumeCall(runID: env.runID, contextBoundMessageID: env.observationMessageID),
+      ]
+    }
+    return []
+  }
+  // swiftlint:enable cyclomatic_complexity
+}

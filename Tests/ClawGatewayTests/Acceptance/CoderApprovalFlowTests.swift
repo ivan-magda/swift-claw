@@ -8,7 +8,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct CoderApprovalFlowTests {
+@Suite
+struct CoderApprovalFlowTests {
   @Test(arguments: [ChatMode.direct, .group])
   func approvalRestoresRecordedRequestAndAuthenticatedOrigin(mode: ChatMode) async throws {
     // given
@@ -16,10 +17,12 @@ import Testing
     let participant: Int64 = mode == .group ? 42 : requester
     let chat: Int64 = mode == .group ? -100_123 : requester
     let thread: Int64? = mode == .group ? 77 : nil
-    let membership = GroupMembershipStub(chatId: chat, memberUserIds: [participant])
+    let membership = GroupMembershipStub(chatID: chat, memberUserIDs: [participant])
     let groups: Set<Int64> = mode == .group ? [chat] : []
     let identity = BotIdentity(id: 900, username: "claw_bot")
-    let backend = ScriptedCoderBackend(invocations: [.init(result: CoderServiceFixture.result())])
+    let backend = ScriptedCoderBackend(invocations: [
+      ScriptedCoderBackend.Invocation(result: CoderServiceFixture.result()),
+    ])
     let first = try makeSC3Harness(
       scripts: [[toolCallResponse([proposal])]],
       httpResponses: [:],
@@ -39,7 +42,7 @@ import Testing
           chat: chat,
           text: "@claw_bot Fix retry handling",
           chatKind: mode == .group ? .supergroup : .private,
-          messageThreadId: thread
+          messageThreadID: thread
         )
       )
       let approval = try #require(
@@ -52,12 +55,14 @@ import Testing
       #expect(try first.stores.coderJobs.reservedJobs().isEmpty)
       #expect(await backend.startedJobIDs.isEmpty)
       let prompt = try #require(
-        try first.stores.outbox.pendingOutbound().first { $0.approvalId == approval.id }
+        try first.stores.outbox.pendingOutbound().first {
+          $0.approvalID == approval.id
+        }
       )
-      #expect(prompt.target.messageThreadId == thread)
+      #expect(prompt.target.messageThreadID == thread)
       try first.stores.outbox.markSent(
         deliveryKey: prompt.deliveryKey,
-        telegramMessageId: 900,
+        telegramMessageID: 900,
         now: Date()
       )
       try await first.stop()
@@ -86,7 +91,7 @@ import Testing
             id: 2,
             from: participant,
             chat: chat,
-            messageId: 900,
+            messageID: 900,
             data: approveData(approval.nonce)
           )
         )
@@ -97,11 +102,11 @@ import Testing
         let id = try #require(await backend.startedJobIDs.first)
         let job = try #require(try restarted.stores.coderJobs.job(id: id))
         #expect(job.prepared == CoderServiceFixture.request())
-        #expect(job.origin.runID == approval.runId)
+        #expect(job.origin.runID == approval.runID)
         let persistedApproval = try #require(
           try restarted.stores.approvals.approval(id: approval.id)
         )
-        #expect(job.origin.sessionID == persistedApproval.sessionId)
+        #expect(job.origin.sessionID == persistedApproval.sessionID)
         #expect(job.origin.requesterUserID == requester)
         #expect(job.origin.chatID == chat)
         #expect(job.origin.approvalID == approval.id)
@@ -118,14 +123,15 @@ import Testing
         )
         let expectedTarget =
           mode == .group
-          ? DeliveryTarget(chatId: chat, messageThreadId: thread, replyToMessageId: 1)
-          : .chat(chat)
+            ? DeliveryTarget(chatID: chat, messageThreadID: thread, replyToMessageID: 1) :
+            .chat(chat)
         #expect(report.target == expectedTarget)
       }
     }
   }
 
-  @Test func ownerCanInspectAndCancelThroughDispatcher() async throws {
+  @Test
+  func ownerCanInspectAndCancelThroughDispatcher() async throws {
     // given
     let fixture = try CoderServiceFixture()
     try await fixture.withJoinedCleanup {
@@ -155,12 +161,15 @@ import Testing
     }
   }
 
-  @Test func proactiveProposalCannotParkCoder() async throws {
+  @Test
+  func proactiveProposalCannotParkCoder() async throws {
     // given
-    let backend = ScriptedCoderBackend(invocations: [.init(result: CoderServiceFixture.result())])
+    let backend = ScriptedCoderBackend(invocations: [
+      ScriptedCoderBackend.Invocation(result: CoderServiceFixture.result()),
+    ])
     let harness = try makeSC3Harness(
       scripts: [
-        [toolCallResponse([proposal]), okResponse(content: "Cannot delegate proactively")]
+        [toolCallResponse([proposal]), okResponse(content: "Cannot delegate proactively")],
       ],
       httpResponses: [:],
       coderBackend: backend
@@ -170,7 +179,7 @@ import Testing
       let now = Date()
       let scheduled = try harness.stores.scheduledJobs.create(
         NewScheduledJob(
-          ownerChatId: 7,
+          ownerChatID: 7,
           label: "retry",
           prompt: "Fix retry handling",
           recurrence: nil,
@@ -181,20 +190,20 @@ import Testing
       )
       guard
         case .fired(let fire) = try harness.stores.scheduledJobs.fireNow(
-          jobId: scheduled.id,
+          jobID: scheduled.id,
           now: now
         )
       else {
         Issue.record("Scheduled run was not created")
         return
       }
-      let origin = try #require(try harness.stores.runs.pickUp(runId: fire.runId, now: now))
+      let origin = try #require(try harness.stores.runs.pickUp(runID: fire.runID, now: now))
 
       // when
       let outcome = try await harness.agent.runTurn(
-        runId: fire.runId,
-        sessionId: fire.sessionId,
-        chatId: fire.ownerChatId,
+        runID: fire.runID,
+        sessionID: fire.sessionID,
+        chatID: fire.ownerChatID,
         buildResult: BuildResult(messages: [], ownerNotices: [], hasPrivateDataAccess: false),
         sessionTainted: false,
         hasPinnedLessons: false,
@@ -213,9 +222,12 @@ import Testing
     }
   }
 
-  @Test func changedExecutionPolicyVoidsParkedApproval() async throws {
+  @Test
+  func changedExecutionPolicyVoidsParkedApproval() async throws {
     // given
-    let backend = ScriptedCoderBackend(invocations: [.init(result: CoderServiceFixture.result())])
+    let backend = ScriptedCoderBackend(invocations: [
+      ScriptedCoderBackend.Invocation(result: CoderServiceFixture.result()),
+    ])
     let first = try makeSC3Harness(
       scripts: [[toolCallResponse([proposal])]],
       httpResponses: [:],
@@ -275,9 +287,9 @@ private extension CoderApprovalFlowTests {
       id: "coder-1",
       name: CoderToolNames.submit,
       argumentsJSON: """
-        {"source":{"local":{"path":"/fixture/repository-1"}},"task":"Fix retry handling",
-        "workspace":"inPlace","deliverable":"localChanges","publish_existing_changes":false}
-        """
+      {"source":{"local":{"path":"/fixture/repository-1"}},"task":"Fix retry handling",
+      "workspace":"inPlace","deliverable":"localChanges","publish_existing_changes":false}
+      """
     )
   }
 
@@ -290,7 +302,9 @@ private extension CoderApprovalFlowTests {
       ]),
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: []),
-        privateFileLoader: { [] },
+        privateFileLoader: {
+          []
+        },
         enabledDangerousTools: []
       )
     )

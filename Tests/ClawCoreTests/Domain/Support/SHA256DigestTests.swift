@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct SHA256DigestTests {
-  @Test func knownVectorsRenderLowercaseHex() {
+@Suite
+struct SHA256DigestTests {
+  @Test
+  func knownVectorsRenderLowercaseHex() {
     // given
     let empty = Data()
     let text = "abc"
@@ -18,7 +20,8 @@ import Testing
     #expect(textDigest == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
   }
 
-  @Test func approvalArgsHashUsesTheCanonicalRenderer() {
+  @Test
+  func approvalArgsHashUsesTheCanonicalRenderer() {
     // given
     let canonicalJSON = #"{"a":1,"b":2}"#
 
@@ -29,7 +32,8 @@ import Testing
     #expect(approvalHash == SHA256Digest.hex(canonicalJSON))
   }
 
-  @Test func canonicalDigestValidationRejectsCaseLengthAndAlphabetMutants() {
+  @Test
+  func canonicalDigestValidationRejectsCaseLengthAndAlphabetMutants() {
     // given
     let valid = String(repeating: "a", count: 64)
 

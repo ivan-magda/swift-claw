@@ -2,9 +2,10 @@ import Foundation
 
 /// Creates a unique, empty temporary workspace root. The caller removes it in a `defer`.
 func makeTemporaryRoot() throws -> URL {
-  let root = FileManager.default.temporaryDirectory
-    .appendingPathComponent("claw-workspace-tests", isDirectory: true)
-    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+    "claw-workspace-tests",
+    isDirectory: true
+  ).appendingPathComponent(UUID().uuidString, isDirectory: true)
   try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
   return root
 }

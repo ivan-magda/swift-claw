@@ -21,8 +21,7 @@ extension MCPSessionError {
   /// remote side effect remains unknown.
   var callExecutionDisposition: MCPCallExecutionDisposition {
     switch self {
-    case .callTimedOut:
-      return .mayHaveExecuted
+    case .callTimedOut: return .mayHaveExecuted
     case .discoveryTimedOut, .tooManyPages, .tooManyTools, .catalogTooLarge, .pagingStalled:
       return .definitelyNotExecuted
     }
@@ -32,18 +31,14 @@ extension MCPSessionError {
 extension MCPSessionError: CustomStringConvertible {
   var description: String {
     switch self {
-    case .callTimedOut(let seconds):
-      return "MCP call exceeded its \(seconds)s budget"
+    case .callTimedOut(let seconds): return "MCP call exceeded its \(seconds)s budget"
     case .discoveryTimedOut(let seconds):
       return "MCP server did not finish discovery within its \(seconds)s budget"
-    case .tooManyPages(let limit):
-      return "MCP server paginated its tool list past \(limit) pages"
-    case .tooManyTools(let limit):
-      return "MCP server offers more than \(limit) tools"
+    case .tooManyPages(let limit): return "MCP server paginated its tool list past \(limit) pages"
+    case .tooManyTools(let limit): return "MCP server offers more than \(limit) tools"
     case .catalogTooLarge(let limitBytes):
       return "MCP tool list exceeds the \(limitBytes)-byte limit"
-    case .pagingStalled:
-      return "MCP server repeated a pagination cursor"
+    case .pagingStalled: return "MCP server repeated a pagination cursor"
     }
   }
 }

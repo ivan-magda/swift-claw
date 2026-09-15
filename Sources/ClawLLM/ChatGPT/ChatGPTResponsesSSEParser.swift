@@ -48,9 +48,7 @@ struct ChatGPTResponsesSSEParser: Sendable {
   private var dataEventCount = 0
   private var boundary = DataFieldScan()
 
-  init(bounds: ChatGPTResponsesBounds = .standard) {
-    self.bounds = bounds
-  }
+  init(bounds: ChatGPTResponsesBounds = .standard) { self.bounds = bounds }
 
   mutating func push(_ chunk: Data) throws -> [ChatGPTResponsesEvent] {
     // Scanned before the buffer is bounded: these bytes arrived whatever the parser goes on to make
@@ -71,9 +69,7 @@ struct ChatGPTResponsesSSEParser: Sendable {
     // it is framed would re-copy the whole remaining buffer every time, which turns one large
     // delivery of small events into quadratic work.
     var consumed = buffer.startIndex
-    defer {
-      buffer.removeSubrange(..<consumed)
-    }
+    defer { buffer.removeSubrange(..<consumed) }
 
     while let delimiter = SSEFraming.delimiterRange(in: buffer[consumed...]) {
       let eventData = buffer[consumed..<delimiter.lowerBound]
@@ -199,9 +195,7 @@ private extension ChatGPTResponsesSSEParser {
     }
 
     let event: ChatGPTWireEvent
-    do {
-      event = try JSONDecoder().decode(ChatGPTWireEvent.self, from: payload)
-    } catch {
+    do { event = try JSONDecoder().decode(ChatGPTWireEvent.self, from: payload) } catch {
       throw Self.malformedEvent
     }
     return try Self.mapped(name, event)
@@ -209,10 +203,9 @@ private extension ChatGPTResponsesSSEParser {
 
   /// A known event in the route's own terms. A known name whose payload does not carry what that
   /// name promises is damage rather than something to ignore, so it fails rather than vanishing.
-  static func mapped(
-    _ name: ChatGPTWireEventName,
-    _ event: ChatGPTWireEvent
-  ) throws -> ChatGPTResponsesEvent {
+  static func mapped(_ name: ChatGPTWireEventName, _ event: ChatGPTWireEvent) throws
+    -> ChatGPTResponsesEvent
+  {
     switch name {
     case .outputItemAdded:
       return .outputItemAdded(index: try index(of: event), item: try item(of: event))
@@ -235,10 +228,8 @@ private extension ChatGPTResponsesSSEParser {
         callID: event.callID,
         arguments: arguments
       )
-    case .completed, .done, .incomplete, .failed:
-      return .terminal(try terminal(name, event))
-    case .error:
-      return .streamError(ChatGPTRemoteFailure(event.error))
+    case .completed, .done, .incomplete, .failed: return .terminal(try terminal(name, event))
+    case .error: return .streamError(ChatGPTRemoteFailure(event.error))
     }
   }
 
@@ -264,10 +255,9 @@ private extension ChatGPTResponsesSSEParser {
     return delta
   }
 
-  static func terminal(
-    _ name: ChatGPTWireEventName,
-    _ event: ChatGPTWireEvent
-  ) throws -> ChatGPTResponsesTerminal {
+  static func terminal(_ name: ChatGPTWireEventName, _ event: ChatGPTWireEvent) throws
+    -> ChatGPTResponsesTerminal
+  {
     guard let response = event.response, let terminalName = ChatGPTResponsesTerminal.Name(name)
     else {
       throw malformedEvent
@@ -336,10 +326,8 @@ enum ChatGPTMessagePhase: Sendable, Equatable {
   /// to refuse.
   var isOwnerVisible: Bool {
     switch self {
-    case .unspecified, .final, .finalAnswer:
-      return true
-    case .commentary, .analysis, .other:
-      return false
+    case .unspecified, .final, .finalAnswer: return true
+    case .commentary, .analysis, .other: return false
     }
   }
 }
@@ -376,20 +364,16 @@ struct ChatGPTResponsesTerminal: Sendable, Equatable {
       return status
     }
     switch name {
-    case .completed:
-      return .completed
-    case .incomplete:
-      return .incomplete
-    case .failed:
-      return .failed
+    case .completed: return .completed
+    case .incomplete: return .incomplete
+    case .failed: return .failed
     }
   }
 
   /// Whether another terminal says the same thing this one does. `response.done` is an observed
   /// alias for `response.completed`, so a stream that sends both has not contradicted itself.
   func restates(_ other: Self) -> Bool {
-    responseID == other.responseID
-      && effectiveStatus == other.effectiveStatus
+    responseID == other.responseID && effectiveStatus == other.effectiveStatus
       && incompleteReason == other.incompleteReason
   }
 
@@ -420,9 +404,7 @@ struct ChatGPTRemoteFailure: Sendable, Equatable {
   /// Whether this failure is the backend refusing the replayed encrypted state. Such a turn can be
   /// re-issued without that state, so it maps to `invalidProviderState` rather than a generic
   /// terminal — the failure downstream turns into actionable `/new` guidance.
-  var isInvalidProviderState: Bool {
-    code == Self.invalidEncryptedContentCode
-  }
+  var isInvalidProviderState: Bool { code == Self.invalidEncryptedContentCode }
 }
 
 // MARK: - Wire Types
@@ -447,14 +429,11 @@ extension ChatGPTResponsesTerminal.Name {
   /// that contradicted itself.
   fileprivate init?(_ name: ChatGPTWireEventName) {
     switch name {
-    case .completed, .done:
-      self = .completed
-    case .incomplete:
-      self = .incomplete
-    case .failed:
-      self = .failed
+    case .completed, .done: self = .completed
+    case .incomplete: self = .incomplete
+    case .failed: self = .failed
     case .outputItemAdded, .outputItemDone, .outputTextDelta, .functionCallArgumentsDelta,
-      .functionCallArgumentsDone, .error:
+         .functionCallArgumentsDone, .error:
       return nil
     }
   }
@@ -462,9 +441,7 @@ extension ChatGPTResponsesTerminal.Name {
 
 /// Read before the event itself so an unknown type is never judged by whether the rest of its
 /// payload happens to fit a shape this route made up for it.
-private struct ChatGPTWireEventType: Decodable {
-  let type: String
-}
+private struct ChatGPTWireEventType: Decodable { let type: String }
 
 private struct ChatGPTWireEvent: Decodable {
   let outputIndex: Int?
@@ -657,14 +634,10 @@ extension ChatGPTStreamItem {
 extension ChatGPTStreamItemType {
   fileprivate init(_ wire: String) {
     switch wire {
-    case "message":
-      self = .message
-    case "reasoning":
-      self = .reasoning
-    case "function_call":
-      self = .functionCall
-    default:
-      self = .other(wire)
+    case "message": self = .message
+    case "reasoning": self = .reasoning
+    case "function_call": self = .functionCall
+    default: self = .other(wire)
     }
   }
 }
@@ -677,18 +650,12 @@ extension ChatGPTMessagePhase {
 
   fileprivate init(_ wire: String?) {
     switch wire {
-    case .none:
-      self = .unspecified
-    case Self.finalWireName:
-      self = .final
-    case Self.finalAnswerWireName:
-      self = .finalAnswer
-    case Self.commentaryWireName:
-      self = .commentary
-    case Self.analysisWireName:
-      self = .analysis
-    case .some(let other):
-      self = .other(other)
+    case .none: self = .unspecified
+    case Self.finalWireName: self = .final
+    case Self.finalAnswerWireName: self = .finalAnswer
+    case Self.commentaryWireName: self = .commentary
+    case Self.analysisWireName: self = .analysis
+    case .some(let other): self = .other(other)
     }
   }
 
@@ -696,18 +663,12 @@ extension ChatGPTMessagePhase {
   /// backend produced rather than as this build's opinion of it.
   var wireName: String? {
     switch self {
-    case .unspecified:
-      return nil
-    case .final:
-      return Self.finalWireName
-    case .finalAnswer:
-      return Self.finalAnswerWireName
-    case .commentary:
-      return Self.commentaryWireName
-    case .analysis:
-      return Self.analysisWireName
-    case .other(let name):
-      return name
+    case .unspecified: return nil
+    case .final: return Self.finalWireName
+    case .finalAnswer: return Self.finalAnswerWireName
+    case .commentary: return Self.commentaryWireName
+    case .analysis: return Self.analysisWireName
+    case .other(let name): return name
     }
   }
 }

@@ -1,12 +1,10 @@
 import Foundation
 
-public extension LearningEligibility {
+extension LearningEligibility {
   /// The one gate in front of learning model spend. Every other value is a terminal classification
   /// the loop records and stops on, so this stays a single equality rather than a list that could
   /// drift open.
-  var reachesEvaluator: Bool {
-    self == .eligibleTaskEvidence
-  }
+  public var reachesEvaluator: Bool { self == .eligibleTaskEvidence }
 }
 
 /// The deterministic map from a settled run's terminal cause and transcript shape onto the evidence
@@ -17,10 +15,9 @@ public enum EligibilityClassifier {
   /// compatibility window rather than silently reinterpret the receipts an earlier version wrote.
   public static let version = "eligibility/v1"
 
-  public static func classify(
-    _ settlement: RunSettlement,
-    transcript: EvidenceTranscript
-  ) -> LearningEligibility {
+  public static func classify(_ settlement: RunSettlement, transcript: EvidenceTranscript)
+    -> LearningEligibility
+  {
     // Transcript first. A run whose evidence cannot be reconstructed whole is neutral however it
     // ended: the evaluator must never receive a partial reconstruction, and a truncated answer
     // would read as the model's own.
@@ -38,18 +35,12 @@ private extension EligibilityClassifier {
   /// than fall into a default that would quietly feed the evaluator or quietly starve it.
   static func classify(_ cause: TerminalCause) -> LearningEligibility {
     switch cause {
-    case .taskCompleted:
-      .eligibleTaskEvidence
-    case .providerFailure, .storageFailure, .budgetStopped:
-      .transientInfrastructureFailure
-    case .policyBlocked:
-      .policyOrSecurityBlock
-    case .approvalUnresolved, .approvalDenied, .ownerCancelled, .superseded:
-      .ownerInterruption
-    case .incomplete:
-      .insufficientEvidence
-    case .unknown:
-      .unsupportedTerminalState
+    case .taskCompleted: .eligibleTaskEvidence
+    case .providerFailure, .storageFailure, .budgetStopped: .transientInfrastructureFailure
+    case .policyBlocked: .policyOrSecurityBlock
+    case .approvalUnresolved, .approvalDenied, .ownerCancelled, .superseded: .ownerInterruption
+    case .incomplete: .insufficientEvidence
+    case .unknown: .unsupportedTerminalState
     }
   }
 }

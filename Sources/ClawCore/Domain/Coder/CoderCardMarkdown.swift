@@ -3,7 +3,7 @@ import Foundation
 /// Literal Coder card blocks for Telegram Rich Markdown. Each block remains independently
 /// bounded by encoded UTF-8 bytes and closed, so message boundaries cannot expose data as markup.
 public enum CoderCardMarkdown {
-  public static func field(_ label: String, _ value: String) -> String {
+  public static func field(label: String, value: String) -> String {
     blocks(value, opening: "<p><b>\(label):</b> ", closing: "</p>", preformatted: false)
   }
 
@@ -36,12 +36,9 @@ public enum CoderCardMarkdown {
 // MARK: - Literal Encoding
 
 private extension CoderCardMarkdown {
-  static func blocks(
-    _ value: String,
-    opening: String,
-    closing: String,
-    preformatted: Bool
-  ) -> String {
+  static func blocks(_ value: String, opening: String, closing: String, preformatted: Bool)
+    -> String
+  {
     let bodyLimit = ReplySplitter.limit - opening.utf8.count - closing.utf8.count
     var result: [String] = []
     var body = ""
@@ -76,9 +73,7 @@ private extension CoderCardMarkdown {
     case "\r": preformatted ? "&#13;" : "<br>"
     case "\r\n": preformatted ? "&#13;&#10;" : "<br>"
     default:
-      text
-        .replacingOccurrences(of: "&", with: "&amp;")
-        .replacingOccurrences(of: "<", with: "&lt;")
+      text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
         .replacingOccurrences(of: ">", with: "&gt;")
     }
   }

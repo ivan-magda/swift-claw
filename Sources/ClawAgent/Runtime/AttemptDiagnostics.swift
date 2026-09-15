@@ -44,9 +44,5 @@ package struct AttemptDiagnostics: Sendable, Equatable {
     self.failureCause = failureCause
   }
 
-  package static let empty = Self(
-    outputCounts: nil,
-    modelObservations: [],
-    failureCause: nil
-  )
+  package static let empty = Self(outputCounts: nil, modelObservations: [], failureCause: nil)
 }

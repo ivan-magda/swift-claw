@@ -12,12 +12,12 @@ import Synchronization
 package struct SwiftSubprocessRunner: SubprocessRunning {
   private let executablePath: String
   private let environmentForTesting: [String: String]
-  private let onSpawnForTesting: @Sendable (Int32) async -> Void
+  private let onSpawnForTesting: @Sendable (_ processIdentifier: Int32) async -> Void
 
   package init(
     executablePath: String,
     environmentForTesting: [String: String] = [:],
-    onSpawnForTesting: @escaping @Sendable (Int32) async -> Void = { _ in }
+    onSpawnForTesting: @escaping @Sendable (_ processIdentifier: Int32) async -> Void = { _ in }
   ) {
     self.executablePath = executablePath
     self.environmentForTesting = environmentForTesting
@@ -47,15 +47,15 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
         defer { spawnedContinuation.finish() }
         return await self.spawnAndCapture(
           command,
-          spawnedProcessIdentifier: spawnedProcessIdentifier,
-          didSpawn: { spawnedContinuation.yield() }
-        )
+          spawnedProcessIdentifier: spawnedProcessIdentifier
+        ) {
+          spawnedContinuation.yield()
+        }
       }
     )
 
     switch outcome {
-    case .operationReturned(let result):
-      return result
+    case .operationReturned(let result): return result
     case .deadlineExpired:
       return SubprocessResult(
         termination: .timedOut,
@@ -78,9 +78,7 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
     spawnedProcessIdentifier: SpawnedProcessIdentifierBox,
     didSpawn: @escaping @Sendable () -> Void
   ) async -> SubprocessResult {
-    let teardownSequence = Self.teardownSequence(
-      gracePeriod: command.teardownGracePeriod
-    )
+    let teardownSequence = Self.teardownSequence(gracePeriod: command.teardownGracePeriod)
 
     do {
       let result = try await Subprocess.run(
@@ -114,8 +112,7 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
     } catch {
       let termination: SubprocessTermination =
         Task.isCancelled || error is CancellationError
-        ? .cancelled
-        : .startFailed(String(describing: error))
+          ? .cancelled : .startFailed(String(describing: error))
 
       return SubprocessResult(
         termination: termination,
@@ -131,12 +128,7 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
 
 private extension SwiftSubprocessRunner {
   static func teardownSequence(gracePeriod: Duration) -> [TeardownStep] {
-    [
-      .gracefulShutDown(
-        toProcessGroup: true,
-        allowedDurationToNextStep: gracePeriod
-      )
-    ]
+    [.gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: gracePeriod)]
   }
 
   static func platformOptions(teardownSequence: [TeardownStep]) -> PlatformOptions {
@@ -146,18 +138,14 @@ private extension SwiftSubprocessRunner {
     return options
   }
 
-  static func classifyTermination(
-    status: TerminationStatus
-  ) -> SubprocessTermination {
+  static func classifyTermination(status: TerminationStatus) -> SubprocessTermination {
     if Task.isCancelled {
       return .cancelled
     }
 
     switch status {
-    case .exited(let code):
-      return .exited(Int32(code))
-    case .signaled(let signal):
-      return .signaled(Int32(signal))
+    case .exited(let code): return .exited(Int32(code))
+    case .signaled(let signal): return .signaled(Int32(signal))
     }
   }
 }
@@ -185,10 +173,9 @@ private extension SwiftSubprocessRunner {
 private extension SwiftSubprocessRunner {
   static let emptyStream = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
 
-  static func capture(
-    _ sequence: SubprocessOutputSequence,
-    limit: Int
-  ) async throws -> CapturedCommandStream {
+  static func capture(_ sequence: SubprocessOutputSequence, limit: Int) async throws
+    -> CapturedCommandStream
+  {
     var prefix = Data()
     prefix.reserveCapacity(min(limit, 64 * 1024))
 
@@ -229,7 +216,9 @@ private final class SpawnedProcessIdentifierBox: Sendable {
 
   var value: Int32? {
     get {
-      storage.withLock { $0 }
+      storage.withLock {
+        $0
+      }
     }
     set {
       storage.withLock {

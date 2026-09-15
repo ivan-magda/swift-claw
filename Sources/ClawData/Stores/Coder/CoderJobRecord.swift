@@ -4,15 +4,13 @@ import GRDB
 
 enum CoderJobRecord {
   static func fetch(_ db: Database, id: UUID) throws -> CoderJob? {
-    try Row.fetchOne(
-      db,
-      sql: "SELECT * FROM coder_jobs WHERE id = ?",
-      arguments: [id.uuidString]
-    ).map(decode)
+    try Row.fetchOne(db, sql: "SELECT * FROM coder_jobs WHERE id = ?", arguments: [id.uuidString])
+      .map(decode)
   }
 
   static func decode(_ row: Row) throws -> CoderJob {
-    guard let id = UUID(uuidString: row["id"]),
+    guard
+      let id = UUID(uuidString: row["id"]),
       let state = CoderJobState(rawValue: row["state"]),
       let ownership = CoderProcessOwnership(rawValue: row["process_ownership"]),
       let createdAt = EpochSecondCodec.date(fromEpoch: row["created_ts"])
@@ -51,16 +49,25 @@ enum CoderJobRecord {
   ) throws -> CoderJob {
     try db.execute(
       sql: """
-        INSERT INTO coder_jobs(id, origin_run_id, origin_session_id, requester_user_id, chat_id,
-          tool_call_id, approval_id, prepared_json, state, slot_reserved, checkout_path,
-          common_git_directory, process_ownership, created_ts, updated_ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
-        """,
+      INSERT INTO coder_jobs(id, origin_run_id, origin_session_id, requester_user_id, chat_id,
+        tool_call_id, approval_id, prepared_json, state, slot_reserved, checkout_path,
+        common_git_directory, process_ownership, created_ts, updated_ts)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+      """,
       arguments: [
-        id.uuidString, origin.runID, origin.sessionID, origin.requesterUserID, origin.chatID,
-        origin.toolCallID, origin.approvalID, try encodeJSON(prepared),
-        CoderJobState.admitted.rawValue, prepared.checkoutPath, prepared.commonGitDirectory,
-        CoderProcessOwnership.none.rawValue, EpochSecondCodec.epoch(now),
+        id.uuidString,
+        origin.runID,
+        origin.sessionID,
+        origin.requesterUserID,
+        origin.chatID,
+        origin.toolCallID,
+        origin.approvalID,
+        try encodeJSON(prepared),
+        CoderJobState.admitted.rawValue,
+        prepared.checkoutPath,
+        prepared.commonGitDirectory,
+        CoderProcessOwnership.none.rawValue,
+        EpochSecondCodec.epoch(now),
         EpochSecondCodec.epoch(now),
       ]
     )
@@ -82,9 +89,7 @@ enum CoderJobRecord {
 
 private extension CoderJobRecord {
   static func decodeJSON<Value: Decodable>(_ json: String) throws -> Value {
-    do {
-      return try JSONDecoder().decode(Value.self, from: Data(json.utf8))
-    } catch {
+    do { return try JSONDecoder().decode(Value.self, from: Data(json.utf8)) } catch {
       throw StoreError.unexpected("Undecodable Coder record")
     }
   }

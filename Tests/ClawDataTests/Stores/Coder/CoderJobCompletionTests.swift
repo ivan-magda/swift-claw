@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct CoderJobCompletionTests {
-  @Test func completionAndNoticeCommitTogether() throws {
+@Suite
+struct CoderJobCompletionTests {
+  @Test
+  func completionAndNoticeCommitTogether() throws {
     // given
     let fixture = try CoderStoreFixture()
     let id = try fixture.admittedID()
@@ -16,9 +18,9 @@ import Testing
     try fixture.queue.write { db in
       try db.execute(
         sql: """
-          CREATE TEMP TRIGGER reject_coder_notice BEFORE INSERT ON outbound_deliveries
-          BEGIN SELECT RAISE(ABORT, 'fixture completion failure'); END
-          """
+        CREATE TEMP TRIGGER reject_coder_notice BEFORE INSERT ON outbound_deliveries
+        BEGIN SELECT RAISE(ABORT, 'fixture completion failure'); END
+        """
       )
     }
     // when
@@ -41,12 +43,13 @@ import Testing
     )
     #expect(rows.count == 2)
     #expect(report.stepIndex > prompt.stepIndex)
-    #expect(report.chatId == fixture.origin.chatID)
+    #expect(report.chatID == fixture.origin.chatID)
     #expect(try fixture.store.job(id: id)?.result == CoderStoreFixture.result())
     #expect(try fixture.store.reservedJobs().isEmpty)
   }
 
-  @Test func cancellationWinsCompletionCompareAndSwap() throws {
+  @Test
+  func cancellationWinsCompletionCompareAndSwap() throws {
     // given
     let fixture = try CoderStoreFixture()
     let id = try fixture.admittedID()
@@ -64,7 +67,8 @@ import Testing
     #expect(try fixture.store.requestCancellation(id: id, now: fixture.now)?.state == .cancelled)
   }
 
-  @Test func releaseRequiresTerminalAndResolvedOwnership() throws {
+  @Test
+  func releaseRequiresTerminalAndResolvedOwnership() throws {
     // given
     let fixture = try CoderStoreFixture()
     let id = try fixture.admittedID()

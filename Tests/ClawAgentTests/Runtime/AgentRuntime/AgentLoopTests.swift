@@ -5,7 +5,8 @@ import Testing
 @testable import ClawAgent
 @testable import ClawCore
 
-@Suite struct AgentLoopTests {
+@Suite
+struct AgentLoopTests {
   private func run(
     _ runtime: AgentRuntime,
     buildResult: BuildResult = makeBuildResult(),
@@ -15,9 +16,9 @@ import Testing
     proactiveTodayUSD: Double = 0
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
-      runId: 1,
-      sessionId: 1,
-      chatId: 1,
+      runID: 1,
+      sessionID: 1,
+      chatID: 1,
       buildResult: buildResult,
       sessionTainted: sessionTainted,
       hasPinnedLessons: hasPinnedLessons,
@@ -29,7 +30,8 @@ import Testing
     )
   }
 
-  @Test func proactiveRunStopsAtTheProactiveCapBeforeAnyProviderCall() async throws {
+  @Test
+  func proactiveRunStopsAtTheProactiveCapBeforeAnyProviderCall() async throws {
     // given — the proactive pool is exhausted; the global pool is not
     let provider = SequenceProvider([okResponse()])
     let runtime = makeRuntime(provider: provider)
@@ -42,7 +44,8 @@ import Testing
     #expect(await provider.requests.isEmpty)
   }
 
-  @Test func interactiveRunIgnoresProactiveSpend() async throws {
+  @Test
+  func interactiveRunIgnoresProactiveSpend() async throws {
     // given — the same exhausted proactive pool
     let provider = SequenceProvider([okResponse(content: "still on")])
     let runtime = makeRuntime(provider: provider)
@@ -55,7 +58,8 @@ import Testing
     #expect(completed.content == "still on")
   }
 
-  @Test func toollessTurnIsOneRoundTripCompleted() async throws {
+  @Test
+  func toollessTurnIsOneRoundTripCompleted() async throws {
     // given
     let provider = SequenceProvider([okResponse(content: "plain answer")])
     let runtime = makeRuntime(provider: provider)
@@ -71,7 +75,8 @@ import Testing
     #expect(await provider.requests.count == 1)
   }
 
-  @Test func toolRoundTripFeedsObservationBackAndCompletes() async throws {
+  @Test
+  func toolRoundTripFeedsObservationBackAndCompletes() async throws {
     // given — round trip 1 proposes a fetch; round trip 2 answers
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal()], content: "let me check"),
@@ -98,12 +103,13 @@ import Testing
     #expect(anchor.toolCalls.map(\.id) == ["c1"])
     let observationMessage = secondRequest.messages[secondRequest.messages.count - 1]
     #expect(observationMessage.role == .tool)
-    #expect(observationMessage.toolCallId == "c1")
+    #expect(observationMessage.toolCallID == "c1")
     #expect(observationMessage.content.text.contains("<claw-untrusted"))
     #expect(observationMessage.content.text.contains("page text"))
   }
 
-  @Test func advertisedToolsRideEveryRequest() async throws {
+  @Test
+  func advertisedToolsRideEveryRequest() async throws {
     // given
     let definition = ToolDefinition(
       name: "web_fetch",
@@ -124,7 +130,8 @@ import Testing
     #expect(await provider.requests[0].tools.map(\.name) == ["web_fetch"])
   }
 
-  @Test func untrustedToolMetadataTaintsBeforeTheFirstDispatch() async throws {
+  @Test
+  func untrustedToolMetadataTaintsBeforeTheFirstDispatch() async throws {
     // given
     let definition = ToolDefinition(
       name: "mcp__docs__search",
@@ -152,7 +159,8 @@ import Testing
     #expect(outcome.ingestedUntrusted)
   }
 
-  @Test func pinnedLessonsTaintBeforeTheFirstDispatch() async throws {
+  @Test
+  func pinnedLessonsTaintBeforeTheFirstDispatch() async throws {
     // given — trusted tools, so the pinned set is the only untrusted material in the turn
     let definition = ToolDefinition(
       name: "web_fetch",
@@ -180,7 +188,8 @@ import Testing
     #expect(outcome.ingestedUntrusted)
   }
 
-  @Test func liveObservationsFenceUnderTheToolsDeclaredLabel() async throws {
+  @Test
+  func liveObservationsFenceUnderTheToolsDeclaredLabel() async throws {
     // given — skill_load declares the "skills" label; its body must reach the wire under it
     let definition = ToolDefinition(
       name: "skill_load",
@@ -206,7 +215,9 @@ import Testing
 
     // then — fenced as "skills", and loading a skill leaves the session untainted
     let observationMessage = try #require(
-      await provider.requests[1].messages.last { message in message.role == .tool }
+      await provider.requests[1].messages.last { message in
+        message.role == .tool
+      }
     )
     #expect(observationMessage.content.text.contains("label=\"skills\""))
     #expect(observationMessage.content.text.contains("label=\"skill_load\"") == false)
@@ -214,7 +225,8 @@ import Testing
     #expect(outcome.ingestedUntrusted == false)
   }
 
-  @Test func maxTurnsCapStopsAndTells() async throws {
+  @Test
+  func maxTurnsCapStopsAndTells() async throws {
     // given — a provider that proposes tools forever; maxTurns 2
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal(id: "c1")]),
@@ -248,10 +260,11 @@ import Testing
     #expect(outcome.ingestedUntrusted)  // executed observations still taint
   }
 
-  @Test func midBatchToolCallCapDispatchesPrefixThenStops() async throws {
+  @Test
+  func midBatchToolCallCapDispatchesPrefixThenStops() async throws {
     // given (rev.1 L4) — one batch of 3 proposals with maxToolCalls 2
     let provider = SequenceProvider([
-      toolCallResponse([fetchProposal(id: "c1"), fetchProposal(id: "c2"), fetchProposal(id: "c3")])
+      toolCallResponse([fetchProposal(id: "c1"), fetchProposal(id: "c2"), fetchProposal(id: "c3")]),
     ])
     let budget = RunBudget(
       maxInputTokens: 100_000,
@@ -276,11 +289,12 @@ import Testing
     #expect(await dispatcher.records.map(\.call.id) == ["c1", "c2"])
   }
 
-  @Test func blockedCallsCountTowardTheCap() async throws {
+  @Test
+  func blockedCallsCountTowardTheCap() async throws {
     // given — a dispatcher that blocks everything; maxToolCalls 2 (§6.4: blocked calls consumed
     // model+gate work)
     let provider = SequenceProvider([
-      toolCallResponse([fetchProposal(id: "c1"), fetchProposal(id: "c2"), fetchProposal(id: "c3")])
+      toolCallResponse([fetchProposal(id: "c1"), fetchProposal(id: "c2"), fetchProposal(id: "c3")]),
     ])
     let budget = RunBudget(
       maxInputTokens: 100_000,
@@ -297,7 +311,7 @@ import Testing
     let dispatcher = ScriptedDispatcher { call, _ in
       ToolDispatchOutcome(
         observation: ToolObservation(
-          callId: call.id,
+          callID: call.id,
           toolName: call.name,
           content: "blocked",
           status: .blockedArgs,
@@ -316,7 +330,8 @@ import Testing
     #expect(outcome.ingestedUntrusted == false)  // blocked observations do not taint (§10)
   }
 
-  @Test func inRunTaintAndPrivateFlagsFeedTheVeryNextGateContext() async throws {
+  @Test
+  func inRunTaintAndPrivateFlagsFeedTheVeryNextGateContext() async throws {
     // given (rev.1 H1) — call 1 reads MEMORY.md (private), call 2's context must see BOTH flags
     let provider = SequenceProvider([
       toolCallResponse([
@@ -339,19 +354,17 @@ import Testing
     #expect(records[1].context.runPrivateData)
   }
 
-  @Test func perRunSpendAccumulatesAcrossRoundTrips() async throws {
+  @Test
+  func perRunSpendAccumulatesAcrossRoundTrips() async throws {
     // given — a price table tuned to the estimator so ACCUMULATION is what trips (§15). With
     // maxOutputTokens 100 and $3_300/MTok: round-trip 1's preflight estimate (~102 tokens ≈ $0.34)
     // is under perRunUSD 0.50, so its provider call fires and records a real usage row. Round-trip
     // 2's own estimate (~146 tokens ≈ $0.48) is ALSO under 0.50, but recordedRunUSD (round-trip 1's
     // ~$0.05) + $0.48 ≈ $0.53 > 0.50, so the run-accumulated per-run check stops the run before the
     // second provider call.
-    let provider = SequenceProvider([
-      toolCallResponse([fetchProposal()]),
-      okResponse(),
-    ])
+    let provider = SequenceProvider([toolCallResponse([fetchProposal()]), okResponse()])
     let priceTable = PriceTable(prices: [
-      "gpt-4o": ModelPrice(inputUSDPerMTok: 3_300, outputUSDPerMTok: 3_300)
+      "gpt-4o": ModelPrice(inputUSDPerMTok: 3_300, outputUSDPerMTok: 3_300),
     ])
     let budget = RunBudget(
       maxInputTokens: 100_000,
@@ -378,7 +391,8 @@ import Testing
     #expect(await provider.requests.count == 1)
   }
 
-  @Test func wireGrowthPastTheInputCapStopsBeforeTheNextProviderCall() async throws {
+  @Test
+  func wireGrowthPastTheInputCapStopsBeforeTheNextProviderCall() async throws {
     // given — round-trip 1 proposes a tool call whose observation blows far past maxInputTokens
     let provider = SequenceProvider([
       toolCallResponse([fetchProposal()]),
@@ -407,7 +421,8 @@ import Testing
     #expect(outcome.exchanges.count == 1)  // the executed exchange still rides the commit
   }
 
-  @Test func advertisedToolsCountTowardTheInputCapBeforeTheProviderCall() async throws {
+  @Test
+  func advertisedToolsCountTowardTheInputCapBeforeTheProviderCall() async throws {
     // given
     let provider = SequenceProvider([okResponse(content: "never reached")])
     let definition = ToolDefinition(
@@ -443,12 +458,10 @@ import Testing
     #expect(outcome.ingestedUntrusted)
   }
 
-  @Test func aDeadlineAlreadyElapsedBeforeSendDegradesWithoutDebiting() async throws {
+  @Test
+  func aDeadlineAlreadyElapsedBeforeSendDegradesWithoutDebiting() async throws {
     // given — a whole-run deadline already elapsed at loop entry, so the first round never issues
-    let provider = SequenceProvider([
-      toolCallResponse([fetchProposal()]),
-      okResponse(),
-    ])
+    let provider = SequenceProvider([toolCallResponse([fetchProposal()]), okResponse()])
     let dispatcher = ScriptedDispatcher { call, context in
       okOutcome()(call, context)
     }
@@ -475,7 +488,8 @@ import Testing
     #expect(await provider.requests.isEmpty)
   }
 
-  @Test func unknownToolAndMalformedArgsSurfaceAsObservationsViaDispatcher() async throws {
+  @Test
+  func unknownToolAndMalformedArgsSurfaceAsObservationsViaDispatcher() async throws {
     // given — the dispatcher owns steps (0)/(1); the loop just forwards (§9.1)
     let provider = SequenceProvider([
       toolCallResponse([ToolCall(id: "c1", name: "nope", argumentsJSON: "{broken")]),
@@ -484,7 +498,7 @@ import Testing
     let dispatcher = ScriptedDispatcher { call, _ in
       ToolDispatchOutcome(
         observation: ToolObservation(
-          callId: call.id,
+          callID: call.id,
           toolName: call.name,
           content: "Unknown tool nope.",
           status: .error,

@@ -2,7 +2,8 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct CommandTests {
+@Suite
+struct CommandTests {
   @Test(arguments: [
     ("/start", Command.start),
     ("/START please", .start),
@@ -51,7 +52,8 @@ import Testing
     #expect(command == .plain(text))
   }
 
-  @Test func botSuffixRequiresKnownMatchingUsername() {
+  @Test
+  func botSuffixRequiresKnownMatchingUsername() {
     // given
     let text = "/new@claw_bot"
 
@@ -84,17 +86,17 @@ import Testing
   }
 
   @Test(arguments: [
-    ("/pause 3", Command.pause(jobId: 3)),
-    ("/pause", .pause(jobId: nil)),
-    ("/pause abc", .pause(jobId: nil)),
-    ("/pause -2", .pause(jobId: nil)),
-    ("/resume 3", .resume(jobId: 3)),
-    ("/resume", .resume(jobId: nil)),
-    ("/runnow 12", .runNow(jobId: 12)),
-    ("/RUNNOW@CLAW_BOT 12", .runNow(jobId: 12)),
-    ("/cancel 3", .cancelJob(jobId: 3)),
-    ("/cancel", .cancelJob(jobId: nil)),
-    ("/cancel three", .cancelJob(jobId: nil)),
+    ("/pause 3", Command.pause(jobID: 3)),
+    ("/pause", .pause(jobID: nil)),
+    ("/pause abc", .pause(jobID: nil)),
+    ("/pause -2", .pause(jobID: nil)),
+    ("/resume 3", .resume(jobID: 3)),
+    ("/resume", .resume(jobID: nil)),
+    ("/runnow 12", .runNow(jobID: 12)),
+    ("/RUNNOW@CLAW_BOT 12", .runNow(jobID: 12)),
+    ("/cancel 3", .cancelJob(jobID: 3)),
+    ("/cancel", .cancelJob(jobID: nil)),
+    ("/cancel three", .cancelJob(jobID: nil)),
   ])
   func verbCommandsParse(text: String, expected: Command) {
     // given
@@ -107,57 +109,57 @@ import Testing
     #expect(command == expected)
   }
 
-  @Test func plainCancelWordStaysPlainText() {
+  @Test
+  func plainCancelWordStaysPlainText() {
     // given / when / then — slash-first parsing: only "/cancel" is the verb; the bare word
     // keeps its confirmation-rejection meaning (spec §9)
     #expect(Command.parse("cancel", botUsername: "claw_bot") == .plain("cancel"))
     #expect(
-      Command.parse("Cancel that idea", botUsername: "claw_bot")
-        == .plain("Cancel that idea")
+      Command.parse("Cancel that idea", botUsername: "claw_bot") == .plain("Cancel that idea")
     )
   }
 
-  @Test func helpParses() {
+  @Test
+  func helpParses() {
     // given / when / then
     #expect(Command.parse("/help", botUsername: "claw_bot") == .help)
     #expect(Command.parse("/HELP@CLAW_BOT", botUsername: "claw_bot") == .help)
     #expect(Command.parse("please /help me", botUsername: "claw_bot") == .plain("please /help me"))
   }
 
-  @Test func doctorParses() {
+  @Test
+  func doctorParses() {
     // given / when / then
     #expect(Command.parse("/doctor", botUsername: "claw_bot") == .doctor)
     #expect(Command.parse("/DOCTOR@CLAW_BOT", botUsername: "claw_bot") == .doctor)
     #expect(Command.parse("run /doctor", botUsername: "claw_bot") == .plain("run /doctor"))
   }
 
-  @Test func statusParsesAsDoctorAlias() {
+  @Test
+  func statusParsesAsDoctorAlias() {
     // given / when / then
     #expect(Command.parse("/status", botUsername: "claw_bot") == .doctor)
     #expect(Command.parse("/STATUS@CLAW_BOT", botUsername: "claw_bot") == .doctor)
     #expect(Command.parse("see /status", botUsername: "claw_bot") == .plain("see /status"))
   }
 
-  @Test func mcpParses() {
+  @Test
+  func mcpParses() {
     // given / when / then
     #expect(Command.parse("/mcp", botUsername: "claw_bot") == .mcp)
     #expect(Command.parse("/MCP@CLAW_BOT", botUsername: "claw_bot") == .mcp)
     #expect(Command.parse("check /mcp", botUsername: "claw_bot") == .plain("check /mcp"))
   }
 
-  @Test func mcpTakesNoArgumentsSoNoArgumentCanBecomeAManagementVerb() {
+  @Test
+  func mcpTakesNoArgumentsSoNoArgumentCanBecomeAManagementVerb() {
     // given — an argument tail that reads like a management command.
     // when / then — it parses to the same argument-free status request.
     #expect(Command.parse("/mcp add https://evil.test/mcp", botUsername: "claw_bot") == .mcp)
     #expect(Command.parse("/mcp set-token linear hunter2", botUsername: "claw_bot") == .mcp)
   }
 
-  @Test(arguments: [
-    "/skills",
-    "/SKILLS",
-    "/skills@claw_bot",
-    "/SKILLS@CLAW_BOT include rejected",
-  ])
+  @Test(arguments: ["/skills", "/SKILLS", "/skills@claw_bot", "/SKILLS@CLAW_BOT include rejected"])
   func skillsParsesAsReadOnlyDiagnostics(text: String) {
     // given
     let botUsername = "claw_bot"
@@ -174,10 +176,10 @@ import Testing
     (.memory(.review), true),
     (.schedule(.list), true),
     (.learning(.list), true),
-    (.pause(jobId: 1), true),
-    (.resume(jobId: 1), true),
-    (.runNow(jobId: 1), true),
-    (.cancelJob(jobId: 1), true),
+    (.pause(jobID: 1), true),
+    (.resume(jobID: 1), true),
+    (.runNow(jobID: 1), true),
+    (.cancelJob(jobID: 1), true),
     (.start, false),
     (.stop, false),
     (.new, false),

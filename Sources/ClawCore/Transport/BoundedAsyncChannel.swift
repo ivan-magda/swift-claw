@@ -5,16 +5,20 @@ public enum BoundedAsyncChannelError: Error, Sendable, Equatable {
   case channelFinished
   /// The weight function returned a negative weight, which would corrupt the buffer's accounting.
   case negativeWeight(Int)
-  /// The element's own weight exceeds the whole capacity, so no drain could ever admit it. Failing
-  /// beats suspending a producer that could only wait forever.
+  /// The element's own weight exceeds the whole capacity, so no drain could ever admit it.
+  ///
+  /// Failing beats suspending a producer that could only wait forever.
   case elementExceedsCapacity(weight: Int, capacity: Int)
-  /// A second iterator was requested. The channel is single-consumer: two iterators would race for
-  /// each element and silently split the stream between them.
+  /// A second iterator was requested.
+  ///
+  /// The channel is single-consumer: two iterators would race for each element and silently split
+  /// the stream between them.
   case multipleIterators
 }
 
-/// A bounded, suspending, single-consumer channel. When the buffer is full a producer suspends until
-/// the consumer drains room for it; an element is never dropped to honour the bound.
+/// A bounded, suspending, single-consumer channel.
+///
+/// A full buffer suspends the producer until the consumer makes room; elements are never dropped.
 ///
 /// Capacity is a cap on total *weight*, not on element count, so a caller can bound a stream by what
 /// it actually costs to hold — response bytes in flight, or queued event payload — with `weight`
@@ -23,20 +27,24 @@ public enum BoundedAsyncChannelError: Error, Sendable, Equatable {
 /// Copies share one close-once state, so any copy can `send`, and any copy can `finish`. The
 /// consumer side is not shareable: exactly one iterator may read the sequence.
 ///
-/// The consumer owns teardown. Abandoning the iteration — `break`ing out of a `for try await`
-/// without cancelling the consuming task — strands every parked producer forever, so such a
-/// consumer must call `finish()`. Cancelling the consumer instead unwinds the producers correctly.
+/// The consumer owns teardown and must call `finish()` when abandoning iteration.
+/// Cancelling a receive removes that receiver; it does not close the channel or release parked
+/// producers. Owning stream wrappers must close the channel as part of cancellation.
 struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
   private let storage: Storage
 
-  /// - Parameter capacity: the greatest total weight the buffer may hold. Must be positive.
-  /// - Parameter weight: the cost of one element against `capacity`. Called once per `send`, outside
-  ///   the channel's lock, and must not return a negative weight. An element's weight is floored at
-  ///   one: every element holds a buffer slot whatever its payload costs, so the channel bounds
-  ///   element count even for a stream that weighs nothing.
+  /// Creates a channel bounded by the combined weight of unread elements.
+  ///
+  /// - Parameters:
+  ///   - capacity: The positive maximum total weight the buffer may hold.
+  ///   - weight: The nonnegative cost of an element, evaluated once per send outside the lock.
+  ///     Each element is charged at least one unit so zero-weight elements cannot fill unbounded
+  ///     buffer slots. The default charges one unit per element.
   init(
     capacity: Int,
-    weight: @escaping @Sendable (Element) -> Int = { _ in 1 }
+    weight: @escaping @Sendable (_ element: Element) -> Int = { _ in
+      1
+    }
   ) {
     precondition(capacity > 0, "BoundedAsyncChannel needs a positive capacity, got \(capacity)")
     storage = Storage(capacity: capacity, weight: weight)
@@ -47,21 +55,17 @@ struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
   /// - Throws: `CancellationError` if the calling task is cancelled first — the element is not
   ///   queued; `BoundedAsyncChannelError.channelFinished` if the channel is already closed; or a
   ///   weight rejection for an element this channel could never admit.
-  func send(_ element: Element) async throws {
-    try await storage.send(element)
-  }
+  func send(_ element: Element) async throws { try await storage.send(element) }
 
-  /// Ends the sequence once every already-accepted element has been read. Later calls are ignored:
-  /// the first termination wins.
-  func finish() {
-    storage.close(with: .finished)
-  }
+  /// Ends the sequence after every already-accepted element has been read.
+  ///
+  /// The first termination wins; later calls are ignored.
+  func finish() { storage.close(with: .finished) }
 
-  /// Ends the sequence with `error`, delivered after every already-accepted element. Later calls are
-  /// ignored.
-  func finish(throwing error: any Error) {
-    storage.close(with: .failed(error))
-  }
+  /// Ends the sequence with `error`, delivered after every already-accepted element.
+  ///
+  /// Later calls are ignored.
+  func finish(throwing error: any Error) { storage.close(with: .failed(error)) }
 
   func makeAsyncIterator() -> Iterator {
     Iterator(storage: storage, hasClaim: storage.claimIterator())
@@ -83,16 +87,14 @@ struct BoundedAsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
 // MARK: - Suspension observation
 
 extension BoundedAsyncChannel {
-  /// Producers currently suspended on a full buffer. Suspending rather than dropping is the
-  /// channel's contract, so tests observe it here; production reads neither of these.
-  var suspendedSenderCount: Int {
-    storage.suspendedSenderCount
-  }
+  /// Producers currently suspended on a full buffer.
+  ///
+  /// Suspending rather than dropping is the channel's contract, so tests observe it here;
+  /// production reads neither of these.
+  var suspendedSenderCount: Int { storage.suspendedSenderCount }
 
   /// Consumers currently suspended on an empty buffer — at most one, by the single-consumer rule.
-  var suspendedReceiverCount: Int {
-    storage.suspendedReceiverCount
-  }
+  var suspendedReceiverCount: Int { storage.suspendedReceiverCount }
 }
 
 // MARK: - Shared state
@@ -148,17 +150,19 @@ extension BoundedAsyncChannel {
       var terminal: Terminal?
       var isIteratorClaimed = false
       var nextTicket = 0
-      /// Tickets whose task was cancelled before `send`/`receive` reached its registration. Consumed
-      /// there, so a cancellation that arrives first neither gets lost nor unregisters twice.
+      /// Tickets whose task was cancelled before `send`/`receive` reached its registration.
+      ///
+      /// Consumed there, so a cancellation that arrives first neither gets lost nor unregisters
+      /// twice.
       var cancelledSenderTickets: Set<Int> = []
       var cancelledReceiverTickets: Set<Int> = []
 
       /// Moves every parked sender whose element now fits into the buffer, in send order, and
-      /// returns their continuations to resume. Stops at the first that does not fit: a stream must
-      /// stay in order, so a heavy element holds the line rather than letting a lighter one pass.
-      mutating func admitParkedSenders(
-        capacity: Int
-      ) -> [CheckedContinuation<Void, any Error>] {
+      /// returns their continuations to resume.
+      ///
+      /// Stops at the first that does not fit: a stream must stay in order, so a heavy element
+      /// holds the line rather than letting a lighter one pass.
+      mutating func admitParkedSenders(capacity: Int) -> [CheckedContinuation<Void, any Error>] {
         var admitted: [CheckedContinuation<Void, any Error>] = []
 
         while let next = senders.first, bufferedWeight + next.weight <= capacity {
@@ -174,9 +178,9 @@ extension BoundedAsyncChannel {
 
     private let state = Mutex(State())
     private let capacity: Int
-    private let weight: @Sendable (Element) -> Int
+    private let weight: @Sendable (_ element: Element) -> Int
 
-    init(capacity: Int, weight: @escaping @Sendable (Element) -> Int) {
+    init(capacity: Int, weight: @escaping @Sendable (_ element: Element) -> Int) {
       self.capacity = capacity
       self.weight = weight
     }
@@ -225,18 +229,21 @@ extension BoundedAsyncChannel.Storage {
     let ticket = makeTicket()
     defer { discardCancellationMarker(senderTicket: ticket) }
 
-    try await withTaskCancellationHandler {
-      try await withCheckedThrowingContinuation { continuation in
-        beginSend(
-          ticket: ticket,
-          element: element,
-          weight: elementWeight,
-          continuation: continuation
-        )
+    try await withTaskCancellationHandler(
+      operation: {
+        try await withCheckedThrowingContinuation { continuation in
+          beginSend(
+            ticket: ticket,
+            element: element,
+            weight: elementWeight,
+            continuation: continuation
+          )
+        }
+      },
+      onCancel: {
+        cancelSend(ticket: ticket)
       }
-    } onCancel: {
-      cancelSend(ticket: ticket)
-    }
+    )
   }
 
   /// Decides this send's fate under the lock and settles it outside: a continuation resumed while
@@ -280,20 +287,19 @@ extension BoundedAsyncChannel.Storage {
     }
 
     switch admission {
-    case .buffered:
-      continuation.resume()
+    case .buffered: continuation.resume()
     case .handedOff(let receiver):
       receiver.resume(returning: element)
       continuation.resume()
-    case .parked:
-      break
-    case .rejected(let error):
-      continuation.resume(throwing: error)
+    case .parked: break
+    case .rejected(let error): continuation.resume(throwing: error)
     }
   }
 
-  /// Unregisters a parked sender and resumes it, or marks a ticket whose registration has not landed
-  /// yet. Exactly one of the two runs, so the send settles exactly once.
+  /// Unregisters a parked sender and resumes it, or marks a ticket whose registration has not
+  /// landed yet.
+  ///
+  /// Exactly one of the two runs, so the send settles exactly once.
   private func cancelSend(ticket: Int) {
     let parked = state.withLock { current -> CheckedContinuation<Void, any Error>? in
       let index = current.senders.firstIndex { sender in
@@ -316,17 +322,18 @@ extension BoundedAsyncChannel.Storage {
 extension BoundedAsyncChannel.Storage {
   func receive() async throws -> Element? {
     let ticket = makeTicket()
-    defer {
-      discardCancellationMarker(receiverTicket: ticket)
-    }
+    defer { discardCancellationMarker(receiverTicket: ticket) }
 
-    return try await withTaskCancellationHandler {
-      try await withCheckedThrowingContinuation { continuation in
-        beginReceive(ticket: ticket, continuation: continuation)
+    return try await withTaskCancellationHandler(
+      operation: {
+        try await withCheckedThrowingContinuation { continuation in
+          beginReceive(ticket: ticket, continuation: continuation)
+        }
+      },
+      onCancel: {
+        cancelReceive(ticket: ticket)
       }
-    } onCancel: {
-      cancelReceive(ticket: ticket)
-    }
+    )
   }
 
   private func beginReceive(ticket: Int, continuation: CheckedContinuation<Element?, any Error>) {
@@ -347,8 +354,7 @@ extension BoundedAsyncChannel.Storage {
       case .none:
         current.receivers.append(ParkedReceiver(ticket: ticket, continuation: continuation))
         return .parked
-      case .finished:
-        return .element(nil)
+      case .finished: return .element(nil)
       case .failed(let error):
         current.terminal = .finished
         return .failed(error)
@@ -360,12 +366,9 @@ extension BoundedAsyncChannel.Storage {
     }
 
     switch delivery {
-    case .element(let element):
-      continuation.resume(returning: element)
-    case .parked:
-      break
-    case .failed(let error):
-      continuation.resume(throwing: error)
+    case .element(let element): continuation.resume(returning: element)
+    case .parked: break
+    case .failed(let error): continuation.resume(throwing: error)
     }
   }
 
@@ -390,8 +393,10 @@ extension BoundedAsyncChannel.Storage {
 
 extension BoundedAsyncChannel.Storage {
   /// Close-once: the first termination latches, and every waiter parked at that moment is removed
-  /// and resumed exactly once. Buffered elements stay readable — closing bounds the producer, it
-  /// does not discard what was already accepted.
+  /// and resumed exactly once.
+  ///
+  /// Buffered elements stay readable — closing bounds the producer, it does not discard what was
+  /// already accepted.
   func close(with terminal: Terminal) {
     var wokenSenders: [CheckedContinuation<Void, any Error>] = []
     var wokenReceivers: [CheckedContinuation<Element?, any Error>] = []
@@ -431,10 +436,8 @@ extension BoundedAsyncChannel.Storage {
 
     for receiver in wokenReceivers {
       switch terminal {
-      case .finished:
-        receiver.resume(returning: nil)
-      case .failed(let error):
-        receiver.resume(throwing: error)
+      case .finished: receiver.resume(returning: nil)
+      case .failed(let error): receiver.resume(throwing: error)
       }
     }
   }

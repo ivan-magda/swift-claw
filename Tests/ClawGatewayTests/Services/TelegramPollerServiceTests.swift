@@ -14,12 +14,7 @@ private actor BlockingTurnRunner: TurnDispatching {
   private var started: CheckedContinuation<Void, Never>?
   private var release: CheckedContinuation<Void, Never>?
 
-  func run(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    triggerMessageId: Int64
-  ) async throws {
+  func run(runID: Int64, sessionID: Int64, chatID: Int64, triggerMessageID: Int64) async throws {
     callCount += 1
     started?.resume()
     started = nil
@@ -43,7 +38,8 @@ private actor BlockingTurnRunner: TurnDispatching {
   }
 }
 
-@Suite struct TelegramPollerServiceTests {
+@Suite
+struct TelegramPollerServiceTests {
   private struct Stack {
     let poller: TelegramPollerService
     let transport: RecordingTransport
@@ -62,7 +58,7 @@ private actor BlockingTurnRunner: TurnDispatching {
     let queue = try TestDatabase.make()
 
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: allowed)
+    try allowlist.seedAllowlist(userIDs: allowed)
 
     let transport = RecordingTransport(
       batches: batches,
@@ -102,15 +98,15 @@ private actor BlockingTurnRunner: TurnDispatching {
     return Stack(poller: poller, transport: transport, cursor: cursor, dispatcher: dispatcher)
   }
 
-  @Test func processesABatchAndAdvancesCursor() async throws {
+  @Test
+  func processesABatchAndAdvancesCursor() async throws {
     // given
-    let stack = try makeStack(
-      batches: [[textUpdate(id: 100, from: 42, text: "hi")]],
-      allowed: [42]
-    )
+    let stack = try makeStack(batches: [[textUpdate(id: 100, from: 42, text: "hi")]], allowed: [42])
 
     // when — the batch (turn dispatch + synchronous advance) completes before the next poll begins
-    let task = Task { try await stack.poller.run() }
+    let task = Task {
+      try await stack.poller.run()
+    }
     await stack.transport.waitForPolls(atLeast: 2)
     task.cancel()
     try await task.value
@@ -120,12 +116,15 @@ private actor BlockingTurnRunner: TurnDispatching {
     #expect(try stack.cursor.loadCursor() == 100)  // advanced LAST
   }
 
-  @Test func cancellationStopsTheLoop() async throws {
+  @Test
+  func cancellationStopsTheLoop() async throws {
     // given
     let stack = try makeStack(batches: [], allowed: [42])
 
     // when
-    let task = Task { try await stack.poller.run() }
+    let task = Task {
+      try await stack.poller.run()
+    }
     await stack.transport.waitForPolls(atLeast: 1)
     task.cancel()
 
@@ -133,12 +132,15 @@ private actor BlockingTurnRunner: TurnDispatching {
     try await task.value  // returns promptly, no throw
   }
 
-  @Test func requestsCallbackQueryAndMembershipUpdates() async throws {
+  @Test
+  func requestsCallbackQueryAndMembershipUpdates() async throws {
     // given — an idle poller (no batches) so it only long-polls
     let stack = try makeStack(batches: [], allowed: [42])
 
     // when
-    let task = Task { try await stack.poller.run() }
+    let task = Task {
+      try await stack.poller.run()
+    }
     await stack.transport.waitForPolls(atLeast: 1)
     task.cancel()
     try await task.value
@@ -147,16 +149,20 @@ private actor BlockingTurnRunner: TurnDispatching {
     // messages and edits; Telegram sends neither unless it is asked for by name
     #expect(
       await stack.transport.lastAllowedUpdates == [
-        "message", "edited_message", "callback_query", "my_chat_member",
+        "message",
+        "edited_message",
+        "callback_query",
+        "my_chat_member",
       ]
     )
   }
 
-  @Test func cursorAdvancesAfterEnqueueWithoutWaitingForTurnCompletion() async throws {
+  @Test
+  func cursorAdvancesAfterEnqueueWithoutWaitingForTurnCompletion() async throws {
     // given
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: [42])
+    try allowlist.seedAllowlist(userIDs: [42])
     let transport = RecordingTransport(batches: [[textUpdate(id: 100, from: 42, text: "hi")]])
     let runner = BlockingTurnRunner()
     let router = MessageRouter(
@@ -187,7 +193,9 @@ private actor BlockingTurnRunner: TurnDispatching {
     )
 
     // when
-    let task = Task { try await poller.run() }
+    let task = Task {
+      try await poller.run()
+    }
     await runner.waitUntilStarted()
     await transport.waitForPolls(atLeast: 2)
 
@@ -198,13 +206,16 @@ private actor BlockingTurnRunner: TurnDispatching {
     try await task.value
   }
 
-  @Test func poisonUpdateAdvancesCursorPastIt() async throws {
+  @Test
+  func poisonUpdateAdvancesCursorPastIt() async throws {
     // given — an update with no actionable content normalizes to nil → no reply, cursor advances
-    let empty = RawUpdate(updateId: 200, message: nil, editedMessage: nil)
+    let empty = RawUpdate(updateID: 200, message: nil, editedMessage: nil)
     let stack = try makeStack(batches: [[empty]], allowed: [42])
 
     // when — a second poll only happens after the batch (incl. the synchronous advance) is done
-    let task = Task { try await stack.poller.run() }
+    let task = Task {
+      try await stack.poller.run()
+    }
     await stack.transport.waitForPolls(atLeast: 2)
     task.cancel()
     try await task.value
@@ -213,7 +224,8 @@ private actor BlockingTurnRunner: TurnDispatching {
     #expect(try stack.cursor.loadCursor() == 200)
   }
 
-  @Test func transientSendFailureDoesNotAdvanceCursor() async throws {
+  @Test
+  func transientSendFailureDoesNotAdvanceCursor() async throws {
     // given — a transient send failure must not advance the offset, else the update is acked
     // to Telegram and the reply is silently lost. An unauthorized sender takes the canned-reply
     // path, whose direct send is what fails here (the turn path has no direct send to fail).
@@ -224,7 +236,9 @@ private actor BlockingTurnRunner: TurnDispatching {
     )
 
     // when
-    let task = Task { try await stack.poller.run() }
+    let task = Task {
+      try await stack.poller.run()
+    }
     await stack.transport.waitForAttempts(atLeast: 1)  // the send was attempted…
     task.cancel()
     try await task.value
@@ -248,7 +262,9 @@ private actor BlockingTurnRunner: TurnDispatching {
     )
 
     // when — observe the first backoff, release it, then hold the second one after the retry
-    let task = Task { try await stack.poller.run() }
+    let task = Task {
+      try await stack.poller.run()
+    }
     await recovery.firstBackoffStarted.wait()
     recovery.allowRetry()
     await recovery.secondBackoffStarted.wait()
@@ -258,7 +274,11 @@ private actor BlockingTurnRunner: TurnDispatching {
     try await task.value
     #expect(recovery.requestedDelays == [.seconds(10), .seconds(10)])
     #expect(await stack.transport.pollCount == 2)
-    let critical = try #require(logs.entries.first { entry in entry.level == .critical })
+    let critical = try #require(
+      logs.entries.first { entry in
+        entry.level == .critical
+      }
+    )
     #expect(critical.message.contains("409 Conflict"))
     #expect(critical.message.contains("terminated by other getUpdates"))
   }
@@ -278,7 +298,9 @@ private actor BlockingTurnRunner: TurnDispatching {
     )
 
     // when — observe the first backoff, release it, then hold the second one after the retry
-    let task = Task { try await stack.poller.run() }
+    let task = Task {
+      try await stack.poller.run()
+    }
     await recovery.firstBackoffStarted.wait()
     recovery.allowRetry()
     await recovery.secondBackoffStarted.wait()
@@ -288,7 +310,11 @@ private actor BlockingTurnRunner: TurnDispatching {
     try await task.value
     #expect(recovery.requestedDelays == [.seconds(3), .seconds(3)])
     #expect(await stack.transport.pollCount == 2)
-    let error = try #require(logs.entries.first { entry in entry.level == .error })
+    let error = try #require(
+      logs.entries.first { entry in
+        entry.level == .error
+      }
+    )
     #expect(error.message.contains("telegram error"))
     #expect(error.message.contains("getUpdates: read timed out"))
   }
@@ -303,9 +329,7 @@ private final class PollerRecoveryControl: Sendable {
   private let delays = Mutex<[Duration]>([])
   private let expectedFirstDelay: Duration
 
-  init(expectedFirstDelay: Duration) {
-    self.expectedFirstDelay = expectedFirstDelay
-  }
+  init(expectedFirstDelay: Duration) { self.expectedFirstDelay = expectedFirstDelay }
 
   var clock: ScriptedClock {
     ScriptedClock { [self] delay in
@@ -330,9 +354,7 @@ private final class PollerRecoveryControl: Sendable {
     }
   }
 
-  func allowRetry() {
-    retryAllowed.open()
-  }
+  func allowRetry() { retryAllowed.open() }
 
   func releaseAll() {
     retryAllowed.open()

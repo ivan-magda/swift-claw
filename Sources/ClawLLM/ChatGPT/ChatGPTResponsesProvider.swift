@@ -22,15 +22,21 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
   private let requestTimeoutSeconds: Int
   private let logger: Logger
 
-  /// - Parameter credentialProfileID: the stable local profile identity replay state is bound to. An
-  ///   absent ID is valid only for the logged-out provider, whose credential source fails
-  ///   authentication before any inference; a live provider always carries one.
-  /// - Parameter buildVersion: `ClawdVersion.current`, sanitized here into the User-Agent so a
-  ///   version carrying stray bytes cannot fold a header of its own.
-  /// - Parameter epochID: mints replay epochs; injected so a test can name the epoch a history
-  ///   derives instead of matching against randomness.
-  /// - Parameter treatsQuotaAsTerminal: set only when a fallback route exists, so a 429 fails onto it
-  ///   immediately instead of burning the turn deadline retrying a subscription quota wall.
+  /// Creates the subscription adapter with bounded attempts and profile-bound replay state.
+  ///
+  /// - Parameters:
+  ///   - http: The streaming transport for the fixed subscription endpoint.
+  ///   - credentials: The authorization source consulted for each attempt.
+  ///   - credentialProfileID: The stable profile identity bound to replay state, or nil only for a
+  ///     logged-out provider whose credential source rejects inference.
+  ///   - buildVersion: The application version, sanitized into the User-Agent header.
+  ///   - retryBudget: The shared maximum retries for credentials, replay recovery, and wire failures.
+  ///   - requestTimeoutSeconds: The timeout applied to provider HTTP requests.
+  ///   - clock: The clock used for retry waits.
+  ///   - jitter: Adjusts bounded retry delays.
+  ///   - epochID: Creates new replay epoch identities.
+  ///   - treatsQuotaAsTerminal: Whether a configured fallback should receive a 429 immediately
+  ///     instead of spending this route's retry budget.
   init(
     http: any HTTPStreaming,
     credentials: any LLMCredentialSource,
@@ -39,7 +45,7 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
     retryBudget: Int,
     requestTimeoutSeconds: Int,
     clock: any Clock<Duration>,
-    jitter: @escaping @Sendable (Duration) -> Duration,
+    jitter: @escaping @Sendable (_ duration: Duration) -> Duration,
     epochID: @escaping @Sendable () -> UUID,
     treatsQuotaAsTerminal: Bool = false
   ) {
@@ -70,7 +76,7 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
     retryBudget: Int,
     requestTimeoutSeconds: Int,
     clock: any Clock<Duration>,
-    jitter: @escaping @Sendable (Duration) -> Duration,
+    jitter: @escaping @Sendable (_ duration: Duration) -> Duration,
     epochID: @escaping @Sendable () -> UUID,
     treatsQuotaAsTerminal: Bool = false,
     logger: Logger
@@ -102,15 +108,13 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
       throw ProviderFailure(cause: cause, accounting: .notStarted)
     case .success(let plan):
       switch await engine.run(plan: plan, emitDelta: Self.discardDelta) {
-      case .completed(let response):
-        return response
+      case .completed(let response): return response
       case .failed(let failure):
         // The whole failure travels, cause and accounting together: a budget-exhausted clean 5xx
         // reports `notStarted`, and throwing the bare cause would strand that fact and invite a
         // false debit.
         throw failure
-      case .cancelled(let accounting):
-        throw Self.cancellation(for: accounting)
+      case .cancelled(let accounting): throw Self.cancellation(for: accounting)
       }
     }
   }
@@ -134,21 +138,24 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
 // MARK: - Plan Assembly
 
 private extension ChatGPTResponsesProvider {
-  /// The all-zero profile a logged-out provider decodes history against. Its identity is never sent:
-  /// the credential source fails authentication before any request is encoded, so this only keeps the
-  /// pure plan build total.
+  /// The all-zero profile a logged-out provider decodes history against.
+  ///
+  /// Its identity is never sent: the credential source fails authentication before any request is
+  /// encoded, so this only keeps the pure plan build total.
   static var loggedOutProfileID: UUID {
     UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
   }
 
   /// The delta sink `complete` runs the engine with — it consumes the same SSE as `stream` and simply
   /// drops the visible deltas rather than publishing them.
-  @Sendable static func discardDelta(_ text: String) async throws {}
+  @Sendable
+  static func discardDelta(_ text: String) async throws {}
 
-  /// Validates the route-incompatible fields, then builds the replay selection, identity, and the
-  /// per-attempt encoder — everything an attempt needs except the credential, which the engine
-  /// resolves per wire attempt. A refusal here is a `Result` rather than a throw so both entry points
-  /// can report it their own way without duplicating the assembly.
+  /// Builds a credential-independent inference plan or a route-validation failure.
+  ///
+  /// The plan contains replay selection, identity, and the request encoder; the engine resolves
+  /// credentials per wire attempt. Both entry points share this assembly and map the returned
+  /// failure to their own result shape.
   func makePlan(  // swiftlint:disable:this function_body_length
     for request: ChatRequest
   ) -> Result<ChatGPTResponsesAttemptPlan, ProviderError> {
@@ -192,34 +199,33 @@ private extension ChatGPTResponsesProvider {
       profileID: profileID,
       wireModel: wireModel,
       outputScope: request.outputScope,
-      terminalValidationPolicy: request.terminalValidationPolicy,
-      encodeRequest: { authorization, includePriorState, beginHandoff in
-        let headers = try Self.headers(
-          for: authorization,
-          userAgent: userAgent,
-          sessionID: request.sessionId
-        )
-        let body = try encoder.encode(
-          request: request,
-          replaying: selection,
-          includePriorState: includePriorState
-        )
-        // The endpoint is the fixed constant, chosen before the bearer headers above were built, and
-        // the streaming policy is forced on both entry points so `complete` reads the same SSE.
-        return HTTPRequest(
-          method: .post,
-          url: ChatGPTProviderMetadata.responsesURL,
-          headers: headers,
-          body: body,
-          timeout: .seconds(timeoutSeconds),
-          responseBodyPolicy: .streaming(
-            maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
-            errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
-          ),
-          beginHandoff: beginHandoff
-        )
-      }
-    )
+      terminalValidationPolicy: request.terminalValidationPolicy
+    ) { authorization, includePriorState, beginHandoff in
+      let headers = try Self.headers(
+        for: authorization,
+        userAgent: userAgent,
+        sessionID: request.sessionID
+      )
+      let body = try encoder.encode(
+        request: request,
+        replaying: selection,
+        includePriorState: includePriorState
+      )
+      // The endpoint is the fixed constant, chosen before the bearer headers above were built, and
+      // the streaming policy is forced on both entry points so `complete` reads the same SSE.
+      return HTTPRequest(
+        method: .post,
+        url: ChatGPTProviderMetadata.responsesURL,
+        headers: headers,
+        body: body,
+        timeout: .seconds(timeoutSeconds),
+        responseBodyPolicy: .streaming(
+          maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
+          errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
+        ),
+        beginHandoff: beginHandoff
+      )
+    }
     return .success(plan)
   }
 
@@ -242,9 +248,10 @@ private extension ChatGPTResponsesProvider {
   static var maximumBuildVersionBytes: Int { 256 }
 
   /// The two headers a credential source may contribute, keyed by normalized name and mapped to the
-  /// single spelling that reaches the wire. Everything else about how the request is framed —
-  /// content negotiation, the beta flag, the impersonated client identity, session routing — is this
-  /// adapter's alone.
+  /// single spelling that reaches the wire.
+  ///
+  /// Everything else about how the request is framed — content negotiation, the beta flag, the
+  /// impersonated client identity, session routing — is this adapter's alone.
   static var allowedCredentialHeaders: [String: String] {
     [
       "authorization": "Authorization",

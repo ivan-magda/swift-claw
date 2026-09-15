@@ -131,10 +131,8 @@ extension ProviderDeadlineCoordinator {
       return Self.timedOut(fromLoser: providerResult)
     }
     switch providerResult {
-    case .response(let response):
-      return .response(response)
-    case .failed(let error):
-      return .failed(error)
+    case .response(let response): return .response(response)
+    case .failed(let error): return .failed(error)
     }
   }
 }
@@ -153,8 +151,10 @@ extension ProviderDeadlineCoordinator {
     stream: LLMEventStream,
     deadlineSeconds: Int,
     clock: any Clock<Duration>,
-    consume: @escaping @Sendable (LLMEventStream, ProviderRaceBox) async -> StreamConsumerOutcome,
-    auxiliary: @escaping @Sendable (ProviderRaceBox) async -> Void
+    consume:
+    @escaping @Sendable (_ stream: LLMEventStream, _ box: ProviderRaceBox) async ->
+      StreamConsumerOutcome,
+    auxiliary: @escaping @Sendable (_ box: ProviderRaceBox) async -> Void
   ) async -> ProviderDeadlineOutcome {
     let box = ProviderRaceBox()
     var consumerOutcome: StreamConsumerOutcome?
@@ -183,10 +183,8 @@ extension ProviderDeadlineCoordinator {
           consumerOutcome = outcome
           _ = box.claim(.provider)
           group.cancelAll()
-        case .deadline:
-          group.cancelAll()
-        case .auxiliary:
-          continue
+        case .deadline: group.cancelAll()
+        case .auxiliary: continue
         }
       }
     }
@@ -257,8 +255,7 @@ private extension ProviderDeadlineCoordinator {
   /// being booked conservatively here alone.
   static func timedOut(fromLoser result: ProviderCallResult) -> ProviderDeadlineOutcome {
     switch result {
-    case .response(let response):
-      return .timedOut(.completed(response))
+    case .response(let response): return .timedOut(.completed(response))
     case .failed(let error):
       if let cancellation = error as? ProviderInferenceCancellation {
         return .timedOut(
@@ -269,8 +266,7 @@ private extension ProviderDeadlineCoordinator {
         return .timedOut(.notStarted)
       }
       switch ProviderFailureAccounting.classify(error) {
-      case .notStarted:
-        return .timedOut(.notStarted)
+      case .notStarted: return .timedOut(.notStarted)
       case .mayHaveStarted(let observed):
         return .timedOut(.mayHaveStarted(observedCompletionTokens: observed))
       }
@@ -282,20 +278,16 @@ private extension ProviderDeadlineCoordinator {
   /// content is the final reply, never the consumer's delta accumulation, which drove only live
   /// drafts and can lag a done item that supersedes the deltas (so persisted text and replay state
   /// stay in agreement). A failure keeps its typed cause; a cancellation carries its accounting.
-  static func streamingOutcome(
-    consumer: StreamConsumerOutcome?,
-    termination: LLMStreamTermination
-  ) -> ProviderDeadlineOutcome {
+  static func streamingOutcome(consumer: StreamConsumerOutcome?, termination: LLMStreamTermination)
+    -> ProviderDeadlineOutcome
+  {
     if case .overflowed = consumer {
       return .failed(AccumulatedStreamContentTooLarge())
     }
     switch termination {
-    case .completed(let terminal):
-      return .response(terminal)
-    case .failed(let failure):
-      return .failed(failure)
-    case .cancelled(.notStarted):
-      return .timedOut(.notStarted)
+    case .completed(let terminal): return .response(terminal)
+    case .failed(let failure): return .failed(failure)
+    case .cancelled(.notStarted): return .timedOut(.notStarted)
     case .cancelled(.mayHaveStarted(let observed)):
       return .timedOut(.mayHaveStarted(observedCompletionTokens: observed))
     }

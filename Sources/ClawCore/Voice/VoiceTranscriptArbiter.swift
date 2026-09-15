@@ -18,16 +18,19 @@ public enum VoiceTranscriptArbiter {
   public static let floorConfidence = 0.3
 
   public static func winner(among candidates: [ScoredTranscript]) -> ScoredTranscript? {
-    let scored = candidates.filter { $0.confidence != nil }
-
-    guard let best = scored.max(by: { ($0.confidence ?? 0) < ($1.confidence ?? 0) }) else {
-      return candidates.first
+    let scored = candidates.filter {
+      $0.confidence != nil
     }
 
     guard
-      let confidence = best.confidence,
-      confidence >= floorConfidence
+      let best = scored.max(by: {
+        ($0.confidence ?? 0) < ($1.confidence ?? 0)
+      })
     else {
+      return candidates.first
+    }
+
+    guard let confidence = best.confidence, confidence >= floorConfidence else {
       return nil
     }
 

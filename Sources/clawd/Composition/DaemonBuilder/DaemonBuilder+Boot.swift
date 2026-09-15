@@ -47,9 +47,7 @@ extension DaemonBuilder {
       // either way rather than inheriting a guard that was never about it.
       var coderReconciled = true
       if let coder {
-        do {
-          try await coder.start()
-        } catch {
+        do { try await coder.start() } catch {
           logger.error("Coder startup reconciliation failed; admission remains closed")
           coderReconciled = false
         }
@@ -69,9 +67,7 @@ extension DaemonBuilder {
   /// means the picker is stale, never that the bot can't serve.
   func registerMenuCommands() -> @Sendable () async -> Void {
     {
-      do {
-        try await transport.setMyCommands(Self.botMenuCommands)
-      } catch {
+      do { try await transport.setMyCommands(Self.botMenuCommands) } catch {
         logger.warning("setMyCommands failed: \(error)")
       }
     }
@@ -86,16 +82,14 @@ extension DaemonBuilder {
         let replies = try stores.runs.reconcileRunsAtBoot(
           now: now(),
           degradationText: Degradation.unfinished,
-          heartbeatNoticeChatId: heartbeatOwner
+          heartbeatNoticeChatID: heartbeatOwner
         )
         if !replies.isEmpty {
           logger.warning(
             "boot reconcile: \(replies.count) unfinished run(s) → degradation enqueued"
           )
         }
-      } catch {
-        logger.error("boot reconcile failed: \(error)")
-      }
+      } catch { logger.error("boot reconcile failed: \(error)") }
     }
   }
 
@@ -117,7 +111,9 @@ extension DaemonBuilder {
       coordinator: coordination.approvalCoordinator,
       waiter: waiter,
       learning: learning,
-      now: { Date() },
+      now: {
+        Date()
+      },
       logger: logger
     )
     return {

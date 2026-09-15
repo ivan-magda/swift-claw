@@ -12,7 +12,8 @@ import Testing
 /// one sweeps to DENY→FAILED at boot), the expiry ticker resolves silence to EXPIRED→DENY, and
 /// `/stop`//`new` resolve a parked approval with no orphan — including after a restart. Every clause
 /// asserts on persisted rows only.
-@Suite struct ApprovalDoneWhenTests {
+@Suite
+struct ApprovalDoneWhenTests {
   // MARK: - Fixture
 
   /// Models a `kill -TERM` + reboot: a fresh harness over the SAME DB file AND the same workspace
@@ -39,19 +40,20 @@ import Testing
     } == false
   }
 
-  private func armSessionPrivateData(databasePath: String, sessionId: Int64) throws {
+  private func armSessionPrivateData(databasePath: String, sessionID: Int64) throws {
     let pool = try ClawDatabase.makePool(path: databasePath)
     try pool.write { database in
       try database.execute(
         sql: "UPDATE sessions SET has_private_data = 1 WHERE id = ?",
-        arguments: [sessionId]
+        arguments: [sessionID]
       )
     }
   }
 
   // MARK: - Restart survival
 
-  @Test func restartThenOwnerCallbackStillResolves() async throws {
+  @Test
+  func restartThenOwnerCallbackStillResolves() async throws {
     // given — a suspended approval, then a restart whose boot reconciliation re-parks the waiter
     let (first, approval) = try await suspendFileWrite()
     let restarted = try await restart(first)
@@ -67,22 +69,22 @@ import Testing
         FileManager.default.fileExists(atPath: approval.canonicalTarget)
       }
     )
-    #expect(
-      try String(contentsOfFile: approval.canonicalTarget, encoding: .utf8) == "hello fabric"
-    )
+    #expect(try String(contentsOfFile: approval.canonicalTarget, encoding: .utf8) == "hello fabric")
     _ = try #require(
       await pollUntilTrue {
-        try runState(databasePath: restarted.databasePath, runId: approval.runId)
+        try runState(databasePath: restarted.databasePath, runID: approval.runID)
           == RunState.done.rawValue
       }
     )
     #expect(
-      try fetchApprovals(databasePath: restarted.databasePath).map(\.state)
-        == [ApprovalState.approved.rawValue]
+      try fetchApprovals(databasePath: restarted.databasePath).map(\.state) == [
+        ApprovalState.approved.rawValue,
+      ]
     )
   }
 
-  @Test func restartWhileASecondApprovalIsParkedDoesNotReplayTheFirst() async throws {
+  @Test
+  func restartWhileASecondApprovalIsParkedDoesNotReplayTheFirst() async throws {
     // given — one run, two sequential ask-tier writes: approve #1, the resumed turn proposes #2
     // and parks again. Approval #1 is APPROVED with its observation filled; only #2 is unresolved.
     let harness = try makeSC3Harness(
@@ -93,16 +95,16 @@ import Testing
               id: "w1",
               name: "file_write",
               argumentsJSON: #"{"path":"notes/plan.md","content":"hello fabric"}"#
-            )
+            ),
           ]),
           toolCallResponse([
             ToolCall(
               id: "w2",
               name: "file_write",
               argumentsJSON: #"{"path":"notes/second.md","content":"second file"}"#
-            )
+            ),
           ]),
-        ]
+        ],
       ],
       httpResponses: [:]
     )
@@ -122,8 +124,7 @@ import Testing
       }
     )
     #expect(
-      approvals.map(\.state)
-        == [ApprovalState.approved.rawValue, ApprovalState.pending.rawValue]
+      approvals.map(\.state) == [ApprovalState.approved.rawValue, ApprovalState.pending.rawValue]
     )
     let secondApproval = approvals[1]
     // The owner edits the first file while approval #2 sits parked across the restart.
@@ -132,15 +133,12 @@ import Testing
     )
 
     // when — restart + boot reconciliation while #2 is parked
-    let restarted = try await restart(
-      harness,
-      scripts: [[okResponse(content: "Both written.")]]
-    )
+    let restarted = try await restart(harness, scripts: [[okResponse(content: "Both written.")]])
 
     // then — boot must NOT replay resolved approval #1: the run stays parked for #2, and the
     // owner's edit survives (a replay would re-execute the recorded rename over it)
     #expect(
-      try runState(databasePath: restarted.databasePath, runId: firstApproval.runId)
+      try runState(databasePath: restarted.databasePath, runID: firstApproval.runID)
         == RunState.awaitingApproval.rawValue
     )
     #expect(
@@ -165,7 +163,7 @@ import Testing
     )
     _ = try #require(
       await pollUntilTrue {
-        try runState(databasePath: restarted.databasePath, runId: firstApproval.runId)
+        try runState(databasePath: restarted.databasePath, runID: firstApproval.runID)
           == RunState.done.rawValue
       }
     )
@@ -174,20 +172,21 @@ import Testing
         == "owner edited since"
     )
     #expect(
-      try fetchApprovals(databasePath: restarted.databasePath).map(\.state)
-        == [ApprovalState.approved.rawValue, ApprovalState.approved.rawValue]
+      try fetchApprovals(databasePath: restarted.databasePath).map(\.state) == [
+        ApprovalState.approved.rawValue,
+        ApprovalState.approved.rawValue,
+      ]
     )
   }
 
-  @Test func restartThenPlainMessageQueuesFIFOBehindTheParkedApproval() async throws {
+  @Test
+  func restartThenPlainMessageQueuesFIFOBehindTheParkedApproval() async throws {
     // given — a suspended approval that survives a restart
     let (first, approval) = try await suspendFileWrite()
     let restarted = try await restart(first)
 
     // when — a plain message arrives while the approval is parked
-    _ = await restarted.router.handle(
-      rawUpdate: textUpdate(id: 2, from: 7, text: "are you there?")
-    )
+    _ = await restarted.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "are you there?"))
 
     // then — it QUEUES behind (§5.1 FIFO): it neither supersedes nor resolves the approval. The
     // suspended run stays AWAITING_APPROVAL, the row stays PENDING, and the plain message persists
@@ -201,23 +200,25 @@ import Testing
     )
     #expect(states == [RunState.awaitingApproval.rawValue, RunState.pending.rawValue])
     #expect(
-      try fetchApprovals(databasePath: restarted.databasePath).map(\.state)
-        == [ApprovalState.pending.rawValue]
+      try fetchApprovals(databasePath: restarted.databasePath).map(\.state) == [
+        ApprovalState.pending.rawValue,
+      ]
     )
     #expect(
-      try runState(databasePath: restarted.databasePath, runId: approval.runId)
+      try runState(databasePath: restarted.databasePath, runID: approval.runID)
         == RunState.awaitingApproval.rawValue
     )
   }
 
-  @Test func restartThenExpiredRowSweepsToDenyFailed() async throws {
+  @Test
+  func restartThenExpiredRowSweepsToDenyFailed() async throws {
     // given — the deadline has passed before the restart
     let (first, approval) = try await suspendFileWrite()
     try tamperApproval(
       databasePath: first.databasePath,
       id: approval.id,
       column: "expires_ts",
-      value: Int64(1)  // epoch seconds — the store's on-disk timestamp encoding
+      value: (1 as Int64)  // epoch seconds — the store's on-disk timestamp encoding
     )
 
     // when — boot reconciliation runs on the restarted process
@@ -232,7 +233,7 @@ import Testing
     )
     _ = try #require(
       await pollUntilTrue {
-        try runState(databasePath: restarted.databasePath, runId: approval.runId)
+        try runState(databasePath: restarted.databasePath, runID: approval.runID)
           == RunState.failed.rawValue
       }
     )
@@ -248,7 +249,8 @@ import Testing
 
   // MARK: - Expiry ticker
 
-  @Test func expiryTickerResolvesSilenceToExpiredThenDeny() async throws {
+  @Test
+  func expiryTickerResolvesSilenceToExpiredThenDeny() async throws {
     // given — a suspended approval with a live parked waiter on the lane
     let (harness, approval) = try await suspendFileWrite()
 
@@ -257,8 +259,12 @@ import Testing
     let ticker = ApprovalExpiryService(
       approvals: harness.stores.approvals,
       coordinator: harness.coordinator,
-      now: { Date(timeIntervalSinceNow: 100_000) },
-      clock: ScriptedClock { _ in throw CancellationError() },
+      now: {
+        Date(timeIntervalSinceNow: 100_000)
+      },
+      clock: ScriptedClock { _ in
+        throw CancellationError()
+      },
       logger: TestLog.silent
     )
     try? await ticker.run()
@@ -272,7 +278,7 @@ import Testing
     )
     _ = try #require(
       await pollUntilTrue {
-        try runState(databasePath: harness.databasePath, runId: approval.runId)
+        try runState(databasePath: harness.databasePath, runID: approval.runID)
           == RunState.failed.rawValue
       }
     )
@@ -288,7 +294,8 @@ import Testing
 
   // MARK: - /stop and /new resolution (no orphan)
 
-  @Test func stopResolvesTheParkedApprovalWithNoOrphan() async throws {
+  @Test
+  func stopResolvesTheParkedApprovalWithNoOrphan() async throws {
     // given
     let (harness, approval) = try await suspendFileWrite()
 
@@ -305,7 +312,7 @@ import Testing
     )
     _ = try #require(
       await pollUntilTrue {
-        try runState(databasePath: harness.databasePath, runId: approval.runId)
+        try runState(databasePath: harness.databasePath, runID: approval.runID)
           == RunState.cancelled.rawValue
       }
     )
@@ -320,11 +327,12 @@ import Testing
     #expect(try noOrphanPendingApproval(databasePath: harness.databasePath))
   }
 
-  @Test func newResolvesTheParkedApprovalAndClearsPrivateData() async throws {
+  @Test
+  func newResolvesTheParkedApprovalAndClearsPrivateData() async throws {
     // given — the persisted private-data flag armed (the §12 over-cap flag /new must clear)
     let (harness, approval) = try await suspendFileWrite()
-    let sessionId = try harness.sessionId()
-    try armSessionPrivateData(databasePath: harness.databasePath, sessionId: sessionId)
+    let sessionID = try harness.sessionID()
+    try armSessionPrivateData(databasePath: harness.databasePath, sessionID: sessionID)
 
     // when — /new
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: "/new"))
@@ -338,12 +346,12 @@ import Testing
     )
     _ = try #require(
       await pollUntilTrue {
-        try runState(databasePath: harness.databasePath, runId: approval.runId)
+        try runState(databasePath: harness.databasePath, runID: approval.runID)
           == RunState.superseded.rawValue
       }
     )
     #expect(
-      try sessionFlags(databasePath: harness.databasePath, sessionId: sessionId).hasPrivateData
+      try sessionFlags(databasePath: harness.databasePath, sessionID: sessionID).hasPrivateData
         == false
     )
     let audits = try harness.auditRows()
@@ -356,7 +364,8 @@ import Testing
     #expect(try noOrphanPendingApproval(databasePath: harness.databasePath))
   }
 
-  @Test func stopResolvesTheParkedApprovalAfterRestart() async throws {
+  @Test
+  func stopResolvesTheParkedApprovalAfterRestart() async throws {
     // given — a suspended approval that survives a restart (re-parked waiter is the live task)
     let (first, approval) = try await suspendFileWrite()
     let restarted = try await restart(first)
@@ -373,7 +382,7 @@ import Testing
     )
     _ = try #require(
       await pollUntilTrue {
-        try runState(databasePath: restarted.databasePath, runId: approval.runId)
+        try runState(databasePath: restarted.databasePath, runID: approval.runID)
           == RunState.cancelled.rawValue
       }
     )

@@ -3,10 +3,12 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct CoderConfigTests {
+@Suite
+struct CoderConfigTests {
   private typealias EnvKey = AppConfig.EnvKey
 
-  @Test func defaultsAndInvalidLimits() throws {
+  @Test
+  func defaultsAndInvalidLimits() throws {
     // given
     let defaults = try CoderConfig.load(environment: [:])
 
@@ -27,14 +29,19 @@ import Testing
     }
   }
 
-  @Test func explicitSettingsReachAppConfig() throws {
+  @Test
+  func explicitSettingsReachAppConfig() throws {
     // given
     let environment = [
-      EnvKey.llmModel: "test-model", EnvKey.llmBaseURL: "http://localhost:1234/v1",
+      EnvKey.llmModel: "test-model",
+      EnvKey.llmBaseURL: "http://localhost:1234/v1",
       EnvKey.stateRoot: NSTemporaryDirectory(),
-      EnvKey.coderEnabled: "yes", EnvKey.coderMaxConcurrentJobs: "3",
-      EnvKey.coderJobTimeoutSeconds: "86400", EnvKey.coderExecutable: "/absent/bin/codex",
-      EnvKey.coderProfile: "personal", EnvKey.coderConfigHome: "/absent/codex-config",
+      EnvKey.coderEnabled: "yes",
+      EnvKey.coderMaxConcurrentJobs: "3",
+      EnvKey.coderJobTimeoutSeconds: "86400",
+      EnvKey.coderExecutable: "/absent/bin/codex",
+      EnvKey.coderProfile: "personal",
+      EnvKey.coderConfigHome: "/absent/codex-config",
     ]
 
     // when
@@ -53,12 +60,15 @@ import Testing
     (EnvKey.coderMaxConcurrentJobs, "many"),
     (EnvKey.coderJobTimeoutSeconds, "86401"),
     (EnvKey.coderJobTimeoutSeconds, "0"),
-  ]) func invalidScalarCategories(key: String, value: String) {
+  ])
+  func invalidScalarCategories(key: String, value: String) {
     // given
     let environment = [key: value]
 
     // when
-    let load = { try CoderConfig.load(environment: environment) }
+    let load = {
+      try CoderConfig.load(environment: environment)
+    }
 
     // then
     #expect(throws: ConfigError.invalidCoderSetting(key: key)) {
@@ -66,12 +76,15 @@ import Testing
     }
   }
 
-  @Test func enabledUsesStrictBooleanParser() {
+  @Test
+  func enabledUsesStrictBooleanParser() {
     // given
     let environment = [EnvKey.coderEnabled: "sometimes"]
 
     // when
-    let load = { try CoderConfig.load(environment: environment) }
+    let load = {
+      try CoderConfig.load(environment: environment)
+    }
 
     // then
     #expect(throws: ConfigError.invalidBool(key: EnvKey.coderEnabled, value: "sometimes")) {
@@ -85,12 +98,15 @@ import Testing
     (EnvKey.coderExecutable, "--codex"),
     (EnvKey.coderConfigHome, "relative/config"),
     (EnvKey.coderProfile, ""),
-  ]) func invalidTextSettings(key: String, value: String) {
+  ])
+  func invalidTextSettings(key: String, value: String) {
     // given
     let environment = [key: value]
 
     // when
-    let load = { try CoderConfig.load(environment: environment) }
+    let load = {
+      try CoderConfig.load(environment: environment)
+    }
 
     // then
     #expect(throws: ConfigError.invalidCoderSetting(key: key)) {

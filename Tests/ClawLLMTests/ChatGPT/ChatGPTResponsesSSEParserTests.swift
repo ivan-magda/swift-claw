@@ -6,13 +6,15 @@ import Testing
 
 private typealias Support = ChatGPTProviderTestSupport
 
-@Suite struct ChatGPTResponsesSSEParserTests {
+@Suite
+struct ChatGPTResponsesSSEParserTests {
   // MARK: - Reconstruction
 
   /// The whole reply for the recorded basic stream, whose terminal carries `"output":null`. Every
   /// field is a literal: an expectation re-derived from the accumulator would move with it and pin
   /// nothing. If reconstruction ever read the terminal's own `output`, `content` would be empty.
-  @Test func nullOutputTerminalStillReconstructsTheWholeReplyFromItemEvents() throws {
+  @Test
+  func nullOutputTerminalStillReconstructsTheWholeReplyFromItemEvents() throws {
     // given
     let stream = try Self.fixture("basic-response")
 
@@ -30,7 +32,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// A byte-at-a-time delivery cuts multi-byte scalars, field lines, and event delimiters apart. The
   /// reply is identical to the whole-chunk delivery, which is what proves the framing buffers rather
   /// than decoding what it happens to hold.
-  @Test func splitUTF8ScalarsAndFragmentedFieldLinesReconstructIdentically() throws {
+  @Test
+  func splitUTF8ScalarsAndFragmentedFieldLinesReconstructIdentically() throws {
     // given
     let stream = Self.messageStream(text: "héllo → 🌍 done")
 
@@ -44,14 +47,15 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(dribbled.deltas == whole.deltas)
   }
 
-  @Test func crlfFramingCommentsAndSeveralEventsInOneChunkAreParsed() throws {
+  @Test
+  func crlfFramingCommentsAndSeveralEventsInOneChunkAreParsed() throws {
     // given
     let stream =
       ": keep-alive\r\n\r\n"
-      + Self.event(Self.addedMessage(index: 0, phase: "final"), separator: "\r\n")
-      + Self.event(Self.textDelta(index: 0, text: "one"), separator: "\r\n")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "one"), separator: "\r\n")
-      + Self.event(Self.completed(), separator: "\r\n")
+        + Self.event(Self.addedMessage(index: 0, phase: "final"), separator: "\r\n")
+        + Self.event(Self.textDelta(index: 0, text: "one"), separator: "\r\n")
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "one"), separator: "\r\n")
+        + Self.event(Self.completed(), separator: "\r\n")
 
     // when
     let run = try Self.consume(stream)
@@ -63,15 +67,16 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Unknown event types and unknown fields are data the route does not model. They are ignored
   /// rather than rejected, and the known events around them still reconstruct.
-  @Test func unknownEventsAreIgnoredWithoutFailingTheStream() throws {
+  @Test
+  func unknownEventsAreIgnoredWithoutFailingTheStream() throws {
     // given
     let stream =
       Self.event(#"{"type":"response.reasoning_summary_part.added","output_index":0}"#)
-      + Self.event(#"{"type":"something.we.have.never.seen","payload":{"nested":[1,2]}}"#)
-      + Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.textDelta(index: 0, text: "still here"))
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "still here"))
-      + Self.event(Self.completed())
+        + Self.event(#"{"type":"something.we.have.never.seen","payload":{"nested":[1,2]}}"#)
+        + Self.addedMessageEvent(index: 0, phase: "final")
+        + Self.event(Self.textDelta(index: 0, text: "still here"))
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "still here"))
+        + Self.event(Self.completed())
 
     // when
     let run = try Self.consume(stream)
@@ -85,7 +90,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// `response.done` is the observed alias for a successful terminal, and the arguments `.done`
   /// event reconciles a delta assembly that only ever reached `{"zone":"UT`.
-  @Test func toolStreamReconcilesArgumentsAndFinishesWithToolCalls() throws {
+  @Test
+  func toolStreamReconcilesArgumentsAndFinishesWithToolCalls() throws {
     // given
     let stream = try Self.fixture("tool-response")
 
@@ -97,7 +103,7 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(run.response.content.isEmpty)
     #expect(
       run.response.toolCalls == [
-        ToolCall(id: "call_abc", name: "clock", argumentsJSON: #"{"zone":"UTC"}"#)
+        ToolCall(id: "call_abc", name: "clock", argumentsJSON: #"{"zone":"UTC"}"#),
       ]
     )
     #expect(run.response.finishReason == "tool_calls")
@@ -108,7 +114,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Commentary and analysis are the model's working notes. They never reach a delta or the final
   /// answer; the paired positive is the `final_answer` item in the same stream, which does both.
-  @Test func commentaryAndAnalysisNeverReachADeltaOrTheFinalAnswer() throws {
+  @Test
+  func commentaryAndAnalysisNeverReachADeltaOrTheFinalAnswer() throws {
     // given
     let stream = try Self.fixture("reasoning-response")
 
@@ -124,7 +131,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// The same commentary the owner never sees is kept for replay, phase and all, so the next request
   /// can hand the backend back the turn it actually produced.
-  @Test func commentaryAndAnalysisSurviveOnlyInReplayState() throws {
+  @Test
+  func commentaryAndAnalysisSurviveOnlyInReplayState() throws {
     // given
     let stream = try Self.fixture("reasoning-response")
 
@@ -153,13 +161,14 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// A phase the route has never heard of is not known to be owner-visible, so it is treated as
   /// working notes rather than published on the assumption that a new name is safe.
-  @Test func anUnrecognizedPhaseIsNotPublished() throws {
+  @Test
+  func anUnrecognizedPhaseIsNotPublished() throws {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "draft")
-      + Self.event(Self.textDelta(index: 0, text: "half-formed"))
-      + Self.event(Self.doneMessage(index: 0, phase: "draft", text: "half-formed"))
-      + Self.event(Self.completed())
+        + Self.event(Self.textDelta(index: 0, text: "half-formed"))
+        + Self.event(Self.doneMessage(index: 0, phase: "draft", text: "half-formed"))
+        + Self.event(Self.completed())
 
     // when
     let run = try Self.consume(stream)
@@ -169,20 +178,19 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(run.response.content.isEmpty)
   }
 
-  @Test func anAbsentPhaseIsPublished() throws {
+  @Test
+  func anAbsentPhaseIsPublished() throws {
     // given
     let stream =
       Self.event(
         #"{"type":"response.output_item.added","output_index":0,"#
           + #""item":{"id":"msg_1","type":"message","role":"assistant","content":[]}}"#
-      )
-      + Self.event(Self.textDelta(index: 0, text: "plain"))
+      ) + Self.event(Self.textDelta(index: 0, text: "plain"))
       + Self.event(
         #"{"type":"response.output_item.done","output_index":0,"#
           + #""item":{"id":"msg_1","type":"message","role":"assistant","status":"completed","#
           + #""content":[{"type":"output_text","text":"plain"}]}}"#
-      )
-      + Self.event(Self.completed())
+      ) + Self.event(Self.completed())
 
     // when
     let run = try Self.consume(stream)
@@ -196,7 +204,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// An omitted summary is "none", not damage, and a supplied one keeps its text. Neither reaches
   /// the owner's answer.
-  @Test func reasoningNormalizesAnOmittedSummaryToAnEmptyArray() throws {
+  @Test
+  func reasoningNormalizesAnOmittedSummaryToAnEmptyArray() throws {
     // given
     let stream = try Self.fixture("reasoning-response")
 
@@ -215,14 +224,14 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Reasoning that never resolved is continuity material the turn does not depend on, so it is
   /// dropped and the answer still lands.
-  @Test func unresolvedReasoningIsOmittedFromReplayStateWithoutFailingTheTurn() throws {
+  @Test
+  func unresolvedReasoningIsOmittedFromReplayStateWithoutFailingTheTurn() throws {
     // given
     let stream =
       Self.event(
         #"{"type":"response.output_item.added","output_index":0,"#
           + #""item":{"id":"rs_1","type":"reasoning","encrypted_content":"ENC"}}"#
-      )
-      + Self.addedMessageEvent(index: 1, phase: "final")
+      ) + Self.addedMessageEvent(index: 1, phase: "final")
       + Self.event(Self.textDelta(index: 1, text: "answer"))
       + Self.event(Self.doneMessage(index: 1, phase: "final", text: "answer"))
       + Self.event(Self.completed())
@@ -240,15 +249,15 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// The backend truncated the message item away, so the visible deltas are all there is. Only the
   /// visible text is synthesized — the commentary deltas in the same stream stay out of it.
-  @Test func aSuccessfulTerminalSynthesizesOnlyVisibleTextWhenTheDoneMessageIsAbsent() throws {
+  @Test
+  func aSuccessfulTerminalSynthesizesOnlyVisibleTextWhenTheDoneMessageIsAbsent() throws {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "commentary")
-      + Self.event(Self.textDelta(index: 0, text: "notes to self"))
-      + Self.addedMessageEvent(index: 1, phase: "final")
-      + Self.event(Self.textDelta(index: 1, text: "half an "))
-      + Self.event(Self.textDelta(index: 1, text: "answer"))
-      + Self.event(Self.completed())
+        + Self.event(Self.textDelta(index: 0, text: "notes to self"))
+        + Self.addedMessageEvent(index: 1, phase: "final")
+        + Self.event(Self.textDelta(index: 1, text: "half an "))
+        + Self.event(Self.textDelta(index: 1, text: "answer")) + Self.event(Self.completed())
 
     // when
     let run = try Self.consume(stream)
@@ -262,7 +271,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Framing comments are not content: a stream that has only ever sent keep-alives can still be
   /// re-issued. The paired positive below proves the flag is not simply stuck at false.
-  @Test func framingCommentsAloneDoNotCrossTheRetryBoundary() throws {
+  @Test
+  func framingCommentsAloneDoNotCrossTheRetryBoundary() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
 
@@ -273,7 +283,8 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(parser.hasSeenDataFieldByte == false)
   }
 
-  @Test func aDataFieldCrossesTheRetryBoundary() throws {
+  @Test
+  func aDataFieldCrossesTheRetryBoundary() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
 
@@ -289,7 +300,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// The boundary closes on the field's first byte, before the event delimiter and before any JSON
   /// decode. This event never completes and never decodes, and it still cannot be replayed.
-  @Test func aFragmentedDataEventCrossesTheBoundaryBeforeTheDelimiterOrDecode() throws {
+  @Test
+  func aFragmentedDataEventCrossesTheBoundaryBeforeTheDelimiterOrDecode() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
 
@@ -301,7 +313,8 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(parser.hasSeenDataFieldByte)
   }
 
-  @Test func anUnknownDataEventCrossesTheBoundary() throws {
+  @Test
+  func anUnknownDataEventCrossesTheBoundary() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
 
@@ -315,7 +328,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// A `data:` field split across chunks mid-name still closes the boundary: the scan is stateful,
   /// so the field is recognized however the transport happened to cut it.
-  @Test func aDataFieldNameSplitAcrossChunksCrossesTheBoundary() throws {
+  @Test
+  func aDataFieldNameSplitAcrossChunksCrossesTheBoundary() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
 
@@ -330,7 +344,8 @@ private typealias Support = ChatGPTProviderTestSupport
   }
 
   /// A comment that merely quotes the field name is still a comment.
-  @Test func aCommentMentioningTheFieldNameDoesNotCrossTheBoundary() throws {
+  @Test
+  func aCommentMentioningTheFieldNameDoesNotCrossTheBoundary() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
 
@@ -345,16 +360,17 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// An output-token limit is a truncated answer, not a failure: the owner keeps the text and the
   /// runtime learns why it stopped.
-  @Test func anIncompleteOutputTokenLimitFinishesWithLength() throws {
+  @Test
+  func anIncompleteOutputTokenLimitFinishesWithLength() throws {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.textDelta(index: 0, text: "as far as I got"))
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "as far as I got"))
-      + Self.event(
-        #"{"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","#
-          + #""incomplete_details":{"reason":"max_output_tokens"}}}"#
-      )
+        + Self.event(Self.textDelta(index: 0, text: "as far as I got"))
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "as far as I got"))
+        + Self.event(
+          #"{"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","#
+            + #""incomplete_details":{"reason":"max_output_tokens"}}}"#
+        )
 
     // when
     let run = try Self.consume(stream)
@@ -365,23 +381,20 @@ private typealias Support = ChatGPTProviderTestSupport
   }
 
   /// Every other terminal state the route can name is a failure rather than a short answer.
-  @Test(
-    arguments: [
-      #"{"type":"response.incomplete","response":{"id":"r","status":"incomplete","#
-        + #""incomplete_details":{"reason":"content_filter"}}}"#,
-      #"{"type":"response.incomplete","response":{"id":"r","status":"incomplete"}}"#,
-      #"{"type":"response.failed","response":{"id":"r","status":"failed","#
-        + #""error":{"code":"server_error","message":"boom"}}}"#,
-      #"{"type":"response.completed","response":{"id":"r","status":"cancelled"}}"#,
-      #"{"type":"error","error":{"code":"rate_limit","message":"slow down"}}"#,
-    ]
-  )
+  @Test(arguments: [
+    #"{"type":"response.incomplete","response":{"id":"r","status":"incomplete","#
+      + #""incomplete_details":{"reason":"content_filter"}}}"#,
+    #"{"type":"response.incomplete","response":{"id":"r","status":"incomplete"}}"#,
+    #"{"type":"response.failed","response":{"id":"r","status":"failed","#
+      + #""error":{"code":"server_error","message":"boom"}}}"#,
+    #"{"type":"response.completed","response":{"id":"r","status":"cancelled"}}"#,
+    #"{"type":"error","error":{"code":"rate_limit","message":"slow down"}}"#,
+  ])
   func nonSuccessfulTerminalsBecomeProviderFailures(terminal: String) throws {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.textDelta(index: 0, text: "some text"))
-      + Self.event(terminal)
+        + Self.event(Self.textDelta(index: 0, text: "some text")) + Self.event(terminal)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -391,16 +404,17 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// The nested status is the meaning; the event name is only the fallback. A `response.completed`
   /// carrying a failed status is a failure, not a success.
-  @Test func theNestedStatusOutranksTheEventName() throws {
+  @Test
+  func theNestedStatusOutranksTheEventName() throws {
     // given
     let succeeding =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "fine"))
-      + Self.event(#"{"type":"response.failed","response":{"id":"r","status":"completed"}}"#)
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "fine"))
+        + Self.event(#"{"type":"response.failed","response":{"id":"r","status":"completed"}}"#)
     let failing =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "fine"))
-      + Self.event(#"{"type":"response.completed","response":{"id":"r","status":"failed"}}"#)
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "fine"))
+        + Self.event(#"{"type":"response.completed","response":{"id":"r","status":"failed"}}"#)
 
     // when
     let run = try Self.consume(succeeding)
@@ -414,12 +428,13 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// With no status to read, the event name decides — which is what keeps a backend that stopped
   /// sending one working.
-  @Test func theEventNameDecidesWhenTheNestedStatusIsAbsent() throws {
+  @Test
+  func theEventNameDecidesWhenTheNestedStatusIsAbsent() throws {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "named"))
-      + Self.event(#"{"type":"response.completed","response":{"id":"r"}}"#)
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "named"))
+        + Self.event(#"{"type":"response.completed","response":{"id":"r"}}"#)
 
     // when
     let run = try Self.consume(stream)
@@ -431,7 +446,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// The first terminal is final and is answered from the batch in hand. Nothing after it — in this
   /// push or a later one — can change or reopen the outcome.
-  @Test func theFirstTerminalWinsWithoutWaitingForALaterEventOrEOF() throws {
+  @Test
+  func theFirstTerminalWinsWithoutWaitingForALaterEventOrEOF() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
     var accumulator = Self.accumulator()
@@ -439,9 +455,8 @@ private typealias Support = ChatGPTProviderTestSupport
     // applying the batch past its outcome would publish it.
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "first"))
-      + Self.event(Self.completed())
-      + Self.event(Self.textDelta(index: 0, text: "same batch"))
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "first"))
+        + Self.event(Self.completed()) + Self.event(Self.textDelta(index: 0, text: "same batch"))
 
     // when
     let events = try accumulator.consume(try parser.push(Data(stream.utf8)))
@@ -459,13 +474,14 @@ private typealias Support = ChatGPTProviderTestSupport
   /// Two terminals that disagree, already decoded in one delivered batch, are a stream the parser
   /// cannot honestly answer for — so it refuses rather than picking one. The paired positive is the
   /// `response.done` alias restating the same terminal, which is not a conflict.
-  @Test func aConflictingSecondTerminalInTheSameBatchIsRejected() throws {
+  @Test
+  func aConflictingSecondTerminalInTheSameBatchIsRejected() throws {
     // given
     let conflicting =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-      + Self.event(Self.completed(id: "resp_1"))
-      + Self.event(#"{"type":"response.failed","response":{"id":"resp_1","status":"failed"}}"#)
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+        + Self.event(Self.completed(id: "resp_1"))
+        + Self.event(#"{"type":"response.failed","response":{"id":"resp_1","status":"failed"}}"#)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -473,13 +489,14 @@ private typealias Support = ChatGPTProviderTestSupport
     }
   }
 
-  @Test func theDoneAliasRestatingTheSameTerminalIsNotAConflict() throws {
+  @Test
+  func theDoneAliasRestatingTheSameTerminalIsNotAConflict() throws {
     // given
     let repeated =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-      + Self.event(Self.completed(id: "resp_1"))
-      + Self.event(#"{"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#)
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+        + Self.event(Self.completed(id: "resp_1"))
+        + Self.event(#"{"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#)
 
     // when
     let run = try Self.consume(repeated)
@@ -490,20 +507,24 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Production returns the first terminal without making later aliases authoritative. Model-alias
   /// enforcement belongs only to the evaluation's strict drain policy.
-  @Test func productionFirstTerminalIgnoresLaterModelSpellingsInTheSameBatch() throws {
+  @Test
+  func productionFirstTerminalIgnoresLaterModelSpellingsInTheSameBatch() throws {
     // given
     let repeatedTerminal =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-      + Self.event(
-        #"""
-        {"type":"response.completed","response":{"id":"resp_1","status":"completed",\#
-        "model":"gpt-a"}}
-        """#
-      )
-      + Self.event(
-        #"{"type":"response.done","response":{"id":"resp_1","status":"completed","model":"gpt-b"}}"#
-      )
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+        + Self.event(
+          #"""
+          {"type":"response.completed","response":{"id":"resp_1","status":"completed",\#
+          "model":"gpt-a"}}
+          """#
+        )
+        + Self.event(
+          #"""
+          {"type":"response.done","response":{"id":"resp_1","status":"completed",\#
+          "model":"gpt-b"}}
+          """#
+        )
 
     // when
     let run = try Self.consume(repeatedTerminal)
@@ -515,14 +536,15 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// A conflicting terminal that arrives in a *later* batch is not consulted: the outcome was
   /// already decided and the parser does not wait for the wire to finish having opinions.
-  @Test func aConflictingTerminalInALaterBatchIsIgnoredRatherThanRejected() throws {
+  @Test
+  func aConflictingTerminalInALaterBatchIsIgnoredRatherThanRejected() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
     var accumulator = Self.accumulator()
     let decided =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "decided"))
-      + Self.event(Self.completed(id: "resp_1"))
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "decided"))
+        + Self.event(Self.completed(id: "resp_1"))
 
     // when
     let events = try accumulator.consume(try parser.push(Data(decided.utf8)))
@@ -544,14 +566,21 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// A stream that simply ended is ambiguous: the model may well have generated the answer we never
   /// received. Reporting an empty success here would hand the owner a blank reply and hide the cost.
-  @Test func aTerminalFreeEOFIsAnAmbiguousFailureRatherThanAnEmptySuccess() throws {
+  @Test
+  func aTerminalFreeEOFIsAnAmbiguousFailureRatherThanAnEmptySuccess() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
     var accumulator = Self.accumulator()
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.textDelta(index: 0, text: "an answer that never landed"))
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "an answer that never landed"))
+        + Self.event(Self.textDelta(index: 0, text: "an answer that never landed"))
+        + Self.event(
+          Self.doneMessage(
+            index: 0,
+            phase: "final",
+            text: "an answer that never landed"
+          )
+        )
 
     // when
     _ = try accumulator.consume(try parser.push(Data(stream.utf8)))
@@ -563,7 +592,8 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(accumulator.observedCompletionTokens > 0)
   }
 
-  @Test func aTerminalFreeEOFWithNoEventsAtAllIsStillAFailure() throws {
+  @Test
+  func aTerminalFreeEOFWithNoEventsAtAllIsStillAFailure() throws {
     // given
     var accumulator = Self.accumulator()
 
@@ -578,26 +608,24 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// A count that is negative, fractional, or too large to be a count at all is damage, not
   /// accounting. The paired positive is the basic fixture's usage, which maps through intact.
-  @Test(
-    arguments: [
-      #"{"input_tokens":-1,"output_tokens":5,"total_tokens":4}"#,
-      #"{"input_tokens":11,"output_tokens":-5,"total_tokens":6}"#,
-      #"{"input_tokens":1.5,"output_tokens":5,"total_tokens":7}"#,
-      #"{"input_tokens":11,"output_tokens":99999999999999999999999,"total_tokens":5}"#,
-      #"{"input_tokens":"eleven","output_tokens":5,"total_tokens":16}"#,
-    ]
-  )
+  @Test(arguments: [
+    #"{"input_tokens":-1,"output_tokens":5,"total_tokens":4}"#,
+    #"{"input_tokens":11,"output_tokens":-5,"total_tokens":6}"#,
+    #"{"input_tokens":1.5,"output_tokens":5,"total_tokens":7}"#,
+    #"{"input_tokens":11,"output_tokens":99999999999999999999999,"total_tokens":5}"#,
+    #"{"input_tokens":"eleven","output_tokens":5,"total_tokens":16}"#,
+  ])
   func aDamagedUsageCountMakesTheResponseMalformed(usage: String) throws {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-      + Self.event(
-        #"""
-        {"type":"response.completed","response":{"id":"r","status":"completed",\#
-        "usage":\#(usage)}}
-        """#
-      )
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+        + Self.event(
+          #"""
+          {"type":"response.completed","response":{"id":"r","status":"completed",\#
+          "usage":\#(usage)}}
+          """#
+        )
 
     // then
     #expect(throws: ProviderError.self) {
@@ -607,15 +635,16 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// An absent total is the checked sum of the parts rather than a zero that would understate the
   /// turn.
-  @Test func anAbsentTotalIsTheSumOfInputAndOutput() throws {
+  @Test
+  func anAbsentTotalIsTheSumOfInputAndOutput() throws {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-      + Self.event(
-        #"{"type":"response.completed","response":{"id":"r","status":"completed","#
-          + #""usage":{"input_tokens":7,"output_tokens":3}}}"#
-      )
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+        + Self.event(
+          #"{"type":"response.completed","response":{"id":"r","status":"completed","#
+            + #""usage":{"input_tokens":7,"output_tokens":3}}}"#
+        )
 
     // when
     let run = try Self.consume(stream)
@@ -626,12 +655,13 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Usage the route never sent is absent, not zero: `ChatUsage.zero` is a genuine measurement and
   /// would let a missing accounting read as a free turn.
-  @Test func anAbsentUsageObjectLeavesTheResponseUsageNil() throws {
+  @Test
+  func anAbsentUsageObjectLeavesTheResponseUsageNil() throws {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-      + Self.event(#"{"type":"response.completed","response":{"id":"r","status":"completed"}}"#)
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+        + Self.event(#"{"type":"response.completed","response":{"id":"r","status":"completed"}}"#)
 
     // when
     let run = try Self.consume(stream)
@@ -640,12 +670,13 @@ private typealias Support = ChatGPTProviderTestSupport
     #expect(run.response.usage == nil)
   }
 
-  @Test func aMalformedNestedResponseObjectIsRejected() throws {
+  @Test
+  func aMalformedNestedResponseObjectIsRejected() throws {
     // given
     let stream =
       Self.addedMessageEvent(index: 0, phase: "final")
-      + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
-      + Self.event(#"{"type":"response.completed","response":{"id":"r","status":7}}"#)
+        + Self.event(Self.doneMessage(index: 0, phase: "final", text: "text"))
+        + Self.event(#"{"type":"response.completed","response":{"id":"r","status":7}}"#)
 
     // then
     #expect(throws: ProviderError.self) {
@@ -657,7 +688,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// A call whose identity changes between events cannot be paired with its result, and inventing a
   /// winner would attach the output to someone else's call.
-  @Test func aCallIDThatChangesBetweenEventsIsRejected() throws {
+  @Test
+  func aCallIDThatChangesBetweenEventsIsRejected() throws {
     // given
     let stream =
       Self.event(
@@ -668,8 +700,7 @@ private typealias Support = ChatGPTProviderTestSupport
         #"{"type":"response.output_item.done","output_index":0,"#
           + #""item":{"id":"fc_1","type":"function_call","call_id":"call_b","#
           + #""name":"clock","arguments":"{}"}}"#
-      )
-      + Self.event(Self.completed())
+      ) + Self.event(Self.completed())
 
     // then
     #expect(throws: ProviderError.self) {
@@ -679,12 +710,13 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// Two items claiming one call ID would give the dispatcher two calls it cannot tell apart, and a
   /// tool result names only the ID.
-  @Test func twoOutputItemsSharingOneCallIDAreRejected() throws {
+  @Test
+  func twoOutputItemsSharingOneCallIDAreRejected() throws {
     // given
     let stream =
       Self.functionCallEvents(index: 0, callID: "call_same", name: "clock")
-      + Self.functionCallEvents(index: 1, callID: "call_same", name: "clock")
-      + Self.event(Self.completed())
+        + Self.functionCallEvents(index: 1, callID: "call_same", name: "clock")
+        + Self.event(Self.completed())
 
     // then
     #expect(throws: ProviderError.self) {
@@ -694,20 +726,18 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// A call with no name or no ID is not dispatchable. The paired positive is the tool fixture,
   /// where both are present and the call survives.
-  @Test(
-    arguments: [
-      #"{"id":"fc_1","type":"function_call","call_id":"call_a","arguments":"{}"}"#,
-      #"{"id":"fc_1","type":"function_call","call_id":"","name":"clock","arguments":"{}"}"#,
-      #"{"id":"fc_1","type":"function_call","name":"clock","arguments":"{}"}"#,
-      #"{"id":"fc_1","type":"function_call","call_id":"call_a","name":"","arguments":"{}"}"#,
-    ]
-  )
+  @Test(arguments: [
+    #"{"id":"fc_1","type":"function_call","call_id":"call_a","arguments":"{}"}"#,
+    #"{"id":"fc_1","type":"function_call","call_id":"","name":"clock","arguments":"{}"}"#,
+    #"{"id":"fc_1","type":"function_call","name":"clock","arguments":"{}"}"#,
+    #"{"id":"fc_1","type":"function_call","call_id":"call_a","name":"","arguments":"{}"}"#,
+  ])
   func aFunctionCallMissingItsNameOrCallIDIsRejected(item: String) throws {
     // given
     let stream =
       Self.event(#"{"type":"response.output_item.added","output_index":0,"item":\#(item)}"#)
-      + Self.event(#"{"type":"response.output_item.done","output_index":0,"item":\#(item)}"#)
-      + Self.event(Self.completed())
+        + Self.event(#"{"type":"response.output_item.done","output_index":0,"item":\#(item)}"#)
+        + Self.event(Self.completed())
 
     // then
     #expect(throws: ProviderError.self) {
@@ -717,7 +747,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// A function call the stream never resolved would be dispatched from truncated arguments. Unlike
   /// reasoning, it cannot be quietly dropped: the model asked for it.
-  @Test func anUnresolvedFunctionCallIsMalformed() throws {
+  @Test
+  func anUnresolvedFunctionCallIsMalformed() throws {
     // given
     let stream =
       Self.event(
@@ -727,8 +758,7 @@ private typealias Support = ChatGPTProviderTestSupport
       + Self.event(
         #"{"type":"response.function_call_arguments.delta","output_index":0,"#
           + #""item_id":"fc_1","call_id":"call_a","delta":"{\"zo"}"#
-      )
-      + Self.event(Self.completed())
+      ) + Self.event(Self.completed())
 
     // then
     #expect(throws: ProviderError.self) {
@@ -739,7 +769,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// Text whose phase was never registered has no filter to pass. Publishing it would mean guessing
   /// that unannounced text is owner-visible, which is exactly the guess the phase filter exists to
   /// refuse.
-  @Test func aDeltaForAnUnregisteredOutputItemIsRejected() throws {
+  @Test
+  func aDeltaForAnUnregisteredOutputItemIsRejected() throws {
     // given
     let stream =
       Self.event(Self.textDelta(index: 3, text: "out of nowhere")) + Self.event(Self.completed())
@@ -755,7 +786,8 @@ private typealias Support = ChatGPTProviderTestSupport
   /// A failure after visible data still has to be reportable. The remote message reaches the owner
   /// stripped of the escape sequences that would repaint their terminal, with its whitespace
   /// collapsed, and the tokens already generated are accounted for.
-  @Test func aFailureAfterVisibleDataIsReportedSanitizedWithObservedTokens() throws {
+  @Test
+  func aFailureAfterVisibleDataIsReportedSanitizedWithObservedTokens() throws {
     // given
     var parser = ChatGPTResponsesSSEParser()
     var accumulator = Self.accumulator()
@@ -763,11 +795,7 @@ private typealias Support = ChatGPTProviderTestSupport
 
     // when
     var thrown: (any Error)?
-    do {
-      _ = try accumulator.consume(try parser.push(Data(stream.utf8)))
-    } catch {
-      thrown = error
-    }
+    do { _ = try accumulator.consume(try parser.push(Data(stream.utf8))) } catch { thrown = error }
     let failure = try #require(thrown as? ProviderError)
 
     // then
@@ -781,7 +809,8 @@ private typealias Support = ChatGPTProviderTestSupport
 
   /// The redaction set the provider carries reaches the parser's diagnostics, so a route that echoed
   /// a bearer back cannot launder it through an error message.
-  @Test func aRemoteDiagnosticIsRedactedWithTheSuppliedSecrets() throws {
+  @Test
+  func aRemoteDiagnosticIsRedactedWithTheSuppliedSecrets() throws {
     // given
     var accumulator = Self.accumulator(redacting: ["sk-live-secret"])
     var parser = ChatGPTResponsesSSEParser()
@@ -791,11 +820,7 @@ private typealias Support = ChatGPTProviderTestSupport
 
     // when
     var thrown: (any Error)?
-    do {
-      _ = try accumulator.consume(try parser.push(Data(stream.utf8)))
-    } catch {
-      thrown = error
-    }
+    do { _ = try accumulator.consume(try parser.push(Data(stream.utf8))) } catch { thrown = error }
     let failure = try #require(thrown as? ProviderError)
 
     // then
@@ -815,9 +840,9 @@ extension ChatGPTResponsesSSEParserTests {
 
   /// Any identity will do: nothing here asserts on the issuer, only on the material stamped with it.
   /// Generating one rather than pinning a literal is what says so.
-  fileprivate static func accumulator(
-    redacting secrets: [String] = []
-  ) -> ChatGPTResponsesAccumulator {
+  fileprivate static func accumulator(redacting secrets: [String] = [])
+    -> ChatGPTResponsesAccumulator
+  {
     ChatGPTResponsesAccumulator(
       identity: ChatGPTReplayIdentity(profileID: UUID(), wireModel: "gpt-5", epoch: UUID()),
       redactionValues: secrets
@@ -835,10 +860,8 @@ extension ChatGPTResponsesSSEParserTests {
     for chunk in chunks(of: Data(stream.utf8), size: chunkSize) {
       for event in try accumulator.consume(try parser.push(chunk)) {
         switch event {
-        case .delta(let text):
-          deltas.append(text)
-        case .finished(let finished):
-          response = finished
+        case .delta(let text): deltas.append(text)
+        case .finished(let finished): response = finished
         }
       }
     }
@@ -867,10 +890,9 @@ extension ChatGPTResponsesSSEParserTests {
   }
 
   fileprivate static func fixture(_ name: String) throws -> String {
-    let url = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .appendingPathComponent("Fixtures")
-      .appendingPathComponent("\(name).sse")
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent(
+      "Fixtures"
+    ).appendingPathComponent("\(name).sse")
     return try String(contentsOf: url, encoding: .utf8)
   }
 }
@@ -911,7 +933,7 @@ extension ChatGPTResponsesSSEParserTests {
   fileprivate static func functionCallEvents(index: Int, callID: String, name: String) -> String {
     let item =
       #"{"id":"fc_\#(index)","type":"function_call","call_id":"\#(callID)","#
-      + #""name":"\#(name)","arguments":"{}"}"#
+        + #""name":"\#(name)","arguments":"{}"}"#
     return event(#"{"type":"response.output_item.added","output_index":\#(index),"item":\#(item)}"#)
       + event(#"{"type":"response.output_item.done","output_index":\#(index),"item":\#(item)}"#)
   }
@@ -919,9 +941,7 @@ extension ChatGPTResponsesSSEParserTests {
   /// One visible message whose text is delivered as a single delta and restated by its done item —
   /// the shape most framing tests only need as a carrier.
   fileprivate static func messageStream(text: String) -> String {
-    addedMessageEvent(index: 0, phase: "final")
-      + event(textDelta(index: 0, text: text))
-      + event(doneMessage(index: 0, phase: "final", text: text))
-      + event(completed())
+    addedMessageEvent(index: 0, phase: "final") + event(textDelta(index: 0, text: text))
+      + event(doneMessage(index: 0, phase: "final", text: text)) + event(completed())
   }
 }

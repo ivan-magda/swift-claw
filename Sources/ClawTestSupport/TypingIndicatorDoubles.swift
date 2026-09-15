@@ -8,25 +8,23 @@ package typealias NoopTyping = ClawAgent.NoopTypingIndicator
 /// calling topic" are all observable.
 public actor RecordingTyping: TypingIndicator {
   public struct Pulse: Sendable, Equatable {
-    public let chatId: Int64
-    public let messageThreadId: Int64?
+    public let chatID: Int64
+    public let messageThreadID: Int64?
 
-    public init(chatId: Int64, messageThreadId: Int64?) {
-      self.chatId = chatId
-      self.messageThreadId = messageThreadId
+    public init(chatID: Int64, messageThreadID: Int64?) {
+      self.chatID = chatID
+      self.messageThreadID = messageThreadID
     }
   }
 
   public private(set) var pulses: [Pulse] = []
 
-  public var calls: Int {
-    pulses.count
-  }
+  public var calls: Int { pulses.count }
 
   public init() {}
 
-  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
-    pulses.append(Pulse(chatId: chatId, messageThreadId: messageThreadId))
+  public func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
+    pulses.append(Pulse(chatID: chatID, messageThreadID: messageThreadID))
   }
 }
 
@@ -42,17 +40,13 @@ public actor TypingReleaseGate {
 
   public init() {}
 
-  public func awaitRelease() async {
-    await gate.waitIgnoringCancellation()
-  }
+  public func awaitRelease() async { await gate.waitIgnoringCancellation() }
 
   public func waitUntilReleased(timeout: Duration = .seconds(30)) async -> Bool {
     await gate.waitUntilOpen(timeout: timeout)
   }
 
-  public func release() {
-    gate.open()
-  }
+  public func release() { gate.open() }
 }
 
 /// Releases `gate` on its first pulse, so a gated producer cannot finish before the owner has
@@ -61,11 +55,9 @@ public actor GatingTyping: TypingIndicator {
   public private(set) var calls = 0
   private let gate: TypingReleaseGate
 
-  public init(gate: TypingReleaseGate) {
-    self.gate = gate
-  }
+  public init(gate: TypingReleaseGate) { self.gate = gate }
 
-  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
+  public func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
     calls += 1
     await gate.release()
   }
@@ -83,8 +75,8 @@ public actor CountingReleaseTyping: TypingIndicator {
     self.gate = gate
   }
 
-  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
-    pulses.append(RecordingTyping.Pulse(chatId: chatId, messageThreadId: messageThreadId))
+  public func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
+    pulses.append(RecordingTyping.Pulse(chatID: chatID, messageThreadID: messageThreadID))
     if pulses.count >= releaseAfter {
       await gate.release()
     }

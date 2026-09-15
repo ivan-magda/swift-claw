@@ -1,20 +1,22 @@
 import Foundation
 import Testing
 
-@testable import ClawSubprocess
-
 #if canImport(Glibc)
   import Glibc
 #else
   import Darwin
 #endif
 
-@Suite struct InstanceLockTests {
+@testable import ClawSubprocess
+
+@Suite
+struct InstanceLockTests {
   private func tempPath() -> String {
     NSTemporaryDirectory() + "claw-lock-\(UInt64.random(in: 0..<(.max))).lock"
   }
 
-  @Test func secondAcquireFails() throws {
+  @Test
+  func secondAcquireFails() throws {
     // given
     let path = tempPath()
     defer { try? FileManager.default.removeItem(atPath: path) }
@@ -22,7 +24,9 @@ import Testing
     defer { first.release() }
 
     // when
-    let second = Result { try InstanceLock(path: path) }
+    let second = Result {
+      try InstanceLock(path: path)
+    }
 
     // then
     #expect(throws: InstanceLock.LockError.alreadyLocked) {
@@ -30,7 +34,8 @@ import Testing
     }
   }
 
-  @Test func reacquiresAfterRelease() throws {
+  @Test
+  func reacquiresAfterRelease() throws {
     // given
     let path = tempPath()
     defer { try? FileManager.default.removeItem(atPath: path) }
@@ -44,7 +49,8 @@ import Testing
     second.release()
   }
 
-  @Test func refusesToFollowALinkAtTheLockPath() throws {
+  @Test
+  func refusesToFollowALinkAtTheLockPath() throws {
     // given
     let path = tempPath()
     let target = path + ".target"
@@ -56,7 +62,9 @@ import Testing
     try FileManager.default.createSymbolicLink(atPath: path, withDestinationPath: target)
 
     // when
-    let acquisition = Result { try InstanceLock(path: path) }
+    let acquisition = Result {
+      try InstanceLock(path: path)
+    }
 
     // then
     #expect(throws: InstanceLock.LockError.insecureLockFile) {
@@ -65,7 +73,8 @@ import Testing
     #expect(try Data(contentsOf: URL(fileURLWithPath: target)) == Data("unrelated".utf8))
   }
 
-  @Test func normalizesAnOwnedLockFileToOwnerOnlyPermissions() throws {
+  @Test
+  func normalizesAnOwnedLockFileToOwnerOnlyPermissions() throws {
     // given
     let path = tempPath()
     defer { try? FileManager.default.removeItem(atPath: path) }
@@ -82,7 +91,8 @@ import Testing
     #expect((attributes[.posixPermissions] as? NSNumber)?.uint16Value == 0o600)
   }
 
-  @Test func refusesAHardLinkedLockWithoutChangingItsTarget() throws {
+  @Test
+  func refusesAHardLinkedLockWithoutChangingItsTarget() throws {
     // given
     let path = tempPath()
     let target = path + ".target"
@@ -99,7 +109,9 @@ import Testing
     )
 
     // when
-    let acquisition = Result { try InstanceLock(path: path) }
+    let acquisition = Result {
+      try InstanceLock(path: path)
+    }
 
     // then
     #expect(throws: InstanceLock.LockError.insecureLockFile) {
@@ -110,14 +122,17 @@ import Testing
     #expect(try Data(contentsOf: URL(fileURLWithPath: target)) == contents)
   }
 
-  @Test func refusesANonRegularLockEntry() throws {
+  @Test
+  func refusesANonRegularLockEntry() throws {
     // given
     let path = tempPath()
     defer { try? FileManager.default.removeItem(atPath: path) }
     try #require(mkfifo(path, 0o600) == 0)
 
     // when
-    let acquisition = Result { try InstanceLock(path: path) }
+    let acquisition = Result {
+      try InstanceLock(path: path)
+    }
 
     // then
     #expect(throws: InstanceLock.LockError.insecureLockFile) {

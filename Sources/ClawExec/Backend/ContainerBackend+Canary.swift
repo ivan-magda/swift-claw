@@ -4,10 +4,7 @@ import Foundation
 // MARK: - Canary
 
 extension ContainerBackend {
-  func canaryOutcome(
-    initImage: String,
-    deadline: ContinuousClock.Instant
-  ) async -> CanaryOutcome? {
+  func canaryOutcome(initImage: String, deadline: ContinuousClock.Instant) async -> CanaryOutcome? {
     let identity = ExecutionIdentity()
     let request = ExecutionRequest(
       language: .python,
@@ -38,10 +35,7 @@ extension ContainerBackend {
       deadline: deadline
     )
 
-    let cleanupOK = await runShieldedCleanup(
-      identity: identity,
-      workspace: workspace
-    )
+    let cleanupOK = await runShieldedCleanup(identity: identity, workspace: workspace)
     guard cleanupOK else {
       return nil
     }
@@ -82,7 +76,9 @@ extension ContainerBackend {
         [ContainerInspectDocument].self,
         from: inspectData
       ),
-      let inspection = inspections.first(where: { $0.configuration.id == identity.name })
+      let inspection = inspections.first(where: {
+        $0.configuration.id == identity.name
+      })
     else {
       return nil
     }
@@ -102,17 +98,15 @@ extension ContainerBackend {
 
     let imageDigestOK =
       inspection.configuration.image.reference == settings.workloadImage.description
-      && inspection.configuration.image.descriptor.digest == expectedDigest
+        && inspection.configuration.image.descriptor.digest == expectedDigest
 
     let memoryInBytes = UInt64(settings.memoryMiB) * 1024 * 1024
     let capsMatch =
       inspection.status.state == "running"
-      && inspection.configuration.resources.cpus == settings.cpus
-      && inspection.configuration.resources.memoryInBytes == memoryInBytes
-      && inspection.configuration.readOnly
-      && inspection.configuration.useInit
-      && inspection.configuration.capAdd.isEmpty
-      && inspection.configuration.capDrop == ["ALL"]
+        && inspection.configuration.resources.cpus == settings.cpus
+        && inspection.configuration.resources.memoryInBytes == memoryInBytes
+        && inspection.configuration.readOnly && inspection.configuration.useInit
+        && inspection.configuration.capAdd.isEmpty && inspection.configuration.capDrop == ["ALL"]
 
     return CanaryOutcome(imageDigestOK: imageDigestOK, capsMatch: capsMatch, guest: guest)
   }
@@ -196,13 +190,7 @@ struct CanaryOutcome: Sendable {
   let guest: GuestCanaryDocument
 
   var isPassing: Bool {
-    imageDigestOK
-      && capsMatch
-      && guest.capsEmpty
-      && guest.netIsolated
-      && guest.reaperOK
-      && guest.rootfsRO
-      && guest.stagingRO
-      && guest.interpretersOK
+    imageDigestOK && capsMatch && guest.capsEmpty && guest.netIsolated && guest.reaperOK
+      && guest.rootfsRO && guest.stagingRO && guest.interpretersOK
   }
 }

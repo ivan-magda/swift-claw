@@ -9,29 +9,33 @@ import Testing
 /// Pins the seam that Task 20b threads: `TurnRunner` must compute the proactive-budget "today"
 /// window from its injected `now`, not the real wall clock. The shared fixture (`makeEnv`, `Env`,
 /// `latestRunState`, `okResponse`, `StubLLMProvider`) lives in the sibling `TurnRunnerTests.swift`.
-@Suite struct TurnRunnerBudgetTests {
+@Suite
+struct TurnRunnerBudgetTests {
   /// 2020-01-01 12:00:00 UTC — a fixed instant far from any real "today", so the seeded spend only
   /// falls inside the proactive window when the read honors the injected clock.
   private static let fixed = Date(timeIntervalSince1970: 1_577_880_000)
 
-  @Test func proactiveBudgetWindowReadsInjectedNowNotWallClock() async throws {
+  @Test
+  func proactiveBudgetWindowReadsInjectedNowNotWallClock() async throws {
     // given — a scheduled run whose proactive pool already overspent (3.00 ≥ 2.00 cap) on `fixed`'s
     // UTC day, with the runner's clock pinned to that same instant
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "should never run")),
-      now: { Self.fixed }
+      now: {
+        Self.fixed
+      }
     )
     try await env.queue.write { db in
       try db.execute(
         sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
-        arguments: [env.runId]
+        arguments: [env.runID]
       )
     }
     try UsageStoreGRDB(writer: env.queue).recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-proactive-seed"),
-        runId: env.runId,
-        sessionId: env.sessionId,
+        runID: env.runID,
+        sessionID: env.sessionID,
         model: "m",
         promptTokens: 10,
         completionTokens: 5,
@@ -44,10 +48,10 @@ import Testing
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — preflight denied by the proactive cap: model never ran, run FAILED with the cap copy.

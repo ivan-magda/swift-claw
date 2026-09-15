@@ -11,9 +11,7 @@ enum WorkflowStep: Hashable, Sendable {
 }
 
 /// An invocation's reviewed work identity; durable ownership belongs to the underlying transaction.
-struct WorkflowClaim: Sendable {
-  let step: WorkflowStep
-}
+struct WorkflowClaim: Sendable { let step: WorkflowStep }
 
 /// Advances durable transitions to a wait state, using store CAS claims rather than process locks.
 public struct LearningWorkflow: Sendable {
@@ -41,97 +39,90 @@ public struct LearningWorkflow: Sendable {
     self.logger = logger
   }
 
-  public func advance(runId: Int64, now: Date) async {
+  public func advance(runID: Int64, now: Date) async {
     do {
-      guard let binding = try store.binding(runId: runId) else {
+      guard let binding = try store.binding(runID: runID) else {
         return
       }
-      try store.sealEvidence(runId: runId, now: now)
-      await runner.runEvaluation(runId: runId, now: now)
+      try store.sealEvidence(runID: runID, now: now)
+      await runner.runEvaluation(runID: runID, now: now)
       guard !Task.isCancelled else {
         return
       }
-      _ = try store.recomputeAssignment(runId: runId, now: now)
-      await advance(jobId: binding.jobId, now: now)
-    } catch {
-      logger.error("run \(runId) learning workflow deferred: \(error)")
-    }
+      _ = try store.recomputeAssignment(runID: runID, now: now)
+      await advance(jobID: binding.jobID, now: now)
+    } catch { logger.error("run \(runID) learning workflow deferred: \(error)") }
   }
 
-  public func advance(jobId: Int64, now: Date) async {
-    await advance(jobId: jobId, now: now, transitionLimit: Self.maxTransitionsPerInvocation)
+  public func advance(jobID: Int64, now: Date) async {
+    await advance(jobID: jobID, now: now, transitionLimit: Self.maxTransitionsPerInvocation)
   }
 
-  func advance(jobId: Int64, now: Date, transitionLimit: Int) async {
+  func advance(jobID: Int64, now: Date, transitionLimit: Int) async {
     do {
-      guard try store.learningState(jobId: jobId) != nil else {
+      guard try store.learningState(jobID: jobID) != nil else {
         return
       }
       var visited: Set<WorkflowStep> = []
-      while let claim = try next(jobId: jobId, visited: visited, now: now) {
+      while let claim = try next(jobID: jobID, visited: visited, now: now) {
         guard !Task.isCancelled else {
           return
         }
         guard visited.count < transitionLimit else {
-          logger.error("learning workflow hit its transition budget for job \(jobId)")
+          logger.error("learning workflow hit its transition budget for job \(jobID)")
           return
         }
         visited.insert(claim.step)
-        try await apply(claim, jobId: jobId, now: now)
+        try await apply(claim, jobID: jobID, now: now)
       }
-    } catch {
-      logger.error("job \(jobId) learning workflow deferred: \(error)")
-    }
+    } catch { logger.error("job \(jobID) learning workflow deferred: \(error)") }
   }
 }
 
 // MARK: - Fixed Point
 
 private extension LearningWorkflow {
-  func next(jobId: Int64, visited: Set<WorkflowStep>, now: Date) throws -> WorkflowClaim? {
+  func next(jobID: Int64, visited: Set<WorkflowStep>, now: Date) throws -> WorkflowClaim? {
     var steps: [WorkflowStep] = []
-    steps += try store.workflowControls(jobId: jobId).map { control in
-      .control(control.eventId)
+    steps += try store.workflowControls(jobID: jobID).map { control in
+      .control(control.eventID)
     }
-    if let trial = try store.openTrial(jobId: jobId) {
-      steps.append(.trial(trial.trialId))
+    if let trial = try store.openTrial(jobID: jobID) {
+      steps.append(.trial(trial.trialID))
     }
-    steps += try store.workflowRollbacks(jobId: jobId).map { trigger in
+    steps += try store.workflowRollbacks(jobID: jobID).map { trigger in
       switch trigger {
-      case .ownerFeedback(_, let eventId), .supportWithdrawal(_, let eventId):
-        return .rollback(eventId)
-      case .adapter, .safety:
-        return .rollback(trigger.promotionId)
+      case .ownerFeedback(_, let eventID), .supportWithdrawal(_, let eventID):
+        return .rollback(eventID)
+      case .adapter, .safety: return .rollback(trigger.promotionID)
       }
     }
-    steps += try store.workflowCandidates(jobId: jobId).map(WorkflowStep.candidate)
-    steps += try store.workflowTriggers(jobId: jobId, now: now).map { trigger in
+    steps += try store.workflowCandidates(jobID: jobID).map(WorkflowStep.candidate)
+    steps += try store.workflowTriggers(jobID: jobID, now: now).map { trigger in
       .reflection(trigger.digest)
     }
-    return steps.first(where: { step in
+    return steps.first { step in
       !visited.contains(step)
-    }).map(WorkflowClaim.init(step:))
+    }.map(WorkflowClaim.init(step:))
   }
 
-  func apply(_ claim: WorkflowClaim, jobId: Int64, now: Date) async throws {
+  func apply(_ claim: WorkflowClaim, jobID: Int64, now: Date) async throws {
     switch claim.step {
     case .reflection(let digest):
-      if let trigger = try store.workflowTriggers(jobId: jobId, now: now)
-        .first(where: { trigger in
+      if
+        let trigger = try store.workflowTriggers(jobID: jobID, now: now).first(where: { trigger in
           trigger.digest == digest
-        })
-      {
+        }) {
         await runner.runReflection(trigger: trigger, now: now)
       }
     case .candidate(let digest):
       let outcome = try store.admitCandidate(digest: digest, redactor: redactor, now: now)
-      try notify(outcome, jobId: jobId, now: now)
-    case .control(let eventId):
+      try notify(outcome, jobID: jobID, now: now)
+    case .control(let eventID):
       guard
-        let control = try store.workflowControls(jobId: jobId)
-          .first(where: { control in
-            control.eventId == eventId
-          })
+        let control = try store.workflowControls(jobID: jobID).first(where: { control in
+          control.eventID == eventID
+        })
       else {
         return
       }
@@ -139,10 +130,7 @@ private extension LearningWorkflow {
       switch control.signal {
       case .candidateApprove:
         outcome = try store.approveCandidate(
-          CandidateApproval(
-            predecessorDigest: control.candidate,
-            feedbackEventId: control.eventId
-          ),
+          CandidateApproval(predecessorDigest: control.candidate, feedbackEventID: control.eventID),
           redactor: redactor,
           now: now
         )
@@ -153,21 +141,21 @@ private extension LearningWorkflow {
         outcome = try store.editCandidate(
           CandidateEdit(
             predecessorDigest: control.candidate,
-            feedbackEventId: control.eventId,
+            feedbackEventID: control.eventID,
             payload: Data(payload.utf8)
           ),
           redactor: redactor,
           now: now
         )
-      default:
-        return
+      default: return
       }
-      try notify(outcome, jobId: jobId, now: now)
+      try notify(outcome, jobID: jobID, now: now)
     case .trial:
-      guard let trial = try store.openTrial(jobId: jobId),
+      guard
+        let trial = try store.openTrial(jobID: jobID),
         case .reconciled(let result) = try store.reconcileTrial(trial.identity, now: now),
-        let current = try store.openTrial(jobId: jobId),
-        let state = try store.learningState(jobId: jobId)
+        let current = try store.openTrial(jobID: jobID),
+        let state = try store.learningState(jobID: jobID)
       else {
         return
       }
@@ -177,20 +165,19 @@ private extension LearningWorkflow {
         feedbackRevision: state.feedbackRevision,
         now: now
       )
-    case .rollback(let eventId):
-      for trigger in try store.workflowRollbacks(jobId: jobId) {
+    case .rollback(let eventID):
+      for trigger in try store.workflowRollbacks(jobID: jobID) {
         switch trigger {
-        case .ownerFeedback(_, let id) where id == eventId,
-          .supportWithdrawal(_, let id) where id == eventId:
+        case .ownerFeedback(_, let id) where id == eventID,
+             .supportWithdrawal(_, let id) where id == eventID:
           _ = try store.rollback(trigger, now: now)
-        default:
-          break
+        default: break
         }
       }
     }
   }
 
-  func notify(_ outcome: AdmissionOutcome, jobId: Int64, now: Date) throws {
+  func notify(_ outcome: AdmissionOutcome, jobID: Int64, now: Date) throws {
     let candidate: CandidateArtifact
     let state: CandidateReviewState
     switch outcome {
@@ -203,17 +190,16 @@ private extension LearningWorkflow {
     case .awaitingApproval(let artifact):
       candidate = artifact
       state = .awaitingApproval
-    case .rejected:
-      return
+    case .rejected: return
     }
-    guard let job = try jobs.job(id: jobId) else {
+    guard let job = try jobs.job(id: jobID) else {
       return
     }
     _ = try notices.enqueueReview(
       candidate: candidate,
       state: state,
-      ownerUserId: job.ownerChatId,
-      chatId: job.ownerChatId,
+      ownerUserID: job.ownerChatID,
+      chatID: job.ownerChatID,
       now: now
     )
   }

@@ -4,22 +4,24 @@ import Testing
 
 @testable import ClawTelegram
 
-@Suite struct CallbackWireTests {
+@Suite
+struct CallbackWireTests {
   private let decoder = JSONDecoder()
 
-  @Test func decodesACallbackQueryUpdate() throws {
+  @Test
+  func decodesACallbackQueryUpdate() throws {
     // given — a getUpdates payload carrying a callback_query (an inline-button tap)
     let json = """
-      {
-        "update_id": 42,
-        "callback_query": {
-          "id": "cbq-1",
-          "from": {"id": 7, "is_bot": false, "username": "owner"},
-          "message": {"message_id": 500, "chat": {"id": 7}},
-          "data": "apr:abc123:y"
-        }
+    {
+      "update_id": 42,
+      "callback_query": {
+        "id": "cbq-1",
+        "from": {"id": 7, "is_bot": false, "username": "owner"},
+        "message": {"message_id": 500, "chat": {"id": 7}},
+        "data": "apr:abc123:y"
       }
-      """
+    }
+    """
 
     // when
     let update = try decoder.decode(TUpdate.self, from: Data(json.utf8))
@@ -32,11 +34,12 @@ import Testing
     #expect(callback.data == "apr:abc123:y")
   }
 
-  @Test func plainMessageUpdateHasNoCallback() throws {
+  @Test
+  func plainMessageUpdateHasNoCallback() throws {
     // given — an ordinary text update with no callback_query key
     let json = """
-      {"update_id": 1, "message": {"message_id": 9, "chat": {"id": 7}, "text": "hi"}}
-      """
+    {"update_id": 1, "message": {"message_id": 9, "chat": {"id": 7}, "text": "hi"}}
+    """
 
     // when
     let update = try decoder.decode(TUpdate.self, from: Data(json.utf8))

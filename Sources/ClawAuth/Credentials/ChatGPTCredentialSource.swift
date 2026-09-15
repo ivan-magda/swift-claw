@@ -58,20 +58,10 @@ package enum ChatGPTRefreshPolicy {
 struct ChatGPTValidatedCredential: Sendable, Equatable {
   let stored: StoredOAuthCredential
 
-  private init(validated stored: StoredOAuthCredential) {
-    self.stored = stored
-  }
-
-  var profileID: UUID { stored.profileID }
-  var accessToken: String { stored.accessToken }
-  var refreshToken: String { stored.refreshToken }
-  var expiresAt: Date { stored.expiresAt }
+  private init(validated stored: StoredOAuthCredential) { self.stored = stored }
 
   init?(_ stored: StoredOAuthCredential) {
-    guard
-      Self.isSpendable(stored.accessToken),
-      Self.isSpendable(stored.refreshToken)
-    else {
+    guard Self.isSpendable(stored.accessToken), Self.isSpendable(stored.refreshToken) else {
       return nil
     }
     self.stored = stored
@@ -91,6 +81,14 @@ struct ChatGPTValidatedCredential: Sendable, Equatable {
     )
   }
 
+  var profileID: UUID { stored.profileID }
+
+  var accessToken: String { stored.accessToken }
+
+  var refreshToken: String { stored.refreshToken }
+
+  var expiresAt: Date { stored.expiresAt }
+
   func requiringRefresh() -> Self {
     Self(
       validated: StoredOAuthCredential(
@@ -103,10 +101,8 @@ struct ChatGPTValidatedCredential: Sendable, Equatable {
   }
 
   private static func isSpendable(_ token: String) -> Bool {
-    ChatGPTWireValues.headerSafeToken(
-      token,
-      maxBytes: ChatGPTProviderMetadata.maximumTokenBytes
-    ) != nil
+    ChatGPTWireValues.headerSafeToken(token, maxBytes: ChatGPTProviderMetadata.maximumTokenBytes)
+      != nil
   }
 }
 
@@ -119,7 +115,7 @@ struct ChatGPTValidatedCredential: Sendable, Equatable {
 /// second implicit flight, and the store stays synchronous so that installing a refreshed pair opens
 /// no reentrancy window between deciding to publish and having published.
 public actor ChatGPTCredentialSource<ClockType: Clock>: LLMCredentialSource
-where ClockType.Duration == Duration {
+  where ClockType.Duration == Duration {
   private let store: any LLMCredentialStore
   private let oauth: any ChatGPTOAuthRefreshing
   private let clock: ClockType
@@ -146,8 +142,7 @@ where ClockType.Duration == Duration {
     self.wallDate = wallDate
 
     switch initialCredential {
-    case nil:
-      state = .missing
+    case nil: state = .missing
     case .some(let stored):
       // A record whose tokens cannot be spent is not a record a refresh can rescue: the refresh
       // token is one of the two values that just failed. Only a new login repairs it.
@@ -161,14 +156,10 @@ where ClockType.Duration == Duration {
   public func authorization() async throws -> LLMRequestAuthorization {
     let now = wallDate()
     switch state {
-    case .stopping:
-      throw ChatGPTCredentialError.shuttingDown
-    case .missing, .authenticationRequired:
-      throw ChatGPTCredentialError.authenticationRequired
-    case .pendingPersistence(let pending):
-      return try await retryPublication(of: pending)
-    case .refreshing(let flight):
-      return try await join(flight)
+    case .stopping: throw ChatGPTCredentialError.shuttingDown
+    case .missing, .authenticationRequired: throw ChatGPTCredentialError.authenticationRequired
+    case .pendingPersistence(let pending): return try await retryPublication(of: pending)
+    case .refreshing(let flight): return try await join(flight)
     case .cooldown(let cooling):
       let remaining = clock.now.duration(to: cooling.until)
       guard remaining <= .zero else {
@@ -187,10 +178,8 @@ where ClockType.Duration == Duration {
   /// A verdict about a snapshot, so it only counts while that snapshot is the one being spent: a late
   /// 401 from a request that authorized two rotations ago has nothing to say about the token now on
   /// the wire.
-  public func reject(
-    generation: LLMCredentialGeneration,
-    disposition: LLMCredentialRejection
-  ) async {
+  public func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async
+  {
     switch state {
     case .ready(let credential, let current) where current == generation:
       switch disposition {
@@ -203,11 +192,8 @@ where ClockType.Duration == Duration {
         do {
           try commit(pending)
           state = .ready(credential: pending.credential, generation: current)
-        } catch {
-          state = .pendingPersistence(pending)
-        }
-      case .authenticationRequired:
-        state = .authenticationRequired
+        } catch { state = .pendingPersistence(pending) }
+      case .authenticationRequired: state = .authenticationRequired
       }
     case .cooldown(let cooling) where cooling.generation == generation:
       // A cooldown already ends in a refresh, so `.refresh` asks for what is coming. A terminal
@@ -235,11 +221,7 @@ where ClockType.Duration == Duration {
     guard case .stopping(let stopping) = state, let pending = stopping.pending else {
       return
     }
-    do {
-      try commit(pending)
-    } catch {
-      throw ChatGPTCredentialError.persistenceFailed(error)
-    }
+    do { try commit(pending) } catch { throw ChatGPTCredentialError.persistenceFailed(error) }
     state = .stopping(Stopping())
   }
 
@@ -251,10 +233,8 @@ where ClockType.Duration == Duration {
       return
     }
     switch result {
-    case .success(let pair):
-      accept(pair, from: flight)
-    case .failure(let error):
-      settle(error, from: flight)
+    case .success(let pair): accept(pair, from: flight)
+    case .failure(let error): settle(error, from: flight)
     }
   }
 }
@@ -304,10 +284,8 @@ private extension ChatGPTCredentialSource {
 
     func failure(retryAfter: Duration) -> ChatGPTCredentialError {
       switch reason {
-      case .throttled:
-        .throttled(retryAfter: retryAfter)
-      case .unavailable(let detail):
-        .temporarilyUnavailable(retryAfter: retryAfter, detail: detail)
+      case .throttled: .throttled(retryAfter: retryAfter)
+      case .unavailable(let detail): .temporarilyUnavailable(retryAfter: retryAfter, detail: detail)
       }
     }
   }
@@ -339,12 +317,9 @@ private extension ChatGPTCredentialSource {
   /// A flight record is reachable from exactly two states, and only under its own ID.
   func flight(matching flightID: UInt64) -> Flight? {
     switch state {
-    case .refreshing(let flight) where flight.id == flightID:
-      return flight
-    case .stopping(let stopping) where stopping.flight?.id == flightID:
-      return stopping.flight
-    default:
-      return nil
+    case .refreshing(let flight) where flight.id == flightID: return flight
+    case .stopping(let stopping) where stopping.flight?.id == flightID: return stopping.flight
+    default: return nil
     }
   }
 }
@@ -360,14 +335,9 @@ private extension ChatGPTCredentialSource {
     // here, before it starts, rather than inside a store that would have to abandon a half-written
     // envelope to honor it.
     try Task.checkCancellation()
-    do {
-      try commit(pending)
-    } catch {
-      throw ChatGPTCredentialError.persistenceFailed(error)
-    }
+    do { try commit(pending) } catch { throw ChatGPTCredentialError.persistenceFailed(error) }
     switch pending.purpose {
-    case .publishRotation:
-      return install(pending)
+    case .publishRotation: return install(pending)
     case .forceRefresh:
       return try await join(
         startFlight(from: pending.credential, replacing: pending.baseGeneration)
@@ -484,17 +454,20 @@ private extension ChatGPTCredentialSource {
   func join(_ flight: Flight) async throws -> LLMRequestAuthorization {
     lastWaiterID += 1
     let waiterID = lastWaiterID
-    return try await withTaskCancellationHandler {
-      try await withCheckedThrowingContinuation { continuation in
-        // Runs on this actor with no suspension between the state check that chose this flight and
-        // the registration, so a finalizer cannot slip past a caller on its way in.
-        waiters[waiterID] = continuation
+    return try await withTaskCancellationHandler(
+      operation: {
+        try await withCheckedThrowingContinuation { continuation in
+          // Runs on this actor with no suspension between the state check that chose this flight and
+          // the registration, so a finalizer cannot slip past a caller on its way in.
+          waiters[waiterID] = continuation
+        }
+      },
+      onCancel: {
+        Task {
+          await self.abandon(waiterID: waiterID)
+        }
       }
-    } onCancel: {
-      Task {
-        await self.abandon(waiterID: waiterID)
-      }
-    }
+    )
   }
 
   /// One waiter leaving. It resumes only itself: the flight belongs to every other waiter too, and
@@ -535,9 +508,7 @@ private extension ChatGPTCredentialSource {
       baseGeneration: flight.baseGeneration,
       purpose: .publishRotation
     )
-    do {
-      try commit(pending)
-    } catch {
+    do { try commit(pending) } catch {
       withhold(pending, after: error)
       return
     }
@@ -591,8 +562,7 @@ private extension ChatGPTCredentialSource {
     let reason: Cooling.Reason
     let delay: Duration
     switch error as? ChatGPTOAuthFailure {
-    case .grantRejected:
-      return nil
+    case .grantRejected: return nil
     case .throttled(let retryAfter):
       reason = .throttled
       delay = retryAfter ?? ChatGPTRefreshPolicy.maximumCooldown
@@ -623,14 +593,10 @@ private extension ChatGPTCredentialSource {
   func closeAdmission() -> Stopping {
     let retained: Stopping
     switch state {
-    case .refreshing(let flight):
-      retained = Stopping(flight: flight, pending: nil)
-    case .pendingPersistence(let pending):
-      retained = Stopping(flight: nil, pending: pending)
-    case .stopping(let stopping):
-      retained = stopping
-    case .missing, .ready, .cooldown, .authenticationRequired:
-      retained = Stopping()
+    case .refreshing(let flight): retained = Stopping(flight: flight, pending: nil)
+    case .pendingPersistence(let pending): retained = Stopping(flight: nil, pending: pending)
+    case .stopping(let stopping): retained = stopping
+    case .missing, .ready, .cooldown, .authenticationRequired: retained = Stopping()
     }
     state = .stopping(retained)
     resumeWaiters(with: .failure(CancellationError()))

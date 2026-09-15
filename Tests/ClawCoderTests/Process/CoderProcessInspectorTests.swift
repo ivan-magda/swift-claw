@@ -3,16 +3,18 @@ import ClawTestSupport
 import Foundation
 import Testing
 
-@testable import ClawCoder
-
 #if canImport(Darwin)
   import Darwin
 #else
   import Glibc
 #endif
 
-@Suite struct CoderProcessInspectorTests {
-  @Test func recoveryRequiresMatchingIdentity() async throws {
+@testable import ClawCoder
+
+@Suite
+struct CoderProcessInspectorTests {
+  @Test
+  func recoveryRequiresMatchingIdentity() async throws {
     // given
     let fixture = ProcessFixture()
     defer { fixture.cleanup() }
@@ -29,9 +31,8 @@ import Testing
             launched.open()
             await release.waitIgnoringCancellation()
           }
-        },
-        onStandardOutput: { _ in }
-      )
+        }
+      ) { _ in }
     }
     defer { task.cancel() }
     await launched.wait()
@@ -82,7 +83,8 @@ import Testing
     #expect(stopped == .stopped)
   }
 
-  @Test func missingLeaderWithLiveDescendantIsUnresolved() async throws {
+  @Test
+  func missingLeaderWithLiveDescendantIsUnresolved() async throws {
     // given
     let fixture = ProcessFixture()
     defer { fixture.cleanup() }

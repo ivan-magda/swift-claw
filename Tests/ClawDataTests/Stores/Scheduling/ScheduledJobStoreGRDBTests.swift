@@ -9,7 +9,8 @@ import Testing
 // Cycle A-E `@Test` methods live in same-type extensions below purely to keep each extension's
 // body under the project's `type_body_length` gate; this is still one `@Suite` with one set of
 // shared fixtures/helpers declared here.
-@Suite struct ScheduledJobStoreGRDBTests {
+@Suite
+struct ScheduledJobStoreGRDBTests {
   // Whole-second fixtures: the store persists occurrence instants as epoch-second INTEGERs.
   private let baseNow = Date(timeIntervalSince1970: 1_782_000_000)
   private let dueFirst = Date(timeIntervalSince1970: 1_782_000_600)
@@ -35,7 +36,7 @@ import Testing
   ) throws -> ScheduledJob {
     try store.create(
       NewScheduledJob(
-        ownerChatId: 777,
+        ownerChatID: 777,
         label: label,
         prompt: "Summarize my unread items",
         recurrence: recurrence,
@@ -67,11 +68,11 @@ import Testing
   /// Drives a fire's PENDING run to the terminal DONE state so the NEXT fire on that session no
   /// longer overlaps a live run. Consecutive proactive fires are only non-overlapping because the
   /// prior turn finished; the store enforces that, so these tests must model it explicitly.
-  private func markRunDone(_ queue: DatabaseQueue, runId: Int64) throws {
+  private func markRunDone(_ queue: DatabaseQueue, runID: Int64) throws {
     try queue.write { db in
       try db.execute(
         sql: "UPDATE runs SET state = ? WHERE id = ?",
-        arguments: [RunState.done.rawValue, runId]
+        arguments: [RunState.done.rawValue, runID]
       )
     }
   }
@@ -85,12 +86,12 @@ import Testing
     return fire
   }
 
-  private func windowStart(_ queue: DatabaseQueue, sessionId: Int64) throws -> Int64? {
+  private func windowStart(_ queue: DatabaseQueue, sessionID: Int64) throws -> Int64? {
     try queue.read { db in
       try Int64.fetchOne(
         db,
         sql: "SELECT window_start_message_id FROM sessions WHERE id = ?",
-        arguments: [sessionId]
+        arguments: [sessionID]
       )
     }
   }
@@ -99,7 +100,8 @@ import Testing
 // MARK: - Cycle A: CRUD
 
 extension ScheduledJobStoreGRDBTests {
-  @Test func createRoundTripsTheJobRow() throws {
+  @Test
+  func createRoundTripsTheJobRow() throws {
     // given
     let (store, _) = try makeStore()
     let envelope = weekdayEnvelope()
@@ -113,14 +115,15 @@ extension ScheduledJobStoreGRDBTests {
     #expect(created.status == .active)
     #expect(created.recurrence == envelope)
     #expect(created.nextOccurrence == dueFirst)
-    #expect(created.sessionId == nil)
+    #expect(created.sessionID == nil)
     #expect(created.lastFiredAt == nil)
     #expect(created.createdTs == baseNow)
     #expect(created.updatedTs == baseNow)
     #expect(try store.job(id: created.id + 99) == nil)
   }
 
-  @Test func oneShotRoundTripsWithNilRecurrence() throws {
+  @Test
+  func oneShotRoundTripsWithNilRecurrence() throws {
     // given
     let (store, _) = try makeStore()
 
@@ -131,7 +134,8 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try store.job(id: created.id)?.recurrence == nil)
   }
 
-  @Test func listAllReturnsEveryRowInIdOrder() throws {
+  @Test
+  func listAllReturnsEveryRowInIDOrder() throws {
     // given
     let (store, _) = try makeStore()
     let first = try makeJob(store, recurrence: nil, next: dueFirst, now: baseNow, label: "a")
@@ -141,7 +145,8 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try store.listAll().map(\.id) == [first.id, second.id])
   }
 
-  @Test func dueJobsReturnsOnlyActiveDueRowsInDueOrder() throws {
+  @Test
+  func dueJobsReturnsOnlyActiveDueRowsInDueOrder() throws {
     // given — two due (out of insert order), one future
     let (store, queue) = try makeStore()
     let later = try makeJob(
@@ -193,7 +198,8 @@ extension ScheduledJobStoreGRDBTests {
 // MARK: - Cycle B: the fused claim (KEYSTONE)
 
 extension ScheduledJobStoreGRDBTests {
-  @Test func staleDueClaimLosesAfterTheFirstAdvance() throws {
+  @Test
+  func staleDueClaimLosesAfterTheFirstAdvance() throws {
     // given — two claims for the same (job, due): the second models a racing ticker that read
     // the row before the first advanced it
     let (store, queue) = try makeStore()
@@ -202,14 +208,14 @@ extension ScheduledJobStoreGRDBTests {
 
     // when
     let winner = try store.claimAndFire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       fireAt: dueFirst,
       nextOccurrence: dueNext,
       now: fireTime
     )
     let loser = try store.claimAndFire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       fireAt: dueFirst,
       nextOccurrence: dueNext,
@@ -227,14 +233,15 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try auditCount(queue, action: .jobExecuted) == 1)
   }
 
-  @Test func concurrentClaimsAllowExactlyOneWinner() async throws {
+  @Test
+  func concurrentClaimsAllowExactlyOneWinner() async throws {
     // given — a real writer race on a file-backed WAL pool, not the serialized test queue
-    let directory = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-sched-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let pool = try ClawDatabase.makePool(
-      path: directory.appendingPathComponent("claw.sqlite").path
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "claw-sched-\(UUID().uuidString)",
+      isDirectory: true
     )
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let pool = try ClawDatabase.makePool(path: directory.appendingPathComponent("claw.sqlite").path)
     try ClawDatabase.migrate(pool)
     let store = ScheduledJobStoreGRDB(writer: pool)
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
@@ -247,7 +254,7 @@ extension ScheduledJobStoreGRDBTests {
       for _ in 0..<2 {
         group.addTask {
           try? store.claimAndFire(
-            jobId: job.id,
+            jobID: job.id,
             due: claimDue,
             fireAt: claimDue,
             nextOccurrence: claimNext,
@@ -264,7 +271,11 @@ extension ScheduledJobStoreGRDBTests {
 
     // then — exactly one winner AND exactly one run row (a swallowed error cannot fake this:
     // zero fires would leave zero runs and zero winners; two would leave two)
-    #expect(claims.compactMap { claim in claim }.count == 1)
+    #expect(
+      claims.compactMap { claim in
+        claim
+      }.count == 1
+    )
     let runCount = try await pool.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM runs") ?? -1
     }
@@ -272,21 +283,22 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try store.job(id: job.id)?.nextOccurrence == dueNext)
   }
 
-  @Test func oneShotClaimCompletesTheJob() throws {
+  @Test
+  func oneShotClaimCompletesTheJob() throws {
     // given
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: nil, next: dueFirst, now: baseNow)
 
     // when — nextOccurrence nil ⇒ one-shot terminal transition
     let claimed = try store.claimAndFire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       fireAt: dueFirst,
       nextOccurrence: nil,
       now: dueFirst
     )
     let replay = try store.claimAndFire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       fireAt: dueFirst,
       nextOccurrence: nil,
@@ -303,23 +315,24 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try count(queue, sql: "SELECT COUNT(*) FROM runs") == 1)
   }
 
-  @Test func firstClaimLazilyCreatesTheJobSessionThenReusesIt() throws {
+  @Test
+  func firstClaimLazilyCreatesTheJobSessionThenReusesIt() throws {
     // given
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
 
     // when — two consecutive, non-overlapping fires (the first run completes before the second)
     let first = try store.claimAndFire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       fireAt: dueFirst,
       nextOccurrence: dueNext,
       now: dueFirst
     )
     let firstFire = try #require(first)
-    try markRunDone(queue, runId: firstFire.runId)
+    try markRunDone(queue, runID: firstFire.runID)
     let second = try store.claimAndFire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueNext,
       fireAt: dueNext,
       nextOccurrence: dueThird,
@@ -329,9 +342,9 @@ extension ScheduledJobStoreGRDBTests {
     // then — one dedicated session, reused; runs carry origin + job linkage; the trigger
     // message is the owner's own confirmed prompt at the trusted tier (spec §5.2)
     let secondFire = try #require(second)
-    #expect(firstFire.sessionId == secondFire.sessionId)
-    #expect(firstFire.triggerMessageId != secondFire.triggerMessageId)
-    #expect(firstFire.ownerChatId == 777)
+    #expect(firstFire.sessionID == secondFire.sessionID)
+    #expect(firstFire.triggerMessageID != secondFire.triggerMessageID)
+    #expect(firstFire.ownerChatID == 777)
     #expect(
       try count(
         queue,
@@ -339,7 +352,7 @@ extension ScheduledJobStoreGRDBTests {
         arguments: [SessionKey.scheduledJob(id: job.id)]
       ) == 1
     )
-    #expect(try store.job(id: job.id)?.sessionId == firstFire.sessionId)
+    #expect(try store.job(id: job.id)?.sessionID == firstFire.sessionID)
     // Both fires produced a scheduled run linked to the job (the first since driven to DONE, the
     // second freshly PENDING) — the second was allowed only because the first was terminal.
     #expect(
@@ -360,9 +373,9 @@ extension ScheduledJobStoreGRDBTests {
       try count(
         queue,
         sql: """
-          SELECT COUNT(*) FROM messages
-          WHERE role = 'user' AND provenance = 'trusted' AND content = 'Summarize my unread items'
-          """
+        SELECT COUNT(*) FROM messages
+        WHERE role = 'user' AND provenance = 'trusted' AND content = 'Summarize my unread items'
+        """
       ) == 2
     )
   }
@@ -371,7 +384,8 @@ extension ScheduledJobStoreGRDBTests {
 // MARK: - Cycle C: scheduler_state, run-now, misfire
 
 extension ScheduledJobStoreGRDBTests {
-  @Test func schedulerStateStartsEmptyAndRecordTickUpserts() throws {
+  @Test
+  func schedulerStateStartsEmptyAndRecordTickUpserts() throws {
     // given
     let (store, _) = try makeStore()
 
@@ -400,13 +414,14 @@ extension ScheduledJobStoreGRDBTests {
     #expect(state.heartbeatCount == 0)
   }
 
-  @Test func fireNowFiresWithoutTouchingTheSchedule() throws {
+  @Test
+  func fireNowFiresWithoutTouchingTheSchedule() throws {
     // given
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
 
     // when
-    let outcome = try store.fireNow(jobId: job.id, now: baseNow)
+    let outcome = try store.fireNow(jobID: job.id, now: baseNow)
 
     // then — a real fire (run + audit + last_fired_at) with the schedule untouched (spec §5.4)
     #expect(firedFire(outcome) != nil)
@@ -424,7 +439,8 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try auditCount(queue, action: .jobExecuted) == 1)
   }
 
-  @Test func fireNowRequiresActiveOrPaused() throws {
+  @Test
+  func fireNowRequiresActiveOrPaused() throws {
     // given — PAUSED is allowed (test a job without unmuting it, spec §5.4); terminal is not
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
@@ -436,7 +452,7 @@ extension ScheduledJobStoreGRDBTests {
     }
 
     // when / then — fires on PAUSED without changing the status
-    #expect(firedFire(try store.fireNow(jobId: job.id, now: baseNow)) != nil)
+    #expect(firedFire(try store.fireNow(jobID: job.id, now: baseNow)) != nil)
     #expect(try store.job(id: job.id)?.status == .paused)
 
     // and refuses terminal states and absent ids
@@ -446,11 +462,12 @@ extension ScheduledJobStoreGRDBTests {
         arguments: [ScheduledJobStatus.cancelled.rawValue, job.id]
       )
     }
-    #expect(try store.fireNow(jobId: job.id, now: baseNow) == .ineligible)
-    #expect(try store.fireNow(jobId: job.id + 99, now: baseNow) == .ineligible)
+    #expect(try store.fireNow(jobID: job.id, now: baseNow) == .ineligible)
+    #expect(try store.fireNow(jobID: job.id + 99, now: baseNow) == .ineligible)
   }
 
-  @Test func skipMisfireAdvancesWithNoRunAndAuditsTheSkip() throws {
+  @Test
+  func skipMisfireAdvancesWithNoRunAndAuditsTheSkip() throws {
     // given
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
@@ -458,14 +475,14 @@ extension ScheduledJobStoreGRDBTests {
 
     // when — five occurrences fell out of the catch-up window
     let applied = try store.skipMisfire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       nextOccurrence: dueNext,
       skippedCount: 5,
       now: skipTime
     )
     let stale = try store.skipMisfire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       nextOccurrence: dueNext,
       skippedCount: 5,
@@ -489,21 +506,22 @@ extension ScheduledJobStoreGRDBTests {
   /// occurrence. Sharing `advanceOccurrence` makes that structural rather than behavioural, so this
   /// is a guard against the two verbs re-growing separate predicates — each verb's own stale-due
   /// test would still pass while cross-verb contention silently stopped working.
-  @Test func aMisfireSkipLosesToAFireClaimOnTheSameOccurrence() throws {
+  @Test
+  func aMisfireSkipLosesToAFireClaimOnTheSameOccurrence() throws {
     // given
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
 
     // when — the claim advances first, then a skip arrives holding the same stale due
     let claimed = try store.claimAndFire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       fireAt: dueFirst,
       nextOccurrence: dueNext,
       now: dueFirst
     )
     let skipped = try store.skipMisfire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       nextOccurrence: dueNext,
       skippedCount: 3,
@@ -521,14 +539,15 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try store.schedulerState().lastMisfireAt == nil)
   }
 
-  @Test func skipMisfireCompletesAOneShot() throws {
+  @Test
+  func skipMisfireCompletesAOneShot() throws {
     // given — a one-shot whose single occurrence aged out entirely
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: nil, next: dueFirst, now: baseNow)
 
     // when
     let applied = try store.skipMisfire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueFirst,
       nextOccurrence: nil,
       skippedCount: 1,
@@ -547,7 +566,8 @@ extension ScheduledJobStoreGRDBTests {
 // MARK: - Cycle D: verb semantics (spec §5.4, §4.1 FSM)
 
 extension ScheduledJobStoreGRDBTests {
-  @Test func pauseIsIdempotentAndHidesTheJobFromTheTicker() throws {
+  @Test
+  func pauseIsIdempotentAndHidesTheJobFromTheTicker() throws {
     // given
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
@@ -564,7 +584,8 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try store.pause(id: job.id + 99, now: baseNow) == nil)
   }
 
-  @Test func resumeAppliesTheCallerRecomputedNextOccurrence() throws {
+  @Test
+  func resumeAppliesTheCallerRecomputedNextOccurrence() throws {
     // given — pause = "be quiet", not "queue up": the caller recomputes from now, so
     // occurrences inside the paused window are skipped, never caught up (spec §5.4)
     let (store, queue) = try makeStore()
@@ -583,7 +604,8 @@ extension ScheduledJobStoreGRDBTests {
     #expect(try auditCount(queue, action: .jobResumed) == 1)
   }
 
-  @Test func cancelIsTerminalAndRetainsTheRow() throws {
+  @Test
+  func cancelIsTerminalAndRetainsTheRow() throws {
     // given
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
@@ -602,10 +624,10 @@ extension ScheduledJobStoreGRDBTests {
     // terminal states refuse every verb and every fire path
     #expect(try store.pause(id: job.id, now: baseNow) == nil)
     #expect(try store.resume(id: job.id, nextOccurrence: dueNext, now: baseNow) == nil)
-    #expect(try store.fireNow(jobId: job.id, now: baseNow) == .ineligible)
+    #expect(try store.fireNow(jobID: job.id, now: baseNow) == .ineligible)
     #expect(
       try store.claimAndFire(
-        jobId: job.id,
+        jobID: job.id,
         due: dueFirst,
         fireAt: dueFirst,
         nextOccurrence: dueNext,
@@ -614,7 +636,8 @@ extension ScheduledJobStoreGRDBTests {
     )
   }
 
-  @Test func cancelAppliesFromPausedToo() throws {
+  @Test
+  func cancelAppliesFromPausedToo() throws {
     // given
     let (store, _) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
@@ -628,7 +651,8 @@ extension ScheduledJobStoreGRDBTests {
 // MARK: - Cycle E: heartbeat fire + conformance
 
 extension ScheduledJobStoreGRDBTests {
-  @Test func fireHeartbeatCreatesTheHeartbeatRunOnItsOwnSession() throws {
+  @Test
+  func fireHeartbeatCreatesTheHeartbeatRunOnItsOwnSession() throws {
     // given
     let (store, queue) = try makeStore()
 
@@ -636,7 +660,7 @@ extension ScheduledJobStoreGRDBTests {
     let fired = try #require(
       try store.fireHeartbeat(
         prompt: "Review the checklist below…",
-        ownerChatId: 777,
+        ownerChatID: 777,
         now: baseNow,
         day: "2026-07-06"
       )
@@ -644,7 +668,7 @@ extension ScheduledJobStoreGRDBTests {
 
     // then — dedicated persistent session; origin heartbeat; NO job linkage; the template
     // wraps HEARTBEAT.md content, so the trigger rides the UNTRUSTED tier (spec §12)
-    #expect(fired.ownerChatId == 777)
+    #expect(fired.ownerChatID == 777)
     #expect(
       try count(
         queue,
@@ -671,7 +695,8 @@ extension ScheduledJobStoreGRDBTests {
     #expect(state.heartbeatCount == 1)
   }
 
-  @Test func heartbeatDayCounterRollsAtTheDayBoundary() throws {
+  @Test
+  func heartbeatDayCounterRollsAtTheDayBoundary() throws {
     // given
     let (store, queue) = try makeStore()
     let secondFire = baseNow.addingTimeInterval(3_600)
@@ -680,28 +705,23 @@ extension ScheduledJobStoreGRDBTests {
     // when — each beat completes before the next fires (consecutive beats never overlap; the
     // store would otherwise skip a fire into a still-live beat)
     let firstBeat = try #require(
-      try store.fireHeartbeat(prompt: "check", ownerChatId: 777, now: baseNow, day: "2026-07-06")
+      try store.fireHeartbeat(prompt: "check", ownerChatID: 777, now: baseNow, day: "2026-07-06")
     )
-    try markRunDone(queue, runId: firstBeat.runId)
+    try markRunDone(queue, runID: firstBeat.runID)
     let secondBeat = try #require(
-      try store.fireHeartbeat(
-        prompt: "check",
-        ownerChatId: 777,
-        now: secondFire,
-        day: "2026-07-06"
-      )
+      try store.fireHeartbeat(prompt: "check", ownerChatID: 777, now: secondFire, day: "2026-07-06")
     )
-    try markRunDone(queue, runId: secondBeat.runId)
+    try markRunDone(queue, runID: secondBeat.runID)
     let sameDayState = try store.schedulerState()
     let thirdBeat = try #require(
       try store.fireHeartbeat(
         prompt: "check",
-        ownerChatId: 777,
+        ownerChatID: 777,
         now: nextDayFire,
         day: "2026-07-07"
       )
     )
-    try markRunDone(queue, runId: thirdBeat.runId)
+    try markRunDone(queue, runID: thirdBeat.runID)
     let nextDayState = try store.schedulerState()
 
     // then — the cap's day boundary is the caller's CLAW_TIMEZONE day string, not UTC (spec §4.3)
@@ -723,13 +743,14 @@ extension ScheduledJobStoreGRDBTests {
 // MARK: - Cycle F: per-fire context isolation
 
 extension ScheduledJobStoreGRDBTests {
-  @Test func eachFireResetsTheSessionWindowSoPriorTurnsStayOutOfContext() throws {
+  @Test
+  func eachFireResetsTheSessionWindowSoPriorTurnsStayOutOfContext() throws {
     // given — a first fire whose turn left a poisoned exchange and sticky flags behind
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
     let firstFire = try #require(
       try store.claimAndFire(
-        jobId: job.id,
+        jobID: job.id,
         due: dueFirst,
         fireAt: dueFirst,
         nextOccurrence: dueNext,
@@ -739,23 +760,23 @@ extension ScheduledJobStoreGRDBTests {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO messages(session_id, role, content, provenance, ts)
-          VALUES (?, 'assistant', 'That text needs to be sent as a /schedule command', 'trusted', ?)
-          """,
-        arguments: [firstFire.sessionId, dueFirst]
+        INSERT INTO messages(session_id, role, content, provenance, ts)
+        VALUES (?, 'assistant', 'That text needs to be sent as a /schedule command', 'trusted', ?)
+        """,
+        arguments: [firstFire.sessionID, dueFirst]
       )
       try db.execute(
         sql: "UPDATE sessions SET tainted = 1, has_private_data = 1 WHERE id = ?",
-        arguments: [firstFire.sessionId]
+        arguments: [firstFire.sessionID]
       )
     }
     // The first run finishes; only then is the next fire non-overlapping and allowed to reset.
-    try markRunDone(queue, runId: firstFire.runId)
+    try markRunDone(queue, runID: firstFire.runID)
 
     // when — the next fire claims on the same persistent session
     let secondFire = try #require(
       try store.claimAndFire(
-        jobId: job.id,
+        jobID: job.id,
         due: dueNext,
         fireAt: dueNext,
         nextOccurrence: dueThird,
@@ -764,10 +785,10 @@ extension ScheduledJobStoreGRDBTests {
     )
 
     // then — same session, but the snapshot holds only the new trigger and the flags cleared
-    #expect(secondFire.sessionId == firstFire.sessionId)
+    #expect(secondFire.sessionID == firstFire.sessionID)
     let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
-      sessionId: secondFire.sessionId,
-      throughMessageId: secondFire.triggerMessageId,
+      sessionID: secondFire.sessionID,
+      throughMessageID: secondFire.triggerMessageID,
       limit: 50
     )
     #expect(snapshot.history.map(\.content) == ["Summarize my unread items"])
@@ -775,43 +796,39 @@ extension ScheduledJobStoreGRDBTests {
     #expect(snapshot.hasPrivateData == false)
   }
 
-  @Test func eachHeartbeatFireResetsTheHeartbeatSessionWindow() throws {
+  @Test
+  func eachHeartbeatFireResetsTheHeartbeatSessionWindow() throws {
     // given — a prior, now-completed beat left a reply on the shared heartbeat session
     let (store, queue) = try makeStore()
     let firstBeat = try #require(
-      try store.fireHeartbeat(
-        prompt: "beat one",
-        ownerChatId: 777,
-        now: baseNow,
-        day: "2026-07-13"
-      )
+      try store.fireHeartbeat(prompt: "beat one", ownerChatID: 777, now: baseNow, day: "2026-07-13")
     )
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO messages(session_id, role, content, provenance, ts)
-          VALUES (?, 'assistant', 'HEARTBEAT_OK', 'trusted', ?)
-          """,
-        arguments: [firstBeat.sessionId, baseNow]
+        INSERT INTO messages(session_id, role, content, provenance, ts)
+        VALUES (?, 'assistant', 'HEARTBEAT_OK', 'trusted', ?)
+        """,
+        arguments: [firstBeat.sessionID, baseNow]
       )
     }
-    try markRunDone(queue, runId: firstBeat.runId)
+    try markRunDone(queue, runID: firstBeat.runID)
 
     // when
     let secondBeat = try #require(
       try store.fireHeartbeat(
         prompt: "beat two",
-        ownerChatId: 777,
+        ownerChatID: 777,
         now: dueFirst,
         day: "2026-07-14"
       )
     )
 
     // then — the new beat's snapshot carries only its own trigger
-    #expect(secondBeat.sessionId == firstBeat.sessionId)
+    #expect(secondBeat.sessionID == firstBeat.sessionID)
     let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
-      sessionId: secondBeat.sessionId,
-      throughMessageId: secondBeat.triggerMessageId,
+      sessionID: secondBeat.sessionID,
+      throughMessageID: secondBeat.triggerMessageID,
       limit: 50
     )
     #expect(snapshot.history.map(\.content) == ["beat two"])
@@ -821,24 +838,25 @@ extension ScheduledJobStoreGRDBTests {
 // MARK: - Cycle G: overlapping fires skipped while a prior run is live
 
 extension ScheduledJobStoreGRDBTests {
-  @Test func overlappingJobFireIsSkippedWhileThePriorRunIsLive() throws {
+  @Test
+  func overlappingJobFireIsSkippedWhileThePriorRunIsLive() throws {
     // given — a first fire whose PENDING run is still live (parked, e.g. on an approval)
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
     let firstFire = try #require(
       try store.claimAndFire(
-        jobId: job.id,
+        jobID: job.id,
         due: dueFirst,
         fireAt: dueFirst,
         nextOccurrence: dueNext,
         now: dueFirst
       )
     )
-    let windowBeforeSecond = try windowStart(queue, sessionId: firstFire.sessionId)
+    let windowBeforeSecond = try windowStart(queue, sessionID: firstFire.sessionID)
 
     // when — the next occurrence claims while the prior run is still live
     let secondFire = try store.claimAndFire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueNext,
       fireAt: dueNext,
       nextOccurrence: dueThird,
@@ -852,10 +870,10 @@ extension ScheduledJobStoreGRDBTests {
       try count(
         queue,
         sql: "SELECT COUNT(*) FROM runs WHERE session_id = ?",
-        arguments: [firstFire.sessionId]
+        arguments: [firstFire.sessionID]
       ) == 1
     )
-    #expect(try windowStart(queue, sessionId: firstFire.sessionId) == windowBeforeSecond)
+    #expect(try windowStart(queue, sessionID: firstFire.sessionID) == windowBeforeSecond)
     #expect(try auditCount(queue, action: .jobOverlapSkipped) == 1)
 
     // and last_fired_at still records the prior REAL fire (dueFirst), not the skipped occurrence's
@@ -864,31 +882,32 @@ extension ScheduledJobStoreGRDBTests {
 
     // and the parked run's trigger is still inside its context window
     let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
-      sessionId: firstFire.sessionId,
-      throughMessageId: firstFire.triggerMessageId,
+      sessionID: firstFire.sessionID,
+      throughMessageID: firstFire.triggerMessageID,
       limit: 50
     )
     #expect(snapshot.history.map(\.content) == ["Summarize my unread items"])
   }
 
-  @Test func onceThePriorRunIsTerminalTheNextFireProceedsAndResets() throws {
+  @Test
+  func onceThePriorRunIsTerminalTheNextFireProceedsAndResets() throws {
     // given — a first fire whose run has since reached the terminal DONE state
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
     let firstFire = try #require(
       try store.claimAndFire(
-        jobId: job.id,
+        jobID: job.id,
         due: dueFirst,
         fireAt: dueFirst,
         nextOccurrence: dueNext,
         now: dueFirst
       )
     )
-    try markRunDone(queue, runId: firstFire.runId)
+    try markRunDone(queue, runID: firstFire.runID)
 
     // when — the next occurrence fires with no live run to guard against
     let secondFire = try store.claimAndFire(
-      jobId: job.id,
+      jobID: job.id,
       due: dueNext,
       fireAt: dueNext,
       nextOccurrence: dueThird,
@@ -897,35 +916,31 @@ extension ScheduledJobStoreGRDBTests {
 
     // then — it proceeds (fresh run) and its window resets so the prior trigger is out of context
     let resumedFire = try #require(secondFire)
-    #expect(resumedFire.sessionId == firstFire.sessionId)
+    #expect(resumedFire.sessionID == firstFire.sessionID)
     #expect(try auditCount(queue, action: .jobOverlapSkipped) == 0)
     // a real (non-overlap) fire DOES advance the fire clock to its fireAt
     #expect(try store.job(id: job.id)?.lastFiredAt == dueNext)
     let snapshot = try SessionMessageStoreGRDB(writer: queue).loadContextSnapshot(
-      sessionId: resumedFire.sessionId,
-      throughMessageId: resumedFire.triggerMessageId,
+      sessionID: resumedFire.sessionID,
+      throughMessageID: resumedFire.triggerMessageID,
       limit: 50
     )
     #expect(snapshot.history.map(\.content) == ["Summarize my unread items"])
   }
 
-  @Test func overlappingHeartbeatFireIsSkippedWhileThePriorBeatIsLive() throws {
+  @Test
+  func overlappingHeartbeatFireIsSkippedWhileThePriorBeatIsLive() throws {
     // given — a first beat whose PENDING run is still live
     let (store, queue) = try makeStore()
     let firstBeat = try #require(
-      try store.fireHeartbeat(
-        prompt: "beat one",
-        ownerChatId: 777,
-        now: baseNow,
-        day: "2026-07-13"
-      )
+      try store.fireHeartbeat(prompt: "beat one", ownerChatID: 777, now: baseNow, day: "2026-07-13")
     )
-    let windowBeforeSecond = try windowStart(queue, sessionId: firstBeat.sessionId)
+    let windowBeforeSecond = try windowStart(queue, sessionID: firstBeat.sessionID)
 
     // when — a second beat fires while the first is still live
     let secondBeat = try store.fireHeartbeat(
       prompt: "beat two",
-      ownerChatId: 777,
+      ownerChatID: 777,
       now: dueFirst,
       day: "2026-07-14"
     )
@@ -938,22 +953,23 @@ extension ScheduledJobStoreGRDBTests {
       try count(
         queue,
         sql: "SELECT COUNT(*) FROM runs WHERE session_id = ?",
-        arguments: [firstBeat.sessionId]
+        arguments: [firstBeat.sessionID]
       ) == 1
     )
-    #expect(try windowStart(queue, sessionId: firstBeat.sessionId) == windowBeforeSecond)
+    #expect(try windowStart(queue, sessionID: firstBeat.sessionID) == windowBeforeSecond)
     #expect(try auditCount(queue, action: .heartbeatSkipped) == 0)
   }
 
-  @Test func runNowIsSkippedWithItsOwnOutcomeWhileThePriorRunIsLive() throws {
+  @Test
+  func runNowIsSkippedWithItsOwnOutcomeWhileThePriorRunIsLive() throws {
     // given — a job whose first fire left a live PENDING run
     let (store, queue) = try makeStore()
     let job = try makeJob(store, recurrence: weekdayEnvelope(), next: dueFirst, now: baseNow)
-    let firstFire = try #require(firedFire(try store.fireNow(jobId: job.id, now: baseNow)))
-    let windowBeforeSecond = try windowStart(queue, sessionId: firstFire.sessionId)
+    let firstFire = try #require(firedFire(try store.fireNow(jobID: job.id, now: baseNow)))
+    let windowBeforeSecond = try windowStart(queue, sessionID: firstFire.sessionID)
 
     // when — /runnow fires again while that run is still live
-    let outcome = try store.fireNow(jobId: job.id, now: dueFirst)
+    let outcome = try store.fireNow(jobID: job.id, now: dueFirst)
 
     // then — a distinct outcome (NOT .ineligible, which the handler maps to "not found"); no
     // second run, window unchanged, and the overlap skip is audited
@@ -962,10 +978,10 @@ extension ScheduledJobStoreGRDBTests {
       try count(
         queue,
         sql: "SELECT COUNT(*) FROM runs WHERE session_id = ?",
-        arguments: [firstFire.sessionId]
+        arguments: [firstFire.sessionID]
       ) == 1
     )
-    #expect(try windowStart(queue, sessionId: firstFire.sessionId) == windowBeforeSecond)
+    #expect(try windowStart(queue, sessionID: firstFire.sessionID) == windowBeforeSecond)
     #expect(try auditCount(queue, action: .jobOverlapSkipped) == 1)
     // the skipped /runnow left the fire clock on the first real fire (baseNow), not dueFirst
     #expect(try store.job(id: job.id)?.lastFiredAt == baseNow)

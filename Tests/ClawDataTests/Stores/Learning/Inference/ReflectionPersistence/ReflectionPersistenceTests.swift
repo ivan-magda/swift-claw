@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct ReflectionPersistenceTests {
-  @Test func aggregatePreparationPreservesExactOrderedTypedEdges() throws {
+@Suite
+struct ReflectionPersistenceTests {
+  @Test
+  func aggregatePreparationPreservesExactOrderedTypedEdges() throws {
     // given
     let env = try BoundRunEnvironment.make()
 
@@ -16,8 +18,8 @@ import Testing
     // then — replacing trigger order with a query's natural order loses the frozen source identity
     #expect(fixture.preparation.trigger == fixture.trigger)
     #expect(fixture.preparation.evidenceSources.map(\.digest) == fixture.trigger.evidenceDigests)
-    #expect(fixture.preparation.evidenceSources.map(\.runId).count == 2)
-    #expect(fixture.preparation.evaluationSources.map(\.runId).count == 2)
+    #expect(fixture.preparation.evidenceSources.map(\.runID).count == 2)
+    #expect(fixture.preparation.evaluationSources.map(\.runID).count == 2)
     #expect(
       fixture.preparation.evidenceSources.map(\.evaluationDigest)
         == fixture.preparation.evaluationSources.map(\.digest)
@@ -39,12 +41,13 @@ import Testing
     )
   }
 
-  @Test func authorizationRechecksTheFrozenCutoff() throws {
+  @Test
+  func authorizationRechecksTheFrozenCutoff() throws {
     // given — preparation and claim happened before feedback changed
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
     let key = LearningOperationKey(
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: fixture.trigger.epoch,
       phase: .reflector,
       sourceDigest: fixture.trigger.digest.rawValue,
@@ -65,14 +68,15 @@ import Testing
     #expect(try env.providerCallID(claim.id) == nil)
   }
 
-  @Test func aggregatePreparationScansLiveTrialRowsInsteadOfTheConveniencePointer() throws {
+  @Test
+  func aggregatePreparationScansLiveTrialRowsInsteadOfTheConveniencePointer() throws {
     // given — a live trial exists while the denormalized pointer is deliberately absent
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
     let started = try env.startReflector(fixture)
     let artifact = try env.candidate(fixture: fixture, operation: started)
     try env.insertLiveTrialWithoutPointer(candidate: artifact)
-    #expect(try env.currentLearningState().openTrialId == nil)
+    #expect(try env.currentLearningState().openTrialID == nil)
 
     // when
     let preparation = try env.learning.prepareReflection(trigger: fixture.trigger)
@@ -81,26 +85,27 @@ import Testing
     #expect(preparation == nil)
   }
 
-  @Test func aggregatePreparationKeepsOnlyUnsupersededFeedbackEdgesAndPayload() throws {
+  @Test
+  func aggregatePreparationKeepsOnlyUnsupersededFeedbackEdgesAndPayload() throws {
     // given — two corrections on one run; only the successor remains effective at revision two
     let env = try BoundRunEnvironment.make()
     let initial = try env.reflectionFixture()
-    let runId = initial.preparation.evidenceSources[0].runId
+    let runID = initial.preparation.evidenceSources[0].runID
     let first = try env.appendFeedback(
       subjectKind: .run,
-      subjectDigest: String(runId),
+      subjectDigest: String(runID),
       signal: .resultCorrection,
       payload: "old correction"
     )
     let second = try env.appendFeedback(
       subjectKind: .run,
-      subjectDigest: String(runId),
+      subjectDigest: String(runID),
       signal: .resultCorrection,
       payload: "new correction",
-      supersedes: first.eventId
+      supersedes: first.eventID
     )
     let trigger = TriggerIdentity(
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: initial.trigger.epoch,
       algorithm: .v1,
       stableDigest: initial.trigger.stableDigest,
@@ -116,19 +121,19 @@ import Testing
     // then — retaining the superseded edge would bind provenance the reducer no longer consulted
     #expect(prepared.feedbackSources == [second])
     #expect(second.digest.rawValue.isEmpty == false)
-    #expect(second.digest.rawValue != String(second.eventId))
+    #expect(second.digest.rawValue != String(second.eventID))
     let expectedDigest = try FeedbackEventDigest.of(
-      eventId: second.eventId,
-      jobId: env.jobId,
+      eventID: second.eventID,
+      jobID: env.jobID,
       epoch: initial.trigger.epoch,
       subjectKind: .run,
-      subjectDigest: String(runId),
+      subjectDigest: String(runID),
       signal: .resultCorrection,
       payload: "new correction",
       actor: .owner,
-      transportUpdateId: nil,
+      transportUpdateID: nil,
       revision: second.revision,
-      supersedes: first.eventId,
+      supersedes: first.eventID,
       occurredAtEpochSecond: Int64(env.now.timeIntervalSince1970.rounded())
     )
     #expect(second.digest == expectedDigest)
@@ -136,7 +141,8 @@ import Testing
     #expect(prepared.ownerPayloads.map(\.source) == [second])
   }
 
-  @Test func aggregatePreparationKeepsCorrectionIndependentOfDisputedEvaluation() throws {
+  @Test
+  func aggregatePreparationKeepsCorrectionIndependentOfDisputedEvaluation() throws {
     // given — the run correction remains usable, but may consume no disputed evaluator fields
     let env = try BoundRunEnvironment.make()
     let initial = try env.reflectionFixture()
@@ -148,12 +154,12 @@ import Testing
     )
     let correction = try env.appendFeedback(
       subjectKind: .run,
-      subjectDigest: String(first.evidence.runId),
+      subjectDigest: String(first.evidence.runID),
       signal: .resultCorrection,
       payload: "the output still missed the material change"
     )
     let trigger = TriggerIdentity(
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: initial.trigger.epoch,
       algorithm: .v1,
       stableDigest: initial.trigger.stableDigest,
@@ -169,7 +175,7 @@ import Testing
     // then — vetoing every dispute would erase the separate authenticated run correction
     let corrected = try #require(
       prepared.evaluations.first { evaluation in
-        evaluation.evidence.runId == first.evidence.runId
+        evaluation.evidence.runID == first.evidence.runID
       }
     )
     #expect(corrected.evidence.evaluationRequired == false)
@@ -178,21 +184,20 @@ import Testing
   }
 
   @Test(arguments: [OwnerSignal.resultCorrection, OwnerSignal.resultNotUseful])
-  func undisputedOwnerResultUsingEvaluatorCodesKeepsEvaluationDependency(
-    signal: OwnerSignal
-  ) throws {
+  func undisputedOwnerResultUsingEvaluatorCodesKeepsEvaluationDependency(signal: OwnerSignal) throws
+  {
     // given — both owner categories reuse the undisputed evaluator's material issue code
     let env = try BoundRunEnvironment.make()
     let initial = try env.reflectionFixture()
     let first = initial.preparation.evaluations[0]
     let result = try env.appendFeedback(
       subjectKind: .run,
-      subjectDigest: String(first.evidence.runId),
+      subjectDigest: String(first.evidence.runID),
       signal: signal,
       payload: signal == .resultCorrection ? "owner correction" : nil
     )
     let trigger = TriggerIdentity(
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: initial.trigger.epoch,
       algorithm: .v1,
       stableDigest: initial.trigger.stableDigest,
@@ -208,14 +213,15 @@ import Testing
     // then — deriving dependency from owner-result presence alone would freeze this as independent
     let resolved = try #require(
       prepared.evaluations.first { evaluation in
-        evaluation.evidence.runId == first.evidence.runId
+        evaluation.evidence.runID == first.evidence.runID
       }
     )
     #expect(resolved.evidence.evaluationRequired)
     #expect(resolved.summary.issueCodes == initial.trigger.issueCodes)
   }
 
-  @Test func aggregatePreparationRejectsARequiredDisputeDespiteAnotherRunsCorrection() throws {
+  @Test
+  func aggregatePreparationRejectsARequiredDisputeDespiteAnotherRunsCorrection() throws {
     // given — one run depends on its disputed evaluator while another has an independent correction
     let env = try BoundRunEnvironment.make()
     let initial = try env.reflectionFixture()
@@ -228,12 +234,12 @@ import Testing
     )
     let correction = try env.appendFeedback(
       subjectKind: .run,
-      subjectDigest: String(corrected.evidence.runId),
+      subjectDigest: String(corrected.evidence.runID),
       signal: .resultCorrection,
       payload: "the second run needs correction"
     )
     let trigger = TriggerIdentity(
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: initial.trigger.epoch,
       algorithm: .v1,
       stableDigest: initial.trigger.stableDigest,
@@ -250,14 +256,15 @@ import Testing
     #expect(prepared == nil)
   }
 
-  @Test func aggregatePreparationExcludesEvidenceProducedUnderATrial() throws {
+  @Test
+  func aggregatePreparationExcludesEvidenceProducedUnderATrial() throws {
     // given — one qualifying source was produced under a closed trial, so no live-trial gate hides it
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
     let started = try env.startReflector(fixture)
     let artifact = try env.candidate(fixture: fixture, operation: started)
     try env.markAsClosedTrialEvidence(
-      runId: fixture.preparation.evidenceSources[0].runId,
+      runID: fixture.preparation.evidenceSources[0].runID,
       candidate: artifact
     )
 
@@ -278,7 +285,7 @@ private extension ReflectionPersistenceTests {
     claim: ClaimedOperation
   ) -> LearningAuthorization {
     LearningAuthorization(
-      operationId: claim.id,
+      operationID: claim.id,
       carrier: CarrierAuthorization(
         sourceDigest: fixture.trigger.digest.rawValue,
         digest: CarrierDigest(rawValue: "frozen-carrier"),

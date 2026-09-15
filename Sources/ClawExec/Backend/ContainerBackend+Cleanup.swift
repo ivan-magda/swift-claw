@@ -4,10 +4,7 @@ import Foundation
 // MARK: - Shielded Cleanup
 
 extension ContainerBackend {
-  func runShieldedCleanup(
-    identity: ExecutionIdentity,
-    workspace: ScratchWorkspace
-  ) async -> Bool {
+  func runShieldedCleanup(identity: ExecutionIdentity, workspace: ScratchWorkspace) async -> Bool {
     let commands = commands
     let watchdogSleep = watchdogSleep
     let taskIdentifier = UUID()
@@ -33,7 +30,7 @@ private struct CleanupOperation: Sendable {
   let commands: any SubprocessRunning
   let identity: String
   let workspace: ScratchWorkspace
-  let watchdogSleep: @Sendable (Duration) async throws -> Void
+  let watchdogSleep: @Sendable (_ duration: Duration) async throws -> Void
 
   // The teardown ladder is shielded from cancellation and each command keeps its own
   // `lifecycleCommandTimeout` independent of the run's outer deadline, so a wedged or cancelled
@@ -45,11 +42,7 @@ private struct CleanupOperation: Sendable {
 
     let absent = await finalAbsence()
 
-    do {
-      try workspace.remove()
-    } catch {
-      return false
-    }
+    do { try workspace.remove() } catch { return false }
 
     return absent
   }
@@ -76,6 +69,8 @@ private struct CleanupOperation: Sendable {
     else {
       return false
     }
-    return !containers.contains { $0.resolvedIdentifier == identity }
+    return !containers.contains {
+      $0.resolvedIdentifier == identity
+    }
   }
 }

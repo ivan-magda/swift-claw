@@ -48,7 +48,5 @@ private struct RecordingLogHandler: LogHandler {
     set { metadata[key] = newValue }
   }
 
-  func log(event: LogEvent) {
-    capture.append(event)
-  }
+  func log(event: LogEvent) { capture.append(event) }
 }

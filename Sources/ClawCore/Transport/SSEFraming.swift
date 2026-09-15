@@ -31,8 +31,7 @@ public enum SSEFraming {
         if let upper = crlfBlankLineEnd(in: data, from: index) {
           return index..<upper
         }
-      default:
-        break
+      default: break
       }
       index = data.index(after: index)
     }
@@ -55,31 +54,29 @@ public enum SSEFraming {
     // at a time but many thousands of them, so an LF-only event — the overwhelmingly common form —
     // skips the fold on a cheap byte scan instead of paying it every single event.
     let normalized =
-      text.utf8.contains(carriageReturn)
-      ? text.replacingOccurrences(of: "\r\n", with: "\n")
-      : text
-    return normalized.split(separator: "\n", omittingEmptySubsequences: false)
-      .compactMap { rawLine -> String? in
-        var line = rawLine
+      text.utf8.contains(carriageReturn) ? text.replacingOccurrences(of: "\r\n", with: "\n") : text
+    return normalized.split(separator: "\n", omittingEmptySubsequences: false).compactMap {
+      (rawLine) -> String? in
+      var line = rawLine
 
-        if line.last == "\r" {
-          line.removeLast()
-        }
-
-        if line.hasPrefix(":") {
-          return nil
-        }
-
-        guard line.hasPrefix("data:") else {
-          return nil
-        }
-        var value = line.dropFirst(5)
-
-        if value.first == " " {
-          value = value.dropFirst()
-        }
-
-        return String(value)
+      if line.last == "\r" {
+        line.removeLast()
       }
+
+      if line.hasPrefix(":") {
+        return nil
+      }
+
+      guard line.hasPrefix("data:") else {
+        return nil
+      }
+      var value = line.dropFirst(5)
+
+      if value.first == " " {
+        value = value.dropFirst()
+      }
+
+      return String(value)
+    }
   }
 }

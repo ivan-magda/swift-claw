@@ -31,7 +31,7 @@ struct CoderScopedCapture: Sendable {
 
 enum CoderCommandTracking: Sendable {
   case preApprovalReadOnly
-  case job(record: @Sendable (CoderProcessEvent) async throws -> Void)
+  case job(record: @Sendable (_ event: CoderProcessEvent) async throws -> Void)
 
   func record(_ event: CoderProcessEvent) async throws {
     if case .job(let record) = self {

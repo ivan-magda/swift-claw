@@ -5,9 +5,7 @@ import Foundation
 public struct LLMProviderID: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 
   public static let openAICompatible = LLMProviderID(rawValue: "openai-compatible")
   public static let openAIChatGPT = LLMProviderID(rawValue: "openai-chatgpt")
@@ -17,9 +15,7 @@ public struct LLMProviderID: RawRepresentable, Sendable, Hashable, Codable {
 /// ordered `["openai-chatgpt", {…}, "openai-compatible", {…}]`.
 extension LLMProviderID: CodingKeyRepresentable {}
 
-extension LLMProviderID: CustomStringConvertible {
-  public var description: String { rawValue }
-}
+extension LLMProviderID: CustomStringConvertible { public var description: String { rawValue } }
 
 public enum LLMCredentialMode: Sendable, Equatable {
   case noneOrStaticBearer
@@ -35,10 +31,7 @@ public struct LLMProviderCapabilities: Sendable, Equatable {
   public let supportsStructuredOutput: Bool
   public let outputTokenField: LLMWireOutputTokenField
 
-  public init(
-    supportsStructuredOutput: Bool,
-    outputTokenField: LLMWireOutputTokenField
-  ) {
+  public init(supportsStructuredOutput: Bool, outputTokenField: LLMWireOutputTokenField) {
     self.supportsStructuredOutput = supportsStructuredOutput
     self.outputTokenField = outputTokenField
   }
@@ -79,10 +72,7 @@ extension LLMProviderDescriptor {
   public static let openAIChatGPT = LLMProviderDescriptor(
     providerID: .openAIChatGPT,
     qualifiedPrefix: "openai-chatgpt/",
-    egress: .managed(
-      providerID: .openAIChatGPT,
-      endpoint: chatGPTResponsesEndpoint
-    ),
+    egress: .managed(providerID: .openAIChatGPT, endpoint: chatGPTResponsesEndpoint),
     credentialMode: .managedOAuth,
     capabilities: LLMProviderCapabilities(
       supportsStructuredOutput: false,
@@ -106,17 +96,16 @@ extension LLMProviderDescriptor {
 
 // MARK: - Resolved route
 
-/// `CLAW_LLM_MODEL` parsed once. `configuredReference` is the accounting and diagnostic identity;
+/// A model route resolved once from `CLAW_LLM_MODEL`.
+///
+/// `configuredReference` retains the configured accounting and diagnostic identity; `wireModel`
+/// is the model name sent to the provider.
 public struct ResolvedLLMRoute: Sendable, Equatable {
   public let descriptor: LLMProviderDescriptor
   public let configuredReference: String
   public let wireModel: String
 
-  public init(
-    descriptor: LLMProviderDescriptor,
-    configuredReference: String,
-    wireModel: String
-  ) {
+  public init(descriptor: LLMProviderDescriptor, configuredReference: String, wireModel: String) {
     self.descriptor = descriptor
     self.configuredReference = configuredReference
     self.wireModel = wireModel
@@ -148,9 +137,7 @@ public enum LLMProviderRegistry {
     }
 
     return ResolvedLLMRoute(
-      descriptor: .openAICompatible(
-        endpoint: canonicalEndpoint(try configuredBaseURL())
-      ),
+      descriptor: .openAICompatible(endpoint: canonicalEndpoint(try configuredBaseURL())),
       configuredReference: modelReference,
       wireModel: modelReference
     )
@@ -196,10 +183,7 @@ private extension LLMProviderRegistry {
       return .oversized
     }
 
-    guard
-      isAlphanumeric(leading),
-      scalars.dropFirst().allSatisfy(isSafeTrailing)
-    else {
+    guard isAlphanumeric(leading), scalars.dropFirst().allSatisfy(isSafeTrailing) else {
       return .unsafe
     }
 
@@ -208,14 +192,10 @@ private extension LLMProviderRegistry {
 
   static func validateQualifiedSuffix(_ suffix: String, reference: String) throws {
     switch qualifiedSuffixRejection(suffix) {
-    case nil:
-      return
-    case .empty:
-      throw ConfigError.emptyQualifiedModelSuffix(reference: reference)
-    case .oversized:
-      throw ConfigError.oversizedQualifiedModelSuffix(reference: reference)
-    case .unsafe:
-      throw ConfigError.unsafeQualifiedModelSuffix(reference: reference)
+    case nil: return
+    case .empty: throw ConfigError.emptyQualifiedModelSuffix(reference: reference)
+    case .oversized: throw ConfigError.oversizedQualifiedModelSuffix(reference: reference)
+    case .unsafe: throw ConfigError.unsafeQualifiedModelSuffix(reference: reference)
     }
   }
 

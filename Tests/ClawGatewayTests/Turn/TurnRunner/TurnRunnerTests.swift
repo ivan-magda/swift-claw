@@ -46,12 +46,12 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
   let commands: CommandStoreGRDB
   let sessionKey: String
 
-  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
-    try base.pickUp(runId: runId, policyVersion: policyVersion, now: now)
+  func pickUp(runID: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
+    try base.pickUp(runID: runID, policyVersion: policyVersion, now: now)
   }
 
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult {
-    _ = try commands.applyStop(updateId: 2, sessionKey: sessionKey, now: now)
+    _ = try commands.applyStop(updateID: 2, sessionKey: sessionKey, now: now)
     return try base.commitAssistantTurn(turn, now: now)
   }
 
@@ -59,64 +59,55 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.commitDegradedTurn(turn, now: now)
   }
 
-  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
-    try base.failRun(runId: runId, cause: cause, now: now)
+  func failRun(runID: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
+    try base.failRun(runID: runID, cause: cause, now: now)
   }
 
-  func commitSuspendedTurn(
-    runId: Int64,
-    sessionId: Int64,
-    commit: SuspendedTurnCommit,
-    now: Date
-  ) throws(StoreError) -> SuspendedCommitReceipt {
-    try base.commitSuspendedTurn(runId: runId, sessionId: sessionId, commit: commit, now: now)
-  }
+  func commitSuspendedTurn(runID: Int64, sessionID: Int64, commit: SuspendedTurnCommit, now: Date)
+    throws(StoreError) -> SuspendedCommitReceipt
+  { try base.commitSuspendedTurn(runID: runID, sessionID: sessionID, commit: commit, now: now) }
 
-  func reconcileRunsAtBoot(
-    now: Date,
-    degradationText: String,
-    heartbeatNoticeChatId: Int64?
-  ) throws(StoreError) -> [DegradationReply] {
+  func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
+    throws(StoreError) -> [DegradationReply]
+  {
     try base.reconcileRunsAtBoot(
       now: now,
       degradationText: degradationText,
-      heartbeatNoticeChatId: heartbeatNoticeChatId
+      heartbeatNoticeChatID: heartbeatNoticeChatID
     )
   }
 
-  func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
-    try base.runsHealth(now: now)
-  }
+  func runsHealth(now: Date) throws(StoreError) -> RunsHealth { try base.runsHealth(now: now) }
 
   func claimApprovedExecution(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim {
     try base.claimApprovedExecution(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       notResumableObservationContent: notResumableObservationContent,
       now: now
     )
   }
 
   func fillClaimedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     fill: ClaimedObservationFill
   ) throws(StoreError) {
     try base.fillClaimedObservation(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       fill: fill
     )
   }
 
   func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     item: NewMemoryItem,
     observationContent: String,
     audit: ApprovedExecutionAudit,
@@ -124,8 +115,8 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim {
     try base.applyApprovedMemoryWrite(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       item: item,
       observationContent: observationContent,
       audit: audit,
@@ -135,68 +126,61 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
   }
 
   func settleClaimedApprovalAtBoot(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
-    noticeChatId: Int64,
+    noticeChatID: Int64,
     noticeText: String,
     now: Date
   ) throws(StoreError) -> ClaimedApprovalBootOutcome {
     try base.settleClaimedApprovalAtBoot(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       observationContent: observationContent,
-      noticeChatId: noticeChatId,
+      noticeChatID: noticeChatID,
       noticeText: noticeText,
       now: now
     )
   }
 
-  func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
-    try base.resumeUsage(runId: runId)
+  func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage {
+    try base.resumeUsage(runID: runID)
   }
 
-  func executionContext(
-    runId: Int64,
-    fallbackChatId: Int64
-  ) throws(StoreError) -> RunExecutionContext? {
-    try base.executionContext(runId: runId, fallbackChatId: fallbackChatId)
-  }
+  func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
+    -> RunExecutionContext?
+  { try base.executionContext(runID: runID, fallbackChatID: fallbackChatID) }
 
-  func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
-    try base.runOrigin(runId: runId)
-  }
+  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? { try base.runOrigin(runID: runID) }
 
-  func jobId(runId: Int64) throws(StoreError) -> Int64? {
-    try base.jobId(runId: runId)
-  }
+  func jobID(runID: Int64) throws(StoreError) -> Int64? { try base.jobID(runID: runID) }
 
   func failRunStalePolicy(
-    runId: Int64,
-    sessionId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
     now: Date
   ) throws(StoreError) -> Bool {
     try base.failRunStalePolicy(
-      runId: runId,
-      sessionId: sessionId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      sessionID: sessionID,
+      observationMessageID: observationMessageID,
       observationContent: observationContent,
       now: now
     )
   }
 
   func resolveDeniedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     content: String,
     cancel: CancelReason?,
     now: Date
   ) throws(StoreError) -> RunCommitResult {
     try base.resolveDeniedObservation(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       content: content,
       cancel: cancel,
       now: now
@@ -211,8 +195,8 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   let commands: CommandStoreGRDB
   let sessionKey: String
 
-  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
-    try base.pickUp(runId: runId, policyVersion: policyVersion, now: now)
+  func pickUp(runID: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
+    try base.pickUp(runID: runID, policyVersion: policyVersion, now: now)
   }
 
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult {
@@ -220,68 +204,59 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   }
 
   func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
-    _ = try commands.applyStop(updateId: 2, sessionKey: sessionKey, now: now)
+    _ = try commands.applyStop(updateID: 2, sessionKey: sessionKey, now: now)
     return try base.commitDegradedTurn(turn, now: now)
   }
 
-  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
-    try base.failRun(runId: runId, cause: cause, now: now)
+  func failRun(runID: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
+    try base.failRun(runID: runID, cause: cause, now: now)
   }
 
-  func commitSuspendedTurn(
-    runId: Int64,
-    sessionId: Int64,
-    commit: SuspendedTurnCommit,
-    now: Date
-  ) throws(StoreError) -> SuspendedCommitReceipt {
-    try base.commitSuspendedTurn(runId: runId, sessionId: sessionId, commit: commit, now: now)
-  }
+  func commitSuspendedTurn(runID: Int64, sessionID: Int64, commit: SuspendedTurnCommit, now: Date)
+    throws(StoreError) -> SuspendedCommitReceipt
+  { try base.commitSuspendedTurn(runID: runID, sessionID: sessionID, commit: commit, now: now) }
 
-  func reconcileRunsAtBoot(
-    now: Date,
-    degradationText: String,
-    heartbeatNoticeChatId: Int64?
-  ) throws(StoreError) -> [DegradationReply] {
+  func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
+    throws(StoreError) -> [DegradationReply]
+  {
     try base.reconcileRunsAtBoot(
       now: now,
       degradationText: degradationText,
-      heartbeatNoticeChatId: heartbeatNoticeChatId
+      heartbeatNoticeChatID: heartbeatNoticeChatID
     )
   }
 
-  func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
-    try base.runsHealth(now: now)
-  }
+  func runsHealth(now: Date) throws(StoreError) -> RunsHealth { try base.runsHealth(now: now) }
 
   func claimApprovedExecution(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim {
     try base.claimApprovedExecution(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       notResumableObservationContent: notResumableObservationContent,
       now: now
     )
   }
 
   func fillClaimedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     fill: ClaimedObservationFill
   ) throws(StoreError) {
     try base.fillClaimedObservation(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       fill: fill
     )
   }
 
   func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     item: NewMemoryItem,
     observationContent: String,
     audit: ApprovedExecutionAudit,
@@ -289,8 +264,8 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim {
     try base.applyApprovedMemoryWrite(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       item: item,
       observationContent: observationContent,
       audit: audit,
@@ -300,68 +275,61 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
   }
 
   func settleClaimedApprovalAtBoot(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
-    noticeChatId: Int64,
+    noticeChatID: Int64,
     noticeText: String,
     now: Date
   ) throws(StoreError) -> ClaimedApprovalBootOutcome {
     try base.settleClaimedApprovalAtBoot(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       observationContent: observationContent,
-      noticeChatId: noticeChatId,
+      noticeChatID: noticeChatID,
       noticeText: noticeText,
       now: now
     )
   }
 
-  func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
-    try base.resumeUsage(runId: runId)
+  func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage {
+    try base.resumeUsage(runID: runID)
   }
 
-  func executionContext(
-    runId: Int64,
-    fallbackChatId: Int64
-  ) throws(StoreError) -> RunExecutionContext? {
-    try base.executionContext(runId: runId, fallbackChatId: fallbackChatId)
-  }
+  func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
+    -> RunExecutionContext?
+  { try base.executionContext(runID: runID, fallbackChatID: fallbackChatID) }
 
-  func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
-    try base.runOrigin(runId: runId)
-  }
+  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? { try base.runOrigin(runID: runID) }
 
-  func jobId(runId: Int64) throws(StoreError) -> Int64? {
-    try base.jobId(runId: runId)
-  }
+  func jobID(runID: Int64) throws(StoreError) -> Int64? { try base.jobID(runID: runID) }
 
   func failRunStalePolicy(
-    runId: Int64,
-    sessionId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
     now: Date
   ) throws(StoreError) -> Bool {
     try base.failRunStalePolicy(
-      runId: runId,
-      sessionId: sessionId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      sessionID: sessionID,
+      observationMessageID: observationMessageID,
       observationContent: observationContent,
       now: now
     )
   }
 
   func resolveDeniedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     content: String,
     cancel: CancelReason?,
     now: Date
   ) throws(StoreError) -> RunCommitResult {
     try base.resolveDeniedObservation(
-      runId: runId,
-      observationMessageId: observationMessageId,
+      runID: runID,
+      observationMessageID: observationMessageID,
       content: content,
       cancel: cancel,
       now: now
@@ -371,29 +339,28 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
 
 /// A `RunStore` whose first write reports a full disk, to exercise the storage-full rethrow.
 struct DiskFullRuns: RunStore {
-  func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
+  func pickUp(runID: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
     throw StoreError.diskFull
   }
+
   func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult {
     .ignored
   }
+
   func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
     .ignored
   }
-  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
-  func commitSuspendedTurn(
-    runId: Int64,
-    sessionId: Int64,
-    commit: SuspendedTurnCommit,
-    now: Date
-  ) throws(StoreError) -> SuspendedCommitReceipt {
-    throw StoreError.diskFull
-  }
-  func reconcileRunsAtBoot(
-    now: Date,
-    degradationText: String,
-    heartbeatNoticeChatId: Int64?
-  ) throws(StoreError) -> [DegradationReply] { [] }
+
+  func failRun(runID: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
+
+  func commitSuspendedTurn(runID: Int64, sessionID: Int64, commit: SuspendedTurnCommit, now: Date)
+    throws(StoreError) -> SuspendedCommitReceipt
+  { throw StoreError.diskFull }
+
+  func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
+    throws(StoreError) -> [DegradationReply]
+  { [] }
+
   func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
     RunsHealth(
       inFlight: 0,
@@ -403,92 +370,76 @@ struct DiskFullRuns: RunStore {
       consecutiveFailures: 0
     )
   }
+
   func claimApprovedExecution(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     notResumableObservationContent: String,
     now: Date
-  ) throws(StoreError) -> ApprovedExecutionClaim {
-    throw StoreError.diskFull
-  }
+  ) throws(StoreError) -> ApprovedExecutionClaim { throw StoreError.diskFull }
+
   func fillClaimedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     fill: ClaimedObservationFill
-  ) throws(StoreError) {
-    throw StoreError.diskFull
-  }
+  ) throws(StoreError) { throw StoreError.diskFull }
+
   func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     item: NewMemoryItem,
     observationContent: String,
     audit: ApprovedExecutionAudit,
     notResumableObservationContent: String,
     now: Date
-  ) throws(StoreError) -> ApprovedExecutionClaim {
-    throw StoreError.diskFull
-  }
+  ) throws(StoreError) -> ApprovedExecutionClaim { throw StoreError.diskFull }
+
   func settleClaimedApprovalAtBoot(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
-    noticeChatId: Int64,
+    noticeChatID: Int64,
     noticeText: String,
     now: Date
-  ) throws(StoreError) -> ClaimedApprovalBootOutcome {
-    throw StoreError.diskFull
-  }
-  func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
-    throw StoreError.diskFull
-  }
-  func executionContext(
-    runId: Int64,
-    fallbackChatId: Int64
-  ) throws(StoreError) -> RunExecutionContext? {
-    nil
-  }
+  ) throws(StoreError) -> ClaimedApprovalBootOutcome { throw StoreError.diskFull }
 
-  func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
-    throw StoreError.diskFull
-  }
-  func jobId(runId: Int64) throws(StoreError) -> Int64? {
-    throw StoreError.diskFull
-  }
+  func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage { throw StoreError.diskFull }
+
+  func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
+    -> RunExecutionContext?
+  { nil }
+
+  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? { throw StoreError.diskFull }
+
+  func jobID(runID: Int64) throws(StoreError) -> Int64? { throw StoreError.diskFull }
+
   func failRunStalePolicy(
-    runId: Int64,
-    sessionId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
     now: Date
-  ) throws(StoreError) -> Bool {
-    throw StoreError.diskFull
-  }
+  ) throws(StoreError) -> Bool { throw StoreError.diskFull }
+
   func resolveDeniedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     content: String,
     cancel: CancelReason?,
     now: Date
-  ) throws(StoreError) -> RunCommitResult {
-    throw StoreError.diskFull
-  }
+  ) throws(StoreError) -> RunCommitResult { throw StoreError.diskFull }
 }
 
 struct TurnRunnerWorkspace: WorkspaceReading {
   let memoryFile: LoadedFile
 
-  init(memoryFile: LoadedFile = .missing) {
-    self.memoryFile = memoryFile
-  }
+  init(memoryFile: LoadedFile = .missing) { self.memoryFile = memoryFile }
 
   func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
     file == .memory ? memoryFile : .missing
   }
 
-  func scanSkills() -> SkillScanResult {
-    SkillScanResult(descriptors: [], warnings: [])
-  }
+  func scanSkills() -> SkillScanResult { SkillScanResult(descriptors: [], warnings: []) }
 }
 
 /// Shared `TurnRunner` test fixture, hoisted to file scope (out of `TurnRunnerTests`' body) so the
@@ -501,10 +452,10 @@ struct Env {
   let sessionMessages: SessionMessageStoreGRDB
   let outbox: OutboxStoreGRDB
 
-  let sessionId: Int64
-  let chatId: Int64
-  let runId: Int64
-  let triggerMessageId: Int64
+  let sessionID: Int64
+  let chatID: Int64
+  let runID: Int64
+  let triggerMessageID: Int64
 
   let imageCache: ImageCache
   let provider: StubLLMProvider
@@ -523,7 +474,9 @@ private func makeContextBuilder(
     memoryStore: memory,
     retriever: retriever,
     budget: budget,
-    now: { Date(timeIntervalSince1970: 0) }
+    now: {
+      Date(timeIntervalSince1970: 0)
+    }
   )
 }
 
@@ -531,18 +484,22 @@ func makeEnv(
   agentOutcome: StubLLMProvider.Outcome,
   providerOverride: (any LLMProvider)? = nil,
   runs: (any RunStore)? = nil,
-  runsFactory: ((DatabaseQueue, String) -> any RunStore)? = nil,
+  runsFactory: ((_ queue: DatabaseQueue, _ sessionKey: String) -> any RunStore)? = nil,
   contextBuilder: ContextBuilder? = nil,
   sessionMessagesForRunner: (any SessionMessageStore)? = nil,
   budget: RunBudget = .default,
   breaker: BudgetBreaker? = nil,
   transport: (any TelegramTransport)? = nil,
-  chatId: Int64 = 42,
+  chatID: Int64 = 42,
   sessionKey: String? = nil,
   typing: any TypingIndicator = NoopTyping(),
-  ownerChatId: Int64? = nil,
-  now: @escaping @Sendable () -> Date = { Date() },
-  freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void = { _, _ in
+  ownerChatID: Int64? = nil,
+  now: @escaping @Sendable () -> Date = {
+    Date()
+  },
+  freezeLearningSurface: @escaping @Sendable (_ runID: Int64, _ policyVersion: String) -> Void = {
+    _,
+    _ in
   }
 ) throws -> Env {
   let queue = try TestDatabase.make()
@@ -551,23 +508,23 @@ func makeEnv(
   let usage = UsageStoreGRDB(writer: queue)
   let outbox = OutboxStoreGRDB(writer: queue)
   let audit = AuditLogGRDB(writer: queue)
-  let resolvedSessionKey = sessionKey ?? SessionKey.telegramDM(chatId: chatId)
+  let resolvedSessionKey = sessionKey ?? SessionKey.telegramDM(chatID: chatID)
 
   // Seed a session + a user message via the real fused claim, so history is realistic.
   let claim = try sessionMessages.claimAndPersistInbound(
     InboundMessage(
-      updateId: 1,
+      updateID: 1,
       sessionKey: resolvedSessionKey,
-      chatId: chatId,
-      userId: chatId,
+      chatID: chatID,
+      userID: chatID,
       text: "hi",
       isEdited: false,
       ts: Date()
     )
   )
-  let sessionId = try #require(claim.sessionId)
-  let runId = try #require(claim.runId)
-  let triggerMessageId = try #require(claim.triggerMessageId)
+  let sessionID = try #require(claim.sessionID)
+  let runID = try #require(claim.runID)
+  let triggerMessageID = try #require(claim.triggerMessageID)
 
   let builder: ContextBuilder
   if let contextBuilder {
@@ -604,7 +561,7 @@ func makeEnv(
     notifyOutbox: {},
     breaker: breaker,
     delivery: transport,
-    ownerChatId: ownerChatId,
+    ownerChatID: ownerChatID,
     now: now,
     freezeLearningSurface: freezeLearningSurface,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
@@ -618,10 +575,10 @@ func makeEnv(
     queue: queue,
     sessionMessages: sessionMessages,
     outbox: outbox,
-    sessionId: sessionId,
-    chatId: chatId,
-    runId: runId,
-    triggerMessageId: triggerMessageId,
+    sessionID: sessionID,
+    chatID: chatID,
+    runID: runID,
+    triggerMessageID: triggerMessageID,
     imageCache: imageCache,
     provider: provider
   )
@@ -637,29 +594,27 @@ func latestRunState(_ queue: DatabaseQueue) throws -> String? {
 /// suspend on a gated fetch, then the owner's approve claiming and filling the observation — and
 /// hands back the message id `resume` binds its context to. File-internal so the image-replay suite
 /// resumes the same way this one does rather than restating forty lines of setup.
-func suspendOnAGatedFetchThenApprove(
-  env: Env,
-  origin: RunOrigin = .interactive,
-  now: Date
-) async throws -> Int64 {
+func suspendOnAGatedFetchThenApprove(env: Env, origin: RunOrigin = .interactive, now: Date)
+  async throws -> Int64
+{
   let runs = RunStoreGRDB(writer: env.queue)
-  _ = try #require(try runs.pickUp(runId: env.runId, policyVersion: nil, now: now))
+  _ = try #require(try runs.pickUp(runID: env.runID, policyVersion: nil, now: now))
   try await env.queue.write { db in
     try db.execute(
       sql: "UPDATE runs SET origin = ? WHERE id = ?",
-      arguments: [origin.rawValue, env.runId]
+      arguments: [origin.rawValue, env.runID]
     )
   }
 
   let receipt = try runs.commitSuspendedTurn(
-    runId: env.runId,
-    sessionId: env.sessionId,
+    runID: env.runID,
+    sessionID: env.sessionID,
     commit: SuspendedTurnCommit(
       assistantContent: "",
       toolCallsJSON: #"[{"id":"f1","name":"web_fetch","arguments":"{}"}]"#,
       completedObservations: [],
       pending: PendingToolAction(
-        toolCallId: "f1",
+        toolCallID: "f1",
         recorded: RecordedToolAction(
           tool: "web_fetch",
           canonicalArgsJSON: #"{"url":"https://evil.example/steal"}"#,
@@ -673,7 +628,7 @@ func suspendOnAGatedFetchThenApprove(
           )
         )
       ),
-      ownerUserId: env.chatId,
+      ownerUserID: env.chatID,
       nonce: ApprovalNonce.generate(),
       promptChunks: [],
       setTainted: true,
@@ -684,15 +639,15 @@ func suspendOnAGatedFetchThenApprove(
   )
 
   let claim = try runs.claimApprovedExecution(
-    runId: env.runId,
-    observationMessageId: receipt.observationMessageId,
+    runID: env.runID,
+    observationMessageID: receipt.observationMessageID,
     notResumableObservationContent: "stopped",
     now: now
   )
   #expect(claim == .committed)
   try runs.fillClaimedObservation(
-    runId: env.runId,
-    observationMessageId: receipt.observationMessageId,
+    runID: env.runID,
+    observationMessageID: receipt.observationMessageID,
     fill: ClaimedObservationFill(
       content: "the fetched page body",
       status: .ok,
@@ -706,7 +661,7 @@ func suspendOnAGatedFetchThenApprove(
     )
   )
 
-  return receipt.observationMessageId
+  return receipt.observationMessageID
 }
 
 private func okResponse(content: String) -> ChatResponse {
@@ -718,42 +673,44 @@ private func okResponse(content: String) -> ChatResponse {
   )
 }
 
-@Suite struct TurnRunnerTests {
-  @Test func topicSessionDrivesGroupProgressThroughTheRealTurnRunner() async throws {
+@Suite
+struct TurnRunnerTests {
+  @Test
+  func topicSessionDrivesGroupProgressThroughTheRealTurnRunner() async throws {
     // given — the provider cannot answer until the first typing pulse opens its gate
     let gate = TypingReleaseGate()
     let typing = CountingReleaseTyping(releaseAfter: 1, gate: gate)
     let provider = GatedProvider(gate: gate, response: okResponse(content: "done"))
-    let groupChatId: Int64 = -1_001
-    let threadId: Int64 = 77
+    let groupChatID: Int64 = -1_001
+    let threadID: Int64 = 77
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "unused")),
       providerOverride: provider,
-      chatId: groupChatId,
-      sessionKey: SessionKey.telegramTopic(chatId: groupChatId, threadId: threadId),
+      chatID: groupChatID,
+      sessionKey: SessionKey.telegramTopic(chatID: groupChatID, threadID: threadID),
       typing: typing
     )
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — TurnRunner derived both values from the persisted session key
     #expect(
-      await typing.pulses
-        == [RecordingTyping.Pulse(chatId: groupChatId, messageThreadId: threadId)]
+      await typing.pulses == [RecordingTyping.Pulse(chatID: groupChatID, messageThreadID: threadID)]
     )
   }
 
-  @Test func groupTurnDailyCapNoticeGoesToTheOwnerDM() async throws {
+  @Test
+  func groupTurnDailyCapNoticeGoesToTheOwnerDM() async throws {
     // given — this reply crosses the process-wide cap from a topic session
     let transport = RecordingTransport()
-    let ownerChatId: Int64 = 42
-    let groupChatId: Int64 = -1_001
+    let ownerChatID: Int64 = 42
+    let groupChatID: Int64 = -1_001
     let response = ChatResponse(
       content: "done",
       finishReason: "stop",
@@ -764,28 +721,29 @@ private func okResponse(content: String) -> ChatResponse {
       agentOutcome: .respond(response),
       breaker: BudgetBreaker(budget: .default),
       transport: transport,
-      chatId: groupChatId,
-      sessionKey: SessionKey.telegramTopic(chatId: groupChatId, threadId: 77),
-      ownerChatId: ownerChatId
+      chatID: groupChatID,
+      sessionKey: SessionKey.telegramTopic(chatID: groupChatID, threadID: 77),
+      ownerChatID: ownerChatID
     )
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
     #expect(await env.provider.callCount == 1)
     let totals = try UsageStoreGRDB(writer: env.queue).todayTokensAndCost(now: Date())
     #expect(totals.costUSD >= RunBudget.default.perDayUSD)
-    #expect(await transport.sent.map(\.target) == [.chat(ownerChatId)])
+    #expect(await transport.sent.map(\.target) == [.chat(ownerChatID)])
     #expect(await transport.sent.map(\.text) == [Degradation.dailyCapTripped])
   }
 
-  @Test func scheduledRunAtTheProactiveCapIsDeniedDMedOnceAndAudited() async throws {
+  @Test
+  func scheduledRunAtTheProactiveCapIsDeniedDMedOnceAndAudited() async throws {
     // given — a scheduled-origin run whose proactive pool already spent 2.50 today
     let transport = RecordingTransport()
     let env = try makeEnv(
@@ -796,14 +754,14 @@ private func okResponse(content: String) -> ChatResponse {
     try await env.queue.write { db in
       try db.execute(
         sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
-        arguments: [env.runId]
+        arguments: [env.runID]
       )
     }
     try UsageStoreGRDB(writer: env.queue).recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-proactive-seed"),
-        runId: env.runId,
-        sessionId: env.sessionId,
+        runID: env.runID,
+        sessionID: env.sessionID,
         model: "m",
         promptTokens: 10,
         completionTokens: 5,
@@ -816,10 +774,10 @@ private func okResponse(content: String) -> ChatResponse {
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — FAILED with the named cap, the model never ran, one owner DM, one audit trip row
@@ -832,40 +790,41 @@ private func okResponse(content: String) -> ChatResponse {
       try Int.fetchOne(
         db,
         sql: """
-          SELECT COUNT(*) FROM audit_events
-          WHERE action = 'budget_tripped' AND decision = 'proactive_per_day'
-          """
+        SELECT COUNT(*) FROM audit_events
+        WHERE action = 'budget_tripped' AND decision = 'proactive_per_day'
+        """
       )
     }
     #expect(tripCount == 1)
   }
 
-  @Test func interactiveRunIsUnaffectedByProactiveSpendAtTheSameMoment() async throws {
+  @Test
+  func interactiveRunIsUnaffectedByProactiveSpendAtTheSameMoment() async throws {
     // given — the same 2.50 proactive spend, recorded on a DIFFERENT scheduled run
     let env = try makeEnv(agentOutcome: .respond(okResponse(content: "Hello there")))
     let otherClaim = try env.sessionMessages.claimAndPersistInbound(
       InboundMessage(
-        updateId: 2,
-        sessionKey: SessionKey.telegramDM(chatId: 77),
-        chatId: 77,
-        userId: 77,
+        updateID: 2,
+        sessionKey: SessionKey.telegramDM(chatID: 77),
+        chatID: 77,
+        userID: 77,
         text: "seed",
         isEdited: false,
         ts: Date()
       )
     )
-    let otherRunId = try #require(otherClaim.runId)
+    let otherRunID = try #require(otherClaim.runID)
     try await env.queue.write { db in
       try db.execute(
         sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
-        arguments: [otherRunId]
+        arguments: [otherRunID]
       )
     }
     try UsageStoreGRDB(writer: env.queue).recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-other-run-seed"),
-        runId: otherRunId,
-        sessionId: try #require(otherClaim.sessionId),
+        runID: otherRunID,
+        sessionID: try #require(otherClaim.sessionID),
         model: "m",
         promptTokens: 10,
         completionTokens: 5,
@@ -878,29 +837,30 @@ private func okResponse(content: String) -> ChatResponse {
 
     // when — the OWNER's interactive run at the same moment
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — completes normally; the proactive pool binds proactive runs only
     let state = try await env.queue.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runId])
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runID])
     }
     #expect(state == "DONE")
   }
 
-  @Test func completedTurnCommitsDoneRunAndEnqueuesOneOutboxRow() async throws {
+  @Test
+  func completedTurnCommitsDoneRunAndEnqueuesOneOutboxRow() async throws {
     // given
     let env = try makeEnv(agentOutcome: .respond(okResponse(content: "Hello there")))
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
@@ -909,7 +869,7 @@ private func okResponse(content: String) -> ChatResponse {
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM messages WHERE run_id = ? AND content = ?",
-        arguments: [env.runId, "Hello there"]
+        arguments: [env.runID, "Hello there"]
       )
     }
     let assistantCount = try #require(persistedAssistantCount)
@@ -920,16 +880,17 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(firstPending.payload == "Hello there")
   }
 
-  @Test func degradedTurnFailsRunAndEnqueuesADegradationReply() async throws {
+  @Test
+  func degradedTurnFailsRunAndEnqueuesADegradationReply() async throws {
     // given — a terminal provider error: no usable answer, no usage to debit
     let env = try makeEnv(agentOutcome: .fail(.terminal(status: 400, message: "bad request")))
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
@@ -940,16 +901,17 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(firstPending.payload == Degradation.providerUnavailable)
   }
 
-  @Test func visionRefusalEnqueuesCopyNamingTheModelRatherThanAnOutage() async throws {
+  @Test
+  func visionRefusalEnqueuesCopyNamingTheModelRatherThanAnOutage() async throws {
     // given — the route refused because the configured model cannot look at images
     let env = try makeEnv(agentOutcome: .fail(.visionUnsupported))
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — the owner is told what to change, not to try again in a moment, and the reply names
@@ -963,7 +925,8 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(firstPending.payload.contains("CLAW_IMAGE_INPUT"))
   }
 
-  @Test func diskFullDuringCommitIsRethrownForTheStorageFullPath() async throws {
+  @Test
+  func diskFullDuringCommitIsRethrownForTheStorageFullPath() async throws {
     // given — the run's first write reports a full disk
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "ignored")),
@@ -973,29 +936,30 @@ private func okResponse(content: String) -> ChatResponse {
     // when / then — only StoreError.diskFull may propagate out of run
     await #expect(throws: StoreError.diskFull) {
       try await env.runner.run(
-        runId: env.runId,
-        sessionId: env.sessionId,
-        chatId: env.chatId,
-        triggerMessageId: env.triggerMessageId
+        runID: env.runID,
+        sessionID: env.sessionID,
+        chatID: env.chatID,
+        triggerMessageID: env.triggerMessageID
       )
     }
   }
 
-  @Test func supersededRunSelfAbortsBeforeProviderCall() async throws {
+  @Test
+  func supersededRunSelfAbortsBeforeProviderCall() async throws {
     // given
     let env = try makeEnv(agentOutcome: .respond(okResponse(content: "should not run")))
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
-      updateId: 2,
-      sessionKey: SessionKey.telegramDM(chatId: env.chatId),
+      updateID: 2,
+      sessionKey: SessionKey.telegramDM(chatID: env.chatID),
       now: Date()
     )
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
@@ -1004,7 +968,8 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(try env.outbox.pendingOutbound().isEmpty)
   }
 
-  @Test func completedUsageSurvivesWhenStopWinsBeforeAssistantCommit() async throws {
+  @Test
+  func completedUsageSurvivesWhenStopWinsBeforeAssistantCommit() async throws {
     // given
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "must not send")),
@@ -1019,16 +984,16 @@ private func okResponse(content: String) -> ChatResponse {
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
     let state = try #require(
       try await env.queue.read { db in
-        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runId])
+        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runID])
       }
     )
     let usageCount = try #require(
@@ -1036,7 +1001,7 @@ private func okResponse(content: String) -> ChatResponse {
         try Int.fetchOne(
           db,
           sql: "SELECT COUNT(*) FROM provider_usage WHERE run_id = ?",
-          arguments: [env.runId]
+          arguments: [env.runID]
         )
       }
     )
@@ -1045,7 +1010,7 @@ private func okResponse(content: String) -> ChatResponse {
         try Int.fetchOne(
           db,
           sql: "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = 'assistant'",
-          arguments: [env.runId]
+          arguments: [env.runID]
         )
       }
     )
@@ -1055,7 +1020,8 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(try env.outbox.pendingOutbound().isEmpty)
   }
 
-  @Test func degradationReplyIsNotLeftPendingWhenStopWinsBeforeFailCommit() async throws {
+  @Test
+  func degradationReplyIsNotLeftPendingWhenStopWinsBeforeFailCommit() async throws {
     // given
     let raced = try makeEnv(
       agentOutcome: .fail(.terminal(status: 400, message: "bad request")),
@@ -1070,10 +1036,10 @@ private func okResponse(content: String) -> ChatResponse {
 
     // when
     try await raced.runner.run(
-      runId: raced.runId,
-      sessionId: raced.sessionId,
-      chatId: raced.chatId,
-      triggerMessageId: raced.triggerMessageId
+      runID: raced.runID,
+      sessionID: raced.sessionID,
+      chatID: raced.chatID,
+      triggerMessageID: raced.triggerMessageID
     )
 
     // then
@@ -1081,7 +1047,8 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(try raced.outbox.pendingOutbound().isEmpty)
   }
 
-  @Test func ownerNoticesArePrefixedToSuccessfulOutboxPayload() async throws {
+  @Test
+  func ownerNoticesArePrefixedToSuccessfulOutboxPayload() async throws {
     // given
     let noticeFile = LoadedFile(outcome: .overCap, text: "", graphemeCount: 2_201)
     let contextBuilder = try makeContextBuilder(
@@ -1094,10 +1061,10 @@ private func okResponse(content: String) -> ChatResponse {
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
@@ -1110,14 +1077,15 @@ private func okResponse(content: String) -> ChatResponse {
         try String.fetchOne(
           db,
           sql: "SELECT content FROM messages WHERE run_id = ? AND role = 'assistant'",
-          arguments: [env.runId]
+          arguments: [env.runID]
         )
       }
     )
     #expect(storedAssistant == "Hello there")
   }
 
-  @Test func contextBuildFailureFailsRunAndEnqueuesContextDegradation() async throws {
+  @Test
+  func contextBuildFailureFailsRunAndEnqueuesContextDegradation() async throws {
     // given
     let tinyBudget = ContextBudget(
       inputCapGraphemes: 1,
@@ -1137,10 +1105,10 @@ private func okResponse(content: String) -> ChatResponse {
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
@@ -1150,21 +1118,24 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(pending.map(\.payload) == [Degradation.contextUnavailable])
   }
 
-  @Test func snapshotFailureAfterPickupFailsRunAndEnqueuesContextDegradation() async throws {
+  @Test
+  func snapshotFailureAfterPickupFailsRunAndEnqueuesContextDegradation() async throws {
     // given
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "must not call provider")),
       sessionMessagesForRunner: FakeSessionMessageStore(
-        failures: [.loadContextSnapshot: .unexpected("snapshot read failed")]
+        failures: [
+          .loadContextSnapshot: .unexpected("snapshot read failed"),
+        ]
       )
     )
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
@@ -1174,7 +1145,8 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(pending.map(\.payload) == [Degradation.contextUnavailable])
   }
 
-  @Test func ownerNoticesArePrefixedToDegradedOutboxPayload() async throws {
+  @Test
+  func ownerNoticesArePrefixedToDegradedOutboxPayload() async throws {
     // given
     let noticeFile = LoadedFile(outcome: .overCap, text: "", graphemeCount: 2_201)
     let contextBuilder = try makeContextBuilder(
@@ -1187,10 +1159,10 @@ private func okResponse(content: String) -> ChatResponse {
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
@@ -1200,7 +1172,8 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(firstPending.payload.contains(Degradation.providerUnavailable))
   }
 
-  @Test func ownerNoticesArePrefixedToBudgetStoppedOutboxPayload() async throws {
+  @Test
+  func ownerNoticesArePrefixedToBudgetStoppedOutboxPayload() async throws {
     // given
     let stoppingBudget = RunBudget(
       maxInputTokens: RunBudget.default.maxInputTokens,
@@ -1225,10 +1198,10 @@ private func okResponse(content: String) -> ChatResponse {
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then
@@ -1239,22 +1212,23 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(firstPending.payload.contains(Degradation.budget(cap: "per-day token")))
   }
 
-  @Test func heartbeatAckCommitsWithNoOutboxRowsAndAuditsSuppressed() async throws {
+  @Test
+  func heartbeatAckCommitsWithNoOutboxRowsAndAuditsSuppressed() async throws {
     // given — a heartbeat-origin run whose whole result is the ack token
     let env = try makeEnv(agentOutcome: .respond(okResponse(content: "HEARTBEAT_OK")))
     try await env.queue.write { db in
       try db.execute(
         sql: "UPDATE runs SET origin = 'heartbeat' WHERE id = ?",
-        arguments: [env.runId]
+        arguments: [env.runID]
       )
     }
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — DONE with ZERO outbox rows; suppressed audited on the same commit path
@@ -1265,23 +1239,24 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(counts.fired == 0)
   }
 
-  @Test func substantiveHeartbeatResultDeliversAndAuditsFired() async throws {
+  @Test
+  func substantiveHeartbeatResultDeliversAndAuditsFired() async throws {
     // given — the token plus a 400-char report: remainder > 300 ⇒ deliver
     let report = "HEARTBEAT_OK\n" + String(repeating: "a", count: 400)
     let env = try makeEnv(agentOutcome: .respond(okResponse(content: report)))
     try await env.queue.write { db in
       try db.execute(
         sql: "UPDATE runs SET origin = 'heartbeat' WHERE id = ?",
-        arguments: [env.runId]
+        arguments: [env.runID]
       )
     }
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — delivered like any run, plus the heartbeatFired marker
@@ -1294,16 +1269,17 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(counts.fired == 1)
   }
 
-  @Test func interactiveRunsAreNeverSuppressedEvenForTheToken() async throws {
+  @Test
+  func interactiveRunsAreNeverSuppressedEvenForTheToken() async throws {
     // given — the same token content on the DEFAULT interactive origin
     let env = try makeEnv(agentOutcome: .respond(okResponse(content: "HEARTBEAT_OK")))
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — delivered; no heartbeat audit rows of either kind
@@ -1313,15 +1289,18 @@ private func okResponse(content: String) -> ChatResponse {
     #expect(counts.fired == 0)
   }
 
-  @Test func scheduledRunResumesUnderTheProactivePromptWithoutRecall() async throws {
+  @Test
+  func scheduledRunResumesUnderTheProactivePromptWithoutRecall() async throws {
     // given — a scheduled-origin run suspended on a gated fetch, its partial exchange persisted
     // through the real store choreography an approval resume replays (commit → claim → fill)
     let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
     let env = try makeEnv(
       agentOutcome: .respond(okResponse(content: "Fetched and summarized.")),
-      now: { fixedNow }
+      now: {
+        fixedNow
+      }
     )
-    let observationMessageId = try await suspendOnAGatedFetchThenApprove(
+    let observationMessageID = try await suspendOnAGatedFetchThenApprove(
       env: env,
       origin: .scheduled,
       now: fixedNow
@@ -1329,10 +1308,10 @@ private func okResponse(content: String) -> ChatResponse {
 
     // when — the owner's approval claimed and filled the observation, so the run resumes
     await env.runner.resume(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      contextBoundMessageId: observationMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      contextBoundMessageID: observationMessageID
     )
 
     // then — the resume assembled under the proactive prompt (no /schedule token), replayed THIS
@@ -1355,9 +1334,8 @@ private func okResponse(content: String) -> ChatResponse {
     )
   }
 
-  private func heartbeatAuditCounts(
-    _ queue: DatabaseQueue
-  ) throws -> (suppressed: Int, fired: Int) {
+  private func heartbeatAuditCounts(_ queue: DatabaseQueue) throws -> (suppressed: Int, fired: Int)
+  {
     try queue.read { db in
       let suppressed =
         try Int.fetchOne(

@@ -12,8 +12,12 @@ public struct CoderProcessInspector: CoderProcessInspecting {
       if boot != receipt.hostBootID {
         return .stopped
       }
-      guard let pid = receipt.pid, let pgid = receipt.pgid,
-        let birth = receipt.birthIdentity, pid > 0, pid == pgid
+      guard
+        let pid = receipt.pid,
+        let pgid = receipt.pgid,
+        let birth = receipt.birthIdentity,
+        pid > 0,
+        pid == pgid
       else {
         return .unresolved
       }

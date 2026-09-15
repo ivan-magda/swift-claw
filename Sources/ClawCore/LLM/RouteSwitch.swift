@@ -25,10 +25,8 @@ extension ProviderError {
       return .short
     }
     switch self {
-    case .quotaLimited, .authenticationRequired, .accessDenied:
-      return .long
-    default:
-      return nil
+    case .quotaLimited, .authenticationRequired, .accessDenied: return .long
+    default: return nil
     }
   }
 }

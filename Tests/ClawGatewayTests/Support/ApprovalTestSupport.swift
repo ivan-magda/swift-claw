@@ -25,10 +25,10 @@ func suspendFileWrite() async throws -> (SC3Harness, ApprovalRowSnapshot) {
             id: "w1",
             name: "file_write",
             argumentsJSON: #"{"path":"notes/plan.md","content":"hello fabric","overwrite":false}"#
-          )
+          ),
         ]),
         okResponse(content: "Saved the plan."),
-      ]
+      ],
     ],
     httpResponses: [:]
   )
@@ -71,7 +71,7 @@ private final class SnapshotPoolCache: @unchecked Sendable {
 /// One `approvals` row projected for acceptance assertions.
 struct ApprovalRowSnapshot: Sendable, Equatable {
   let id: Int64
-  let runId: Int64
+  let runID: Int64
   let state: String
   let tool: String
   let canonicalTarget: String
@@ -86,13 +86,13 @@ func fetchApprovals(databasePath: String) throws -> [ApprovalRowSnapshot] {
     try Row.fetchAll(
       db,
       sql: """
-        SELECT id, run_id, state, tool, canonical_target, canonical_args, nonce, reason
-        FROM approvals ORDER BY id
-        """
+      SELECT id, run_id, state, tool, canonical_target, canonical_args, nonce, reason
+      FROM approvals ORDER BY id
+      """
     ).map { row in
       ApprovalRowSnapshot(
         id: row["id"],
-        runId: row["run_id"],
+        runID: row["run_id"],
         state: row["state"],
         tool: row["tool"],
         canonicalTarget: row["canonical_target"],
@@ -104,10 +104,10 @@ func fetchApprovals(databasePath: String) throws -> [ApprovalRowSnapshot] {
   }
 }
 
-func runState(databasePath: String, runId: Int64) throws -> String? {
+func runState(databasePath: String, runID: Int64) throws -> String? {
   let pool = try SnapshotPoolCache.shared.pool(at: databasePath)
   return try pool.read { db in
-    try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+    try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
   }
 }
 
@@ -132,16 +132,16 @@ func tamperApproval(
   }
 }
 
-func sessionFlags(
-  databasePath: String,
-  sessionId: Int64
-) throws -> (tainted: Bool, hasPrivateData: Bool) {
+func sessionFlags(databasePath: String, sessionID: Int64) throws -> (
+  tainted: Bool,
+  hasPrivateData: Bool
+) {
   let pool = try SnapshotPoolCache.shared.pool(at: databasePath)
   return try pool.read { db in
     let row = try Row.fetchOne(
       db,
       sql: "SELECT tainted, has_private_data FROM sessions WHERE id = ?",
-      arguments: [sessionId]
+      arguments: [sessionID]
     )
     return (tainted: row?["tainted"] ?? false, hasPrivateData: row?["has_private_data"] ?? false)
   }

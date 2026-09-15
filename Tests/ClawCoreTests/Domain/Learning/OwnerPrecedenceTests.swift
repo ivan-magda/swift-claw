@@ -2,8 +2,10 @@ import ClawCore
 import Foundation
 import Testing
 
-@Suite struct OwnerPrecedenceTests {
-  @Test func eachPrecedenceRungWinsOverTheOneBelow() {
+@Suite
+struct OwnerPrecedenceTests {
+  @Test
+  func eachPrecedenceRungWinsOverTheOneBelow() {
     // given
     let evaluator = EvaluatorOutcome.reusableIssue
     let codes = ["material.missed"]
@@ -30,7 +32,8 @@ import Testing
     #expect(useful.ownerConfirmed == false)
   }
 
-  @Test func latestResultSignalWins() {
+  @Test
+  func latestResultSignalWins() {
     // given
     let useful = event(.resultUseful, id: 1, revision: 1)
     let notUseful = event(.resultNotUseful, id: 2, revision: 2)
@@ -46,7 +49,8 @@ import Testing
     #expect(resolved.outcome == .negative(issueCodes: ["evaluator-code"]))
   }
 
-  @Test func supersededResultSignalDoesNotCount() {
+  @Test
+  func supersededResultSignalDoesNotCount() {
     // given
     let useful = event(.resultUseful, id: 1, revision: 1)
     let notUseful = event(.resultNotUseful, id: 2, revision: 2)
@@ -64,14 +68,12 @@ import Testing
     #expect(resolved.ownerConfirmed == false)
   }
 
-  @Test(
-    arguments: [
-      (EvaluatorOutcome.noIssue, EffectiveOutcome.positive),
-      (.reusableIssue, .negative(issueCodes: ["evaluator-code"])),
-      (.transientIssue, .neutral),
-      (.uncertain, .neutral),
-    ]
-  )
+  @Test(arguments: [
+    (EvaluatorOutcome.noIssue, EffectiveOutcome.positive),
+    (.reusableIssue, .negative(issueCodes: ["evaluator-code"])),
+    (.transientIssue, .neutral),
+    (.uncertain, .neutral),
+  ])
   func everyEvaluatorOutcomeMapsToItsEffectiveOutcome(
     evaluator: EvaluatorOutcome,
     expected: EffectiveOutcome
@@ -87,7 +89,8 @@ import Testing
     #expect(resolved.outcome == expected)
   }
 
-  @Test func notUsefulWithoutEvaluatorCodeUsesSyntheticCode() {
+  @Test
+  func notUsefulWithoutEvaluatorCodeUsesSyntheticCode() {
     // given
     let signals = [event(.resultNotUseful)]
 
@@ -99,7 +102,8 @@ import Testing
     #expect(resolved.outcome == .negative(issueCodes: expected))
   }
 
-  @Test func correctionWithoutEvaluatorCodeDoesNotManufactureCode() {
+  @Test
+  func correctionWithoutEvaluatorCodeDoesNotManufactureCode() {
     // given
     let signals = [event(.resultCorrection)]
 
@@ -110,28 +114,22 @@ import Testing
     #expect(resolved.outcome == .negative(issueCodes: []))
   }
 
-  @Test func reusableIssueWithoutCodesRemainsStructurallyInert() {
+  @Test
+  func reusableIssueWithoutCodesRemainsStructurallyInert() {
     // given / when
-    let resolved = OwnerPrecedence.resolve(
-      evaluator: .reusableIssue,
-      issueCodes: [],
-      signals: []
-    )
+    let resolved = OwnerPrecedence.resolve(evaluator: .reusableIssue, issueCodes: [], signals: [])
 
     // then
     #expect(resolved.outcome == .negative(issueCodes: []))
   }
 
-  @Test func disputeRemovesEvaluatorOutcomeAndVetoesDependentDecisions() {
+  @Test
+  func disputeRemovesEvaluatorOutcomeAndVetoesDependentDecisions() {
     // given
     let signals = [event(.evaluationDispute)]
 
     // when
-    let resolved = OwnerPrecedence.resolve(
-      evaluator: .noIssue,
-      issueCodes: [],
-      signals: signals
-    )
+    let resolved = OwnerPrecedence.resolve(evaluator: .noIssue, issueCodes: [], signals: signals)
 
     // then
     #expect(resolved.outcome == .neutral)
@@ -139,7 +137,8 @@ import Testing
     #expect(resolved.permitsDependentDecision == false)
   }
 
-  @Test func ownerResultRemainsEffectiveWhenEvaluatorIsDisputed() {
+  @Test
+  func ownerResultRemainsEffectiveWhenEvaluatorIsDisputed() {
     // given
     let signals = [
       event(.evaluationDispute, id: 1, revision: 1),
@@ -187,7 +186,7 @@ private func event(
 ) -> FeedbackEvent {
   FeedbackEvent(
     id: id,
-    runId: 41,
+    runID: 41,
     signal: signal,
     payload: nil,
     revision: FeedbackRevision(revision),

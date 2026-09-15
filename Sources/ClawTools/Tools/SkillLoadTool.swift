@@ -28,17 +28,17 @@ public struct SkillLoadTool: Tool {
     ToolDefinition(
       name: "skill_load",
       description: """
-        Load one skill the owner installed, by the name the skills index spells. Returns the \
-        skill's instructions to follow for the current task; an unknown name returns the \
-        installed names.
-        """,
+      Load one skill the owner installed, by the name the skills index spells. Returns the \
+      skill's instructions to follow for the current task; an unknown name returns the \
+      installed names.
+      """,
       parameters: .object([
         "type": .string("object"),
         "properties": .object([
           "name": .object([
             "type": .string("string"),
             "description": .string("The skill's name from the skills index, e.g. summarize"),
-          ])
+          ]),
         ]),
         "required": .array([.string("name")]),
       ]),
@@ -56,10 +56,7 @@ public struct SkillLoadTool: Tool {
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    guard
-      let name = arguments.objectValue?["name"]?.stringValue,
-      name.isEmpty == false
-    else {
+    guard let name = arguments.objectValue?["name"]?.stringValue, name.isEmpty == false else {
       return errorPayload("skill_load needs a non-empty \"name\" argument.")
     }
 
@@ -105,10 +102,8 @@ private extension SkillLoadTool {
 
     let manifestPath: String
     switch WorkspacePathContainment.resolveExisting(path: relativePath, root: workspaceRoot.path) {
-    case .refused(let reason):
-      return errorPayload(reason)
-    case .resolved(let resolved):
-      manifestPath = resolved
+    case .refused(let reason): return errorPayload(reason)
+    case .resolved(let resolved): manifestPath = resolved
     }
 
     guard
@@ -128,16 +123,11 @@ private extension SkillLoadTool {
     // Frontmatter without a procedure under it is an authoring gap, not a skill: returning it as a
     // success would spend a tool call to hand the model an empty guidance fence and no reason why.
     guard document.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-      return errorPayload(
-        "The skill \(descriptor.name) has no instructions under its frontmatter."
-      )
+      return errorPayload("The skill \(descriptor.name) has no instructions under its frontmatter.")
     }
 
     return ToolPayload(
-      content: ToolOutputCap.cap(
-        redactor.redact(document.body),
-        maxGraphemes: outputCapGraphemes
-      ),
+      content: ToolOutputCap.cap(redactor.redact(document.body), maxGraphemes: outputCapGraphemes),
       status: .ok,
       // A SKILL.md is owner-authored workspace material, like SOUL.md and AGENTS.md, which the
       // context injects untainted. Tainting here would suppress high-sensitivity memory for the
@@ -154,8 +144,8 @@ private extension SkillLoadTool {
     let names = scan.descriptors.map(\.name).sorted()
     let content =
       names.isEmpty
-      ? "That skill is not installed, and the workspace has no skills at all."
-      : "That skill is not installed. Installed skills: \(names.joined(separator: ", "))."
+        ? "That skill is not installed, and the workspace has no skills at all."
+        : "That skill is not installed. Installed skills: \(names.joined(separator: ", "))."
     return ToolPayload(content: content, status: .ok, ingestedUntrusted: false)
   }
 
@@ -166,17 +156,14 @@ private extension SkillLoadTool {
   static func duplicateRefusal(name: String, directories: [String]) -> String {
     let claimants = directories.sorted().joined(separator: ", ")
     return """
-      Several skill directories claim the name \(name) (\(claimants)), so I can't tell which one \
-      you mean. Ask the owner to rename one of them.
-      """
+    Several skill directories claim the name \(name) (\(claimants)), so I can't tell which one \
+    you mean. Ask the owner to rename one of them.
+    """
   }
 
   /// The directories that collided over `name`, empty when the scan reported no collision — a
   /// warning always names at least the two claimants that produced it.
-  static func duplicateDirectories(
-    for name: String,
-    in warnings: [WorkspaceWarning]
-  ) -> [String] {
+  static func duplicateDirectories(for name: String, in warnings: [WorkspaceWarning]) -> [String] {
     for warning in warnings {
       if case .duplicateSkillName(let warnedName, let directories) = warning, warnedName == name {
         return directories

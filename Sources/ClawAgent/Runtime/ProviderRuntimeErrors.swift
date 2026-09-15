@@ -8,9 +8,7 @@ import ClawCore
 public struct RacedDeadlineSuccess: Error, Sendable {
   public let response: ChatResponse
 
-  public init(response: ChatResponse) {
-    self.response = response
-  }
+  public init(response: ChatResponse) { self.response = response }
 }
 
 /// Raised when a streamed reply's accumulated content overruns the local byte cap. Owned here so the

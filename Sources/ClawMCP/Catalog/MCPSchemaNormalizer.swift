@@ -14,10 +14,12 @@ import ClawCore
 enum MCPSchemaNormalizer {
   /// The parameter schema a tool gets when the server's is not one. Object with no properties is
   /// what "this tool takes no arguments" looks like, which is the only reading left.
-  static let emptyObjectSchema = JSONValue.object([
-    Keyword.type: .string(Keyword.object),
-    Keyword.properties: .object([:]),
-  ])
+  static let emptyObjectSchema = JSONValue.object(
+    [
+      Keyword.type: .string(Keyword.object),
+      Keyword.properties: .object([:]),
+    ]
+  )
 
   static func normalize(_ schema: JSONValue) -> JSONValue {
     var promotions: [ReferencePromotion] = []
@@ -26,10 +28,7 @@ enum MCPSchemaNormalizer {
     // Only at the root. A non-object *node* inside a schema is ordinary — `items: true`, an enum
     // member — but the root is what reaches `function.parameters`, where a provider expects an
     // object and rejects the whole request, every built-in tool with it, when it does not find one.
-    guard
-      case .object(let root) = referenced,
-      root[Keyword.type] == .string(Keyword.object)
-    else {
+    guard case .object(let root) = referenced, root[Keyword.type] == .string(Keyword.object) else {
       return emptyObjectSchema
     }
     return referenced
@@ -53,9 +52,16 @@ private extension MCPSchemaNormalizer {
     static let schemaMaps = [properties, defs, definitions, "patternProperties"]
     /// Values are arrays of schemas.
     static let schemaArrays = [anyOf, "oneOf", "allOf", "prefixItems"]
+
     /// Values are a single schema, or (for `items`) a tuple of them. May legally be a bool.
     static let schemaValues = [
-      "items", "additionalProperties", "not", "contains", "if", "then", "else",
+      "items",
+      "additionalProperties",
+      "not",
+      "contains",
+      "if",
+      "then",
+      "else",
     ]
 
     /// Keys whose presence means the node describes an object even when it forgot to say so.
@@ -100,8 +106,7 @@ private extension MCPSchemaNormalizer {
     let nonNull = branches.filter {
       isNullType($0) == false
     }
-    guard nonNull.count == 1, nonNull.count < branches.count,
-      case .object(let branch) = nonNull[0]
+    guard nonNull.count == 1, nonNull.count < branches.count, case .object(let branch) = nonNull[0]
     else {
       return object
     }
@@ -174,9 +179,7 @@ private extension MCPSchemaNormalizer {
       guard case .array(let branches)? = result[key] else {
         continue
       }
-      result[key] = .array(
-        normalizeAll(branches, path: path + [key], promotions: &promotions)
-      )
+      result[key] = .array(normalizeAll(branches, path: path + [key], promotions: &promotions))
     }
 
     for key in Keyword.schemaValues {
@@ -185,17 +188,10 @@ private extension MCPSchemaNormalizer {
       }
       switch value {
       case .object:
-        result[key] = normalizeSchema(
-          value,
-          path: path + [key],
-          promotions: &promotions
-        )
+        result[key] = normalizeSchema(value, path: path + [key], promotions: &promotions)
       case .array(let items):
-        result[key] = .array(
-          normalizeAll(items, path: path + [key], promotions: &promotions)
-        )
-      default:
-        continue
+        result[key] = .array(normalizeAll(items, path: path + [key], promotions: &promotions))
+      default: continue
       }
     }
 
@@ -211,20 +207,13 @@ private extension MCPSchemaNormalizer {
     normalized.reserveCapacity(nodes.count)
     for (index, node) in nodes.enumerated() {
       normalized.append(
-        normalizeSchema(
-          node,
-          path: path + [String(index)],
-          promotions: &promotions
-        )
+        normalizeSchema(node, path: path + [String(index)], promotions: &promotions)
       )
     }
     return normalized
   }
 
-  static func rewriteReferences(
-    _ node: JSONValue,
-    promotions: [ReferencePromotion]
-  ) -> JSONValue {
+  static func rewriteReferences(_ node: JSONValue, promotions: [ReferencePromotion]) -> JSONValue {
     switch node {
     case .object(let object):
       var rewritten: [String: JSONValue] = [:]
@@ -237,17 +226,21 @@ private extension MCPSchemaNormalizer {
       }
       return .object(rewritten)
     case .array(let values):
-      return .array(values.map { rewriteReferences($0, promotions: promotions) })
-    case .null, .bool, .integer, .number, .string:
-      return node
+      return .array(
+        values.map {
+          rewriteReferences($0, promotions: promotions)
+        }
+      )
+    case .null, .bool, .integer, .number, .string: return node
     }
   }
 
-  static func rewriteReference(
-    _ reference: String,
-    promotions: [ReferencePromotion]
-  ) -> String {
-    for promotion in promotions.sorted(by: { $0.legacy.count > $1.legacy.count }) {
+  static func rewriteReference(_ reference: String, promotions: [ReferencePromotion]) -> String {
+    for promotion in promotions.sorted(
+      by: {
+        $0.legacy.count > $1.legacy.count
+      }
+    ) {
       guard reference == promotion.legacy || reference.hasPrefix(promotion.legacy + "/") else {
         continue
       }
@@ -259,8 +252,10 @@ private extension MCPSchemaNormalizer {
   static func referencePath(_ components: [String]) -> String {
     "#/"
       + components.map { component in
-        component.replacingOccurrences(of: "~", with: "~0")
-          .replacingOccurrences(of: "/", with: "~1")
+        component.replacingOccurrences(of: "~", with: "~0").replacingOccurrences(
+          of: "/",
+          with: "~1"
+        )
       }.joined(separator: "/")
   }
 

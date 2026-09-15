@@ -39,11 +39,9 @@ public actor SequenceProvider: LLMProvider {
 
   nonisolated public func stream(request: ChatRequest) -> LLMEventStream {
     LLMEventStream.make { _ in
-      do {
-        return .completed(try await self.complete(request: request))
-      } catch let cause as ProviderError {
-        return .failed(ProviderFailure(cause: cause, accounting: .notStarted))
-      } catch {
+      do { return .completed(try await self.complete(request: request)) } catch let cause
+        as ProviderError
+      { return .failed(ProviderFailure(cause: cause, accounting: .notStarted)) } catch {
         return .failed(
           ProviderFailure(
             cause: .terminal(status: nil, message: "scripted provider failed"),
@@ -96,9 +94,7 @@ public struct HangingInferenceProvider: LLMProvider {
   }
 
   public func complete(request: ChatRequest) async throws -> ChatResponse {
-    do {
-      try await Task.sleep(for: .seconds(3600))
-    } catch {
+    do { try await Task.sleep(for: .seconds(3600)) } catch {
       throw ProviderInferenceCancellation(observing: observedCompletionTokens)
     }
     throw ProviderError.terminal(status: nil, message: "unreachable")
@@ -122,9 +118,7 @@ public struct CancellingProvider: LLMProvider {
 public struct RacedSuccessProvider: LLMProvider {
   private let response: ChatResponse
 
-  public init(response: ChatResponse) {
-    self.response = response
-  }
+  public init(response: ChatResponse) { self.response = response }
 
   public func complete(request: ChatRequest) async throws -> ChatResponse {
     while !Task.isCancelled {
@@ -145,9 +139,7 @@ public final class SequentialCallIDGenerator: ProviderCallIDGenerating, @uncheck
   private let prefix: String
   private var issued = 0
 
-  public init(prefix: String = "call") {
-    self.prefix = prefix
-  }
+  public init(prefix: String = "call") { self.prefix = prefix }
 
   public func next() -> ProviderCallID {
     lock.lock()
@@ -167,21 +159,22 @@ public actor ScriptedDispatcher: ToolDispatching {
   }
 
   nonisolated public let definitions: [ToolDefinition]
-  private let respond: @Sendable (ToolCall, ToolDispatchContext) -> ToolDispatchOutcome
+
+  private let respond:
+    @Sendable (_ call: ToolCall, _ context: ToolDispatchContext) -> ToolDispatchOutcome
+
   public private(set) var records: [Record] = []
 
   public init(
     definitions: [ToolDefinition] = [],
-    respond: @escaping @Sendable (ToolCall, ToolDispatchContext) -> ToolDispatchOutcome
+    respond:
+    @escaping @Sendable (_ call: ToolCall, _ context: ToolDispatchContext) -> ToolDispatchOutcome
   ) {
     self.definitions = definitions
     self.respond = respond
   }
 
-  public func dispatch(
-    call: ToolCall,
-    context: ToolDispatchContext
-  ) async -> ToolDispatchOutcome {
+  public func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
     records.append(Record(call: call, context: context))
     return respond(call, context)
   }
@@ -203,9 +196,7 @@ public final class RecordingAuditLog: AuditLog, @unchecked Sendable {
     return storedEvents
   }
 
-  public init(thrown: StoreError? = nil) {
-    self.thrown = thrown
-  }
+  public init(thrown: StoreError? = nil) { self.thrown = thrown }
 
   public func appendAudit(_ event: AuditEvent) throws(StoreError) {
     lock.lock()
@@ -224,13 +215,9 @@ public final class RecordingAuditLog: AuditLog, @unchecked Sendable {
 public struct EmptyWorkspace: WorkspaceReading {
   public init() {}
 
-  public func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile {
-    .missing
-  }
+  public func load(file: WorkspaceFile, maxGraphemes: Int?) -> LoadedFile { .missing }
 
-  public func scanSkills() -> SkillScanResult {
-    SkillScanResult(descriptors: [], warnings: [])
-  }
+  public func scanSkills() -> SkillScanResult { SkillScanResult(descriptors: [], warnings: []) }
 }
 
 package typealias EmptyMemoryStore = ClawAgent.EmptyMemoryStore

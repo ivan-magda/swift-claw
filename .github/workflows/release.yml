@@ -34,7 +34,7 @@ jobs:
       - name: Stamp version
         run: |
           printf 'enum ClawdVersion {\n  static let current = "%s"\n}\n' \
-            "${GITHUB_REF_NAME#v}" > Sources/clawd/Version.swift
+            "${GITHUB_REF_NAME#v}" > Sources/clawd/ClawdVersion.swift
       - name: Build release binary
         run: swift build -c release --static-swift-stdlib --product clawd
       - name: Package
@@ -73,7 +73,7 @@ jobs:
       - name: Stamp version
         run: |
           printf 'enum ClawdVersion {\n  static let current = "%s"\n}\n' \
-            "${GITHUB_REF_NAME#v}" > Sources/clawd/Version.swift
+            "${GITHUB_REF_NAME#v}" > Sources/clawd/ClawdVersion.swift
       - name: Build release binary
         run: swift build -c release --product clawd
       - name: Package

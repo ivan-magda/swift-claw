@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct SandboxLifecycleServiceTests {
-  @Test func endingTheServiceRunsBackendShutdownOnce() async throws {
+@Suite
+struct SandboxLifecycleServiceTests {
+  @Test
+  func endingTheServiceRunsBackendShutdownOnce() async throws {
     // given
     let backend = FakeExecutionBackend()
     let service = SandboxLifecycleService(maintenance: backend)

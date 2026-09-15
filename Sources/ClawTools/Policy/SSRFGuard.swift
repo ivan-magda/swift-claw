@@ -24,10 +24,8 @@ public enum SSRFGuard {
 
   public static func isPublic(_ address: ResolvedAddress) -> Bool {
     switch address {
-    case .ipv4(let value):
-      isPublicV4(value)
-    case .ipv6(let bytes):
-      isPublicV6(bytes)
+    case .ipv4(let value): isPublicV4(value)
+    case .ipv6(let bytes): isPublicV6(bytes)
     }
   }
 }
@@ -59,17 +57,12 @@ private extension SSRFGuard {
     }
   }
 
-  static func v4(
-    _ byte0: UInt32,
-    _ byte1: UInt32,
-    _ byte2: UInt32,
-    _ byte3: UInt32
-  ) -> UInt32 {
+  static func v4(_ byte0: UInt32, _ byte1: UInt32, _ byte2: UInt32, _ byte3: UInt32) -> UInt32 {
     (byte0 << 24) | (byte1 << 16) | (byte2 << 8) | byte3
   }
 
   static func mask(_ prefixLength: UInt32) -> UInt32 {
-    prefixLength == 0 ? 0 : ~UInt32(0) << (32 - prefixLength)
+    prefixLength == 0 ? 0 : ~(0 as UInt32) << (32 - prefixLength)
   }
 
   /// The IPv4 address embedded in the final four bytes of an IPv6 address (mapped/NAT64/compatible).
@@ -87,20 +80,31 @@ private extension SSRFGuard {
     }
 
     // IPv4-mapped (::ffff:a.b.c.d): unwrap and re-check the embedded v4.
-    if bytes[0...9].allSatisfy({ $0 == 0 }), bytes[10] == 0xFF, bytes[11] == 0xFF {
+    if
+      bytes[0...9].allSatisfy({
+        $0 == 0
+      }),
+      bytes[10] == 0xFF,
+      bytes[11] == 0xFF
+    {
       return isPublicV4(embeddedV4(bytes))
     }
     // NAT64 well-known prefix 64:ff9b::/96 (RFC 6052): a DNS64/NAT64 translator forwards to the
     // embedded v4, so classify by that v4 — else 64:ff9b::7f00:1 reaches 127.0.0.1 on such a network.
     let isNAT64 =
       bytes[0] == 0x00 && bytes[1] == 0x64 && bytes[2] == 0xFF && bytes[3] == 0x9B
-      && bytes[4...11].allSatisfy { $0 == 0 }
+        && bytes[4...11].allSatisfy {
+          $0 == 0
+        }
     if isNAT64 {
       return isPublicV4(embeddedV4(bytes))
     }
     // IPv4-compatible ::a.b.c.d (::/96, deprecated): unwrap the embedded v4. This also subsumes the
     // unspecified :: (→ 0.0.0.0) and loopback ::1 (→ 0.0.0.1), both refused by the v4 blocklist.
-    if bytes[0...11].allSatisfy({ $0 == 0 }) {
+    if
+      bytes[0...11].allSatisfy({
+        $0 == 0
+      }) {
       return isPublicV4(embeddedV4(bytes))
     }
     // link-local fe80::/10
@@ -129,9 +133,7 @@ public protocol AddressResolving: Sendable {
   func resolve(host: String) async throws -> [ResolvedAddress]
 }
 
-public enum AddressResolutionError: Error, Sendable, Equatable {
-  case unresolvable(host: String)
-}
+public enum AddressResolutionError: Error, Sendable, Equatable { case unresolvable(host: String) }
 
 /// The system resolver via `getaddrinfo` — works on macOS and Linux behind the one seam.
 /// `getaddrinfo` is a BLOCKING syscall that never observes cancellation, so it runs on a
@@ -149,7 +151,11 @@ public struct SystemAddressResolver: AddressResolving {
 
     return try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global(qos: .utility).async {
-        continuation.resume(with: Result { try Self.blockingResolve(host: host) })
+        continuation.resume(
+          with: Result {
+            try Self.blockingResolve(host: host)
+          }
+        )
       }
     }
   }
@@ -185,7 +191,9 @@ public struct SystemAddressResolver: AddressResolving {
       } else if info.pointee.ai_family == AF_INET6, let rawAddress = info.pointee.ai_addr {
         rawAddress.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { pointer in
           var v6Address = pointer.pointee.sin6_addr
-          let bytes = withUnsafeBytes(of: &v6Address) { Array($0) }
+          let bytes = withUnsafeBytes(of: &v6Address) {
+            Array($0)
+          }
           addresses.append(.ipv6(bytes))
         }
       }

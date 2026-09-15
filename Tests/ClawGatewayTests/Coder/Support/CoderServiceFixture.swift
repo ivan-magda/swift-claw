@@ -26,7 +26,7 @@ struct CoderServiceFixture: Sendable {
     inspection: CoderRecoveryObservation = .stopped,
     groupChatID: Int64? = nil,
     threadID: Int64? = nil,
-    redactor: @escaping @Sendable (String) -> String = { text in
+    redactor: @escaping @Sendable (_ text: String) -> String = { text in
       text
     }
   ) throws {
@@ -37,7 +37,8 @@ struct CoderServiceFixture: Sendable {
     preparer = CoderPreparationStub()
     inspector = CoderInspectionStub(observation: inspection)
     backend = ScriptedCoderBackend(
-      invocations: scripts.isEmpty ? [.init(result: Self.result())] : scripts
+      invocations: scripts.isEmpty
+        ? [ScriptedCoderBackend.Invocation(result: Self.result())] : scripts
     )
     jobFinished = AsyncGate()
     ownerContext = try Self.context(
@@ -68,9 +69,7 @@ struct CoderServiceFixture: Sendable {
       let prepared = Self.request(index: index)
       let context = try Self.context(queue: queue, prepared: prepared, index: index)
       return .success(try await service.submit(prepared, context: context))
-    } catch let error as CoderError {
-      return .failure(error)
-    } catch {
+    } catch let error as CoderError { return .failure(error) } catch {
       Issue.record(error)
       return .failure(.unavailable("Fixture origin failed"))
     }
@@ -78,7 +77,7 @@ struct CoderServiceFixture: Sendable {
 
   func reports() throws -> [OutboxRow] {
     try OutboxStoreGRDB(writer: queue).pendingOutbound().filter { row in
-      row.approvalId == nil
+      row.approvalID == nil
     }
   }
 
@@ -88,10 +87,12 @@ struct CoderServiceFixture: Sendable {
   }
 
   func restartedService(
-    redactor: @escaping @Sendable (String) -> String = { text in
+    redactor: @escaping @Sendable (_ text: String) -> String = { text in
       text
     }
-  ) -> CoderService {
+  )
+    -> CoderService
+  {
     Self.makeService(
       store: store,
       backend: backend,
@@ -112,7 +113,7 @@ struct CoderServiceFixture: Sendable {
     root: URL,
     limit: Int,
     finished: AsyncGate,
-    redactor: @escaping @Sendable (String) -> String
+    redactor: @escaping @Sendable (_ text: String) -> String
   ) -> CoderService {
     CoderService(
       store: store,
@@ -130,7 +131,9 @@ struct CoderServiceFixture: Sendable {
       jobRoot: root.path,
       executionPolicyID: CoderServiceFixture.executionPolicyID,
       redact: redactor,
-      notifyOutbox: { finished.open() }
+      notifyOutbox: {
+        finished.open()
+      }
     )
   }
 
@@ -152,29 +155,28 @@ struct CoderServiceFixture: Sendable {
       threadID: threadID
     )
     let outbox = OutboxStoreGRDB(writer: queue)
-    for row in try outbox.pendingOutbound() where row.runId == origin.runID {
+    for row in try outbox.pendingOutbound() where row.runID == origin.runID {
       try outbox.markSent(
         deliveryKey: row.deliveryKey,
-        telegramMessageId: 12,
+        telegramMessageID: 12,
         now: Date(timeIntervalSince1970: 1_800_000_000)
       )
     }
     return ToolExecutionContext(
-      runId: origin.runID,
-      sessionId: origin.sessionID,
-      chatId: origin.chatID,
-      requesterUserId: origin.requesterUserID,
+      runID: origin.runID,
+      sessionID: origin.sessionID,
+      chatID: origin.chatID,
+      requesterUserID: origin.requesterUserID,
       origin: .interactive,
       mode: groupChatID == nil ? .direct : .group,
-      toolCallId: origin.toolCallID,
-      approvalId: origin.approvalID
+      toolCallID: origin.toolCallID,
+      approvalID: origin.approvalID
     )
   }
 
-  static func request(
-    index: Int64 = 1,
-    policy: String = CoderServiceFixture.executionPolicyID
-  ) -> CoderPreparedRequest {
+  static func request(index: Int64 = 1, policy: String = CoderServiceFixture.executionPolicyID)
+    -> CoderPreparedRequest
+  {
     let path = "/fixture/repository-\(index)"
     return CoderPreparedRequest(
       request: CoderRequest(
@@ -195,10 +197,8 @@ struct CoderServiceFixture: Sendable {
     )
   }
 
-  static func result(
-    state: CoderJobState = .succeeded,
-    failure: CoderFailure? = nil
-  ) -> CoderResult {
+  static func result(state: CoderJobState = .succeeded, failure: CoderFailure? = nil) -> CoderResult
+  {
     CoderResult(
       state: state,
       summary: "Updated retry handling",

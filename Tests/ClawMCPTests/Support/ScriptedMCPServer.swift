@@ -10,8 +10,11 @@ import MCP
 /// like from the client side — so reconnect scenarios need no special support beyond counting how
 /// many times a session came back.
 actor ScriptedMCPServer {
-  typealias ListHandler = @Sendable (ListTools.Parameters) async throws -> ListTools.Result
-  typealias CallHandler = @Sendable (Int, CallTool.Parameters) async throws -> CallTool.Result
+  typealias ListHandler =
+    @Sendable (_ parameters: ListTools.Parameters) async throws -> ListTools.Result
+
+  typealias CallHandler =
+    @Sendable (_ connection: Int, _ parameters: CallTool.Parameters) async throws -> CallTool.Result
 
   private let name: String
   private let list: ListHandler
@@ -83,7 +86,7 @@ actor ScriptedMCPServer {
   static let echo: CallHandler = { connection, parameters in
     CallTool.Result(
       content: [
-        .text(text: "\(parameters.name) on connection \(connection)", annotations: nil, _meta: nil)
+        .text(text: "\(parameters.name) on connection \(connection)", annotations: nil, _meta: nil),
       ]
     )
   }
@@ -92,9 +95,7 @@ actor ScriptedMCPServer {
     _ name: String,
     description: String = "a fixture tool",
     schema: Value = .object(["type": .string("object"), "properties": .object([:])])
-  ) -> MCP.Tool {
-    MCP.Tool(name: name, description: description, inputSchema: schema)
-  }
+  ) -> MCP.Tool { MCP.Tool(name: name, description: description, inputSchema: schema) }
 }
 
 /// Opens whatever the test scripts — a live transport, or a failure standing in for a server that
@@ -102,9 +103,7 @@ actor ScriptedMCPServer {
 struct StubTransportFactory: MCPTransportFactory {
   let open: @Sendable () async throws -> any Transport
 
-  func makeTransport() async throws -> any Transport {
-    try await open()
-  }
+  func makeTransport() async throws -> any Transport { try await open() }
 }
 
 /// A transport that accepts everything and answers nothing: `connect` and `send` succeed, and the
@@ -130,15 +129,11 @@ actor SilentTransport: Transport {
 
   func connect() async throws {}
 
-  func disconnect() async {
-    continuation.finish()
-  }
+  func disconnect() async { continuation.finish() }
 
   func send(_ data: Data) async throws {}
 
-  func receive() -> AsyncThrowingStream<Data, any Error> {
-    messages
-  }
+  func receive() -> AsyncThrowingStream<Data, any Error> { messages }
 }
 
 /// Wraps a live transport and stops forwarding from `mutingSend` onward, so the handshake lands but
@@ -163,9 +158,7 @@ actor MuteAfterHandshakeTransport: Transport {
     stream = await inner.receive()
   }
 
-  func disconnect() async {
-    await inner.disconnect()
-  }
+  func disconnect() async { await inner.disconnect() }
 
   func send(_ data: Data) async throws {
     sends += 1
@@ -216,9 +209,7 @@ actor FaultyTransport: Transport {
     stream = await inner.receive()
   }
 
-  func disconnect() async {
-    await inner.disconnect()
-  }
+  func disconnect() async { await inner.disconnect() }
 
   func send(_ data: Data) async throws {
     sends += 1

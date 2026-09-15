@@ -52,10 +52,9 @@ public struct CoderConfig: Sendable, Equatable {
 
     let searchPath = values[AppConfig.EnvKey.coderPath]
     if let searchPath {
-      let absolute =
-        searchPath
-        .split(separator: ":", omittingEmptySubsequences: false)
-        .allSatisfy { $0.hasPrefix("/") }
+      let absolute = searchPath.split(separator: ":", omittingEmptySubsequences: false).allSatisfy {
+        $0.hasPrefix("/")
+      }
       guard absolute else {
         throw .invalidCoderSetting(key: AppConfig.EnvKey.coderPath)
       }
@@ -70,19 +69,17 @@ public struct CoderConfig: Sendable, Equatable {
       maxConcurrentJobs: try ConfigParse.boundedInt(
         values[AppConfig.EnvKey.coderMaxConcurrentJobs],
         default: Defaults.maxConcurrentJobs,
-        range: 1...Int.max,
-        onInvalid: { _ in
-          .invalidCoderSetting(key: AppConfig.EnvKey.coderMaxConcurrentJobs)
-        }
-      ),
+        range: 1...Int.max
+      ) { _ in
+        .invalidCoderSetting(key: AppConfig.EnvKey.coderMaxConcurrentJobs)
+      },
       jobTimeoutSeconds: try ConfigParse.boundedInt(
         values[AppConfig.EnvKey.coderJobTimeoutSeconds],
         default: Defaults.jobTimeoutSeconds,
-        range: 1...maximumJobTimeoutSeconds,
-        onInvalid: { _ in
-          .invalidCoderSetting(key: AppConfig.EnvKey.coderJobTimeoutSeconds)
-        }
-      ),
+        range: 1...maximumJobTimeoutSeconds
+      ) { _ in
+        .invalidCoderSetting(key: AppConfig.EnvKey.coderJobTimeoutSeconds)
+      },
       executable: executable,
       profile: values[AppConfig.EnvKey.coderProfile],
       configHome: configHome,
@@ -94,13 +91,16 @@ public struct CoderConfig: Sendable, Equatable {
 // MARK: - Scalar Validation
 
 private extension CoderConfig {
-  static func nonemptySettings(
-    _ environment: [String: String]
-  ) throws(ConfigError) -> [String: String] {
+  static func nonemptySettings(_ environment: [String: String]) throws(ConfigError) -> [String:
+    String]
+  {
     let keys = [
-      AppConfig.EnvKey.coderEnabled, AppConfig.EnvKey.coderMaxConcurrentJobs,
-      AppConfig.EnvKey.coderJobTimeoutSeconds, AppConfig.EnvKey.coderExecutable,
-      AppConfig.EnvKey.coderProfile, AppConfig.EnvKey.coderConfigHome,
+      AppConfig.EnvKey.coderEnabled,
+      AppConfig.EnvKey.coderMaxConcurrentJobs,
+      AppConfig.EnvKey.coderJobTimeoutSeconds,
+      AppConfig.EnvKey.coderExecutable,
+      AppConfig.EnvKey.coderProfile,
+      AppConfig.EnvKey.coderConfigHome,
       AppConfig.EnvKey.coderPath,
     ]
 
@@ -112,7 +112,8 @@ private extension CoderConfig {
 
       let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
 
-      guard !value.isEmpty,
+      guard
+        !value.isEmpty,
         !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
       else {
         throw .invalidCoderSetting(key: key)

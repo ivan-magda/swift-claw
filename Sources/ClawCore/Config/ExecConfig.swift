@@ -8,9 +8,7 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
     String(repository.split(separator: "/", maxSplits: 1)[0]).lowercased()
   }
 
-  public var description: String {
-    "\(repository)@sha256:\(digest)"
-  }
+  public var description: String { "\(repository)@sha256:\(digest)" }
 
   public static func parse(_ rawValue: String) -> PinnedImageReference? {
     guard rawValue == rawValue.trimmingCharacters(in: .whitespacesAndNewlines) else {
@@ -22,11 +20,7 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
     guard let separator = rawValue.range(of: "@sha256:") else {
       return nil
     }
-    guard
-      rawValue.range(
-        of: "@sha256:",
-        range: separator.upperBound..<rawValue.endIndex
-      ) == nil
+    guard rawValue.range(of: "@sha256:", range: separator.upperBound..<rawValue.endIndex) == nil
     else {
       return nil
     }
@@ -67,7 +61,9 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
       let rawPort = pieces[1]
       guard
         rawPort.isEmpty == false,
-        rawPort.allSatisfy({ "0123456789".contains($0) }),
+        rawPort.allSatisfy({
+          "0123456789".contains($0)
+        }),
         let port = Int(rawPort),
         (1...65_535).contains(port)
       else {
@@ -84,7 +80,11 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
     guard labels.allSatisfy(isValidDNSLabel) else {
       return false
     }
-    guard labels.allSatisfy({ Int($0) != nil }) == false else {
+    guard
+      labels.allSatisfy({
+        Int($0) != nil
+      }) == false
+    else {
       return false
     }
 
@@ -148,11 +148,7 @@ public struct ExecConfig: Sendable, Equatable {
 
 extension AppConfig {
   static func parseExecConfig(from env: [String: String]) throws -> ExecConfig {
-    let enabled = try boolValue(
-      env[EnvKey.execEnabled],
-      key: EnvKey.execEnabled,
-      default: false
-    )
+    let enabled = try boolValue(env[EnvKey.execEnabled], key: EnvKey.execEnabled, default: false)
 
     let registryAllowlist = try parseExecRegistryAllowlist(env[EnvKey.execImageRegistries])
 
@@ -224,9 +220,7 @@ extension AppConfig {
     let hosts = trimmed.split(separator: ",", omittingEmptySubsequences: false).map { part in
       part.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
-    guard hosts.isEmpty == false,
-      hosts.allSatisfy(PinnedImageReference.isValidRegistryHost)
-    else {
+    guard hosts.isEmpty == false, hosts.allSatisfy(PinnedImageReference.isValidRegistryHost) else {
       throw ConfigError.invalidExecImageRegistry(rawValue)
     }
 

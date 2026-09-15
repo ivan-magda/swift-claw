@@ -5,9 +5,7 @@ import Foundation
 public struct LearningAlgorithm: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 
   // swiftlint:disable:next identifier_name
   public static let v1 = LearningAlgorithm(rawValue: "scheduled-learning/v1")
@@ -18,9 +16,7 @@ public struct LearningAlgorithm: RawRepresentable, Sendable, Hashable, Codable {
 public struct LessonSetDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
 /// Digest of one candidate record. Stays distinct from `LessonSetDigest` — a candidate's own record
@@ -29,9 +25,7 @@ public struct LessonSetDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct CandidateDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
 /// Digest of the canonical typed source manifest, distinct from the candidate record that also
@@ -39,9 +33,7 @@ public struct CandidateDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct CandidateSourceManifestDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
 /// SHA-256 over the canonical bytes of what a job asks for. Stays distinct from the lesson-set and
@@ -51,16 +43,11 @@ public struct CandidateSourceManifestDigest: RawRepresentable, Sendable, Hashabl
 public struct JobDefinitionDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 
-  public static func of(
-    label: String,
-    prompt: String,
-    recurrenceJSON: String?,
-    timezone: String
-  ) throws -> JobDefinitionDigest {
+  public static func of(label: String, prompt: String, recurrenceJSON: String?, timezone: String)
+    throws -> JobDefinitionDigest
+  {
     let payload = Payload(
       label: label,
       prompt: prompt,
@@ -86,18 +73,14 @@ public struct JobDefinitionDigest: RawRepresentable, Sendable, Hashable, Codable
 public struct EvidenceDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
 /// Digest of one frozen evaluation used as reflection evidence.
 public struct EvaluationDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
 /// Digest of one exact append-only owner-feedback event. The row id locates the dependency; this
@@ -105,69 +88,65 @@ public struct EvaluationDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct FeedbackEventDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 
   public static func of(  // swiftlint:disable:this function_parameter_count
-    eventId: Int64,
-    jobId: Int64,
+    eventID: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     subjectKind: FeedbackSubjectKind,
     subjectDigest: String,
     signal: OwnerSignal,
     payload: String?,
     actor: AuditActor,
-    transportUpdateId: Int64?,
+    transportUpdateID: Int64?,
     revision: FeedbackRevision,
     supersedes: Int64?,
     occurredAtEpochSecond: Int64
   ) throws -> FeedbackEventDigest {
     let event = EventProjection(
-      eventId: eventId,
-      jobId: jobId,
+      eventID: eventID,
+      jobID: jobID,
       epoch: epoch.value,
       subjectKind: subjectKind.rawValue,
       subjectDigest: subjectDigest,
       signal: signal.rawValue,
       payload: payload,
       actor: actor.rawValue,
-      transportUpdateId: transportUpdateId,
+      transportUpdateID: transportUpdateID,
       revision: revision.value,
       supersedes: supersedes,
       occurredAtEpochSecond: occurredAtEpochSecond
     )
     let bytes = try CanonicalJSON.data(encoding: event)
-    let framed = CanonicalDigestInput.joined([
-      "feedback-event/v1", bytes.base64EncodedString(),
-    ])
+    let framed = CanonicalDigestInput.joined(["feedback-event/v1", bytes.base64EncodedString()])
     return FeedbackEventDigest(rawValue: SHA256Digest.hex(framed))
   }
 
   private struct EventProjection: Encodable {
-    let eventId: Int64
-    let jobId: Int64
+    let eventID: Int64
+    let jobID: Int64
     let epoch: Int64
     let subjectKind: String
     let subjectDigest: String
     let signal: String
     let payload: String?
     let actor: String
-    let transportUpdateId: Int64?
+    let transportUpdateID: Int64?
     let revision: Int64
     let supersedes: Int64?
     let occurredAtEpochSecond: Int64
 
     enum CodingKeys: String, CodingKey {
-      case eventId = "event_id"
-      case jobId = "job_id"
+      case eventID = "event_id"
+      case jobID = "job_id"
       case epoch = "learning_epoch"
       case subjectKind = "subject_kind"
       case subjectDigest = "subject_digest"
       case signal
       case payload
       case actor
-      case transportUpdateId = "transport_update_id"
+      case transportUpdateID = "transport_update_id"
       case revision = "feedback_revision"
       case supersedes
       case occurredAtEpochSecond = "occurred_at"
@@ -180,17 +159,11 @@ public struct FeedbackEventDigest: RawRepresentable, Sendable, Hashable, Codable
 public struct LearningEpoch: Sendable, Hashable, Comparable, Codable {
   public let value: Int64
 
-  public init(_ value: Int64) {
-    self.value = value
-  }
+  public init(_ value: Int64) { self.value = value }
 
-  public static func < (lhs: LearningEpoch, rhs: LearningEpoch) -> Bool {
-    lhs.value < rhs.value
-  }
+  public static func < (lhs: LearningEpoch, rhs: LearningEpoch) -> Bool { lhs.value < rhs.value }
 
-  public func next() -> LearningEpoch {
-    LearningEpoch(value + 1)
-  }
+  public func next() -> LearningEpoch { LearningEpoch(value + 1) }
 }
 
 /// Marks which frozen version of the current stable lesson set an evidence window or trial was
@@ -198,17 +171,11 @@ public struct LearningEpoch: Sendable, Hashable, Comparable, Codable {
 public struct StableRevision: Sendable, Hashable, Comparable, Codable {
   public let value: Int64
 
-  public init(_ value: Int64) {
-    self.value = value
-  }
+  public init(_ value: Int64) { self.value = value }
 
-  public static func < (lhs: StableRevision, rhs: StableRevision) -> Bool {
-    lhs.value < rhs.value
-  }
+  public static func < (lhs: StableRevision, rhs: StableRevision) -> Bool { lhs.value < rhs.value }
 
-  public func next() -> StableRevision {
-    StableRevision(value + 1)
-  }
+  public func next() -> StableRevision { StableRevision(value + 1) }
 }
 
 /// Marks which frozen version of the append-only owner-feedback log a candidate, approval or
@@ -217,17 +184,13 @@ public struct StableRevision: Sendable, Hashable, Comparable, Codable {
 public struct FeedbackRevision: Sendable, Hashable, Comparable, Codable {
   public let value: Int64
 
-  public init(_ value: Int64) {
-    self.value = value
-  }
+  public init(_ value: Int64) { self.value = value }
 
   public static func < (lhs: FeedbackRevision, rhs: FeedbackRevision) -> Bool {
     lhs.value < rhs.value
   }
 
-  public func next() -> FeedbackRevision {
-    FeedbackRevision(value + 1)
-  }
+  public func next() -> FeedbackRevision { FeedbackRevision(value + 1) }
 }
 
 /// Digest of the whole surface two runs must share before their verdicts may be counted as
@@ -238,18 +201,14 @@ public struct FeedbackRevision: Sendable, Hashable, Comparable, Codable {
 public struct CompatibilityDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
 /// SHA-256 identity of one frozen reflection question.
 public struct TriggerDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
 /// Digest of one `LearningOperationKey`. The stored claim key: `learning_operations` has no
@@ -258,9 +217,7 @@ public struct TriggerDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct LearningOperationKeyDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
 /// One durable `learning_operations` row. Its shape is the key digest and the attempt generation,
@@ -268,9 +225,7 @@ public struct LearningOperationKeyDigest: RawRepresentable, Sendable, Hashable, 
 public struct LearningOperationID: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 
   public init(key: LearningOperationKeyDigest, attemptGeneration: Int) {
     rawValue = "\(key.rawValue):\(attemptGeneration)"
@@ -283,9 +238,7 @@ public struct LearningOperationID: RawRepresentable, Sendable, Hashable, Codable
 public struct CarrierDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 }
 
 /// Digest of the exact closed reflector reply after fence removal. It is source provenance, not
@@ -293,14 +246,10 @@ public struct CarrierDigest: RawRepresentable, Sendable, Hashable, Codable {
 public struct ReflectionResultDigest: RawRepresentable, Sendable, Hashable, Codable {
   public let rawValue: String
 
-  public init(rawValue: String) {
-    self.rawValue = rawValue
-  }
+  public init(rawValue: String) { self.rawValue = rawValue }
 
   public static func of(_ bytes: Data) -> ReflectionResultDigest {
-    let framed = CanonicalDigestInput.joined([
-      "reflection-result/v1", bytes.base64EncodedString(),
-    ])
+    let framed = CanonicalDigestInput.joined(["reflection-result/v1", bytes.base64EncodedString()])
     return ReflectionResultDigest(rawValue: SHA256Digest.hex(framed))
   }
 }

@@ -2,13 +2,13 @@ import ClawCore
 import Foundation
 import Testing
 
-@Suite struct CanonicalJSONTests {
-  @Test func strictIntegerRejectsJSONBooleans() throws {
+@Suite
+struct CanonicalJSONTests {
+  @Test
+  func strictIntegerRejectsJSONBooleans() throws {
     // given
     let object = try #require(
-      JSONSerialization.jsonObject(
-        with: Data(#"{"integer":1,"fraction":1.5,"boolean":true}"#.utf8)
-      )
+      JSONSerialization.jsonObject(with: Data(#"{"integer":1,"fraction":1.5,"boolean":true}"#.utf8))
         as? [String: Any]
     )
 

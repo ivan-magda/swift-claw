@@ -4,11 +4,9 @@ import Foundation
 // MARK: - Ordered Section Assembly
 
 extension ContextBuilder {
-  func buildFixedSections(
-    origin: RunOrigin,
-    lessons: LessonSet?,
-    ownerNotices: inout [String]
-  ) -> [FittableSection] {
+  func buildFixedSections(origin: RunOrigin, lessons: LessonSet?, ownerNotices: inout [String])
+    -> [FittableSection]
+  {
     [
       section(
         id: .policy,
@@ -17,7 +15,7 @@ extension ContextBuilder {
             id: "policy",
             content: origin.isProactive ? proactiveSystemPrompt : systemPrompt,
             canTruncate: false
-          )
+          ),
         ]
       ),
       workspaceSection(
@@ -26,12 +24,7 @@ extension ContextBuilder {
         cap: nil,
         ownerNotices: &ownerNotices
       ),
-      workspaceSection(
-        id: .tools,
-        files: [.tools],
-        cap: nil,
-        ownerNotices: &ownerNotices
-      ),
+      workspaceSection(id: .tools, files: [.tools], cap: nil, ownerNotices: &ownerNotices),
       section(
         id: .metadata,
         units: [
@@ -39,7 +32,7 @@ extension ContextBuilder {
             id: "metadata-time",
             content: "Current time: \(Self.iso8601(now()))",
             canTruncate: false
-          )
+          ),
         ]
       ),
       lessons.map(lessonsSection),
@@ -55,12 +48,14 @@ extension ContextBuilder {
         cap: budget.memoryFileCap,
         ownerNotices: &ownerNotices
       ),
-    ].compactMap { $0 }
+    ].compactMap {
+      $0
+    }
   }
 
   func buildTruncatableSections(
     snapshot: SessionContextSnapshot,
-    sessionId: Int64,
+    sessionID: Int64,
     origin: RunOrigin,
     residual: Int,
     excludeSensitiveMemory: Bool,
@@ -73,10 +68,11 @@ extension ContextBuilder {
       // so after a per-fire window reset a recall search would resurface exactly the prior-fire
       // turns (and the owner's DM chat about arming the job) that the reset fenced off.
       origin.isProactive
-        ? nil
-        : recallSection(snapshot: snapshot, sessionId: sessionId, residual: residual),
+        ? nil : recallSection(snapshot: snapshot, sessionID: sessionID, residual: residual),
       skillsSection(residual: residual, ownerNotices: &ownerNotices),
-    ].compactMap { $0 }
+    ].compactMap {
+      $0
+    }
   }
 }
 
@@ -86,13 +82,10 @@ private extension ContextBuilder {
   /// The row is uncapped and non-truncatable by its spec, so it is measured into the residual with
   /// the system rows: whatever the lessons cost, the truncatable rows share what is left.
   func lessonsSection(_ lessons: LessonSet) -> FittableSection {
-    let body =
-      lessons.lessons
-      .enumerated()
-      .map { index, lesson in
-        "\(index + 1). \(lesson)"
-      }
-      .joined(separator: "\n")
+    let body = lessons.lessons.enumerated().map { index, lesson in
+      "\(index + 1). \(lesson)"
+    }
+    .joined(separator: "\n")
     return section(
       id: .lessons,
       units: [SectionUnit(id: ContextRowID.lessons.rawValue, content: body, canTruncate: false)]
@@ -121,16 +114,15 @@ private extension ContextBuilder {
       case .overCap:
         if let cap {
           let notice = """
-            ⚠ `\(file.relativePath)` is \(loaded.graphemeCount)/\(cap) \
-            — edit it to trim; left out this turn.
-            """
+          ⚠ `\(file.relativePath)` is \(loaded.graphemeCount)/\(cap) \
+          — edit it to trim; left out this turn.
+          """
           ownerNotices.append(notice)
         } else {
           warn("Workspace file \(file.relativePath) exceeded an uncapped load")
         }
         return nil
-      case .missing:
-        return nil
+      case .missing: return nil
       case .unreadable:
         warn("Workspace file \(file.relativePath) could not be read")
         return nil
@@ -182,7 +174,11 @@ extension ContextBuilder {
 
 private extension ContextBuilder {
   func spec(for id: ContextRowID) -> RowSpec {
-    guard let spec = ContextRowPolicy.specs.first(where: { $0.id == id }) else {
+    guard
+      let spec = ContextRowPolicy.specs.first(where: {
+        $0.id == id
+      })
+    else {
       preconditionFailure("missing context row spec for \(id)")
     }
     return spec

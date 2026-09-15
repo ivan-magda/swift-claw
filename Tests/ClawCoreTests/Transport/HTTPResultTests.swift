@@ -2,8 +2,10 @@ import ClawCore
 import Foundation
 import Testing
 
-@Suite struct HTTPResultTests {
-  @Test func headerLookupIsCaseInsensitive() {
+@Suite
+struct HTTPResultTests {
+  @Test
+  func headerLookupIsCaseInsensitive() {
     // given
     let result = HTTPResult(
       statusCode: 200,
@@ -12,8 +14,8 @@ import Testing
     )
 
     // when / then
-    #expect(result.getHeader(for: "x-litellm-response-cost") == "0.0023")
-    #expect(result.getHeader(for: "RETRY-AFTER") == "7")
-    #expect(result.getHeader(for: "absent") == nil)
+    #expect(result.header(for: "x-litellm-response-cost") == "0.0023")
+    #expect(result.header(for: "RETRY-AFTER") == "7")
+    #expect(result.header(for: "absent") == nil)
   }
 }

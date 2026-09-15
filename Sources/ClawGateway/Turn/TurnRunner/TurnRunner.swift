@@ -5,24 +5,17 @@ import Logging
 
 /// Injected behind a protocol so the router/poller tests stay decoupled from the real provider.
 public protocol TurnDispatching: Sendable {
-  func run(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    triggerMessageId: Int64
-  ) async throws
+  func run(runID: Int64, sessionID: Int64, chatID: Int64, triggerMessageID: Int64) async throws
+
   /// Continues a run the approval waiter already flipped AWAITING_APPROVAL → RUNNING: no pick-up,
   /// context bound to the filled observation row, budget counters carried over.
-  func resume(runId: Int64, sessionId: Int64, chatId: Int64, contextBoundMessageId: Int64) async
+  func resume(runID: Int64, sessionID: Int64, chatID: Int64, contextBoundMessageID: Int64) async
 }
 
 extension TurnDispatching {
-  public func resume(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    contextBoundMessageId: Int64
-  ) async {}
+  public func resume(runID: Int64, sessionID: Int64, chatID: Int64, contextBoundMessageID: Int64)
+    async
+  {}
 }
 
 /// Picks up a durable PENDING run, assembles its trigger-bounded context, executes the agent, and
@@ -42,7 +35,7 @@ public struct TurnRunner: TurnDispatching {
   let breaker: BudgetBreaker?
   let delivery: (any MessageDelivery)?
   /// The config-resolved owner DM for process-wide notices raised by a group turn.
-  let ownerChatId: Int64?
+  let ownerChatID: Int64?
   /// The turn's clock. Sourcing the budget "today" window from an injected now (defaulting to the
   /// real clock) keeps the proactive/global daily-spend boundary deterministic under test — the
   /// same seam ContextBuilder/MessageRouter/SchedulerService already use.
@@ -54,7 +47,7 @@ public struct TurnRunner: TurnDispatching {
   /// is still current. Injected rather than assembled here: the tool catalog, the skills root and
   /// the resolved route all live at the composition root, and a run that is not bound freezes
   /// nothing. Inert when learning is disarmed.
-  private let freezeLearningSurface: @Sendable (_ runId: Int64, _ policyVersion: String) -> Void
+  private let freezeLearningSurface: @Sendable (_ runID: Int64, _ policyVersion: String) -> Void
 
   /// Reads the lesson set a bound run froze at its fire. Nil while learning is disarmed, which is
   /// the same turn a run with no binding gets: no lesson row, no lesson taint. Disarming has to
@@ -82,11 +75,18 @@ public struct TurnRunner: TurnDispatching {
     notifyOutbox: @escaping @Sendable () -> Void,
     breaker: BudgetBreaker? = nil,
     delivery: (any MessageDelivery)? = nil,
-    ownerChatId: Int64? = nil,
-    now: @escaping @Sendable () -> Date = { Date() },
-    freezeLearningSurface: @escaping @Sendable (Int64, String) -> Void = { _, _ in },
+    ownerChatID: Int64? = nil,
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    },
+    freezeLearningSurface: @escaping @Sendable (_ runID: Int64, _ policyVersion: String) -> Void = {
+      _,
+      _ in
+    },
     learning: (any ScheduledLearningStore)? = nil,
-    makeFeedbackNonce: @escaping @Sendable () -> String = { OpaqueNonce.generate() },
+    makeFeedbackNonce: @escaping @Sendable () -> String = {
+      OpaqueNonce.generate()
+    },
     // No default: an ask-tier suspend parks the lane on this seam, and a composition site that
     // silently fell back to an inert parker (whose private coordinator no resolver ever signals)
     // would hold that lane forever. Every caller chooses its parker explicitly.
@@ -106,7 +106,7 @@ public struct TurnRunner: TurnDispatching {
     self.notifyOutbox = notifyOutbox
     self.breaker = breaker
     self.delivery = delivery
-    self.ownerChatId = ownerChatId
+    self.ownerChatID = ownerChatID
 
     self.now = now
     self.freezeLearningSurface = freezeLearningSurface
@@ -118,10 +118,10 @@ public struct TurnRunner: TurnDispatching {
   }
 
   public func run(  // swiftlint:disable:this function_body_length
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    triggerMessageId: Int64
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
+    triggerMessageID: Int64
   ) async throws {
     guard !Task.isCancelled else {
       return
@@ -132,14 +132,14 @@ public struct TurnRunner: TurnDispatching {
     // stamped in the same UPDATE that flips PENDING→RUNNING, so an approval this run creates binds
     // to the exact prompt/tool/config surface in force at run start.
     let policyVersion = contextBuilder.currentPolicyVersion()
-    guard let origin = try runs.pickUp(runId: runId, policyVersion: policyVersion, now: now) else {
-      logger.debug("run \(runId) was not pending at pickup; skipping turn")
+    guard let origin = try runs.pickUp(runID: runID, policyVersion: policyVersion, now: now) else {
+      logger.debug("run \(runID) was not pending at pickup; skipping turn")
       return
     }
     // Frozen here rather than read back at sealing: this run's evidence has to be filed under the
     // surface it actually ran on, and the skills, the tool catalog and the route can all move
     // before the sealer reaches it.
-    freezeLearningSurface(runId, policyVersion)
+    freezeLearningSurface(runID, policyVersion)
 
     guard !Task.isCancelled else {
       return
@@ -148,23 +148,21 @@ public struct TurnRunner: TurnDispatching {
     let inputs: TurnInputs
     let execution: RunExecutionContext?
     do {
-      execution = try runs.executionContext(runId: runId, fallbackChatId: chatId)
+      execution = try runs.executionContext(runID: runID, fallbackChatID: chatID)
       inputs = try loadTurnInputs(
-        runId: runId,
-        sessionId: sessionId,
-        boundMessageId: triggerMessageId,
+        runID: runID,
+        sessionID: sessionID,
+        boundMessageID: triggerMessageID,
         origin: origin,
         at: now,
-        images: await cachedImages(sessionId: sessionId)
+        images: await cachedImages(sessionID: sessionID)
       )
-    } catch StoreError.diskFull {
-      throw StoreError.diskFull
-    } catch {
-      logger.error("context build failed for run \(runId): \(error)")
+    } catch StoreError.diskFull { throw StoreError.diskFull } catch {
+      logger.error("context build failed for run \(runID): \(error)")
       try commitContextUnavailable(
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
         setTainted: false,
         at: Date()
       )
@@ -175,9 +173,9 @@ public struct TurnRunner: TurnDispatching {
     // prior turn keeps the exfil gate armed from this run's very first tool call.
     let mode = SessionKey.mode(from: inputs.snapshot.sessionKey)
     let outcome = try await agent.runTurn(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: chatId,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: chatID,
       buildResult: inputs.buildResult,
       sessionTainted: inputs.snapshot.isTainted,
       hasPinnedLessons: inputs.buildResult.hasPinnedLessons,
@@ -187,15 +185,15 @@ public struct TurnRunner: TurnDispatching {
       origin: origin,
       proactiveTodayUSD: inputs.proactiveTodayUSD,
       mode: mode,
-      threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey),
-      requesterUserId: execution?.requesterUserId
+      threadID: SessionKey.threadID(from: inputs.snapshot.sessionKey),
+      requesterUserID: execution?.requesterUserID
     )
 
     try await commit(
       outcome,
-      runId: runId,
-      sessionId: sessionId,
-      chatId: chatId,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: chatID,
       mode: mode,
       ownerNotices: inputs.buildResult.ownerNotices,
       origin: origin
@@ -209,17 +207,14 @@ public struct TurnRunner: TurnDispatching {
   /// with the run's carried-over budget counters. Non-throwing: it runs on the session lane inside
   /// the waiter's `park`, so every failure resolves in-band (a build/turn failure fails the run so
   /// the lane frees).
-  public func resume(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    contextBoundMessageId: Int64
-  ) async {
+  public func resume(runID: Int64, sessionID: Int64, chatID: Int64, contextBoundMessageID: Int64)
+    async
+  {
     guard !Task.isCancelled else {
       return
     }
 
-    guard let origin = resumeOrigin(runId: runId) else {
+    guard let origin = resumeOrigin(runID: runID) else {
       return
     }
 
@@ -227,18 +222,18 @@ public struct TurnRunner: TurnDispatching {
     let carryOver: ResumeUsage
     let execution: RunExecutionContext?
     do {
-      execution = try runs.executionContext(runId: runId, fallbackChatId: chatId)
-      carryOver = try runs.resumeUsage(runId: runId)
+      execution = try runs.executionContext(runID: runID, fallbackChatID: chatID)
+      carryOver = try runs.resumeUsage(runID: runID)
       inputs = try loadTurnInputs(
-        runId: runId,
-        sessionId: sessionId,
-        boundMessageId: contextBoundMessageId,
+        runID: runID,
+        sessionID: sessionID,
+        boundMessageID: contextBoundMessageID,
         origin: origin,
         at: now(),
-        images: await cachedImages(sessionId: sessionId)
+        images: await cachedImages(sessionID: sessionID)
       )
     } catch {
-      failResume(runId: runId, stage: .contextBuild, error: error)
+      failResume(runID: runID, stage: .contextBuild, error: error)
       return
     }
 
@@ -246,9 +241,9 @@ public struct TurnRunner: TurnDispatching {
     let outcome: TurnOutcome
     do {
       outcome = try await agent.runTurn(
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
         buildResult: inputs.buildResult,
         sessionTainted: inputs.snapshot.isTainted,
         hasPinnedLessons: inputs.buildResult.hasPinnedLessons,
@@ -259,27 +254,25 @@ public struct TurnRunner: TurnDispatching {
         proactiveTodayUSD: inputs.proactiveTodayUSD,
         carryOver: carryOver,
         mode: mode,
-        threadId: SessionKey.threadId(from: inputs.snapshot.sessionKey),
-        requesterUserId: execution?.requesterUserId
+        threadID: SessionKey.threadID(from: inputs.snapshot.sessionKey),
+        requesterUserID: execution?.requesterUserID
       )
     } catch {
-      failResume(runId: runId, stage: .turn, error: error)
+      failResume(runID: runID, stage: .turn, error: error)
       return
     }
 
     do {
       try await commit(
         outcome,
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
         mode: mode,
         ownerNotices: inputs.buildResult.ownerNotices,
         origin: origin
       )
-    } catch {
-      logger.error("resume commit failed for run \(runId): \(error)")
-    }
+    } catch { logger.error("resume commit failed for run \(runID): \(error)") }
   }
 }
 
@@ -316,23 +309,23 @@ enum ResumeStage: String {
 private extension TurnRunner {
   /// The resumed run's origin, or nil when it cannot be read — a resume runs inside the waiter's
   /// `park`, so both "no such run" and a failed read resolve in-band by abandoning the resume.
-  func resumeOrigin(runId: Int64) -> RunOrigin? {
+  func resumeOrigin(runID: Int64) -> RunOrigin? {
     do {
-      guard let origin = try runs.runOrigin(runId: runId) else {
-        logger.debug("run \(runId) has no origin at resume; skipping")
+      guard let origin = try runs.runOrigin(runID: runID) else {
+        logger.debug("run \(runID) has no origin at resume; skipping")
         return nil
       }
       return origin
     } catch {
-      logger.error("resume origin read failed for run \(runId): \(error)")
+      logger.error("resume origin read failed for run \(runID): \(error)")
       return nil
     }
   }
 
   /// `resume`'s shared failure tail: every pre-commit failure fails the run in-band (best-effort)
   /// so the lane frees — `resume` is non-throwing by contract.
-  func failResume(runId: Int64, stage: ResumeStage, error: any Error) {
-    logger.error("resume \(stage.rawValue) failed for run \(runId): \(error)")
-    try? runs.failRun(runId: runId, cause: stage.terminalCause(for: error), now: now())
+  func failResume(runID: Int64, stage: ResumeStage, error: any Error) {
+    logger.error("resume \(stage.rawValue) failed for run \(runID): \(error)")
+    try? runs.failRun(runID: runID, cause: stage.terminalCause(for: error), now: now())
   }
 }

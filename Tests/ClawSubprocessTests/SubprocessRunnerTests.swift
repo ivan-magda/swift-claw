@@ -2,16 +2,18 @@ import ClawTestSupport
 import Foundation
 import Testing
 
-@testable import ClawSubprocess
-
 #if canImport(Glibc)
   import Glibc
 #else
   import Darwin
 #endif
 
-@Suite struct SubprocessRunnerTests {
-  @Test func adapterPreservesRawBytesAndExitStatus() async {
+@testable import ClawSubprocess
+
+@Suite
+struct SubprocessRunnerTests {
+  @Test
+  func adapterPreservesRawBytesAndExitStatus() async {
     // given
     let runner = SwiftSubprocessRunner(executablePath: "/bin/sh")
     let command = testCommand(["-c", "printf '\\001out'; printf '\\377err' >&2; exit 7"])
@@ -28,14 +30,12 @@ import Testing
     #expect(result.processIdentifier != nil)
   }
 
-  @Test func adapterForwardsStandardInputVerbatim() async {
+  @Test
+  func adapterForwardsStandardInputVerbatim() async {
     // given
     let runner = SwiftSubprocessRunner(executablePath: "/bin/cat")
     let standardInput = Data([0x00, 0x01, 0x7f, 0x80, 0xff])
-    let command = testCommand(
-      [],
-      standardInput: standardInput
-    )
+    let command = testCommand([], standardInput: standardInput)
 
     // when
     let result = await runner.run(command)
@@ -47,17 +47,18 @@ import Testing
     #expect(!result.stdout.truncated)
   }
 
-  @Test func adapterDrainsBothFloodedStreamsAndKeepsIndependentPrefixes() async {
+  @Test
+  func adapterDrainsBothFloodedStreamsAndKeepsIndependentPrefixes() async {
     // given
     let runner = SwiftSubprocessRunner(executablePath: "/bin/sh")
     let script = """
-      count=0
-      while [ "$count" -lt 4096 ]; do
-        printf 'oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo'
-        printf 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' >&2
-        count=$((count + 1))
-      done
-      """
+    count=0
+    while [ "$count" -lt 4096 ]; do
+      printf 'oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo'
+      printf 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' >&2
+      count=$((count + 1))
+    done
+    """
     let command = testCommand(["-c", script], captureLimit: 1024)
 
     // when
@@ -73,7 +74,8 @@ import Testing
     #expect(result.stderr.truncated)
   }
 
-  @Test func adapterAppliesTheCommandsEnvironmentRemovalPolicy() async {
+  @Test
+  func adapterAppliesTheCommandsEnvironmentRemovalPolicy() async {
     // given
     let runner = SwiftSubprocessRunner(
       executablePath: "/bin/sh",
@@ -84,11 +86,11 @@ import Testing
       ]
     )
     let script = """
-      printf '%s|%s|%s' \
-        "${CLAW_REMOVE_FIRST-unset}" \
-        "${CLAW_REMOVE_SECOND-unset}" \
-        "${CLAW_KEEP_SENTINEL-unset}"
-      """
+    printf '%s|%s|%s' \
+      "${CLAW_REMOVE_FIRST-unset}" \
+      "${CLAW_REMOVE_SECOND-unset}" \
+      "${CLAW_KEEP_SENTINEL-unset}"
+    """
     let command = testCommand(
       ["-c", script],
       environmentKeysToRemove: ["CLAW_REMOVE_FIRST", "CLAW_REMOVE_SECOND"]
@@ -102,18 +104,16 @@ import Testing
     #expect(String(bytes: result.stdout.bytes, encoding: .utf8) == "unset|unset|present")
   }
 
-  @Test func programBudgetStartsAfterSpawnAndReturnsTypedTimeout() async throws {
+  @Test
+  func programBudgetStartsAfterSpawnAndReturnsTypedTimeout() async throws {
     // given
     let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
     let releaseSpawnBoundary = AsyncGate()
     let completed = CompletionFlag()
-    let runner = SwiftSubprocessRunner(
-      executablePath: "/bin/sh",
-      onSpawnForTesting: { processIdentifier in
-        continuation.yield(processIdentifier)
-        await releaseSpawnBoundary.waitIgnoringCancellation()
-      }
-    )
+    let runner = SwiftSubprocessRunner(executablePath: "/bin/sh") { processIdentifier in
+      continuation.yield(processIdentifier)
+      await releaseSpawnBoundary.waitIgnoringCancellation()
+    }
     let task = Task {
       let result = await runner.run(
         testCommand(["-c", "trap '' TERM; while :; do :; done"], timeout: .zero)
@@ -141,31 +141,27 @@ import Testing
     #expect(result.processIdentifier == processIdentifier)
   }
 
-  @Test func callerCancellationTearsDownTheCreatedProcessGroup() async throws {
+  @Test
+  func callerCancellationTearsDownTheCreatedProcessGroup() async throws {
     // given
     let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
     let root = try makeTemporaryRoot(prefix: "claw-grandchild")
     defer { try? FileManager.default.removeItem(at: root) }
     let pipe = try makeGrandchildPipe(in: root)
     let grandchildPIDFile = root.appendingPathComponent("grandchild.pid")
-    let runner = SwiftSubprocessRunner(
-      executablePath: "/bin/sh",
-      onSpawnForTesting: { processIdentifier in
-        continuation.yield(processIdentifier)
-      }
-    )
+    let runner = SwiftSubprocessRunner(executablePath: "/bin/sh") { processIdentifier in
+      continuation.yield(processIdentifier)
+    }
     let script = """
-      trap '' TERM
-      (trap '' TERM; exec cat "$2") &
-      grandchild=$!
-      printf '%s\n' "$grandchild" > "$1"
-      wait
-      """
+    trap '' TERM
+    (trap '' TERM; exec cat "$2") &
+    grandchild=$!
+    printf '%s\n' "$grandchild" > "$1"
+    wait
+    """
     let task = Task {
       await runner.run(
-        testCommand(
-          ["-c", script, "claw-subprocess-test", grandchildPIDFile.path, pipe.path]
-        )
+        testCommand(["-c", script, "claw-subprocess-test", grandchildPIDFile.path, pipe.path])
       )
     }
     defer {
@@ -189,15 +185,16 @@ import Testing
     #expect(grandchildBecameUnreachable)
   }
 
-  @Test func childExitDoesNotWaitForGrandchildHoldingThePipe() async throws {
+  @Test
+  func childExitDoesNotWaitForGrandchildHoldingThePipe() async throws {
     // given
     let root = try makeTemporaryRoot(prefix: "claw-grandchild-pipe")
     defer { try? FileManager.default.removeItem(at: root) }
     let pipe = try makeGrandchildPipe(in: root)
     let runner = SwiftSubprocessRunner(executablePath: "/bin/sh")
-    let command = testCommand([
-      "-c", "cat \"$1\" & printf child", "claw-subprocess-test", pipe.path,
-    ])
+    let command = testCommand(
+      ["-c", "cat \"$1\" & printf child", "claw-subprocess-test", pipe.path]
+    )
 
     // when
     let result = await runner.run(command)
@@ -254,10 +251,8 @@ private func readProcessIdentifier(from file: URL) async -> Int32? {
 private func processBecameUnreachable(_ processIdentifier: Int32) async -> Bool {
   await pollUntil {
     #if canImport(Glibc)
-      if let stat = try? String(
-        contentsOfFile: "/proc/\(processIdentifier)/stat",
-        encoding: .utf8
-      ),
+      if
+        let stat = try? String(contentsOfFile: "/proc/\(processIdentifier)/stat", encoding: .utf8),
         let commandEnd = stat.lastIndex(of: ")"),
         stat[stat.index(after: commandEnd)...].split(separator: " ").first == "Z"
       {

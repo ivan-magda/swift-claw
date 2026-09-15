@@ -81,9 +81,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
   /// rather than crash and strand the remaining rows.
   func drainOnce() async {
     let pendingRows: [OutboxRow]
-    do {
-      pendingRows = try outbox.pendingOutbound()
-    } catch {
+    do { pendingRows = try outbox.pendingOutbound() } catch {
       logger.error("outbox drain aborted; could not read pending rows: \(error)")
       return
     }
@@ -97,21 +95,19 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
 
       // A chat Telegram is throttling waits out its hold; the rows of every other chat carry on.
       // Order inside a run survives because a run answers exactly one chat.
-      if holds.isHeld(row.chatId, now: clock.now) {
+      if holds.isHeld(row.chatID, now: clock.now) {
         continue
       }
 
-      let messageId: Int64
-      do {
-        messageId = try await send(row)
-      } catch {
+      let messageID: Int64
+      do { messageID = try await send(row) } catch {
         // A send interrupted by shutdown is not a fault — the row stays PENDING and boot recovery
         // redelivers it; only a genuine failure is worth a warning.
         if Task.isCancelled {
           break
         }
         if let retryAfter = Self.floodControlRetryAfter(error) {
-          hold(chat: row.chatId, forSeconds: retryAfter)
+          hold(chat: row.chatID, forSeconds: retryAfter)
           continue
         }
         // Recoverable: leave this row and any later ones PENDING and stop, so a multi-chunk reply
@@ -130,20 +126,16 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
       }
 
       do {
-        try outbox.markSent(
-          deliveryKey: row.deliveryKey,
-          telegramMessageId: messageId,
-          now: Date()
-        )
+        try outbox.markSent(deliveryKey: row.deliveryKey, telegramMessageID: messageID, now: Date())
         logger.debug(
-          "outbox delivered \(row.originLabel) step \(row.stepIndex) as message \(messageId)"
+          "outbox delivered \(row.originLabel) step \(row.stepIndex) as message \(messageID)"
         )
       } catch {
         // The send already went out; we just couldn't record it, so the row stays PENDING and
         // re-sends next drain — an accepted at-least-once duplicate.
         logger.error(
           """
-          outbox delivered \(row.originLabel) step \(row.stepIndex) (message \(messageId)) \
+          outbox delivered \(row.originLabel) step \(row.stepIndex) (message \(messageID)) \
           but recording it failed; expect a duplicate: \(error)
           """
         )
@@ -192,10 +184,10 @@ private extension OutboxDispatcher {
   /// Parks one chat for the `retry_after` Telegram asked for and arranges the drain that resumes it:
   /// the producer only pokes on a fresh commit, so without this wake-up a held chat would wait for
   /// unrelated traffic before its rows moved.
-  func hold(chat chatId: Int64, forSeconds retryAfter: Int) {
+  func hold(chat chatID: Int64, forSeconds retryAfter: Int) {
     let wait = Duration.seconds(retryAfter)
-    holds.hold(chatId, until: clock.now.advanced(by: wait))
-    logger.warning("flood control on chat \(chatId); holding its rows for \(retryAfter)s")
+    holds.hold(chatID, until: clock.now.advanced(by: wait))
+    logger.warning("flood control on chat \(chatID); holding its rows for \(retryAfter)s")
     Task { [signal, clock] in
       try? await clock.sleep(for: wait)
       signal.poke()
@@ -216,33 +208,33 @@ private extension OutboxDispatcher {
 private final class FloodControlHolds<Instant: InstantProtocol>: Sendable {
   private let notBefore = Mutex<[Int64: Instant]>([:])
 
-  /// Whether `chatId` is still inside a hold; an elapsed hold is dropped on the way out so the map
+  /// Whether `chatID` is still inside a hold; an elapsed hold is dropped on the way out so the map
   /// stays the size of the currently-throttled chats.
-  func isHeld(_ chatId: Int64, now: Instant) -> Bool {
+  func isHeld(_ chatID: Int64, now: Instant) -> Bool {
     notBefore.withLock { held in
-      guard let deadline = held[chatId] else {
+      guard let deadline = held[chatID] else {
         return false
       }
       if now < deadline {
         return true
       }
-      held[chatId] = nil
+      held[chatID] = nil
       return false
     }
   }
 
   /// Extends the chat's hold, never shortens it: two 429s in one drain leave the later deadline.
-  func hold(_ chatId: Int64, until deadline: Instant) {
+  func hold(_ chatID: Int64, until deadline: Instant) {
     notBefore.withLock { held in
-      held[chatId] = max(held[chatId] ?? deadline, deadline)
+      held[chatID] = max(held[chatID] ?? deadline, deadline)
     }
   }
 }
 
 // MARK: - Production Clock
 
-public extension OutboxDispatcher where ClockType == ContinuousClock {
-  init(
+extension OutboxDispatcher where ClockType == ContinuousClock {
+  public init(
     outbox: any OutboxStore,
     delivery: any MessageDelivery,
     signal: OutboxSignal,

@@ -5,10 +5,12 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct OutboxRebuildTests {
+@Suite
+struct OutboxRebuildTests {
   private static let seededAt = Date(timeIntervalSince1970: 1_700_000_000)
 
-  @Test func vThirteenCarriesEveryDeliveredRowAcrossTheRebuildAsRunSourced() throws {
+  @Test
+  func vThirteenCarriesEveryDeliveredRowAcrossTheRebuildAsRunSourced() throws {
     // given — a populated v10 database, i.e. rows written while run_id was still NOT NULL
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVTen(queue)
@@ -30,7 +32,8 @@ import Testing
     #expect(deliveries[0]["delivery_source"] == DeliverySource.run.rawValue)
   }
 
-  @Test func aRunSourcedRowMayNeverLoseItsRun() throws {
+  @Test
+  func aRunSourcedRowMayNeverLoseItsRun() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -40,10 +43,10 @@ import Testing
       try queue.write { db in
         try db.execute(
           sql: """
-            INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-              payload_hash, status, created_ts)
-            VALUES (NULL, 0, 7, 'orphan', 'x', 'h', 'PENDING', ?)
-            """,
+          INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+            payload_hash, status, created_ts)
+          VALUES (NULL, 0, 7, 'orphan', 'x', 'h', 'PENDING', ?)
+          """,
           arguments: [Self.seededAt]
         )
       }
@@ -63,24 +66,24 @@ private extension OutboxRebuildTests {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
-          VALUES ('tg:dm:7', ?, ?, 0)
-          """,
+        INSERT INTO sessions(session_key, created_ts, updated_ts, tainted)
+        VALUES ('tg:dm:7', ?, ?, 0)
+        """,
         arguments: [seededAt, seededAt]
       )
       try db.execute(
         sql: """
-          INSERT INTO runs(session_id, state, created_ts, updated_ts)
-          VALUES (1, 'DONE', ?, ?)
-          """,
+        INSERT INTO runs(session_id, state, created_ts, updated_ts)
+        VALUES (1, 'DONE', ?, ?)
+        """,
         arguments: [seededAt, seededAt]
       )
       try db.execute(
         sql: """
-          INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
-            payload_hash, telegram_message_id, status, created_ts, sent_ts)
-          VALUES (1, 0, 7, '1:0', 'already delivered', 'hash-1', 555, 'SENT', ?, ?)
-          """,
+        INSERT INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key, payload,
+          payload_hash, telegram_message_id, status, created_ts, sent_ts)
+        VALUES (1, 0, 7, '1:0', 'already delivered', 'hash-1', 555, 'SENT', ?, ?)
+        """,
         arguments: [seededAt, seededAt]
       )
     }

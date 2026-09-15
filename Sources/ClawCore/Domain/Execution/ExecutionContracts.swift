@@ -184,11 +184,14 @@ public struct SandboxHealth: Sendable, Equatable {
 
 public protocol ExecutionBackend: Sendable {
   func probe() async -> BackendAvailability
+
   func run(_ request: ExecutionRequest) async -> ExecutionResult
 }
 
 public protocol SandboxMaintenance: Sendable {
   func prepare() async -> SandboxHealth
+
   func shutdown() async
+
   func isAdmitting() async -> Bool
 }

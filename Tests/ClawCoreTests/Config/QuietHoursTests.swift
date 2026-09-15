@@ -3,7 +3,8 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct QuietHoursTests {
+@Suite
+struct QuietHoursTests {
   private let berlin = TimeZone(identifier: "Europe/Berlin") ?? .gmt
 
   /// A fixed instant at the given Berlin wall-clock time on 2026-07-06 (no DST edge — QuietHours
@@ -19,7 +20,8 @@ import Testing
     return date
   }
 
-  @Test func parsesTheDefaultWindow() throws {
+  @Test
+  func parsesTheDefaultWindow() throws {
     // given / when
     let window = try #require(QuietHours.parse("22:00-09:00"))
 
@@ -47,7 +49,8 @@ import Testing
     #expect(QuietHours.parse(raw) == nil)
   }
 
-  @Test func midnightCrossingWindowContainsNightAndExcludesDay() throws {
+  @Test
+  func midnightCrossingWindowContainsNightAndExcludesDay() throws {
     // given — the default 22:00-09:00 window crosses midnight
     let window = try #require(QuietHours.parse("22:00-09:00"))
 
@@ -61,7 +64,8 @@ import Testing
     #expect(window.contains(berlinInstant(hour: 21, minute: 59), timezone: berlin) == false)
   }
 
-  @Test func sameDayWindowIsAPlainInterval() throws {
+  @Test
+  func sameDayWindowIsAPlainInterval() throws {
     // given
     let window = try #require(QuietHours.parse("09:00-17:00"))
 
@@ -73,7 +77,8 @@ import Testing
     #expect(window.contains(berlinInstant(hour: 23, minute: 0), timezone: berlin) == false)
   }
 
-  @Test func containsEvaluatesInTheGivenTimezone() throws {
+  @Test
+  func containsEvaluatesInTheGivenTimezone() throws {
     // given — 23:00 Berlin is 21:00 UTC; the same instant must classify differently per zone
     let window = try #require(QuietHours.parse("22:00-09:00"))
     let instant = berlinInstant(hour: 23, minute: 0)

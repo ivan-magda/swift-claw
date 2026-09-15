@@ -8,15 +8,14 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct ApprovedActionExecutorTests {
+@Suite
+struct ApprovedActionExecutorTests {
   /// Records whether a tool double's `execute` ever ran — the cancel-race tests assert a claimed
   /// terminal run means the external effect NEVER starts.
   private actor ExecutionProbe {
     private(set) var executed = false
 
-    func mark() {
-      executed = true
-    }
+    func mark() { executed = true }
   }
 
   private actor ExecutionGate {
@@ -109,7 +108,7 @@ import Testing
   /// the moment the tool body ran.
   private struct RunStateReportingTool: Tool {
     let queue: DatabaseQueue
-    let runId: Int64
+    let runID: Int64
 
     var definition: ToolDefinition {
       ToolDefinition(
@@ -129,7 +128,7 @@ import Testing
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       let state =
         (try? await queue.read { db in
-          try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+          try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
         }) ?? "unreadable"
       return ToolPayload(content: state, status: .ok, ingestedUntrusted: false)
     }
@@ -139,55 +138,55 @@ import Testing
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
     let sessionKey: String
-    let sessionId: Int64
-    let runId: Int64
-    let observationMessageId: Int64
+    let sessionID: Int64
+    let runID: Int64
+    let observationMessageID: Int64
   }
 
   private func makeSuspendedFixture() throws -> Fixture {
     let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
-    let sessionKey = SessionKey.telegramDM(chatId: 7)
+    let sessionKey = SessionKey.telegramDM(chatID: 7)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
+        updateID: 1,
         sessionKey: sessionKey,
-        chatId: 7,
-        userId: 7,
+        chatID: 7,
+        userID: 7,
         text: "write",
         isEdited: false,
         ts: Date()
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
     let runs = RunStoreGRDB(writer: queue)
-    _ = try #require(try runs.pickUp(runId: runId, now: Date()))
-    let observationMessageId = try queue.write { db -> Int64 in
+    _ = try #require(try runs.pickUp(runID: runID, now: Date()))
+    let observationMessageID = try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
-          """,
-        arguments: [sessionId, runId, Date()]
+        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+        VALUES (?, ?, 'tool', 'awaiting owner approval', 'untrusted', ?, 'c1')
+        """,
+        arguments: [sessionID, runID, Date()]
       )
-      let messageId = db.lastInsertedRowID
+      let messageID = db.lastInsertedRowID
       _ = try RunStoreGRDB.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .suspendForApproval,
         now: Date(),
         terminal: nil
       )
-      return messageId
+      return messageID
     }
     return Fixture(
       queue: queue,
       runs: runs,
       sessionKey: sessionKey,
-      sessionId: sessionId,
-      runId: runId,
-      observationMessageId: observationMessageId
+      sessionID: sessionID,
+      runID: runID,
+      observationMessageID: observationMessageID
     )
   }
 
@@ -199,20 +198,20 @@ import Testing
   ) -> Approval {
     Approval(
       id: 1,
-      runId: env.runId,
-      sessionId: env.sessionId,
+      runID: env.runID,
+      sessionID: env.sessionID,
       state: .approved,
       tool: tool,
       canonicalArgsJSON: argsJSON,
       canonicalTarget: target,
       argsHash: ApprovalArgsHash.sha256Hex(argsJSON),
       policyVersion: "pv",
-      ownerUserId: 7,
+      ownerUserID: 7,
       nonce: "nonce-a",
-      observationMessageId: env.observationMessageId,
-      toolCallId: "c1",
+      observationMessageID: env.observationMessageID,
+      toolCallID: "c1",
       reason: .askTier,
-      promptMessageId: 900,
+      promptMessageID: 900,
       createdTs: Date(),
       expiresTs: Date(),
       resolvedTs: Date()
@@ -223,13 +222,21 @@ import Testing
     _ env: Fixture,
     tools: [any Tool],
     runs: (any RunStore)? = nil,
-    redactArguments: @escaping @Sendable (String) -> String = { $0 }
+    redactArguments: @escaping @Sendable (_ text: String) -> String = {
+      $0
+    }
   ) -> ApprovedActionExecutor {
     ApprovedActionExecutor(
-      tools: Dictionary(uniqueKeysWithValues: tools.map { ($0.definition.name, $0) }),
+      tools: Dictionary(
+        uniqueKeysWithValues: tools.map {
+          ($0.definition.name, $0)
+        }
+      ),
       runs: runs ?? env.runs,
       redactArguments: redactArguments,
-      now: { Date() },
+      now: {
+        Date()
+      },
       logger: TestLog.silent
     )
   }
@@ -239,14 +246,14 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT content FROM messages WHERE id = ?",
-        arguments: [env.observationMessageId]
+        arguments: [env.observationMessageID]
       )
     }
   }
 
   private func runState(_ env: Fixture) throws -> String? {
     try env.queue.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runId])
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [env.runID])
     }
   }
 
@@ -256,7 +263,7 @@ import Testing
         try Row.fetchOne(
           db,
           sql: "SELECT tainted, has_private_data FROM sessions WHERE id = ?",
-          arguments: [env.sessionId]
+          arguments: [env.sessionID]
         )
       )
       return (row["tainted"], row["has_private_data"])
@@ -269,18 +276,19 @@ import Testing
         try Row.fetchOne(
           db,
           sql: """
-            SELECT tool, args_redacted, result_size, decision
-            FROM audit_events
-            WHERE run_id = ? AND action = ?
-            ORDER BY id DESC LIMIT 1
-            """,
-          arguments: [env.runId, AuditAction.toolCall.rawValue]
+          SELECT tool, args_redacted, result_size, decision
+          FROM audit_events
+          WHERE run_id = ? AND action = ?
+          ORDER BY id DESC LIMIT 1
+          """,
+          arguments: [env.runID, AuditAction.toolCall.rawValue]
         )
       )
     }
   }
 
-  @Test func corruptPersistedOriginRefusesBeforeExternalExecution() async throws {
+  @Test
+  func corruptPersistedOriginRefusesBeforeExternalExecution() async throws {
     // given
     let env = try makeSuspendedFixture()
     let probe = ExecutionProbe()
@@ -289,7 +297,7 @@ import Testing
     try await env.queue.write { database in
       try database.execute(
         sql: "UPDATE runs SET origin = ? WHERE id = ?",
-        arguments: ["unrecognized-origin", env.runId]
+        arguments: ["unrecognized-origin", env.runID]
       )
     }
 
@@ -305,7 +313,8 @@ import Testing
     #expect(status == ToolObservationStatus.error.rawValue)
   }
 
-  @Test func executesRecordedArgsAndFillsTheObservation() async throws {
+  @Test
+  func executesRecordedArgsAndFillsTheObservation() async throws {
     // given
     let env = try makeSuspendedFixture()
     let executor = makeExecutor(
@@ -324,18 +333,15 @@ import Testing
     #expect(try runState(env) == RunState.running.rawValue)
   }
 
-  @Test func awaitsAStallingToolToCompletionWithoutTheTimeoutAbandonRace() async throws {
+  @Test
+  func awaitsAStallingToolToCompletionWithoutTheTimeoutAbandonRace() async throws {
     // given
     let env = try makeSuspendedFixture()
     let gate = ExecutionGate()
     let executor = makeExecutor(
       env,
       tools: [
-        RecordingWriteTool(
-          toolName: "file_write",
-          result: "the gated write finished",
-          gate: gate
-        )
+        RecordingWriteTool(toolName: "file_write", result: "the gated write finished", gate: gate),
       ]
     )
 
@@ -354,7 +360,8 @@ import Testing
     #expect(try messageContent(env) == "the gated write finished")
   }
 
-  @Test func fullPayloadStatusProvenanceAndRedactedArgsReachTheFill() async throws {
+  @Test
+  func fullPayloadStatusProvenanceAndRedactedArgsReachTheFill() async throws {
     // given
     let env = try makeSuspendedFixture()
     let secret = "owner-secret-value"
@@ -368,12 +375,11 @@ import Testing
           status: .error,
           ingestedUntrusted: true,
           readPrivateData: true
-        )
-      ],
-      redactArguments: { arguments in
-        arguments.replacingOccurrences(of: secret, with: "[REDACTED:secret-value]")
-      }
-    )
+        ),
+      ]
+    ) { arguments in
+      arguments.replacingOccurrences(of: secret, with: "[REDACTED:secret-value]")
+    }
 
     // when
     let commit = await executor.executeApproved(
@@ -393,7 +399,8 @@ import Testing
     #expect(argsRedacted.contains(secret) == false)
   }
 
-  @Test func stopDuringExecutionRetainsCompletedPayloadProvenance() async throws {
+  @Test
+  func stopDuringExecutionRetainsCompletedPayloadProvenance() async throws {
     // given
     let env = try makeSuspendedFixture()
     let gate = ExecutionGate()
@@ -406,7 +413,7 @@ import Testing
           ingestedUntrusted: true,
           readPrivateData: true,
           gate: gate
-        )
+        ),
       ]
     )
     let execution = Task {
@@ -418,7 +425,7 @@ import Testing
 
     // when: claim is already RUNNING; /stop wins before the fill
     _ = try CommandStoreGRDB(writer: env.queue).applyStop(
-      updateId: 2,
+      updateID: 2,
       sessionKey: env.sessionKey,
       now: Date()
     )
@@ -433,7 +440,8 @@ import Testing
     #expect(try sessionFlags(env).privateData)
   }
 
-  @Test func newDuringExecutionNeverRetaintsTheFreshWindow() async throws {
+  @Test
+  func newDuringExecutionNeverRetaintsTheFreshWindow() async throws {
     // given
     let env = try makeSuspendedFixture()
     let gate = ExecutionGate()
@@ -446,7 +454,7 @@ import Testing
           ingestedUntrusted: true,
           readPrivateData: true,
           gate: gate
-        )
+        ),
       ]
     )
     let execution = Task {
@@ -458,7 +466,7 @@ import Testing
 
     // when: /new supersedes/detaints after claim but before fill
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
-      updateId: 2,
+      updateID: 2,
       sessionKey: env.sessionKey,
       now: Date()
     )
@@ -474,7 +482,8 @@ import Testing
     #expect(try lastToolAudit(env)["tool"] == "execute_code")
   }
 
-  @Test func memoryWriteFusesTheInsertAndIsExactlyOnce() async throws {
+  @Test
+  func memoryWriteFusesTheInsertAndIsExactlyOnce() async throws {
     // given — no tool is registered for memory_write: the executor rebuilds the item and routes
     // through the fused store method (D10), never a tool `execute`
     let env = try makeSuspendedFixture()
@@ -500,14 +509,15 @@ import Testing
     #expect(try messageContent(env)?.contains("project") == true)
   }
 
-  @Test func aRunCancelledAfterApprovalNeverExecutesTheWrite() async throws {
+  @Test
+  func aRunCancelledAfterApprovalNeverExecutesTheWrite() async throws {
     // given — the Approve callback won its CAS, then /stop drove the run terminal before the
     // waiter reached the executor (the §6.6 cancel race)
     let env = try makeSuspendedFixture()
     try await env.queue.write { db in
       _ = try RunStoreGRDB.transitionRun(
         db,
-        runId: env.runId,
+        runID: env.runID,
         event: .cancel,
         now: Date(),
         terminal: .deferred(.ownerCancelled)
@@ -532,12 +542,13 @@ import Testing
     #expect(try messageContent(env) == ApprovedActionExecutor.notResumableObservationContent)
   }
 
-  @Test func theRunIsClaimedRunningBeforeTheToolBodyExecutes() async throws {
+  @Test
+  func theRunIsClaimedRunningBeforeTheToolBodyExecutes() async throws {
     // given — a tool that reports the run row's live state from inside its own body
     let env = try makeSuspendedFixture()
     let executor = makeExecutor(
       env,
-      tools: [RunStateReportingTool(queue: env.queue, runId: env.runId)]
+      tools: [RunStateReportingTool(queue: env.queue, runID: env.runID)]
     )
 
     // when
@@ -551,7 +562,8 @@ import Testing
     #expect(try messageContent(env) == RunState.running.rawValue)
   }
 
-  @Test func aThrowingResultRecordSurfacesRecordFailedAfterTheToolRan() async throws {
+  @Test
+  func aThrowingResultRecordSurfacesRecordFailedAfterTheToolRan() async throws {
     // given — the claim seam works (real store), but recording the executed result throws
     let env = try makeSuspendedFixture()
     let executor = makeExecutor(
@@ -572,7 +584,8 @@ import Testing
     #expect(try messageContent(env) == "awaiting owner approval")
   }
 
-  @Test func aThrowingObservationCommitSurfacesStoreFailedNotIgnored() async throws {
+  @Test
+  func aThrowingObservationCommitSurfacesStoreFailedNotIgnored() async throws {
     // given — the store throws at the commit seam (DiskFullRuns); the durable DB is untouched
     let env = try makeSuspendedFixture()
     let executor = makeExecutor(
@@ -593,7 +606,8 @@ import Testing
     #expect(try messageContent(env) == "awaiting owner approval")
   }
 
-  @Test func aThrowingMemoryWriteCommitSurfacesStoreFailedNotIgnored() async throws {
+  @Test
+  func aThrowingMemoryWriteCommitSurfacesStoreFailedNotIgnored() async throws {
     // given — the fused memory_write commit throws at the store seam
     let env = try makeSuspendedFixture()
     let executor = makeExecutor(env, tools: [], runs: DiskFullRuns())
@@ -623,57 +637,52 @@ import Testing
     let base: RunStoreGRDB
 
     func claimApprovedExecution(
-      runId: Int64,
-      observationMessageId: Int64,
+      runID: Int64,
+      observationMessageID: Int64,
       notResumableObservationContent: String,
       now: Date
     ) throws(StoreError) -> ApprovedExecutionClaim {
       try base.claimApprovedExecution(
-        runId: runId,
-        observationMessageId: observationMessageId,
+        runID: runID,
+        observationMessageID: observationMessageID,
         notResumableObservationContent: notResumableObservationContent,
         now: now
       )
     }
 
     func fillClaimedObservation(
-      runId: Int64,
-      observationMessageId: Int64,
+      runID: Int64,
+      observationMessageID: Int64,
       fill: ClaimedObservationFill
-    ) throws(StoreError) {
-      throw StoreError.diskFull
-    }
+    ) throws(StoreError) { throw StoreError.diskFull }
 
     func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
-      runId: Int64,
-      observationMessageId: Int64,
+      runID: Int64,
+      observationMessageID: Int64,
       item: NewMemoryItem,
       observationContent: String,
       audit: ApprovedExecutionAudit,
       notResumableObservationContent: String,
       now: Date
-    ) throws(StoreError) -> ApprovedExecutionClaim {
-      throw StoreError.diskFull
-    }
+    ) throws(StoreError) -> ApprovedExecutionClaim { throw StoreError.diskFull }
 
-    func pickUp(runId: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
+    func pickUp(runID: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin? {
       nil
     }
-    func commitAssistantTurn(
-      _ turn: AssistantTurn,
-      now: Date
-    ) throws(StoreError) -> RunCommitResult {
-      .ignored
-    }
+
+    func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult
+    { .ignored }
+
     func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult {
       .ignored
     }
-    func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
-    func reconcileRunsAtBoot(
-      now: Date,
-      degradationText: String,
-      heartbeatNoticeChatId: Int64?
-    ) throws(StoreError) -> [DegradationReply] { [] }
+
+    func failRun(runID: Int64, cause: TerminalCause, now: Date) throws(StoreError) {}
+
+    func reconcileRunsAtBoot(now: Date, degradationText: String, heartbeatNoticeChatID: Int64?)
+      throws(StoreError) -> [DegradationReply]
+    { [] }
+
     func runsHealth(now: Date) throws(StoreError) -> RunsHealth {
       RunsHealth(
         inFlight: 0,
@@ -683,56 +692,55 @@ import Testing
         consecutiveFailures: 0
       )
     }
-    func commitSuspendedTurn(
-      runId: Int64,
-      sessionId: Int64,
-      commit: SuspendedTurnCommit,
-      now: Date
-    ) throws(StoreError) -> SuspendedCommitReceipt {
-      throw StoreError.unexpected("unused in this fixture")
-    }
+
+    func commitSuspendedTurn(runID: Int64, sessionID: Int64, commit: SuspendedTurnCommit, now: Date)
+      throws(StoreError) -> SuspendedCommitReceipt
+    { throw StoreError.unexpected("unused in this fixture") }
+
     func settleClaimedApprovalAtBoot(
-      runId: Int64,
-      observationMessageId: Int64,
+      runID: Int64,
+      observationMessageID: Int64,
       observationContent: String,
-      noticeChatId: Int64,
+      noticeChatID: Int64,
       noticeText: String,
       now: Date
     ) throws(StoreError) -> ClaimedApprovalBootOutcome {
       throw StoreError.unexpected("unused in this fixture")
     }
-    func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
+
+    func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage {
       throw StoreError.unexpected("unused in this fixture")
     }
-    func executionContext(
-      runId: Int64,
-      fallbackChatId: Int64
-    ) throws(StoreError) -> RunExecutionContext? {
-      try base.executionContext(runId: runId, fallbackChatId: fallbackChatId)
+
+    func executionContext(runID: Int64, fallbackChatID: Int64) throws(StoreError)
+      -> RunExecutionContext?
+    { try base.executionContext(runID: runID, fallbackChatID: fallbackChatID) }
+
+    func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? {
+      try base.runOrigin(runID: runID)
     }
 
-    func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
-      try base.runOrigin(runId: runId)
-    }
+    func jobID(runID: Int64) throws(StoreError) -> Int64? { nil }
 
-    func jobId(runId: Int64) throws(StoreError) -> Int64? { nil }
     func failRunStalePolicy(
-      runId: Int64,
-      sessionId: Int64,
-      observationMessageId: Int64,
+      runID: Int64,
+      sessionID: Int64,
+      observationMessageID: Int64,
       observationContent: String,
       now: Date
     ) throws(StoreError) -> Bool { false }
+
     func resolveDeniedObservation(
-      runId: Int64,
-      observationMessageId: Int64,
+      runID: Int64,
+      observationMessageID: Int64,
       content: String,
       cancel: CancelReason?,
       now: Date
     ) throws(StoreError) -> RunCommitResult { .ignored }
   }
 
-  @Test func aMissingToolStillResumesWithAnErrorObservation() async throws {
+  @Test
+  func aMissingToolStillResumesWithAnErrorObservation() async throws {
     // given — a recorded action whose tool is no longer registered
     let env = try makeSuspendedFixture()
     let executor = makeExecutor(env, tools: [])

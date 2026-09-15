@@ -69,9 +69,7 @@ public struct EncryptedMCPCredentialStore: Sendable {
 
   private let file: SealedCredentialFile<CredentialMap>
 
-  public init(stateRoot: URL) {
-    self.init(stateRoot: stateRoot, publisher: SecureFilePublisher())
-  }
+  public init(stateRoot: URL) { self.init(stateRoot: stateRoot, publisher: SecureFilePublisher()) }
 
   init(stateRoot: URL, publisher: SecureFilePublisher) {
     file = SealedCredentialFile(
@@ -90,17 +88,15 @@ public struct EncryptedMCPCredentialStore: Sendable {
 
   /// Every configured server's outcome in one read, so the boot path opens the envelope once rather
   /// than once per server — and so a server with nothing stored still gets a row to report.
-  public func loadAll(
-    servers: [MCPServerConfig]
-  ) throws(CredentialStoreError) -> [String: MCPCredentialLoad] {
-    try loadSnapshot(servers: servers).outcomes
-  }
+  public func loadAll(servers: [MCPServerConfig]) throws(CredentialStoreError) -> [String:
+    MCPCredentialLoad]
+  { try loadSnapshot(servers: servers).outcomes }
 
   /// Opens the envelope once for boot, returning both the credentials safe to send and every stored
   /// token that must remain unprintable even after its server is removed or re-pointed.
-  public func loadSnapshot(
-    servers: [MCPServerConfig]
-  ) throws(CredentialStoreError) -> MCPCredentialSnapshot {
+  public func loadSnapshot(servers: [MCPServerConfig]) throws(CredentialStoreError)
+    -> MCPCredentialSnapshot
+  {
     let stored = try file.load()?.servers ?? [:]
     var outcomes: [String: MCPCredentialLoad] = [:]
     for server in servers {
@@ -126,10 +122,7 @@ public struct EncryptedMCPCredentialStore: Sendable {
   /// Binds `token` to the server's current URL. A second call for the same name replaces the record,
   /// which is how a re-pointed server is repaired.
   public func save(token: String, for server: MCPServerConfig) throws(CredentialStoreError) {
-    let record = StoredMCPCredential(
-      token: token,
-      urlFingerprint: Self.fingerprint(of: server.url)
-    )
+    let record = StoredMCPCredential(token: token, urlFingerprint: Self.fingerprint(of: server.url))
     try file.mutate { map in
       map.servers[server.name] = record
       return true
@@ -152,10 +145,9 @@ public struct EncryptedMCPCredentialStore: Sendable {
 // MARK: - URL Binding
 
 extension EncryptedMCPCredentialStore {
-  static func outcome(
-    for record: StoredMCPCredential?,
-    server: MCPServerConfig
-  ) -> MCPCredentialLoad {
+  static func outcome(for record: StoredMCPCredential?, server: MCPServerConfig)
+    -> MCPCredentialLoad
+  {
     guard let record else {
       return .absent
     }
@@ -216,17 +208,10 @@ extension EncryptedMCPCredentialStore {
     Data("swift-claw:mcp-credentials:v\(version)".utf8)
   }
 
-  static func sealEnvelope(
-    _ plaintext: Data,
-    key: SymmetricKey
-  ) throws(CredentialStoreError) -> Data {
-    try envelopeCodec.sealCredential(plaintext, key: key)
-  }
+  static func sealEnvelope(_ plaintext: Data, key: SymmetricKey) throws(CredentialStoreError)
+    -> Data
+  { try envelopeCodec.sealCredential(plaintext, key: key) }
 
-  static func openEnvelope(
-    _ envelope: Data,
-    key: SymmetricKey
-  ) throws(CredentialStoreError) -> Data {
-    try envelopeCodec.openCredential(envelope, key: key)
-  }
+  static func openEnvelope(_ envelope: Data, key: SymmetricKey) throws(CredentialStoreError) -> Data
+  { try envelopeCodec.openCredential(envelope, key: key) }
 }

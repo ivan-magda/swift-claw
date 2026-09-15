@@ -54,9 +54,7 @@ struct ChatGPTResponsesAccumulator: Sendable {
   /// Maintained incrementally in `update(_:mutate:)` rather than recomputed here: the caller reads it
   /// once per delivered chunk, and re-walking every item's whole text on each read would turn a long
   /// reply's stream consumption quadratic.
-  var observedCompletionTokens: Int {
-    observedTokens
-  }
+  var observedCompletionTokens: Int { observedTokens }
 
   /// The bytes held in the raw per-item delta buffers, whether or not any of them can reach the
   /// owner. Distinct from the accumulated-output budget, which charges only text the owner may see:
@@ -156,16 +154,12 @@ private struct OutputItem {
   /// Whether text for this item can ever reach the owner. Phase and type are frozen at first
   /// sighting, so an item that fails this can never later become visible — its text is read nowhere
   /// and is dropped as it arrives rather than buffered.
-  var retainsText: Bool {
-    type == .message && phase.isOwnerVisible
-  }
+  var retainsText: Bool { type == .message && phase.isOwnerVisible }
 
   /// Whether arguments for this item can ever be dispatched. Type is frozen at first sighting, so an
   /// item that fails this proposes no call — its arguments are read nowhere and are dropped rather
   /// than buffered.
-  var retainsArguments: Bool {
-    type == .functionCall
-  }
+  var retainsArguments: Bool { type == .functionCall }
 
   /// The text of this item the owner may see. A done item is the source of truth; the delta assembly
   /// stands in only while none has arrived.
@@ -184,9 +178,7 @@ private struct OutputItem {
     return arguments ?? argumentDeltas
   }
 
-  var budgetBytes: Int {
-    SaturatingArithmetic.sum(visibleText.utf8.count, argumentText.utf8.count)
-  }
+  var budgetBytes: Int { SaturatingArithmetic.sum(visibleText.utf8.count, argumentText.utf8.count) }
 
   /// The completion tokens this item's visible text and tool arguments estimate to, each rounded on
   /// its own so the per-item headroom matches the summed-per-message input estimate.
@@ -209,8 +201,7 @@ private extension ChatGPTResponsesAccumulator {
     case .outputItemDone(let index, let item):
       try complete(index: index, item: item)
       return nil
-    case .outputTextDelta(let index, let text):
-      return try appendText(index: index, text: text)
+    case .outputTextDelta(let index, let text): return try appendText(index: index, text: text)
     case .functionCallArgumentsDelta(let index, let callID, let fragment):
       try appendArguments(index: index, callID: callID, fragment: fragment)
       return nil
@@ -336,7 +327,7 @@ private extension ChatGPTResponsesAccumulator {
 
   /// Mutates one item and re-charges the accumulated-output budget with what it now holds, so the
   /// running total is always the bytes actually retained rather than the bytes ever seen.
-  mutating func update(_ index: Int, mutate: (inout OutputItem) -> Void) throws {
+  mutating func update(_ index: Int, mutate: (_ item: inout OutputItem) -> Void) throws {
     guard var item = items[index] else {
       throw Self.unregisteredItem
     }
@@ -364,16 +355,11 @@ private extension ChatGPTResponsesAccumulator {
       var fields: [AttemptOutputField] = []
       let visible = item.visibleText
       if visible.isEmpty == false {
-        fields.append(
-          AttemptOutputField(key: "responses-visible:\(index)", value: visible)
-        )
+        fields.append(AttemptOutputField(key: "responses-visible:\(index)", value: visible))
       }
       if item.retainsArguments {
         fields.append(
-          AttemptOutputField(
-            key: "responses-tool-arguments:\(index)",
-            value: item.argumentText
-          )
+          AttemptOutputField(key: "responses-tool-arguments:\(index)", value: item.argumentText)
         )
       }
       return fields
@@ -431,9 +417,7 @@ private extension ChatGPTResponsesAccumulator {
         guard let encrypted = done.encryptedContent else {
           continue
         }
-        reasoning.append(
-          ChatGPTReasoningItem(encryptedContent: encrypted, summary: done.summary)
-        )
+        reasoning.append(ChatGPTReasoningItem(encryptedContent: encrypted, summary: done.summary))
       case .message:
         messages.append(
           ChatGPTAssistantMessageItem(
@@ -488,14 +472,10 @@ private extension ChatGPTResponsesAccumulator {
           throw Self.conflictingTerminals
         }
         if terminalValidationPolicy == .throughStreamEnd {
-          reconciled = reconciled.withReportedModel(
-            reconciled.reportedModel ?? other.reportedModel
-          )
+          reconciled = reconciled.withReportedModel(reconciled.reportedModel ?? other.reportedModel)
         }
-      case .streamError:
-        throw Self.conflictingTerminals
-      default:
-        continue
+      case .streamError: throw Self.conflictingTerminals
+      default: continue
       }
     }
     return reconciled
@@ -504,8 +484,7 @@ private extension ChatGPTResponsesAccumulator {
   /// The whole reply, or the failure the terminal states.
   func response(for terminal: ChatGPTResponsesTerminal) throws -> ChatResponse {
     switch terminal.effectiveStatus {
-    case .completed:
-      return try assembled(terminal, finishReason: nil)
+    case .completed: return try assembled(terminal, finishReason: nil)
     case .incomplete:
       // Running out of room to answer in is a short answer, not a failure: the text is real and the
       // runtime is told why it stopped.
@@ -513,15 +492,12 @@ private extension ChatGPTResponsesAccumulator {
         throw failure(terminal.failure, fallback: "the ChatGPT reply did not complete")
       }
       return try assembled(terminal, finishReason: Self.lengthFinishReason)
-    case .failed, .cancelled:
-      throw failure(terminal.failure, fallback: "the ChatGPT reply failed")
+    case .failed, .cancelled: throw failure(terminal.failure, fallback: "the ChatGPT reply failed")
     }
   }
 
-  func assembled(
-    _ terminal: ChatGPTResponsesTerminal,
-    finishReason: String?
-  ) throws -> ChatResponse {
+  func assembled(_ terminal: ChatGPTResponsesTerminal, finishReason: String?) throws -> ChatResponse
+  {
     let calls = try toolCalls()
     return ChatResponse(
       content: content,
@@ -539,11 +515,9 @@ private extension ChatGPTResponsesAccumulator {
   /// visible deltas stand in only where the backend never sent one — which is what lets a truncated
   /// turn still say what it managed to say.
   var content: String {
-    order.sorted()
-      .compactMap { index in
-        items[index]?.visibleText
-      }
-      .joined()
+    order.sorted().compactMap { index in
+      items[index]?.visibleText
+    }.joined()
   }
 
   func toolCalls() throws -> [ToolCall] {
@@ -560,8 +534,10 @@ private extension ChatGPTResponsesAccumulator {
         throw Self.unresolvedFunctionCall
       }
       guard
-        let callID = accumulated.callID, callID.isEmpty == false,
-        let name = done.name, name.isEmpty == false
+        let callID = accumulated.callID,
+        callID.isEmpty == false,
+        let name = done.name,
+        name.isEmpty == false
       else {
         throw Self.undispatchableFunctionCall
       }
@@ -603,17 +579,11 @@ private extension ChatGPTResponsesAccumulator {
   /// evaluation harness may use the payload-free cause to replace the whole attempt once.
   static let ambiguousEnd = ProviderError.partialStreamWithoutCompletedTerminal
 
-  static let conflictingTerminals = terminal(
-    "the ChatGPT reply stated conflicting outcomes"
-  )
+  static let conflictingTerminals = terminal("the ChatGPT reply stated conflicting outcomes")
 
-  static let conflictingCallID = terminal(
-    "the ChatGPT reply gave one tool call two identities"
-  )
+  static let conflictingCallID = terminal("the ChatGPT reply gave one tool call two identities")
 
-  static let unresolvedFunctionCall = terminal(
-    "the ChatGPT reply left a tool call unfinished"
-  )
+  static let unresolvedFunctionCall = terminal("the ChatGPT reply left a tool call unfinished")
 
   static let undispatchableFunctionCall = terminal(
     "the ChatGPT reply proposed a tool call with no name or no call ID"
@@ -640,10 +610,9 @@ private extension ChatGPTResponsesAccumulator {
   /// repaint a terminal, collapsed onto one line, redacted against the credential the request
   /// carried, and bounded — in that order, so a value that only becomes a secret once its escapes
   /// are gone is still matched, and the truncation can only ever cut a placeholder.
-  func failure(
-    _ remote: ChatGPTRemoteFailure?,
-    fallback: String = "the ChatGPT reply failed"
-  ) -> ProviderError {
+  func failure(_ remote: ChatGPTRemoteFailure?, fallback: String = "the ChatGPT reply failed")
+    -> ProviderError
+  {
     // The backend refusing the replayed encrypted state is not a generic terminal: a fresh session
     // drops that state, so it surfaces as invalid replay state and its downstream `/new` guidance.
     if remote?.isInvalidProviderState == true {

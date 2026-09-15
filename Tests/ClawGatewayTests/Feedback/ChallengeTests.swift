@@ -9,9 +9,10 @@ import Testing
 @testable import ClawGateway
 @testable import ClawTelegram
 
-@Suite struct ChallengeTests {
-  @Test func tappingCorrectionDefersTheEventAndConsumesTheNextOwnerMessageExactlyOnce() async throws
-  {
+@Suite
+struct ChallengeTests {
+  @Test
+  func tappingCorrectionDefersTheEventAndConsumesTheNextOwnerMessageExactlyOnce() async throws {
     // given — one authenticated result-correction target
     let env = try ChallengeEnvironment.make()
     let target = env.target(
@@ -21,10 +22,10 @@ import Testing
     try TestLearningFixtures(writer: env.queue).seedTargets([target])
 
     // when — the owner taps but has not supplied the payload yet
-    let tapOutcome = await env.router.handle(rawUpdate: env.callback(target: target, updateId: 1))
-    let tapReplay = await env.router.handle(rawUpdate: env.callback(target: target, updateId: 1))
+    let tapOutcome = await env.router.handle(rawUpdate: env.callback(target: target, updateID: 1))
+    let tapReplay = await env.router.handle(rawUpdate: env.callback(target: target, updateID: 1))
     let freshTapReplay = await env.router.handle(
-      rawUpdate: env.callback(target: target, updateId: 2)
+      rawUpdate: env.callback(target: target, updateID: 2)
     )
 
     // then — target, challenge, and prompt committed; no semantic event or revision did
@@ -33,7 +34,7 @@ import Testing
     #expect(freshTapReplay == .processed)
     #expect(try env.eventCount() == 0)
     #expect(try env.feedbackRevision() == 0)
-    #expect(try env.learning.liveChallenge(ownerUserId: env.ownerId, chatId: env.chatId) != nil)
+    #expect(try env.learning.liveChallenge(ownerUserID: env.ownerID, chatID: env.chatID) != nil)
     #expect(try env.pendingDeliveries().count == 1)
     let promptSurfaces = try env.pendingDeliveries().map { row in
       [row.deliveryKey, row.payload, row.replyMarkup ?? ""].joined()
@@ -44,13 +45,13 @@ import Testing
     // when — Telegram replays the payload update, then a distinct message arrives
     let payload = "It missed the price change."
     let first = await env.router.handle(
-      rawUpdate: textUpdate(id: 3, from: env.ownerId, text: payload)
+      rawUpdate: textUpdate(id: 3, from: env.ownerID, text: payload)
     )
     let replay = await env.router.handle(
-      rawUpdate: textUpdate(id: 3, from: env.ownerId, text: payload)
+      rawUpdate: textUpdate(id: 3, from: env.ownerID, text: payload)
     )
     let ordinary = await env.router.handle(
-      rawUpdate: textUpdate(id: 4, from: env.ownerId, text: "Anything else?")
+      rawUpdate: textUpdate(id: 4, from: env.ownerID, text: "Anything else?")
     )
     await env.turns.waitForCalls(atLeast: 1)
 
@@ -59,7 +60,7 @@ import Testing
     #expect(replay == .skipped)
     #expect(ordinary == .processed)
     #expect(try env.eventPayloads() == [payload])
-    #expect(try env.eventTransportIds() == [nil])
+    #expect(try env.eventTransportIDs() == [nil])
     #expect(try env.feedbackRevision() == 1)
     #expect(await env.turns.calls.count == 1)
     #expect(try env.processedCount() == 4)
@@ -70,14 +71,15 @@ import Testing
     #expect(logged.contains(target.nonce) == false)
   }
 
-  @Test func challengeInterceptsOwnerTextBeforeCommandParsing() async throws {
+  @Test
+  func challengeInterceptsOwnerTextBeforeCommandParsing() async throws {
     // given — a live challenge and a command-shaped owner payload
     let env = try ChallengeEnvironment.make()
     try await env.openChallenge(nonce: "before-command")
 
     // when
     let outcome = await env.router.handle(
-      rawUpdate: textUpdate(id: 2, from: env.ownerId, text: "/new")
+      rawUpdate: textUpdate(id: 2, from: env.ownerID, text: "/new")
     )
 
     // then — parsing first would supersede the session instead of recording these exact bytes
@@ -105,19 +107,19 @@ import Testing
     let env = try ChallengeEnvironment.make()
     try await env.openChallenge(nonce: "original-text-only")
     let challenge = try #require(
-      try env.learning.liveChallenge(ownerUserId: env.ownerId, chatId: env.chatId)
+      try env.learning.liveChallenge(ownerUserID: env.ownerID, chatID: env.chatID)
     )
     let json = """
-      {
-        "update_id": 2,
-        "message": {
-          "message_id": 200,
-          "from": {"id": \(env.ownerId)},
-          "chat": {"id": \(env.chatId), "type": "private"},
-          \(messageFields)
-        }
+    {
+      "update_id": 2,
+      "message": {
+        "message_id": 200,
+        "from": {"id": \(env.ownerID)},
+        "chat": {"id": \(env.chatID), "type": "private"},
+        \(messageFields)
       }
-      """
+    }
+    """
     let update = try JSONDecoder().decode(TUpdate.self, from: Data(json.utf8)).toRawUpdate()
 
     // when
@@ -127,23 +129,24 @@ import Testing
     #expect(outcome == .processed)
     #expect(try env.eventCount() == 0)
     #expect(try env.feedbackRevision() == 0)
-    let remaining = try env.learning.liveChallenge(ownerUserId: env.ownerId, chatId: env.chatId)
+    let remaining = try env.learning.liveChallenge(ownerUserID: env.ownerID, chatID: env.chatID)
     #expect(remaining?.id == challenge.id)
 
     // when
     let correction = "Report the price change."
     let original = await env.router.handle(
-      rawUpdate: textUpdate(id: 3, from: env.ownerId, text: correction)
+      rawUpdate: textUpdate(id: 3, from: env.ownerID, text: correction)
     )
 
     // then
     #expect(original == .processed)
     #expect(try env.eventPayloads() == [correction])
     #expect(try env.feedbackRevision() == 1)
-    #expect(try env.learning.liveChallenge(ownerUserId: env.ownerId, chatId: env.chatId) == nil)
+    #expect(try env.learning.liveChallenge(ownerUserID: env.ownerID, chatID: env.chatID) == nil)
   }
 
-  @Test func challengeOpenedBeforeEpochAdvanceCannotAppendFeedback() async throws {
+  @Test
+  func challengeOpenedBeforeEpochAdvanceCannotAppendFeedback() async throws {
     // given
     let env = try ChallengeEnvironment.make()
     try await env.openChallenge(nonce: "stale-epoch")
@@ -151,7 +154,7 @@ import Testing
 
     // when
     let outcome = await env.router.handle(
-      rawUpdate: textUpdate(id: 2, from: env.ownerId, text: "too late")
+      rawUpdate: textUpdate(id: 2, from: env.ownerID, text: "too late")
     )
 
     // then — the in-transaction epoch CAS rejects the already claimed owner message
@@ -161,7 +164,8 @@ import Testing
     #expect(await env.turns.calls.isEmpty)
   }
 
-  @Test func expiredChallengeFallsThroughToAnOrdinaryTurnWithoutClaimingFirst() async throws {
+  @Test
+  func expiredChallengeFallsThroughToAnOrdinaryTurnWithoutClaimingFirst() async throws {
     // given — the challenge expires exactly at the handler's captured clock
     let env = try ChallengeEnvironment.make()
     let expiresAt = env.now.addingTimeInterval(10)
@@ -171,7 +175,7 @@ import Testing
 
     // when
     let outcome = await env.router.handle(
-      rawUpdate: textUpdate(id: 2, from: env.ownerId, text: text)
+      rawUpdate: textUpdate(id: 2, from: env.ownerID, text: text)
     )
 
     // then — the ordinary path persists its inbound and run before returning
@@ -181,12 +185,13 @@ import Testing
     #expect(try env.processedCount() == 2)
   }
 
-  @Test func failedChallengeTransactionDoesNotPokeTheOutbox() async throws {
+  @Test
+  func failedChallengeTransactionDoesNotPokeTheOutbox() async throws {
     // given — the prompt's exact outbox identity is already occupied
     let env = try ChallengeEnvironment.make()
     let target = env.target(nonce: "failed-prompt", expiresAt: env.now.addingTimeInterval(3_600))
     try TestLearningFixtures(writer: env.queue).seedTargets([target])
-    let tap = env.tap(target: target, updateId: 1)
+    let tap = env.tap(target: target, updateID: 1)
     let prompt = LearningNotices.challengePrompt(for: tap)
     for chunk in prompt {
       let deliveryKey = OutboxDedupKey.make(
@@ -202,26 +207,27 @@ import Testing
     }
 
     // when
-    let outcome = await env.router.handle(rawUpdate: env.callback(target: target, updateId: 1))
+    let outcome = await env.router.handle(rawUpdate: env.callback(target: target, updateID: 1))
 
     // then — an eager or unconditional poke advertises a transaction that rolled back
     #expect(outcome == .processed)
     #expect(env.pokes.count == Int.zero)
     #expect(try env.learning.feedbackTarget(nonce: target.nonce)?.consumedAt == nil)
-    #expect(try env.learning.liveChallenge(ownerUserId: env.ownerId, chatId: env.chatId) == nil)
+    #expect(try env.learning.liveChallenge(ownerUserID: env.ownerID, chatID: env.chatID) == nil)
   }
 
-  @Test func resultKeyboardContainsExactlyTheThreeRunActionsInOrder() throws {
+  @Test
+  func resultKeyboardContainsExactlyTheThreeRunActionsInOrder() throws {
     // given
     let target = NewFeedbackTarget(
       nonce: "keyboard-nonce",
-      jobId: 1,
+      jobID: 1,
       epoch: LearningEpoch(1),
       subjectKind: .run,
       subjectDigest: "41",
       allowedActions: [.resultUseful, .resultNotUseful, .resultCorrection],
-      ownerUserId: 42,
-      chatId: 42,
+      ownerUserID: 42,
+      chatID: 42,
       expiresAt: .distantFuture
     )
 
@@ -247,17 +253,13 @@ import Testing
 private struct KeyboardEnvelope: Decodable {
   let inlineKeyboard: [[KeyboardButton]]
 
-  private enum CodingKeys: String, CodingKey {
-    case inlineKeyboard = "inline_keyboard"
-  }
+  private enum CodingKeys: String, CodingKey { case inlineKeyboard = "inline_keyboard" }
 }
 
 private struct KeyboardButton: Decodable {
   let callbackData: String
 
-  private enum CodingKeys: String, CodingKey {
-    case callbackData = "callback_data"
-  }
+  private enum CodingKeys: String, CodingKey { case callbackData = "callback_data" }
 }
 
 // MARK: - Fixtures
@@ -266,9 +268,9 @@ private struct ChallengeEnvironment {
   let queue: DatabaseQueue
   let learning: ScheduledLearningStoreGRDB
   let state: JobLearningState
-  let jobId: Int64
-  let ownerId: Int64
-  let chatId: Int64
+  let jobID: Int64
+  let ownerID: Int64
+  let chatID: Int64
   let clock: ManualClock
   let transport: RecordingTransport
   let logs: RecordingLogCapture
@@ -281,11 +283,11 @@ private struct ChallengeEnvironment {
   static func make() throws -> ChallengeEnvironment {
     let queue = try TestDatabase.make()
     let now = Date(timeIntervalSince1970: 1_900_000_000)
-    let ownerId: Int64 = 42
+    let ownerID: Int64 = 42
     let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: true)
     let job = try jobs.create(
       NewScheduledJob(
-        ownerChatId: ownerId,
+        ownerChatID: ownerID,
         label: "challenge",
         prompt: "Summarize updates",
         recurrence: nil,
@@ -295,9 +297,9 @@ private struct ChallengeEnvironment {
       now: now
     )
     let learning = ScheduledLearningStoreGRDB(writer: queue)
-    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: job.id, now: now)
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobID: job.id, now: now)
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: [ownerId])
+    try allowlist.seedAllowlist(userIDs: [ownerID])
     let access = AccessControl(allowlist: allowlist, groupChats: [])
     let transport = RecordingTransport()
     let processed = ProcessedUpdateStoreGRDB(writer: queue)
@@ -308,8 +310,12 @@ private struct ChallengeEnvironment {
     let challenges = FeedbackChallengeHandler(
       replies: ReplySender(processed: processed, delivery: transport, logger: logger),
       learning: learning,
-      notifyOutbox: { pokes.record() },
-      now: { clock.now }
+      notifyOutbox: {
+        pokes.record()
+      },
+      now: {
+        clock.now
+      }
     )
     let callbacks = FeedbackCallbackHandler(
       replies: ReplySender(processed: processed, delivery: transport, logger: logger),
@@ -318,7 +324,9 @@ private struct ChallengeEnvironment {
       audit: AuditLogGRDB(writer: queue),
       callbacks: transport,
       challenges: challenges,
-      now: { clock.now },
+      now: {
+        clock.now
+      },
       logger: logger
     )
     let turns = FakeTurnRunner()
@@ -340,16 +348,18 @@ private struct ChallengeEnvironment {
       feedbackChallenges: challenges,
       coordinator: ApprovalCoordinator(),
       doctor: StubDoctorReporter(),
-      now: { clock.now },
+      now: {
+        clock.now
+      },
       logger: logger
     )
     return ChallengeEnvironment(
       queue: queue,
       learning: learning,
       state: state,
-      jobId: job.id,
-      ownerId: ownerId,
-      chatId: ownerId,
+      jobID: job.id,
+      ownerID: ownerID,
+      chatID: ownerID,
       clock: clock,
       transport: transport,
       logs: logs,
@@ -360,74 +370,69 @@ private struct ChallengeEnvironment {
   }
 }
 
+// MARK: - Challenge Fixtures
+
 private extension ChallengeEnvironment {
   func target(nonce: String, expiresAt: Date) -> NewFeedbackTarget {
     NewFeedbackTarget(
       nonce: nonce,
-      jobId: jobId,
+      jobID: jobID,
       epoch: state.epoch,
       subjectKind: .run,
       subjectDigest: "41",
       allowedActions: [.resultCorrection],
-      ownerUserId: ownerId,
-      chatId: chatId,
+      ownerUserID: ownerID,
+      chatID: chatID,
       expiresAt: expiresAt
     )
   }
 
-  func callback(target: NewFeedbackTarget, updateId: Int64) -> RawUpdate {
+  func callback(target: NewFeedbackTarget, updateID: Int64) -> RawUpdate {
     RawUpdate(
-      updateId: updateId,
+      updateID: updateID,
       message: nil,
       editedMessage: nil,
       callback: RawCallback(
-        callbackId: "challenge-\(updateId)",
-        fromUserId: ownerId,
-        chatId: chatId,
-        messageId: 100,
+        callbackID: "challenge-\(updateID)",
+        fromUserID: ownerID,
+        chatID: chatID,
+        messageID: 100,
         data: FeedbackKeyboard.callbackData(nonce: target.nonce, action: .resultCorrection)
       )
     )
   }
 
-  func tap(target: NewFeedbackTarget, updateId: Int64) -> FeedbackTap {
+  func tap(target: NewFeedbackTarget, updateID: Int64) -> FeedbackTap {
     FeedbackTap(
       nonce: target.nonce,
       signal: .resultCorrection,
-      ownerUserId: ownerId,
-      chatId: chatId,
-      transportUpdateId: updateId
+      ownerUserID: ownerID,
+      chatID: chatID,
+      transportUpdateID: updateID
     )
   }
 
   func openChallenge(nonce: String, expiresAt: Date? = nil) async throws {
-    let target = target(
-      nonce: nonce,
-      expiresAt: expiresAt ?? now.addingTimeInterval(3_600)
-    )
+    let target = target(nonce: nonce, expiresAt: expiresAt ?? now.addingTimeInterval(3_600))
     try TestLearningFixtures(writer: queue).seedTargets([target])
-    let outcome = await router.handle(rawUpdate: callback(target: target, updateId: 1))
+    let outcome = await router.handle(rawUpdate: callback(target: target, updateID: 1))
     #expect(outcome == .processed)
-    #expect(try learning.liveChallenge(ownerUserId: ownerId, chatId: chatId) != nil)
+    #expect(try learning.liveChallenge(ownerUserID: ownerID, chatID: chatID) != nil)
   }
 
-  func eventCount() throws -> Int {
-    try rowCount(table: "feedback_events")
-  }
+  func eventCount() throws -> Int { try rowCount(table: "feedback_events") }
 
-  func processedCount() throws -> Int {
-    try rowCount(table: "processed_updates")
-  }
+  func processedCount() throws -> Int { try rowCount(table: "processed_updates") }
 
   func persistedTurnCount(text: String) throws -> Int {
     try queue.read { db in
       try Int.fetchOne(
         db,
         sql: """
-          SELECT COUNT(*) FROM runs
-          JOIN messages ON messages.id = runs.trigger_message_id
-          WHERE messages.content = ? AND messages.role = ?
-          """,
+        SELECT COUNT(*) FROM runs
+        JOIN messages ON messages.id = runs.trigger_message_id
+        WHERE messages.content = ? AND messages.role = ?
+        """,
         arguments: [text, MessageRole.user.rawValue]
       ) ?? -1
     }
@@ -444,7 +449,7 @@ private extension ChallengeEnvironment {
       try Int64.fetchOne(
         db,
         sql: "SELECT feedback_revision FROM job_learning_state WHERE job_id = ?",
-        arguments: [jobId]
+        arguments: [jobID]
       ) ?? -1
     }
   }
@@ -455,7 +460,7 @@ private extension ChallengeEnvironment {
     }
   }
 
-  func eventTransportIds() throws -> [Int64?] {
+  func eventTransportIDs() throws -> [Int64?] {
     try queue.read { db in
       try Int64?.fetchAll(
         db,
@@ -472,7 +477,7 @@ private extension ChallengeEnvironment {
     try queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET learning_epoch = learning_epoch + 1 WHERE job_id = ?",
-        arguments: [jobId]
+        arguments: [jobID]
       )
     }
   }

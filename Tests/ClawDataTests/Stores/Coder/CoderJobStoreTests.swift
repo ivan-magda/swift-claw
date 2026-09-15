@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct CoderJobStoreTests {
-  @Test func admissionDeduplicatesBeforeCapacity() throws {
+@Suite
+struct CoderJobStoreTests {
+  @Test
+  func admissionDeduplicatesBeforeCapacity() throws {
     // given
     let fixture = try CoderStoreFixture()
     let first = try fixture.admit(id: UUID(), limit: 1)
@@ -28,7 +30,8 @@ import Testing
 // MARK: - Reservation Admission
 
 extension CoderJobStoreTests {
-  @Test func onlyOneAdmissionWinsLastSlot() async throws {
+  @Test
+  func onlyOneAdmissionWinsLastSlot() async throws {
     // given
     let first = try CoderStoreFixture()
     let second = try CoderStoreFixture(queue: first.queue, updateID: 2)
@@ -65,7 +68,8 @@ extension CoderJobStoreTests {
     #expect(try first.store.reservedJobs().count == 1)
   }
 
-  @Test func inPlaceReservationsExcludeRelatedWorkspaces() throws {
+  @Test
+  func inPlaceReservationsExcludeRelatedWorkspaces() throws {
     // given
     let first = try CoderStoreFixture(
       prepared: CoderStoreFixture.localRequest(checkout: "/repo/main", common: "/repo/git")
@@ -103,7 +107,8 @@ extension CoderJobStoreTests {
     }
   }
 
-  @Test func unresolvedOwnershipBlocksNewAdmissions() throws {
+  @Test
+  func unresolvedOwnershipBlocksNewAdmissions() throws {
     // given
     let fixture = try CoderStoreFixture()
     let id = try fixture.admittedID()

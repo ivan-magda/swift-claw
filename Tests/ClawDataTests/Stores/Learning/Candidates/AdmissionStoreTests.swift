@@ -6,8 +6,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct AdmissionStoreTests {
-  @Test func persistedArtifactOpensExactlyOneEmptyTrialAndChangesNoStableOrSpendState() throws {
+@Suite
+struct AdmissionStoreTests {
+  @Test
+  func persistedArtifactOpensExactlyOneEmptyTrialAndChangesNoStableOrSpendState() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -28,18 +30,12 @@ import Testing
       Issue.record("expected the current reflector candidate to be admitted")
       return
     }
-    let row = try fixture.trial(receipt.trialId)
+    let row = try fixture.trial(receipt.trialID)
     #expect(row.candidate == artifact.digest.rawValue)
     #expect(row.admittedAt == EpochSecondCodec.epoch(fixture.env.now))
     #expect(row.cohortCutoff == row.admittedAt)
-    #expect(
-      row.assignmentDeadline
-        == EpochSecondCodec.epoch(fixture.env.now) + 2_592_000
-    )
-    #expect(
-      row.decisionDeadline
-        == EpochSecondCodec.epoch(fixture.env.now) + 3_196_800
-    )
+    #expect(row.assignmentDeadline == EpochSecondCodec.epoch(fixture.env.now) + 2_592_000)
+    #expect(row.decisionDeadline == EpochSecondCodec.epoch(fixture.env.now) + 3_196_800)
     #expect(row.maximumAssignments == 3)
     #expect(row.consumedAssignments == 0)
     #expect(row.state == LearningTrialState.open.rawValue)
@@ -51,10 +47,11 @@ import Testing
     let after = try fixture.env.currentLearningState()
     #expect(after.stableDigest == before.stableDigest)
     #expect(after.stableRevision == before.stableRevision)
-    #expect(after.openTrialId == receipt.trialId)
+    #expect(after.openTrialID == receipt.trialID)
   }
 
-  @Test func drainingTrialBlocksAdmissionEvenWhenConveniencePointerIsNil() throws {
+  @Test
+  func drainingTrialBlocksAdmissionEvenWhenConveniencePointerIsNil() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -69,11 +66,12 @@ import Testing
 
     // then — consulting open_trial_id or only state=open would open a second live experiment.
     #expect(outcome == .rejected(.trialAlreadyLive))
-    #expect(try fixture.env.currentLearningState().openTrialId == nil)
+    #expect(try fixture.env.currentLearningState().openTrialID == nil)
     #expect(try fixture.env.countRows(in: "learning_trials") == 1)
   }
 
-  @Test func feedbackCutoffAdvancingMakesTheArtifactStaleWithoutRebindingIt() throws {
+  @Test
+  func feedbackCutoffAdvancingMakesTheArtifactStaleWithoutRebindingIt() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -92,7 +90,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "learning_trials") == 0)
   }
 
-  @Test func replayAndConcurrentAdmissionReturnOneDurableOutcome() async throws {
+  @Test
+  func replayAndConcurrentAdmissionReturnOneDurableOutcome() async throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -120,13 +119,18 @@ import Testing
     // then — removing writer serialization or replay detection duplicates a trial or receipt.
     let receipts = outcomes.compactMap(\.admissionReceipt)
     #expect(receipts.count == 8)
-    #expect(receipts.allSatisfy { receipt in receipt == receipts.first })
+    #expect(
+      receipts.allSatisfy { receipt in
+        receipt == receipts.first
+      }
+    )
     #expect(try fixture.env.countRows(in: "learning_trials") == 1)
     #expect(try fixture.env.countRows(in: "learning_decisions") == 1)
     #expect(try fixture.admissionAuditCount() == 1)
   }
 
-  @Test func approvalCreatesOneSuccessorAndAdmitsItThroughTheCommonGates() throws {
+  @Test
+  func approvalCreatesOneSuccessorAndAdmitsItThroughTheCommonGates() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -137,7 +141,7 @@ import Testing
     )
     let approval = CandidateApproval(
       predecessorDigest: predecessor.digest,
-      feedbackEventId: control.eventId
+      feedbackEventID: control.eventID
     )
 
     // when
@@ -170,7 +174,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "learning_trials") == 1)
   }
 
-  @Test func supersededManifestFeedbackMakesApprovalStaleWithoutRebinding() throws {
+  @Test
+  func supersededManifestFeedbackMakesApprovalStaleWithoutRebinding() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let (predecessor, frozenSource) = try fixture.persistedCandidateWithFeedback()
@@ -178,7 +183,7 @@ import Testing
       subjectKind: frozenSource.subjectKind,
       subjectDigest: frozenSource.subjectDigest,
       signal: .evaluationConfirm,
-      supersedes: frozenSource.eventId
+      supersedes: frozenSource.eventID
     )
     let approvalSource = try fixture.env.appendFeedback(
       subjectKind: .candidate,
@@ -190,7 +195,7 @@ import Testing
     let outcome = try fixture.env.learning.approveCandidate(
       CandidateApproval(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: approvalSource.eventId
+        feedbackEventID: approvalSource.eventID
       ),
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
@@ -203,7 +208,8 @@ import Testing
     #expect(try fixture.env.learning.candidateArtifact(digest: predecessor.digest) == predecessor)
   }
 
-  @Test func editVetoesTheOldTrialAndPersistsOnlyAnAwaitingSuccessor() throws {
+  @Test
+  func editVetoesTheOldTrialAndPersistsOnlyAnAwaitingSuccessor() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -212,7 +218,7 @@ import Testing
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
-    let oldTrial = try #require(admitted.admissionReceipt).trialId
+    let oldTrial = try #require(admitted.admissionReceipt).trialID
     let editedLesson = "Keep the exact owner-edited instruction."
     let payloadText = #"{"lessons":["\#(editedLesson)"]}"#
     let payload = Data(payloadText.utf8)
@@ -227,7 +233,7 @@ import Testing
     let outcome = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: control.eventId,
+        feedbackEventID: control.eventID,
         payload: payload
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -245,12 +251,13 @@ import Testing
     #expect(successor.manifest.predecessorFeedback == control)
     #expect(try fixture.trial(oldTrial).state == LearningTrialState.fellBack.rawValue)
     #expect(try fixture.env.terminalDecisionCount() == 1)
-    #expect(try fixture.env.learning.openTrial(jobId: fixture.env.jobId) == nil)
+    #expect(try fixture.env.learning.openTrial(jobID: fixture.env.jobID) == nil)
     #expect(try fixture.env.countRows(in: "learning_trials") == 1)
     #expect(try fixture.env.countRows(in: "learning_candidates") == 2)
   }
 
-  @Test func invalidOrSecretEditBytesNeverReachCandidateOrLessonRows() throws {
+  @Test
+  func invalidOrSecretEditBytesNeverReachCandidateOrLessonRows() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -268,7 +275,7 @@ import Testing
     let outcome = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: control.eventId,
+        feedbackEventID: control.eventID,
         payload: payload
       ),
       redactor: SecretRedactor(secretValues: ["loaded-secret"]),
@@ -281,7 +288,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "lesson_sets") == lessonCount)
   }
 
-  @Test func lateAuditFailureRollsBackTrialPointerAndReceipt() throws {
+  @Test
+  func lateAuditFailureRollsBackTrialPointerAndReceipt() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let artifact = try fixture.persistedCandidate()
@@ -299,10 +307,11 @@ import Testing
     // then — a transaction ending before audit would strand a partially admitted candidate.
     #expect(try fixture.env.countRows(in: "learning_trials") == 0)
     #expect(try fixture.env.countRows(in: "learning_decisions") == 0)
-    #expect(try fixture.env.currentLearningState().openTrialId == nil)
+    #expect(try fixture.env.currentLearningState().openTrialID == nil)
   }
 
-  @Test func lateAdmissionFailureAlsoRollsBackAnApprovalSuccessor() throws {
+  @Test
+  func lateAdmissionFailureAlsoRollsBackAnApprovalSuccessor() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -316,10 +325,7 @@ import Testing
     // when
     #expect(throws: StoreError.self) {
       _ = try fixture.env.learning.approveCandidate(
-        CandidateApproval(
-          predecessorDigest: predecessor.digest,
-          feedbackEventId: control.eventId
-        ),
+        CandidateApproval(predecessorDigest: predecessor.digest, feedbackEventID: control.eventID),
         redactor: SecretRedactor(secretValues: []),
         now: fixture.env.now
       )
@@ -331,7 +337,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "learning_decisions") == 0)
   }
 
-  @Test func candidateReviewCommitIsAtomicAndIdempotent() throws {
+  @Test
+  func candidateReviewCommitIsAtomicAndIdempotent() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let now = fixture.env.now
@@ -357,14 +364,13 @@ import Testing
     #expect(try fixture.env.countRows(in: "feedback_targets") == review.targets.count)
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries + 1)
     let delivery = try fixture.reviewDelivery()
-    #expect(
-      delivery.key == OutboxDedupKey.make(subjectDigest: review.subjectDigest, ordinal: 0)
-    )
-    #expect(delivery.runId == nil)
+    #expect(delivery.key == OutboxDedupKey.make(subjectDigest: review.subjectDigest, ordinal: 0))
+    #expect(delivery.runID == nil)
     #expect(delivery.source == DeliverySource.learning.rawValue)
   }
 
-  @Test func reviewTargetFailureRollsBackEveryRunlessChunk() throws {
+  @Test
+  func reviewTargetFailureRollsBackEveryRunlessChunk() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let candidate = try fixture.persistedCandidate()
@@ -374,11 +380,7 @@ import Testing
       now: fixture.env.now
     )
     try fixture.failReviewTarget()
-    let review = fixture.review(
-      candidate: candidate,
-      state: .admitted,
-      now: fixture.env.now
-    )
+    let review = fixture.review(candidate: candidate, state: .admitted, now: fixture.env.now)
     let deliveries = try fixture.env.countRows(in: "outbound_deliveries")
 
     // when / then — committing the outbox before targets would leave a live button with no nonce.
@@ -389,6 +391,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "outbound_deliveries") == deliveries)
   }
 }
+
+// MARK: - Admission Receipt Inspection
 
 private extension AdmissionOutcome {
   var admissionReceipt: AdmissionReceipt? {

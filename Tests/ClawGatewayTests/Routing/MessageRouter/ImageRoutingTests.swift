@@ -15,22 +15,22 @@ private func photoUpdate(
   chatKind: ChatKind = .private
 ) -> RawUpdate {
   RawUpdate(
-    updateId: id,
+    updateID: id,
     message: RawMessage(
-      messageId: id,
-      fromUserId: from,
-      chatId: chat ?? from,
+      messageID: id,
+      fromUserID: from,
+      chatID: chat ?? from,
       text: nil,
       caption: caption,
       mediaKind: PhotoAttachment.mediaKindDescription,
       photo: PhotoAttachment(sizes: [
         PhotoSize(
-          fileId: "photo-\(id)",
-          fileUniqueId: "u-\(id)",
+          fileID: "photo-\(id)",
+          fileUniqueID: "u-\(id)",
           width: 1280,
           height: 960,
           fileSizeBytes: 186_422
-        )
+        ),
       ]),
       chatKind: chatKind
     ),
@@ -38,7 +38,8 @@ private func photoUpdate(
   )
 }
 
-@Suite struct ImageRoutingTests {
+@Suite
+struct ImageRoutingTests {
   private struct Harness {
     let router: MessageRouter
     let transport: RecordingTransport
@@ -64,7 +65,7 @@ private func photoUpdate(
   ) throws -> Harness {
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: allowed)
+    try allowlist.seedAllowlist(userIDs: allowed)
 
     let transport = RecordingTransport()
     let dispatcher = FakeTurnRunner()
@@ -106,7 +107,8 @@ private func photoUpdate(
     )
   }
 
-  @Test func ownerPhotoDispatchesAnUntrustedTurnAndCachesTheBytes() async throws {
+  @Test
+  func ownerPhotoDispatchesAnUntrustedTurnAndCachesTheBytes() async throws {
     // given
     let harness = try makeHarness(allowed: [42])
 
@@ -122,8 +124,8 @@ private func photoUpdate(
     #expect(await harness.transport.sent.isEmpty)
     let call = try #require(await harness.dispatcher.calls.first)
     let snapshot = try harness.sessionMessages.loadContextSnapshot(
-      sessionId: call.sessionId,
-      throughMessageId: call.triggerMessageId,
+      sessionID: call.sessionID,
+      throughMessageID: call.triggerMessageID,
       limit: 10
     )
     // The marker leads even when captioned — the row's only surviving evidence that it carried a
@@ -135,17 +137,18 @@ private func photoUpdate(
           role: .user,
           content: "\(ImageMarkers.barePhoto) Что это?",
           provenance: .untrusted
-        )
+        ),
       ]
     )
     #expect(snapshot.isTainted)
 
     // … and the bytes are waiting on the row the turn was triggered by
-    let cached = await harness.cache.images(sessionId: call.sessionId)
-    #expect(cached == [call.triggerMessageId: fetched])
+    let cached = await harness.cache.images(sessionID: call.sessionID)
+    #expect(cached == [call.triggerMessageID: fetched])
   }
 
-  @Test func aBarePhotoPersistsThePlaceholderRatherThanAnEmptyRow() async throws {
+  @Test
+  func aBarePhotoPersistsThePlaceholderRatherThanAnEmptyRow() async throws {
     // given — no caption at all
     let harness = try makeHarness(allowed: [42])
 
@@ -157,14 +160,15 @@ private func photoUpdate(
     #expect(outcome == .processed)
     let call = try #require(await harness.dispatcher.calls.first)
     let snapshot = try harness.sessionMessages.loadContextSnapshot(
-      sessionId: call.sessionId,
-      throughMessageId: call.triggerMessageId,
+      sessionID: call.sessionID,
+      throughMessageID: call.triggerMessageID,
       limit: 10
     )
     #expect(snapshot.history.map(\.content) == [ImageMarkers.barePhoto])
   }
 
-  @Test func aCaptionIsNeverParsedAsACommand() async throws {
+  @Test
+  func aCaptionIsNeverParsedAsACommand() async throws {
     // given — a caption that reads exactly like /stop
     let harness = try makeHarness(allowed: [42])
 
@@ -180,14 +184,15 @@ private func photoUpdate(
     #expect(await harness.dispatcher.calls.count == 1)
   }
 
-  @Test func aCaptionNeverResolvesAParkedConfirmation() async throws {
+  @Test
+  func aCaptionNeverResolvesAParkedConfirmation() async throws {
     // given — a parked yes/no confirmation, and a photo captioned exactly "yes"
     let harness = try makeHarness(allowed: [42])
-    let sessionId = try harness.sessionMessages.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+    let sessionID = try harness.sessionMessages.loadOrCreateSession(
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date()
     )
-    await harness.pendingConfirmations.park(.deleteItem(id: 7), sessionId: sessionId)
+    await harness.pendingConfirmations.park(.deleteItem(id: 7), sessionID: sessionID)
 
     // when
     let outcome = await harness.router.handle(
@@ -197,13 +202,14 @@ private func photoUpdate(
     // then — a caption commits nothing: the confirmation stays parked and the photo became an
     // ordinary turn
     #expect(outcome == .processed)
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) != nil)
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) != nil)
     #expect(await harness.transport.sent.isEmpty)
     await harness.dispatcher.waitForCalls(atLeast: 1)
     #expect(await harness.dispatcher.calls.count == 1)
   }
 
-  @Test func theOwnerSeesTypingWhileThePhotoDownloads() async throws {
+  @Test
+  func theOwnerSeesTypingWhileThePhotoDownloads() async throws {
     // given
     let typing = RecordingTyping()
     let harness = try makeHarness(allowed: [42], typing: typing)
@@ -217,7 +223,8 @@ private func photoUpdate(
     #expect(await typing.calls == 1)
   }
 
-  @Test func aStrangerNeverSeesTyping() async throws {
+  @Test
+  func aStrangerNeverSeesTyping() async throws {
     // given — a pulse would confirm the bot is live to someone who must learn nothing
     let typing = RecordingTyping()
     let harness = try makeHarness(allowed: [42], typing: typing)
@@ -229,7 +236,8 @@ private func photoUpdate(
     #expect(await typing.calls == 0)
   }
 
-  @Test func aDisabledImageServiceNeverPulsesTyping() async throws {
+  @Test
+  func aDisabledImageServiceNeverPulsesTyping() async throws {
     // given — the canned "can't read photos yet" reply is instant, not work in progress
     let typing = RecordingTyping()
     let harness = try makeHarness(allowed: [42], imagesEnabled: false, typing: typing)
@@ -241,7 +249,8 @@ private func photoUpdate(
     #expect(await typing.calls == 0)
   }
 
-  @Test func strangerPhotoGetsPrivateBotReplyAndNeverDownloads() async throws {
+  @Test
+  func strangerPhotoGetsPrivateBotReplyAndNeverDownloads() async throws {
     // given
     let fetcher = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
     let harness = try makeHarness(allowed: [42], fetcher: fetcher)
@@ -256,7 +265,8 @@ private func photoUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func strangerPhotoWithImagesDisabledStillGetsPrivateBotReply() async throws {
+  @Test
+  func strangerPhotoWithImagesDisabledStillGetsPrivateBotReply() async throws {
     // given — the access check must outrank the service-availability check
     let harness = try makeHarness(allowed: [42], imagesEnabled: false)
 
@@ -269,7 +279,8 @@ private func photoUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func aBarePhotoWithoutAServiceGetsTheCannedUnsupportedReply() async throws {
+  @Test
+  func aBarePhotoWithoutAServiceGetsTheCannedUnsupportedReply() async throws {
     // given — no image service, and nothing but the photo: the bare arm of the opted-out fork
     let harness = try makeHarness(allowed: [42], imagesEnabled: false)
 
@@ -281,13 +292,14 @@ private func photoUpdate(
     let sent = await harness.transport.sent
     #expect(
       sent.map(\.text) == [
-        MessageRouter.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
+        MessageRouter.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription),
       ]
     )
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func aCaptionedPhotoWithoutAServiceStillAnswersTheOwnersQuestion() async throws {
+  @Test
+  func aCaptionedPhotoWithoutAServiceStillAnswersTheOwnersQuestion() async throws {
     // given — the configuration the product itself recommends to an owner on a text-only model.
     // Their caption is a real question and must not be swallowed by the canned reply.
     let harness = try makeHarness(allowed: [42], imagesEnabled: false)
@@ -307,8 +319,8 @@ private func photoUpdate(
     #expect(outcome == .processed)
     let call = try #require(await harness.dispatcher.calls.first)
     let snapshot = try harness.sessionMessages.loadContextSnapshot(
-      sessionId: call.sessionId,
-      throughMessageId: call.triggerMessageId,
+      sessionID: call.sessionID,
+      throughMessageID: call.triggerMessageID,
       limit: 10
     )
     #expect(
@@ -317,25 +329,26 @@ private func photoUpdate(
           role: .user,
           content: "\(ImageMarkers.barePhoto) what does this say",
           provenance: .untrusted
-        )
+        ),
       ]
     )
     #expect(snapshot.isTainted)
 
     // … and no bytes were cached, so assembly renders the unavailable notice rather than letting the
     // model answer about pixels that were never downloaded
-    #expect(await harness.cache.images(sessionId: call.sessionId).isEmpty)
+    #expect(await harness.cache.images(sessionID: call.sessionID).isEmpty)
   }
 
-  @Test func aCaptionWithoutAServiceIsStillNeverParsedAsACommand() async throws {
+  @Test
+  func aCaptionWithoutAServiceIsStillNeverParsedAsACommand() async throws {
     // given — the opted-out path reaches dispatch, so it must clear the same bar as the enabled
     // one: a caption is untrusted content, never owner intent
     let harness = try makeHarness(allowed: [42], imagesEnabled: false)
-    let sessionId = try harness.sessionMessages.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+    let sessionID = try harness.sessionMessages.loadOrCreateSession(
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date()
     )
-    await harness.pendingConfirmations.park(.deleteItem(id: 7), sessionId: sessionId)
+    await harness.pendingConfirmations.park(.deleteItem(id: 7), sessionID: sessionID)
 
     // when — a caption that reads exactly like a confirmation
     let outcome = await harness.router.handle(
@@ -344,13 +357,14 @@ private func photoUpdate(
 
     // then — nothing was committed and the confirmation stays parked
     #expect(outcome == .processed)
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) != nil)
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) != nil)
     try #require(await harness.transport.sent.isEmpty)
     await harness.dispatcher.waitForCalls(atLeast: 1)
     #expect(await harness.dispatcher.calls.count == 1)
   }
 
-  @Test func downloadFailureGetsItsMappedReplyAndNoTurn() async throws {
+  @Test
+  func downloadFailureGetsItsMappedReplyAndNoTurn() async throws {
     // given
     let harness = try makeHarness(allowed: [42], fetcher: StubMediaFetcher.failing)
 
@@ -364,7 +378,8 @@ private func photoUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func undecodableBytesGetTheirMappedReplyAndNoTurn() async throws {
+  @Test
+  func undecodableBytesGetTheirMappedReplyAndNoTurn() async throws {
     // given — a body that is not an image at all
     let harness = try makeHarness(
       allowed: [42],
@@ -380,7 +395,8 @@ private func photoUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func onePhotoCrossesFromTheRouterThatDepositedItToTheRunnerThatReplaysIt() async throws {
+  @Test
+  func onePhotoCrossesFromTheRouterThatDepositedItToTheRunnerThatReplaysIt() async throws {
     // given — a stack wired the way the composition root wires it: one cache, both ends
     let queue = try TestDatabase.make()
     let stack = try makeStack(
@@ -394,7 +410,7 @@ private func photoUpdate(
 
     // when — one photo goes in the front door and the lane runs the turn it dispatched
     let outcome = await stack.router.handle(
-      rawUpdate: photoUpdate(id: 1, from: stack.chatId, caption: "Что это?")
+      rawUpdate: photoUpdate(id: 1, from: stack.chatID, caption: "Что это?")
     )
     await stack.provider.waitForRequestCount(1)
 
@@ -409,7 +425,8 @@ private func photoUpdate(
     #expect(carrying.first?.content.images == [fetched])
   }
 
-  @Test func shutdownCancellationLeavesThePhotoUpdateUnclaimedForRedelivery() async throws {
+  @Test
+  func shutdownCancellationLeavesThePhotoUpdateUnclaimedForRedelivery() async throws {
     // given — a download parked mid-flight when graceful shutdown cancels the intake task
     let harness = try makeHarness(allowed: [42], fetcher: ParkUntilCancelledFetcher())
     let update = photoUpdate(id: 1, from: 42)
@@ -433,10 +450,11 @@ private func photoUpdate(
     #expect(redelivered == .processed)
     await harness.dispatcher.waitForCalls(atLeast: 1)
     let call = try #require(await harness.dispatcher.calls.first)
-    #expect(await harness.cache.images(sessionId: call.sessionId).isEmpty == false)
+    #expect(await harness.cache.images(sessionID: call.sessionID).isEmpty == false)
   }
 
-  @Test func anUnaddressedGroupPhotoIsNeverFetched() async throws {
+  @Test
+  func anUnaddressedGroupPhotoIsNeverFetched() async throws {
     // given — a slide posted to the room, naming nobody
     let fetcher = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001], fetcher: fetcher)
@@ -453,7 +471,8 @@ private func photoUpdate(
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func aGroupPhotoCaptionedWithAMentionIsFetched() async throws {
+  @Test
+  func aGroupPhotoCaptionedWithAMentionIsFetched() async throws {
     // given — the same slide, this time captioned at the bot
     let fetcher = StubMediaFetcher(result: .success(ImageFixtures.jpeg))
     let harness = try makeHarness(allowed: [42], groupChats: [-1_001], fetcher: fetcher)

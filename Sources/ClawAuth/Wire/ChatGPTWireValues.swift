@@ -11,14 +11,10 @@ package enum ChatGPTWireValues {
   /// poll loop, is rejected rather than coerced.
   static func positiveInteger(_ value: JSONValue) -> Int? {
     switch value {
-    case .integer(let integer):
-      return integer > 0 && integer < Int.max ? integer : nil
-    case .number(let number):
-      return positiveInteger(fromNumber: number)
-    case .string(let text):
-      return positiveInteger(fromDecimalString: text)
-    case .null, .bool, .array, .object:
-      return nil
+    case .integer(let integer): return integer > 0 && integer < Int.max ? integer : nil
+    case .number(let number): return positiveInteger(fromNumber: number)
+    case .string(let text): return positiveInteger(fromDecimalString: text)
+    case .null, .bool, .array, .object: return nil
     }
   }
 
@@ -53,11 +49,9 @@ package enum ChatGPTWireValues {
   /// Order is load-bearing. Sanitizing precedes redaction so that text which only *becomes* a
   /// secret once its escapes are stripped is still matched, and truncation comes last so it can
   /// only ever cut a placeholder rather than expose the prefix of a token that outran the bound.
-  package static func safeRemoteDiagnostic(
-    _ raw: String,
-    redacting values: [String],
-    maxBytes: Int
-  ) -> String {
+  package static func safeRemoteDiagnostic(_ raw: String, redacting values: [String], maxBytes: Int)
+    -> String
+  {
     let sanitized = collapsingWhitespace(strippingControls(strippingEscapeSequences(raw)))
     let redacted = SecretRedactor(secretValues: values).redact(sanitized)
     return truncating(redacted, toBytes: maxBytes)
@@ -100,13 +94,9 @@ private extension ChatGPTWireValues {
     scalar.value <= 0x1F || (0x7F...0x9F).contains(scalar.value)
   }
 
-  static func isWhitespace(_ scalar: Unicode.Scalar) -> Bool {
-    scalar.properties.isWhitespace
-  }
+  static func isWhitespace(_ scalar: Unicode.Scalar) -> Bool { scalar.properties.isWhitespace }
 
-  static func isASCIIDigit(_ scalar: Unicode.Scalar) -> Bool {
-    ("0"..."9").contains(scalar)
-  }
+  static func isASCIIDigit(_ scalar: Unicode.Scalar) -> Bool { ("0"..."9").contains(scalar) }
 }
 
 // MARK: - Positive Integer Parsing
@@ -175,10 +165,8 @@ private extension ChatGPTWireValues {
     }
     scalars = scalars.dropFirst()
     switch introducer {
-    case "[":
-      consumeControlSequence(&scalars)
-    case "]":
-      consumeOperatingSystemCommand(&scalars)
+    case "[": consumeControlSequence(&scalars)
+    case "]": consumeOperatingSystemCommand(&scalars)
     default:
       // A two-character escape: the introducer was the whole sequence.
       break

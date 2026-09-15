@@ -62,28 +62,28 @@ public enum ChatMembershipChange: Sendable, Equatable {
 /// Its whole purpose is the operator-facing log — being added to a room is the only moment the
 /// chat id that would have to go into `CLAW_GROUP_CHATS` is announced.
 public struct RawChatMemberUpdate: Sendable, Equatable {
-  public let chatId: Int64
+  public let chatID: Int64
   public let chatKind: ChatKind
   public let chatTitle: String?
   /// Who made the change. Absent when Telegram reports one with no acting user.
-  public let actorUserId: Int64?
+  public let actorUserID: Int64?
   public let actorDisplayName: String?
   public let oldStatus: ChatMembershipStatus
   public let newStatus: ChatMembershipStatus
 
   public init(
-    chatId: Int64,
+    chatID: Int64,
     chatKind: ChatKind,
     chatTitle: String? = nil,
-    actorUserId: Int64? = nil,
+    actorUserID: Int64? = nil,
     actorDisplayName: String? = nil,
     oldStatus: ChatMembershipStatus,
     newStatus: ChatMembershipStatus
   ) {
-    self.chatId = chatId
+    self.chatID = chatID
     self.chatKind = chatKind
     self.chatTitle = chatTitle
-    self.actorUserId = actorUserId
+    self.actorUserID = actorUserID
     self.actorDisplayName = actorDisplayName
     self.oldStatus = oldStatus
     self.newStatus = newStatus
@@ -99,7 +99,5 @@ public struct RawChatMemberUpdate: Sendable, Equatable {
 
   /// Two statuses on the same side of the door: a rights change while in the chat, and nothing
   /// worth a distinct word while out of it (left → kicked is still gone).
-  private var sameSideChange: ChatMembershipChange {
-    newStatus.isPresent ? .updated : .unchanged
-  }
+  private var sameSideChange: ChatMembershipChange { newStatus.isPresent ? .updated : .unchanged }
 }

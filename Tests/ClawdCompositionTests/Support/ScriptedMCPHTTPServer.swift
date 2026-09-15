@@ -75,21 +75,14 @@ actor ScriptedMCPHTTPServer: HTTPExecuting, HTTPStreaming {
     let reply = try answer(to: request.body ?? Data())
     let head = HTTPStreamHead(
       statusCode: reply.status,
-      headers: [
-        "Content-Type": "application/json",
-        "Mcp-Session-Id": Self.sessionID,
-      ]
+      headers: ["Content-Type": "application/json", "Mcp-Session-Id": Self.sessionID]
     )
 
     return HTTPStreamExchange.make(head: head, maximumUnreadBodyBytes: maximumUnreadBytes) { sink in
       guard reply.body.isEmpty == false else {
         return .completed
       }
-      do {
-        try await sink.send(reply.body)
-      } catch {
-        return .cancelled(.mayHaveBeenSent)
-      }
+      do { try await sink.send(reply.body) } catch { return .cancelled(.mayHaveBeenSent) }
       return .completed
     }
   }
@@ -111,23 +104,18 @@ private extension ScriptedMCPHTTPServer {
     }
 
     switch method {
-    case "initialize":
-      return (200, try response(id: id, result: initializeResult()))
-    case "tools/list":
-      return (200, try response(id: id, result: try listResult()))
+    case "initialize": return (200, try response(id: id, result: initializeResult()))
+    case "tools/list": return (200, try response(id: id, result: try listResult()))
     case "tools/call":
       let parameters = message["params"] as? [String: Any] ?? [:]
       calledTools.append(parameters["name"] as? String ?? "")
       return (200, try response(id: id, result: callResult()))
-    default:
-      return (200, try response(id: id, result: [:]))
+    default: return (200, try response(id: id, result: [:]))
     }
   }
 
   func response(id: Any, result: [String: Any]) throws -> Data {
-    try JSONSerialization.data(
-      withJSONObject: ["jsonrpc": "2.0", "id": id, "result": result]
-    )
+    try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": id, "result": result])
   }
 
   func initializeResult() -> [String: Any] {
@@ -146,14 +134,13 @@ private extension ScriptedMCPHTTPServer {
           "description": tool.description,
           "inputSchema": try JSONSerialization.jsonObject(with: Data(tool.schemaJSON.utf8)),
         ]
-      }
+      },
     ]
   }
 
   func callResult() -> [String: Any] {
     switch outcome {
-    case .text(let text):
-      return ["content": [["type": "text", "text": text]], "isError": false]
+    case .text(let text): return ["content": [["type": "text", "text": text]], "isError": false]
     case .reportedFailure(let text):
       return ["content": [["type": "text", "text": text]], "isError": true]
     }

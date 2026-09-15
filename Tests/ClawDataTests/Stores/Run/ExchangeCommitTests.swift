@@ -6,12 +6,13 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct ExchangeCommitTests {
+@Suite
+struct ExchangeCommitTests {
   private struct Fixture {
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
-    let sessionId: Int64
-    let runId: Int64
+    let sessionID: Int64
+    let runID: Int64
   }
 
   /// One RUNNING run with its inbound user message, ready to commit against.
@@ -20,39 +21,39 @@ import Testing
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
+        updateID: 1,
         sessionKey: "tg:dm:7",
-        chatId: 7,
-        userId: 7,
+        chatID: 7,
+        userID: 7,
         text: "read a page",
         isEdited: false,
         ts: Date()
       )
     )
     let runs = RunStoreGRDB(writer: queue)
-    let runId = claim.runId ?? 0
-    _ = try #require(try runs.pickUp(runId: runId, now: Date()))
-    return Fixture(queue: queue, runs: runs, sessionId: claim.sessionId ?? 0, runId: runId)
+    let runID = claim.runID ?? 0
+    _ = try #require(try runs.pickUp(runID: runID, now: Date()))
+    return Fixture(queue: queue, runs: runs, sessionID: claim.sessionID ?? 0, runID: runID)
   }
 
   private func makeUsage(_ fixture: Fixture) -> ProviderUsage {
-    makeProviderUsage(runId: fixture.runId, sessionId: fixture.sessionId)
+    makeProviderUsage(runID: fixture.runID, sessionID: fixture.sessionID)
   }
 
   private func makeExchange() -> ToolExchange {
     ToolExchange(
       assistantContent: "let me fetch that",
       toolCalls: [
-        ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#)
+        ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#),
       ],
       observations: [
         ToolObservation(
-          callId: "c1",
+          callID: "c1",
           toolName: "web_fetch",
           content: "raw page text",
           status: .ok,
           ingestedUntrusted: true
-        )
+        ),
       ]
     )
   }
@@ -62,22 +63,23 @@ import Testing
       try Bool.fetchOne(
         db,
         sql: "SELECT tainted FROM sessions WHERE id = ?",
-        arguments: [fixture.sessionId]
+        arguments: [fixture.sessionID]
       ) ?? false
     }
   }
 
-  @Test func commitWritesExchangeRowsInOrderThenReplyThenTaint() throws {
+  @Test
+  func commitWritesExchangeRowsInOrderThenReplyThenTaint() throws {
     // given
     let fixture = try makeRunningFixture()
     let turn = AssistantTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       content: "summary of the page",
       usage: makeUsage(fixture),
       chunks: [
-        OutboxChunk(stepIndex: 0, chatId: 7, payload: "summary of the page", payloadHash: "h")
+        OutboxChunk(stepIndex: 0, chatID: 7, payload: "summary of the page", payloadHash: "h"),
       ],
       exchanges: [makeExchange()],
       setTainted: true
@@ -92,56 +94,67 @@ import Testing
       try Row.fetchAll(
         db,
         sql: """
-          SELECT id, role, content, provenance, tool_calls, tool_call_id, run_id \
-          FROM messages ORDER BY id ASC
-          """
+        SELECT id, role, content, provenance, tool_calls, tool_call_id, run_id \
+        FROM messages ORDER BY id ASC
+        """
       )
     }
     // user inbound, exchange anchor, tool observation, final reply — count guards spurious rows
     #expect(rows.count == 4)
-    let assistantRows = rows.filter { ($0["role"] as String?) == "assistant" }
-    let toolRows = rows.filter { ($0["role"] as String?) == "tool" }
+    let assistantRows = rows.filter {
+      ($0["role"] as String?) == "assistant"
+    }
+    let toolRows = rows.filter {
+      ($0["role"] as String?) == "tool"
+    }
     #expect(assistantRows.count == 2)
     #expect(toolRows.count == 1)
 
     // the exchange anchor is the assistant row carrying the tool_calls
     let anchor = try #require(
-      assistantRows.first { ($0["tool_calls"] as String?)?.contains("web_fetch") == true }
+      assistantRows.first {
+        ($0["tool_calls"] as String?)?.contains("web_fetch") == true
+      }
     )
     #expect(anchor["provenance"] == "trusted")
-    #expect(anchor["run_id"] == fixture.runId)
+    #expect(anchor["run_id"] == fixture.runID)
 
     // the untrusted tool observation, raw and un-wrapped (§11)
     let toolRow = try #require(toolRows.first)
     #expect(toolRow["content"] == "raw page text")
     #expect(toolRow["provenance"] == "untrusted")
     #expect(toolRow["tool_call_id"] == "c1")
-    #expect(toolRow["run_id"] == fixture.runId)
+    #expect(toolRow["run_id"] == fixture.runID)
 
     // the final reply is the assistant row without tool_calls
-    let reply = try #require(assistantRows.first { ($0["tool_calls"] as String?) == nil })
+    let reply = try #require(
+      assistantRows.first {
+        ($0["tool_calls"] as String?) == nil
+      }
+    )
     #expect(reply["content"] == "summary of the page")
-    #expect(reply["run_id"] == fixture.runId)
+    #expect(reply["run_id"] == fixture.runID)
 
     // …InOrderThenReply: anchor → observation → reply by insertion id
-    let anchorId = try #require(anchor["id"] as Int64?)
-    let toolId = try #require(toolRow["id"] as Int64?)
-    let replyId = try #require(reply["id"] as Int64?)
-    #expect(anchorId < toolId)
-    #expect(toolId < replyId)
+    let anchorID = try #require(anchor["id"] as Int64?)
+    let toolID = try #require(toolRow["id"] as Int64?)
+    let replyID = try #require(reply["id"] as Int64?)
+    #expect(anchorID < toolID)
+    #expect(toolID < replyID)
     #expect(try isTainted(fixture))
   }
 
-  @Test func committedTurnWithoutIngestionDoesNotTaint() throws {
+  @Test
+  func committedTurnWithoutIngestionDoesNotTaint() throws {
     // given
     let fixture = try makeRunningFixture()
     let turn = AssistantTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       content: "plain",
       usage: makeUsage(fixture),
-      chunks: [OutboxChunk(stepIndex: 0, chatId: 7, payload: "plain", payloadHash: "h")]
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "plain", payloadHash: "h")]
     )
 
     // when
@@ -151,15 +164,16 @@ import Testing
     #expect(try isTainted(fixture) == false)
   }
 
-  @Test func degradedCommitStillTaints() throws {
+  @Test
+  func degradedCommitStillTaints() throws {
     // given — spec §10: a degraded turn that ingested content persists the taint (amendment F)
     let fixture = try makeRunningFixture()
     let turn = DegradedTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       usage: makeUsage(fixture),
-      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
+      chunk: OutboxChunk(stepIndex: 0, chatID: 7, payload: "degraded", payloadHash: "h"),
       setTainted: true,
       cause: .providerFailure
     )
@@ -176,15 +190,16 @@ import Testing
     #expect(toolRows == 0)
   }
 
-  @Test func degradedCommitPersistsExecutedExchanges() throws {
+  @Test
+  func degradedCommitPersistsExecutedExchanges() throws {
     // given — a run that executed one exchange, then degraded: the work must survive
     let fixture = try makeRunningFixture()
     let turn = DegradedTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       usage: makeUsage(fixture),
-      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
+      chunk: OutboxChunk(stepIndex: 0, chatID: 7, payload: "degraded", payloadHash: "h"),
       exchanges: [makeExchange()],
       setTainted: true,
       cause: .providerFailure
@@ -204,31 +219,29 @@ import Testing
     }
     #expect(anchors == 1)
     let toolRows = try fixture.queue.read { db in
-      try Row.fetchAll(
-        db,
-        sql: "SELECT provenance, tool_call_id FROM messages WHERE role = 'tool'"
-      )
+      try Row.fetchAll(db, sql: "SELECT provenance, tool_call_id FROM messages WHERE role = 'tool'")
     }
     #expect(toolRows.count == 1)
     #expect(toolRows.first?["provenance"] == "untrusted")
     #expect(toolRows.first?["tool_call_id"] == "c1")
   }
 
-  @Test func cancelledArbitrationArmStillTaints() throws {
+  @Test
+  func cancelledArbitrationArmStillTaints() throws {
     // given — /stop won the race (rev.1 M1: CANCELLED taints)
     let fixture = try makeRunningFixture()
     _ = try CommandStoreGRDB(writer: fixture.queue).applyStop(
-      updateId: 100,
-      sessionKey: SessionKey.telegramDM(chatId: 7),
+      updateID: 100,
+      sessionKey: SessionKey.telegramDM(chatID: 7),
       now: Date()
     )
     let turn = AssistantTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       content: "late",
       usage: makeUsage(fixture),
-      chunks: [OutboxChunk(stepIndex: 0, chatId: 7, payload: "late", payloadHash: "h")],
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "late", payloadHash: "h")],
       exchanges: [makeExchange()],
       setTainted: true
     )
@@ -245,21 +258,22 @@ import Testing
     #expect(messageCount == 1)  // only the inbound user message
   }
 
-  @Test func supersededArbitrationArmNeverRetaints() throws {
+  @Test
+  func supersededArbitrationArmNeverRetaints() throws {
     // given — /new won the race; detaint already ran (rev.1 M1: SUPERSEDED skips)
     let fixture = try makeRunningFixture()
     _ = try CommandStoreGRDB(writer: fixture.queue).applyNew(
-      updateId: 100,
-      sessionKey: SessionKey.telegramDM(chatId: 7),
+      updateID: 100,
+      sessionKey: SessionKey.telegramDM(chatID: 7),
       now: Date()
     )
     let turn = AssistantTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       content: "late",
       usage: makeUsage(fixture),
-      chunks: [OutboxChunk(stepIndex: 0, chatId: 7, payload: "late", payloadHash: "h")],
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "late", payloadHash: "h")],
       setTainted: true
     )
 
@@ -271,20 +285,21 @@ import Testing
     #expect(try isTainted(fixture) == false)
   }
 
-  @Test func cancelledNilUsageDegradedCommitStillTaints() throws {
+  @Test
+  func cancelledNilUsageDegradedCommitStillTaints() throws {
     // given — cancellation raced a degraded turn that has no usage row to record
     let fixture = try makeRunningFixture()
     _ = try CommandStoreGRDB(writer: fixture.queue).applyStop(
-      updateId: 100,
-      sessionKey: SessionKey.telegramDM(chatId: 7),
+      updateID: 100,
+      sessionKey: SessionKey.telegramDM(chatID: 7),
       now: Date()
     )
     let turn = DegradedTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       usage: nil,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "late", payloadHash: "h"),
+      chunk: OutboxChunk(stepIndex: 0, chatID: 7, payload: "late", payloadHash: "h"),
       setTainted: true,
       cause: .providerFailure
     )
@@ -323,6 +338,7 @@ extension ExchangeCommitTests {
     issuer: "openai-chatgpt-responses-v1:final",
     payload: finalPayload
   )
+
   static let exchangeState = ProviderExchangeState(
     issuer: "openai-chatgpt-responses-v1:exchange",
     payload: exchangePayload
@@ -330,14 +346,11 @@ extension ExchangeCommitTests {
 
   /// The persisted state pair of every message row, oldest first, read back as raw storage so a
   /// coerced or half-written pair is visible rather than papered over by a typed decode.
-  private func persistedStates(
-    _ fixture: Fixture
-  ) throws -> [(role: String, state: DatabaseValue)] {
+  private func persistedStates(_ fixture: Fixture) throws -> [(role: String, state: DatabaseValue)]
+  {
     try fixture.queue.read { db in
-      try Row.fetchAll(
-        db,
-        sql: "SELECT role, provider_state FROM messages ORDER BY id ASC"
-      ).map { row in
+      try Row.fetchAll(db, sql: "SELECT role, provider_state FROM messages ORDER BY id ASC").map {
+        (row) in
         (row["role"], row["provider_state"])
       }
     }
@@ -347,16 +360,16 @@ extension ExchangeCommitTests {
     ToolExchange(
       assistantContent: "let me fetch that",
       toolCalls: [
-        ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#)
+        ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#),
       ],
       observations: [
         ToolObservation(
-          callId: "c1",
+          callID: "c1",
           toolName: "web_fetch",
           content: "raw page text",
           status: .ok,
           ingestedUntrusted: true
-        )
+        ),
       ],
       providerState: Self.exchangeState
     )
@@ -364,23 +377,24 @@ extension ExchangeCommitTests {
 
   private func loadedHistory(_ fixture: Fixture) throws -> [StoredMessage] {
     try SessionMessageStoreGRDB(writer: fixture.queue).loadContextSnapshot(
-      sessionId: fixture.sessionId,
-      throughMessageId: Int64.max,
+      sessionID: fixture.sessionID,
+      throughMessageID: Int64.max,
       limit: 50
     ).history
   }
 
-  @Test func aCompletedCommitPersistsTheFinalStateAndEachExchangeState() throws {
+  @Test
+  func aCompletedCommitPersistsTheFinalStateAndEachExchangeState() throws {
     // given
     let fixture = try makeRunningFixture()
     let turn = AssistantTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       content: "summary of the page",
       usage: makeUsage(fixture),
       chunks: [
-        OutboxChunk(stepIndex: 0, chatId: 7, payload: "summary of the page", payloadHash: "h")
+        OutboxChunk(stepIndex: 0, chatID: 7, payload: "summary of the page", payloadHash: "h"),
       ],
       exchanges: [statefulExchange()],
       providerState: Self.finalState
@@ -398,15 +412,16 @@ extension ExchangeCommitTests {
     #expect(history[3].providerState == Self.finalState)
   }
 
-  @Test func aDegradedCommitPersistsTheStateOfEveryExecutedExchange() throws {
+  @Test
+  func aDegradedCommitPersistsTheStateOfEveryExecutedExchange() throws {
     // given
     let fixture = try makeRunningFixture()
     let turn = DegradedTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       usage: makeUsage(fixture),
-      chunk: OutboxChunk(stepIndex: 0, chatId: 7, payload: "degraded", payloadHash: "h"),
+      chunk: OutboxChunk(stepIndex: 0, chatID: 7, payload: "degraded", payloadHash: "h"),
       exchanges: [statefulExchange()],
       cause: .providerFailure
     )
@@ -421,16 +436,17 @@ extension ExchangeCommitTests {
     #expect(history[2].providerState == nil)
   }
 
-  @Test func aCommitWithoutStateLeavesBothColumnsNull() throws {
+  @Test
+  func aCommitWithoutStateLeavesBothColumnsNull() throws {
     // given — a route that mints no replay state, i.e. every Chat Completions turn
     let fixture = try makeRunningFixture()
     let turn = AssistantTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       content: "plain",
       usage: makeUsage(fixture),
-      chunks: [OutboxChunk(stepIndex: 0, chatId: 7, payload: "plain", payloadHash: "h")],
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "plain", payloadHash: "h")],
       exchanges: [makeExchange()]
     )
 
@@ -442,26 +458,31 @@ extension ExchangeCommitTests {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT COUNT(*) AS total FROM messages
-          WHERE provider_state_issuer IS NOT NULL OR provider_state IS NOT NULL
-          """
+        SELECT COUNT(*) AS total FROM messages
+        WHERE provider_state_issuer IS NOT NULL OR provider_state IS NOT NULL
+        """
       )
     }
     #expect(pairs.first?["total"] == 0)
-    #expect(try loadedHistory(fixture).allSatisfy { message in message.providerState == nil })
+    #expect(
+      try loadedHistory(fixture).allSatisfy { message in
+        message.providerState == nil
+      }
+    )
   }
 
-  @Test func providerStateNeverReachesTheOwnerFacingOutbox() throws {
+  @Test
+  func providerStateNeverReachesTheOwnerFacingOutbox() throws {
     // given
     let fixture = try makeRunningFixture()
     let turn = AssistantTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       content: "summary of the page",
       usage: makeUsage(fixture),
       chunks: [
-        OutboxChunk(stepIndex: 0, chatId: 7, payload: "summary of the page", payloadHash: "h")
+        OutboxChunk(stepIndex: 0, chatID: 7, payload: "summary of the page", payloadHash: "h"),
       ],
       exchanges: [statefulExchange()],
       providerState: Self.finalState
@@ -483,16 +504,17 @@ extension ExchangeCommitTests {
     }
   }
 
-  @Test func toolObservationRowsNeverReceiveState() throws {
+  @Test
+  func toolObservationRowsNeverReceiveState() throws {
     // given — two exchanges, each with its own state and observation
     let fixture = try makeRunningFixture()
     let turn = AssistantTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       content: "done",
       usage: makeUsage(fixture),
-      chunks: [OutboxChunk(stepIndex: 0, chatId: 7, payload: "done", payloadHash: "h")],
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "done", payloadHash: "h")],
       exchanges: [statefulExchange(), statefulExchange()],
       providerState: Self.finalState
     )
@@ -505,6 +527,10 @@ extension ExchangeCommitTests {
     for entry in states where entry.role == MessageRole.tool.rawValue {
       #expect(entry.state.isNull)
     }
-    #expect(states.filter { entry in entry.state.isNull == false }.count == 3)
+    #expect(
+      states.filter { entry in
+        entry.state.isNull == false
+      }.count == 3
+    )
   }
 }

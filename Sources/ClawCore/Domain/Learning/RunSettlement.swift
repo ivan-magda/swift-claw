@@ -7,7 +7,7 @@ import Foundation
 /// that wins the state, always. `settledAt` is written only where a later primary fact is
 /// impossible; until it is set, usage, observations and live work may still land against the run.
 public struct RunSettlement: Sendable, Equatable {
-  public let runId: Int64
+  public let runID: Int64
   public let winningState: RunState
   public let terminalCause: TerminalCause
   public let terminalAt: Date
@@ -16,13 +16,13 @@ public struct RunSettlement: Sendable, Equatable {
   public let settledAt: Date?
 
   public init(
-    runId: Int64,
+    runID: Int64,
     winningState: RunState,
     terminalCause: TerminalCause,
     terminalAt: Date,
     settledAt: Date?
   ) {
-    self.runId = runId
+    self.runID = runID
     self.winningState = winningState
     self.terminalCause = terminalCause
     self.terminalAt = terminalAt
@@ -54,10 +54,10 @@ public enum TerminalDisposition: Sendable, Equatable {
   }
 }
 
-public extension CancelReason {
+extension CancelReason {
   /// The run event a command-driven termination raises. One switch, so `/stop` and `/new` cannot
   /// drift apart between the single-run and plural arms.
-  var runEvent: RunEvent {
+  public var runEvent: RunEvent {
     switch self {
     case .cancelled: .cancel
     case .superseded: .supersede
@@ -67,7 +67,7 @@ public extension CancelReason {
   /// The typed terminal cause the same termination records. Read off the caller's own reason, not
   /// reconstructed from the state it produced: `CANCELLED` and `SUPERSEDED` are the two states
   /// `RunState` happens to distinguish, and every other cause it cannot.
-  var terminalCause: TerminalCause {
+  public var terminalCause: TerminalCause {
     switch self {
     case .cancelled: .ownerCancelled
     case .superseded: .superseded

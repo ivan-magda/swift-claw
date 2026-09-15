@@ -17,11 +17,7 @@ struct LaneSettlement: Sendable {
   private let now: @Sendable () -> Date
   private let logger: Logger
 
-  init(
-    learning: ScheduledLearningService?,
-    now: @escaping @Sendable () -> Date,
-    logger: Logger
-  ) {
+  init(learning: ScheduledLearningService?, now: @escaping @Sendable () -> Date, logger: Logger) {
     self.learning = learning
     self.now = now
     self.logger = logger
@@ -36,10 +32,10 @@ struct LaneSettlement: Sendable {
   /// the composition carries no learning service.
   ///
   /// `log` lets a caller pass its run-stamped logger so lifecycle greps by `run=<id>` keep working.
-  func settle(runId: Int64, log: Logger? = nil) async {
+  func settle(runID: Int64, log: Logger? = nil) async {
     guard let learning else {
       return
     }
-    await learning.settleAndNotify(runId: runId, now: now(), log: log ?? logger)
+    await learning.settleAndNotify(runID: runID, now: now(), log: log ?? logger)
   }
 }

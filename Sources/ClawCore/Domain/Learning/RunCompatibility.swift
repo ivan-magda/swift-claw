@@ -39,8 +39,8 @@ public struct RunSurface: Sendable, Equatable {
 /// The stored `run_compatibility` row: the pickup-time surface, the job and epoch it belongs to,
 /// and the versions the sealer stamped when it froze the run's evidence.
 public struct RunCompatibility: Sendable, Equatable {
-  public let runId: Int64
-  public let jobId: Int64
+  public let runID: Int64
+  public let jobID: Int64
   public let epoch: LearningEpoch
   public let contextSchemaVersion: String
   public let toolCatalogDigest: String
@@ -53,8 +53,8 @@ public struct RunCompatibility: Sendable, Equatable {
   public let classifierVersion: String?
 
   public init(
-    runId: Int64,
-    jobId: Int64,
+    runID: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     contextSchemaVersion: String,
     toolCatalogDigest: String,
@@ -64,8 +64,8 @@ public struct RunCompatibility: Sendable, Equatable {
     evidenceSchemaVersion: String?,
     classifierVersion: String?
   ) {
-    self.runId = runId
-    self.jobId = jobId
+    self.runID = runID
+    self.jobID = jobID
     self.epoch = epoch
     self.contextSchemaVersion = contextSchemaVersion
     self.toolCatalogDigest = toolCatalogDigest
@@ -121,7 +121,7 @@ extension RunCompatibility {
   ) -> CompatibilityDigest {
     let fields = [
       Self.canonicalPrefix,
-      String(jobId),
+      String(jobID),
       String(epoch.value),
       binding.jobDefinitionDigest.rawValue,
       binding.stableDigest.rawValue,

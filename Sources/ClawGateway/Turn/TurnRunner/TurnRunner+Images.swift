@@ -4,8 +4,8 @@ import ClawCore
 
 extension TurnRunner {
   /// The images this session's inbound photos left behind, whatever survived eviction.
-  func cachedImages(sessionId: Int64) async -> [Int64: ImagePart] {
-    await imageCache.images(sessionId: sessionId)
+  func cachedImages(sessionID: Int64) async -> [Int64: ImagePart] {
+    await imageCache.images(sessionID: sessionID)
   }
 
   /// Moves cached images onto the history rows they arrived on, matching by message id while
@@ -15,21 +15,20 @@ extension TurnRunner {
   ///
   /// Budget selection runs after the match, not before, so the aggregate cap is only ever spent on
   /// images that actually landed inside the history window.
-  static func attach(
-    _ images: [Int64: ImagePart],
-    to snapshot: SessionContextSnapshot
-  ) -> SessionContextSnapshot {
+  static func attach(_ images: [Int64: ImagePart], to snapshot: SessionContextSnapshot)
+    -> SessionContextSnapshot
+  {
     guard images.isEmpty == false else {
       return snapshot
     }
 
-    let paired = min(snapshot.history.count, snapshot.historyMessageIds.count)
+    let paired = min(snapshot.history.count, snapshot.historyMessageIDs.count)
     var inWindow: [Int64: ImagePart] = [:]
-    for messageId in snapshot.historyMessageIds.prefix(paired) {
-      guard let image = images[messageId] else {
+    for messageID in snapshot.historyMessageIDs.prefix(paired) {
+      guard let image = images[messageID] else {
         continue
       }
-      inWindow[messageId] = image
+      inWindow[messageID] = image
     }
 
     let kept = ImageReplaySelection.affordable(
@@ -42,8 +41,8 @@ extension TurnRunner {
 
     let history = snapshot.history.enumerated().map { offset, message in
       guard
-        offset < snapshot.historyMessageIds.count,
-        let image = kept[snapshot.historyMessageIds[offset]]
+        offset < snapshot.historyMessageIDs.count,
+        let image = kept[snapshot.historyMessageIDs[offset]]
       else {
         return message
       }
@@ -52,7 +51,7 @@ extension TurnRunner {
         content: message.content,
         provenance: message.provenance,
         toolCallsJSON: message.toolCallsJSON,
-        toolCallId: message.toolCallId,
+        toolCallID: message.toolCallID,
         providerState: message.providerState,
         image: image
       )
@@ -61,8 +60,8 @@ extension TurnRunner {
     return SessionContextSnapshot(
       sessionKey: snapshot.sessionKey,
       history: history,
-      historyMessageIds: snapshot.historyMessageIds,
-      windowStartMessageId: snapshot.windowStartMessageId,
+      historyMessageIDs: snapshot.historyMessageIDs,
+      windowStartMessageID: snapshot.windowStartMessageID,
       isTainted: snapshot.isTainted,
       hasPrivateData: snapshot.hasPrivateData
     )

@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct SQLiteStoredValueTests {
-  @Test func exactStorageClassMatrix() throws {
+@Suite
+struct SQLiteStoredValueTests {
+  @Test
+  func exactStorageClassMatrix() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -14,21 +16,17 @@ import Testing
         try Row.fetchOne(
           db,
           sql: """
-            SELECT NULL AS null_value, 0 AS zero_value, 1 AS one_value, 2 AS two_value,
-              9223372036854775807 AS maximum_integer, 1.5 AS real_value,
-              '1' AS text_value, X'01' AS blob_value
-            """
+          SELECT NULL AS null_value, 0 AS zero_value, 1 AS one_value, 2 AS two_value,
+            9223372036854775807 AS maximum_integer, 1.5 AS real_value,
+            '1' AS text_value, X'01' AS blob_value
+          """
         )
       )
     }
 
     // when
-    let nullableInt64 = try #require(
-      SQLiteStoredValue.nullableInt64(in: row, column: "null_value")
-    )
-    let nullableInt = try #require(
-      SQLiteStoredValue.nullableInt(in: row, column: "null_value")
-    )
+    let nullableInt64 = try #require(SQLiteStoredValue.nullableInt64(in: row, column: "null_value"))
+    let nullableInt = try #require(SQLiteStoredValue.nullableInt(in: row, column: "null_value"))
     let nullableDouble = try #require(
       SQLiteStoredValue.nullableDouble(in: row, column: "null_value")
     )
@@ -56,6 +54,8 @@ import Testing
     #expect(doublesUseNumericStorageClasses(in: row))
   }
 }
+
+// MARK: - Stored Value Assertions
 
 private extension SQLiteStoredValueTests {
   func nonnullableDecodersRejectNull(in row: Row) -> Bool {
@@ -99,10 +99,8 @@ private extension SQLiteStoredValueTests {
     switch (expected, nullable) {
     case (.some(let expected), .some(let nullable)):
       return decoded == expected && nullable.value == expected
-    case (nil, nil):
-      return decoded == nil
-    default:
-      return false
+    case (nil, nil): return decoded == nil
+    default: return false
     }
   }
 
@@ -116,16 +114,13 @@ private extension SQLiteStoredValueTests {
     return SQLiteStoredValue.double(in: row, column: "one_value") == 1
       && SQLiteStoredValue.double(in: row, column: "real_value") == 1.5
       && SQLiteStoredValue.double(in: row, column: "text_value") == nil
-      && nullableInteger.value == 1
-      && nullableReal.value == 1.5
+      && nullableInteger.value == 1 && nullableReal.value == 1.5
   }
 
   func isAbsent<Value>(_ value: Value?) -> Bool {
     switch value {
-    case nil:
-      true
-    case .some:
-      false
+    case nil: true
+    case .some: false
     }
   }
 }

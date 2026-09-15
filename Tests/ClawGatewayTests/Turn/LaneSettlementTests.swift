@@ -11,71 +11,76 @@ import Testing
 /// The lane closure is the only in-process owner of a deferred settlement. Boot reconciliation is
 /// the crash backstop: a cancelled bound run whose settlement waited for the next daemon start
 /// would fall out of the learning loop for as long as the daemon stays up.
-@Suite struct LaneSettlementTests {
-  @Test func theLaneTailSettlesACancelledRunWithoutWaitingForBoot() async throws {
+@Suite
+struct LaneSettlementTests {
+  @Test
+  func theLaneTailSettlesACancelledRunWithoutWaitingForBoot() async throws {
     // given — a bound run enqueued on its session lane, cancelled while the turn is in flight
     let env = try LaneSettlementEnvironment.make()
-    let runId = try env.boundRun()
+    let runID = try env.boundRun()
     let enqueuer = env.enqueuer(dispatcher: env.cancellingDispatcher())
 
     // when — the lane closure unwinds
     await enqueuer.enqueue(
-      runId: runId,
-      sessionId: env.sessionId,
-      chatId: 777,
-      triggerMessageId: try env.triggerMessageId(runId: runId)
+      runID: runID,
+      sessionID: env.sessionID,
+      chatID: 777,
+      triggerMessageID: try env.triggerMessageID(runID: runID)
     )
     let drained = await env.lanes.drain(timeout: .seconds(5), clock: ContinuousClock())
 
     // then — settlement happened in-process, not at the next boot
     #expect(drained == .drained)
-    let receipt = try #require(try TestLearningFixtures(writer: env.queue).settlement(runId: runId))
+    let receipt = try #require(try TestLearningFixtures(writer: env.queue).settlement(runID: runID))
     #expect(receipt.terminalCause == .ownerCancelled)
     #expect(receipt.settledAt != nil)
   }
 
-  @Test func theLaneTailStillSettlesWhenTheTurnThrows() async throws {
+  @Test
+  func theLaneTailStillSettlesWhenTheTurnThrows() async throws {
     // given — the same cancellation, but the turn leaves through the `catch` arm
     let env = try LaneSettlementEnvironment.make()
-    let runId = try env.boundRun()
+    let runID = try env.boundRun()
     let dispatcher = env.cancellingDispatcher(error: StoreError.diskFull)
     let enqueuer = env.enqueuer(dispatcher: dispatcher)
 
     // when
     await enqueuer.enqueue(
-      runId: runId,
-      sessionId: env.sessionId,
-      chatId: 777,
-      triggerMessageId: try env.triggerMessageId(runId: runId)
+      runID: runID,
+      sessionID: env.sessionID,
+      chatID: 777,
+      triggerMessageID: try env.triggerMessageID(runID: runID)
     )
     _ = await env.lanes.drain(timeout: .seconds(5), clock: ContinuousClock())
 
     // then — every exit from the turn passes the tail, not just the happy one
-    #expect(try TestLearningFixtures(writer: env.queue).settlement(runId: runId)?.settledAt != nil)
+    #expect(try TestLearningFixtures(writer: env.queue).settlement(runID: runID)?.settledAt != nil)
   }
 
-  @Test func theLaneTailNotifiesTheSealerAndDoesNotOnlySettle() async throws {
+  @Test
+  func theLaneTailNotifiesTheSealerAndDoesNotOnlySettle() async throws {
     // given — the same cancelled bound run; nothing but the tail's own notification can put it in
     // front of the sealer before the next periodic sweep
     let env = try LaneSettlementEnvironment.make()
-    let runId = try env.boundRun()
+    let runID = try env.boundRun()
     let enqueuer = env.enqueuer(dispatcher: env.cancellingDispatcher())
 
     // when
     await enqueuer.enqueue(
-      runId: runId,
-      sessionId: env.sessionId,
-      chatId: 777,
-      triggerMessageId: try env.triggerMessageId(runId: runId)
+      runID: runID,
+      sessionID: env.sessionID,
+      chatID: 777,
+      triggerMessageID: try env.triggerMessageID(runID: runID)
     )
     _ = await env.lanes.drain(timeout: .seconds(5), clock: ContinuousClock())
 
     // then — a settlement with no notification would leave this receipt unwritten until a sweep
-    try await waitUntilSealed(runId: runId, in: env)
-    #expect(try env.learning.evidence(runId: runId) != nil)
+    try await waitUntilSealed(runID: runID, in: env)
+    #expect(try env.learning.evidence(runID: runID) != nil)
   }
 
-  @Test func theBootReparkedApprovalLaneCarriesTheSameTail() async throws {
+  @Test
+  func theBootReparkedApprovalLaneCarriesTheSameTail() async throws {
     // given — a bound run parked on an unexpired approval, re-parked by boot onto its session lane;
     // `ApprovalBootReconciler` enqueues onto the registry itself rather than through `TurnEnqueuer`
     let env = try LaneSettlementEnvironment.make()
@@ -89,13 +94,14 @@ import Testing
     // then — the second lane closure settles too; the run does not wait for the next boot
     #expect(await parker.parkCount == 1)
     let receipt = try #require(
-      try TestLearningFixtures(writer: env.queue).settlement(runId: parked.runId)
+      try TestLearningFixtures(writer: env.queue).settlement(runID: parked.runID)
     )
     #expect(receipt.terminalCause == .ownerCancelled)
     #expect(receipt.settledAt != nil)
   }
 
-  @Test func bootReconcilesTheOperationsAPriorProcessLeftOpen() async throws {
+  @Test
+  func bootReconcilesTheOperationsAPriorProcessLeftOpen() async throws {
     // given — a claim the last process took and never authorized
     let env = try LaneSettlementEnvironment.make()
     try env.seedClaimedOperation(id: "op-1")
@@ -114,18 +120,18 @@ import Testing
 /// Yields until the sealing the notification queued has run. Not a wall-clock wait: the sealing
 /// task only needs a turn on the executor, so the loop ends on the first turn after it commits.
 private func waitUntilSealed(
-  runId: Int64,
+  runID: Int64,
   in env: LaneSettlementEnvironment,
   sourceLocation: SourceLocation = #_sourceLocation
 ) async throws {
   for _ in 0..<10_000 {
-    if try env.learning.evidence(runId: runId) != nil {
+    if try env.learning.evidence(runID: runID) != nil {
       return
     }
     await Task.yield()
   }
   Issue.record(
-    "run \(runId) was never sealed after the lane tail notified",
+    "run \(runID) was never sealed after the lane tail notified",
     sourceLocation: sourceLocation
   )
 }
@@ -142,8 +148,8 @@ private struct LaneSettlementEnvironment {
   let learning: ScheduledLearningStoreGRDB
   let service: ScheduledLearningService
   let lanes: SessionLaneRegistry
-  let jobId: Int64
-  let sessionId: Int64
+  let jobID: Int64
+  let sessionID: Int64
   let now: Date
 
   static func make() throws -> LaneSettlementEnvironment {
@@ -152,7 +158,7 @@ private struct LaneSettlementEnvironment {
     let now = Date(timeIntervalSince1970: 1_782_000_600)
     let job = try jobs.create(
       NewScheduledJob(
-        ownerChatId: 777,
+        ownerChatID: 777,
         label: "digest",
         prompt: "Summarize my unread items",
         recurrence: nil,
@@ -161,41 +167,47 @@ private struct LaneSettlementEnvironment {
       ),
       now: now
     )
-    guard case .fired(let fired) = try jobs.fireNow(jobId: job.id, now: now) else {
+    guard case .fired(let fired) = try jobs.fireNow(jobID: job.id, now: now) else {
       throw StoreError.unexpected("job \(job.id) refused to fire")
     }
     let runs = RunStoreGRDB(writer: queue)
     let learning = ScheduledLearningStoreGRDB(writer: queue)
     // The fixture's first fire only establishes the job's session; the run it created is retired
     // so the overlap guard lets each test fire its own.
-    try runs.failRun(runId: fired.runId, cause: .unknown, now: now)
+    try runs.failRun(runID: fired.runID, cause: .unknown, now: now)
     return LaneSettlementEnvironment(
       queue: queue,
       jobs: jobs,
       runs: runs,
       learning: learning,
-      service: ScheduledLearningService(store: learning, now: { now }, logger: TestLog.silent),
+      service: ScheduledLearningService(
+        store: learning,
+        now: {
+          now
+        },
+        logger: TestLog.silent
+      ),
       lanes: SessionLaneRegistry(),
-      jobId: job.id,
-      sessionId: fired.sessionId,
+      jobID: job.id,
+      sessionID: fired.sessionID,
       now: now
     )
   }
 
   func boundRun() throws -> Int64 {
-    guard case .fired(let fired) = try jobs.fireNow(jobId: jobId, now: now) else {
-      throw StoreError.unexpected("job \(jobId) refused to fire")
+    guard case .fired(let fired) = try jobs.fireNow(jobID: jobID, now: now) else {
+      throw StoreError.unexpected("job \(jobID) refused to fire")
     }
-    _ = try runs.pickUp(runId: fired.runId, now: now)
-    return fired.runId
+    _ = try runs.pickUp(runID: fired.runID, now: now)
+    return fired.runID
   }
 
-  func triggerMessageId(runId: Int64) throws -> Int64 {
+  func triggerMessageID(runID: Int64) throws -> Int64 {
     try queue.read { db in
       try Int64.fetchOne(
         db,
         sql: "SELECT trigger_message_id FROM runs WHERE id = ?",
-        arguments: [runId]
+        arguments: [runID]
       ) ?? 0
     }
   }
@@ -205,7 +217,9 @@ private struct LaneSettlementEnvironment {
       lanes: lanes,
       turns: dispatcher,
       learning: service,
-      now: { now },
+      now: {
+        now
+      },
       logger: TestLog.silent
     )
   }
@@ -217,13 +231,13 @@ private struct LaneSettlementEnvironment {
     try queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
-            source_digest, attempt_generation, state, key_digest, created_at)
-          VALUES (?, ?, 1, ?, 'evidence', 1, ?, ?, 0)
-          """,
+        INSERT INTO learning_operations(operation_id, job_id, learning_epoch, phase,
+          source_digest, attempt_generation, state, key_digest, created_at)
+        VALUES (?, ?, 1, ?, 'evidence', 1, ?, ?, 0)
+        """,
         arguments: [
           id,
-          jobId,
+          jobID,
           LearningPhase.evaluator.rawValue,
           LearningOperationState.claimed.rawValue,
           "key-\(id)",
@@ -255,39 +269,41 @@ private struct LaneSettlementEnvironment {
       coordinator: ApprovalCoordinator(),
       waiter: waiter,
       learning: service,
-      now: { now },
+      now: {
+        now
+      },
       logger: TestLog.silent
     )
   }
 
   /// A bound run suspended to AWAITING_APPROVAL with an unexpired PENDING approval — what boot
   /// finds in a reopened database and re-parks onto the session lane.
-  func parkedApprovalOnABoundRun() throws -> (runId: Int64, approvalId: Int64) {
-    let runId = try boundRun()
-    let approvalId = try queue.write { db -> Int64 in
+  func parkedApprovalOnABoundRun() throws -> (runID: Int64, approvalID: Int64) {
+    let runID = try boundRun()
+    let approvalID = try queue.write { db -> Int64 in
       try db.execute(
         sql: """
-          INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
-          VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
-          """,
-        arguments: [sessionId, runId, RunStoreGRDB.placeholderObservationContent, now]
+        INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
+        VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
+        """,
+        arguments: [sessionID, runID, RunStoreGRDB.placeholderObservationContent, now]
       )
-      let observationMessageId = db.lastInsertedRowID
+      let observationMessageID = db.lastInsertedRowID
       let canonicalArgsJSON = #"{"path":"/w/plan.md"}"#
-      let approvalId = try ApprovalStoreGRDB.insertApproval(
+      let approvalID = try ApprovalStoreGRDB.insertApproval(
         db,
         NewApproval(
-          runId: runId,
-          sessionId: sessionId,
+          runID: runID,
+          sessionID: sessionID,
           tool: "file_write",
           canonicalArgsJSON: canonicalArgsJSON,
           canonicalTarget: "/w/plan.md",
           argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
           policyVersion: "pv16",
-          ownerUserId: 777,
+          ownerUserID: 777,
           nonce: "n-parked",
-          observationMessageId: observationMessageId,
-          toolCallId: "c1",
+          observationMessageID: observationMessageID,
+          toolCallID: "c1",
           reason: .askTier,
           createdTs: now,
           expiresTs: now.addingTimeInterval(3_600)
@@ -295,14 +311,14 @@ private struct LaneSettlementEnvironment {
       )
       _ = try RunStoreGRDB.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .suspendForApproval,
         now: now,
         terminal: nil
       )
-      return approvalId
+      return approvalID
     }
-    return (runId, approvalId)
+    return (runID, approvalID)
   }
 }
 
@@ -319,17 +335,17 @@ private actor CancellingParker: ApprovalParking {
   }
 
   func park(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    approvalID: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     revalidatePolicyOnApprove: Bool
   ) async {
     parkCount += 1
     _ = try? await queue.write { db in
       try RunStoreGRDB.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .cancel,
         now: self.now,
         terminal: .deferred(.ownerCancelled)
@@ -344,11 +360,11 @@ private struct CancellingDispatcher: TurnDispatching {
   let now: Date
   let error: (any Error)?
 
-  func run(runId: Int64, sessionId: Int64, chatId: Int64, triggerMessageId: Int64) async throws {
+  func run(runID: Int64, sessionID: Int64, chatID: Int64, triggerMessageID: Int64) async throws {
     _ = try await queue.write { db in
       try RunStoreGRDB.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .cancel,
         now: now,
         terminal: .deferred(.ownerCancelled)

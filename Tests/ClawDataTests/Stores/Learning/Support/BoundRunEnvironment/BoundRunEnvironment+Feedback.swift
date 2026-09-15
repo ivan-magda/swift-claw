@@ -6,24 +6,22 @@ import GRDB
 @testable import ClawData
 
 extension BoundRunEnvironment {
-  func runFeedbackTarget(runId: Int64, signal: OwnerSignal) -> NewFeedbackTarget {
+  func runFeedbackTarget(runID: Int64, signal: OwnerSignal) -> NewFeedbackTarget {
     NewFeedbackTarget(
-      nonce: "run-\(runId)-\(signal.rawValue)",
-      jobId: jobId,
+      nonce: "run-\(runID)-\(signal.rawValue)",
+      jobID: jobID,
       epoch: LearningEpoch(1),
       subjectKind: .run,
-      subjectDigest: String(runId),
+      subjectDigest: String(runID),
       allowedActions: [signal],
-      ownerUserId: 42,
-      chatId: 777,
+      ownerUserID: 42,
+      chatID: 777,
       expiresAt: now.addingTimeInterval(3_600)
     )
   }
 
-  func evaluationFeedbackTarget(
-    digest: EvaluationDigest,
-    signal: OwnerSignal
-  ) -> NewFeedbackTarget {
+  func evaluationFeedbackTarget(digest: EvaluationDigest, signal: OwnerSignal) -> NewFeedbackTarget
+  {
     feedbackTarget(
       nonce: "evaluation-\(signal.rawValue)",
       kind: .evaluation,
@@ -32,10 +30,7 @@ extension BoundRunEnvironment {
     )
   }
 
-  func candidateFeedbackTarget(
-    digest: CandidateDigest,
-    signal: OwnerSignal
-  ) -> NewFeedbackTarget {
+  func candidateFeedbackTarget(digest: CandidateDigest, signal: OwnerSignal) -> NewFeedbackTarget {
     feedbackTarget(
       nonce: "candidate-\(signal.rawValue)",
       kind: .candidate,
@@ -44,13 +39,13 @@ extension BoundRunEnvironment {
     )
   }
 
-  func feedbackTap(_ target: NewFeedbackTarget, updateId: Int64) -> FeedbackTap {
+  func feedbackTap(_ target: NewFeedbackTarget, updateID: Int64) -> FeedbackTap {
     FeedbackTap(
       nonce: target.nonce,
       signal: target.allowedActions[0],
-      ownerUserId: target.ownerUserId,
-      chatId: target.chatId,
-      transportUpdateId: updateId
+      ownerUserID: target.ownerUserID,
+      chatID: target.chatID,
+      transportUpdateID: updateID
     )
   }
 
@@ -60,23 +55,19 @@ extension BoundRunEnvironment {
       LearningNoticeChunk(
         subjectDigest: FeedbackChallengeDeliveryIdentity.digest(targetNonce: target.nonce),
         ordinal: 0,
-        chatId: target.chatId,
+        chatID: target.chatID,
         payload: payload,
         payloadHash: ContentHash.fnv1a(payload)
-      )
+      ),
     ]
   }
 
-  func recordRunFeedback(
-    runId: Int64,
-    signal: OwnerSignal,
-    updateId: Int64
-  ) throws {
-    let target = runFeedbackTarget(runId: runId, signal: signal)
+  func recordRunFeedback(runID: Int64, signal: OwnerSignal, updateID: Int64) throws {
+    let target = runFeedbackTarget(runID: runID, signal: signal)
     try TestLearningFixtures(writer: queue).seedTargets([target])
     guard
       case .recorded = try learning.consumeAndAppendEvent(
-        feedbackTap(target, updateId: updateId),
+        feedbackTap(target, updateID: updateID),
         now: now.addingTimeInterval(1)
       )
     else {
@@ -88,7 +79,7 @@ extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET feedback_revision = ? WHERE job_id = ?",
-        arguments: [revision, jobId]
+        arguments: [revision, jobID]
       )
     }
   }
@@ -113,21 +104,18 @@ extension BoundRunEnvironment {
 // MARK: - Feedback Targets
 
 private extension BoundRunEnvironment {
-  func feedbackTarget(
-    nonce: String,
-    kind: FeedbackSubjectKind,
-    digest: String,
-    signal: OwnerSignal
-  ) -> NewFeedbackTarget {
+  func feedbackTarget(nonce: String, kind: FeedbackSubjectKind, digest: String, signal: OwnerSignal)
+    -> NewFeedbackTarget
+  {
     NewFeedbackTarget(
       nonce: nonce,
-      jobId: jobId,
+      jobID: jobID,
       epoch: LearningEpoch(1),
       subjectKind: kind,
       subjectDigest: digest,
       allowedActions: [signal],
-      ownerUserId: 42,
-      chatId: 777,
+      ownerUserID: 42,
+      chatID: 777,
       expiresAt: now.addingTimeInterval(3_600)
     )
   }

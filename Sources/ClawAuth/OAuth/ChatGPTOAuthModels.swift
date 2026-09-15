@@ -27,9 +27,7 @@ extension ChatGPTDeviceCode: CustomStringConvertible, CustomDebugStringConvertib
     "ChatGPTDeviceCode(userCode: \(userCode), pollInterval: \(pollInterval))"
   }
 
-  public var debugDescription: String {
-    description
-  }
+  public var debugDescription: String { description }
 }
 
 /// The proof of approval a device poll returns, spendable exactly once at the token endpoint.
@@ -46,13 +44,9 @@ public struct ChatGPTAuthorizationGrant: Sendable, Equatable {
 /// Nothing about a grant is printable: the code is spendable and the verifier is what proves the
 /// spender is us. There is no field left worth naming, so neither form names one.
 extension ChatGPTAuthorizationGrant: CustomStringConvertible, CustomDebugStringConvertible {
-  public var description: String {
-    "ChatGPTAuthorizationGrant(redacted)"
-  }
+  public var description: String { "ChatGPTAuthorizationGrant(redacted)" }
 
-  public var debugDescription: String {
-    description
-  }
+  public var debugDescription: String { description }
 }
 
 /// A validated credential pair. Reaching this type means the tokens are already bounded and fit for
@@ -80,9 +74,7 @@ extension ChatGPTTokenPair: CustomStringConvertible, CustomDebugStringConvertibl
     "ChatGPTTokenPair(expiresAt: \(expiresAt), rotated: \(refreshToken != nil))"
   }
 
-  public var debugDescription: String {
-    description
-  }
+  public var debugDescription: String { description }
 }
 
 /// What one poll learned. Pending and throttled are outcomes rather than errors: both mean the flow
@@ -122,15 +114,10 @@ public enum ChatGPTOAuthFailure: Error, Sendable, Equatable {
 /// The refresh half of the token endpoint, named separately so the credential source can depend on
 /// the one call it makes rather than on the whole login flow.
 public protocol ChatGPTOAuthRefreshing: Sendable {
-  func refresh(
-    refreshToken: String,
-    timeout: Duration
-  ) async throws -> ChatGPTTokenPair
+  func refresh(refreshToken: String, timeout: Duration) async throws -> ChatGPTTokenPair
 }
 
 public protocol ChatGPTOAuthExchanging: Sendable {
-  func exchange(
-    grant: ChatGPTAuthorizationGrant,
-    timeout: Duration
-  ) async throws -> ChatGPTTokenPair
+  func exchange(grant: ChatGPTAuthorizationGrant, timeout: Duration) async throws
+    -> ChatGPTTokenPair
 }

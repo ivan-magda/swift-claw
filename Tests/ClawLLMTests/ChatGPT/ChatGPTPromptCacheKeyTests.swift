@@ -7,17 +7,16 @@ import Testing
 /// The key is asserted through the encoder rather than against the deriving type directly: what the
 /// route is actually told to cache under is the body's field, and a key that is right in isolation
 /// but never reaches the body would still leave every run cache-cold.
-@Suite struct ChatGPTPromptCacheKeyTests {
+@Suite
+struct ChatGPTPromptCacheKeyTests {
   /// The key over a known prefix, byte for byte. The expectation was computed from the specified
   /// encoding — length-prefixed UTF-8 segments, first twelve digest bytes as hex — independently of
   /// the Swift that produces it, so the two agreeing means the encoding is the one specified rather
   /// than merely self-consistent.
-  @Test func cacheKeyMatchesTheGoldenVector() throws {
+  @Test
+  func cacheKeyMatchesTheGoldenVector() throws {
     // given
-    let request = makeRequest(
-      instructions: ["You are helpful.", "Be brief."],
-      tools: []
-    )
+    let request = makeRequest(instructions: ["You are helpful.", "Be brief."], tools: [])
 
     // when
     let key = try cacheKey(for: request)
@@ -29,17 +28,18 @@ import Testing
   /// Two runs of the same static prefix share a cache entry however their sessions differ; the
   /// session travels in a header instead. A key that folded the session in would make every
   /// recurring proactive run cache-cold.
-  @Test func cacheKeyIsStableAcrossSessions() throws {
+  @Test
+  func cacheKeyIsStableAcrossSessions() throws {
     // given
     let first = makeRequest(
       instructions: ["You are helpful."],
       tools: [Support.clockTool],
-      sessionId: "clawd-session-1"
+      sessionID: "clawd-session-1"
     )
     let second = makeRequest(
       instructions: ["You are helpful."],
       tools: [Support.clockTool],
-      sessionId: "clawd-session-2"
+      sessionID: "clawd-session-2"
     )
 
     // when
@@ -53,7 +53,8 @@ import Testing
   /// The registry hands the same tools over in whatever order it iterates, and that order is not
   /// something the owner chose. The body still sends them as given, so the two assertions here are
   /// the whole rule: the key sorts, the array does not.
-  @Test func cacheKeyIsStableAcrossToolInsertionOrder() throws {
+  @Test
+  func cacheKeyIsStableAcrossToolInsertionOrder() throws {
     // given
     let forward = makeRequest(
       instructions: ["S"],
@@ -76,7 +77,8 @@ import Testing
     #expect(toolNames(in: reversedBody) == ["clock", "web_fetch"])
   }
 
-  @Test func cacheKeyChangesWithInstructions() throws {
+  @Test
+  func cacheKeyChangesWithInstructions() throws {
     // given
     let original = makeRequest(instructions: ["You are helpful.", "Be brief."], tools: [])
     let altered = makeRequest(instructions: ["You are helpful.", "Be terse."], tools: [])
@@ -91,7 +93,8 @@ import Testing
     #expect(alteredKey == "swift-claw:74df22596ffe729837abfc45")
   }
 
-  @Test func cacheKeyChangesWithToolSchema() throws {
+  @Test
+  func cacheKeyChangesWithToolSchema() throws {
     // given
     let original = makeRequest(instructions: ["S"], tools: [Support.clockTool])
     let altered = makeRequest(
@@ -107,7 +110,7 @@ import Testing
           metadataProvenance: .trusted,
           egressClass: .none,
           riskLevel: .safe
-        )
+        ),
       ]
     )
 
@@ -119,7 +122,8 @@ import Testing
     #expect(originalKey != alteredKey)
   }
 
-  @Test func cacheKeyChangesWithToolDescription() throws {
+  @Test
+  func cacheKeyChangesWithToolDescription() throws {
     // given
     let original = makeRequest(instructions: ["S"], tools: [Support.clockTool])
     let altered = makeRequest(
@@ -132,7 +136,7 @@ import Testing
           metadataProvenance: .trusted,
           egressClass: .none,
           riskLevel: .safe
-        )
+        ),
       ]
     )
 
@@ -146,7 +150,8 @@ import Testing
 
   /// Conversation text is not part of the prefix at all, so a turn cannot move the key off the
   /// entry its instructions and tools earned.
-  @Test func cacheKeyIgnoresConversationText() throws {
+  @Test
+  func cacheKeyIgnoresConversationText() throws {
     // given
     let first = ChatRequest(
       model: "gpt-5",
@@ -177,7 +182,8 @@ import Testing
   /// The key travels to the vendor as a cache hint, so it must carry no prompt text. The shape
   /// assertion is what makes that structural: a value that is exactly a fixed prefix and twenty-four
   /// hex characters has nowhere to hide the phrases the absence checks look for.
-  @Test func cacheKeyCarriesNoPromptText() throws {
+  @Test
+  func cacheKeyCarriesNoPromptText() throws {
     // given
     let phrase = "Zanzibar-Quartzite-Owner-Secret"
     let request = makeRequest(
@@ -190,7 +196,7 @@ import Testing
           metadataProvenance: .trusted,
           egressClass: .none,
           riskLevel: .safe
-        )
+        ),
       ]
     )
 
@@ -214,12 +220,13 @@ import Testing
   /// Length prefixes are what make the encoding injective. Without them these two requests hash the
   /// same bytes — empty instructions followed by one tool's JSON, against that same JSON as the
   /// instructions and no tools at all — and would silently share a cache entry.
-  @Test func lengthPrefixesSeparateInstructionsFromToolDefinitions() throws {
+  @Test
+  func lengthPrefixesSeparateInstructionsFromToolDefinitions() throws {
     // given
     let toolJSON = """
-      {"description":"d","name":"a","parameters":{"type":"object"},"strict":false,\
-      "type":"function"}
-      """
+    {"description":"d","name":"a","parameters":{"type":"object"},"strict":false,\
+    "type":"function"}
+    """
     let asTool = ChatRequest(
       model: "gpt-5",
       messages: [ChatMessage(role: .user, content: "hello")],
@@ -232,7 +239,7 @@ import Testing
           metadataProvenance: .trusted,
           egressClass: .none,
           riskLevel: .safe
-        )
+        ),
       ]
     )
     let asInstructions = ChatRequest(
@@ -265,7 +272,7 @@ extension ChatGPTPromptCacheKeyTests {
   fileprivate func makeRequest(
     instructions: [String],
     tools: [ToolDefinition],
-    sessionId: String? = nil
+    sessionID: String? = nil
   ) -> ChatRequest {
     let system = instructions.map { text in
       ChatMessage(role: .system, content: text)
@@ -275,7 +282,7 @@ extension ChatGPTPromptCacheKeyTests {
       messages: system + [ChatMessage(role: .user, content: "hello")],
       maxOutputTokens: 4096,
       tools: tools,
-      sessionId: sessionId
+      sessionID: sessionID
     )
   }
 

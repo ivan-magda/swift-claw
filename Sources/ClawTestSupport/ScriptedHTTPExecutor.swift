@@ -5,9 +5,7 @@ import Foundation
 public struct ScriptedTransportFailure: Error, CustomStringConvertible, Sendable {
   public let message: String
 
-  public init(message: String) {
-    self.message = message
-  }
+  public init(message: String) { self.message = message }
 
   public var description: String { message }
 }
@@ -39,15 +37,17 @@ public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
   public enum Step: Sendable {
     case ok(HTTPResult)
     /// Answers a buffered request at its transport boundary, including gated long-poll replies.
-    case responding(@Sendable (HTTPRequest) async throws -> HTTPResult)
+    case responding(@Sendable (_ request: HTTPRequest) async throws -> HTTPResult)
     case fail(ScriptedTransportFailure)
     case stream(HTTPStreamHead, [Data])
     case streamFailure(HTTPStreamHead, [Data], ScriptedTransportFailure)
+
     /// Builds a streaming response from the recorded request, for protocols whose reply must echo
     /// a generated request identifier.
     case respondingStream(
-      @Sendable (HTTPRequest) throws -> (head: HTTPStreamHead, chunks: [Data])
+      @Sendable (_ request: HTTPRequest) throws -> (head: HTTPStreamHead, chunks: [Data])
     )
+
     /// A typed transport failure with the disposition under test. Tests state the disposition; they
     /// never leave it to be guessed from the message.
     case transportFailure(HTTPTransportFailure)
@@ -72,9 +72,7 @@ public actor ScriptedHTTPExecutor: HTTPExecuting, HTTPStreaming {
   private var steps: [Step]
   public private(set) var recorded: [Recorded] = []
 
-  public init(_ steps: [Step]) {
-    self.steps = steps
-  }
+  public init(_ steps: [Step]) { self.steps = steps }
 
   public func execute(_ request: HTTPRequest) async throws -> HTTPResult {
     guard case .buffered = request.responseBodyPolicy else {
@@ -131,8 +129,7 @@ private extension ScriptedHTTPExecutor {
     errorBytes: Int
   ) throws -> HTTPStreamExchange {
     switch step {
-    case .transportFailure(let failure):
-      throw failure
+    case .transportFailure(let failure): throw failure
     case .stream(let head, let chunks):
       return Self.exchange(
         head: head,
@@ -146,10 +143,7 @@ private extension ScriptedHTTPExecutor {
         chunks: chunks,
         unread: maximumUnreadBytes,
         error: errorBytes,
-        failure: HTTPTransportFailure(
-          disposition: .mayHaveBeenSent,
-          safeMessage: failure.message
-        )
+        failure: HTTPTransportFailure(disposition: .mayHaveBeenSent, safeMessage: failure.message)
       )
     case .respondingStream(let response):
       let reply = try response(request)
@@ -186,19 +180,13 @@ private extension ScriptedHTTPExecutor {
 
 // MARK: - Recorded fields
 
-public extension ScriptedHTTPExecutor {
+extension ScriptedHTTPExecutor {
   /// URLs of every recorded call, in dispatch order.
-  var requestedURLs: [String] {
-    recorded.map(\.url)
-  }
+  public var requestedURLs: [String] { recorded.map(\.url) }
 
-  var lastHeaders: [String: String] {
-    recorded.last?.headers ?? [:]
-  }
+  public var lastHeaders: [String: String] { recorded.last?.headers ?? [:] }
 
-  var lastBody: Data? {
-    recorded.last?.body
-  }
+  public var lastBody: Data? { recorded.last?.body }
 }
 
 // MARK: - Scripting

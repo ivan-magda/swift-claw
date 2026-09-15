@@ -1,8 +1,9 @@
 import ClawCore
 import Foundation
 
-/// What a model choice is and where it came from. The origin is what lets the command explain a
-/// default it picked without asking.
+/// What a model choice is and where it came from.
+///
+/// The origin is what lets the command explain a default it picked without asking.
 enum ChatGPTModelChoiceOrigin: Sendable, Equatable {
   case configuredDefault
   case firstReturnedDefault
@@ -13,13 +14,10 @@ struct ChatGPTModelChoice: Sendable, Equatable {
   let slug: String
   let origin: ChatGPTModelChoiceOrigin
 
-  init(slug: String, origin: ChatGPTModelChoiceOrigin) {
-    self.slug = slug
-    self.origin = origin
-  }
-
-  /// The exact line an owner may paste. The variable is the one configuration reads and the prefix
-  /// is the route's own, so a chosen model resolves back to the provider it came from.
+  /// The exact line an owner may paste.
+  ///
+  /// The variable is the one configuration reads and the prefix is the route's own, so a chosen
+  /// model resolves back to the provider it came from.
   var assignment: String {
     "\(AppConfig.EnvKey.llmModel)=\(ChatGPTProviderMetadata.modelPrefix)\(slug)"
   }
@@ -27,22 +25,27 @@ struct ChatGPTModelChoice: Sendable, Equatable {
 
 enum ChatGPTModelPickerOutcome: Sendable, Equatable {
   case chose(ChatGPTModelChoice)
-  /// The owner named a row the numbered list does not have. The caller asks again; nothing here
-  /// decides how many times it may.
+  /// The owner named a row the numbered list does not have.
+  ///
+  /// The caller asks again; nothing here decides how many times it may.
   case indexOutOfRange
   case noEligibleModels
 }
 
-/// Picks a model from a catalog. A pure function of what it is handed: it reads no terminal, no
-/// configuration, and no clock, so the same arguments always name the same model — which is what
-/// makes the default a non-interactive run takes provably the one a terminal would have offered.
+/// Picks a model from a catalog.
+///
+/// A pure function of what it is handed: it reads no terminal, no configuration, and no clock, so
+/// the same arguments always name the same model — which is what makes the default a
+/// non-interactive run takes provably the one a terminal would have offered.
 enum ChatGPTModelPicker {
+  /// Selects an owner's catalog choice or the available configured default.
+  ///
   /// - Parameters:
-  ///   - configuredSuffix: the ChatGPT model already configured, if any. Honored only while the
-  ///     catalog still offers it: a default naming a model the vendor has withdrawn would be a
-  ///     suggestion that cannot work.
-  ///   - chosenIndex: the row an owner named, numbered from one as the printed list is. Ignored
-  ///     without a terminal, where no prompt ran and so no answer can have come back.
+  ///   - catalog: Eligible models in the order shown to the owner.
+  ///   - configuredSuffix: The configured ChatGPT model, honored only while the catalog offers it.
+  ///   - isInteractive: Whether a terminal can supply an explicit choice.
+  ///   - chosenIndex: The owner's one-based catalog row, ignored without a terminal.
+  /// - Returns: The explicit choice, the configured or first available default, or a selection error.
   static func select(
     catalog: [ChatGPTCatalogModel],
     configuredSuffix: String?,
@@ -79,7 +82,9 @@ private extension ChatGPTModelPicker {
     guard
       let configured = configuredSuffix,
       LLMProviderRegistry.isValidQualifiedModelSuffix(configured),
-      catalog.contains(where: { $0.slug == configured })
+      catalog.contains(where: {
+        $0.slug == configured
+      })
     else {
       return ChatGPTModelChoice(slug: first.slug, origin: .firstReturnedDefault)
     }

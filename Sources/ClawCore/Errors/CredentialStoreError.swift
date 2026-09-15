@@ -23,23 +23,18 @@ extension CredentialStoreError: CustomStringConvertible {
   /// publication left the previous credential whole, and an uncertain one did not.
   public var description: String {
     switch self {
-    case .missingRuntimeKey:
-      return "no runtime key in the state root; run: clawd secrets seal"
+    case .missingRuntimeKey: return "no runtime key in the state root; run: clawd secrets seal"
     case .insecureStorage:
       return "the credential file or the runtime key has unsafe ownership or permissions"
     case .malformedStorage:
       return """
-        the credential file failed authentication; \
-        it is truncated, tampered with, or sealed under another key
-        """
-    case .unsupportedVersion:
-      return "the credential file was written by a newer clawd"
-    case .oversizedStorage:
-      return "the credential file is larger than the cap this build will read"
-    case .publicationFailed:
-      return "the credential file could not be written; nothing was changed"
-    case .commitUncertain:
-      return "the credential was written but could not be proven durable"
+      the credential file failed authentication; \
+      it is truncated, tampered with, or sealed under another key
+      """
+    case .unsupportedVersion: return "the credential file was written by a newer clawd"
+    case .oversizedStorage: return "the credential file is larger than the cap this build will read"
+    case .publicationFailed: return "the credential file could not be written; nothing was changed"
+    case .commitUncertain: return "the credential was written but could not be proven durable"
     }
   }
 }

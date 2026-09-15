@@ -121,10 +121,9 @@ public enum ChatGPTProviderMetadata {
   /// to the wire adapter. The account claim is unverified metadata, so it is added only when it can
   /// safely be a header value and is otherwise omitted — a token whose account cannot be read is
   /// still a token the server may accept, and composition must not pre-empt that verdict.
-  public static func authorization(
-    accessToken: String,
-    generation: LLMCredentialGeneration
-  ) -> LLMRequestAuthorization {
+  public static func authorization(accessToken: String, generation: LLMCredentialGeneration)
+    -> LLMRequestAuthorization
+  {
     var headers = ["Authorization": "Bearer \(accessToken)"]
     var redactionValues = [accessToken]
 
@@ -165,16 +164,12 @@ public enum ChatGPTProviderMetadata {
     _ request: HTTPRequest,
     on http: any HTTPExecuting,
     redacting secrets: [String],
-    onTransportFailure asFailure: (String) -> Failure
+    onTransportFailure asFailure: (_ message: String) -> Failure
   ) async throws -> HTTPResult {
-    do {
-      return try await http.execute(request)
-    } catch let cancellation as CancellationError {
+    do { return try await http.execute(request) } catch let cancellation as CancellationError {
       throw cancellation
     } catch let failure as HTTPTransportFailure {
       throw asFailure(safeDiagnostic(failure.safeMessage, redacting: secrets))
-    } catch {
-      throw asFailure(safeDiagnostic("\(error)", redacting: secrets))
-    }
+    } catch { throw asFailure(safeDiagnostic("\(error)", redacting: secrets)) }
   }
 }

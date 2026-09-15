@@ -10,9 +10,7 @@ extension AppConfig {
   /// wire cap. The API key is not read here: it is a secret the composition root hands a credential
   /// source.
   static func parseLLMConfig(from env: [String: String]) throws -> LLMConfig {
-    guard
-      let model = env[EnvKey.llmModel]?.trimmingCharacters(in: .whitespaces),
-      !model.isEmpty
+    guard let model = env[EnvKey.llmModel]?.trimmingCharacters(in: .whitespaces), !model.isEmpty
     else {
       throw ConfigError.missingLLMModel
     }
@@ -167,10 +165,9 @@ private extension AppConfig {
   /// fallback cannot serve is a latent failure the moment the fallback carries a turn, so a route with
   /// no relied-upon structured-output contract accepts only `off` — any other value fails closed with
   /// the offending route named rather than being silently sent to a wire that cannot honor it.
-  static func parseStructuredOutput(
-    from env: [String: String],
-    routes: [ResolvedLLMRoute]
-  ) throws -> StructuredOutputMode {
+  static func parseStructuredOutput(from env: [String: String], routes: [ResolvedLLMRoute]) throws
+    -> StructuredOutputMode
+  {
     let rawStructuredOutput =
       env[EnvKey.llmStructuredOutput]?.trimmingCharacters(in: .whitespaces) ?? ""
     let structuredOutput: StructuredOutputMode

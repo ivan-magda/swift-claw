@@ -67,12 +67,8 @@ struct ChatGPTReplayIdentity: Sendable, Equatable {
   let epoch: UUID
 
   var issuer: String {
-    [
-      Self.providerVersion,
-      credentialProfileHash,
-      wireModelHash,
-      epoch.uuidString.lowercased(),
-    ].joined(separator: ":")
+    [Self.providerVersion, credentialProfileHash, wireModelHash, epoch.uuidString.lowercased()]
+      .joined(separator: ":")
   }
 
   init(profileID: UUID, wireModel: String, epoch: UUID) {
@@ -213,13 +209,9 @@ struct ChatGPTReplayDrops: Sendable, Equatable {
   /// Sound state omitted so the request fits its aggregate budget.
   var budgetEvicted = 0
 
-  var total: Int {
-    foreign + staleEpoch + malformed + oversized + budgetEvicted
-  }
+  var total: Int { foreign + staleEpoch + malformed + oversized + budgetEvicted }
 
-  var isEmpty: Bool {
-    total == 0
-  }
+  var isEmpty: Bool { total == 0 }
 }
 
 /// What a request may replay, and what it could not.
@@ -255,27 +247,19 @@ struct ChatGPTProviderStateCodec: Sendable {
     newEpoch: @escaping @Sendable () -> UUID = {
       UUID()
     }
-  ) {
-    self.newEpoch = newEpoch
-  }
+  ) { self.newEpoch = newEpoch }
 
   /// Selects the replay material a request may carry, and the identity its response is stamped with.
   ///
   /// Nothing here can fail a turn. State that is foreign, damaged, too large, or simply unaffordable
   /// is left behind and counted; the conversation continues on its text and its tool calls, which
   /// are never this method's to drop.
-  func decodeCompatibleHistory(
-    messages: [ChatMessage],
-    profileID: UUID,
-    wireModel: String
-  ) -> ChatGPTReplaySelection {
+  func decodeCompatibleHistory(messages: [ChatMessage], profileID: UUID, wireModel: String)
+    -> ChatGPTReplaySelection
+  {
     var drops = ChatGPTReplayDrops()
     let origin = ChatGPTReplayOrigin(profileID: profileID, wireModel: wireModel)
-    let candidates = Self.compatibleCandidates(
-      in: messages,
-      origin: origin,
-      drops: &drops
-    )
+    let candidates = Self.compatibleCandidates(in: messages, origin: origin, drops: &drops)
 
     // The newest state that actually decoded is what names the live epoch. A damaged or foreign
     // newest state has already been discarded above, so it cannot drag the session onto a generation
@@ -322,10 +306,9 @@ struct ChatGPTProviderStateCodec: Sendable {
   /// to say, and that stamp is the entire record a restart derives the epoch from: without it the
   /// newest compatible state in history is the poisoned one again, and the recovery is undone on
   /// reload. So this writes the empty payload rather than returning nothing.
-  func encodeResponseState(
-    items: ChatGPTReplayItems,
-    identity: ChatGPTReplayIdentity
-  ) throws -> ProviderExchangeState {
+  func encodeResponseState(items: ChatGPTReplayItems, identity: ChatGPTReplayIdentity) throws
+    -> ProviderExchangeState
+  {
     let payload = try Self.canonicalPayload(items)
     guard payload.count <= Self.maximumStateBytes else {
       return ProviderExchangeState(
@@ -380,9 +363,7 @@ private extension ChatGPTProviderStateCodec {
       guard let state = message.providerState else {
         continue
       }
-      guard
-        let identity = ChatGPTReplayIdentity(issuer: state.issuer),
-        origin.matches(identity)
+      guard let identity = ChatGPTReplayIdentity(issuer: state.issuer), origin.matches(identity)
       else {
         drops.foreign += 1
         continue
@@ -417,10 +398,8 @@ private extension ChatGPTProviderStateCodec {
   /// Walking newest-first and stopping at the first state that would cross the cap is what makes the
   /// omission oldest-first: continuing past it could admit a small ancient state over a large recent
   /// one, which is the opposite of the rule. The result is returned chronologically.
-  static func affordable(
-    _ candidates: [Candidate],
-    drops: inout ChatGPTReplayDrops
-  ) -> [Candidate] {
+  static func affordable(_ candidates: [Candidate], drops: inout ChatGPTReplayDrops) -> [Candidate]
+  {
     var selected: [Candidate] = []
     var total = 0
     for (offset, candidate) in candidates.reversed().enumerated() {
@@ -583,9 +562,7 @@ struct DurableContent: Codable {
     case text
   }
 
-  init(_ text: String) {
-    self.text = text
-  }
+  init(_ text: String) { self.text = text }
 
   init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)

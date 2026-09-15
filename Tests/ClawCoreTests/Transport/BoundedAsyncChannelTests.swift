@@ -10,8 +10,10 @@ import Testing
 enum BoundedAsyncChannelTests {
   // MARK: - Delivery
 
-  @Suite struct Delivery {
-    @Test func deliversElementsInSendOrder() async throws {
+  @Suite
+  struct Delivery {
+    @Test
+    func deliversElementsInSendOrder() async throws {
       // given
       let channel = BoundedAsyncChannel<Int>(capacity: 3)
 
@@ -26,7 +28,8 @@ enum BoundedAsyncChannelTests {
       #expect(received == [1, 2, 3])
     }
 
-    @Test func suspendsTheProducerWhenTheBufferIsFull() async throws {
+    @Test
+    func suspendsTheProducerWhenTheBufferIsFull() async throws {
       // given a channel with room for exactly one element, already holding it
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       try await channel.send(1)
@@ -52,7 +55,8 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedSenderCount == 0)
     }
 
-    @Test func boundsTheBufferByWeightRatherThanElementCount() async throws {
+    @Test
+    func boundsTheBufferByWeightRatherThanElementCount() async throws {
       // given a channel that admits ten units of weight, each element weighing its own value
       let channel = BoundedAsyncChannel<Int>(capacity: 10) { element in
         element
@@ -76,7 +80,8 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedSenderCount == 0)
     }
 
-    @Test func boundsElementCountWhenEveryElementWeighsNothing() async throws {
+    @Test
+    func boundsElementCountWhenEveryElementWeighsNothing() async throws {
       // given a channel with room for one unit, and a weight function that costs an element nothing
       let channel = BoundedAsyncChannel<Int>(capacity: 1) { _ in
         0
@@ -102,7 +107,8 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedSenderCount == 0)
     }
 
-    @Test func admitsParkedSendersInSendOrder() async throws {
+    @Test
+    func admitsParkedSendersInSendOrder() async throws {
       // given two producers parked on a full channel, in a known order
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       try await channel.send(1)
@@ -131,7 +137,8 @@ enum BoundedAsyncChannelTests {
       #expect([first, secondElement, thirdElement] == [1, 2, 3])
     }
 
-    @Test func deliversDirectlyToAReceiverParkedBeforeTheSend() async throws {
+    @Test
+    func deliversDirectlyToAReceiverParkedBeforeTheSend() async throws {
       // given a consumer parked on an empty channel
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       let consumer = Task { () -> Int? in
@@ -156,8 +163,10 @@ enum BoundedAsyncChannelTests {
 
   // MARK: - Termination
 
-  @Suite struct Termination {
-    @Test func finishDeliversBufferedElementsBeforeTheEnd() async throws {
+  @Suite
+  struct Termination {
+    @Test
+    func finishDeliversBufferedElementsBeforeTheEnd() async throws {
       // given
       let channel = BoundedAsyncChannel<Int>(capacity: 2)
       try await channel.send(1)
@@ -171,7 +180,8 @@ enum BoundedAsyncChannelTests {
       #expect(received == [1, 2])
     }
 
-    @Test func finishThrowingDeliversBufferedElementsBeforeTheError() async throws {
+    @Test
+    func finishThrowingDeliversBufferedElementsBeforeTheError() async throws {
       // given
       let channel = BoundedAsyncChannel<Int>(capacity: 2)
       try await channel.send(1)
@@ -183,18 +193,15 @@ enum BoundedAsyncChannelTests {
       var iterator = channel.makeAsyncIterator()
       let first = try await iterator.next()
       var failure: (any Error)?
-      do {
-        _ = try await iterator.next()
-      } catch {
-        failure = error
-      }
+      do { _ = try await iterator.next() } catch { failure = error }
       let afterFailure = try await iterator.next()
       #expect(first == 1)
       #expect(failure is StreamFailure)
       #expect(afterFailure == nil)
     }
 
-    @Test func repeatedFinishKeepsTheFirstTermination() async throws {
+    @Test
+    func repeatedFinishKeepsTheFirstTermination() async throws {
       // given a channel closed cleanly
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       channel.finish()
@@ -208,7 +215,8 @@ enum BoundedAsyncChannelTests {
       #expect(received.isEmpty)
     }
 
-    @Test func finishWakesEveryParkedProducer() async throws {
+    @Test
+    func finishWakesEveryParkedProducer() async throws {
       // given two producers parked on a full channel
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       try await channel.send(1)
@@ -238,7 +246,8 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedSenderCount == 0)
     }
 
-    @Test func finishThrowingWakesAParkedProducerWithTheRefusal() async throws {
+    @Test
+    func finishThrowingWakesAParkedProducerWithTheRefusal() async throws {
       // given a producer parked on a full channel
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       try await channel.send(1)
@@ -260,7 +269,8 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedSenderCount == 0)
     }
 
-    @Test func finishWakesAParkedConsumer() async throws {
+    @Test
+    func finishWakesAParkedConsumer() async throws {
       // given a consumer parked on an empty channel
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       let consumer = Task { () -> Int? in
@@ -280,7 +290,8 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedReceiverCount == 0)
     }
 
-    @Test func finishThrowingWakesAParkedConsumerWithTheError() async throws {
+    @Test
+    func finishThrowingWakesAParkedConsumerWithTheError() async throws {
       // given a consumer parked on an empty channel
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       let consumer = Task { () -> Int? in
@@ -301,7 +312,8 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedReceiverCount == 0)
     }
 
-    @Test func rejectsASendAfterFinish() async throws {
+    @Test
+    func rejectsASendAfterFinish() async throws {
       // given
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       channel.finish()
@@ -315,8 +327,10 @@ enum BoundedAsyncChannelTests {
 
   // MARK: - Cancellation
 
-  @Suite struct Cancellation {
-    @Test func cancellingAParkedProducerRemovesItsElement() async throws {
+  @Suite
+  struct Cancellation {
+    @Test
+    func cancellingAParkedProducerRemovesItsElement() async throws {
       // given a producer parked on a full channel
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       try await channel.send(1)
@@ -342,7 +356,8 @@ enum BoundedAsyncChannelTests {
       #expect(received == [1])
     }
 
-    @Test func cancellingAParkedConsumerRemovesIt() async throws {
+    @Test
+    func cancellingAParkedConsumerRemovesIt() async throws {
       // given a consumer parked on an empty channel
       let channel = BoundedAsyncChannel<Int>(capacity: 2)
       let consumer = Task { () -> Int? in
@@ -367,7 +382,8 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedSenderCount == 0)
     }
 
-    @Test func rejectsASendFromAnAlreadyCancelledTask() async throws {
+    @Test
+    func rejectsASendFromAnAlreadyCancelledTask() async throws {
       // given a producer, cancelled before it reaches a channel with room to spare
       let channel = BoundedAsyncChannel<Int>(capacity: 4)
       let release = AsyncGate()
@@ -391,7 +407,8 @@ enum BoundedAsyncChannelTests {
       #expect(received.isEmpty)
     }
 
-    @Test func rejectsAReceiveFromAnAlreadyCancelledTask() async throws {
+    @Test
+    func rejectsAReceiveFromAnAlreadyCancelledTask() async throws {
       // given an element ready to deliver and a consumer cancelled before it reads
       let channel = BoundedAsyncChannel<Int>(capacity: 4)
       try await channel.send(1)
@@ -475,23 +492,25 @@ enum BoundedAsyncChannelTests {
 
   // MARK: - Validation
 
-  @Suite struct Validation {
-    @Test func rejectsAnElementHeavierThanTheCapacity() async throws {
+  @Suite
+  struct Validation {
+    @Test
+    func rejectsAnElementHeavierThanTheCapacity() async throws {
       // given a channel whose whole cap is smaller than the element handed to it
       let channel = BoundedAsyncChannel<Int>(capacity: 4) { element in
         element
       }
 
       // when / then it fails rather than waiting for a drain that could never admit it
-      await #expect(
-        throws: BoundedAsyncChannelError.elementExceedsCapacity(weight: 5, capacity: 4)
-      ) {
+      await #expect(throws: BoundedAsyncChannelError.elementExceedsCapacity(weight: 5, capacity: 4))
+      {
         try await channel.send(5)
       }
       #expect(channel.suspendedSenderCount == 0)
     }
 
-    @Test func rejectsANegativeWeight() async throws {
+    @Test
+    func rejectsANegativeWeight() async throws {
       // given a weight function that can return a negative weight
       let channel = BoundedAsyncChannel<Int>(capacity: 4) { element in
         element
@@ -504,21 +523,24 @@ enum BoundedAsyncChannelTests {
       #expect(channel.suspendedSenderCount == 0)
     }
 
-    @Test func trapsOnAZeroCapacity() async {
+    @Test
+    func trapsOnAZeroCapacity() async {
       // given / when / then a channel that can never admit anything is a programming error
       await #expect(processExitsWith: .failure) {
         _ = BoundedAsyncChannel<Int>(capacity: 0)
       }
     }
 
-    @Test func trapsOnANegativeCapacity() async {
+    @Test
+    func trapsOnANegativeCapacity() async {
       // given / when / then
       await #expect(processExitsWith: .failure) {
         _ = BoundedAsyncChannel<Int>(capacity: -1)
       }
     }
 
-    @Test func rejectsASecondIterator() async throws {
+    @Test
+    func rejectsASecondIterator() async throws {
       // given a channel whose single consumer has claimed the sequence
       let channel = BoundedAsyncChannel<Int>(capacity: 1)
       try await channel.send(1)
@@ -541,9 +563,9 @@ enum BoundedAsyncChannelTests {
 
 private struct StreamFailure: Error, Equatable {}
 
-private func collect<Element: Sendable>(
-  _ channel: BoundedAsyncChannel<Element>
-) async throws -> [Element] {
+private func collect<Element: Sendable>(_ channel: BoundedAsyncChannel<Element>) async throws
+  -> [Element]
+{
   var received: [Element] = []
   for try await element in channel {
     received.append(element)

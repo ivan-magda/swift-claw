@@ -3,9 +3,7 @@ import Foundation
 import GRDB
 
 extension ScheduledLearningStoreGRDB {
-  public func candidateArtifact(
-    digest: CandidateDigest
-  ) throws(StoreError) -> CandidateArtifact? {
+  public func candidateArtifact(digest: CandidateDigest) throws(StoreError) -> CandidateArtifact? {
     try database.readMapping { db in
       try Self.readCandidateArtifact(db, digest: digest)
     }
@@ -26,13 +24,13 @@ extension ScheduledLearningStoreGRDB {
     let manifestJSON = String(decoding: bytes, as: UTF8.self)
     try db.execute(
       sql: """
-        INSERT OR IGNORE INTO lesson_sets(
-          job_id, digest, schema_version, canonical_bytes, source, created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
+      INSERT OR IGNORE INTO lesson_sets(
+        job_id, digest, schema_version, canonical_bytes, source, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      """,
       arguments: [
-        artifact.replacement.jobId,
+        artifact.replacement.jobID,
         artifact.replacement.digest.rawValue,
         artifact.replacement.schemaVersion,
         artifact.replacement.canonicalBytes,
@@ -43,7 +41,7 @@ extension ScheduledLearningStoreGRDB {
     guard
       let stored = try readLessonSet(
         db,
-        jobId: artifact.replacement.jobId,
+        jobID: artifact.replacement.jobID,
         digest: artifact.replacement.digest
       ),
       stored == artifact.replacement
@@ -52,14 +50,14 @@ extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: """
-        INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
-          replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
-          source_manifest, predecessor_digest, algorithm, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+      INSERT INTO learning_candidates(candidate_digest, job_id, learning_epoch,
+        replacement_digest, base_digest, base_revision, frozen_feedback_revision, origin,
+        source_manifest, predecessor_digest, algorithm, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      """,
       arguments: [
         artifact.digest.rawValue,
-        artifact.manifest.jobId,
+        artifact.manifest.jobID,
         artifact.manifest.epoch.value,
         artifact.replacement.digest.rawValue,
         artifact.manifest.baseDigest.rawValue,
@@ -74,19 +72,18 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  static func readCandidateArtifact(
-    _ db: Database,
-    digest: CandidateDigest
-  ) throws -> CandidateArtifact? {
+  static func readCandidateArtifact(_ db: Database, digest: CandidateDigest) throws
+    -> CandidateArtifact?
+  {
     guard
       let row = try Row.fetchOne(
         db,
         sql: """
-          SELECT candidate_digest, job_id, learning_epoch, replacement_digest, base_digest,
-            base_revision, frozen_feedback_revision, origin, source_manifest, predecessor_digest,
-            algorithm
-          FROM learning_candidates WHERE candidate_digest = ?
-          """,
+        SELECT candidate_digest, job_id, learning_epoch, replacement_digest, base_digest,
+          base_revision, frozen_feedback_revision, origin, source_manifest, predecessor_digest,
+          algorithm
+        FROM learning_candidates WHERE candidate_digest = ?
+        """,
         arguments: [digest.rawValue]
       )
     else {
@@ -100,7 +97,7 @@ extension ScheduledLearningStoreGRDB {
       let manifest = CandidateSourceManifest.decodedCanonical(from: manifestBytes),
       let replacement = try readLessonSet(
         db,
-        jobId: stored.jobId,
+        jobID: stored.jobID,
         digest: LessonSetDigest(rawValue: stored.replacementDigest)
       )
     else {
@@ -116,7 +113,7 @@ extension ScheduledLearningStoreGRDB {
 
 private struct StoredCandidateProjection {
   let candidateDigest: String
-  let jobId: Int64
+  let jobID: Int64
   let epoch: Int64
   let replacementDigest: String
   let baseDigest: String
@@ -130,15 +127,12 @@ private struct StoredCandidateProjection {
   init?(row: Row) {
     guard
       let candidateDigest = SQLiteStoredValue.string(in: row, column: "candidate_digest"),
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
+      let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
       let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
       let replacementDigest = SQLiteStoredValue.string(in: row, column: "replacement_digest"),
       let baseDigest = SQLiteStoredValue.string(in: row, column: "base_digest"),
       let baseRevision = SQLiteStoredValue.int64(in: row, column: "base_revision"),
-      let feedbackRevision = SQLiteStoredValue.int64(
-        in: row,
-        column: "frozen_feedback_revision"
-      ),
+      let feedbackRevision = SQLiteStoredValue.int64(in: row, column: "frozen_feedback_revision"),
       let origin = SQLiteStoredValue.string(in: row, column: "origin"),
       let manifestJSON = SQLiteStoredValue.string(in: row, column: "source_manifest"),
       let predecessor = SQLiteStoredValue.nullableString(in: row, column: "predecessor_digest"),
@@ -147,7 +141,7 @@ private struct StoredCandidateProjection {
       return nil
     }
     self.candidateDigest = candidateDigest
-    self.jobId = jobId
+    self.jobID = jobID
     self.epoch = epoch
     self.replacementDigest = replacementDigest
     self.baseDigest = baseDigest
@@ -159,21 +153,14 @@ private struct StoredCandidateProjection {
     self.algorithm = algorithm
   }
 
-  func matches(
-    artifact: CandidateArtifact,
-    requestedDigest: CandidateDigest
-  ) -> Bool {
+  func matches(artifact: CandidateArtifact, requestedDigest: CandidateDigest) -> Bool {
     let manifest = artifact.manifest
     return candidateDigest == requestedDigest.rawValue
-      && candidateDigest == artifact.digest.rawValue
-      && jobId == artifact.replacement.jobId
-      && jobId == manifest.jobId
-      && epoch == manifest.epoch.value
+      && candidateDigest == artifact.digest.rawValue && jobID == artifact.replacement.jobID
+      && jobID == manifest.jobID && epoch == manifest.epoch.value
       && replacementDigest == artifact.replacement.digest.rawValue
-      && baseDigest == manifest.baseDigest.rawValue
-      && baseRevision == manifest.baseRevision.value
-      && feedbackRevision == manifest.feedbackRevision.value
-      && origin == manifest.origin.rawValue
+      && baseDigest == manifest.baseDigest.rawValue && baseRevision == manifest.baseRevision.value
+      && feedbackRevision == manifest.feedbackRevision.value && origin == manifest.origin.rawValue
       && predecessorDigest == manifest.predecessorCandidate?.rawValue
       && algorithm == manifest.algorithm.rawValue
   }

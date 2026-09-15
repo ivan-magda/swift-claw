@@ -68,10 +68,7 @@ package struct AttemptOutputScope: Sendable, Equatable {
   /// high-water charge. Separate fields are counted separately, so a combining scalar at a field
   /// boundary cannot merge two independently emitted values.
   package func observe(fields: [AttemptOutputField]) throws {
-    try limiter.replace(
-      roundID: roundID,
-      fields: fields
-    )
+    try limiter.replace(roundID: roundID, fields: fields)
   }
 
   /// Rechecks the provider's whole reply. Tool names and call IDs are routing metadata, not model
@@ -114,9 +111,7 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
   package let limits: AttemptOutputLimits
   private let state = Mutex(State())
 
-  package init(limits: AttemptOutputLimits) {
-    self.limits = limits
-  }
+  package init(limits: AttemptOutputLimits) { self.limits = limits }
 
   package func beginRound() -> AttemptOutputScope {
     let roundID = UUID()
@@ -137,10 +132,7 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
     }
   }
 
-  fileprivate func replace(
-    roundID: UUID,
-    fields: [AttemptOutputField]
-  ) throws {
+  fileprivate func replace(roundID: UUID, fields: [AttemptOutputField]) throws {
     let exceeded = state.withLock { current -> Bool in
       guard current.exceeded == false else {
         return true
@@ -152,8 +144,7 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
 
       let totals = Self.totals(current.rounds.values.map(\.counts))
       let exceedsLimits =
-        totals.utf8Bytes > limits.maximumUTF8Bytes
-        || totals.graphemes > limits.maximumGraphemes
+        totals.utf8Bytes > limits.maximumUTF8Bytes || totals.graphemes > limits.maximumGraphemes
 
       if exceedsLimits {
         current.exceeded = true
@@ -167,11 +158,7 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
     }
   }
 
-  fileprivate func finalize(
-    roundID: UUID,
-    visibleText: [String],
-    toolArguments: [String]
-  ) throws {
+  fileprivate func finalize(roundID: UUID, visibleText: [String], toolArguments: [String]) throws {
     let snapshot = Self.counts(for: visibleText + toolArguments)
     let exceeded = state.withLock { current -> Bool in
       guard current.exceeded == false else {
@@ -187,8 +174,7 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
 
       let totals = Self.totals(current.rounds.values.map(\.counts))
       let exceedsLimits =
-        totals.utf8Bytes > limits.maximumUTF8Bytes
-        || totals.graphemes > limits.maximumGraphemes
+        totals.utf8Bytes > limits.maximumUTF8Bytes || totals.graphemes > limits.maximumGraphemes
 
       if exceedsLimits {
         current.exceeded = true
@@ -202,10 +188,7 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
     }
   }
 
-  private static func merge(
-    fields: [AttemptOutputField],
-    into highWater: inout [String: Counts]
-  ) {
+  private static func merge(fields: [AttemptOutputField], into highWater: inout [String: Counts]) {
     precondition(Set(fields.map(\.key)).count == fields.count, "output field keys must be unique")
     for field in fields {
       let observed = counts(for: [field.value])
@@ -219,8 +202,12 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
 
   private static func counts(for fields: [String]) -> Counts {
     Counts(
-      utf8Bytes: fields.reduce(0) { SaturatingArithmetic.sum($0, $1.utf8.count) },
-      graphemes: fields.reduce(0) { SaturatingArithmetic.sum($0, $1.count) }
+      utf8Bytes: fields.reduce(0) {
+        SaturatingArithmetic.sum($0, $1.utf8.count)
+      },
+      graphemes: fields.reduce(0) {
+        SaturatingArithmetic.sum($0, $1.count)
+      }
     )
   }
 

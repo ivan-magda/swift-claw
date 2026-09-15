@@ -53,9 +53,7 @@ public struct MCPTool: ClawCore.Tool {
     )
   }
 
-  public var timeout: Duration {
-    .seconds(config.worstCaseCallSeconds + Self.timeoutMarginSeconds)
-  }
+  public var timeout: Duration { .seconds(config.worstCaseCallSeconds + Self.timeoutMarginSeconds) }
 
   /// The server, never a destination read out of the arguments. An MCP call has exactly one
   /// recipient — the one the owner configured — so the approval binds to that, and a model that
@@ -64,13 +62,11 @@ public struct MCPTool: ClawCore.Tool {
     .resolved(target)
   }
 
-  public func approvalPresentation(
-    arguments: JSONValue,
-    canonicalTarget: String
-  ) -> ToolApprovalPresentation {
+  public func approvalPresentation(arguments: JSONValue, canonicalTarget: String)
+    -> ToolApprovalPresentation
+  {
     ToolApprovalPresentation(
-      blastRadius:
-        "MCP: \(config.name) · "
+      blastRadius: "MCP: \(config.name) · "
         + MCPMetadataSanitizer(redactor: redactor).displayName(resolved.coordinate.remoteName),
       contentPreview: preview(of: arguments),
       warnings: []
@@ -112,9 +108,7 @@ private extension MCPTool {
 
   /// Names the server and its complete endpoint: scheme, port, path, and query can each select a
   /// different recipient, so a host-only label is not an exact-action binding.
-  var target: String {
-    "\(config.name) (\(config.url.absoluteString))"
-  }
+  var target: String { "\(config.name) (\(config.url.absoluteString))" }
 
   var invocationIdentity: String {
     var headers = config.headers.map { header in
@@ -124,10 +118,7 @@ private extension MCPTool {
       left.name == right.name ? left.value < right.value : left.name < right.name
     }
     let headerIdentity: [JSONValue] = headers.map { header in
-      JSONValue.object([
-        "name": .string(header.name),
-        "value": .string(header.value),
-      ])
+      JSONValue.object(["name": .string(header.name), "value": .string(header.value)])
     }
     let identity = JSONValue.object([
       "authHeader": .string(config.authHeader.lowercased()),
@@ -141,7 +132,10 @@ private extension MCPTool {
           config.url.absoluteString,
           resolved.coordinate.remoteName,
           config.authHeader.lowercased(),
-        ] + headers.flatMap { [$0.name, $0.value] }
+        ]
+          + headers.flatMap {
+            [$0.name, $0.value]
+          }
       )
   }
 
@@ -200,13 +194,12 @@ private extension MCPTool {
     }
 
     switch disposition {
-    case .definitelyNotExecuted:
-      return "\(resolved.localName) failed: \(detail)."
+    case .definitelyNotExecuted: return "\(resolved.localName) failed: \(detail)."
     case .mayHaveExecuted:
       return """
-        \(resolved.localName) may have completed remotely; \
-        verify its effects before retrying: \(detail).
-        """
+      \(resolved.localName) may have completed remotely; \
+      verify its effects before retrying: \(detail).
+      """
     }
   }
 }
@@ -229,26 +222,20 @@ private extension MCPTool {
   /// Text parts join as text; everything else is noted by kind, because the model can act on
   /// knowing a picture came back even though it cannot see one.
   static func render(_ content: [MCP.Tool.Content]) -> String {
-    content
-      .map(part)
-      .joined(separator: "\n")
+    content.map(part).joined(separator: "\n")
   }
 
   static func part(_ content: MCP.Tool.Content) -> String {
     switch content {
-    case .text(let text, _, _):
-      return text
-    case .image(_, let mimeType, _, _):
-      return "[image: \(mimeType)]"
-    case .audio(_, let mimeType, _, _):
-      return "[audio: \(mimeType)]"
+    case .text(let text, _, _): return text
+    case .image(_, let mimeType, _, _): return "[image: \(mimeType)]"
+    case .audio(_, let mimeType, _, _): return "[audio: \(mimeType)]"
     case .resource(let resource, _, _):
       guard let text = resource.text else {
         return "[resource: \(resource.uri) (\(resource.mimeType ?? "binary"))]"
       }
       return text
-    case .resourceLink(let uri, let name, _, _, _, _):
-      return "[resource link: \(name) at \(uri)]"
+    case .resourceLink(let uri, let name, _, _, _, _): return "[resource link: \(name) at \(uri)]"
     }
   }
 }

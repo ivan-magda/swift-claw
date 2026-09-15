@@ -62,11 +62,13 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
     credentials: any LLMCredentialSource,
     http: any HTTPStreaming,
     clock: any Clock<Duration>,
-    jitter: @escaping @Sendable (Duration) -> Duration,
+    jitter: @escaping @Sendable (_ duration: Duration) -> Duration,
     retryBudget: Int,
     requestTimeoutSeconds: Int,
     treatsQuotaAsTerminal: Bool = false,
-    logger: Logger = Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() })
+    logger: Logger = Logger(label: "clawd.llm") { _ in
+      SwiftLogNoOpLogHandler()
+    }
   ) {
     self.credentials = credentials
     self.http = http
@@ -86,7 +88,7 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
   /// delta; `complete` passes a sink that discards them.
   func run(
     plan: ChatGPTResponsesAttemptPlan,
-    emitDelta: @escaping @Sendable (String) async throws -> Void
+    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
   ) async -> LLMStreamTermination {
     if Task.isCancelled {
       return .cancelled(.notStarted)
@@ -95,14 +97,10 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
     var state = CallState(replayMode: .normal(plan.identity))
     while true {
       switch await runAttempt(plan: plan, state: &state, emitDelta: emitDelta) {
-      case .stop(let termination):
-        return termination
-      case .retryImmediately:
-        continue
+      case .stop(let termination): return termination
+      case .retryImmediately: continue
       case .retryAfter(let delay):
-        do {
-          try await backoff.wait(retryAfter: delay, attempt: state.attempt)
-        } catch {
+        do { try await backoff.wait(retryAfter: delay, attempt: state.attempt) } catch {
           // Retries only ever follow a clean reset, so a cancelled backoff owes no usage.
           return .cancelled(.notStarted)
         }
@@ -136,7 +134,7 @@ private extension ChatGPTResponsesAttemptEngine {
   func runAttempt(
     plan: ChatGPTResponsesAttemptPlan,
     state: inout CallState,
-    emitDelta: @escaping @Sendable (String) async throws -> Void
+    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
   ) async -> LoopControl {
     state.attempt += 1
     if Task.isCancelled {
@@ -145,9 +143,7 @@ private extension ChatGPTResponsesAttemptEngine {
 
     let exposure = ProviderAttemptExposure()
     let authorization: LLMRequestAuthorization
-    do {
-      authorization = try await credentials.authorization()
-    } catch is CancellationError {
+    do { authorization = try await credentials.authorization() } catch is CancellationError {
       return .stop(.cancelled(.notStarted))
     } catch let credentialError as ChatGPTCredentialError {
       // No request goes out without a credential, so nothing was exposed. A throttle or a transient
@@ -183,8 +179,7 @@ private extension ChatGPTResponsesAttemptEngine {
 
     let canRetry = state.attempt < retryBudget
     switch await dispatch(request, exposure: exposure, context: context, emitDelta: emitDelta) {
-    case .terminal(let termination):
-      return .stop(termination)
+    case .terminal(let termination): return .stop(termination)
     case .transportRetryable(let cause):
       guard canRetry else {
         return .stop(.failed(exposure.failure(cause)))
@@ -218,8 +213,7 @@ private extension ChatGPTResponsesAttemptEngine {
       refreshRequested: state.refreshRequested,
       recoveryUsed: state.recoveryUsed
     ) {
-    case .fail(let cause):
-      return .stop(.failed(exposure.failure(cause)))
+    case .fail(let cause): return .stop(.failed(exposure.failure(cause)))
 
     case .refreshThenRetry:
       await credentials.reject(generation: authorization.generation, disposition: .refresh)
@@ -248,27 +242,20 @@ private extension ChatGPTResponsesAttemptEngine {
       state.recoveryUsed = true
       return .retryImmediately
 
-    case .backoffThenRetry(let delay):
-      return .retryAfter(delay)
+    case .backoffThenRetry(let delay): return .retryAfter(delay)
     }
   }
 
   /// Drives credential acquisition after a clean 401 without re-entering the Responses attempt
   /// loop. A successful rotation is intentionally discarded here: it is durable for use in a later
   /// planned attempt, while this logical attempt terminates without a second inference send.
-  func finishRefreshWithoutInferenceRetry(
-    exposure: ProviderAttemptExposure
-  ) async -> LoopControl {
+  func finishRefreshWithoutInferenceRetry(exposure: ProviderAttemptExposure) async -> LoopControl {
     do {
       _ = try await credentials.authorization()
       return .stop(.failed(exposure.failure(.credentialRefreshCompleted)))
-    } catch is CancellationError {
-      return .stop(.cancelled(.notStarted))
-    } catch let credentialError as ChatGPTCredentialError {
-      return .stop(
-        .failed(exposure.failure(Self.cause(for: credentialError)))
-      )
-    } catch {
+    } catch is CancellationError { return .stop(.cancelled(.notStarted)) } catch let credentialError
+      as ChatGPTCredentialError
+    { return .stop(.failed(exposure.failure(Self.cause(for: credentialError)))) } catch {
       return .stop(.failed(exposure.failure(.authenticationRequired)))
     }
   }
@@ -284,8 +271,7 @@ private extension ChatGPTResponsesAttemptEngine {
   /// nothing — and only `.authenticationRequired` earns the terminal login prompt.
   static func cause(for credentialError: ChatGPTCredentialError) -> ProviderError {
     switch credentialError {
-    case .authenticationRequired:
-      return .authenticationRequired
+    case .authenticationRequired: return .authenticationRequired
     case .throttled(let retryAfter):
       return .quotaLimited(retryAfterSeconds: Self.wholeSeconds(retryAfter))
     case .temporarilyUnavailable:
@@ -360,17 +346,14 @@ private extension ChatGPTResponsesAttemptEngine {
 
     var identity: ChatGPTReplayIdentity {
       switch self {
-      case .normal(let identity), .stateFree(let identity):
-        return identity
+      case .normal(let identity), .stateFree(let identity): return identity
       }
     }
 
     var includesPriorState: Bool {
       switch self {
-      case .normal:
-        return true
-      case .stateFree:
-        return false
+      case .normal: return true
+      case .stateFree: return false
       }
     }
   }
@@ -394,19 +377,15 @@ private extension ChatGPTResponsesAttemptEngine {
     _ request: HTTPRequest,
     exposure: ProviderAttemptExposure,
     context: ResponseContext,
-    emitDelta: @escaping @Sendable (String) async throws -> Void
+    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
   ) async -> Dispatch {
     let exchange: HTTPStreamExchange
-    do {
-      exchange = try await http.openStream(request)
-    } catch is CancellationError {
+    do { exchange = try await http.openStream(request) } catch is CancellationError {
       // The handoff refused, or the transport unwound: the reducer owns whether the model was asked.
       return .terminal(.cancelled(exposure.accounting))
     } catch let transport as HTTPTransportFailure {
       return transportDispatch(transport, exposure: exposure, redactor: context.redactor)
-    } catch {
-      return .terminal(.failed(exposure.failure(context.redactedCause(for: error))))
-    }
+    } catch { return .terminal(.failed(exposure.failure(context.redactedCause(for: error)))) }
 
     guard (200..<300).contains(exchange.head.statusCode) else {
       // The server answered instead of inferring, so this attempt generated nothing.
@@ -438,16 +417,13 @@ private extension ChatGPTResponsesAttemptEngine {
     }
   }
 
-  static func providerError(
-    from transport: HTTPTransportFailure,
-    redactor: SecretRedactor
-  ) -> ProviderError {
+  static func providerError(from transport: HTTPTransportFailure, redactor: SecretRedactor)
+    -> ProviderError
+  {
     let message = redactor.redact(transport.safeMessage)
     switch transport.disposition {
-    case .definitelyNotSent:
-      return .connectFailed(message: message)
-    case .mayHaveBeenSent:
-      return .transportFailure(message: message)
+    case .definitelyNotSent: return .connectFailed(message: message)
+    case .mayHaveBeenSent: return .transportFailure(message: message)
     }
   }
 }
@@ -464,7 +440,7 @@ private extension ChatGPTResponsesAttemptEngine {
     _ exchange: HTTPStreamExchange,
     exposure: ProviderAttemptExposure,
     context: ResponseContext,
-    emitDelta: @escaping @Sendable (String) async throws -> Void
+    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
   ) async -> LLMStreamTermination {
     var parser = ChatGPTResponsesSSEParser()
     var accumulator = ChatGPTResponsesAccumulator(
@@ -481,15 +457,11 @@ private extension ChatGPTResponsesAttemptEngine {
         // `accumulator.consume` may first observe tokens and then throw (for example when the
         // evaluation output cap is crossed). Debit that observation before the error leaves this
         // chunk so cancellation cannot turn known provider work into a zero-token exposure.
-        defer {
-          exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens)
-        }
+        defer { exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens) }
         for streamEvent in try accumulator.consume(try parser.push(chunk)) {
           switch streamEvent {
-          case .delta(let text):
-            try await emitDelta(text)
-          case .finished(let response):
-            terminal = response
+          case .delta(let text): try await emitDelta(text)
+          case .finished(let response): terminal = response
           }
         }
         if terminal != nil {
@@ -523,12 +495,9 @@ private extension ChatGPTResponsesAttemptEngine {
 
   static func transferError(_ termination: HTTPStreamTermination) -> (any Error)? {
     switch termination {
-    case .completed:
-      return nil
-    case .failed(let failure):
-      return failure
-    case .cancelled:
-      return CancellationError()
+    case .completed: return nil
+    case .failed(let failure): return failure
+    case .cancelled: return CancellationError()
     }
   }
 }
@@ -564,10 +533,7 @@ private extension ChatGPTResponsesAttemptEngine {
 
   /// Reads and sanitizes the diagnostic body, then joins the exchange. The body is already capped by
   /// the executor at the diagnostic allowance, so reading it whole holds no more than that.
-  func diagnose(
-    _ exchange: HTTPStreamExchange,
-    redactionValues: [String]
-  ) async -> HeadDiagnosis {
+  func diagnose(_ exchange: HTTPStreamExchange, redactionValues: [String]) async -> HeadDiagnosis {
     var body = Data()
     do {
       for try await chunk in exchange.body {
@@ -637,18 +603,15 @@ private extension ChatGPTResponsesAttemptEngine {
       }
       return .backoffThenRetry(nil)
 
-    default:
-      return terminalOrRecovery(diagnosis, canRetry: canRetry, recoveryUsed: recoveryUsed)
+    default: return terminalOrRecovery(diagnosis, canRetry: canRetry, recoveryUsed: recoveryUsed)
     }
   }
 
   /// The default bucket: a clean poisoned-state rejection earns one state-free recovery, counted
   /// against the budget; every other clean head is a terminal rejection.
-  func terminalOrRecovery(
-    _ diagnosis: HeadDiagnosis,
-    canRetry: Bool,
-    recoveryUsed: Bool
-  ) -> HeadDecision {
+  func terminalOrRecovery(_ diagnosis: HeadDiagnosis, canRetry: Bool, recoveryUsed: Bool)
+    -> HeadDecision
+  {
     guard diagnosis.visionRefusal == false else {
       return .fail(.visionUnsupported)
     }
@@ -664,7 +627,7 @@ private extension ChatGPTResponsesAttemptEngine {
   }
 
   static func retryAfterSeconds(_ head: HTTPStreamHead) -> Int? {
-    guard let raw = head.getHeader(for: "retry-after") else {
+    guard let raw = head.header(for: "retry-after") else {
       return nil
     }
     // Whole delta-seconds only; an HTTP-date form is not honored as a bounded hint.

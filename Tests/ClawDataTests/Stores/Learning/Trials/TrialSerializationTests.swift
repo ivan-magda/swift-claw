@@ -8,8 +8,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct TrialSerializationTests {
-  @Test func recomputeThenResetCommitsOnlyTheSerializedOldEpochProjection() async throws {
+@Suite
+struct TrialSerializationTests {
+  @Test
+  func recomputeThenResetCommitsOnlyTheSerializedOldEpochProjection() async throws {
     // given
     let gate = SQLiteTransactionGate()
     let fixture = try pooledTrialEnvironment(prefix: "claw-trial-recompute-reset", gate: gate)
@@ -19,28 +21,28 @@ import Testing
     }
     try fixture.env.installTrial()
     let evidence = try fixture.env.sealedTrialEvidence()
-    try fixture.env.resetAssignmentCache(runId: evidence.runId, state: .created)
+    try fixture.env.resetAssignmentCache(runID: evidence.runID, state: .created)
     try await fixture.env.queue.write { db in
       try db.execute(
         sql: """
-          CREATE TRIGGER hold_task16_recompute
-          BEFORE UPDATE OF state ON trial_assignments
-          WHEN OLD.run_id = \(evidence.runId)
-          BEGIN SELECT task16_hold(); END
-          """
+        CREATE TRIGGER hold_task16_recompute
+        BEFORE UPDATE OF state ON trial_assignments
+        WHEN OLD.run_id = \(evidence.runID)
+        BEGIN SELECT task16_hold(); END
+        """
       )
     }
     let learning = fixture.env.learning
-    let jobId = fixture.env.jobId
+    let jobID = fixture.env.jobID
     let now = fixture.env.now
 
     // when
     let recomputationTask = databaseTask {
-      try learning.recomputeAssignment(runId: evidence.runId, now: now)
+      try learning.recomputeAssignment(runID: evidence.runID, now: now)
     }
     await gate.entered.wait()
     let resetTask = databaseTask {
-      try learning.applyReset(updateId: 9_160, jobId: jobId, now: now.addingTimeInterval(1))
+      try learning.applyReset(updateID: 9_160, jobID: jobID, now: now.addingTimeInterval(1))
     }
     gate.release()
     let recomputation = try await recomputationTask.value
@@ -58,11 +60,12 @@ import Testing
     #expect(assignment.state == .primaryRunSettled)
     #expect(receipt.result.newEpoch == LearningEpoch(2))
     #expect(try fixture.env.currentLearningState().epoch == LearningEpoch(2))
-    #expect(try fixture.env.assignmentState(runId: evidence.runId) == .primaryRunSettled)
+    #expect(try fixture.env.assignmentState(runID: evidence.runID) == .primaryRunSettled)
     #expect(try fixture.env.trialState() == .closed)
   }
 
-  @Test func resetThenRecomputeRejectsTheOldEpochWithoutWritingItsCache() async throws {
+  @Test
+  func resetThenRecomputeRejectsTheOldEpochWithoutWritingItsCache() async throws {
     // given
     let gate = SQLiteTransactionGate()
     let fixture = try pooledTrialEnvironment(prefix: "claw-trial-reset-recompute", gate: gate)
@@ -72,28 +75,28 @@ import Testing
     }
     try fixture.env.installTrial()
     let evidence = try fixture.env.sealedTrialEvidence()
-    try fixture.env.resetAssignmentCache(runId: evidence.runId, state: .created)
+    try fixture.env.resetAssignmentCache(runID: evidence.runID, state: .created)
     try await fixture.env.queue.write { db in
       try db.execute(
         sql: """
-          CREATE TRIGGER hold_task16_reset
-          BEFORE UPDATE OF learning_epoch ON job_learning_state
-          WHEN OLD.job_id = \(fixture.env.jobId)
-          BEGIN SELECT task16_hold(); END
-          """
+        CREATE TRIGGER hold_task16_reset
+        BEFORE UPDATE OF learning_epoch ON job_learning_state
+        WHEN OLD.job_id = \(fixture.env.jobID)
+        BEGIN SELECT task16_hold(); END
+        """
       )
     }
     let learning = fixture.env.learning
-    let jobId = fixture.env.jobId
+    let jobID = fixture.env.jobID
     let now = fixture.env.now
 
     // when
     let resetTask = databaseTask {
-      try learning.applyReset(updateId: 9_161, jobId: jobId, now: now.addingTimeInterval(1))
+      try learning.applyReset(updateID: 9_161, jobID: jobID, now: now.addingTimeInterval(1))
     }
     await gate.entered.wait()
     let recomputationTask = databaseTask {
-      try learning.recomputeAssignment(runId: evidence.runId, now: now.addingTimeInterval(2))
+      try learning.recomputeAssignment(runID: evidence.runID, now: now.addingTimeInterval(2))
     }
     gate.release()
     let reset = try await resetTask.value
@@ -106,11 +109,12 @@ import Testing
     }
     #expect(receipt.result.newEpoch == LearningEpoch(2))
     #expect(recomputation == .stale)
-    #expect(try fixture.env.assignmentState(runId: evidence.runId) == .created)
+    #expect(try fixture.env.assignmentState(runID: evidence.runID) == .created)
     #expect(try fixture.env.trialState() == .closed)
   }
 
-  @Test func admissionQueuedBehindTheThirdFireStillSeesOneLiveDrainingTrial() async throws {
+  @Test
+  func admissionQueuedBehindTheThirdFireStillSeesOneLiveDrainingTrial() async throws {
     // given
     let gate = SQLiteTransactionGate()
     let fixture = try pooledTrialEnvironment(prefix: "claw-trial-admission-drain", gate: gate)
@@ -127,11 +131,11 @@ import Testing
     try await fixture.env.queue.write { db in
       try db.execute(
         sql: """
-          CREATE TRIGGER hold_task16_third_fire
-          BEFORE UPDATE OF consumed_assignments ON learning_trials
-          WHEN NEW.consumed_assignments = 3
-          BEGIN SELECT task16_hold(); END
-          """
+        CREATE TRIGGER hold_task16_third_fire
+        BEFORE UPDATE OF consumed_assignments ON learning_trials
+        WHEN NEW.consumed_assignments = 3
+        BEGIN SELECT task16_hold(); END
+        """
       )
     }
     let env = fixture.env
@@ -164,9 +168,9 @@ private struct PooledTrialEnvironment {
   let env: BoundRunEnvironment
 }
 
-private func databaseTask<Value: Sendable>(
-  _ operation: @escaping @Sendable () throws -> Value
-) -> Task<Value, any Error> {
+private func databaseTask<Value: Sendable>(_ operation: @escaping @Sendable () throws -> Value)
+  -> Task<Value, any Error>
+{
   Task {
     try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global().async {
@@ -176,10 +180,9 @@ private func databaseTask<Value: Sendable>(
   }
 }
 
-private func pooledTrialEnvironment(
-  prefix: String,
-  gate: SQLiteTransactionGate
-) throws -> PooledTrialEnvironment {
+private func pooledTrialEnvironment(prefix: String, gate: SQLiteTransactionGate) throws
+  -> PooledTrialEnvironment
+{
   let path = makeTempDatabasePath(prefix: prefix)
   var configuration = ClawDatabase.makeConfiguration()
   configuration.prepareDatabase { db in
@@ -219,13 +222,15 @@ private final class SQLiteTransactionGate: @unchecked Sendable {
   }
 }
 
+// MARK: - Trial State Inspection
+
 private extension BoundRunEnvironment {
   func trialState() throws -> LearningTrialState? {
     try queue.read { db in
       let raw = try String.fetchOne(
         db,
         sql: "SELECT state FROM learning_trials WHERE job_id = ? ORDER BY trial_id LIMIT 1",
-        arguments: [jobId]
+        arguments: [jobID]
       )
       return raw.flatMap(LearningTrialState.init(rawValue:))
     }

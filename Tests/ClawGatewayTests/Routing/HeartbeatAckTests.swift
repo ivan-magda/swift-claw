@@ -3,14 +3,17 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct HeartbeatAckTests {
-  @Test func tokenAloneIsAnAck() {
+@Suite
+struct HeartbeatAckTests {
+  @Test
+  func tokenAloneIsAnAck() {
     // given / when / then
     #expect(HeartbeatAck.isAck("HEARTBEAT_OK"))
     #expect(HeartbeatAck.isAck("  HEARTBEAT_OK\n"))
   }
 
-  @Test func tokenWithShortTailIsAnAck() {
+  @Test
+  func tokenWithShortTailIsAnAck() {
     // given — model politeness around the token stays an ack
     let content = "HEARTBEAT_OK\nAll checks passed, nothing needs you."
 
@@ -18,7 +21,8 @@ import Testing
     #expect(HeartbeatAck.isAck(content))
   }
 
-  @Test func leadingAndTrailingTokensBothStrip() {
+  @Test
+  func leadingAndTrailingTokensBothStrip() {
     // given
     let content = "HEARTBEAT_OK all quiet HEARTBEAT_OK"
 
@@ -26,7 +30,8 @@ import Testing
     #expect(HeartbeatAck.isAck(content))
   }
 
-  @Test func threeHundredCharRemainderIsTheBoundary() {
+  @Test
+  func threeHundredCharRemainderIsTheBoundary() {
     // given — the pinned threshold: ≤ 300 chars of remainder suppresses, 301 delivers
     let exactlyAtCap = "HEARTBEAT_OK " + String(repeating: "x", count: 300)
     let oneOver = "HEARTBEAT_OK " + String(repeating: "x", count: 301)
@@ -37,7 +42,8 @@ import Testing
     #expect(HeartbeatAck.isAck(oneOver) == false)
   }
 
-  @Test func longSubstantiveTextIsNotAnAck() {
+  @Test
+  func longSubstantiveTextIsNotAnAck() {
     // given
     let report = String(repeating: "the backup target disk is failing — ", count: 12)
 
@@ -45,13 +51,15 @@ import Testing
     #expect(HeartbeatAck.isAck(report) == false)
   }
 
-  @Test func tokenlessShortTextIsNotAnAck() {
+  @Test
+  func tokenlessShortTextIsNotAnAck() {
     // given — a concise heartbeat reply WITHOUT the token is owner-relevant (an opt-in alert), so
     // it must deliver, never suppress. Only the HEARTBEAT_OK marker authorizes silent drop.
     #expect(HeartbeatAck.isAck("All good.") == false)
   }
 
-  @Test func embeddedTokenDoesNotStrip() {
+  @Test
+  func embeddedTokenDoesNotStrip() {
     // given — only ONE leading and ONE trailing token strip; an embedded token is content, so no
     // token is present as a leading/trailing marker here — this is not an ack.
     let content = "prefix HEARTBEAT_OK " + String(repeating: "y", count: 300)
@@ -60,13 +68,15 @@ import Testing
     #expect(HeartbeatAck.isAck(content) == false)
   }
 
-  @Test func nearTokenPrefixIsNotAnAck() {
+  @Test
+  func nearTokenPrefixIsNotAnAck() {
     // given — a malformed near-token alert (HEARTBEAT_OKAY…) must NOT be treated as the ack
     // token; its substantive tail must deliver, not be silently suppressed (P2 fix).
     #expect(HeartbeatAck.isAck("HEARTBEAT_OKAY: backup failed") == false)
   }
 
-  @Test func nearTokenSuffixIsNotAnAck() {
+  @Test
+  func nearTokenSuffixIsNotAnAck() {
     // given — a word ending in the token bytes without a boundary is not the trailing marker
     #expect(HeartbeatAck.isAck("status: allHEARTBEAT_OK") == false)
   }

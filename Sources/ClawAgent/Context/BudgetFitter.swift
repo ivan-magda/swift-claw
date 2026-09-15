@@ -21,10 +21,8 @@ enum DropMarker: Sendable, Equatable {
 
   func line(kept: Int, total: Int) -> String? {
     switch self {
-    case .none:
-      nil
-    case .showingCount(let noun):
-      "(showing \(kept) of \(total) \(noun))"
+    case .none: nil
+    case .showingCount(let noun): "(showing \(kept) of \(total) \(noun))"
     }
   }
 }
@@ -66,9 +64,7 @@ struct FittedSection: Sendable, Equatable, Identifiable {
   let units: [SectionUnit]
   let droppedUnitIDs: [String]
 
-  var content: String {
-    renderUnits(units)
-  }
+  var content: String { renderUnits(units) }
 
   fileprivate init(source: FittableSection, units: [SectionUnit], droppedUnitIDs: [String] = []) {
     self.id = source.id
@@ -89,14 +85,15 @@ enum BudgetFitter {
   static let truncationMarker = TextTruncation.marker
   static let dropMarkerUnitID = "drop-marker"
 
-  static func fitWithUnits(
-    _ sections: [FittableSection],
-    budget: ContextBudget
-  ) throws -> [FittedSection] {
+  static func fitWithUnits(_ sections: [FittableSection], budget: ContextBudget) throws
+    -> [FittedSection]
+  {
     let ordered = sections.sorted { first, second in
       first.priority < second.priority
     }
-    let nonTruncatable = ordered.filter { !$0.truncatable }
+    let nonTruncatable = ordered.filter {
+      !$0.truncatable
+    }
     let truncatable = ordered.filter(\.truncatable)
     let required = requiredGraphemes(nonTruncatable)
 
@@ -111,7 +108,9 @@ enum BudgetFitter {
     // The newest history unit is kept even when it alone exceeds the residual (see `fittedRow`),
     // so the squeezed total can legitimately overshoot the residual by this floor.
     let historyFloorCount =
-      ordered.first { $0.id == .history }?.units.first?.content.count ?? 0
+      ordered.first {
+        $0.id == .history
+      }?.units.first?.content.count ?? 0
     let cappedRows = truncatable.compactMap { section -> FittedRow? in
       let maxCount = min(section.cap ?? Int.max, renderedCount(section))
       return fittedRow(for: section, maxCount: maxCount)
@@ -151,10 +150,7 @@ enum BudgetFitter {
     }
   }
 
-  private static func fittedRow(
-    for section: FittableSection,
-    maxCount: Int
-  ) -> FittedRow? {
+  private static func fittedRow(for section: FittableSection, maxCount: Int) -> FittedRow? {
     // The newest history unit is the current turn; it is non-droppable even when it alone
     // exceeds the budget, so the model always sees the message it is answering. Flooring the
     // budget at its size means it is admitted whole on the first iteration; later units still
@@ -210,11 +206,9 @@ enum BudgetFitter {
   /// Appends the row's drop marker when the budget left units out. The marker shares the cap with
   /// the content it describes, so a cap too tight for both ships the kept units unmarked — giving
   /// content back to make room would let an annotation about missing skills empty the whole row.
-  private static func markedRow(
-    for section: FittableSection,
-    kept: [SectionUnit],
-    maxCount: Int
-  ) -> FittedRow? {
+  private static func markedRow(for section: FittableSection, kept: [SectionUnit], maxCount: Int)
+    -> FittedRow?
+  {
     guard kept.isEmpty == false else {
       return nil
     }
@@ -230,21 +224,12 @@ enum BudgetFitter {
 
     return FittedRow(
       source: section,
-      units: kept + [
-        SectionUnit(
-          id: dropMarkerUnitID,
-          content: marker,
-          canTruncate: false
-        )
-      ],
+      units: kept + [SectionUnit(id: dropMarkerUnitID, content: marker, canTruncate: false)],
       droppedUnitIDs: droppedIDs
     )
   }
 
-  private static func droppedUnitIDs(
-    in section: FittableSection,
-    kept: [SectionUnit]
-  ) -> [String] {
+  private static func droppedUnitIDs(in section: FittableSection, kept: [SectionUnit]) -> [String] {
     let keptIDs = Set(kept.map(\.id))
     return section.units.map(\.id).filter { id in
       keptIDs.contains(id) == false
@@ -266,10 +251,9 @@ enum BudgetFitter {
   /// The graphemes the non-truncatable rows consume once rendered — the same rendering the fit
   /// itself measures, separator included.
   private static func requiredGraphemes(_ sections: [FittableSection]) -> Int {
-    sections
-      .filter { !$0.truncatable }
-      .map(renderedCount)
-      .reduce(0, +)
+    sections.filter {
+      !$0.truncatable
+    }.map(renderedCount).reduce(0, +)
   }
 
   private static func renderedCount(_ section: FittableSection) -> Int {
@@ -282,9 +266,7 @@ private struct FittedRow: Equatable {
   let units: [SectionUnit]
   let droppedUnitIDs: [String]
 
-  var content: String {
-    renderUnits(units)
-  }
+  var content: String { renderUnits(units) }
 }
 
 private func renderUnits(_ units: [SectionUnit]) -> String {

@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct AdmissionTests {
-  @Test func currentBindingsAndSupportGatesFireIndependently() throws {
+@Suite
+struct AdmissionTests {
+  @Test
+  func currentBindingsAndSupportGatesFireIndependently() throws {
     // given
     let fixture = try AdmissionFixture.make()
     let cases: [(AdmissionRejection, AdmissionValidationContext)] = [
@@ -13,10 +15,7 @@ import Testing
       (.staleEpoch, fixture.context(epoch: fixture.epoch.next())),
       (.staleBaseDigest, fixture.context(stableDigest: fixture.replacement.digest)),
       (.staleBaseRevision, fixture.context(stableRevision: fixture.baseRevision.next())),
-      (
-        .staleFeedbackRevision,
-        fixture.context(feedbackRevision: fixture.feedbackRevision.next())
-      ),
+      (.staleFeedbackRevision, fixture.context(feedbackRevision: fixture.feedbackRevision.next())),
       (.trialAlreadyLive, fixture.context(hasLiveTrial: true)),
       (.sourceBindingsChanged, fixture.context(sourceBindingsAreCurrent: false)),
       (
@@ -35,7 +34,8 @@ import Testing
     }
   }
 
-  @Test func activeAndPausedRecurringJobsAreBothAdmissible() throws {
+  @Test
+  func activeAndPausedRecurringJobsAreBothAdmissible() throws {
     // given
     let fixture = try AdmissionFixture.make()
 
@@ -54,7 +54,8 @@ import Testing
     #expect(paused == nil)
   }
 
-  @Test func aNoOpReplacementIsIndependentOfClosedReplacementHistory() throws {
+  @Test
+  func aNoOpReplacementIsIndependentOfClosedReplacementHistory() throws {
     // given
     let fixture = try AdmissionFixture.make(baseLessons: ["Use exact evidence."])
     let noOp = try fixture.candidate(replacement: fixture.base)
@@ -69,7 +70,8 @@ import Testing
     #expect(rejection == .noOpReplacement)
   }
 
-  @Test func approvalExceptionPermitsOnlyClosedHistoryAndNeverANoOp() throws {
+  @Test
+  func approvalExceptionPermitsOnlyClosedHistoryAndNeverANoOp() throws {
     // given
     let fixture = try AdmissionFixture.make(baseLessons: ["Keep the stable lesson."])
     let noOp = try fixture.candidate(replacement: fixture.base)
@@ -77,10 +79,7 @@ import Testing
     // when
     let closedApproval = AdmissionValidator.validate(
       candidate: fixture.candidate,
-      context: fixture.context(
-        replacementAlreadyClosed: true,
-        permitsClosedReplacement: true
-      )
+      context: fixture.context(replacementAlreadyClosed: true, permitsClosedReplacement: true)
     )
     let noOpApproval = AdmissionValidator.validate(
       candidate: noOp,
@@ -96,7 +95,8 @@ import Testing
     #expect(noOpApproval == .noOpReplacement)
   }
 
-  @Test func benignAuthorityWordsAreNeverPolicyOperands() throws {
+  @Test
+  func benignAuthorityWordsAreNeverPolicyOperands() throws {
     // given
     let lessons = [
       "Mention /tmp/report.txt only as an example path.",
@@ -106,7 +106,7 @@ import Testing
 
     // when
     let result = AdmissionValidator.validatedReplacement(
-      jobId: 41,
+      jobID: 41,
       lessons: lessons,
       redactor: SecretRedactor(secretValues: ["actual-loaded-secret"])
     )
@@ -115,13 +115,14 @@ import Testing
     #expect(try result.get().lessons == lessons)
   }
 
-  @Test func exactLoadedSecretLeakIsRejectedBeforeCanonicalBytesPersist() {
+  @Test
+  func exactLoadedSecretLeakIsRejectedBeforeCanonicalBytesPersist() {
     // given
     let secret = "credential-with-quote-\"-and-newline\nvalue"
 
     // when
     let result = AdmissionValidator.validatedReplacement(
-      jobId: 41,
+      jobID: 41,
       lessons: ["Never print \(secret) to the owner."],
       redactor: SecretRedactor(secretValues: [secret])
     )
@@ -130,7 +131,8 @@ import Testing
     #expect(result == .failure(.secretLeak))
   }
 
-  @Test func lessonSetFailuresRemainTypedAtTheAdmissionBoundary() {
+  @Test
+  func lessonSetFailuresRemainTypedAtTheAdmissionBoundary() {
     // given
     let cases: [([String], AdmissionRejection)] = [
       ([""], .lessonSet(.emptyLesson(index: 0))),
@@ -142,7 +144,7 @@ import Testing
     // when / then
     for (lessons, expected) in cases {
       let result = AdmissionValidator.validatedReplacement(
-        jobId: 41,
+        jobID: 41,
         lessons: lessons,
         redactor: SecretRedactor(secretValues: [])
       )
@@ -150,12 +152,13 @@ import Testing
     }
   }
 
-  @Test func approvalAndEditSuccessorsCarryClosedImmutableProvenance() throws {
+  @Test
+  func approvalAndEditSuccessorsCarryClosedImmutableProvenance() throws {
     // given
     let fixture = try AdmissionFixture.make()
-    let approval = fixture.control(.candidateApprove, eventId: 70, revision: 4)
+    let approval = fixture.control(.candidateApprove, eventID: 70, revision: 4)
     let editedReplacement = try AdmissionValidator.validatedReplacement(
-      jobId: fixture.jobId,
+      jobID: fixture.jobID,
       lessons: [],
       redactor: SecretRedactor(secretValues: [])
     ).get()
@@ -170,7 +173,7 @@ import Testing
     let edit = fixture.control(
       .candidateEdit,
       subjectDigest: approved.digest.rawValue,
-      eventId: 71,
+      eventID: 71,
       revision: 5
     )
     let edited = try CandidateSuccessorRules.edit(
@@ -189,7 +192,7 @@ import Testing
     #expect(approved.manifest.predecessorFeedback == approval)
     #expect(approved.manifest.feedbackRevision == FeedbackRevision(4))
     #expect(approved.manifest.triggerDigest == fixture.candidate.manifest.triggerDigest)
-    #expect(approved.manifest.operationId == fixture.candidate.manifest.operationId)
+    #expect(approved.manifest.operationID == fixture.candidate.manifest.operationID)
     #expect(approved.manifest.carrierDigest == fixture.candidate.manifest.carrierDigest)
     #expect(approved.manifest.resultDigest == fixture.candidate.manifest.resultDigest)
     #expect(approved.manifest.baseDigest == fixture.candidate.manifest.baseDigest)
@@ -206,18 +209,19 @@ import Testing
     #expect(edited.manifest.feedback == fixture.candidate.manifest.feedback)
   }
 
-  @Test func successorRulesRejectWrongSubjectAndUnchangedEdit() throws {
+  @Test
+  func successorRulesRejectWrongSubjectAndUnchangedEdit() throws {
     // given
     let fixture = try AdmissionFixture.make()
     let wrongSubject = CandidateFeedbackSource(
-      eventId: 70,
+      eventID: 70,
       digest: FeedbackEventDigest(rawValue: "feedback-70"),
       revision: FeedbackRevision(4),
       subjectKind: .candidate,
       subjectDigest: "another-candidate",
       signal: .candidateApprove
     )
-    let edit = fixture.control(.candidateEdit, eventId: 71, revision: 5)
+    let edit = fixture.control(.candidateEdit, eventID: 71, revision: 5)
 
     // when / then
     #expect(throws: AdmissionRejection.invalidOwnerControl) {
@@ -239,10 +243,11 @@ import Testing
     }
   }
 
-  @Test func anEffectiveDelayedControlFreezesTheCurrentRevision() throws {
+  @Test
+  func anEffectiveDelayedControlFreezesTheCurrentRevision() throws {
     // given
     let fixture = try AdmissionFixture.make()
-    let approval = fixture.control(.candidateApprove, eventId: 70, revision: 4)
+    let approval = fixture.control(.candidateApprove, eventID: 70, revision: 4)
 
     // when
     let successor = try CandidateSuccessorRules.approval(
@@ -258,7 +263,8 @@ import Testing
     #expect(successor.manifest.predecessorFeedback == approval)
   }
 
-  @Test func v1TrialConstantsArePinnedIndependently() {
+  @Test
+  func v1TrialConstantsArePinnedIndependently() {
     // given / when / then — deriving the expected values from EvidenceWindow or the production
     // deadline expressions would let an algorithm-version change pass unnoticed.
     #expect(TrialAdmissionPolicy.assignmentWindow == 2_592_000)
@@ -266,7 +272,8 @@ import Testing
     #expect(TrialAdmissionPolicy.maximumAssignments == 3)
   }
 
-  @Test func editPayloadIsTheExactClosedObjectAndAllowsEmptyReplacement() throws {
+  @Test
+  func editPayloadIsTheExactClosedObjectAndAllowsEmptyReplacement() throws {
     // given
     let valid = Data(#"{"lessons":[]}"#.utf8)
     let invalid = [
@@ -287,7 +294,7 @@ import Testing
 }
 
 private struct AdmissionFixture {
-  let jobId: Int64
+  let jobID: Int64
   let epoch: LearningEpoch
   let baseRevision: StableRevision
   let feedbackRevision: FeedbackRevision
@@ -295,20 +302,18 @@ private struct AdmissionFixture {
   let replacement: LessonSet
   let candidate: CandidateArtifact
 
-  static func make(
-    baseLessons: [String] = []
-  ) throws -> AdmissionFixture {
-    let jobId: Int64 = 41
+  static func make(baseLessons: [String] = []) throws -> AdmissionFixture {
+    let jobID: Int64 = 41
     let epoch = LearningEpoch(1)
     let baseRevision = StableRevision(2)
     let feedbackRevision = FeedbackRevision(3)
-    let base = try LessonSet.canonical(jobId: jobId, lessons: baseLessons)
+    let base = try LessonSet.canonical(jobID: jobID, lessons: baseLessons)
     let replacement = try LessonSet.canonical(
-      jobId: jobId,
+      jobID: jobID,
       lessons: ["Report only material changes."]
     )
     let evidence = CandidateEvidenceSource(
-      runId: 101,
+      runID: 101,
       digest: EvidenceDigest(rawValue: "evidence-101"),
       evaluationDigest: EvaluationDigest(rawValue: "evaluation-101"),
       evaluationRequired: true
@@ -316,12 +321,12 @@ private struct AdmissionFixture {
     let manifest = CandidateSourceManifest(
       origin: .reflection,
       algorithm: .v1,
-      jobId: jobId,
+      jobID: jobID,
       epoch: epoch,
       triggerDigest: TriggerDigest(rawValue: "trigger"),
       triggerReason: .recurringIssue,
       qualifyingIssueCodes: ["material.missed"],
-      operationId: LearningOperationID(rawValue: "operation"),
+      operationID: LearningOperationID(rawValue: "operation"),
       carrierDigest: CarrierDigest(rawValue: "carrier"),
       resultDigest: ReflectionResultDigest(rawValue: "result"),
       baseDigest: base.digest,
@@ -329,14 +334,14 @@ private struct AdmissionFixture {
       feedbackRevision: feedbackRevision,
       evidence: [evidence],
       evaluations: [
-        CandidateEvaluationSource(runId: evidence.runId, digest: evidence.evaluationDigest)
+        CandidateEvaluationSource(runID: evidence.runID, digest: evidence.evaluationDigest),
       ],
       feedback: [],
       predecessorCandidate: nil,
       predecessorFeedback: nil
     )
     return AdmissionFixture(
-      jobId: jobId,
+      jobID: jobID,
       epoch: epoch,
       baseRevision: baseRevision,
       feedbackRevision: feedbackRevision,
@@ -353,12 +358,12 @@ private struct AdmissionFixture {
       manifest: CandidateSourceManifest(
         origin: source.origin,
         algorithm: source.algorithm,
-        jobId: source.jobId,
+        jobID: source.jobID,
         epoch: source.epoch,
         triggerDigest: source.triggerDigest,
         triggerReason: source.triggerReason,
         qualifyingIssueCodes: source.qualifyingIssueCodes,
-        operationId: source.operationId,
+        operationID: source.operationID,
         carrierDigest: source.carrierDigest,
         resultDigest: source.resultDigest,
         baseDigest: source.baseDigest,
@@ -389,11 +394,11 @@ private struct AdmissionFixture {
   ) -> AdmissionValidationContext {
     AdmissionValidationContext(
       currentState: JobLearningState(
-        jobId: jobId,
+        jobID: jobID,
         epoch: epoch ?? self.epoch,
         stableDigest: stableDigest ?? base.digest,
         stableRevision: stableRevision ?? baseRevision,
-        openTrialId: nil,
+        openTrialID: nil,
         feedbackRevision: feedbackRevision ?? self.feedbackRevision
       ),
       jobHasRecurrence: jobHasRecurrence,
@@ -408,15 +413,12 @@ private struct AdmissionFixture {
     )
   }
 
-  func control(
-    _ signal: OwnerSignal,
-    subjectDigest: String? = nil,
-    eventId: Int64,
-    revision: Int64
-  ) -> CandidateFeedbackSource {
+  func control(_ signal: OwnerSignal, subjectDigest: String? = nil, eventID: Int64, revision: Int64)
+    -> CandidateFeedbackSource
+  {
     CandidateFeedbackSource(
-      eventId: eventId,
-      digest: FeedbackEventDigest(rawValue: "feedback-\(eventId)"),
+      eventID: eventID,
+      digest: FeedbackEventDigest(rawValue: "feedback-\(eventID)"),
       revision: FeedbackRevision(revision),
       subjectKind: .candidate,
       subjectDigest: subjectDigest ?? candidate.digest.rawValue,

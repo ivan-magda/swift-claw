@@ -17,8 +17,8 @@ extension ReflectionPersistenceTests {
     let baseline = try env.candidate(fixture: fixture, operation: operation)
     let schemaVersion =
       corruption == .wrongSchema
-      ? CandidateSourceManifest.currentSchemaVersion + 1
-      : CandidateSourceManifest.currentSchemaVersion
+        ? CandidateSourceManifest.currentSchemaVersion + 1
+        : CandidateSourceManifest.currentSchemaVersion
     let artifact = try artifactWithFeedback(baseline, schemaVersion: schemaVersion)
     try insertArtifactForReload(artifact, env: env)
     if corruption != .wrongSchema {
@@ -34,9 +34,9 @@ extension ReflectionPersistenceTests {
   }
 
   @Test(arguments: CandidateRowMismatch.allCases)
-  func candidateArtifactRejectsManifestRowProjectionMismatch(
-    _ mismatch: CandidateRowMismatch
-  ) throws {
+  func candidateArtifactRejectsManifestRowProjectionMismatch(_ mismatch: CandidateRowMismatch)
+    throws
+  {
     // given
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
@@ -79,50 +79,40 @@ enum CandidateRowMismatch: CaseIterable, Sendable {
 // MARK: - Artifact Corruption Fixtures
 
 private extension ReflectionPersistenceTests {
-  func artifactWithFeedback(
-    _ artifact: CandidateArtifact,
-    schemaVersion: Int
-  ) throws -> CandidateArtifact {
+  func artifactWithFeedback(_ artifact: CandidateArtifact, schemaVersion: Int) throws
+    -> CandidateArtifact
+  {
     let manifest = artifact.manifest
     let feedback = CandidateFeedbackSource(
-      eventId: 91,
+      eventID: 91,
       digest: FeedbackEventDigest(rawValue: "feedback-event"),
       revision: manifest.feedbackRevision,
       subjectKind: .run,
-      subjectDigest: String(manifest.evidence[0].runId),
+      subjectDigest: String(manifest.evidence[0].runID),
       signal: .resultCorrection
     )
     return try CandidateArtifact(
       replacement: artifact.replacement,
-      manifest: copyManifest(
-        manifest,
-        schemaVersion: schemaVersion,
-        feedback: [feedback]
-      )
+      manifest: copyManifest(manifest, schemaVersion: schemaVersion, feedback: [feedback])
     )
   }
 
-  func insertArtifactForReload(
-    _ artifact: CandidateArtifact,
-    env: BoundRunEnvironment
-  ) throws {
+  func insertArtifactForReload(_ artifact: CandidateArtifact, env: BoundRunEnvironment) throws {
     try env.queue.write { db in
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: artifact, now: env.now)
     }
   }
 
-  func corruptedManifestBytes(
-    for artifact: CandidateArtifact,
-    corruption: ManifestByteCorruption
-  ) throws -> Data {
+  func corruptedManifestBytes(for artifact: CandidateArtifact, corruption: ManifestByteCorruption)
+    throws -> Data
+  {
     let original = try CanonicalJSON.data(encoding: artifact.manifest)
     if corruption == .nonCanonical {
       return original + Data(" ".utf8)
     }
     var object = try manifestObject(original)
     switch corruption {
-    case .unknownTopLevel:
-      object["unexpected"] = true
+    case .unknownTopLevel: object["unexpected"] = true
     case .unknownEvidence:
       var values = try nestedObjects(object, key: "evidence")
       values[0]["unexpected"] = true
@@ -135,8 +125,7 @@ private extension ReflectionPersistenceTests {
       var values = try nestedObjects(object, key: "feedback")
       values[0]["unexpected"] = true
       object["feedback"] = values
-    case .wrongSchema, .nonCanonical:
-      throw ArtifactFixtureError.unsupportedCorruption
+    case .wrongSchema, .nonCanonical: throw ArtifactFixtureError.unsupportedCorruption
     }
     return try CanonicalJSON.data(fromJSONObject: object)
   }
@@ -148,21 +137,15 @@ private extension ReflectionPersistenceTests {
     return object
   }
 
-  func nestedObjects(
-    _ object: [String: Any],
-    key: String
-  ) throws -> [[String: Any]] {
+  func nestedObjects(_ object: [String: Any], key: String) throws -> [[String: Any]] {
     guard let values = object[key] as? [[String: Any]], values.isEmpty == false else {
       throw ArtifactFixtureError.missingNestedObject(key)
     }
     return values
   }
 
-  func replaceManifestBytes(
-    _ bytes: Data,
-    digest: CandidateDigest,
-    env: BoundRunEnvironment
-  ) throws {
+  func replaceManifestBytes(_ bytes: Data, digest: CandidateDigest, env: BoundRunEnvironment) throws
+  {
     // swiftlint:disable:next optional_data_string_conversion
     let json = String(decoding: bytes, as: UTF8.self)
     try env.queue.write { db in
@@ -224,7 +207,7 @@ private extension ReflectionPersistenceTests {
         env: env
       )
     case .replacementDigest:
-      let replacement = try LessonSet.canonical(jobId: env.jobId, lessons: ["A different lesson."])
+      let replacement = try LessonSet.canonical(jobID: env.jobID, lessons: ["A different lesson."])
       try insertLessonSet(replacement, env: env)
       try updateCandidateColumn(
         "replacement_digest",
@@ -233,17 +216,17 @@ private extension ReflectionPersistenceTests {
         env: env
       )
     case .rowJob:
-      let otherJobId = env.jobId + 10_000
+      let otherJobID = env.jobID + 10_000
       let replacement = try LessonSet.canonical(
-        jobId: otherJobId,
+        jobID: otherJobID,
         lessons: artifact.replacement.lessons
       )
       try insertLessonSet(replacement, env: env)
-      try updateCandidateColumn("job_id", value: otherJobId, artifact: artifact, env: env)
+      try updateCandidateColumn("job_id", value: otherJobID, artifact: artifact, env: env)
     case .manifestJob:
       let changedManifest = copyManifest(
         artifact.manifest,
-        jobId: env.jobId + 20_000,
+        jobID: env.jobID + 20_000,
         feedback: artifact.manifest.feedback
       )
       let changedArtifact = try CandidateArtifact(
@@ -256,9 +239,9 @@ private extension ReflectionPersistenceTests {
       try env.queue.write { db in
         try db.execute(
           sql: """
-            UPDATE learning_candidates SET candidate_digest = ?, source_manifest = ?
-            WHERE candidate_digest = ?
-            """,
+          UPDATE learning_candidates SET candidate_digest = ?, source_manifest = ?
+          WHERE candidate_digest = ?
+          """,
           arguments: [changedArtifact.digest.rawValue, json, artifact.digest.rawValue]
         )
       }
@@ -294,12 +277,12 @@ private extension ReflectionPersistenceTests {
     try env.queue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO lesson_sets(job_id, digest, schema_version, \
-          canonical_bytes, source, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-          """,
+        INSERT INTO lesson_sets(job_id, digest, schema_version, \
+        canonical_bytes, source, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
         arguments: [
-          lessonSet.jobId,
+          lessonSet.jobID,
           lessonSet.digest.rawValue,
           lessonSet.schemaVersion,
           lessonSet.canonicalBytes,
@@ -313,19 +296,19 @@ private extension ReflectionPersistenceTests {
   func copyManifest(
     _ manifest: CandidateSourceManifest,
     schemaVersion: Int? = nil,
-    jobId: Int64? = nil,
+    jobID: Int64? = nil,
     feedback: [CandidateFeedbackSource]
   ) -> CandidateSourceManifest {
     CandidateSourceManifest(
       schemaVersion: schemaVersion ?? manifest.schemaVersion,
       origin: manifest.origin,
       algorithm: manifest.algorithm,
-      jobId: jobId ?? manifest.jobId,
+      jobID: jobID ?? manifest.jobID,
       epoch: manifest.epoch,
       triggerDigest: manifest.triggerDigest,
       triggerReason: manifest.triggerReason,
       qualifyingIssueCodes: manifest.qualifyingIssueCodes,
-      operationId: manifest.operationId,
+      operationID: manifest.operationID,
       carrierDigest: manifest.carrierDigest,
       resultDigest: manifest.resultDigest,
       baseDigest: manifest.baseDigest,

@@ -36,7 +36,7 @@ struct LearningRetentionReferences: Equatable {
 }
 
 struct LearningRetentionLesson: Hashable {
-  let jobId: Int64
+  let jobID: Int64
   let digest: String
 }
 
@@ -77,11 +77,9 @@ struct LearningRetentionSnapshot {
 // MARK: - Collection
 
 extension LearningRetentionSnapshot {
-  func clearPayloads(
-    _ db: Database,
-    excluding retained: LearningRetentionReferences,
-    cutoff: Int64
-  ) throws -> Int {
+  func clearPayloads(_ db: Database, excluding retained: LearningRetentionReferences, cutoff: Int64)
+    throws -> Int
+  {
     var count = 0
     for row in evidence where !retained.runs.contains(row["run_id"]) {
       guard (row["sealed_at"] as Int64) < cutoff, (row["payload"] as Data?) != nil else {
@@ -134,7 +132,10 @@ extension LearningRetentionSnapshot {
     }
     for row in bindings where !retained.runs.contains(row["run_id"]) {
       for table in [
-        "learning_evaluations", "learning_evidence", "run_compatibility", "run_settlements",
+        "learning_evaluations",
+        "learning_evidence",
+        "run_compatibility",
+        "run_settlements",
         "run_learning_bindings",
       ] {
         try delete(db, table: table, key: "run_id", row: row)
@@ -150,13 +151,13 @@ extension LearningRetentionSnapshot {
       try delete(db, table: "feedback_challenges", key: "challenge_id", row: row)
     }
     for row in lessons where (row["created_at"] as Int64) < cutoff {
-      let lesson = LearningRetentionLesson(jobId: row["job_id"], digest: row["digest"])
+      let lesson = LearningRetentionLesson(jobID: row["job_id"], digest: row["digest"])
       guard !retained.lessons.contains(lesson) else {
         continue
       }
       try db.execute(
         sql: "DELETE FROM lesson_sets WHERE job_id = ? AND digest = ?",
-        arguments: [lesson.jobId, lesson.digest]
+        arguments: [lesson.jobID, lesson.digest]
       )
     }
     return db.totalChangesCount - before

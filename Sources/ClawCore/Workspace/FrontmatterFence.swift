@@ -49,11 +49,9 @@ public enum FrontmatterFence {
   /// units; swift-corelibs-foundation does not, returning the whole file as one line). Scalars are
   /// the level both agree on. A trailing `\r` stays on the line for `isFence` to trim.
   private static func lines(in text: String) -> [String] {
-    text.unicodeScalars
-      .split(separator: "\n", omittingEmptySubsequences: false)
-      .map { scalars in
-        String(String.UnicodeScalarView(scalars))
-      }
+    text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false).map { scalars in
+      String(String.UnicodeScalarView(scalars))
+    }
   }
 
   /// A fence is a line whose trimmed text is exactly `---`, which is what makes CRLF endings and
