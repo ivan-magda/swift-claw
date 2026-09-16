@@ -147,14 +147,14 @@ vulnerability, see [SECURITY.md](SECURITY.md).
 
 Persona and behavior live in Markdown files under `~/.swift-claw/workspace/`:
 
-| File | Shapes | Trust |
-|---|---|---|
-| `SOUL.md` | Personality and tone | System prompt |
-| `AGENTS.md` | Behavior rules | System prompt |
-| `TOOLS.md` | When and how to use tools | System prompt |
-| `USER.md` | Who you are | Untrusted, labeled |
-| `HEARTBEAT.md` | The proactive heartbeat checklist | Heartbeat runs only |
-| `skills/<name>/SKILL.md` | A procedure the agent loads when a task calls for it | Untrusted, labeled |
+| File                     | Shapes                                               | Trust               |
+| ------------------------ | ---------------------------------------------------- | ------------------- |
+| `SOUL.md`                | Personality and tone                                 | System prompt       |
+| `AGENTS.md`              | Behavior rules                                       | System prompt       |
+| `TOOLS.md`               | When and how to use tools                            | System prompt       |
+| `USER.md`                | Who you are                                          | Untrusted, labeled  |
+| `HEARTBEAT.md`           | The proactive heartbeat checklist                    | Heartbeat runs only |
+| `skills/<name>/SKILL.md` | A procedure the agent loads when a task calls for it | Untrusted, labeled  |
 
 MCP servers go in `~/.swift-claw/mcp.yaml`, with their tokens stored encrypted by
 `clawd mcp set-token`. Other runtime knobs are environment variables: the model route
@@ -165,16 +165,17 @@ set it), USD budgets, schedules and quiet hours, voice locales, sandbox limits.
 
 ## Documentation
 
-| You want to | Read |
-|---|---|
-| Set it up end to end | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) |
-| Install, update, or uninstall | [docs/INSTALL.md](docs/INSTALL.md) |
-| Make it yours | [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) |
-| Run it as a service | [docs/INSTALL.md](docs/INSTALL.md#4-running-as-a-service) |
-| Develop and test locally | [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) |
-| Follow the Swift style baseline | [docs/CODE_STYLE.md](docs/CODE_STYLE.md) |
-| Understand the design | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Report a vulnerability | [SECURITY.md](SECURITY.md) |
+| You want to                      | Read                                                                                                                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Set it up end to end             | [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)                                                                                                                                   |
+| Install, update, or uninstall    | [docs/INSTALL.md](docs/INSTALL.md)                                                                                                                                                   |
+| Make it yours                    | [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md)                                                                                                                                       |
+| Run it as a service              | [docs/INSTALL.md](docs/INSTALL.md#4-running-as-a-service)                                                                                                                            |
+| Develop and test locally         | [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md)                                                                                                                                               |
+| Follow the Swift style baseline  | [docs/CODE_STYLE.md](docs/CODE_STYLE.md)                                                                                                                                             |
+| Understand the design            | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)                                                                                                                                         |
+| See the architecture as diagrams | [swift-claw-architecture.html](https://raw.githack.com/ivan-magda/swift-claw/main/docs/diagrams/swift-claw-architecture.html) ([source](docs/diagrams/swift-claw-architecture.html)) |
+| Report a vulnerability           | [SECURITY.md](SECURITY.md)                                                                                                                                                           |
 
 Experimental benchmarks, corpora and the Swift evaluation harness live in
 [swift-claw-evals](https://github.com/ivan-magda/swift-claw-evals). The daemon's scheduled-learning
