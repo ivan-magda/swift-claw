@@ -3,1446 +3,2421 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>swift-claw — Architecture</title>
+<title>swift-claw architecture</title>
+<meta name="description" content="Layered module graph, ClawCore seams, the clawd composition root, the MCP client boundary and the group-mode exception, drawn from Package.swift and Sources/ at commit 7564c0cd.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2313202b'/%3E%3Crect x='12' y='12' width='40' height='10' rx='2' fill='%23ff8d5f'/%3E%3Crect x='12' y='27' width='18' height='10' rx='2' fill='%23dbe5ec'/%3E%3Crect x='34' y='27' width='18' height='10' rx='2' fill='%23dbe5ec'/%3E%3Crect x='12' y='42' width='40' height='10' rx='2' fill='%2362c9c2'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono:wght@400;500;600&family=Red+Hat+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* ============ THEME — Blueprint (dark-first) ============ */
-:root {
-  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  /* ============ TOKENS ============ */
+  :root {
+    color-scheme: light dark;
+    --font-body: 'Red Hat Text', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Red Hat Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  --bg: #0b1520;
-  --surface: #112032;
-  --surface-2: #162a40;
-  --surface-3: #1d3450;
-  --border: rgba(74,159,212,0.12);
-  --border-bright: rgba(74,159,212,0.28);
-  --text: #d8e8f4;
-  --text-dim: #7a9ab8;
-  --text-faint: #3f5f7a;
+    --bg: #f1ede4;
+    --grid: rgba(28, 40, 51, 0.05);
+    --surface: #fbf9f4;
+    --surface-2: #ebe6db;
+    --border: rgba(28, 40, 51, 0.12);
+    --border-strong: rgba(28, 40, 51, 0.28);
+    --text: #1c2833;
+    --text-dim: #56626d;
 
-  --accent: #4a9fd4;
-  --accent-dim: rgba(74,159,212,0.10);
-  --gold: #d4a73a;
-  --gold-dim: rgba(212,167,58,0.10);
-  --green: #4aad7a;
-  --green-dim: rgba(74,173,122,0.10);
-  --red: #d45c5c;
-  --red-dim: rgba(212,92,92,0.10);
-  --orange: #d47a3a;
-  --orange-dim: rgba(212,122,58,0.10);
-  --purple: #9d7ad4;
-  --purple-dim: rgba(157,122,212,0.10);
-  --teal: #4ac9d4;
-  --teal-dim: rgba(74,201,212,0.10);
+    /* Semantic accents: composition root, ClawCore seams, trust boundary, refusal. */
+    --root: #c2451a;
+    --seam: #146e6c;
+    --edge: #93620a;
+    --deny: #a3312a;
+    --root-wash: rgba(194, 69, 26, 0.08);
+    --seam-wash: rgba(20, 110, 108, 0.08);
+    --edge-wash: rgba(147, 98, 10, 0.10);
+    --deny-wash: rgba(163, 49, 42, 0.08);
 
-  --mod-core:      #4a9fd4;
-  --mod-data:      #4aad7a;
-  --mod-gateway:   #7a9ad4;
-  --mod-agent:     #4ac9d4;
-  --mod-telegram:  #d4a73a;
-  --mod-llm:       #d47a3a;
-  --mod-tools:     #d45c5c;
-  --mod-workspace: #9d7ad4;
-}
-
-/* ============ RESET ============ */
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-body { overflow-wrap: break-word; }
-
-body {
-  background-color: var(--bg);
-  background-image:
-    linear-gradient(var(--border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border) 1px, transparent 1px);
-  background-size: 40px 40px;
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 14px;
-  line-height: 1.65;
-  padding: 48px 24px;
-  min-height: 100vh;
-}
-
-.container { max-width: 1120px; margin: 0 auto; }
-
-/* ============ ANIMATIONS ============ */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.animate {
-  animation: fadeUp 0.45s ease-out both;
-  animation-delay: calc(var(--i, 0) * 0.07s);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-delay: 0ms !important;
-    transition-duration: 0.01ms !important;
+    /* Mermaid reads these at render time; keep them six-digit hex. */
+    --mm-node: #fbf9f4;
+    --mm-node-line: #7d8791;
+    --mm-edge: #6f7a84;
+    --mm-cluster: #f4f0e7;
+    --mm-cluster-line: #cbc3b3;
   }
-}
 
-/* ============ HEADER ============ */
-.page-header {
-  margin-bottom: 52px;
-  padding-bottom: 28px;
-  border-bottom: 1px solid var(--border);
-}
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1720;
+      --grid: rgba(150, 190, 210, 0.05);
+      --surface: #13202b;
+      --surface-2: #0a131a;
+      --border: rgba(214, 228, 236, 0.10);
+      --border-strong: rgba(214, 228, 236, 0.24);
+      --text: #dbe5ec;
+      --text-dim: #93a4b1;
 
-.page-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  color: var(--accent);
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.page-label::before {
-  content: '';
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  display: inline-block;
-}
+      --root: #ff8d5f;
+      --seam: #62c9c2;
+      --edge: #e3b04f;
+      --deny: #f08b7f;
+      --root-wash: rgba(255, 141, 95, 0.11);
+      --seam-wash: rgba(98, 201, 194, 0.10);
+      --edge-wash: rgba(227, 176, 79, 0.11);
+      --deny-wash: rgba(240, 139, 127, 0.10);
 
-h1 {
-  font-size: clamp(26px, 4vw, 42px);
-  font-weight: 700;
-  letter-spacing: -1px;
-  line-height: 1.1;
-  margin-bottom: 10px;
-}
+      --mm-node: #16242f;
+      --mm-node-line: #5b7282;
+      --mm-edge: #7d91a0;
+      --mm-cluster: #101c26;
+      --mm-cluster-line: #2d404d;
+    }
+  }
 
-.page-subtitle {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-dim);
-}
+  /* ============ BASE ============ */
+  *, *::before, *::after { box-sizing: border-box; }
 
-/* ============ SECTIONS ============ */
-.section { margin-bottom: 60px; }
+  html { font-size: 16px; scroll-behavior: smooth; }
 
-.section-header {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  margin-bottom: 16px;
-}
+  body {
+    margin: 0;
+    padding: 40px;
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 24px 24px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    overflow-wrap: break-word;
+    -webkit-font-smoothing: antialiased;
+  }
 
-.section-num {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--accent);
-  background: var(--accent-dim);
-  border: 1px solid var(--border-bright);
-  padding: 2px 8px;
-  border-radius: 4px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    padding: 0.05em 0.3em;
+    border-radius: 3px;
+    background: var(--surface-2);
+    overflow-wrap: break-word;
+  }
 
-h2 {
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.2px;
-}
+  a { color: var(--seam); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:hover { color: var(--text); }
 
-.section-desc {
-  font-size: 13px;
-  color: var(--text-dim);
-  margin-bottom: 20px;
-  max-width: 760px;
-  line-height: 1.6;
-}
+  :focus-visible { outline: 2px solid var(--root); outline-offset: 2px; border-radius: 3px; }
 
-.section-desc code, .callout code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: var(--accent-dim);
-  color: var(--accent);
-  padding: 1px 5px;
-  border-radius: 3px;
-}
+  /* ============ PAGE LAYOUT ============ */
+  .wrap {
+    max-width: 1320px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 0 44px;
+  }
 
-/* ============ CALLOUT ============ */
-.callout {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 8px 8px 0;
-  padding: 13px 17px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-dim);
-  margin-top: 16px;
-}
-.callout--gold { border-left-color: var(--gold); }
-.callout--gold strong { color: var(--gold); }
-.callout strong { color: var(--text); }
+  .main { min-width: 0; }
 
-/* ============ CARDS ============ */
-.ve-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 18px 20px;
-  min-width: 0;
-}
-.ve-card--elevated {
-  background: var(--surface-2);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-}
-.ve-card code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: var(--accent-dim);
-  color: var(--accent);
-  padding: 1px 5px;
-  border-radius: 3px;
-}
+  /* ============ TABLE OF CONTENTS ============ */
+  .toc {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    grid-row: 1 / -1;
+    max-height: calc(100dvh - 48px);
+    overflow-y: auto;
+    padding: 6px 0;
+  }
 
-/* ============ MODULE GRID ============ */
-.module-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.module-grid > * { min-width: 0; }
+  .toc__title {
+    margin: 0 0 8px;
+    padding: 0 0 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
 
-@media (max-width: 900px) { .module-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 560px) { .module-grid { grid-template-columns: 1fr; } }
+  .toc a {
+    display: block;
+    margin-bottom: 1px;
+    padding: 5px 10px;
+    border-left: 2px solid transparent;
+    border-radius: 0 4px 4px 0;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--text-dim);
+    text-decoration: none;
+    transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+  }
 
-.module-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 15px 17px;
-  min-width: 0;
-  transition: border-color 0.2s ease;
-}
-.module-card:hover { border-color: var(--border-bright); }
-.module-card--span-all { grid-column: 1 / -1; background: var(--surface-2); }
+  .toc a:hover { color: var(--text); background: var(--surface); }
+  .toc a.active { color: var(--text); background: var(--surface); border-left-color: var(--root); }
 
-.module-card__kind {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1.8px;
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.module-card__dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: inline-block;
-}
-.module-card__name {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 5px;
-}
-.module-card__role {
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.55;
-  margin-bottom: 10px;
-}
-.module-card__types {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.module-card__types li {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-faint);
-  padding-left: 12px;
-  position: relative;
-  line-height: 1.85;
-}
-.module-card__types li::before {
-  content: '›';
-  position: absolute;
-  left: 0;
-  color: var(--text-faint);
-}
-.module-card__types code {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  background: var(--accent-dim);
-  color: var(--accent);
-  padding: 0 4px;
-  border-radius: 3px;
-}
+  .toc__meta {
+    margin-top: 14px;
+    padding: 10px 12px 0;
+    border-top: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1.55;
+    color: var(--text-dim);
+  }
 
-/* ============ MERMAID SHELL ============ */
-.diagram-shell { position: relative; margin-bottom: 12px; }
+  /* ============ HEADER / TITLE BLOCK ============ */
+  .sheet-head {
+    margin-bottom: 64px;
+    padding: 30px 32px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+  }
 
-.diagram-shell__hint {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-faint);
-  margin-bottom: 6px;
-  opacity: 0.8;
-}
+  .sheet-head h1 {
+    margin: 0 0 12px;
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
 
-.mermaid-wrap {
-  position: relative;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 32px 24px;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 420px;
-  cursor: grab;
-}
-.mermaid-wrap.is-panning { cursor: grabbing; user-select: none; }
+  .lead {
+    max-width: 68ch;
+    margin: 0 0 24px;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+  }
 
-.zoom-controls {
-  position: absolute;
-  top: 8px; right: 8px;
-  display: flex;
-  gap: 2px;
-  z-index: 10;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2px;
-}
-.zoom-controls button {
-  width: 28px; height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.zoom-controls button:hover { background: var(--border); color: var(--text); }
+  .title-block {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    margin: 0;
+    border-top: 1px solid var(--border-strong);
+  }
 
-.mermaid-viewport {
-  position: relative;
-  overflow: hidden;
-  width: 100%;
-  height: 100%;
-  min-height: 380px;
-}
-.mermaid-canvas { position: absolute; top: 0; left: 0; }
+  .title-block > div {
+    min-width: 0;
+    padding: 10px 16px 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
 
-.zoom-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  padding: 0 6px;
-  white-space: nowrap;
-}
+  .title-block dt {
+    margin-bottom: 2px;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
 
-/* ============ MERMAID OVERRIDES ============ */
-.mermaid .nodeLabel,
-.mermaid .nodeLabel p,
-.mermaid .label,
-.mermaid .label p {
-  font-family: var(--font-body) !important;
-  font-size: 13px !important;
-  color: var(--text) !important;
-  fill: var(--text) !important;
-}
-.mermaid .edgeLabel,
-.mermaid .edgeLabel p {
-  font-family: var(--font-mono) !important;
-  font-size: 11px !important;
-  color: var(--text-dim) !important;
-  fill: var(--text-dim) !important;
-  background-color: var(--bg) !important;
-}
-.mermaid .edgeLabel rect { fill: var(--bg) !important; }
-.mermaid text { fill: var(--text) !important; }
-.mermaid .edgeLabel text { fill: var(--text-dim) !important; }
-.mermaid .node rect,
-.mermaid .node circle,
-.mermaid .node polygon,
-.mermaid .node ellipse { stroke-width: 1.5px !important; }
+  .title-block dd { margin: 0; font-size: 0.875rem; }
 
-/* ============ BUDGET GRID ============ */
-.budget-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px;
-  margin-top: 16px;
-}
-.budget-grid > * { min-width: 0; }
+  .key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    margin: 18px 0 0;
+    padding: 0;
+    list-style: none;
+  }
 
-.budget-item {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
-}
-.budget-item__field {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--text-faint);
-  margin-bottom: 3px;
-}
-.budget-item__value {
-  font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--gold);
-  letter-spacing: -0.5px;
-}
-.budget-item__meaning {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 3px;
-  line-height: 1.45;
-}
+  .key li {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8125rem;
+    color: var(--text-dim);
+  }
 
-/* ============ CODE BLOCK ============ */
-.code-block {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.65;
-  color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-x: auto;
-  margin-top: 10px;
-}
-.code-block .cm { color: var(--text-faint); }
-.code-block .kw { color: var(--accent); }
-.code-block .ty { color: var(--teal); }
-.code-block .fn { color: var(--gold); }
+  .swatch {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid;
+    border-radius: 3px;
+  }
 
-/* ============ TABLE ============ */
-.table-wrap {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.data-table thead { position: sticky; top: 0; z-index: 2; }
-.data-table th {
-  background: var(--surface-2);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-dim);
-  text-align: left;
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--border-bright);
-  white-space: nowrap;
-}
-.data-table td {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
-}
-.data-table tbody tr:last-child td { border-bottom: none; }
-.data-table tbody tr:hover { background: var(--accent-dim); }
-.data-table code {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  background: var(--accent-dim);
-  color: var(--accent);
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-.data-table small { display: block; color: var(--text-dim); font-size: 10px; margin-top: 2px; }
+  .swatch--root { border-color: var(--root); background: var(--root-wash); }
+  .swatch--seam { border-color: var(--seam); background: var(--seam-wash); }
+  .swatch--impl { border-color: var(--border-strong); background: var(--surface); }
+  .swatch--edge { border-color: var(--edge); background: var(--edge-wash); }
+  .swatch--deny { border-color: var(--deny); background: var(--deny-wash); border-style: dashed; }
+  .swatch--test { border-color: var(--text-dim); border-style: dashed; background: transparent; }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-.badge--low  { background: var(--green-dim); color: var(--green); }
-.badge--med  { background: var(--orange-dim); color: var(--orange); }
-.badge--high { background: var(--red-dim); color: var(--red); }
-.badge--info { background: var(--teal-dim); color: var(--teal); }
+  /* ============ SECTIONS ============ */
+  .sec { margin: 0 0 80px; scroll-margin-top: 24px; }
 
-/* ============ ROADMAP ============ */
-.roadmap-item {
-  display: grid;
-  grid-template-columns: 92px 1fr;
-  gap: 16px;
-  align-items: start;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border);
-  min-width: 0;
-}
-.roadmap-item > * { min-width: 0; }
-.roadmap-item:last-child { border-bottom: none; }
+  .eyebrow {
+    margin: 0 0 6px;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
 
-.roadmap-inc {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-}
-.roadmap-inc--v1 { color: var(--gold); }
-.roadmap-phase {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--gold);
-  margin-top: 3px;
-}
-.roadmap-title {
-  font-weight: 600;
-  font-size: 13px;
-  margin-bottom: 4px;
-}
-.roadmap-done {
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.55;
-}
-.roadmap-done code {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  background: var(--accent-dim);
-  color: var(--accent);
-  padding: 1px 4px;
-  border-radius: 3px;
-}
+  .sec h2 {
+    margin: 0 0 10px;
+    font-size: 1.625rem;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
 
-/* ============ RESPONSIVE ============ */
-@media (max-width: 768px) {
-  body { padding: 20px 16px; }
-  h1 { font-size: 22px; }
-  .roadmap-item { grid-template-columns: 66px 1fr; gap: 10px; }
-  .budget-grid { grid-template-columns: repeat(2, 1fr); }
-}
+  .sec h3 { margin: 0 0 10px; font-size: 1.0625rem; line-height: 1.3; }
+
+  .sec-lead { max-width: 72ch; margin: 0 0 24px; }
+
+  .fig { margin: 0; }
+
+  .fig figcaption {
+    max-width: 82ch;
+    margin-top: 12px;
+    font-size: 0.875rem;
+    color: var(--text-dim);
+  }
+
+  .fig figcaption strong { color: var(--text); }
+
+  /* ============ MERMAID SHELL ============ */
+  .diagram-shell { position: relative; }
+
+  .diagram-shell__hint {
+    margin: 0 0 8px;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    color: var(--text-dim);
+  }
+
+  .mermaid-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 360px;
+    padding: 44px 8px 8px;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    cursor: grab;
+  }
+
+  .mermaid-wrap.is-panning { cursor: grabbing; user-select: none; }
+
+  .zoom-controls {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    cursor: default;
+  }
+
+  .zoom-controls button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-dim);
+    font: 500 0.875rem/1 var(--font-mono);
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+  }
+
+  .zoom-controls button:hover { background: var(--surface-2); color: var(--text); }
+
+  .zoom-label {
+    padding: 0 6px;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    white-space: nowrap;
+    color: var(--text-dim);
+  }
+
+  .mermaid-viewport {
+    position: relative;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 300px;
+    overflow: hidden;
+  }
+
+  .mermaid-canvas { position: absolute; top: 0; left: 0; }
+
+  .mermaid .nodeLabel,
+  .mermaid .nodeLabel p { color: var(--text) !important; }
+
+  /* Mermaid sizes label boxes from its own font settings: shrink labels here, never widen them. */
+  .mermaid .edgeLabel {
+    font-size: 13px !important;
+    color: var(--text-dim) !important;
+    background-color: var(--surface) !important;
+  }
+
+  .mermaid .edgeLabel p,
+  .mermaid .labelBkg { background-color: var(--surface) !important; }
+  .mermaid .edgeLabel rect { fill: var(--surface) !important; }
+
+  .mermaid .cluster-label .nodeLabel,
+  .mermaid .cluster-label .nodeLabel p { color: var(--text-dim) !important; }
+
+  .mermaid .flowchart-link { stroke-width: 1.5px; }
+
+  /* ============ MODULE GRAPH ============ */
+  .dag-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8125rem;
+    color: var(--text-dim);
+  }
+
+  .dag-legend li { display: inline-flex; align-items: center; gap: 8px; }
+  .dag-legend svg { flex: none; }
+
+  .dag {
+    container-type: inline-size;
+    padding: 20px;
+    background: color-mix(in srgb, var(--surface) 55%, transparent);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+  }
+
+  .dag-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 230px;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .band-label {
+    margin: 4px 0 8px;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .stacks {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-flow: row dense;
+    gap: 0 14px;
+  }
+
+  .stack { display: grid; min-width: 0; margin-bottom: 18px; }
+
+  .stack-note {
+    align-self: center;
+    margin: 0 0 18px;
+    padding: 4px 6px;
+    font-size: 0.875rem;
+    color: var(--text-dim);
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .imports {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 4px 0;
+    color: var(--text-dim);
+  }
+
+  .imports--pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+
+  .imports__one { display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+  .imports svg { flex: none; width: 14px; height: 28px; }
+
+  .imports__label {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .singles {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  /* The graph lays itself out from its own width, not the viewport's. */
+  @container (min-width: 520px) {
+    .stacks, .singles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stack, .stack-note { grid-row: span 3; }
+    .stack { grid-template-rows: subgrid; }
+    .stack--pair { grid-column: span 2; }
+  }
+
+  @container (min-width: 820px) {
+    .stacks, .singles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  @container (max-width: 700px) {
+    .dag-top { grid-template-columns: minmax(0, 1fr); }
+    .bus--root .bus__label { left: 50%; }
+  }
+
+  @container (max-width: 420px) {
+    .pair, .imports--pair { grid-template-columns: minmax(0, 1fr); }
+    .imports--pair .imports__one + .imports__one { display: none; }
+    .bus__label { max-width: 92%; white-space: normal; text-align: center; }
+  }
+
+  .bus { position: relative; height: 44px; margin: 0 4%; }
+
+  .bus::before,
+  .bus::after { content: ''; position: absolute; left: 0; right: 0; }
+
+  .bus::before { height: 2px; background: currentColor; }
+
+  .bus::after {
+    background-image: linear-gradient(90deg, currentColor 0 2px, transparent 2px);
+    background-size: calc((100% - 2px) / 10) 100%;
+    background-repeat: repeat-x;
+  }
+
+  .bus--root { color: var(--root); }
+  .bus--root::before { top: 12px; }
+  .bus--root::after { top: 12px; bottom: 0; }
+
+  .bus--core { color: var(--seam); }
+  .bus--core::before { bottom: 12px; }
+  .bus--core::after { top: 0; bottom: 12px; }
+
+  .bus__label {
+    position: absolute;
+    left: 50%;
+    z-index: 1;
+    padding: 1px 12px;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1.5px solid currentColor;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .bus__label span { color: var(--text); }
+  .bus--root .bus__label { top: 1px; left: 40%; }
+  .bus--core .bus__label { bottom: 1px; }
+
+  .mod {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+  }
+
+  .mod__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2px 10px;
+  }
+
+  .mod__name {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .mod__kind {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .mod__desc { margin: 0; font-size: 0.875rem; line-height: 1.45; }
+
+  .mod__edge {
+    margin: 0;
+    padding: 6px 8px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--text-dim);
+  }
+
+  .mod__edge b { font-family: var(--font-mono); font-weight: 600; color: var(--text); }
+
+  .types { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+
+  .types li code { display: inline-block; font-size: 0.75rem; }
+
+  .mod__pkgs {
+    margin: auto 0 0;
+    padding-top: 7px;
+    border-top: 1px dashed var(--border-strong);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: var(--text-dim);
+  }
+
+  .mod--root {
+    border: 1.5px solid var(--root);
+    background: color-mix(in srgb, var(--surface) 93%, var(--root) 7%);
+  }
+
+  .mod--root .mod__name { font-size: 1.125rem; }
+
+  .mod--core {
+    border: 1.5px solid var(--seam);
+    background: color-mix(in srgb, var(--surface) 93%, var(--seam) 7%);
+  }
+
+  .mod--core .mod__name { font-size: 1.125rem; }
+
+  .mod--test { background: transparent; border-style: dashed; border-color: var(--text-dim); }
+
+  .cmds { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 0; padding: 0; list-style: none; }
+  .cmds li code { font-size: 0.75rem; background: var(--surface); border: 1px solid var(--border); }
+
+  .families {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 10px;
+    margin: 4px 0 2px;
+  }
+
+  .family {
+    min-width: 0;
+    padding: 8px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .family h4 {
+    margin: 0 0 5px;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--seam);
+  }
+
+  .family .types li code { background: var(--surface-2); }
+
+  /* ============ CALLOUTS & FACT CARDS ============ */
+  .callouts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+    margin-top: 20px;
+  }
+
+  .callout {
+    min-width: 0;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--text-dim);
+    border-radius: 0 6px 6px 0;
+    font-size: 0.875rem;
+  }
+
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 8px; }
+  .callout strong { display: block; margin-bottom: 4px; font-size: 0.9375rem; }
+  .callout--seam { border-left-color: var(--seam); }
+  .callout--root { border-left-color: var(--root); }
+  .callout--edge { border-left-color: var(--edge); background: color-mix(in srgb, var(--surface) 90%, var(--edge) 10%); }
+
+  /* ============ STEPS ============ */
+  .two-col {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .panel {
+    min-width: 0;
+    padding: 18px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+  }
+
+  .panel h3 { display: flex; align-items: baseline; gap: 10px; }
+
+  .panel h3 span {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+
+  .steps li {
+    position: relative;
+    padding: 0 0 12px 38px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    counter-increment: step;
+  }
+
+  .steps li:last-child { padding-bottom: 0; }
+
+  .steps li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute;
+    top: 1px;
+    left: 0;
+    width: 26px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--root);
+  }
+
+  .steps li::after {
+    content: '';
+    position: absolute;
+    top: 22px;
+    bottom: 2px;
+    left: 9px;
+    width: 1px;
+    background: var(--border-strong);
+  }
+
+  .steps li:last-child::after { display: none; }
+  .steps b { font-weight: 600; }
+  .steps--seam li::before { color: var(--seam); }
+
+  /* ============ TABLES ============ */
+  .table-wrap {
+    margin-top: 20px;
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+  }
+
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    line-height: 1.45;
+  }
+
+  table.data caption {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-strong);
+    text-align: left;
+    font-size: 0.8125rem;
+    color: var(--text-dim);
+  }
+
+  table.data th,
+  table.data td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  table.data thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  table.data tbody tr:last-child td { border-bottom: 0; }
+
+  table.data tr.group th {
+    padding-top: 14px;
+    background: var(--surface-2);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--seam);
+  }
+
+  table.data td code { font-size: 0.75rem; }
+  table.data .num { width: 1%; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-dim); }
+  table.data .target { font-family: var(--font-mono); font-size: 0.8125rem; white-space: nowrap; }
+  table.data .dim { color: var(--text-dim); }
+
+  .seams col.c1 { width: 34%; }
+  .seams col.c2 { width: 14%; }
+  .seams col.c3 { width: 30%; }
+  .seams col.c4 { width: 22%; }
+
+  .compare col.c1 { width: 18%; }
+  .compare col.c2 { width: 37%; }
+  .compare col.c3 { width: 45%; }
+
+  .compare tbody th { font-weight: 600; font-size: 0.875rem; }
+
+  .compare td.relaxed {
+    background: var(--edge-wash);
+    box-shadow: inset 3px 0 0 var(--edge);
+  }
+
+  .compare td.narrower { box-shadow: inset 3px 0 0 var(--border-strong); }
+
+  .tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 6px;
+    border: 1px solid;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    vertical-align: 1px;
+    white-space: nowrap;
+  }
+
+  .tag--edge { color: var(--edge); border-color: var(--edge); }
+  .tag--dim { color: var(--text-dim); border-color: var(--border-strong); }
+
+  .opt { color: var(--text-dim); }
+
+  /* ============ DOES / NEVER ============ */
+  .rules {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  .rules ul { margin: 0; padding: 0; list-style: none; }
+
+  .rules li {
+    position: relative;
+    padding: 0 0 9px 22px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .rules li:last-child { padding-bottom: 0; }
+
+  .rules li::before {
+    position: absolute;
+    top: 0;
+    left: 0;
+    font-family: var(--font-mono);
+    font-weight: 600;
+  }
+
+  .rules .panel--does li::before { content: '+'; color: var(--seam); }
+  .rules .panel--never li::before { content: '×'; color: var(--deny); }
+  .rules .panel--never { border-style: dashed; border-color: var(--deny); }
+
+  /* ============ FOOTER ============ */
+  .provenance {
+    padding: 20px 22px;
+    background: var(--surface);
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
+    font-size: 0.875rem;
+  }
+
+  .provenance h2 { margin: 0 0 10px; font-size: 1.0625rem; }
+  .provenance ul { margin: 0; padding-left: 1.3em; }
+  .provenance li + li { margin-top: 5px; }
+
+  /* ============ MOTION ============ */
+  @media (prefers-reduced-motion: no-preference) {
+    .sheet-head, .sec { animation: rise 0.45s ease-out both; }
+    .sec { animation-delay: 0.05s; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+  }
+
+  /* Scoped on purpose: a universal transition override skews Mermaid's label measurements. */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .toc a, .zoom-controls button { transition: none; }
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width: 1000px) {
+    .wrap { grid-template-columns: minmax(0, 1fr); }
+
+    .toc {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      grid-row: auto;
+      max-height: none;
+      margin: 0 -40px 24px;
+      padding: 10px 40px;
+      overflow-x: auto;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .toc::-webkit-scrollbar { display: none; }
+    .toc__title, .toc__meta { display: none; }
+
+    .toc a {
+      flex-shrink: 0;
+      white-space: nowrap;
+      border-left: 0;
+      border-bottom: 2px solid transparent;
+      border-radius: 4px 4px 0 0;
+      padding: 6px 10px;
+    }
+
+    .toc a.active { border-bottom-color: var(--root); }
+
+    .sec { scroll-margin-top: 64px; }
+  }
+
+  @media (max-width: 860px) {
+    .two-col, .rules { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (max-width: 760px) {
+    body { padding: 16px; }
+    .toc { margin: 0 -16px 20px; padding: 10px 16px; }
+    .sheet-head { padding: 22px 18px 18px; }
+    .sheet-head h1 { font-size: 2rem; }
+    .dag { padding: 12px; }
+    .bus { margin: 0 2%; }
+  }
 </style>
 </head>
 <body>
-<div class="container">
+<div class="wrap">
 
-  <!-- ── HEADER ── -->
-  <header class="page-header animate" style="--i:0">
-    <div class="page-label">swift-claw &middot; normative technical spec</div>
-    <h1>System Architecture</h1>
-    <p class="page-subtitle">clawd — persistent single-owner Telegram AI assistant in pure Swift &middot; v1 scope approved &middot; 2026-06-15</p>
-  </header>
+  <nav class="toc" id="toc" aria-label="Sections">
+    <p class="toc__title">Contents</p>
+    <a href="#s-context">System context</a>
+    <a href="#s-dag">Module graph</a>
+    <a href="#s-seams">Seams</a>
+    <a href="#s-root">Composition root</a>
+    <a href="#s-mcp">MCP boundary</a>
+    <a href="#s-group">Group mode</a>
+    <p class="toc__meta">Drawn at<br><a href="https://github.com/ivan-magda/swift-claw/commit/7564c0cd18852e24ea51c1a8eef0349966c9ecad">7564c0cd</a><br>2026-09-16</p>
+  </nav>
 
-  <!-- ── § 01  SYSTEM CONTEXT ── -->
-  <section class="section animate" style="--i:1">
-    <div class="section-header">
-      <span class="section-num">§ 01</span>
-      <h2>System Context — High Level</h2>
-    </div>
-    <p class="section-desc">
-      A single long-running supervised daemon (<code>clawd</code>) owns all connectivity, state, policy, routing, sessions, and tools.
-      Telegram is the only surface in v1 (long-polling, no listen socket — better secure-by-default posture).
-      The LLM is reached via one <code>LLMProvider</code> contract with two wire adapters (a Chat Completions adapter and a ChatGPT Responses adapter, selected by the <code>CLAW_LLM_MODEL</code> route). All state is local-first on the owner's machine.
-    </p>
+  <main class="main">
 
-    <div class="diagram-shell">
-      <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom &nbsp;&middot;&nbsp; drag to pan &nbsp;&middot;&nbsp; double-click to fit</p>
-      <div class="mermaid-wrap">
-        <div class="zoom-controls">
-          <button type="button" data-action="zoom-in"     title="Zoom in">+</button>
-          <button type="button" data-action="zoom-out"    title="Zoom out">&minus;</button>
-          <button type="button" data-action="zoom-fit"    title="Smart fit">&#8634;</button>
-          <button type="button" data-action="zoom-one"    title="1:1 zoom">1:1</button>
-          <button type="button" data-action="zoom-expand" title="Open full size">&#x26F6;</button>
-          <span class="zoom-label">Loading...</span>
-        </div>
-        <div class="mermaid-viewport">
-          <div class="mermaid mermaid-canvas"></div>
-        </div>
-      </div>
-      <script type="text/plain" class="diagram-source">
-graph TD
-  subgraph ext["External Systems"]
-    TG["Telegram Bot API<br/>long-poll · getUpdates<br/>sendMessage · editMessageText"]
-    LLM["LLM Provider<br/>OpenAI-compatible<br/>Chat Completions + SSE"]
-  end
-
-  CLAWD["clawd — supervised daemon<br/>ServiceGroup · TelegramPollerService<br/>Gateway · AgentRuntime · Memory<br/>Audit · OutboxDispatcher"]
-
-  DB[("SQLite WAL<br/>GRDB · FTS5<br/>sessions · runs · messages<br/>outbox · audit · memory")]
-  WS["Workspace files<br/>~/.swift-claw/workspace/<br/>SOUL · AGENTS · USER · TOOLS<br/>MEMORY.md · skills/"]
-  SB["ExecutionBackend<br/>apple/container — macOS<br/>microVM/Podman — Linux<br/>(Inc 5)"]
-
-  TG <-->|"getUpdates / long-poll<br/>sendMessage / callbacks"| CLAWD
-  CLAWD <-->|"Chat Completions<br/>SSE streaming"| LLM
-  CLAWD --> DB
-  CLAWD --> WS
-  CLAWD -.->|"shell exec — Inc 5"| SB
-      </script>
-    </div>
-
-    <div class="callout">
-      <strong>Local-first principle.</strong> No data leaves the machine except to the configured LLM endpoint and Telegram.
-      <code>base_url</code> is pinned/allowlisted and documented as a trust dependency — it is an outbound exfiltration sink.
-      The owner can export and delete all conversation history and memory items.
-    </div>
-  </section>
-
-  <!-- ── § 02  MODULE DEPENDENCY DAG ── -->
-  <section class="section animate" style="--i:2">
-    <div class="section-header">
-      <span class="section-num">§ 02</span>
-      <h2>Component Architecture — Module Dependency DAG</h2>
-    </div>
-    <p class="section-desc">
-      SwiftPM package <code>swift-claw</code>. A layered DAG — never a star.
-      Stores are reached through <strong>protocols declared in <code>ClawCore</code></strong>.
-      Concrete <code>ClawData</code> is injected only at the <code>clawd</code> composition root — no module outside ClawData imports GRDB.
-    </p>
-
-    <div class="diagram-shell">
-      <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom &nbsp;&middot;&nbsp; drag to pan &nbsp;&middot;&nbsp; double-click to fit</p>
-      <div class="mermaid-wrap">
-        <div class="zoom-controls">
-          <button type="button" data-action="zoom-in"     title="Zoom in">+</button>
-          <button type="button" data-action="zoom-out"    title="Zoom out">&minus;</button>
-          <button type="button" data-action="zoom-fit"    title="Smart fit">&#8634;</button>
-          <button type="button" data-action="zoom-one"    title="1:1 zoom">1:1</button>
-          <button type="button" data-action="zoom-expand" title="Open full size">&#x26F6;</button>
-          <span class="zoom-label">Loading...</span>
-        </div>
-        <div class="mermaid-viewport">
-          <div class="mermaid mermaid-canvas"></div>
-        </div>
-      </div>
-      <script type="text/plain" class="diagram-source">
-graph TD
-  BIN["clawd<br/>(binary — entry)"]:::entry
-  GW["ClawGateway<br/>wiring · services · routing"]:::gateway
-  AG["ClawAgent<br/>runtime · context · lane"]:::agent
-  TL["ClawTelegram<br/>client · poller · splitter"]:::telegram
-  LM["ClawLLM<br/>provider · SSE · cost"]:::llm
-  TLS["ClawTools<br/>registry · policy · tools"]:::tools
-  WS["ClawWorkspace<br/>identity · memory files"]:::workspace
-  DA["ClawData<br/>GRDB store impls · FTS5"]:::data
-  CO["ClawCore<br/>domain types · protocols<br/>error taxonomy"]:::core
-
-  BIN --> GW
-  GW --> AG
-  GW --> TL
-  GW --> DA
-  AG --> LM
-  AG --> TLS
-  AG --> WS
-  AG --> CO
-  TL --> CO
-  LM --> CO
-  TLS --> CO
-  WS --> CO
-  DA --> CO
-
-  classDef entry    fill:#1d344988,stroke:#7a9ad4,stroke-width:2px
-  classDef gateway  fill:#1d344988,stroke:#7a9ad4
-  classDef agent    fill:#1a354088,stroke:#4ac9d4
-  classDef telegram fill:#352d1a88,stroke:#d4a73a
-  classDef llm      fill:#3a2a1a88,stroke:#d47a3a
-  classDef tools    fill:#3a1a1a88,stroke:#d45c5c
-  classDef workspace fill:#2a1a3888,stroke:#9d7ad4
-  classDef data     fill:#1a2e2888,stroke:#4aad7a
-  classDef core     fill:#0c1d3088,stroke:#4a9fd4,stroke-width:2px
-      </script>
-    </div>
-
-    <div class="callout">
-      <strong>Dependency rule:</strong> <code>ClawAgent</code> and <code>ClawGateway</code> depend only on <code>ClawCore</code> for persistence protocols.
-      Concrete <code>ClawData</code> is injected at the composition root only — clean, testable seam at every boundary.
-    </div>
-  </section>
-
-  <!-- ── § 03  MODULE DETAIL CARDS ── -->
-  <section class="section animate" style="--i:3">
-    <div class="section-header">
-      <span class="section-num">§ 03</span>
-      <h2>Module Detail</h2>
-    </div>
-
-    <div class="module-grid">
-
-      <div class="module-card module-card--span-all animate" style="--i:4; border-left:3px solid var(--mod-gateway)">
-        <div class="module-card__kind" style="color:var(--mod-gateway)">
-          <span class="module-card__dot" style="background:var(--mod-gateway)"></span>
-          executable &middot; composition root
-        </div>
-        <div class="module-card__name" style="color:var(--mod-gateway)">clawd</div>
-        <div class="module-card__role">Thin entry point. Loads and validates <code>AppConfig</code>, acquires cross-process advisory flock (single-instance guard), builds the <code>ServiceGroup</code> with all services injected, then runs. No business logic — only wires things together.</div>
-        <ul class="module-card__types">
-          <li>Load + validate <code>AppConfig</code> &middot; distinct exit codes for config/secret failures</li>
-          <li>Acquire advisory flock on state root (refuses boot if another clawd is running)</li>
-          <li><code>ServiceGroup</code> orchestration: ordered startup + ordered graceful shutdown on SIGTERM/SIGINT</li>
-          <li><code>clawd doctor --check-config</code> — validates without starting the daemon</li>
-        </ul>
-      </div>
-
-      <div class="module-card animate" style="--i:5; border-left:3px solid var(--mod-gateway)">
-        <div class="module-card__kind" style="color:var(--mod-gateway)">
-          <span class="module-card__dot" style="background:var(--mod-gateway)"></span>
-          lib &middot; orchestration
-        </div>
-        <div class="module-card__name" style="color:var(--mod-gateway)">ClawGateway</div>
-        <div class="module-card__role">Wires the whole system. Services, routing, access control (numeric-ID default-deny), session resolution, outbox dispatch, graceful shutdown choreography.</div>
-        <ul class="module-card__types">
-          <li><code>Gateway</code>, <code>TelegramPollerService</code></li>
-          <li><code>SchedulerService</code> (Inc 4)</li>
-          <li><code>Router</code>, <code>AccessControl</code>, <code>RateLimiter</code></li>
-          <li><code>OutboxDispatcher</code></li>
-        </ul>
-      </div>
-
-      <div class="module-card animate" style="--i:6; border-left:3px solid var(--mod-agent)">
-        <div class="module-card__kind" style="color:var(--mod-agent)">
-          <span class="module-card__dot" style="background:var(--mod-agent)"></span>
-          lib &middot; runtime
-        </div>
-        <div class="module-card__name" style="color:var(--mod-agent)">ClawAgent</div>
-        <div class="module-card__role">Core agent runtime. Context assembly, ReAct loop, per-session FIFO lane via Task chaining, RunBudget enforcement (turns / tokens / USD / wall-clock), cooperative cancellation.</div>
-        <ul class="module-card__types">
-          <li><code>AgentRuntime</code>, <code>SessionActor</code></li>
-          <li><code>ContextBuilder</code> — budgeted, priority-ordered</li>
-          <li><code>RunBudget</code> — all caps checked before each call</li>
-        </ul>
-      </div>
-
-      <div class="module-card animate" style="--i:7; border-left:3px solid var(--mod-telegram)">
-        <div class="module-card__kind" style="color:var(--mod-telegram)">
-          <span class="module-card__dot" style="background:var(--mod-telegram)"></span>
-          lib &middot; transport
-        </div>
-        <div class="module-card__name" style="color:var(--mod-telegram)">ClawTelegram</div>
-        <div class="module-card__role">Thin clean-room Bot API client over AsyncHTTPClient. Long-poll intake, envelope normalization, MarkdownV2/HTML escaping, code-fence-aware reply splitter. ~8–10 endpoints.</div>
-        <ul class="module-card__types">
-          <li><code>TelegramClient</code>, <code>TelegramLongPoller</code></li>
-          <li><code>MessageEnvelope</code>, <code>MarkdownEscaper</code></li>
-          <li><code>ReplySplitter</code> — safe split at code-fence boundaries</li>
-        </ul>
-      </div>
-
-      <div class="module-card animate" style="--i:8; border-left:3px solid var(--mod-llm)">
-        <div class="module-card__kind" style="color:var(--mod-llm)">
-          <span class="module-card__dot" style="background:var(--mod-llm)"></span>
-          lib &middot; provider
-        </div>
-        <div class="module-card__name" style="color:var(--mod-llm)">ClawLLM</div>
-        <div class="module-card__role">OpenAI-compatible Chat Completions. SSE streaming (v1), per-call usage/cost attribution from a local <code>CostTable</code>, retries with capped exponential backoff + full jitter, USD breaker integration.</div>
-        <ul class="module-card__types">
-          <li><code>OpenAICompatibleProvider</code>, <code>LLMProvider</code> protocol</li>
-          <li><code>SSEParser</code>, <code>ChatMessage</code>, <code>ToolCall</code></li>
-          <li><code>CostTable</code>, <code>Usage</code> — feeds USD breaker</li>
-        </ul>
-      </div>
-
-      <div class="module-card animate" style="--i:9; border-left:3px solid var(--mod-tools)">
-        <div class="module-card__kind" style="color:var(--mod-tools)">
-          <span class="module-card__dot" style="background:var(--mod-tools)"></span>
-          lib &middot; policy gate
-        </div>
-        <div class="module-card__name" style="color:var(--mod-tools)">ClawTools</div>
-        <div class="module-card__role">Tool registry + in-code policy enforcement. v1 ships read-only safe-tier tools. Risk-tier dispatch, SSRF blocklist, workspace-scope path canonicalization, exfil gate. Approval FSM arrives Inc 5.</div>
-        <ul class="module-card__types">
-          <li><code>ToolRegistry</code>, <code>PolicyGate</code>, <code>ToolContext</code></li>
-          <li><code>WebSearchTool</code>, <code>WebFetchTool</code>, <code>FileReadTool</code></li>
-          <li><code>ApprovalCoordinator</code> — Inc 5 (nonce + FSM + callback auth)</li>
-        </ul>
-      </div>
-
-      <div class="module-card animate" style="--i:10; border-left:3px solid var(--mod-workspace)">
-        <div class="module-card__kind" style="color:var(--mod-workspace)">
-          <span class="module-card__dot" style="background:var(--mod-workspace)"></span>
-          lib &middot; memory files
-        </div>
-        <div class="module-card__name" style="color:var(--mod-workspace)">ClawWorkspace</div>
-        <div class="module-card__role">Loads identity and memory files from workspace root. Injects at the <strong>untrusted tier</strong> with per-file grapheme caps and truncation markers. Missing files never crash.</div>
-        <ul class="module-card__types">
-          <li><code>WorkspaceStore</code>, <code>WorkspaceFile</code>, <code>MemoryDoc</code></li>
-          <li><code>FrontmatterParser</code> (Yams — SKILL.md frontmatter)</li>
-          <li>MEMORY.md cap = 2200 graphemes &middot; USER.md = 1375</li>
-        </ul>
-      </div>
-
-      <div class="module-card animate" style="--i:11; border-left:3px solid var(--mod-data)">
-        <div class="module-card__kind" style="color:var(--mod-data)">
-          <span class="module-card__dot" style="background:var(--mod-data)"></span>
-          lib &middot; persistence
-        </div>
-        <div class="module-card__name" style="color:var(--mod-data)">ClawData</div>
-        <div class="module-card__role">GRDB.swift v7, WAL mode, FTS5 external-content index, explicit versioned <code>DatabaseMigrator</code>. Thin Sendable wrappers over <code>DatabaseWriter</code>. Implements all protocols from ClawCore.</div>
-        <ul class="module-card__types">
-          <li>Concrete <code>MessageStore</code>, <code>SessionStore</code>, <code>RunStore</code></li>
-          <li><code>OutboxStore</code>, <code>AuditLog</code>, <code>MemoryStore</code>, <code>ApprovalStore</code></li>
-          <li>FTS5 external-content over <code>messages</code> — single delete source of truth</li>
-        </ul>
-      </div>
-
-      <div class="module-card animate" style="--i:12; border-left:3px solid var(--mod-core); background:var(--surface-2)">
-        <div class="module-card__kind" style="color:var(--mod-core)">
-          <span class="module-card__dot" style="background:var(--mod-core)"></span>
-          lib &middot; pure domain &middot; no I/O &middot; depends on nothing
-        </div>
-        <div class="module-card__name" style="color:var(--mod-core)">ClawCore</div>
-        <div class="module-card__role">The pure domain layer. All value types, config model, full error taxonomy, and every store / provider / transport / tool / sandbox protocol. Zero I/O — trivially unit-testable in isolation.</div>
-        <ul class="module-card__types">
-          <li>Value types: <code>IncomingMessage</code>, <code>OutgoingReply</code>, <code>SessionKey</code>, <code>Principal</code>, <code>AppConfig</code></li>
-          <li>FSM: <code>RunState</code>, <code>ApprovalState</code>, <code>RiskLevel</code>, <code>RunBudget</code></li>
-          <li>Error taxonomy: <code>ProviderError</code>, <code>TelegramError</code> (incl. typed 409), <code>PolicyDenied</code>, <code>BudgetExhausted</code>, <code>StoreError</code>, <code>ConfigError</code></li>
-          <li>Protocols: <code>LLMProvider</code>, <code>TelegramTransport</code>, <code>SecretStore</code>, <code>ExecutionBackend</code>, <code>Tool</code>, all Store protocols</li>
-        </ul>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- ── § 04  CONCURRENCY ── -->
-  <section class="section animate" style="--i:4">
-    <div class="section-header">
-      <span class="section-num">§ 04</span>
-      <h2>Concurrency — Per-Session Lane</h2>
-    </div>
-
-    <div class="callout callout--gold" style="margin-top:0; margin-bottom:14px;">
-      <strong>Critical correctness trap.</strong> Swift actors do <strong>NOT</strong> serialize across <code>await</code> —
-      an actor reentrantly admits other calls while a turn is suspended on a network <code>await</code>.
-      &ldquo;An actor serializes turns&rdquo; is false. The lane uses explicit Task chaining.
-    </div>
-
-    <div class="ve-card ve-card--elevated">
-      <div style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--mod-agent);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-        <span style="width:6px;height:6px;border-radius:50%;background:var(--mod-agent);display:inline-block;"></span>
-        SessionActor — Task chaining
-      </div>
-      <pre class="code-block"><code><span class="cm">// One SessionActor per SessionKey. Holds one stored Task.</span>
-<span class="kw">var</span> currentTurn: <span class="ty">Task</span>&lt;<span class="ty">Void</span>, <span class="ty">Never</span>&gt;?
-
-<span class="kw">func</span> <span class="fn">enqueue</span>(_ work: <span class="ty">@Sendable @escaping</span> () <span class="kw">async</span> -&gt; <span class="ty">Void</span>) {
-    <span class="kw">let</span> prev = currentTurn
-    currentTurn = <span class="ty">Task</span> {
-        _ = <span class="kw">await</span> prev?.value   <span class="cm">// wait out the previous turn fully</span>
-        <span class="kw">await</span> work()            <span class="cm">// run this turn to completion</span>
-    }
-}</code></pre>
-      <p style="font-size:12px;color:var(--text-dim);margin-top:10px;line-height:1.55;">
-        Default = strict FIFO per session. Plain messages queue. Only <code>/stop</code> (&#x2192; CANCELLED) and
-        <code>/new</code> (&#x2192; SUPERSEDED + detaint) supersede. Cross-session work runs concurrently.
+    <!-- ============ HEADER ============ -->
+    <header class="sheet-head">
+      <h1>swift-claw architecture</h1>
+      <p class="lead">
+        One supervised <code>clawd</code> process, built from 18 SwiftPM targets. Protocols live in
+        <code>ClawCore</code>, implementations live in sibling <code>Claw*</code> targets, and
+        <code>clawd</code> is the only target that imports all of them.
       </p>
-    </div>
-
-    <div class="budget-grid">
-      <div class="budget-item"><div class="budget-item__field">maxTurns</div><div class="budget-item__value">12</div><div class="budget-item__meaning">LLM round-trips per run</div></div>
-      <div class="budget-item"><div class="budget-item__field">maxToolCalls</div><div class="budget-item__value">20</div><div class="budget-item__meaning">tool calls per run</div></div>
-      <div class="budget-item"><div class="budget-item__field">maxInputTokens</div><div class="budget-item__value">100k</div><div class="budget-item__meaning">messages + tool definitions</div></div>
-      <div class="budget-item"><div class="budget-item__field">max_tokens</div><div class="budget-item__value">4096</div><div class="budget-item__meaning">reserved output (non-null; doctor rejects null)</div></div>
-      <div class="budget-item"><div class="budget-item__field">wallClockDeadline</div><div class="budget-item__value">180 s</div><div class="budget-item__meaning">per-run wall-clock cap</div></div>
-      <div class="budget-item"><div class="budget-item__field">perRunUSD</div><div class="budget-item__value">$0.50</div><div class="budget-item__meaning">cost ceiling per run</div></div>
-      <div class="budget-item"><div class="budget-item__field">perDayUSD</div><div class="budget-item__value">$10.00</div><div class="budget-item__meaning">rolling daily kill-switch + owner DM</div></div>
-      <div class="budget-item"><div class="budget-item__field">retryBudget</div><div class="budget-item__value">3</div><div class="budget-item__meaning">attempts per LLM request</div></div>
-    </div>
-  </section>
-
-  <!-- ── § 05  INBOUND LIFECYCLE ── -->
-  <section class="section animate" style="--i:5">
-    <div class="section-header">
-      <span class="section-num">§ 05</span>
-      <h2>Inbound Message Lifecycle — Normative Sequence</h2>
-    </div>
-    <p class="section-desc">
-      The most safety-critical invariant in the system.
-      The offset cursor advances <strong>LAST</strong> — only after the inbound write commits.
-      The dedup check (<code>claimUpdate</code>) is <strong>synchronous</strong> — never spanning an <code>await</code>.
-    </p>
-
-    <div class="diagram-shell">
-      <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom &nbsp;&middot;&nbsp; drag to pan &nbsp;&middot;&nbsp; double-click to fit</p>
-      <div class="mermaid-wrap" style="min-height:500px;">
-        <div class="zoom-controls">
-          <button type="button" data-action="zoom-in"     title="Zoom in">+</button>
-          <button type="button" data-action="zoom-out"    title="Zoom out">&minus;</button>
-          <button type="button" data-action="zoom-fit"    title="Smart fit">&#8634;</button>
-          <button type="button" data-action="zoom-one"    title="1:1 zoom">1:1</button>
-          <button type="button" data-action="zoom-expand" title="Open full size">&#x26F6;</button>
-          <span class="zoom-label">Loading...</span>
+      <dl class="title-block">
+        <div>
+          <dt>Drawn from</dt>
+          <dd><code>Package.swift</code>, imports and conformances in <code>Sources/</code>, <code>docs/ARCHITECTURE.md</code></dd>
         </div>
-        <div class="mermaid-viewport" style="min-height:460px;">
-          <div class="mermaid mermaid-canvas"></div>
+        <div>
+          <dt>Commit</dt>
+          <dd><a href="https://github.com/ivan-magda/swift-claw/commit/7564c0cd18852e24ea51c1a8eef0349966c9ecad"><code>7564c0cd</code></a> on <code>main</code>, 2026-09-16</dd>
         </div>
-      </div>
-      <script type="text/plain" class="diagram-source">
-graph TD
-  S1["(1) getUpdates<br/>long-poll offset = lastUpdateId + 1<br/>409 Conflict = typed error, not retryable"]
-  S2{"(2) claimUpdate<br/>INSERT OR IGNORE<br/>SYNCHRONOUS — no await across check"}
-  S3{"(3) normalize + AccessControl<br/>numeric userId in allowlist?<br/>default-DENY, fail-closed on error"}
-  S3a["(3a) RateLimiter<br/>token-bucket · honor retry_after<br/>fail-closed on store/lock error"]
-  S3b["(3b) Non-text intake<br/>unsupported → friendly reply<br/>caption text IS processed · edited = /retry"]
-  S4["(4) ONE db.write transaction<br/>persist inbound message + side effects<br/>COMMIT"]
-  S5["(5) advance lastUpdateId<br/>ONLY after (4) commits<br/>next getUpdates acks update to Telegram"]
-  S6["SessionActor lane<br/>AgentRuntime.runTurn<br/>context → LLM → tools → persist → outbox"]
-
-  SKIP["SKIP<br/>(already seen)"]
-  DENY["minimal reply<br/>'private bot'<br/>never reveals allowlist"]
-
-  S1 --> S2
-  S2 -->|"inserted = true"| S3
-  S2 -->|"already seen"| SKIP
-  S3 -->|"allowlisted"| S3a
-  S3 -->|"unknown sender"| DENY
-  S3a --> S3b --> S4 --> S5 --> S6
-
-  classDef crit  fill:#0c1d3088,stroke:#4a9fd4,stroke-width:2px
-  classDef gate  fill:#2a200f88,stroke:#d4a73a,stroke-width:2px
-  classDef deny  fill:#3a1a1a88,stroke:#d45c5c
-  classDef skip  fill:#1a1a2288,stroke:#3f5f7a
-  classDef step  fill:#11203288,stroke:#4a6880
-
-  class S4,S5 crit
-  class S2,S3 gate
-  class DENY deny
-  class SKIP skip
-  class S1,S3a,S3b,S6 step
-      </script>
-    </div>
-
-    <div class="callout">
-      <strong>Poison-update policy:</strong> if normalization of one update throws, advance the offset past it
-      (never wedge the poller), log it, increment a <code>dropped_updates</code> counter surfaced in <code>doctor</code>.
-    </div>
-  </section>
-
-  <!-- ── § 06  RUN FSM ── -->
-  <section class="section animate" style="--i:6">
-    <div class="section-header">
-      <span class="section-num">§ 06</span>
-      <h2>Run State Machine</h2>
-    </div>
-    <p class="section-desc">
-      <code>RunState</code> = PENDING / RUNNING / AWAITING_APPROVAL / DONE / FAILED / CANCELLED / SUPERSEDED.
-      FSM invariants: synchronous reduce, no default arm, side effects after commit.
-      A boot reconciliation sweep resolves orphaned states at startup.
-    </p>
-
-    <div class="diagram-shell">
-      <p class="diagram-shell__hint">Ctrl/Cmd + wheel to zoom &nbsp;&middot;&nbsp; drag to pan &nbsp;&middot;&nbsp; double-click to fit</p>
-      <div class="mermaid-wrap" style="min-height:460px;">
-        <div class="zoom-controls">
-          <button type="button" data-action="zoom-in"     title="Zoom in">+</button>
-          <button type="button" data-action="zoom-out"    title="Zoom out">&minus;</button>
-          <button type="button" data-action="zoom-fit"    title="Smart fit">&#8634;</button>
-          <button type="button" data-action="zoom-one"    title="1:1 zoom">1:1</button>
-          <button type="button" data-action="zoom-expand" title="Open full size">&#x26F6;</button>
-          <span class="zoom-label">Loading...</span>
+        <div>
+          <dt>Targets</dt>
+          <dd>16 libraries, <code>ClawTestSupport</code>, the <code>clawd</code> executable, 17 test targets</dd>
         </div>
-        <div class="mermaid-viewport" style="min-height:420px;">
-          <div class="mermaid mermaid-canvas"></div>
+        <div>
+          <dt>Platforms</dt>
+          <dd>macOS 15 or later and Linux; swift-tools 6.1</dd>
+        </div>
+      </dl>
+      <ul class="key" aria-label="Color key">
+        <li><span class="swatch swatch--root"></span>composition root</li>
+        <li><span class="swatch swatch--seam"></span>ClawCore seam</li>
+        <li><span class="swatch swatch--impl"></span>implementation</li>
+        <li><span class="swatch swatch--edge"></span>untrusted side, or a relaxed default</li>
+        <li><span class="swatch swatch--deny"></span>refused</li>
+        <li><span class="swatch swatch--test"></span>test-only</li>
+      </ul>
+    </header>
+
+    <!-- ============ 1. SYSTEM CONTEXT ============ -->
+    <section class="sec" id="s-context" aria-labelledby="h-context">
+      <p class="eyebrow">Runtime</p>
+      <h2 id="h-context">System context</h2>
+      <p class="sec-lead">
+        <code>clawd</code> starts every connection it has. It long-polls Telegram instead of
+        receiving webhooks, calls model and tool endpoints, and opens no listening socket. Local
+        state lives under one state root: <code>~/.swift-claw</code> by default, or
+        <code>CLAW_STATE_ROOT</code>.
+      </p>
+
+      <figure class="fig">
+        <div class="diagram-shell">
+          <p class="diagram-shell__hint">Ctrl/Cmd + wheel zooms. Drag or scroll pans once zoomed in. Double-click fits.</p>
+          <div class="mermaid-wrap">
+            <div class="zoom-controls">
+              <button type="button" data-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+              <button type="button" data-action="zoom-out" title="Zoom out" aria-label="Zoom out">&minus;</button>
+              <button type="button" data-action="zoom-fit" title="Fit to view" aria-label="Fit to view">&#8634;</button>
+              <button type="button" data-action="zoom-one" title="Actual size" aria-label="Actual size">1:1</button>
+              <button type="button" data-action="zoom-expand" title="Open in a new tab" aria-label="Open in a new tab">&#x26F6;</button>
+              <span class="zoom-label">Loading…</span>
+            </div>
+            <div class="mermaid-viewport" role="img" aria-label="launchd or systemd starts and restarts clawd. clawd opens connections to the Telegram Bot API; to two model routes and the Exa search API, which are pinned endpoints; and to public web pages and MCP servers, which are arbitrary destinations. On the same host it writes the state root, runs apple/container VMs and supervises Codex CLI children.">
+              <div class="mermaid mermaid-canvas"></div>
+            </div>
+          </div>
+          <script type="text/plain" class="diagram-source">
+flowchart TD
+  sup["launchd or systemd"]:::ext
+  clawd["clawd<br/>one process · ServiceGroup"]:::root
+  bot["Telegram Bot API<br/>owner DM · group rooms"]:::ext
+  subgraph pinned["Pinned endpoints"]
+    direction TB
+    oai["OpenAI-compatible API<br/>configured URL · optional key"]:::ext
+    cgpt["ChatGPT Codex Responses<br/>fixed URL · OAuth · unofficial"]:::ext
+    exa["Exa search API<br/>web_search"]:::ext
+  end
+  subgraph arbitrary["Arbitrary destinations"]
+    direction TB
+    web["Public web pages<br/>web_fetch · SSRF-checked"]:::edge
+    mcp["MCP servers<br/>tools/call · Streamable HTTP"]:::edge
+  end
+  subgraph host["Same host"]
+    direction TB
+    state[("State root<br/>SQLite writes · flock")]
+    vm["apple/container VM<br/>one per execute_code call"]
+    codex["Codex CLI<br/>opt-in Coder jobs"]
+  end
+  sup -->|"starts · restarts"| clawd
+  clawd -->|"long-poll · reply"| bot
+  clawd -->|"HTTPS"| pinned
+  clawd -->|"HTTPS"| arbitrary
+  clawd -->|"local"| host
+          </script>
+        </div>
+        <figcaption>
+          <strong>Two classes of egress.</strong> Configuration or code fixes the pinned endpoints.
+          Web pages and MCP servers are arbitrary destinations: their results are untrusted, and the
+          trifecta gate can require approval before a call. Both model routes sit behind one
+          <code>LLMProvider</code> seam, and each call uses one of them. The ChatGPT route is
+          unofficial and can change without notice.
+        </figcaption>
+      </figure>
+
+      <div class="callouts">
+        <div class="callout callout--root">
+          <strong>Three HTTP clients</strong>
+          <p>Telegram follows redirects. The LLM and tool clients have redirects disabled, so a bearer token cannot follow a redirect to another host (<code>RuntimeHTTPClients</code>).</p>
+        </div>
+        <div class="callout callout--root">
+          <strong>One daemon per state root</strong>
+          <p><code>clawd run</code> takes an exclusive <code>flock</code> and holds it until exit. A second daemon exits with the already-running code. <code>auth login</code>, <code>auth logout</code>, <code>mcp set-token</code> and <code>mcp clear-token</code> need the same lock.</p>
+        </div>
+        <div class="callout callout--seam">
+          <strong>State root</strong>
+          <p><code>claw.sqlite</code> (GRDB, WAL, FTS5), <code>workspace/</code>, <code>secret.key</code> with the <code>secrets.enc</code>, <code>llm-credentials.enc</code> and <code>mcp-credentials.enc</code> envelopes, and an optional <code>mcp.yaml</code>.</p>
         </div>
       </div>
-      <script type="text/plain" class="diagram-source">
-graph TD
-  START["inbound claimed + persisted"]
-  PEND["PENDING"]
-  RUN["RUNNING"]
-  AWAIT["AWAITING_APPROVAL<br/>(Inc 5)"]
-  DONE["DONE"]
-  FAIL["FAILED"]
-  CANC["CANCELLED"]
-  SUP["SUPERSEDED"]
+    </section>
 
-  START -->|"claim + persist"| PEND
-  PEND  -->|"lane picks up"| RUN
-  PEND  -->|"/stop"| CANC
-  PEND  -->|"/new"| SUP
-  RUN   -->|"turn completes<br/>reply enqueued"| DONE
-  RUN   -->|"retries exhausted<br/>or terminal error"| FAIL
-  RUN   -->|"/stop"| CANC
-  RUN   -->|"/new"| SUP
-  RUN   -->|"tool needs approval"| AWAIT
-  AWAIT -->|"APPROVED"| RUN
-  AWAIT -->|"REJECTED or<br/>EXPIRED to DENY"| FAIL
-  AWAIT -->|"/stop or /new"| CANC
+    <!-- ============ 2. MODULE GRAPH ============ -->
+    <section class="sec" id="s-dag" aria-labelledby="h-dag">
+      <p class="eyebrow">Compile time</p>
+      <h2 id="h-dag">Module dependency graph</h2>
+      <p class="sec-lead">
+        <code>Package.swift</code> declares these edges, and the <code>import</code> lines in
+        <code>Sources/</code> match them exactly. Read from the top: <code>clawd</code> imports every
+        library, the implementation libraries sit in the middle, and every target imports
+        <code>ClawCore</code> at the bottom. Only five imports run from one implementation library
+        to another.
+      </p>
 
-  classDef active   fill:#0c1d3088,stroke:#4a9fd4,stroke-width:2px
-  classDef terminal fill:#1a2e2888,stroke:#4aad7a,stroke-width:2px
-  classDef failed   fill:#3a1a1a88,stroke:#d45c5c
-  classDef stopped  fill:#1a1a2888,stroke:#3f5f7a
-  classDef waiting  fill:#2a200f88,stroke:#d4a73a
-  classDef start    fill:#0b152088,stroke:#3f5f7a
+      <figure class="fig">
+        <ul class="dag-legend" aria-label="How to read the graph">
+          <li>
+            <svg width="30" height="14" viewBox="0 0 30 14" aria-hidden="true"><path d="M1 2H29M3 2V13M15 2V13M27 2V13" fill="none" stroke="var(--root)" stroke-width="2"/></svg>
+            orange rail: <code>clawd</code> imports each library below it
+          </li>
+          <li>
+            <svg width="14" height="20" viewBox="0 0 14 20" aria-hidden="true"><path d="M7 1V17M2 12L7 18L12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            arrow: one library imports another
+          </li>
+          <li>
+            <svg width="30" height="14" viewBox="0 0 30 14" aria-hidden="true"><path d="M1 12H29M3 1V12M15 1V12M27 1V12" fill="none" stroke="var(--seam)" stroke-width="2"/></svg>
+            teal rail: every target above imports <code>ClawCore</code>
+          </li>
+          <li>
+            <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"/></svg>
+            dashed card: test-only, not linked into <code>clawd</code>
+          </li>
+        </ul>
 
-  class PEND,RUN active
-  class DONE terminal
-  class FAIL failed
-  class CANC,SUP stopped
-  class AWAIT waiting
-  class START start
-      </script>
-    </div>
+        <div class="dag">
+          <div class="dag-top">
+            <article class="mod mod--root" aria-labelledby="m-clawd">
+              <div class="mod__head">
+                <h3 class="mod__name" id="m-clawd">clawd</h3>
+                <span class="mod__kind">executable · composition root</span>
+              </div>
+              <p class="mod__desc">Parses the command, loads config, takes the state-root lock, loads secrets, then builds every concrete type and the <code>ServiceGroup</code>.</p>
+              <ul class="cmds" aria-label="Commands">
+                <li><code>run</code> <span class="opt">(default)</span></li>
+                <li><code>doctor [--check-config]</code></li>
+                <li><code>secrets seal</code></li>
+                <li><code>auth login | status | logout</code></li>
+                <li><code>mcp list | probe | set-token | clear-token</code></li>
+                <li><code>coder setup</code></li>
+              </ul>
+              <ul class="types" aria-label="Key types">
+                <li><code>RunCommand</code></li>
+                <li><code>RunComposition</code></li>
+                <li><code>DaemonBuilder</code></li>
+                <li><code>EnvironmentLoader</code></li>
+              </ul>
+              <p class="mod__pkgs">swift-argument-parser · swift-service-lifecycle · async-http-client · swift-log</p>
+            </article>
 
-    <div class="callout">
-      <strong>Boot reconciliation sweep:</strong> any <code>RUNNING</code> at boot &#x2192; <code>FAILED</code> (or re-enqueue via outbox);
-      any expired <code>AWAITING_APPROVAL</code> &#x2192; DENY. An <code>updated_ts</code> lease distinguishes stuck-forever from in-flight.
-      The 60s ticker enforces <code>PENDING &#x2192; EXPIRED &#x2192; DENY</code>.
-    </div>
-  </section>
+            <article class="mod mod--test" aria-labelledby="m-testsupport">
+              <div class="mod__head">
+                <h3 class="mod__name" id="m-testsupport">ClawTestSupport</h3>
+                <span class="mod__kind">test-only</span>
+              </div>
+              <p class="mod__desc">Shared doubles and in-memory databases for 14 of the 17 test targets.</p>
+              <p class="mod__edge">imports <b>ClawAgent</b>, <b>ClawAuth</b>, <b>ClawCore</b>, <b>ClawData</b>, <b>ClawTools</b></p>
+              <p class="mod__pkgs">swift-log</p>
+            </article>
+          </div>
 
-  <!-- ── § 07  CONTEXT ASSEMBLY ── -->
-  <section class="section animate" style="--i:7">
-    <div class="section-header">
-      <span class="section-num">§ 07</span>
-      <h2>Context Assembly — Instruction Hierarchy</h2>
-    </div>
-    <p class="section-desc">
-      Budget: <code>inputCap = modelMax &minus; reservedOutput</code>, filled greedily by priority, grapheme-counted (<code>String.count</code>).
-      Untrusted data is wrapped/labeled and can never claim system authority — durable memory is never injected at the system tier.
-    </p>
+          <div class="bus bus--root" aria-hidden="true">
+            <span class="bus__label"><span>clawd imports all 16 libraries</span></span>
+          </div>
 
-    <div class="table-wrap animate" style="--i:8">
-      <div class="table-scroll">
-        <table class="data-table">
+          <p class="band-label">The five library-to-library imports</p>
+          <div class="stacks">
+            <div class="stack">
+              <article class="mod" aria-labelledby="m-gateway">
+                <div class="mod__head">
+                  <h3 class="mod__name" id="m-gateway">ClawGateway</h3>
+                  <span class="mod__kind">lib</span>
+                </div>
+                <p class="mod__desc">Runtime wiring: services, routing, access control, turns, outbox, approvals, scheduler, Coder jobs, shutdown.</p>
+                <p class="mod__edge">imports <b>ClawAgent</b> for <code>AgentRuntime</code>, <code>SessionLaneRegistry</code> and <code>ContextBuilder</code></p>
+                <ul class="types" aria-label="Key types">
+                  <li><code>MessageRouter</code></li>
+                  <li><code>AccessControl</code></li>
+                  <li><code>TurnRunner</code></li>
+                  <li><code>OutboxDispatcher</code></li>
+                </ul>
+                <p class="mod__pkgs">swift-service-lifecycle · swift-log</p>
+              </article>
+              <div class="imports" aria-hidden="true">
+                <svg viewBox="0 0 14 28"><path d="M7 1V25M1.5 19.5L7 26L12.5 19.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="imports__label">imports</span>
+              </div>
+              <article class="mod" aria-labelledby="m-agent">
+                <div class="mod__head">
+                  <h3 class="mod__name" id="m-agent">ClawAgent</h3>
+                  <span class="mod__kind">lib</span>
+                </div>
+                <p class="mod__desc">Agent runtime: context assembly, the run loop, budgets, cancellation, per-session lanes.</p>
+                <ul class="types" aria-label="Key types">
+                  <li><code>AgentRuntime</code></li>
+                  <li><code>ContextBuilder</code></li>
+                  <li><code>SessionLaneRegistry</code></li>
+                </ul>
+                <p class="mod__pkgs">swift-log</p>
+              </article>
+            </div>
+
+            <div class="stack">
+              <article class="mod" aria-labelledby="m-telegram">
+                <div class="mod__head">
+                  <h3 class="mod__name" id="m-telegram">ClawTelegram</h3>
+                  <span class="mod__kind">lib</span>
+                </div>
+                <p class="mod__desc">Thin Bot API client: long-poll, update normalization, rich messages with a plain fallback, file download.</p>
+                <p class="mod__edge">imports <b>ClawHTTP</b> for <code>AsyncHTTPExecutor</code> and <code>HTTPClientProfile</code> to build the three runtime clients</p>
+                <ul class="types" aria-label="Key types">
+                  <li><code>TelegramClient</code></li>
+                  <li><code>RuntimeHTTPClients</code></li>
+                </ul>
+                <p class="mod__pkgs">async-http-client</p>
+              </article>
+              <div class="imports" aria-hidden="true">
+                <svg viewBox="0 0 14 28"><path d="M7 1V25M1.5 19.5L7 26L12.5 19.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="imports__label">imports</span>
+              </div>
+              <article class="mod" aria-labelledby="m-http">
+                <div class="mod__head">
+                  <h3 class="mod__name" id="m-http">ClawHTTP</h3>
+                  <span class="mod__kind">lib</span>
+                </div>
+                <p class="mod__desc">AsyncHTTPClient behind the Core HTTP seams, with redirect and decompression profiles. No Telegram or provider policy.</p>
+                <ul class="types" aria-label="Key types">
+                  <li><code>AsyncHTTPExecutor</code></li>
+                  <li><code>HTTPClientProfile</code></li>
+                </ul>
+                <p class="mod__pkgs">async-http-client · swift-nio</p>
+              </article>
+            </div>
+
+            <div class="stack">
+              <article class="mod" aria-labelledby="m-exec">
+                <div class="mod__head">
+                  <h3 class="mod__name" id="m-exec">ClawExec</h3>
+                  <span class="mod__kind">lib</span>
+                </div>
+                <p class="mod__desc"><code>execute_code</code> backend: a fresh apple/container VM per call, plus probe, reap and canary. macOS 26 on arm64 only.</p>
+                <p class="mod__edge">imports <b>ClawSubprocess</b> for <code>SubprocessRunning</code> to drive the container CLI</p>
+                <ul class="types" aria-label="Key types">
+                  <li><code>ContainerBackend</code></li>
+                  <li><code>ExecSandbox<wbr>Settings</code></li>
+                </ul>
+                <p class="mod__pkgs">no package dependencies</p>
+              </article>
+              <div class="imports" aria-hidden="true">
+                <svg viewBox="0 0 14 28"><path d="M7 1V25M1.5 19.5L7 26L12.5 19.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="imports__label">imports</span>
+              </div>
+              <article class="mod" aria-labelledby="m-subprocess">
+                <div class="mod__head">
+                  <h3 class="mod__name" id="m-subprocess">ClawSubprocess</h3>
+                  <span class="mod__kind">lib</span>
+                </div>
+                <p class="mod__desc">Process launch with bounded output capture, timeouts and process-group teardown. Also the cross-process <code>InstanceLock</code>.</p>
+                <ul class="types" aria-label="Key types">
+                  <li><code>SwiftSubprocess<wbr>Runner</code></li>
+                  <li><code>SubprocessCommand</code></li>
+                  <li><code>InstanceLock</code></li>
+                </ul>
+                <p class="mod__pkgs">swift-subprocess 1.0.0 · swift-system on Linux</p>
+              </article>
+            </div>
+
+            <div class="stack stack--pair">
+              <div class="pair">
+                <article class="mod" aria-labelledby="m-llm">
+                  <div class="mod__head">
+                    <h3 class="mod__name" id="m-llm">ClawLLM</h3>
+                    <span class="mod__kind">lib</span>
+                  </div>
+                  <p class="mod__desc">Both wire adapters behind <code>LLMProvider</code>: OpenAI-compatible Chat Completions and ChatGPT Codex Responses. SSE, retries, cost.</p>
+                  <p class="mod__edge">imports <b>ClawAuth</b> for <code>ChatGPTCredentialSource</code> and <code>ChatGPTOAuthClient</code></p>
+                  <ul class="types" aria-label="Key types">
+                    <li><code>ProviderStackFactory</code></li>
+                    <li><code>OpenAICompatibleProvider</code></li>
+                    <li><code>ChatGPTResponsesProvider</code></li>
+                  </ul>
+                  <p class="mod__pkgs">swift-log · embeds <code>Prices.json</code></p>
+                </article>
+                <article class="mod" aria-labelledby="m-secrets">
+                  <div class="mod__head">
+                    <h3 class="mod__name" id="m-secrets">ClawSecrets</h3>
+                    <span class="mod__kind">lib</span>
+                  </div>
+                  <p class="mod__desc">AES-GCM envelopes under one <code>0600</code> key: runtime secrets, LLM credentials, MCP tokens. Crash-aware publication.</p>
+                  <p class="mod__edge">imports <b>ClawAuth</b> so <code>LLMAuthDoctor</code> reads token expiry the same way the live source does</p>
+                  <ul class="types" aria-label="Key types">
+                    <li><code>SecretStoreResolver</code></li>
+                    <li><code>EncryptedLLMCredentialStore</code></li>
+                    <li><code>EncryptedMCPCredentialStore</code></li>
+                  </ul>
+                  <p class="mod__pkgs">swift-crypto</p>
+                </article>
+              </div>
+              <div class="imports imports--pair" aria-hidden="true">
+                <span class="imports__one">
+                  <svg viewBox="0 0 14 28"><path d="M7 1V25M1.5 19.5L7 26L12.5 19.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="imports__label">imports</span>
+                </span>
+                <span class="imports__one">
+                  <svg viewBox="0 0 14 28"><path d="M7 1V25M1.5 19.5L7 26L12.5 19.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="imports__label">imports</span>
+                </span>
+              </div>
+              <article class="mod" aria-labelledby="m-auth">
+                <div class="mod__head">
+                  <h3 class="mod__name" id="m-auth">ClawAuth</h3>
+                  <span class="mod__kind">lib</span>
+                </div>
+                <p class="mod__desc">ChatGPT device-code OAuth, the model catalog, the refreshing credential actor, and one workflow per <code>clawd auth</code> command.</p>
+                <ul class="types" aria-label="Key types">
+                  <li><code>ChatGPTCredentialSource</code></li>
+                  <li><code>ChatGPTOAuthClient</code></li>
+                  <li><code>AuthLoginWorkflow</code></li>
+                </ul>
+                <p class="mod__pkgs">no package dependencies</p>
+              </article>
+            </div>
+
+            <p class="stack-note">Each arrow is a direct import between two libraries. Any other use across these targets goes through <code>ClawCore</code> types, and <code>clawd</code> supplies the concrete implementations.</p>
+          </div>
+
+          <p class="band-label">No library-to-library import in either direction</p>
+          <div class="singles">
+            <article class="mod" aria-labelledby="m-data">
+              <div class="mod__head">
+                <h3 class="mod__name" id="m-data">ClawData</h3>
+                <span class="mod__kind">lib</span>
+              </div>
+              <p class="mod__desc">GRDB persistence: schema, migrations, and the <code>…GRDB</code> stores behind the Core persistence protocols. SQLite errors map to <code>StoreError</code>.</p>
+              <ul class="types" aria-label="Key types">
+                <li><code>ClawStores</code></li>
+                <li><code>ClawDatabase</code></li>
+                <li><code>MappedDatabase</code></li>
+              </ul>
+              <p class="mod__pkgs">GRDB.swift</p>
+            </article>
+
+            <article class="mod" aria-labelledby="m-workspace">
+              <div class="mod__head">
+                <h3 class="mod__name" id="m-workspace">ClawWorkspace</h3>
+                <span class="mod__kind">lib</span>
+              </div>
+              <p class="mod__desc">Workspace files (SOUL, AGENTS, USER, TOOLS, MEMORY), skills with YAML frontmatter, and the <code>mcp.yaml</code> loader.</p>
+              <ul class="types" aria-label="Key types">
+                <li><code>FileSystemWorkspace</code></li>
+                <li><code>MCPConfigLoader</code></li>
+              </ul>
+              <p class="mod__pkgs">Yams</p>
+            </article>
+
+            <article class="mod" aria-labelledby="m-tools">
+              <div class="mod__head">
+                <h3 class="mod__name" id="m-tools">ClawTools</h3>
+                <span class="mod__kind">lib</span>
+              </div>
+              <p class="mod__desc">Tool registry, policy gate and the built-in tools: web, files, memory, skills, <code>execute_code</code>, Coder.</p>
+              <ul class="types" aria-label="Key types">
+                <li><code>ToolRegistry</code></li>
+                <li><code>ToolPolicyGate</code></li>
+                <li><code>GatedToolDispatcher</code></li>
+              </ul>
+              <p class="mod__pkgs">no package dependencies</p>
+            </article>
+
+            <article class="mod" aria-labelledby="m-mcp">
+              <div class="mod__head">
+                <h3 class="mod__name" id="m-mcp">ClawMCP</h3>
+                <span class="mod__kind">lib</span>
+              </div>
+              <p class="mod__desc">MCP client: Streamable HTTP transport on the Core HTTP seam, one session per server, and the <code>MCPTool</code> adapter.</p>
+              <ul class="types" aria-label="Key types">
+                <li><code>MCPServerSession</code></li>
+                <li><code>MCPCatalogResolver</code></li>
+                <li><code>MCPTool</code></li>
+              </ul>
+              <p class="mod__pkgs">swift-sdk (MCP) · swift-log</p>
+            </article>
+
+            <article class="mod" aria-labelledby="m-coder">
+              <div class="mod__head">
+                <h3 class="mod__name" id="m-coder">ClawCoder</h3>
+                <span class="mod__kind">lib</span>
+              </div>
+              <p class="mod__desc">Native Codex delegation: process ownership, Git workspaces, result inspection. macOS and Linux.</p>
+              <ul class="types" aria-label="Key types">
+                <li><code>CodexBackend</code></li>
+                <li><code>CoderRequestPreparer</code></li>
+                <li><code>CoderProcessInspector</code></li>
+              </ul>
+              <p class="mod__pkgs">swift-subprocess 1.0.0 · swift-system on Linux · embeds <code>CodexResult.schema.json</code></p>
+            </article>
+
+            <article class="mod" aria-labelledby="m-speech">
+              <div class="mod__head">
+                <h3 class="mod__name" id="m-speech">ClawAppleSpeech</h3>
+                <span class="mod__kind">lib</span>
+              </div>
+              <p class="mod__desc">On-device voice transcription behind <code>VoiceTranscribing</code>. macOS 26; an empty module on Linux.</p>
+              <ul class="types" aria-label="Key types">
+                <li><code>AppleSpeechTranscriber</code></li>
+                <li><code>SystemVoiceTranscriber</code></li>
+              </ul>
+              <p class="mod__pkgs">no package dependencies · system Speech framework</p>
+            </article>
+          </div>
+
+          <div class="bus bus--core" aria-hidden="true">
+            <span class="bus__label"><span>all 17 targets above import ClawCore</span></span>
+          </div>
+
+          <article class="mod mod--core" aria-labelledby="m-core">
+            <div class="mod__head">
+              <h3 class="mod__name" id="m-core">ClawCore</h3>
+              <span class="mod__kind">lib · seams and value types</span>
+            </div>
+            <p class="mod__desc">The contracts every other target programs against: 46 protocols and the shared value types. It imports no Claw target.</p>
+            <div class="families">
+              <div class="family">
+                <h4>Persistence · 18 protocols</h4>
+                <ul class="types">
+                  <li><code>SessionMessageStore</code></li>
+                  <li><code>RunStore</code></li>
+                  <li><code>OutboxStore</code></li>
+                  <li><code>UsageStore</code></li>
+                  <li><code>AuditLog</code></li>
+                  <li><code>MemoryStore</code></li>
+                  <li><code>Retriever</code></li>
+                  <li><code>ApprovalStore</code></li>
+                  <li><code>CoderJobStore</code></li>
+                  <li><a href="#s-seams">+9 more</a></li>
+                </ul>
+              </div>
+              <div class="family">
+                <h4>Telegram and HTTP</h4>
+                <ul class="types">
+                  <li><code>TelegramTransport</code></li>
+                  <li><code>MediaFetching</code></li>
+                  <li><code>RichDraftStreaming</code></li>
+                  <li><code>TypingIndicator</code></li>
+                  <li><code>HTTPExecuting</code></li>
+                  <li><code>HTTPStreaming</code></li>
+                </ul>
+              </div>
+              <div class="family">
+                <h4>Model access and secrets</h4>
+                <ul class="types">
+                  <li><code>LLMProvider</code></li>
+                  <li><code>LLMCredentialSource</code></li>
+                  <li><code>LLMCredentialStore</code></li>
+                  <li><code>SecretStore</code></li>
+                </ul>
+              </div>
+              <div class="family">
+                <h4>Tools, execution, Coder</h4>
+                <ul class="types">
+                  <li><code>Tool</code></li>
+                  <li><code>ToolDispatching</code></li>
+                  <li><code>SearchProviding</code></li>
+                  <li><code>ExecutionBackend</code></li>
+                  <li><code>CoderBackend</code></li>
+                  <li><code>CoderServing</code></li>
+                </ul>
+              </div>
+              <div class="family">
+                <h4>Workspace and voice</h4>
+                <ul class="types">
+                  <li><code>WorkspaceReading</code></li>
+                  <li><code>VoiceTranscribing</code></li>
+                </ul>
+              </div>
+              <div class="family">
+                <h4>Value types</h4>
+                <ul class="types">
+                  <li><code>AppConfig</code></li>
+                  <li><code>SessionKey</code></li>
+                  <li><code>ChatMode</code></li>
+                  <li><code>RunFSM</code></li>
+                  <li><code>ApprovalFSM</code></li>
+                  <li><code>PolicyFingerprint</code></li>
+                  <li><code>StoreError</code></li>
+                </ul>
+              </div>
+            </div>
+            <p class="mod__pkgs">swift-crypto, for SHA-256</p>
+          </article>
+        </div>
+
+        <figcaption>
+          <strong>Three layers, five cross-imports.</strong> <code>clawd</code> imports all 16
+          libraries, and every target imports <code>ClawCore</code>. Apart from those, the only
+          imports between libraries linked into <code>clawd</code> are the five arrows.
+          <code>ClawTestSupport</code> also imports five targets but is linked only into tests.
+        </figcaption>
+      </figure>
+
+      <div class="callouts">
+        <div class="callout callout--seam">
+          <strong>Siblings meet through ClawCore</strong>
+          <p><code>coder_submit</code> lives in <code>ClawTools</code> and needs <code>CoderService</code> from <code>ClawGateway</code>. Neither target imports the other. The tool holds <code>any CoderServing</code>, a <code>ClawCore</code> protocol, and <code>DaemonBuilder.prepareCoder</code> passes the concrete service in.</p>
+        </div>
+        <div class="callout callout--seam">
+          <strong>Persistence stays behind protocols</strong>
+          <p>Only <code>clawd</code> and <code>ClawTestSupport</code> import <code>ClawData</code>. <code>ClawGateway</code> and <code>ClawAgent</code> never name a <code>…GRDB</code> store, <code>ClawStores</code> or <code>ClawDatabase</code>. They hold store protocols from <code>ClawCore</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 3. SEAMS ============ -->
+    <section class="sec" id="s-seams" aria-labelledby="h-seams">
+      <p class="eyebrow">Compile time</p>
+      <h2 id="h-seams">Seams and their implementations</h2>
+      <p class="sec-lead">
+        A consumer stores an <code>any</code> protocol type from <code>ClawCore</code>. The concrete
+        type lives in a sibling target, and <code>clawd</code> passes it in. The rows below come from
+        a scan of conformances and <code>any</code> or generic uses in <code>Sources/</code>. Test
+        doubles in <code>ClawTestSupport</code> are left out.
+      </p>
+
+      <div class="table-wrap">
+        <table class="data seams">
+          <caption>ClawCore seams grouped by area. “Held by” lists the targets that store or accept the protocol type.</caption>
+          <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
           <thead>
             <tr>
-              <th>#</th>
-              <th>Section</th>
-              <th>Tier</th>
-              <th>Priority</th>
-              <th>Truncatable / Cap</th>
+              <th scope="col">Seam in ClawCore</th>
+              <th scope="col">Implemented in</th>
+              <th scope="col">Concrete type</th>
+              <th scope="col">Held by</th>
             </tr>
           </thead>
           <tbody>
+            <tr class="group"><th colspan="4" scope="colgroup">Persistence</th></tr>
             <tr>
-              <td><code>1</code></td>
-              <td><strong>System / security policy</strong></td>
-              <td><span class="badge badge--info">system trusted</span></td>
-              <td>Highest</td>
-              <td>No — degrade, never drop</td>
+              <td><code>SessionMessageStore</code> <code>RunStore</code> <code>OutboxStore</code> <code>ApprovalStore</code> <code>AllowlistStore</code> <code>UpdateCursorStore</code> <code>ProcessedUpdateStore</code> <code>CommandStore</code> <code>ScheduledJobStore</code> <code>ScheduleCommandStore</code> <code>MemoryCommandStore</code></td>
+              <td class="target">ClawData</td>
+              <td>One <code>…StoreGRDB</code> per protocol, bundled in <code>ClawStores</code></td>
+              <td class="target">ClawGateway</td>
             </tr>
             <tr>
-              <td><code>2</code></td>
-              <td><strong>Identity files</strong> (SOUL &middot; AGENTS)</td>
-              <td><span class="badge badge--info">system trusted</span></td>
-              <td>High</td>
-              <td>No</td>
+              <td><code>UsageStore</code> <code>AuditLog</code> <code>MemoryStore</code></td>
+              <td class="target">ClawData</td>
+              <td><code>UsageStoreGRDB</code> <code>AuditLogGRDB</code> <code>MemoryStoreGRDB</code></td>
+              <td class="target">ClawAgent, ClawGateway</td>
             </tr>
             <tr>
-              <td><code>3</code></td>
-              <td><strong>Developer config / tool policy</strong> (TOOLS)</td>
-              <td><span class="badge badge--info">system trusted</span></td>
-              <td>High</td>
-              <td>No</td>
+              <td><code>Retriever</code></td>
+              <td class="target">ClawData</td>
+              <td><code>RetrieverGRDB</code></td>
+              <td class="target">ClawAgent</td>
             </tr>
             <tr>
-              <td><code>4</code></td>
-              <td><strong>Current date / time</strong></td>
-              <td><span class="badge badge--info">system trusted</span></td>
-              <td>High</td>
-              <td>No</td>
+              <td><code>CoderJobStore</code> <code>ScheduledLearningStore</code> <code>LearningWorkflowStore</code></td>
+              <td class="target">ClawData</td>
+              <td><code>CoderJobStoreGRDB</code> <code>ScheduledLearningStoreGRDB</code></td>
+              <td class="target">ClawGateway, clawd</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr class="group"><th colspan="4" scope="colgroup">Telegram and HTTP</th></tr>
+            <tr>
+              <td><code>TelegramTransport</code> <span class="dim">(<code>ChannelIntake</code> + <code>MessageDelivery</code> + <code>CallbackResponding</code> + <code>GroupMembershipChecking</code>)</span>, <code>MediaFetching</code></td>
+              <td class="target">ClawTelegram</td>
+              <td><code>TelegramClient</code></td>
+              <td class="target">ClawGateway</td>
             </tr>
             <tr>
-              <td><code>5</code></td>
-              <td><strong>Owner profile</strong> (USER.md)</td>
-              <td><span class="badge badge--med">untrusted / labeled</span></td>
-              <td>Med-high</td>
-              <td>Yes — &#x2264; 1375 graphemes</td>
+              <td><code>RichDraftStreaming</code> <code>TypingIndicator</code></td>
+              <td class="target">ClawTelegram</td>
+              <td><code>TelegramRichDraftStreamer</code> <code>TelegramTypingIndicator</code></td>
+              <td class="target">ClawAgent, ClawGateway</td>
             </tr>
             <tr>
-              <td><code>6</code></td>
-              <td><strong>Durable memory</strong> (MEMORY.md &middot; memory_items)</td>
-              <td><span class="badge badge--med">untrusted / labeled</span></td>
-              <td>Med</td>
-              <td>Yes — &#x2264; 2200 graphemes; overflow &#x2192; error + consolidation</td>
+              <td><code>HTTPExecuting</code> <code>HTTPStreaming</code></td>
+              <td class="target">ClawHTTP</td>
+              <td><code>AsyncHTTPExecutor</code></td>
+              <td class="target">ClawLLM, ClawMCP, ClawTelegram, ClawTools, ClawAuth</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr class="group"><th colspan="4" scope="colgroup">Model access and secrets</th></tr>
+            <tr>
+              <td><code>LLMProvider</code></td>
+              <td class="target">ClawLLM</td>
+              <td><code>OpenAICompatibleProvider</code> <code>ChatGPTResponsesProvider</code>, built by <code>ProviderStackFactory</code></td>
+              <td class="target">ClawAgent, ClawGateway</td>
             </tr>
             <tr>
-              <td><code>7</code></td>
-              <td><strong>Session history / rolling summary</strong></td>
-              <td><span class="badge badge--med">mixed; provenance preserved</span></td>
-              <td>Med</td>
-              <td>Yes</td>
+              <td><code>LLMCredentialSource</code></td>
+              <td class="target">ClawLLM, ClawAuth</td>
+              <td><code>StaticLLMCredentialSource</code> <code>ChatGPTCredentialSource</code></td>
+              <td class="target">ClawLLM, ClawGateway, clawd</td>
             </tr>
             <tr>
-              <td><code>8</code></td>
-              <td><strong>Retrieved (FTS5 recall) + tool observations</strong></td>
-              <td><span class="badge badge--high">untrusted / labeled</span></td>
-              <td>Low</td>
-              <td>Yes — per-tool output cap ~25k tokens</td>
+              <td><code>LLMCredentialStore</code></td>
+              <td class="target">ClawSecrets</td>
+              <td><code>EncryptedLLMCredentialStore</code></td>
+              <td class="target">ClawAuth, ClawLLM</td>
             </tr>
             <tr>
-              <td><code>9</code></td>
-              <td><strong>Skills</strong></td>
-              <td><span class="badge badge--high">untrusted / labeled</span></td>
-              <td>Low</td>
-              <td>Yes</td>
+              <td><code>SecretStore</code></td>
+              <td class="target">ClawSecrets</td>
+              <td><code>EncryptedFileSecretStore</code> <code>EnvSecretStore</code></td>
+              <td><code>SecretStoreResolver</code> <span class="dim">(ClawSecrets), called by clawd at boot</span></td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr class="group"><th colspan="4" scope="colgroup">Workspace and tools</th></tr>
+            <tr>
+              <td><code>WorkspaceReading</code></td>
+              <td class="target">ClawWorkspace</td>
+              <td><code>FileSystemWorkspace</code></td>
+              <td class="target">ClawAgent, ClawGateway</td>
+            </tr>
+            <tr>
+              <td><code>Tool</code></td>
+              <td class="target">ClawTools, ClawMCP</td>
+              <td>10 built-in tools such as <code>FileReadTool</code> and <code>CoderSubmitTool</code>, and <code>MCPTool</code></td>
+              <td class="target">ClawTools, ClawGateway, clawd</td>
+            </tr>
+            <tr>
+              <td><code>ToolDispatching</code></td>
+              <td class="target">ClawTools</td>
+              <td><code>GatedToolDispatcher</code></td>
+              <td class="target">ClawAgent</td>
+            </tr>
+            <tr>
+              <td><code>SearchProviding</code></td>
+              <td class="target">ClawTools</td>
+              <td><code>ExaSearchProvider</code></td>
+              <td><code>WebSearchTool</code> <span class="dim">(ClawTools)</span></td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr class="group"><th colspan="4" scope="colgroup">Execution, Coder and voice</th></tr>
+            <tr>
+              <td><code>ExecutionBackend</code> <code>SandboxMaintenance</code></td>
+              <td class="target">ClawExec</td>
+              <td><code>ContainerBackend</code></td>
+              <td class="target">ClawTools, ClawGateway</td>
+            </tr>
+            <tr>
+              <td><code>CoderBackend</code> <code>CoderRequestPreparing</code> <code>CoderProcessInspecting</code></td>
+              <td class="target">ClawCoder</td>
+              <td><code>CodexBackend</code> <code>CoderRequestPreparer</code> <code>CoderProcessInspector</code></td>
+              <td class="target">ClawGateway, clawd</td>
+            </tr>
+            <tr>
+              <td><code>CoderServing</code></td>
+              <td class="target">ClawGateway</td>
+              <td><code>CoderService</code></td>
+              <td>ClawTools <span class="dim">(the <code>coder_*</code> tools)</span></td>
+            </tr>
+            <tr>
+              <td><code>VoiceTranscribing</code></td>
+              <td class="target">ClawAppleSpeech</td>
+              <td><code>AppleSpeechTranscriber</code></td>
+              <td class="target">ClawGateway</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
 
-    <div class="callout">
-      <strong>Security invariant:</strong> §5–6 (MEMORY.md / USER.md) is wrapped in the same untrusted/labeled wrapper as tool output.
-      High-sensitivity memory is <strong>not</strong> auto-injected into a turn that already ingested untrusted content.
-      Compaction preserves untrusted provenance — never folds a tool result into the trusted rolling summary.
-    </div>
-  </section>
+    <!-- ============ 4. COMPOSITION ROOT ============ -->
+    <section class="sec" id="s-root" aria-labelledby="h-root">
+      <p class="eyebrow">Runtime</p>
+      <h2 id="h-root">Composition root</h2>
+      <p class="sec-lead">
+        <code>clawd run</code> is where concrete types meet their seams. It finishes every check that
+        can fail cheaply before it builds the object graph. On the way out it drains live work before
+        it commits credentials and closes clients.
+      </p>
 
-  <!-- ── § 08  TECHNOLOGY DECISIONS ── -->
-  <section class="section animate" style="--i:9">
-    <div class="section-header">
-      <span class="section-num">§ 08</span>
-      <h2>Technology Decisions</h2>
-    </div>
+      <div class="two-col">
+        <div class="panel">
+          <h3>Boot <span>RunCommand · RunComposition · DaemonBuilder</span></h3>
+          <ol class="steps">
+            <li><b>Config.</b> <code>EnvironmentLoader</code> parses <code>AppConfig</code> from the environment. Invalid config exits with its own code.</li>
+            <li><b>Instance lock.</b> <code>InstanceLock</code> takes the state-root <code>flock</code> and holds it until exit.</li>
+            <li><b>Secrets and MCP inputs.</b> The fail-closed resolver unseals <code>secrets.enc</code>, then <code>mcp.yaml</code> and <code>mcp-credentials.enc</code> load. Secret failures exit non-retryably.</li>
+            <li><b>Redacting logger.</b> The log backend starts with every secret and MCP token in its redaction set, before the first log line.</li>
+            <li><b>Stores.</b> <code>EnvironmentLoader.openStores</code> opens <code>claw.sqlite</code> into <code>ClawStores</code> and seeds the owner allowlist.</li>
+            <li><b>Clients and bot identity.</b> Three HTTP clients, then <code>getMe</code>. With group chats configured, a missing bot @username stops the boot.</li>
+            <li><b>Provider roster.</b> <code>ProviderStackFactory</code> builds the primary and optional fallback route on the LLM client. Turns and schedule parsing share one <code>PrimaryRouteCooldown</code>.</li>
+            <li><b>Object graph.</b> <code>DaemonBuilder.build</code> prepares the sandbox and Coder, pins the MCP catalog before the tool registry exists, then builds the agent stack, learning and the services.</li>
+            <li><b>Boot hook, then serve.</b> <code>setMyCommands</code>, reconcile orphaned runs, reconcile Coder, replay approvals (skipped if Coder failed to reconcile), reconcile learning. Then <code>ServiceGroup.run()</code>.</li>
+          </ol>
+        </div>
 
-    <div class="table-wrap">
-      <div class="table-scroll">
-        <table class="data-table">
+        <div class="panel">
+          <h3>Shutdown <span>RuntimeShutdownCoordinator</span></h3>
+          <ol class="steps steps--seam">
+            <li><b>Signal.</b> SIGTERM or SIGINT starts a graceful shutdown. ServiceLifecycle stops services in reverse registration order.</li>
+            <li><b>Lanes first.</b> <code>LaneAdmissionShutdownService</code> is registered last, so it stops first: it closes admission, cancels lane tasks and waits up to 30 seconds.</li>
+            <li><b>A drain timeout is fatal.</b> If a lane is still live, <code>FatalProcessTerminator</code> ends the process. Credentials and clients are not closed under live tasks.</li>
+            <li><b>Coder join.</b> <code>CoderService.shutdown()</code> must prove its process cleanup was joined and persisted. Otherwise the exit is fatal.</li>
+            <li><b>Credential commit.</b> Every route's <code>LLMCredentialSource.shutdown()</code> runs, primary first, so a token rotation is either saved or reported as failed.</li>
+            <li><b>Clients close.</b> The LLM client, then Telegram, then the tool client. The instance lock is released when <code>run</code> returns.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data">
+          <caption>ServiceGroup services in registration order (<code>DaemonBuilder.build</code>). Shutdown walks this list from the bottom.</caption>
           <thead>
             <tr>
-              <th>Decision</th>
-              <th>Choice</th>
-              <th>Rationale / Trade-offs</th>
-              <th>Risk</th>
+              <th scope="col">#</th>
+              <th scope="col">Service</th>
+              <th scope="col">Target</th>
+              <th scope="col">Registered when</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="num">1</td><td><code>TelegramPollerService</code></td><td class="target">ClawGateway</td><td>always</td></tr>
+            <tr><td class="num">2</td><td><code>OutboxDispatcher</code></td><td class="target">ClawGateway</td><td>always</td></tr>
+            <tr><td class="num">3</td><td><code>SchedulerService</code></td><td class="target">ClawGateway</td><td>always</td></tr>
+            <tr><td class="num">4</td><td><code>ApprovalExpiryService</code></td><td class="target">ClawGateway</td><td>always</td></tr>
+            <tr><td class="num">5</td><td><code>ScheduledLearningService</code></td><td class="target">ClawGateway</td><td><code>CLAW_LEARNING_ENABLED</code> is on</td></tr>
+            <tr><td class="num">6</td><td><code>SandboxLifecycleService</code></td><td class="target">ClawGateway</td><td><code>CLAW_EXEC_ENABLED</code> is on</td></tr>
+            <tr><td class="num">7</td><td><code>MCPSessionLifecycleService</code></td><td class="target">clawd</td><td>at least one enabled MCP server</td></tr>
+            <tr><td class="num">8</td><td><code>CoderService</code></td><td class="target">ClawGateway</td><td>Coder is enabled, or durable Coder reservations need recovery</td></tr>
+            <tr><td class="num">9</td><td><code>LaneAdmissionShutdownService</code></td><td class="target">ClawGateway</td><td>always, and always last</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 5. MCP BOUNDARY ============ -->
+    <section class="sec" id="s-mcp" aria-labelledby="h-mcp">
+      <p class="eyebrow">Boundary</p>
+      <h2 id="h-mcp">MCP: client only</h2>
+      <p class="sec-lead">
+        <code>ClawMCP</code> is the only target that implements MCP. It turns each remote tool into an
+        ordinary <code>Tool</code>, so the policy gate, approvals, <code>policy_version</code>,
+        redaction and audit have no MCP-specific code. The daemon uses remote tools and exposes none
+        of its own.
+      </p>
+
+      <figure class="fig">
+        <div class="diagram-shell">
+          <p class="diagram-shell__hint">Ctrl/Cmd + wheel zooms. Drag or scroll pans once zoomed in. Double-click fits.</p>
+          <div class="mermaid-wrap">
+            <div class="zoom-controls">
+              <button type="button" data-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+              <button type="button" data-action="zoom-out" title="Zoom out" aria-label="Zoom out">&minus;</button>
+              <button type="button" data-action="zoom-fit" title="Fit to view" aria-label="Fit to view">&#8634;</button>
+              <button type="button" data-action="zoom-one" title="Actual size" aria-label="Actual size">1:1</button>
+              <button type="button" data-action="zoom-expand" title="Open in a new tab" aria-label="Open in a new tab">&#x26F6;</button>
+              <span class="zoom-label">Loading…</span>
+            </div>
+            <div class="mermaid-viewport" role="img" aria-label="At boot, clawd reads mcp.yaml and URL-bound tokens and opens one MCPServerSession per server over the tool HTTP client. MCPCatalogResolver turns discovered tools into MCPTool adapters that conform to the ClawCore Tool protocol. ToolRegistry, ToolPolicyGate, ApprovalFSM and PolicyFingerprint hold only the Tool protocol and have no MCP branch.">
+              <div class="mermaid mermaid-canvas"></div>
+            </div>
+          </div>
+          <script type="text/plain" class="diagram-source">
+flowchart TD
+  subgraph inputs["Boot inputs · read once"]
+    yaml["mcp.yaml<br/>MCPConfigLoader · ClawWorkspace"]
+    tokens["mcp-credentials.enc<br/>EncryptedMCPCredentialStore · ClawSecrets"]
+  end
+  root["DaemonBuilder.resolveMCPStack<br/>clawd"]:::root
+  subgraph clawmcp["ClawMCP · the only MCP-aware target"]
+    session["MCPServerSession<br/>one per server · no client capabilities"]
+    transport["MCPStreamableHTTPTransport<br/>on HTTPExecuting and HTTPStreaming"]
+    catalog["MCPCatalogResolver<br/>names mcp__server__tool · 25k-token cap"]
+    adapter["MCPTool<br/>ask tier · arbitrary egress · untrusted result"]
+  end
+  srv["Remote MCP server<br/>Streamable HTTP"]:::edge
+  seam(["Tool protocol · ClawCore"]):::seam
+  subgraph unaware["No MCP branch"]
+    gate["ToolRegistry · ToolPolicyGate<br/>ClawTools"]
+    fsm["ApprovalFSM · PolicyFingerprint<br/>ClawCore"]
+  end
+  yaml -->|"enabled servers"| root
+  tokens -->|"token only if its URL still matches"| root
+  root -->|"opens sessions"| session
+  session -->|"initialize · tools/list · tools/call"| transport
+  transport -->|"HTTPS on the tool client"| srv
+  session -->|"discovered tools"| catalog
+  catalog -->|"one adapter per remote tool"| adapter
+  adapter -.->|"conforms to"| seam
+  gate -->|"holds any Tool"| seam
+  gate -->|"ask tier parks the run"| fsm
+          </script>
+        </div>
+        <figcaption>
+          <strong>A remote tool looks like any other tool.</strong> <code>MCPTool</code> conforms to
+          <code>Tool</code>. The gate, approval state machine and fingerprint work with that
+          protocol. The word MCP appears nowhere in <code>ClawTools</code>, <code>ClawAgent</code>,
+          <code>ApprovalFSM</code> or <code>PolicyFingerprint</code>. <code>ClawGateway</code>
+          mentions it only to route and render the <code>/mcp</code> status command.
+        </figcaption>
+      </figure>
+
+      <div class="rules">
+        <div class="panel panel--does">
+          <h3>The client</h3>
+          <ul>
+            <li>Discovers tools from owner-configured Streamable HTTP servers once, at boot. The catalog stays fixed while the process runs.</li>
+            <li>Names each tool <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>. A name collision takes the lowest free numeric suffix, assigned in config order.</li>
+            <li>Starts every remote tool at <code>ask</code>. Owner config may lower a named tool to <code>safe</code>, and the trifecta gate can still force approval.</li>
+            <li>Skips an unreachable or misbehaving server with a redacted reason. The daemon still boots, and <code>clawd doctor</code> exits non-zero.</li>
+            <li>Folds each server's endpoint, auth header name, static headers and remote tool names into <code>policy_version</code>, so a change voids parked approvals.</li>
+            <li>Disconnects every session at shutdown while the tool client is still open to send <code>DELETE</code>.</li>
+            <li>Speaks Streamable HTTP only. The stdio transport, OAuth 2.1 client auth and live catalog refresh are deferred.</li>
+          </ul>
+        </div>
+        <div class="panel panel--never">
+          <h3>Never</h3>
+          <ul>
+            <li>Runs an MCP server or exposes swift-claw's own tools.</li>
+            <li>Advertises client capabilities: the SDK <code>Client</code> is built with none, so no server can request sampling, elicitation or roots.</li>
+            <li>Gives the model an MCP admin, credential or catalog tool. Tokens change only through <code>clawd mcp set-token</code> and <code>clear-token</code>, under the instance lock.</li>
+            <li>Lets Telegram manage MCP: <code>/mcp</code> reports boot status only.</li>
+            <li>Accepts <code>dangerous</code> for a remote tool. Config loading rejects it.</li>
+            <li>Treats server text as trusted: those results are <code>ingestedUntrusted</code> and taint the session.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 6. GROUP MODE ============ -->
+    <section class="sec" id="s-group" aria-labelledby="h-group">
+      <p class="eyebrow">Exception</p>
+      <h2 id="h-group">Group and forum mode</h2>
+      <p class="sec-lead">
+        Off by default. When <code>CLAW_GROUP_CHATS</code> lists chat IDs, <code>clawd</code> also
+        serves those rooms, and each forum topic gets its own session. The spec scopes this to a
+        supervised event on a separate installation. It is not a multi-user mode for the owner's
+        personal daemon.
+      </p>
+
+      <figure class="fig">
+        <div class="diagram-shell">
+          <p class="diagram-shell__hint">Ctrl/Cmd + wheel zooms. Drag or scroll pans once zoomed in. Double-click fits.</p>
+          <div class="mermaid-wrap">
+            <div class="zoom-controls">
+              <button type="button" data-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+              <button type="button" data-action="zoom-out" title="Zoom out" aria-label="Zoom out">&minus;</button>
+              <button type="button" data-action="zoom-fit" title="Fit to view" aria-label="Fit to view">&#8634;</button>
+              <button type="button" data-action="zoom-one" title="Actual size" aria-label="Actual size">1:1</button>
+              <button type="button" data-action="zoom-expand" title="Open in a new tab" aria-label="Open in a new tab">&#x26F6;</button>
+              <span class="zoom-label">Loading…</span>
+            </div>
+            <div class="mermaid-viewport" role="img" aria-label="AccessControl.decide routes an update by chat kind. A private chat from an allowlisted sender becomes direct mode and every message runs. A private chat from a stranger gets a reply telling them to ask the owner. A group or supergroup listed in CLAW_GROUP_CHATS becomes group mode; AddressingResolver then runs addressed messages, stores unaddressed text without a run, and skips unaddressed media. Every other chat gets no reply.">
+              <div class="mermaid mermaid-canvas"></div>
+            </div>
+          </div>
+          <script type="text/plain" class="diagram-source">
+flowchart TD
+  upd["Telegram update"]
+  env["CLAW_GROUP_CHATS<br/>empty by default"]:::edge
+  access{{"AccessControl.decide<br/>by chat kind"}}
+  dm["Direct mode<br/>session tg:dm:chat"]
+  stranger["DM from a stranger<br/>told to ask the owner"]:::deny
+  grp["Group mode<br/>session tg:topic:chat:thread or general"]:::edge
+  silent["Unlisted group · channel · unknown kind<br/>no reply"]:::deny
+  dmrun["claimAndPersistInbound<br/>run · reply in the DM"]
+  addr{{"AddressingResolver<br/>@mention · bot command · reply to bot"}}:::edge
+  run["claimAndPersistInbound<br/>run · reply in the topic"]:::edge
+  observe["claimAndPersistObserved<br/>stored · no run"]:::edge
+  skip["Photo or voice note<br/>not downloaded"]:::deny
+  upd --> access
+  env -.->|"chat IDs"| access
+  access -->|"private · sender allowlisted"| dm
+  access -->|"private · sender not allowlisted"| stranger
+  access -->|"group or supergroup · chat listed"| grp
+  access -->|"any other chat"| silent
+  dm -->|"every message"| dmrun
+  grp --> addr
+  addr -->|"addressed"| run
+  addr -->|"unaddressed text"| observe
+  addr -->|"unaddressed media"| skip
+          </script>
+        </div>
+        <figcaption>
+          <strong>One decision point, then the session key.</strong> <code>AccessControl</code> is
+          the only component that turns <code>CLAW_GROUP_CHATS</code> into a mode. Consumers that
+          hold only a session ID read the mode back from the key. <code>clawd</code> reads the list
+          in two other places: to refuse boot without a bot @username, and to count group chats in
+          <code>doctor</code>.
+        </figcaption>
+      </figure>
+
+      <div class="table-wrap">
+        <table class="data compare">
+          <caption>What changes in a group topic. <span class="tag tag--edge">relaxed</span> marks a DM safeguard that group mode weakens; <span class="tag tag--dim">narrower</span> marks a capability it removes.</caption>
+          <colgroup><col class="c1"><col class="c2"><col class="c3"></colgroup>
+          <thead>
+            <tr>
+              <th scope="col">Aspect</th>
+              <th scope="col">Direct message (default)</th>
+              <th scope="col">Group topic (opt-in)</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>Daemon framework</strong></td>
-              <td><code>swift-service-lifecycle</code><br/><small>ServiceGroup / NIO</small></td>
-              <td><strong>No listen socket by default</strong> (long-polling is outbound — better secure-by-default posture). Structured supervised lifecycle.</td>
-              <td><span class="badge badge--low">Low</span></td>
+              <th scope="row">Admission</th>
+              <td>The sender's numeric user ID must be on the allowlist.</td>
+              <td class="relaxed">The chat ID must be listed. Members need no allowlist entry. <span class="tag tag--edge">relaxed</span></td>
             </tr>
             <tr>
-              <td><strong>Telegram client</strong></td>
-              <td>Thin clean-room client<br/><small>over AsyncHTTPClient</small></td>
-              <td>Deliberate clean-room provenance, zero bus-factor, full transport + escaping + offset-durability control. Research primary was <code>nerzh/swift-telegram-bot</code> — this is the considered runner-up.</td>
-              <td><span class="badge badge--low">Low–Med</span></td>
+              <th scope="row">Refusal</th>
+              <td>A stranger gets a reply telling them to ask the owner.</td>
+              <td>Unlisted groups, channels and unknown chat kinds get silence.</td>
             </tr>
             <tr>
-              <td><strong>Persistence</strong></td>
-              <td><code>GRDB.swift v7</code><br/><small>WAL · FTS5 · DatabaseMigrator</small></td>
-              <td>Swift-6 concurrency-native, boring, full-featured. FTS5 for cross-session recall. Pin GRDB; vendor SQLite amalgamation with FTS5 compiled in.</td>
-              <td><span class="badge badge--low">Low (macOS)</span> <span class="badge badge--med">Med (Linux)</span></td>
+              <th scope="row">Session key</th>
+              <td><code>tg:dm:&lt;chat&gt;</code></td>
+              <td><code>tg:topic:&lt;chat&gt;:&lt;thread or general&gt;</code>, one per forum topic</td>
             </tr>
             <tr>
-              <td><strong>HTTP / SSE</strong></td>
-              <td>AsyncHTTPClient + custom SSE parser</td>
-              <td>URLSession cannot stream SSE on Linux. Streaming is v1. AsyncHTTPClient is the portable choice.</td>
-              <td><span class="badge badge--low">Low</span></td>
+              <th scope="row">What starts a run</th>
+              <td>Every message.</td>
+              <td class="narrower">An @mention, a bot command or a reply to the bot. Other text is stored without a run. <span class="tag tag--dim">narrower</span></td>
             </tr>
             <tr>
-              <td><strong>LLM provider</strong></td>
-              <td>OpenAI-compatible + <code>LLMProvider</code> protocol</td>
-              <td>Swap providers / models via config (OpenAI, OpenRouter, Groq, Ollama, LiteLLM). <code>base_url</code> pinned/allowlisted. Protocol seam for native Anthropic adapter later.</td>
-              <td><span class="badge badge--med">Med</span></td>
+              <th scope="row">Stored provenance</th>
+              <td>Voice transcripts and photos are stored untrusted and taint the session.</td>
+              <td class="relaxed">Every line is stored trusted, voice transcripts included, and prefixed with the speaker's name. Attendee text never taints. <span class="tag tag--edge">relaxed</span></td>
             </tr>
             <tr>
-              <td><strong>Concurrency</strong></td>
-              <td>stdlib actors + stored <code>currentTurn</code> Task</td>
-              <td>Per-session lanes without an external queue lib. <code>dfed/swift-async-queue</code> is the escape hatch if measured bugs appear.</td>
-              <td><span class="badge badge--low">Low</span></td>
+              <th scope="row">Recall</th>
+              <td>Searches across sessions.</td>
+              <td class="narrower">Restricted to the topic's own session. <span class="tag tag--dim">narrower</span></td>
             </tr>
             <tr>
-              <td><strong>Secrets</strong></td>
-              <td><code>SecretStore</code> over sops + age<br/><small>+ swift-crypto AES-GCM</small></td>
-              <td>A launchd daemon cannot use the macOS Data-Protection Keychain. Sops + age is portable. Age identity lives outside the repo at <code>0600</code>.</td>
-              <td><span class="badge badge--low">Low</span></td>
+              <th scope="row">Trifecta gate</th>
+              <td>A tainted session with private data needs approval for arbitrary-destination egress.</td>
+              <td class="relaxed">Allows. The argument scans for secrets and private substrings still run. <span class="tag tag--edge">relaxed</span></td>
             </tr>
             <tr>
-              <td><strong>Sandbox (Inc 5)</strong></td>
-              <td><code>apple/container</code> (macOS)<br/>microVM / Podman (Linux)</td>
-              <td>Hardware-virtualization boundary for untrusted code. One execution = one disposable never-reused VM. Linux backend is an open question (Podman + microVM vs gVisor <code>runsc</code>).</td>
-              <td><span class="badge badge--med">Med</span></td>
+              <th scope="row">Approvals</th>
+              <td>Ask-tier and dangerous tools park for the owner's tap.</td>
+              <td class="relaxed">Ask-tier and enabled dangerous tools run without parking. Only <code>coder_submit</code> parks, and any current member may decide after a fresh <code>getChatMember</code> check. <span class="tag tag--edge">relaxed</span></td>
             </tr>
             <tr>
-              <td><strong>Vector search</strong></td>
-              <td>Deferred — FTS5/BM25 for v1</td>
-              <td><code>sqlite-vec</code> requires a custom SQLite amalgamation + separate Linux CI re-validation. A stock <code>DatabaseMigrator</code> cannot create a <code>vec0</code> table. Strictly behind a protocol.</td>
-              <td><span class="badge badge--high">High</span></td>
+              <th scope="row">Memory and prompt files</th>
+              <td><code>memory_write</code> and privileged prompt-file writes need approval.</td>
+              <td class="narrower">Both are refused. <span class="tag tag--dim">narrower</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Owner commands</th>
+              <td>All available.</td>
+              <td class="narrower"><code>/remember</code> <code>/memory</code> <code>/schedule</code> <code>/learning</code> <code>/pause</code> <code>/resume</code> <code>/runnow</code> <code>/cancel</code> are refused. <span class="tag tag--dim">narrower</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Durable memory in context</th>
+              <td>Assembled. High-sensitivity items are held back once the session is tainted.</td>
+              <td class="relaxed">Assembled. Attendee text never taints, so it never triggers the hold-back. The owner's memory is in the room. <span class="tag tag--edge">relaxed</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Delivery</th>
+              <td>The owner's DM, with streaming rich drafts.</td>
+              <td>A reply in the originating topic, with a typing indicator only. A Telegram 429 holds that chat while other chats keep sending.</td>
+            </tr>
+            <tr>
+              <th scope="row">Daily budget</th>
+              <td colspan="2">One <code>RunBudget</code> for the whole daemon. Every topic and the owner's DM share it.</td>
             </tr>
           </tbody>
         </table>
       </div>
-    </div>
-  </section>
 
-  <!-- ── § 09  ROADMAP ── -->
-  <section class="section animate" style="--i:10">
-    <div class="section-header">
-      <span class="section-num">§ 09</span>
-      <h2>Development Roadmap — Technical Increments</h2>
-    </div>
-    <p class="section-desc">
-      Inc 0–3 = <strong>v1 daily-driver milestone</strong>: conversational + durable memory + read-only tools + streaming.
-      Each increment lands a working supervised slice; &ldquo;Done when&rdquo; is an automated acceptance test, not a manual check.
-    </p>
-
-    <div class="ve-card" style="padding:0; overflow:hidden;">
-      <div style="padding:2px 20px 16px;">
-
-        <div class="roadmap-item">
-          <div><div class="roadmap-inc roadmap-inc--v1">Inc 0 &middot; v1</div><div class="roadmap-phase">Daily Driver</div></div>
-          <div>
-            <div class="roadmap-title">Supervised default-deny Telegram daemon (echo)</div>
-            <div class="roadmap-done">Bot echoes allowlisted DMs; un-allowlisted refused. Startup flock blocks second <code>clawd</code>. <code>409</code> handled as distinct typed error. Onboarding self-ID echo. Non-text &ldquo;I can&rsquo;t read X yet&rdquo;. Doctor skeleton. Survives SIGTERM + restart.</div>
-          </div>
+      <div class="callouts">
+        <div class="callout callout--edge">
+          <strong>Run it on a separate installation</strong>
+          <p>Group lines reach the model unfenced, the trifecta gate allows, and the owner's durable memory is assembled into the room. The spec accepts that only for a supervised event on its own state root, with a workspace and memory that hold nothing private.</p>
         </div>
-
-        <div class="roadmap-item">
-          <div><div class="roadmap-inc roadmap-inc--v1">Inc 1 &middot; v1</div></div>
-          <div>
-            <div class="roadmap-title">LLM turn (blocking) + persistence</div>
-            <div class="roadmap-done">Real OpenAI-compatible answer; persisted (sessions / messages / runs / usage / audit + outbox + <code>claimUpdate</code> ordering). Escaper + splitter. Degradation UX. USD budget breaker. Context caps.</div>
-          </div>
+        <div class="callout callout--root">
+          <strong>Boot guard</strong>
+          <p><code>RunComposition</code> refuses to boot when <code>CLAW_GROUP_CHATS</code> is set but <code>getMe</code> returned no bot @username. Without it, addressing can never match and the bot would stay silent in every room.</p>
         </div>
-
-        <div class="roadmap-item">
-          <div><div class="roadmap-inc roadmap-inc--v1">Inc 2 &middot; v1</div></div>
-          <div>
-            <div class="roadmap-title">Streaming + per-session lane</div>
-            <div class="roadmap-done">SSE &#x2192; throttled <code>editMessageText</code>. Per-session Task-chaining lane. Second message queues in order. <code>/stop</code> cancels. <code>/new</code> resets + detaints. SecretStore (no plaintext on disk).</div>
-          </div>
-        </div>
-
-        <div class="roadmap-item">
-          <div><div class="roadmap-inc roadmap-inc--v1">Inc 3 &middot; v1</div></div>
-          <div>
-            <div class="roadmap-title">Memory &amp; workspace + read-only tools</div>
-            <div class="roadmap-done">Workspace files at untrusted tier (budgeted, caps, flush-before-compact). Durable facts on confirm. FTS5 recall. <code>/memory</code>. <code>web_search</code> / <code>web_fetch</code> / file READ at <code>safe</code> tier with exfil gate.</div>
-          </div>
-        </div>
-
-        <div class="roadmap-item">
-          <div><div class="roadmap-inc">Inc 4</div></div>
-          <div>
-            <div class="roadmap-title">Scheduler &amp; proactive</div>
-            <div class="roadmap-done">&ldquo;Every weekday 07:00 Europe/Berlin&rdquo; fires once per occurrence across restarts and DST changes. Confirm-before-arm. Reduced-privilege runs. Clock-gap catch-up. Opt-in heartbeat with quiet hours.</div>
-          </div>
-        </div>
-
-        <div class="roadmap-item">
-          <div><div class="roadmap-inc">Inc 5</div></div>
-          <div>
-            <div class="roadmap-title">Write / shell tools + approvals + sandbox</div>
-            <div class="roadmap-done">Consequential tools require explicit approval (callback auth + &#x2265;128-bit nonce + FSM). Forged or third-party callback cannot approve. Untrusted code in per-exec disposable VM. Enforced lethal-trifecta gate forces approval path in code.</div>
-          </div>
-        </div>
-
-        <div class="roadmap-item">
-          <div><div class="roadmap-inc">Inc 6</div></div>
-          <div>
-            <div class="roadmap-title">Linux portability &amp; deployment</div>
-            <div class="roadmap-done">Same source &#x2192; running supervised binary on fresh Linux box (static SDK, distroless, systemd). CI Linux build including GRDB + FTS5 passes — <strong>the one hard portability gate</strong>.</div>
-          </div>
-        </div>
-
       </div>
-    </div>
-  </section>
+    </section>
 
+    <!-- ============ PROVENANCE ============ -->
+    <footer class="provenance">
+      <h2>How this drawing was checked</h2>
+      <ul>
+        <li>Targets and edges come from <code>Package.swift</code>, cross-checked against every <code>import</code> line in <code>Sources/</code>.</li>
+        <li>Seams: the 46 protocols declared in <code>ClawCore</code>, their conforming types, and the targets that hold them as <code>any</code> or generic types.</li>
+        <li>Runtime order: <code>RunCommand</code>, <code>RunComposition</code>, <code>DaemonBuilder</code>, <code>DaemonBuilder+Boot</code> and <code>RuntimeShutdownCoordinator</code>.</li>
+        <li>Boundaries: <code>AccessControl</code>, <code>AddressingResolver</code>, <code>ChatMode</code>, <code>Command.isDirectOnly</code>, <code>MCPTool</code>, <code>MCPConfig</code> and <code>MCPServerSession</code>. Other rules come from <code>docs/ARCHITECTURE.md</code> §10.3 and §12.1.</li>
+        <li>Redraw when <code>Package.swift</code> adds or removes a target or an edge.</li>
+      </ul>
+    </footer>
+
+  </main>
 </div>
 
 <script type="module">
-import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 
-const cfg = {
-  fitPadding:28, minHeight:360, maxHeightPx:960,
-  maxHeightVh:0.84, maxInitialZoom:1.8, minZoom:0.08,
-  maxZoom:6.5, zoomStep:0.14, readabilityFloor:0.58
-};
-const clamp = (n,lo,hi) => Math.max(lo,Math.min(hi,n));
-let activeDrag = null;
-addEventListener('mousemove', e => activeDrag?.onMove(e));
-addEventListener('mouseup',   () => { activeDrag?.onEnd(); activeDrag = null; });
-
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'base',
-  look: 'classic',
-  themeVariables: {
-    fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
-    fontSize: '13px',
-    primaryColor:        '#112032',
-    primaryBorderColor:  '#4a9fd4',
-    primaryTextColor:    '#d8e8f4',
-    secondaryColor:      '#1a2e28',
-    secondaryBorderColor:'#4aad7a',
-    secondaryTextColor:  '#d8e8f4',
-    tertiaryColor:       '#2a2010',
-    tertiaryBorderColor: '#d4a73a',
-    tertiaryTextColor:   '#d8e8f4',
-    lineColor:           '#4a6880',
-    noteBkgColor:        '#1d3450',
-    noteTextColor:       '#d8e8f4',
-    noteBorderColor:     '#4a9fd4',
-    background:          '#0b1520',
-    mainBkg:             '#112032',
-    clusterBkg:          '#0f1f30',
-    clusterBorder:       '#4a9fd4',
-    titleColor:          '#d8e8f4',
-    edgeLabelBackground: '#0b1520',
-    nodeTextColor:       '#d8e8f4',
+  let layout = 'dagre';
+  try {
+    const elk = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk/dist/mermaid-layout-elk.esm.min.mjs');
+    mermaid.registerLayoutLoaders(elk.default);
+    layout = 'elk';
+  } catch (error) {
+    console.warn('ELK layout unavailable; using dagre.', error);
   }
-});
 
-function initDiagram(shell) {
-  const wrap     = shell.querySelector('.mermaid-wrap');
-  const viewport = shell.querySelector('.mermaid-viewport');
-  const canvas   = shell.querySelector('.mermaid-canvas');
-  const source   = shell.querySelector('.diagram-source');
-  const label    = shell.querySelector('.zoom-label');
-  if (!wrap||!viewport||!canvas||!source||!label) return;
-
-  let zoom=1, fitMode='contain', panX=0, panY=0, svgW=0, svgH=0;
-  let sx=0, sy=0, spx=0, spy=0, touchDist=0, touchCx=0, touchCy=0;
-
-  const constrainPan = () => {
-    const vpW=viewport.clientWidth, vpH=viewport.clientHeight, p=cfg.fitPadding;
-    const rW=svgW*zoom, rH=svgH*zoom;
-    panX = rW+p*2<=vpW ? (vpW-rW)/2 : clamp(panX, vpW-rW-p, p);
-    panY = rH+p*2<=vpH ? (vpH-rH)/2 : clamp(panY, vpH-rH-p, p);
-  };
-  const applyT = () => {
-    const svg=canvas.querySelector('svg'); if (!svg||!svgW) return;
-    constrainPan();
-    svg.style.width=svgW*zoom+'px'; svg.style.height=svgH*zoom+'px';
-    canvas.style.transform=`translate(${panX}px,${panY}px)`;
-    label.textContent=Math.round(zoom*100)+'% — '+fitMode;
-  };
-  const canPan = () => svgW*zoom+cfg.fitPadding*2>viewport.clientWidth || svgH*zoom+cfg.fitPadding*2>viewport.clientHeight;
-  const smartFit = () => {
-    const vpW=viewport.clientWidth, vpH=viewport.clientHeight;
-    const aW=Math.max(80,vpW-cfg.fitPadding*2), aH=Math.max(80,vpH-cfg.fitPadding*2);
-    const c=Math.min(aW/svgW,aH/svgH); let z=c, m='contain';
-    if (c<cfg.readabilityFloor) svgH/svgW>=vpH/Math.max(vpW,1) ? (z=aW/svgW,m='width-priority') : (z=aH/svgH,m='height-priority');
-    return {zoom:clamp(z,cfg.minZoom,cfg.maxInitialZoom),mode:m};
-  };
-  const fitDiagram = () => {
-    if (!svgW) return; const f=smartFit(); zoom=f.zoom; fitMode=f.mode;
-    panX=(viewport.clientWidth-svgW*zoom)/2; panY=(viewport.clientHeight-svgH*zoom)/2; applyT();
-  };
-  const zoomAround = (factor,cx,cy) => {
-    const next=clamp(zoom*factor,cfg.minZoom,cfg.maxZoom), r=next/zoom;
-    panX=cx-r*(cx-panX); panY=cy-r*(cy-panY); zoom=next; fitMode='custom'; applyT();
-  };
-  const readSize = svg => {
-    let w=0,h=0;
-    if (svg.viewBox?.baseVal?.width>0){w=svg.viewBox.baseVal.width;h=svg.viewBox.baseVal.height;}
-    if (!w){w=parseFloat(svg.getAttribute('width'))||0;h=parseFloat(svg.getAttribute('height'))||0;}
-    if (!w){const b=svg.getBBox();w=b.width;h=b.height;}
-    if (!w){const r=svg.getBoundingClientRect();w=r.width||1000;h=r.height||700;}
-    if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
-    return {w,h};
-  };
-  const setHeight = () => {
-    if (!svgW) return;
-    const usW=Math.max(280,wrap.getBoundingClientRect().width-2);
-    const idealH=(svgH/svgW)*usW+cfg.fitPadding*2;
-    const maxH=Math.min(cfg.maxHeightPx,Math.max(cfg.minHeight+40,Math.floor(innerHeight*cfg.maxHeightVh)));
-    wrap.style.height=Math.round(clamp(idealH,cfg.minHeight,maxH))+'px';
-  };
-  const openInNewTab = () => {
-    const svg=canvas.querySelector('svg'); if (!svg) return;
-    const clone=svg.cloneNode(true); clone.style.width=''; clone.style.height='';
-    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Diagram</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0b1520;padding:40px;box-sizing:border-box}svg{max-width:100%;max-height:90vh;height:auto}</style></head><body>${clone.outerHTML}</body></html>`;
-    open(URL.createObjectURL(new Blob([html],{type:'text/html'})),'_blank');
+  // Frames grow to the diagram's height at up to 100% zoom, so a tall diagram is never cropped.
+  const config = {
+    fitPadding: 24,
+    chromeHeight: 54,
+    minHeight: 320,
+    maxHeightPx: 1600,
+    maxInitialZoom: 1,
+    minZoom: 0.08,
+    maxZoom: 6,
+    zoomStep: 0.14
   };
 
-  const render = async () => {
-    try {
-      const code=source.textContent.trim(); if (!code){label.textContent='Error: Empty source';return;}
-      const id='diag-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
-      const {svg}=await mermaid.render(id,code); canvas.innerHTML=svg;
-      const svgNode=canvas.querySelector('svg'); if (!svgNode){label.textContent='Error: No SVG';return;}
-      const s=readSize(svgNode); svgW=s.w; svgH=s.h;
-      svgNode.removeAttribute('width'); svgNode.removeAttribute('height');
-      svgNode.style.maxWidth='none'; svgNode.style.display='block';
-      setHeight(); fitDiagram();
-    } catch(err){ console.error('Mermaid render failed:',err); label.textContent='Error: '+(err.message||'Render failed'); }
-  };
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+  const darkScheme = matchMedia('(prefers-color-scheme: dark)');
+  const bodyFont = "'Red Hat Text', ui-sans-serif, system-ui, sans-serif";
 
-  const actions = {
-    'zoom-in':     ()=>zoomAround(1+cfg.zoomStep,viewport.clientWidth/2,viewport.clientHeight/2),
-    'zoom-out':    ()=>zoomAround(1/(1+cfg.zoomStep),viewport.clientWidth/2,viewport.clientHeight/2),
-    'zoom-fit':    fitDiagram,
-    'zoom-one':    ()=>{ zoom=clamp(1,cfg.minZoom,cfg.maxZoom);fitMode='1:1';panX=(viewport.clientWidth-svgW*zoom)/2;panY=(viewport.clientHeight-svgH*zoom)/2;applyT(); },
-    'zoom-expand': openInNewTab
-  };
-  Object.entries(actions).forEach(([a,h])=>wrap.querySelector(`[data-action="${a}"]`)?.addEventListener('click',h));
-  viewport.addEventListener('dblclick', fitDiagram);
-  viewport.addEventListener('wheel', e=>{
-    if (e.ctrlKey||e.metaKey){
-      e.preventDefault(); const r=viewport.getBoundingClientRect();
-      zoomAround(e.deltaY<0?1+cfg.zoomStep:1/(1+cfg.zoomStep),e.clientX-r.left,e.clientY-r.top);
-    } else if (canPan()){e.preventDefault();panX-=e.deltaX;panY-=e.deltaY;applyT();}
-  },{passive:false});
-  viewport.addEventListener('mousedown', e=>{
-    if (e.target.closest('.zoom-controls')||!canPan()) return;
-    wrap.classList.add('is-panning'); sx=e.clientX;sy=e.clientY;spx=panX;spy=panY; e.preventDefault();
-    activeDrag={
-      onMove:ev=>{panX=spx+(ev.clientX-sx);panY=spy+(ev.clientY-sy);applyT();},
-      onEnd:()=>wrap.classList.remove('is-panning')
-    };
+  let activeDrag = null;
+  addEventListener('mousemove', (e) => activeDrag?.onMove(e));
+  addEventListener('mouseup', () => {
+    activeDrag?.onEnd();
+    activeDrag = null;
   });
-  viewport.addEventListener('touchstart', e=>{
-    if (e.touches.length===1){sx=e.touches[0].clientX;sy=e.touches[0].clientY;spx=panX;spy=panY;}
-    else if (e.touches.length===2){
-      const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
-      touchDist=Math.sqrt(dx*dx+dy*dy); const r=viewport.getBoundingClientRect();
-      touchCx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left;
-      touchCy=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top;
-    }
-  },{passive:true});
-  viewport.addEventListener('touchmove', e=>{
-    if (e.touches.length===1&&canPan()){
-      if (touchDist>0){sx=e.touches[0].clientX;sy=e.touches[0].clientY;spx=panX;spy=panY;touchDist=0;}
-      e.preventDefault();panX=spx+(e.touches[0].clientX-sx);panY=spy+(e.touches[0].clientY-sy);applyT();
-    } else if (e.touches.length===2&&touchDist>0){
-      e.preventDefault(); const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
-      const d=Math.sqrt(dx*dx+dy*dy); zoomAround(d/touchDist,touchCx,touchCy); touchDist=d;
-    }
-  },{passive:false});
-  new ResizeObserver(()=>{if (svgW){setHeight();fitDiagram();}}).observe(wrap);
-  render();
-}
 
-document.querySelectorAll('.diagram-shell').forEach(initDiagram);
+  function token(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function palette() {
+    return {
+      surface: token('--surface'),
+      text: token('--text'),
+      textDim: token('--text-dim'),
+      root: token('--root'),
+      seam: token('--seam'),
+      edge: token('--edge'),
+      deny: token('--deny'),
+      node: token('--mm-node'),
+      nodeLine: token('--mm-node-line'),
+      line: token('--mm-edge'),
+      cluster: token('--mm-cluster'),
+      clusterLine: token('--mm-cluster-line')
+    };
+  }
+
+  function configureMermaid(p) {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      look: 'classic',
+      layout,
+      fontFamily: bodyFont,
+      flowchart: { padding: 12 },
+      themeVariables: {
+        fontFamily: bodyFont,
+        fontSize: '15px',
+        background: p.surface,
+        primaryColor: p.node,
+        primaryBorderColor: p.nodeLine,
+        primaryTextColor: p.text,
+        secondaryColor: p.cluster,
+        secondaryBorderColor: p.clusterLine,
+        secondaryTextColor: p.text,
+        tertiaryColor: p.cluster,
+        tertiaryBorderColor: p.clusterLine,
+        tertiaryTextColor: p.text,
+        mainBkg: p.node,
+        nodeBorder: p.nodeLine,
+        nodeTextColor: p.text,
+        clusterBkg: p.cluster,
+        clusterBorder: p.clusterLine,
+        titleColor: p.textDim,
+        lineColor: p.line,
+        edgeLabelBackground: p.surface
+      }
+    });
+  }
+
+  // classDef text cannot read CSS variables, so the class palette is appended per render.
+  function classDefs(p) {
+    return [
+      `classDef root fill:${p.root}1f,stroke:${p.root},stroke-width:2px`,
+      `classDef seam fill:${p.seam}1f,stroke:${p.seam},stroke-width:2px`,
+      `classDef edge fill:${p.edge}1c,stroke:${p.edge},stroke-width:1.5px`,
+      `classDef deny fill:${p.deny}14,stroke:${p.deny},stroke-width:1.5px,stroke-dasharray:5 4`,
+      `classDef ext fill:${p.node},stroke:${p.nodeLine},stroke-width:1.5px,stroke-dasharray:6 4`
+    ].join('\n');
+  }
+
+  const rerenderers = [];
+
+  function initDiagram(shell) {
+    const wrap = shell.querySelector('.mermaid-wrap');
+    const viewport = shell.querySelector('.mermaid-viewport');
+    const canvas = shell.querySelector('.mermaid-canvas');
+    const source = shell.querySelector('.diagram-source');
+    const label = shell.querySelector('.zoom-label');
+
+    if (!wrap || !viewport || !canvas || !source || !label) {
+      console.error('initDiagram: missing required elements in', shell);
+      return;
+    }
+
+    let zoom = 1;
+    let fitMode = 'contain';
+    let panX = 0;
+    let panY = 0;
+    let svgW = 0;
+    let svgH = 0;
+    let sx = 0;
+    let sy = 0;
+    let spx = 0;
+    let spy = 0;
+    let touchDist = 0;
+    let touchCx = 0;
+    let touchCy = 0;
+
+    function constrainPan() {
+      const vpW = viewport.clientWidth;
+      const vpH = viewport.clientHeight;
+      const rW = svgW * zoom;
+      const rH = svgH * zoom;
+      const pad = config.fitPadding;
+      panX = (rW + pad * 2 <= vpW) ? (vpW - rW) / 2 : clamp(panX, vpW - rW - pad, pad);
+      panY = (rH + pad * 2 <= vpH) ? (vpH - rH) / 2 : clamp(panY, vpH - rH - pad, pad);
+    }
+
+    function applyTransform() {
+      const svg = canvas.querySelector('svg');
+      if (!svg || !svgW) {
+        return;
+      }
+      constrainPan();
+      svg.style.width = (svgW * zoom) + 'px';
+      svg.style.height = (svgH * zoom) + 'px';
+      canvas.style.transform = `translate(${panX}px, ${panY}px)`;
+      label.textContent = Math.round(zoom * 100) + '% — ' + fitMode;
+    }
+
+    function canPan() {
+      return svgW * zoom + config.fitPadding * 2 > viewport.clientWidth
+        || svgH * zoom + config.fitPadding * 2 > viewport.clientHeight;
+    }
+
+    function containZoom() {
+      const aW = Math.max(80, viewport.clientWidth - config.fitPadding * 2);
+      const aH = Math.max(80, viewport.clientHeight - config.fitPadding * 2);
+      return clamp(Math.min(aW / svgW, aH / svgH), config.minZoom, config.maxInitialZoom);
+    }
+
+    function fitDiagram() {
+      if (!svgW) {
+        return;
+      }
+      zoom = containZoom();
+      fitMode = 'fit';
+      panX = (viewport.clientWidth - svgW * zoom) / 2;
+      panY = (viewport.clientHeight - svgH * zoom) / 2;
+      applyTransform();
+    }
+
+    function setOneToOne() {
+      zoom = clamp(1, config.minZoom, config.maxZoom);
+      fitMode = '1:1';
+      panX = (viewport.clientWidth - svgW * zoom) / 2;
+      panY = (viewport.clientHeight - svgH * zoom) / 2;
+      applyTransform();
+    }
+
+    function zoomAround(factor, cx, cy) {
+      const next = clamp(zoom * factor, config.minZoom, config.maxZoom);
+      const ratio = next / zoom;
+      panX = cx - ratio * (cx - panX);
+      panY = cy - ratio * (cy - panY);
+      zoom = next;
+      fitMode = 'custom';
+      applyTransform();
+    }
+
+    function readSvgNaturalSize(svg) {
+      let w = 0;
+      let h = 0;
+      if (svg.viewBox?.baseVal?.width > 0) {
+        w = svg.viewBox.baseVal.width;
+        h = svg.viewBox.baseVal.height;
+      }
+      if (!w) {
+        w = parseFloat(svg.getAttribute('width')) || 0;
+        h = parseFloat(svg.getAttribute('height')) || 0;
+      }
+      if (!w) {
+        const box = svg.getBBox();
+        w = box.width;
+        h = box.height;
+      }
+      if (!w) {
+        const rect = svg.getBoundingClientRect();
+        w = rect.width || 1000;
+        h = rect.height || 700;
+      }
+      if (!svg.getAttribute('viewBox')) {
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      }
+      return { w, h };
+    }
+
+    function setAdaptiveHeight() {
+      if (!svgW) {
+        return;
+      }
+      const usableW = Math.max(80, viewport.clientWidth - config.fitPadding * 2);
+      const scale = Math.min(usableW / svgW, config.maxInitialZoom);
+      const idealH = svgH * scale + config.fitPadding * 2 + config.chromeHeight;
+      wrap.style.height = Math.round(clamp(idealH, config.minHeight, config.maxHeightPx)) + 'px';
+    }
+
+    function openInNewTab() {
+      const svg = canvas.querySelector('svg');
+      if (!svg) {
+        return;
+      }
+      const clone = svg.cloneNode(true);
+      clone.style.width = '';
+      clone.style.height = '';
+      const bg = token('--surface');
+      const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>swift-claw diagram</title><style>
+        body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+        background:${bg};padding:40px;box-sizing:border-box}
+        svg{max-width:100%;max-height:90vh;height:auto}
+        </style></head><body>${clone.outerHTML}</body></html>`;
+      open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
+    }
+
+    async function render() {
+      try {
+        const code = source.textContent.trim();
+        if (!code) {
+          label.textContent = 'Error: empty source';
+          return;
+        }
+        const id = 'diagram-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        const { svg } = await mermaid.render(id, code + '\n' + classDefs(palette()));
+        const parsed = new DOMParser().parseFromString(svg, 'text/html');
+        const parsedSvg = parsed.body.querySelector('svg');
+        if (!parsedSvg) {
+          label.textContent = 'Error: no SVG';
+          return;
+        }
+        canvas.replaceChildren(document.adoptNode(parsedSvg));
+        const svgNode = canvas.querySelector('svg');
+        const size = readSvgNaturalSize(svgNode);
+        svgW = size.w;
+        svgH = size.h;
+        svgNode.removeAttribute('width');
+        svgNode.removeAttribute('height');
+        svgNode.style.maxWidth = 'none';
+        svgNode.style.display = 'block';
+        setAdaptiveHeight();
+        fitDiagram();
+      } catch (err) {
+        console.error('Mermaid render failed:', err);
+        label.textContent = 'Error: ' + (err.message || 'render failed');
+      }
+    }
+
+    const actions = {
+      'zoom-in': () => zoomAround(1 + config.zoomStep, viewport.clientWidth / 2, viewport.clientHeight / 2),
+      'zoom-out': () => zoomAround(1 / (1 + config.zoomStep), viewport.clientWidth / 2, viewport.clientHeight / 2),
+      'zoom-fit': fitDiagram,
+      'zoom-one': setOneToOne,
+      'zoom-expand': openInNewTab
+    };
+
+    Object.entries(actions).forEach(([action, handler]) => {
+      wrap.querySelector(`[data-action="${action}"]`)?.addEventListener('click', handler);
+    });
+
+    viewport.addEventListener('dblclick', fitDiagram);
+
+    viewport.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = viewport.getBoundingClientRect();
+        const factor = e.deltaY < 0 ? 1 + config.zoomStep : 1 / (1 + config.zoomStep);
+        zoomAround(factor, e.clientX - rect.left, e.clientY - rect.top);
+        return;
+      }
+      if (canPan()) {
+        e.preventDefault();
+        panX -= e.deltaX;
+        panY -= e.deltaY;
+        applyTransform();
+      }
+    }, { passive: false });
+
+    viewport.addEventListener('mousedown', (e) => {
+      if (!canPan()) {
+        return;
+      }
+      wrap.classList.add('is-panning');
+      sx = e.clientX;
+      sy = e.clientY;
+      spx = panX;
+      spy = panY;
+      e.preventDefault();
+      activeDrag = {
+        onMove: (ev) => {
+          panX = spx + (ev.clientX - sx);
+          panY = spy + (ev.clientY - sy);
+          applyTransform();
+        },
+        onEnd: () => {
+          wrap.classList.remove('is-panning');
+        }
+      };
+    });
+
+    viewport.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        sx = e.touches[0].clientX;
+        sy = e.touches[0].clientY;
+        spx = panX;
+        spy = panY;
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        touchDist = Math.sqrt(dx * dx + dy * dy);
+        const rect = viewport.getBoundingClientRect();
+        touchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+        touchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      }
+    }, { passive: true });
+
+    viewport.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1 && canPan()) {
+        if (touchDist > 0) {
+          sx = e.touches[0].clientX;
+          sy = e.touches[0].clientY;
+          spx = panX;
+          spy = panY;
+          touchDist = 0;
+        }
+        e.preventDefault();
+        panX = spx + (e.touches[0].clientX - sx);
+        panY = spy + (e.touches[0].clientY - sy);
+        applyTransform();
+      } else if (e.touches.length === 2 && touchDist > 0) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        zoomAround(d / touchDist, touchCx, touchCy);
+        touchDist = d;
+      }
+    }, { passive: false });
+
+    new ResizeObserver(() => {
+      if (svgW) {
+        setAdaptiveHeight();
+        fitDiagram();
+      }
+    }).observe(wrap);
+
+    rerenderers.push(render);
+    return render();
+  }
+
+  // Mermaid measures labels with the configured font, so render only after the web font is ready.
+  await document.fonts.ready;
+  configureMermaid(palette());
+  await Promise.all([...document.querySelectorAll('.diagram-shell')].map(initDiagram));
+
+  // Mermaid bakes colors into the SVG, so a color-scheme change needs a fresh render.
+  darkScheme.addEventListener('change', () => {
+    configureMermaid(palette());
+    rerenderers.forEach((render) => render());
+  });
 </script>
+
+<script>
+  (function () {
+    const toc = document.getElementById('toc');
+    const links = [...toc.querySelectorAll('a[href^="#s-"]')];
+    const scrollBehavior = () => matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    const sections = links
+      .map((link) => ({ link, el: document.getElementById(link.getAttribute('href').slice(1)) }))
+      .filter((entry) => entry.el);
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) {
+          return;
+        }
+        links.forEach((link) => link.classList.remove('active'));
+        const match = sections.find((s) => s.el === entry.target);
+        if (!match) {
+          return;
+        }
+        match.link.classList.add('active');
+        if (window.innerWidth <= 1000) {
+          match.link.scrollIntoView({ behavior: scrollBehavior(), block: 'nearest', inline: 'center' });
+        }
+      });
+    }, { rootMargin: '-10% 0px -80% 0px' });
+
+    sections.forEach((s) => observer.observe(s.el));
+
+    links.forEach((link) => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const id = link.getAttribute('href').slice(1);
+        const el = document.getElementById(id);
+        if (!el) {
+          return;
+        }
+        el.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+        try {
+          history.replaceState(null, '', '#' + id);
+        } catch (_) {
+          // file:// pages have a null origin; the scroll already happened.
+        }
+      });
+    });
+  })();
+</script>
+
 </body>
 </html>
