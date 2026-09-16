@@ -9,21 +9,21 @@ public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
     database = MappedDatabase(writer: writer)
   }
 
-  public func binding(runId: Int64) throws(StoreError) -> RunLearningBinding? {
+  public func binding(runID: Int64) throws(StoreError) -> RunLearningBinding? {
     try database.readMapping { db in
-      try Self.readBinding(db, runId: runId)
+      try Self.readBinding(db, runID: runID)
     }
   }
 
-  public func openTrial(jobId: Int64) throws(StoreError) -> LearningTrial? {
+  public func openTrial(jobID: Int64) throws(StoreError) -> LearningTrial? {
     try database.readMapping { db in
-      try Self.liveTrial(db, jobId: jobId)
+      try Self.liveTrial(db, jobID: jobID)
     }
   }
 
-  public func lessonSet(jobId: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
+  public func lessonSet(jobID: Int64, digest: LessonSetDigest) throws(StoreError) -> LessonSet? {
     try database.readMapping { db in
-      try Self.readLessonSet(db, jobId: jobId, digest: digest)
+      try Self.readLessonSet(db, jobID: jobID, digest: digest)
     }
   }
 }
@@ -33,33 +33,32 @@ public struct ScheduledLearningStoreGRDB: ScheduledLearningStore {
 extension ScheduledLearningStoreGRDB {
   static func readLessonSet(
     _ db: Database,
-    jobId: Int64,
+    jobID: Int64,
     digest: LessonSetDigest
   ) throws -> LessonSet? {
     let row = try Row.fetchOne(
       db,
       sql: "SELECT canonical_bytes FROM lesson_sets WHERE job_id = ? AND digest = ?",
-      arguments: [jobId, digest.rawValue]
+      arguments: [jobID, digest.rawValue]
     )
     guard let row else {
       return nil
     }
-    guard
-      let bytes = SQLiteStoredValue.data(in: row, column: "canonical_bytes"),
-      let set = LessonSet.decoded(jobId: jobId, canonicalBytes: bytes),
-      set.digest == digest
+    guard let bytes = SQLiteStoredValue.data(in: row, column: "canonical_bytes"),
+          let set = LessonSet.decoded(jobID: jobID, canonicalBytes: bytes),
+          set.digest == digest
     else {
-      throw StoreError.unexpected("lesson set \(digest.rawValue) for job \(jobId) is unreadable")
+      throw StoreError.unexpected("lesson set \(digest.rawValue) for job \(jobID) is unreadable")
     }
     return set
   }
 
   /// Arms the job inside the fire transaction that binds its run.
   /// An already-armed job keeps its current state.
-  static func armState(_ db: Database, jobId: Int64, now: Date) throws -> JobLearningState {
+  static func armState(_ db: Database, jobID: Int64, now: Date) throws -> JobLearningState {
     // The empty set goes in first: the state row names a digest, and a state that pointed at a
     // lesson set no row holds would let a job fire against a binding it cannot resolve.
-    let empty = LessonSet.empty(jobId: jobId)
+    let empty = LessonSet.empty(jobID: jobID)
     try ensureCanonicalEmptySet(db, empty, now: now)
     try db.execute(
       sql: """
@@ -67,15 +66,15 @@ extension ScheduledLearningStoreGRDB {
           stable_lesson_set_digest, stable_revision, open_trial_id, feedback_revision, armed_at)
         VALUES (?, 1, ?, 0, NULL, 0, ?)
         """,
-      arguments: [jobId, empty.digest.rawValue, EpochSecondCodec.epoch(now)]
+      arguments: [jobID, empty.digest.rawValue, EpochSecondCodec.epoch(now)]
     )
-    guard let state = try readState(db, jobId: jobId) else {
-      throw StoreError.unexpected("job \(jobId) has no learning state after arming")
+    guard let state = try readState(db, jobID: jobID) else {
+      throw StoreError.unexpected("job \(jobID) has no learning state after arming")
     }
     return state
   }
 
-  static func readState(_ db: Database, jobId: Int64) throws -> JobLearningState? {
+  static func readState(_ db: Database, jobID: Int64) throws -> JobLearningState? {
     let row = try Row.fetchOne(
       db,
       sql: """
@@ -83,29 +82,25 @@ extension ScheduledLearningStoreGRDB {
           feedback_revision
         FROM job_learning_state WHERE job_id = ?
         """,
-      arguments: [jobId]
+      arguments: [jobID]
     )
     guard let row else {
       return nil
     }
-    guard
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      let stableDigest = SQLiteStoredValue.string(
-        in: row,
-        column: "stable_lesson_set_digest"
-      ),
-      let stableRevision = SQLiteStoredValue.int64(in: row, column: "stable_revision"),
-      let openTrial = SQLiteStoredValue.nullableInt64(in: row, column: "open_trial_id"),
-      let feedbackRevision = SQLiteStoredValue.int64(in: row, column: "feedback_revision")
+    guard let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+          let stableDigest = SQLiteStoredValue.string(in: row, column: "stable_lesson_set_digest"),
+          let stableRevision = SQLiteStoredValue.int64(in: row, column: "stable_revision"),
+          let openTrial = SQLiteStoredValue.nullableInt64(in: row, column: "open_trial_id"),
+          let feedbackRevision = SQLiteStoredValue.int64(in: row, column: "feedback_revision")
     else {
-      throw StoreError.unexpected("job \(jobId) has an unreadable learning state")
+      throw StoreError.unexpected("job \(jobID) has an unreadable learning state")
     }
     return JobLearningState(
-      jobId: jobId,
+      jobID: jobID,
       epoch: LearningEpoch(epoch),
       stableDigest: LessonSetDigest(rawValue: stableDigest),
       stableRevision: StableRevision(stableRevision),
-      openTrialId: openTrial.value,
+      openTrialID: openTrial.value,
       feedbackRevision: FeedbackRevision(feedbackRevision)
     )
   }
@@ -121,7 +116,7 @@ extension ScheduledLearningStoreGRDB {
         SELECT job_id, digest, schema_version, canonical_bytes, source
         FROM lesson_sets WHERE job_id = ? AND digest = ?
         """,
-      arguments: [set.jobId, set.digest.rawValue]
+      arguments: [set.jobID, set.digest.rawValue]
     )
     if let row {
       guard canonicalEmptySetMatches(row, set: set) else {
@@ -135,7 +130,7 @@ extension ScheduledLearningStoreGRDB {
         VALUES (?, ?, ?, ?, ?, ?)
         """,
       arguments: [
-        set.jobId,
+        set.jobID,
         set.digest.rawValue,
         set.schemaVersion,
         set.canonicalBytes,
@@ -146,7 +141,7 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func canonicalEmptySetMatches(_ row: Row, set: LessonSet) -> Bool {
-    SQLiteStoredValue.int64(in: row, column: "job_id") == set.jobId
+    SQLiteStoredValue.int64(in: row, column: "job_id") == set.jobID
       && SQLiteStoredValue.string(in: row, column: "digest") == set.digest.rawValue
       && SQLiteStoredValue.int(in: row, column: "schema_version") == set.schemaVersion
       && SQLiteStoredValue.data(in: row, column: "canonical_bytes") == set.canonicalBytes

@@ -40,8 +40,7 @@ enum ServiceStartHint {
       ? """
       Checks passed (no owner allowlisted yet — start the daemon, \
       then send /start to your bot to get your ID).
-      """
-      : "All checks passed."
+      """ : "All checks passed."
 
     guard unitInstalled else {
       return """

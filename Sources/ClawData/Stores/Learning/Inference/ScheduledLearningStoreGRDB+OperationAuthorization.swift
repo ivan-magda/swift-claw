@@ -13,20 +13,19 @@ extension ScheduledLearningStoreGRDB {
     _ authorization: LearningAuthorization,
     now: Date
   ) throws -> AuthorizeOutcome {
-    guard
-      let operation = try readOperation(db, id: authorization.operationId),
-      operation.state == .claimed
+    guard let operation = try readOperation(db, id: authorization.operationID),
+          operation.state == .claimed
     else {
       return .superseded
     }
     // A job that re-epoched between the claim and here is asking a different question. Nothing is
     // written: no policy refused this call, so no policy verdict may be recorded against it.
-    guard try readState(db, jobId: operation.jobId)?.epoch == operation.epoch else {
+    guard try readState(db, jobID: operation.jobID)?.epoch == operation.epoch else {
       return .superseded
     }
     // The epoch cannot stand in for this: cancelling a job leaves its learning state row exactly
     // as it was, so a cancelled job would otherwise still buy a paid call against its evidence.
-    guard try jobPermitsLearningCalls(db, jobId: operation.jobId) else {
+    guard try jobPermitsLearningCalls(db, jobID: operation.jobID) else {
       return .superseded
     }
     // A carrier built from another source is a caller plumbing bug, not a policy verdict, and gets
@@ -67,12 +66,9 @@ private extension ScheduledLearningStoreGRDB {
     case (.evaluator, .evaluation):
       return true
     case (.reflector, .reflection(let reflection)):
-      let sourcesAreCurrent = try reflectionAuthorizationIsCurrent(
-        db,
-        authorization: reflection
-      )
+      let sourcesAreCurrent = try reflectionAuthorizationIsCurrent(db, authorization: reflection)
       let expectedKey = LearningOperationKey(
-        jobId: operation.jobId,
+        jobID: operation.jobID,
         epoch: operation.epoch,
         phase: .reflector,
         sourceDigest: reflection.trigger.digest.rawValue,
@@ -82,9 +78,8 @@ private extension ScheduledLearningStoreGRDB {
       )
       return operation.keyDigest == expectedKey.digest
         && operation.sourceDigest == reflection.trigger.digest.rawValue
-        && reflection.trigger.jobId == operation.jobId
-        && reflection.trigger.epoch == operation.epoch
-        && reflection.trigger.algorithm == .v1
+        && reflection.trigger.jobID == operation.jobID
+        && reflection.trigger.epoch == operation.epoch && reflection.trigger.algorithm == .v1
         && sourcesAreCurrent
     case (.evaluator, .reflection), (.reflector, .evaluation):
       return false
@@ -106,7 +101,7 @@ private extension ScheduledLearningStoreGRDB {
     }
     try recomputeEvaluatorSource(
       db,
-      jobId: operation.jobId,
+      jobID: operation.jobID,
       epoch: operation.epoch,
       evidenceDigest: operation.sourceDigest,
       now: now
@@ -125,11 +120,7 @@ private extension ScheduledLearningStoreGRDB {
     now: Date
   ) throws -> Bool {
     let global = try UsageStoreGRDB.dayTotals(db, now: now)
-    let proactive = try UsageStoreGRDB.dayTotals(
-      db,
-      origins: RunOrigin.proactiveOrigins,
-      now: now
-    )
+    let proactive = try UsageStoreGRDB.dayTotals(db, origins: RunOrigin.proactiveOrigins, now: now)
     let reserved = try openReservations(db)
     let decision = authorization.budget.preflight(
       todayTokens: global.tokens + reserved.tokens,

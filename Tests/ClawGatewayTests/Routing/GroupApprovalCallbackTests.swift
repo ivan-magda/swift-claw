@@ -7,12 +7,13 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct GroupApprovalCallbackTests {
+@Suite
+struct GroupApprovalCallbackTests {
   private func handler(
     _ fixture: GroupApprovalFixture,
     membership: GroupMembershipStub = GroupMembershipStub(
-      chatId: GroupApprovalFixture.chatId,
-      memberUserIds: [GroupApprovalFixture.requesterId, GroupApprovalFixture.participantId]
+      chatID: GroupApprovalFixture.chatID,
+      memberUserIDs: [GroupApprovalFixture.requesterID, GroupApprovalFixture.participantID]
     ),
     groupAllowed: Bool = true
   ) -> ApprovalCallbackHandler {
@@ -22,7 +23,7 @@ import Testing
       delivery: transport,
       accessControl: AccessControl(
         allowlist: AllowlistStoreGRDB(writer: fixture.queue),
-        groupChats: groupAllowed ? [GroupApprovalFixture.chatId] : []
+        groupChats: groupAllowed ? [GroupApprovalFixture.chatID] : []
       ),
       approvals: fixture.approvals,
       runs: fixture.runs,
@@ -30,8 +31,12 @@ import Testing
       audit: AuditLogGRDB(writer: fixture.queue),
       coordinator: ApprovalCoordinator(),
       callbacks: transport,
-      currentPolicyVersion: { GroupApprovalFixture.policyVersion },
-      now: { GroupApprovalFixture.now },
+      currentPolicyVersion: {
+        GroupApprovalFixture.policyVersion
+      },
+      now: {
+        GroupApprovalFixture.now
+      },
       logger: TestLog.silent
     )
   }
@@ -43,7 +48,7 @@ import Testing
     let callbackHandler = handler(fixture)
 
     // when
-    _ = await callbackHandler.handle(fixture.callback(approve: approve), updateId: 2)
+    _ = await callbackHandler.handle(fixture.callback(approve: approve), updateID: 2)
 
     // then
     let expectedState: ApprovalState = approve ? .approved : .rejected
@@ -58,7 +63,7 @@ import Testing
     }
     let grant = try #require(row)
     #expect(grant["actor"] as String == AuditActor.groupMember.rawValue)
-    #expect(grant["actor_user_id"] as Int64 == GroupApprovalFixture.participantId)
+    #expect(grant["actor_user_id"] as Int64 == GroupApprovalFixture.participantID)
   }
 
   enum Refusal: CaseIterable {
@@ -81,7 +86,8 @@ import Testing
         try database.execute(
           sql: "INSERT INTO sessions(session_key, created_ts, updated_ts) VALUES (?, ?, ?)",
           arguments: [
-            SessionKey.telegramDM(chatId: 99), GroupApprovalFixture.now,
+            SessionKey.telegramDM(chatID: 99),
+            GroupApprovalFixture.now,
             GroupApprovalFixture.now,
           ]
         )
@@ -100,20 +106,20 @@ import Testing
     let callbackHandler = handler(
       fixture,
       membership: GroupMembershipStub(
-        chatId: GroupApprovalFixture.chatId,
-        memberUserIds: refusal == .removedMember ? [] : [GroupApprovalFixture.participantId],
+        chatID: GroupApprovalFixture.chatID,
+        memberUserIDs: refusal == .removedMember ? [] : [GroupApprovalFixture.participantID],
         fails: refusal == .unavailableMembership
       ),
       groupAllowed: refusal != .unlistedGroup
     )
     let callback = fixture.callback(
-      chatId: refusal == .copiedChat ? -100_456 : GroupApprovalFixture.chatId,
-      messageId: refusal == .undeliveredPrompt
-        ? nil : (refusal == .copiedMessage ? 901 : GroupApprovalFixture.promptMessageId)
+      chatID: refusal == .copiedChat ? -100_456 : GroupApprovalFixture.chatID,
+      messageID: refusal == .undeliveredPrompt
+        ? nil : (refusal == .copiedMessage ? 901 : GroupApprovalFixture.promptMessageID)
     )
 
     // when
-    _ = await callbackHandler.handle(callback, updateId: 2)
+    _ = await callbackHandler.handle(callback, updateID: 2)
 
     // then
     #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == .pending)

@@ -18,10 +18,13 @@ jobs:
     runs-on: ubuntu-24.04-arm
     container: swift:6.3-noble
     timeout-minutes: 30
+
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
+
       - name: Install system dependencies
         run: |
           apt-get update &&
@@ -30,21 +33,37 @@ jobs:
               ca-certificates \
               tzdata \
               zstd
+
       - name: Show toolchain
         id: toolchain
         run: |
           swift --version
+
           toolchain_key=$(swift --version | sha256sum | cut -d ' ' -f 1)
           echo "cache-key=$toolchain_key" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
+
+      - name: Cache Swift package build artifacts
+        uses: actions/cache@v6
         with:
           path: .build
-          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/ci.yml') }}-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/ci.yml') }}-
+          key: >-
+            ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles(
+              'Package.swift',
+              'Package.resolved',
+              '.github/workflows/ci.yml'
+            ) }}-${{ github.sha }}
+          restore-keys: >-
+            ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles(
+              'Package.swift',
+              'Package.resolved',
+              '.github/workflows/ci.yml'
+            ) }}-
+
       - name: Build and run tests
         run: swift test -Xswiftc -enable-incremental-file-hashing
         env:
           SWIFT_BACKTRACE: enable=yes
+
       - name: Re-run the concurrency-sensitive suites on one cooperative thread
         env:
           LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
@@ -59,20 +78,25 @@ jobs:
   test-macos:
     runs-on: macos-26
     timeout-minutes: 30
+
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
+
       - name: Select Swift 6.3 toolchain
         id: toolchain
         run: |
           ls -d /Applications/Xcode*.app 2>/dev/null || true
           sudo xcode-select -s /Applications/Xcode_26.6.app
+
           swift --version
           swift --version 2>&1 | grep -qF "Swift version 6.3" || {
             echo "::error::Expected a Swift 6.3.x toolchain on this runner"
             exit 1
           }
+
           toolchain_key=$(
             {
               swift --version
@@ -81,13 +105,27 @@ jobs:
             } | shasum -a 256 | cut -d ' ' -f 1
           )
           echo "cache-key=$toolchain_key" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
+
+      - name: Cache Swift package build artifacts
+        uses: actions/cache@v6
         with:
           path: .build
-          key: ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/ci.yml') }}-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/ci.yml') }}-
+          key: >-
+            ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles(
+              'Package.swift',
+              'Package.resolved',
+              '.github/workflows/ci.yml'
+            ) }}-${{ github.sha }}
+          restore-keys: >-
+            ${{ runner.os }}-${{ runner.arch }}-spm-${{ steps.toolchain.outputs.cache-key }}-${{ hashFiles(
+              'Package.swift',
+              'Package.resolved',
+              '.github/workflows/ci.yml'
+            ) }}-
+
       - name: Build and run tests outside native Coder integration
         run: swift test -Xswiftc -enable-incremental-file-hashing --skip ClawCoderTests
+
       - name: Run native Coder integration in a separate test process
         run: swift test --skip-build --filter ClawCoderTests
 
@@ -97,33 +135,42 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
+
       - name: Install, re-run, uninstall against the latest release
         run: |
           sh install.sh
           "$HOME/.swift-claw/bin/clawd" --version
-          sh install.sh                      # idempotent upgrade path
+          sh install.sh # idempotent upgrade path
+
           sh install.sh --uninstall
           test ! -e "$HOME/.swift-claw/bin/clawd"
           test -f "$HOME/.swift-claw/clawd.env"
+
           sh install.sh --uninstall --purge
           test ! -e "$HOME/.swift-claw"
 
   workflow-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
+
       - name: actionlint
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/repo" \
             -w /repo \
             rhysd/actionlint:1.7.12 -color
+
       - name: zizmor
         run: pipx run zizmor==1.26.1 .

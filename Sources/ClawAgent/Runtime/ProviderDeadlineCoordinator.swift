@@ -153,8 +153,10 @@ extension ProviderDeadlineCoordinator {
     stream: LLMEventStream,
     deadlineSeconds: Int,
     clock: any Clock<Duration>,
-    consume: @escaping @Sendable (LLMEventStream, ProviderRaceBox) async -> StreamConsumerOutcome,
-    auxiliary: @escaping @Sendable (ProviderRaceBox) async -> Void
+    consume:
+      @escaping @Sendable (_ stream: LLMEventStream, _ box: ProviderRaceBox) async ->
+      StreamConsumerOutcome,
+    auxiliary: @escaping @Sendable (_ box: ProviderRaceBox) async -> Void
   ) async -> ProviderDeadlineOutcome {
     let box = ProviderRaceBox()
     var consumerOutcome: StreamConsumerOutcome?

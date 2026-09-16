@@ -7,7 +7,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct GroupApprovalResumeTests {
+@Suite
+struct GroupApprovalResumeTests {
   private struct ContextEchoTool: Tool {
     let definition = ToolDefinition(
       name: CoderToolNames.submit,
@@ -18,9 +19,12 @@ import Testing
       riskLevel: .dangerous,
       requiresInteractiveRequester: true
     )
+
     let timeout: Duration = .seconds(1)
 
-    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+    func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+      nil
+    }
 
     func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
       ToolPayload(content: "context missing", status: .error, ingestedUntrusted: false)
@@ -31,14 +35,20 @@ import Testing
       canonicalTarget: String?,
       context: ToolExecutionContext?
     ) async -> ToolPayload {
-      let value = JSONValue.object([
-        "requester": .string(context?.requesterUserId.map(String.init) ?? "missing"),
-        "chat": .string(context.map { String($0.chatId) } ?? "missing"),
-        "mode": .string(context?.mode.rawValue ?? "missing"),
-        "origin": .string(context?.origin.rawValue ?? "missing"),
-        "args": arguments,
-        "target": .string(canonicalTarget ?? "missing"),
-      ])
+      let value = JSONValue.object(
+        [
+          "requester": .string(context?.requesterUserID.map(String.init) ?? "missing"),
+          "chat": .string(
+            context.map {
+              String($0.chatID)
+            } ?? "missing"
+          ),
+          "mode": .string(context?.mode.rawValue ?? "missing"),
+          "origin": .string(context?.origin.rawValue ?? "missing"),
+          "args": arguments,
+          "target": .string(canonicalTarget ?? "missing"),
+        ]
+      )
       return ToolPayload(
         content: CanonicalJSON.encode(value) ?? "invalid",
         status: .ok,
@@ -63,7 +73,9 @@ import Testing
       redactArguments: { value in
         value
       },
-      now: { GroupApprovalFixture.now },
+      now: {
+        GroupApprovalFixture.now
+      },
       logger: TestLog.silent
     )
   }
@@ -74,14 +86,15 @@ import Testing
       currentPolicyVersion: GroupApprovalFixture.policyVersion,
       actor: ApprovalResolutionActor(
         actor: .groupMember,
-        userId: GroupApprovalFixture.participantId
+        userID: GroupApprovalFixture.participantID
       ),
       now: GroupApprovalFixture.now
     )
     return try #require(try fixture.approvals.approval(id: fixture.approval.id))
   }
 
-  @Test func approvedGroupActionNeverInfersMissingRequesterFromChatOrApprover() async throws {
+  @Test
+  func approvedGroupActionNeverInfersMissingRequesterFromChatOrApprover() async throws {
     // given
     let fixture = try GroupApprovalFixture()
     let approval = try approved(fixture)
@@ -98,13 +111,14 @@ import Testing
       try String.fetchOne(
         database,
         sql: "SELECT decision FROM audit_events WHERE run_id = ? AND action = ?",
-        arguments: [approval.runId, AuditAction.toolCall.rawValue]
+        arguments: [approval.runID, AuditAction.toolCall.rawValue]
       )
     }
     #expect(status == ToolObservationStatus.error.rawValue)
   }
 
-  @Test func deniedGroupNoticeRepliesInOriginalTopicAndDisarmsOriginalPrompt() async throws {
+  @Test
+  func deniedGroupNoticeRepliesInOriginalTopicAndDisarmsOriginalPrompt() async throws {
     // given
     let fixture = try GroupApprovalFixture()
     let coordinator = ApprovalCoordinator()
@@ -114,7 +128,7 @@ import Testing
       decision: .rejected,
       now: GroupApprovalFixture.now
     )
-    await coordinator.signal(approvalId: fixture.approval.id, .denied(.rejected))
+    await coordinator.signal(.denied(.rejected), forApprovalID: fixture.approval.id)
     let waiter = waiter(fixture, coordinator: coordinator, transport: transport)
 
     // when
@@ -125,25 +139,26 @@ import Testing
     #expect(
       sent.map(\.target) == [
         DeliveryTarget(
-          chatId: GroupApprovalFixture.chatId,
-          messageThreadId: 77,
-          replyToMessageId: 88
-        )
+          chatID: GroupApprovalFixture.chatID,
+          messageThreadID: 77,
+          replyToMessageID: 88
+        ),
       ]
     )
     let edits = await transport.markupEdits
     #expect(
       edits == [
         RecordingTransport.MarkupEdit(
-          chatId: GroupApprovalFixture.chatId,
-          messageId: GroupApprovalFixture.promptMessageId,
+          chatID: GroupApprovalFixture.chatID,
+          messageID: GroupApprovalFixture.promptMessageID,
           replyMarkup: nil
-        )
+        ),
       ]
     )
   }
 
-  @Test func approvedGroupTypingAndFailureNoticeUseOriginalTopic() async throws {
+  @Test
+  func approvedGroupTypingAndFailureNoticeUseOriginalTopic() async throws {
     // given
     let fixture = try GroupApprovalFixture()
     _ = try approved(fixture)
@@ -158,7 +173,7 @@ import Testing
       actionExecutor: TypingGatedFailure(gate: gate),
       typing: typing
     )
-    await coordinator.signal(approvalId: fixture.approval.id, .approved)
+    await coordinator.signal(.approved, forApprovalID: fixture.approval.id)
 
     // when
     await withTaskGroup(of: Void.self) { group in
@@ -176,21 +191,22 @@ import Testing
     #expect(
       sent.map(\.target) == [
         DeliveryTarget(
-          chatId: GroupApprovalFixture.chatId,
-          messageThreadId: 77,
-          replyToMessageId: 88
-        )
+          chatID: GroupApprovalFixture.chatID,
+          messageThreadID: 77,
+          replyToMessageID: 88
+        ),
       ]
     )
     let pulses = await typing.pulses
     #expect(
       pulses.contains(
-        RecordingTyping.Pulse(chatId: GroupApprovalFixture.chatId, messageThreadId: 77)
+        RecordingTyping.Pulse(chatID: GroupApprovalFixture.chatID, messageThreadID: 77)
       )
     )
   }
 
-  @Test func unreadableGroupDestinationNeverFallsBackToWholeChat() async throws {
+  @Test
+  func unreadableGroupDestinationNeverFallsBackToWholeChat() async throws {
     // given
     let fixture = try GroupApprovalFixture()
     let coordinator = ApprovalCoordinator()
@@ -203,7 +219,7 @@ import Testing
     try await fixture.queue.write { database in
       try database.execute(sql: "UPDATE sessions SET session_key = 'tg:topic:broken:77'")
     }
-    await coordinator.signal(approvalId: fixture.approval.id, .denied(.rejected))
+    await coordinator.signal(.denied(.rejected), forApprovalID: fixture.approval.id)
     let waiter = waiter(fixture, coordinator: coordinator, transport: transport)
 
     // when
@@ -235,18 +251,22 @@ private extension GroupApprovalResumeTests {
       callbacks: transport,
       typing: typing,
       clock: ContinuousClock(),
-      currentPolicyVersion: { GroupApprovalFixture.policyVersion },
-      now: { GroupApprovalFixture.now },
+      currentPolicyVersion: {
+        GroupApprovalFixture.policyVersion
+      },
+      now: {
+        GroupApprovalFixture.now
+      },
       logger: TestLog.silent
     )
   }
 
   func park(_ waiter: ApprovalWaiter, fixture: GroupApprovalFixture) async {
     await waiter.park(
-      approvalId: fixture.approval.id,
-      runId: fixture.approval.runId,
-      sessionId: fixture.approval.sessionId,
-      chatId: GroupApprovalFixture.chatId,
+      approvalID: fixture.approval.id,
+      runID: fixture.approval.runID,
+      sessionID: fixture.approval.sessionID,
+      chatID: GroupApprovalFixture.chatID,
       revalidatePolicyOnApprove: false
     )
   }

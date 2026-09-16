@@ -49,9 +49,7 @@ extension ScheduledLearningStoreGRDB {
     permitsClosedReplacement: Bool = false
   ) throws -> AdmissionPlan {
     if persisted {
-      guard
-        let exact = try readCandidateArtifact(db, digest: artifact.digest),
-        exact == artifact
+      guard let exact = try readCandidateArtifact(db, digest: artifact.digest), exact == artifact
       else {
         throw StoreError.unexpected("candidate changed during admission reload")
       }
@@ -62,13 +60,12 @@ extension ScheduledLearningStoreGRDB {
     guard try admissionDecisionExists(db, artifact: artifact) == false else {
       throw StoreError.unexpected("candidate admission decision has no matching trial")
     }
-    guard
-      let state = try readState(db, jobId: artifact.manifest.jobId),
-      let job = try admissionJob(db, jobId: artifact.manifest.jobId)
+    guard let state = try readState(db, jobID: artifact.manifest.jobID),
+          let job = try admissionJob(db, jobID: artifact.manifest.jobID)
     else {
       return .rejected(.jobNotRepeatable)
     }
-    let live = try liveTrial(db, jobId: artifact.manifest.jobId)
+    let live = try liveTrial(db, jobID: artifact.manifest.jobID)
     let hasCompetingLiveTrial =
       live.map { trial in
         trial.candidateDigest != permittedLiveCandidate
@@ -149,7 +146,7 @@ private extension ScheduledLearningStoreGRDB {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
         """,
       arguments: [
-        artifact.manifest.jobId,
+        artifact.manifest.jobID,
         artifact.manifest.epoch.value,
         artifact.manifest.baseDigest.rawValue,
         artifact.digest.rawValue,
@@ -166,7 +163,7 @@ private extension ScheduledLearningStoreGRDB {
     let receipt = AdmissionReceipt(
       candidateDigest: artifact.digest,
       replacementDigest: artifact.replacement.digest,
-      trialId: db.lastInsertedRowID,
+      trialID: db.lastInsertedRowID,
       generation: generation
     )
     try db.execute(
@@ -174,7 +171,7 @@ private extension ScheduledLearningStoreGRDB {
         UPDATE job_learning_state SET open_trial_id = ?
         WHERE job_id = ? AND learning_epoch = ?
         """,
-      arguments: [receipt.trialId, artifact.manifest.jobId, artifact.manifest.epoch.value]
+      arguments: [receipt.trialID, artifact.manifest.jobID, artifact.manifest.epoch.value]
     )
     try insertAdmissionReceipt(db, artifact: artifact, receipt: receipt, now: now)
     try AuditLogGRDB.insertAudit(
@@ -183,7 +180,7 @@ private extension ScheduledLearningStoreGRDB {
         actor: .system,
         action: .learningCandidateAdmitted,
         decision: "admitted",
-        sessionId: job.sessionId,
+        sessionID: job.sessionID,
         ts: now
       )
     )
@@ -194,8 +191,10 @@ private extension ScheduledLearningStoreGRDB {
     switch artifact.manifest.origin {
     case .reflection:
       switch artifact.manifest.triggerReason {
-      case .recurringIssue: .recurringIssue
-      case .ownerCorrection: .ownerCorrection
+      case .recurringIssue:
+        .recurringIssue
+      case .ownerCorrection:
+        .ownerCorrection
       }
     case .ownerApproval:
       .ownerApproval
@@ -212,7 +211,7 @@ private extension ScheduledLearningStoreGRDB {
           SELECT MAX(generation) FROM learning_trials
           WHERE job_id = ? AND learning_epoch = ?
           """,
-        arguments: [artifact.manifest.jobId, artifact.manifest.epoch.value]
+        arguments: [artifact.manifest.jobID, artifact.manifest.epoch.value]
       ) ?? 0
     return latest + 1
   }
@@ -231,7 +230,7 @@ private extension ScheduledLearningStoreGRDB {
         )
         """,
       arguments: [
-        artifact.manifest.jobId,
+        artifact.manifest.jobID,
         artifact.manifest.epoch.value,
         artifact.manifest.baseDigest.rawValue,
         artifact.replacement.digest.rawValue,
@@ -251,7 +250,7 @@ private extension ScheduledLearningStoreGRDB {
     try insertDecision(
       db,
       kind: AdmissionReceipt.kind,
-      jobId: artifact.manifest.jobId,
+      jobID: artifact.manifest.jobID,
       epoch: artifact.manifest.epoch,
       inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
       result: receipt,

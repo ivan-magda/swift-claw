@@ -5,12 +5,12 @@ import GRDB
 // MARK: - Result Commit
 
 extension ScheduledLearningStoreGRDB {
-  /// - Returns: whether this call is the one that committed the result. A duplicate writes nothing,
-  ///   so it can neither insert a second usage row nor close the reservation twice.
+  /// Commits a started learning operation's result and usage within the caller's transaction.
+  ///
+  /// - Returns: Whether this call committed the result; a duplicate writes nothing and cannot
+  ///   insert another usage row or close the reservation twice.
   static func finish(_ db: Database, _ result: LearningOperationResult, now: Date) throws -> Bool {
-    guard
-      let operation = try readOperation(db, id: result.operationId),
-      operation.state == .started
+    guard let operation = try readOperation(db, id: result.operationID), operation.state == .started
     else {
       return false
     }
@@ -42,7 +42,7 @@ extension ScheduledLearningStoreGRDB {
       isEstimated: result.usage.isEstimated,
       now: now
     )
-    guard try readState(db, jobId: operation.jobId)?.epoch == operation.epoch else {
+    guard try readState(db, jobID: operation.jobID)?.epoch == operation.epoch else {
       return true
     }
     switch result.product {
@@ -59,7 +59,7 @@ extension ScheduledLearningStoreGRDB {
         try recordNoCandidate(
           db,
           result: noCandidate,
-          jobId: operation.jobId,
+          jobID: operation.jobID,
           epoch: operation.epoch,
           now: now
         )
@@ -68,7 +68,7 @@ extension ScheduledLearningStoreGRDB {
     if operation.phase == .evaluator {
       try recomputeEvaluatorSource(
         db,
-        jobId: operation.jobId,
+        jobID: operation.jobID,
         epoch: operation.epoch,
         evidenceDigest: operation.sourceDigest,
         now: now
@@ -81,10 +81,7 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Result Validation
 
 private extension ScheduledLearningStoreGRDB {
-  static func product(
-    _ product: LearningOperationProduct,
-    belongsTo phase: LearningPhase
-  ) -> Bool {
+  static func product(_ product: LearningOperationProduct, belongsTo phase: LearningPhase) -> Bool {
     switch (phase, product) {
     case (.evaluator, .evaluation), (.reflector, .candidate), (.reflector, .noCandidate),
       (_, .failure):
@@ -99,20 +96,17 @@ private extension ScheduledLearningStoreGRDB {
     result: NoCandidateResult,
     operation: OperationRow
   ) throws -> Bool {
-    guard
-      result.algorithm == .v1,
-      result.triggerDigest.rawValue == operation.sourceDigest,
-      result.operationId == operation.id,
-      result.carrierDigest == operation.carrierDigest,
-      result.authorization.trigger.digest == result.triggerDigest
+    guard result.algorithm == .v1,
+          result.triggerDigest.rawValue == operation.sourceDigest,
+          result.operationID == operation.id,
+          result.carrierDigest == operation.carrierDigest,
+          result.authorization.trigger.digest == result.triggerDigest
     else {
       return false
     }
     // A no-candidate carries no durable source bytes. Its authorization is revalidated before the
     // call, and finish still fences the state whose identity is stored on the operation itself.
-    guard
-      try reflectionAuthorizationIsCurrent(db, authorization: result.authorization)
-    else {
+    guard try reflectionAuthorizationIsCurrent(db, authorization: result.authorization) else {
       return false
     }
     return true
@@ -130,9 +124,7 @@ extension ScheduledLearningStoreGRDB {
     guard let trigger = reflectionTrigger(artifact: artifact, operation: operation) else {
       return false
     }
-    guard
-      let current = try prepareReflection(db, trigger: trigger)
-    else {
+    guard let current = try prepareReflection(db, trigger: trigger) else {
       return false
     }
     let manifest = artifact.manifest
@@ -147,23 +139,22 @@ extension ScheduledLearningStoreGRDB {
     operation: OperationRow
   ) -> TriggerIdentity? {
     let manifest = artifact.manifest
-    guard
-      manifest.schemaVersion == CandidateSourceManifest.currentSchemaVersion,
-      manifest.origin == .reflection,
-      manifest.algorithm == .v1,
-      manifest.jobId == operation.jobId,
-      artifact.replacement.jobId == operation.jobId,
-      manifest.epoch == operation.epoch,
-      manifest.triggerDigest.rawValue == operation.sourceDigest,
-      manifest.operationId == operation.id,
-      manifest.carrierDigest == operation.carrierDigest,
-      manifest.predecessorCandidate == nil,
-      manifest.predecessorFeedback == nil
+    guard manifest.schemaVersion == CandidateSourceManifest.currentSchemaVersion,
+          manifest.origin == .reflection,
+          manifest.algorithm == .v1,
+          manifest.jobID == operation.jobID,
+          artifact.replacement.jobID == operation.jobID,
+          manifest.epoch == operation.epoch,
+          manifest.triggerDigest.rawValue == operation.sourceDigest,
+          manifest.operationID == operation.id,
+          manifest.carrierDigest == operation.carrierDigest,
+          manifest.predecessorCandidate == nil,
+          manifest.predecessorFeedback == nil
     else {
       return nil
     }
     let trigger = TriggerIdentity(
-      jobId: manifest.jobId,
+      jobID: manifest.jobID,
       epoch: manifest.epoch,
       algorithm: manifest.algorithm,
       stableDigest: manifest.baseDigest,
@@ -189,14 +180,11 @@ extension ScheduledLearningStoreGRDB {
     }
     try db.execute(
       sql: "UPDATE learning_operations SET state = ? WHERE state = ?",
-      arguments: [
-        LearningOperationState.pending.rawValue,
-        LearningOperationState.claimed.rawValue,
-      ]
+      arguments: [LearningOperationState.pending.rawValue, LearningOperationState.claimed.rawValue]
     )
     let returnedToClaimable = db.changesCount
-    for runId in affectedEvaluatorRuns {
-      _ = try recomputeAndReconcile(db, runId: runId, now: now)
+    for runID in affectedEvaluatorRuns {
+      _ = try recomputeAndReconcile(db, runID: runID, now: now)
     }
     return OperationReconciliation(
       interrupted: interrupted.count,
@@ -236,8 +224,10 @@ private extension ScheduledLearningStoreGRDB {
 // MARK: - Reservation Close
 
 private extension ScheduledLearningStoreGRDB {
-  /// The one predicate that makes closing idempotent. A duplicate result finds the row already out
-  /// of `started` and changes nothing, so the reservation is emptied exactly once.
+  /// The one predicate that makes closing idempotent.
+  ///
+  /// A duplicate result finds the row already out of `started` and changes nothing, so the
+  /// reservation is emptied exactly once.
   static func closeStarted(
     _ db: Database,
     _ operation: OperationRow,
@@ -263,6 +253,7 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   /// A `started` row at boot means the call may have been billed and its answer is unrecoverable.
+  ///
   /// The estimate becomes a real charge under the id the call was sent with, so the same id can
   /// never be reused and the day's totals do not under-report what the provider may have billed.
   static func chargeInterrupted(_ db: Database, id: LearningOperationID, now: Date) throws {
@@ -304,7 +295,9 @@ private extension ScheduledLearningStoreGRDB {
 
 private extension ScheduledLearningStoreGRDB {
   /// One learning call's spend, scoped to its operation and job rather than to a run it has none
-  /// of. `provider_usage.session_id` is NOT NULL, so the row rides the job's own session lane.
+  /// of.
+  ///
+  /// `provider_usage.session_id` is NOT NULL, so the row rides the job's own session lane.
   static func chargeLearningUsage(  // swiftlint:disable:this function_parameter_count
     _ db: Database,
     operation: OperationRow,
@@ -319,8 +312,8 @@ private extension ScheduledLearningStoreGRDB {
   ) throws {
     let usage = ProviderUsage(
       providerCallID: callID,
-      runId: nil,
-      sessionId: try jobSessionID(db, jobId: operation.jobId),
+      runID: nil,
+      sessionID: try jobSessionID(db, jobID: operation.jobID),
       model: model,
       promptTokens: promptTokens,
       completionTokens: completionTokens,
@@ -328,21 +321,21 @@ private extension ScheduledLearningStoreGRDB {
       costSource: costSource,
       isEstimated: isEstimated,
       ts: now,
-      learningScope: LearningUsageScope(operationId: operation.id, jobId: operation.jobId)
+      learningScope: LearningUsageScope(operationID: operation.id, jobID: operation.jobID)
     )
     _ = try RunStoreGRDB.insertUsage(db, usage)
   }
 
-  static func jobSessionID(_ db: Database, jobId: Int64) throws -> Int64 {
-    let sessionId = try Int64.fetchOne(
+  static func jobSessionID(_ db: Database, jobID: Int64) throws -> Int64 {
+    let sessionID = try Int64.fetchOne(
       db,
       sql: "SELECT session_id FROM scheduled_jobs WHERE id = ?",
-      arguments: [jobId]
+      arguments: [jobID]
     )
-    guard let sessionId else {
-      throw StoreError.unexpected("job \(jobId) has no session to charge learning spend against")
+    guard let sessionID else {
+      throw StoreError.unexpected("job \(jobID) has no session to charge learning spend against")
     }
-    return sessionId
+    return sessionID
   }
 
   static func operationIDs(
@@ -353,7 +346,6 @@ private extension ScheduledLearningStoreGRDB {
       db,
       sql: "SELECT operation_id FROM learning_operations WHERE state = ? ORDER BY operation_id",
       arguments: [state.rawValue]
-    )
-    .map(LearningOperationID.init(rawValue:))
+    ).map(LearningOperationID.init(rawValue:))
   }
 }

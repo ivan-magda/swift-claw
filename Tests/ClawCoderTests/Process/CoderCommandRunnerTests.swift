@@ -4,25 +4,24 @@ import Foundation
 import Synchronization
 import Testing
 
-@testable import ClawCoder
-
 #if canImport(Darwin)
   import Darwin
 #else
   import Glibc
 #endif
 
-@Suite struct CoderCommandRunnerTests {
-  @Test func cancellationJoinsSurvivingGroup() async throws {
+@testable import ClawCoder
+
+@Suite
+struct CoderCommandRunnerTests {
+  @Test
+  func cancellationJoinsSurvivingGroup() async throws {
     // given
     let fixture = ProcessFixture()
     defer { fixture.cleanup() }
     let task = Task {
       defer { fixture.ready.open() }
-      return await fixture.run(
-        fixture.command(),
-        tracking: .job(record: fixture.record)
-      ) {
+      return await fixture.run(fixture.command(), tracking: .job(record: fixture.record)) {
         await fixture.output($0)
       }
     }
@@ -56,9 +55,8 @@ import Testing
     // when
     let result = await fixture.run(
       fixture.command(arguments: ["-c", script]),
-      tracking: .preApprovalReadOnly,
-      onStandardOutput: { _ in }
-    )
+      tracking: .preApprovalReadOnly
+    ) { _ in }
 
     // then
     #expect(result.exitCode == (signaled ? nil : 7))
@@ -68,7 +66,8 @@ import Testing
     #expect(cleanupResolved)
   }
 
-  @Test func cancellationBeforeSpawn() async {
+  @Test
+  func cancellationBeforeSpawn() async {
     // given
     let fixture = ProcessFixture()
     defer { fixture.cleanup() }
@@ -85,9 +84,8 @@ import Testing
             entered.open()
             await release.waitIgnoringCancellation()
           }
-        },
-        onStandardOutput: { _ in }
-      )
+        }
+      ) { _ in }
     }
     defer { task.cancel() }
     await entered.wait()
@@ -105,7 +103,8 @@ import Testing
     #expect(cleanupResolved)
   }
 
-  @Test func cancellationDuringLaunchReceiptStopsChild() async throws {
+  @Test
+  func cancellationDuringLaunchReceiptStopsChild() async throws {
     // given
     let fixture = ProcessFixture()
     defer { fixture.cleanup() }
@@ -122,9 +121,8 @@ import Testing
             entered.open()
             await release.waitIgnoringCancellation()
           }
-        },
-        onStandardOutput: { _ in }
-      )
+        }
+      ) { _ in }
     }
     defer { task.cancel() }
     await entered.wait()
@@ -159,7 +157,8 @@ import Testing
           switch (event, boundary) {
           case (.willLaunch, .willLaunch), (.didLaunch, .didLaunch):
             try await callback.suspend()
-          default: break
+          default:
+            break
           }
         }
       ) { data in
@@ -198,11 +197,11 @@ import Testing
           switch (event, boundary) {
           case (.willLaunch, .willLaunch), (.didLaunch, .didLaunch):
             try await callback.suspend()
-          default: break
+          default:
+            break
           }
-        },
-        onStandardOutput: { _ in }
-      )
+        }
+      ) { _ in }
     }
     defer { task.cancel() }
     let entered = await callback.entered.waitUntilOpen()
@@ -228,7 +227,8 @@ import Testing
     }
   }
 
-  @Test func failedLaunchReceiptCleansUp() async {
+  @Test
+  func failedLaunchReceiptCleansUp() async {
     // given
     let fixture = ProcessFixture()
     defer { fixture.cleanup() }
@@ -241,9 +241,8 @@ import Testing
         if case .didLaunch = event {
           throw FixtureFailure.rejected
         }
-      },
-      onStandardOutput: { _ in }
-    )
+      }
+    ) { _ in }
 
     // then
     let cleanupResolved = result.cleanupResolved
@@ -253,16 +252,15 @@ import Testing
     #expect(fixture.stoppedAfterReap)
   }
 
-  @Test func failedOutputConsumerCleansUp() async {
+  @Test
+  func failedOutputConsumerCleansUp() async {
     // given
     let fixture = ProcessFixture()
     defer { fixture.cleanup() }
 
     // when
-    let result = await fixture.run(
-      fixture.command(),
-      tracking: .job(record: fixture.record)
-    ) { data in
+    let result = await fixture.run(fixture.command(), tracking: .job(record: fixture.record)) {
+      (data) in
       await fixture.output(data)
       if fixture.ready.isOpen {
         throw FixtureFailure.rejected
@@ -284,7 +282,8 @@ import Testing
     )
   }
 
-  @Test func drainsBeyondDiagnosticLimit() async {
+  @Test
+  func drainsBeyondDiagnosticLimit() async {
     // given
     let fixture = ProcessFixture()
     defer { fixture.cleanup() }

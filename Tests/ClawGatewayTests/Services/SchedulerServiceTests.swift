@@ -13,14 +13,14 @@ import Testing
 /// (the protocol is synchronous).
 final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
   struct ClaimCall: Equatable {
-    let jobId: Int64
+    let jobID: Int64
     let due: Date
     let fireAt: Date
     let nextOccurrence: Date?
   }
 
   struct SkipCall: Equatable {
-    let jobId: Int64
+    let jobID: Int64
     let due: Date
     let nextOccurrence: Date?
     let skippedCount: Int
@@ -28,7 +28,7 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
 
   struct HeartbeatCall: Equatable {
     let prompt: String
-    let ownerChatId: Int64
+    let ownerChatID: Int64
     let day: String
   }
 
@@ -43,9 +43,9 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
   private var recordedHeartbeats: [HeartbeatCall] = []
 
   init(
-    jobs: [ScheduledJob],
+    jobs seededJobs: [ScheduledJob],
     claimResult: ClaimedFire?,
-    state: SchedulerState = SchedulerState(
+    state cannedState: SchedulerState = SchedulerState(
       lastTickAt: nil,
       lastMisfireAt: nil,
       lastMisfireSkippedCount: 0,
@@ -55,9 +55,9 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     ),
     heartbeatResult: ClaimedFire? = nil
   ) {
-    seededJobs = jobs
+    self.seededJobs = seededJobs
     self.claimResult = claimResult
-    cannedState = state
+    self.cannedState = cannedState
     self.heartbeatResult = heartbeatResult
   }
 
@@ -90,12 +90,15 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     defer { lock.unlock() }
     // Mirrors the store contract: status='ACTIVE' AND next_occurrence <= now.
     return seededJobs.filter { job in
-      job.status == .active && job.nextOccurrence.map { occurrence in occurrence <= now } == true
+      job.status == .active
+        && job.nextOccurrence.map { occurrence in
+          occurrence <= now
+        } == true
     }
   }
 
   func claimAndFire(
-    jobId: Int64,
+    jobID: Int64,
     due: Date,
     fireAt: Date,
     nextOccurrence: Date?,
@@ -104,13 +107,13 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     recordedClaims.append(
-      ClaimCall(jobId: jobId, due: due, fireAt: fireAt, nextOccurrence: nextOccurrence)
+      ClaimCall(jobID: jobID, due: due, fireAt: fireAt, nextOccurrence: nextOccurrence)
     )
     return claimResult
   }
 
   func skipMisfire(
-    jobId: Int64,
+    jobID: Int64,
     due: Date,
     nextOccurrence: Date?,
     skippedCount: Int,
@@ -119,7 +122,7 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     recordedSkips.append(
-      SkipCall(jobId: jobId, due: due, nextOccurrence: nextOccurrence, skippedCount: skippedCount)
+      SkipCall(jobID: jobID, due: due, nextOccurrence: nextOccurrence, skippedCount: skippedCount)
     )
     return true
   }
@@ -135,11 +138,15 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
     throw StoreError.unexpected("unused by SchedulerService")
   }
 
-  func job(id: Int64) throws(StoreError) -> ScheduledJob? { nil }
+  func job(id: Int64) throws(StoreError) -> ScheduledJob? {
+    nil
+  }
 
-  func listAll() throws(StoreError) -> [ScheduledJob] { [] }
+  func listAll() throws(StoreError) -> [ScheduledJob] {
+    []
+  }
 
-  func fireNow(jobId: Int64, now: Date) throws(StoreError) -> RunNowOutcome {
+  func fireNow(jobID: Int64, now: Date) throws(StoreError) -> RunNowOutcome {
     throw StoreError.unexpected("unused by SchedulerService")
   }
 
@@ -163,13 +170,13 @@ final class ScriptedJobStore: ScheduledJobStore, @unchecked Sendable {
 
   func fireHeartbeat(
     prompt: String,
-    ownerChatId: Int64,
+    ownerChatID: Int64,
     now: Date,
     day: String
   ) throws(StoreError) -> ClaimedFire? {
     lock.lock()
     defer { lock.unlock() }
-    recordedHeartbeats.append(HeartbeatCall(prompt: prompt, ownerChatId: ownerChatId, day: day))
+    recordedHeartbeats.append(HeartbeatCall(prompt: prompt, ownerChatID: ownerChatID, day: day))
     return heartbeatResult
   }
 }
@@ -192,7 +199,8 @@ private final class SleepRecorder: @unchecked Sendable {
   }
 }
 
-@Suite struct SchedulerServiceTests {
+@Suite
+struct SchedulerServiceTests {
   /// The occurrence phase anchor; the every-5-min rule recurs at anchor + k·300 s exactly.
   private let anchor = Date(timeIntervalSince1970: 1_750_000_000)
 
@@ -208,7 +216,7 @@ private final class SleepRecorder: @unchecked Sendable {
   ) -> ScheduledJob {
     ScheduledJob(
       id: id,
-      ownerChatId: 42,
+      ownerChatID: 42,
       label: "digest",
       prompt: "Summarize my unread items",
       recurrence: recurrence,
@@ -216,7 +224,7 @@ private final class SleepRecorder: @unchecked Sendable {
       nextOccurrence: nextOccurrence,
       lastFiredAt: nil,
       status: status,
-      sessionId: nil,
+      sessionID: nil,
       createdTs: anchor,
       updatedTs: anchor
     )
@@ -231,10 +239,10 @@ private final class SleepRecorder: @unchecked Sendable {
   private func makeFixture(
     jobs: [ScheduledJob],
     claimResult: ClaimedFire? = ClaimedFire(
-      runId: 900,
-      sessionId: 500,
-      triggerMessageId: 300,
-      ownerChatId: 42
+      runID: 900,
+      sessionID: 500,
+      triggerMessageID: 300,
+      ownerChatID: 42
     ),
     heartbeat: HeartbeatSettings? = nil,
     now: Date
@@ -250,14 +258,17 @@ private final class SleepRecorder: @unchecked Sendable {
       heartbeat: heartbeat,
       workspace: EmptyWorkspace(),
       audit: RecordingAuditLog(),
-      now: { now },
+      now: {
+        now
+      },
       clock: ScriptedClock { _ in },
       logger: TestLog.silent
     )
     return Fixture(service: service, store: store, runner: runner)
   }
 
-  @Test func onTimeDueJobFiresAtItsOccurrenceAndRunsOnTheLane() async throws {
+  @Test
+  func onTimeDueJobFiresAtItsOccurrenceAndRunsOnTheLane() async throws {
     // given — due 30 s ago: lateness ≤ the 60 s grain ⇒ fire at the stored occurrence
     let due = anchor.addingTimeInterval(600)
     let now = due.addingTimeInterval(30)
@@ -275,11 +286,11 @@ private final class SleepRecorder: @unchecked Sendable {
     #expect(
       fixture.store.claims == [
         ScriptedJobStore.ClaimCall(
-          jobId: 7,
+          jobID: 7,
           due: due,
           fireAt: due,
           nextOccurrence: anchor.addingTimeInterval(900)
-        )
+        ),
       ]
     )
     #expect(fixture.store.skips.isEmpty)
@@ -288,17 +299,12 @@ private final class SleepRecorder: @unchecked Sendable {
     await fixture.runner.waitForCalls(atLeast: 1)
     let call = try #require(await fixture.runner.calls.first)
     #expect(
-      call
-        == FakeTurnRunner.Call(
-          runId: 900,
-          sessionId: 500,
-          chatId: 42,
-          triggerMessageId: 300
-        )
+      call == FakeTurnRunner.Call(runID: 900, sessionID: 500, chatID: 42, triggerMessageID: 300)
     )
   }
 
-  @Test func missedOccurrencesInsideTheWindowCoalesceToOneFireAtTheLatest() async throws {
+  @Test
+  func missedOccurrencesInsideTheWindowCoalesceToOneFireAtTheLatest() async throws {
     // given — due at T0+300; now T0+1530: five occurrences missed (300…1500), all < 30 min old
     let due = anchor.addingTimeInterval(300)
     let now = anchor.addingTimeInterval(1530)
@@ -315,17 +321,18 @@ private final class SleepRecorder: @unchecked Sendable {
     #expect(
       fixture.store.claims == [
         ScriptedJobStore.ClaimCall(
-          jobId: 7,
+          jobID: 7,
           due: due,
           fireAt: anchor.addingTimeInterval(1500),
           nextOccurrence: anchor.addingTimeInterval(1800)
-        )
+        ),
       ]
     )
     #expect(fixture.store.skips.isEmpty)
   }
 
-  @Test func occurrencesOlderThanTheCatchUpWindowAreSkippedWithNoRun() async throws {
+  @Test
+  func occurrencesOlderThanTheCatchUpWindowAreSkippedWithNoRun() async throws {
     // given — due at T0+300; now T0+2100: lateness 1800 s == catchUpMaxAge ⇒ skip (≥ boundary)
     let due = anchor.addingTimeInterval(300)
     let now = anchor.addingTimeInterval(2100)
@@ -343,17 +350,18 @@ private final class SleepRecorder: @unchecked Sendable {
     #expect(
       fixture.store.skips == [
         ScriptedJobStore.SkipCall(
-          jobId: 7,
+          jobID: 7,
           due: due,
           nextOccurrence: anchor.addingTimeInterval(2400),
           skippedCount: 7
-        )
+        ),
       ]
     )
     #expect(await fixture.runner.calls.isEmpty)
   }
 
-  @Test func pausedJobsNeverFire() async throws {
+  @Test
+  func pausedJobsNeverFire() async throws {
     // given — a PAUSED job whose occurrence is long past; the scan predicate excludes it
     let due = anchor.addingTimeInterval(300)
     let now = anchor.addingTimeInterval(600)
@@ -373,7 +381,8 @@ private final class SleepRecorder: @unchecked Sendable {
     #expect(fixture.store.skips.isEmpty)
   }
 
-  @Test func oneShotJobFiresWithNilNextOccurrence() async throws {
+  @Test
+  func oneShotJobFiresWithNilNextOccurrence() async throws {
     // given — recurrence nil ⇔ one-shot; the store completes it on nil (§5.2)
     let due = anchor.addingTimeInterval(600)
     let now = due.addingTimeInterval(30)
@@ -385,12 +394,13 @@ private final class SleepRecorder: @unchecked Sendable {
     // then
     #expect(
       fixture.store.claims == [
-        ScriptedJobStore.ClaimCall(jobId: 7, due: due, fireAt: due, nextOccurrence: nil)
+        ScriptedJobStore.ClaimCall(jobID: 7, due: due, fireAt: due, nextOccurrence: nil),
       ]
     )
   }
 
-  @Test func lostClaimEnqueuesNothing() async throws {
+  @Test
+  func lostClaimEnqueuesNothing() async throws {
     // given — the CAS matched no row (claimed elsewhere / job mutated): claimAndFire → nil
     let due = anchor.addingTimeInterval(600)
     let now = due.addingTimeInterval(30)
@@ -408,7 +418,8 @@ private final class SleepRecorder: @unchecked Sendable {
     #expect(await fixture.runner.calls.isEmpty)
   }
 
-  @Test func runTicksImmediatelyThenSleepsTheTickInterval() async throws {
+  @Test
+  func runTicksImmediatelyThenSleepsTheTickInterval() async throws {
     // given — a sleep that records its duration and ends the loop like a cancellation
     let recorder = SleepRecorder()
     let store = ScriptedJobStore(jobs: [], claimResult: nil)
@@ -421,7 +432,9 @@ private final class SleepRecorder: @unchecked Sendable {
       heartbeat: nil,
       workspace: EmptyWorkspace(),
       audit: RecordingAuditLog(),
-      now: { Date(timeIntervalSince1970: 1_750_000_000) },
+      now: {
+        Date(timeIntervalSince1970: 1_750_000_000)
+      },
       clock: ScriptedClock { duration in
         recorder.append(duration)
         throw CancellationError()

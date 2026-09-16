@@ -12,8 +12,10 @@ extension ExecLanguage {
   /// Staged file name of the script the sandbox executes for this language.
   public var entrypointFileName: String {
     switch self {
-    case .python: "\(Self.reservedEntrypointPrefix)py"
-    case .sh: "\(Self.reservedEntrypointPrefix)sh"
+    case .python:
+      "\(Self.reservedEntrypointPrefix)py"
+    case .sh:
+      "\(Self.reservedEntrypointPrefix)sh"
     }
   }
 }
@@ -184,11 +186,14 @@ public struct SandboxHealth: Sendable, Equatable {
 
 public protocol ExecutionBackend: Sendable {
   func probe() async -> BackendAvailability
+
   func run(_ request: ExecutionRequest) async -> ExecutionResult
 }
 
 public protocol SandboxMaintenance: Sendable {
   func prepare() async -> SandboxHealth
+
   func shutdown() async
+
   func isAdmitting() async -> Bool
 }

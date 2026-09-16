@@ -23,9 +23,7 @@ import Foundation
       self.maxAudioDurationSeconds = maxAudioDurationSeconds
     }
 
-    func transcribe(
-      audioFileAt url: URL
-    ) async throws(VoiceTranscriptionError) -> String {
+    func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String {
       let lanes = await Self.resolveLanes(for: localeIdentifiers)
 
       if lanes.isEmpty {
@@ -48,7 +46,11 @@ import Foundation
 
       // Lanes run in configured priority order; a clear early match skips the remaining lanes,
       // and one lane's engine failure must not take down a language that still works.
-      let configuredTags = Set(lanes.map { $0.locale.bcp47Tag })
+      let configuredTags = Set(
+        lanes.map {
+          $0.locale.bcp47Tag
+        }
+      )
       var candidates: [ScoredTranscript] = []
       var firstFailure: VoiceTranscriptionError?
 
@@ -165,10 +167,12 @@ import Foundation
     static func resolve(
       _ requestedLocale: Locale,
       in supportedLocales: [Locale],
-      via equivalent: (Locale) async -> Locale?
+      via equivalent: (_ locale: Locale) async -> Locale?
     ) async -> Locale? {
       let requestedTag = requestedLocale.bcp47Tag
-      if let exactMatch = supportedLocales.first(where: { $0.bcp47Tag == requestedTag }) {
+      if let exactMatch = supportedLocales.first(where: {
+        $0.bcp47Tag == requestedTag
+      }) {
         return exactMatch
       }
 
@@ -176,7 +180,9 @@ import Foundation
         return nil
       }
 
-      return supportedLocales.first { $0.bcp47Tag == normalized.bcp47Tag }
+      return supportedLocales.first {
+        $0.bcp47Tag == normalized.bcp47Tag
+      }
     }
   }
 
@@ -280,7 +286,9 @@ import Foundation
     ) async throws(VoiceTranscriptionError) {
       do {
         let reserved = await AssetInventory.reservedLocales
-        if !reserved.contains(where: { $0.bcp47Tag == locale.bcp47Tag }) {
+        if !reserved.contains(where: {
+          $0.bcp47Tag == locale.bcp47Tag
+        }) {
           for stale in reserved where !configuredTags.contains(stale.bcp47Tag) {
             await AssetInventory.release(reservedLocale: stale)
           }
@@ -290,7 +298,10 @@ import Foundation
           } catch {
             let occupied = await AssetInventory.reservedLocales
 
-            guard let evictable = occupied.first(where: { $0.bcp47Tag != locale.bcp47Tag }) else {
+            guard let evictable = occupied.first(where: {
+                $0.bcp47Tag != locale.bcp47Tag
+              })
+            else {
               throw error
             }
             await AssetInventory.release(reservedLocale: evictable)
@@ -326,7 +337,9 @@ public enum SystemVoiceTranscriber {
   public static func make(
     localeIdentifiers: [String],
     maxAudioDurationSeconds: Int? = nil
-  ) -> (any VoiceTranscribing)? {
+  ) -> (
+    any VoiceTranscribing
+  )? {
     #if canImport(Speech) && canImport(AVFAudio)
       guard #available(macOS 26.0, *) else {
         return nil

@@ -12,12 +12,7 @@ extension Date {
   /// stable so a stored stamp keeps comparing equal to a freshly rendered one.
   public func wallClockDay(in zone: TimeZone) -> String {
     let parts = components([.year, .month, .day], in: zone)
-    return String(
-      format: "%04d-%02d-%02d",
-      parts.year ?? 0,
-      parts.month ?? 0,
-      parts.day ?? 0
-    )
+    return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
   }
 
   /// `YYYY-MM-DD HH:mm` wall-clock minute in `zone` — deterministic and locale-free (the ISO8601

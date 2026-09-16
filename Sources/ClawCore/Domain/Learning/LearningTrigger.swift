@@ -24,40 +24,40 @@ private struct ByteExactIssueCode: Hashable, Comparable {
 
 /// One completed compatible evaluation after owner precedence has been frozen at a revision.
 public struct EffectiveEvaluation: Sendable, Equatable {
-  public let runId: Int64
-  public let jobId: Int64
+  public let runID: Int64
+  public let jobID: Int64
   public let epoch: LearningEpoch
   public let stableDigest: LessonSetDigest
   public let evidenceDigest: EvidenceDigest
   public let compatibility: CompatibilityDigest
   public let occurrenceAt: Date
   public let evaluatorCompletedAt: Date
-  public let trialId: Int64?
+  public let trialID: Int64?
   public let outcome: EffectiveOutcome
   public let feedbackRevision: FeedbackRevision
 
   public init(  // swiftlint:disable:this function_parameter_count
-    runId: Int64,
-    jobId: Int64,
+    runID: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     stableDigest: LessonSetDigest,
     evidenceDigest: EvidenceDigest,
     compatibility: CompatibilityDigest,
     occurrenceAt: Date,
     evaluatorCompletedAt: Date,
-    trialId: Int64?,
+    trialID: Int64?,
     outcome: EffectiveOutcome,
     feedbackRevision: FeedbackRevision
   ) {
-    self.runId = runId
-    self.jobId = jobId
+    self.runID = runID
+    self.jobID = jobID
     self.epoch = epoch
     self.stableDigest = stableDigest
     self.evidenceDigest = evidenceDigest
     self.compatibility = compatibility
     self.occurrenceAt = occurrenceAt
     self.evaluatorCompletedAt = evaluatorCompletedAt
-    self.trialId = trialId
+    self.trialID = trialID
     self.outcome = outcome
     self.feedbackRevision = feedbackRevision
   }
@@ -74,16 +74,11 @@ public enum EvidenceWindow {
     cutoff: Date
   ) -> [EffectiveEvaluation] {
     let oldestOccurrence = cutoff.addingTimeInterval(-maximumAge)
-    let ordered =
-      evaluations
-      .filter { evaluation in
-        evaluation.compatibility == compatibility
-          && evaluation.trialId == nil
-          && evaluation.occurrenceAt >= oldestOccurrence
-          && evaluation.occurrenceAt <= cutoff
-          && evaluation.evaluatorCompletedAt <= cutoff
-      }
-      .sorted(by: occursBefore)
+    let ordered = evaluations.filter { evaluation in
+      evaluation.compatibility == compatibility && evaluation.trialID == nil
+        && evaluation.occurrenceAt >= oldestOccurrence && evaluation.occurrenceAt <= cutoff
+        && evaluation.evaluatorCompletedAt <= cutoff
+    }.sorted(by: occursBefore)
     return Array(ordered.suffix(maximumCount))
   }
 }
@@ -95,7 +90,7 @@ private extension EvidenceWindow {
     if lhs.occurrenceAt != rhs.occurrenceAt {
       return lhs.occurrenceAt < rhs.occurrenceAt
     }
-    return lhs.runId < rhs.runId
+    return lhs.runID < rhs.runID
   }
 }
 
@@ -106,7 +101,7 @@ public enum LearningTriggerReason: String, Sendable, Equatable, Codable {
 
 /// The complete idempotency identity for one logical reflector operation.
 public struct TriggerIdentity: Sendable, Equatable {
-  public let jobId: Int64
+  public let jobID: Int64
   public let epoch: LearningEpoch
   public let algorithm: LearningAlgorithm
   public let stableDigest: LessonSetDigest
@@ -116,7 +111,7 @@ public struct TriggerIdentity: Sendable, Equatable {
   public let reason: LearningTriggerReason
 
   public init(
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     algorithm: LearningAlgorithm,
     stableDigest: LessonSetDigest,
@@ -125,7 +120,7 @@ public struct TriggerIdentity: Sendable, Equatable {
     issueCodes: [String],
     reason: LearningTriggerReason
   ) {
-    self.jobId = jobId
+    self.jobID = jobID
     self.epoch = epoch
     self.algorithm = algorithm
     self.stableDigest = stableDigest
@@ -143,15 +138,12 @@ public struct TriggerIdentity: Sendable, Equatable {
     let fields =
       [
         Self.canonicalPrefix,
-        String(jobId),
+        String(jobID),
         String(epoch.value),
         algorithm.rawValue,
         stableDigest.rawValue,
         String(evidenceFields.count),
-      ] + evidenceFields + [
-        String(feedbackRevision.value),
-        String(issueFields.count),
-      ] + issueFields
+      ] + evidenceFields + [String(feedbackRevision.value), String(issueFields.count)] + issueFields
     return TriggerDigest(rawValue: SHA256Digest.hex(CanonicalDigestInput.joined(fields)))
   }
 
@@ -173,13 +165,13 @@ public enum LearningTrigger {
     guard trialIsOpen == false, let first = window.first else {
       return nil
     }
-    let eligibleRunIds = Set(window.map(\.runId))
+    let eligibleRunIDs = Set(window.map(\.runID))
     var signalsByRun: [Int64: [FeedbackEvent]] = [:]
     for event in corrections {
-      guard let runId = event.runId, eligibleRunIds.contains(runId) else {
+      guard let runID = event.runID, eligibleRunIDs.contains(runID) else {
         continue
       }
-      signalsByRun[runId, default: []].append(event)
+      signalsByRun[runID, default: []].append(event)
     }
     let effectiveCorrections = signalsByRun.values.compactMap { signals in
       let winner = FeedbackEvent.latestUnsupersededResult(in: signals)
@@ -197,9 +189,12 @@ public enum LearningTrigger {
 
     let highestEvaluationRevision = window.map(\.feedbackRevision).max() ?? FeedbackRevision(0)
     let highestCorrectionRevision = effectiveCorrections.map(\.revision).max()
-    let feedbackRevision = max(highestEvaluationRevision, highestCorrectionRevision ?? .init(0))
+    let feedbackRevision = max(
+      highestEvaluationRevision,
+      highestCorrectionRevision ?? FeedbackRevision(0)
+    )
     return TriggerIdentity(
-      jobId: first.jobId,
+      jobID: first.jobID,
       epoch: first.epoch,
       algorithm: .v1,
       stableDigest: first.stableDigest,
@@ -221,11 +216,11 @@ private extension LearningTrigger {
         continue
       }
       for issueCode in Set(issueCodes.map(ByteExactIssueCode.init)) {
-        runsByCode[issueCode, default: []].insert(evaluation.runId)
+        runsByCode[issueCode, default: []].insert(evaluation.runID)
       }
     }
-    return runsByCode.compactMap { issueCode, runIds in
-      runIds.count >= recurringRunThreshold ? issueCode : nil
+    return runsByCode.compactMap { issueCode, runIDs in
+      runIDs.count >= recurringRunThreshold ? issueCode : nil
     }.sorted().map(\.value)
   }
 }

@@ -10,10 +10,10 @@ public enum Command: Sendable, Equatable {
   case memory(MemoryCommand)
   case schedule(ScheduleCommand)
   case learning(LearningCommand)
-  case pause(jobId: Int64?)
-  case resume(jobId: Int64?)
-  case runNow(jobId: Int64?)
-  case cancelJob(jobId: Int64?)
+  case pause(jobID: Int64?)
+  case resume(jobID: Int64?)
+  case runNow(jobID: Int64?)
+  case cancelJob(jobID: Int64?)
   case help
   case doctor
   case mcp
@@ -36,31 +36,30 @@ private extension Command {
   static func slashToken(
     in text: String,
     botUsername: String?
-  ) -> (name: String, arguments: Substring)? {
+  ) -> (
+    name: String,
+    arguments: Substring
+  )? {
     guard text.first == "/" else {
       return nil
     }
 
-    let tokenEnd = text.firstIndex(where: { $0.isWhitespace }) ?? text.endIndex
+    let tokenEnd =
+      text.firstIndex {
+        $0.isWhitespace
+      } ?? text.endIndex
     let commandBody = text[..<tokenEnd].dropFirst()
     guard commandBody.isEmpty == false else {
       return nil
     }
 
-    let pieces = commandBody.split(
-      separator: "@",
-      maxSplits: 1,
-      omittingEmptySubsequences: false
-    )
+    let pieces = commandBody.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false)
     guard let rawName = pieces.first, rawName.isEmpty == false else {
       return nil
     }
 
     if pieces.count == 2 {
-      guard
-        let botUsername,
-        pieces[1].caseInsensitiveCompare(botUsername) == .orderedSame
-      else {
+      guard let botUsername, pieces[1].caseInsensitiveCompare(botUsername) == .orderedSame else {
         return nil
       }
     }
@@ -115,20 +114,20 @@ private extension Command {
   static func jobCommand(named name: String, arguments: Substring) -> Command? {
     switch name {
     case "pause":
-      .pause(jobId: jobId(from: arguments))
+      .pause(jobID: jobID(from: arguments))
     case "resume":
-      .resume(jobId: jobId(from: arguments))
+      .resume(jobID: jobID(from: arguments))
     case "runnow":
-      .runNow(jobId: jobId(from: arguments))
+      .runNow(jobID: jobID(from: arguments))
     case "cancel":
-      .cancelJob(jobId: jobId(from: arguments))
+      .cancelJob(jobID: jobID(from: arguments))
     default:
       nil
     }
   }
 
   /// nil ⇒ missing/invalid argument; the router replies with usage, never guesses.
-  static func jobId(from arguments: Substring) -> Int64? {
+  static func jobID(from arguments: Substring) -> Int64? {
     PositiveInt64.parse(String(arguments))
   }
 }
@@ -151,8 +150,8 @@ public enum ScheduleCommand: Sendable, Equatable {
 /// Parsed `/learning` arguments. Unknown non-reset arguments list; reset never guesses an id.
 public enum LearningCommand: Sendable, Equatable {
   case list
-  case detail(jobId: Int64)
-  case reset(jobId: Int64?)
+  case detail(jobID: Int64)
+  case reset(jobID: Int64?)
 
   public static func parse(arguments: Substring) -> LearningCommand {
     let trimmed = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -162,12 +161,12 @@ public enum LearningCommand: Sendable, Equatable {
     let pieces = trimmed.split(whereSeparator: \.isWhitespace)
     if pieces.first?.caseInsensitiveCompare("reset") == .orderedSame {
       guard pieces.count == 2 else {
-        return .reset(jobId: nil)
+        return .reset(jobID: nil)
       }
-      return .reset(jobId: PositiveInt64.parse(String(pieces[1])))
+      return .reset(jobID: PositiveInt64.parse(String(pieces[1])))
     }
-    if let jobId = PositiveInt64.parse(trimmed) {
-      return .detail(jobId: jobId)
+    if let jobID = PositiveInt64.parse(trimmed) {
+      return .detail(jobID: jobID)
     }
     return .list
   }
@@ -175,13 +174,13 @@ public enum LearningCommand: Sendable, Equatable {
 
 // MARK: - Availability
 
-public extension Command {
+extension Command {
   /// True for the commands that only make sense in the owner's own conversation.
   ///
   /// Durable memory, schedules, and scheduled-learning state are owner-private. Memory and
   /// schedules also park a confirmation that the *next plain message* resolves — in a shared room
   /// that message belongs to whoever typed fastest, so one attendee could commit another's draft.
-  var isDirectOnly: Bool {
+  public var isDirectOnly: Bool {
     switch self {
     case .remember, .memory, .schedule, .learning, .pause, .resume, .runNow, .cancelJob:
       true

@@ -5,7 +5,8 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct ExecuteCodeToolTests {
+@Suite
+struct ExecuteCodeToolTests {
   private struct Workspace {
     let root: URL
     let outside: URL
@@ -83,7 +84,10 @@ import Testing
   private func recordedInvocation(
     tool: ExecuteCodeTool,
     arguments: JSONValue
-  ) async throws -> (JSONValue, String) {
+  ) async throws -> (
+    JSONValue,
+    String
+  ) {
     let action = try await prepared(tool.prepareAction(arguments: arguments))
     let recorded = try #require(JSONValue.parse(action.canonicalArgsJSON))
     return (recorded, action.canonicalTarget)
@@ -107,7 +111,8 @@ import Testing
 }
 
 extension ExecuteCodeToolTests {
-  @Test func definitionDeclaresTheClosedDangerousSurface() throws {
+  @Test
+  func definitionDeclaresTheClosedDangerousSurface() throws {
     // given
     let workspace = try makeWorkspace()
     let tool = makeTool(workspace: workspace)
@@ -121,7 +126,8 @@ extension ExecuteCodeToolTests {
     #expect(definition.egressClass == .none)
   }
 
-  @Test func unknownLanguageAndOversizeCodeRefuse() async throws {
+  @Test
+  func unknownLanguageAndOversizeCodeRefuse() async throws {
     // given
     let workspace = try makeWorkspace()
     let tool = makeTool(workspace: workspace)
@@ -136,14 +142,12 @@ extension ExecuteCodeToolTests {
     #expect(refused(code))
   }
 
-  @Test func rawOptionalDefaultsAreExplicitAndWrongTypesRefuse() async throws {
+  @Test
+  func rawOptionalDefaultsAreExplicitAndWrongTypesRefuse() async throws {
     // given
     let workspace = try makeWorkspace()
     let tool = makeTool(workspace: workspace)
-    let minimal: JSONValue = .object([
-      "language": .string("sh"),
-      "code": .string("echo hello"),
-    ])
+    let minimal: JSONValue = .object(["language": .string("sh"), "code": .string("echo hello")])
     let badStage: JSONValue = .object([
       "language": .string("sh"),
       "code": .string("echo hello"),
@@ -171,7 +175,8 @@ extension ExecuteCodeToolTests {
     #expect(refused(network))
   }
 
-  @Test func absoluteDotDotAndSymlinkEscapesRefuse() async throws {
+  @Test
+  func absoluteDotDotAndSymlinkEscapesRefuse() async throws {
     // given
     let workspace = try makeWorkspace()
     try "outside".write(
@@ -200,7 +205,8 @@ extension ExecuteCodeToolTests {
     #expect(refused(missing))
   }
 
-  @Test func directoriesAndExceededStageCapsRefuse() async throws {
+  @Test
+  func directoriesAndExceededStageCapsRefuse() async throws {
     // given
     let workspace = try makeWorkspace()
     try FileManager.default.createDirectory(
@@ -246,7 +252,8 @@ extension ExecuteCodeToolTests {
     #expect(refused(total))
   }
 
-  @Test func networkNeedsTheOwnerConfigSwitch() async throws {
+  @Test
+  func networkNeedsTheOwnerConfigSwitch() async throws {
     // given
     let workspace = try makeWorkspace()
 
@@ -263,25 +270,20 @@ extension ExecuteCodeToolTests {
     #expect(try prepared(enabled).canExfiltrate)
   }
 
-  @Test func normalizedDuplicateAndReservedBasenamesRefuse() async throws {
+  @Test
+  func normalizedDuplicateAndReservedBasenamesRefuse() async throws {
     // given
     let workspace = try makeWorkspace()
     try write(Data("a".utf8), relativePath: "A.txt", workspace: workspace)
     try write(Data("b".utf8), relativePath: "a.TXT", workspace: workspace)
     try write(Data("c".utf8), relativePath: ".CLAWD-ENTRYPOINT.PY", workspace: workspace)
     try write(Data("d".utf8), relativePath: "résumé.txt", workspace: workspace)
-    try write(
-      Data("e".utf8),
-      relativePath: "re\u{301}sume\u{301}.txt",
-      workspace: workspace
-    )
+    try write(Data("e".utf8), relativePath: "re\u{301}sume\u{301}.txt", workspace: workspace)
     let tool = makeTool(workspace: workspace)
 
     // when
     let duplicate = await tool.prepareAction(arguments: arguments(stage: ["A.txt", "a.TXT"]))
-    let reserved = await tool.prepareAction(
-      arguments: arguments(stage: [".CLAWD-ENTRYPOINT.PY"])
-    )
+    let reserved = await tool.prepareAction(arguments: arguments(stage: [".CLAWD-ENTRYPOINT.PY"]))
     let unicodeDuplicate = await tool.prepareAction(
       arguments: arguments(stage: ["résumé.txt", "re\u{301}sume\u{301}.txt"])
     )
@@ -292,7 +294,8 @@ extension ExecuteCodeToolTests {
     #expect(refused(unicodeDuplicate))
   }
 
-  @Test func preparedJSONBindsEveryStageAndPrivateClassification() async throws {
+  @Test
+  func preparedJSONBindsEveryStageAndPrivateClassification() async throws {
     // given
     let workspace = try makeWorkspace()
     try write(Data("input text".utf8), relativePath: "notes/input.txt", workspace: workspace)
@@ -302,9 +305,7 @@ extension ExecuteCodeToolTests {
 
     // when
     let action = try await prepared(
-      tool.prepareAction(
-        arguments: arguments(stage: ["notes/input.txt", "MEMORY.md"])
-      )
+      tool.prepareAction(arguments: arguments(stage: ["notes/input.txt", "MEMORY.md"]))
     )
     let decoded = try #require(JSONValue.parse(action.canonicalArgsJSON)?.objectValue)
     guard case .array(let stages) = decoded["stage"] else {
@@ -314,7 +315,8 @@ extension ExecuteCodeToolTests {
     let inputStage = try #require(
       stages.first { stage in
         stage.objectValue?["path"] == .string("notes/input.txt")
-      }?.objectValue
+      }?
+      .objectValue
     )
     let memoryStage = try #require(
       stages.first { stage in
@@ -342,7 +344,8 @@ extension ExecuteCodeToolTests {
     }
   }
 
-  @Test func boundedReaderRefusesOneBytePastItsLimit() throws {
+  @Test
+  func boundedReaderRefusesOneBytePastItsLimit() throws {
     // given
     let workspace = try makeWorkspace()
     let path = workspace.root.appendingPathComponent("race.bin").path
@@ -357,7 +360,8 @@ extension ExecuteCodeToolTests {
 }
 
 extension ExecuteCodeToolTests {
-  @Test func presentationShowsTheCompleteRedactedScriptAndEveryStage() async throws {
+  @Test
+  func presentationShowsTheCompleteRedactedScriptAndEveryStage() async throws {
     // given
     let workspace = try makeWorkspace()
     try write(Data("one".utf8), relativePath: "notes/one.txt", workspace: workspace)
@@ -368,9 +372,7 @@ extension ExecuteCodeToolTests {
 
     // when
     let action = try await prepared(
-      tool.prepareAction(
-        arguments: arguments(code: code, stage: ["notes/one.txt", "two.txt"])
-      )
+      tool.prepareAction(arguments: arguments(code: code, stage: ["notes/one.txt", "two.txt"]))
     )
     let preview = try #require(action.presentation.contentPreview)
     let canonicalRoot = try #require(WorkspacePathContainment.canonicalPath(workspace.root.path))
@@ -391,15 +393,15 @@ extension ExecuteCodeToolTests {
     #expect(preview.contains(String(oneHash)))
     #expect(preview.contains(String(twoHash)))
     #expect(
-      action.presentation.blastRadius
-        == """
+      action.presentation.blastRadius == """
         run python · egress: no · 4 CPU / 1024 MiB · \
         code \(code.utf8.count) B · 2 staged file(s), 6 B
         """
     )
   }
 
-  @Test func maximumCodePreviewIsNeverTruncated() async throws {
+  @Test
+  func maximumCodePreviewIsNeverTruncated() async throws {
     // given
     let workspace = try makeWorkspace()
     let code = String(repeating: "x", count: ExecuteCodeTool.maxCodeBytes)
@@ -414,15 +416,14 @@ extension ExecuteCodeToolTests {
     #expect(preview.contains(ToolOutputCap.truncationMarker) == false)
   }
 
-  @Test func networkedPresentationNamesEgressAndWarning() async throws {
+  @Test
+  func networkedPresentationNamesEgressAndWarning() async throws {
     // given
     let workspace = try makeWorkspace()
     let tool = makeTool(workspace: workspace, allowEgress: true)
 
     // when
-    let action = try await prepared(
-      tool.prepareAction(arguments: arguments(network: true))
-    )
+    let action = try await prepared(tool.prepareAction(arguments: arguments(network: true)))
 
     // then
     #expect(action.presentation.blastRadius.contains("egress: yes"))
@@ -432,13 +433,14 @@ extension ExecuteCodeToolTests {
 }
 
 extension ExecuteCodeToolTests {
-  @Test func executeRevalidatesAndSendsOnlyRecordedCopies() async throws {
+  @Test
+  func executeRevalidatesAndSendsOnlyRecordedCopies() async throws {
     // given
     let workspace = try makeWorkspace()
     try write(Data("input".utf8), relativePath: "notes/input.txt", workspace: workspace)
-    let backend = FakeExecutionBackend(
-      results: [result(termination: .exited(code: 0), stdout: "done")]
-    )
+    let backend = FakeExecutionBackend(results: [
+      result(termination: .exited(code: 0), stdout: "done"),
+    ])
     let tool = makeTool(workspace: workspace, backend: backend, allowEgress: true)
     let (recorded, target) = try await recordedInvocation(
       tool: tool,
@@ -474,7 +476,8 @@ extension ExecuteCodeToolTests {
     #expect(request.timeout == .seconds(30))
   }
 
-  @Test func contentDriftFailsBeforeBackend() async throws {
+  @Test
+  func contentDriftFailsBeforeBackend() async throws {
     // given
     let workspace = try makeWorkspace()
     try write(Data("approved".utf8), relativePath: "input.txt", workspace: workspace)
@@ -495,7 +498,8 @@ extension ExecuteCodeToolTests {
     #expect(await backend.recordedRequests().isEmpty)
   }
 
-  @Test func symlinkRealpathDriftFailsBeforeBackend() async throws {
+  @Test
+  func symlinkRealpathDriftFailsBeforeBackend() async throws {
     // given
     let workspace = try makeWorkspace()
     try write(Data("first".utf8), relativePath: "first.txt", workspace: workspace)
@@ -526,7 +530,8 @@ extension ExecuteCodeToolTests {
     #expect(await backend.recordedRequests().isEmpty)
   }
 
-  @Test func changedCanonicalTargetFailsBeforeBackend() async throws {
+  @Test
+  func changedCanonicalTargetFailsBeforeBackend() async throws {
     // given
     let workspace = try makeWorkspace()
     let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 0))])
@@ -544,7 +549,8 @@ extension ExecuteCodeToolTests {
     #expect(await backend.recordedRequests().isEmpty)
   }
 
-  @Test func rawArgumentsCannotCrossTheRecordedResumeSeam() async throws {
+  @Test
+  func rawArgumentsCannotCrossTheRecordedResumeSeam() async throws {
     // given
     let workspace = try makeWorkspace()
     let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 0))])
@@ -562,7 +568,8 @@ extension ExecuteCodeToolTests {
     #expect(await backend.recordedRequests().isEmpty)
   }
 
-  @Test func networkPolicyDriftFailsBeforeBackend() async throws {
+  @Test
+  func networkPolicyDriftFailsBeforeBackend() async throws {
     // given
     let workspace = try makeWorkspace()
     let preparingTool = makeTool(workspace: workspace, allowEgress: true)
@@ -584,23 +591,22 @@ extension ExecuteCodeToolTests {
 }
 
 extension ExecuteCodeToolTests {
-  @Test func exitedResultRedactsLabelsNoticesAndCapsOnce() async throws {
+  @Test
+  func exitedResultRedactsLabelsNoticesAndCapsOnce() async throws {
     // given
     let workspace = try makeWorkspace()
     let stdoutSecret = "stdout-secret-value"
     let boundarySecret = String(repeating: "boundary-secret-value-", count: 20)
     let boundaryPrefix = String(repeating: "x", count: ToolOutputCap.maxGraphemes - 200)
     let overflowTail = String(repeating: "y", count: 1_000)
-    let backend = FakeExecutionBackend(
-      results: [
-        result(
-          termination: .exited(code: 7),
-          stdout: "stdout \(stdoutSecret)",
-          stderr: boundaryPrefix + boundarySecret + overflowTail,
-          truncated: true
-        )
-      ]
-    )
+    let backend = FakeExecutionBackend(results: [
+      result(
+        termination: .exited(code: 7),
+        stdout: "stdout \(stdoutSecret)",
+        stderr: boundaryPrefix + boundarySecret + overflowTail,
+        truncated: true
+      ),
+    ])
     let tool = makeTool(
       workspace: workspace,
       backend: backend,
@@ -620,18 +626,17 @@ extension ExecuteCodeToolTests {
     #expect(payload.content.contains("--- stderr ---"))
     #expect(payload.content.contains(stdoutSecret) == false)
     #expect(payload.content.contains(String(boundarySecret.prefix(32))) == false)
-    #expect(
-      payload.content.components(separatedBy: SecretRedactor.replacement).count - 1 == 2
-    )
+    #expect(payload.content.components(separatedBy: SecretRedactor.replacement).count - 1 == 2)
     #expect(payload.content.components(separatedBy: ToolOutputCap.truncationMarker).count - 1 == 1)
   }
 
-  @Test func rawPrefixOverflowGetsOneNoticeBeforeTheSingleCap() async throws {
+  @Test
+  func rawPrefixOverflowGetsOneNoticeBeforeTheSingleCap() async throws {
     // given
     let workspace = try makeWorkspace()
-    let backend = FakeExecutionBackend(
-      results: [result(termination: .exited(code: 0), stdout: "short", truncated: true)]
-    )
+    let backend = FakeExecutionBackend(results: [
+      result(termination: .exited(code: 0), stdout: "short", truncated: true),
+    ])
     let tool = makeTool(workspace: workspace, backend: backend)
     let (recorded, target) = try await recordedInvocation(tool: tool, arguments: arguments())
 
@@ -646,7 +651,8 @@ extension ExecuteCodeToolTests {
     #expect(payload.content.contains(ToolOutputCap.truncationMarker) == false)
   }
 
-  @Test func exit137IsSuccessfulAndCarriesTheMemoryHint() async throws {
+  @Test
+  func exit137IsSuccessfulAndCarriesTheMemoryHint() async throws {
     // given
     let workspace = try makeWorkspace()
     let backend = FakeExecutionBackend(results: [result(termination: .exited(code: 137))])
@@ -662,7 +668,8 @@ extension ExecuteCodeToolTests {
     #expect(payload.content.contains("memory cap"))
   }
 
-  @Test func infrastructureAndCancellationResultsHaveNoNewProvenance() async throws {
+  @Test
+  func infrastructureAndCancellationResultsHaveNoNewProvenance() async throws {
     // given
     let workspace = try makeWorkspace()
     try write(Data("private".utf8), relativePath: "MEMORY.md", workspace: workspace)
@@ -693,7 +700,8 @@ extension ExecuteCodeToolTests {
     }
   }
 
-  @Test func successfulPrivateStagePropagatesPrivateData() async throws {
+  @Test
+  func successfulPrivateStagePropagatesPrivateData() async throws {
     // given
     let workspace = try makeWorkspace()
     try write(Data("private".utf8), relativePath: "MEMORY.md", workspace: workspace)
@@ -720,7 +728,8 @@ extension ExecuteCodeToolTests {
   /// the recorded JSON and its redaction must stay bounded (the regex shape-scan cannot explode),
   /// the redactor must strip an embedded secret, and the recorded JSON must be deterministic and
   /// structurally intact so the audit redacts exactly the action the approval stored.
-  @Test func maxPayloadAuditRedactionStaysBoundedDeterministicAndIntact() async throws {
+  @Test
+  func maxPayloadAuditRedactionStaysBoundedDeterministicAndIntact() async throws {
     // given
     let workspace = try makeWorkspace()
     let stagePaths = (0..<ExecuteCodeTool.maxStagedFiles).map { index in
@@ -774,7 +783,8 @@ extension ExecuteCodeToolTests {
 }
 
 extension ExecuteCodeToolTests {
-  @Test func stagedPathsAreRedactedInTheApprovalPreview() async throws {
+  @Test
+  func stagedPathsAreRedactedInTheApprovalPreview() async throws {
     // given — a loaded secret value embedded in a staged file's own path
     let workspace = try makeWorkspace()
     let secret = "s3cr3t-path-token-abcdef"

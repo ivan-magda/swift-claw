@@ -23,41 +23,43 @@ struct ScriptedAskTool: Tool {
       riskLevel: .ask
     )
   }
-  var timeout: Duration { .seconds(5) }
+
+  var timeout: Duration {
+    .seconds(5)
+  }
 
   func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     .resolved("/workspace/notes/plan.md")
   }
+
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     ToolPayload(content: "wrote it", status: .ok, ingestedUntrusted: false)
   }
 }
 
-@Suite(.serialized, .timeLimit(.minutes(1))) struct SuspendLaneHoldTests {
+@Suite(.serialized, .timeLimit(.minutes(1)))
+struct SuspendLaneHoldTests {
   private func approvals(_ pool: DatabasePool) throws -> [Row] {
     try pool.read { db in
       try Row.fetchAll(db, sql: "SELECT * FROM approvals ORDER BY id")
     }
   }
 
-  private func runState(_ path: String, _ runId: Int64) throws -> String? {
+  private func runState(_ path: String, _ runID: Int64) throws -> String? {
     let pool = try ClawDatabase.makePool(path: path)
     return try pool.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
     }
   }
 
-  @Test func proposalSuspendsHoldsTheLaneAndStaysAssemblyVisible() async throws {
+  @Test
+  func proposalSuspendsHoldsTheLaneAndStaysAssemblyVisible() async throws {
     // given — a shared coordinator so the test can release the held lane; the ask-tier tool
     // registered as an extra tool; two scripts (the suspending proposal, then the plain message)
     let coordinator = ApprovalCoordinator()
     let harness = try makeSC3Harness(
       scripts: [
-        [
-          toolCallResponse([
-            ToolCall(id: "w1", name: "scripted_write", argumentsJSON: "{}")
-          ])
-        ],
+        [toolCallResponse([ToolCall(id: "w1", name: "scripted_write", argumentsJSON: "{}")])],
         [okResponse(content: "second turn done")],
       ],
       httpResponses: [:],
@@ -70,20 +72,20 @@ struct ScriptedAskTool: Tool {
     var notifications = harness.outboxSignal.notifications.makeAsyncIterator()
     _ = await notifications.next()
     let approval = try #require(try approvals(harness.readPool).first)
-    let approvalId: Int64 = approval["id"]
-    let runId: Int64 = approval["run_id"]
+    let approvalID: Int64 = approval["id"]
+    let runID: Int64 = approval["run_id"]
 
     // then — persisted PENDING checkpoint + AWAITING run + prompt chunk with a keyboard
     #expect(approval["state"] == ApprovalState.pending.rawValue)
     #expect(approval["tool"] == "scripted_write")
-    #expect(try runState(harness.databasePath, runId) == RunState.awaitingApproval.rawValue)
+    #expect(try runState(harness.databasePath, runID) == RunState.awaitingApproval.rawValue)
     let promptRow = try harness.stores.outbox.pendingOutbound().first
     #expect(promptRow != nil)
     let markup = try await ClawDatabase.makePool(path: harness.databasePath).read { db in
       try String.fetchOne(
         db,
         sql: "SELECT reply_markup FROM outbound_deliveries WHERE approval_id = ?",
-        arguments: [approvalId]
+        arguments: [approvalID]
       )
     }
     #expect(markup?.isEmpty == false)
@@ -99,7 +101,7 @@ struct ScriptedAskTool: Tool {
     // when — release the lane; the queued plain message now runs to completion. The reply lands in
     // the durable OUTBOX — this harness wires no `OutboxDispatcher`, so nothing is sent over the
     // `RecordingTransport`; existing SC3 assertions read `stores.outbox.pendingOutbound()` too.
-    await coordinator.signal(approvalId: approvalId, .denied(.cancelled))
+    await coordinator.signal(.denied(.cancelled), forApprovalID: approvalID)
     while true {
       let payloads = try harness.stores.outbox.pendingOutbound().map(\.payload)
       if payloads.contains(where: { payload in
@@ -117,7 +119,7 @@ struct ScriptedAskTool: Tool {
     // survive `HistoryHygiene` even with the interleaved plain message (§5.3 contiguity). Asserted
     // through the PUBLIC assembler (`assemble` runs `HistoryHygiene`), since the grouping helper
     // `historyGroups`/`HistoryGroup` is `private` to `ContextBuilder.swift` and not test-reachable.
-    let sessionId: Int64 = approval["session_id"]
+    let sessionID: Int64 = approval["session_id"]
     let contextBuilder = ContextBuilder(
       systemPrompt: SystemPrompt.minimal,
       workspace: FileSystemWorkspace(root: harness.workspaceRoot),
@@ -125,24 +127,32 @@ struct ScriptedAskTool: Tool {
       retriever: harness.stores.retriever,
       budget: .default
     )
-    let lastMessageId = try await ClawDatabase.makePool(path: harness.databasePath).read { db in
+    let lastMessageID = try await ClawDatabase.makePool(path: harness.databasePath).read { db in
       try Int64.fetchOne(
         db,
         sql: "SELECT MAX(id) FROM messages WHERE session_id = ?",
-        arguments: [sessionId]
+        arguments: [sessionID]
       ) ?? 0
     }
     let snapshot = try harness.stores.sessionMessages.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: lastMessageId,
+      sessionID: sessionID,
+      throughMessageID: lastMessageID,
       limit: 50
     )
     let assembled = try contextBuilder.assemble(
       snapshot: snapshot,
-      sessionId: sessionId,
+      sessionID: sessionID,
       origin: .interactive
     )
-    #expect(assembled.messages.contains { $0.role == .assistant && $0.toolCalls.isEmpty == false })
-    #expect(assembled.messages.contains { $0.role == .tool })
+    #expect(
+      assembled.messages.contains {
+        $0.role == .assistant && $0.toolCalls.isEmpty == false
+      }
+    )
+    #expect(
+      assembled.messages.contains {
+        $0.role == .tool
+      }
+    )
   }
 }

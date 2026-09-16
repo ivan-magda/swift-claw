@@ -23,7 +23,9 @@ enum CoderHealthRows {
     static let usage = "coder.usage"
   }
 
-  static var disabled: [DoctorReport.Check] { [row(Key.enabled, "false")] }
+  static var disabled: [DoctorReport.Check] {
+    [row(Key.enabled, "false")]
+  }
 
   static func unavailable(config: CoderConfig, error: (any Error)? = nil) -> [DoctorReport.Check] {
     let reason: String
@@ -68,7 +70,8 @@ enum CoderHealthRows {
         setup.permitsSubmission ? "true (compatible CLI)" : "false",
         ok: setup.permitsSubmission
       ),
-      row(Key.executable, setup.executable, headline: true), row(Key.version, setup.version),
+      row(Key.executable, setup.executable, headline: true),
+      row(Key.version, setup.version),
       row(Key.configHome, setup.configHome ?? "default"),
       row(Key.profile, setup.profile ?? "default"),
       row(Key.authentication, authentication, ok: authOK),
@@ -98,7 +101,7 @@ enum CoderHealthRows {
   static func configuration(
     config: CoderConfig,
     live: Bool,
-    resolve: @Sendable (CoderConfig) async throws -> CoderBackendSetup
+    resolve: @Sendable (_ config: CoderConfig) async throws -> CoderBackendSetup
   ) async -> [DoctorReport.Check] {
     guard config.enabled else {
       return disabled
@@ -175,7 +178,7 @@ enum CoderHealthRows {
         Key.serviceFailure,
         failure == nil ? "none" : "fatal persistence/process cleanup failure",
         ok: failure == nil
-      )
+      ),
     ]
   }
 }
@@ -192,7 +195,8 @@ private extension CoderHealthRows {
 
   static func configurationRows(_ config: CoderConfig) -> [DoctorReport.Check] {
     [
-      row(Key.enabled, "true"), row(Key.executable, "\(config.executable) (configured)"),
+      row(Key.enabled, "true"),
+      row(Key.executable, "\(config.executable) (configured)"),
       row(Key.configHome, config.configHome ?? "inherited CODEX_HOME or daemon HOME/.codex"),
       row(Key.profile, config.profile ?? "default"),
       row(Key.capacity, String(config.maxConcurrentJobs)),
@@ -206,13 +210,7 @@ private extension CoderHealthRows {
     ok: Bool = true,
     headline: Bool = false
   ) -> DoctorReport.Check {
-    DoctorReport.Check(
-      key: key,
-      value: value,
-      ok: ok,
-      group: .coder,
-      isHeadline: headline
-    )
+    DoctorReport.Check(key: key, value: value, ok: ok, group: .coder, isHeadline: headline)
   }
 
   static func unreadable(_ key: String) -> DoctorReport.Check {

@@ -18,8 +18,10 @@ public enum RuntimeHTTPClientRole: Sendable, CaseIterable, Equatable {
   /// redirect-following default it has always used.
   public var egressProfile: HTTPClientProfile {
     switch self {
-    case .telegram: return .redirectFollowing
-    case .llm, .tool: return .protectedEgress
+    case .telegram:
+      return .redirectFollowing
+    case .llm, .tool:
+      return .protectedEgress
     }
   }
 }
@@ -37,7 +39,7 @@ public struct RuntimeHTTPClients<Client: Sendable>: Sendable {
 
   /// Builds the three clients by role. The order is fixed — Telegram, then LLM, then tool — so an
   /// injected maker observes the same sequence production creates them in.
-  public init(makeClient: (RuntimeHTTPClientRole) throws -> Client) rethrows {
+  public init(makeClient: (_ role: RuntimeHTTPClientRole) throws -> Client) rethrows {
     telegram = try makeClient(.telegram)
     llm = try makeClient(.llm)
     tool = try makeClient(.tool)
@@ -68,10 +70,9 @@ extension RuntimeHTTPClients where Client == RuntimeHTTPClient {
         eventLoopGroupProvider: .singleton,
         configuration: role.egressProfile.configuration
       )
-      return RuntimeHTTPClient(
-        executor: AsyncHTTPExecutor(client: client),
-        close: { try await client.shutdown() }
-      )
+      return RuntimeHTTPClient(executor: AsyncHTTPExecutor(client: client)) {
+        try await client.shutdown()
+      }
     }
   }
 }

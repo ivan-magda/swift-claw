@@ -7,7 +7,9 @@ import Testing
 struct MockHTTPExecutor: HTTPExecuting {
   let result: HTTPResult
 
-  func execute(_ request: HTTPRequest) async throws -> HTTPResult { result }
+  func execute(_ request: HTTPRequest) async throws -> HTTPResult {
+    result
+  }
 }
 
 /// Local to this suite: it answers with one canned result and records the fields the Telegram wire
@@ -31,11 +33,7 @@ struct RecordingHTTPExecutor: HTTPExecuting {
   let result: HTTPResult
 
   func execute(_ request: HTTPRequest) async throws -> HTTPResult {
-    await recorder.append(
-      url: request.url,
-      body: request.body ?? Data(),
-      timeout: request.timeout
-    )
+    await recorder.append(url: request.url, body: request.body ?? Data(), timeout: request.timeout)
     return result
   }
 }
@@ -44,7 +42,10 @@ struct RecordingHTTPExecutor: HTTPExecuting {
 struct URLEchoingExecutor: HTTPExecuting {
   struct URLEchoError: Error, CustomStringConvertible {
     let url: String
-    var description: String { "connection failed for \(url)" }
+
+    var description: String {
+      "connection failed for \(url)"
+    }
   }
 
   func execute(_ request: HTTPRequest) async throws -> HTTPResult {
@@ -62,14 +63,16 @@ private func client(status: Int, json: String) -> TelegramClient {
   )
 }
 
-@Suite struct TelegramClientTests {
+@Suite
+struct TelegramClientTests {
   struct HTTPErrorCase: Sendable {
     let status: Int
     let json: String
     let expected: TelegramError
   }
 
-  @Test func decodesGetMe() async throws {
+  @Test
+  func decodesGetMe() async throws {
     // given
     let telegram = client(
       status: 200,
@@ -84,7 +87,8 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(identity.username == "claw_bot")
   }
 
-  @Test func decodesTextUpdate() async throws {
+  @Test
+  func decodesTextUpdate() async throws {
     // given
     let telegram = client(
       status: 200,
@@ -96,17 +100,21 @@ private func client(status: Int, json: String) -> TelegramClient {
     )
 
     // when
-    let updates =
-      try await telegram.getUpdates(offset: nil, timeout: 0, allowedUpdates: ["message"])
+    let updates = try await telegram.getUpdates(
+      offset: nil,
+      timeout: 0,
+      allowedUpdates: ["message"]
+    )
 
     // then
     let update = try #require(updates.first)
-    #expect(update.updateId == 12)
+    #expect(update.updateID == 12)
     #expect(update.message?.text == "hi")
-    #expect(update.message?.fromUserId == 42)
+    #expect(update.message?.fromUserID == 42)
   }
 
-  @Test func mapsMediaToFriendlyKind() async throws {
+  @Test
+  func mapsMediaToFriendlyKind() async throws {
     // given
     let telegram = client(
       status: 200,
@@ -118,8 +126,11 @@ private func client(status: Int, json: String) -> TelegramClient {
     )
 
     // when
-    let updates =
-      try await telegram.getUpdates(offset: nil, timeout: 0, allowedUpdates: ["message"])
+    let updates = try await telegram.getUpdates(
+      offset: nil,
+      timeout: 0,
+      allowedUpdates: ["message"]
+    )
 
     // then
     let update = try #require(updates.first)
@@ -127,34 +138,32 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(update.message?.text == nil)
   }
 
-  @Test(
-    arguments: [
-      HTTPErrorCase(
-        status: 409,
-        json: #"""
-          {"ok":false,"error_code":409,\#
-          "description":"Conflict: terminated by other getUpdates request"}
-          """#,
-        expected: TelegramError.conflict409(
-          description: "Conflict: terminated by other getUpdates request"
-        )
-      ),
-      HTTPErrorCase(
-        status: 429,
-        json: #"""
-          {"ok":false,"error_code":429,"description":"Too Many Requests",\#
-          "parameters":{"retry_after":7}}
-          """#,
-        expected: TelegramError.floodControl(retryAfter: 7)
-      ),
-      HTTPErrorCase(
-        status: 400,
-        json: #"{"ok":false,"error_code":400,"description":"Bad Request"}"#,
-        expected: TelegramError.apiError(code: 400, description: "Bad Request")
-      ),
-    ]
-  )
-  func mapsHttpStatusToTelegramError(_ errorCase: HTTPErrorCase) async throws {
+  @Test(arguments: [
+    HTTPErrorCase(
+      status: 409,
+      json: #"""
+        {"ok":false,"error_code":409,\#
+        "description":"Conflict: terminated by other getUpdates request"}
+        """#,
+      expected: TelegramError.conflict409(
+        description: "Conflict: terminated by other getUpdates request"
+      )
+    ),
+    HTTPErrorCase(
+      status: 429,
+      json: #"""
+        {"ok":false,"error_code":429,"description":"Too Many Requests",\#
+        "parameters":{"retry_after":7}}
+        """#,
+      expected: TelegramError.floodControl(retryAfter: 7)
+    ),
+    HTTPErrorCase(
+      status: 400,
+      json: #"{"ok":false,"error_code":400,"description":"Bad Request"}"#,
+      expected: TelegramError.apiError(code: 400, description: "Bad Request")
+    ),
+  ])
+  func mapsHTTPStatusToTelegramError(_ errorCase: HTTPErrorCase) async throws {
     // given
     let telegram = client(status: errorCase.status, json: errorCase.json)
 
@@ -164,7 +173,8 @@ private func client(status: Int, json: String) -> TelegramClient {
     }
   }
 
-  @Test func malformedBodyIsDecodingError() async throws {
+  @Test
+  func malformedBodyIsDecodingError() async throws {
     // given
     let telegram = client(status: 200, json: "not json")
 
@@ -182,7 +192,8 @@ private func client(status: Int, json: String) -> TelegramClient {
     }
   }
 
-  @Test func transportErrorRedactsTheBotToken() async throws {
+  @Test
+  func transportErrorRedactsTheBotToken() async throws {
     // given: the token is in the request URL; a transport error echoing the URL must NOT leak it
     let telegram = TelegramClient(
       token: "SECRET-123:abc",
@@ -208,7 +219,8 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(message.contains(SecretRedactor.replacement))
   }
 
-  @Test func setMyCommandsPostsCorrectPayload() async throws {
+  @Test
+  func setMyCommandsPostsCorrectPayload() async throws {
     // given
     let recorder = RecordingHTTPExecutor.Recorder()
     let http = RecordingHTTPExecutor(
@@ -222,11 +234,13 @@ private func client(status: Int, json: String) -> TelegramClient {
     let telegram = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
 
     // when
-    try await telegram.setMyCommands([
-      BotMenuCommand(command: "start", description: "Start the bot."),
-      BotMenuCommand(command: "new", description: "Start a new session."),
-      BotMenuCommand(command: "stop", description: "Stop the current run."),
-    ])
+    try await telegram.setMyCommands(
+      [
+        BotMenuCommand(command: "start", description: "Start the bot."),
+        BotMenuCommand(command: "new", description: "Start a new session."),
+        BotMenuCommand(command: "stop", description: "Stop the current run."),
+      ]
+    )
 
     // then
     let call = try #require(await recorder.calls.first)
@@ -240,7 +254,8 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(commands[2]["command"] as? String == "stop")
   }
 
-  @Test func sendsRichMessageDraftWithDraftIdAndMarkdown() async throws {
+  @Test
+  func sendsRichMessageDraftWithDraftIDAndMarkdown() async throws {
     // given
     let recorder = RecordingHTTPExecutor.Recorder()
     let http = RecordingHTTPExecutor(
@@ -254,7 +269,7 @@ private func client(status: Int, json: String) -> TelegramClient {
     let telegram = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
 
     // when
-    let sent = try await telegram.sendRichMessageDraft(chatId: 42, draftId: 99, markdown: "**hi**")
+    let sent = try await telegram.sendRichMessageDraft(chatID: 42, draftID: 99, markdown: "**hi**")
 
     // then
     #expect(sent)
@@ -270,7 +285,8 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(linkPreviewOptions["is_disabled"] as? Bool == true)
   }
 
-  @Test func sendMessageDisablesLinkPreviews() async throws {
+  @Test
+  func sendMessageDisablesLinkPreviews() async throws {
     // given: an exfil-approval prompt embeds an attacker-chosen URL in outbound text; Telegram
     // must never auto-fetch it to build a preview (ARCHITECTURE.md §12), regardless of the owner's
     // eventual answer.
@@ -286,10 +302,10 @@ private func client(status: Int, json: String) -> TelegramClient {
     let telegram = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
 
     // when
-    let messageId = try await telegram.sendMessage(chatId: 42, text: "https://evil.example/exfil")
+    let messageID = try await telegram.sendMessage(chatID: 42, text: "https://evil.example/exfil")
 
     // then
-    #expect(messageId == 7)
+    #expect(messageID == 7)
     let call = try #require(await recorder.calls.first)
     let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
     #expect(body["chat_id"] as? Int == 42)
@@ -298,7 +314,8 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(linkPreviewOptions["is_disabled"] as? Bool == true)
   }
 
-  @Test func getUpdatesSocketTimeoutIsLongPollTimeoutPlusTenSeconds() async throws {
+  @Test
+  func getUpdatesSocketTimeoutIsLongPollTimeoutPlusTenSeconds() async throws {
     // given (§18-A3): the socket read timeout must outlive the long poll by exactly 10 s, so a
     // stalled poll is cut and re-issued instead of hanging the loop across a network gap
     let recorder = RecordingHTTPExecutor.Recorder()
@@ -324,7 +341,8 @@ private func client(status: Int, json: String) -> TelegramClient {
     #expect(TelegramClient.defaultHTTPTimeoutSlackSeconds == 10)
   }
 
-  @Test func getUpdatesPutsNonNilOffsetOnTheWire() async throws {
+  @Test
+  func getUpdatesPutsNonNilOffsetOnTheWire() async throws {
     // given
     let recorder = RecordingHTTPExecutor.Recorder()
     let http = RecordingHTTPExecutor(

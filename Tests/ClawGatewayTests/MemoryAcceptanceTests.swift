@@ -14,18 +14,18 @@ import Testing
 /// Increment 3a acceptance gate (spec §14): the SC2 memory lifecycle plus the cross-cutting
 /// integration seams — restart recall, delivered overflow notices, and the dormant ②/③ signals —
 /// exercised over the real router → lane → TurnRunner → outbox stack.
-@Suite struct MemoryAcceptanceTests {
+@Suite
+struct MemoryAcceptanceTests {
   private func runStates(_ writer: any DatabaseWriter) throws -> [String] {
     try writer.read { db in
       try String.fetchAll(db, sql: "SELECT state FROM runs ORDER BY id ASC")
     }
   }
 
-  private func waitForRunStates(
-    _ writer: any DatabaseWriter,
-    expected: [String]
-  ) async throws {
-    _ = try await pollUntil { try runStates(writer) == expected ? expected : nil }
+  private func waitForRunStates(_ writer: any DatabaseWriter, expected: [String]) async throws {
+    _ = try await pollUntil {
+      try runStates(writer) == expected ? expected : nil
+    }
     #expect(try runStates(writer) == expected)
   }
 
@@ -41,7 +41,8 @@ import Testing
 
   /// SC2 (spec §1.1, §14): tell it a fact today; it recalls it in a new conversation after a real
   /// restart; the owner reviews it with provenance and deletes it — and it stops being injected.
-  @Test func sc2FactSurvivesRestartIsRecalledReviewedAndDeleted() async throws {
+  @Test
+  func sc2FactSurvivesRestartIsRecalledReviewedAndDeleted() async throws {
     // given — a file-backed database so the restart between phases is a real reopen
     let path = makeTempDatabasePath()
     defer { try? FileManager.default.removeItem(atPath: path) }
@@ -53,10 +54,10 @@ import Testing
       try ClawDatabase.migrate(firstPool)
       let firstStack = try makeStack(writer: firstPool, outcome: .respond("unused"))
       _ = await firstStack.router.handle(
-        rawUpdate: textUpdate(id: 1, from: firstStack.chatId, text: "/remember project: ship 3a")
+        rawUpdate: textUpdate(id: 1, from: firstStack.chatID, text: "/remember project: ship 3a")
       )
       _ = await firstStack.router.handle(
-        rawUpdate: textUpdate(id: 2, from: firstStack.chatId, text: "yes")
+        rawUpdate: textUpdate(id: 2, from: firstStack.chatID, text: "yes")
       )
 
       // then — the confirmed fact and its audit row are durable before the "process" exits
@@ -77,9 +78,9 @@ import Testing
     try await pool.write { db in
       try db.execute(sql: "UPDATE memory_items SET created_at = ?", arguments: [weekAgo])
     }
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 3, from: stack.chatId, text: "/new"))
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 3, from: stack.chatID, text: "/new"))
     _ = await stack.router.handle(
-      rawUpdate: textUpdate(id: 4, from: stack.chatId, text: "what are we working on?")
+      rawUpdate: textUpdate(id: 4, from: stack.chatID, text: "what are we working on?")
     )
     try await waitForRunStates(pool, expected: [RunState.done.rawValue])
 
@@ -97,7 +98,7 @@ import Testing
     #expect(labeledMessage.content.text.contains("ship 3a"))
 
     // when — phase 3: /memory review
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 5, from: stack.chatId, text: "/memory"))
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 5, from: stack.chatID, text: "/memory"))
 
     // then — the listing shows id, kind group, source, and the back-dated day (provenance, FR-M6)
     let savedItem = try #require(
@@ -110,11 +111,11 @@ import Testing
 
     // when — phase 4: confirmed delete, then one more turn
     _ = await stack.router.handle(
-      rawUpdate: textUpdate(id: 6, from: stack.chatId, text: "/memory delete \(savedItem.id)")
+      rawUpdate: textUpdate(id: 6, from: stack.chatID, text: "/memory delete \(savedItem.id)")
     )
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 7, from: stack.chatId, text: "yes"))
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 7, from: stack.chatID, text: "yes"))
     _ = await stack.router.handle(
-      rawUpdate: textUpdate(id: 8, from: stack.chatId, text: "and now?")
+      rawUpdate: textUpdate(id: 8, from: stack.chatID, text: "and now?")
     )
     try await waitForRunStates(pool, expected: [RunState.done.rawValue, RunState.done.rawValue])
 
@@ -123,13 +124,16 @@ import Testing
     #expect(try auditActions(pool).contains(AuditAction.memoryDelete.rawValue))
     let finalRequest = try #require(await stack.provider.requests.last)
     #expect(
-      finalRequest.allSatisfy { message in message.content.text.contains("ship 3a") == false }
+      finalRequest.allSatisfy { message in
+        message.content.text.contains("ship 3a") == false
+      }
     )
   }
 
   /// R2 (spec §10.2): a plain message from before a restart is found via FTS5/BM25 in a fresh
   /// conversation window and injected as an untrusted-labeled recall row — not as history.
-  @Test func factMentionedBeforeRestartIsRecalledAfterNewConversation() async throws {
+  @Test
+  func factMentionedBeforeRestartIsRecalledAfterNewConversation() async throws {
     // given — a file-backed database so the FTS index must survive a real reopen
     let path = makeTempDatabasePath()
     defer { try? FileManager.default.removeItem(atPath: path) }
@@ -140,7 +144,7 @@ import Testing
       try ClawDatabase.migrate(firstPool)
       let firstStack = try makeStack(writer: firstPool, outcome: .respond("noted"))
       _ = await firstStack.router.handle(
-        rawUpdate: textUpdate(id: 1, from: firstStack.chatId, text: "the wifi password is hunter2")
+        rawUpdate: textUpdate(id: 1, from: firstStack.chatID, text: "the wifi password is hunter2")
       )
       try await waitForRunStates(firstPool, expected: [RunState.done.rawValue])
     }
@@ -149,9 +153,9 @@ import Testing
     let pool = try ClawDatabase.makePool(path: path)
     try ClawDatabase.migrate(pool)
     let stack = try makeStack(writer: pool, outcome: .respond("stub answer"))
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "/new"))
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatID, text: "/new"))
     _ = await stack.router.handle(
-      rawUpdate: textUpdate(id: 3, from: stack.chatId, text: "what is the wifi password?")
+      rawUpdate: textUpdate(id: 3, from: stack.chatID, text: "what is the wifi password?")
     )
     try await waitForRunStates(pool, expected: [RunState.done.rawValue, RunState.done.rawValue])
 
@@ -172,10 +176,13 @@ import Testing
   /// H2 (spec §6.1, §14): an over-cap MEMORY.md is omitted from the model context AND the owner
   /// receives the consolidation notice through the real outbox delivery path — and recovery
   /// commands keep working while the file is over cap.
-  @Test func overCapMemoryFileIsOmittedAndTheConsolidationNoticeIsDelivered() async throws {
+  @Test
+  func overCapMemoryFileIsOmittedAndTheConsolidationNoticeIsDelivered() async throws {
     // given — a real on-disk workspace whose MEMORY.md exceeds the 2200-grapheme hard cap
-    let workspaceRoot = URL(fileURLWithPath: NSTemporaryDirectory())
-      .appendingPathComponent("claw-workspace-\(UInt64.random(in: 0..<(.max)))", isDirectory: true)
+    let workspaceRoot = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(
+      "claw-workspace-\(UInt64.random(in: 0..<(.max)))",
+      isDirectory: true
+    )
     try FileManager.default.createDirectory(at: workspaceRoot, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: workspaceRoot) }
     let overCapBody = String(repeating: "OVERFLOW-CANARY ", count: 138)  // 2208 graphemes > 2200
@@ -193,7 +200,7 @@ import Testing
     )
 
     // when — a normal turn commits, then the dispatcher drains the outbox
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "hello"))
     try await waitForRunStates(queue, expected: [RunState.done.rawValue])
     await stack.dispatcher.drainOnce()
 
@@ -209,7 +216,7 @@ import Testing
     #expect(delivered.contains("stub answer"))
 
     // when — the owner runs a recovery command while the file is still over cap
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "/memory"))
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatID, text: "/memory"))
 
     // then — command handling is independent of context assembly (spec §6.1)
     #expect(await stack.transport.sent.last?.text == MemoryReplies.emptyReview(kind: nil))
@@ -218,49 +225,54 @@ import Testing
   /// ③ (spec §2, §7.5): the taint-read guard is wired but dormant. Untainted turns inject
   /// high-sensitivity items; once `sessions.tainted` is set (3b's job — forced here via SQL),
   /// the real snapshot → fetchRanked seam excludes them.
-  @Test func taintReadGuardExcludesHighSensitivityItemsThroughTheRealStores() async throws {
+  @Test
+  func taintReadGuardExcludesHighSensitivityItemsThroughTheRealStores() async throws {
     // given — one normal and one high-sensitivity fact in the real GRDB store
     let queue = try TestDatabase.make()
     let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
     let memoryCommands = MemoryCommandStoreGRDB(writer: queue)
     _ = try memoryCommands.applyRemember(
-      updateId: -1,
-      item: NewMemoryItem(text: "normal fact", kind: .user, sessionId: nil),
+      updateID: -1,
+      item: NewMemoryItem(text: "normal fact", kind: .user, sessionID: nil),
       now: Date(timeIntervalSince1970: 86_400)
     )
     _ = try memoryCommands.applyRemember(
-      updateId: -2,
-      item: NewMemoryItem(text: "secret omega", kind: .user, sensitivity: .high, sessionId: nil),
+      updateID: -2,
+      item: NewMemoryItem(text: "secret omega", kind: .user, sensitivity: .high, sessionID: nil),
       now: Date(timeIntervalSince1970: 172_800)
     )
 
     // when — an untainted turn runs
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hi"))
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "hi"))
     try await waitForRunStates(queue, expected: [RunState.done.rawValue])
 
     // then — the guard is dormant: both items inject while the session is untainted
     let untaintedRequest = try #require(await stack.provider.requests.first)
     let untaintedLabeled = try #require(
-      untaintedRequest.first { message in message.content.text.contains("label=\"memory_items\"") }
+      untaintedRequest.first { message in
+        message.content.text.contains("label=\"memory_items\"")
+      }
     )
     #expect(untaintedLabeled.content.text.contains("normal fact"))
     #expect(untaintedLabeled.content.text.contains("secret omega"))
 
     // when — the session is marked tainted (3a only READS this flag; 3b sets it)
-    let sessionId = try stack.sessionMessages.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatId: stack.chatId),
+    let sessionID = try stack.sessionMessages.loadOrCreateSession(
+      sessionKey: SessionKey.telegramDM(chatID: stack.chatID),
       now: Date()
     )
     try await queue.write { db in
-      try db.execute(sql: "UPDATE sessions SET tainted = 1 WHERE id = ?", arguments: [sessionId])
+      try db.execute(sql: "UPDATE sessions SET tainted = 1 WHERE id = ?", arguments: [sessionID])
     }
-    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "again"))
+    _ = await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatID, text: "again"))
     try await waitForRunStates(queue, expected: [RunState.done.rawValue, RunState.done.rawValue])
 
     // then — the tainted read excludes the high-sensitivity item and keeps the normal one
     let taintedRequest = try #require(await stack.provider.requests.last)
     let taintedLabeled = try #require(
-      taintedRequest.first { message in message.content.text.contains("label=\"memory_items\"") }
+      taintedRequest.first { message in
+        message.content.text.contains("label=\"memory_items\"")
+      }
     )
     #expect(taintedLabeled.content.text.contains("normal fact"))
     #expect(taintedLabeled.content.text.contains("secret omega") == false)
@@ -268,55 +280,57 @@ import Testing
 
   /// ② (spec §7.5): `hasPrivateDataAccess` over the REAL GRDB store — false with nothing durable,
   /// true the moment any memory_item is injected, false again after it is deleted.
-  @Test func hasPrivateDataAccessTracksMemoryInjectionOverTheRealStores() throws {
+  @Test
+  func hasPrivateDataAccessTracksMemoryInjectionOverTheRealStores() throws {
     // given — a builder over the real stores and an empty workspace
     let queue = try TestDatabase.make()
     let memoryCommands = MemoryCommandStoreGRDB(writer: queue)
     let builder = makeAcceptanceContextBuilder(writer: queue)
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [StoredMessage(role: .user, content: "hello", provenance: .trusted)],
-      historyMessageIds: [1],
-      windowStartMessageId: 0,
+      historyMessageIDs: [1],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when — nothing private exists yet
-    let emptyResult = try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive)
+    let emptyResult = try builder.assemble(snapshot: snapshot, sessionID: 1, origin: .interactive)
 
     // then
     #expect(emptyResult.hasPrivateDataAccess == false)
 
     // when — one durable fact is appended
     let remembered = try memoryCommands.applyRemember(
-      updateId: -1,
-      item: NewMemoryItem(text: "durable fact", kind: .user, sessionId: nil),
+      updateID: -1,
+      item: NewMemoryItem(text: "durable fact", kind: .user, sessionID: nil),
       now: Date(timeIntervalSince1970: 86_400)
     )
     let appended = try #require(remembered.item)
     let injectedResult = try builder.assemble(
       snapshot: snapshot,
-      sessionId: 1,
+      sessionID: 1,
       origin: .interactive
     )
 
     // then
     #expect(injectedResult.hasPrivateDataAccess)
     #expect(
-      injectedResult.messages.contains { message in message.content.text.contains("durable fact") }
+      injectedResult.messages.contains { message in
+        message.content.text.contains("durable fact")
+      }
     )
 
     // when — the fact is deleted again
     _ = try memoryCommands.applyForget(
-      updateId: -2,
-      itemId: appended.id,
+      updateID: -2,
+      itemID: appended.id,
       now: Date(timeIntervalSince1970: 172_800)
     )
-    let deletedResult = try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive)
+    let deletedResult = try builder.assemble(snapshot: snapshot, sessionID: 1, origin: .interactive)
 
     // then
     #expect(deletedResult.hasPrivateDataAccess == false)
   }
-}
-// swiftlint:enable function_body_length
+}  // swiftlint:enable function_body_length

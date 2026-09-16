@@ -9,13 +9,14 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct TurnRunnerOutcomeTests {
+@Suite
+struct TurnRunnerOutcomeTests {
   private struct Fixture {
     let runner: TurnRunner
     let stores: ClawStores
-    let sessionId: Int64
-    let runId: Int64
-    let triggerMessageId: Int64
+    let sessionID: Int64
+    let runID: Int64
+    let triggerMessageID: Int64
     let databasePath: String
   }
 
@@ -25,15 +26,16 @@ import Testing
     dispatcher: (any ToolDispatching)?,
     budget: RunBudget = .default
   ) throws -> Fixture {
-    let databasePath = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-sc3-\(UUID().uuidString).sqlite").path
+    let databasePath = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "claw-sc3-\(UUID().uuidString).sqlite"
+    ).path
     let stores = try ClawDatabase.openStores(path: databasePath)
     let claim = try stores.sessionMessages.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 7),
-        chatId: 7,
-        userId: 7,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 7),
+        chatID: 7,
+        userID: 7,
         text: "read https://example.com/a and summarize",
         isEdited: false,
         ts: Date()
@@ -68,9 +70,9 @@ import Testing
     return Fixture(
       runner: runner,
       stores: stores,
-      sessionId: claim.sessionId ?? 0,
-      runId: claim.runId ?? 0,
-      triggerMessageId: claim.triggerMessageId ?? 0,
+      sessionID: claim.sessionID ?? 0,
+      runID: claim.runID ?? 0,
+      triggerMessageID: claim.triggerMessageID ?? 0,
       databasePath: databasePath
     )
   }
@@ -84,12 +86,12 @@ import Testing
   /// notice-to-copy mapping, not how a real turn arrives at that outcome — the switching mechanics
   /// themselves are already covered by `AgentRuntimeFallbackTests`.
   private func runCommit(_ fixture: Fixture, _ outcome: TurnOutcome) async throws -> String {
-    _ = try fixture.stores.runs.pickUp(runId: fixture.runId, policyVersion: nil, now: Date())
+    _ = try fixture.stores.runs.pickUp(runID: fixture.runID, policyVersion: nil, now: Date())
     try await fixture.runner.commit(
       outcome,
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
       mode: .direct,
       ownerNotices: [],
       origin: .interactive
@@ -97,7 +99,8 @@ import Testing
     return try outboxPayloads(fixture).joined(separator: "\n\n")
   }
 
-  @Test func completedToolTurnPersistsExchangesTaintAndUsageRows() async throws {
+  @Test
+  func completedToolTurnPersistsExchangesTaintAndUsageRows() async throws {
     // given — one tool round-trip then an answer
     let fixture = try makeFixture(
       provider: SequenceProvider([
@@ -109,30 +112,37 @@ import Testing
 
     // when
     try await fixture.runner.run(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
-      triggerMessageId: fixture.triggerMessageId
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
+      triggerMessageID: fixture.triggerMessageID
     )
 
     // then — reply delivered; exchange rows + taint persisted (REOPEN the DB to assert, §17-1)
     #expect(
-      try outboxPayloads(fixture).contains { payload in payload.contains("summary of the page") }
+      try outboxPayloads(fixture).contains { payload in
+        payload.contains("summary of the page")
+      }
     )
     let reopened = try ClawDatabase.openStores(path: fixture.databasePath)
     let snapshot = try reopened.sessionMessages.loadContextSnapshot(
-      sessionId: fixture.sessionId,
-      throughMessageId: Int64.max,
+      sessionID: fixture.sessionID,
+      throughMessageID: Int64.max,
       limit: 50
     )
     #expect(snapshot.isTainted)
-    #expect(snapshot.history.contains { stored in stored.role == .tool })
+    #expect(
+      snapshot.history.contains { stored in
+        stored.role == .tool
+      }
+    )
     // two usage rows: the intermediate write + the commit-borne final row (D6)
     let totals = try reopened.usage.todayTokensAndCost(now: Date())
     #expect(totals.tokens > 0)
   }
 
-  @Test func degradedRunPersistsItsExecutedExchanges() async throws {
+  @Test
+  func degradedRunPersistsItsExecutedExchanges() async throws {
     // given — round-trip 1 executes one tool; round-trip 2 is unscripted, so the provider throws
     // terminal and the run degrades. The executed exchange must survive the failure commit.
     let provider = SequenceProvider([
@@ -142,19 +152,19 @@ import Testing
         usage: ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15),
         costFromProvider: 0.001,
         toolCalls: [
-          ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#)
+          ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"https://e.example/"}"#),
         ]
-      )
+      ),
     ])
     let dispatcher = ScriptedDispatcher(respond: okOutcome())
     let fixture = try makeFixture(provider: provider, dispatcher: dispatcher)
 
     // when
     try await fixture.runner.run(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
-      triggerMessageId: fixture.triggerMessageId
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
+      triggerMessageID: fixture.triggerMessageID
     )
 
     // then — the run FAILED, yet the anchor + observation rows exist in durable history
@@ -167,13 +177,14 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT state FROM runs WHERE id = ?",
-        arguments: [fixture.runId]
+        arguments: [fixture.runID]
       )
     }
     #expect(runState == RunState.failed.rawValue)
   }
 
-  @Test func budgetStoppedTurnStillTaints() async throws {
+  @Test
+  func budgetStoppedTurnStillTaints() async throws {
     // given — c1 executes (untrusted ingestion), then the per-run tool-call cap ends the run at c2
     // (rev.1 L4). maxToolCalls 1 makes the second proposal in the same batch trip the cap.
     let smallBudget = RunBudget(
@@ -190,7 +201,7 @@ import Testing
     )
     let fixture = try makeFixture(
       provider: SequenceProvider([
-        toolCallResponse([fetchProposal(id: "c1"), fetchProposal(id: "c2")])
+        toolCallResponse([fetchProposal(id: "c1"), fetchProposal(id: "c2")]),
       ]),
       dispatcher: ScriptedDispatcher(respond: okOutcome()),
       budget: smallBudget
@@ -198,25 +209,30 @@ import Testing
 
     // when
     try await fixture.runner.run(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
-      triggerMessageId: fixture.triggerMessageId
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
+      triggerMessageID: fixture.triggerMessageID
     )
 
     // then — the run FAILED with the named-cap reply (`Degradation.budget(cap:)`), and the taint
     // from c1's ingestion persisted even though the budget-stopped commit dropped the exchanges (§10).
     let payloads = try outboxPayloads(fixture)
-    #expect(payloads.contains { payload in payload.contains("per-run tool-call") })
+    #expect(
+      payloads.contains { payload in
+        payload.contains("per-run tool-call")
+      }
+    )
     let snapshot = try fixture.stores.sessionMessages.loadContextSnapshot(
-      sessionId: fixture.sessionId,
-      throughMessageId: Int64.max,
+      sessionID: fixture.sessionID,
+      throughMessageID: Int64.max,
       limit: 50
     )
     #expect(snapshot.isTainted)
   }
 
-  @Test func authenticationFailureDeliversTheExactLoginCopyAndDebitsNothing() async throws {
+  @Test
+  func authenticationFailureDeliversTheExactLoginCopyAndDebitsNothing() async throws {
     // given — the credential is refused before any inference begins (a clean, not-started head)
     let fixture = try makeFixture(
       provider: SequenceProvider([], then: ProviderError.authenticationRequired),
@@ -225,20 +241,25 @@ import Testing
 
     // when
     try await fixture.runner.run(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
-      triggerMessageId: fixture.triggerMessageId
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
+      triggerMessageID: fixture.triggerMessageID
     )
 
     // then — the pinned login sentence reaches the owner verbatim, and no usage row was written
     let payloads = try outboxPayloads(fixture)
     #expect(payloads.contains(Degradation.authenticationRequired))
-    #expect(payloads.contains { payload in payload.contains("clawd auth login") })
+    #expect(
+      payloads.contains { payload in
+        payload.contains("clawd auth login")
+      }
+    )
     #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
   }
 
-  @Test func quotaFailureSaysRetryNotLoginAndDebitsNothing() async throws {
+  @Test
+  func quotaFailureSaysRetryNotLoginAndDebitsNothing() async throws {
     // given
     let fixture = try makeFixture(
       provider: SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 30)),
@@ -247,20 +268,25 @@ import Testing
 
     // when
     try await fixture.runner.run(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
-      triggerMessageId: fixture.triggerMessageId
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
+      triggerMessageID: fixture.triggerMessageID
     )
 
     // then — the quota reply names the retry, never the login command, and debits nothing
     let payloads = try outboxPayloads(fixture)
     #expect(payloads.contains(Degradation.quotaLimited(retryAfterSeconds: 30)))
-    #expect(payloads.allSatisfy { payload in payload.contains("clawd auth login") == false })
+    #expect(
+      payloads.allSatisfy { payload in
+        payload.contains("clawd auth login") == false
+      }
+    )
     #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
   }
 
-  @Test func accessDenialDoesNotTellTheOwnerToLogIn() async throws {
+  @Test
+  func accessDenialDoesNotTellTheOwnerToLogIn() async throws {
     // given
     let fixture = try makeFixture(
       provider: SequenceProvider([], then: ProviderError.accessDenied),
@@ -269,20 +295,25 @@ import Testing
 
     // when
     try await fixture.runner.run(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
-      triggerMessageId: fixture.triggerMessageId
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
+      triggerMessageID: fixture.triggerMessageID
     )
 
     // then — the access reply never names the login recovery, and debits nothing
     let payloads = try outboxPayloads(fixture)
     #expect(payloads.contains(Degradation.accessDenied))
-    #expect(payloads.allSatisfy { payload in payload.contains("clawd auth login") == false })
+    #expect(
+      payloads.allSatisfy { payload in
+        payload.contains("clawd auth login") == false
+      }
+    )
     #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
   }
 
-  @Test func rejectedReplayStateGivesNewGuidanceAndDebitsNothing() async throws {
+  @Test
+  func rejectedReplayStateGivesNewGuidanceAndDebitsNothing() async throws {
     // given
     let fixture = try makeFixture(
       provider: SequenceProvider([], then: ProviderError.invalidProviderState),
@@ -291,17 +322,25 @@ import Testing
 
     // when
     try await fixture.runner.run(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
-      chatId: 7,
-      triggerMessageId: fixture.triggerMessageId
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
+      chatID: 7,
+      triggerMessageID: fixture.triggerMessageID
     )
 
     // then — safe /new guidance, never a login prompt, and debits nothing
     let payloads = try outboxPayloads(fixture)
     #expect(payloads.contains(Degradation.invalidProviderState))
-    #expect(payloads.contains { payload in payload.contains("/new") })
-    #expect(payloads.allSatisfy { payload in payload.contains("clawd auth login") == false })
+    #expect(
+      payloads.contains { payload in
+        payload.contains("/new")
+      }
+    )
+    #expect(
+      payloads.allSatisfy { payload in
+        payload.contains("clawd auth login") == false
+      }
+    )
     #expect(try fixture.stores.usage.todayTokensAndCost(now: Date()).tokens == 0)
   }
 
@@ -312,7 +351,7 @@ import Testing
     let outcome = TurnOutcome(
       result: .completed(
         content: "answer",
-        usage: usageFixture(sessionId: fixture.sessionId),
+        usage: usageFixture(sessionID: fixture.sessionID),
         providerState: nil
       ),
       routeNotice: .switched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4")
@@ -333,7 +372,7 @@ import Testing
     let outcome = TurnOutcome(
       result: .completed(
         content: "answer",
-        usage: usageFixture(sessionId: fixture.sessionId),
+        usage: usageFixture(sessionID: fixture.sessionID),
         providerState: nil
       ),
       routeNotice: nil
@@ -353,7 +392,7 @@ import Testing
     let outcome = TurnOutcome(
       result: .completed(
         content: "answer",
-        usage: usageFixture(sessionId: fixture.sessionId),
+        usage: usageFixture(sessionID: fixture.sessionID),
         providerState: nil
       ),
       routeNotice: .restored(route: "openai-chatgpt/gpt-5.4")
@@ -415,8 +454,7 @@ import Testing
 
     // then
     #expect(
-      sent
-        == "\(Degradation.budget(cap: "per-run tool-call"))\n\n"
+      sent == "\(Degradation.budget(cap: "per-run tool-call"))\n\n"
         + "\(Degradation.routeSwitched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4"))"
     )
   }
@@ -425,10 +463,7 @@ import Testing
   func budgetStoppedWithNoNoticeIsUnchanged() async throws {
     // given
     let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
-    let outcome = TurnOutcome(
-      result: .budgetStopped(cap: "per-run tool-call"),
-      routeNotice: nil
-    )
+    let outcome = TurnOutcome(result: .budgetStopped(cap: "per-run tool-call"), routeNotice: nil)
 
     // when
     let sent = try await runCommit(fixture, outcome)

@@ -172,6 +172,7 @@ set it), USD budgets, schedules and quiet hours, voice locales, sandbox limits.
 | Make it yours | [docs/CUSTOMIZATION.md](docs/CUSTOMIZATION.md) |
 | Run it as a service | [docs/INSTALL.md](docs/INSTALL.md#4-running-as-a-service) |
 | Develop and test locally | [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) |
+| Follow the Swift style baseline | [docs/CODE_STYLE.md](docs/CODE_STYLE.md) |
 | Understand the design | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Report a vulnerability | [SECURITY.md](SECURITY.md) |
 

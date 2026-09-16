@@ -62,16 +62,8 @@ struct ChatGPTValidatedCredential: Sendable, Equatable {
     self.stored = stored
   }
 
-  var profileID: UUID { stored.profileID }
-  var accessToken: String { stored.accessToken }
-  var refreshToken: String { stored.refreshToken }
-  var expiresAt: Date { stored.expiresAt }
-
   init?(_ stored: StoredOAuthCredential) {
-    guard
-      Self.isSpendable(stored.accessToken),
-      Self.isSpendable(stored.refreshToken)
-    else {
+    guard Self.isSpendable(stored.accessToken), Self.isSpendable(stored.refreshToken) else {
       return nil
     }
     self.stored = stored
@@ -91,6 +83,22 @@ struct ChatGPTValidatedCredential: Sendable, Equatable {
     )
   }
 
+  var profileID: UUID {
+    stored.profileID
+  }
+
+  var accessToken: String {
+    stored.accessToken
+  }
+
+  var refreshToken: String {
+    stored.refreshToken
+  }
+
+  var expiresAt: Date {
+    stored.expiresAt
+  }
+
   func requiringRefresh() -> Self {
     Self(
       validated: StoredOAuthCredential(
@@ -103,10 +111,8 @@ struct ChatGPTValidatedCredential: Sendable, Equatable {
   }
 
   private static func isSpendable(_ token: String) -> Bool {
-    ChatGPTWireValues.headerSafeToken(
-      token,
-      maxBytes: ChatGPTProviderMetadata.maximumTokenBytes
-    ) != nil
+    ChatGPTWireValues.headerSafeToken(token, maxBytes: ChatGPTProviderMetadata.maximumTokenBytes)
+      != nil
   }
 }
 
@@ -262,7 +268,9 @@ where ClockType.Duration == Duration {
 // MARK: - State
 
 private extension ChatGPTCredentialSource {
-  static var initialGeneration: LLMCredentialGeneration { LLMCredentialGeneration(value: 1) }
+  static var initialGeneration: LLMCredentialGeneration {
+    LLMCredentialGeneration(value: 1)
+  }
 
   struct TokenPair: Sendable, Equatable {
     let accessToken: String
@@ -484,17 +492,20 @@ private extension ChatGPTCredentialSource {
   func join(_ flight: Flight) async throws -> LLMRequestAuthorization {
     lastWaiterID += 1
     let waiterID = lastWaiterID
-    return try await withTaskCancellationHandler {
-      try await withCheckedThrowingContinuation { continuation in
-        // Runs on this actor with no suspension between the state check that chose this flight and
-        // the registration, so a finalizer cannot slip past a caller on its way in.
-        waiters[waiterID] = continuation
+    return try await withTaskCancellationHandler(
+      operation: {
+        try await withCheckedThrowingContinuation { continuation in
+          // Runs on this actor with no suspension between the state check that chose this flight and
+          // the registration, so a finalizer cannot slip past a caller on its way in.
+          waiters[waiterID] = continuation
+        }
+      },
+      onCancel: {
+        Task {
+          await self.abandon(waiterID: waiterID)
+        }
       }
-    } onCancel: {
-      Task {
-        await self.abandon(waiterID: waiterID)
-      }
-    }
+    )
   }
 
   /// One waiter leaving. It resumes only itself: the flight belongs to every other waiter too, and

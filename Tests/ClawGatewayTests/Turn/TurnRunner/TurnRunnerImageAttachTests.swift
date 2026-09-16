@@ -6,13 +6,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct TurnRunnerImageAttachTests {
-  private let alpha = ImagePart(
-    data: ImageFixtures.jpeg,
-    mediaType: .jpeg,
-    width: 640,
-    height: 480
-  )
+@Suite
+struct TurnRunnerImageAttachTests {
+  private let alpha = ImagePart(data: ImageFixtures.jpeg, mediaType: .jpeg, width: 640, height: 480)
+
   private let beta = ImagePart(
     data: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
     mediaType: .png,
@@ -20,29 +17,26 @@ import Testing
     height: 240
   )
 
-  @Test func eachImageStaysOnItsOwnMessageThroughTheRowsSanitizingDrops() throws {
+  @Test
+  func eachImageStaysOnItsOwnMessageThroughTheRowsSanitizingDrops() throws {
     // given — a leading orphaned tool row, which sanitizing drops and every later position shifts by
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [
-        StoredMessage(role: .tool, content: "orphan", provenance: .untrusted, toolCallId: "gone"),
+        StoredMessage(role: .tool, content: "orphan", provenance: .untrusted, toolCallID: "gone"),
         StoredMessage(role: .user, content: "first caption", provenance: .untrusted),
         StoredMessage(role: .assistant, content: "an answer", provenance: .trusted),
         StoredMessage(role: .user, content: "second caption", provenance: .untrusted),
       ],
-      historyMessageIds: [10, 11, 12, 13],
-      windowStartMessageId: nil,
+      historyMessageIDs: [10, 11, 12, 13],
+      windowStartMessageID: nil,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
     let enriched = TurnRunner.attach([11: alpha, 13: beta], to: snapshot)
-    let result = try makeBuilder().assemble(
-      snapshot: enriched,
-      sessionId: 1,
-      origin: .interactive
-    )
+    let result = try makeBuilder().assemble(snapshot: enriched, sessionID: 1, origin: .interactive)
 
     // then — each image sits on the row it arrived on, and survives into that row's rendered message
     #expect(enriched.history.map(\.image) == [nil, alpha, nil, beta])
@@ -60,7 +54,8 @@ import Testing
     #expect(second.content.images == [beta])
   }
 
-  @Test func aCachedImageReachesTheProviderOnTheMessageItArrivedOn() async throws {
+  @Test
+  func aCachedImageReachesTheProviderOnTheMessageItArrivedOn() async throws {
     // given — a real run whose trigger message has an image waiting in the cache it was handed
     let env = try makeEnv(
       agentOutcome: .respond(
@@ -72,14 +67,14 @@ import Testing
         )
       )
     )
-    await env.imageCache.store(alpha, sessionId: env.sessionId, messageId: env.triggerMessageId)
+    await env.imageCache.store(alpha, sessionID: env.sessionID, messageID: env.triggerMessageID)
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — the image crossed every stage between the cache and the wire, on exactly one message
@@ -95,7 +90,8 @@ import Testing
   /// The approval detour is exactly the path a photo takes when its caption asks for something
   /// gated: the second half of that turn runs through `resume`, not `run`, and would answer about
   /// pixels it never received if replay were wired to only one of the two.
-  @Test func aCachedImageStillReachesTheProviderOnAResumedRun() async throws {
+  @Test
+  func aCachedImageStillReachesTheProviderOnAResumedRun() async throws {
     // given — a turn suspended on a gated tool, with the trigger message's photo in the cache
     let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
     let env = try makeEnv(
@@ -107,17 +103,19 @@ import Testing
           costFromProvider: 0.0021
         )
       ),
-      now: { fixedNow }
+      now: {
+        fixedNow
+      }
     )
-    await env.imageCache.store(alpha, sessionId: env.sessionId, messageId: env.triggerMessageId)
-    let observationMessageId = try await suspendOnAGatedFetchThenApprove(env: env, now: fixedNow)
+    await env.imageCache.store(alpha, sessionID: env.sessionID, messageID: env.triggerMessageID)
+    let observationMessageID = try await suspendOnAGatedFetchThenApprove(env: env, now: fixedNow)
 
     // when
     await env.runner.resume(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      contextBoundMessageId: observationMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      contextBoundMessageID: observationMessageID
     )
 
     // then — the continuation carries the image on the message it arrived on, exactly as `run` does
@@ -130,7 +128,8 @@ import Testing
     #expect(carrying.first?.content.images == [alpha])
   }
 
-  @Test func theReplayBudgetIsSpentOnlyOnImagesInsideTheHistoryWindow() throws {
+  @Test
+  func theReplayBudgetIsSpentOnlyOnImagesInsideTheHistoryWindow() throws {
     // given — two images each big enough to exhaust the aggregate cap alone: one on an older row
     // still inside the window, one on a row the window rolled past. Budgeting walks newest-first, so
     // the small in-window image is reached first and both giants are then unaffordable.
@@ -138,13 +137,13 @@ import Testing
     let overBudget = ImagePart(data: hugeBytes, mediaType: .jpeg, width: 4_000, height: 3_000)
     let rolledPast = ImagePart(data: hugeBytes, mediaType: .png, width: 4_000, height: 3_000)
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [
         StoredMessage(role: .user, content: "older caption", provenance: .untrusted),
         StoredMessage(role: .user, content: "newer caption", provenance: .untrusted),
       ],
-      historyMessageIds: [20, 21],
-      windowStartMessageId: nil,
+      historyMessageIDs: [20, 21],
+      windowStartMessageID: nil,
       isTainted: false,
       hasPrivateData: false
     )

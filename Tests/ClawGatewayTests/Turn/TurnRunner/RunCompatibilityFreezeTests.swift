@@ -9,8 +9,10 @@ import Testing
 /// A run's compatibility surface is frozen at pickup, not read back at sealing. Without this hop
 /// every bound run seals with no surface at all, and the whole learning loop degrades to
 /// `insufficient_evidence` in silence.
-@Suite struct RunCompatibilityFreezeTests {
-  @Test func pickupFreezesTheSurfaceAgainstTheRunsOwnPolicyVersion() async throws {
+@Suite
+struct RunCompatibilityFreezeTests {
+  @Test
+  func pickupFreezesTheSurfaceAgainstTheRunsOwnPolicyVersion() async throws {
     // given
     let recorder = SurfaceFreezeRecorder()
     let env = try makeEnv(
@@ -22,17 +24,17 @@ import Testing
           costFromProvider: 0.0021
         )
       ),
-      freezeLearningSurface: { runId, policyVersion in
-        recorder.record(runId: runId, policyVersion: policyVersion)
+      freezeLearningSurface: { runID, policyVersion in
+        recorder.record(runID: runID, policyVersion: policyVersion)
       }
     )
 
     // when
     try await env.runner.run(
-      runId: env.runId,
-      sessionId: env.sessionId,
-      chatId: env.chatId,
-      triggerMessageId: env.triggerMessageId
+      runID: env.runID,
+      sessionID: env.sessionID,
+      chatID: env.chatID,
+      triggerMessageID: env.triggerMessageID
     )
 
     // then — once, for this run, against the exact version the same pickup stamped on it
@@ -40,11 +42,11 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT policy_version FROM runs WHERE id = ?",
-        arguments: [env.runId]
+        arguments: [env.runID]
       )
     }
     #expect(recorder.calls.count == 1)
-    #expect(recorder.calls.first?.runId == env.runId)
+    #expect(recorder.calls.first?.runID == env.runID)
     #expect(recorder.calls.first?.policyVersion == stamped)
   }
 }
@@ -55,7 +57,7 @@ import Testing
 /// an actor.
 private final class SurfaceFreezeRecorder: @unchecked Sendable {
   struct Call: Equatable {
-    let runId: Int64
+    let runID: Int64
     let policyVersion: String
   }
 
@@ -68,9 +70,9 @@ private final class SurfaceFreezeRecorder: @unchecked Sendable {
     return recorded
   }
 
-  func record(runId: Int64, policyVersion: String) {
+  func record(runID: Int64, policyVersion: String) {
     lock.lock()
     defer { lock.unlock() }
-    recorded.append(Call(runId: runId, policyVersion: policyVersion))
+    recorded.append(Call(runID: runID, policyVersion: policyVersion))
   }
 }

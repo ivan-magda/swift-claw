@@ -2,13 +2,15 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct UnauthorizedStartTextTests {
-  @Test func refusalCarriesACopyPasteableAllowlistLine() {
+@Suite
+struct UnauthorizedStartTextTests {
+  @Test
+  func refusalCarriesACopyPasteableAllowlistLine() {
     // given
-    let userId: Int64 = 12_345_678
+    let userID: Int64 = 12345678
 
     // when
-    let text = MessageRouter.unauthorizedStartText(userId: userId)
+    let text = MessageRouter.unauthorizedStartText(userID: userID)
 
     // then — the owner can paste the last line into clawd.env verbatim
     #expect(text.contains("This is a private bot."))

@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawAuth
 
-@Suite struct ChatGPTWireValuesTests {
+@Suite
+struct ChatGPTWireValuesTests {
   // MARK: - Positive Integer: Accepted Encodings
 
   @Test(arguments: [
@@ -82,11 +83,7 @@ import Testing
 
   // MARK: - Header-Safe Token: Accepted
 
-  @Test(arguments: [
-    "abc123",
-    "eyJhbGciOiJub25lIn0.eyJhIjoxfQ.sig",
-    "acct_-._~+/=",
-  ])
+  @Test(arguments: ["abc123", "eyJhbGciOiJub25lIn0.eyJhIjoxfQ.sig", "acct_-._~+/="])
   func headerSafeTokenAcceptsBoundedAsciiWithoutWhitespace(raw: String) {
     // given / when
     let accepted = ChatGPTWireValues.headerSafeToken(raw, maxBytes: 256)
@@ -95,7 +92,8 @@ import Testing
     #expect(accepted == raw)
   }
 
-  @Test func headerSafeTokenAcceptsAValueExactlyAtTheByteCap() {
+  @Test
+  func headerSafeTokenAcceptsAValueExactlyAtTheByteCap() {
     // given
     let exact = String(repeating: "a", count: 256)
 
@@ -105,7 +103,8 @@ import Testing
 
   // MARK: - Header-Safe Token: Rejected
 
-  @Test func headerSafeTokenRejectsAValueOneByteOverTheCap() {
+  @Test
+  func headerSafeTokenRejectsAValueOneByteOverTheCap() {
     // given
     let oversized = String(repeating: "a", count: 257)
 
@@ -121,7 +120,7 @@ import Testing
     "has\r\ncrlf",
     "trailing ",
     " leading",
-    "nul\u{0}byte",
+    "nul\0byte",
     "esc\u{1B}[31m",
     "del\u{7F}",
     // A C1 control is invisible in a terminal and is not ASCII; both bars must reject it.
@@ -136,7 +135,8 @@ import Testing
     #expect(ChatGPTWireValues.headerSafeToken(raw, maxBytes: 256) == nil)
   }
 
-  @Test func headerSafeTokenMeasuresTheCapInUtf8BytesNotCharacters() {
+  @Test
+  func headerSafeTokenMeasuresTheCapInUTF8BytesNotCharacters() {
     // given
     // Four scalars, but eight UTF-8 bytes: a character count would wrongly admit this.
     let multiByte = "ééée"
@@ -163,7 +163,8 @@ import Testing
     #expect(accepted == raw)
   }
 
-  @Test func controlFreeAcceptsAValueExactlyAtTheByteCap() {
+  @Test
+  func controlFreeAcceptsAValueExactlyAtTheByteCap() {
     // given
     let exact = String(repeating: "A", count: 128)
 
@@ -173,7 +174,8 @@ import Testing
 
   // MARK: - Control-Free: Rejected
 
-  @Test func controlFreeRejectsAValueOneByteOverTheCap() {
+  @Test
+  func controlFreeRejectsAValueOneByteOverTheCap() {
     // given
     let oversized = String(repeating: "A", count: 129)
 
@@ -183,7 +185,7 @@ import Testing
 
   @Test(arguments: [
     "",
-    "code\u{0}nul",
+    "code\0nul",
     "code\u{7}bell",
     "code\ttab",
     "code\nnewline",
@@ -197,7 +199,8 @@ import Testing
     #expect(ChatGPTWireValues.controlFree(raw, maxBytes: 128) == nil)
   }
 
-  @Test func controlFreeMeasuresTheCapInUtf8BytesNotCharacters() {
+  @Test
+  func controlFreeMeasuresTheCapInUTF8BytesNotCharacters() {
     // given
     let multiByte = "ééé"
 
@@ -210,7 +213,8 @@ import Testing
 
   // MARK: - Safe Remote Diagnostic: Sanitizing
 
-  @Test func safeRemoteDiagnosticPassesPlainTextThrough() {
+  @Test
+  func safeRemoteDiagnosticPassesPlainTextThrough() {
     // given
     let remote = "authorization pending"
 
@@ -229,10 +233,7 @@ import Testing
     ("  surrounded  ", "surrounded"),
     ("\n\n", ""),
   ])
-  func safeRemoteDiagnosticCollapsesWhitespaceRunsToSingleSpaces(
-    remote: String,
-    expected: String
-  ) {
+  func safeRemoteDiagnosticCollapsesWhitespaceRunsToSingleSpaces(remote: String, expected: String) {
     // given / when
     let safe = ChatGPTWireValues.safeRemoteDiagnostic(remote, redacting: [], maxBytes: 200)
 
@@ -255,7 +256,7 @@ import Testing
     ("\u{9B}31mred", "red"),
     // A lone control that is not part of any sequence.
     ("bell\u{7}rung", "bellrung"),
-    ("nul\u{0}separated", "nulseparated"),
+    ("nul\0separated", "nulseparated"),
   ])
   func safeRemoteDiagnosticStripsTerminalEscapesAndControls(remote: String, expected: String) {
     // given / when
@@ -268,7 +269,8 @@ import Testing
 
   // MARK: - Safe Remote Diagnostic: Redaction
 
-  @Test func safeRemoteDiagnosticRedactsExactTokenValues() {
+  @Test
+  func safeRemoteDiagnosticRedactsExactTokenValues() {
     // given
     let token = "sk-live-abcdef123456"
     let remote = "rejected token \(token) for account"
@@ -281,7 +283,8 @@ import Testing
     #expect(safe == "rejected token \(SecretRedactor.replacement) for account")
   }
 
-  @Test func safeRemoteDiagnosticRedactsEveryValueInTheSetAndEveryOccurrence() {
+  @Test
+  func safeRemoteDiagnosticRedactsEveryValueInTheSetAndEveryOccurrence() {
     // given
     let access = "access-token-value"
     let refresh = "refresh-token-value"
@@ -300,7 +303,8 @@ import Testing
     #expect(safe.contains(SecretRedactor.replacement))
   }
 
-  @Test func safeRemoteDiagnosticRedactsATokenThatEscapesSplitInTheRemoteText() {
+  @Test
+  func safeRemoteDiagnosticRedactsATokenThatEscapesSplitInTheRemoteText() {
     // given
     // A server echoing our token with an escape wedged into it would defeat a redactor that
     // scrubbed before sanitizing: stripping the escape afterwards would reassemble the secret.
@@ -315,7 +319,8 @@ import Testing
     #expect(safe == "echo \(SecretRedactor.replacement) done")
   }
 
-  @Test func safeRemoteDiagnosticRedactsATokenSplitByWhitespaceCollapse() {
+  @Test
+  func safeRemoteDiagnosticRedactsATokenSplitByWhitespaceCollapse() {
     // given
     let token = "account id 42"
     let remote = "header\naccount\t\tid   42\nend"
@@ -327,7 +332,8 @@ import Testing
     #expect(safe == "header \(SecretRedactor.replacement) end")
   }
 
-  @Test func safeRemoteDiagnosticIgnoresEmptyRedactionValues() {
+  @Test
+  func safeRemoteDiagnosticIgnoresEmptyRedactionValues() {
     // given
     let remote = "plain text"
 
@@ -340,7 +346,8 @@ import Testing
 
   // MARK: - Safe Remote Diagnostic: Bounding
 
-  @Test func safeRemoteDiagnosticTruncatesToTheByteBound() {
+  @Test
+  func safeRemoteDiagnosticTruncatesToTheByteBound() {
     // given
     let remote = String(repeating: "a", count: 500)
 
@@ -352,7 +359,8 @@ import Testing
     #expect(safe.hasPrefix("aaaa"))
   }
 
-  @Test func safeRemoteDiagnosticTruncatesOnAScalarBoundary() {
+  @Test
+  func safeRemoteDiagnosticTruncatesOnAScalarBoundary() {
     // given
     // Each "é" is two UTF-8 bytes, so an odd cap lands mid-scalar unless truncation is boundary-safe.
     let remote = String(repeating: "é", count: 20)
@@ -365,7 +373,8 @@ import Testing
     #expect(safe == "ééé")
   }
 
-  @Test func safeRemoteDiagnosticRedactsBeforeItTruncatesSoNoTokenSurvivesInThePrefix() {
+  @Test
+  func safeRemoteDiagnosticRedactsBeforeItTruncatesSoNoTokenSurvivesInThePrefix() {
     // given
     let token = "leading-secret"
     let remote = "\(token) then a very long tail \(String(repeating: "z", count: 400))"
@@ -379,9 +388,10 @@ import Testing
     #expect(safe.utf8.count <= 64)
   }
 
-  @Test func safeRemoteDiagnosticReturnsEmptyForAWhollyUnprintableBody() {
+  @Test
+  func safeRemoteDiagnosticReturnsEmptyForAWhollyUnprintableBody() {
     // given
-    let remote = "\u{1B}[31m\u{0}\u{7}\u{1B}[0m"
+    let remote = "\u{1B}[31m\0\u{7}\u{1B}[0m"
 
     // when
     let safe = ChatGPTWireValues.safeRemoteDiagnostic(remote, redacting: [], maxBytes: 200)

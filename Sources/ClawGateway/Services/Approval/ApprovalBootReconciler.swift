@@ -119,10 +119,10 @@ private extension ApprovalBootReconciler {
     let settlement: ClaimedApprovalBootOutcome
     do {
       settlement = try runs.settleClaimedApprovalAtBoot(
-        runId: approval.runId,
-        observationMessageId: approval.observationMessageId,
+        runID: approval.runID,
+        observationMessageID: approval.observationMessageID,
         observationContent: Self.claimedCrashObservation,
-        noticeChatId: approval.ownerUserId,
+        noticeChatID: approval.ownerUserID,
         noticeText: Self.claimedCrashNotice(tool: approval.tool),
         now: instant
       )
@@ -155,7 +155,7 @@ private extension ApprovalBootReconciler {
       // Crash window: granted before the crash, never claimed. Buffer the approval signal and
       // re-park under re-validation so the waiter rechecks policy_version before executing the
       // recorded action.
-      await coordinator.signal(approvalId: approval.id, .approved)
+      await coordinator.signal(.approved, forApprovalID: approval.id)
       revalidate = true
     case .pending where approval.expiresTs <= instant:
       // Expiry: CAS PENDING→EXPIRED (+ approvalDenied/expired audit) here, then let the parked
@@ -170,7 +170,7 @@ private extension ApprovalBootReconciler {
         logger.error("boot approvals: expiry deny failed for approval \(approval.id): \(error)")
         return
       }
-      await coordinator.signal(approvalId: approval.id, .denied(.expired))
+      await coordinator.signal(.denied(.expired), forApprovalID: approval.id)
       revalidate = false
     case .pending:
       // Unexpired: re-park so buttons and the FIFO queue-behind contract survive restart.
@@ -183,40 +183,40 @@ private extension ApprovalBootReconciler {
       // recoverable from the row; both map to run→FAILED with no cancel, so the generic
       // `.rejected` differs only in owner-notice copy. (Cancel/supersede denials can never land
       // here — the command txn moves the run off AWAITING_APPROVAL atomically with the CAS.)
-      await coordinator.signal(approvalId: approval.id, .denied(.rejected))
+      await coordinator.signal(.denied(.rejected), forApprovalID: approval.id)
       revalidate = false
     case .expired:
       // The same deny-side belt for a row the expiry CAS resolved before the crash.
-      await coordinator.signal(approvalId: approval.id, .denied(.expired))
+      await coordinator.signal(.denied(.expired), forApprovalID: approval.id)
       revalidate = false
     }
 
     let park = waiter
     let settle = settlement
-    let approvalId = approval.id
-    let runId = approval.runId
-    let sessionId = approval.sessionId
-    let chatId = approval.ownerUserId
+    let approvalID = approval.id
+    let runID = approval.runID
+    let sessionID = approval.sessionID
+    let chatID = approval.ownerUserID
 
-    let result = await lanes.enqueue(sessionID: sessionId, runID: runId) {
+    let result = await lanes.enqueue(sessionID: sessionID, runID: runID) {
       await park.park(
-        approvalId: approvalId,
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
+        approvalID: approvalID,
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
         revalidatePolicyOnApprove: revalidate
       )
       // The same tail `TurnEnqueuer` ends its closure with, for the same reason: the resolution
       // this park waits on can drive the run terminal with a deferred receipt, and nothing else in
       // this process would settle it before the next boot.
-      await settle.settle(runId: runId)
+      await settle.settle(runID: runID)
     }
 
     if result == .shuttingDown {
       // The daemon began draining mid-reconcile: leave the durable approval untouched so the next
       // boot re-parks it, rather than resolving it against a lane that will never run the waiter.
       logger.notice(
-        "boot approvals: approval \(approvalId) not re-parked; lane admission is shutting down"
+        "boot approvals: approval \(approvalID) not re-parked; lane admission is shutting down"
       )
     }
   }

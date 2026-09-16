@@ -29,28 +29,28 @@ enum TrialSnapshotCorruption: CaseIterable {
 
 extension BoundRunEnvironment {
   func installTrial() throws {
-    _ = try installTrial(jobId: jobId)
+    _ = try installTrial(jobID: jobID)
   }
 
   @discardableResult
-  func installTrial(jobId: Int64) throws -> LearningTrialIdentity {
-    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobId: jobId, now: now)
-    let base = LessonSet.empty(jobId: jobId)
+  func installTrial(jobID: Int64) throws -> LearningTrialIdentity {
+    let state = try TestLearningFixtures(writer: queue).seedArmedJob(jobID: jobID, now: now)
+    let base = LessonSet.empty(jobID: jobID)
     let replacement = try LessonSet.canonical(
-      jobId: jobId,
+      jobID: jobID,
       lessons: ["Check the archive before answering"]
     )
     let manifest = CandidateSourceManifest(
       origin: .reflection,
       algorithm: .v1,
-      jobId: jobId,
+      jobID: jobID,
       epoch: state.epoch,
-      triggerDigest: TriggerDigest(rawValue: SHA256Digest.hex("trial-trigger-\(jobId)")),
+      triggerDigest: TriggerDigest(rawValue: SHA256Digest.hex("trial-trigger-\(jobID)")),
       triggerReason: .ownerCorrection,
       qualifyingIssueCodes: [],
-      operationId: LearningOperationID(rawValue: "trial-fixture-operation"),
-      carrierDigest: CarrierDigest(rawValue: SHA256Digest.hex("trial-carrier-\(jobId)")),
-      resultDigest: ReflectionResultDigest(rawValue: SHA256Digest.hex("trial-result-\(jobId)")),
+      operationID: LearningOperationID(rawValue: "trial-fixture-operation"),
+      carrierDigest: CarrierDigest(rawValue: SHA256Digest.hex("trial-carrier-\(jobID)")),
+      resultDigest: ReflectionResultDigest(rawValue: SHA256Digest.hex("trial-result-\(jobID)")),
       baseDigest: base.digest,
       baseRevision: state.stableRevision,
       feedbackRevision: state.feedbackRevision,
@@ -71,7 +71,7 @@ extension BoundRunEnvironment {
           VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
           """,
         arguments: [
-          jobId,
+          jobID,
           state.epoch.value,
           base.digest.rawValue,
           artifact.digest.rawValue,
@@ -83,29 +83,29 @@ extension BoundRunEnvironment {
           LearningAlgorithm.v1.rawValue,
         ]
       )
-      let trialId = db.lastInsertedRowID
+      let trialID = db.lastInsertedRowID
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
-        arguments: [trialId, jobId]
+        arguments: [trialID, jobID]
       )
       try ScheduledLearningStoreGRDB.insertDecision(
         db,
         kind: AdmissionReceipt.kind,
-        jobId: jobId,
+        jobID: jobID,
         epoch: state.epoch,
         inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
         result: AdmissionReceipt(
           candidateDigest: artifact.digest,
           replacementDigest: replacement.digest,
-          trialId: trialId,
+          trialID: trialID,
           generation: 1
         ),
         algorithm: .v1,
         now: now
       )
       return LearningTrialIdentity(
-        trialId: trialId,
-        jobId: jobId,
+        trialID: trialID,
+        jobID: jobID,
         epoch: state.epoch,
         generation: 1
       )
@@ -113,22 +113,22 @@ extension BoundRunEnvironment {
   }
 
   func sealedTrialEvidence() throws -> SealedEvidence {
-    try seal(runId: settledBoundRun())
+    try seal(runID: settledBoundRun())
   }
 
-  func assignmentState(runId: Int64) throws -> TrialAssignmentState? {
+  func assignmentState(runID: Int64) throws -> TrialAssignmentState? {
     try queue.read { db in
       let raw = try String.fetchOne(
         db,
         sql: "SELECT state FROM trial_assignments WHERE run_id = ?",
-        arguments: [runId]
+        arguments: [runID]
       )
       return raw.flatMap(TrialAssignmentState.init(rawValue:))
     }
   }
 
-  func assignment(runId: Int64) throws -> TrialAssignment? {
-    switch try learning.recomputeAssignment(runId: runId, now: now) {
+  func assignment(runID: Int64) throws -> TrialAssignment? {
+    switch try learning.recomputeAssignment(runID: runID, now: now) {
     case .notAssigned, .stale:
       return nil
     case .unchanged(let assignment), .updated(let assignment):
@@ -136,20 +136,17 @@ extension BoundRunEnvironment {
     }
   }
 
-  func corruptAssignmentGeneration(runId: Int64) throws {
+  func corruptAssignmentGeneration(runID: Int64) throws {
     try queue.write { db in
       try db.execute(
         sql:
           "UPDATE trial_assignments SET trial_generation = trial_generation + 1 WHERE run_id = ?",
-        arguments: [runId]
+        arguments: [runID]
       )
     }
   }
 
-  func resetAssignmentCache(
-    runId: Int64,
-    state: TrialAssignmentState
-  ) throws {
+  func resetAssignmentCache(runID: Int64, state: TrialAssignmentState) throws {
     try queue.write { db in
       try db.execute(
         sql: """
@@ -158,30 +155,27 @@ extension BoundRunEnvironment {
             evaluation_required = 1, effective_feedback_revision = NULL, resolved_at = NULL
           WHERE run_id = ?
           """,
-        arguments: [state.rawValue, runId]
+        arguments: [state.rawValue, runID]
       )
     }
   }
 
-  func setAssignmentFeedbackRevision(runId: Int64, revision: Int64) throws {
+  func setAssignmentFeedbackRevision(runID: Int64, revision: Int64) throws {
     try queue.write { db in
       try db.execute(
         sql: """
           UPDATE trial_assignments SET effective_feedback_revision = ? WHERE run_id = ?
           """,
-        arguments: [revision, runId]
+        arguments: [revision, runID]
       )
     }
   }
 
-  func apply(
-    _ corruption: AssignmentIdentityCorruption,
-    runId: Int64
-  ) throws {
+  func apply(_ corruption: AssignmentIdentityCorruption, runID: Int64) throws {
     if case .bindingJob = corruption {
       let otherJob = try jobs.create(
         NewScheduledJob(
-          ownerChatId: 777,
+          ownerChatID: 777,
           label: "foreign binding",
           prompt: "Read a different archive",
           recurrence: nil,
@@ -203,11 +197,11 @@ extension BoundRunEnvironment {
               AND run_learning_bindings.job_id = lesson_sets.job_id
             WHERE run_learning_bindings.run_id = ?
             """,
-          arguments: [otherJob.id, runId]
+          arguments: [otherJob.id, runID]
         )
         try db.execute(
           sql: "UPDATE run_learning_bindings SET job_id = ? WHERE run_id = ?",
-          arguments: [otherJob.id, runId]
+          arguments: [otherJob.id, runID]
         )
       }
       return
@@ -239,7 +233,7 @@ extension BoundRunEnvironment {
         "UPDATE run_learning_bindings SET effective_digest = stable_digest WHERE run_id = ?"
     }
     try queue.write { db in
-      try db.execute(sql: mutation, arguments: [runId])
+      try db.execute(sql: mutation, arguments: [runID])
     }
   }
 
@@ -255,41 +249,37 @@ extension BoundRunEnvironment {
             )
             WHERE job_id = ?
             """,
-          arguments: [jobId, jobId]
+          arguments: [jobID, jobID]
         )
       case .stableRevision:
         try db.execute(
           sql: """
             UPDATE job_learning_state SET stable_revision = stable_revision + 1 WHERE job_id = ?
             """,
-          arguments: [jobId]
+          arguments: [jobID]
         )
       }
     }
   }
 
-  func apply(
-    _ corruption: TrialSnapshotCorruption,
-    runId: Int64,
-    trialId: Int64
-  ) throws {
+  func apply(_ corruption: TrialSnapshotCorruption, runID: Int64, trialID: Int64) throws {
     try queue.write { db in
       switch corruption {
       case .count:
         try db.execute(
           sql: "UPDATE learning_trials SET consumed_assignments = 2 WHERE trial_id = ?",
-          arguments: [trialId]
+          arguments: [trialID]
         )
       case .assignmentJob:
         try db.execute(
           sql: "UPDATE trial_assignments SET job_id = job_id + 1 WHERE run_id = ?",
-          arguments: [runId]
+          arguments: [runID]
         )
       }
     }
   }
 
-  func insertDuplicateLiveTrial(jobId: Int64) throws {
+  func insertDuplicateLiveTrial(jobID: Int64) throws {
     try queue.write { db in
       try db.execute(sql: "DROP INDEX idx_learning_trials_live_job")
       try db.execute(
@@ -302,17 +292,17 @@ extension BoundRunEnvironment {
             cohort_cutoff, state, close_reason, algorithm
           FROM learning_trials WHERE job_id = ?
           """,
-        arguments: [jobId]
+        arguments: [jobID]
       )
     }
   }
 
-  func trialState(trialId: Int64) throws -> LearningTrialState? {
+  func trialState(trialID: Int64) throws -> LearningTrialState? {
     try queue.read { db in
       try String.fetchOne(
         db,
         sql: "SELECT state FROM learning_trials WHERE trial_id = ?",
-        arguments: [trialId]
+        arguments: [trialID]
       ).flatMap(LearningTrialState.init(rawValue:))
     }
   }

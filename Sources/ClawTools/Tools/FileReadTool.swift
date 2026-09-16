@@ -31,7 +31,7 @@ public struct FileReadTool: Tool {
           "path": .object([
             "type": .string("string"),
             "description": .string("Workspace-relative file path, e.g. notes/plan.md"),
-          ])
+          ]),
         ]),
         "required": .array([.string("path")]),
       ]),
@@ -41,17 +41,16 @@ public struct FileReadTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(5) }
+  public var timeout: Duration {
+    .seconds(5)
+  }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     nil  // nothing egresses; containment is enforced inside execute
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    guard
-      let path = arguments.objectValue?["path"]?.stringValue,
-      path.isEmpty == false
-    else {
+    guard let path = arguments.objectValue?["path"]?.stringValue, path.isEmpty == false else {
       return errorPayload("file_read needs a non-empty \"path\" argument.")
     }
     guard let canonicalRoot = WorkspacePathContainment.canonicalPath(workspaceRoot.path) else {

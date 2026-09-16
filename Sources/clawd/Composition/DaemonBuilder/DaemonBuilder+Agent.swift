@@ -61,9 +61,7 @@ extension DaemonBuilder {
       tools: toolDefinitions
     )
     let contextBudget = ContextBudget(
-      inputCapGraphemes: TokenEstimator.graphemeBudget(
-        forInputTokens: messageInputTokens
-      ),
+      inputCapGraphemes: TokenEstimator.graphemeBudget(forInputTokens: messageInputTokens),
       userFileCap: ContextBudget.default.userFileCap,
       memoryFileCap: ContextBudget.default.memoryFileCap,
       itemsCap: ContextBudget.default.itemsCap,

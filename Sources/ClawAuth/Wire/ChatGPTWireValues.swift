@@ -113,11 +113,10 @@ private extension ChatGPTWireValues {
 
 private extension ChatGPTWireValues {
   static func positiveInteger(fromNumber number: Double) -> Int? {
-    guard
-      number.isFinite,
-      number > 0,
-      number.rounded(.towardZero) == number,
-      number < Double(Int.max)
+    guard number.isFinite,
+          number > 0,
+          number.rounded(.towardZero) == number,
+          number < Double(Int.max)
     else {
       return nil
     }
@@ -127,11 +126,10 @@ private extension ChatGPTWireValues {
   /// ASCII decimal digits only. `Int(_:)` alone would accept a leading sign and non-ASCII digit
   /// shapes, neither of which the vendor sends and both of which read as an attempt to be clever.
   static func positiveInteger(fromDecimalString text: String) -> Int? {
-    guard
-      text.isEmpty == false,
-      text.unicodeScalars.allSatisfy(isASCIIDigit),
-      let parsed = Int(text),
-      parsed > 0
+    guard text.isEmpty == false,
+          text.unicodeScalars.allSatisfy(isASCIIDigit),
+          let parsed = Int(text),
+          parsed > 0
     else {
       return nil
     }

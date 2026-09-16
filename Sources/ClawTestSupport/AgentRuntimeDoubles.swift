@@ -41,7 +41,9 @@ public actor SequenceProvider: LLMProvider {
     LLMEventStream.make { _ in
       do {
         return .completed(try await self.complete(request: request))
-      } catch let cause as ProviderError {
+      } catch let cause
+        as ProviderError
+      {
         return .failed(ProviderFailure(cause: cause, accounting: .notStarted))
       } catch {
         return .failed(
@@ -167,21 +169,22 @@ public actor ScriptedDispatcher: ToolDispatching {
   }
 
   nonisolated public let definitions: [ToolDefinition]
-  private let respond: @Sendable (ToolCall, ToolDispatchContext) -> ToolDispatchOutcome
+
+  private let respond:
+    @Sendable (_ call: ToolCall, _ context: ToolDispatchContext) -> ToolDispatchOutcome
+
   public private(set) var records: [Record] = []
 
   public init(
     definitions: [ToolDefinition] = [],
-    respond: @escaping @Sendable (ToolCall, ToolDispatchContext) -> ToolDispatchOutcome
+    respond:
+      @escaping @Sendable (_ call: ToolCall, _ context: ToolDispatchContext) -> ToolDispatchOutcome
   ) {
     self.definitions = definitions
     self.respond = respond
   }
 
-  public func dispatch(
-    call: ToolCall,
-    context: ToolDispatchContext
-  ) async -> ToolDispatchOutcome {
+  public func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
     records.append(Record(call: call, context: context))
     return respond(call, context)
   }

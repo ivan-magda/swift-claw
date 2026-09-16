@@ -41,7 +41,7 @@ extension ResetFixture {
         try insertOperation(
           db,
           id: "current-terminal-operation",
-          jobId: env.jobId,
+          jobID: env.jobID,
           epoch: epoch,
           state: .failed
         )
@@ -78,19 +78,14 @@ extension ResetFixture {
         try insertOperation(
           db,
           id: "late-old-pending",
-          jobId: env.jobId,
+          jobID: env.jobID,
           epoch: oldEpoch,
           state: .pending
         )
       }
     case .unlistedStartedOperation:
       try env.queue.write { db in
-        try insertStartedOperation(
-          db,
-          id: "late-old-started",
-          jobId: env.jobId,
-          epoch: oldEpoch
-        )
+        try insertStartedOperation(db, id: "late-old-started", jobID: env.jobID, epoch: oldEpoch)
       }
     }
   }
@@ -102,7 +97,7 @@ private extension ResetFixture {
   func insertOperation(
     _ db: Database,
     id: String,
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     state: LearningOperationState
   ) throws {
@@ -114,7 +109,7 @@ private extension ResetFixture {
         """,
       arguments: [
         id,
-        jobId,
+        jobID,
         epoch.value,
         "source-\(id)",
         state.rawValue,
@@ -125,20 +120,20 @@ private extension ResetFixture {
   }
 
   func seedCompatibility(epoch: LearningEpoch) throws {
-    let runId = try env.unboundRun()
+    let runID = try env.unboundRun()
     try env.queue.write { db in
       try db.execute(
         sql: """
           INSERT INTO run_compatibility(run_id, job_id, learning_epoch)
           VALUES (?, ?, ?)
           """,
-        arguments: [runId, env.jobId, epoch.value]
+        arguments: [runID, env.jobID, epoch.value]
       )
     }
   }
 
   func seedEvidence(epoch: LearningEpoch) throws {
-    let runId = try env.unboundRun()
+    let runID = try env.unboundRun()
     try env.queue.write { db in
       try db.execute(
         sql: """
@@ -146,13 +141,13 @@ private extension ResetFixture {
             eligibility, classifier_version, sealed_at)
           VALUES (?, ?, ?, 'current-evidence', 'insufficient_evidence', '1', ?)
           """,
-        arguments: [runId, env.jobId, epoch.value, EpochSecondCodec.epoch(env.now)]
+        arguments: [runID, env.jobID, epoch.value, EpochSecondCodec.epoch(env.now)]
       )
     }
   }
 
   func seedEvaluation(epoch: LearningEpoch) throws {
-    let runId = try env.unboundRun()
+    let runID = try env.unboundRun()
     try env.queue.write { db in
       try db.execute(
         sql: """
@@ -162,7 +157,7 @@ private extension ResetFixture {
           VALUES ('current-evaluation', ?, ?, ?, 'evidence', 'no_issue', '[]', '1', '1', '1',
             'compatibility', ?)
           """,
-        arguments: [env.jobId, epoch.value, runId, EpochSecondCodec.epoch(env.now)]
+        arguments: [env.jobID, epoch.value, runID, EpochSecondCodec.epoch(env.now)]
       )
     }
   }
@@ -177,7 +172,7 @@ private extension ResetFixture {
           """,
         arguments: [
           consumed ? "current-consumed-target" : "late-old-live-target",
-          env.jobId,
+          env.jobID,
           epoch.value,
           consumed ? 1 : nil,
         ]
@@ -193,13 +188,7 @@ private extension ResetFixture {
             subject_kind, subject_digest, consumed_at, expires_at)
           VALUES (?, ?, ?, ?, 'run', 'subject', ?, 1)
           """,
-        arguments: [
-          consumed ? 1 : 2,
-          consumed ? 1 : 2,
-          env.jobId,
-          epoch.value,
-          consumed ? 1 : nil,
-        ]
+        arguments: [consumed ? 1 : 2, consumed ? 1 : 2, env.jobID, epoch.value, consumed ? 1 : nil]
       )
     }
   }
@@ -212,14 +201,14 @@ private extension ResetFixture {
             signal, actor, feedback_revision, occurred_at)
           VALUES (?, ?, 'run', 'subject', 'result_useful', 'owner', 1, 1)
           """,
-        arguments: [env.jobId, epoch.value]
+        arguments: [env.jobID, epoch.value]
       )
     }
   }
 
   func seedCandidate(epoch: LearningEpoch) throws -> String {
     let digest = String(repeating: "c", count: 64)
-    let replacement = try LessonSet.canonical(jobId: env.jobId, lessons: ["current candidate"])
+    let replacement = try LessonSet.canonical(jobID: env.jobID, lessons: ["current candidate"])
     let state = try state()
     try env.queue.write { db in
       try db.execute(
@@ -228,7 +217,7 @@ private extension ResetFixture {
             source, created_at) VALUES (?, ?, ?, ?, ?, ?)
           """,
         arguments: [
-          env.jobId,
+          env.jobID,
           replacement.digest.rawValue,
           replacement.schemaVersion,
           replacement.canonicalBytes,
@@ -245,7 +234,7 @@ private extension ResetFixture {
           """,
         arguments: [
           digest,
-          env.jobId,
+          env.jobID,
           epoch.value,
           replacement.digest.rawValue,
           state.stableDigest.rawValue,
@@ -266,11 +255,8 @@ private extension ResetFixture {
 
   func seedAssignmentActivity(epoch: LearningEpoch) throws {
     let candidate = try seedCandidate(epoch: LearningEpoch(epoch.value - 1))
-    let trialId = try seedClosedTrial(
-      candidate: candidate,
-      epoch: LearningEpoch(epoch.value - 1)
-    )
-    let runId = try env.unboundRun()
+    let trialID = try seedClosedTrial(candidate: candidate, epoch: LearningEpoch(epoch.value - 1))
+    let runID = try env.unboundRun()
     try env.queue.write { db in
       try db.execute(
         sql: """
@@ -278,13 +264,7 @@ private extension ResetFixture {
             trial_generation, assigned_at, state, evaluation_required)
           VALUES (?, ?, ?, ?, 1, ?, 'created', 1)
           """,
-        arguments: [
-          runId,
-          trialId,
-          env.jobId,
-          epoch.value,
-          EpochSecondCodec.epoch(env.now),
-        ]
+        arguments: [runID, trialID, env.jobID, epoch.value, EpochSecondCodec.epoch(env.now)]
       )
     }
   }
@@ -300,7 +280,7 @@ private extension ResetFixture {
           VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, 'closed', 'fixture', ?)
           """,
         arguments: [
-          env.jobId,
+          env.jobID,
           epoch.value,
           state.stableDigest.rawValue,
           candidate,
@@ -326,7 +306,7 @@ private extension ResetFixture {
           VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, 'open', ?)
           """,
         arguments: [
-          env.jobId,
+          env.jobID,
           epoch.value,
           state.stableDigest.rawValue,
           candidate,
@@ -343,7 +323,7 @@ private extension ResetFixture {
   func insertStartedOperation(
     _ db: Database,
     id: String,
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch
   ) throws {
     try db.execute(
@@ -356,7 +336,7 @@ private extension ResetFixture {
         """,
       arguments: [
         id,
-        jobId,
+        jobID,
         epoch.value,
         "source-\(id)",
         EpochSecondCodec.epoch(env.now),

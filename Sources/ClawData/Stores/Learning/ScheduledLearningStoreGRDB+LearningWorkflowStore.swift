@@ -3,27 +3,29 @@ import Foundation
 import GRDB
 
 extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
-  public func learningState(jobId: Int64) throws(StoreError) -> JobLearningState? {
+  public func learningState(jobID: Int64) throws(StoreError) -> JobLearningState? {
     try database.readMapping { db in
-      try Self.readState(db, jobId: jobId)
+      try Self.readState(db, jobID: jobID)
     }
   }
 
-  public func workflowJobs(after jobId: Int64, limit: Int) throws(StoreError) -> [Int64] {
+  public func workflowJobs(after jobID: Int64, limit: Int) throws(StoreError) -> [Int64] {
     try database.readMapping { db in
       try Int64.fetchAll(
         db,
         sql: """
           SELECT job_id FROM job_learning_state WHERE job_id > ? ORDER BY job_id LIMIT ?
           """,
-        arguments: [jobId, max(0, limit)]
+        arguments: [jobID, max(0, limit)]
       )
     }
   }
 
-  public func workflowRuns(jobId: Int64, after runId: Int64, limit: Int)
-    throws(StoreError) -> [Int64]
-  {
+  public func workflowRuns(
+    jobID: Int64,
+    after runID: Int64,
+    limit: Int
+  ) throws(StoreError) -> [Int64] {
     try database.readMapping { db in
       try Int64.fetchAll(
         db,
@@ -48,7 +50,9 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
           ORDER BY binding.run_id LIMIT ?
           """,
         arguments: [
-          jobId, runId, LearningEligibility.eligibleTaskEvidence.rawValue,
+          jobID,
+          runID,
+          LearningEligibility.eligibleTaskEvidence.rawValue,
           LearningPhase.evaluator.rawValue,
           LearningOperationState.pending.rawValue,
           LearningOperationState.interruptedUnknown.rawValue,
@@ -58,7 +62,7 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
     }
   }
 
-  public func workflowCandidates(jobId: Int64) throws(StoreError) -> [CandidateDigest] {
+  public func workflowCandidates(jobID: Int64) throws(StoreError) -> [CandidateDigest] {
     try database.readMapping { db in
       try String.fetchAll(
         db,
@@ -80,15 +84,16 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
           ORDER BY candidate.created_at, candidate.candidate_digest
           """,
         arguments: [
-          jobId, FeedbackSubjectKind.candidate.rawValue,
-          LearningTrialState.open.rawValue, LearningTrialState.draining.rawValue,
+          jobID,
+          FeedbackSubjectKind.candidate.rawValue,
+          LearningTrialState.open.rawValue,
+          LearningTrialState.draining.rawValue,
         ]
-      )
-      .map(CandidateDigest.init(rawValue:))
+      ).map(CandidateDigest.init(rawValue:))
     }
   }
 
-  public func workflowControls(jobId: Int64) throws(StoreError) -> [LearningCandidateControl] {
+  public func workflowControls(jobID: Int64) throws(StoreError) -> [LearningCandidateControl] {
     try database.readMapping { db in
       try Row.fetchAll(
         db,
@@ -105,16 +110,17 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
           ORDER BY event.feedback_revision, event.event_id
           """,
         arguments: [
-          jobId, FeedbackSubjectKind.candidate.rawValue,
-          OwnerSignal.candidateApprove.rawValue, OwnerSignal.candidateEdit.rawValue,
+          jobID,
+          FeedbackSubjectKind.candidate.rawValue,
+          OwnerSignal.candidateApprove.rawValue,
+          OwnerSignal.candidateEdit.rawValue,
         ]
-      )
-      .compactMap { row in
+      ).compactMap { row in
         guard let signal = OwnerSignal(rawValue: row["signal"]) else {
           return nil
         }
         return LearningCandidateControl(
-          eventId: row["event_id"],
+          eventID: row["event_id"],
           candidate: CandidateDigest(rawValue: row["subject_digest"]),
           signal: signal,
           payload: row["payload"]
@@ -123,10 +129,10 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
     }
   }
 
-  public func workflowRollbacks(jobId: Int64) throws(StoreError) -> [RollbackTrigger] {
+  public func workflowRollbacks(jobID: Int64) throws(StoreError) -> [RollbackTrigger] {
     try database.readMapping { db in
-      guard let state = try Self.readState(db, jobId: jobId),
-        let promotion = try Self.currentPromotion(db, state: state)
+      guard let state = try Self.readState(db, jobID: jobID),
+            let promotion = try Self.currentPromotion(db, state: state)
       else {
         return []
       }
@@ -139,9 +145,13 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
             AND signal IN (?, ?, ?, ?, ?) ORDER BY feedback_revision, event_id
           """,
         arguments: [
-          jobId, promotion.inputs.identity.epoch.value, promotion.inputs.feedbackRevision.value,
-          OwnerSignal.promotionRollback.rawValue, OwnerSignal.candidateReject.rawValue,
-          OwnerSignal.resultNotUseful.rawValue, OwnerSignal.resultCorrection.rawValue,
+          jobID,
+          promotion.inputs.identity.epoch.value,
+          promotion.inputs.feedbackRevision.value,
+          OwnerSignal.promotionRollback.rawValue,
+          OwnerSignal.candidateReject.rawValue,
+          OwnerSignal.resultNotUseful.rawValue,
+          OwnerSignal.resultCorrection.rawValue,
           OwnerSignal.evaluationDispute.rawValue,
         ]
       )
@@ -151,37 +161,35 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
           SELECT decision_id, inputs, result FROM learning_decisions \
           WHERE job_id = ? AND kind = ?
           """,
-        arguments: [jobId, LearningDecisionKind.rollback.rawValue]
-      )
-      .map(Self.decodeTerminalReceipt)
+        arguments: [jobID, LearningDecisionKind.rollback.rawValue]
+      ).map(Self.decodeTerminalReceipt)
       return rows.compactMap { row in
         let subject: String = row["subject_digest"]
         let kind = FeedbackSubjectKind(rawValue: row["subject_kind"])
         let signal = OwnerSignal(rawValue: row["signal"])
         let trigger: RollbackTrigger
         if signal == .promotionRollback || signal == .candidateReject {
-          guard
-            (kind == .promotion && subject == promotion.promotionSubject)
-              || (kind == .candidate && subject == promotion.inputs.candidateDigest.rawValue)
+          guard (kind == .promotion && subject == promotion.promotionSubject)
+                || (kind == .candidate && subject == promotion.inputs.candidateDigest.rawValue)
           else {
             return nil
           }
-          trigger = .ownerFeedback(promotionId: promotion.decisionId, eventId: row["event_id"])
+          trigger = .ownerFeedback(promotionID: promotion.decisionID, eventID: row["event_id"])
         } else {
-          guard
-            promotion.cohort.contains(where: { support in
+          guard promotion.cohort.contains(where: { support in
               support.outcome == .positive
-                && ((kind == .run && subject == String(support.runId))
+                && ((kind == .run && subject == String(support.runID))
                   || (kind == .evaluation && subject == support.evaluationDigest?.rawValue))
             })
           else {
             return nil
           }
-          trigger = .supportWithdrawal(promotionId: promotion.decisionId, eventId: row["event_id"])
+          trigger = .supportWithdrawal(promotionID: promotion.decisionID, eventID: row["event_id"])
         }
-        return receipts.contains(where: { receipt in
+        return receipts.contains { receipt in
           receipt.record.rollbackTrigger == trigger
-        }) ? nil : trigger
+        }
+          ? nil : trigger
       }
     }
   }

@@ -15,19 +15,10 @@ public enum ApprovalsHealthRows {
     // heartbeat.today "count/cap" idiom — a row nearing the cap flags a stuck approval before the
     // ticker sweeps it.
     return [
-      .storeRead(
-        health,
-        key: "approvals.pending",
-        group: .approvals,
-        isHeadline: true
-      ) { health in
+      .storeRead(health, key: "approvals.pending", group: .approvals, isHeadline: true) { health in
         "\(health.pendingCount)"
       },
-      .storeRead(
-        health,
-        key: "approvals.oldest_age_s",
-        group: .approvals
-      ) { health in
+      .storeRead(health, key: "approvals.oldest_age_s", group: .approvals) { health in
         health.oldestPendingAgeSeconds.map { age in
           "\(age)/\(approvalExpirySeconds)"
         } ?? "none"

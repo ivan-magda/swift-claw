@@ -5,7 +5,8 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct V8MigrationTests {
+@Suite
+struct V8MigrationTests {
   private func columnNames(_ queue: DatabaseQueue, table: String) throws -> [String] {
     try queue.read { db in
       try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").map { row in
@@ -33,7 +34,7 @@ import Testing
 
   private func insertApproval(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     nonce: String,
     state: String = "PENDING"
   ) throws {
@@ -45,11 +46,12 @@ import Testing
         VALUES (?, 1, ?, 'file_write', '{}', '/w/plan.md', 'h16', 'pv16', 7, ?, 1, 'c1',
           'ask_tier', 1782000000, 1782003600)
         """,
-      arguments: [runId, state, nonce]
+      arguments: [runID, state, nonce]
     )
   }
 
-  @Test func vEightCreatesTheApprovalsTableAndLinkageColumns() throws {
+  @Test
+  func vEightCreatesTheApprovalsTableAndLinkageColumns() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -60,9 +62,24 @@ import Testing
     let approvalColumns = Set(try columnNames(queue, table: "approvals"))
     #expect(
       approvalColumns.isSuperset(of: [
-        "id", "run_id", "session_id", "state", "tool", "canonical_args", "canonical_target",
-        "args_hash", "policy_version", "owner_user_id", "nonce", "observation_message_id",
-        "tool_call_id", "reason", "prompt_message_id", "created_ts", "expires_ts", "resolved_ts",
+        "id",
+        "run_id",
+        "session_id",
+        "state",
+        "tool",
+        "canonical_args",
+        "canonical_target",
+        "args_hash",
+        "policy_version",
+        "owner_user_id",
+        "nonce",
+        "observation_message_id",
+        "tool_call_id",
+        "reason",
+        "prompt_message_id",
+        "created_ts",
+        "expires_ts",
+        "resolved_ts",
       ])
     )
     #expect(try columnNames(queue, table: "runs").contains("policy_version"))
@@ -71,7 +88,8 @@ import Testing
     #expect(outboundColumns.isSuperset(of: ["approval_id", "reply_markup"]))
   }
 
-  @Test func pendingPerRunIndexIsUniqueAndPartial() throws {
+  @Test
+  func pendingPerRunIndexIsUniqueAndPartial() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -93,26 +111,27 @@ import Testing
     #expect(indexSQL?.contains("run_id") == true)
   }
 
-  @Test func atMostOneLivePendingApprovalPerRun() throws {
+  @Test
+  func atMostOneLivePendingApprovalPerRun() throws {
     // given — one run already holding a PENDING approval
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     try seedSessionAndRun(queue)
     try queue.write { db in
-      try self.insertApproval(db, runId: 1, nonce: "nonce-a")
+      try self.insertApproval(db, runID: 1, nonce: "nonce-a")
     }
 
     // when / then — a second PENDING row for the same run violates the partial UNIQUE index
     #expect(throws: (any Error).self) {
       try queue.write { db in
-        try self.insertApproval(db, runId: 1, nonce: "nonce-b")
+        try self.insertApproval(db, runID: 1, nonce: "nonce-b")
       }
     }
 
     // and a RESOLVED row does not block a fresh PENDING one (the index is partial)
     try queue.write { db in
       try db.execute(sql: "UPDATE approvals SET state = 'REJECTED' WHERE nonce = 'nonce-a'")
-      try self.insertApproval(db, runId: 1, nonce: "nonce-c")
+      try self.insertApproval(db, runID: 1, nonce: "nonce-c")
     }
     let pendingCount = try queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM approvals WHERE state = 'PENDING'")
@@ -120,24 +139,26 @@ import Testing
     #expect(pendingCount == 1)
   }
 
-  @Test func nonceIsGloballyUnique() throws {
+  @Test
+  func nonceIsGloballyUnique() throws {
     // given — a resolved row already holds the nonce (single-use = never reused, spec §6.2)
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     try seedSessionAndRun(queue)
     try queue.write { db in
-      try self.insertApproval(db, runId: 1, nonce: "nonce-a", state: "REJECTED")
+      try self.insertApproval(db, runID: 1, nonce: "nonce-a", state: "REJECTED")
     }
 
     // when / then
     #expect(throws: (any Error).self) {
       try queue.write { db in
-        try self.insertApproval(db, runId: 1, nonce: "nonce-a")
+        try self.insertApproval(db, runID: 1, nonce: "nonce-a")
       }
     }
   }
 
-  @Test func vEightUpgradesAPopulatedVSevenDatabase() throws {
+  @Test
+  func vEightUpgradesAPopulatedVSevenDatabase() throws {
     // given — a v7 database holding a session, a run, and a PENDING outbox row
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrator.migrate(queue, upTo: "v7")

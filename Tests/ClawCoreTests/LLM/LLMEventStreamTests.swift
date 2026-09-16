@@ -12,8 +12,10 @@ import Testing
 enum LLMEventStreamTests {
   // MARK: - Terminal outcomes
 
-  @Suite struct TerminalOutcomes {
-    @Test func deliversDeltasThenTheReservedTerminalEvent() async throws {
+  @Suite
+  struct TerminalOutcomes {
+    @Test
+    func deliversDeltasThenTheReservedTerminalEvent() async throws {
       // given a producer that streams two deltas and reports a whole reply
       let stream = LLMEventStream.make { sink in
         try? await sink.sendDelta("he")
@@ -30,7 +32,8 @@ enum LLMEventStreamTests {
       #expect(terminal == .completed(wholeReply))
     }
 
-    @Test func throwsANaturalFailureFromTheIteratorAndCachesItsTypedCause() async throws {
+    @Test
+    func throwsANaturalFailureFromTheIteratorAndCachesItsTypedCause() async throws {
       // given a producer that streams part of a reply and then fails for a real reason
       let failure = ProviderFailure(
         cause: .retryable(status: 503, message: "upstream unavailable"),
@@ -61,8 +64,10 @@ enum LLMEventStreamTests {
 
   // MARK: - Cancellation
 
-  @Suite struct Cancellation {
-    @Test func joinsAsNotStartedWhenCancelledBeforeTheProducerHandsOff() async throws {
+  @Suite
+  struct Cancellation {
+    @Test
+    func joinsAsNotStartedWhenCancelledBeforeTheProducerHandsOff() async throws {
       // given a producer parked before it has done any authorization or network work
       let reachedHandoff = AsyncGate()
       let releaseHandoff = AsyncGate()
@@ -82,7 +87,8 @@ enum LLMEventStreamTests {
       #expect(try await collect(stream).isEmpty)
     }
 
-    @Test func joinsWithObservedTokensWhenCancelledAfterExposure() async throws {
+    @Test
+    func joinsWithObservedTokensWhenCancelledAfterExposure() async throws {
       // given a producer that has already streamed visible output
       let exposed = AsyncGate()
       let releaseProducer = AsyncGate()
@@ -102,7 +108,8 @@ enum LLMEventStreamTests {
       #expect(terminal == .cancelled(.mayHaveStarted(observedCompletionTokens: 2)))
     }
 
-    @Test func unwindsAProducerBlockedOnAFullEventChannel() async throws {
+    @Test
+    func unwindsAProducerBlockedOnAFullEventChannel() async throws {
       // given a producer parked on a delta the full channel cannot admit
       let blockedSendFailed = Mutex(false)
       let stream = LLMEventStream.make(limits: tinyLimits) { sink in
@@ -126,11 +133,16 @@ enum LLMEventStreamTests {
 
       // then the parked producer was resumed rather than stranded, so the join could not deadlock
       #expect(terminal == .cancelled(.mayHaveStarted(observedCompletionTokens: 1)))
-      #expect(blockedSendFailed.withLock { current in current })
+      #expect(
+        blockedSendFailed.withLock { current in
+          current
+        }
+      )
       #expect(stream.suspendedDeltaSenderCount == 0)
     }
 
-    @Test func cancellationImmediatelyBeforeTheTerminalCommitWins() async throws {
+    @Test
+    func cancellationImmediatelyBeforeTheTerminalCommitWins() async throws {
       // given a producer holding a whole reply it has not yet reported
       let readyToCommit = AsyncGate()
       let mayCommit = AsyncGate()
@@ -152,7 +164,8 @@ enum LLMEventStreamTests {
       #expect(try await collect(stream).isEmpty)
     }
 
-    @Test func cancellationImmediatelyAfterTheTerminalCommitIsANoOp() async throws {
+    @Test
+    func cancellationImmediatelyAfterTheTerminalCommitIsANoOp() async throws {
       // given a stream whose terminal has provably landed
       let stream = LLMEventStream.make { _ in
         .completed(wholeReply)
@@ -168,7 +181,8 @@ enum LLMEventStreamTests {
       #expect(try await collect(stream) == [wholeReplyEvent])
     }
 
-    @Test func abandoningTheIteratorCancelsTheProducer() async throws {
+    @Test
+    func abandoningTheIteratorCancelsTheProducer() async throws {
       // given a producer that would stream deltas forever
       let stream = LLMEventStream.make(limits: tinyLimits) { sink in
         while true {
@@ -190,8 +204,10 @@ enum LLMEventStreamTests {
 
   // MARK: - Joining
 
-  @Suite struct Joining {
-    @Test func everyJoinerSharesOneCachedTerminal() async throws {
+  @Suite
+  struct Joining {
+    @Test
+    func everyJoinerSharesOneCachedTerminal() async throws {
       // given a stream whose producer has not reported yet
       let mayFinish = AsyncGate()
       defer { mayFinish.open() }
@@ -216,7 +232,8 @@ enum LLMEventStreamTests {
       #expect(stream.parkedJoinerCount == 0)
     }
 
-    @Test func joinersResumeOnlyAfterTheProducerReturnsFromCleanup() async throws {
+    @Test
+    func joinersResumeOnlyAfterTheProducerReturnsFromCleanup() async throws {
       // given a producer whose cleanup — standing in for joining a nested HTTP exchange — is held
       let cleanupStarted = AsyncGate()
       let cleanupMayReturn = AsyncGate()
@@ -244,17 +261,26 @@ enum LLMEventStreamTests {
       // then the decided cancellation has not released the joiner: releasing it is the producer's
       // last act, so a joiner still parked here is the whole guarantee
       #expect(stream.parkedJoinerCount == 1)
-      #expect(cleanupReturned.withLock { current in !current })
+      #expect(
+        cleanupReturned.withLock { current in
+          !current
+        }
+      )
 
       // when cleanup returns
       cleanupMayReturn.open()
 
       // then the joiner resumes, and only then
       #expect(await joiner.value == .cancelled(.notStarted))
-      #expect(cleanupReturned.withLock { current in current })
+      #expect(
+        cleanupReturned.withLock { current in
+          current
+        }
+      )
     }
 
-    @Test func awaitTerminationIgnoresTheJoinersOwnCancellation() async throws {
+    @Test
+    func awaitTerminationIgnoresTheJoinersOwnCancellation() async throws {
       // given a joiner parked on a stream whose producer has not reported
       let mayFinish = AsyncGate()
       defer { mayFinish.open() }
@@ -281,8 +307,10 @@ enum LLMEventStreamTests {
 
   // MARK: - Default budget
 
-  @Suite struct DefaultBudget {
-    @Test func pinsTheProviderDefaultBudgetAndItsExactSlotDivision() {
+  @Suite
+  struct DefaultBudget {
+    @Test
+    func pinsTheProviderDefaultBudgetAndItsExactSlotDivision() {
       // given the budget every stream runs on unless its caller names another
       let limits = LLMEventBufferLimits.providerDefault
 
@@ -302,8 +330,10 @@ enum LLMEventStreamTests {
 
   // MARK: - Buffer bounds
 
-  @Suite struct BufferBounds {
-    @Test func boundsTheDeltaQueueByCountWhenDeltasAreTiny() async throws {
+  @Suite
+  struct BufferBounds {
+    @Test
+    func boundsTheDeltaQueueByCountWhenDeltasAreTiny() async throws {
       // given a queue budgeted for three deltas across three hundred bytes
       let limits = LLMEventBufferLimits(
         maximumDeltaCount: 3,
@@ -326,7 +356,8 @@ enum LLMEventStreamTests {
       _ = await stream.cancelAndAwait()
     }
 
-    @Test func boundsTheDeltaQueueByPayloadWhenDeltasAreLarge() async throws {
+    @Test
+    func boundsTheDeltaQueueByPayloadWhenDeltasAreLarge() async throws {
       // given a queue budgeted for ten deltas across a hundred bytes
       let limits = LLMEventBufferLimits(
         maximumDeltaCount: 10,
@@ -349,7 +380,8 @@ enum LLMEventStreamTests {
       _ = await stream.cancelAndAwait()
     }
 
-    @Test func rejectsADeltaLargerThanTheWholeDeltaBudget() async throws {
+    @Test
+    func rejectsADeltaLargerThanTheWholeDeltaBudget() async throws {
       // given a delta no drain could ever make room for
       let sendFailure = Mutex<BoundedAsyncChannelError?>(nil)
       let stream = LLMEventStream.make(limits: tinyLimits) { sink in
@@ -368,7 +400,9 @@ enum LLMEventStreamTests {
 
       // then it is refused outright rather than parking the producer forever
       #expect(
-        sendFailure.withLock { current in current }
+        sendFailure.withLock { current in
+          current
+        }
           == .elementExceedsCapacity(weight: 65, capacity: 64)
       )
     }
@@ -376,8 +410,10 @@ enum LLMEventStreamTests {
 
   // MARK: - Terminal reservation
 
-  @Suite struct TerminalReservation {
-    @Test func commitsAMaximumSizeTerminalAgainstAFullDeltaQueue() async throws {
+  @Suite
+  struct TerminalReservation {
+    @Test
+    func commitsAMaximumSizeTerminalAgainstAFullDeltaQueue() async throws {
       // given a full delta queue and a reply that exactly fills the terminal reservation
       let maximumReply = ChatResponse(
         content: String(repeating: "z", count: 128),
@@ -397,16 +433,11 @@ enum LLMEventStreamTests {
       // then the reservation carried the terminal past a queue with no room left in it
       #expect(terminal == .completed(maximumReply))
       let events = try await collect(stream)
-      #expect(
-        events == [
-          .delta("first"),
-          .delta("second"),
-          .finished(maximumReply),
-        ]
-      )
+      #expect(events == [.delta("first"), .delta("second"), .finished(maximumReply)])
     }
 
-    @Test func failsSafelyWhenTheTerminalOutgrowsItsReservation() async throws {
+    @Test
+    func failsSafelyWhenTheTerminalOutgrowsItsReservation() async throws {
       // given a reply one byte past the reservation
       let oversizedReply = ChatResponse(
         content: String(repeating: "z", count: 129),
@@ -436,7 +467,8 @@ enum LLMEventStreamTests {
       )
     }
 
-    @Test func chargesToolArgumentsAndReplayStateAgainstTheReservation() async throws {
+    @Test
+    func chargesToolArgumentsAndReplayStateAgainstTheReservation() async throws {
       // given a reply whose visible text is tiny but whose tool call and replay state are not
       let statefulReply = ChatResponse(
         content: "hi",

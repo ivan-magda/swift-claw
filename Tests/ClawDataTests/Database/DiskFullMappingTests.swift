@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct DiskFullMappingTests {
-  @Test func mapsSqliteFullToStoreErrorDiskFull() throws {
+@Suite
+struct DiskFullMappingTests {
+  @Test
+  func mapsSQLiteFullToStoreErrorDiskFull() throws {
     // given
     let sqliteFull = DatabaseError(resultCode: .SQLITE_FULL, message: "database or disk is full")
 
@@ -19,11 +21,14 @@ import Testing
     // and the write seam surfaces the same typed error when a write throws SQLITE_FULL
     let database = MappedDatabase(writer: try ClawDatabase.makeInMemoryQueue())
     #expect(throws: StoreError.diskFull) {
-      try database.writeMapping { (_: Database) in throw sqliteFull }
+      try database.writeMapping { (_: Database) in
+        throw sqliteFull
+      }
     }
   }
 
-  @Test func mapsOtherDatabaseErrorsToUnexpected() throws {
+  @Test
+  func mapsOtherDatabaseErrorsToUnexpected() throws {
     // given
     let constraint = DatabaseError(
       resultCode: .SQLITE_CONSTRAINT,
@@ -44,27 +49,35 @@ import Testing
     // and the write seam surfaces a domain StoreError, never a raw DatabaseError
     let database = MappedDatabase(writer: try ClawDatabase.makeInMemoryQueue())
     #expect(throws: StoreError.self) {
-      try database.writeMapping { (_: Database) in throw constraint }
+      try database.writeMapping { (_: Database) in
+        throw constraint
+      }
     }
   }
 
-  @Test func mappedDatabaseTranslatesFailuresOnBothSeams() throws {
+  @Test
+  func mappedDatabaseTranslatesFailuresOnBothSeams() throws {
     // given
     let sqliteFull = DatabaseError(resultCode: .SQLITE_FULL, message: "database or disk is full")
     let database = MappedDatabase(writer: try ClawDatabase.makeInMemoryQueue())
 
     // when / then — the write seam surfaces the domain error
     #expect(throws: StoreError.diskFull) {
-      try database.writeMapping { (_: Database) in throw sqliteFull }
+      try database.writeMapping { (_: Database) in
+        throw sqliteFull
+      }
     }
 
     // and the read seam classifies identically
     #expect(throws: StoreError.diskFull) {
-      try database.readMapping { (_: Database) in throw sqliteFull }
+      try database.readMapping { (_: Database) in
+        throw sqliteFull
+      }
     }
   }
 
-  @Test func passesStoreErrorsThroughUnchanged() throws {
+  @Test
+  func passesStoreErrorsThroughUnchanged() throws {
     // given — an already-domain error must pass through, never be re-wrapped
     let domain = StoreError.unexpected("already typed")
 
@@ -79,7 +92,8 @@ import Testing
 // MARK: - Coder Writer
 
 extension DiskFullMappingTests {
-  @Test func coderWriterMapsDiskFull() throws {
+  @Test
+  func coderWriterMapsDiskFull() throws {
     // given
     let fixture = try CoderStoreFixture()
     let id = try fixture.admittedID()

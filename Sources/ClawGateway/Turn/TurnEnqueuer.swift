@@ -19,7 +19,9 @@ struct TurnEnqueuer: Sendable {
     lanes: SessionLaneRegistry,
     turns: any TurnDispatching,
     learning: ScheduledLearningService? = nil,
-    now: @escaping @Sendable () -> Date = { Date() },
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    },
     logger: Logger
   ) {
     self.lanes = lanes
@@ -31,39 +33,39 @@ struct TurnEnqueuer: Sendable {
   /// `log` lets the inbound path pass its run/session/update-stamped logger so lifecycle greps
   /// by `run=<id>` keep working; other initiators use the component logger.
   func enqueue(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    triggerMessageId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
+    triggerMessageID: Int64,
     log: Logger? = nil
   ) async {
     let runLog = log ?? logger
     let runner = turns
     let settle = settlement
 
-    let result = await lanes.enqueue(sessionID: sessionId, runID: runId) {
+    let result = await lanes.enqueue(sessionID: sessionID, runID: runID) {
       do {
         try await runner.run(
-          runId: runId,
-          sessionId: sessionId,
-          chatId: chatId,
-          triggerMessageId: triggerMessageId
+          runID: runID,
+          sessionID: sessionID,
+          chatID: chatID,
+          triggerMessageID: triggerMessageID
         )
       } catch StoreError.diskFull {
-        runLog.error("run \(runId) stopped by storage full after enqueue")
+        runLog.error("run \(runID) stopped by storage full after enqueue")
       } catch {
-        runLog.error("run \(runId) error (handled in-band): \(error)")
+        runLog.error("run \(runID) error (handled in-band): \(error)")
       }
       // Every exit from the turn passes here, including cancellation and supersession. Settling in
       // the closure is what keeps a cancelled bound run inside the learning loop; boot
       // reconciliation is a crash backstop, not the ordinary path to settlement.
-      await settle.settle(runId: runId, log: runLog)
+      await settle.settle(runID: runID, log: runLog)
     }
 
     if result == .shuttingDown {
       // Admission closed between the durable claim and the lane hop: the run stays PENDING for the
       // boot reconciler to recover on the next start rather than executing under a draining daemon.
-      runLog.notice("run \(runId) not enqueued; lane admission is shutting down")
+      runLog.notice("run \(runID) not enqueued; lane admission is shutting down")
     }
   }
 
@@ -71,10 +73,10 @@ struct TurnEnqueuer: Sendable {
   /// like any turn.
   func enqueue(fire: ClaimedFire) async {
     await enqueue(
-      runId: fire.runId,
-      sessionId: fire.sessionId,
-      chatId: fire.ownerChatId,
-      triggerMessageId: fire.triggerMessageId
+      runID: fire.runID,
+      sessionID: fire.sessionID,
+      chatID: fire.ownerChatID,
+      triggerMessageID: fire.triggerMessageID
     )
   }
 }

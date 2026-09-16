@@ -4,18 +4,15 @@ import GRDB
 
 enum CoderJobRecord {
   static func fetch(_ db: Database, id: UUID) throws -> CoderJob? {
-    try Row.fetchOne(
-      db,
-      sql: "SELECT * FROM coder_jobs WHERE id = ?",
-      arguments: [id.uuidString]
-    ).map(decode)
+    try Row.fetchOne(db, sql: "SELECT * FROM coder_jobs WHERE id = ?", arguments: [id.uuidString])
+      .map(decode)
   }
 
   static func decode(_ row: Row) throws -> CoderJob {
     guard let id = UUID(uuidString: row["id"]),
-      let state = CoderJobState(rawValue: row["state"]),
-      let ownership = CoderProcessOwnership(rawValue: row["process_ownership"]),
-      let createdAt = EpochSecondCodec.date(fromEpoch: row["created_ts"])
+          let state = CoderJobState(rawValue: row["state"]),
+          let ownership = CoderProcessOwnership(rawValue: row["process_ownership"]),
+          let createdAt = EpochSecondCodec.date(fromEpoch: row["created_ts"])
     else {
       throw StoreError.unexpected("Invalid Coder job record")
     }
@@ -57,10 +54,19 @@ enum CoderJobRecord {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
         """,
       arguments: [
-        id.uuidString, origin.runID, origin.sessionID, origin.requesterUserID, origin.chatID,
-        origin.toolCallID, origin.approvalID, try encodeJSON(prepared),
-        CoderJobState.admitted.rawValue, prepared.checkoutPath, prepared.commonGitDirectory,
-        CoderProcessOwnership.none.rawValue, EpochSecondCodec.epoch(now),
+        id.uuidString,
+        origin.runID,
+        origin.sessionID,
+        origin.requesterUserID,
+        origin.chatID,
+        origin.toolCallID,
+        origin.approvalID,
+        try encodeJSON(prepared),
+        CoderJobState.admitted.rawValue,
+        prepared.checkoutPath,
+        prepared.commonGitDirectory,
+        CoderProcessOwnership.none.rawValue,
+        EpochSecondCodec.epoch(now),
         EpochSecondCodec.epoch(now),
       ]
     )

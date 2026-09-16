@@ -36,8 +36,8 @@ extension BoundRunEnvironment {
 
   struct LearningUsageRow: Equatable {
     let providerCallID: String
-    let jobId: Int64?
-    let runId: Int64?
+    let jobID: Int64?
+    let runID: Int64?
     let costUSD: Double
     let tokens: Int
   }
@@ -48,27 +48,24 @@ extension BoundRunEnvironment {
 
   /// One completed bound run, sealed as evidence the evaluator is allowed to read.
   func sealedEvidence() throws -> SealedEvidence {
-    let runId = try settledBoundRun()
-    _ = try learning.sealEvidence(runId: runId, now: now)
-    return try sealed(runId: runId)
+    let runID = try settledBoundRun()
+    _ = try learning.sealEvidence(runID: runID, now: now)
+    return try sealed(runID: runID)
   }
 
   /// A bound run that ended in provider failure: sealed, but classified as infrastructure noise
   /// rather than task evidence.
   func ineligibleSealedEvidence() throws -> SealedEvidence {
-    let runId = try runningBoundRun()
-    try freezeSurface(runId: runId, skillSetDigest: Self.pickupSkillSetDigest)
-    _ = try runs.commitDegradedTurn(
-      degradedTurn(runId: runId, cause: .providerFailure),
-      now: now
-    )
-    _ = try learning.sealEvidence(runId: runId, now: now)
-    return try sealed(runId: runId)
+    let runID = try runningBoundRun()
+    try freezeSurface(runID: runID, skillSetDigest: Self.pickupSkillSetDigest)
+    _ = try runs.commitDegradedTurn(degradedTurn(runID: runID, cause: .providerFailure), now: now)
+    _ = try learning.sealEvidence(runID: runID, now: now)
+    return try sealed(runID: runID)
   }
 
   func evaluatorKey(for evidence: SealedEvidence) -> LearningOperationKey {
     LearningOperationKey(
-      jobId: evidence.jobId,
+      jobID: evidence.jobID,
       epoch: evidence.epoch,
       phase: .evaluator,
       sourceDigest: evidence.digest.rawValue,
@@ -97,7 +94,7 @@ extension BoundRunEnvironment {
     providerCallID: ProviderCallID = UUIDProviderCallIDGenerator().next()
   ) -> LearningAuthorization {
     LearningAuthorization(
-      operationId: claim.id,
+      operationID: claim.id,
       carrier: carrier ?? permittedCarrier(for: claim),
       estimatedTokens: 1_000,
       estimatedCostUSD: estimatedCostUSD,
@@ -141,7 +138,7 @@ extension BoundRunEnvironment {
       product = .evaluation(verdict(outcome: .noIssue, issueCodes: []))
     }
     return LearningOperationResult(
-      operationId: id,
+      operationID: id,
       usage: LearningCallUsage(
         model: "openai-compatible/test-model",
         promptTokens: 900,
@@ -189,8 +186,8 @@ extension BoundRunEnvironment {
   }
 
   func cancelJob() throws {
-    guard try jobs.cancel(id: jobId, now: now) != nil else {
-      throw StoreError.unexpected("job \(jobId) refused to cancel")
+    guard try jobs.cancel(id: jobID, now: now) != nil else {
+      throw StoreError.unexpected("job \(jobID) refused to cancel")
     }
   }
 
@@ -234,12 +231,12 @@ extension BoundRunEnvironment {
     }
   }
 
-  func evaluatorRoute(runId: Int64) throws -> String? {
+  func evaluatorRoute(runID: Int64) throws -> String? {
     try queue.read { db in
       try String.fetchOne(
         db,
         sql: "SELECT evaluator_route FROM run_compatibility WHERE run_id = ?",
-        arguments: [runId]
+        arguments: [runID]
       )
     }
   }
@@ -265,7 +262,7 @@ extension BoundRunEnvironment {
     }
   }
 
-  func learningUsage(operationId: LearningOperationID) throws -> [LearningUsageRow] {
+  func learningUsage(operationID: LearningOperationID) throws -> [LearningUsageRow] {
     try queue.read { db in
       try Row.fetchAll(
         db,
@@ -274,13 +271,12 @@ extension BoundRunEnvironment {
             prompt_tokens + completion_tokens AS tokens
           FROM provider_usage WHERE learning_operation_id = ? ORDER BY id
           """,
-        arguments: [operationId.rawValue]
-      )
-      .map { row in
+        arguments: [operationID.rawValue]
+      ).map { row in
         LearningUsageRow(
           providerCallID: row["provider_call_id"],
-          jobId: row["learning_job_id"],
-          runId: row["run_id"],
+          jobID: row["learning_job_id"],
+          runID: row["run_id"],
           costUSD: row["cost_usd"],
           tokens: row["tokens"]
         )
@@ -301,9 +297,9 @@ extension BoundRunEnvironment {
           """,
         arguments: [
           "evaluation-\(evidence.digest.rawValue)",
-          evidence.jobId,
+          evidence.jobID,
           evidence.epoch.value,
-          evidence.runId,
+          evidence.runID,
           evidence.digest.rawValue,
           EvaluatorOutcome.noIssue.rawValue,
           EpochSecondCodec.epoch(now),
@@ -316,9 +312,9 @@ extension BoundRunEnvironment {
 // MARK: - Sealing Plumbing
 
 private extension BoundRunEnvironment {
-  func sealed(runId: Int64) throws -> SealedEvidence {
-    guard let evidence = try learning.evidence(runId: runId) else {
-      throw StoreError.unexpected("run \(runId) sealed no evidence")
+  func sealed(runID: Int64) throws -> SealedEvidence {
+    guard let evidence = try learning.evidence(runID: runID) else {
+      throw StoreError.unexpected("run \(runID) sealed no evidence")
     }
     return evidence
   }

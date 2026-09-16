@@ -4,47 +4,46 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct RetentionTests {
-  @Test func unreferencedPayloadsThenReceiptsAreCollectedWithoutRecovery() throws {
+@Suite
+struct RetentionTests {
+  @Test
+  func unreferencedPayloadsThenReceiptsAreCollectedWithoutRecovery() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let source = try env.evaluatedEvidence(issueCode: "material.missed")
     let feedback = try env.appendFeedback(
       subjectKind: .run,
-      subjectDigest: String(source.evidence.runId),
+      subjectDigest: String(source.evidence.runID),
       signal: .resultCorrection,
       payload: "Ignore counter-only changes."
     )
 
     // when
-    let payloadSweep = try env.learning.sweepRetention(
-      now: env.now.addingTimeInterval(31 * 86_400)
-    )
+    let payloadSweep = try env.learning.sweepRetention(now: env.now.addingTimeInterval(31 * 86_400))
 
     // then
     #expect(payloadSweep.deletedPayloads == 2)
-    #expect(try env.learning.evidence(runId: source.evidence.runId)?.payload == nil)
-    #expect(try env.learning.evaluation(runId: source.evidence.runId) != nil)
-    #expect(feedback.eventId > 0)
+    #expect(try env.learning.evidence(runID: source.evidence.runID)?.payload == nil)
+    #expect(try env.learning.evaluation(runID: source.evidence.runID) != nil)
+    #expect(feedback.eventID > 0)
 
     // when
-    let compactSweep = try env.learning.sweepRetention(
-      now: env.now.addingTimeInterval(91 * 86_400)
-    )
+    let compactSweep = try env.learning.sweepRetention(now: env.now.addingTimeInterval(91 * 86_400))
     let again = try env.learning.sweepRetention(now: env.now.addingTimeInterval(92 * 86_400))
 
     // then
     #expect(compactSweep.deletedReceipts > 0)
     #expect(again.deletedReceipts == 0)
-    #expect(try env.learning.evidence(runId: source.evidence.runId) == nil)
-    #expect(try env.learning.workflowRuns(jobId: env.jobId, after: 0, limit: 64).isEmpty)
+    #expect(try env.learning.evidence(runID: source.evidence.runID) == nil)
+    #expect(try env.learning.workflowRuns(jobID: env.jobID, after: 0, limit: 64).isEmpty)
     #expect(try env.learning.unsealed(limit: 64).isEmpty)
   }
 
-  @Test func liveTrialAndPromotionRetainSources() throws {
+  @Test
+  func liveTrialAndPromotionRetainSources() throws {
     // given
     let env = try BoundRunEnvironment.promotionEnvironment()
-    let trial = try #require(try env.learning.openTrial(jobId: env.jobId))
+    let trial = try #require(try env.learning.openTrial(jobID: env.jobID))
     let candidate = try #require(try env.learning.candidateArtifact(digest: trial.candidateDigest))
     let first = try env.positiveTrialRun()
     _ = try env.positiveTrialRun()
@@ -55,27 +54,28 @@ import Testing
 
     // then
     for source in candidate.manifest.evidence {
-      #expect(try env.learning.evidence(runId: source.runId)?.payload != nil)
+      #expect(try env.learning.evidence(runID: source.runID)?.payload != nil)
     }
-    #expect(try env.learning.openTrial(jobId: env.jobId) != nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) != nil)
 
     // when
     let promotion = try env.promoteTrial()
     _ = try env.learning.sweepRetention(now: old)
 
     // then
-    #expect(try env.learning.currentPromotion(jobId: env.jobId) == promotion)
-    #expect(try env.learning.evidence(runId: first)?.payload != nil)
-    #expect(try env.learning.lessonSet(jobId: env.jobId, digest: trial.baseDigest) != nil)
+    #expect(try env.learning.currentPromotion(jobID: env.jobID) == promotion)
+    #expect(try env.learning.evidence(runID: first)?.payload != nil)
+    #expect(try env.learning.lessonSet(jobID: env.jobID, digest: trial.baseDigest) != nil)
     #expect(try env.learning.candidateArtifact(digest: trial.candidateDigest) == candidate)
   }
 
-  @Test func closedReplacementRemainsBlockedAfterCollection() throws {
+  @Test
+  func closedReplacementRemainsBlockedAfterCollection() throws {
     // given
     let env = try BoundRunEnvironment.promotionEnvironment()
-    let trial = try #require(try env.learning.openTrial(jobId: env.jobId))
+    let trial = try #require(try env.learning.openTrial(jobID: env.jobID))
     let replacement = try #require(
-      try env.learning.lessonSet(jobId: env.jobId, digest: trial.replacementDigest)
+      try env.learning.lessonSet(jobID: env.jobID, digest: trial.replacementDigest)
     )
     _ = try env.learning.applyTrialDecision(
       .fallback(reason: .insufficientSupport),
@@ -86,9 +86,7 @@ import Testing
 
     // when
     _ = try env.learning.sweepRetention(now: env.now.addingTimeInterval(150 * 86_400))
-    let retry = try AdmissionStoreFixture(env: env).persistedCandidate(
-      lessons: replacement.lessons
-    )
+    let retry = try AdmissionStoreFixture(env: env).persistedCandidate(lessons: replacement.lessons)
     let outcome = try env.learning.admitCandidate(
       digest: retry.digest,
       redactor: SecretRedactor(secretValues: []),
@@ -99,12 +97,13 @@ import Testing
     #expect(outcome == .rejected(.replacementAlreadyClosed))
   }
 
-  @Test func rollbackBaseRetainsItsClosedReplacementBlocker() throws {
+  @Test
+  func rollbackBaseRetainsItsClosedReplacementBlocker() throws {
     // given
     let env = try BoundRunEnvironment.promotionEnvironment()
-    let failed = try #require(try env.learning.openTrial(jobId: env.jobId))
+    let failed = try #require(try env.learning.openTrial(jobID: env.jobID))
     let replacement = try #require(
-      try env.learning.lessonSet(jobId: env.jobId, digest: failed.replacementDigest)
+      try env.learning.lessonSet(jobID: env.jobID, digest: failed.replacementDigest)
     )
     _ = try env.learning.applyTrialDecision(
       .fallback(reason: .insufficientSupport),
@@ -127,7 +126,7 @@ import Testing
     _ = try env.learning.sweepRetention(now: env.now.addingTimeInterval(150 * 86_400))
     let event = try env.promotionFeedback(promotion, signal: .promotionRollback)
     let rollback = try env.learning.rollback(
-      .ownerFeedback(promotionId: promotion.decisionId, eventId: event.id),
+      .ownerFeedback(promotionID: promotion.decisionID, eventID: event.id),
       now: env.now
     )
     let retry = try fixture.persistedCandidate(lessons: replacement.lessons)
@@ -142,7 +141,8 @@ import Testing
     #expect(outcome == .rejected(.replacementAlreadyClosed))
   }
 
-  @Test func liveEditedCandidateRetainsItsPredecessorAndSourcePayloads() throws {
+  @Test
+  func liveEditedCandidateRetainsItsPredecessorAndSourcePayloads() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let original = try AdmissionStoreFixture(env: env).persistedCandidate()
@@ -156,7 +156,7 @@ import Testing
     let outcome = try env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: original.digest,
-        feedbackEventId: feedback.eventId,
+        feedbackEventID: feedback.eventID,
         payload: Data(payload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -174,11 +174,12 @@ import Testing
     #expect(try env.learning.candidateArtifact(digest: edited.digest) == edited)
     #expect(try env.learning.candidateArtifact(digest: original.digest) == original)
     for source in original.manifest.evidence {
-      #expect(try env.learning.evidence(runId: source.runId)?.payload != nil)
+      #expect(try env.learning.evidence(runID: source.runID)?.payload != nil)
     }
   }
 
-  @Test func unfinishedOperationRetainsEvidence() throws {
+  @Test
+  func unfinishedOperationRetainsEvidence() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let evidence = try env.sealedEvidence()
@@ -193,6 +194,6 @@ import Testing
 
     // then
     #expect(recorded)
-    #expect(try env.learning.evaluation(runId: evidence.runId) != nil)
+    #expect(try env.learning.evaluation(runID: evidence.runID) != nil)
   }
 }

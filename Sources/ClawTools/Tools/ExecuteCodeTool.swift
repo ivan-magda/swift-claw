@@ -21,6 +21,7 @@ public struct ExecuteCodeTool: Tool {
   public static let maxStagedFileBytes = ExecStagingLimits.standard.maxStagedFileBytes
   public static let maxStagedTotalBytes = ExecStagingLimits.standard.maxStagedTotalBytes
   public static let maxStagedFiles = ExecStagingLimits.standard.maxStagedFiles
+
   public static let rawOutputTruncationNotice =
     "[raw output truncated after the first 1 MiB of one or more streams]"
 
@@ -48,25 +49,27 @@ public struct ExecuteCodeTool: Tool {
         Run a short Python or shell script in a locked-down, throwaway sandbox \
         (owner approval required; no network unless explicitly requested).
         """,
-      parameters: .object([
-        "type": .string("object"),
-        "properties": .object([
-          "language": .object([
-            "type": .string("string"),
-            "enum": .array([.string("python"), .string("sh")]),
-          ]),
-          "code": .object(["type": .string("string")]),
-          "stage": .object([
-            "type": .string("array"),
-            "items": .object(["type": .string("string")]),
-          ]),
-          "network": .object([
-            "type": .string("boolean"),
-            "default": .bool(false),
-          ]),
-        ]),
-        "required": .array([.string("language"), .string("code")]),
-      ]),
+      parameters: .object(
+        [
+          "type": .string("object"),
+          "properties": .object(
+            [
+              "language": .object(
+                [
+                  "type": .string("string"),
+                  "enum": .array([.string("python"), .string("sh")]),
+                ]
+              ),
+              "code": .object(["type": .string("string")]),
+              "stage": .object(
+                ["type": .string("array"), "items": .object(["type": .string("string")])]
+              ),
+              "network": .object(["type": .string("boolean"), "default": .bool(false)]),
+            ]
+          ),
+          "required": .array([.string("language"), .string("code")]),
+        ]
+      ),
       metadataProvenance: .trusted,
       egressClass: .none,
       riskLevel: .dangerous
@@ -332,13 +335,7 @@ private extension ExecuteCodeTool {
         basename = accepted
       }
 
-      authorized.append(
-        AuthorizedStage(
-          path: path,
-          realpath: realpath,
-          basename: basename
-        )
-      )
+      authorized.append(AuthorizedStage(path: path, realpath: realpath, basename: basename))
     }
 
     return .success(authorized)
@@ -412,6 +409,8 @@ extension ExecuteCodeTool {
   }
 }
 
+// MARK: - Staged File Validation
+
 private extension ExecuteCodeTool {
   enum BasenameValidation {
     case accepted(String)
@@ -448,9 +447,9 @@ private extension ExecuteCodeTool {
   }
 
   static func normalizedBasename(_ basename: String) -> String {
-    basename.precomposedStringWithCanonicalMapping
-      .lowercased(with: Locale(identifier: "en_US_POSIX"))
-      .precomposedStringWithCanonicalMapping
+    basename.precomposedStringWithCanonicalMapping.lowercased(
+      with: Locale(identifier: "en_US_POSIX")
+    ).precomposedStringWithCanonicalMapping
   }
 
   func readsPrivateData(in stages: [LoadedStage]) -> Bool {
@@ -508,8 +507,7 @@ private extension ExecuteCodeTool {
         \(recorded.stage.count) staged file(s), \(totalBytes) B
         """,
       contentPreview: preview,
-      warnings: recorded.network
-        ? ["network egress is enabled — this run can send data out"] : []
+      warnings: recorded.network ? ["network egress is enabled — this run can send data out"] : []
     )
   }
 
@@ -586,10 +584,7 @@ private extension ExecuteCodeTool {
     claimed normalizedNames: inout Set<String>
   ) -> StageOutcome<LoadedStage> {
     let liveRealpath: String
-    switch WorkspacePathContainment.resolveExisting(
-      path: record.path,
-      root: workspaceRoot.path
-    ) {
+    switch WorkspacePathContainment.resolveExisting(path: record.path, root: workspaceRoot.path) {
     case .refused:
       return .failure("A staged path no longer resolves to its approved target; nothing ran.")
     case .resolved(let resolved):
@@ -607,11 +602,10 @@ private extension ExecuteCodeTool {
       return .failure("A staged file became unavailable after approval; nothing ran.")
     }
 
-    guard
-      attributes[.type] as? FileAttributeType == .typeRegular,
-      let size = attributes[.size] as? NSNumber,
-      size.intValue == record.bytes,
-      size.intValue <= Self.maxStagedFileBytes
+    guard attributes[.type] as? FileAttributeType == .typeRegular,
+          let size = attributes[.size] as? NSNumber,
+          size.intValue == record.bytes,
+          size.intValue <= Self.maxStagedFileBytes
     else {
       return .failure("A staged file no longer has its approved size and type; nothing ran.")
     }
@@ -644,13 +638,7 @@ private extension ExecuteCodeTool {
       basename = accepted
     }
 
-    return .success(
-      LoadedStage(
-        record: record,
-        basename: basename,
-        bytes: data
-      )
-    )
+    return .success(LoadedStage(record: record, basename: basename, bytes: data))
   }
 }
 

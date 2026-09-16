@@ -150,19 +150,18 @@ private extension SchedulerService {
         )
       }
 
-      guard
-        let fire = try jobs.claimAndFire(
-          jobId: job.id,
-          due: due,
-          fireAt: fireAt,
-          nextOccurrence: policy.advance(
-            for: job,
-            timezone: timezone,
-            anchor: due,
-            after: tickTime
-          ),
-          now: tickTime
-        )
+      guard let fire = try jobs.claimAndFire(
+        jobID: job.id,
+        due: due,
+        fireAt: fireAt,
+        nextOccurrence: policy.advance(
+          for: job,
+          timezone: timezone,
+          anchor: due,
+          after: tickTime
+        ),
+        now: tickTime
+      )
       else {
         // No run to enqueue: the CAS matched no row (claimed elsewhere / job mutated) OR the
         // job's session already has a live run and the overlap guard skipped this fire.
@@ -175,12 +174,7 @@ private extension SchedulerService {
     }
   }
 
-  func skipMisfire(
-    job: ScheduledJob,
-    due: Date,
-    timezone: TimeZone,
-    tickTime: Date
-  ) throws {
+  func skipMisfire(job: ScheduledJob, due: Date, timezone: TimeZone, tickTime: Date) throws {
     let skippedCount = policy.missedOccurrenceCount(
       for: job,
       timezone: timezone,
@@ -190,7 +184,7 @@ private extension SchedulerService {
     )
 
     _ = try jobs.skipMisfire(
-      jobId: job.id,
+      jobID: job.id,
       due: due,
       nextOccurrence: policy.advance(for: job, timezone: timezone, anchor: due, after: tickTime),
       skippedCount: skippedCount,
@@ -253,13 +247,12 @@ private extension SchedulerService {
     }
 
     do {
-      guard
-        let fire = try jobs.fireHeartbeat(
-          prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
-          ownerChatId: heartbeat.ownerChatId,
-          now: tickTime,
-          day: day
-        )
+      guard let fire = try jobs.fireHeartbeat(
+        prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
+        ownerChatID: heartbeat.ownerChatID,
+        now: tickTime,
+        day: day
+      )
       else {
         // A prior beat is still live: the store skipped this one to protect its window. Record
         // the canonical heartbeat_skipped audit (reason in `decision`) like every other beat skip.

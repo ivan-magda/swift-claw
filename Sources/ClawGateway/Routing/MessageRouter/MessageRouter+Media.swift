@@ -11,7 +11,7 @@ extension MessageRouter {
   ) async throws(RoutingHalt) -> HandleOutcome {
     guard let voice else {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
+        updateID: rawUpdate.updateID,
         target: .reply(to: message, mode: mode),
         text: Self.unsupportedMediaText(kind: VoiceAttachment.mediaKindDescription)
       )
@@ -30,7 +30,7 @@ extension MessageRouter {
       return await replies.storageFull(target: .reply(to: message, mode: mode))
     case .failure(let failure):
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
+        updateID: rawUpdate.updateID,
         target: .reply(to: message, mode: mode),
         text: failure.ownerReplyText
       )
@@ -65,7 +65,7 @@ extension MessageRouter {
     // awake. Whether the pulse lands is not checked and cannot be: the action auto-expires
     // server-side, so one that never arrives is no reason to fail a photo the owner is waiting on.
     let target = DeliveryTarget.reply(to: message, mode: mode)
-    await typing?.sendTyping(chatId: target.chatId, messageThreadId: target.messageThreadId)
+    await typing?.sendTyping(chatID: target.chatID, messageThreadID: target.messageThreadID)
 
     switch await images.materialize(attachment) {
     case .success(let image):
@@ -79,7 +79,7 @@ extension MessageRouter {
       )
     case .failure(let failure):
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
+        updateID: rawUpdate.updateID,
         target: .reply(to: message, mode: mode),
         text: failure.ownerReplyText
       )
@@ -108,7 +108,7 @@ private extension MessageRouter {
   ) async throws(RoutingHalt) -> HandleOutcome {
     guard let caption, caption.isEmpty == false else {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
+        updateID: rawUpdate.updateID,
         target: .reply(to: message, mode: mode),
         text: Self.unsupportedMediaText(kind: PhotoAttachment.mediaKindDescription)
       )

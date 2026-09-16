@@ -16,17 +16,16 @@ public struct ProviderStack: Sendable {
   public let binding: LLMRouteBinding
   public let credentialSource: any LLMCredentialSource
 
-  public init(
-    binding: LLMRouteBinding,
-    credentialSource: any LLMCredentialSource
-  ) {
+  public init(binding: LLMRouteBinding, credentialSource: any LLMCredentialSource) {
     self.binding = binding
     self.credentialSource = credentialSource
   }
 }
 
-/// A composed roster plus the credential sources the shutdown sequence must commit. The sources are
-/// held apart from the roster because a turn drives routes while only composition closes them.
+/// A composed roster plus the credential sources the shutdown sequence must commit.
+///
+/// The sources are held apart from the roster because a turn drives routes while only composition
+/// closes them.
 public struct RosterStack: Sendable {
   public let roster: ProviderRoster
   public let credentialSources: [any LLMCredentialSource]
@@ -34,40 +33,49 @@ public struct RosterStack: Sendable {
 
 // MARK: - Factory
 
-/// The one place a resolved route becomes a concrete provider stack. It lives in `ClawLLM` rather than
-/// the executable so a test executes the production selection logic — which route builds which adapter,
-/// which credential seam it opens, and which policies it stamps — instead of re-deriving it.
+/// The one place a resolved route becomes a concrete provider stack.
+///
+/// It lives in `ClawLLM` rather than the executable so a test executes the production selection
+/// logic — which route builds which adapter, which credential seam it opens, and which policies it
+/// stamps — instead of re-deriving it.
 public enum ProviderStackFactory {
-  /// A route reached the factory in a shape its credential mode structurally forbids. Every case is
-  /// impossible for a correctly registered descriptor, so it names a registry defect, not a
-  /// configuration error: the factory fails closed at boot rather than composing a broken wire.
+  /// A route reached the factory in a shape its credential mode structurally forbids.
+  ///
+  /// Every case is impossible for a correctly registered descriptor, so it names a registry defect,
+  /// not a configuration error: the factory fails closed at boot rather than composing a broken
+  /// wire.
   public enum CompositionError: Error, Equatable {
     /// A current route (`.noneOrStaticBearer`) carried a non-`.configuredEndpoint` egress, so no
-    /// endpoint was chosen. Composing would point the wire at nothing; this surfaces instead.
+    /// endpoint was chosen.
+    ///
+    /// Composing would point the wire at nothing; this surfaces instead.
     case currentRouteMissingConfiguredEndpoint(providerID: LLMProviderID)
-    /// A current route (`.noneOrStaticBearer`) carried a non-`.configured` output-token field, so no
-    /// wire key was chosen. Composing would silently pick an unchosen default; this surfaces instead.
+    /// A current route (`.noneOrStaticBearer`) carried a non-`.configured` output-token field, so
+    /// no wire key was chosen.
+    ///
+    /// Composing would silently pick an unchosen default; this surfaces instead.
     case currentRouteMissingOutputField(providerID: LLMProviderID)
   }
 
   // The pinned route-directed signature carries six inputs by design — the resolved route, the neutral
   // settings, the two lazy per-route credential seams, the dedicated executor, and the build version.
   // swiftlint:disable function_parameter_count
-  /// Composes the stack the route selects. The two secret seams are lazy and each belongs to exactly
-  /// one route: the static bearer closure is read only for the current route and the managed store is
-  /// built only for the ChatGPT route, so a route never opens the other's credential path.
+  /// Composes the provider and credential lifetime selected by a resolved route.
   ///
-  /// - Parameter loadStaticBearer: the current route's static bearer, read once. Never invoked on the
-  ///   managed route.
-  /// - Parameter makeManagedCredentialStore: builds the encrypted credential store, invoked once and
-  ///   only for the managed route. Its `load` throws the closed store taxonomy: a missing record is a
-  ///   valid logged-out boot, a malformed or insecure envelope propagates for the caller to map to the
-  ///   secret-load exit code.
-  /// - Parameter buildVersion: `ClawdVersion.current`, sanitized by the ChatGPT adapter into its
-  ///   User-Agent. Unused by the current route.
-  /// - Parameter treatsQuotaAsTerminal: whether a 429 on this route should fail immediately rather
-  ///   than spend the retry budget — set for the primary only when a fallback route exists to take
-  ///   over. Unused by the current route, which carries no subscription quota to wall against.
+  /// - Parameters:
+  ///   - route: The resolved wire, credential, and accounting identities.
+  ///   - settings: Provider settings shared by the configured routes.
+  ///   - loadStaticBearer: Reads this route's static bearer once; unused by a managed route.
+  ///   - makeManagedCredentialStore: Creates the encrypted store once for a managed route.
+  ///     A missing record permits logged-out startup; malformed or insecure credentials fail boot.
+  ///   - http: The dedicated provider transport with redirects disabled.
+  ///   - buildVersion: The application version sanitized into the subscription User-Agent;
+  ///     unused by the OpenAI-compatible route.
+  ///   - treatsQuotaAsTerminal: Whether a subscription 429 should fail immediately to a fallback
+  ///     instead of using the retry budget; unused by the OpenAI-compatible route.
+  /// - Returns: The route binding and the credential source that shutdown must close.
+  /// - Throws: `CompositionError` for an inconsistent route descriptor, or a credential-store
+  ///   failure when managed credentials cannot be loaded safely.
   public static func make(
     route: ResolvedLLMRoute,
     settings: LLMConfig,
@@ -96,14 +104,24 @@ public enum ProviderStackFactory {
       )
     }
   }
+
   // swiftlint:enable function_parameter_count
 
   // swiftlint:disable function_parameter_count
-  /// Composes every configured route at boot. A fallback that cannot be built is a startup failure,
-  /// never a surprise discovered when the primary's quota runs out.
+  /// Composes every configured route and its credential lifetime at boot.
   ///
-  /// - Parameter loadFallbackBearer: the fallback route's static bearer. Read only when a fallback
-  ///   route is configured, and never for the primary.
+  /// - Parameters:
+  ///   - primaryRoute: The route used when no fallback or cooldown applies.
+  ///   - fallbackRoute: The optional route used when the primary is unavailable.
+  ///   - settings: Provider settings shared by both routes.
+  ///   - loadStaticBearer: Reads the primary's static bearer when that route needs it.
+  ///   - loadFallbackBearer: Reads only the fallback's static bearer, when configured and needed.
+  ///   - makeManagedCredentialStore: Creates the store for a route using managed credentials.
+  ///   - http: The dedicated provider transport with redirects disabled.
+  ///   - buildVersion: The application version used by subscription adapters.
+  /// - Returns: The ordered route roster and every credential source shutdown must close.
+  /// - Throws: A route-composition or credential-store failure from either configured route;
+  ///   a broken fallback fails startup rather than being deferred until failover.
   public static func makeRoster(
     primaryRoute: ResolvedLLMRoute,
     fallbackRoute: ResolvedLLMRoute?,
@@ -145,16 +163,16 @@ public enum ProviderStackFactory {
       roster: ProviderRoster(primary: primaryStack.binding, fallback: fallbackStack.binding),
       credentialSources: [primaryStack.credentialSource, fallbackStack.credentialSource]
     )
-  }
-  // swiftlint:enable function_parameter_count
+  }  // swiftlint:enable function_parameter_count
 }
 
 // MARK: - Current route
 
 private extension ProviderStackFactory {
-  /// The configured OpenAI-compatible Chat Completions stack: a static bearer (or none, for a keyless
-  /// local server), the wire adapter pointed at the route's resolved endpoint, and metered text-only
-  /// policies. The endpoint arrives already resolved from the route; this never re-canonicalizes it.
+  /// Composes the OpenAI-compatible adapter with its resolved endpoint and static bearer.
+  ///
+  /// An absent bearer permits a keyless local server. The binding uses metered cost and text-only
+  /// reservation policies; the endpoint arrives resolved and is not canonicalized again.
   static func currentStack(
     route: ResolvedLLMRoute,
     settings: LLMConfig,
@@ -198,9 +216,7 @@ private extension ProviderStackFactory {
     guard case .configured(let field) = route.descriptor.capabilities.outputTokenField else {
       // A none-or-static-bearer route always carries a configured field by construction; its absence
       // here is a registry defect. Fail closed at boot rather than degrade to an unchosen wire key.
-      throw CompositionError.currentRouteMissingOutputField(
-        providerID: route.descriptor.providerID
-      )
+      throw CompositionError.currentRouteMissingOutputField(providerID: route.descriptor.providerID)
     }
     return field
   }
@@ -209,10 +225,12 @@ private extension ProviderStackFactory {
 // MARK: - ChatGPT route
 
 private extension ProviderStackFactory {
-  /// The managed ChatGPT Responses stack. The credential is loaded and validated once before the
-  /// actor is built, so loading is never a second implicit refresh flight: a missing record boots
-  /// logged out (the source authenticates before any inference and the daemon still delivers login
-  /// guidance), and a malformed envelope throws for the caller to map to the secret-load exit code.
+  /// The managed ChatGPT Responses stack.
+  ///
+  /// The credential is loaded and validated once before the actor is built, so loading is never a
+  /// second implicit refresh flight: a missing record boots logged out (the source authenticates
+  /// before any inference and the daemon still delivers login guidance), and a malformed envelope
+  /// throws for the caller to map to the secret-load exit code.
   static func managedStack(
     route: ResolvedLLMRoute,
     settings: LLMConfig,
@@ -226,10 +244,13 @@ private extension ProviderStackFactory {
     let credentialSource = ChatGPTCredentialSource(
       initialCredential: initial,
       store: store,
-      oauth: ChatGPTOAuthClient(http: http, wallDate: { Date() }),
-      clock: ContinuousClock(),
-      wallDate: { Date() }
-    )
+      oauth: ChatGPTOAuthClient(http: http) {
+        Date()
+      },
+      clock: ContinuousClock()
+    ) {
+      Date()
+    }
     let provider = ChatGPTResponsesProvider(
       http: http,
       credentials: credentialSource,
@@ -239,7 +260,9 @@ private extension ProviderStackFactory {
       requestTimeoutSeconds: settings.requestTimeoutSeconds,
       clock: ContinuousClock(),
       jitter: Self.jitter,
-      epochID: { UUID() },
+      epochID: {
+        UUID()
+      },
       treatsQuotaAsTerminal: treatsQuotaAsTerminal
     )
     let binding = LLMRouteBinding(
@@ -257,12 +280,17 @@ private extension ProviderStackFactory {
 
 private extension ProviderStackFactory {
   /// The bootstrapped production logger, so a composed provider's diagnostics reach the redacting
-  /// backend rather than a silent no-op. It is not a test seam: the factory is the production path.
-  static var llmLogger: Logger { Logger(label: "clawd.llm") }
+  /// backend rather than a silent no-op.
+  ///
+  /// It is not a test seam: the factory is the production path.
+  static var llmLogger: Logger {
+    Logger(label: "clawd.llm")
+  }
 
   /// Uniform jittered backoff for both adapters: a full-jitter draw over the capped exponential
   /// window, matching what the daemon wired inline before the factory owned composition.
-  @Sendable static func jitter(_ cap: Duration) -> Duration {
+  @Sendable
+  static func jitter(_ cap: Duration) -> Duration {
     Duration.seconds(Double.random(in: 0...(cap / .seconds(1))))
   }
 }

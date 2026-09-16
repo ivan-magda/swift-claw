@@ -13,10 +13,10 @@ public struct TestLearningFixtures {
   }
 
   @discardableResult
-  public func seedArmedJob(jobId: Int64, now: Date) throws(StoreError) -> JobLearningState {
+  public func seedArmedJob(jobID: Int64, now: Date) throws(StoreError) -> JobLearningState {
     do {
       return try writer.write { db in
-        let empty = LessonSet.empty(jobId: jobId)
+        let empty = LessonSet.empty(jobID: jobID)
         try db.execute(
           sql: """
             INSERT OR IGNORE INTO lesson_sets(
@@ -24,8 +24,12 @@ public struct TestLearningFixtures {
             VALUES (?, ?, ?, ?, ?, ?)
             """,
           arguments: [
-            jobId, empty.digest.rawValue, empty.schemaVersion, empty.canonicalBytes,
-            LessonSetSource.canonicalEmpty.rawValue, Int64(now.timeIntervalSince1970),
+            jobID,
+            empty.digest.rawValue,
+            empty.schemaVersion,
+            empty.canonicalBytes,
+            LessonSetSource.canonicalEmpty.rawValue,
+            Int64(now.timeIntervalSince1970),
           ]
         )
         try db.execute(
@@ -35,23 +39,22 @@ public struct TestLearningFixtures {
               open_trial_id, feedback_revision, armed_at)
             VALUES (?, 1, ?, 0, NULL, 0, ?)
             """,
-          arguments: [jobId, empty.digest.rawValue, Int64(now.timeIntervalSince1970)]
+          arguments: [jobID, empty.digest.rawValue, Int64(now.timeIntervalSince1970)]
         )
-        guard
-          let row = try Row.fetchOne(
-            db,
-            sql: "SELECT * FROM job_learning_state WHERE job_id = ?",
-            arguments: [jobId]
-          )
+        guard let row = try Row.fetchOne(
+          db,
+          sql: "SELECT * FROM job_learning_state WHERE job_id = ?",
+          arguments: [jobID]
+        )
         else {
           throw StoreError.unexpected("learning fixture state is missing")
         }
         return JobLearningState(
-          jobId: jobId,
+          jobID: jobID,
           epoch: LearningEpoch(row["learning_epoch"]),
           stableDigest: LessonSetDigest(rawValue: row["stable_lesson_set_digest"]),
           stableRevision: StableRevision(row["stable_revision"]),
-          openTrialId: row["open_trial_id"],
+          openTrialID: row["open_trial_id"],
           feedbackRevision: FeedbackRevision(row["feedback_revision"])
         )
       }
@@ -73,9 +76,15 @@ public struct TestLearningFixtures {
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
               """,
             arguments: [
-              target.nonce, target.jobId, target.epoch.value, target.subjectKind.rawValue,
-              target.subjectDigest, String(bytes: actions, encoding: .utf8), target.ownerUserId,
-              target.chatId, Int64(target.expiresAt.timeIntervalSince1970),
+              target.nonce,
+              target.jobID,
+              target.epoch.value,
+              target.subjectKind.rawValue,
+              target.subjectDigest,
+              String(bytes: actions, encoding: .utf8),
+              target.ownerUserID,
+              target.chatID,
+              Int64(target.expiresAt.timeIntervalSince1970),
             ]
           )
         }
@@ -86,27 +95,26 @@ public struct TestLearningFixtures {
   }
 
   /// Reads the durable receipt after a production run transition or lane settlement.
-  public func settlement(runId: Int64) throws(StoreError) -> RunSettlement? {
+  public func settlement(runID: Int64) throws(StoreError) -> RunSettlement? {
     do {
       return try writer.read { db -> RunSettlement? in
-        guard
-          let row = try Row.fetchOne(
-            db,
-            sql: "SELECT * FROM run_settlements WHERE run_id = ?",
-            arguments: [runId]
-          )
+        guard let row = try Row.fetchOne(
+          db,
+          sql: "SELECT * FROM run_settlements WHERE run_id = ?",
+          arguments: [runID]
+        )
         else {
           return nil
         }
         guard let state = RunState(rawValue: row["winning_state"]),
-          let cause = TerminalCause(rawValue: row["terminal_cause"])
+              let cause = TerminalCause(rawValue: row["terminal_cause"])
         else {
           throw StoreError.unexpected("learning fixture receipt is unreadable")
         }
         let terminalEpoch: Int64 = row["terminal_at"]
         let settledEpoch: Int64? = row["settled_at"]
         return RunSettlement(
-          runId: runId,
+          runID: runID,
           winningState: state,
           terminalCause: cause,
           terminalAt: Date(timeIntervalSince1970: Double(terminalEpoch)),

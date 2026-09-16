@@ -32,7 +32,7 @@ struct RunComposition {
 
   /// Builds the managed credential store from the state root. Injectable so a test scripts a missing
   /// or malformed envelope, and observes whether it is opened at all, without a real encrypted file.
-  var makeManagedStore: @Sendable (URL) -> any LLMCredentialStore = { stateRoot in
+  var makeManagedStore: @Sendable (_ stateRoot: URL) -> any LLMCredentialStore = { stateRoot in
     EncryptedLLMCredentialStore(stateRoot: stateRoot)
   }
 
@@ -41,14 +41,19 @@ struct RunComposition {
   /// consequence — mention parsing falls back to bare commands — so a daemon that boots while
   /// Telegram is unreachable does not run its whole lifetime with degraded `/cmd@bot` handling and
   /// no operator signal.
-  var fetchBotIdentity: @Sendable (TelegramClient, Logger) async -> BotIdentity? = Self.readIdentity
+  var fetchBotIdentity:
+    @Sendable (_ transport: TelegramClient, _ logger: Logger) async -> BotIdentity? = Self
+      .readIdentity
 
   /// Assembles the daemon bundle from the roster and the shared cooldown. Injectable so a test
   /// forces a post-clients build failure and proves every already-created client is closed rather
   /// than leaked, and so an acceptance test reads the exact roster and cooldown the daemon runs on.
   var buildDaemon:
-    @Sendable (DaemonBuilder, RosterStack, PrimaryRouteCooldown<ContinuousClock>) async throws ->
-      DaemonRuntimeBundle = Self.assembleDaemon
+    @Sendable (
+      _ builder: DaemonBuilder,
+      _ stack: RosterStack,
+      _ cooldown: PrimaryRouteCooldown<ContinuousClock>
+    ) async throws -> DaemonRuntimeBundle = Self.assembleDaemon
 
   struct Composed {
     let bundle: DaemonRuntimeBundle
@@ -84,7 +89,9 @@ struct RunComposition {
         botIdentity: botIdentity,
         mcp: mcp,
         logger: logger,
-        makeManagedStore: { makeManagedStore(config.stateRoot) }
+        makeManagedStore: {
+          makeManagedStore(config.stateRoot)
+        }
       )
       let stack = try builder.makeRosterStack(http: clients.llm.executor)
       // ONE ledger for the whole process. The turn path and the /schedule parse both take this
@@ -122,10 +129,7 @@ extension RunComposition {
 
 extension RunComposition {
   /// The live `getMe` read behind `fetchBotIdentity`.
-  static func readIdentity(
-    _ transport: TelegramClient,
-    _ logger: Logger
-  ) async -> BotIdentity? {
+  static func readIdentity(_ transport: TelegramClient, _ logger: Logger) async -> BotIdentity? {
     do {
       return try await transport.getMe()
     } catch {
@@ -143,10 +147,7 @@ extension RunComposition {
   /// Closes all three clients on a failed boot, in the same LLM → Telegram → tool order the clean
   /// shutdown uses. Every client closes even when an earlier close throws: a client left open on a
   /// failed boot is a socket the process would otherwise carry to exit.
-  static func closeAll(
-    _ clients: RuntimeHTTPClients<RuntimeHTTPClient>,
-    logger: Logger
-  ) async {
+  static func closeAll(_ clients: RuntimeHTTPClients<RuntimeHTTPClient>, logger: Logger) async {
     for client in [clients.llm, clients.telegram, clients.tool] {
       do {
         try await client.close()

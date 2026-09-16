@@ -13,8 +13,8 @@ struct ResetFixture {
   }
 
   func installStableLessons(_ lessons: [String]) throws -> LessonSet {
-    _ = try TestLearningFixtures(writer: env.queue).seedArmedJob(jobId: env.jobId, now: env.now)
-    let set = try LessonSet.canonical(jobId: env.jobId, lessons: lessons)
+    _ = try TestLearningFixtures(writer: env.queue).seedArmedJob(jobID: env.jobID, now: env.now)
+    let set = try LessonSet.canonical(jobID: env.jobID, lessons: lessons)
     try env.queue.write { db in
       try db.execute(
         sql: """
@@ -22,7 +22,7 @@ struct ResetFixture {
             created_at) VALUES (?, ?, ?, ?, ?, ?)
           """,
         arguments: [
-          set.jobId,
+          set.jobID,
           set.digest.rawValue,
           set.schemaVersion,
           set.canonicalBytes,
@@ -35,7 +35,7 @@ struct ResetFixture {
           UPDATE job_learning_state SET stable_lesson_set_digest = ?, stable_revision = 4
           WHERE job_id = ?
           """,
-        arguments: [set.digest.rawValue, env.jobId]
+        arguments: [set.digest.rawValue, env.jobID]
       )
     }
     return set
@@ -45,7 +45,7 @@ struct ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET feedback_revision = ? WHERE job_id = ?",
-        arguments: [revision, env.jobId]
+        arguments: [revision, env.jobID]
       )
     }
   }
@@ -57,7 +57,7 @@ struct ResetFixture {
       for (index, state) in [LearningTrialState.open, .draining].enumerated() {
         let candidateDigest = String(repeating: index == 0 ? "a" : "b", count: 64)
         let replacement = try LessonSet.canonical(
-          jobId: env.jobId,
+          jobID: env.jobID,
           lessons: ["replacement-\(index)"]
         )
         try db.execute(
@@ -66,7 +66,7 @@ struct ResetFixture {
               created_at) VALUES (?, ?, ?, ?, ?, ?)
             """,
           arguments: [
-            env.jobId,
+            env.jobID,
             replacement.digest.rawValue,
             replacement.schemaVersion,
             replacement.canonicalBytes,
@@ -83,7 +83,7 @@ struct ResetFixture {
             """,
           arguments: [
             candidateDigest,
-            env.jobId,
+            env.jobID,
             replacement.digest.rawValue,
             base.rawValue,
             LearningAlgorithm.v1.rawValue,
@@ -98,7 +98,7 @@ struct ResetFixture {
             VALUES (?, 1, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
             """,
           arguments: [
-            env.jobId,
+            env.jobID,
             base.rawValue,
             candidateDigest,
             index + 1,
@@ -114,7 +114,7 @@ struct ResetFixture {
       }
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
-        arguments: [ids[0], env.jobId]
+        arguments: [ids[0], env.jobID]
       )
       return ids
     }
@@ -123,7 +123,7 @@ struct ResetFixture {
   func createOtherJob() throws -> Int64 {
     let job = try env.jobs.create(
       NewScheduledJob(
-        ownerChatId: 888,
+        ownerChatID: 888,
         label: "other",
         prompt: "Other job",
         recurrence: nil,
@@ -135,12 +135,12 @@ struct ResetFixture {
     return job.id
   }
 
-  func seedFeedbackControls(otherJobId: Int64) throws {
+  func seedFeedbackControls(otherJobID: Int64) throws {
     try env.queue.write { db in
-      for (nonce, jobId, epoch) in [
-        ("target-secret-nonce-current", env.jobId, 1),
-        ("target-secret-nonce-old", env.jobId, 0),
-        ("target-secret-nonce-other", otherJobId, 1),
+      for (nonce, jobID, epoch) in [
+        ("target-secret-nonce-current", env.jobID, 1),
+        ("target-secret-nonce-old", env.jobID, 0),
+        ("target-secret-nonce-other", otherJobID, 1),
       ] {
         try db.execute(
           sql: """
@@ -148,13 +148,13 @@ struct ResetFixture {
               subject_digest, allowed_actions, owner_user_id, chat_id, expires_at)
             VALUES (?, ?, ?, 'run', 'subject', '["result_useful"]', ?, ?, ?)
             """,
-          arguments: [nonce, jobId, epoch, jobId + 100, jobId + 200, 1]
+          arguments: [nonce, jobID, epoch, jobID + 100, jobID + 200, 1]
         )
       }
-      for (owner, chat, jobId, epoch) in [
-        (100, 200, env.jobId, 1),
-        (101, 201, env.jobId, 0),
-        (102, 202, otherJobId, 1),
+      for (owner, chat, jobID, epoch) in [
+        (100, 200, env.jobID, 1),
+        (101, 201, env.jobID, 0),
+        (102, 202, otherJobID, 1),
       ] {
         try db.execute(
           sql: """
@@ -162,7 +162,7 @@ struct ResetFixture {
               subject_kind, subject_digest, expires_at)
             VALUES (?, ?, ?, ?, 'run', 'subject', 1)
             """,
-          arguments: [owner, chat, jobId, epoch]
+          arguments: [owner, chat, jobID, epoch]
         )
       }
       try db.execute(
@@ -171,29 +171,29 @@ struct ResetFixture {
             subject_kind, subject_digest, expires_at)
           VALUES (103, 203, ?, 0, 'run', 'history', 1)
           """,
-        arguments: [env.jobId]
+        arguments: [env.jobID]
       )
-      let historyId = db.lastInsertedRowID
+      let historyID = db.lastInsertedRowID
       try db.execute(
         sql: "UPDATE feedback_challenges SET superseded_by = ? WHERE challenge_id = ?",
-        arguments: [historyId, historyId]
+        arguments: [historyID, historyID]
       )
     }
   }
 
-  func seedOperations(otherJobId: Int64) throws {
+  func seedOperations(otherJobID: Int64) throws {
     try env.queue.write { db in
-      try insertOperation(db, id: "op-pending", jobId: env.jobId, state: .pending)
-      try insertOperation(db, id: "op-claimed", jobId: env.jobId, state: .claimed)
-      try insertOperation(db, id: "op-started", jobId: env.jobId, state: .started)
-      try insertOperation(db, id: "op-other", jobId: otherJobId, state: .claimed)
+      try insertOperation(db, id: "op-pending", jobID: env.jobID, state: .pending)
+      try insertOperation(db, id: "op-claimed", jobID: env.jobID, state: .claimed)
+      try insertOperation(db, id: "op-started", jobID: env.jobID, state: .started)
+      try insertOperation(db, id: "op-other", jobID: otherJobID, state: .claimed)
     }
   }
 
   func insertOperation(
     _ db: Database,
     id: String,
-    jobId: Int64,
+    jobID: Int64,
     state: LearningOperationState
   ) throws {
     let started = state == .started
@@ -206,7 +206,7 @@ struct ResetFixture {
         """,
       arguments: [
         id,
-        jobId,
+        jobID,
         "source-\(id)",
         started ? "carrier-\(id)" : nil,
         started ? "route" : nil,

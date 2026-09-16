@@ -35,13 +35,16 @@ public final class AsyncGate: Sendable {
   public func wait() async {
     let ticket = makeTicket()
     defer { discardCancellationMarker(ticket: ticket) }
-    await withTaskCancellationHandler {
-      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-        park(ticket: ticket, continuation: continuation, honorsCancellation: true)
+    await withTaskCancellationHandler(
+      operation: {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+          park(ticket: ticket, continuation: continuation, honorsCancellation: true)
+        }
+      },
+      onCancel: {
+        releaseCancelled(ticket: ticket)
       }
-    } onCancel: {
-      releaseCancelled(ticket: ticket)
-    }
+    )
   }
 
   /// True requires an opened gate. The watchdog only bounds a missing-signal test failure;
@@ -53,7 +56,11 @@ public final class AsyncGate: Sendable {
         return self.isOpen
       }
       group.addTask {
-        do { try await Task.sleep(for: timeout) } catch { return false }
+        do {
+          try await Task.sleep(for: timeout)
+        } catch {
+          return false
+        }
         return false
       }
       let opened = await group.next() ?? false

@@ -6,11 +6,10 @@ import Foundation
 extension ContainerBackend {
   // swiftlint:disable:next discouraged_optional_collection
   func ownedContainers(deadline: ContinuousClock.Instant) async -> [ListedContainer]? {
-    guard
-      let containers = await listedContainers(
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      )
+    guard let containers = await listedContainers(
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    )
     else {
       return nil
     }
@@ -72,11 +71,10 @@ extension ContainerBackend {
         continue
       }
 
-      guard
-        let children = try? manager.contentsOfDirectory(
-          at: root,
-          includingPropertiesForKeys: nil
-        )
+      guard let children = try? manager.contentsOfDirectory(
+        at: root,
+        includingPropertiesForKeys: nil
+      )
       else {
         return false
       }
@@ -98,12 +96,11 @@ extension ContainerBackend {
 
 extension ContainerBackend {
   func workloadDigestMatches(deadline: ContinuousClock.Instant) async -> Bool {
-    guard
-      let data = await boundedCommandData(
-        ContainerInvocation.inspectImage(settings.workloadImage.description),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      )
+    guard let data = await boundedCommandData(
+      ContainerInvocation.inspectImage(settings.workloadImage.description),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    )
     else {
       return false
     }

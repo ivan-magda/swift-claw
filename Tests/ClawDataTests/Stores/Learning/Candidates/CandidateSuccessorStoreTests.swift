@@ -5,7 +5,8 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct CandidateSuccessorStoreTests {
+@Suite
+struct CandidateSuccessorStoreTests {
   @Test(arguments: ApprovalRejectionScenario.allCases)
   func normalApprovalRejectionLeavesNoOrphanSuccessor(
     _ scenario: ApprovalRejectionScenario
@@ -23,10 +24,7 @@ import Testing
 
     // when
     let outcome = try fixture.env.learning.approveCandidate(
-      CandidateApproval(
-        predecessorDigest: predecessor.digest,
-        feedbackEventId: control.eventId
-      ),
+      CandidateApproval(predecessorDigest: predecessor.digest, feedbackEventID: control.eventID),
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
@@ -36,7 +34,8 @@ import Testing
     #expect(try fixture.rowCounts() == before)
   }
 
-  @Test func approvalOfExactCurrentPredecessorMayReuseAClosedReplacement() throws {
+  @Test
+  func approvalOfExactCurrentPredecessorMayReuseAClosedReplacement() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -50,10 +49,7 @@ import Testing
 
     // when
     let outcome = try fixture.env.learning.approveCandidate(
-      CandidateApproval(
-        predecessorDigest: predecessor.digest,
-        feedbackEventId: control.eventId
-      ),
+      CandidateApproval(predecessorDigest: predecessor.digest, feedbackEventID: control.eventID),
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
@@ -70,11 +66,12 @@ import Testing
     #expect(try fixture.rowCounts().trials == before.trials + 1)
     #expect(try fixture.rowCounts().decisions == before.decisions + 1)
     #expect(try fixture.rowCounts().audits == before.audits + 1)
-    #expect(try fixture.env.currentLearningState().openTrialId == receipt.trialId)
+    #expect(try fixture.env.currentLearningState().openTrialID == receipt.trialID)
     #expect(try fixture.successorCount(of: predecessor.digest) == 1)
   }
 
-  @Test func editToStableRejectsWithoutClosingThePredecessorTrial() throws {
+  @Test
+  func editToStableRejectsWithoutClosingThePredecessorTrial() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -83,7 +80,7 @@ import Testing
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
-    let trialId = try #require(admission.admissionReceipt).trialId
+    let trialID = try #require(admission.admissionReceipt).trialID
     let payload = #"{"lessons":[]}"#
     let control = try fixture.env.appendFeedback(
       subjectKind: .candidate,
@@ -97,7 +94,7 @@ import Testing
     let outcome = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: control.eventId,
+        feedbackEventID: control.eventID,
         payload: Data(payload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -108,11 +105,12 @@ import Testing
     // and fall back the still-authoritative predecessor trial.
     #expect(outcome == .rejected(.noOpReplacement))
     #expect(try fixture.rowCounts() == before)
-    #expect(try fixture.trial(trialId).state == LearningTrialState.open.rawValue)
-    #expect(try fixture.env.currentLearningState().openTrialId == trialId)
+    #expect(try fixture.trial(trialID).state == LearningTrialState.open.rawValue)
+    #expect(try fixture.env.currentLearningState().openTrialID == trialID)
   }
 
-  @Test func editToPreviouslyClosedReplacementPreservesThePredecessorTrial() throws {
+  @Test
+  func editToPreviouslyClosedReplacementPreservesThePredecessorTrial() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -121,7 +119,7 @@ import Testing
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
-    let trialId = try #require(admission.admissionReceipt).trialId
+    let trialID = try #require(admission.admissionReceipt).trialID
     let closedLessons = ["Use the exact previously closed replacement."]
     try fixture.insertClosedReplacementTrial(from: predecessor, lessons: closedLessons)
     let payload = #"{"lessons":["Use the exact previously closed replacement."]}"#
@@ -137,7 +135,7 @@ import Testing
     let outcome = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: control.eventId,
+        feedbackEventID: control.eventID,
         payload: Data(payload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -148,11 +146,12 @@ import Testing
     // the unrelated live predecessor trial.
     #expect(outcome == .rejected(.replacementAlreadyClosed))
     #expect(try fixture.rowCounts() == before)
-    #expect(try fixture.trial(trialId).state == LearningTrialState.open.rawValue)
-    #expect(try fixture.env.currentLearningState().openTrialId == trialId)
+    #expect(try fixture.trial(trialID).state == LearningTrialState.open.rawValue)
+    #expect(try fixture.env.currentLearningState().openTrialID == trialID)
   }
 
-  @Test func delayedEffectiveApprovalFreezesTheCurrentFeedbackRevision() throws {
+  @Test
+  func delayedEffectiveApprovalFreezesTheCurrentFeedbackRevision() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -165,10 +164,7 @@ import Testing
 
     // when
     let outcome = try fixture.env.learning.approveCandidate(
-      CandidateApproval(
-        predecessorDigest: predecessor.digest,
-        feedbackEventId: control.eventId
-      ),
+      CandidateApproval(predecessorDigest: predecessor.digest, feedbackEventID: control.eventID),
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
@@ -180,7 +176,8 @@ import Testing
     #expect(successor.manifest.feedbackRevision == FeedbackRevision(2))
   }
 
-  @Test func delayedEffectiveEditFreezesTheCurrentFeedbackRevision() throws {
+  @Test
+  func delayedEffectiveEditFreezesTheCurrentFeedbackRevision() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -197,7 +194,7 @@ import Testing
     let outcome = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: control.eventId,
+        feedbackEventID: control.eventID,
         payload: Data(payload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -238,7 +235,8 @@ import Testing
     #expect(try fixture.rowCounts() == before)
   }
 
-  @Test func anEditReplayReturnsTheSameAwaitingArtifactAndWritesNothing() throws {
+  @Test
+  func anEditReplayReturnsTheSameAwaitingArtifactAndWritesNothing() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -251,7 +249,7 @@ import Testing
     )
     let edit = CandidateEdit(
       predecessorDigest: predecessor.digest,
-      feedbackEventId: control.eventId,
+      feedbackEventID: control.eventID,
       payload: Data(payload.utf8)
     )
     let first = try fixture.env.learning.editCandidate(
@@ -274,7 +272,8 @@ import Testing
     #expect(try fixture.rowCounts() == afterFirst)
   }
 
-  @Test func anApprovedEditRevalidatesItsCompletePredecessorChain() throws {
+  @Test
+  func anApprovedEditRevalidatesItsCompletePredecessorChain() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -288,7 +287,7 @@ import Testing
     let edit = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: editControl.eventId,
+        feedbackEventID: editControl.eventID,
         payload: Data(editPayload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -303,10 +302,7 @@ import Testing
 
     // when
     let outcome = try fixture.env.learning.approveCandidate(
-      CandidateApproval(
-        predecessorDigest: edited.digest,
-        feedbackEventId: approval.eventId
-      ),
+      CandidateApproval(predecessorDigest: edited.digest, feedbackEventID: approval.eventID),
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
@@ -320,7 +316,8 @@ import Testing
     #expect(try fixture.env.countRows(in: "learning_trials") == 1)
   }
 
-  @Test func longSuccessorChainValidatesThroughThePublicStoreWithoutADepthLimit() throws {
+  @Test
+  func longSuccessorChainValidatesThroughThePublicStoreWithoutADepthLimit() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     var current = try fixture.persistedCandidate()
@@ -335,10 +332,7 @@ import Testing
       )
       let edited = try CandidateSuccessorRules.edit(
         predecessor: current,
-        replacement: LessonSet.canonical(
-          jobId: fixture.env.jobId,
-          lessons: [lesson]
-        ),
+        replacement: LessonSet.canonical(jobID: fixture.env.jobID, lessons: [lesson]),
         control: editControl,
         feedbackRevision: editControl.revision,
         effectiveFeedback: current.manifest.feedback
@@ -363,7 +357,7 @@ import Testing
     let approval = try fixture.env.learning.approveCandidate(
       CandidateApproval(
         predecessorDigest: current.digest,
-        feedbackEventId: approvalControl.eventId
+        feedbackEventID: approvalControl.eventID
       ),
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
@@ -376,12 +370,13 @@ import Testing
     #expect(try fixture.env.countRows(in: "learning_candidates") == 49)
     #expect(try fixture.successorCount(of: admitted.digest) == 0)
     #expect(
-      try fixture.env.learning.openTrial(jobId: fixture.env.jobId)?.candidateDigest
+      try fixture.env.learning.openTrial(jobID: fixture.env.jobID)?.candidateDigest
         == admitted.digest
     )
   }
 
-  @Test func approvalOfAnEditRequiresItsInheritedRootPredecessor() throws {
+  @Test
+  func approvalOfAnEditRequiresItsInheritedRootPredecessor() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -395,7 +390,7 @@ import Testing
     let edit = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: editControl.eventId,
+        feedbackEventID: editControl.eventID,
         payload: Data(editPayload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -417,10 +412,7 @@ import Testing
 
     // when
     let outcome = try fixture.env.learning.approveCandidate(
-      CandidateApproval(
-        predecessorDigest: edited.digest,
-        feedbackEventId: approval.eventId
-      ),
+      CandidateApproval(predecessorDigest: edited.digest, feedbackEventID: approval.eventID),
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
@@ -430,7 +422,8 @@ import Testing
     #expect(try fixture.rowCounts() == before)
   }
 
-  @Test func approvalOfAnEditRevalidatesTheInheritedRootOperation() throws {
+  @Test
+  func approvalOfAnEditRevalidatesTheInheritedRootOperation() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -444,7 +437,7 @@ import Testing
     let edit = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: editControl.eventId,
+        feedbackEventID: editControl.eventID,
         payload: Data(editPayload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -454,7 +447,7 @@ import Testing
     try fixture.env.queue.write { db in
       try db.execute(
         sql: "UPDATE learning_operations SET carrier_digest = ? WHERE operation_id = ?",
-        arguments: ["tampered-carrier", predecessor.manifest.operationId.rawValue]
+        arguments: ["tampered-carrier", predecessor.manifest.operationID.rawValue]
       )
     }
     let approval = try fixture.env.appendFeedback(
@@ -466,10 +459,7 @@ import Testing
 
     // when
     let outcome = try fixture.env.learning.approveCandidate(
-      CandidateApproval(
-        predecessorDigest: edited.digest,
-        feedbackEventId: approval.eventId
-      ),
+      CandidateApproval(predecessorDigest: edited.digest, feedbackEventID: approval.eventID),
       redactor: SecretRedactor(secretValues: []),
       now: fixture.env.now
     )
@@ -479,7 +469,8 @@ import Testing
     #expect(try fixture.rowCounts() == before)
   }
 
-  @Test func persistedOwnerEditMustMatchItsExactControlPayload() throws {
+  @Test
+  func persistedOwnerEditMustMatchItsExactControlPayload() throws {
     // given
     let fixture = try AdmissionStoreFixture.make()
     let predecessor = try fixture.persistedCandidate()
@@ -491,7 +482,7 @@ import Testing
       payload: payload
     )
     let replacement = try LessonSet.canonical(
-      jobId: fixture.env.jobId,
+      jobID: fixture.env.jobID,
       lessons: ["A different persisted replacement."]
     )
     let source = predecessor.manifest
@@ -500,12 +491,12 @@ import Testing
       manifest: CandidateSourceManifest(
         origin: .ownerEdit,
         algorithm: source.algorithm,
-        jobId: source.jobId,
+        jobID: source.jobID,
         epoch: source.epoch,
         triggerDigest: source.triggerDigest,
         triggerReason: source.triggerReason,
         qualifyingIssueCodes: source.qualifyingIssueCodes,
-        operationId: source.operationId,
+        operationID: source.operationID,
         carrierDigest: source.carrierDigest,
         resultDigest: source.resultDigest,
         baseDigest: source.baseDigest,
@@ -557,7 +548,7 @@ import Testing
     let outcome = try fixture.env.learning.editCandidate(
       CandidateEdit(
         predecessorDigest: predecessor.digest,
-        feedbackEventId: control.eventId,
+        feedbackEventID: control.eventID,
         payload: Data(invalid.payload.utf8)
       ),
       redactor: SecretRedactor(secretValues: []),
@@ -625,6 +616,8 @@ enum InvalidEditPayload: CaseIterable, Sendable {
   }
 }
 
+// MARK: - Admission Outcome Inspection
+
 private extension AdmissionOutcome {
   var admissionReceipt: AdmissionReceipt? {
     guard case .admitted(let receipt) = self else {
@@ -640,6 +633,8 @@ private extension AdmissionOutcome {
     return artifact
   }
 }
+
+// MARK: - Successor Admission Fixtures
 
 private extension AdmissionStoreFixture {
   func arrangeApprovalRejection(
@@ -666,13 +661,10 @@ private extension AdmissionStoreFixture {
     try insertClosedReplacementTrial(from: predecessor, replacement: predecessor.replacement)
   }
 
-  func insertClosedReplacementTrial(
-    from predecessor: CandidateArtifact,
-    lessons: [String]
-  ) throws {
+  func insertClosedReplacementTrial(from predecessor: CandidateArtifact, lessons: [String]) throws {
     try insertClosedReplacementTrial(
       from: predecessor,
-      replacement: LessonSet.canonical(jobId: predecessor.manifest.jobId, lessons: lessons)
+      replacement: LessonSet.canonical(jobID: predecessor.manifest.jobID, lessons: lessons)
     )
   }
 
@@ -684,12 +676,12 @@ private extension AdmissionStoreFixture {
     let alternateManifest = CandidateSourceManifest(
       origin: source.origin,
       algorithm: source.algorithm,
-      jobId: source.jobId,
+      jobID: source.jobID,
       epoch: source.epoch,
       triggerDigest: source.triggerDigest,
       triggerReason: source.triggerReason,
       qualifyingIssueCodes: source.qualifyingIssueCodes,
-      operationId: source.operationId,
+      operationID: source.operationID,
       carrierDigest: source.carrierDigest,
       resultDigest: ReflectionResultDigest(rawValue: "closed-result"),
       baseDigest: source.baseDigest,
@@ -701,10 +693,7 @@ private extension AdmissionStoreFixture {
       predecessorCandidate: nil,
       predecessorFeedback: nil
     )
-    let closed = try CandidateArtifact(
-      replacement: replacement,
-      manifest: alternateManifest
-    )
+    let closed = try CandidateArtifact(replacement: replacement, manifest: alternateManifest)
     try env.queue.write { db in
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: closed, now: env.now)
       try db.execute(
@@ -715,7 +704,7 @@ private extension AdmissionStoreFixture {
           VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
           """,
         arguments: [
-          env.jobId,
+          env.jobID,
           source.epoch.value,
           source.baseDigest.rawValue,
           closed.digest.rawValue,
@@ -746,14 +735,14 @@ private extension AdmissionStoreFixture {
   ) throws -> CandidateArtifact {
     var control = try env.appendFeedback(
       subjectKind: .candidate,
-      subjectDigest:
-        corruption == .wrongSubject ? "another-candidate" : predecessor.digest.rawValue,
+      subjectDigest: corruption == .wrongSubject
+        ? "another-candidate" : predecessor.digest.rawValue,
       signal: corruption == .wrongSignal ? .candidateReject : .candidateApprove,
       payload: corruption == .payloadOnApproval ? "unexpected" : nil
     )
     if corruption == .wrongDigest {
       control = CandidateFeedbackSource(
-        eventId: control.eventId,
+        eventID: control.eventID,
         digest: FeedbackEventDigest(rawValue: "tampered-feedback-digest"),
         revision: control.revision,
         subjectKind: control.subjectKind,
@@ -766,7 +755,7 @@ private extension AdmissionStoreFixture {
         subjectKind: .candidate,
         subjectDigest: predecessor.digest.rawValue,
         signal: .candidateReject,
-        supersedes: control.eventId
+        supersedes: control.eventID
       )
     }
     let state = try env.currentLearningState()
@@ -774,12 +763,12 @@ private extension AdmissionStoreFixture {
     let manifest = CandidateSourceManifest(
       origin: .ownerApproval,
       algorithm: source.algorithm,
-      jobId: source.jobId,
+      jobID: source.jobID,
       epoch: source.epoch,
       triggerDigest: source.triggerDigest,
       triggerReason: source.triggerReason,
       qualifyingIssueCodes: source.qualifyingIssueCodes,
-      operationId: source.operationId,
+      operationID: source.operationID,
       carrierDigest: source.carrierDigest,
       resultDigest: source.resultDigest,
       baseDigest: source.baseDigest,
@@ -788,31 +777,23 @@ private extension AdmissionStoreFixture {
       evidence: source.evidence,
       evaluations: source.evaluations,
       feedback: source.feedback,
-      predecessorCandidate:
-        corruption == .missingPredecessor
+      predecessorCandidate: corruption == .missingPredecessor
         ? CandidateDigest(rawValue: "missing-predecessor") : predecessor.digest,
       predecessorFeedback: control
     )
-    let successor = try CandidateArtifact(
-      replacement: predecessor.replacement,
-      manifest: manifest
-    )
+    let successor = try CandidateArtifact(replacement: predecessor.replacement, manifest: manifest)
     try env.queue.write { db in
-      try ScheduledLearningStoreGRDB.recordCandidateArtifact(
-        db,
-        artifact: successor,
-        now: env.now
-      )
+      try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: successor, now: env.now)
       if corruption == .missingEvent {
         try db.execute(
           sql: "DELETE FROM feedback_events WHERE event_id = ?",
-          arguments: [control.eventId]
+          arguments: [control.eventID]
         )
       }
       if corruption == .nonOwner {
         try db.execute(
           sql: "UPDATE feedback_events SET actor = ? WHERE event_id = ?",
-          arguments: [AuditActor.system.rawValue, control.eventId]
+          arguments: [AuditActor.system.rawValue, control.eventID]
         )
       }
     }

@@ -38,7 +38,7 @@ public struct SkillLoadTool: Tool {
           "name": .object([
             "type": .string("string"),
             "description": .string("The skill's name from the skills index, e.g. summarize"),
-          ])
+          ]),
         ]),
         "required": .array([.string("name")]),
       ]),
@@ -49,17 +49,16 @@ public struct SkillLoadTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(5) }
+  public var timeout: Duration {
+    .seconds(5)
+  }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     nil  // nothing egresses; the name is resolved against the scan inside execute
   }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
-    guard
-      let name = arguments.objectValue?["name"]?.stringValue,
-      name.isEmpty == false
-    else {
+    guard let name = arguments.objectValue?["name"]?.stringValue, name.isEmpty == false else {
       return errorPayload("skill_load needs a non-empty \"name\" argument.")
     }
 
@@ -111,9 +110,8 @@ private extension SkillLoadTool {
       manifestPath = resolved
     }
 
-    guard
-      let data = FileManager.default.contents(atPath: manifestPath),
-      let text = String(data: data, encoding: .utf8)
+    guard let data = FileManager.default.contents(atPath: manifestPath),
+          let text = String(data: data, encoding: .utf8)
     else {
       return errorPayload("The skill \(descriptor.name) could not be read.")
     }
@@ -128,16 +126,11 @@ private extension SkillLoadTool {
     // Frontmatter without a procedure under it is an authoring gap, not a skill: returning it as a
     // success would spend a tool call to hand the model an empty guidance fence and no reason why.
     guard document.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-      return errorPayload(
-        "The skill \(descriptor.name) has no instructions under its frontmatter."
-      )
+      return errorPayload("The skill \(descriptor.name) has no instructions under its frontmatter.")
     }
 
     return ToolPayload(
-      content: ToolOutputCap.cap(
-        redactor.redact(document.body),
-        maxGraphemes: outputCapGraphemes
-      ),
+      content: ToolOutputCap.cap(redactor.redact(document.body), maxGraphemes: outputCapGraphemes),
       status: .ok,
       // A SKILL.md is owner-authored workspace material, like SOUL.md and AGENTS.md, which the
       // context injects untainted. Tainting here would suppress high-sensitivity memory for the
@@ -173,10 +166,7 @@ private extension SkillLoadTool {
 
   /// The directories that collided over `name`, empty when the scan reported no collision — a
   /// warning always names at least the two claimants that produced it.
-  static func duplicateDirectories(
-    for name: String,
-    in warnings: [WorkspaceWarning]
-  ) -> [String] {
+  static func duplicateDirectories(for name: String, in warnings: [WorkspaceWarning]) -> [String] {
     for warning in warnings {
       if case .duplicateSkillName(let warnedName, let directories) = warning, warnedName == name {
         return directories

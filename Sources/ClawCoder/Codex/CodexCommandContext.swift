@@ -31,8 +31,12 @@ struct CodexCommandContext: Sendable {
     let result = await CoderCommandRunner().run(command, tracking: tracking) { bytes in
       try await output.append(bytes)
     }
-    guard result.exitCode == 0, result.signal == nil, !result.supervisionFailed,
-      !result.cancelled, !result.timedOut, result.cleanupResolved
+    guard result.exitCode == 0,
+          result.signal == nil,
+          !result.supervisionFailed,
+          !result.cancelled,
+          !result.timedOut,
+          result.cleanupResolved
     else {
       throw CoderGitFailure.supervision(result)
     }
@@ -43,7 +47,7 @@ struct CodexCommandContext: Sendable {
     let version = try await capture(executable: executable, arguments: ["--version"])
     let help = try await capture(executable: executable, arguments: ["exec", "--help"])
     guard let helpText = String(data: help, encoding: .utf8),
-      let versionText = String(data: version, encoding: .utf8)
+          let versionText = String(data: version, encoding: .utf8)
     else {
       throw CoderError.unavailable("Codex CLI probe returned invalid UTF-8.")
     }
@@ -60,9 +64,7 @@ struct CodexCommandContext: Sendable {
         "Codex CLI lacks required flags: \(missing.joined(separator: ", "))."
       )
     }
-    let text = versionText.trimmingCharacters(
-      in: .whitespacesAndNewlines
-    )
+    let text = versionText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else {
       throw CoderError.unavailable("Codex CLI returned no version.")
     }

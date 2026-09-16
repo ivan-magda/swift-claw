@@ -104,8 +104,7 @@ enum ChatGPTProviderTestSupport {
         return nil
       }
       return response
-    }
-    .last
+    }.last
   }
 
   static let plainRequest = ChatRequest(
@@ -118,7 +117,7 @@ enum ChatGPTProviderTestSupport {
     model: "gpt-5",
     messages: [ChatMessage(role: .user, content: "hello")],
     maxOutputTokens: 256,
-    sessionId: "sess-1"
+    sessionID: "sess-1"
   )
 
   static var defaultCredentials: ScriptedLLMCredentialSource {
@@ -141,7 +140,9 @@ enum ChatGPTProviderTestSupport {
       credentials: any LLMCredentialSource = ChatGPTProviderTestSupport.defaultCredentials,
       credentialProfileID: UUID? = ChatGPTProviderTestSupport.fixedProfileID,
       retryBudget: Int = 3,
-      logger: Logger = Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+      logger: Logger = Logger(label: "test") { _ in
+        SwiftLogNoOpLogHandler()
+      }
     ) {
       let http = ScriptedHTTPExecutor(steps)
       self.http = http
@@ -156,8 +157,12 @@ enum ChatGPTProviderTestSupport {
         clock: ScriptedClock { delay in
           await sleeps.record(delay / .seconds(1))
         },
-        jitter: { duration in duration },
-        epochID: { ChatGPTProviderTestSupport.fixedEpoch },
+        jitter: { duration in
+          duration
+        },
+        epochID: {
+          ChatGPTProviderTestSupport.fixedEpoch
+        },
         logger: logger
       )
     }
@@ -277,7 +282,10 @@ enum ChatGPTProviderTestSupport {
 
     /// A non-success diagnostic body, carrying an optional error code alongside the message.
     static func errorBody(_ message: String, code: String? = nil) -> [Data] {
-      let codeField = code.map { "\"code\":\"\($0)\"," } ?? ""
+      let codeField =
+        code.map {
+          "\"code\":\"\($0)\","
+        } ?? ""
       return [Data(#"{"error":{\#(codeField)"message":"\#(message)"}}"#.utf8)]
     }
 

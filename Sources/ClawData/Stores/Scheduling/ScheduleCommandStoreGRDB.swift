@@ -13,14 +13,14 @@ public struct ScheduleCommandStoreGRDB: ScheduleCommandStore {
   }
 
   public func applyArm(
-    updateId: Int64,
+    updateID: Int64,
     job: NewScheduledJob,
     now: Date
   ) throws(StoreError) -> ScheduleArmResult {
     try database.writeMapping { db in
       let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
         db: db,
-        updateId: updateId,
+        updateID: updateID,
         claimedAt: now
       )
       guard newlyClaimed else {

@@ -110,64 +110,62 @@ public struct FeedbackEventDigest: RawRepresentable, Sendable, Hashable, Codable
   }
 
   public static func of(  // swiftlint:disable:this function_parameter_count
-    eventId: Int64,
-    jobId: Int64,
+    eventID: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     subjectKind: FeedbackSubjectKind,
     subjectDigest: String,
     signal: OwnerSignal,
     payload: String?,
     actor: AuditActor,
-    transportUpdateId: Int64?,
+    transportUpdateID: Int64?,
     revision: FeedbackRevision,
     supersedes: Int64?,
     occurredAtEpochSecond: Int64
   ) throws -> FeedbackEventDigest {
     let event = EventProjection(
-      eventId: eventId,
-      jobId: jobId,
+      eventID: eventID,
+      jobID: jobID,
       epoch: epoch.value,
       subjectKind: subjectKind.rawValue,
       subjectDigest: subjectDigest,
       signal: signal.rawValue,
       payload: payload,
       actor: actor.rawValue,
-      transportUpdateId: transportUpdateId,
+      transportUpdateID: transportUpdateID,
       revision: revision.value,
       supersedes: supersedes,
       occurredAtEpochSecond: occurredAtEpochSecond
     )
     let bytes = try CanonicalJSON.data(encoding: event)
-    let framed = CanonicalDigestInput.joined([
-      "feedback-event/v1", bytes.base64EncodedString(),
-    ])
+    let framed = CanonicalDigestInput.joined(["feedback-event/v1", bytes.base64EncodedString()])
     return FeedbackEventDigest(rawValue: SHA256Digest.hex(framed))
   }
 
   private struct EventProjection: Encodable {
-    let eventId: Int64
-    let jobId: Int64
+    let eventID: Int64
+    let jobID: Int64
     let epoch: Int64
     let subjectKind: String
     let subjectDigest: String
     let signal: String
     let payload: String?
     let actor: String
-    let transportUpdateId: Int64?
+    let transportUpdateID: Int64?
     let revision: Int64
     let supersedes: Int64?
     let occurredAtEpochSecond: Int64
 
     enum CodingKeys: String, CodingKey {
-      case eventId = "event_id"
-      case jobId = "job_id"
+      case eventID = "event_id"
+      case jobID = "job_id"
       case epoch = "learning_epoch"
       case subjectKind = "subject_kind"
       case subjectDigest = "subject_digest"
       case signal
       case payload
       case actor
-      case transportUpdateId = "transport_update_id"
+      case transportUpdateID = "transport_update_id"
       case revision = "feedback_revision"
       case supersedes
       case occurredAtEpochSecond = "occurred_at"
@@ -298,9 +296,7 @@ public struct ReflectionResultDigest: RawRepresentable, Sendable, Hashable, Coda
   }
 
   public static func of(_ bytes: Data) -> ReflectionResultDigest {
-    let framed = CanonicalDigestInput.joined([
-      "reflection-result/v1", bytes.base64EncodedString(),
-    ])
+    let framed = CanonicalDigestInput.joined(["reflection-result/v1", bytes.base64EncodedString()])
     return ReflectionResultDigest(rawValue: SHA256Digest.hex(framed))
   }
 }

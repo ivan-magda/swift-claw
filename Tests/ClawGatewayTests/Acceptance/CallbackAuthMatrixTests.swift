@@ -11,7 +11,8 @@ import Testing
 /// tampered args-hash, stale policy_version — each DENY and CANNOT drive the row to APPROVED. Every
 /// clause proves it on the persisted `approvals`/`runs`/`audit_events` rows (A4: the primary proof)
 /// and, for the auth-failure clauses, the neutral-toast `answerCallbackQuery` spy (secondary).
-@Suite struct CallbackAuthMatrixTests {
+@Suite
+struct CallbackAuthMatrixTests {
   // MARK: - Fixture
 
   private func grantAudited(_ harness: SC3Harness) throws -> Bool {
@@ -22,7 +23,8 @@ import Testing
 
   // MARK: - Auth-chain denials (row untouched, audited message_in/forbidden)
 
-  @Test func forgedNonAllowlistedSenderCannotApprove() async throws {
+  @Test
+  func forgedNonAllowlistedSenderCannotApprove() async throws {
     // given — a live PENDING approval owned by user 7
     let (harness, approval) = try await suspendFileWrite()
 
@@ -35,11 +37,12 @@ import Testing
     // (not an approval decision) attributed to `system` — a stranger's tap is never owner-attributed;
     // the callback is answered with a neutral toast (A4, secondary)
     #expect(
-      try fetchApprovals(databasePath: harness.databasePath).map(\.state)
-        == [ApprovalState.pending.rawValue]
+      try fetchApprovals(databasePath: harness.databasePath).map(\.state) == [
+        ApprovalState.pending.rawValue,
+      ]
     )
     #expect(
-      try runState(databasePath: harness.databasePath, runId: approval.runId)
+      try runState(databasePath: harness.databasePath, runID: approval.runID)
         == RunState.awaitingApproval.rawValue
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
@@ -57,10 +60,11 @@ import Testing
     #expect(await harness.transport.answeredCallbacks.isEmpty == false)
   }
 
-  @Test func differentAllowlistedNonOwnerCannotApprove() async throws {
+  @Test
+  func differentAllowlistedNonOwnerCannotApprove() async throws {
     // given — user 8 is allowlisted too, but the approval's owner is 7 (§4.4 owner binding)
     let (harness, approval) = try await suspendFileWrite()
-    try harness.stores.allowlist.seedAllowlist(userIds: [8])
+    try harness.stores.allowlist.seedAllowlist(userIDs: [8])
 
     // when
     _ = await harness.router.handle(
@@ -70,11 +74,12 @@ import Testing
     // then — owner-binding fails closed: row untouched, run still parked, forbidden access event
     // attributed to `system` (the resolved row's owner is 7, not the sender), no grant
     #expect(
-      try fetchApprovals(databasePath: harness.databasePath).map(\.state)
-        == [ApprovalState.pending.rawValue]
+      try fetchApprovals(databasePath: harness.databasePath).map(\.state) == [
+        ApprovalState.pending.rawValue,
+      ]
     )
     #expect(
-      try runState(databasePath: harness.databasePath, runId: approval.runId)
+      try runState(databasePath: harness.databasePath, runID: approval.runID)
         == RunState.awaitingApproval.rawValue
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
@@ -88,7 +93,8 @@ import Testing
     #expect(try grantAudited(harness) == false)
   }
 
-  @Test func unknownNonceCannotApprove() async throws {
+  @Test
+  func unknownNonceCannotApprove() async throws {
     // given
     let (harness, approval) = try await suspendFileWrite()
 
@@ -102,11 +108,12 @@ import Testing
     // (`approval.ownerUserId == sender`, the handler's only owner identity), and an unknown nonce
     // resolves no row — so even the owner's tap audits as `system` here (Task 15 denyAuth contract)
     #expect(
-      try fetchApprovals(databasePath: harness.databasePath).map(\.state)
-        == [ApprovalState.pending.rawValue]
+      try fetchApprovals(databasePath: harness.databasePath).map(\.state) == [
+        ApprovalState.pending.rawValue,
+      ]
     )
     #expect(
-      try runState(databasePath: harness.databasePath, runId: approval.runId)
+      try runState(databasePath: harness.databasePath, runID: approval.runID)
         == RunState.awaitingApproval.rawValue
     )
     #expect(FileManager.default.fileExists(atPath: approval.canonicalTarget) == false)
@@ -122,7 +129,8 @@ import Testing
 
   // MARK: - Resolution-state denials (single-use CAS + validate-in-CAS)
 
-  @Test func duplicateTapAfterResolutionIsANoOp() async throws {
+  @Test
+  func duplicateTapAfterResolutionIsANoOp() async throws {
     // given — a legitimate approve lands first
     let (harness, approval) = try await suspendFileWrite()
     _ = await harness.router.handle(
@@ -142,8 +150,9 @@ import Testing
 
     // then — the duplicate resolves nothing new: still one APPROVED row, exactly one grant audit
     #expect(
-      try fetchApprovals(databasePath: harness.databasePath).map(\.state)
-        == [ApprovalState.approved.rawValue]
+      try fetchApprovals(databasePath: harness.databasePath).map(\.state) == [
+        ApprovalState.approved.rawValue,
+      ]
     )
     let grants = try harness.auditRows().filter { row in
       row.action == AuditAction.approvalGranted.rawValue
@@ -151,14 +160,15 @@ import Testing
     #expect(grants.count == 1)
   }
 
-  @Test func expiredRowCannotApprove() async throws {
+  @Test
+  func expiredRowCannotApprove() async throws {
     // given — the deadline has already passed while the row is still PENDING
     let (harness, approval) = try await suspendFileWrite()
     try tamperApproval(
       databasePath: harness.databasePath,
       id: approval.id,
       column: "expires_ts",
-      value: Int64(1)  // epoch seconds — the store's on-disk timestamp encoding
+      value: (1 as Int64)  // epoch seconds — the store's on-disk timestamp encoding
     )
 
     // when — the owner taps Approve
@@ -176,7 +186,7 @@ import Testing
     )
     _ = try #require(
       await pollUntilTrue {
-        try runState(databasePath: harness.databasePath, runId: approval.runId)
+        try runState(databasePath: harness.databasePath, runID: approval.runID)
           == RunState.failed.rawValue
       }
     )
@@ -191,7 +201,8 @@ import Testing
     #expect(try grantAudited(harness) == false)
   }
 
-  @Test func tamperedArgsHashCannotApprove() async throws {
+  @Test
+  func tamperedArgsHashCannotApprove() async throws {
     // given — the recorded canonical args are MUTATED after park (a re-proposed variant), so the
     // stored args-hash no longer matches SHA-256(canonical_args). This clause pins the recorded-args
     // binding: an approved execution runs exactly the bytes the owner was shown, and any post-park
@@ -220,7 +231,7 @@ import Testing
     )
     _ = try #require(
       await pollUntilTrue {
-        try runState(databasePath: harness.databasePath, runId: approval.runId)
+        try runState(databasePath: harness.databasePath, runID: approval.runID)
           == RunState.failed.rawValue
       }
     )
@@ -236,7 +247,8 @@ import Testing
     #expect(try grantAudited(harness) == false)
   }
 
-  @Test func stalePolicyVersionCannotApprove() async throws {
+  @Test
+  func stalePolicyVersionCannotApprove() async throws {
     // given — the run's tools/prompt/config effectively changed since the request
     let (harness, approval) = try await suspendFileWrite()
     try tamperApproval(

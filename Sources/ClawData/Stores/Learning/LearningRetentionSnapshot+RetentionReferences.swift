@@ -8,23 +8,23 @@ extension LearningRetentionSnapshot {
   func liveReferences(_ db: Database, now: Date) throws -> LearningRetentionReferences {
     var retained = LearningRetentionReferences()
     for state in states {
-      let jobId: Int64 = state["job_id"]
+      let jobID: Int64 = state["job_id"]
       retained.lessons.insert(
-        LearningRetentionLesson(jobId: jobId, digest: state["stable_lesson_set_digest"])
+        LearningRetentionLesson(jobID: jobID, digest: state["stable_lesson_set_digest"])
       )
-      if let current = try ScheduledLearningStoreGRDB.readState(db, jobId: jobId),
-        let promotion = try ScheduledLearningStoreGRDB.currentPromotion(db, state: current)
+      if let current = try ScheduledLearningStoreGRDB.readState(db, jobID: jobID),
+         let promotion = try ScheduledLearningStoreGRDB.currentPromotion(db, state: current)
       {
-        retained.decisions.insert(promotion.decisionId)
+        retained.decisions.insert(promotion.decisionID)
       }
     }
     for binding in bindings {
-      let runId: Int64 = binding["run_id"]
+      let runID: Int64 = binding["run_id"]
       let settled = settlements.contains { row in
-        (row["run_id"] as Int64) == runId && (row["settled_at"] as Int64?) != nil
+        (row["run_id"] as Int64) == runID && (row["settled_at"] as Int64?) != nil
       }
       if !settled {
-        retained.runs.insert(runId)
+        retained.runs.insert(runID)
       }
     }
     for trial in trials where isLiveTrial(trial) {
@@ -34,10 +34,11 @@ extension LearningRetentionSnapshot {
       retained.candidates.insert(candidate["candidate_digest"])
     }
     let timestamp = EpochSecondCodec.epoch(now)
-    for target in targets + challenges
-    where (target["expires_at"] as Int64) >= timestamp
-      && (target["consumed_at"] as Int64?) == nil
-    {
+    for target in targets + challenges {
+      guard (target["expires_at"] as Int64) >= timestamp && (target["consumed_at"] as Int64?) == nil
+      else {
+        continue
+      }
       retainSubject(target, in: &retained)
     }
     for operation in operations {
@@ -96,9 +97,7 @@ extension LearningRetentionSnapshot {
   func retainResetBarrier(_ retained: inout LearningRetentionReferences) throws {
     for row in decisions where (row["kind"] as String) == ResetReceipt.kind {
       let result: LearningResetDecisionResult =
-        try ScheduledLearningStoreGRDB.decodeCanonicalDecision(
-          row["result"]
-        )
+        try ScheduledLearningStoreGRDB.decodeCanonicalDecision(row["result"])
       if states.contains(where: { state in
         sameJobEpoch(state, row)
           && (state["stable_revision"] as Int64) == result.newStableRevision.value
@@ -113,19 +112,20 @@ extension LearningRetentionSnapshot {
     _ retained: inout LearningRetentionReferences
   ) throws {
     for state in states {
-      let jobId: Int64 = state["job_id"]
+      let jobID: Int64 = state["job_id"]
       var bases: Set<String> = [state["stable_lesson_set_digest"]]
-      if let current = try ScheduledLearningStoreGRDB.readState(db, jobId: jobId),
-        let promotion = try ScheduledLearningStoreGRDB.currentPromotion(db, state: current)
+      if let current = try ScheduledLearningStoreGRDB.readState(db, jobID: jobID),
+         let promotion = try ScheduledLearningStoreGRDB.currentPromotion(db, state: current)
       {
         bases.insert(promotion.inputs.baseDigest.rawValue)
       }
-      for trial in trials
-      where !isLiveTrial(trial) && sameJobEpoch(state, trial)
-        && bases.contains(trial["base_digest"])
-      {
-        guard
-          let candidate = candidates.first(where: { candidate in
+      for trial in trials {
+        guard !isLiveTrial(trial) && sameJobEpoch(state, trial)
+              && bases.contains(trial["base_digest"])
+        else {
+          continue
+        }
+        guard let candidate = candidates.first(where: { candidate in
             (candidate["candidate_digest"] as String) == (trial["candidate_digest"] as String)
           })
         else {
@@ -136,7 +136,7 @@ extension LearningRetentionSnapshot {
         retained.trials.insert(trial["trial_id"])
         retained.candidates.insert(candidate["candidate_digest"])
         retained.lessons.insert(
-          LearningRetentionLesson(jobId: jobId, digest: candidate["replacement_digest"])
+          LearningRetentionLesson(jobID: jobID, digest: candidate["replacement_digest"])
         )
       }
     }
@@ -153,15 +153,15 @@ extension LearningRetentionSnapshot {
       for trial in trials where retained.trials.contains(trial["trial_id"]) {
         retained.candidates.insert(trial["candidate_digest"])
         retained.lessons.insert(
-          LearningRetentionLesson(jobId: trial["job_id"], digest: trial["base_digest"])
+          LearningRetentionLesson(jobID: trial["job_id"], digest: trial["base_digest"])
         )
       }
       for assignment in assignments {
-        let runId: Int64 = assignment["run_id"]
-        let trialId: Int64 = assignment["trial_id"]
-        if retained.trials.contains(trialId) || retained.runs.contains(runId) {
-          retained.runs.insert(runId)
-          retained.trials.insert(trialId)
+        let runID: Int64 = assignment["run_id"]
+        let trialID: Int64 = assignment["trial_id"]
+        if retained.trials.contains(trialID) || retained.runs.contains(runID) {
+          retained.runs.insert(runID)
+          retained.trials.insert(trialID)
         }
       }
       try retainCandidateSources(&retained)
@@ -199,8 +199,7 @@ extension LearningRetentionSnapshot {
       return Int64(digest).map(retained.runs.contains) ?? false
     case .evaluation:
       return evaluations.contains { evaluation in
-        sameJobEpoch(row, evaluation)
-          && (evaluation["evaluation_digest"] as String) == digest
+        sameJobEpoch(row, evaluation) && (evaluation["evaluation_digest"] as String) == digest
           && retained.runs.contains(evaluation["run_id"])
       }
     case .candidate:
@@ -219,28 +218,29 @@ private extension LearningRetentionSnapshot {
   func retainCandidateSources(_ retained: inout LearningRetentionReferences) throws {
     for row in candidates where retained.candidates.contains(row["candidate_digest"]) {
       let manifest: CandidateSourceManifest =
-        try ScheduledLearningStoreGRDB.decodeCanonicalDecision(
-          row["source_manifest"]
-        )
+        try ScheduledLearningStoreGRDB.decodeCanonicalDecision(row["source_manifest"])
       retained.lessons.insert(
-        LearningRetentionLesson(jobId: row["job_id"], digest: row["replacement_digest"])
+        LearningRetentionLesson(jobID: row["job_id"], digest: row["replacement_digest"])
       )
       retained.lessons.insert(
-        LearningRetentionLesson(jobId: row["job_id"], digest: manifest.baseDigest.rawValue)
+        LearningRetentionLesson(jobID: row["job_id"], digest: manifest.baseDigest.rawValue)
       )
-      retained.runs.formUnion(manifest.evidence.map(\.runId))
-      retained.runs.formUnion(manifest.evaluations.map(\.runId))
-      retained.feedback.formUnion(manifest.feedback.map(\.eventId))
-      retained.operations.insert(manifest.operationId.rawValue)
+      retained.runs.formUnion(manifest.evidence.map(\.runID))
+      retained.runs.formUnion(manifest.evaluations.map(\.runID))
+      retained.feedback.formUnion(manifest.feedback.map(\.eventID))
+      retained.operations.insert(manifest.operationID.rawValue)
       if let predecessor = manifest.predecessorCandidate {
         retained.candidates.insert(predecessor.rawValue)
       }
       if let control = manifest.predecessorFeedback {
-        retained.feedback.insert(control.eventId)
+        retained.feedback.insert(control.eventID)
       }
       // A successor and notice target are also durable completion markers for the predecessor.
-      for successor in candidates
-      where (successor["predecessor_digest"] as String?) == (row["candidate_digest"] as String) {
+      for successor in candidates {
+        guard (successor["predecessor_digest"] as String?) == (row["candidate_digest"] as String)
+        else {
+          continue
+        }
         retained.candidates.insert(successor["candidate_digest"])
       }
     }
@@ -251,27 +251,27 @@ private extension LearningRetentionSnapshot {
       let id: Int64 = row["decision_id"]
       let kind: String = row["kind"]
       if kind == LearningDecisionKind.trial.rawValue
-        || kind == LearningDecisionKind.rollback.rawValue
+         || kind == LearningDecisionKind.rollback.rawValue
       {
         let receipt = try ScheduledLearningStoreGRDB.decodeTerminalReceipt(row)
-        if retained.trials.contains(receipt.inputs.identity.trialId) {
+        if retained.trials.contains(receipt.inputs.identity.trialID) {
           retained.decisions.insert(id)
         }
         guard retained.decisions.contains(id) else {
           continue
         }
-        retained.trials.insert(receipt.inputs.identity.trialId)
+        retained.trials.insert(receipt.inputs.identity.trialID)
         retained.candidates.insert(receipt.inputs.candidateDigest.rawValue)
-        retained.runs.formUnion(receipt.cohort.map(\.runId))
+        retained.runs.formUnion(receipt.cohort.map(\.runID))
         switch receipt.record.rollbackTrigger {
-        case .ownerFeedback(let promotionId, let eventId),
-          .supportWithdrawal(let promotionId, let eventId):
-          retained.decisions.insert(promotionId)
-          retained.feedback.insert(eventId)
-        case .safety(let promotionId, _, _):
-          retained.decisions.insert(promotionId)
-        case .adapter(let promotionId, _, _):
-          retained.decisions.insert(promotionId)
+        case .ownerFeedback(let promotionID, let eventID),
+          .supportWithdrawal(let promotionID, let eventID):
+          retained.decisions.insert(promotionID)
+          retained.feedback.insert(eventID)
+        case .safety(let promotionID, _, _):
+          retained.decisions.insert(promotionID)
+        case .adapter(let promotionID, _, _):
+          retained.decisions.insert(promotionID)
         case nil:
           break
         }
@@ -279,27 +279,23 @@ private extension LearningRetentionSnapshot {
         let receipt: AdmissionReceipt = try ScheduledLearningStoreGRDB.decodeCanonicalDecision(
           row["result"]
         )
-        if retained.trials.contains(receipt.trialId) {
+        if retained.trials.contains(receipt.trialID) {
           retained.decisions.insert(id)
         }
         if retained.decisions.contains(id) {
-          retained.trials.insert(receipt.trialId)
+          retained.trials.insert(receipt.trialID)
           retained.candidates.insert(receipt.candidateDigest.rawValue)
         }
       } else if kind == ReflectionNoCandidateReceipt.kind, retained.decisions.contains(id) {
         let inputs: ReflectionNoCandidateInputs =
-          try ScheduledLearningStoreGRDB.decodeCanonicalDecision(
-            row["inputs"]
-          )
-        retained.operations.insert(inputs.operationId.rawValue)
+          try ScheduledLearningStoreGRDB.decodeCanonicalDecision(row["inputs"])
+        retained.operations.insert(inputs.operationID.rawValue)
       } else if kind == ResetReceipt.kind, retained.decisions.contains(id) {
         let result: LearningResetDecisionResult =
-          try ScheduledLearningStoreGRDB.decodeCanonicalDecision(
-            row["result"]
-          )
-        retained.trials.formUnion(result.closedTrials.map(\.trialId))
-        retained.operations.formUnion(result.staleNoCallOperationIds.map(\.rawValue))
-        retained.operations.formUnion(result.inFlightOperationIds.map(\.rawValue))
+          try ScheduledLearningStoreGRDB.decodeCanonicalDecision(row["result"])
+        retained.trials.formUnion(result.closedTrials.map(\.trialID))
+        retained.operations.formUnion(result.staleNoCallOperationIDs.map(\.rawValue))
+        retained.operations.formUnion(result.inFlightOperationIDs.map(\.rawValue))
       }
     }
   }
@@ -307,17 +303,19 @@ private extension LearningRetentionSnapshot {
   func retainRunSources(_ retained: inout LearningRetentionReferences) {
     for row in bindings where retained.runs.contains(row["run_id"]) {
       retained.lessons.insert(
-        LearningRetentionLesson(jobId: row["job_id"], digest: row["effective_digest"])
+        LearningRetentionLesson(jobID: row["job_id"], digest: row["effective_digest"])
       )
       retained.lessons.insert(
-        LearningRetentionLesson(jobId: row["job_id"], digest: row["stable_digest"])
+        LearningRetentionLesson(jobID: row["job_id"], digest: row["stable_digest"])
       )
     }
     for row in evidence where retained.runs.contains(row["run_id"]) {
-      for operation in operations
-      where sameJobEpoch(row, operation)
-        && (operation["source_digest"] as String) == (row["evidence_digest"] as String)
-      {
+      for operation in operations {
+        guard sameJobEpoch(row, operation)
+              && (operation["source_digest"] as String) == (row["evidence_digest"] as String)
+        else {
+          continue
+        }
         retained.operations.insert(operation["operation_id"])
       }
     }
@@ -325,15 +323,19 @@ private extension LearningRetentionSnapshot {
 
   func retainOperationSources(_ retained: inout LearningRetentionReferences) {
     for row in operations where retained.operations.contains(row["operation_id"]) {
-      for sibling in operations
-      where (sibling["key_digest"] as String?) == (row["key_digest"] as String?) {
+      for sibling in operations {
+        guard (sibling["key_digest"] as String?) == (row["key_digest"] as String?) else {
+          continue
+        }
         retained.operations.insert(sibling["operation_id"])
       }
       if (row["phase"] as String) == LearningPhase.evaluator.rawValue {
-        for source in evidence
-        where sameJobEpoch(row, source)
-          && (row["source_digest"] as String) == (source["evidence_digest"] as String)
-        {
+        for source in evidence {
+          guard sameJobEpoch(row, source)
+                && (row["source_digest"] as String) == (source["evidence_digest"] as String)
+          else {
+            continue
+          }
           retained.runs.insert(source["run_id"])
         }
       }
@@ -370,8 +372,9 @@ private extension LearningRetentionSnapshot {
         sameJobEpoch(event, candidate)
           && (event["subject_kind"] as String) == FeedbackSubjectKind.candidate.rawValue
           && (event["subject_digest"] as String) == digest
-          && [OwnerSignal.candidateReject.rawValue, OwnerSignal.candidateEdit.rawValue]
-            .contains(event["signal"])
+          && [OwnerSignal.candidateReject.rawValue, OwnerSignal.candidateEdit.rawValue].contains(
+            event["signal"]
+          )
       }
   }
 
@@ -379,14 +382,15 @@ private extension LearningRetentionSnapshot {
     let digest: String = row["subject_digest"]
     switch FeedbackSubjectKind(rawValue: row["subject_kind"]) {
     case .run:
-      if let runId = Int64(digest) {
-        retained.runs.insert(runId)
+      if let runID = Int64(digest) {
+        retained.runs.insert(runID)
       }
     case .evaluation:
-      for evaluation in evaluations
-      where sameJobEpoch(row, evaluation)
-        && (evaluation["evaluation_digest"] as String) == digest
-      {
+      for evaluation in evaluations {
+        guard sameJobEpoch(row, evaluation) && (evaluation["evaluation_digest"] as String) == digest
+        else {
+          continue
+        }
         retained.runs.insert(evaluation["run_id"])
       }
     case .candidate:

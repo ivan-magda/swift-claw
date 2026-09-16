@@ -1,9 +1,9 @@
 import ClawCore
 
 struct CoderCompletionReport: Sendable {
-  private let redact: @Sendable (String) -> String
+  private let redact: @Sendable (_ text: String) -> String
 
-  init(redact: @escaping @Sendable (String) -> String) {
+  init(redact: @escaping @Sendable (_ text: String) -> String) {
     self.redact = redact
   }
 
@@ -26,15 +26,15 @@ struct CoderCompletionReport: Sendable {
     blocks += ["### Details", field("Job ID", job.id.uuidString)]
     blocks += executionEvidence(result)
 
-    return CoderCardMarkdown.split(text: blocks.joined(separator: "\n\n"))
-      .enumerated().map { index, payload in
-        OutboxChunk(
-          stepIndex: index,
-          chatId: job.origin.chatID,
-          payload: payload,
-          payloadHash: ContentHash.fnv1a(payload)
-        )
-      }
+    return CoderCardMarkdown.split(text: blocks.joined(separator: "\n\n")).enumerated().map {
+      (index, payload) in
+      OutboxChunk(
+        stepIndex: index,
+        chatID: job.origin.chatID,
+        payload: payload,
+        payloadHash: ContentHash.fnv1a(payload)
+      )
+    }
   }
 }
 
@@ -42,7 +42,7 @@ struct CoderCompletionReport: Sendable {
 
 private extension CoderCompletionReport {
   func field(_ label: String, _ value: String) -> String {
-    CoderCardMarkdown.field(label, redact(value))
+    CoderCardMarkdown.field(label: label, value: redact(value))
   }
 
   func workspaceEvidence(_ result: CoderResult) -> [String] {
@@ -89,8 +89,7 @@ private extension CoderCompletionReport {
   func executionEvidence(_ result: CoderResult) -> [String] {
     let baseline = result.baselineObserved ? "observed" : "worker-reported"
     let startingCommit =
-      result.startingCommit
-      ?? (result.baselineObserved ? "none (unborn HEAD)" : "unavailable")
+      result.startingCommit ?? (result.baselineObserved ? "none (unborn HEAD)" : "unavailable")
     var blocks = [field("Starting commit (\(baseline))", startingCommit)]
     if let commit = result.commit {
       blocks.append(field("Commit (observed)", commit))

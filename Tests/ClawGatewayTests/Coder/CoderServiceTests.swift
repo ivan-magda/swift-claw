@@ -6,7 +6,8 @@ import Testing
 @testable import ClawGateway
 
 struct CoderServiceTests {
-  @Test func startupBlocksSubmissionDuringInspection() async throws {
+  @Test
+  func startupBlocksSubmissionDuringInspection() async throws {
     // given
     let fixture = try CoderServiceFixture(limit: 4)
     defer { fixture.cleanup() }
@@ -30,7 +31,8 @@ struct CoderServiceTests {
     try await fixture.service.shutdown()
   }
 
-  @Test func cancelBeforeLaunchKeepsServiceHealthy() async throws {
+  @Test
+  func cancelBeforeLaunchKeepsServiceHealthy() async throws {
     // given
     let script = ScriptedCoderBackend.Invocation(
       result: CoderServiceFixture.result(state: .cancelled),
@@ -58,7 +60,8 @@ struct CoderServiceTests {
     #expect(try fixture.reports().count == 1)
   }
 
-  @Test func cancelKeepsReservationUntilJoined() async throws {
+  @Test
+  func cancelKeepsReservationUntilJoined() async throws {
     // given
     let script = ScriptedCoderBackend.Invocation(
       result: CoderServiceFixture.result(),
@@ -92,7 +95,8 @@ struct CoderServiceTests {
     try await fixture.service.shutdown()
   }
 
-  @Test func twoJobsStartBeforeEitherFinishes() async throws {
+  @Test
+  func twoJobsStartBeforeEitherFinishes() async throws {
     // given
     let scripts = (0..<2).map { _ in
       ScriptedCoderBackend.Invocation(result: CoderServiceFixture.result())
@@ -115,7 +119,8 @@ struct CoderServiceTests {
     try await fixture.service.shutdown()
   }
 
-  @Test func duplicateSubmissionDoesNotRelaunch() async throws {
+  @Test
+  func duplicateSubmissionDoesNotRelaunch() async throws {
     // given
     let fixture = try CoderServiceFixture()
     defer { fixture.cleanup() }
@@ -157,7 +162,8 @@ struct CoderServiceTests {
     try await fixture.service.shutdown()
   }
 
-  @Test func requesterScopeIsEnforced() async throws {
+  @Test
+  func requesterScopeIsEnforced() async throws {
     // given
     let fixture = try CoderServiceFixture()
     defer { fixture.cleanup() }
@@ -182,7 +188,8 @@ struct CoderServiceTests {
     try await fixture.service.shutdown()
   }
 
-  @Test func shutdownClosesAdmissionAndJoins() async throws {
+  @Test
+  func shutdownClosesAdmissionAndJoins() async throws {
     // given
     let script = ScriptedCoderBackend.Invocation(
       result: CoderServiceFixture.result(),
@@ -217,7 +224,8 @@ struct CoderServiceTests {
     #expect(try fixture.store.job(id: job.id)?.slotReserved == false)
   }
 
-  @Test func admissionCannotResumeAfterShutdown() async throws {
+  @Test
+  func admissionCannotResumeAfterShutdown() async throws {
     // given
     let fixture = try CoderServiceFixture()
     defer { fixture.cleanup() }
@@ -240,17 +248,14 @@ struct CoderServiceTests {
     #expect(await fixture.backend.startedJobIDs.isEmpty)
   }
 
-  @Test func groupJobControlRequiresOriginalRequesterAndTopic() async throws {
+  @Test
+  func groupJobControlRequiresOriginalRequesterAndTopic() async throws {
     // given
     let fixture = try CoderServiceFixture(groupChatID: -700, threadID: 19)
     try await fixture.withJoinedCleanup {
       try await fixture.service.start()
       let job = try await fixture.submitFirst()
-      let otherScopes: [(Int64, Int64?, Int64?)] = [
-        (88, -700, 19),
-        (7, -700, 20),
-        (7, nil, nil),
-      ]
+      let otherScopes: [(Int64, Int64?, Int64?)] = [(88, -700, 19), (7, -700, 20), (7, nil, nil)]
 
       // when
       for (offset, scope) in otherScopes.enumerated() {

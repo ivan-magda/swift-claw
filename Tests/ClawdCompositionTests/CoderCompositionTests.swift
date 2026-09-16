@@ -12,8 +12,10 @@ import Testing
 
 @testable import clawd
 
-@Suite struct CoderCompositionTests {
-  @Test func approvedBootReplayUsesComposedCoderWithVMDisabled() async throws {
+@Suite
+struct CoderCompositionTests {
+  @Test
+  func approvedBootReplayUsesComposedCoderWithVMDisabled() async throws {
     // given
     let fixture = try CoderCompositionFixture()
     defer { fixture.cleanup() }
@@ -54,14 +56,14 @@ import Testing
         sessionHasPrivateData: false,
         approvalAlreadyPending: false,
         executionContext: ToolExecutionContext(
-          runId: 1,
-          sessionId: 1,
-          chatId: 7,
-          requesterUserId: 7,
+          runID: 1,
+          sessionID: 1,
+          chatID: 7,
+          requesterUserID: 7,
           origin: .interactive,
           mode: .direct,
-          toolCallId: proposal.id,
-          approvalId: nil
+          toolCallID: proposal.id,
+          approvalID: nil
         )
       )
     )
@@ -77,11 +79,11 @@ import Testing
     try await fixture.queue.write { db in
       try db.execute(
         sql: "UPDATE runs SET state = ?, policy_version = ? WHERE id = ?",
-        arguments: [RunState.awaitingApproval.rawValue, policy, context.runId]
+        arguments: [RunState.awaitingApproval.rawValue, policy, context.runID]
       )
       try db.execute(
         sql: "UPDATE approvals SET policy_version = ? WHERE id = ?",
-        arguments: [policy, context.approvalId]
+        arguments: [policy, context.approvalID]
       )
     }
     try await service.shutdown()
@@ -136,7 +138,7 @@ import Testing
     let id = try #require(await fixture.backend.startedJobIDs.first)
     let job = try #require(try fixture.builder.stores.coderJobs.job(id: id))
     #expect(job.prepared.executionPolicyID == namesPolicy(restarted.tools))
-    #expect(job.origin.approvalID == context.approvalId)
+    #expect(job.origin.approvalID == context.approvalID)
     #expect(!job.slotReserved)
   }
 
@@ -149,14 +151,16 @@ import Testing
     defer { fixture.cleanup() }
 
     // when
-    let coder = await fixture.builder.prepareCoder(coordination: .init())
+    let coder = await fixture.builder.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
     let service = try #require(coder.service)
     try await service.start()
     let preparation: Result<CoderPreparedRequest, any Error>
     do {
       let prepared = try await service.prepare(CoderCompositionFixture.request)
       preparation = .success(prepared)
-    } catch { preparation = .failure(error) }
+    } catch {
+      preparation = .failure(error)
+    }
     try await service.shutdown()
 
     // then
@@ -180,7 +184,8 @@ import Testing
     }
   }
 
-  @Test func disabledDoesNotResolveBackend() async throws {
+  @Test
+  func disabledDoesNotResolveBackend() async throws {
     // given
     let fixture = try CoderCompositionFixture(enabled: false)
     defer { fixture.cleanup() }
@@ -191,29 +196,32 @@ import Testing
     }
 
     // when
-    let coder = await builder.prepareCoder(coordination: .init())
+    let coder = await builder.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
 
     // then
     #expect(coder.service == nil)
     #expect(coder.tools.isEmpty)
   }
 
-  @Test func unavailableBackendStillReconcilesReservedJobs() async throws {
+  @Test
+  func unavailableBackendStillReconcilesReservedJobs() async throws {
     // given
     let fixture = try CoderCompositionFixture()
     defer { fixture.cleanup() }
-    let original = await fixture.builder.prepareCoder(coordination: .init())
+    let original = await fixture.builder.prepareCoder(
+      coordination: DaemonBuilder.TurnCoordination()
+    )
     let first = try #require(original.service)
     try await first.start()
     let prepared = try await first.prepare(CoderCompositionFixture.request)
     let context = try fixture.approvedContext(prepared)
     let origin = CoderOrigin(
-      runID: context.runId,
-      sessionID: context.sessionId,
+      runID: context.runID,
+      sessionID: context.sessionID,
       requesterUserID: 7,
       chatID: 7,
-      toolCallID: context.toolCallId,
-      approvalID: try #require(context.approvalId)
+      toolCallID: context.toolCallID,
+      approvalID: try #require(context.approvalID)
     )
     let id = UUID()
     _ = try fixture.builder.stores.coderJobs.admit(
@@ -230,7 +238,7 @@ import Testing
     }
 
     // when
-    let coder = await restarted.prepareCoder(coordination: .init())
+    let coder = await restarted.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
     let service = try #require(coder.service)
     try await service.start()
     try await service.shutdown()
@@ -257,7 +265,8 @@ import Testing
     #expect(await fixture.backend.startedJobIDs.isEmpty)
   }
 
-  @Test func offlineRowsDoNotProbe() async throws {
+  @Test
+  func offlineRowsDoNotProbe() async throws {
     // given
     let fixture = try CoderCompositionFixture()
     defer { fixture.cleanup() }
@@ -265,13 +274,10 @@ import Testing
     // when
     var doctor = DoctorCommand()
     doctor.checkConfig = true
-    let rows = await doctor.coderRows(
-      config: fixture.builder.config.coder,
-      resolve: { _ in
-        Issue.record("Offline doctor launched a Coder probe")
-        throw CoderError.unavailable("unexpected probe")
-      }
-    )
+    let rows = await doctor.coderRows(config: fixture.builder.config.coder) { _ in
+      Issue.record("Offline doctor launched a Coder probe")
+      throw CoderError.unavailable("unexpected probe")
+    }
 
     // then
     #expect(
@@ -281,22 +287,23 @@ import Testing
     )
   }
 
-  @Test func persistedHealthSurvivesReleaseAndFailsUnreadable() async throws {
+  @Test
+  func persistedHealthSurvivesReleaseAndFailsUnreadable() async throws {
     // given
     let fixture = try CoderCompositionFixture()
     defer { fixture.cleanup() }
-    let coder = await fixture.builder.prepareCoder(coordination: .init())
+    let coder = await fixture.builder.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
     let service = try #require(coder.service)
     try await service.start()
     let prepared = try await service.prepare(CoderCompositionFixture.request)
     let context = try fixture.approvedContext(prepared)
     let origin = CoderOrigin(
-      runID: context.runId,
-      sessionID: context.sessionId,
+      runID: context.runID,
+      sessionID: context.sessionID,
       requesterUserID: 7,
       chatID: 7,
-      toolCallID: context.toolCallId,
-      approvalID: try #require(context.approvalId)
+      toolCallID: context.toolCallID,
+      approvalID: try #require(context.approvalID)
     )
     let store = fixture.builder.stores.coderJobs
     let id = UUID()
@@ -356,7 +363,9 @@ import Testing
       }?.value.hasPrefix("0") == true
     )
     for key in [
-      CoderHealthRows.Key.reserved, CoderHealthRows.Key.ownership, CoderHealthRows.Key.lastFailure,
+      CoderHealthRows.Key.reserved,
+      CoderHealthRows.Key.ownership,
+      CoderHealthRows.Key.lastFailure,
     ] {
       let row = try #require(
         unreadable.first {

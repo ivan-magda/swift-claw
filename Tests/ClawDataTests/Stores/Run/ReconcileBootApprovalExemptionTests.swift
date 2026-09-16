@@ -6,8 +6,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct ReconcileBootApprovalExemptionTests {
-  @Test func reconcileFailsRunningOrphansButLeavesSuspendedRunsParked() throws {
+@Suite
+struct ReconcileBootApprovalExemptionTests {
+  @Test
+  func reconcileFailsRunningOrphansButLeavesSuspendedRunsParked() throws {
     // given — a crashed RUNNING run and a suspended AWAITING_APPROVAL run in the reopened DB
     let queue = try TestDatabase.make()
     try queue.write { db in
@@ -33,7 +35,7 @@ import Testing
     _ = try runs.reconcileRunsAtBoot(
       now: Date(),
       degradationText: "unfinished",
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
 
     // then — the RUNNING orphan is failed; the suspended run is DELIBERATELY exempt (§7), left for
@@ -62,32 +64,32 @@ import Testing
         sql: "INSERT INTO runs(session_id, state, created_ts, updated_ts) VALUES (1, ?, ?, ?)",
         arguments: [RunState.running.rawValue, Date(), Date()]
       )
-      let runId = db.lastInsertedRowID
+      let runID = db.lastInsertedRowID
 
-      var approvalId: Int64?
+      var approvalID: Int64?
       if sentRowIsApprovalPrompt {
         try db.execute(
           sql: """
             INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
             VALUES (1, ?, 'tool', 'filled result', 'untrusted', ?, 'c1')
             """,
-          arguments: [runId, Date()]
+          arguments: [runID, Date()]
         )
         let argsJSON = #"{"path":"/w/plan.md"}"#
-        approvalId = try ApprovalStoreGRDB.insertApproval(
+        approvalID = try ApprovalStoreGRDB.insertApproval(
           db,
           NewApproval(
-            runId: runId,
-            sessionId: 1,
+            runID: runID,
+            sessionID: 1,
             tool: "file_write",
             canonicalArgsJSON: argsJSON,
             canonicalTarget: "/w/plan.md",
             argsHash: ApprovalArgsHash.sha256Hex(argsJSON),
             policyVersion: "pv",
-            ownerUserId: 7,
+            ownerUserID: 7,
             nonce: "n-orphan",
-            observationMessageId: db.lastInsertedRowID,
-            toolCallId: "c1",
+            observationMessageID: db.lastInsertedRowID,
+            toolCallID: "c1",
             reason: .askTier,
             createdTs: Date(),
             expiresTs: Date().addingTimeInterval(3600)
@@ -100,34 +102,36 @@ import Testing
             payload_hash, approval_id, status, created_ts)
           VALUES (?, 0, 7, ?, 'sent earlier', 'h', ?, 'SENT', ?)
           """,
-        arguments: [runId, "\(runId):0", approvalId, Date()]
+        arguments: [runID, "\(runID):0", approvalID, Date()]
       )
-      return runId
+      return runID
     }
   }
 
-  @Test func reconcileNotifiesARunningOrphanWhoseOnlyDeliveryWasItsApprovalPrompt() throws {
+  @Test
+  func reconcileNotifiesARunningOrphanWhoseOnlyDeliveryWasItsApprovalPrompt() throws {
     // given — the recorded-but-continuation-lost window: the approval prompt was delivered (its
     // keyboard chunk is the newest SENT row), the owner approved, the action ran and recorded,
     // and the daemon died during the continuation — the run is a RUNNING orphan at boot
     let queue = try TestDatabase.make()
-    let runId = try makeRunningOrphan(queue, sentRowIsApprovalPrompt: true)
+    let runID = try makeRunningOrphan(queue, sentRowIsApprovalPrompt: true)
     let runs = RunStoreGRDB(writer: queue)
 
     // when
     let replies = try runs.reconcileRunsAtBoot(
       now: Date(),
       degradationText: "unfinished",
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
 
     // then — a delivered PROMPT is not a delivered reply: the owner has heard nothing since
     // approving, so the F22 degradation notice must still fire
-    #expect(replies.map(\.runId) == [runId])
-    #expect(replies.map(\.chatId) == [7])
+    #expect(replies.map(\.runID) == [runID])
+    #expect(replies.map(\.chatID) == [7])
   }
 
-  @Test func reconcileStaysSilentWhenTheOwnerAlreadySawAReply() throws {
+  @Test
+  func reconcileStaysSilentWhenTheOwnerAlreadySawAReply() throws {
     // given — a RUNNING orphan whose newest SENT row is a genuine reply chunk (no approval link)
     let queue = try TestDatabase.make()
     _ = try makeRunningOrphan(queue, sentRowIsApprovalPrompt: false)
@@ -137,7 +141,7 @@ import Testing
     let replies = try runs.reconcileRunsAtBoot(
       now: Date(),
       degradationText: "unfinished",
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
 
     // then — the owner already received output for this run; no double notice

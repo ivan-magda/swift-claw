@@ -25,17 +25,26 @@ public struct LearningTrial: Sendable, Equatable {
   public let state: LearningTrialState
   public let hardVetoes: Set<HardVeto>
 
-  public var trialId: Int64 { identity.trialId }
-  public var jobId: Int64 { identity.jobId }
-  public var epoch: LearningEpoch { identity.epoch }
-  public var generation: Int { identity.generation }
+  public var trialID: Int64 {
+    identity.trialID
+  }
+
+  public var jobID: Int64 {
+    identity.jobID
+  }
+
+  public var epoch: LearningEpoch {
+    identity.epoch
+  }
+
+  public var generation: Int {
+    identity.generation
+  }
 
   /// The two bounds that stop new exposure. Reaching either drains the trial: runs already
   /// assigned still finish, but no further fire binds to the candidate.
   public func acceptsAssignment(occurrenceAt: Date, now: Date) -> Bool {
-    state == .open
-      && consumedAssignments < maxAssignments
-      && occurrenceAt >= cohortCutoff
+    state == .open && consumedAssignments < maxAssignments && occurrenceAt >= cohortCutoff
       && now < assignmentDeadline
   }
 

@@ -53,6 +53,7 @@ public struct EncryptedFileSecretStore: SecretStore {
     maximumByteCount: keyByteCount,
     requiredPermissionBits: SecureFilePublisher.ownerOnlyPermissions
   )
+
   static let envelopeReadPolicy = SecureFilePublisher.ReadPolicy(
     maximumByteCount: maximumEnvelopeByteCount,
     requiredPermissionBits: nil
@@ -154,7 +155,9 @@ extension EncryptedFileSecretStore {
   static func openEnvelope(_ envelope: Data, key: SymmetricKey) throws(SecretStoreError) -> Data {
     do {
       return try envelopeCodec.open(envelope, key: key)
-    } catch AESGCMEnvelopeError.missingVersion, AESGCMEnvelopeError.unsupportedVersion {
+    } catch AESGCMEnvelopeError
+      .missingVersion, AESGCMEnvelopeError.unsupportedVersion
+    {
       throw .malformedEnvelope
     } catch {
       throw .decryptionFailed
@@ -168,15 +171,15 @@ private extension EncryptedFileSecretStore {
   /// The JSON shape stored inside the encrypted envelope.
   struct Payload: Codable {
     let telegramBotToken: String
-    let llmApiKey: String?
-    let searchApiKey: String?
-    let llmFallbackApiKey: String?
+    let llmAPIKey: String?
+    let searchAPIKey: String?
+    let llmFallbackAPIKey: String?
 
     enum CodingKeys: String, CodingKey {
       case telegramBotToken = "telegram_bot_token"
-      case llmApiKey = "llm_api_key"
-      case searchApiKey = "search_api_key"
-      case llmFallbackApiKey = "llm_fallback_api_key"
+      case llmAPIKey = "llm_api_key"
+      case searchAPIKey = "search_api_key"
+      case llmFallbackAPIKey = "llm_fallback_api_key"
     }
   }
 }
@@ -185,9 +188,9 @@ extension EncryptedFileSecretStore {
   static func encode(_ secrets: Secrets) throws(SecretStoreError) -> Data {
     let payload = Payload(
       telegramBotToken: secrets.telegramBotToken,
-      llmApiKey: secrets.llmApiKey,
-      searchApiKey: secrets.searchApiKey,
-      llmFallbackApiKey: secrets.llmFallbackApiKey
+      llmAPIKey: secrets.llmAPIKey,
+      searchAPIKey: secrets.searchAPIKey,
+      llmFallbackAPIKey: secrets.llmFallbackAPIKey
     )
 
     guard let encoded = try? JSONEncoder().encode(payload) else {
@@ -204,21 +207,21 @@ extension EncryptedFileSecretStore {
     guard !payload.telegramBotToken.isEmpty else {
       throw .missingTelegramToken
     }
-    let apiKey = payload.llmApiKey.flatMap { value in
+    let apiKey = payload.llmAPIKey.flatMap { value in
       value.isEmpty ? nil : value
     }
-    let searchKey = payload.searchApiKey.flatMap { value in
+    let searchKey = payload.searchAPIKey.flatMap { value in
       value.isEmpty ? nil : value
     }
-    let fallbackApiKey = payload.llmFallbackApiKey.flatMap { value in
+    let fallbackAPIKey = payload.llmFallbackAPIKey.flatMap { value in
       value.isEmpty ? nil : value
     }
 
     return Secrets(
       telegramBotToken: payload.telegramBotToken,
-      llmApiKey: apiKey,
-      searchApiKey: searchKey,
-      llmFallbackApiKey: fallbackApiKey
+      llmAPIKey: apiKey,
+      searchAPIKey: searchKey,
+      llmFallbackAPIKey: fallbackAPIKey
     )
   }
 }
@@ -271,10 +274,7 @@ extension EncryptedFileSecretStore {
       throw mapKeyError(error)
     }
 
-    created.key = CreatedRuntimeArtifacts.Step(
-      url: url,
-      identity: outcome.identity
-    )
+    created.key = CreatedRuntimeArtifacts.Step(url: url, identity: outcome.identity)
 
     guard !outcome.isCommitUncertain else {
       throw .publicationFailed(uncertainCommitGuidance(SecretStatePaths.keyName))
@@ -318,10 +318,7 @@ extension EncryptedFileSecretStore {
     }
 
     if !existed {
-      created.envelope = CreatedRuntimeArtifacts.Step(
-        url: url,
-        identity: outcome.identity
-      )
+      created.envelope = CreatedRuntimeArtifacts.Step(url: url, identity: outcome.identity)
     }
 
     guard !outcome.isCommitUncertain else {

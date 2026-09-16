@@ -32,10 +32,7 @@ extension AppConfig {
 
   /// A positive `Double` override: `fallback` when absent/blank, else `invalidBudget` on a
   /// non-numeric or non-positive value.
-  static func positiveBudgetDouble(
-    _ raw: String?,
-    default fallback: Double
-  ) throws -> Double {
+  static func positiveBudgetDouble(_ raw: String?, default fallback: Double) throws -> Double {
     try ConfigParse.positiveDouble(raw, default: fallback, onInvalid: ConfigError.invalidBudget)
   }
 }
@@ -56,10 +53,6 @@ private extension AppConfig {
 
   /// An optional positive `Int` ceiling override; `nil` when absent so the budget derives it.
   static func positiveBudgetIntOrNil(_ raw: String?) throws -> Int? {
-    try ConfigParse.boundedIntOrNil(
-      raw,
-      range: 1...Int.max,
-      onInvalid: ConfigError.invalidBudget
-    )
+    try ConfigParse.boundedIntOrNil(raw, range: 1...Int.max, onInvalid: ConfigError.invalidBudget)
   }
 }

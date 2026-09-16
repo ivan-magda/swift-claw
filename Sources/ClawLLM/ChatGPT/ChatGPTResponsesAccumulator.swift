@@ -336,7 +336,7 @@ private extension ChatGPTResponsesAccumulator {
 
   /// Mutates one item and re-charges the accumulated-output budget with what it now holds, so the
   /// running total is always the bytes actually retained rather than the bytes ever seen.
-  mutating func update(_ index: Int, mutate: (inout OutputItem) -> Void) throws {
+  mutating func update(_ index: Int, mutate: (_ item: inout OutputItem) -> Void) throws {
     guard var item = items[index] else {
       throw Self.unregisteredItem
     }
@@ -364,16 +364,11 @@ private extension ChatGPTResponsesAccumulator {
       var fields: [AttemptOutputField] = []
       let visible = item.visibleText
       if visible.isEmpty == false {
-        fields.append(
-          AttemptOutputField(key: "responses-visible:\(index)", value: visible)
-        )
+        fields.append(AttemptOutputField(key: "responses-visible:\(index)", value: visible))
       }
       if item.retainsArguments {
         fields.append(
-          AttemptOutputField(
-            key: "responses-tool-arguments:\(index)",
-            value: item.argumentText
-          )
+          AttemptOutputField(key: "responses-tool-arguments:\(index)", value: item.argumentText)
         )
       }
       return fields
@@ -431,9 +426,7 @@ private extension ChatGPTResponsesAccumulator {
         guard let encrypted = done.encryptedContent else {
           continue
         }
-        reasoning.append(
-          ChatGPTReasoningItem(encryptedContent: encrypted, summary: done.summary)
-        )
+        reasoning.append(ChatGPTReasoningItem(encryptedContent: encrypted, summary: done.summary))
       case .message:
         messages.append(
           ChatGPTAssistantMessageItem(
@@ -488,9 +481,7 @@ private extension ChatGPTResponsesAccumulator {
           throw Self.conflictingTerminals
         }
         if terminalValidationPolicy == .throughStreamEnd {
-          reconciled = reconciled.withReportedModel(
-            reconciled.reportedModel ?? other.reportedModel
-          )
+          reconciled = reconciled.withReportedModel(reconciled.reportedModel ?? other.reportedModel)
         }
       case .streamError:
         throw Self.conflictingTerminals
@@ -539,11 +530,9 @@ private extension ChatGPTResponsesAccumulator {
   /// visible deltas stand in only where the backend never sent one — which is what lets a truncated
   /// turn still say what it managed to say.
   var content: String {
-    order.sorted()
-      .compactMap { index in
-        items[index]?.visibleText
-      }
-      .joined()
+    order.sorted().compactMap { index in
+      items[index]?.visibleText
+    }.joined()
   }
 
   func toolCalls() throws -> [ToolCall] {
@@ -559,9 +548,10 @@ private extension ChatGPTResponsesAccumulator {
       guard let done = accumulated.done else {
         throw Self.unresolvedFunctionCall
       }
-      guard
-        let callID = accumulated.callID, callID.isEmpty == false,
-        let name = done.name, name.isEmpty == false
+      guard let callID = accumulated.callID,
+            callID.isEmpty == false,
+            let name = done.name,
+            name.isEmpty == false
       else {
         throw Self.undispatchableFunctionCall
       }
@@ -603,17 +593,11 @@ private extension ChatGPTResponsesAccumulator {
   /// evaluation harness may use the payload-free cause to replace the whole attempt once.
   static let ambiguousEnd = ProviderError.partialStreamWithoutCompletedTerminal
 
-  static let conflictingTerminals = terminal(
-    "the ChatGPT reply stated conflicting outcomes"
-  )
+  static let conflictingTerminals = terminal("the ChatGPT reply stated conflicting outcomes")
 
-  static let conflictingCallID = terminal(
-    "the ChatGPT reply gave one tool call two identities"
-  )
+  static let conflictingCallID = terminal("the ChatGPT reply gave one tool call two identities")
 
-  static let unresolvedFunctionCall = terminal(
-    "the ChatGPT reply left a tool call unfinished"
-  )
+  static let unresolvedFunctionCall = terminal("the ChatGPT reply left a tool call unfinished")
 
   static let undispatchableFunctionCall = terminal(
     "the ChatGPT reply proposed a tool call with no name or no call ID"

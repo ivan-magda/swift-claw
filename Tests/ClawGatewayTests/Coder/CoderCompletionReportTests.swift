@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct CoderCompletionReportTests {
-  @Test func completionCardSeparatesEvidenceFromWorkerText() throws {
+@Suite
+struct CoderCompletionReportTests {
+  @Test
+  func completionCardSeparatesEvidenceFromWorkerText() throws {
     // given
     let url = "https://github.com/owner/repository/pull/42"
     let result = CoderResult(
@@ -50,7 +52,8 @@ import Testing
     #expect(details.lowerBound < jobID.lowerBound)
   }
 
-  @Test func manyReportedChecksStayWithinRichMessageBlockLimit() {
+  @Test
+  func manyReportedChecksStayWithinRichMessageBlockLimit() {
     // given
     let richMessageBlockLimit = 500
     let checks = (1...(richMessageBlockLimit + 1)).map { index in

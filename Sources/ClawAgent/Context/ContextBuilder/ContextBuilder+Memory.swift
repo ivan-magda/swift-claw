@@ -4,10 +4,7 @@ import Foundation
 // MARK: - Memory and Recall Sections
 
 extension ContextBuilder {
-  func memoryItemsSection(
-    excludeSensitive: Bool,
-    residual: Int
-  ) -> FittableSection? {
+  func memoryItemsSection(excludeSensitive: Bool, residual: Int) -> FittableSection? {
     let cap = cap(for: .memoryItems, residual: residual)
     guard cap > 0 else {
       return nil
@@ -24,11 +21,7 @@ extension ContextBuilder {
       return nil
     }
 
-    let ranked = MemoryRanker.rank(
-      items: fetched,
-      excludeSensitive: excludeSensitive,
-      cap: cap
-    )
+    let ranked = MemoryRanker.rank(items: fetched, excludeSensitive: excludeSensitive, cap: cap)
     let units = ranked.map { item in
       SectionUnit(id: "memory-\(item.id)", content: item.text, canTruncate: false)
     }
@@ -42,13 +35,11 @@ extension ContextBuilder {
 
   func recallSection(
     snapshot: SessionContextSnapshot,
-    sessionId: Int64,
+    sessionID: Int64,
     residual: Int
   ) -> FittableSection? {
     let cap = cap(for: .recall, residual: residual)
-    guard cap > 0,
-      let query = latestUserMessage(in: snapshot.history)
-    else {
+    guard cap > 0, let query = latestUserMessage(in: snapshot.history) else {
       return nil
     }
 
@@ -56,10 +47,10 @@ extension ContextBuilder {
     do {
       hits = try retriever.searchRelevantMessages(
         query: query,
-        currentSessionId: sessionId,
-        restrictToSessionId: recallRestriction(for: snapshot, sessionId: sessionId),
-        windowStartMessageId: snapshot.windowStartMessageId,
-        excludedMessageIds: snapshot.historyMessageIds,
+        currentSessionID: sessionID,
+        restrictToSessionID: recallRestriction(for: snapshot, sessionID: sessionID),
+        windowStartMessageID: snapshot.windowStartMessageID,
+        excludedMessageIDs: snapshot.historyMessageIDs,
         limit: Self.recallCandidateLimit
       )
     } catch {
@@ -67,15 +58,11 @@ extension ContextBuilder {
       return nil
     }
 
-    let selected = CandidateCapRecallCutoff.select(
-      hits: hits,
-      limit: Self.recallInjectionLimit
-    )
+    let selected = CandidateCapRecallCutoff.select(hits: hits, limit: Self.recallInjectionLimit)
     let units = selected.compactMap { hit -> SectionUnit? in
       let content = cappedRecallContent(hit.content)
       return content.isEmpty
-        ? nil
-        : SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)
+        ? nil : SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)
     }
 
     guard units.isEmpty == false else {
@@ -90,10 +77,12 @@ extension ContextBuilder {
 
 private extension ContextBuilder {
   /// A group topic recalls only its own past; a DM keeps its reach across the owner's sessions.
-  func recallRestriction(for snapshot: SessionContextSnapshot, sessionId: Int64) -> Int64? {
+  func recallRestriction(for snapshot: SessionContextSnapshot, sessionID: Int64) -> Int64? {
     switch SessionKey.mode(from: snapshot.sessionKey) {
-    case .direct: nil
-    case .group: sessionId
+    case .direct:
+      nil
+    case .group:
+      sessionID
     }
   }
 

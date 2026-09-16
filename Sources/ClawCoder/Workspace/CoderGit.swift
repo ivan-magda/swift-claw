@@ -18,15 +18,34 @@ struct CoderGit: Sendable {
     let command = CoderCommand(
       executable: "/usr/bin/git",
       arguments: [
-        "--no-optional-locks", "--no-pager",
-        "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
-        "-c", "core.attributesFile=/dev/null", "-c", "core.excludesFile=/dev/null",
-        "-c", "diff.external=", "-c", "protocol.allow=never", "-c", "protocol.file.allow=always",
-        "-c", "maintenance.auto=false", "-c", "gc.auto=0",
+        "--no-optional-locks",
+        "--no-pager",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.attributesFile=/dev/null",
+        "-c",
+        "core.excludesFile=/dev/null",
+        "-c",
+        "diff.external=",
+        "-c",
+        "protocol.allow=never",
+        "-c",
+        "protocol.file.allow=always",
+        "-c",
+        "maintenance.auto=false",
+        "-c",
+        "gc.auto=0",
       ] + arguments,
       environment: [
-        "PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
-        "GIT_TERMINAL_PROMPT": "0", "GIT_NO_REPLACE_OBJECTS": "1", "LC_ALL": "C",
+        "PATH": "/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_NO_REPLACE_OBJECTS": "1",
+        "LC_ALL": "C",
       ],
       workingDirectory: directory,
       input: "",
@@ -60,7 +79,7 @@ struct CoderGit: Sendable {
       at: directory
     )
     guard [40, 64].contains(sha.utf8.count),
-      sha.utf8.allSatisfy({ byte in
+          sha.utf8.allSatisfy({ byte in
         (48...57).contains(byte) || (97...102).contains(byte)
       })
     else {
@@ -103,7 +122,9 @@ extension CoderGit {
   func headCommit(at directory: String) async throws -> String? {
     do {
       return try await commit("HEAD", at: directory)
-    } catch CoderGitFailure.command(let failedHead) {
+    } catch CoderGitFailure.command(
+      let failedHead
+    ) {
       let ref = try await text(["symbolic-ref", "--quiet", "HEAD"], at: directory)
       guard ref.hasPrefix("refs/heads/") else {
         throw CoderGitFailure.command(failedHead)

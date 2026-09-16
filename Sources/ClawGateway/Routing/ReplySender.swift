@@ -29,7 +29,7 @@ struct ReplySender: Sendable {
   /// Runs one store operation, mapping the failure classes every handler shares.
   func perform<Value: Sendable>(
     _ operation: String,
-    updateId: Int64,
+    updateID: Int64,
     target: DeliveryTarget,
     onFailure: StoreFailureReply = .retryUpdate,
     body: () throws -> Value
@@ -39,13 +39,13 @@ struct ReplySender: Sendable {
     } catch StoreError.diskFull {
       throw RoutingHalt(outcome: await storageFull(target: target))
     } catch {
-      logger.error("\(operation) failed for update \(updateId): \(error)")
+      logger.error("\(operation) failed for update \(updateID): \(error)")
       switch onFailure {
       case .retryUpdate:
         throw RoutingHalt(outcome: .transientFailure)
       case .ack(let text):
         throw RoutingHalt(
-          outcome: await sendCommandAck(updateId: updateId, target: target, text: text)
+          outcome: await sendCommandAck(updateID: updateID, target: target, text: text)
         )
       }
     }
@@ -54,29 +54,29 @@ struct ReplySender: Sendable {
   /// Claims the update for a direct effect (canned reply, verb, confirmation cancel) so a
   /// redelivery applies once. Returning normally means newly claimed — proceed; a duplicate or
   /// failed claim halts with the outcome the handler must return.
-  func claimUpdate(updateId: Int64, target: DeliveryTarget) async throws(RoutingHalt) {
-    let claimed = try await perform("update claim", updateId: updateId, target: target) {
-      try processed.claimUpdate(updateId: updateId)
+  func claimUpdate(updateID: Int64, target: DeliveryTarget) async throws(RoutingHalt) {
+    let claimed = try await perform("update claim", updateID: updateID, target: target) {
+      try processed.claimUpdate(updateID: updateID)
     }
     if !claimed {
-      throw RoutingHalt(outcome: skipDuplicate(updateId: updateId))
+      throw RoutingHalt(outcome: skipDuplicate(updateID: updateID))
     }
   }
 
   /// The one spelling of the duplicate-update outcome (dedup claims lose exactly one way).
-  func skipDuplicate(updateId: Int64) -> HandleOutcome {
-    logger.debug("duplicate update \(updateId), skipping")
+  func skipDuplicate(updateID: Int64) -> HandleOutcome {
+    logger.debug("duplicate update \(updateID), skipping")
     return .skipped
   }
 
   /// A direct canned reply, deduped via `claimUpdate` so a redelivery doesn't double-send it.
-  func sendCanned(updateId: Int64, target: DeliveryTarget, text: String) async -> HandleOutcome {
+  func sendCanned(updateID: Int64, target: DeliveryTarget, text: String) async -> HandleOutcome {
     guard !Task.isCancelled else {
       return .transientFailure
     }
 
     do {
-      try await claimUpdate(updateId: updateId, target: target)
+      try await claimUpdate(updateID: updateID, target: target)
     } catch {
       return error.outcome
     }
@@ -84,7 +84,7 @@ struct ReplySender: Sendable {
     do {
       _ = try await delivery.sendMessage(to: target, text: text)
     } catch {
-      logger.error("send failed for update \(updateId): \(error)")
+      logger.error("send failed for update \(updateID): \(error)")
       return .transientFailure
     }
 
@@ -93,7 +93,7 @@ struct ReplySender: Sendable {
 
   /// One claimed canned response delivered in stable chunk order.
   func sendCannedChunks(
-    updateId: Int64,
+    updateID: Int64,
     target: DeliveryTarget,
     texts: [String]
   ) async -> HandleOutcome {
@@ -102,7 +102,7 @@ struct ReplySender: Sendable {
     }
 
     do {
-      try await claimUpdate(updateId: updateId, target: target)
+      try await claimUpdate(updateID: updateID, target: target)
     } catch {
       return error.outcome
     }
@@ -112,7 +112,7 @@ struct ReplySender: Sendable {
         _ = try await delivery.sendMessage(to: target, text: text)
       }
     } catch {
-      logger.error("chunked send failed for update \(updateId): \(error)")
+      logger.error("chunked send failed for update \(updateID): \(error)")
       return .transientFailure
     }
     return .processed
@@ -121,20 +121,20 @@ struct ReplySender: Sendable {
   /// Ack for a command whose effect already claimed the update; the send is best-effort — a lost
   /// ack must not re-run the effect.
   func sendCommandAck(
-    updateId: Int64,
+    updateID: Int64,
     target: DeliveryTarget,
     text: String
   ) async -> HandleOutcome {
     do {
       _ = try await delivery.sendMessage(to: target, text: text)
     } catch {
-      logger.error("command ack send failed for update \(updateId): \(error)")
+      logger.error("command ack send failed for update \(updateID): \(error)")
     }
     return .processed
   }
 
-  func sendPrivateBot(updateId: Int64, target: DeliveryTarget) async -> HandleOutcome {
-    await sendCanned(updateId: updateId, target: target, text: MessageRouter.privateBotText)
+  func sendPrivateBot(updateID: Int64, target: DeliveryTarget) async -> HandleOutcome {
+    await sendCanned(updateID: updateID, target: target, text: MessageRouter.privateBotText)
   }
 
   /// Best-effort "storage full" notice (the send may still succeed — a full disk doesn't break

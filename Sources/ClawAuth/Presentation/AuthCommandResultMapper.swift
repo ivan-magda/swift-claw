@@ -75,7 +75,7 @@ enum AuthCommandResultMapper {
             clawd is running for this state root. Stop the daemon before changing the stored \
             credential, then run this again.
             """
-          )
+          ),
         ]
       )
     case .unavailable(let detail):
@@ -84,28 +84,6 @@ enum AuthCommandResultMapper {
         events: [.error("The state root's lock could not be opened: \(safe(detail))")]
       )
     }
-  }
-
-  /// Every runtime-secret failure, named or not, is a secret-load failure. Falling through to an
-  /// ordinary command failure on an error no case happens to name would be the one mistake that
-  /// matters here: it would tell a supervisor to try again on a condition that will never fix
-  /// itself.
-  static func runtimeSecretResult(for error: any Error) -> AuthCommandResult {
-    let named = error as? SecretStoreError
-    let cause =
-      if let named {
-        describe(named)
-      } else {
-        "the runtime secrets could not be prepared"
-      }
-
-    return AuthCommandResult(
-      exit: .secretLoadFailure,
-      events: [
-        .error("Login stopped before touching your credentials: \(cause)."),
-        .error(repair(for: named)),
-      ]
-    )
   }
 
   /// Worded for a read and a write alike: login saves through this seam, status and logout read
@@ -117,18 +95,36 @@ enum AuthCommandResultMapper {
     )
   }
 
-  static func credentialStoreResult(for error: any Error) -> AuthCommandResult {
-    guard let named = error as? LLMCredentialStoreError else {
-      return unexpected()
-    }
-    return result(for: named)
-  }
-
   static func result(for failure: ChatGPTOAuthFailure) -> AuthCommandResult {
     AuthCommandResult(
       exit: .commandFailure,
       events: [.error("Login failed: \(describe(failure)).")]
     )
+  }
+
+  /// Every runtime-secret failure, named or not, is a secret-load failure. Falling through to an
+  /// ordinary command failure on an error no case happens to name would be the one mistake that
+  /// matters here: it would tell a supervisor to try again on a condition that will never fix
+  /// itself.
+  static func runtimeSecretResult(for error: any Error) -> AuthCommandResult {
+    let named = error as? SecretStoreError
+    let cause =
+      if let named { describe(named) } else { "the runtime secrets could not be prepared" }
+
+    return AuthCommandResult(
+      exit: .secretLoadFailure,
+      events: [
+        .error("Login stopped before touching your credentials: \(cause)."),
+        .error(repair(for: named)),
+      ]
+    )
+  }
+
+  static func credentialStoreResult(for error: any Error) -> AuthCommandResult {
+    guard let named = error as? LLMCredentialStoreError else {
+      return unexpected()
+    }
+    return result(for: named)
   }
 
   /// A failure no seam named. It is an ordinary command failure, and it says nothing about the error

@@ -33,7 +33,7 @@ extension ResetFixture {
     try env.queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = NULL WHERE job_id = ?",
-        arguments: [env.jobId]
+        arguments: [env.jobID]
       )
     }
   }
@@ -47,7 +47,7 @@ extension ResetFixture {
             SELECT trial_id FROM learning_trials WHERE job_id = ? ORDER BY trial_id LIMIT 1
           )
           """,
-        arguments: [env.jobId]
+        arguments: [env.jobID]
       )
     }
   }
@@ -113,23 +113,23 @@ extension ResetFixture {
   }
 
   func corruptCanonicalEmpty(_ collision: ResetEmptyCollision) throws {
-    let empty = LessonSet.empty(jobId: env.jobId)
+    let empty = LessonSet.empty(jobID: env.jobID)
     try env.queue.write { db in
       switch collision {
       case .schemaVersion:
         try db.execute(
           sql: "UPDATE lesson_sets SET schema_version = ? WHERE job_id = ? AND digest = ?",
-          arguments: [empty.schemaVersion + 1, env.jobId, empty.digest.rawValue]
+          arguments: [empty.schemaVersion + 1, env.jobID, empty.digest.rawValue]
         )
       case .canonicalBytes:
         try db.execute(
           sql: "UPDATE lesson_sets SET canonical_bytes = ? WHERE job_id = ? AND digest = ?",
-          arguments: [Data("reset-corrupt".utf8), env.jobId, empty.digest.rawValue]
+          arguments: [Data("reset-corrupt".utf8), env.jobID, empty.digest.rawValue]
         )
       case .source:
         try db.execute(
           sql: "UPDATE lesson_sets SET source = ? WHERE job_id = ? AND digest = ?",
-          arguments: [LessonSetSource.ownerEdit.rawValue, env.jobId, empty.digest.rawValue]
+          arguments: [LessonSetSource.ownerEdit.rawValue, env.jobID, empty.digest.rawValue]
         )
       }
     }
@@ -183,8 +183,8 @@ extension ResetFixture {
           closedTrials: decoded.closedTrials,
           invalidatedTargetCount: decoded.invalidatedTargetCount,
           invalidatedChallengeCount: decoded.invalidatedChallengeCount,
-          staleNoCallOperationIds: decoded.staleNoCallOperationIds,
-          inFlightOperationIds: decoded.inFlightOperationIds
+          staleNoCallOperationIDs: decoded.staleNoCallOperationIDs,
+          inFlightOperationIDs: decoded.inFlightOperationIDs
         )
         corrupted = try ScheduledLearningStoreGRDB.canonicalDecisionJSON(changed)
       }

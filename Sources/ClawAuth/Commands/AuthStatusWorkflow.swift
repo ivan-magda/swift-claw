@@ -32,7 +32,7 @@ public struct AuthStatusWorkflow: Sendable {
     }
 
     var events: [AuthPresentationEvent] = [
-      .output("provider: \(ChatGPTProviderMetadata.providerID.rawValue)")
+      .output("provider: \(ChatGPTProviderMetadata.providerID.rawValue)"),
     ]
 
     guard let stored else {

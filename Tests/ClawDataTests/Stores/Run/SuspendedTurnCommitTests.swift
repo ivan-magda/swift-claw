@@ -6,11 +6,12 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct SuspendedTurnCommitTests {
+@Suite
+struct SuspendedTurnCommitTests {
   private struct Fixture {
     let queue: DatabaseQueue
-    let sessionId: Int64
-    let runId: Int64
+    let sessionID: Int64
+    let runID: Int64
   }
 
   private func makeRunningFixture() throws -> Fixture {
@@ -18,19 +19,19 @@ import Testing
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
+        updateID: 1,
         sessionKey: "tg:dm:7",
-        chatId: 7,
-        userId: 7,
+        chatID: 7,
+        userID: 7,
         text: "write the plan",
         isEdited: false,
         ts: Date()
       )
     )
     let runs = RunStoreGRDB(writer: queue)
-    let runId = try #require(claim.runId)
-    _ = try #require(try runs.pickUp(runId: runId, now: Date()))
-    return Fixture(queue: queue, sessionId: try #require(claim.sessionId), runId: runId)
+    let runID = try #require(claim.runID)
+    _ = try #require(try runs.pickUp(runID: runID, now: Date()))
+    return Fixture(queue: queue, sessionID: try #require(claim.sessionID), runID: runID)
   }
 
   private func makeCommit(_ fixture: Fixture) -> SuspendedTurnCommit {
@@ -48,18 +49,18 @@ import Testing
     )
     let buttonChunk = OutboxChunk(
       stepIndex: 0,
-      chatId: 7,
+      chatID: 7,
       payload: "Approve writing /workspace/notes/plan.md?",
       payloadHash: "hash",
-      approvalId: nil,
+      approvalID: nil,
       replyMarkup: #"{"inline_keyboard":[[{"text":"Approve","callback_data":"apr:n0:y"}]]}"#
     )
     return SuspendedTurnCommit(
       assistantContent: "Let me save that.",
       toolCallsJSON: #"[{"id":"w1","name":"file_write","arguments":"{}"}]"#,
       completedObservations: [],
-      pending: PendingToolAction(toolCallId: "w1", recorded: recorded),
-      ownerUserId: 7,
+      pending: PendingToolAction(toolCallID: "w1", recorded: recorded),
+      ownerUserID: 7,
       nonce: "n0",
       promptChunks: [buttonChunk],
       setTainted: false,
@@ -69,18 +70,21 @@ import Testing
   }
 
   private func count(_ queue: DatabaseQueue, _ sql: String) throws -> Int {
-    try queue.read { db in try Int.fetchOne(db, sql: sql) ?? 0 }
+    try queue.read { db in
+      try Int.fetchOne(db, sql: sql) ?? 0
+    }
   }
 
-  @Test func suspendCommitPersistsTheWholeCheckpointInOneTransaction() throws {
+  @Test
+  func suspendCommitPersistsTheWholeCheckpointInOneTransaction() throws {
     // given
     let fixture = try makeRunningFixture()
     let runs = RunStoreGRDB(writer: fixture.queue)
 
     // when
     let receipt = try runs.commitSuspendedTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
       commit: makeCommit(fixture),
       now: Date()
     )
@@ -90,7 +94,7 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT state FROM runs WHERE id = ?",
-        arguments: [fixture.runId]
+        arguments: [fixture.runID]
       )
     }
     #expect(runState == RunState.awaitingApproval.rawValue)
@@ -99,20 +103,20 @@ import Testing
       try Row.fetchOne(
         db,
         sql: "SELECT * FROM approvals WHERE id = ?",
-        arguments: [receipt.approvalId]
+        arguments: [receipt.approvalID]
       )
     }
     #expect(approval?["state"] == ApprovalState.pending.rawValue)
     #expect(approval?["tool"] == "file_write")
     #expect(approval?["nonce"] == "n0")
     #expect(approval?["reason"] == ApprovalReason.askTier.rawValue)
-    #expect((approval?["observation_message_id"] as Int64?) == receipt.observationMessageId)
+    #expect((approval?["observation_message_id"] as Int64?) == receipt.observationMessageID)
 
     let placeholder = try fixture.queue.read { db in
       try String.fetchOne(
         db,
         sql: "SELECT content FROM messages WHERE id = ?",
-        arguments: [receipt.observationMessageId]
+        arguments: [receipt.observationMessageID]
       )
     }
     #expect(placeholder == "awaiting owner approval")
@@ -132,7 +136,7 @@ import Testing
     #expect(
       try count(
         fixture.queue,
-        "SELECT COUNT(*) FROM outbound_deliveries WHERE approval_id = \(receipt.approvalId)"
+        "SELECT COUNT(*) FROM outbound_deliveries WHERE approval_id = \(receipt.approvalID)"
       ) == 1
     )
     // The suspend commit persists NO usage row — the suspending round was already debited mid-loop,
@@ -143,26 +147,29 @@ import Testing
       try Bool.fetchOne(
         db,
         sql: "SELECT has_private_data FROM sessions WHERE id = ?",
-        arguments: [fixture.sessionId]
+        arguments: [fixture.sessionID]
       )
     }
     #expect(hasPrivate == true)
   }
 
-  @Test func aWriteFaultRollsBackTheEntireCheckpoint() throws {
+  @Test
+  func aWriteFaultRollsBackTheEntireCheckpoint() throws {
     // given — the fault seam throws just before the commit returns (still inside the txn)
     let fixture = try makeRunningFixture()
     struct InjectedFault: Error {}
     let runs = RunStoreGRDB(
       writer: fixture.queue,
-      suspendCommitFault: { throw InjectedFault() }
+      suspendCommitFault: {
+        throw InjectedFault()
+      }
     )
 
     // when / then — the whole checkpoint rolls back (the fault surfaces classified at the seam)
     #expect(throws: StoreError.self) {
       _ = try runs.commitSuspendedTurn(
-        runId: fixture.runId,
-        sessionId: fixture.sessionId,
+        runID: fixture.runID,
+        sessionID: fixture.sessionID,
         commit: makeCommit(fixture),
         now: Date()
       )
@@ -172,7 +179,7 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT state FROM runs WHERE id = ?",
-        arguments: [fixture.runId]
+        arguments: [fixture.runID]
       )
     }
     #expect(runState == RunState.running.rawValue)
@@ -220,9 +227,9 @@ extension SuspendedTurnCommitTests {
     return SuspendedTurnCommit(
       assistantContent: base.assistantContent,
       toolCallsJSON: base.toolCallsJSON,
-      completedObservations: [ToolObservationRow(toolCallId: "w0", content: "already ran")],
+      completedObservations: [ToolObservationRow(toolCallID: "w0", content: "already ran")],
       pending: base.pending,
-      ownerUserId: base.ownerUserId,
+      ownerUserID: base.ownerUserID,
       nonce: base.nonce,
       promptChunks: base.promptChunks,
       setTainted: base.setTainted,
@@ -232,15 +239,16 @@ extension SuspendedTurnCommitTests {
     )
   }
 
-  @Test func theSuspendCommitPersistsTheAnchorStateWithTheCheckpoint() throws {
+  @Test
+  func theSuspendCommitPersistsTheAnchorStateWithTheCheckpoint() throws {
     // given
     let fixture = try makeRunningFixture()
     let runs = RunStoreGRDB(writer: fixture.queue)
 
     // when
     _ = try runs.commitSuspendedTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
       commit: statefulCommit(fixture),
       now: Date()
     )
@@ -254,7 +262,7 @@ extension SuspendedTurnCommitTests {
             SELECT provider_state_issuer, provider_state FROM messages
             WHERE run_id = ? AND role = ?
             """,
-          arguments: [fixture.runId, MessageRole.assistant.rawValue]
+          arguments: [fixture.runID, MessageRole.assistant.rawValue]
         )
       }
     )
@@ -262,7 +270,8 @@ extension SuspendedTurnCommitTests {
     #expect(anchor["provider_state"] as Data? == Self.anchorState.payload)
   }
 
-  @Test func providerStateNeverReachesTheAuditTrailOrTheApprovalPrompt() throws {
+  @Test
+  func providerStateNeverReachesTheAuditTrailOrTheApprovalPrompt() throws {
     // given — the suspend commit is the one store path that writes an audit row and an owner-facing
     // prompt in the same transaction as an anchor's state
     let fixture = try makeRunningFixture()
@@ -270,15 +279,17 @@ extension SuspendedTurnCommitTests {
 
     // when
     _ = try runs.commitSuspendedTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
       commit: statefulCommit(fixture),
       now: Date()
     )
 
     // then — both surfaces exist and neither holds the issuer or the payload
     let auditRows = try fixture.queue.read { db in
-      try Row.fetchAll(db, sql: "SELECT * FROM audit_events").map { row in "\(row)" }
+      try Row.fetchAll(db, sql: "SELECT * FROM audit_events").map { row in
+        "\(row)"
+      }
     }
     let prompts = try fixture.queue.read { db in
       try String.fetchAll(db, sql: "SELECT payload FROM outbound_deliveries")
@@ -291,27 +302,32 @@ extension SuspendedTurnCommitTests {
     }
   }
 
-  @Test func theResumedContextLoadsTheSuspendedAnchorStateAndNoOtherRow() throws {
+  @Test
+  func theResumedContextLoadsTheSuspendedAnchorStateAndNoOtherRow() throws {
     // given — the checkpoint a resume reads back before its next provider call
     let fixture = try makeRunningFixture()
     let runs = RunStoreGRDB(writer: fixture.queue)
     let receipt = try runs.commitSuspendedTurn(
-      runId: fixture.runId,
-      sessionId: fixture.sessionId,
+      runID: fixture.runID,
+      sessionID: fixture.sessionID,
       commit: statefulCommit(fixture),
       now: Date()
     )
 
     // when — resume binds context to the filled observation row
     let history = try SessionMessageStoreGRDB(writer: fixture.queue).loadContextSnapshot(
-      sessionId: fixture.sessionId,
-      throughMessageId: receipt.observationMessageId,
+      sessionID: fixture.sessionID,
+      throughMessageID: receipt.observationMessageID,
       limit: 50
     ).history
 
     // then — the parked anchor carries its state; the completed and placeholder rows carry none
     #expect(history.map(\.role) == [.user, .assistant, .tool, .tool])
     #expect(history[1].providerState == Self.anchorState)
-    #expect(history.filter { message in message.providerState != nil }.count == 1)
+    #expect(
+      history.filter { message in
+        message.providerState != nil
+      }.count == 1
+    )
   }
 }

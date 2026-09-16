@@ -4,14 +4,16 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct RecurrenceEnvelopeTests {
+@Suite
+struct RecurrenceEnvelopeTests {
   private func weekdaySevenBerlinRule() throws -> Calendar.RecurrenceRule {
     // force_unwrapping is `error` project-wide with no Tests exclusion (.swiftlint.yml); #require
     // is the house pattern for a lookup that is statically known to succeed.
     SchedulingRuleFixtures.weekdaySeven(zone: try #require(TimeZone(identifier: "Europe/Berlin")))
   }
 
-  @Test func roundTripIsByteForByteStable() throws {
+  @Test
+  func roundTripIsByteForByteStable() throws {
     // given — the toolchain-drift tripwire (spec §17, preamble Verification Notes): if a future
     // Foundation changes the rule's encoding, this breaks BEFORE any stored row does.
     let envelope = RecurrenceEnvelope(
@@ -30,7 +32,8 @@ import Testing
     #expect(decoded.rule == envelope.rule)
   }
 
-  @Test func envelopeUsesThePinnedStorageKeys() throws {
+  @Test
+  func envelopeUsesThePinnedStorageKeys() throws {
     // given
     let envelope = RecurrenceEnvelope(schemaVersion: 1, rule: try weekdaySevenBerlinRule())
 
@@ -44,8 +47,10 @@ import Testing
   }
 }
 
-@Suite struct SchedulingDomainTests {
-  @Test func statusRawValuesMatchTheDBVocabulary() {
+@Suite
+struct SchedulingDomainTests {
+  @Test
+  func statusRawValuesMatchTheDBVocabulary() {
     // given / when / then — the closed FSM vocabulary of spec §4.1
     #expect(ScheduledJobStatus.active.rawValue == "ACTIVE")
     #expect(ScheduledJobStatus.paused.rawValue == "PAUSED")
@@ -53,7 +58,8 @@ import Testing
     #expect(ScheduledJobStatus.cancelled.rawValue == "CANCELLED")
   }
 
-  @Test func originRawValuesMatchTheRunsColumnVocabulary() {
+  @Test
+  func originRawValuesMatchTheRunsColumnVocabulary() {
     // given / when / then — the runs.origin discriminator of spec §4.2
     #expect(RunOrigin.interactive.rawValue == "interactive")
     #expect(RunOrigin.scheduled.rawValue == "scheduled")

@@ -11,12 +11,14 @@ enum CoderToolOutput {
   static let jobSchema: JSONValue = .object([
     "type": .string("object"),
     "properties": .object(["job_id": .object(["type": .string("string")])]),
-    "required": .array([.string("job_id")]), "additionalProperties": .bool(false),
+    "required": .array([.string("job_id")]),
+    "additionalProperties": .bool(false),
   ])
 
   static func jobID(_ arguments: JSONValue) -> UUID? {
-    guard let object = arguments.objectValue, Set(object.keys) == ["job_id"],
-      let raw = object["job_id"]?.stringValue
+    guard let object = arguments.objectValue,
+          Set(object.keys) == ["job_id"],
+          let raw = object["job_id"]?.stringValue
     else {
       return nil
     }

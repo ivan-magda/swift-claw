@@ -1,30 +1,30 @@
 public struct ToolExecutionContext: Sendable, Equatable {
-  public let runId: Int64
-  public let sessionId: Int64
-  public let chatId: Int64
-  public let requesterUserId: Int64?
+  public let runID: Int64
+  public let sessionID: Int64
+  public let chatID: Int64
+  public let requesterUserID: Int64?
   public let origin: RunOrigin
   public let mode: ChatMode
-  public let toolCallId: String
-  public let approvalId: Int64?
+  public let toolCallID: String
+  public let approvalID: Int64?
 
   public init(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
-    requesterUserId: Int64?,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
+    requesterUserID: Int64?,
     origin: RunOrigin,
     mode: ChatMode,
-    toolCallId: String,
-    approvalId: Int64?
+    toolCallID: String,
+    approvalID: Int64?
   ) {
-    self.runId = runId
-    self.sessionId = sessionId
-    self.chatId = chatId
-    self.requesterUserId = requesterUserId
+    self.runID = runID
+    self.sessionID = sessionID
+    self.chatID = chatID
+    self.requesterUserID = requesterUserID
     self.origin = origin
     self.mode = mode
-    self.toolCallId = toolCallId
-    self.approvalId = approvalId
+    self.toolCallID = toolCallID
+    self.approvalID = approvalID
   }
 }

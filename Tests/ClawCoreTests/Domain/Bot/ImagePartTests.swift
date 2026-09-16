@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ImagePartTests {
-  @Test func sniffsEachSupportedFormatFromItsMagicBytes() {
+@Suite
+struct ImagePartTests {
+  @Test
+  func sniffsEachSupportedFormatFromItsMagicBytes() {
     // given — the leading bytes each format is identified by
     let samples: [(Data, ImageMediaType)] = [
       (Data([0xFF, 0xD8, 0xFF, 0xE0]), .jpeg),
@@ -19,7 +21,8 @@ import Testing
     }
   }
 
-  @Test func rejectsBytesThatAreNotAnImage() {
+  @Test
+  func rejectsBytesThatAreNotAnImage() {
     // given — a plausible-looking but non-image payload, and a truncated header
     let html = Data("<!DOCTYPE html>".utf8)
     let truncated = Data([0xFF, 0xD8])
@@ -29,7 +32,8 @@ import Testing
     #expect(ImageMediaType.sniff(truncated) == nil)
   }
 
-  @Test func rejectsRiffThatIsNotWebp() {
+  @Test
+  func rejectsRiffThatIsNotWebp() {
     // given — RIFF also fronts WAV and AVI
     let wav = Data("RIFF____WAVEfmt ".utf8)
 
@@ -37,7 +41,8 @@ import Testing
     #expect(ImageMediaType.sniff(wav) == nil)
   }
 
-  @Test func visualTokenEstimateUsesThePatchGridAndIsCapped() {
+  @Test
+  func visualTokenEstimateUsesThePatchGridAndIsCapped() {
     // given — the published 28px patch grid, and an image far past the cap
     let typical = ImagePart(data: Data(), mediaType: .jpeg, width: 1280, height: 960)
     let huge = ImagePart(data: Data(), mediaType: .jpeg, width: 8000, height: 8000)

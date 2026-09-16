@@ -44,13 +44,7 @@ public struct CoderJobStoreGRDB: CoderJobStore {
         return .workspaceBusy
       }
       return .admitted(
-        try CoderJobRecord.insert(
-          db,
-          id: id,
-          prepared: prepared,
-          origin: origin,
-          now: now
-        )
+        try CoderJobRecord.insert(db, id: id, prepared: prepared, origin: origin, now: now)
       )
     }
   }
@@ -70,7 +64,8 @@ public struct CoderJobStoreGRDB: CoderJobStore {
           ORDER BY updated_ts DESC, id DESC LIMIT 1
           """,
         arguments: [
-          CoderJobState.failed.rawValue, CoderJobState.timedOut.rawValue,
+          CoderJobState.failed.rawValue,
+          CoderJobState.timedOut.rawValue,
           CoderJobState.interrupted.rawValue,
         ]
       ).map(CoderJobRecord.decode)
@@ -88,7 +83,9 @@ public struct CoderJobStoreGRDB: CoderJobStore {
       try db.execute(
         sql: "UPDATE coder_jobs SET state = ?, updated_ts = ? WHERE id = ? AND state = ?",
         arguments: [
-          CoderJobState.running.rawValue, EpochSecondCodec.epoch(now), id.uuidString,
+          CoderJobState.running.rawValue,
+          EpochSecondCodec.epoch(now),
+          id.uuidString,
           CoderJobState.admitted.rawValue,
         ]
       )
@@ -101,8 +98,11 @@ public struct CoderJobStoreGRDB: CoderJobStore {
       try db.execute(
         sql: "UPDATE coder_jobs SET state = ?, updated_ts = ? WHERE id = ? AND state IN (?, ?)",
         arguments: [
-          CoderJobState.stopping.rawValue, EpochSecondCodec.epoch(now), id.uuidString,
-          CoderJobState.admitted.rawValue, CoderJobState.running.rawValue,
+          CoderJobState.stopping.rawValue,
+          EpochSecondCodec.epoch(now),
+          id.uuidString,
+          CoderJobState.admitted.rawValue,
+          CoderJobState.running.rawValue,
         ]
       )
       return try CoderJobRecord.fetch(db, id: id)
@@ -114,8 +114,9 @@ public struct CoderJobStoreGRDB: CoderJobStore {
 
 private extension CoderJobStoreGRDB {
   static func reservedJobs(_ db: Database) throws -> [CoderJob] {
-    try Row.fetchAll(db, sql: "SELECT * FROM coder_jobs WHERE slot_reserved = 1 ORDER BY id")
-      .map(CoderJobRecord.decode)
+    try Row.fetchAll(db, sql: "SELECT * FROM coder_jobs WHERE slot_reserved = 1 ORDER BY id").map(
+      CoderJobRecord.decode
+    )
   }
 
   static func conflicts(

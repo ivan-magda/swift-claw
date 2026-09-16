@@ -8,8 +8,7 @@ enum ScheduleReplies {
   /// The confirm prompt previews the next 3 fire times.
   static let confirmPreviewCount = 3
 
-  static let exampleLine =
-    "Example: /schedule every weekday at 07:00, summarize my unread items"
+  static let exampleLine = "Example: /schedule every weekday at 07:00, summarize my unread items"
 
   static var parseFailed: String {
     "I couldn't turn that into a schedule. \(exampleLine)"
@@ -20,13 +19,19 @@ enum ScheduleReplies {
   // auth sentence names the exact recovery command, while access and quota deliberately do not.
 
   /// A `/schedule` parse that could not reach a usable model (terminal reject, brownout, deadline).
-  static var providerUnavailable: String { Degradation.providerUnavailable }
+  static var providerUnavailable: String {
+    Degradation.providerUnavailable
+  }
 
   /// The credential is gone or refused; names `clawd auth login` as the exact recovery.
-  static var authenticationRequired: String { Degradation.authenticationRequired }
+  static var authenticationRequired: String {
+    Degradation.authenticationRequired
+  }
 
   /// The plan/account cannot use the requested route or model; does not tell the owner to log in.
-  static var accessDenied: String { Degradation.accessDenied }
+  static var accessDenied: String {
+    Degradation.accessDenied
+  }
 
   /// A clean throttle; says to retry after the provider's hint or the plan reset, never to log in.
   static func quotaLimited(retryAfterSeconds: Int?) -> String {
@@ -54,8 +59,7 @@ enum ScheduleReplies {
   }
 
   /// Terminal arm failure: the pending intent was cleared; re-issue.
-  static let armFailed =
-    "Couldn't arm the schedule. Nothing was created. Run /schedule again."
+  static let armFailed = "Couldn't arm the schedule. Nothing was created. Run /schedule again."
 
   /// A parked one-shot confirmed after its instant already passed — nothing left to arm.
   static let armExpired =
@@ -72,7 +76,7 @@ enum ScheduleReplies {
     ]
 
     for fire in nextFires {
-      lines.append("  \(fireTime(fire, timezoneId: schedule.timezone))")
+      lines.append("  \(fireTime(fire, timezoneID: schedule.timezone))")
     }
     lines.append("Reply yes to arm, no to cancel.")
 
@@ -88,7 +92,7 @@ enum ScheduleReplies {
 
     var text = "Armed schedule \(job.id) · «\(job.label)»"
     if let next = job.nextOccurrence {
-      text += " · next fire \(fireTime(next, timezoneId: job.timezone))"
+      text += " · next fire \(fireTime(next, timezoneID: job.timezone))"
     }
 
     return text + "."
@@ -99,7 +103,7 @@ enum ScheduleReplies {
     rows.map { row in
       let fire =
         row.nextFire.map { date in
-          fireTime(date, timezoneId: row.job.timezone)
+          fireTime(date, timezoneID: row.job.timezone)
         } ?? "—"
       return """
         \(row.job.id) · \(row.job.label) · \(row.job.status.rawValue) · \
@@ -130,7 +134,7 @@ enum ScheduleReplies {
     }
     return """
       Resumed schedule \(job.id) · «\(job.label)». Next fire \
-      \(fireTime(next, timezoneId: job.timezone)).
+      \(fireTime(next, timezoneID: job.timezone)).
       """
   }
 
@@ -150,8 +154,8 @@ enum ScheduleReplies {
     "Schedule \(id) already has a run in progress. Wait for it to finish, then try again."
   }
 
-  static func fireTime(_ date: Date, timezoneId: String) -> String {
-    let zone = TimeZone(identifier: timezoneId) ?? .gmt  // id was validated upstream
+  static func fireTime(_ date: Date, timezoneID: String) -> String {
+    let zone = TimeZone(identifier: timezoneID) ?? .gmt  // id was validated upstream
     return date.wallClockMinute(in: zone)
   }
 }

@@ -11,7 +11,7 @@ public struct OutboxStoreGRDB: OutboxStore {
 
   public func markSent(
     deliveryKey: String,
-    telegramMessageId: Int64,
+    telegramMessageID: Int64,
     now: Date
   ) throws(StoreError) {
     try database.writeMapping { db in
@@ -20,7 +20,7 @@ public struct OutboxStoreGRDB: OutboxStore {
           UPDATE outbound_deliveries SET status = 'SENT', telegram_message_id = ?, sent_ts = ?
           WHERE dedup_key = ?
           """,
-        arguments: [telegramMessageId, now, deliveryKey]
+        arguments: [telegramMessageID, now, deliveryKey]
       )
       // An approval-prompt delivery links its Telegram message to the approval so the
       // buttons can later be disarmed. The write rides THIS transaction; a NULL approval_id makes
@@ -30,7 +30,7 @@ public struct OutboxStoreGRDB: OutboxStore {
           UPDATE approvals SET prompt_message_id = ?
           WHERE id = (SELECT approval_id FROM outbound_deliveries WHERE dedup_key = ?)
           """,
-        arguments: [telegramMessageId, deliveryKey]
+        arguments: [telegramMessageID, deliveryKey]
       )
     }
   }
@@ -52,14 +52,14 @@ public struct OutboxStoreGRDB: OutboxStore {
       ).map { row in
         OutboxRow(
           deliveryKey: row["dedup_key"],
-          runId: row["run_id"],
+          runID: row["run_id"],
           stepIndex: row["step_index"],
-          chatId: row["chat_id"],
+          chatID: row["chat_id"],
           payload: row["payload"],
-          approvalId: row["approval_id"],
+          approvalID: row["approval_id"],
           replyMarkup: row["reply_markup"],
-          messageThreadId: row["message_thread_id"],
-          replyToMessageId: row["reply_to_message_id"]
+          messageThreadID: row["message_thread_id"],
+          replyToMessageID: row["reply_to_message_id"]
         )
       }
     }
@@ -71,11 +71,7 @@ public struct OutboxStoreGRDB: OutboxStore {
 extension OutboxStoreGRDB {
   /// The runless outbox insert without a transaction of its own, shared by learning transactions
   /// that must commit a notice and every feedback target exposed by its keyboard atomically.
-  static func insertNotice(
-    _ db: Database,
-    chunk: LearningNoticeChunk,
-    now: Date
-  ) throws -> Bool {
+  static func insertNotice(_ db: Database, chunk: LearningNoticeChunk, now: Date) throws -> Bool {
     try db.execute(
       sql: """
         INSERT OR IGNORE INTO outbound_deliveries(run_id, step_index, chat_id, dedup_key,
@@ -84,7 +80,7 @@ extension OutboxStoreGRDB {
         """,
       arguments: [
         chunk.ordinal,
-        chunk.chatId,
+        chunk.chatID,
         OutboxDedupKey.make(subjectDigest: chunk.subjectDigest, ordinal: chunk.ordinal),
         chunk.payload,
         chunk.payloadHash,

@@ -7,20 +7,20 @@ public struct HeartbeatSettings: Sendable, Equatable {
   public let intervalMinutes: Int
   public let quietHours: QuietHours
   public let maxPerDay: Int
-  public let ownerChatId: Int64
+  public let ownerChatID: Int64
   public let timezone: TimeZone
 
   public init(
     intervalMinutes: Int,
     quietHours: QuietHours,
     maxPerDay: Int,
-    ownerChatId: Int64,
+    ownerChatID: Int64,
     timezone: TimeZone
   ) {
     self.intervalMinutes = intervalMinutes
     self.quietHours = quietHours
     self.maxPerDay = maxPerDay
-    self.ownerChatId = ownerChatId
+    self.ownerChatID = ownerChatID
     self.timezone = timezone
   }
 
@@ -28,7 +28,7 @@ public struct HeartbeatSettings: Sendable, Equatable {
     guard config.heartbeatEnabled else {
       return nil
     }
-    guard let ownerChatId = config.heartbeatOwnerChatId else {
+    guard let ownerChatID = config.heartbeatOwnerChatID else {
       preconditionFailure("AppConfig must resolve one heartbeat owner before composition")
     }
 
@@ -36,7 +36,7 @@ public struct HeartbeatSettings: Sendable, Equatable {
       intervalMinutes: config.heartbeatIntervalMinutes,
       quietHours: config.heartbeatQuietHours,
       maxPerDay: config.heartbeatMaxPerDay,
-      ownerChatId: ownerChatId,
+      ownerChatID: ownerChatID,
       timezone: config.timezone
     )
   }

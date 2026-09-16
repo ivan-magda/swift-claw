@@ -17,12 +17,12 @@ struct RetryBackoff: Sendable {
   static let maximumRetryAfterSeconds = 30
 
   private let clock: any Clock<Duration>
-  private let jitter: @Sendable (Duration) -> Duration
+  private let jitter: @Sendable (_ duration: Duration) -> Duration
   private let requestTimeoutSeconds: Int
 
   init(
     clock: any Clock<Duration>,
-    jitter: @escaping @Sendable (Duration) -> Duration,
+    jitter: @escaping @Sendable (_ duration: Duration) -> Duration,
     requestTimeoutSeconds: Int
   ) {
     self.clock = clock

@@ -17,8 +17,10 @@ extension CoderJobStoreGRDB {
           WHERE id = ?
           """,
         arguments: [
-          update.ownership.rawValue, try CoderJobRecord.encodeJSON(update.receipt),
-          EpochSecondCodec.epoch(now), id.uuidString,
+          update.ownership.rawValue,
+          try CoderJobRecord.encodeJSON(update.receipt),
+          EpochSecondCodec.epoch(now),
+          id.uuidString,
         ]
       )
     }
@@ -31,11 +33,15 @@ private extension CoderJobStoreGRDB {
   static func processUpdate(
     job: CoderJob,
     event: CoderProcessEvent
-  ) throws -> (ownership: CoderProcessOwnership, receipt: CoderProcessReceipt)? {
+  ) throws -> (
+    ownership: CoderProcessOwnership,
+    receipt: CoderProcessReceipt
+  )? {
     switch event {
     case .willLaunch(let receipt):
-      guard job.state == .running, job.slotReserved,
-        job.ownership == .none || job.ownership == .stopped
+      guard job.state == .running,
+            job.slotReserved,
+            job.ownership == .none || job.ownership == .stopped
       else {
         throw StoreError.unexpected("Coder job cannot begin a process launch")
       }

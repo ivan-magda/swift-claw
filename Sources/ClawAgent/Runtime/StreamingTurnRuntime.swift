@@ -62,10 +62,7 @@ struct StreamingTurnRuntime: Sendable {
     self.clock = clock
   }
 
-  func run(
-    target: TurnProgressTarget,
-    request: ChatRequest
-  ) async throws -> ChatResponse {
+  func run(target: TurnProgressTarget, request: ChatRequest) async throws -> ChatResponse {
     let snapshot = DraftSnapshot()
     // Built before the race children start, so the runtime holds the cancel-and-join handle before
     // any authorization or network work can race the deadline.
@@ -147,11 +144,7 @@ private extension StreamingTurnRuntime {
     }
   }
 
-  func append(
-    delta: String,
-    to content: inout String,
-    contentBytes: inout Int
-  ) throws {
+  func append(delta: String, to content: inout String, contentBytes: inout Int) throws {
     let deltaBytes = delta.utf8.count
     guard deltaBytes <= LLMStreamLimits.maxAccumulatedContentBytes - contentBytes else {
       throw AccumulatedStreamContentTooLarge()
@@ -196,7 +189,7 @@ private extension StreamingTurnRuntime {
       // than on having attempted a send, because a group chat is a sink that accepts no draft at
       // all — assuming the bubble appeared there would leave the topic with no signal whatever.
       if !sentAnyDraft, ticksSinceTyping >= Self.ticksBetweenTyping {
-        await typingIndicator.sendTyping(chatId: target.chatId, messageThreadId: target.threadId)
+        await typingIndicator.sendTyping(chatID: target.chatID, messageThreadID: target.threadID)
         ticksSinceTyping = 0
       }
 
@@ -227,8 +220,8 @@ private extension StreamingTurnRuntime {
       clock: clock
     ) {
       await draftStreamer.sendDraft(
-        chatId: target.chatId,
-        draftId: target.draftId,
+        chatID: target.chatID,
+        draftID: target.draftID,
         markdown: markdown
       )
     }

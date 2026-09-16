@@ -7,23 +7,23 @@ public enum OutboxFixture {
   /// Completes an already running turn through its production transaction before delivery tests.
   public static func commitReply(
     in writer: any DatabaseWriter,
-    runId: Int64,
+    runID: Int64,
     chunks: [OutboxChunk],
     now: Date = Date(timeIntervalSince1970: 1_700_000_000)
   ) throws {
     let runs = RunStoreGRDB(writer: writer)
     guard let chunk = chunks.first,
-      let context = try runs.executionContext(runId: runId, fallbackChatId: chunk.chatId)
+          let context = try runs.executionContext(runID: runID, fallbackChatID: chunk.chatID)
     else {
       throw StoreError.unexpected("Outbox fixture needs a run and reply chunks")
     }
     let outcome = try runs.commitAssistantTurn(
       AssistantTurn(
-        runId: runId,
-        sessionId: context.sessionId,
-        chatId: chunk.chatId,
+        runID: runID,
+        sessionID: context.sessionID,
+        chatID: chunk.chatID,
         content: chunks.map(\.payload).joined(),
-        usage: usageFixture(sessionId: context.sessionId, runId: runId),
+        usage: usageFixture(sessionID: context.sessionID, runID: runID),
         chunks: chunks
       ),
       now: now
@@ -49,7 +49,7 @@ public enum OutboxFixture {
           """,
         arguments: [
           chunk.ordinal,
-          chunk.chatId,
+          chunk.chatID,
           deliveryKey,
           chunk.payload,
           chunk.payloadHash,
@@ -64,7 +64,7 @@ public enum OutboxFixture {
   /// Recreates legacy incomplete-run deliveries for the boot reconciler's defensive recovery path.
   public static func seedLegacyRunDelivery(
     in writer: any DatabaseWriter,
-    runId: Int64,
+    runID: Int64,
     chunk: OutboxChunk,
     deliveryKey: String = UUID().uuidString,
     now: Date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -77,9 +77,9 @@ public enum OutboxFixture {
           VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
           """,
         arguments: [
-          runId,
+          runID,
           chunk.stepIndex,
-          chunk.chatId,
+          chunk.chatID,
           deliveryKey,
           chunk.payload,
           chunk.payloadHash,

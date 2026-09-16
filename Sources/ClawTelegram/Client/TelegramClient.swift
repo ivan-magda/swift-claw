@@ -34,14 +34,14 @@ public struct TelegramClient: TelegramTransport {
     return BotIdentity(id: user.id, username: user.username)
   }
 
-  public func isCurrentMember(chatId: Int64, userId: Int64) async throws -> Bool {
-    let request = GetChatMemberRequest(chatId: chatId, userId: userId)
+  public func isCurrentMember(chatID: Int64, userID: Int64) async throws -> Bool {
+    let request = GetChatMemberRequest(chatID: chatID, userID: userID)
     let member: TChatMemberLookup = try await callMethod(
       "getChatMember",
       body: request,
       httpTimeout: Timeout.shortRequestSeconds
     )
-    guard member.user.id == userId else {
+    guard member.user.id == userID else {
       return false
     }
     switch ChatMembershipStatus(apiValue: member.status) {
@@ -69,7 +69,9 @@ public struct TelegramClient: TelegramTransport {
       body: request,
       httpTimeout: timeout + httpTimeoutSlackSeconds
     )
-    return updates.map { $0.toRawUpdate() }
+    return updates.map {
+      $0.toRawUpdate()
+    }
   }
 
   public func sendMessage(
@@ -78,9 +80,9 @@ public struct TelegramClient: TelegramTransport {
     replyMarkup: String?
   ) async throws -> Int64 {
     let request = SendMessageRequest(
-      chatId: target.chatId,
+      chatID: target.chatID,
       text: text,
-      messageThreadId: target.messageThreadId,
+      messageThreadID: target.messageThreadID,
       replyParameters: ReplyParameters(answering: target),
       linkPreviewOptions: LinkPreviewOptions(isDisabled: true),
       replyMarkup: replyMarkup.flatMap(JSONValue.parse)
@@ -99,9 +101,9 @@ public struct TelegramClient: TelegramTransport {
     replyMarkup: String?
   ) async throws -> Int64 {
     let request = SendRichMessageRequest(
-      chatId: target.chatId,
+      chatID: target.chatID,
       richMessage: InputRichMessage(markdown: markdown),
-      messageThreadId: target.messageThreadId,
+      messageThreadID: target.messageThreadID,
       replyParameters: ReplyParameters(answering: target),
       linkPreviewOptions: LinkPreviewOptions(isDisabled: true),
       replyMarkup: replyMarkup.flatMap(JSONValue.parse)
@@ -115,7 +117,7 @@ public struct TelegramClient: TelegramTransport {
   }
 
   public func answerCallbackQuery(id: String, text: String?) async throws {
-    let request = AnswerCallbackQueryRequest(callbackQueryId: id, text: text)
+    let request = AnswerCallbackQueryRequest(callbackQueryID: id, text: text)
     let _: Bool = try await callMethod(
       "answerCallbackQuery",
       body: request,
@@ -124,13 +126,13 @@ public struct TelegramClient: TelegramTransport {
   }
 
   public func editMessageReplyMarkup(
-    chatId: Int64,
-    messageId: Int64,
+    chatID: Int64,
+    messageID: Int64,
     replyMarkup: String?
   ) async throws {
     let request = EditMessageReplyMarkupRequest(
-      chatId: chatId,
-      messageId: messageId,
+      chatID: chatID,
+      messageID: messageID,
       replyMarkup: replyMarkup.flatMap(JSONValue.parse)
     )
     let _: JSONValue = try await callMethod(
@@ -141,13 +143,13 @@ public struct TelegramClient: TelegramTransport {
   }
 
   public func sendRichMessageDraft(
-    chatId: Int64,
-    draftId: Int64,
+    chatID: Int64,
+    draftID: Int64,
     markdown: String
   ) async throws -> Bool {
     let request = SendRichMessageDraftRequest(
-      chatId: chatId,
-      draftId: draftId,
+      chatID: chatID,
+      draftID: draftID,
       richMessage: InputRichMessage(markdown: markdown),
       linkPreviewOptions: LinkPreviewOptions(isDisabled: true)
     )
@@ -158,10 +160,10 @@ public struct TelegramClient: TelegramTransport {
     )
   }
 
-  public func sendChatAction(chatId: Int64, messageThreadId: Int64?, action: String) async throws {
+  public func sendChatAction(chatID: Int64, messageThreadID: Int64?, action: String) async throws {
     let request = SendChatActionRequest(
-      chatId: chatId,
-      messageThreadId: messageThreadId,
+      chatID: chatID,
+      messageThreadID: messageThreadID,
       action: action
     )
     let _: Bool = try await callMethod(
@@ -186,8 +188,8 @@ public struct TelegramClient: TelegramTransport {
 extension TelegramClient: MediaFetching {
   /// `getFile` then a bounded GET of `/file/bot<token>/<file_path>`. The URL carries the bot
   /// token, so every failure message passes through `sanitize` before it can be thrown or logged.
-  public func downloadFile(fileId: String, maxBytes: Int) async throws -> Data {
-    let request = GetFileRequest(fileId: fileId)
+  public func downloadFile(fileID: String, maxBytes: Int) async throws -> Data {
+    let request = GetFileRequest(fileID: fileID)
     let file: TFile = try await callMethod(
       "getFile",
       body: request,
@@ -226,12 +228,8 @@ extension TelegramClient: MediaFetching {
   /// `file_path` is server-controlled text interpolated into a URL; refuse anything that could
   /// escape the `/file/bot<token>/` prefix (absolute paths, traversal, query/fragment splits).
   private func isSafeFilePath(_ path: String) -> Bool {
-    !path.isEmpty
-      && !path.hasPrefix("/")
-      && !path.contains("..")
-      && !path.contains("?")
-      && !path.contains("#")
-      && !path.contains("\\")
+    !path.isEmpty && !path.hasPrefix("/") && !path.contains("..") && !path.contains("?")
+      && !path.contains("#") && !path.contains("\\")
   }
 }
 
@@ -259,7 +257,10 @@ extension TelegramClient {
   ) async throws -> Response {
     let payload: Data
     do {
-      payload = try body.map { try Self.encoder.encode($0) } ?? Data("{}".utf8)
+      payload =
+        try body.map {
+          try Self.encoder.encode($0)
+        } ?? Data("{}".utf8)
     } catch {
       throw TelegramError.transport(sanitize("encode \(methodName): \(error)"))
     }
@@ -319,27 +320,54 @@ private struct GetUpdatesRequest: Encodable {
 }
 
 private struct GetFileRequest: Encodable {
-  let fileId: String
+  private enum CodingKeys: String, CodingKey {
+    case fileID = "fileId"
+  }
+
+  let fileID: String
 }
 
 private struct GetChatMemberRequest: Encodable {
-  let chatId: Int64
-  let userId: Int64
+  private enum CodingKeys: String, CodingKey {
+    case chatID = "chatId"
+    case userID = "userId"
+  }
+
+  let chatID: Int64
+  let userID: Int64
 }
 
 private struct SendMessageRequest: Encodable {
-  let chatId: Int64
+  private enum CodingKeys: String, CodingKey {
+    case chatID = "chatId"
+    case text
+    case messageThreadID = "messageThreadId"
+    case replyParameters
+    case linkPreviewOptions
+    case replyMarkup
+  }
+
+  let chatID: Int64
   let text: String
-  let messageThreadId: Int64?
+  let messageThreadID: Int64?
   let replyParameters: ReplyParameters?
   let linkPreviewOptions: LinkPreviewOptions
   let replyMarkup: JSONValue?
 }
 
 private struct SendRichMessageRequest: Encodable {
-  let chatId: Int64
+  private enum CodingKeys: String, CodingKey {
+    case chatID = "chatId"
+    case richMessage
+    case messageThreadID = "messageThreadId"
+    case replyParameters
+    case linkPreviewOptions
+    case replyMarkup
+  }
+
+  let chatID: Int64
   let richMessage: InputRichMessage
-  let messageThreadId: Int64?
+  let messageThreadID: Int64?
   let replyParameters: ReplyParameters?
   let linkPreviewOptions: LinkPreviewOptions
   let replyMarkup: JSONValue?
@@ -348,20 +376,31 @@ private struct SendRichMessageRequest: Encodable {
 /// Bot API `ReplyParameters`. `allowSendingWithoutReply` is always on: a deleted target would
 /// otherwise answer 400, and a permanently failing send stalls every later outbox row behind it.
 private struct ReplyParameters: Encodable {
-  let messageId: Int64
+  private enum CodingKeys: String, CodingKey {
+    case messageID = "messageId"
+    case allowSendingWithoutReply
+  }
+
+  let messageID: Int64
   let allowSendingWithoutReply = true
 
   init?(answering target: DeliveryTarget) {
-    guard let messageId = target.replyToMessageId else {
+    guard let messageID = target.replyToMessageID else {
       return nil
     }
-    self.messageId = messageId
+    self.messageID = messageID
   }
 }
 
 private struct SendChatActionRequest: Encodable {
-  let chatId: Int64
-  let messageThreadId: Int64?
+  private enum CodingKeys: String, CodingKey {
+    case chatID = "chatId"
+    case messageThreadID = "messageThreadId"
+    case action
+  }
+
+  let chatID: Int64
+  let messageThreadID: Int64?
   let action: String
 }
 
@@ -370,13 +409,24 @@ private struct SetMyCommandsRequest: Encodable {
 }
 
 private struct AnswerCallbackQueryRequest: Encodable {
-  let callbackQueryId: String
+  private enum CodingKeys: String, CodingKey {
+    case callbackQueryID = "callbackQueryId"
+    case text
+  }
+
+  let callbackQueryID: String
   let text: String?
 }
 
 private struct EditMessageReplyMarkupRequest: Encodable {
-  let chatId: Int64
-  let messageId: Int64
+  private enum CodingKeys: String, CodingKey {
+    case chatID = "chatId"
+    case messageID = "messageId"
+    case replyMarkup
+  }
+
+  let chatID: Int64
+  let messageID: Int64
   let replyMarkup: JSONValue?
 }
 
@@ -389,10 +439,10 @@ public struct TelegramTypingIndicator: TypingIndicator {
     self.transport = transport
   }
 
-  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
+  public func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
     try? await transport.sendChatAction(
-      chatId: chatId,
-      messageThreadId: messageThreadId,
+      chatID: chatID,
+      messageThreadID: messageThreadID,
       action: "typing"
     )
   }

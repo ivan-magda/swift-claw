@@ -6,9 +6,9 @@ import GRDB
 
 extension ScheduledLearningStoreGRDB {
   @discardableResult
-  public func settleFromLane(runId: Int64, now: Date) throws(StoreError) -> Bool {
+  public func settleFromLane(runID: Int64, now: Date) throws(StoreError) -> Bool {
     try database.writeMapping { db in
-      try Self.freezeEvidence(db, runId: runId, now: now)
+      try Self.freezeEvidence(db, runID: runID, now: now)
     }
   }
 }
@@ -23,12 +23,12 @@ extension ScheduledLearningStoreGRDB {
   /// and a disarmed daemon therefore writes nothing here.
   static func recordTerminalReceipt(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     state: RunState,
     disposition: TerminalDisposition,
     now: Date
   ) throws {
-    guard try isBound(db, runId: runId) else {
+    guard try isBound(db, runID: runID) else {
       return
     }
     let epoch = EpochSecondCodec.epoch(now)
@@ -42,7 +42,7 @@ extension ScheduledLearningStoreGRDB {
         VALUES (?, ?, ?, ?, ?)
         """,
       arguments: [
-        runId,
+        runID,
         state.rawValue,
         disposition.cause.rawValue,
         epoch,
@@ -56,18 +56,18 @@ extension ScheduledLearningStoreGRDB {
   /// the write idempotent and keeps the first settler's instant.
   ///
   /// - Returns: whether this call froze the evidence.
-  static func freezeEvidence(_ db: Database, runId: Int64, now: Date) throws -> Bool {
+  static func freezeEvidence(_ db: Database, runID: Int64, now: Date) throws -> Bool {
     try db.execute(
       sql: """
         UPDATE run_settlements SET settled_at = ?
         WHERE run_id = ? AND settled_at IS NULL
         """,
-      arguments: [EpochSecondCodec.epoch(now), runId]
+      arguments: [EpochSecondCodec.epoch(now), runID]
     )
     return db.changesCount > 0
   }
 
-  static func isSettled(_ db: Database, runId: Int64) throws -> Bool {
+  static func isSettled(_ db: Database, runID: Int64) throws -> Bool {
     try Bool.fetchOne(
       db,
       sql: """
@@ -75,31 +75,30 @@ extension ScheduledLearningStoreGRDB {
           SELECT 1 FROM run_settlements WHERE run_id = ? AND settled_at IS NOT NULL
         )
         """,
-      arguments: [runId]
+      arguments: [runID]
     ) ?? false
   }
 
-  static func readSettlement(_ db: Database, runId: Int64) throws -> RunSettlement? {
+  static func readSettlement(_ db: Database, runID: Int64) throws -> RunSettlement? {
     let row = try Row.fetchOne(
       db,
       sql: """
         SELECT winning_state, terminal_cause, terminal_at, settled_at
         FROM run_settlements WHERE run_id = ?
         """,
-      arguments: [runId]
+      arguments: [runID]
     )
     guard let row else {
       return nil
     }
-    guard
-      let winningState = RunState(rawValue: row["winning_state"]),
-      let terminalCause = TerminalCause(rawValue: row["terminal_cause"]),
-      let terminalAt = EpochSecondCodec.date(fromEpoch: row["terminal_at"])
+    guard let winningState = RunState(rawValue: row["winning_state"]),
+          let terminalCause = TerminalCause(rawValue: row["terminal_cause"]),
+          let terminalAt = EpochSecondCodec.date(fromEpoch: row["terminal_at"])
     else {
-      throw StoreError.unexpected("run \(runId) has an unreadable terminal receipt")
+      throw StoreError.unexpected("run \(runID) has an unreadable terminal receipt")
     }
     return RunSettlement(
-      runId: runId,
+      runID: runID,
       winningState: winningState,
       terminalCause: terminalCause,
       terminalAt: terminalAt,
@@ -166,13 +165,13 @@ extension ScheduledLearningStoreGRDB {
   /// settlement writes. The per-run half of the same rule `settleAbandonedRuns` applies set-wide.
   static func owesUnresolvedFact(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     unresolvedObservationContent: String
   ) throws -> Bool {
     try Bool.fetchOne(
       db,
       sql: "SELECT \(owedFactExists(runColumn: "?"))",
-      arguments: [runId, unresolvedObservationContent]
+      arguments: [runID, unresolvedObservationContent]
     ) ?? false
   }
 
@@ -198,11 +197,11 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Binding Lookups
 
 private extension ScheduledLearningStoreGRDB {
-  static func isBound(_ db: Database, runId: Int64) throws -> Bool {
+  static func isBound(_ db: Database, runID: Int64) throws -> Bool {
     try Bool.fetchOne(
       db,
       sql: "SELECT EXISTS(SELECT 1 FROM run_learning_bindings WHERE run_id = ?)",
-      arguments: [runId]
+      arguments: [runID]
     ) ?? false
   }
 }

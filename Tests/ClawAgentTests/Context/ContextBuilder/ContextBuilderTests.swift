@@ -7,33 +7,32 @@ import Testing
 
 @Suite("ContextBuilder")
 struct ContextBuilderTests {
-  @Test func assemblesSystemUntrustedAndHistoryInTheRequiredOrder() throws {
+  @Test
+  func assemblesSystemUntrustedAndHistoryInTheRequiredOrder() throws {
     // given
     let builder = makeBuilder(
-      workspace: FakeWorkspace(
-        files: [
-          .soul: .present("soul text"),
-          .agents: .present("agent rules"),
-          .tools: .present("tool policy"),
-          .user: .present("owner profile"),
-          .memory: .present("curated memory"),
-        ]
-      )
+      workspace: FakeWorkspace(files: [
+        .soul: .present("soul text"),
+        .agents: .present("agent rules"),
+        .tools: .present("tool policy"),
+        .user: .present("owner profile"),
+        .memory: .present("curated memory"),
+      ])
     )
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [
         StoredMessage(role: .user, content: "hello", provenance: .trusted),
         StoredMessage(role: .assistant, content: "hi", provenance: .trusted),
       ],
-      historyMessageIds: [10, 11],
-      windowStartMessageId: 0,
+      historyMessageIDs: [10, 11],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 42, origin: .interactive)
 
     // then
     #expect(result.messages.map(\.role) == [.system, .user, .user, .assistant])
@@ -56,68 +55,75 @@ struct ContextBuilderTests {
     #expect(result.ownerNotices.isEmpty)
   }
 
-  @Test func policyVersionFoldsTheStaticSubhashWithTheRawPromptMaterials() throws {
+  @Test
+  func policyVersionFoldsTheStaticSubhashWithTheRawPromptMaterials() throws {
     // given — the RAW file texts (pre "## path" wrapping) fold into the injected static sub-hash
     let builder = makeBuilder(
       policyStaticSubhash: "static-sub-hash",
-      workspace: FakeWorkspace(
-        files: [
-          .soul: .present("soul text"),
-          .agents: .present("agent rules"),
-          .tools: .present("tool policy"),
-        ]
-      )
+      workspace: FakeWorkspace(files: [
+        .soul: .present("soul text"),
+        .agents: .present("agent rules"),
+        .tools: .present("tool policy"),
+      ])
     )
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [],
-      historyMessageIds: [],
-      windowStartMessageId: 0,
+      historyMessageIDs: [],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 1, origin: .interactive)
 
     // then — combined = first 16 hex over [staticSubhash, systemPrompt, soul, agents, tools]
     let expected = PolicyFingerprint.combined(
       staticSubhash: "static-sub-hash",
       promptMaterials: [
-        "system policy", "proactive policy", "soul text", "agent rules", "tool policy",
+        "system policy",
+        "proactive policy",
+        "soul text",
+        "agent rules",
+        "tool policy",
       ]
     )
     #expect(result.policyVersion == expected)
     #expect(result.policyVersion.count == 16)
   }
 
-  @Test func currentPolicyVersionMatchesTheAssembledFingerprint() throws {
+  @Test
+  func currentPolicyVersionMatchesTheAssembledFingerprint() throws {
     // given — the recompute seam (§6.3) must equal the value `assemble` produces, by construction
     let builder = makeBuilder(
       policyStaticSubhash: "sub",
-      workspace: FakeWorkspace(
-        files: [.soul: .present("s"), .agents: .present("a"), .tools: .present("t")]
-      )
+      workspace: FakeWorkspace(files: [
+        .soul: .present("s"),
+        .agents: .present("a"),
+        .tools: .present("t"),
+      ])
     )
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [],
-      historyMessageIds: [],
-      windowStartMessageId: 0,
+      historyMessageIDs: [],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
     let standalone = builder.currentPolicyVersion()
-    let assembled = try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive)
+    let assembled = try builder.assemble(snapshot: snapshot, sessionID: 1, origin: .interactive)
       .policyVersion
 
     // then
     #expect(standalone == assembled)
   }
 
-  @Test func missingPromptFilesFoldInAsEmpty() {
+  @Test
+  func missingPromptFilesFoldInAsEmpty() {
     // given — no workspace files; only the systemPrompt contributes to class 1
     let builder = makeBuilder(policyStaticSubhash: "sub", workspace: FakeWorkspace(files: [:]))
 
@@ -134,7 +140,8 @@ struct ContextBuilderTests {
     )
   }
 
-  @Test func editingAPromptFileChangesThePolicyVersion() {
+  @Test
+  func editingAPromptFileChangesThePolicyVersion() {
     // given / when — a strict-inequality voider (§3.2)
     let before = makeBuilder(
       policyStaticSubhash: "sub",
@@ -149,22 +156,21 @@ struct ContextBuilderTests {
     #expect(before != after)
   }
 
-  @Test func hardCapOverflowOmitsFileAndProducesOwnerNotice() throws {
+  @Test
+  func hardCapOverflowOmitsFileAndProducesOwnerNotice() throws {
     // given
-    let builder = makeBuilder(
-      workspace: FakeWorkspace(files: [.memory: .overCap(count: 2_201)])
-    )
+    let builder = makeBuilder(workspace: FakeWorkspace(files: [.memory: .overCap(count: 2_201)]))
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [],
-      historyMessageIds: [],
-      windowStartMessageId: 0,
+      historyMessageIDs: [],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 42, origin: .interactive)
 
     // then
     #expect(result.messages.count == 1)
@@ -186,124 +192,133 @@ struct ContextBuilderTests {
     let memoryStore = FakeMemoryStore(items: [high, normal])
     let builder = makeBuilder(memoryStore: memoryStore)
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [StoredMessage(role: .user, content: "question", provenance: .trusted)],
-      historyMessageIds: [44],
-      windowStartMessageId: 0,
+      historyMessageIDs: [44],
+      windowStartMessageID: 0,
       isTainted: true,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 42, origin: .interactive)
 
     // then
     #expect(memoryStore.fetchRankedCalls == [true])
-    let untrusted = try #require(result.messages.first { message in message.role == .user })
-      .content.text
+    let untrusted = try #require(
+      result.messages.first { message in
+        message.role == .user
+      }
+    ).content
+      .text
     #expect(untrusted.contains("normal fact"))
     #expect(untrusted.contains("secret") == false)
     #expect(result.hasPrivateDataAccess)
   }
 
-  @Test func recallUsesLatestUserMessageAndExcludesCurrentHistoryIds() throws {
+  @Test
+  func recallUsesLatestUserMessageAndExcludesCurrentHistoryIDs() throws {
     // given
-    let retriever = FakeRetriever(
-      hits: [
-        RecallHit(
-          id: 90,
-          sessionId: 2,
-          role: .user,
-          content: String(repeating: "r", count: 450),
-          score: RecallScore(value: 10),
-          createdAt: Date(timeIntervalSince1970: 90)
-        )
-      ]
-    )
+    let retriever = FakeRetriever(hits: [
+      RecallHit(
+        id: 90,
+        sessionID: 2,
+        role: .user,
+        content: String(repeating: "r", count: 450),
+        score: RecallScore(value: 10),
+        createdAt: Date(timeIntervalSince1970: 90)
+      ),
+    ])
     let builder = makeBuilder(retriever: retriever)
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [
         StoredMessage(role: .user, content: "first", provenance: .trusted),
         StoredMessage(role: .assistant, content: "answer", provenance: .trusted),
         StoredMessage(role: .user, content: "latest query", provenance: .trusted),
       ],
-      historyMessageIds: [10, 11, 12],
-      windowStartMessageId: 7,
+      historyMessageIDs: [10, 11, 12],
+      windowStartMessageID: 7,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 42, origin: .interactive)
 
     // then
     #expect(retriever.calls.count == 1)
     let call = try #require(retriever.calls.first)
     #expect(call.query == "latest query")  // the latest user message, not older history
-    #expect(call.currentSessionId == 42)
-    #expect(call.restrictToSessionId == nil)  // a DM still recalls across its own past sessions
-    #expect(call.windowStartMessageId == 7)
-    #expect(call.excludedMessageIds == [10, 11, 12])  // current history excluded from recall
+    #expect(call.currentSessionID == 42)
+    #expect(call.restrictToSessionID == nil)  // a DM still recalls across its own past sessions
+    #expect(call.windowStartMessageID == 7)
+    #expect(call.excludedMessageIDs == [10, 11, 12])  // current history excluded from recall
     // the recall candidate limit from its source of truth, not the literal 20
     #expect(call.limit == ContextBuilder.recallCandidateLimit)
-    let untrusted = try #require(result.messages.first { message in message.role == .user })
-      .content.text
+    let untrusted = try #require(
+      result.messages.first { message in
+        message.role == .user
+      }
+    ).content
+      .text
     #expect(untrusted.contains("label=\"recall\""))
     #expect(untrusted.contains(BudgetFitter.truncationMarker))
   }
 
-  @Test func groupModeRestrictsRecallToTheTopicSession() throws {
+  @Test
+  func groupModeRestrictsRecallToTheTopicSession() throws {
     // given — a snapshot whose key says the conversation is a forum topic
     let retriever = FakeRetriever()
     let builder = makeBuilder(retriever: retriever)
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramTopic(chatId: -1_001, threadId: 11),
-      history: [
-        StoredMessage(role: .user, content: "latest query", provenance: .trusted)
-      ],
-      historyMessageIds: [10],
-      windowStartMessageId: 7,
+      sessionKey: SessionKey.telegramTopic(chatID: -1_001, threadID: 11),
+      history: [StoredMessage(role: .user, content: "latest query", provenance: .trusted)],
+      historyMessageIDs: [10],
+      windowStartMessageID: 7,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    _ = try builder.assemble(snapshot: snapshot, sessionId: 77, origin: .interactive)
+    _ = try builder.assemble(snapshot: snapshot, sessionID: 77, origin: .interactive)
 
     // then — the search never reaches another topic's rows
     let call = try #require(retriever.calls.first)
-    #expect(call.restrictToSessionId == 77)
+    #expect(call.restrictToSessionID == 77)
   }
 
-  @Test func skillsRenderAsUntrustedIndexWithoutSettingPrivateAccess() throws {
+  @Test
+  func skillsRenderAsUntrustedIndexWithoutSettingPrivateAccess() throws {
     // given
     let builder = makeBuilder(
-      workspace: FakeWorkspace(
-        skills: [
-          SkillDescriptor(
-            name: "summarize",
-            description: "Summarize owner-provided text.",
-            directory: URL(fileURLWithPath: "/tmp/skills/summarize")
-          )
-        ]
-      )
+      workspace: FakeWorkspace(skills: [
+        SkillDescriptor(
+          name: "summarize",
+          description: "Summarize owner-provided text.",
+          directory: URL(fileURLWithPath: "/tmp/skills/summarize")
+        ),
+      ])
     )
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [],
-      historyMessageIds: [],
-      windowStartMessageId: 0,
+      historyMessageIDs: [],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 42, origin: .interactive)
 
     // then
-    let untrusted = try #require(result.messages.first { message in message.role == .user })
-      .content.text
+    let untrusted = try #require(
+      result.messages.first { message in
+        message.role == .user
+      }
+    ).content
+      .text
     #expect(untrusted.contains("label=\"skills\""))
     #expect(untrusted.contains("- summarize: Summarize owner-provided text."))
     // The model names a skill, never a path — printing one would invite it to type one back.
@@ -313,7 +328,8 @@ struct ContextBuilderTests {
     #expect(result.ownerNotices.isEmpty)
   }
 
-  @Test func rejectedSkillManifestsSurfaceToTheOwnerAsNotices() throws {
+  @Test
+  func rejectedSkillManifestsSurfaceToTheOwnerAsNotices() throws {
     // given
     let builder = makeBuilder(
       workspace: FakeWorkspace(
@@ -322,7 +338,7 @@ struct ContextBuilderTests {
             name: "summarize",
             description: "Summarize owner-provided text.",
             directory: URL(fileURLWithPath: "/tmp/skills/summarize")
-          )
+          ),
         ],
         skillWarnings: [
           .invalidSkillManifest(skill: "no-frontmatter"),
@@ -339,7 +355,7 @@ struct ContextBuilderTests {
     // when
     let result = try builder.assemble(
       snapshot: emptySnapshot(),
-      sessionId: 42,
+      sessionID: 42,
       origin: .interactive
     )
 
@@ -363,12 +379,17 @@ struct ContextBuilderTests {
     #expect(result.ownerNotices[3].contains("`deploy-copy`"))
     #expect(result.ownerNotices[4].contains("`linked-out`"))
     #expect(result.ownerNotices[5].contains("all skills skipped"))
-    let untrusted = try #require(result.messages.first { message in message.role == .user })
-      .content.text
+    let untrusted = try #require(
+      result.messages.first { message in
+        message.role == .user
+      }
+    ).content
+      .text
     #expect(untrusted.contains("- summarize: Summarize owner-provided text."))
   }
 
-  @Test func skillsDroppedByTheBudgetAreNamedInAnOwnerNotice() throws {
+  @Test
+  func skillsDroppedByTheBudgetAreNamedInAnOwnerNotice() throws {
     // given — the skills cap admits the first index line plus the drop marker, not the second
     let budget = ContextBudget(
       inputCapGraphemes: 4_000,
@@ -381,33 +402,35 @@ struct ContextBuilderTests {
       recallHitCap: 1
     )
     let builder = makeBuilder(
-      workspace: FakeWorkspace(
-        skills: [
-          SkillDescriptor(
-            name: "alpha",
-            description: "one",
-            directory: URL(fileURLWithPath: "/tmp/skills/alpha")
-          ),
-          SkillDescriptor(
-            name: "bravo",
-            description: String(repeating: "b", count: 31),
-            directory: URL(fileURLWithPath: "/tmp/skills/bravo")
-          ),
-        ]
-      ),
+      workspace: FakeWorkspace(skills: [
+        SkillDescriptor(
+          name: "alpha",
+          description: "one",
+          directory: URL(fileURLWithPath: "/tmp/skills/alpha")
+        ),
+        SkillDescriptor(
+          name: "bravo",
+          description: String(repeating: "b", count: 31),
+          directory: URL(fileURLWithPath: "/tmp/skills/bravo")
+        ),
+      ]),
       budget: budget
     )
 
     // when
     let result = try builder.assemble(
       snapshot: emptySnapshot(),
-      sessionId: 42,
+      sessionID: 42,
       origin: .interactive
     )
 
     // then
-    let untrusted = try #require(result.messages.first { message in message.role == .user })
-      .content.text
+    let untrusted = try #require(
+      result.messages.first { message in
+        message.role == .user
+      }
+    ).content
+      .text
     #expect(untrusted.contains("- alpha: one"))
     #expect(untrusted.contains("(showing 1 of 2 skills)"))
     #expect(result.ownerNotices.count == 1)
@@ -416,7 +439,8 @@ struct ContextBuilderTests {
     #expect(notice.contains("`alpha`") == false)
   }
 
-  @Test func aSkillsIndexTheBudgetCannotAffordAtAllStillReachesTheOwner() throws {
+  @Test
+  func aSkillsIndexTheBudgetCannotAffordAtAllStillReachesTheOwner() throws {
     // given — a cap that admits no index line at all, so the whole row leaves the prompt
     let budget = ContextBudget(
       inputCapGraphemes: 4_000,
@@ -429,39 +453,41 @@ struct ContextBuilderTests {
       recallHitCap: 1
     )
     let builder = makeBuilder(
-      workspace: FakeWorkspace(
-        skills: [
-          SkillDescriptor(
-            name: "alpha",
-            description: "one",
-            directory: URL(fileURLWithPath: "/tmp/skills/alpha")
-          ),
-          SkillDescriptor(
-            name: "bravo",
-            description: "two",
-            directory: URL(fileURLWithPath: "/tmp/skills/bravo")
-          ),
-        ]
-      ),
+      workspace: FakeWorkspace(skills: [
+        SkillDescriptor(
+          name: "alpha",
+          description: "one",
+          directory: URL(fileURLWithPath: "/tmp/skills/alpha")
+        ),
+        SkillDescriptor(
+          name: "bravo",
+          description: "two",
+          directory: URL(fileURLWithPath: "/tmp/skills/bravo")
+        ),
+      ]),
       budget: budget
     )
 
     // when
     let result = try builder.assemble(
       snapshot: emptySnapshot(),
-      sessionId: 42,
+      sessionID: 42,
       origin: .interactive
     )
 
     // then — a missing index reads as "every skill dropped", never as "no skills installed"
-    let untrusted = result.messages.first { message in message.role == .user }?.content.text ?? ""
+    let untrusted =
+      result.messages.first { message in
+        message.role == .user
+      }?.content.text ?? ""
     #expect(untrusted.contains("label=\"skills\"") == false)
     let notice = try #require(result.ownerNotices.first)
     #expect(notice.contains("`alpha`"))
     #expect(notice.contains("`bravo`"))
   }
 
-  @Test func rejectedSkillManifestsSurfaceEvenWhenTheIndexHasNoBudget() throws {
+  @Test
+  func rejectedSkillManifestsSurfaceEvenWhenTheIndexHasNoBudget() throws {
     // given — an authoring fault is the owner's to fix whether or not the index fit this turn
     let budget = ContextBudget(
       inputCapGraphemes: 4_000,
@@ -474,16 +500,14 @@ struct ContextBuilderTests {
       recallHitCap: 1
     )
     let builder = makeBuilder(
-      workspace: FakeWorkspace(
-        skillWarnings: [.invalidSkillManifest(skill: "no-frontmatter")]
-      ),
+      workspace: FakeWorkspace(skillWarnings: [.invalidSkillManifest(skill: "no-frontmatter")]),
       budget: budget
     )
 
     // when
     let result = try builder.assemble(
       snapshot: emptySnapshot(),
-      sessionId: 42,
+      sessionID: 42,
       origin: .interactive
     )
 
@@ -496,28 +520,31 @@ struct ContextBuilderTests {
   func proactiveRunsStillSeeTheSkillsIndex(origin: RunOrigin) throws {
     // given — the activation protocol has to hold on a fire with nobody watching
     let builder = makeBuilder(
-      workspace: FakeWorkspace(
-        skills: [
-          SkillDescriptor(
-            name: "summarize",
-            description: "Summarize owner-provided text.",
-            directory: URL(fileURLWithPath: "/tmp/skills/summarize")
-          )
-        ]
-      )
+      workspace: FakeWorkspace(skills: [
+        SkillDescriptor(
+          name: "summarize",
+          description: "Summarize owner-provided text.",
+          directory: URL(fileURLWithPath: "/tmp/skills/summarize")
+        ),
+      ])
     )
 
     // when
-    let result = try builder.assemble(snapshot: emptySnapshot(), sessionId: 42, origin: origin)
+    let result = try builder.assemble(snapshot: emptySnapshot(), sessionID: 42, origin: origin)
 
     // then
-    let untrusted = try #require(result.messages.first { message in message.role == .user })
-      .content.text
+    let untrusted = try #require(
+      result.messages.first { message in
+        message.role == .user
+      }
+    ).content
+      .text
     #expect(untrusted.contains("label=\"skills\""))
     #expect(untrusted.contains("- summarize: Summarize owner-provided text."))
   }
 
-  @Test func fittedHistoryKeepsNewestMessagesButRestoresChronology() throws {
+  @Test
+  func fittedHistoryKeepsNewestMessagesButRestoresChronology() throws {
     // given
     let budget = ContextBudget(
       inputCapGraphemes: 80,
@@ -531,26 +558,27 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(budget: budget)
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [
         StoredMessage(role: .user, content: "old", provenance: .trusted),
         StoredMessage(role: .assistant, content: "middle", provenance: .trusted),
         StoredMessage(role: .user, content: "new", provenance: .trusted),
       ],
-      historyMessageIds: [1, 2, 3],
-      windowStartMessageId: 0,
+      historyMessageIDs: [1, 2, 3],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 42, origin: .interactive)
 
     // then
     #expect(result.messages.suffix(2).map(\.content.text) == ["middle", "new"])
   }
 
-  @Test func fittedHistoryDoesNotReAdmitOlderMessagesAfterOversizedMiddleMessage() throws {
+  @Test
+  func fittedHistoryDoesNotReAdmitOlderMessagesAfterOversizedMiddleMessage() throws {
     // given
     let budget = ContextBudget(
       inputCapGraphemes: 80,
@@ -564,28 +592,33 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(budget: budget)
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [
         StoredMessage(role: .user, content: "o", provenance: .trusted),
         StoredMessage(role: .assistant, content: "oversized middle", provenance: .trusted),
         StoredMessage(role: .user, content: "newest", provenance: .trusted),
       ],
-      historyMessageIds: [1, 2, 3],
-      windowStartMessageId: 0,
+      historyMessageIDs: [1, 2, 3],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 42, origin: .interactive)
 
     // then
     #expect(result.messages.suffix(1).map(\.content.text) == ["newest"])
-    #expect(result.messages.contains(where: { message in message.content.text == "o" }) == false)
+    #expect(
+      result.messages.contains { message in
+        message.content.text == "o"
+      } == false
+    )
     #expect(result.messages[0].content.text.contains("[…earlier conversation truncated]"))
   }
 
-  @Test func triggerMessageSurvivesWhenBudgetCannotFitIt() throws {
+  @Test
+  func triggerMessageSurvivesWhenBudgetCannotFitIt() throws {
     // given
     let budget = ContextBudget(
       inputCapGraphemes: 60,
@@ -599,18 +632,18 @@ struct ContextBuilderTests {
     )
     let builder = makeBuilder(budget: budget)
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [
-        StoredMessage(role: .user, content: "what is the meaning of this", provenance: .trusted)
+        StoredMessage(role: .user, content: "what is the meaning of this", provenance: .trusted),
       ],
-      historyMessageIds: [7],
-      windowStartMessageId: 0,
+      historyMessageIDs: [7],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: .interactive)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 42, origin: .interactive)
 
     // then
     #expect(result.messages.last?.role == .user)
@@ -620,32 +653,30 @@ struct ContextBuilderTests {
   @Test(arguments: [RunOrigin.scheduled, RunOrigin.heartbeat])
   func proactiveOriginSelectsTheProactivePromptAndSkipsRecall(origin: RunOrigin) throws {
     // given — recall hits that a proactive run must never consult
-    let retriever = FakeRetriever(
-      hits: [
-        RecallHit(
-          id: 90,
-          sessionId: 2,
-          role: .user,
-          content: "owner DM about arming this schedule",
-          score: RecallScore(value: 10),
-          createdAt: Date(timeIntervalSince1970: 90)
-        )
-      ]
-    )
+    let retriever = FakeRetriever(hits: [
+      RecallHit(
+        id: 90,
+        sessionID: 2,
+        role: .user,
+        content: "owner DM about arming this schedule",
+        score: RecallScore(value: 10),
+        createdAt: Date(timeIntervalSince1970: 90)
+      ),
+    ])
     let builder = makeBuilder(retriever: retriever)
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [
-        StoredMessage(role: .user, content: "follow the tournament daily", provenance: .trusted)
+        StoredMessage(role: .user, content: "follow the tournament daily", provenance: .trusted),
       ],
-      historyMessageIds: [10],
-      windowStartMessageId: 0,
+      historyMessageIDs: [10],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
 
     // when
-    let result = try builder.assemble(snapshot: snapshot, sessionId: 42, origin: origin)
+    let result = try builder.assemble(snapshot: snapshot, sessionID: 42, origin: origin)
 
     // then — the proactive policy rides the system tier; the retriever is never consulted
     #expect(result.messages[0].content.text.contains("proactive policy"))
@@ -654,7 +685,8 @@ struct ContextBuilderTests {
     #expect(
       result.messages.contains { message in
         message.content.text.contains("label=\"recall\"")
-      } == false
+      }
+        == false
     )
     #expect(result.messages.last?.content.text == "follow the tournament daily")
   }
@@ -687,7 +719,7 @@ extension ContextBuilderTests {
   /// kind the renderer can meet, with state on the anchors alone.
   private func statefulSnapshot() -> SessionContextSnapshot {
     SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: [
         StoredMessage(role: .user, content: "fetch the page", provenance: .trusted),
         StoredMessage(
@@ -701,7 +733,7 @@ extension ContextBuilderTests {
           role: .tool,
           content: "raw page text",
           provenance: .untrusted,
-          toolCallId: "c1"
+          toolCallID: "c1"
         ),
         StoredMessage(
           role: .assistant,
@@ -710,21 +742,22 @@ extension ContextBuilderTests {
           providerState: Self.replayState
         ),
       ],
-      historyMessageIds: [10, 11, 12, 13],
-      windowStartMessageId: 0,
+      historyMessageIDs: [10, 11, 12, 13],
+      windowStartMessageID: 0,
       isTainted: false,
       hasPrivateData: false
     )
   }
 
-  @Test func assistantAnchorsCarryTheirProviderStateOntoTheWire() throws {
+  @Test
+  func assistantAnchorsCarryTheirProviderStateOntoTheWire() throws {
     // given
     let builder = makeBuilder()
 
     // when
     let result = try builder.assemble(
       snapshot: statefulSnapshot(),
-      sessionId: 42,
+      sessionID: 42,
       origin: .interactive
     )
 
@@ -737,28 +770,27 @@ extension ContextBuilderTests {
     }
   }
 
-  @Test func providerStateNeverBecomesPromptContent() throws {
+  @Test
+  func providerStateNeverBecomesPromptContent() throws {
     // given — a retriever that would surface the same window text again, and a recall query drawn
     // from it, so every text-bearing seam of one assembly is covered at once
     let builder = makeBuilder(
-      retriever: FakeRetriever(
-        hits: [
-          RecallHit(
-            id: 99,
-            sessionId: 2,
-            role: .assistant,
-            content: "an older answer",
-            score: RecallScore(value: 10),
-            createdAt: Date(timeIntervalSince1970: 0)
-          )
-        ]
-      )
+      retriever: FakeRetriever(hits: [
+        RecallHit(
+          id: 99,
+          sessionID: 2,
+          role: .assistant,
+          content: "an older answer",
+          score: RecallScore(value: 10),
+          createdAt: Date(timeIntervalSince1970: 0)
+        ),
+      ])
     )
 
     // when
     let result = try builder.assemble(
       snapshot: statefulSnapshot(),
-      sessionId: 42,
+      sessionID: 42,
       origin: .interactive
     )
 
@@ -767,13 +799,20 @@ extension ContextBuilderTests {
       #expect(message.content.text.contains("zzzsecretissuer") == false)
       #expect(message.content.text.contains(Self.replayPayloadAsLossyText) == false)
     }
-    #expect(result.messages.contains { message in message.content.text.contains("raw page text") })
     #expect(
-      result.ownerNotices.allSatisfy { notice in notice.contains("zzzsecretissuer") == false }
+      result.messages.contains { message in
+        message.content.text.contains("raw page text")
+      }
+    )
+    #expect(
+      result.ownerNotices.allSatisfy { notice in
+        notice.contains("zzzsecretissuer") == false
+      }
     )
   }
 
-  @Test func historyHygienePreservesTheStateOfAnAnchorItKeeps() throws {
+  @Test
+  func historyHygienePreservesTheStateOfAnAnchorItKeeps() throws {
     // given — the sanitizer is the last seam between a loaded row and the wire
     let history = statefulSnapshot().history
 
@@ -802,16 +841,18 @@ private func makeBuilder(
     retriever: retriever,
     budget: budget,
     policyStaticSubhash: policyStaticSubhash,
-    now: { Date(timeIntervalSince1970: 0) }
+    now: {
+      Date(timeIntervalSince1970: 0)
+    }
   )
 }
 
 private func emptySnapshot() -> SessionContextSnapshot {
   SessionContextSnapshot(
-    sessionKey: SessionKey.telegramDM(chatId: 42),
+    sessionKey: SessionKey.telegramDM(chatID: 42),
     history: [],
-    historyMessageIds: [],
-    windowStartMessageId: 0,
+    historyMessageIDs: [],
+    windowStartMessageID: 0,
     isTainted: false,
     hasPrivateData: false
   )
@@ -830,7 +871,7 @@ private func memory(
     sensitivity: sensitivity,
     importance: importance,
     source: .owner,
-    sessionId: nil,
+    sessionID: nil,
     createdAt: Date(timeIntervalSince1970: Double(id))
   )
 }
@@ -838,10 +879,10 @@ private func memory(
 private final class FakeRetriever: Retriever, @unchecked Sendable {
   struct Call: Sendable, Equatable {
     let query: String
-    let currentSessionId: Int64
-    let restrictToSessionId: Int64?
-    let windowStartMessageId: Int64?
-    let excludedMessageIds: [Int64]
+    let currentSessionID: Int64
+    let restrictToSessionID: Int64?
+    let windowStartMessageID: Int64?
+    let excludedMessageIDs: [Int64]
     let limit: Int
   }
 
@@ -854,19 +895,19 @@ private final class FakeRetriever: Retriever, @unchecked Sendable {
 
   func searchRelevantMessages(
     query: String,
-    currentSessionId: Int64,
-    restrictToSessionId: Int64?,
-    windowStartMessageId: Int64?,
-    excludedMessageIds: [Int64],
+    currentSessionID: Int64,
+    restrictToSessionID: Int64?,
+    windowStartMessageID: Int64?,
+    excludedMessageIDs: [Int64],
     limit: Int
   ) throws(StoreError) -> [RecallHit] {
     calls.append(
       Call(
         query: query,
-        currentSessionId: currentSessionId,
-        restrictToSessionId: restrictToSessionId,
-        windowStartMessageId: windowStartMessageId,
-        excludedMessageIds: excludedMessageIds,
+        currentSessionID: currentSessionID,
+        restrictToSessionID: restrictToSessionID,
+        windowStartMessageID: windowStartMessageID,
+        excludedMessageIDs: excludedMessageIDs,
         limit: limit
       )
     )

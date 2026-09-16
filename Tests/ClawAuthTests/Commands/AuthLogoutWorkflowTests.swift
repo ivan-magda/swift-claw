@@ -6,8 +6,10 @@ import Testing
 
 @testable import ClawAuth
 
-@Suite struct AuthLogoutWorkflowTests {
-  @Test func logoutTakesTheLockDeletesTheRecordAndReleasesIt() async throws {
+@Suite
+struct AuthLogoutWorkflowTests {
+  @Test
+  func logoutTakesTheLockDeletesTheRecordAndReleasesIt() async throws {
     try await withAuthWorld("auth-logout") { world in
       // given
       try world.seedPriorLogin()
@@ -32,7 +34,8 @@ import Testing
     }
   }
 
-  @Test func logoutSaysTheDeletionIsLocalRatherThanARevocation() async throws {
+  @Test
+  func logoutSaysTheDeletionIsLocalRatherThanARevocation() async throws {
     try await withAuthWorld("auth-logout-wording") { world in
       // given
       try world.seedPriorLogin()
@@ -48,7 +51,8 @@ import Testing
     }
   }
 
-  @Test func logoutIsIdempotent() async throws {
+  @Test
+  func logoutIsIdempotent() async throws {
     try await withAuthWorld("auth-logout-idempotent") { world in
       // given
       try world.seedPriorLogin()
@@ -64,7 +68,8 @@ import Testing
     }
   }
 
-  @Test func logoutOnARootThatNeverHeldACredentialSucceeds() async throws {
+  @Test
+  func logoutOnARootThatNeverHeldACredentialSucceeds() async throws {
     try await withAuthWorld("auth-logout-never") { world in
       // given
       let workflow = world.logoutWorkflow()
@@ -79,7 +84,8 @@ import Testing
     }
   }
 
-  @Test func aHeldLockStopsLogoutBeforeItReadsOrDeletesAnything() async throws {
+  @Test
+  func aHeldLockStopsLogoutBeforeItReadsOrDeletesAnything() async throws {
     try await withAuthWorld("auth-logout-locked") { world in
       // given
       try world.seedPriorLogin()

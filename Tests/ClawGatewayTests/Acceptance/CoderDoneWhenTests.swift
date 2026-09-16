@@ -6,11 +6,15 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct CoderDoneWhenTests {
-  @Test func approvedTaskLeavesConversationResponsiveAndDeliversCompletion() async throws {
+@Suite
+struct CoderDoneWhenTests {
+  @Test
+  func approvedTaskLeavesConversationResponsiveAndDeliversCompletion() async throws {
     // given
     let result = CoderServiceFixture.result()
-    let backend = ScriptedCoderBackend(invocations: [.init(result: result)])
+    let backend = ScriptedCoderBackend(invocations: [
+      ScriptedCoderBackend.Invocation(result: result),
+    ])
     let signal = OutboxSignal()
     let ordinaryReply = "Your next message reached me while the coding task is running."
     let harness = try makeSC3Harness(
@@ -63,8 +67,8 @@ import Testing
           }
         )
         let saved = try #require(try harness.stores.coderJobs.job(id: id))
-        #expect(saved.origin.runID == approval.runId)
-        #expect(saved.origin.sessionID == (try harness.sessionId()))
+        #expect(saved.origin.runID == approval.runID)
+        #expect(saved.origin.sessionID == (try harness.sessionID()))
         #expect(saved.result == result)
         #expect(saved.state == .succeeded)
         #expect(!saved.slotReserved)

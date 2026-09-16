@@ -6,7 +6,8 @@ import Testing
 @testable import ClawData
 
 extension FeedbackStoreTests {
-  @Test func newerSameSubjectPromptSupersedesAndEnqueuesIndependently() throws {
+  @Test
+  func newerSameSubjectPromptSupersedesAndEnqueuesIndependently() throws {
     // given — two independently authenticated correction targets for the same exact run
     let env = try FeedbackStoreEnvironment.make()
     let firstTarget = env.target(nonce: "prompt-one", signal: .resultCorrection, subject: "41")
@@ -16,16 +17,16 @@ extension FeedbackStoreTests {
 
     // when
     let first = try env.openChallenge(firstTarget)
-    let second = try env.openChallenge(secondTarget, updateId: 2)
+    let second = try env.openChallenge(secondTarget, updateID: 2)
 
     // then — subject-only outbox identity would drop the second prompt
     guard case .challengeOpened(let firstChallenge) = first,
-      case .challengeOpened(let secondChallenge) = second
+          case .challengeOpened(let secondChallenge) = second
     else {
       Issue.record("expected both correction prompts to open")
       return
     }
-    #expect(try env.learning.liveChallenge(ownerUserId: 42, chatId: 42)?.id == secondChallenge.id)
+    #expect(try env.learning.liveChallenge(ownerUserID: 42, chatID: 42)?.id == secondChallenge.id)
     #expect(try env.challenge(firstChallenge.id)?.supersededBy == secondChallenge.id)
     #expect(try env.challenge(firstChallenge.id)?.consumedAt == nil)
     #expect(
@@ -47,7 +48,8 @@ extension FeedbackStoreTests {
     #expect(exposed.contains(secondTarget.nonce) == false)
   }
 
-  @Test func challengeReplyStoresExactUTF8AndSupersedesTheExactSubject() throws {
+  @Test
+  func challengeReplyStoresExactUTF8AndSupersedesTheExactSubject() throws {
     // given — a prior signal on the same run and an interleaved signal on another run
     let env = try FeedbackStoreEnvironment.make()
     let prior = env.target(nonce: "prior", signal: .resultNotUseful, subject: "41")
@@ -55,8 +57,8 @@ extension FeedbackStoreTests {
     let correction = env.target(nonce: "correction", signal: .resultCorrection, subject: "41")
     try env.seedTargets([prior, other, correction], chunks: [])
     _ = try env.consume(env.tap(target: prior, signal: .resultNotUseful))
-    _ = try env.consume(env.tap(target: other, signal: .resultUseful, updateId: 2))
-    let opened = try env.openChallenge(correction, updateId: 3)
+    _ = try env.consume(env.tap(target: other, signal: .resultUseful, updateID: 2))
+    let opened = try env.openChallenge(correction, updateID: 3)
     guard case .challengeOpened(let challenge) = opened else {
       Issue.record("expected the correction prompt to open")
       return
@@ -76,18 +78,18 @@ extension FeedbackStoreTests {
       return
     }
     let exact = try env.feedbackEvents(
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: env.state.epoch,
       subjectKind: .run,
       subjectDigest: "41"
     )
     #expect(event.payload == payload)
-    #expect(event.transportUpdateId == nil)
+    #expect(event.transportUpdateID == nil)
     #expect(event.signal == .resultCorrection)
     #expect(event.supersedes == exact.first?.id)
     #expect(
       try env.feedbackEvents(
-        jobId: env.jobId,
+        jobID: env.jobID,
         epoch: env.state.epoch,
         subjectKind: .run,
         subjectDigest: "42"
@@ -97,13 +99,19 @@ extension FeedbackStoreTests {
     #expect(audit.resultSize == payload.utf8.count)
     #expect(audit.args == "subject_kind=run,subject_digest=41")
     #expect([audit.args, audit.tool, audit.decision].joined().contains(payload) == false)
-    #expect(try env.deliveryRows().allSatisfy { $0.payload.contains(payload) == false })
+    #expect(
+      try env.deliveryRows().allSatisfy {
+        $0.payload.contains(payload) == false
+      }
+    )
   }
 
-  @Test func challengeSubjectKindsMapToOnlyTheirLegalSignals() throws {
+  @Test
+  func challengeSubjectKindsMapToOnlyTheirLegalSignals() throws {
     // given — v13 has no signal column; subject kind is the closed discriminator
     let cases: [(FeedbackSubjectKind, OwnerSignal)] = [
-      (.run, .resultCorrection), (.candidate, .candidateEdit),
+      (.run, .resultCorrection),
+      (.candidate, .candidateEdit),
     ]
 
     for (offset, entry) in cases.enumerated() {
@@ -138,7 +146,8 @@ extension FeedbackStoreTests {
     }
   }
 
-  @Test func mismatchedChallengeTargetAndActionFailClosed() throws {
+  @Test
+  func mismatchedChallengeTargetAndActionFailClosed() throws {
     // given — a corrupted target says candidate while allowing the run-only correction action
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "mismatched-pair", signal: .resultCorrection, subject: "41")
@@ -158,19 +167,21 @@ extension FeedbackStoreTests {
     #expect(try env.rowCount(table: "feedback_challenges") == 0)
   }
 
-  @Test func unsupportedDurableChallengeKindFailsClosedOnRead() throws {
+  @Test
+  func unsupportedDurableChallengeKindFailsClosedOnRead() throws {
     // given — v13 can physically hold a kind with no payload signal mapping
     let env = try FeedbackStoreEnvironment.make()
     try env.insertChallengeDirectly(kind: .evaluation)
 
     // when / then — guessing a signal for the row would return it as actionable
     #expect(throws: StoreError.self) {
-      _ = try env.learning.liveChallenge(ownerUserId: 42, chatId: 42)
+      _ = try env.learning.liveChallenge(ownerUserID: 42, chatID: 42)
     }
     #expect(try env.eventCount() == 0)
   }
 
-  @Test func challengeCASRejectsReplayExpiryAndStaleEpoch() throws {
+  @Test
+  func challengeCASRejectsReplayExpiryAndStaleEpoch() throws {
     // given — each case reaches an independent predicate on a fresh live challenge
     for failure in ChallengeFailure.allCases {
       let env = try FeedbackStoreEnvironment.make()
@@ -207,7 +218,8 @@ extension FeedbackStoreTests {
     }
   }
 
-  @Test func promptCollisionRollsBackTargetConsumptionAndChallenge() throws {
+  @Test
+  func promptCollisionRollsBackTargetConsumptionAndChallenge() throws {
     // given — the second prompt identity exists, so the first insert precedes the collision
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "prompt-collision", signal: .resultCorrection, subject: "41")
@@ -217,7 +229,7 @@ extension FeedbackStoreTests {
     let second = LearningNoticeChunk(
       subjectDigest: first.subjectDigest,
       ordinal: 1,
-      chatId: first.chatId,
+      chatID: first.chatID,
       payload: secondPayload,
       payloadHash: ContentHash.fnv1a(secondPayload)
     )
@@ -238,7 +250,8 @@ extension FeedbackStoreTests {
     #expect(try env.deliveryRows().first?.payload == secondPayload)
   }
 
-  @Test func challengeAuditFailureRollsBackPayloadEventAndRevision() throws {
+  @Test
+  func challengeAuditFailureRollsBackPayloadEventAndRevision() throws {
     // given — a live challenge and a database failure at the transaction's final audit row
     let env = try FeedbackStoreEnvironment.make()
     let target = env.target(nonce: "audit-payload", signal: .resultCorrection, subject: "41")
@@ -253,12 +266,13 @@ extension FeedbackStoreTests {
     #expect(throws: StoreError.self) {
       _ = try env.learning.consumeChallenge(id: challenge.id, payload: "private", now: env.now)
     }
-    #expect(try env.learning.liveChallenge(ownerUserId: 42, chatId: 42)?.id == challenge.id)
+    #expect(try env.learning.liveChallenge(ownerUserID: 42, chatID: 42)?.id == challenge.id)
     #expect(try env.eventCount() == 0)
     #expect(try env.feedbackRevision() == 0)
   }
 
-  @Test func liveChallengePartialUniqueIndexMapsAndRollsBackDirectSQL() throws {
+  @Test
+  func liveChallengePartialUniqueIndexMapsAndRollsBackDirectSQL() throws {
     // given — one mapped transaction inserts two physically live rows for the same owner DM
     let env = try FeedbackStoreEnvironment.make()
 
@@ -287,9 +301,12 @@ private enum ChallengeFailure: CaseIterable {
 
   var outcome: FeedbackOutcome {
     switch self {
-    case .replay: .alreadyConsumed
-    case .expired: .expired
-    case .staleEpoch: .staleEpoch
+    case .replay:
+      .alreadyConsumed
+    case .expired:
+      .expired
+    case .staleEpoch:
+      .staleEpoch
     }
   }
 }

@@ -34,13 +34,13 @@ struct SSEParser: Sendable {
     maxEventBytes: Int = LLMStreamLimits.maxEventBytes,
     maxBufferedBytes: Int = LLMStreamLimits.maxBufferedBytes,
     maxAccumulatedContentBytes: Int = LLMStreamLimits.maxAccumulatedContentBytes,
-    fallbackProviderCost: Double? = nil
+    fallbackProviderCost providerCost: Double? = nil
   ) {
     self.maxEventBytes = maxEventBytes
     self.maxBufferedBytes = maxBufferedBytes
     self.maxAccumulatedContentBytes = maxAccumulatedContentBytes
 
-    self.providerCost = fallbackProviderCost
+    self.providerCost = providerCost
   }
 
   mutating func push(_ data: Data) throws -> [StreamEvent] {
@@ -140,26 +140,26 @@ struct SSEParser: Sendable {
   /// accumulator that never received an id/name (malformed stream) and defaults empty
   /// arguments to `"{}"`, mirroring the blocking path's `parse(result:)` (same rule, two seams).
   private var assembledToolCalls: [ToolCall] {
-    toolCallAccumulators
-      .sorted { $0.key < $1.key }
-      .compactMap { _, accumulator in
-        guard !accumulator.id.isEmpty, !accumulator.name.isEmpty else {
-          return nil
-        }
-        return ToolCall(
-          id: accumulator.id,
-          name: accumulator.name,
-          argumentsJSON: accumulator.arguments.isEmpty ? "{}" : accumulator.arguments
-        )
+    toolCallAccumulators.sorted {
+      $0.key < $1.key
+    }.compactMap { _, accumulator in
+      guard !accumulator.id.isEmpty, !accumulator.name.isEmpty else {
+        return nil
       }
+      return ToolCall(
+        id: accumulator.id,
+        name: accumulator.name,
+        argumentsJSON: accumulator.arguments.isEmpty ? "{}" : accumulator.arguments
+      )
+    }
   }
 
   private mutating func accumulate(_ fragments: [DeltaToolCall]) throws {
     for fragment in fragments {
       let index = fragment.index ?? 0
       var accumulator = toolCallAccumulators[index] ?? ToolCallAccumulator()
-      if let fragmentId = fragment.id, !fragmentId.isEmpty {
-        accumulator.id = fragmentId
+      if let fragmentID = fragment.id, !fragmentID.isEmpty {
+        accumulator.id = fragmentID
       }
       if let name = fragment.function?.name, !name.isEmpty {
         accumulator.name = name
@@ -209,6 +209,8 @@ extension SSEParser {
     usage?.completionTokens ?? 0
   }
 }
+
+// MARK: - Stream Usage Accounting
 
 private extension SSEParser {
   /// The terminal event — one construction shared by `finish()` and the `[DONE]` sentinel so the two

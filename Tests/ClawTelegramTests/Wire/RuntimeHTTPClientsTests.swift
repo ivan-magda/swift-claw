@@ -11,15 +11,17 @@ private struct RecordingClient: Sendable {
   let close: @Sendable () async -> Void
 }
 
-@Suite struct RuntimeHTTPClientsTests {
-  @Test func buildsThreeClientsInFixedOrderWithDistinctProfiles() {
+@Suite
+struct RuntimeHTTPClientsTests {
+  @Test
+  func buildsThreeClientsInFixedOrderWithDistinctProfiles() {
     // given — a maker recording the role of every client it is asked to build
     var creationOrder: [RuntimeHTTPClientRole] = []
 
     // when
     let clients = RuntimeHTTPClients { role in
       creationOrder.append(role)
-      return RecordingClient(role: role, close: {})
+      return RecordingClient(role: role) {}
     }
 
     // then — Telegram, then LLM, then tool, each in its own slot
@@ -29,7 +31,8 @@ private struct RecordingClient: Sendable {
     #expect(clients.tool.role == .tool)
   }
 
-  @Test func telegramFollowsRedirectsWhileLLMAndToolAreProtected() {
+  @Test
+  func telegramFollowsRedirectsWhileLLMAndToolAreProtected() {
     // given
     let roles: [RuntimeHTTPClientRole] = [.telegram, .llm, .tool]
 

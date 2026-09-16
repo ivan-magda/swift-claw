@@ -19,7 +19,7 @@ extension DaemonBuilder {
       config: config,
       sandbox: sandbox,
       cooldown: cooldown,
-      staticAPIKey: secrets.llmApiKey,
+      staticAPIKey: secrets.llmAPIKey,
       makeManagedStore: makeManagedStore,
       mcp: mcp,
       mcpOutcomes: mcpOutcomes,

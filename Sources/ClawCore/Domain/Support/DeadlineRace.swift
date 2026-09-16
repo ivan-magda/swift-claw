@@ -7,14 +7,12 @@ public enum DeadlineRaceOutcome<Value: Sendable>: Sendable {
 public enum DeadlineRace {
   public static func race<Value: Sendable>(
     allowance: Duration,
-    sleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
+    sleep: @escaping @Sendable (_ duration: Duration) async throws -> Void = { duration in
       try await Task.sleep(for: duration)
     },
     operation: @escaping @Sendable () async -> Value
   ) async -> DeadlineRaceOutcome<Value> {
-    let (outcomes, continuation) = AsyncStream.makeStream(
-      of: DeadlineRaceOutcome<Value>.self
-    )
+    let (outcomes, continuation) = AsyncStream.makeStream(of: DeadlineRaceOutcome<Value>.self)
 
     let operationTask = Task {
       continuation.yield(.operationReturned(await operation()))

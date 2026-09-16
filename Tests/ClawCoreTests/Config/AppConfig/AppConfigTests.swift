@@ -3,19 +3,21 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct AppConfigTests {
+@Suite
+struct AppConfigTests {
   private typealias EnvKey = AppConfig.EnvKey
 
   /// Adds the LLM keys every successful `load` now requires, unless the base already sets them.
   /// No secret keys here — the bot token / LLM key load via `SecretStore`, not `AppConfig`.
   private func envWithLLM(_ base: [String: String]) -> [String: String] {
-    base.merging([
-      EnvKey.llmBaseURL: "http://localhost:1234/v1",
-      EnvKey.llmModel: "gpt-4o",
-    ]) { existing, _ in existing }
+    base.merging([EnvKey.llmBaseURL: "http://localhost:1234/v1", EnvKey.llmModel: "gpt-4o"]) {
+      (existing, _) in
+      existing
+    }
   }
 
-  @Test func loadsValidConfig() throws {
+  @Test
+  func loadsValidConfig() throws {
     // given
     let env = envWithLLM([
       EnvKey.allowlist: "42, 99",
@@ -49,7 +51,8 @@ import Testing
       overrides: [EnvKey.allowlist: "42, notanumber"],
       expectedError: ConfigError.invalidAllowlist("notanumber")
     ),
-  ]) func missingOrInvalidConfigFieldThrows(
+  ])
+  func missingOrInvalidConfigFieldThrows(
     description: String,
     envWithLLM: Bool,
     overrides: [String: String],
@@ -61,7 +64,9 @@ import Testing
       env[EnvKey.llmBaseURL] = "http://localhost:1234/v1"
       env[EnvKey.llmModel] = "gpt-4o"
     }
-    env.merge(overrides) { _, new in new }
+    env.merge(overrides) { _, new in
+      new
+    }
 
     // then
     #expect(throws: expectedError) {
@@ -69,7 +74,8 @@ import Testing
     }
   }
 
-  @Test func emptyAllowlistIsAllowed() throws {
+  @Test
+  func emptyAllowlistIsAllowed() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -80,7 +86,8 @@ import Testing
     #expect(config.allowlist.isEmpty)
   }
 
-  @Test func absentGroupChatsMeansGroupModeOff() throws {
+  @Test
+  func absentGroupChatsMeansGroupModeOff() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -100,16 +107,10 @@ import Testing
       "-1001234567890, -1009876543210",
       Set<Int64>([-1_001_234_567_890, -1_009_876_543_210])
     ),
-  ]) func groupChatsParseAsAnIdSet(
-    description: String,
-    raw: String,
-    expected: Set<Int64>
-  ) throws {
+  ])
+  func groupChatsParseAsAnIDSet(description: String, raw: String, expected: Set<Int64>) throws {
     // given
-    let env = envWithLLM([
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-      EnvKey.groupChats: raw,
-    ])
+    let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory(), EnvKey.groupChats: raw])
 
     // when
     let config = try AppConfig.load(environment: env)
@@ -118,7 +119,8 @@ import Testing
     #expect(config.groupChats == expected)
   }
 
-  @Test func malformedGroupChatsFailsClosed() {
+  @Test
+  func malformedGroupChatsFailsClosed() {
     // given
     let env = envWithLLM([
       EnvKey.stateRoot: NSTemporaryDirectory(),
@@ -131,7 +133,8 @@ import Testing
     }
   }
 
-  @Test func defaultsPollTimeoutTo30() throws {
+  @Test
+  func defaultsPollTimeoutTo30() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -142,7 +145,8 @@ import Testing
     #expect(config.pollTimeoutSeconds == 30)
   }
 
-  @Test func blankStateRootFallsBackToHomeDefaultNotCwd() throws {
+  @Test
+  func blankStateRootFallsBackToHomeDefaultNotCwd() throws {
     // given — copying .env.example verbatim leaves CLAW_STATE_ROOT blank
     let blankEnv = envWithLLM([EnvKey.stateRoot: "   "])
     let omittedEnv = envWithLLM([:])
@@ -157,7 +161,8 @@ import Testing
     #expect(fromBlank.stateRoot.standardizedFileURL != workingDir.standardizedFileURL)
   }
 
-  @Test func loadsLLMConfigWithDefaults() throws {
+  @Test
+  func loadsLLMConfigWithDefaults() throws {
     // given — only the required LLM keys, no field/max-tokens overrides
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -171,7 +176,8 @@ import Testing
     #expect(config.llm.maxOutputTokens == 4096)
   }
 
-  @Test func maxTokensFieldOverrideParses() throws {
+  @Test
+  func maxTokensFieldOverrideParses() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.llmMaxTokensField] = "max_tokens"
@@ -183,7 +189,8 @@ import Testing
     #expect(config.llm.route.descriptor.capabilities.outputTokenField == .configured(.maxTokens))
   }
 
-  @Test func structuredOutputDefaultsToOff() throws {
+  @Test
+  func structuredOutputDefaultsToOff() throws {
     // given — no override; the safe default sends no response_format, so a provider that does not
     // support the field is never broken by it (opt in only when the provider is known to support it)
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
@@ -195,7 +202,8 @@ import Testing
     #expect(config.llm.structuredOutput == .off)
   }
 
-  @Test func structuredOutputOverridesParse() throws {
+  @Test
+  func structuredOutputOverridesParse() throws {
     // given / when / then — each accepted mode round-trips from its raw env value
     let cases: [(String, StructuredOutputMode)] = [
       ("off", .off),
@@ -210,7 +218,8 @@ import Testing
     }
   }
 
-  @Test func invalidStructuredOutputFailsClosed() {
+  @Test
+  func invalidStructuredOutputFailsClosed() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.llmStructuredOutput] = "grammar"
@@ -221,7 +230,8 @@ import Testing
     }
   }
 
-  @Test func perDayUSDOverrideParses() throws {
+  @Test
+  func perDayUSDOverrideParses() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.perDayUSD] = "5"
@@ -233,7 +243,8 @@ import Testing
     #expect(config.budget.perDayUSD == 5)
   }
 
-  @Test func budgetDefaultsMirrorRunBudgetAndLLM() throws {
+  @Test
+  func budgetDefaultsMirrorRunBudgetAndLLM() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -246,7 +257,8 @@ import Testing
     #expect(config.budget.dayTokenCeilingOverride == nil)
   }
 
-  @Test func invalidBudgetValueThrows() {
+  @Test
+  func invalidBudgetValueThrows() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.perRunUSD] = "-1"
@@ -257,7 +269,8 @@ import Testing
     }
   }
 
-  @Test func streamingDefaultsToOn() throws {
+  @Test
+  func streamingDefaultsToOn() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -294,7 +307,8 @@ import Testing
     #expect(config.llm.streamingEnabled)
   }
 
-  @Test func invalidStreamingFlagFailsClosed() {
+  @Test
+  func invalidStreamingFlagFailsClosed() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.llmStreaming] = "sometimes"
@@ -310,13 +324,15 @@ import Testing
   /// A ChatGPT model with no base URL and no key at all, to prove the managed route neither reads nor
   /// requires either.
   private func chatGPTEnv(_ overrides: [String: String] = [:]) -> [String: String] {
-    [
-      EnvKey.stateRoot: NSTemporaryDirectory(),
-      EnvKey.llmModel: "openai-chatgpt/gpt-5.4",
-    ].merging(overrides) { _, new in new }
+    [EnvKey.stateRoot: NSTemporaryDirectory(), EnvKey.llmModel: "openai-chatgpt/gpt-5.4"].merging(
+      overrides
+    ) { _, new in
+      new
+    }
   }
 
-  @Test func chatGPTPrefixResolvesTheManagedRouteWithoutBaseURLOrKey() throws {
+  @Test
+  func chatGPTPrefixResolvesTheManagedRouteWithoutBaseURLOrKey() throws {
     // given — the exact qualified prefix, and neither CLAW_LLM_BASE_URL nor CLAW_LLM_API_KEY present
     let env = chatGPTEnv()
 
@@ -340,7 +356,8 @@ import Testing
     #expect(route.descriptor.capabilities.outputTokenField == .omitted)
   }
 
-  @Test func staleBaseURLAndKeyAreIgnoredOnTheManagedRoute() throws {
+  @Test
+  func staleBaseURLAndKeyAreIgnoredOnTheManagedRoute() throws {
     // given — a leftover base URL from a prior current-route install; the managed route must not read
     // it into its egress
     let env = chatGPTEnv([EnvKey.llmBaseURL: "https://leftover.example/v1"])
@@ -358,7 +375,8 @@ import Testing
     )
   }
 
-  @Test func currentRouteBothIdentitiesAreTheConfiguredModel() throws {
+  @Test
+  func currentRouteBothIdentitiesAreTheConfiguredModel() throws {
     // given — an unqualified model
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -376,7 +394,8 @@ import Testing
       "openai-chatgpt/ bad",
       ConfigError.unsafeQualifiedModelSuffix(reference: "openai-chatgpt/ bad")
     ),
-  ]) func invalidChatGPTSuffixFailsClosed(model: String, expected: ConfigError) {
+  ])
+  func invalidChatGPTSuffixFailsClosed(model: String, expected: ConfigError) {
     // given — a recognized prefix with a suffix that is not a model this route may name
     let env = chatGPTEnv([EnvKey.llmModel: model])
 
@@ -386,7 +405,8 @@ import Testing
     }
   }
 
-  @Test func oversizedChatGPTSuffixFailsClosed() {
+  @Test
+  func oversizedChatGPTSuffixFailsClosed() {
     // given — a suffix past the 200-scalar bound
     let model = "openai-chatgpt/" + String(repeating: "a", count: 201)
     let env = chatGPTEnv([EnvKey.llmModel: model])
@@ -411,7 +431,8 @@ import Testing
     #expect(route.configuredReference == model)
   }
 
-  @Test func currentRouteRequiresBaseURL() {
+  @Test
+  func currentRouteRequiresBaseURL() {
     // given — an unqualified model with no base URL
     let env = [EnvKey.stateRoot: NSTemporaryDirectory(), EnvKey.llmModel: "gpt-4o"]
 
@@ -421,7 +442,8 @@ import Testing
     }
   }
 
-  @Test func chatGPTRouteIgnoresMaxTokensFieldEvenWhenInvalid() throws {
+  @Test
+  func chatGPTRouteIgnoresMaxTokensFieldEvenWhenInvalid() throws {
     // given — a value that would fail on the current route; the managed route consults no wire cap,
     // so it must neither read nor reject it
     let env = chatGPTEnv([EnvKey.llmMaxTokensField: "not_a_field"])
@@ -433,7 +455,8 @@ import Testing
     #expect(config.llm.route.descriptor.capabilities.outputTokenField == .omitted)
   }
 
-  @Test func currentRouteStillRejectsInvalidMaxTokensField() {
+  @Test
+  func currentRouteStillRejectsInvalidMaxTokensField() {
     // given — the pairing to the ignore-on-ChatGPT case: the current route DOES honor the variable
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.llmMaxTokensField] = "not_a_field"
@@ -444,7 +467,8 @@ import Testing
     }
   }
 
-  @Test func nonOffStructuredOutputIsRejectedOnTheManagedRoute() {
+  @Test
+  func nonOffStructuredOutputIsRejectedOnTheManagedRoute() {
     // given — a structured-output mode the managed route has no contract to honor
     let env = chatGPTEnv([EnvKey.llmStructuredOutput: "json_object"])
 
@@ -459,7 +483,8 @@ import Testing
     }
   }
 
-  @Test func offStructuredOutputIsAcceptedOnTheManagedRoute() throws {
+  @Test
+  func offStructuredOutputIsAcceptedOnTheManagedRoute() throws {
     // given — the one structured-output value the managed route accepts
     let env = chatGPTEnv([EnvKey.llmStructuredOutput: "off"])
 
@@ -470,7 +495,8 @@ import Testing
 
   // MARK: - Fallback route resolution
 
-  @Test func absentFallbackParsesNil() throws {
+  @Test
+  func absentFallbackParsesNil() throws {
     // given — no CLAW_LLM_FALLBACK_MODEL set
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -481,7 +507,8 @@ import Testing
     #expect(config.llm.fallbackRoute == nil)
   }
 
-  @Test func fallbackResolvesRoute() throws {
+  @Test
+  func fallbackResolvesRoute() throws {
     // given — a managed primary and an OpenAI-compatible fallback with its own base URL
     let env = chatGPTEnv([
       EnvKey.llmFallbackModel: "gpt-5.4",
@@ -496,7 +523,8 @@ import Testing
     #expect(config.llm.route.configuredReference == "openai-chatgpt/gpt-5.4")
   }
 
-  @Test func fallbackWithoutBaseURLRejected() {
+  @Test
+  func fallbackWithoutBaseURLRejected() {
     // given — an OpenAI-compatible fallback with no CLAW_LLM_FALLBACK_BASE_URL
     let env = chatGPTEnv([EnvKey.llmFallbackModel: "gpt-5.4"])
 
@@ -506,7 +534,8 @@ import Testing
     }
   }
 
-  @Test func fallbackBaseURLIsNotPrimaryBaseURL() {
+  @Test
+  func fallbackBaseURLIsNotPrimaryBaseURL() {
     // given — the fallback's base URL is set but the primary's is not; the fallback's must never
     // stand in for the primary's
     let env = [
@@ -556,7 +585,8 @@ import Testing
     #expect(config.llm.structuredOutput == .jsonObject)
   }
 
-  @Test func cooldownDefaults() throws {
+  @Test
+  func cooldownDefaults() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -567,7 +597,8 @@ import Testing
     #expect(config.llm.primaryCooldownSeconds == 900)
   }
 
-  @Test func invalidCooldownRejected() {
+  @Test
+  func invalidCooldownRejected() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.primaryCooldownSeconds] = "0"
@@ -578,7 +609,8 @@ import Testing
     }
   }
 
-  @Test func schedulerAndHeartbeatDefaultsArePinned() throws {
+  @Test
+  func schedulerAndHeartbeatDefaultsArePinned() throws {
     // given — none of the eight Inc 4 keys set
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -596,7 +628,8 @@ import Testing
     #expect(config.heartbeatMaxPerDay == 8)
   }
 
-  @Test func schedulerOverridesParse() throws {
+  @Test
+  func schedulerOverridesParse() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.timezone] = "Europe/Berlin"
@@ -623,10 +656,7 @@ import Testing
     #expect(config.heartbeatMaxPerDay == 4)
   }
 
-  @Test(arguments: [
-    (allowlist: "", count: 0),
-    (allowlist: "1,2", count: 2),
-  ])
+  @Test(arguments: [(allowlist: "", count: 0), (allowlist: "1,2", count: 2)])
   func heartbeatEnabledWithoutOneOwnerFailsClosed(_ fixture: (allowlist: String, count: Int)) {
     // given — the heartbeat's delivery target is the config-resolved owner DM (spec §12)
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
@@ -634,14 +664,13 @@ import Testing
     env[EnvKey.allowlist] = fixture.allowlist
 
     // when / then
-    #expect(
-      throws: ConfigError.heartbeatOwnerUnresolved(allowlistCount: fixture.count)
-    ) {
+    #expect(throws: ConfigError.heartbeatOwnerUnresolved(allowlistCount: fixture.count)) {
       try AppConfig.load(environment: env)
     }
   }
 
-  @Test func heartbeatEnabledWithExactlyOneOwnerLoads() throws {
+  @Test
+  func heartbeatEnabledWithExactlyOneOwnerLoads() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.heartbeatEnabled] = "true"
@@ -655,7 +684,8 @@ import Testing
     #expect(config.allowlist == [42])
   }
 
-  @Test func learningIsOffUnlessTheFlagArmsIt() throws {
+  @Test
+  func learningIsOffUnlessTheFlagArmsIt() throws {
     // given — learning must never arm itself: an unset flag has to leave the daemon as it was
     var armed = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     armed[EnvKey.learningEnabled] = "true"
@@ -671,7 +701,8 @@ import Testing
     #expect(explicit.learningEnabled)
   }
 
-  @Test func heartbeatDisabledToleratesAnyAllowlist() throws {
+  @Test
+  func heartbeatDisabledToleratesAnyAllowlist() throws {
     // given — the default-OFF path must not constrain onboarding (empty allowlist still boots)
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -683,7 +714,8 @@ import Testing
     #expect(config.allowlist.isEmpty)
   }
 
-  @Test func invalidTimezoneFailsClosed() {
+  @Test
+  func invalidTimezoneFailsClosed() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.timezone] = "Mars/Olympus_Mons"
@@ -694,7 +726,8 @@ import Testing
     }
   }
 
-  @Test func zeroWidthQuietHoursFailClosed() {
+  @Test
+  func zeroWidthQuietHoursFailClosed() {
     // given — the OpenClaw always-skipped footgun is a config ERROR here (spec §12)
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.heartbeatQuietHours] = "22:00-22:00"
@@ -723,7 +756,8 @@ import Testing
     }
   }
 
-  @Test func nonPositiveProactiveBudgetFailsClosed() {
+  @Test
+  func nonPositiveProactiveBudgetFailsClosed() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.proactivePerDayUSD] = "0"
@@ -734,7 +768,8 @@ import Testing
     }
   }
 
-  @Test func budgetMirrorsTheProactivePerDayCap() throws {
+  @Test
+  func budgetMirrorsTheProactivePerDayCap() throws {
     // given — the env key Phase 1 already parses onto AppConfig.proactivePerDayUSD
     let env = envWithLLM([
       EnvKey.stateRoot: NSTemporaryDirectory(),
@@ -749,7 +784,8 @@ import Testing
     #expect(config.proactivePerDayUSD == 1.25)
   }
 
-  @Test func approvalExpiryDefaultsTo3600() throws {
+  @Test
+  func approvalExpiryDefaultsTo3600() throws {
     // given — the key unset
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -760,7 +796,8 @@ import Testing
     #expect(config.approvalExpirySeconds == 3600)
   }
 
-  @Test func approvalExpiryOverrideParses() throws {
+  @Test
+  func approvalExpiryOverrideParses() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.approvalExpiry] = "1800"
@@ -772,7 +809,8 @@ import Testing
     #expect(config.approvalExpirySeconds == 1800)
   }
 
-  @Test func approvalExpiryFloorAndCeilingAreInclusive() throws {
+  @Test
+  func approvalExpiryFloorAndCeilingAreInclusive() throws {
     // given — the exact bounds are legal (spec §4.6: floor 60, ceiling 86400)
     var floorEnv = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     floorEnv[EnvKey.approvalExpiry] = "60"
@@ -805,7 +843,8 @@ import Testing
     }
   }
 
-  @Test func webFetchExemptCIDRsDefaultToEmpty() throws {
+  @Test
+  func webFetchExemptCIDRsDefaultToEmpty() throws {
     // given — the key unset, and set but blank
     let omittedEnv = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     var blankEnv = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
@@ -816,7 +855,8 @@ import Testing
     #expect(try AppConfig.load(environment: blankEnv).webFetchExemptCIDRs.isEmpty)
   }
 
-  @Test func webFetchExemptCIDRsParseAsAList() throws {
+  @Test
+  func webFetchExemptCIDRsParseAsAList() throws {
     // given — a fake-IP v4 pool plus a fake v6 range, comma-separated with spaces
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.webFetchExemptCIDRs] = "198.18.0.0/15, fc00::/18"
@@ -842,13 +882,16 @@ import Testing
     // when / then — a widening of the SSRF posture must never load half-parsed
     let badEntry = rawValue.split(separator: ",").map { part in
       part.trimmingCharacters(in: .whitespaces)
-    }.first { entry in CIDR.parse(entry) == nil }
+    }.first { entry in
+      CIDR.parse(entry) == nil
+    }
     #expect(throws: ConfigError.invalidWebFetchExemptCIDR(badEntry ?? rawValue)) {
       try AppConfig.load(environment: env)
     }
   }
 
-  @Test func execDefaultsToDisabledWithStableLowCoreSafeValues() throws {
+  @Test
+  func execDefaultsToDisabledWithStableLowCoreSafeValues() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -866,7 +909,8 @@ import Testing
     #expect(config.exec.allowEgress == false)
   }
 
-  @Test func pinnedImageParserAcceptsOnlyAnExplicitRegistryAndLowercaseDigest() throws {
+  @Test
+  func pinnedImageParserAcceptsOnlyAnExplicitRegistryAndLowercaseDigest() throws {
     // given
     let digest = String(repeating: "a", count: 64)
 
@@ -900,7 +944,8 @@ import Testing
     #expect(PinnedImageReference.parse(rawValue) == nil)
   }
 
-  @Test func enabledExecParsesTheCompleteValidatedBlock() throws {
+  @Test
+  func enabledExecParsesTheCompleteValidatedBlock() throws {
     // given
     let digest = String(repeating: "b", count: 64)
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
@@ -917,10 +962,7 @@ import Testing
 
     // then
     #expect(config.exec.enabled)
-    #expect(
-      config.exec.image?.description
-        == "images.example.com/team/python@sha256:\(digest)"
-    )
+    #expect(config.exec.image?.description == "images.example.com/team/python@sha256:\(digest)")
     #expect(config.exec.imageRegistryAllowlist == ["cgr.dev", "images.example.com"])
     #expect(config.exec.memoryMiB == 512)
     #expect(config.exec.cpus == 1)
@@ -928,7 +970,8 @@ import Testing
     #expect(config.exec.allowEgress)
   }
 
-  @Test func disabledExecDoesNotApplyTheLiveHostCPUCeiling() throws {
+  @Test
+  func disabledExecDoesNotApplyTheLiveHostCPUCeiling() throws {
     // given: Linux CI may expose fewer than four CPUs; disabled parsing must remain stable
     let aboveHost = ProcessInfo.processInfo.activeProcessorCount + 1
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
@@ -942,7 +985,8 @@ import Testing
     #expect(config.exec.cpus == aboveHost)
   }
 
-  @Test func enabledExecDefaultsToTheVerifiedImagePin() throws {
+  @Test
+  func enabledExecDefaultsToTheVerifiedImagePin() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.execEnabled] = "true"
@@ -956,7 +1000,8 @@ import Testing
     #expect(config.exec.image == .verifiedDefault)
   }
 
-  @Test func theVerifiedDefaultPinSurvivesItsOwnValidation() {
+  @Test
+  func theVerifiedDefaultPinSurvivesItsOwnValidation() {
     // given
     let reference = PinnedImageReference.verifiedDefault
 
@@ -965,7 +1010,8 @@ import Testing
     #expect(ExecConfig.disabledDefault.imageRegistryAllowlist.contains(reference.registryHost))
   }
 
-  @Test func theDefaultPinObeysTheRegistryAllowlist() {
+  @Test
+  func theDefaultPinObeysTheRegistryAllowlist() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.execEnabled] = "true"
@@ -978,7 +1024,8 @@ import Testing
     }
   }
 
-  @Test func disabledExecDoesNotFillTheDefaultImage() throws {
+  @Test
+  func disabledExecDoesNotFillTheDefaultImage() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -989,30 +1036,28 @@ import Testing
     #expect(config.exec.image == nil)
   }
 
-  @Test func enabledExecRejectsAnImageOutsideTheRegistryAllowlist() {
+  @Test
+  func enabledExecRejectsAnImageOutsideTheRegistryAllowlist() {
     // given
-    let rawImage =
-      "registry.example.com/team/python@sha256:" + String(repeating: "c", count: 64)
+    let rawImage = "registry.example.com/team/python@sha256:" + String(repeating: "c", count: 64)
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.execEnabled] = "true"
     env[EnvKey.execImage] = rawImage
     env[EnvKey.execCPUs] = "1"
 
     // when / then
-    #expect(
-      throws: ConfigError.execImageRegistryNotAllowed("registry.example.com")
-    ) {
+    #expect(throws: ConfigError.execImageRegistryNotAllowed("registry.example.com")) {
       try AppConfig.load(environment: env)
     }
   }
 
-  @Test func enabledExecRejectsCPUAboveTheLiveHostCap() {
+  @Test
+  func enabledExecRejectsCPUAboveTheLiveHostCap() {
     // given
     let rawCPUs = "\(ProcessInfo.processInfo.activeProcessorCount + 1)"
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.execEnabled] = "true"
-    env[EnvKey.execImage] =
-      "cgr.dev/chainguard/python@sha256:" + String(repeating: "d", count: 64)
+    env[EnvKey.execImage] = "cgr.dev/chainguard/python@sha256:" + String(repeating: "d", count: 64)
     env[EnvKey.execCPUs] = rawCPUs
 
     // when / then
@@ -1021,10 +1066,10 @@ import Testing
     }
   }
 
-  @Test func execImageWhitespaceFailsClosedAtTheConfigBoundary() {
+  @Test
+  func execImageWhitespaceFailsClosedAtTheConfigBoundary() {
     // given
-    let rawImage =
-      " cgr.dev/chainguard/python@sha256:" + String(repeating: "e", count: 64)
+    let rawImage = " cgr.dev/chainguard/python@sha256:" + String(repeating: "e", count: 64)
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.execImage] = rawImage
 
@@ -1036,15 +1081,18 @@ import Testing
 
   @Test(arguments: [
     (
-      key: AppConfig.EnvKey.execMemoryMiB, value: "255",
+      key: AppConfig.EnvKey.execMemoryMiB,
+      value: "255",
       error: ConfigError.invalidExecMemoryMiB("255")
     ),
     (
-      key: AppConfig.EnvKey.execMemoryMiB, value: "8193",
+      key: AppConfig.EnvKey.execMemoryMiB,
+      value: "8193",
       error: ConfigError.invalidExecMemoryMiB("8193")
     ),
     (
-      key: AppConfig.EnvKey.execMemoryMiB, value: "large",
+      key: AppConfig.EnvKey.execMemoryMiB,
+      value: "large",
       error: ConfigError.invalidExecMemoryMiB("large")
     ),
     (key: AppConfig.EnvKey.execCPUs, value: "0", error: ConfigError.invalidExecCPUs("0")),
@@ -1052,13 +1100,12 @@ import Testing
     (key: AppConfig.EnvKey.execTimeout, value: "0", error: ConfigError.invalidExecTimeout("0")),
     (key: AppConfig.EnvKey.execTimeout, value: "301", error: ConfigError.invalidExecTimeout("301")),
     (
-      key: AppConfig.EnvKey.execTimeout, value: "later",
+      key: AppConfig.EnvKey.execTimeout,
+      value: "later",
       error: ConfigError.invalidExecTimeout("later")
     ),
   ])
-  func malformedExecBoundsFailClosed(
-    _ fixture: (key: String, value: String, error: ConfigError)
-  ) {
+  func malformedExecBoundsFailClosed(_ fixture: (key: String, value: String, error: ConfigError)) {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[fixture.key] = fixture.value
@@ -1093,7 +1140,8 @@ import Testing
     }
   }
 
-  @Test func voiceTranscriptionDefaultsOnWithTheDefaultLocale() throws {
+  @Test
+  func voiceTranscriptionDefaultsOnWithTheDefaultLocale() throws {
     // given
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -1105,7 +1153,8 @@ import Testing
     #expect(config.voice.localeIdentifiers == [AppConfig.EnvDefaults.voiceLocale])
   }
 
-  @Test func voiceTranscriptionParsesExplicitOptOutAndLocale() throws {
+  @Test
+  func voiceTranscriptionParsesExplicitOptOutAndLocale() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.voiceTranscription] = "false"
@@ -1119,7 +1168,8 @@ import Testing
     #expect(config.voice.localeIdentifiers == ["de-DE"])
   }
 
-  @Test func voiceLocalesParseAsAnOrderedDedupedList() throws {
+  @Test
+  func voiceLocalesParseAsAnOrderedDedupedList() throws {
     // given — messy but salvageable input: padding, empty segments, a repeated entry
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.voiceLocales] = " ru-RU , en-US,ru-RU ,, "
@@ -1131,7 +1181,8 @@ import Testing
     #expect(config.voice.localeIdentifiers == ["ru-RU", "en-US"])
   }
 
-  @Test func voiceLocalesWithOnlySeparatorsFallBackToTheDefault() throws {
+  @Test
+  func voiceLocalesWithOnlySeparatorsFallBackToTheDefault() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.voiceLocales] = " , "
@@ -1143,20 +1194,20 @@ import Testing
     #expect(config.voice.localeIdentifiers == [AppConfig.EnvDefaults.voiceLocale])
   }
 
-  @Test func malformedVoiceBooleanFailsClosed() {
+  @Test
+  func malformedVoiceBooleanFailsClosed() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.voiceTranscription] = "sometimes"
 
     // when / then
-    #expect(
-      throws: ConfigError.invalidBool(key: EnvKey.voiceTranscription, value: "sometimes")
-    ) {
+    #expect(throws: ConfigError.invalidBool(key: EnvKey.voiceTranscription, value: "sometimes")) {
       try AppConfig.load(environment: env)
     }
   }
 
-  @Test func imageInputDefaultsOn() throws {
+  @Test
+  func imageInputDefaultsOn() throws {
     // given — nothing set, mirroring voice transcription: the owner gets it without opting in
     let env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
 
@@ -1167,7 +1218,8 @@ import Testing
     #expect(config.image.enabled)
   }
 
-  @Test func imageInputParsesExplicitOptOut() throws {
+  @Test
+  func imageInputParsesExplicitOptOut() throws {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.imageInput] = "false"
@@ -1179,7 +1231,8 @@ import Testing
     #expect(config.image.enabled == false)
   }
 
-  @Test func malformedImageBooleanFailsClosed() {
+  @Test
+  func malformedImageBooleanFailsClosed() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
     env[EnvKey.imageInput] = "sometimes"

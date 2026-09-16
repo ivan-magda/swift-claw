@@ -2,13 +2,15 @@ import ClawCore
 import Foundation
 import Testing
 
-@Suite struct TriggerTests {
-  @Test func twoDistinctRunsSharingExactCodesTriggerOnceWithSortedCodes() throws {
+@Suite
+struct TriggerTests {
+  @Test
+  func twoDistinctRunsSharingExactCodesTriggerOnceWithSortedCodes() throws {
     // given
     let window = [
-      outcome(runId: 1, codes: ["b", "a", "b"]),
-      outcome(runId: 2, codes: ["b", "a"]),
-      outcome(runId: 3, codes: ["c"]),
+      outcome(runID: 1, codes: ["b", "a", "b"]),
+      outcome(runID: 2, codes: ["b", "a"]),
+      outcome(runID: 3, codes: ["c"]),
     ]
 
     // when
@@ -20,9 +22,10 @@ import Testing
     #expect(identity.reason == .recurringIssue)
   }
 
-  @Test func oneRunCountsOnlyOncePerCode() {
+  @Test
+  func oneRunCountsOnlyOncePerCode() {
     // given
-    let window = [outcome(runId: 1, codes: ["a", "a"])]
+    let window = [outcome(runID: 1, codes: ["a", "a"])]
 
     // when
     let trigger = LearningTrigger.detect(window: window, corrections: [])
@@ -31,9 +34,10 @@ import Testing
     #expect(trigger == nil)
   }
 
-  @Test func emptyIssueListsNeverTrigger() {
+  @Test
+  func emptyIssueListsNeverTrigger() {
     // given
-    let window = [outcome(runId: 1, codes: []), outcome(runId: 2, codes: [])]
+    let window = [outcome(runID: 1, codes: []), outcome(runID: 2, codes: [])]
 
     // when
     let trigger = LearningTrigger.detect(window: window, corrections: [])
@@ -42,9 +46,10 @@ import Testing
     #expect(trigger == nil)
   }
 
-  @Test func issueCodesCompareByExactEquality() {
+  @Test
+  func issueCodesCompareByExactEquality() {
     // given
-    let window = [outcome(runId: 1, codes: ["issue"]), outcome(runId: 2, codes: ["Issue"])]
+    let window = [outcome(runID: 1, codes: ["issue"]), outcome(runID: 2, codes: ["Issue"])]
 
     // when
     let trigger = LearningTrigger.detect(window: window, corrections: [])
@@ -53,14 +58,12 @@ import Testing
     #expect(trigger == nil)
   }
 
-  @Test func canonicallyEquivalentIssueCodesRemainByteDistinct() {
+  @Test
+  func canonicallyEquivalentIssueCodesRemainByteDistinct() {
     // given
     let precomposed = "\u{e9}"
     let decomposed = "e\u{301}"
-    let window = [
-      outcome(runId: 1, codes: [precomposed]),
-      outcome(runId: 2, codes: [decomposed]),
-    ]
+    let window = [outcome(runID: 1, codes: [precomposed]), outcome(runID: 2, codes: [decomposed])]
 
     // when
     let trigger = LearningTrigger.detect(window: window, corrections: [])
@@ -69,12 +72,13 @@ import Testing
     #expect(trigger == nil)
   }
 
-  @Test func positiveRunDoesNotEraseARecurringCode() throws {
+  @Test
+  func positiveRunDoesNotEraseARecurringCode() throws {
     // given
     let window = [
-      outcome(runId: 1, codes: ["a"]),
-      outcome(runId: 2, codes: [], outcome: .positive),
-      outcome(runId: 3, codes: ["a"]),
+      outcome(runID: 1, codes: ["a"]),
+      outcome(runID: 2, codes: [], outcome: .positive),
+      outcome(runID: 3, codes: ["a"]),
     ]
 
     // when
@@ -84,37 +88,34 @@ import Testing
     #expect(try #require(trigger).issueCodes == ["a"])
   }
 
-  @Test func oneOwnerCorrectionTriggersAfterOneEligibleRun() throws {
+  @Test
+  func oneOwnerCorrectionTriggersAfterOneEligibleRun() throws {
     // given
-    let window = [outcome(runId: 1, codes: [])]
+    let window = [outcome(runID: 1, codes: [])]
 
     // when
-    let trigger = LearningTrigger.detect(
-      window: window,
-      corrections: [correction(runId: 1)]
-    )
+    let trigger = LearningTrigger.detect(window: window, corrections: [correction(runID: 1)])
 
     // then
     #expect(try #require(trigger).reason == .ownerCorrection)
   }
 
-  @Test func correctionForARunOutsideTheWindowDoesNotTrigger() {
+  @Test
+  func correctionForARunOutsideTheWindowDoesNotTrigger() {
     // given
-    let window = [outcome(runId: 1, codes: [])]
+    let window = [outcome(runID: 1, codes: [])]
 
     // when
-    let trigger = LearningTrigger.detect(
-      window: window,
-      corrections: [correction(runId: 2)]
-    )
+    let trigger = LearningTrigger.detect(window: window, corrections: [correction(runID: 2)])
 
     // then
     #expect(trigger == nil)
   }
 
-  @Test func noTriggerOpensWhileATrialIsOpen() {
+  @Test
+  func noTriggerOpensWhileATrialIsOpen() {
     // given
-    let window = [outcome(runId: 1, codes: ["a"]), outcome(runId: 2, codes: ["a"])]
+    let window = [outcome(runID: 1, codes: ["a"]), outcome(runID: 2, codes: ["a"])]
 
     // when
     let trigger = LearningTrigger.detect(window: window, corrections: [], trialIsOpen: true)
@@ -123,13 +124,14 @@ import Testing
     #expect(trigger == nil)
   }
 
-  @Test func supersededOwnerCorrectionDoesNotTrigger() {
+  @Test
+  func supersededOwnerCorrectionDoesNotTrigger() {
     // given
-    let window = [outcome(runId: 1, codes: [])]
-    let superseded = correction(runId: 1)
+    let window = [outcome(runID: 1, codes: [])]
+    let superseded = correction(runID: 1)
     let replacement = FeedbackEvent(
       id: 2,
-      runId: 1,
+      runID: 1,
       signal: .resultUseful,
       payload: nil,
       revision: FeedbackRevision(3),
@@ -138,21 +140,19 @@ import Testing
     )
 
     // when
-    let trigger = LearningTrigger.detect(
-      window: window,
-      corrections: [superseded, replacement]
-    )
+    let trigger = LearningTrigger.detect(window: window, corrections: [superseded, replacement])
 
     // then
     #expect(trigger == nil)
   }
 
-  @Test func laterUsefulResultOverridesCorrectionWithoutASupersessionEdge() {
+  @Test
+  func laterUsefulResultOverridesCorrectionWithoutASupersessionEdge() {
     // given
-    let window = [outcome(runId: 1, codes: [])]
+    let window = [outcome(runID: 1, codes: [])]
     let events = [
-      feedback(.resultCorrection, runId: 1, id: 1, revision: 2),
-      feedback(.resultUseful, runId: 1, id: 2, revision: 3),
+      feedback(.resultCorrection, runID: 1, id: 1, revision: 2),
+      feedback(.resultUseful, runID: 1, id: 2, revision: 3),
     ]
 
     // when
@@ -162,12 +162,13 @@ import Testing
     #expect(trigger == nil)
   }
 
-  @Test func winningResultIsSelectedIndependentlyForEachEligibleRun() throws {
+  @Test
+  func winningResultIsSelectedIndependentlyForEachEligibleRun() throws {
     // given
-    let window = [outcome(runId: 1, codes: []), outcome(runId: 2, codes: [])]
+    let window = [outcome(runID: 1, codes: []), outcome(runID: 2, codes: [])]
     let events = [
-      feedback(.resultCorrection, runId: 1, id: 1, revision: 2),
-      feedback(.resultUseful, runId: 2, id: 2, revision: 3),
+      feedback(.resultCorrection, runID: 1, id: 1, revision: 2),
+      feedback(.resultUseful, runID: 2, id: 2, revision: 3),
     ]
 
     // when
@@ -177,42 +178,43 @@ import Testing
     #expect(try #require(trigger).reason == .ownerCorrection)
   }
 
-  @Test func windowKeepsNewestFiveByOccurrenceThenRunId() {
+  @Test
+  func windowKeepsNewestFiveByOccurrenceThenRunID() {
     // given
     let cutoff = Date(timeIntervalSince1970: 3_000_000)
     let evaluations = [
       outcome(
-        runId: 9,
+        runID: 9,
         codes: [],
         occurrenceAt: cutoff.addingTimeInterval(-4),
         completedAt: cutoff.addingTimeInterval(-1)
       ),
       outcome(
-        runId: 3,
+        runID: 3,
         codes: [],
         occurrenceAt: cutoff.addingTimeInterval(-3),
         completedAt: cutoff.addingTimeInterval(-3)
       ),
       outcome(
-        runId: 2,
+        runID: 2,
         codes: [],
         occurrenceAt: cutoff.addingTimeInterval(-3),
         completedAt: cutoff.addingTimeInterval(-2)
       ),
       outcome(
-        runId: 8,
+        runID: 8,
         codes: [],
         occurrenceAt: cutoff.addingTimeInterval(-2),
         completedAt: cutoff.addingTimeInterval(-4)
       ),
       outcome(
-        runId: 7,
+        runID: 7,
         codes: [],
         occurrenceAt: cutoff.addingTimeInterval(-1),
         completedAt: cutoff.addingTimeInterval(-200)
       ),
       outcome(
-        runId: 1,
+        runID: 1,
         codes: [],
         occurrenceAt: cutoff,
         completedAt: cutoff.addingTimeInterval(-100)
@@ -227,15 +229,16 @@ import Testing
     )
 
     // then
-    #expect(window.map(\.runId) == [2, 3, 8, 7, 1])
+    #expect(window.map(\.runID) == [2, 3, 8, 7, 1])
   }
 
-  @Test func evaluationCompletedAfterTheCutoffIsExcluded() {
+  @Test
+  func evaluationCompletedAfterTheCutoffIsExcluded() {
     // given
     let cutoff = Date(timeIntervalSince1970: 5_000_000)
     let evaluations = [
-      outcome(runId: 1, codes: [], completedAt: cutoff),
-      outcome(runId: 2, codes: [], completedAt: cutoff.addingTimeInterval(1)),
+      outcome(runID: 1, codes: [], completedAt: cutoff),
+      outcome(runID: 2, codes: [], completedAt: cutoff.addingTimeInterval(1)),
     ]
 
     // when
@@ -246,17 +249,18 @@ import Testing
     )
 
     // then
-    #expect(window.map(\.runId) == [1])
+    #expect(window.map(\.runID) == [1])
   }
 
-  @Test func evaluationsOlderThanThirtyDaysAreExcluded() {
+  @Test
+  func evaluationsOlderThanThirtyDaysAreExcluded() {
     // given
     let cutoff = Date(timeIntervalSince1970: 4_000_000)
     let exactlyThirtyDays = cutoff.addingTimeInterval(-EvidenceWindow.maximumAge)
     let evaluations = [
-      outcome(runId: 1, codes: [], occurrenceAt: exactlyThirtyDays, completedAt: cutoff),
+      outcome(runID: 1, codes: [], occurrenceAt: exactlyThirtyDays, completedAt: cutoff),
       outcome(
-        runId: 2,
+        runID: 2,
         codes: [],
         occurrenceAt: exactlyThirtyDays.addingTimeInterval(-1),
         completedAt: cutoff
@@ -271,15 +275,16 @@ import Testing
     )
 
     // then
-    #expect(window.map(\.runId) == [1])
+    #expect(window.map(\.runID) == [1])
   }
 
-  @Test func compatibilityMismatchStartsASeparateWindow() {
+  @Test
+  func compatibilityMismatchStartsASeparateWindow() {
     // given
     let cutoff = Date(timeIntervalSince1970: 5_000_000)
     let evaluations = [
-      outcome(runId: 1, codes: [], compatibility: compatibility),
-      outcome(runId: 2, codes: [], compatibility: CompatibilityDigest(rawValue: "other")),
+      outcome(runID: 1, codes: [], compatibility: compatibility),
+      outcome(runID: 2, codes: [], compatibility: CompatibilityDigest(rawValue: "other")),
     ]
 
     // when
@@ -290,15 +295,16 @@ import Testing
     )
 
     // then
-    #expect(window.map(\.runId) == [1])
+    #expect(window.map(\.runID) == [1])
   }
 
-  @Test func trialRunsNeverEnterAStableWindow() {
+  @Test
+  func trialRunsNeverEnterAStableWindow() {
     // given
     let cutoff = Date(timeIntervalSince1970: 5_000_000)
     let evaluations = [
-      outcome(runId: 1, codes: [], trialId: nil),
-      outcome(runId: 2, codes: [], trialId: 9),
+      outcome(runID: 1, codes: [], trialID: nil),
+      outcome(runID: 2, codes: [], trialID: 9),
     ]
 
     // when
@@ -309,26 +315,19 @@ import Testing
     )
 
     // then
-    #expect(window.map(\.runId) == [1])
+    #expect(window.map(\.runID) == [1])
   }
 
-  @Test func triggerIdentityUsesUnambiguousFieldBoundaries() throws {
+  @Test
+  func triggerIdentityUsesUnambiguousFieldBoundaries() throws {
     // given
     let firstWindow = [
-      outcome(
-        runId: 1,
-        codes: ["issue"],
-        evidenceDigest: EvidenceDigest(rawValue: "left\u{0}edge")
-      ),
-      outcome(runId: 2, codes: ["issue"], evidenceDigest: EvidenceDigest(rawValue: "right")),
+      outcome(runID: 1, codes: ["issue"], evidenceDigest: EvidenceDigest(rawValue: "left\0edge")),
+      outcome(runID: 2, codes: ["issue"], evidenceDigest: EvidenceDigest(rawValue: "right")),
     ]
     let secondWindow = [
-      outcome(runId: 1, codes: ["issue"], evidenceDigest: EvidenceDigest(rawValue: "left")),
-      outcome(
-        runId: 2,
-        codes: ["issue"],
-        evidenceDigest: EvidenceDigest(rawValue: "edge\u{0}right")
-      ),
+      outcome(runID: 1, codes: ["issue"], evidenceDigest: EvidenceDigest(rawValue: "left")),
+      outcome(runID: 2, codes: ["issue"], evidenceDigest: EvidenceDigest(rawValue: "edge\0right")),
     ]
 
     // when
@@ -339,18 +338,20 @@ import Testing
     #expect(first.digest != second.digest)
   }
 
-  @Test func issueCodeMembersUseUnambiguousFieldBoundaries() {
+  @Test
+  func issueCodeMembersUseUnambiguousFieldBoundaries() {
     // given
-    let first = identity(issueCodes: ["a\u{0}b", "c"])
+    let first = identity(issueCodes: ["a\0b", "c"])
 
     // when
-    let shifted = identity(issueCodes: ["a", "b\u{0}c"])
+    let shifted = identity(issueCodes: ["a", "b\0c"])
 
     // then
     #expect(first.digest != shifted.digest)
   }
 
-  @Test func triggerReasonIsDescriptiveRatherThanIdentity() {
+  @Test
+  func triggerReasonIsDescriptiveRatherThanIdentity() {
     // given
     let recurring = identity(reason: .recurringIssue)
 
@@ -361,7 +362,8 @@ import Testing
     #expect(recurring.digest == correction.digest)
   }
 
-  @Test func triggerIdentityOrdersIssueCodesByRawUTF8() {
+  @Test
+  func triggerIdentityOrdersIssueCodesByRawUTF8() {
     // given
     let precomposed = "\u{e9}"
     let decomposed = "e\u{301}"
@@ -380,7 +382,8 @@ import Testing
     )
   }
 
-  @Test func triggerDigestPreservesByteDistinctIssueCodes() {
+  @Test
+  func triggerDigestPreservesByteDistinctIssueCodes() {
     // given
     let precomposed = identity(issueCodes: ["\u{e9}"])
 
@@ -391,11 +394,12 @@ import Testing
     #expect(precomposed.digest != decomposed.digest)
   }
 
-  @Test func eachTriggerIdentityInputChangesTheDigest() {
+  @Test
+  func eachTriggerIdentityInputChangesTheDigest() {
     // given
     let baseline = identity()
     let variants = [
-      identity(jobId: 12),
+      identity(jobID: 12),
       identity(epoch: LearningEpoch(2)),
       identity(algorithm: LearningAlgorithm(rawValue: "scheduled-learning/v2")),
       identity(stableDigest: LessonSetDigest(rawValue: "stable-v2")),
@@ -417,16 +421,19 @@ import Testing
     )
   }
 
-  @Test func triggerIdentityPreservesEvidenceOrder() {
+  @Test
+  func triggerIdentityPreservesEvidenceOrder() {
     // given
-    let first = identity(
-      evidenceDigests: [EvidenceDigest(rawValue: "one"), EvidenceDigest(rawValue: "two")]
-    )
+    let first = identity(evidenceDigests: [
+      EvidenceDigest(rawValue: "one"),
+      EvidenceDigest(rawValue: "two"),
+    ])
 
     // when
-    let reordered = identity(
-      evidenceDigests: [EvidenceDigest(rawValue: "two"), EvidenceDigest(rawValue: "one")]
-    )
+    let reordered = identity(evidenceDigests: [
+      EvidenceDigest(rawValue: "two"),
+      EvidenceDigest(rawValue: "one"),
+    ])
 
     // then
     #expect(first.digest != reordered.digest)
@@ -439,43 +446,43 @@ private let compatibility = CompatibilityDigest(rawValue: "compatible")
 
 // swiftlint:disable:next function_default_parameter_at_end
 private func outcome(
-  runId: Int64,
+  runID: Int64,
   codes: [String],
   outcome: EffectiveOutcome? = nil,
   occurrenceAt: Date = Date(timeIntervalSince1970: 4_999_999),
   completedAt: Date = Date(timeIntervalSince1970: 5_000_000),
   compatibility: CompatibilityDigest = compatibility,
-  trialId: Int64? = nil,
+  trialID: Int64? = nil,
   evidenceDigest: EvidenceDigest? = nil
 ) -> EffectiveEvaluation {
   EffectiveEvaluation(
-    runId: runId,
-    jobId: 11,
+    runID: runID,
+    jobID: 11,
     epoch: LearningEpoch(1),
     stableDigest: LessonSetDigest(rawValue: "stable-v1"),
-    evidenceDigest: evidenceDigest ?? EvidenceDigest(rawValue: "evidence-\(runId)"),
+    evidenceDigest: evidenceDigest ?? EvidenceDigest(rawValue: "evidence-\(runID)"),
     compatibility: compatibility,
     occurrenceAt: occurrenceAt,
     evaluatorCompletedAt: completedAt,
-    trialId: trialId,
+    trialID: trialID,
     outcome: outcome ?? .negative(issueCodes: codes),
     feedbackRevision: FeedbackRevision(1)
   )
 }
 
-private func correction(runId: Int64) -> FeedbackEvent {
-  feedback(.resultCorrection, runId: runId, id: runId, revision: 2)
+private func correction(runID: Int64) -> FeedbackEvent {
+  feedback(.resultCorrection, runID: runID, id: runID, revision: 2)
 }
 
 private func feedback(
   _ signal: OwnerSignal,
-  runId: Int64,
+  runID: Int64,
   id: Int64,
   revision: Int64
 ) -> FeedbackEvent {
   FeedbackEvent(
     id: id,
-    runId: runId,
+    runID: runID,
     signal: signal,
     payload: signal == .resultCorrection ? "owner correction" : nil,
     revision: FeedbackRevision(revision),
@@ -486,7 +493,7 @@ private func feedback(
 
 // swiftlint:disable:next function_default_parameter_at_end
 private func identity(
-  jobId: Int64 = 11,
+  jobID: Int64 = 11,
   epoch: LearningEpoch = LearningEpoch(1),
   algorithm: LearningAlgorithm = .v1,
   stableDigest: LessonSetDigest = LessonSetDigest(rawValue: "stable-v1"),
@@ -496,7 +503,7 @@ private func identity(
   reason: LearningTriggerReason = .recurringIssue
 ) -> TriggerIdentity {
   TriggerIdentity(
-    jobId: jobId,
+    jobID: jobID,
     epoch: epoch,
     algorithm: algorithm,
     stableDigest: stableDigest,

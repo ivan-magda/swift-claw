@@ -12,7 +12,8 @@ import Testing
 /// The owner's durable state is not the room's. Both families that write it — memory and the
 /// schedule table — are refused in a topic before their handler runs, so nothing parks there and
 /// the next plain line an attendee types can only ever be a message.
-@Suite struct GroupCommandRefusalTests {
+@Suite
+struct GroupCommandRefusalTests {
   private struct Harness {
     let router: MessageRouter
     let transport: RecordingTransport
@@ -37,15 +38,15 @@ import Testing
     }
   }
 
-  private static let groupChatId: Int64 = -1_001
-  private static let topicId: Int64 = 5
+  private static let groupChatID: Int64 = -1_001
+  private static let topicID: Int64 = 5
 
   private func makeHarness(
-    routerSessionMessages: ((SessionMessageStoreGRDB) -> any SessionMessageStore)? = nil
+    routerSessionMessages: ((_ store: SessionMessageStoreGRDB) -> any SessionMessageStore)? = nil
   ) throws -> Harness {
     let queue = try TestDatabase.make()
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: [42])
+    try allowlist.seedAllowlist(userIDs: [42])
 
     let transport = RecordingTransport()
     let dispatcher = FakeTurnRunner()
@@ -59,7 +60,7 @@ import Testing
       memoryCommands: MemoryCommandStoreGRDB(writer: queue),
       pendingConfirmations: pendingConfirmations,
       botIdentity: BotIdentity(id: 900, username: "claw_bot"),
-      accessControl: AccessControl(allowlist: allowlist, groupChats: [Self.groupChatId]),
+      accessControl: AccessControl(allowlist: allowlist, groupChats: [Self.groupChatID]),
       delivery: transport,
       turnRunner: dispatcher,
       imageCache: ImageCache(),
@@ -83,15 +84,16 @@ import Testing
     textUpdate(
       id: id,
       from: 7,
-      chat: Self.groupChatId,
+      chat: Self.groupChatID,
       text: text,
       chatKind: .supergroup,
-      messageThreadId: Self.topicId,
+      messageThreadID: Self.topicID,
       senderDisplayName: "Ada"
     )
   }
 
-  @Test func anOwnerScopedCommandIsRefusedBeforeItCanParkAConfirmation() async throws {
+  @Test
+  func anOwnerScopedCommandIsRefusedBeforeItCanParkAConfirmation() async throws {
     // given — the /remember spelling that would park a confirmation in a DM
     let harness = try makeHarness()
 
@@ -106,32 +108,28 @@ import Testing
     #expect(await harness.dispatcher.calls.isEmpty)
     #expect(try harness.memoryItemCount() == 0)
     #expect(try harness.scheduledJobCount() == 0)
-    let topicKey = SessionKey.telegramTopic(
-      chatId: Self.groupChatId,
-      threadId: Self.topicId
-    )
+    let topicKey = SessionKey.telegramTopic(chatID: Self.groupChatID, threadID: Self.topicID)
     #expect(try harness.sessionMessages.findSession(sessionKey: topicKey) == nil)
   }
 
   /// A store whose only broken operation is the confirmation lookup: reaching the resolver is
   /// then a `.transientFailure` nothing else in the router produces for plain text.
   private func harnessWithBrokenPendingLookup() throws -> Harness {
-    try makeHarness(routerSessionMessages: { real in
+    try makeHarness { real in
       FakeSessionMessageStore(
         failures: [.findSession: .unexpected("pending lookup is down")],
         delegatingTo: real
       )
-    })
+    }
   }
 
-  @Test func aTopicLineIsNeverOfferedToTheConfirmationResolver() async throws {
+  @Test
+  func aTopicLineIsNeverOfferedToTheConfirmationResolver() async throws {
     // given
     let harness = try harnessWithBrokenPendingLookup()
 
     // when — an addressed plain line in the room
-    let outcome = await harness.router.handle(
-      rawUpdate: groupUpdate(id: 1, text: "@claw_bot yes")
-    )
+    let outcome = await harness.router.handle(rawUpdate: groupUpdate(id: 1, text: "@claw_bot yes"))
 
     // then — the broken lookup was never called, so the turn ran
     await harness.dispatcher.waitForCalls(atLeast: 1)

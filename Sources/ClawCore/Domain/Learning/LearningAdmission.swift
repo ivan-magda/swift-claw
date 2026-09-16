@@ -29,25 +29,25 @@ public struct AdmissionReceipt: Sendable, Equatable, Codable {
 
   public let candidateDigest: CandidateDigest
   public let replacementDigest: LessonSetDigest
-  public let trialId: Int64
+  public let trialID: Int64
   public let generation: Int
 
   public init(
     candidateDigest: CandidateDigest,
     replacementDigest: LessonSetDigest,
-    trialId: Int64,
+    trialID: Int64,
     generation: Int
   ) {
     self.candidateDigest = candidateDigest
     self.replacementDigest = replacementDigest
-    self.trialId = trialId
+    self.trialID = trialID
     self.generation = generation
   }
 
   enum CodingKeys: String, CodingKey {
     case candidateDigest = "candidate_digest"
     case replacementDigest = "replacement_digest"
-    case trialId = "trial_id"
+    case trialID = "trial_id"
     case generation
   }
 }
@@ -60,22 +60,22 @@ public enum AdmissionOutcome: Sendable, Equatable {
 
 public struct CandidateApproval: Sendable, Equatable {
   public let predecessorDigest: CandidateDigest
-  public let feedbackEventId: Int64
+  public let feedbackEventID: Int64
 
-  public init(predecessorDigest: CandidateDigest, feedbackEventId: Int64) {
+  public init(predecessorDigest: CandidateDigest, feedbackEventID: Int64) {
     self.predecessorDigest = predecessorDigest
-    self.feedbackEventId = feedbackEventId
+    self.feedbackEventID = feedbackEventID
   }
 }
 
 public struct CandidateEdit: Sendable, Equatable {
   public let predecessorDigest: CandidateDigest
-  public let feedbackEventId: Int64
+  public let feedbackEventID: Int64
   public let payload: Data
 
-  public init(predecessorDigest: CandidateDigest, feedbackEventId: Int64, payload: Data) {
+  public init(predecessorDigest: CandidateDigest, feedbackEventID: Int64, payload: Data) {
     self.predecessorDigest = predecessorDigest
-    self.feedbackEventId = feedbackEventId
+    self.feedbackEventID = feedbackEventID
     self.payload = payload
   }
 }
@@ -165,7 +165,7 @@ public enum AdmissionValidator {
     guard context.jobHasRecurrence, [.active, .paused].contains(context.jobStatus) else {
       return .jobNotRepeatable
     }
-    guard manifest.jobId == state.jobId, manifest.epoch == state.epoch else {
+    guard manifest.jobID == state.jobID, manifest.epoch == state.epoch else {
       return .staleEpoch
     }
     guard manifest.baseDigest == state.stableDigest else {
@@ -202,13 +202,13 @@ public enum AdmissionValidator {
   }
 
   public static func validatedReplacement(
-    jobId: Int64,
+    jobID: Int64,
     lessons: [String],
     redactor: SecretRedactor
   ) -> Result<LessonSet, AdmissionRejection> {
     let replacement: LessonSet
     do {
-      replacement = try LessonSet.canonical(jobId: jobId, lessons: lessons)
+      replacement = try LessonSet.canonical(jobID: jobID, lessons: lessons)
     } catch {
       return .failure(.lessonSet(error))
     }
@@ -218,10 +218,7 @@ public enum AdmissionValidator {
     return .success(replacement)
   }
 
-  private static func containsSecret(
-    _ replacement: LessonSet,
-    redactor: SecretRedactor
-  ) -> Bool {
+  private static func containsSecret(_ replacement: LessonSet, redactor: SecretRedactor) -> Bool {
     if replacement.lessons.contains(where: { lesson in
       redactor.redact(lesson) != lesson
     }) {
@@ -293,12 +290,11 @@ private extension CandidateSuccessorRules {
     replacement: LessonSet,
     intent: SuccessorIntent
   ) throws(AdmissionRejection) -> CandidateArtifact {
-    guard
-      intent.control.subjectKind == .candidate,
-      intent.control.subjectDigest == predecessor.digest.rawValue,
-      intent.control.signal == intent.expectedSignal,
-      intent.control.revision <= intent.feedbackRevision,
-      intent.feedbackRevision >= predecessor.manifest.feedbackRevision
+    guard intent.control.subjectKind == .candidate,
+          intent.control.subjectDigest == predecessor.digest.rawValue,
+          intent.control.signal == intent.expectedSignal,
+          intent.control.revision <= intent.feedbackRevision,
+          intent.feedbackRevision >= predecessor.manifest.feedbackRevision
     else {
       throw .invalidOwnerControl
     }
@@ -306,12 +302,12 @@ private extension CandidateSuccessorRules {
     let manifest = CandidateSourceManifest(
       origin: intent.origin,
       algorithm: source.algorithm,
-      jobId: source.jobId,
+      jobID: source.jobID,
       epoch: source.epoch,
       triggerDigest: source.triggerDigest,
       triggerReason: source.triggerReason,
       qualifyingIssueCodes: source.qualifyingIssueCodes,
-      operationId: source.operationId,
+      operationID: source.operationID,
       carrierDigest: source.carrierDigest,
       resultDigest: source.resultDigest,
       baseDigest: source.baseDigest,

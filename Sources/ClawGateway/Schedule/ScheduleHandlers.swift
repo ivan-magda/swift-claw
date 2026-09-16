@@ -26,41 +26,41 @@ struct ScheduleHandlers: Sendable {
   ) async throws(RoutingHalt) -> HandleOutcome {
     let claim = try await replies.perform(
       "schedule claim",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId)
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID)
     ) {
       try sessionMessages.claimCommandUpdate(
-        updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
+        updateID: rawUpdate.updateID,
+        sessionKey: SessionKey.telegramDM(chatID: message.chatID),
         now: now()
       )
     }
 
-    guard case .claimed(let sessionId) = claim else {
-      return replies.skipDuplicate(updateId: rawUpdate.updateId)
+    guard case .claimed(let sessionID) = claim else {
+      return replies.skipDuplicate(updateID: rawUpdate.updateID)
     }
 
-    let parseResult = await schedule.parser.parse(ownerText: text, sessionId: sessionId)
+    let parseResult = await schedule.parser.parse(ownerText: text, sessionID: sessionID)
     switch parseResult {
     case .providerUnavailable, .authenticationRequired, .accessDenied, .quotaLimited:
       // Every provider-side failure gives the same actionable guidance a turn does and arms nothing:
       // the auth reply names `clawd auth login`; access and quota deliberately do NOT say to log in.
       return await replies.sendCommandAck(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
         text: ScheduleReplies.providerFailure(parseResult)
       )
     case .budgetDenied(let cap):
       // The day-spend gate refused before the call issued; nothing armed, plain-language stop.
       return await replies.sendCommandAck(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
         text: Degradation.budget(cap: cap)
       )
     case .unparseable:
       return await replies.sendCommandAck(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
         text: ScheduleReplies.parseFailed
       )
     case .draft(let draft):
@@ -68,16 +68,16 @@ struct ScheduleHandlers: Sendable {
       switch schedule.validator.validate(draft, now: nowDate) {
       case .failure(let problem):
         return await replies.sendCommandAck(
-          updateId: rawUpdate.updateId,
-          target: .chat(message.chatId),
+          updateID: rawUpdate.updateID,
+          target: .chat(message.chatID),
           text: problem.ownerReply
         )
       case .success(let validated):
         // Single slot per session: a second /schedule visibly displaces the older draft.
-        await pendingConfirmations.park(.scheduleArm(validated), sessionId: sessionId)
+        await pendingConfirmations.park(.scheduleArm(validated), sessionID: sessionID)
         return await replies.sendCommandAck(
-          updateId: rawUpdate.updateId,
-          target: .chat(message.chatId),
+          updateID: rawUpdate.updateID,
+          target: .chat(message.chatID),
           text: ScheduleReplies.confirmPrompt(
             schedule: validated,
             nextFires: schedule.policy.confirmPreview(
@@ -93,19 +93,19 @@ struct ScheduleHandlers: Sendable {
 
   /// `/schedule list`: read-only, deduped via the canned-reply claim like
   /// `CommandHandlers.memoryReview`.
-  func list(rawUpdate: RawUpdate, chatId: Int64) async throws(RoutingHalt) -> HandleOutcome {
+  func list(rawUpdate: RawUpdate, chatID: Int64) async throws(RoutingHalt) -> HandleOutcome {
     let jobs = try await replies.perform(
       "schedule list",
-      updateId: rawUpdate.updateId,
-      target: .chat(chatId)
+      updateID: rawUpdate.updateID,
+      target: .chat(chatID)
     ) {
       try schedule.jobs.listAll()
     }
 
     guard jobs.isEmpty == false else {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        target: .chat(chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(chatID),
         text: ScheduleReplies.emptyList
       )
     }
@@ -114,8 +114,8 @@ struct ScheduleHandlers: Sendable {
       (job: job, nextFire: displayNextFire(job))
     }
     return await replies.sendCanned(
-      updateId: rawUpdate.updateId,
-      target: .chat(chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(chatID),
       text: ScheduleReplies.listLines(rows)
     )
   }
@@ -123,30 +123,30 @@ struct ScheduleHandlers: Sendable {
   func pause(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    jobId: Int64?
+    jobID: Int64?
   ) async throws(RoutingHalt) -> HandleOutcome {
-    guard let jobId else {
+    guard let jobID else {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
         text: ScheduleReplies.pauseUsage
       )
     }
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
+    try await replies.claimUpdate(updateID: rawUpdate.updateID, target: .chat(message.chatID))
 
     let paused = try await replies.perform(
       "pause",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       onFailure: .ack(ScheduleReplies.verbFailed)
     ) {
-      try schedule.jobs.pause(id: jobId, now: now())
+      try schedule.jobs.pause(id: jobID, now: now())
     }
 
-    let reply = paused.map(ScheduleReplies.paused) ?? ScheduleReplies.notFound(id: jobId)
+    let reply = paused.map(ScheduleReplies.paused) ?? ScheduleReplies.notFound(id: jobID)
     return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       text: reply
     )
   }
@@ -154,54 +154,54 @@ struct ScheduleHandlers: Sendable {
   func resume(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    jobId: Int64?
+    jobID: Int64?
   ) async throws(RoutingHalt) -> HandleOutcome {
-    guard let jobId else {
+    guard let jobID else {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
         text: ScheduleReplies.resumeUsage
       )
     }
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
+    try await replies.claimUpdate(updateID: rawUpdate.updateID, target: .chat(message.chatID))
 
     // The CALLER recomputes next-from-now: occurrences inside the paused
     // window are skipped, never caught up. No race with the ticker: the row is PAUSED
     // until `resume` commits, and the ticker's scan predicate excludes PAUSED.
     let job = try await replies.perform(
       "resume lookup",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       onFailure: .ack(ScheduleReplies.verbFailed)
     ) {
-      try schedule.jobs.job(id: jobId)
+      try schedule.jobs.job(id: jobID)
     }
 
     guard let job else {
       return await replies.sendCommandAck(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
-        text: ScheduleReplies.notFound(id: jobId)
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
+        text: ScheduleReplies.notFound(id: jobID)
       )
     }
 
     let resumed = try await replies.perform(
       "resume",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       onFailure: .ack(ScheduleReplies.verbFailed)
     ) {
       try schedule.jobs.resume(
-        id: jobId,
+        id: jobID,
         nextOccurrence: schedule.policy.resumeOccurrence(for: job, from: now()),
         now: now()
       )
     }
 
-    let reply = resumed.map(ScheduleReplies.resumed) ?? ScheduleReplies.notFound(id: jobId)
+    let reply = resumed.map(ScheduleReplies.resumed) ?? ScheduleReplies.notFound(id: jobID)
     return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       text: reply
     )
   }
@@ -209,49 +209,49 @@ struct ScheduleHandlers: Sendable {
   func runNow(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    jobId: Int64?
+    jobID: Int64?
   ) async throws(RoutingHalt) -> HandleOutcome {
-    guard let jobId else {
+    guard let jobID else {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
         text: ScheduleReplies.runNowUsage
       )
     }
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
+    try await replies.claimUpdate(updateID: rawUpdate.updateID, target: .chat(message.chatID))
 
     let outcome = try await replies.perform(
       "run-now",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       onFailure: .ack(ScheduleReplies.verbFailed)
     ) {
-      try schedule.jobs.fireNow(jobId: jobId, now: now())
+      try schedule.jobs.fireNow(jobID: jobID, now: now())
     }
 
     switch outcome {
     case .ineligible:
       return await replies.sendCommandAck(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
-        text: ScheduleReplies.notFound(id: jobId)
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
+        text: ScheduleReplies.notFound(id: jobID)
       )
     case .skippedActiveRun:
       // A real job, but a prior run on its session is still live — the fire was skipped, not
       // failed. Tell the owner rather than claiming the job doesn't exist.
       return await replies.sendCommandAck(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
-        text: ScheduleReplies.alreadyRunning(id: jobId)
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
+        text: ScheduleReplies.alreadyRunning(id: jobID)
       )
     case .fired(let fire):
       // The fused fireNow already created the session, trigger message, PENDING run, and
       // jobExecuted audit; TurnEnqueuer gives the run ordering and cancellability.
       await enqueuer.enqueue(fire: fire)
       return await replies.sendCommandAck(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
-        text: ScheduleReplies.runningNow(id: jobId)
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
+        text: ScheduleReplies.runningNow(id: jobID)
       )
     }
   }
@@ -259,30 +259,30 @@ struct ScheduleHandlers: Sendable {
   func cancelJob(
     rawUpdate: RawUpdate,
     message: IncomingMessage,
-    jobId: Int64?
+    jobID: Int64?
   ) async throws(RoutingHalt) -> HandleOutcome {
-    guard let jobId else {
+    guard let jobID else {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
         text: ScheduleReplies.cancelUsage
       )
     }
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
+    try await replies.claimUpdate(updateID: rawUpdate.updateID, target: .chat(message.chatID))
 
     let cancelled = try await replies.perform(
       "cancel",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       onFailure: .ack(ScheduleReplies.verbFailed)
     ) {
-      try schedule.jobs.cancel(id: jobId, now: now())
+      try schedule.jobs.cancel(id: jobID, now: now())
     }
 
-    let reply = cancelled.map(ScheduleReplies.cancelled) ?? ScheduleReplies.notFound(id: jobId)
+    let reply = cancelled.map(ScheduleReplies.cancelled) ?? ScheduleReplies.notFound(id: jobID)
     return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       text: reply
     )
   }

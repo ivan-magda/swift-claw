@@ -19,8 +19,7 @@ extension ClawDatabase {
 
     try db.create(table: "messages_new") { table in
       table.autoIncrementedPrimaryKey("id")
-      table.column("session_id", .integer).notNull()
-        .references("sessions", onDelete: .cascade)
+      table.column("session_id", .integer).notNull().references("sessions", onDelete: .cascade)
       table.column("run_id", .integer).references("runs", onDelete: .setNull)
       table.column("role", .text).notNull()
       table.column("content", .text).notNull()
@@ -67,8 +66,7 @@ extension ClawDatabase {
     try db.create(table: "provider_usage_new") { table in
       table.autoIncrementedPrimaryKey("id")
       table.column("run_id", .integer).references("runs", onDelete: .cascade)
-      table.column("session_id", .integer).notNull()
-        .references("sessions", onDelete: .cascade)
+      table.column("session_id", .integer).notNull().references("sessions", onDelete: .cascade)
       table.column("model", .text).notNull()
       table.column("prompt_tokens", .integer).notNull()
       table.column("completion_tokens", .integer).notNull()

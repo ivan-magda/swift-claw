@@ -114,10 +114,7 @@ struct FallbackCompositionAcceptanceTests {
 
     // given — a transport that walls the plan off on the primary's endpoint and answers on the
     // fallback's, and the production roster composed over it
-    let http = ScriptedHTTPExecutor([
-      FallbackWire.quotaExhausted,
-      .ok(FallbackWire.okCompletion),
-    ])
+    let http = ScriptedHTTPExecutor([FallbackWire.quotaExhausted, .ok(FallbackWire.okCompletion)])
     let rosterStack = try harness.builder.makeRosterStack(http: http)
     let runtime = FallbackWire.makeRuntime(
       roster: rosterStack.roster,
@@ -127,9 +124,9 @@ struct FallbackCompositionAcceptanceTests {
 
     // when — one turn runs
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 1,
-      chatId: 1,
+      runID: 1,
+      sessionID: 1,
+      chatID: 1,
       buildResult: BuildResult(
         messages: [ChatMessage(role: .user, content: "what time is it?")],
         ownerNotices: [],
@@ -161,9 +158,15 @@ struct FallbackCompositionAcceptanceTests {
     // so the two routes never shared a wire
     let earlier = recorded.dropLast()
     #expect(earlier.isEmpty == false)
-    #expect(earlier.allSatisfy { request in request.url == FallbackWire.chatGPTURL })
     #expect(
-      earlier.allSatisfy { request in request.headers["Authorization"] == "Bearer acc-token" }
+      earlier.allSatisfy { request in
+        request.url == FallbackWire.chatGPTURL
+      }
+    )
+    #expect(
+      earlier.allSatisfy { request in
+        request.headers["Authorization"] == "Bearer acc-token"
+      }
     )
   }
 }
@@ -181,9 +184,9 @@ private enum FallbackWire {
   static var secrets: Secrets {
     Secrets(
       telegramBotToken: "token",
-      llmApiKey: "sk-primary-key",
-      searchApiKey: nil,
-      llmFallbackApiKey: fallbackKey
+      llmAPIKey: "sk-primary-key",
+      searchAPIKey: nil,
+      llmFallbackAPIKey: fallbackKey
     )
   }
 

@@ -84,7 +84,9 @@ public struct CodexBackend: CoderBackend {
     )
     do {
       return redactor.redact(try await context.compatibility(executable: executable))
-    } catch let error as CoderError {
+    } catch let
+      error as CoderError
+    {
       throw error
     } catch {
       throw CoderError.unavailable(
@@ -111,23 +113,28 @@ public struct CodexBackend: CoderBackend {
       timeout: CoderCommandRunner.readOnlyTimeout
     )
     let result = await CoderCommandRunner().run(command, tracking: .preApprovalReadOnly) { _ in }
-    guard !result.supervisionFailed, result.cleanupResolved, !result.cancelled,
-      !result.timedOut, result.signal == nil
+    guard !result.supervisionFailed,
+          result.cleanupResolved,
+          !result.cancelled,
+          !result.timedOut,
+          result.signal == nil
     else {
       return .unavailable
     }
     switch result.exitCode {
-    case 0: return .authenticated
+    case 0:
+      return .authenticated
     case 1:
       return result.diagnostics.trimmingCharacters(in: .whitespacesAndNewlines) == "Not logged in"
         ? .missing : .unavailable
-    default: return .unavailable
+    default:
+      return .unavailable
     }
   }
 
   public func run(
     _ invocation: CoderInvocation,
-    recordProcess: @Sendable (CoderProcessEvent) async throws -> Void
+    recordProcess: @Sendable (_ event: CoderProcessEvent) async throws -> Void
   ) async -> CoderResult {
     await run(invocation, workerRunner: CoderCommandRunner(), recordProcess: recordProcess)
   }
@@ -135,7 +142,7 @@ public struct CodexBackend: CoderBackend {
   func run(
     _ invocation: CoderInvocation,
     workerRunner: CoderCommandRunner,
-    recordProcess: @Sendable (CoderProcessEvent) async throws -> Void
+    recordProcess: @Sendable (_ event: CoderProcessEvent) async throws -> Void
   ) async -> CoderResult {
     await withoutActuallyEscaping(recordProcess) { recordProcess in
       await execute(invocation, workerRunner: workerRunner, recordProcess: recordProcess)
@@ -149,12 +156,13 @@ private extension CodexBackend {
   func execute(
     _ invocation: CoderInvocation,
     workerRunner: CoderCommandRunner,
-    recordProcess: @Sendable @escaping (CoderProcessEvent) async throws -> Void
+    recordProcess: @Sendable @escaping (_ event: CoderProcessEvent) async throws -> Void
   ) async -> CoderResult {
     let deadline = ContinuousClock.now.advanced(by: invocation.timeout)
     var outcome = CodexOutcome()
-    let protocolDirectory = URL(fileURLWithPath: invocation.jobDirectory)
-      .appendingPathComponent("protocol-\(UUID().uuidString)")
+    let protocolDirectory = URL(fileURLWithPath: invocation.jobDirectory).appendingPathComponent(
+      "protocol-\(UUID().uuidString)"
+    )
     var stage = CoderFailureStage.preparation
     do {
       try PrivateDirectory.ensure(at: protocolDirectory)
@@ -202,7 +210,9 @@ private extension CodexBackend {
       outcome.stopIfNeeded(deadline: deadline)
     }
     if FileManager.default.fileExists(atPath: protocolDirectory.path) {
-      do { try FileManager.default.removeItem(at: protocolDirectory) } catch {
+      do {
+        try FileManager.default.removeItem(at: protocolDirectory)
+      } catch {
         outcome.fail(.cleanup, "Private Codex protocol files could not be removed.")
       }
     }
@@ -293,8 +303,10 @@ private extension CodexBackend {
   func classifyReport(events: CodexEvents, outcome: inout CodexOutcome) async {
     if let report = outcome.report {
       switch report.status {
-      case .blocked: outcome.fail(.permission, report.error ?? "Codex reported the task blocked.")
-      case .failed: outcome.fail(.execution, report.error ?? "Codex reported the task failed.")
+      case .blocked:
+        outcome.fail(.permission, report.error ?? "Codex reported the task blocked.")
+      case .failed:
+        outcome.fail(.execution, report.error ?? "Codex reported the task failed.")
       case .succeeded:
         if await events.completed {
           outcome.state = .succeeded

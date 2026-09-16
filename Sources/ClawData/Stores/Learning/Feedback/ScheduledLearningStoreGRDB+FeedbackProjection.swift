@@ -12,20 +12,20 @@ extension ScheduledLearningStoreGRDB {
 
   static func storedFeedback(
     _ db: Database,
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
-    runIds: Set<Int64>,
+    runIDs: Set<Int64>,
     evaluationRuns: [String: Int64],
     cutoff: FeedbackRevision? = nil
   ) throws -> [StoredFeedbackProjection] {
-    let runSubjects = runIds.map(String.init).sorted()
+    let runSubjects = runIDs.map(String.init).sorted()
     let evaluationSubjects = evaluationRuns.keys.sorted()
     guard runSubjects.isEmpty == false || evaluationSubjects.isEmpty == false else {
       return []
     }
 
     var subjectPredicates: [String] = []
-    var arguments: [any DatabaseValueConvertible] = [jobId, epoch.value]
+    var arguments: [any DatabaseValueConvertible] = [jobID, epoch.value]
     if runSubjects.isEmpty == false {
       let placeholders = Array(repeating: "?", count: runSubjects.count).joined(separator: ", ")
       subjectPredicates.append("(subject_kind = ? AND subject_digest IN (\(placeholders)))")
@@ -33,8 +33,9 @@ extension ScheduledLearningStoreGRDB {
       arguments.append(contentsOf: runSubjects)
     }
     if evaluationSubjects.isEmpty == false {
-      let placeholders = Array(repeating: "?", count: evaluationSubjects.count)
-        .joined(separator: ", ")
+      let placeholders = Array(repeating: "?", count: evaluationSubjects.count).joined(
+        separator: ", "
+      )
       subjectPredicates.append("(subject_kind = ? AND subject_digest IN (\(placeholders)))")
       arguments.append(FeedbackSubjectKind.evaluation.rawValue)
       arguments.append(contentsOf: evaluationSubjects)
@@ -62,9 +63,9 @@ extension ScheduledLearningStoreGRDB {
     return try rows.map { row in
       try decodeStoredFeedback(
         row,
-        jobId: jobId,
+        jobID: jobID,
         epoch: epoch,
-        runIds: runIds,
+        runIDs: runIDs,
         evaluationRuns: evaluationRuns
       )
     }
@@ -72,73 +73,68 @@ extension ScheduledLearningStoreGRDB {
 
   private static func decodeStoredFeedback(
     _ row: Row,
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
-    runIds: Set<Int64>,
+    runIDs: Set<Int64>,
     evaluationRuns: [String: Int64]
   ) throws -> StoredFeedbackProjection {
-    guard
-      let eventId = SQLiteStoredValue.int64(in: row, column: "event_id"),
-      eventId > 0,
-      let kindRaw = SQLiteStoredValue.string(in: row, column: "subject_kind"),
-      let kind = FeedbackSubjectKind(rawValue: kindRaw),
-      let subject = SQLiteStoredValue.string(in: row, column: "subject_digest"),
-      let signalRaw = SQLiteStoredValue.string(in: row, column: "signal"),
-      let signal = OwnerSignal(rawValue: signalRaw),
-      signal.feedbackSubjectKind == kind,
-      let payload = SQLiteStoredValue.nullableString(in: row, column: "payload"),
-      let revisionRaw = SQLiteStoredValue.int64(in: row, column: "feedback_revision"),
-      revisionRaw > 0,
-      let supersedes = SQLiteStoredValue.nullableInt64(in: row, column: "supersedes"),
-      let occurredRaw = SQLiteStoredValue.int64(in: row, column: "occurred_at"),
-      let occurredAt = EpochSecondCodec.date(fromEpoch: occurredRaw),
-      let actorRaw = SQLiteStoredValue.string(in: row, column: "actor"),
-      let actor = AuditActor(rawValue: actorRaw),
-      let updateId = SQLiteStoredValue.nullableInt64(in: row, column: "transport_update_id")
+    guard let eventID = SQLiteStoredValue.int64(in: row, column: "event_id"),
+          eventID > 0,
+          let kindRaw = SQLiteStoredValue.string(in: row, column: "subject_kind"),
+          let kind = FeedbackSubjectKind(rawValue: kindRaw),
+          let subject = SQLiteStoredValue.string(in: row, column: "subject_digest"),
+          let signalRaw = SQLiteStoredValue.string(in: row, column: "signal"),
+          let signal = OwnerSignal(rawValue: signalRaw),
+          signal.feedbackSubjectKind == kind,
+          let payload = SQLiteStoredValue.nullableString(in: row, column: "payload"),
+          let revisionRaw = SQLiteStoredValue.int64(in: row, column: "feedback_revision"),
+          revisionRaw > 0,
+          let supersedes = SQLiteStoredValue.nullableInt64(in: row, column: "supersedes"),
+          let occurredRaw = SQLiteStoredValue.int64(in: row, column: "occurred_at"),
+          let occurredAt = EpochSecondCodec.date(fromEpoch: occurredRaw),
+          let actorRaw = SQLiteStoredValue.string(in: row, column: "actor"),
+          let actor = AuditActor(rawValue: actorRaw),
+          let updateID = SQLiteStoredValue.nullableInt64(in: row, column: "transport_update_id")
     else {
       throw StoreError.unexpected("assignment source holds an unreadable feedback event")
     }
-    let runId: Int64
+    let runID: Int64
     switch kind {
     case .run:
-      guard
-        let parsed = Int64(subject),
-        String(parsed) == subject,
-        runIds.contains(parsed)
-      else {
+      guard let parsed = Int64(subject), String(parsed) == subject, runIDs.contains(parsed) else {
         throw StoreError.unexpected("run feedback subject does not match its assignment")
       }
-      runId = parsed
+      runID = parsed
     case .evaluation:
       guard let parsed = evaluationRuns[subject] else {
         throw StoreError.unexpected("evaluation feedback subject does not match its assignment")
       }
-      runId = parsed
+      runID = parsed
     case .candidate, .promotion:
       throw StoreError.unexpected("assignment feedback has an unsupported subject")
     }
     let revision = FeedbackRevision(revisionRaw)
     let event = FeedbackEvent(
-      id: eventId,
-      runId: runId,
+      id: eventID,
+      runID: runID,
       signal: signal,
       payload: payload.value,
       revision: revision,
       supersedes: supersedes.value,
       occurredAt: occurredAt,
       actor: actor,
-      transportUpdateId: updateId.value
+      transportUpdateID: updateID.value
     )
     let digest = try FeedbackEventDigest.of(
-      eventId: eventId,
-      jobId: jobId,
+      eventID: eventID,
+      jobID: jobID,
       epoch: epoch,
       subjectKind: kind,
       subjectDigest: subject,
       signal: signal,
       payload: payload.value,
       actor: actor,
-      transportUpdateId: updateId.value,
+      transportUpdateID: updateID.value,
       revision: revision,
       supersedes: supersedes.value,
       occurredAtEpochSecond: occurredRaw
@@ -146,7 +142,7 @@ extension ScheduledLearningStoreGRDB {
     return StoredFeedbackProjection(
       event: event,
       source: CandidateFeedbackSource(
-        eventId: eventId,
+        eventID: eventID,
         digest: digest,
         revision: revision,
         subjectKind: kind,

@@ -4,10 +4,12 @@ import Testing
 
 @testable import ClawTelegram
 
-@Suite struct CallbackWireTests {
+@Suite
+struct CallbackWireTests {
   private let decoder = JSONDecoder()
 
-  @Test func decodesACallbackQueryUpdate() throws {
+  @Test
+  func decodesACallbackQueryUpdate() throws {
     // given — a getUpdates payload carrying a callback_query (an inline-button tap)
     let json = """
       {
@@ -32,7 +34,8 @@ import Testing
     #expect(callback.data == "apr:abc123:y")
   }
 
-  @Test func plainMessageUpdateHasNoCallback() throws {
+  @Test
+  func plainMessageUpdateHasNoCallback() throws {
     // given — an ordinary text update with no callback_query key
     let json = """
       {"update_id": 1, "message": {"message_id": 9, "chat": {"id": 7}, "text": "hi"}}

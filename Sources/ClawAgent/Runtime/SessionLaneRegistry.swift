@@ -75,6 +75,7 @@ public actor SessionLaneRegistry {
     }
 
     let operationID = nextOperationID
+    // IDs are process-local opaque bits, not an ordered count, so overflow continues the cycle.
     nextOperationID &+= 1
     let predecessor = sessionTails[sessionID]?.task
 
@@ -91,11 +92,7 @@ public actor SessionLaneRegistry {
       await work()
     }
 
-    operations[operationID] = ActiveOperation(
-      runID: runID,
-      sessionID: sessionID,
-      task: task
-    )
+    operations[operationID] = ActiveOperation(runID: runID, sessionID: sessionID, task: task)
     sessionTails[sessionID] = SessionTail(operationID: operationID, task: task)
     return .accepted
   }

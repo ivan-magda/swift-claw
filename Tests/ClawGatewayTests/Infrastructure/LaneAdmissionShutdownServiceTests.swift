@@ -7,7 +7,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct LaneAdmissionShutdownServiceTests {
+@Suite
+struct LaneAdmissionShutdownServiceTests {
   /// A scripted clock whose drain-deadline sleep signals `drainStarted` (proving the full shutdown
   /// sequence — close admission, cancel, begin drain — has run) and then parks on `holdDeadline`.
   /// The park is cancellation-aware, so a clean drain's `deadline.cancel()` releases it; opening
@@ -22,7 +23,8 @@ import Testing
     }
   }
 
-  @Test func closesAdmissionOnShutdownAndDrainsAfterTurnsFinish() async throws {
+  @Test
+  func closesAdmissionOnShutdownAndDrainsAfterTurnsFinish() async throws {
     // given — a service over lanes holding one turn that outlives its own cancellation.
     let lanes = SessionLaneRegistry()
     let outcome = LaneShutdownOutcome()
@@ -60,7 +62,7 @@ import Testing
       await drainStarted.wait()
 
       // then — a racing enqueue after admission closed is rejected…
-      let racing = await lanes.enqueue(sessionID: 2, runID: 2, work: {})
+      let racing = await lanes.enqueue(sessionID: 2, runID: 2) {}
       #expect(racing == .shuttingDown)
       // …and the service is still draining (waiting on the held turn), so nothing is recorded yet.
       #expect(await outcome.value() == nil)
@@ -70,11 +72,16 @@ import Testing
     }
 
     // then
-    #expect(cancelledObserved.withLock { observed in observed } == true)
+    #expect(
+      cancelledObserved.withLock { observed in
+        observed
+      } == true
+    )
     #expect(await outcome.value() == .drained)
   }
 
-  @Test func timesOutWithSortedActiveRunIDsWhenTurnsStayInFlight() async throws {
+  @Test
+  func timesOutWithSortedActiveRunIDsWhenTurnsStayInFlight() async throws {
     // given — two turns on distinct sessions that never finish, enqueued out of run-id order.
     let lanes = SessionLaneRegistry()
     let outcome = LaneShutdownOutcome()
@@ -163,7 +170,7 @@ import Testing
 
     // then — admission closed via the cancel backstop (not the graceful handler), so a racing
     // enqueue is rejected, and the service is still draining the held turn, so nothing is recorded yet.
-    let racing = await lanes.enqueue(sessionID: 2, runID: 2, work: {})
+    let racing = await lanes.enqueue(sessionID: 2, runID: 2) {}
     #expect(racing == .shuttingDown)
     #expect(await outcome.value() == nil)
 
@@ -176,11 +183,16 @@ import Testing
     }
 
     // then — the cancelled turn observed its cancellation, and exactly one outcome landed.
-    #expect(cancelledObserved.withLock { observed in observed } == true)
+    #expect(
+      cancelledObserved.withLock { observed in
+        observed
+      } == true
+    )
     #expect(await outcome.value() == .drained)
   }
 
-  @Test func drainsImmediatelyWithNoRegisteredTurns() async throws {
+  @Test
+  func drainsImmediatelyWithNoRegisteredTurns() async throws {
     // given — a service over empty lanes; the clock must never be slept on.
     let lanes = SessionLaneRegistry()
     let outcome = LaneShutdownOutcome()

@@ -24,18 +24,25 @@ public enum Importance: Int, Sendable, Equatable, Comparable, CaseIterable {
   /// The wire/owner-facing vocabulary; the `Int` rawValue is the storage form.
   public var wireLabel: String {
     switch self {
-    case .low: "low"
-    case .normal: "normal"
-    case .high: "high"
+    case .low:
+      "low"
+    case .normal:
+      "normal"
+    case .high:
+      "high"
     }
   }
 
   public init?(wireLabel: String) {
     switch wireLabel {
-    case "low": self = .low
-    case "normal": self = .normal
-    case "high": self = .high
-    default: return nil
+    case "low":
+      self = .low
+    case "normal":
+      self = .normal
+    case "high":
+      self = .high
+    default:
+      return nil
     }
   }
 }
@@ -55,7 +62,7 @@ public struct MemoryItem: Sendable, Equatable, Identifiable {
   public let sensitivity: Sensitivity
   public let importance: Importance
   public let source: MemorySource
-  public let sessionId: Int64?
+  public let sessionID: Int64?
   public let createdAt: Date
 
   public init(
@@ -65,7 +72,7 @@ public struct MemoryItem: Sendable, Equatable, Identifiable {
     sensitivity: Sensitivity,
     importance: Importance,
     source: MemorySource,
-    sessionId: Int64?,
+    sessionID: Int64?,
     createdAt: Date
   ) {
     self.id = id
@@ -74,7 +81,7 @@ public struct MemoryItem: Sendable, Equatable, Identifiable {
     self.sensitivity = sensitivity
     self.importance = importance
     self.source = source
-    self.sessionId = sessionId
+    self.sessionID = sessionID
     self.createdAt = createdAt
   }
 }
@@ -85,7 +92,7 @@ public struct NewMemoryItem: Sendable, Equatable {
   public let sensitivity: Sensitivity
   public let importance: Importance
   public let source: MemorySource
-  public let sessionId: Int64?
+  public let sessionID: Int64?
 
   public init(
     text: String,
@@ -93,13 +100,13 @@ public struct NewMemoryItem: Sendable, Equatable {
     sensitivity: Sensitivity = .normal,
     importance: Importance = .normal,
     source: MemorySource = .owner,
-    sessionId: Int64?
+    sessionID: Int64?
   ) {
     self.text = text
     self.kind = kind
     self.sensitivity = sensitivity
     self.importance = importance
     self.source = source
-    self.sessionId = sessionId
+    self.sessionID = sessionID
   }
 }

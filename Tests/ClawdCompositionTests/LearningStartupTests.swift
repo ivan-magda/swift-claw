@@ -9,8 +9,10 @@ import Testing
 @testable import ClawGateway
 @testable import clawd
 
-@Suite struct LearningStartupTests {
-  @Test func recoveryDoesNotHoldPrimaryDeliveryOrOwnerControl() async throws {
+@Suite
+struct LearningStartupTests {
+  @Test
+  func recoveryDoesNotHoldPrimaryDeliveryOrOwnerControl() async throws {
     // given
     let entered = AsyncGate()
     let release = AsyncGate()
@@ -53,7 +55,7 @@ import Testing
           throw ScriptedTransportFailure(message: "expected buffered completion")
         }
         return result
-      }
+      },
     ])
     var environment = CompositionAcceptanceHarness.validEnv()
     environment[AppConfig.EnvKey.learningEnabled] = "true"
@@ -63,12 +65,12 @@ import Testing
     var builder = try CompositionAcceptance.makeBuilder(
       http: telegram,
       config: config,
-      secrets: Secrets(telegramBotToken: "tg-token", llmApiKey: "sk-test")
+      secrets: Secrets(telegramBotToken: "tg-token", llmAPIKey: "sk-test")
     )
     builder.now = {
       LearningAcceptanceHarness.now
     }
-    try builder.stores.allowlist.seedAllowlist(userIds: [LearningAcceptanceHarness.owner])
+    try builder.stores.allowlist.seedAllowlist(userIDs: [LearningAcceptanceHarness.owner])
     let backlog = try Self.commitBacklog(
       stores: builder.stores,
       route: config.llm.route.configuredReference
@@ -90,9 +92,10 @@ import Testing
       let command: [String: Any] = [
         "update_id": 1,
         "message": [
-          "message_id": 1000, "from": ["id": LearningAcceptanceHarness.owner],
+          "message_id": 1000,
+          "from": ["id": LearningAcceptanceHarness.owner],
           "chat": ["id": LearningAcceptanceHarness.owner, "type": "private"],
-          "text": "/pause \(backlog.jobId)",
+          "text": "/pause \(backlog.jobID)",
         ],
       ]
       let bytes = try JSONSerialization.data(withJSONObject: ["ok": true, "result": [command]])
@@ -100,9 +103,9 @@ import Testing
       await commandHandled.wait()
 
       // then
-      #expect(try builder.stores.scheduledJobs.job(id: backlog.jobId)?.status == .paused)
+      #expect(try builder.stores.scheduledJobs.job(id: backlog.jobID)?.status == .paused)
       #expect(release.isOpen == false)
-      #expect(try builder.stores.learning.evaluation(runId: backlog.runId) == nil)
+      #expect(try builder.stores.learning.evaluation(runID: backlog.runID) == nil)
       release.open()
       let learning = try #require(
         bundle.daemon.services.compactMap {
@@ -110,7 +113,7 @@ import Testing
         }.first
       )
       await learning.waitForPendingWork()
-      #expect(try builder.stores.learning.evaluation(runId: backlog.runId)?.outcome == .noIssue)
+      #expect(try builder.stores.learning.evaluation(runID: backlog.runID)?.outcome == .noIssue)
       daemon.cancel()
       _ = await daemon.result
       #expect(await llm.recorded.count == 1)
@@ -140,11 +143,14 @@ private extension LearningStartupTests {
   static func commitBacklog(
     stores: ClawStores,
     route: String
-  ) throws -> (jobId: Int64, runId: Int64) {
+  ) throws -> (
+    jobID: Int64,
+    runID: Int64
+  ) {
     let now = LearningAcceptanceHarness.now
     let job = try stores.scheduledJobs.create(
       NewScheduledJob(
-        ownerChatId: LearningAcceptanceHarness.owner,
+        ownerChatID: LearningAcceptanceHarness.owner,
         label: "digest",
         prompt: "Summarize material changes.",
         recurrence: SchedulingRuleFixtures.weekdayEnvelope(zone: .gmt),
@@ -153,12 +159,12 @@ private extension LearningStartupTests {
       ),
       now: now
     )
-    guard case .fired(let fire) = try stores.scheduledJobs.fireNow(jobId: job.id, now: now) else {
+    guard case .fired(let fire) = try stores.scheduledJobs.fireNow(jobID: job.id, now: now) else {
       throw StoreError.unexpected("expected eligible scheduled fire")
     }
-    _ = try stores.runs.pickUp(runId: fire.runId, now: now)
+    _ = try stores.runs.pickUp(runID: fire.runID, now: now)
     try stores.learning.freezeCompatibility(
-      runId: fire.runId,
+      runID: fire.runID,
       surface: RunSurface(
         toolCatalogDigest: "tools-v1",
         policyVersion: "policy-v1",
@@ -169,22 +175,22 @@ private extension LearningStartupTests {
     let answer = LearningAcceptanceHarness.answer
     _ = try stores.runs.commitAssistantTurn(
       AssistantTurn(
-        runId: fire.runId,
-        sessionId: fire.sessionId,
-        chatId: LearningAcceptanceHarness.owner,
+        runID: fire.runID,
+        sessionID: fire.sessionID,
+        chatID: LearningAcceptanceHarness.owner,
         content: answer,
-        usage: usageFixture(sessionId: fire.sessionId, runId: fire.runId),
+        usage: usageFixture(sessionID: fire.sessionID, runID: fire.runID),
         chunks: [
           OutboxChunk(
             stepIndex: 0,
-            chatId: LearningAcceptanceHarness.owner,
+            chatID: LearningAcceptanceHarness.owner,
             payload: answer,
             payloadHash: ContentHash.fnv1a(answer)
-          )
+          ),
         ]
       ),
       now: now
     )
-    return (job.id, fire.runId)
+    return (job.id, fire.runID)
   }
 }

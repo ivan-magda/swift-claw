@@ -21,17 +21,11 @@ public struct ChatGPTTokenMetadata: Sendable, Equatable {
   /// bytes the daemon did not author, and on this path a malformed token must degrade to "no
   /// metadata" rather than become an error that outranks the server's own verdict.
   public static func extract(accessToken: String) -> ChatGPTTokenMetadata {
-    guard
-      let payload = decodedPayload(of: accessToken),
-      case .object(let claims) = payload
-    else {
+    guard let payload = decodedPayload(of: accessToken), case .object(let claims) = payload else {
       return ChatGPTTokenMetadata(expiresAt: nil, accountID: nil)
     }
 
-    return ChatGPTTokenMetadata(
-      expiresAt: expiry(from: claims),
-      accountID: account(from: claims)
-    )
+    return ChatGPTTokenMetadata(expiresAt: expiry(from: claims), accountID: account(from: claims))
   }
 }
 
@@ -66,19 +60,18 @@ private extension ChatGPTTokenMetadata {
   /// `Data(base64Encoded:)` without `.ignoreUnknownCharacters` rejects what the alphabet check
   /// could not.
   static func decodingBase64URL(_ segment: Substring) -> Data? {
-    guard
-      segment.isEmpty == false,
-      let decodedByteCount = decodedByteCount(ofBase64URL: segment),
-      decodedByteCount <= maximumPayloadBytes,
-      segment.unicodeScalars.allSatisfy(isBase64URLScalar)
+    guard segment.isEmpty == false,
+          let decodedByteCount = decodedByteCount(ofBase64URL: segment),
+          decodedByteCount <= maximumPayloadBytes,
+          segment.unicodeScalars.allSatisfy(isBase64URLScalar)
     else {
       return nil
     }
 
-    var standard =
-      segment
-      .replacingOccurrences(of: "-", with: "+")
-      .replacingOccurrences(of: "_", with: "/")
+    var standard = segment.replacingOccurrences(of: "-", with: "+").replacingOccurrences(
+      of: "_",
+      with: "/"
+    )
     standard.append(String(repeating: "=", count: (4 - standard.count % 4) % 4))
 
     return Data(base64Encoded: standard)
@@ -100,11 +93,8 @@ private extension ChatGPTTokenMetadata {
   }
 
   static func isBase64URLScalar(_ scalar: Unicode.Scalar) -> Bool {
-    ("A"..."Z").contains(scalar)
-      || ("a"..."z").contains(scalar)
-      || ("0"..."9").contains(scalar)
-      || scalar == "-"
-      || scalar == "_"
+    ("A"..."Z").contains(scalar) || ("a"..."z").contains(scalar) || ("0"..."9").contains(scalar)
+      || scalar == "-" || scalar == "_"
   }
 }
 
@@ -124,9 +114,8 @@ private extension ChatGPTTokenMetadata {
   /// issuer. Reusing the wire parser is what makes a fractional or negative expiry impossible here
   /// without restating the rule.
   static func expiry(from claims: [String: JSONValue]) -> Date? {
-    guard
-      let claim = claims[expiryClaimName],
-      let seconds = ChatGPTWireValues.positiveInteger(claim)
+    guard let claim = claims[expiryClaimName],
+          let seconds = ChatGPTWireValues.positiveInteger(claim)
     else {
       return nil
     }
@@ -134,9 +123,8 @@ private extension ChatGPTTokenMetadata {
   }
 
   static func account(from claims: [String: JSONValue]) -> String? {
-    guard
-      case .object(let auth)? = claims[authClaimName],
-      case .string(let raw)? = auth[accountClaimName]
+    guard case .object(let auth)? = claims[authClaimName],
+          case .string(let raw)? = auth[accountClaimName]
     else {
       return nil
     }

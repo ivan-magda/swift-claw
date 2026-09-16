@@ -17,11 +17,7 @@ struct MCPBootInputs: Sendable {
   let credentialRedactionValues: [String]
 
   /// No catalog: the feature is off, and every consumer downstream sees an empty tool set.
-  static let empty = MCPBootInputs(
-    config: .empty,
-    credentials: [:],
-    credentialRedactionValues: []
-  )
+  static let empty = MCPBootInputs(config: .empty, credentials: [:], credentialRedactionValues: [])
 
   /// The process-wide redaction set: the secret store's values plus every MCP token this boot
   /// loaded. Built here so the log backend and every redactor read one list rather than each

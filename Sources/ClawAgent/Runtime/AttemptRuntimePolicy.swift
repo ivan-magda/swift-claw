@@ -37,16 +37,18 @@ package struct AttemptRuntimePolicy: Sendable {
   package let terminalValidationPolicy: StreamingTerminalValidationPolicy
   package let outputLimits: AttemptOutputLimits?
   package let expectedWireModel: String?
+
   package let roundTripAdmission:
-    (@Sendable (ProviderRoundTripAdmissionContext) async -> ProviderRoundTripAdmission)?
+    (@Sendable (_ context: ProviderRoundTripAdmissionContext) async -> ProviderRoundTripAdmission)?
 
   package init(
     streamingReattemptPolicy: StreamingReattemptPolicy = .bufferedWhenSafe,
     terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal,
     outputLimits: AttemptOutputLimits? = nil,
     expectedWireModel: String? = nil,
-    roundTripAdmission:
-      (@Sendable (ProviderRoundTripAdmissionContext) async -> ProviderRoundTripAdmission)? = nil
+    roundTripAdmission: (
+      @Sendable (_ context: ProviderRoundTripAdmissionContext) async -> ProviderRoundTripAdmission
+    )? = nil
   ) {
     self.streamingReattemptPolicy = streamingReattemptPolicy
     self.terminalValidationPolicy = terminalValidationPolicy
@@ -82,7 +84,9 @@ struct AttemptRuntimeState {
   }
 
   func accepts(outboundModel: String) -> Bool {
-    policy.expectedWireModel.map { $0 == outboundModel } ?? true
+    policy.expectedWireModel.map {
+      $0 == outboundModel
+    } ?? true
   }
 
   mutating func observe(response: ChatResponse, outboundModel: String) -> Bool {
@@ -91,7 +95,9 @@ struct AttemptRuntimeState {
       terminalModel: response.reportedModel
     )
     return policy.expectedWireModel.flatMap { expected in
-      response.reportedModel.map { $0 != expected }
+      response.reportedModel.map {
+        $0 != expected
+      }
     } ?? false
   }
 

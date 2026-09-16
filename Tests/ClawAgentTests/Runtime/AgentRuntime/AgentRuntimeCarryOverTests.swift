@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawAgent
 
-@Suite struct AgentRuntimeCarryOverTests {
-  @Test func carriedOverSpendStopsBeforeAnyProviderCall() async throws {
+@Suite
+struct AgentRuntimeCarryOverTests {
+  @Test
+  func carriedOverSpendStopsBeforeAnyProviderCall() async throws {
     // given — a run that already spent its entire per-run USD budget before it suspended; the
     // resume must inherit that spend so a suspend cycle can't reset the cap (§6.3 no cap evasion)
     let provider = StubProvider(.respond(okResponse(content: "should never send")))
@@ -19,9 +21,9 @@ import Testing
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 1,
-      chatId: 7,
+      runID: 1,
+      sessionID: 1,
+      chatID: 7,
       buildResult: makeBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -36,7 +38,8 @@ import Testing
     #expect(await provider.calls == 0)
   }
 
-  @Test func nilCarryOverLeavesTheRunFreeToComplete() async throws {
+  @Test
+  func nilCarryOverLeavesTheRunFreeToComplete() async throws {
     // given — the identical setup WITHOUT carry-over completes, proving the stop above came from
     // the seeded counter and not the base budget
     let provider = StubProvider(.respond(okResponse(content: "hi")))
@@ -44,9 +47,9 @@ import Testing
 
     // when
     let outcome = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 1,
-      chatId: 7,
+      runID: 1,
+      sessionID: 1,
+      chatID: 7,
       buildResult: makeBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,

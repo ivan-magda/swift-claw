@@ -4,38 +4,42 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct ProcessedUpdateStoreTests {
+@Suite
+struct ProcessedUpdateStoreTests {
   private func freshStore() throws -> ProcessedUpdateStoreGRDB {
     let queue = try TestDatabase.make()
     return ProcessedUpdateStoreGRDB(writer: queue)
   }
 
-  @Test func firstClaimSucceeds() throws {
+  @Test
+  func firstClaimSucceeds() throws {
     // given
     let store = try freshStore()
 
     // then
-    #expect(try store.claimUpdate(updateId: 100))
+    #expect(try store.claimUpdate(updateID: 100))
   }
 
-  @Test func secondClaimOfSameUpdateIsRejected() throws {
+  @Test
+  func secondClaimOfSameUpdateIsRejected() throws {
     // given
     let store = try freshStore()
 
     // when
-    let first = try store.claimUpdate(updateId: 100)
+    let first = try store.claimUpdate(updateID: 100)
 
     // then
     #expect(first)
-    #expect(try store.claimUpdate(updateId: 100) == false)
+    #expect(try store.claimUpdate(updateID: 100) == false)
   }
 
-  @Test func distinctUpdatesAreEachClaimed() throws {
+  @Test
+  func distinctUpdatesAreEachClaimed() throws {
     // given
     let store = try freshStore()
 
     // then
-    #expect(try store.claimUpdate(updateId: 1))
-    #expect(try store.claimUpdate(updateId: 2))
+    #expect(try store.claimUpdate(updateID: 1))
+    #expect(try store.claimUpdate(updateID: 2))
   }
 }

@@ -2,8 +2,10 @@ import Testing
 
 @testable import clawd
 
-@Suite struct ServiceStartHintTests {
-  @Test func healthyIdleMachineWithInstalledUnitGetsThePlatformStartCommand() {
+@Suite
+struct ServiceStartHintTests {
+  @Test
+  func healthyIdleMachineWithInstalledUnitGetsThePlatformStartCommand() {
     // given / when
     let macHint = ServiceStartHint.text(
       readiness: .ready,
@@ -29,7 +31,8 @@ import Testing
     #expect(linuxHint?.contains("systemctl --user enable --now swift-claw.service") == true)
   }
 
-  @Test func loadedButStoppedLaunchAgentGetsKickstartBecauseBootstrapWouldBeRejected() {
+  @Test
+  func loadedButStoppedLaunchAgentGetsKickstartBecauseBootstrapWouldBeRejected() {
     // given / when
     let hint = ServiceStartHint.text(
       readiness: .ready,
@@ -46,7 +49,8 @@ import Testing
     #expect(hint?.contains("bootstrap") == false)
   }
 
-  @Test func unloadedLaunchAgentStillGetsTheBootstrapCommand() {
+  @Test
+  func unloadedLaunchAgentStillGetsTheBootstrapCommand() {
     // given / when
     let hint = ServiceStartHint.text(
       readiness: .ready,
@@ -63,7 +67,8 @@ import Testing
     #expect(hint?.contains("kickstart") == false)
   }
 
-  @Test func emptyAllowlistOnboardingStateStillGetsAStartCommandWithStartGuidance() {
+  @Test
+  func emptyAllowlistOnboardingStateStillGetsAStartCommandWithStartGuidance() {
     // given / when — the daemon must run for /start to reveal the owner's ID
     let hint = ServiceStartHint.text(
       readiness: .readyAwaitingOwner,
@@ -80,7 +85,8 @@ import Testing
     #expect(hint?.contains("/start") == true)
   }
 
-  @Test func noHintWhileNotReadyOrAlreadyRunning() {
+  @Test
+  func noHintWhileNotReadyOrAlreadyRunning() {
     // given / when / then — a failing report or a live daemon must not suggest starting
     #expect(
       ServiceStartHint.text(
@@ -106,7 +112,8 @@ import Testing
     )
   }
 
-  @Test func missingUnitOrServiceManagerFallsBackHonestly() {
+  @Test
+  func missingUnitOrServiceManagerFallsBackHonestly() {
     // given / when
     let noUnit = ServiceStartHint.text(
       readiness: .ready,

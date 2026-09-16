@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawExec
 
-@Suite struct ScratchWorkspaceTests {
-  @Test func materializerCreatesPrivateRootsExactFilesAndExternalCidfile() throws {
+@Suite
+struct ScratchWorkspaceTests {
+  @Test
+  func materializerCreatesPrivateRootsExactFilesAndExternalCidfile() throws {
     // given
     let fixture = try ScratchFixture()
     defer { fixture.remove() }
@@ -35,7 +37,8 @@ import Testing
     #expect(!workspace.cidFile.path.hasPrefix(workspace.directory.path + "/"))
   }
 
-  @Test func materializerRejectsPathReservedAndCaseFoldedCollisionsBeforeRunDirectory() throws {
+  @Test
+  func materializerRejectsPathReservedAndCaseFoldedCollisionsBeforeRunDirectory() throws {
     // given
     let fixture = try ScratchFixture()
     defer { fixture.remove() }
@@ -63,16 +66,21 @@ import Testing
     }
 
     // then
-    #expect(throws: ScratchWorkspaceError.self) { try result.get() }
-    let runDirectory = fixture.root.appending(path: "exec-scratch")
-      .appending(path: try fixedIdentity().identifier)
+    #expect(throws: ScratchWorkspaceError.self) {
+      try result.get()
+    }
+    let runDirectory = fixture.root.appending(path: "exec-scratch").appending(
+      path: try fixedIdentity().identifier
+    )
     #expect(!FileManager.default.fileExists(atPath: runDirectory.path))
   }
 
-  @Test func materializerRefusesStateRootThatCannotCrossAMountDirective() throws {
+  @Test
+  func materializerRefusesStateRootThatCannotCrossAMountDirective() throws {
     // given
-    let root = FileManager.default.temporaryDirectory
-      .appending(path: "clawd-scratch-tests-comma,\(UUID().uuidString.lowercased())")
+    let root = FileManager.default.temporaryDirectory.appending(
+      path: "clawd-scratch-tests-comma,\(UUID().uuidString.lowercased())"
+    )
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
     defer { try? FileManager.default.removeItem(at: root) }
 
@@ -92,7 +100,8 @@ import Testing
     #expect(!FileManager.default.fileExists(atPath: scratchRoot.path))
   }
 
-  @Test func materializerRejectsWrongEntrypointNameAndModes() throws {
+  @Test
+  func materializerRejectsWrongEntrypointNameAndModes() throws {
     // given
     let fixture = try ScratchFixture()
     defer { fixture.remove() }
@@ -118,7 +127,8 @@ import Testing
     }
   }
 
-  @Test func materializerEnforcesEntrypointPerFileAndTotalBounds() throws {
+  @Test
+  func materializerEnforcesEntrypointPerFileAndTotalBounds() throws {
     // given
     let fixture = try ScratchFixture()
     defer { fixture.remove() }
@@ -162,7 +172,8 @@ import Testing
     }
   }
 
-  @Test func workspaceRemovalDeletesScratchAndCidfileIdempotently() throws {
+  @Test
+  func workspaceRemovalDeletesScratchAndCidfileIdempotently() throws {
     // given
     let fixture = try ScratchFixture()
     defer { fixture.remove() }

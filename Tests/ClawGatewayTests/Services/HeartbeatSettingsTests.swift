@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct HeartbeatSettingsTests {
+@Suite
+struct HeartbeatSettingsTests {
   private func loadConfig(allowlist: String, enabled: Bool) throws -> AppConfig {
     var env: [String: String] = [
       "CLAW_LLM_BASE_URL": "http://localhost:9/v1",
@@ -20,7 +21,8 @@ import Testing
     return try AppConfig.load(environment: env)
   }
 
-  @Test func resolveMapsEveryConfigFieldAndTheSingleOwner() throws {
+  @Test
+  func resolveMapsEveryConfigFieldAndTheSingleOwner() throws {
     // given
     let config = try loadConfig(allowlist: "777", enabled: true)
 
@@ -32,11 +34,12 @@ import Testing
     #expect(active.intervalMinutes == 30)
     #expect(active.quietHours.rendered == "23:00-08:00")
     #expect(active.maxPerDay == 4)
-    #expect(active.ownerChatId == 777)
+    #expect(active.ownerChatID == 777)
     #expect(active.timezone.identifier == "Europe/Berlin")
   }
 
-  @Test func disabledConfigReturnsNoActiveSettingsAndRetainsTheReconcileOwner() throws {
+  @Test
+  func disabledConfigReturnsNoActiveSettingsAndRetainsTheReconcileOwner() throws {
     // given
     let config = try loadConfig(allowlist: "777", enabled: false)
 
@@ -45,10 +48,11 @@ import Testing
 
     // then
     #expect(settings == nil)
-    #expect(config.heartbeatOwnerChatId == 777)
+    #expect(config.heartbeatOwnerChatID == 777)
   }
 
-  @Test func templateWrapsTheChecklistUnderTheVerbatimContractSentence() {
+  @Test
+  func templateWrapsTheChecklistUnderTheVerbatimContractSentence() {
     // given
     let checklist = "- check backups\n- check inbox"
 

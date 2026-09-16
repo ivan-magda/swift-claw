@@ -25,45 +25,28 @@ For vulnerabilities, never open a public issue. Follow [SECURITY.md](SECURITY.md
 
 ## Development setup
 
-You need a Swift 6.3 toolchain and SwiftLint (the lint gate exits 1 without it). The gate's
-third tool, SwiftFormat, needs no install — `scripts/lint.sh` runs it out of the `BuildTools`
-package at a pinned version, so the first run builds it and needs network access.
+Use the [pinned Swift style toolchain](docs/CODE_STYLE.md#setup): Swift 6.3.3,
+Apple swift-format 6.3.0 on macOS / 6.3.3 on Linux, SwiftLint 0.65.1, and SwiftFormat 0.62.1. The lint script
+validates versions before changing source; BuildTools supplies SwiftFormat from a
+locked dependency. Its first run needs dependency access.
+Linux development also needs `libsqlite3-dev` for GRDB.
+
+The [Google Swift style workflow](docs/CODE_STYLE.md) covers installation, the seven
+review sections, local exceptions, per-file checks, and editor formatting. CI calls
+the same entry point:
 
 ```bash
-# macOS
-brew install swiftlint
-
-# Linux
-sudo apt-get install -y libsqlite3-dev          # SQLite headers GRDB links against
-docker pull ghcr.io/realm/swiftlint:0.65.0      # the image CI lints with
+scripts/lint.sh --fix  # apply the canonical Google/local style pipeline
+git diff              # review the corrections
+scripts/lint.sh        # verify
+swift build
+swift test
 ```
 
-On Linux, put a wrapper on your `PATH` so `scripts/lint.sh` finds SwiftLint and runs the
-same checks as everywhere else:
-
-```bash
-sudo tee /usr/local/bin/swiftlint >/dev/null <<'EOF'
-#!/bin/sh
-exec docker run --rm -v "$PWD:$PWD" -w "$PWD" \
-  --entrypoint swiftlint ghcr.io/realm/swiftlint:0.65.0 "$@"
-EOF
-sudo chmod +x /usr/local/bin/swiftlint
-```
-
-Mounting the working directory at its own path keeps the paths SwiftLint prints usable on
-the host. Run the
-gate with `scripts/lint.sh` rather than calling `swiftlint` yourself: warnings are not
-failures by default, so a bare `--strict` run reports the accepted warnings
-and exits nonzero on a clean checkout.
-
-Then:
-
-```bash
-swift build            # build
-swift test             # run the suite
-scripts/lint.sh --fix  # auto-apply layout, multiline conditional bodies, and SwiftLint fixes
-scripts/lint.sh        # verify; must pass before committing
-```
+The gate reports its current stage and elapsed time. SwiftLint warnings are advisory
+unless `STRICT=1` is set; errors always fail. Run the complete gate rather than
+standalone formatter commands, whose intermediate layouts differ from the final
+Google style. Tooling/configuration changes also run `scripts/test-lint.sh`.
 
 Day-to-day commands, including how to run the daemon locally, live in
 [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md).

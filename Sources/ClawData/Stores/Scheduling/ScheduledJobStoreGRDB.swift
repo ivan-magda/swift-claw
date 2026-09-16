@@ -47,7 +47,7 @@ extension ScheduledJobStoreGRDB {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [
-        job.ownerChatId,
+        job.ownerChatID,
         job.label,
         job.prompt,
         recurrenceJSON,
@@ -101,12 +101,11 @@ extension ScheduledJobStoreGRDB {
 
 extension ScheduledJobStoreGRDB {
   static func fetchJob(_ db: Database, id: Int64) throws -> ScheduledJob? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT * FROM scheduled_jobs WHERE id = ?",
-        arguments: [id]
-      )
+    guard let row = try Row.fetchOne(
+      db,
+      sql: "SELECT * FROM scheduled_jobs WHERE id = ?",
+      arguments: [id]
+    )
     else {
       return nil
     }
@@ -129,16 +128,15 @@ extension ScheduledJobStoreGRDB {
     guard let status = ScheduledJobStatus(rawValue: row["status"]) else {
       throw StoreError.unexpected("unknown scheduled job status")
     }
-    guard
-      let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
-      let updatedTs = EpochSecondCodec.date(fromEpoch: row["updated_ts"])
+    guard let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
+          let updatedTs = EpochSecondCodec.date(fromEpoch: row["updated_ts"])
     else {
       throw StoreError.unexpected("scheduled job row missing timestamps")
     }
 
     return ScheduledJob(
       id: row["id"],
-      ownerChatId: row["owner_chat_id"],
+      ownerChatID: row["owner_chat_id"],
       label: row["label"],
       prompt: row["prompt"],
       recurrence: recurrence,
@@ -146,7 +144,7 @@ extension ScheduledJobStoreGRDB {
       nextOccurrence: EpochSecondCodec.date(fromEpoch: row["next_occurrence"]),
       lastFiredAt: EpochSecondCodec.date(fromEpoch: row["last_fired_at"]),
       status: status,
-      sessionId: row["session_id"],
+      sessionID: row["session_id"],
       createdTs: createdTs,
       updatedTs: updatedTs
     )
@@ -182,8 +180,8 @@ extension ScheduledJobStoreGRDB {
       try Self.insertVerbAudit(
         db,
         action: .jobPaused,
-        jobId: id,
-        sessionId: current.sessionId,
+        jobID: id,
+        sessionID: current.sessionID,
         now: now
       )
       return try Self.fetchJob(db, id: id)
@@ -224,8 +222,8 @@ extension ScheduledJobStoreGRDB {
       try Self.insertVerbAudit(
         db,
         action: .jobResumed,
-        jobId: id,
-        sessionId: current.sessionId,
+        jobID: id,
+        sessionID: current.sessionID,
         now: now
       )
       return try Self.fetchJob(db, id: id)
@@ -258,8 +256,8 @@ extension ScheduledJobStoreGRDB {
       try Self.insertVerbAudit(
         db,
         action: .jobCancelled,
-        jobId: id,
-        sessionId: current.sessionId,
+        jobID: id,
+        sessionID: current.sessionID,
         now: now
       )
       return try Self.fetchJob(db, id: id)
@@ -273,8 +271,8 @@ private extension ScheduledJobStoreGRDB {
   static func insertVerbAudit(
     _ db: Database,
     action: AuditAction,
-    jobId: Int64,
-    sessionId: Int64?,
+    jobID: Int64,
+    sessionID: Int64?,
     now: Date
   ) throws {
     try AuditLogGRDB.insertAudit(
@@ -282,8 +280,8 @@ private extension ScheduledJobStoreGRDB {
       AuditEvent(
         actor: .owner,
         action: action,
-        argsRedacted: "{\"job_id\":\(jobId)}",
-        sessionId: sessionId,
+        argsRedacted: "{\"job_id\":\(jobID)}",
+        sessionID: sessionID,
         ts: now
       )
     )

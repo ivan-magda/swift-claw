@@ -10,7 +10,8 @@ import Testing
 ///
 /// The one-minute limits are deadlock guards, not timing assertions: every wait is released through
 /// an `AsyncGate` or a `ScriptedClock`, never a sleep.
-@Suite struct SessionLaneRegistryTests {
+@Suite
+struct SessionLaneRegistryTests {
   /// Records ordered string events and lets a test await a given count without polling.
   private actor Recorder {
     private var events: [String] = []
@@ -187,9 +188,15 @@ import Testing
     let hold = AsyncGate()
 
     // when — three accepted, gated turns across two sessions.
-    _ = await registry.enqueue(sessionID: 1, runID: 10) { await hold.wait() }
-    _ = await registry.enqueue(sessionID: 1, runID: 11) { await hold.wait() }
-    _ = await registry.enqueue(sessionID: 2, runID: 12) { await hold.wait() }
+    _ = await registry.enqueue(sessionID: 1, runID: 10) {
+      await hold.wait()
+    }
+    _ = await registry.enqueue(sessionID: 1, runID: 11) {
+      await hold.wait()
+    }
+    _ = await registry.enqueue(sessionID: 2, runID: 12) {
+      await hold.wait()
+    }
 
     // then — registration is synchronous with enqueue: a run cannot finish before it is registered.
     #expect(await registry.activeRunIDs() == [10, 11, 12])

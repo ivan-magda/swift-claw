@@ -202,9 +202,8 @@ private extension MCPStreamableHTTPTransport {
     guard handshakeCompleted else {
       return connectTimeout
     }
-    guard
-      let envelope = try? JSONDecoder().decode(OutboundMethodEnvelope.self, from: body),
-      envelope.method == CancelledNotification.name
+    guard let envelope = try? JSONDecoder().decode(OutboundMethodEnvelope.self, from: body),
+          envelope.method == CancelledNotification.name
     else {
       return requestTimeout
     }
@@ -247,10 +246,7 @@ private extension MCPStreamableHTTPTransport {
 
 private extension MCPStreamableHTTPTransport {
   func capture(from head: HTTPStreamHead) {
-    guard
-      let session = head.getHeader(for: MCPHTTPHeader.session),
-      session.isEmpty == false
-    else {
+    guard let session = head.header(for: MCPHTTPHeader.session), session.isEmpty == false else {
       return
     }
     sessionID = session
@@ -276,13 +272,10 @@ private extension MCPStreamableHTTPTransport {
       return
     }
 
-    let rawContentType = exchange.head.getHeader(for: MCPHTTPHeader.contentType) ?? ""
+    let rawContentType = exchange.head.header(for: MCPHTTPHeader.contentType) ?? ""
     let contentType =
-      rawContentType
-      .split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
-      .first?
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-      .lowercased() ?? ""
+      rawContentType.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false).first?
+      .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
     if contentType == ContentType.eventStream {
       try await deliverEvents(exchange)
     } else if contentType == ContentType.json {
@@ -367,9 +360,9 @@ private extension MCPStreamableHTTPTransport {
   /// the SDK and unblocks that notification.
   func adoptVersionFromHandshake(_ message: Data) {
     guard handshakeCompleted == false,
-      let envelope = try? JSONDecoder().decode(InitializeEnvelope.self, from: message),
-      let version = envelope.result?.protocolVersion,
-      Version.supported.contains(version)
+          let envelope = try? JSONDecoder().decode(InitializeEnvelope.self, from: message),
+          let version = envelope.result?.protocolVersion,
+          Version.supported.contains(version)
     else {
       return
     }

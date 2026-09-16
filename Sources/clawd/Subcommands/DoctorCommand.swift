@@ -128,13 +128,11 @@ private extension DoctorCommand {
     )
     // The one route row a stopped daemon can answer for: whether a second route is configured at
     // all is a fact about the environment, unlike which route is currently carrying traffic.
-    report.add(
-      contentsOf: [
-        HealthRowsBuilder.fallbackConfiguredCheck(
-          fallbackReference: config.llm.fallbackRoute?.configuredReference
-        )
-      ]
-    )
+    report.add(contentsOf: [
+      HealthRowsBuilder.fallbackConfiguredCheck(
+        fallbackReference: config.llm.fallbackRoute?.configuredReference
+      ),
+    ])
     // Warn-not-fail: a proactive cap at/above the global cap is legal but inert —
     // the household kill-switch dominates.
     let proactiveNote =
@@ -202,15 +200,14 @@ private extension DoctorCommand {
   func addLLMAuthRow(to report: inout DoctorReport, config: AppConfig) {
     // The `secrets` row above owns the decrypt-failure diagnosis and fails loudly there, so an
     // undecryptable store degrades this row quietly to mode=none rather than double-reporting.
-    let staticAPIKey = (try? EnvironmentLoader.loadSecrets(config: config))?.llmApiKey
+    let staticAPIKey = (try? EnvironmentLoader.loadSecrets(config: config))?.llmAPIKey
     let result = LLMAuthDoctor.inspect(
       route: config.llm.route,
       staticAPIKey: staticAPIKey,
-      now: Date(),
-      makeManagedStore: {
-        EncryptedLLMCredentialStore(stateRoot: config.stateRoot)
-      }
-    )
+      now: Date()
+    ) {
+      EncryptedLLMCredentialStore(stateRoot: config.stateRoot)
+    }
     report.add(key: "llm.auth", value: result.value, ok: result.ok, group: .llmRuns)
   }
 }
@@ -224,10 +221,7 @@ extension DoctorCommand {
   ///
   /// Returns what it read so the live probe below contacts exactly the servers these rows describe,
   /// rather than re-reading the catalog and possibly answering about a different one.
-  static func addMCPRows(
-    to report: inout DoctorReport,
-    config: AppConfig
-  ) -> MCPDoctorLoadResult {
+  static func addMCPRows(to report: inout DoctorReport, config: AppConfig) -> MCPDoctorLoadResult {
     let catalog: MCPConfig
     do {
       catalog = try EnvironmentLoader.loadMCPConfig(config: config)
@@ -255,6 +249,8 @@ extension DoctorCommand {
     }
   }
 }
+
+// MARK: - Live Health Checks
 
 private extension DoctorCommand {
   /// The live half, on a full run only: each enabled server is contacted over the same transport the
@@ -318,8 +314,7 @@ private extension DoctorCommand {
     // Info, never a failed check: unconfigured search just means the tool is absent.
     report.add(
       key: "web_search",
-      value: secrets.searchApiKey != nil
-        ? "configured" : "not configured (web_search tool absent)",
+      value: secrets.searchAPIKey != nil ? "configured" : "not configured (web_search tool absent)",
       group: .connectivity
     )
 
@@ -346,10 +341,7 @@ private extension DoctorCommand {
 // MARK: - Sandbox Health
 
 private extension DoctorCommand {
-  func sandboxRows(
-    config: AppConfig,
-    live: Bool
-  ) async -> [DoctorReport.Check] {
+  func sandboxRows(config: AppConfig, live: Bool) async -> [DoctorReport.Check] {
     guard config.exec.enabled else {
       return SandboxHealthRows.rows(for: .disabled)
     }
@@ -390,9 +382,7 @@ private extension DoctorCommand {
         return SandboxHealthRows.rows(for: .live(health: health))
       }
       return SandboxHealthRows.rows(
-        for: .unavailable(
-          reason: bootstrap.unavailableReason ?? "sandbox health is unavailable"
-        )
+        for: .unavailable(reason: bootstrap.unavailableReason ?? "sandbox health is unavailable")
       )
     #endif
   }
@@ -435,10 +425,7 @@ private extension DoctorCommand {
 // MARK: - Service Hint
 
 private extension DoctorCommand {
-  func serviceStartHint(
-    report: DoctorReport,
-    config: AppConfig
-  ) -> String? {
+  func serviceStartHint(report: DoctorReport, config: AppConfig) -> String? {
     let lockPath = config.stateRoot.appendingPathComponent(StateFile.lock).path
     let daemonRunning: Bool
 
@@ -456,13 +443,10 @@ private extension DoctorCommand {
     #if os(Linux)
       let unitPath = NSHomeDirectory() + "/.config/systemd/user/swift-claw.service"
       let isLinux = true
-      let serviceManagerAvailable = FileManager.default.fileExists(
-        atPath: "/run/systemd/system"
-      )
+      let serviceManagerAvailable = FileManager.default.fileExists(atPath: "/run/systemd/system")
       let unitLoaded = false
     #else
-      let unitPath =
-        NSHomeDirectory() + "/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
+      let unitPath = NSHomeDirectory() + "/Library/LaunchAgents/com.ivanmagda.swift-claw.plist"
       let isLinux = false
       let serviceManagerAvailable = true
       let unitLoaded = launchAgentLoaded(uid: getuid())
@@ -513,7 +497,8 @@ private extension DoctorCommand {
 extension DoctorCommand {
   func coderRows(
     config: CoderConfig,
-    resolve: @Sendable (CoderConfig) async throws -> CoderBackendSetup = CoderBackendSetup.live
+    resolve: @Sendable (_ config: CoderConfig) async throws -> CoderBackendSetup = CoderBackendSetup
+      .live
   ) async -> [DoctorReport.Check] {
     let rows = await CoderHealthRows.configuration(
       config: config,

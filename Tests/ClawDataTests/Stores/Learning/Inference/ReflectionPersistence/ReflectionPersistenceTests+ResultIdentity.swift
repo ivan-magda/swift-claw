@@ -6,7 +6,8 @@ import Testing
 @testable import ClawData
 
 extension ReflectionPersistenceTests {
-  @Test func wrongPhaseProductRollsBackClosureAndSpend() throws {
+  @Test
+  func wrongPhaseProductRollsBackClosureAndSpend() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
@@ -30,11 +31,12 @@ extension ReflectionPersistenceTests {
       return
     }
     #expect(try env.operationState(started.id) == .started)
-    #expect(try env.learningUsage(operationId: started.id).isEmpty)
+    #expect(try env.learningUsage(operationID: started.id).isEmpty)
     #expect(try env.countRows(in: "learning_evaluations") == 2)
   }
 
-  @Test func evaluatorCannotCommitAReflectionProduct() throws {
+  @Test
+  func evaluatorCannotCommitAReflectionProduct() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
@@ -60,7 +62,7 @@ extension ReflectionPersistenceTests {
       return
     }
     #expect(try env.operationState(evaluator.id) == .started)
-    #expect(try env.learningUsage(operationId: evaluator.id).isEmpty)
+    #expect(try env.learningUsage(operationID: evaluator.id).isEmpty)
   }
 
   @Test(arguments: ReflectionProductIdentityMismatch.allCases)
@@ -71,12 +73,7 @@ extension ReflectionPersistenceTests {
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
     let operation = try env.startReflector(fixture)
-    let product = try mismatchedProduct(
-      mismatch,
-      env: env,
-      fixture: fixture,
-      operation: operation
-    )
+    let product = try mismatchedProduct(mismatch, env: env, fixture: fixture, operation: operation)
 
     // when
     let committed = try env.learning.finishOperation(
@@ -88,12 +85,13 @@ extension ReflectionPersistenceTests {
     // different trigger, call, schema, origin, or predecessor while still charging this call
     #expect(committed)
     #expect(try env.operationState(operation.id) == .succeeded)
-    #expect(try env.learningUsage(operationId: operation.id).count == 1)
+    #expect(try env.learningUsage(operationID: operation.id).count == 1)
     #expect(try env.countRows(in: "learning_candidates") == 0)
     #expect(try env.countRows(in: "learning_decisions") == 0)
   }
 
-  @Test func staleResultClosesAndChargesButPersistsNoArtifact() throws {
+  @Test
+  func staleResultClosesAndChargesButPersistsNoArtifact() throws {
     // given — authorization succeeded before the source cutoff advanced
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
@@ -110,12 +108,13 @@ extension ReflectionPersistenceTests {
     // then — dropping the finish-time cutoff check would persist late output against newer state
     #expect(committed)
     #expect(try env.operationState(started.id) == .succeeded)
-    #expect(try env.learningUsage(operationId: started.id).count == 1)
+    #expect(try env.learningUsage(operationID: started.id).count == 1)
     #expect(try env.countRows(in: "learning_candidates") == 0)
     #expect(try env.learning.candidateArtifact(digest: artifact.digest) == nil)
   }
 
-  @Test func staleNoCandidateClosesAndChargesWithoutWritingAReceipt() throws {
+  @Test
+  func staleNoCandidateClosesAndChargesWithoutWritingAReceipt() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let fixture = try env.reflectionFixture()
@@ -132,7 +131,7 @@ extension ReflectionPersistenceTests {
     // then — a stale null result is no more authoritative than a stale replacement
     #expect(committed)
     #expect(try env.operationState(started.id) == .succeeded)
-    #expect(try env.learningUsage(operationId: started.id).count == 1)
+    #expect(try env.learningUsage(operationID: started.id).count == 1)
     #expect(try env.countRows(in: "learning_decisions") == 0)
   }
 }
@@ -178,7 +177,7 @@ private extension ReflectionPersistenceTests {
     productMismatch: ReflectionProductIdentityMismatch
   ) -> CandidateSourceManifest {
     let predecessorFeedback = CandidateFeedbackSource(
-      eventId: 92,
+      eventID: 92,
       digest: FeedbackEventDigest(rawValue: "predecessor-feedback"),
       revision: manifest.feedbackRevision,
       subjectKind: .candidate,
@@ -190,22 +189,16 @@ private extension ReflectionPersistenceTests {
         ? manifest.schemaVersion + 1 : manifest.schemaVersion,
       origin: productMismatch == .candidateOrigin ? .ownerEdit : manifest.origin,
       algorithm: manifest.algorithm,
-      jobId: manifest.jobId,
+      jobID: manifest.jobID,
       epoch: manifest.epoch,
-      triggerDigest:
-        productMismatch == .candidateTrigger
-        ? TriggerDigest(rawValue: "different-trigger")
-        : manifest.triggerDigest,
+      triggerDigest: productMismatch == .candidateTrigger
+        ? TriggerDigest(rawValue: "different-trigger") : manifest.triggerDigest,
       triggerReason: manifest.triggerReason,
       qualifyingIssueCodes: manifest.qualifyingIssueCodes,
-      operationId:
-        productMismatch == .candidateOperation
-        ? LearningOperationID(rawValue: "different-operation")
-        : manifest.operationId,
-      carrierDigest:
-        productMismatch == .candidateCarrier
-        ? CarrierDigest(rawValue: "different-carrier")
-        : manifest.carrierDigest,
+      operationID: productMismatch == .candidateOperation
+        ? LearningOperationID(rawValue: "different-operation") : manifest.operationID,
+      carrierDigest: productMismatch == .candidateCarrier
+        ? CarrierDigest(rawValue: "different-carrier") : manifest.carrierDigest,
       resultDigest: manifest.resultDigest,
       baseDigest: manifest.baseDigest,
       baseRevision: manifest.baseRevision,
@@ -213,14 +206,10 @@ private extension ReflectionPersistenceTests {
       evidence: manifest.evidence,
       evaluations: manifest.evaluations,
       feedback: manifest.feedback,
-      predecessorCandidate:
-        productMismatch == .candidatePredecessor
-        ? CandidateDigest(rawValue: "predecessor-candidate")
-        : manifest.predecessorCandidate,
-      predecessorFeedback:
-        productMismatch == .candidatePredecessorFeedback
-        ? predecessorFeedback
-        : manifest.predecessorFeedback
+      predecessorCandidate: productMismatch == .candidatePredecessor
+        ? CandidateDigest(rawValue: "predecessor-candidate") : manifest.predecessorCandidate,
+      predecessorFeedback: productMismatch == .candidatePredecessorFeedback
+        ? predecessorFeedback : manifest.predecessorFeedback
     )
   }
 
@@ -230,18 +219,12 @@ private extension ReflectionPersistenceTests {
   ) -> NoCandidateResult {
     NoCandidateResult(
       algorithm: result.algorithm,
-      triggerDigest:
-        mismatch == .noCandidateTrigger
-        ? TriggerDigest(rawValue: "different-trigger")
-        : result.triggerDigest,
-      operationId:
-        mismatch == .noCandidateOperation
-        ? LearningOperationID(rawValue: "different-operation")
-        : result.operationId,
-      carrierDigest:
-        mismatch == .noCandidateCarrier
-        ? CarrierDigest(rawValue: "different-carrier")
-        : result.carrierDigest,
+      triggerDigest: mismatch == .noCandidateTrigger
+        ? TriggerDigest(rawValue: "different-trigger") : result.triggerDigest,
+      operationID: mismatch == .noCandidateOperation
+        ? LearningOperationID(rawValue: "different-operation") : result.operationID,
+      carrierDigest: mismatch == .noCandidateCarrier
+        ? CarrierDigest(rawValue: "different-carrier") : result.carrierDigest,
       resultDigest: result.resultDigest,
       authorization: result.authorization
     )

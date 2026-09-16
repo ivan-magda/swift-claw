@@ -50,10 +50,9 @@ enum ProviderStateCoding {
 
     // Storage classes, not typed decodes: `row["…"] as Data?` would happily coerce a TEXT value
     // into bytes and hand the adapter a payload no issuer ever wrote.
-    guard
-      case .string(let issuer) = issuerValue.storage,
-      case .blob(let payload) = payloadValue.storage,
-      payload.count <= maxPayloadBytes
+    guard case .string(let issuer) = issuerValue.storage,
+          case .blob(let payload) = payloadValue.storage,
+          payload.count <= maxPayloadBytes
     else {
       return nil
     }

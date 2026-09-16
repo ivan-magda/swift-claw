@@ -9,7 +9,8 @@ import Testing
 @testable import clawd
 
 /// The redaction union the whole process inherits, built before the first logger exists.
-@Suite struct MCPBootInputsTests {
+@Suite
+struct MCPBootInputsTests {
   @Test("every stored MCP token joins the secret store's redaction values")
   func tokensJoinTheRedactionUnion() throws {
     // given
@@ -21,7 +22,7 @@ import Testing
 
     // when
     let values = inputs.redactionValues(
-      with: Secrets(telegramBotToken: "tg-token", llmApiKey: "sk-key", searchApiKey: nil)
+      with: Secrets(telegramBotToken: "tg-token", llmAPIKey: "sk-key", searchAPIKey: nil)
     )
 
     // then
@@ -39,7 +40,7 @@ import Testing
 
     // when
     let values = inputs.redactionValues(
-      with: Secrets(telegramBotToken: "tg-token", llmApiKey: nil, searchApiKey: nil)
+      with: Secrets(telegramBotToken: "tg-token", llmAPIKey: nil, searchAPIKey: nil)
     )
 
     // then
@@ -57,20 +58,18 @@ import Testing
     )
     let secrets = Secrets(
       telegramBotToken: "tg-token",
-      llmApiKey: "llm-secret-token",
-      searchApiKey: "search-secret-token"
+      llmAPIKey: "llm-secret-token",
+      searchAPIKey: "search-secret-token"
     )
     let capture = BootLoggingCapture()
 
     // when
-    let logging = RunCommand.makeBootLogging(
-      secrets: secrets,
-      mcp: inputs,
-      bootstrap: { values in
-        capture.record(values)
-        return Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+    let logging = RunCommand.makeBootLogging(secrets: secrets, mcp: inputs) { values in
+      capture.record(values)
+      return Logger(label: "test") { _ in
+        SwiftLogNoOpLogHandler()
       }
-    )
+    }
 
     // then
     let expected = Set([
@@ -107,7 +106,8 @@ private final class BootLoggingCapture: @unchecked Sendable {
 
 /// The rows both health surfaces are built from — `clawd doctor` offline, and the running daemon's
 /// reporter with the boot outcomes appended.
-@Suite struct MCPDoctorRowsTests {
+@Suite
+struct MCPDoctorRowsTests {
   @Test("an empty catalog reports one row and fails nothing")
   func emptyCatalogReportsOneRow() {
     // given, when
@@ -115,7 +115,11 @@ private final class BootLoggingCapture: @unchecked Sendable {
 
     // then
     #expect(rows.map(\.key) == ["mcp"])
-    #expect(rows.contains { $0.ok == false } == false)
+    #expect(
+      rows.contains {
+        $0.ok == false
+      } == false
+    )
     #expect(rows[0].group == .mcp)
   }
 
@@ -126,21 +130,26 @@ private final class BootLoggingCapture: @unchecked Sendable {
       (MCPCredentialLoad.token("secret"), "token set", true),
       (
         MCPCredentialLoad.boundToDifferentURL,
-        "token bound to a different URL; re-run clawd mcp set-token", false
+        "token bound to a different URL; re-run clawd mcp set-token",
+        false
       ),
     ]
   )
   func tokenStateReachesTheRow(load: MCPCredentialLoad, expected: String, ok: Bool) throws {
     // given
     let config = try MCPConfig(servers: [
-      try MCPServerConfig(name: "linear", url: "https://mcp.test.invalid/mcp")
+      try MCPServerConfig(name: "linear", url: "https://mcp.test.invalid/mcp"),
     ])
 
     // when
     let rows = MCPDoctorRows.rows(config: config, credentials: ["linear": load])
 
     // then
-    let row = try #require(rows.first { $0.key == "mcp.linear" })
+    let row = try #require(
+      rows.first {
+        $0.key == "mcp.linear"
+      }
+    )
     #expect(row.value.contains(expected))
     #expect(row.ok == ok)
     #expect(try #require(rows.first).value == "1 configured, 1 enabled")
@@ -155,14 +164,18 @@ private final class BootLoggingCapture: @unchecked Sendable {
         url: "https://mcp.test.invalid/mcp",
         enabled: false,
         tools: MCPToolFilter(include: ["list_issues"], exclude: ["create_issue"])
-      )
+      ),
     ])
 
     // when
     let rows = MCPDoctorRows.rows(config: config, credentials: [:])
 
     // then
-    let row = try #require(rows.first { $0.key == "mcp.linear" })
+    let row = try #require(
+      rows.first {
+        $0.key == "mcp.linear"
+      }
+    )
     #expect(row.value.contains("disabled"))
     // Include wins, so the row must not offer the exclusion the loader ignores.
     #expect(row.value.contains("include: list_issues"))

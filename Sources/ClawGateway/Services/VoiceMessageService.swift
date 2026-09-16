@@ -5,7 +5,10 @@ import Logging
 public protocol VoiceMessageTranscribing: Sendable {
   func transcribe(
     _ attachment: VoiceAttachment
-  ) async -> Result<String, VoiceMessageService.Failure>
+  ) async -> Result<
+    String,
+    VoiceMessageService.Failure
+  >
 }
 
 public struct VoiceMessageService: VoiceMessageTranscribing {
@@ -96,7 +99,7 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
     let audioData: Data
     do {
       audioData = try await fetcher.downloadFile(
-        fileId: attachment.fileId,
+        fileID: attachment.fileID,
         maxBytes: maxDownloadBytes
       )
     } catch {
@@ -111,9 +114,7 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
       logger.error("voice staging failed: \(error)")
       return .failure(Self.classifyStagingError(error))
     }
-    defer {
-      try? FileManager.default.removeItem(at: stagedFileURL)
-    }
+    defer { try? FileManager.default.removeItem(at: stagedFileURL) }
 
     let transcript: String
     switch await transcribeWithDeadline(audioFileAt: stagedFileURL) {
@@ -136,15 +137,12 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
 // MARK: - Deadline
 
 private extension VoiceMessageService {
-  func transcribeWithDeadline(
-    audioFileAt staged: URL
-  ) async -> Result<String, Failure> {
+  func transcribeWithDeadline(audioFileAt staged: URL) async -> Result<String, Failure> {
     let transcriber = self.transcriber
     let logger = self.logger
 
-    let outcome = await DeadlineRace.race(
-      allowance: transcriptionDeadline
-    ) { () async -> Result<String, Failure> in
+    let outcome = await DeadlineRace.race(allowance: transcriptionDeadline) {
+      () async -> Result<String, Failure> in
       do {
         return .success(try await transcriber.transcribe(audioFileAt: staged))
       } catch {
@@ -174,10 +172,7 @@ private extension VoiceMessageService {
     let file = stagingDirectory.appendingPathComponent("\(UUID().uuidString).oga")
     do {
       try data.write(to: file, options: [.withoutOverwriting])
-      try FileManager.default.setAttributes(
-        [.posixPermissions: 0o600],
-        ofItemAtPath: file.path
-      )
+      try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     } catch {
       try? FileManager.default.removeItem(at: file)
       throw error
@@ -187,8 +182,7 @@ private extension VoiceMessageService {
   }
 
   func normalize(_ transcript: String) -> Result<String, Failure> {
-    let redacted = redactor.redact(transcript)
-      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let redacted = redactor.redact(transcript).trimmingCharacters(in: .whitespacesAndNewlines)
 
     guard !redacted.isEmpty else {
       return .failure(.emptyTranscript)

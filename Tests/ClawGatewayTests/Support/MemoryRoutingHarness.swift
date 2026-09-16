@@ -27,12 +27,12 @@ struct MemoryRoutingHarness {
     allowed: [Int64] = [42],
     groupChats: Set<Int64> = [],
     memoryCommands: (any MemoryCommandStore)? = nil,
-    routerSessionMessages: ((SessionMessageStoreGRDB) -> any SessionMessageStore)? = nil
+    routerSessionMessages: ((_ store: SessionMessageStoreGRDB) -> any SessionMessageStore)? = nil
   ) throws -> MemoryRoutingHarness {
     let queue = try TestDatabase.make()
 
     let allowlist = AllowlistStoreGRDB(writer: queue)
-    try allowlist.seedAllowlist(userIds: allowed)
+    try allowlist.seedAllowlist(userIDs: allowed)
 
     let transport = RecordingTransport()
     let dispatcher = FakeTurnRunner()
@@ -69,9 +69,9 @@ struct MemoryRoutingHarness {
     )
   }
 
-  func ownerSessionId() throws -> Int64 {
+  func ownerSessionID() throws -> Int64 {
     try sessionMessages.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date(timeIntervalSince1970: 0)
     )
   }
@@ -79,12 +79,12 @@ struct MemoryRoutingHarness {
   func seedItem(
     text: String,
     kind: MemoryKind,
-    updateId: Int64 = -1,
+    updateID: Int64 = -1,
     day: Double = 86_400
   ) throws -> MemoryItem {
     let result = try MemoryCommandStoreGRDB(writer: queue).applyRemember(
-      updateId: updateId,
-      item: NewMemoryItem(text: text, kind: kind, sessionId: nil),
+      updateID: updateID,
+      item: NewMemoryItem(text: text, kind: kind, sessionID: nil),
       now: Date(timeIntervalSince1970: day)
     )
     return try #require(result.item)

@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct SQLiteStoredValueTests {
-  @Test func exactStorageClassMatrix() throws {
+@Suite
+struct SQLiteStoredValueTests {
+  @Test
+  func exactStorageClassMatrix() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -23,12 +25,8 @@ import Testing
     }
 
     // when
-    let nullableInt64 = try #require(
-      SQLiteStoredValue.nullableInt64(in: row, column: "null_value")
-    )
-    let nullableInt = try #require(
-      SQLiteStoredValue.nullableInt(in: row, column: "null_value")
-    )
+    let nullableInt64 = try #require(SQLiteStoredValue.nullableInt64(in: row, column: "null_value"))
+    let nullableInt = try #require(SQLiteStoredValue.nullableInt(in: row, column: "null_value"))
     let nullableDouble = try #require(
       SQLiteStoredValue.nullableDouble(in: row, column: "null_value")
     )
@@ -57,6 +55,8 @@ import Testing
   }
 }
 
+// MARK: - Stored Value Assertions
+
 private extension SQLiteStoredValueTests {
   func nonnullableDecodersRejectNull(in row: Row) -> Bool {
     SQLiteStoredValue.int64(in: row, column: "null_value") == nil
@@ -82,9 +82,8 @@ private extension SQLiteStoredValueTests {
   }
 
   func booleanDomainIsExact(in row: Row) -> Bool {
-    guard
-      case .falseValue? = SQLiteStoredValue.boolean(in: row, column: "zero_value"),
-      case .trueValue? = SQLiteStoredValue.boolean(in: row, column: "one_value")
+    guard case .falseValue? = SQLiteStoredValue.boolean(in: row, column: "zero_value"),
+          case .trueValue? = SQLiteStoredValue.boolean(in: row, column: "one_value")
     else {
       return false
     }
@@ -107,17 +106,15 @@ private extension SQLiteStoredValueTests {
   }
 
   func doublesUseNumericStorageClasses(in row: Row) -> Bool {
-    guard
-      let nullableInteger = SQLiteStoredValue.nullableDouble(in: row, column: "one_value"),
-      let nullableReal = SQLiteStoredValue.nullableDouble(in: row, column: "real_value")
+    guard let nullableInteger = SQLiteStoredValue.nullableDouble(in: row, column: "one_value"),
+          let nullableReal = SQLiteStoredValue.nullableDouble(in: row, column: "real_value")
     else {
       return false
     }
     return SQLiteStoredValue.double(in: row, column: "one_value") == 1
       && SQLiteStoredValue.double(in: row, column: "real_value") == 1.5
       && SQLiteStoredValue.double(in: row, column: "text_value") == nil
-      && nullableInteger.value == 1
-      && nullableReal.value == 1.5
+      && nullableInteger.value == 1 && nullableReal.value == 1.5
   }
 
   func isAbsent<Value>(_ value: Value?) -> Bool {

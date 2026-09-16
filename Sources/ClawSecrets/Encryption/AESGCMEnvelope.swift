@@ -26,9 +26,8 @@ package struct AESGCMEnvelope: Sendable {
   }
 
   package func seal(_ plaintext: Data, key: SymmetricKey) throws(AESGCMEnvelopeError) -> Data {
-    guard
-      let sealedBox = try? AES.GCM.seal(plaintext, using: key, authenticating: associatedData),
-      let combined = sealedBox.combined
+    guard let sealedBox = try? AES.GCM.seal(plaintext, using: key, authenticating: associatedData),
+          let combined = sealedBox.combined
     else {
       throw .sealFailed
     }
@@ -44,9 +43,8 @@ package struct AESGCMEnvelope: Sendable {
     guard onDiskVersion == version else {
       throw .unsupportedVersion
     }
-    guard
-      let sealedBox = try? AES.GCM.SealedBox(combined: Data(envelope.dropFirst())),
-      let plaintext = try? AES.GCM.open(sealedBox, using: key, authenticating: associatedData)
+    guard let sealedBox = try? AES.GCM.SealedBox(combined: Data(envelope.dropFirst())),
+          let plaintext = try? AES.GCM.open(sealedBox, using: key, authenticating: associatedData)
     else {
       throw .openFailed
     }

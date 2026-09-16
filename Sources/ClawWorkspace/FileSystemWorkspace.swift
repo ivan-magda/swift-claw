@@ -26,10 +26,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
 
   public func scanSkills() -> SkillScanResult {
     let fileManager = FileManager.default
-    let skillsRoot = root.appendingPathComponent(
-      WorkspaceSkills.directoryName,
-      isDirectory: true
-    )
+    let skillsRoot = root.appendingPathComponent(WorkspaceSkills.directoryName, isDirectory: true)
 
     var skillsIsDirectory: ObjCBool = false
     guard fileManager.fileExists(atPath: skillsRoot.path, isDirectory: &skillsIsDirectory) else {
@@ -44,12 +41,11 @@ public struct FileSystemWorkspace: WorkspaceReading {
       return SkillScanResult(descriptors: [], warnings: [.skillsDirectoryOutsideWorkspace])
     }
 
-    guard
-      let entries = try? fileManager.contentsOfDirectory(
-        at: containmentRoot,
-        includingPropertiesForKeys: nil,
-        options: [.skipsHiddenFiles]
-      )
+    guard let entries = try? fileManager.contentsOfDirectory(
+      at: containmentRoot,
+      includingPropertiesForKeys: nil,
+      options: [.skipsHiddenFiles]
+    )
     else {
       // skills/ exists but cannot be listed: a context-read failure, not a missing directory.
       return SkillScanResult(descriptors: [], warnings: [.unreadableSkillsDirectory])
@@ -58,7 +54,9 @@ public struct FileSystemWorkspace: WorkspaceReading {
     var descriptors: [SkillDescriptor] = []
     var warnings: [WorkspaceWarning] = []
 
-    for subdir in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+    for subdir in entries.sorted(by: {
+      $0.lastPathComponent < $1.lastPathComponent
+    }) {
       switch Self.entry(at: subdir, under: containmentRoot) {
       case .notASkill:
         continue
@@ -86,10 +84,9 @@ public struct FileSystemWorkspace: WorkspaceReading {
   /// The canonical `skills/` directory, or nil when it resolves outside the canonical workspace
   /// root — which is what makes it a sound containment anchor for the skills beneath it.
   static func containedSkillsRoot(_ skillsRoot: URL, under root: URL) -> URL? {
-    guard
-      let canonicalRoot = WorkspacePathContainment.canonicalPath(root.path),
-      let canonicalSkillsRoot = WorkspacePathContainment.canonicalPath(skillsRoot.path),
-      WorkspacePathContainment.isContained(target: canonicalSkillsRoot, root: canonicalRoot)
+    guard let canonicalRoot = WorkspacePathContainment.canonicalPath(root.path),
+          let canonicalSkillsRoot = WorkspacePathContainment.canonicalPath(skillsRoot.path),
+          WorkspacePathContainment.isContained(target: canonicalSkillsRoot, root: canonicalRoot)
     else {
       return nil
     }
@@ -123,10 +120,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
     let frontmatter = Self.frontmatter(in: manifestText)
     let description = Self.singleLine(frontmatter["description"] ?? "")
 
-    guard
-      let name = frontmatter["name"], name.isEmpty == false,
-      description.isEmpty == false
-    else {
+    guard let name = frontmatter["name"], name.isEmpty == false, description.isEmpty == false else {
       return .rejected(.invalidSkillManifest(skill: directoryName))
     }
 
@@ -141,10 +135,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
     return .usable(
       SkillDescriptor(
         name: name,
-        description: TextTruncation.cap(
-          description,
-          maxGraphemes: Self.maxDescriptionGraphemes
-        ),
+        description: TextTruncation.cap(description, maxGraphemes: Self.maxDescriptionGraphemes),
         directory: subdir
       )
     )
@@ -154,13 +145,20 @@ public struct FileSystemWorkspace: WorkspaceReading {
   /// principled winner, and shadowing one silently is exactly what the loader must never do.
   static func withoutCollidingNames(
     _ descriptors: [SkillDescriptor]
-  ) -> (descriptors: [SkillDescriptor], warnings: [WorkspaceWarning]) {
+  ) -> (
+    descriptors: [SkillDescriptor],
+    warnings: [WorkspaceWarning]
+  ) {
     var directoriesByName: [String: [String]] = [:]
     for descriptor in descriptors {
       directoriesByName[descriptor.name, default: []].append(descriptor.directory.lastPathComponent)
     }
 
-    let collidingNames = Set(directoriesByName.filter { $0.value.count > 1 }.keys)
+    let collidingNames = Set(
+      directoriesByName.filter {
+        $0.value.count > 1
+      }.keys
+    )
     guard collidingNames.isEmpty == false else {
       return (descriptors, [])
     }
@@ -170,7 +168,9 @@ public struct FileSystemWorkspace: WorkspaceReading {
     }
 
     return (
-      descriptors.filter { collidingNames.contains($0.name) == false },
+      descriptors.filter {
+        collidingNames.contains($0.name) == false
+      },
       warnings
     )
   }
@@ -197,7 +197,9 @@ public struct FileSystemWorkspace: WorkspaceReading {
     let segments = name.split(separator: "-", omittingEmptySubsequences: false)
     return segments.allSatisfy { segment in
       segment.isEmpty == false
-        && segment.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) }
+        && segment.allSatisfy {
+          ("a"..."z").contains($0) || ("0"..."9").contains($0)
+        }
     }
   }
 
@@ -230,9 +232,8 @@ public struct FileSystemWorkspace: WorkspaceReading {
       return .missing
     }
 
-    guard
-      let rawData = try? Data(contentsOf: fileURL),
-      let text = String(data: rawData, encoding: .utf8)
+    guard let rawData = try? Data(contentsOf: fileURL),
+          let text = String(data: rawData, encoding: .utf8)
     else {
       return LoadedFile(outcome: .unreadable, text: "", graphemeCount: 0)
     }

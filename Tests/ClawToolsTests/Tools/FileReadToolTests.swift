@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct FileReadToolTests {
+@Suite
+struct FileReadToolTests {
   /// A real temp workspace with a sibling "outside" directory for escape tests.
   private struct Fixture {
     let root: URL
@@ -13,8 +14,10 @@ import Testing
   }
 
   private func makeFixture() throws -> Fixture {
-    let base = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-fileread-\(UUID().uuidString)", isDirectory: true)
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "claw-fileread-\(UUID().uuidString)",
+      isDirectory: true
+    )
     let root = base.appendingPathComponent("workspace", isDirectory: true)
     let outside = base.appendingPathComponent("outside", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -38,7 +41,8 @@ import Testing
     await tool.execute(arguments: .object(["path": .string(path)]), canonicalTarget: nil)
   }
 
-  @Test func readsARelativeFileAndSetsUntrusted() async throws {
+  @Test
+  func readsARelativeFileAndSetsUntrusted() async throws {
     // given
     let fixture = try makeFixture()
     try write("project status: green", to: fixture.root.appendingPathComponent("notes/status.md"))
@@ -53,7 +57,8 @@ import Testing
     #expect(payload.readPrivateData == false)
   }
 
-  @Test func refusesAbsoluteAndEmptyPaths() async throws {
+  @Test
+  func refusesAbsoluteAndEmptyPaths() async throws {
     // given
     let fixture = try makeFixture()
 
@@ -62,7 +67,8 @@ import Testing
     #expect((await execute(fixture.tool, path: "")).status == .error)
   }
 
-  @Test func dotDotTraversalFailsContainment() async throws {
+  @Test
+  func dotDotTraversalFailsContainment() async throws {
     // given — a real file outside the workspace (FR-T4 tested invariant)
     let fixture = try makeFixture()
     try write("outside secret", to: fixture.outside.appendingPathComponent("target.md"))
@@ -76,7 +82,8 @@ import Testing
     #expect(payload.ingestedUntrusted == false)
   }
 
-  @Test func outPointingSymlinkFailsContainment() async throws {
+  @Test
+  func outPointingSymlinkFailsContainment() async throws {
     // given — a symlink INSIDE the workspace pointing OUT (FR-T4: the final target is asserted)
     let fixture = try makeFixture()
     let target = fixture.outside.appendingPathComponent("real.md")
@@ -92,7 +99,8 @@ import Testing
     #expect(payload.content.contains("outside via link") == false)
   }
 
-  @Test func refusesBinaryContent() async throws {
+  @Test
+  func refusesBinaryContent() async throws {
     // given
     let fixture = try makeFixture()
     let url = fixture.root.appendingPathComponent("blob.bin")
@@ -105,7 +113,8 @@ import Testing
     #expect(payload.status == .error)
   }
 
-  @Test func missingFileIsAFriendlyError() async throws {
+  @Test
+  func missingFileIsAFriendlyError() async throws {
     // given
     let fixture = try makeFixture()
 
@@ -117,7 +126,8 @@ import Testing
     #expect(payload.ingestedUntrusted == false)
   }
 
-  @Test func redactsExactSecretValuesFromContent() async throws {
+  @Test
+  func redactsExactSecretValuesFromContent() async throws {
     // given
     let fixture = try makeFixture()
     try write("the token is tok-secret-1 ok", to: fixture.root.appendingPathComponent("leak.md"))
@@ -129,7 +139,8 @@ import Testing
     #expect(payload.content == "the token is [REDACTED:secret-value] ok")
   }
 
-  @Test func memoryFileReadSetsThePrivateDataFlag() async throws {
+  @Test
+  func memoryFileReadSetsThePrivateDataFlag() async throws {
     // given (rev.1 H1 — the run-local private-data signal)
     let fixture = try makeFixture()
     try write("private memory", to: fixture.root.appendingPathComponent("MEMORY.md"))

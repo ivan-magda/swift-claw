@@ -30,11 +30,9 @@ public enum RuntimeSecretPreparer {
   ) throws(SecretStoreError) -> Secrets {
     // The resolver already owns the fail-closed rule for which backend a state root is on; asking
     // it keeps login and daemon startup from ever disagreeing about that.
-    let resolution = SecretStoreResolver.resolve(
-      stateRoot: stateRoot,
-      environment: environment,
-      warn: { _ in }
-    )
+    let resolution = SecretStoreResolver.resolve(stateRoot: stateRoot, environment: environment) {
+      _ in
+    }
 
     switch resolution.backend {
     case .encrypted:

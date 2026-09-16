@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct SkillDiagnosticsTests {
-  @Test func canonicalIndexUsesOneLinePerDescriptorAndCountsGraphemes() {
+@Suite
+struct SkillDiagnosticsTests {
+  @Test
+  func canonicalIndexUsesOneLinePerDescriptorAndCountsGraphemes() {
     // given
     let descriptors = [
       descriptor(name: "alpha", description: "First skill."),
@@ -26,7 +28,8 @@ import Testing
     #expect(WorkspaceSkills.indexLine(for: descriptors[0]) == "- alpha: First skill.")
   }
 
-  @Test func emptyDescriptorListHasAnEmptyZeroLengthIndex() {
+  @Test
+  func emptyDescriptorListHasAnEmptyZeroLengthIndex() {
     // given
     let descriptors: [SkillDescriptor] = []
 
@@ -38,48 +41,35 @@ import Testing
     #expect(WorkspaceSkills.completeIndexGraphemeCount(for: descriptors) == 0)
   }
 
-  @Test(
-    arguments: [
-      (
-        WorkspaceWarning.invalidSkillManifest(skill: "broken"),
-        "Skill `broken`",
-        "frontmatter"
-      ),
-      (
-        WorkspaceWarning.invalidSkillName(directory: "Shouting", name: "Shouting"),
-        "Skill `Shouting`",
-        "lowercase"
-      ),
-      (
-        WorkspaceWarning.skillNameDirectoryMismatch(directory: "triage", name: "triage-mail"),
-        "Skill `triage`",
-        "`triage-mail`"
-      ),
-      (
-        WorkspaceWarning.duplicateSkillName(
-          name: "deploy",
-          directories: ["deploy", "deploy-copy"]
-        ),
-        "Skill name `deploy`",
-        "`deploy-copy`"
-      ),
-      (
-        WorkspaceWarning.escapingSkillDirectory(directory: "linked-out"),
-        "Skill `linked-out`",
-        "outside the workspace"
-      ),
-      (
-        WorkspaceWarning.unreadableSkillsDirectory,
-        "`skills` directory",
-        "couldn't be read"
-      ),
-      (
-        WorkspaceWarning.skillsDirectoryOutsideWorkspace,
-        "`skills` directory",
-        "outside the workspace"
-      ),
-    ]
-  )
+  @Test(arguments: [
+    (WorkspaceWarning.invalidSkillManifest(skill: "broken"), "Skill `broken`", "frontmatter"),
+    (
+      WorkspaceWarning.invalidSkillName(directory: "Shouting", name: "Shouting"),
+      "Skill `Shouting`",
+      "lowercase"
+    ),
+    (
+      WorkspaceWarning.skillNameDirectoryMismatch(directory: "triage", name: "triage-mail"),
+      "Skill `triage`",
+      "`triage-mail`"
+    ),
+    (
+      WorkspaceWarning.duplicateSkillName(name: "deploy", directories: ["deploy", "deploy-copy"]),
+      "Skill name `deploy`",
+      "`deploy-copy`"
+    ),
+    (
+      WorkspaceWarning.escapingSkillDirectory(directory: "linked-out"),
+      "Skill `linked-out`",
+      "outside the workspace"
+    ),
+    (WorkspaceWarning.unreadableSkillsDirectory, "`skills` directory", "couldn't be read"),
+    (
+      WorkspaceWarning.skillsDirectoryOutsideWorkspace,
+      "`skills` directory",
+      "outside the workspace"
+    ),
+  ])
   func everyWarningHasAnOwnerFacingReason(
     warning: WorkspaceWarning,
     identity: String,
@@ -94,6 +84,8 @@ import Testing
     #expect(reason.contains("skipped"))
   }
 }
+
+// MARK: - Skill Descriptor Fixtures
 
 private extension SkillDiagnosticsTests {
   func descriptor(name: String, description: String) -> SkillDescriptor {

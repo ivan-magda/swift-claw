@@ -29,18 +29,16 @@ struct ConfirmationResolver: Sendable {
   ) async throws(RoutingHalt) -> HandleOutcome? {
     let existing = try await replies.perform(
       "pending lookup",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId)
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID)
     ) {
-      try sessionMessages.findSession(
-        sessionKey: SessionKey.telegramDM(chatId: message.chatId)
-      )
+      try sessionMessages.findSession(sessionKey: SessionKey.telegramDM(chatID: message.chatID))
     }
-    guard let sessionId = existing else {
+    guard let sessionID = existing else {
       return nil
     }
 
-    guard let entry = await pendingConfirmations.pending(sessionId: sessionId) else {
+    guard let entry = await pendingConfirmations.pending(sessionID: sessionID) else {
       return nil
     }
 
@@ -48,18 +46,14 @@ struct ConfirmationResolver: Sendable {
     case .confirm:
       return try await commitPending(
         entry,
-        sessionId: sessionId,
+        sessionID: sessionID,
         rawUpdate: rawUpdate,
         message: message
       )
     case .cancel:
-      return try await cancelPending(
-        sessionId: sessionId,
-        rawUpdate: rawUpdate,
-        message: message
-      )
+      return try await cancelPending(sessionID: sessionID, rawUpdate: rawUpdate, message: message)
     case .other:
-      await pendingConfirmations.clear(sessionId: sessionId)
+      await pendingConfirmations.clear(sessionID: sessionID)
       return nil
     }
   }
@@ -71,7 +65,7 @@ private extension ConfirmationResolver {
   /// Confirms a parked effect through its atomic claim+effect+audit store seam.
   func commitPending(
     _ confirmation: CommandConfirmation,
-    sessionId: Int64,
+    sessionID: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
@@ -83,7 +77,7 @@ private extension ConfirmationResolver {
     if case .scheduleArm(let validated) = confirmation {
       guard let recomputed = schedule.policy.armOccurrence(for: validated, at: now()) else {
         return try await rejectStaleArm(
-          sessionId: sessionId,
+          sessionID: sessionID,
           rawUpdate: rawUpdate,
           message: message
         )
@@ -96,33 +90,33 @@ private extension ConfirmationResolver {
     do {
       (newlyClaimed, ackText) = try applyConfirmedEffect(
         confirmation,
-        updateId: rawUpdate.updateId,
-        chatId: message.chatId,
+        updateID: rawUpdate.updateID,
+        chatID: message.chatID,
         scheduleArmNext: scheduleArmNext
       )
     } catch StoreError.diskFull {
-      throw RoutingHalt(outcome: await replies.storageFull(target: .chat(message.chatId)))
+      throw RoutingHalt(outcome: await replies.storageFull(target: .chat(message.chatID)))
     } catch {
       // A non-disk commit failure is terminal for the parked entry — recovery is claim + clear
       // + per-entry ack, which `perform`'s retry/ack options don't express.
-      logger.error("confirmation commit failed for update \(rawUpdate.updateId): \(error)")
+      logger.error("confirmation commit failed for update \(rawUpdate.updateID): \(error)")
       return try await failPendingCommit(
         confirmation,
-        sessionId: sessionId,
+        sessionID: sessionID,
         rawUpdate: rawUpdate,
         message: message
       )
     }
 
     guard newlyClaimed else {
-      return replies.skipDuplicate(updateId: rawUpdate.updateId)
+      return replies.skipDuplicate(updateID: rawUpdate.updateID)
     }
 
-    await pendingConfirmations.clear(sessionId: sessionId)
+    await pendingConfirmations.clear(sessionID: sessionID)
 
     return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       text: ackText
     )
   }
@@ -131,71 +125,63 @@ private extension ConfirmationResolver {
   /// claim verdict plus the per-effect ack text. Store failures propagate to `commitPending`.
   func applyConfirmedEffect(
     _ confirmation: CommandConfirmation,
-    updateId: Int64,
-    chatId: Int64,
+    updateID: Int64,
+    chatID: Int64,
     scheduleArmNext: Date?
   ) throws -> (newlyClaimed: Bool, ackText: String) {
     switch confirmation {
     case .rememberWrite(let request):
       let result = try memoryCommands.applyRemember(
-        updateId: updateId,
+        updateID: updateID,
         item: request.item,
         now: now()
       )
       return (result.newlyClaimed, MemoryReplies.saved(id: result.item?.id))
-    case .deleteItem(let itemId):
-      let result = try memoryCommands.applyForget(
-        updateId: updateId,
-        itemId: itemId,
-        now: now()
-      )
-      return (result.newlyClaimed, MemoryReplies.deleted(id: itemId))
+    case .deleteItem(let itemID):
+      let result = try memoryCommands.applyForget(updateID: updateID, itemID: itemID, now: now())
+      return (result.newlyClaimed, MemoryReplies.deleted(id: itemID))
     case .scheduleArm(let validated):
       // owner_chat_id is set HERE, in code, from the arming chat — never model- or
       // prompt-controlled. The insert is the exact parked draft (no re-parse).
       let newJob = NewScheduledJob(
-        ownerChatId: chatId,
+        ownerChatID: chatID,
         label: validated.label,
         prompt: validated.prompt,
         recurrence: validated.recurrence,
         timezone: validated.timezone,
         nextOccurrence: scheduleArmNext ?? validated.firstOccurrence
       )
-      let result = try schedule.commands.applyArm(
-        updateId: updateId,
-        job: newJob,
-        now: now()
-      )
+      let result = try schedule.commands.applyArm(updateID: updateID, job: newJob, now: now())
       return (result.newlyClaimed, ScheduleReplies.armed(job: result.job))
-    case .learningReset(let jobId):
+    case .learningReset(let jobID):
       guard let learningReset else {
         throw StoreError.unexpected("learning reset is unavailable")
       }
-      let result = try learningReset.applyReset(updateId: updateId, jobId: jobId, now: now())
+      let result = try learningReset.applyReset(updateID: updateID, jobID: jobID, now: now())
       guard result.newlyClaimed else {
         return (false, "")
       }
       guard let outcome = result.outcome else {
         throw StoreError.unexpected("claimed learning reset has no outcome")
       }
-      return (true, LearningReplies.resetOutcome(outcome, jobId: jobId))
+      return (true, LearningReplies.resetOutcome(outcome, jobID: jobID))
     }
   }
 
   /// A parked schedule confirmed after its only fire time has passed: nothing valid remains to
   /// arm. Claim the update (dedup), clear the slot, and tell the owner to reschedule.
   func rejectStaleArm(
-    sessionId: Int64,
+    sessionID: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
+    try await replies.claimUpdate(updateID: rawUpdate.updateID, target: .chat(message.chatID))
 
-    await pendingConfirmations.clear(sessionId: sessionId)
+    await pendingConfirmations.clear(sessionID: sessionID)
 
     return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       text: ScheduleReplies.armExpired
     )
   }
@@ -204,13 +190,13 @@ private extension ConfirmationResolver {
   /// ephemeral pending state, and tell the owner nothing changed so they can re-issue.
   func failPendingCommit(
     _ confirmation: CommandConfirmation,
-    sessionId: Int64,
+    sessionID: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
+    try await replies.claimUpdate(updateID: rawUpdate.updateID, target: .chat(message.chatID))
 
-    await pendingConfirmations.clear(sessionId: sessionId)
+    await pendingConfirmations.clear(sessionID: sessionID)
 
     let errorText: String =
       switch confirmation {
@@ -225,25 +211,25 @@ private extension ConfirmationResolver {
       }
 
     return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       text: errorText
     )
   }
 
   /// A negative confirmation claims the update, clears the parked entry, and sends a cancel ack.
   func cancelPending(
-    sessionId: Int64,
+    sessionID: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: .chat(message.chatId))
+    try await replies.claimUpdate(updateID: rawUpdate.updateID, target: .chat(message.chatID))
 
-    await pendingConfirmations.clear(sessionId: sessionId)
+    await pendingConfirmations.clear(sessionID: sessionID)
 
     return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       text: MemoryReplies.cancelled
     )
   }

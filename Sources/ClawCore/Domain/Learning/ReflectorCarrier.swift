@@ -27,13 +27,13 @@ public enum ReflectorRubric {
 /// The canonical summary placed inside one evaluation fence. Raw evidence, tool arguments,
 /// provider replay state and private observations have no field here.
 public struct ReflectorEvaluationSummary: Sendable, Equatable, Encodable {
-  public let runId: Int64
+  public let runID: Int64
   public let finalOutput: String
   public let outcome: String
   public let issueCodes: [String]
 
-  public init(runId: Int64, finalOutput: String, outcome: EffectiveOutcome) {
-    self.runId = runId
+  public init(runID: Int64, finalOutput: String, outcome: EffectiveOutcome) {
+    self.runID = runID
     self.finalOutput = finalOutput
     switch outcome {
     case .positive:
@@ -49,7 +49,7 @@ public struct ReflectorEvaluationSummary: Sendable, Equatable, Encodable {
   }
 
   enum CodingKeys: String, CodingKey {
-    case runId = "run_id"
+    case runID = "run_id"
     case finalOutput = "final_output"
     case outcome
     case issueCodes = "issue_codes"
@@ -181,7 +181,10 @@ public struct ReflectorOutput: Sendable, Equatable, Decodable {
 
   struct AnyKey: CodingKey {
     let stringValue: String
-    var intValue: Int? { nil }
+
+    var intValue: Int? {
+      nil
+    }
 
     init(stringValue: String) {
       self.stringValue = stringValue

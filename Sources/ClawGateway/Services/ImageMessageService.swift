@@ -55,7 +55,10 @@ public struct ImageMessageService: ImageMessageHandling {
 
   public func materialize(
     _ attachment: PhotoAttachment
-  ) async -> Result<ImagePart, ImageMessageFailure> {
+  ) async -> Result<
+    ImagePart,
+    ImageMessageFailure
+  > {
     // Declared metadata picks the rung before anything is fetched, but a sender can forge it, so
     // the same ceiling goes to the transport as the ground truth that actually binds.
     guard let rung = attachment.best(withinBytes: Int64(maxBytes)) else {
@@ -64,7 +67,7 @@ public struct ImageMessageService: ImageMessageHandling {
 
     let bytes: Data
     do {
-      bytes = try await media.downloadFile(fileId: rung.fileId, maxBytes: maxBytes)
+      bytes = try await media.downloadFile(fileID: rung.fileID, maxBytes: maxBytes)
     } catch {
       // Each transport spells cancellation in its own error type, so the task's own state decides
       // whether this was a shutdown rather than a download that genuinely failed.

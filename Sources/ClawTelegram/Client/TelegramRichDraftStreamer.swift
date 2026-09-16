@@ -17,15 +17,15 @@ public struct TelegramRichDraftStreamer: RichDraftStreaming {
   /// Telegram accepts a draft only in a private chat, so the negative chat id of every group is
   /// refused here and reported as undelivered — a group turn keeps the typing action as its only
   /// progress signal rather than falling silent behind a bubble that never appears.
-  public func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async -> Bool {
-    guard chatId > 0 else {
+  public func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool {
+    guard chatID > 0 else {
       return false
     }
 
     let capped = String(markdown.prefix(Self.maxMarkdownCharacters))
     let sent = try? await transport.sendRichMessageDraft(
-      chatId: chatId,
-      draftId: draftId,
+      chatID: chatID,
+      draftID: draftID,
       markdown: capped
     )
     return sent ?? false

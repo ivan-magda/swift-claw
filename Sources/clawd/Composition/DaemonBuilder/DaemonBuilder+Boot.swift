@@ -86,7 +86,7 @@ extension DaemonBuilder {
         let replies = try stores.runs.reconcileRunsAtBoot(
           now: now(),
           degradationText: Degradation.unfinished,
-          heartbeatNoticeChatId: heartbeatOwner
+          heartbeatNoticeChatID: heartbeatOwner
         )
         if !replies.isEmpty {
           logger.warning(
@@ -117,7 +117,9 @@ extension DaemonBuilder {
       coordinator: coordination.approvalCoordinator,
       waiter: waiter,
       learning: learning,
-      now: { Date() },
+      now: {
+        Date()
+      },
       logger: logger
     )
     return {

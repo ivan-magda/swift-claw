@@ -51,12 +51,8 @@ public enum SchedulerHealth {
       .storeRead(snapshot.state, key: "scheduler.last_tick_at", group: .scheduler) { state in
         state.lastTickAt.map(String.init(describing:)) ?? "never"
       },
-      .storeRead(
-        snapshot.dueCount,
-        key: "scheduler.due_count",
-        group: .scheduler,
-        isHeadline: true
-      ) { count in
+      .storeRead(snapshot.dueCount, key: "scheduler.due_count", group: .scheduler, isHeadline: true)
+      { count in
         String(count)
       },
       .storeRead(snapshot.state, key: "scheduler.last_misfire", group: .scheduler) { state in
@@ -65,11 +61,8 @@ public enum SchedulerHealth {
         }
         return "\(lastMisfireAt) (skipped \(state.lastMisfireSkippedCount))"
       },
-      .storeRead(
-        snapshot.proactiveTodayUSD,
-        key: "spend.proactive_today_usd",
-        group: .scheduler
-      ) { spent in
+      .storeRead(snapshot.proactiveTodayUSD, key: "spend.proactive_today_usd", group: .scheduler) {
+        (spent) in
         "\(USD.display(spent))/\(USD.display(snapshot.proactivePerDayUSD))"
       },
       check("heartbeat.enabled", snapshot.heartbeatEnabled ? "on" : "off"),
@@ -106,11 +99,7 @@ public enum SchedulerHealth {
 // MARK: - Check Builder
 
 private extension SchedulerHealth {
-  static func check(
-    _ key: String,
-    _ value: String,
-    headline: Bool = false
-  ) -> DoctorReport.Check {
+  static func check(_ key: String, _ value: String, headline: Bool = false) -> DoctorReport.Check {
     DoctorReport.Check(key: key, value: value, ok: true, group: .scheduler, isHeadline: headline)
   }
 }

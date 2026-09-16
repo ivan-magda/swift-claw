@@ -2,16 +2,20 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct CoderRequestTests {
+@Suite
+struct CoderRequestTests {
   @Test(arguments: [
     CoderSource.githubRepository(url: "https://github.com/owner/project"),
     .githubIssue(url: "https://github.com/owner/project/issues/12"),
-  ]) func rejectsInvalidCombinations(source: CoderSource) {
+  ])
+  func rejectsInvalidCombinations(source: CoderSource) {
     // given
     let request = request(source: source)
 
     // when
-    let validate = { try request.validated() }
+    let validate = {
+      try request.validated()
+    }
 
     // then
     #expect(throws: CoderError.self) {
@@ -19,7 +23,8 @@ import Testing
     }
   }
 
-  @Test func issueCanSupplyTask() throws {
+  @Test
+  func issueCanSupplyTask() throws {
     // given
     let request = request(
       source: .githubIssue(url: "https://github.com/owner/project/issues/12"),
@@ -37,7 +42,8 @@ import Testing
   @Test(arguments: [
     CoderSource.local(path: "/tmp/project"),
     .githubRepository(url: "https://github.com/owner/project"),
-  ]) func separateSourcesAcceptStartRef(source: CoderSource) throws {
+  ])
+  func separateSourcesAcceptStartRef(source: CoderSource) throws {
     // given
     let request = request(source: source, workspace: .separate, startRef: "release")
 
@@ -52,12 +58,15 @@ import Testing
     (CoderSource.githubRepository(url: "https://github.com/owner/project"), nil as String?),
     (.githubRepository(url: "https://github.com/owner/project"), " \n"),
     (.local(path: "/tmp/project"), nil),
-  ]) func repositorySourcesRequireTask(source: CoderSource, task: String?) {
+  ])
+  func repositorySourcesRequireTask(source: CoderSource, task: String?) {
     // given
     let request = request(source: source, task: task, workspace: .separate)
 
     // when
-    let validate = { try request.validated() }
+    let validate = {
+      try request.validated()
+    }
 
     // then
     #expect(throws: CoderError.self) {
@@ -65,12 +74,15 @@ import Testing
     }
   }
 
-  @Test func inPlaceRejectsStartRef() {
+  @Test
+  func inPlaceRejectsStartRef() {
     // given
     let request = request(startRef: "release")
 
     // when
-    let validate = { try request.validated() }
+    let validate = {
+      try request.validated()
+    }
 
     // then
     #expect(throws: CoderError.self) {
@@ -78,7 +90,8 @@ import Testing
     }
   }
 
-  @Test func inPlaceAllowsPRTargetAndPreservesTaskData() throws {
+  @Test
+  func inPlaceAllowsPRTargetAndPreservesTaskData() throws {
     // given
     let request = request(
       task: "  Fix `retry()`; $(leave as data)\n",
@@ -94,12 +107,15 @@ import Testing
     #expect(validated == request)
   }
 
-  @Test func separateRejectsPublishingExistingChanges() {
+  @Test
+  func separateRejectsPublishingExistingChanges() {
     // given
     let request = request(workspace: .separate, publishExistingChanges: true)
 
     // when
-    let validate = { try request.validated() }
+    let validate = {
+      try request.validated()
+    }
 
     // then
     #expect(throws: CoderError.self) {
@@ -107,12 +123,15 @@ import Testing
     }
   }
 
-  @Test func localPathMustBeAbsolute() {
+  @Test
+  func localPathMustBeAbsolute() {
     // given
     let request = request(source: .local(path: "relative/project"))
 
     // when
-    let validate = { try request.validated() }
+    let validate = {
+      try request.validated()
+    }
 
     // then
     #expect(throws: CoderError.self) {
@@ -133,12 +152,15 @@ import Testing
     .githubIssue(url: "https://github.com/owner/project/pull/12"),
     .githubIssue(url: "https://github.com/owner/project/issues/0"),
     .githubIssue(url: "https://github.com/owner/project/issues/+1"),
-  ]) func githubURLValidation(source: CoderSource) {
+  ])
+  func githubURLValidation(source: CoderSource) {
     // given
     let request = request(source: source, workspace: .separate)
 
     // when
-    let validate = { try request.validated() }
+    let validate = {
+      try request.validated()
+    }
 
     // then
     #expect(throws: CoderError.self) {

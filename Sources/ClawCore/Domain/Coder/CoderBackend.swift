@@ -22,7 +22,7 @@ public struct CoderInvocation: Sendable {
 public protocol CoderBackend: Sendable {
   func run(
     _ invocation: CoderInvocation,
-    recordProcess: @Sendable (CoderProcessEvent) async throws -> Void
+    recordProcess: @Sendable (_ event: CoderProcessEvent) async throws -> Void
   ) async -> CoderResult
 }
 
@@ -40,8 +40,13 @@ public protocol CoderRequestPreparing: Sendable {
 
 public protocol CoderServing: Sendable {
   func prepare(_ request: CoderRequest) async throws -> CoderPreparedRequest
-  func submit(_ prepared: CoderPreparedRequest, context: ToolExecutionContext) async throws
-    -> CoderJob
+
+  func submit(
+    _ prepared: CoderPreparedRequest,
+    context: ToolExecutionContext
+  ) async throws -> CoderJob
+
   func status(id: UUID, context: ToolExecutionContext) async throws -> CoderJob
+
   func cancel(id: UUID, context: ToolExecutionContext) async throws -> CoderJob
 }

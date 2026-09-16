@@ -7,25 +7,25 @@ import Testing
 #if canImport(Speech) && canImport(AVFAudio)
   /// The pure end-of-race policy: which transcript (or which typed error) leaves the engine
   /// after every lane ran, collected as candidates or as a remembered first failure.
-  @Suite struct LaneSettlementTests {
+  @Suite
+  struct LaneSettlementTests {
+    @Test
     @available(macOS 26.0, *)
-    @Test func theWinningCandidateSettlesAsItsText() {
+    func theWinningCandidateSettlesAsItsText() {
       // given
       let winner = ScoredTranscript(text: "привет мир", confidence: 0.84)
       let garbage = ScoredTranscript(text: ", , ,", confidence: 0.02)
 
       // when
-      let outcome = AppleSpeechTranscriber.settle(
-        candidates: [garbage, winner],
-        firstFailure: nil
-      )
+      let outcome = AppleSpeechTranscriber.settle(candidates: [garbage, winner], firstFailure: nil)
 
       // then
       #expect(outcome == .success("привет мир"))
     }
 
+    @Test
     @available(macOS 26.0, *)
-    @Test func aLaneFailureOutranksLowConfidenceWhenNoCandidateWins() {
+    func aLaneFailureOutranksLowConfidenceWhenNoCandidateWins() {
       // given — a lane that never ran may be the one that would have matched; saying
       // "couldn't make out the language" would hide the real, actionable fault
       let garbage = ScoredTranscript(text: ", , ,", confidence: 0.02)
@@ -40,8 +40,9 @@ import Testing
       #expect(outcome == .failure(.assetsUnavailable("reservation slots exhausted")))
     }
 
+    @Test
     @available(macOS 26.0, *)
-    @Test func allLanesGarbageWithoutFailuresIsLowConfidence() {
+    func allLanesGarbageWithoutFailuresIsLowConfidence() {
       // given
       let candidates = [
         ScoredTranscript(text: ", , ,", confidence: 0.02),
@@ -55,8 +56,9 @@ import Testing
       #expect(outcome == .failure(.lowConfidence))
     }
 
+    @Test
     @available(macOS 26.0, *)
-    @Test func everyLaneFailingSettlesAsTheFirstFailure() {
+    func everyLaneFailingSettlesAsTheFirstFailure() {
       // given / when
       let outcome = AppleSpeechTranscriber.settle(
         candidates: [],
@@ -67,8 +69,9 @@ import Testing
       #expect(outcome == .failure(.assetsUnavailable("download failed")))
     }
 
+    @Test
     @available(macOS 26.0, *)
-    @Test func aWinnerStillBeatsAFailureFromAnotherLane() {
+    func aWinnerStillBeatsAFailureFromAnotherLane() {
       // given — one broken locale must not take down a language that worked
       let winner = ScoredTranscript(text: "quick brown fox", confidence: 0.96)
 

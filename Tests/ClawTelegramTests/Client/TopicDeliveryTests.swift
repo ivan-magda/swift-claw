@@ -5,10 +5,9 @@ import Testing
 @testable import ClawCore
 @testable import ClawTelegram
 
-@Suite struct TopicDeliveryTests {
-  private func makeClient(
-    _ executor: ClawTestSupport.RecordingHTTPExecutor
-  ) -> TelegramClient {
+@Suite
+struct TopicDeliveryTests {
+  private func makeClient(_ executor: ClawTestSupport.RecordingHTTPExecutor) -> TelegramClient {
     TelegramClient(token: "T", http: executor, baseURL: "https://example.test")
   }
 
@@ -29,10 +28,11 @@ import Testing
     return try #require(try JSONSerialization.jsonObject(with: raw) as? [String: Any])
   }
 
-  @Test func plainSendCarriesTheTopicAndTheReplyTarget() async throws {
+  @Test
+  func plainSendCarriesTheTopicAndTheReplyTarget() async throws {
     // given
     let executor = makeExecutor()
-    let target = DeliveryTarget(chatId: -1_001, messageThreadId: 5, replyToMessageId: 88)
+    let target = DeliveryTarget(chatID: -1_001, messageThreadID: 5, replyToMessageID: 88)
 
     // when
     _ = try await makeClient(executor).sendMessage(to: target, text: "answer", replyMarkup: nil)
@@ -44,10 +44,11 @@ import Testing
     #expect(replyParameters["message_id"] as? Int64 == 88)
   }
 
-  @Test func richSendCarriesTheTopicAndTheReplyTarget() async throws {
+  @Test
+  func richSendCarriesTheTopicAndTheReplyTarget() async throws {
     // given
     let executor = makeExecutor()
-    let target = DeliveryTarget(chatId: -1_001, messageThreadId: 5, replyToMessageId: 88)
+    let target = DeliveryTarget(chatID: -1_001, messageThreadID: 5, replyToMessageID: 88)
 
     // when
     _ = try await makeClient(executor).sendRichMessage(
@@ -65,10 +66,11 @@ import Testing
 
   /// Without the flag a deleted target answers 400, which stalls the row and every later one
   /// behind it on every drain — one removed message would wedge delivery for every topic.
-  @Test func aReplyDegradesToAPlainInTopicMessageWhenItsTargetIsGone() async throws {
+  @Test
+  func aReplyDegradesToAPlainInTopicMessageWhenItsTargetIsGone() async throws {
     // given
     let executor = makeExecutor()
-    let target = DeliveryTarget(chatId: -1_001, messageThreadId: 5, replyToMessageId: 88)
+    let target = DeliveryTarget(chatID: -1_001, messageThreadID: 5, replyToMessageID: 88)
 
     // when
     _ = try await makeClient(executor).sendMessage(to: target, text: "answer", replyMarkup: nil)
@@ -80,10 +82,11 @@ import Testing
     #expect(json["message_thread_id"] as? Int64 == 5)
   }
 
-  @Test func aGeneralTopicSendCarriesAReplyTargetButNoThread() async throws {
+  @Test
+  func aGeneralTopicSendCarriesAReplyTargetButNoThread() async throws {
     // given — the General topic has no `message_thread_id` to carry
     let executor = makeExecutor()
-    let target = DeliveryTarget(chatId: -1_001, messageThreadId: nil, replyToMessageId: 88)
+    let target = DeliveryTarget(chatID: -1_001, messageThreadID: nil, replyToMessageID: 88)
 
     // when
     _ = try await makeClient(executor).sendMessage(to: target, text: "answer", replyMarkup: nil)
@@ -94,12 +97,13 @@ import Testing
     #expect(json["reply_parameters"] != nil)
   }
 
-  @Test func aDirectSendCarriesNeitherTopicNorReply() async throws {
+  @Test
+  func aDirectSendCarriesNeitherTopicNorReply() async throws {
     // given
     let executor = makeExecutor()
 
     // when
-    _ = try await makeClient(executor).sendMessage(chatId: 42, text: "answer")
+    _ = try await makeClient(executor).sendMessage(chatID: 42, text: "answer")
 
     // then — the DM request is exactly what it was before topics existed
     let json = try await body(executor)
@@ -108,13 +112,14 @@ import Testing
     #expect(json["chat_id"] as? Int64 == 42)
   }
 
-  @Test func aTypingActionCarriesTheTopic() async throws {
+  @Test
+  func aTypingActionCarriesTheTopic() async throws {
     // given
     let executor = makeExecutor()
     let indicator = TelegramTypingIndicator(transport: makeClient(executor))
 
     // when
-    await indicator.sendTyping(chatId: -1_001, messageThreadId: 5)
+    await indicator.sendTyping(chatID: -1_001, messageThreadID: 5)
 
     // then
     let json = try await body(executor)
@@ -122,13 +127,14 @@ import Testing
     #expect(json["action"] as? String == "typing")
   }
 
-  @Test func aDirectTypingActionCarriesNoTopic() async throws {
+  @Test
+  func aDirectTypingActionCarriesNoTopic() async throws {
     // given
     let executor = makeExecutor()
     let indicator = TelegramTypingIndicator(transport: makeClient(executor))
 
     // when
-    await indicator.sendTyping(chatId: 42)
+    await indicator.sendTyping(chatID: 42)
 
     // then — the DM request is exactly what it was before topics existed
     let json = try await body(executor)

@@ -41,16 +41,19 @@ extension ContextBuilder {
   /// gone from `fitted` entirely — the case the owner most needs told, so it reads as every skill
   /// dropped rather than as no skills installed.
   func droppedSkillsNotice(fitted: [FittedSection], requested: [FittableSection]) -> String? {
-    guard let source = requested.first(where: { $0.id == .skills }) else {
+    guard let source = requested.first(where: {
+        $0.id == .skills
+      })
+    else {
       return nil
     }
 
     let fittedSkills = fitted.first { section in
       section.id == .skills
     }
-    let dropped =
-      (fittedSkills?.droppedUnitIDs ?? source.units.map(\.id))
-      .map(Self.skillName(fromUnitID:))
+    let dropped = (fittedSkills?.droppedUnitIDs ?? source.units.map(\.id)).map(
+      Self.skillName(fromUnitID:)
+    )
     guard dropped.isEmpty == false else {
       return nil
     }

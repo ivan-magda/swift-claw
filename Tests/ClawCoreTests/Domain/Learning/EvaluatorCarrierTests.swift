@@ -6,7 +6,15 @@ import Testing
 /// payload instead of projecting named fields out of it. The rubric travels inside the carrier, so
 /// this list also bounds how the rubric may be worded.
 private let forbiddenCarrierTokens = [
-  "lesson", "trial", "candidate", "digest", "promotion", "stable", "score", "expected", "gold",
+  "lesson",
+  "trial",
+  "candidate",
+  "digest",
+  "promotion",
+  "stable",
+  "score",
+  "expected",
+  "gold",
   "oracle",
 ]
 
@@ -18,7 +26,11 @@ private let repliesOutsideTheFrozenSchema: [String] = [
   #"{"schema_version":1,"outcome":"maybe","issue_codes":[]}"#,
   #"{"schema_version":1,"outcome":"reusable_issue","issue_codes":[""]}"#,
   reply(issueCodes: ["duplicate", "duplicate"]),
-  reply(issueCodes: (0...EvaluatorOutput.maxIssueCodes).map { "code_\($0)" }),
+  reply(
+    issueCodes: (0...EvaluatorOutput.maxIssueCodes).map {
+      "code_\($0)"
+    }
+  ),
   reply(issueCodes: [String(repeating: "x", count: EvaluatorOutput.maxIssueCodeCharacters + 1)]),
 ]
 
@@ -35,11 +47,13 @@ private func reply(issueCodes: [String]) -> String {
 /// The evaluator is blind by construction, not by convention: `EvaluatorCarrier` is the whole
 /// model-visible surface of a run, and `EvaluatorOutput` is the whole reply the algorithm accepts
 /// back. Both are closed types, so widening either is a visible trust decision.
-@Suite struct EvaluatorCarrierTests {
-  @Test func serializedCarrierHoldsNoLessonTrialOrCandidateField() throws {
+@Suite
+struct EvaluatorCarrierTests {
+  @Test
+  func serializedCarrierHoldsNoLessonTrialOrCandidateField() throws {
     // given — a payload whose lesson-set and job-definition digests spell the forbidden tokens
     let carrier = EvaluatorCarrier(
-      runId: 41,
+      runID: 41,
       jobPrompt: "Check the page for material changes.",
       rubric: EvaluatorRubric.v1.text,
       evidence: evidencePayload()
@@ -69,7 +83,8 @@ private func reply(issueCodes: [String]) -> String {
     #expect(decoded == nil)
   }
 
-  @Test func aReplyOmittingIssueCodesNamesNoDefects() throws {
+  @Test
+  func aReplyOmittingIssueCodesNamesNoDefects() throws {
     // given — the shape a model returns when it found nothing to report
     let json = #"{"schema_version":1,"outcome":"no_issue"}"#
 
@@ -81,7 +96,8 @@ private func reply(issueCodes: [String]) -> String {
     #expect(output.issueCodes.isEmpty)
   }
 
-  @Test func issueCodesAreStoredSortedSoTwoRunsCompareByExactEquality() throws {
+  @Test
+  func issueCodesAreStoredSortedSoTwoRunsCompareByExactEquality() throws {
     // given — the same two codes a second run could report in the other order
     let json = """
       {"schema_version":1,"outcome":"reusable_issue",\
@@ -104,7 +120,7 @@ private func evidencePayload() -> EvidencePayload {
     schemaVersion: EvidenceLimits.schemaVersion,
     jobDefinitionDigest: "digest-of-the-job-definition",
     effectiveLessonSetDigest: "lesson-set-the-run-was-told",
-    sourceMessageId: 7,
+    sourceMessageID: 7,
     sourceDigest: "digest-of-this-receipt",
     finalOutput: "The price changed from 10 to 12.",
     toolFacts: [
@@ -119,6 +135,6 @@ private func evidencePayload() -> EvidencePayload {
     skillSetDigest: "skills-v1",
     configuredRoute: "openai-compatible/gpt-x",
     terminalRoute: "openai-compatible/gpt-x",
-    usageRowIds: [11]
+    usageRowIDs: [11]
   )
 }

@@ -18,47 +18,37 @@ struct LearningHandlers: Sendable {
   ) async throws(RoutingHalt) -> HandleOutcome {
     switch command {
     case .list:
-      return try await read(
-        jobId: nil,
-        style: .list,
-        rawUpdate: rawUpdate,
-        message: message
-      )
-    case .detail(let jobId):
-      return try await read(
-        jobId: jobId,
-        style: .detail,
-        rawUpdate: rawUpdate,
-        message: message
-      )
-    case .reset(let jobId):
-      guard let jobId else {
+      return try await read(jobID: nil, style: .list, rawUpdate: rawUpdate, message: message)
+    case .detail(let jobID):
+      return try await read(jobID: jobID, style: .detail, rawUpdate: rawUpdate, message: message)
+    case .reset(let jobID):
+      guard let jobID else {
         return await replies.sendCanned(
-          updateId: rawUpdate.updateId,
-          target: .chat(message.chatId),
+          updateID: rawUpdate.updateID,
+          target: .chat(message.chatID),
           text: CommandReplies.learningUsage
         )
       }
-      return try await requestReset(jobId: jobId, rawUpdate: rawUpdate, message: message)
+      return try await requestReset(jobID: jobID, rawUpdate: rawUpdate, message: message)
     }
   }
 
   private func requestReset(
-    jobId: Int64,
+    jobID: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
     let view = try await replies.perform(
       "learning reset view",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId)
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID)
     ) {
-      try learning.learningView(jobId: jobId)
+      try learning.learningView(jobID: jobID)
     }
     guard view.count == 1 else {
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
-        target: .chat(message.chatId),
+        updateID: rawUpdate.updateID,
+        target: .chat(message.chatID),
         text: CommandReplies.learningUnavailable
       )
     }
@@ -67,14 +57,14 @@ struct LearningHandlers: Sendable {
       return await send(view: view, style: .detail, rawUpdate: rawUpdate, message: message)
     case .readable(let readable):
       return try await parkReset(
-        jobId: jobId,
+        jobID: jobID,
         label: readable.job.label,
         rawUpdate: rawUpdate,
         message: message
       )
     case .unreadable(let unreadable):
       return try await parkReset(
-        jobId: jobId,
+        jobID: jobID,
         label: unreadable.validatedLabel,
         rawUpdate: rawUpdate,
         message: message
@@ -83,55 +73,56 @@ struct LearningHandlers: Sendable {
   }
 
   private func parkReset(
-    jobId: Int64,
+    jobID: Int64,
     label: String?,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
     let claim = try await replies.perform(
       "learning reset claim",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId)
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID)
     ) {
       try sessionMessages.claimCommandUpdate(
-        updateId: rawUpdate.updateId,
-        sessionKey: SessionKey.telegramDM(chatId: message.chatId),
+        updateID: rawUpdate.updateID,
+        sessionKey: SessionKey.telegramDM(chatID: message.chatID),
         now: now()
       )
     }
-    guard case .claimed(let sessionId) = claim else {
-      return replies.skipDuplicate(updateId: rawUpdate.updateId)
+    guard case .claimed(let sessionID) = claim else {
+      return replies.skipDuplicate(updateID: rawUpdate.updateID)
     }
-    await pendingConfirmations.park(.learningReset(jobId: jobId), sessionId: sessionId)
-    let prompt = LearningReplies.resetConfirmation(jobId: jobId, label: label)
+    await pendingConfirmations.park(.learningReset(jobID: jobID), sessionID: sessionID)
+    let prompt = LearningReplies.resetConfirmation(jobID: jobID, label: label)
     return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       text: redactor.redact(prompt)
     )
   }
 
   private func read(
-    jobId: Int64?,
+    jobID: Int64?,
     style: LearningSurface.Style,
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
     let view = try await replies.perform(
       "learning view",
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId)
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID)
     ) {
-      try learning.learningView(jobId: jobId)
+      try learning.learningView(jobID: jobID)
     }
-    if let jobId, let outboxSignal,
-      let outcome = try await promotionReply(
-        jobId: jobId,
-        view: view,
-        rawUpdate: rawUpdate,
-        message: message,
-        signal: outboxSignal
-      )
+    if let jobID,
+       let outboxSignal,
+       let outcome = try await promotionReply(
+         jobID: jobID,
+         view: view,
+         rawUpdate: rawUpdate,
+         message: message,
+         signal: outboxSignal
+       )
     {
       return outcome
     }
@@ -151,8 +142,8 @@ struct LearningHandlers: Sendable {
       limit: TelegramMessageLimits.maxPlainMessageCharacters
     )
     return await replies.sendCannedChunks(
-      updateId: rawUpdate.updateId,
-      target: .chat(message.chatId),
+      updateID: rawUpdate.updateID,
+      target: .chat(message.chatID),
       texts: chunks
     )
   }

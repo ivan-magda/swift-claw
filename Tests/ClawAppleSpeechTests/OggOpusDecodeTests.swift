@@ -2,25 +2,29 @@ import ClawCore
 import Foundation
 import Testing
 
+#if canImport(AVFAudio)
+  import AVFAudio
+#endif
+
 @testable import ClawAppleSpeech
 
 #if canImport(AVFAudio)
-  import AVFAudio
-
   /// The pipeline hands Telegram's Ogg/Opus straight to `AVAudioFile` with no transcoder — that
   /// rests on an UNDOCUMENTED CoreAudio component ('Oggf', no public constant), so this fixture
   /// decode is the tripwire for an OS update silently removing it. The fixture is SYNTHETIC
   /// (say → ffmpeg libopus → Ogg, 48 kHz mono — the exact codec/container/params of a real voice
   /// note); swapping in a genuine Telegram `getFile` download is the still-open spike in
   /// docs/research/telegram-voice-transcription-2026-07-16.md §5.2.
-  @Suite struct OggOpusDecodeTests {
+  @Suite
+  struct OggOpusDecodeTests {
     private func fixtureURL() throws -> URL {
       try #require(
         Bundle.module.url(forResource: "voice-note", withExtension: "oga", subdirectory: "Fixtures")
       )
     }
 
-    @Test func avAudioFileDecodesTelegramShapedOggOpusToPCM() throws {
+    @Test
+    func avAudioFileDecodesTelegramShapedOggOpusToPCM() throws {
       // given
       let fixture = try fixtureURL()
 
@@ -47,9 +51,11 @@ import Testing
 
   /// The ground-truth duration guard is pure arithmetic on an opened file — testable with the
   /// fixture (~7.8s of audio), no speech assets or network involved.
-  @Suite struct DecodedDurationGuardTests {
+  @Suite
+  struct DecodedDurationGuardTests {
+    @Test
     @available(macOS 26.0, *)
-    @Test func fixtureWithinCapPassesAndOverCapThrowsAudioTooLong() throws {
+    func fixtureWithinCapPassesAndOverCapThrowsAudioTooLong() throws {
       // given
       let fixture = try #require(
         Bundle.module.url(forResource: "voice-note", withExtension: "oga", subdirectory: "Fixtures")
@@ -68,12 +74,11 @@ import Testing
   /// End-to-end engine test: real `SpeechAnalyzer` transcription of the fixture. Opt-in only
   /// (CLAW_SPEECH_LIVE_TESTS=1): first use may download model assets over the network, which the
   /// deterministic suite must never depend on.
-  @Suite(
-    .enabled(if: ProcessInfo.processInfo.environment["CLAW_SPEECH_LIVE_TESTS"] == "1")
-  )
+  @Suite(.enabled(if: ProcessInfo.processInfo.environment["CLAW_SPEECH_LIVE_TESTS"] == "1"))
   struct AppleSpeechTranscriberLiveTests {
+    @Test
     @available(macOS 26.0, *)
-    @Test func transcribesTheFixtureVerbatim() async throws {
+    func transcribesTheFixtureVerbatim() async throws {
       // given
       let fixture = try #require(
         Bundle.module.url(forResource: "voice-note", withExtension: "oga", subdirectory: "Fixtures")
@@ -91,13 +96,13 @@ import Testing
     /// race: the mismatched lane must score below early-accept and the matching lane must win.
     /// The Russian lane also exercises the `DictationTranscriber` fallback — `ru-RU` has no
     /// `SpeechTranscriber` model.
-    @available(macOS 26.0, *)
     @Test(arguments: [
       (fixture: "voice-note", expected: "quick brown fox", locales: ["ru-RU", "en-US"]),
       (fixture: "voice-note-ru", expected: "французских", locales: ["en-US", "ru-RU"]),
       // Language-only tags are valid BCP-47 and must resolve to each engine's regional model.
       (fixture: "voice-note-ru", expected: "французских", locales: ["en", "ru"]),
     ])
+    @available(macOS 26.0, *)
     func multiLocaleRacePicksTheLaneMatchingTheAudio(
       _ testCase: (fixture: String, expected: String, locales: [String])
     ) async throws {

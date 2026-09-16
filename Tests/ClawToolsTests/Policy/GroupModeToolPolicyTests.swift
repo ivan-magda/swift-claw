@@ -7,7 +7,8 @@ import Testing
 
 /// Group mode has no approval keyboard, so allowed calls must reach `execute` and hard refusals
 /// must stop before it. The suite asserts observable effects at the dispatcher seam.
-@Suite struct GroupModeToolPolicyTests {
+@Suite
+struct GroupModeToolPolicyTests {
   private static let memoryText = "The owner's private project is called Operation Nightjar Falcon."
 
   // MARK: - Fixtures
@@ -24,22 +25,18 @@ import Testing
   private func makeGate() -> ToolPolicyGate {
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: ["s3cret-value-1"]),
-      privateFileLoader: { [Self.memoryText] },
+      privateFileLoader: {
+        [Self.memoryText]
+      },
       enabledDangerousTools: [ExecuteCodeTool.name]
     )
   }
 
   private func makeDispatcher(tools: [any Tool]) -> GatedToolDispatcher {
-    GatedToolDispatcher(
-      registry: ToolRegistry(tools: tools),
-      gate: makeGate()
-    )
+    GatedToolDispatcher(registry: ToolRegistry(tools: tools), gate: makeGate())
   }
 
-  private func context(
-    mode: ChatMode,
-    trifectaHeld: Bool = false
-  ) -> ToolDispatchContext {
+  private func context(mode: ChatMode, trifectaHeld: Bool = false) -> ToolDispatchContext {
     ToolDispatchContext(
       sessionTainted: trifectaHeld,
       runIngestedUntrusted: false,
@@ -86,12 +83,13 @@ import Testing
 
   // MARK: - Executed side effects
 
-  @Test func groupModeFileWriteCreatesTheFile() async throws {
+  @Test
+  func groupModeFileWriteCreatesTheFile() async throws {
     // given
     let root = try makeWorkspace()
-    let dispatcher = makeDispatcher(
-      tools: [FileWriteTool(workspaceRoot: root, redactor: SecretRedactor(secretValues: []))]
-    )
+    let dispatcher = makeDispatcher(tools: [
+      FileWriteTool(workspaceRoot: root, redactor: SecretRedactor(secretValues: [])),
+    ])
 
     // when
     let outcome = await dispatcher.dispatch(
@@ -109,7 +107,8 @@ import Testing
     #expect(written == "hello from the topic")
   }
 
-  @Test func groupModeExecuteCodeProducesProgramOutput() async throws {
+  @Test
+  func groupModeExecuteCodeProducesProgramOutput() async throws {
     // given
     let root = try makeWorkspace()
     let backend = FakeExecutionBackend()
@@ -133,7 +132,8 @@ import Testing
     #expect(outcome.observation.content.contains("unreadable") == false)
   }
 
-  @Test func groupModeFetchUnderTrifectaReturnsContent() async {
+  @Test
+  func groupModeFetchUnderTrifectaReturnsContent() async {
     // given — a would-be-trifecta call: tainted session plus private assembly data.
     let dispatcher = makeDispatcher(tools: [FetchLikeTool()])
     let call = ToolCall(
@@ -156,10 +156,11 @@ import Testing
 
   // MARK: - Group-mode refusals
 
-  @Test func groupModeRefusesMemoryWrite() async {
+  @Test
+  func groupModeRefusesMemoryWrite() async {
     // given
     let dispatcher = makeDispatcher(tools: [
-      MemoryWriteTool(redactor: SecretRedactor(secretValues: []))
+      MemoryWriteTool(redactor: SecretRedactor(secretValues: [])),
     ])
     let call = ToolCall(
       id: "call-memory",
@@ -176,13 +177,14 @@ import Testing
     #expect(outcome.observation.content.contains("approval resume path") == false)
   }
 
-  @Test func groupModeRefusesPrivilegedPromptFileWrite() async throws {
+  @Test
+  func groupModeRefusesPrivilegedPromptFileWrite() async throws {
     // given — filename enumeration belongs to WorkspaceValuesTests
     let root = try makeWorkspace()
     let name = WorkspaceFile.soul.relativePath
-    let dispatcher = makeDispatcher(
-      tools: [FileWriteTool(workspaceRoot: root, redactor: SecretRedactor(secretValues: []))]
-    )
+    let dispatcher = makeDispatcher(tools: [
+      FileWriteTool(workspaceRoot: root, redactor: SecretRedactor(secretValues: [])),
+    ])
 
     // when
     let outcome = await dispatcher.dispatch(
@@ -192,8 +194,6 @@ import Testing
 
     // then
     #expect(outcome.observation.status == .error)
-    #expect(
-      FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path) == false
-    )
+    #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path) == false)
   }
 }

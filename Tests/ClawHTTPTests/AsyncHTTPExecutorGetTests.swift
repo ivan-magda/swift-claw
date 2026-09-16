@@ -7,9 +7,10 @@ import Testing
 
 /// The `get` convenience, which is the one request path the fetch tool takes. The loopback harness
 /// it shares with the other wire suites lives in `AsyncHTTPExecutorGeneralRequestTests`.
-@Suite(.serialized) struct AsyncHTTPExecutorGetTests {
+@Suite(.serialized)
+struct AsyncHTTPExecutorGetTests {
   private func withNoRedirectExecutor<Result>(
-    _ operation: (AsyncHTTPExecutor) async throws -> Result
+    _ operation: (_ executor: AsyncHTTPExecutor) async throws -> Result
   ) async throws -> Result {
     var configuration = HTTPClient.Configuration()
     configuration.redirectConfiguration = .disallow
@@ -24,7 +25,7 @@ import Testing
         status: .ok,
         headers: [("content-type", "text/html")],
         body: "<html><body>hello</body></html>"
-      )
+      ),
     ]) { server in
       // when
       let result = try await withNoRedirectExecutor { executor in
@@ -38,7 +39,7 @@ import Testing
 
       // then
       #expect(result.statusCode == 200)
-      #expect(result.getHeader(for: "Content-Type") == "text/html")
+      #expect(result.header(for: "Content-Type") == "text/html")
       #expect(String(data: result.body, encoding: .utf8)?.contains("hello") == true)
     }
   }
@@ -52,7 +53,7 @@ import Testing
         status: .movedPermanently,
         headers: [("location", "http://127.0.0.1:1/private")],
         body: ""
-      )
+      ),
     ]) { server in
       // when
       let result = try await withNoRedirectExecutor { executor in
@@ -66,7 +67,7 @@ import Testing
 
       // then — the redirect came back to us; nothing fetched the Location target
       #expect(result.statusCode == 301)
-      #expect(result.getHeader(for: "Location") == "http://127.0.0.1:1/private")
+      #expect(result.header(for: "Location") == "http://127.0.0.1:1/private")
     }
   }
 
@@ -74,7 +75,7 @@ import Testing
   func pageBeyondMaxBodyBytesFailsInsteadOfComingBackShort() async throws {
     // given
     try await withScriptedServer(routes: [
-      "/big": ScriptedResponse(status: .ok, body: String(repeating: "a", count: 4096))
+      "/big": ScriptedResponse(status: .ok, body: String(repeating: "a", count: 4096)),
     ]) { server in
       // when
       let failure = await #expect(throws: HTTPTransportFailure.self) {
@@ -103,7 +104,7 @@ import Testing
         status: .movedPermanently,
         headers: [("location", "http://127.0.0.1:1/private")],
         body: String(repeating: "c", count: 4096)
-      )
+      ),
     ]) { server in
       // when
       let result = try await withNoRedirectExecutor { executor in

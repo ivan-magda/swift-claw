@@ -6,7 +6,7 @@ import Foundation
 /// the bounded-download cap survives the middle of the chain.
 struct StubMediaFetcher: MediaFetching {
   struct Call: Sendable, Equatable {
-    let fileId: String
+    let fileID: String
     let maxBytes: Int
   }
 
@@ -27,18 +27,11 @@ struct StubMediaFetcher: MediaFetching {
   let result: Result<Data, any Error & Sendable>
 
   var calls: [Call] {
-    get async {
-      await recorder.calls
-    }
+    get async { await recorder.calls }
   }
 
   init(result: Result<Data, any Error & Sendable>) {
     self.result = result
-  }
-
-  /// A fetcher whose every download fails, for tests that care only that no bytes came back.
-  static var failing: StubMediaFetcher {
-    StubMediaFetcher(result: .failure(FetchFailed()))
   }
 
   /// Audio-shaped convenience: canned bytes, or `nil` for a plain download failure.
@@ -50,8 +43,13 @@ struct StubMediaFetcher: MediaFetching {
     self.init(result: .success(audio))
   }
 
-  func downloadFile(fileId: String, maxBytes: Int) async throws -> Data {
-    await recorder.append(Call(fileId: fileId, maxBytes: maxBytes))
+  /// A fetcher whose every download fails, for tests that care only that no bytes came back.
+  static var failing: StubMediaFetcher {
+    StubMediaFetcher(result: .failure(FetchFailed()))
+  }
+
+  func downloadFile(fileID: String, maxBytes: Int) async throws -> Data {
+    await recorder.append(Call(fileID: fileID, maxBytes: maxBytes))
     return try result.get()
   }
 }
@@ -64,7 +62,7 @@ struct ParkUntilCancelledFetcher: MediaFetching {
   let calls = CallCounter()
   var bytes = ImageFixtures.jpeg
 
-  func downloadFile(fileId: String, maxBytes: Int) async throws -> Data {
+  func downloadFile(fileID: String, maxBytes: Int) async throws -> Data {
     guard await calls.next() > 1 else {
       try? await Task.sleep(for: .seconds(3_600))
       throw StubMediaFetcher.FetchFailed()

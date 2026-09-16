@@ -58,29 +58,29 @@ public struct FeedbackChallengeHandler: Sendable {
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome? {
-    guard
-      let rawMessage = rawUpdate.message ?? rawUpdate.editedMessage,
-      !rawMessage.isForwarded, let text = rawMessage.text
+    guard let rawMessage = rawUpdate.message ?? rawUpdate.editedMessage,
+          !rawMessage.isForwarded,
+          let text = rawMessage.text
     else {
       return nil
     }
     let capturedNow = now()
-    let target = DeliveryTarget.chat(message.chatId)
+    let target = DeliveryTarget.chat(message.chatID)
     let challenge = try await replies.perform(
       "feedback challenge lookup",
-      updateId: rawUpdate.updateId,
+      updateID: rawUpdate.updateID,
       target: target
     ) {
-      try learning.liveChallenge(ownerUserId: message.userId, chatId: message.chatId)
+      try learning.liveChallenge(ownerUserID: message.userID, chatID: message.chatID)
     }
     guard let challenge, challenge.expiresAt > capturedNow else {
       return nil
     }
 
-    try await replies.claimUpdate(updateId: rawUpdate.updateId, target: target)
+    try await replies.claimUpdate(updateID: rawUpdate.updateID, target: target)
     let outcome = try await replies.perform(
       "feedback challenge consumption",
-      updateId: rawUpdate.updateId,
+      updateID: rawUpdate.updateID,
       target: target,
       onFailure: .ack(Self.retryText)
     ) {
@@ -90,14 +90,14 @@ public struct FeedbackChallengeHandler: Sendable {
     let acknowledgement: String
     switch outcome {
     case .recorded:
-      await workflow?.notifyChanged(jobId: challenge.jobId)
+      await workflow?.notifyChanged(jobID: challenge.jobID)
       acknowledgement = Self.recordedText
-    case .challengeOpened, .targetMissing, .ownerMismatch, .chatMismatch, .expired,
-      .actionMismatch, .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
+    case .challengeOpened, .targetMissing, .ownerMismatch, .chatMismatch, .expired, .actionMismatch,
+      .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
       acknowledgement = Self.neutralText
     }
     return await replies.sendCommandAck(
-      updateId: rawUpdate.updateId,
+      updateID: rawUpdate.updateID,
       target: target,
       text: acknowledgement
     )

@@ -8,8 +8,10 @@ import Testing
 /// The four transactions that decide whether one logical inference is paid for exactly once: the
 /// durable claim, the single authorize-and-start, the result commit, and the boot pass that has to
 /// tell "a call may have gone out" from "durable state proves it did not".
-@Suite struct OperationLifecycleTests {
-  @Test func onlyOneAttemptGenerationIsCurrent() throws {
+@Suite
+struct OperationLifecycleTests {
+  @Test
+  func onlyOneAttemptGenerationIsCurrent() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let key = try env.evaluatorKey()
@@ -23,7 +25,8 @@ import Testing
     #expect(first.attemptGeneration == 1)
   }
 
-  @Test func aResultCommitsOnlyAgainstAStartedOperation() throws {
+  @Test
+  func aResultCommitsOnlyAgainstAStartedOperation() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let claimed = try env.claim(try env.evaluatorKey())
@@ -34,10 +37,11 @@ import Testing
     // then
     #expect(committed == false)
     #expect(try env.operationState(claimed.id) == .claimed)
-    #expect(try env.learningUsage(operationId: claimed.id).isEmpty)
+    #expect(try env.learningUsage(operationID: claimed.id).isEmpty)
   }
 
-  @Test func twoWorkersCannotBothPassTheBudgetGate() async throws {
+  @Test
+  func twoWorkersCannotBothPassTheBudgetGate() async throws {
     // given — headroom for exactly one learning call
     let env = try BoundRunEnvironment.make()
     let oneCallCostUSD = 0.10
@@ -46,11 +50,7 @@ import Testing
     // in the same proactive pool the cap is drawn from.
     let capUSD = try env.proactiveSpentUSD() + oneCallCostUSD
     let authorizations = claims.map { claim in
-      env.authorization(
-        for: claim,
-        estimatedCostUSD: oneCallCostUSD,
-        proactiveCapUSD: capUSD
-      )
+      env.authorization(for: claim, estimatedCostUSD: oneCallCostUSD, proactiveCapUSD: capUSD)
     }
     let learning = env.learning
     let now = env.now
@@ -73,13 +73,13 @@ import Testing
     #expect(
       outcomes.filter { outcome in
         outcome == .started
-      }
-      .count == 1
+      }.count == 1
     )
     #expect(outcomes.contains(.deniedNoCall(.budgetDenied)))
   }
 
-  @Test func aBudgetDenialClosesTheOperationAndReservesNothing() throws {
+  @Test
+  func aBudgetDenialClosesTheOperationAndReservesNothing() throws {
     // given — a proactive pool with no headroom left at all
     let env = try BoundRunEnvironment.make()
     let key = try env.evaluatorKey()
@@ -101,7 +101,8 @@ import Testing
     #expect(try env.learning.claimOperation(key, now: env.now) == nil)
   }
 
-  @Test func aCarrierDenialClosesTheOperationAndLeavesTheReceipt() throws {
+  @Test
+  func aCarrierDenialClosesTheOperationAndLeavesTheReceipt() throws {
     // given — the privacy verdict recomputed over the carrier refuses it
     let env = try BoundRunEnvironment.make()
     let evidence = try env.sealedEvidence()
@@ -122,10 +123,11 @@ import Testing
     #expect(outcome == .deniedNoCall(.carrierPolicyDenied))
     #expect(try env.operationState(claimed.id) == .failedNoCall)
     #expect(try env.failureCode(claimed.id) == .carrierPolicyDenied)
-    #expect(try env.learning.evidence(runId: evidence.runId) == evidence)
+    #expect(try env.learning.evidence(runID: evidence.runID) == evidence)
   }
 
-  @Test func aCarrierBuiltFromAnotherSourceStartsNothingAndKeepsTheClaim() throws {
+  @Test
+  func aCarrierBuiltFromAnotherSourceStartsNothingAndKeepsTheClaim() throws {
     // given — a carrier assembled from a different run's evidence than the claim names
     let env = try BoundRunEnvironment.make()
     let claimed = try env.claim(try env.evaluatorKey())
@@ -149,7 +151,8 @@ import Testing
     #expect(try env.failureCode(claimed.id) == nil)
   }
 
-  @Test func aCancelledJobBlocksNewLearningCalls() throws {
+  @Test
+  func aCancelledJobBlocksNewLearningCalls() throws {
     // given — one claim taken and one further piece of evidence sealed while the job was live
     let env = try BoundRunEnvironment.make()
     let claimed = try env.claim(try env.evaluatorKey())
@@ -170,7 +173,8 @@ import Testing
     #expect(try env.learning.claimOperation(unclaimed, now: env.now) == nil)
   }
 
-  @Test func aFailedCallCommitsAsFailedAndIsStillCharged() throws {
+  @Test
+  func aFailedCallCommitsAsFailedAndIsStillCharged() throws {
     // given — a started operation whose provider returned output the operation cannot use
     let env = try BoundRunEnvironment.make()
     let started = try env.startedOperation(try env.evaluatorKey())
@@ -186,11 +190,12 @@ import Testing
     #expect(committed)
     #expect(try env.operationState(started.id) == .failed)
     #expect(try env.failureCode(started.id) == .providerTerminal)
-    #expect(try env.learningUsage(operationId: started.id).count == 1)
+    #expect(try env.learningUsage(operationID: started.id).count == 1)
     #expect(try env.reservation(started.id) == BoundRunEnvironment.closedReservation)
   }
 
-  @Test func aVerdictCommitsInTheSameTransactionAsTheOperationThatBoughtIt() throws {
+  @Test
+  func aVerdictCommitsInTheSameTransactionAsTheOperationThatBoughtIt() throws {
     // given — a started evaluator operation over one run's sealed receipt
     let env = try BoundRunEnvironment.make()
     let evidence = try env.sealedEvidence()
@@ -205,17 +210,18 @@ import Testing
     // then — a `succeeded` operation whose verdict landed in a later transaction could lose it to a
     // crash, and `claim` refuses a finished key forever, so that evidence would never be judged
     #expect(committed)
-    let stored = try #require(try env.learning.evaluation(runId: evidence.runId))
+    let stored = try #require(try env.learning.evaluation(runID: evidence.runID))
     #expect(stored.outcome == .reusableIssue)
     #expect(stored.issueCodes == ["empty_answer", "missed_price_change"])
     #expect(stored.evaluator.route == BoundRunEnvironment.evaluatorServedRoute)
     #expect(
-      try env.evaluatorRoute(runId: evidence.runId) == BoundRunEnvironment.evaluatorServedRoute
+      try env.evaluatorRoute(runID: evidence.runID) == BoundRunEnvironment.evaluatorServedRoute
     )
     #expect(try env.learning.claimOperation(env.evaluatorKey(for: evidence), now: env.now) == nil)
   }
 
-  @Test func anEpochTheJobMovedPastAuthorizesNothing() throws {
+  @Test
+  func anEpochTheJobMovedPastAuthorizesNothing() throws {
     // given — the job re-epoched between the claim and the network handoff
     let env = try BoundRunEnvironment.make()
     let claimed = try env.claim(try env.evaluatorKey())
@@ -233,7 +239,8 @@ import Testing
     #expect(try env.providerCallID(claimed.id) == nil)
   }
 
-  @Test func learningSpendReachesTheProactiveTotal() throws {
+  @Test
+  func learningSpendReachesTheProactiveTotal() throws {
     // given — a finished evaluator operation on a scheduled job
     let env = try BoundRunEnvironment.make()
     let started = try env.startedOperation(try env.evaluatorKey())
@@ -252,10 +259,11 @@ import Testing
     // then — a null run_id with no learning scope is invisible to the origin JOIN
     #expect(committed)
     #expect(abs(proactive.costUSD - before - 0.25) < 0.000_001)
-    #expect(try env.learningUsage(operationId: started.id).first?.jobId == env.jobId)
+    #expect(try env.learningUsage(operationID: started.id).first?.jobID == env.jobID)
   }
 
-  @Test func aDuplicateResultCannotCloseTheReservationTwice() throws {
+  @Test
+  func aDuplicateResultCannotCloseTheReservationTwice() throws {
     // given — a started operation whose result already committed
     let env = try BoundRunEnvironment.make()
     let started = try env.startedOperation(try env.evaluatorKey())
@@ -267,11 +275,12 @@ import Testing
     // then
     #expect(second == false)
     #expect(try env.operationState(started.id) == .succeeded)
-    #expect(try env.learningUsage(operationId: started.id).count == 1)
+    #expect(try env.learningUsage(operationID: started.id).count == 1)
     #expect(try env.reservation(started.id) == BoundRunEnvironment.closedReservation)
   }
 
-  @Test func bootReconcilesStartedAndClaimedDifferently() throws {
+  @Test
+  func bootReconcilesStartedAndClaimedDifferently() throws {
     // given — a prior process left one operation started and one merely claimed
     let env = try BoundRunEnvironment.make()
     let startedKey = try env.evaluatorKey()
@@ -297,7 +306,8 @@ import Testing
     #expect(try env.providerCallID(started.id) != nil)
   }
 
-  @Test func aClaimedOperationBootReturnsToClaimableKeepsItsGeneration() throws {
+  @Test
+  func aClaimedOperationBootReturnsToClaimableKeepsItsGeneration() throws {
     // given — a crash between the claim and the authorization
     let env = try BoundRunEnvironment.make()
     let key = try env.evaluatorKey()
@@ -313,7 +323,8 @@ import Testing
     #expect(try env.operationState(claimed.id) == .claimed)
   }
 
-  @Test func bootChargesAnInterruptedCallUnderItsSavedCallID() throws {
+  @Test
+  func bootChargesAnInterruptedCallUnderItsSavedCallID() throws {
     // given — a started operation holding an open reservation
     let env = try BoundRunEnvironment.make()
     let started = try env.startedOperation(try env.evaluatorKey())
@@ -324,48 +335,45 @@ import Testing
     _ = try env.learning.reconcileOperationsAtBoot(now: env.now)
 
     // then — the estimate becomes a conservative charge under the id the call was sent with
-    let rows = try env.learningUsage(operationId: started.id)
+    let rows = try env.learningUsage(operationID: started.id)
     #expect(rows.count == 1)
     #expect(rows.first?.providerCallID == callID)
-    #expect(rows.first?.jobId == env.jobId)
-    #expect(rows.first?.runId == nil)
+    #expect(rows.first?.jobID == env.jobID)
+    #expect(rows.first?.runID == nil)
     #expect(rows.first?.costUSD == reserved.costUSD)
     #expect(try env.reservation(started.id) == BoundRunEnvironment.closedReservation)
   }
 
-  @Test func evidenceTheEvaluatorMayNotReadIsNotClaimable() throws {
+  @Test
+  func evidenceTheEvaluatorMayNotReadIsNotClaimable() throws {
     // given — a bound run that ended in provider failure, not task evidence
     let env = try BoundRunEnvironment.make()
     let evidence = try env.ineligibleSealedEvidence()
 
     // when
-    let claimed = try env.learning.claimOperation(
-      env.evaluatorKey(for: evidence),
-      now: env.now
-    )
+    let claimed = try env.learning.claimOperation(env.evaluatorKey(for: evidence), now: env.now)
 
     // then
     #expect(evidence.eligibility == .transientInfrastructureFailure)
     #expect(claimed == nil)
   }
 
-  @Test func alreadyEvaluatedEvidenceIsNotClaimable() throws {
+  @Test
+  func alreadyEvaluatedEvidenceIsNotClaimable() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let evidence = try env.sealedEvidence()
     try env.recordEvaluation(of: evidence)
 
     // when
-    let claimed = try env.learning.claimOperation(
-      env.evaluatorKey(for: evidence),
-      now: env.now
-    )
+    let claimed = try env.learning.claimOperation(env.evaluatorKey(for: evidence), now: env.now)
 
     // then
     #expect(claimed == nil)
   }
 
-  @Test func aKeyFromASupersededEpochIsNotClaimable() throws {
+  @Test
+  func aKeyFromASupersededEpochIsNotClaimable() throws {
     // given
     let env = try BoundRunEnvironment.make()
     let key = try env.evaluatorKey()

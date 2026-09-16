@@ -6,23 +6,24 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct SessionMessageStoreTests {
+@Suite
+struct SessionMessageStoreTests {
   private func freshStore() throws -> SessionMessageStoreGRDB {
     let queue = try TestDatabase.make()
     return SessionMessageStoreGRDB(writer: queue)
   }
 
   private func inbound(
-    updateId: Int64,
-    chatId: Int64 = 42,
+    updateID: Int64,
+    chatID: Int64 = 42,
     text: String,
     provenance: Provenance = .trusted
   ) -> InboundMessage {
     InboundMessage(
-      updateId: updateId,
-      sessionKey: SessionKey.telegramDM(chatId: chatId),
-      chatId: chatId,
-      userId: chatId,
+      updateID: updateID,
+      sessionKey: SessionKey.telegramDM(chatID: chatID),
+      chatID: chatID,
+      userID: chatID,
       text: text,
       isEdited: false,
       provenance: provenance,
@@ -30,68 +31,71 @@ import Testing
     )
   }
 
-  @Test func untrustedInboundPersistsItsProvenanceAndTaintsTheSession() throws {
+  @Test
+  func untrustedInboundPersistsItsProvenanceAndTaintsTheSession() throws {
     // given
     let store = try freshStore()
 
     // when — a machine-derived inbound (a voice transcript) lands
     let result = try store.claimAndPersistInbound(
-      inbound(updateId: 1, text: "spoken words", provenance: .untrusted)
+      inbound(updateID: 1, text: "spoken words", provenance: .untrusted)
     )
 
     // then — the row keeps the untrusted tier and the session is tainted in the same write
-    let sessionId = try #require(result.sessionId)
-    let triggerMessageId = try #require(result.triggerMessageId)
+    let sessionID = try #require(result.sessionID)
+    let triggerMessageID = try #require(result.triggerMessageID)
     let snapshot = try store.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: triggerMessageId,
+      sessionID: sessionID,
+      throughMessageID: triggerMessageID,
       limit: 10
     )
     #expect(
       snapshot.history == [
-        StoredMessage(role: .user, content: "spoken words", provenance: .untrusted)
+        StoredMessage(role: .user, content: "spoken words", provenance: .untrusted),
       ]
     )
     #expect(snapshot.isTainted)
   }
 
-  @Test func trustedInboundLeavesTheSessionUntainted() throws {
+  @Test
+  func trustedInboundLeavesTheSessionUntainted() throws {
     // given
     let store = try freshStore()
 
     // when
-    let result = try store.claimAndPersistInbound(inbound(updateId: 1, text: "typed words"))
+    let result = try store.claimAndPersistInbound(inbound(updateID: 1, text: "typed words"))
 
     // then
-    let sessionId = try #require(result.sessionId)
-    let triggerMessageId = try #require(result.triggerMessageId)
+    let sessionID = try #require(result.sessionID)
+    let triggerMessageID = try #require(result.triggerMessageID)
     let snapshot = try store.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: triggerMessageId,
+      sessionID: sessionID,
+      throughMessageID: triggerMessageID,
       limit: 10
     )
     #expect(snapshot.isTainted == false)
   }
 
-  @Test func claimAndPersistCreatesPendingRunBoundToTriggerMessage() throws {
+  @Test
+  func claimAndPersistCreatesPendingRunBoundToTriggerMessage() throws {
     // given
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
 
     // when
-    let result = try store.claimAndPersistInbound(inbound(updateId: 1, text: "hello"))
+    let result = try store.claimAndPersistInbound(inbound(updateID: 1, text: "hello"))
 
     // then
     #expect(result.newlyClaimed)
-    let sessionId = try #require(result.sessionId)
-    let messageId = try #require(result.messageId)
-    let runId = try #require(result.runId)
-    let triggerMessageId = try #require(result.triggerMessageId)
-    #expect(triggerMessageId == messageId)
+    let sessionID = try #require(result.sessionID)
+    let messageID = try #require(result.messageID)
+    let runID = try #require(result.runID)
+    let triggerMessageID = try #require(result.triggerMessageID)
+    #expect(triggerMessageID == messageID)
 
     let history = try store.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: triggerMessageId,
+      sessionID: sessionID,
+      throughMessageID: triggerMessageID,
       limit: 10
     ).history
     #expect(history == [StoredMessage(role: .user, content: "hello", provenance: .trusted)])
@@ -101,76 +105,79 @@ import Testing
         try Row.fetchOne(
           db,
           sql: "SELECT session_id, state, trigger_message_id FROM runs WHERE id = ?",
-          arguments: [runId]
+          arguments: [runID]
         )
       }
     )
-    let persistedSessionId: Int64 = run["session_id"]
+    let persistedSessionID: Int64 = run["session_id"]
     let state: String = run["state"]
-    let persistedTriggerMessageId: Int64 = run["trigger_message_id"]
-    #expect(persistedSessionId == sessionId)
+    let persistedTriggerMessageID: Int64 = run["trigger_message_id"]
+    #expect(persistedSessionID == sessionID)
     #expect(state == RunState.pending.rawValue)
-    #expect(persistedTriggerMessageId == messageId)
+    #expect(persistedTriggerMessageID == messageID)
   }
 
-  @Test func duplicateUpdateIsNotReclaimedAndPersistsNothingNew() throws {
+  @Test
+  func duplicateUpdateIsNotReclaimedAndPersistsNothingNew() throws {
     // given
     let store = try freshStore()
-    _ = try store.claimAndPersistInbound(inbound(updateId: 1, text: "first"))
+    _ = try store.claimAndPersistInbound(inbound(updateID: 1, text: "first"))
 
     // when — same update_id redelivered
-    let again = try store.claimAndPersistInbound(inbound(updateId: 1, text: "first"))
+    let again = try store.claimAndPersistInbound(inbound(updateID: 1, text: "first"))
 
     // then — claim fails, no second message
     #expect(again.newlyClaimed == false)
-    #expect(again.sessionId == nil)
+    #expect(again.sessionID == nil)
   }
 
-  @Test func claimCommandUpdateResolvesTheSessionInOneWriteAndDedups() throws {
+  @Test
+  func claimCommandUpdateResolvesTheSessionInOneWriteAndDedups() throws {
     // given
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
-    let sessionKey = SessionKey.telegramDM(chatId: 42)
+    let sessionKey = SessionKey.telegramDM(chatID: 42)
 
     // when
     let first = try store.claimCommandUpdate(
-      updateId: 10,
+      updateID: 10,
       sessionKey: sessionKey,
       now: Date(timeIntervalSince1970: 100)
     )
-    guard case .claimed(let sessionId) = first else {
+    guard case .claimed(let sessionID) = first else {
       #expect(Bool(false), "expected the first claim to create a session")
       return
     }
-    let foundSessionId = try #require(try store.findSession(sessionKey: sessionKey))
+    let foundSessionID = try #require(try store.findSession(sessionKey: sessionKey))
     let duplicate = try store.claimCommandUpdate(
-      updateId: 10,
+      updateID: 10,
       sessionKey: sessionKey,
       now: Date(timeIntervalSince1970: 200)
     )
 
     // then
-    #expect(foundSessionId == sessionId)
+    #expect(foundSessionID == sessionID)
     #expect(duplicate == .duplicate)
     let updatedTs = try #require(
       try queue.read { db in
         try Date.fetchOne(
           db,
           sql: "SELECT updated_ts FROM sessions WHERE id = ?",
-          arguments: [sessionId]
+          arguments: [sessionID]
         )
       }
     )
     #expect(updatedTs == Date(timeIntervalSince1970: 100))
   }
 
-  @Test func findSessionIsReadOnlyAndNilForAnUnknownChat() throws {
+  @Test
+  func findSessionIsReadOnlyAndNilForAnUnknownChat() throws {
     // given
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
 
     // when
-    let found = try store.findSession(sessionKey: SessionKey.telegramDM(chatId: 7))
+    let found = try store.findSession(sessionKey: SessionKey.telegramDM(chatID: 7))
 
     // then
     #expect(found == nil)
@@ -182,22 +189,23 @@ import Testing
     #expect(sessionCount == 0)
   }
 
-  @Test func loadContextIsOldestFirstWithinLimitAndTriggerBound() throws {
+  @Test
+  func loadContextIsOldestFirstWithinLimitAndTriggerBound() throws {
     // given
     let store = try freshStore()
     var claims: [ClaimResult] = []
     for index in 1...5 {
       claims.append(
-        try store.claimAndPersistInbound(inbound(updateId: Int64(index), text: "m\(index)"))
+        try store.claimAndPersistInbound(inbound(updateID: Int64(index), text: "m\(index)"))
       )
     }
-    let sessionId = try #require(claims.last?.sessionId)
-    let throughMessageId = try #require(claims[3].triggerMessageId)
+    let sessionID = try #require(claims.last?.sessionID)
+    let throughMessageID = try #require(claims[3].triggerMessageID)
 
     // when
     let history = try store.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: throughMessageId,
+      sessionID: sessionID,
+      throughMessageID: throughMessageID,
       limit: 3
     ).history
 
@@ -205,27 +213,28 @@ import Testing
     #expect(history.map(\.content) == ["m2", "m3", "m4"])
   }
 
-  @Test func newCommandExcludesEarlierHistoryFromTheNextContext() throws {
+  @Test
+  func newCommandExcludesEarlierHistoryFromTheNextContext() throws {
     // given
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
-    let first = try store.claimAndPersistInbound(inbound(updateId: 1, text: "before"))
-    let sessionId = try #require(first.sessionId)
+    let first = try store.claimAndPersistInbound(inbound(updateID: 1, text: "before"))
+    let sessionID = try #require(first.sessionID)
     try queue.write { db in
-      try db.execute(sql: "UPDATE sessions SET tainted = 1 WHERE id = ?", arguments: [sessionId])
+      try db.execute(sql: "UPDATE sessions SET tainted = 1 WHERE id = ?", arguments: [sessionID])
     }
 
     // when
     _ = try CommandStoreGRDB(writer: queue).applyNew(
-      updateId: 100,
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      updateID: 100,
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date()
     )
-    let second = try store.claimAndPersistInbound(inbound(updateId: 2, text: "after"))
-    let triggerMessageId = try #require(second.triggerMessageId)
+    let second = try store.claimAndPersistInbound(inbound(updateID: 2, text: "after"))
+    let triggerMessageID = try #require(second.triggerMessageID)
     let history = try store.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: triggerMessageId,
+      sessionID: sessionID,
+      throughMessageID: triggerMessageID,
       limit: 10
     ).history
 
@@ -236,14 +245,15 @@ import Testing
         try Int.fetchOne(
           db,
           sql: "SELECT tainted FROM sessions WHERE id = ?",
-          arguments: [sessionId]
+          arguments: [sessionID]
         )
       }
     )
     #expect(tainted == 0)
   }
 
-  @Test func claimAndPersistRollsBackEntirelyWhenTheMessageInsertAborts() throws {
+  @Test
+  func claimAndPersistRollsBackEntirelyWhenTheMessageInsertAborts() throws {
     // given — a trigger that aborts the message INSERT mid-transaction
     let queue = try TestDatabase.make()
     try queue.write { db in
@@ -255,7 +265,7 @@ import Testing
 
     // when / then — the fused write throws and leaves NEITHER the claim NOR the session (F4 atomicity)
     #expect(throws: (any Error).self) {
-      try store.claimAndPersistInbound(inbound(updateId: 1, text: "hi"))
+      try store.claimAndPersistInbound(inbound(updateID: 1, text: "hi"))
     }
     let claims = try #require(
       try queue.read { db in
@@ -271,38 +281,40 @@ import Testing
     #expect(sessions == 0)
   }
 
-  @Test func loadContextSnapshotIncludesHistoryIdsWindowStartAndTaint() throws {
+  @Test
+  func loadContextSnapshotIncludesHistoryIDsWindowStartAndTaint() throws {
     // given
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
-    let first = try store.claimAndPersistInbound(inbound(updateId: 1, text: "before"))
-    let second = try store.claimAndPersistInbound(inbound(updateId: 2, text: "after"))
-    let sessionId = try #require(second.sessionId)
-    let firstMessageId = try #require(first.messageId)
-    let secondMessageId = try #require(second.messageId)
-    let triggerMessageId = try #require(second.triggerMessageId)
+    let first = try store.claimAndPersistInbound(inbound(updateID: 1, text: "before"))
+    let second = try store.claimAndPersistInbound(inbound(updateID: 2, text: "after"))
+    let sessionID = try #require(second.sessionID)
+    let firstMessageID = try #require(first.messageID)
+    let secondMessageID = try #require(second.messageID)
+    let triggerMessageID = try #require(second.triggerMessageID)
     try queue.write { db in
       try db.execute(
         sql: "UPDATE sessions SET window_start_message_id = ?, tainted = 1 WHERE id = ?",
-        arguments: [firstMessageId, sessionId]
+        arguments: [firstMessageID, sessionID]
       )
     }
 
     // when
     let snapshot = try store.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: triggerMessageId,
+      sessionID: sessionID,
+      throughMessageID: triggerMessageID,
       limit: 10
     )
 
     // then
     #expect(snapshot.history.map(\.content) == ["after"])
-    #expect(snapshot.historyMessageIds == [secondMessageId])
-    #expect(snapshot.windowStartMessageId == firstMessageId)
+    #expect(snapshot.historyMessageIDs == [secondMessageID])
+    #expect(snapshot.windowStartMessageID == firstMessageID)
     #expect(snapshot.isTainted)
   }
 
-  @Test func claimAndPersistRollsBackEntirelyWhenTheRunInsertAborts() throws {
+  @Test
+  func claimAndPersistRollsBackEntirelyWhenTheRunInsertAborts() throws {
     // given
     let queue = try TestDatabase.make()
     try queue.write { db in
@@ -314,7 +326,7 @@ import Testing
 
     // when / then
     #expect(throws: (any Error).self) {
-      try store.claimAndPersistInbound(inbound(updateId: 1, text: "hi"))
+      try store.claimAndPersistInbound(inbound(updateID: 1, text: "hi"))
     }
     let counts = try queue.read { db in
       (
@@ -330,55 +342,58 @@ import Testing
     #expect(counts.runs == 0)
   }
 
-  @Test func corruptProvenanceFailsClosedInsteadOfDecodingTrusted() throws {
+  @Test
+  func corruptProvenanceFailsClosedInsteadOfDecodingTrusted() throws {
     // given — a persisted message whose provenance left the vocabulary (rollback / hand-edit)
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
-    let claim = try store.claimAndPersistInbound(inbound(updateId: 1, text: "hello"))
-    let sessionId = try #require(claim.sessionId)
-    let messageId = try #require(claim.messageId)
+    let claim = try store.claimAndPersistInbound(inbound(updateID: 1, text: "hello"))
+    let sessionID = try #require(claim.sessionID)
+    let messageID = try #require(claim.messageID)
     try queue.write { db in
       try db.execute(
         sql: "UPDATE messages SET provenance = 'quarantined' WHERE id = ?",
-        arguments: [messageId]
+        arguments: [messageID]
       )
     }
 
     // when / then — the load throws; it must never render the row as trusted (§12)
     #expect(throws: StoreError.self) {
       _ = try store.loadContextSnapshot(
-        sessionId: sessionId,
-        throughMessageId: messageId,
+        sessionID: sessionID,
+        throughMessageID: messageID,
         limit: 10
       )
     }
   }
 
-  @Test func corruptRoleFailsClosedInsteadOfDecodingUser() throws {
+  @Test
+  func corruptRoleFailsClosedInsteadOfDecodingUser() throws {
     // given
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
-    let claim = try store.claimAndPersistInbound(inbound(updateId: 1, text: "hello"))
-    let sessionId = try #require(claim.sessionId)
-    let messageId = try #require(claim.messageId)
+    let claim = try store.claimAndPersistInbound(inbound(updateID: 1, text: "hello"))
+    let sessionID = try #require(claim.sessionID)
+    let messageID = try #require(claim.messageID)
     try queue.write { db in
       try db.execute(
         sql: "UPDATE messages SET role = 'oracle' WHERE id = ?",
-        arguments: [messageId]
+        arguments: [messageID]
       )
     }
 
     // when / then
     #expect(throws: StoreError.self) {
       _ = try store.loadContextSnapshot(
-        sessionId: sessionId,
-        throughMessageId: messageId,
+        sessionID: sessionID,
+        throughMessageID: messageID,
         limit: 10
       )
     }
   }
 
-  @Test func snapshotSurfacesThePersistedPrivateDataFlag() throws {
+  @Test
+  func snapshotSurfacesThePersistedPrivateDataFlag() throws {
     // given — a session with the persisted private-data flag armed (the §12 over-cap case: the
     // flag outlives the assembly that set it)
     let queue = try TestDatabase.make()
@@ -386,27 +401,27 @@ import Testing
     let now = Date(timeIntervalSince1970: 1_750_000_000)
     let claim = try store.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 7),
-        chatId: 7,
-        userId: 7,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 7),
+        chatID: 7,
+        userID: 7,
         text: "hi",
         isEdited: false,
         ts: now
       )
     )
-    let sessionId = try #require(claim.sessionId)
+    let sessionID = try #require(claim.sessionID)
     try queue.write { db in
       try db.execute(
         sql: "UPDATE sessions SET has_private_data = 1 WHERE id = ?",
-        arguments: [sessionId]
+        arguments: [sessionID]
       )
     }
 
     // when
     let snapshot = try store.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: Int64.max,
+      sessionID: sessionID,
+      throughMessageID: Int64.max,
       limit: 50
     )
 
@@ -425,7 +440,9 @@ private struct StateCorruption: Sendable, CustomTestStringConvertible {
   let payload: DatabaseValue
   let violatesPairCheck: Bool
 
-  var testDescription: String { label }
+  var testDescription: String {
+    label
+  }
 }
 
 extension SessionMessageStoreTests {
@@ -457,7 +474,7 @@ extension SessionMessageStoreTests {
     StateCorruption(
       label: "payload stored as an integer",
       issuer: issuerText.databaseValue,
-      payload: Int64(7).databaseValue,
+      payload: (7 as Int64).databaseValue,
       violatesPairCheck: false
     ),
     StateCorruption(
@@ -479,19 +496,19 @@ extension SessionMessageStoreTests {
   private struct StateFixture {
     let queue: DatabaseQueue
     let store: SessionMessageStoreGRDB
-    let sessionId: Int64
-    let triggerMessageId: Int64
+    let sessionID: Int64
+    let triggerMessageID: Int64
   }
 
   private func stateFixture() throws -> StateFixture {
     let queue = try TestDatabase.make()
     let store = SessionMessageStoreGRDB(writer: queue)
-    let claim = try store.claimAndPersistInbound(inbound(updateId: 1, text: "summarise it"))
+    let claim = try store.claimAndPersistInbound(inbound(updateID: 1, text: "summarise it"))
     return StateFixture(
       queue: queue,
       store: store,
-      sessionId: try #require(claim.sessionId),
-      triggerMessageId: try #require(claim.messageId)
+      sessionID: try #require(claim.sessionID),
+      triggerMessageID: try #require(claim.messageID)
     )
   }
 
@@ -516,7 +533,7 @@ extension SessionMessageStoreTests {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           """,
         arguments: [
-          fixture.sessionId,
+          fixture.sessionID,
           MessageRole.assistant.rawValue,
           "on it",
           Provenance.trusted.rawValue,
@@ -532,13 +549,14 @@ extension SessionMessageStoreTests {
 
   private func loadHistory(_ fixture: StateFixture) throws -> [StoredMessage] {
     try fixture.store.loadContextSnapshot(
-      sessionId: fixture.sessionId,
-      throughMessageId: Int64.max,
+      sessionID: fixture.sessionID,
+      throughMessageID: Int64.max,
       limit: 50
     ).history
   }
 
-  @Test func anAssistantAnchorRoundTripsItsProviderStateVerbatim() throws {
+  @Test
+  func anAssistantAnchorRoundTripsItsProviderStateVerbatim() throws {
     // given
     let fixture = try stateFixture()
     _ = try insertAnchor(
@@ -558,7 +576,8 @@ extension SessionMessageStoreTests {
     )
   }
 
-  @Test func aRowWithoutProviderStateLoadsWithNone() throws {
+  @Test
+  func aRowWithoutProviderStateLoadsWithNone() throws {
     // given — the both-null pair every pre-v9 row carries
     let fixture = try stateFixture()
     _ = try insertAnchor(fixture, issuer: .null, payload: .null)
@@ -567,10 +586,15 @@ extension SessionMessageStoreTests {
     let history = try loadHistory(fixture)
 
     // then
-    #expect(history.allSatisfy { message in message.providerState == nil })
+    #expect(
+      history.allSatisfy { message in
+        message.providerState == nil
+      }
+    )
   }
 
-  @Test func aRowFromASelectThatOmitsTheStateColumnsDropsTheStateRatherThanTrapping() throws {
+  @Test
+  func aRowFromASelectThatOmitsTheStateColumnsDropsTheStateRatherThanTrapping() throws {
     // given — a stored anchor whose state is intact, so a dropped state can only be the SELECT's
     // doing and not a missing value
     let fixture = try stateFixture()
@@ -622,7 +646,8 @@ extension SessionMessageStoreTests {
     #expect(history.first?.content == "summarise it")
   }
 
-  @Test func aFailedStateColumnReadStaysATypedStoreError() throws {
+  @Test
+  func aFailedStateColumnReadStaysATypedStoreError() throws {
     // given — the column the loader selects no longer answers to that name, so the context SELECT
     // itself fails. A real query failure must never land in the lenient bucket a malformed value
     // lands in: dropping the state would report a healthy session over a broken database.
@@ -639,7 +664,8 @@ extension SessionMessageStoreTests {
     }
   }
 
-  @Test func providerStateIsNeverIndexedByFTS() throws {
+  @Test
+  func providerStateIsNeverIndexedByFTS() throws {
     // given — an anchor whose issuer is a token FTS would happily index if it were fed one
     let fixture = try stateFixture()
     _ = try insertAnchor(

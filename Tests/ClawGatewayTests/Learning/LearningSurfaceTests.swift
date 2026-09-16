@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct LearningSurfaceTests {
-  @Test func detailKeepsDistinctIdentitiesAndBothDeadlines() throws {
+@Suite
+struct LearningSurfaceTests {
+  @Test
+  func detailKeepsDistinctIdentitiesAndBothDeadlines() throws {
     // given
     let view = try learningDetailView()
     let assignmentDeadline = Date(timeIntervalSince1970: 1_782_086_400)
@@ -37,20 +39,19 @@ import Testing
 
     // then — omitting warnings from the compact projection hides a known integrity mismatch.
     #expect(listed.contains("warning"))
-    #expect(
-      listed.contains("assignment outcomes: 1 positive, 2 negative, 3 neutral, 4 unresolved")
-    )
+    #expect(listed.contains("assignment outcomes: 1 positive, 2 negative, 3 neutral, 4 unresolved"))
   }
 
-  @Test func unreadableAndUnarmedStatesDoNotInventLearningFacts() {
+  @Test
+  func unreadableAndUnarmedStatesDoNotInventLearningFacts() {
     // given
     let identity = LearningJobIdentity(
-      jobId: 8,
+      jobID: 8,
       label: "unarmed",
       status: .paused,
       timezone: "Europe/Berlin"
     )
-    let unreadable = UnreadableLearningJob(jobId: 9, validatedLabel: nil)
+    let unreadable = UnreadableLearningJob(jobID: 9, validatedLabel: nil)
 
     // when
     let unarmedText = LearningSurface.render([.unarmed(identity)])
@@ -63,10 +64,11 @@ import Testing
     #expect(unreadableText.contains("unknown label"))
   }
 
-  @Test func listPreservesStoreOrderAndKeepsUnreadableRowsVisible() throws {
+  @Test
+  func listPreservesStoreOrderAndKeepsUnreadableRowsVisible() throws {
     // given
     let readable = try learningDetailView()
-    let unreadable = UnreadableLearningJob(jobId: 72, validatedLabel: "damaged")
+    let unreadable = UnreadableLearningJob(jobID: 72, validatedLabel: "damaged")
 
     // when
     let rendered = LearningSurface.render(
@@ -80,15 +82,16 @@ import Testing
     #expect(lines.last?.hasPrefix("72 · damaged · learning state unreadable") == true)
   }
 
-  @Test func resetDecisionRendersOnlySafeBarrierFactsAndCounts() {
+  @Test
+  func resetDecisionRendersOnlySafeBarrierFactsAndCounts() {
     // given
-    let empty = LessonSet.empty(jobId: 7)
+    let empty = LessonSet.empty(jobID: 7)
     let inputs = LearningResetDecisionInputs(
       oldEpoch: LearningEpoch(3),
       oldStableDigest: Self.base,
       oldStableRevision: StableRevision(6),
       feedbackRevisionAtCut: FeedbackRevision(9),
-      priorOpenTrialId: 41
+      priorOpenTrialID: 41
     )
     let result = LearningResetDecisionResult(
       newEpoch: LearningEpoch(4),
@@ -96,23 +99,23 @@ import Testing
       newStableRevision: StableRevision(7),
       closedTrials: [
         ResetTrialIdentity(
-          trialId: 41,
-          jobId: 7,
+          trialID: 41,
+          jobID: 7,
           epoch: LearningEpoch(3),
           generation: 2,
           baseDigest: Self.base,
           candidateDigest: Self.candidate,
           algorithm: .v1
-        )
+        ),
       ],
       invalidatedTargetCount: 5,
       invalidatedChallengeCount: 2,
-      staleNoCallOperationIds: [LearningOperationID(rawValue: "opaque-stale-id")],
-      inFlightOperationIds: [LearningOperationID(rawValue: "opaque-flight-id")]
+      staleNoCallOperationIDs: [LearningOperationID(rawValue: "opaque-stale-id")],
+      inFlightOperationIDs: [LearningOperationID(rawValue: "opaque-flight-id")]
     )
     let view = ReadableJobLearningView(
       job: LearningJobIdentity(
-        jobId: 7,
+        jobID: 7,
         label: "digest",
         status: .active,
         timezone: Self.zone.identifier
@@ -122,8 +125,8 @@ import Testing
       stableLessons: empty,
       liveTrial: nil,
       lastDecision: LearningDecisionView(
-        decisionId: 14,
-        jobId: 7,
+        decisionID: 14,
+        jobID: 7,
         epoch: result.newEpoch,
         algorithm: .v1,
         decidedAt: Date(timeIntervalSince1970: 1_782_000_600),
@@ -156,6 +159,8 @@ import Testing
   }
 }
 
+// MARK: - Learning Detail Fixtures
+
 private extension LearningSurfaceTests {
   static let base = LessonSetDigest(rawValue: String(repeating: "a", count: 64))
   static let candidate = CandidateDigest(rawValue: String(repeating: "b", count: 64))
@@ -164,11 +169,11 @@ private extension LearningSurfaceTests {
 
   func learningDetailView() throws -> ReadableJobLearningView {
     let lessons = try LessonSet.canonical(
-      jobId: 7,
+      jobID: 7,
       lessons: ["Keep facts exact.", "Preserve order."]
     )
     let trial = LearningTrialView(
-      trialId: 41,
+      trialID: 41,
       epoch: LearningEpoch(3),
       generation: 2,
       state: .draining,
@@ -190,12 +195,12 @@ private extension LearningSurfaceTests {
     let receipt = AdmissionReceipt(
       candidateDigest: Self.candidate,
       replacementDigest: Self.replacement,
-      trialId: 41,
+      trialID: 41,
       generation: 2
     )
     let decision = LearningDecisionView(
-      decisionId: 13,
-      jobId: 7,
+      decisionID: 13,
+      jobID: 7,
       epoch: LearningEpoch(3),
       algorithm: .v1,
       decidedAt: Date(timeIntervalSince1970: 1_782_000_600),
@@ -206,7 +211,7 @@ private extension LearningSurfaceTests {
     )
     return ReadableJobLearningView(
       job: LearningJobIdentity(
-        jobId: 7,
+        jobID: 7,
         label: "digest",
         status: .active,
         timezone: Self.zone.identifier

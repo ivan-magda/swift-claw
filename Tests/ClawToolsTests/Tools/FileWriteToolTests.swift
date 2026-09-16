@@ -4,10 +4,12 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct FileWriteToolTests {
+@Suite
+struct FileWriteToolTests {
   private func makeWorkspace() throws -> URL {
-    let root = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-filewrite-\(UUID().uuidString)")
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "claw-filewrite-\(UUID().uuidString)"
+    )
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     return root
   }
@@ -26,7 +28,8 @@ import Testing
     return .object(object)
   }
 
-  @Test func declaresAskTierWithNoEgress() throws {
+  @Test
+  func declaresAskTierWithNoEgress() throws {
     // given / when
     let definition = makeTool(root: try makeWorkspace()).definition
 
@@ -36,7 +39,8 @@ import Testing
     #expect(definition.egressClass == .none)
   }
 
-  @Test func canonicalTargetResolvesACreatePathAtGateTime() throws {
+  @Test
+  func canonicalTargetResolvesACreatePathAtGateTime() throws {
     // given
     let root = try makeWorkspace()
     let canonicalRoot = try #require(WorkspacePathContainment.canonicalPath(root.path))
@@ -50,17 +54,17 @@ import Testing
     #expect(resolution == .resolved(canonicalRoot + "/notes/plan.md"))
   }
 
-  @Test func existingFileWithoutOverwriteRefusesBeforeAnyApproval() throws {
+  @Test
+  func existingFileWithoutOverwriteRefusesBeforeAnyApproval() throws {
     // given
     let root = try makeWorkspace()
     try Data("old".utf8).write(to: root.appendingPathComponent("plan.md"))
     let tool = makeTool(root: root)
 
     // when / then — overwrite:false (and the missing-flag default) refuse at gate time
-    guard
-      case .refused(let reason) = tool.canonicalTarget(
+    guard case .refused(let reason) = tool.canonicalTarget(
         arguments: args(path: "plan.md", content: "new", overwrite: false)
-      )
+    )
     else {
       Issue.record("expected a refusal for overwrite:false on an existing file")
       return
@@ -73,7 +77,8 @@ import Testing
     }
   }
 
-  @Test func existingFileWithOverwriteTrueResolves() throws {
+  @Test
+  func existingFileWithOverwriteTrueResolves() throws {
     // given
     let root = try makeWorkspace()
     try Data("old".utf8).write(to: root.appendingPathComponent("plan.md"))
@@ -88,17 +93,17 @@ import Testing
     #expect(resolution == .resolved(canonicalRoot + "/plan.md"))
   }
 
-  @Test func overwriteTrueOnAMissingTargetRefusesAtGateTime() throws {
+  @Test
+  func overwriteTrueOnAMissingTargetRefusesAtGateTime() throws {
     // given — nothing exists at the path, so the prompt would render "create"; a recorded
     // overwrite:true would let execute take the replacing rename(2) branch if a file appeared
     // during the approval window, silently widening the approved blast radius (§10.2)
     let root = try makeWorkspace()
 
     // when / then — the flag must match the approved mode: no target, no overwrite
-    guard
-      case .refused(let reason) = makeTool(root: root).canonicalTarget(
+    guard case .refused(let reason) = makeTool(root: root).canonicalTarget(
         arguments: args(path: "fresh.md", content: "new", overwrite: true)
-      )
+    )
     else {
       Issue.record("expected overwrite: true on a missing target to refuse at gate time")
       return
@@ -106,15 +111,15 @@ import Testing
     #expect(reason.contains("does not exist"))
   }
 
-  @Test func oversizedContentRefusesAtGateTime() throws {
+  @Test
+  func oversizedContentRefusesAtGateTime() throws {
     // given
     let huge = String(repeating: "a", count: FileWriteTool.maxContentBytes + 1)
 
     // when / then
-    guard
-      case .refused(let reason) = makeTool(root: try makeWorkspace()).canonicalTarget(
+    guard case .refused(let reason) = makeTool(root: try makeWorkspace()).canonicalTarget(
         arguments: args(path: "big.txt", content: huge)
-      )
+    )
     else {
       Issue.record("expected the size cap to refuse")
       return
@@ -122,7 +127,8 @@ import Testing
     #expect(reason.contains("cap"))
   }
 
-  @Test func executeWritesAtomicallyAndCreatesParents() async throws {
+  @Test
+  func executeWritesAtomicallyAndCreatesParents() async throws {
     // given
     let root = try makeWorkspace()
     let tool = makeTool(root: root)
@@ -141,7 +147,8 @@ import Testing
     #expect(try String(contentsOfFile: target, encoding: .utf8) == "nested")
   }
 
-  @Test func executeOverwriteReplacesContentAndSaysSo() async throws {
+  @Test
+  func executeOverwriteReplacesContentAndSaysSo() async throws {
     // given
     let root = try makeWorkspace()
     try Data("old".utf8).write(to: root.appendingPathComponent("plan.md"))
@@ -161,7 +168,8 @@ import Testing
     #expect(try String(contentsOfFile: target, encoding: .utf8) == "new")
   }
 
-  @Test func createApprovedWriteFailsClosedWhenTheTargetAppearsAfterApproval() async throws {
+  @Test
+  func createApprovedWriteFailsClosedWhenTheTargetAppearsAfterApproval() async throws {
     // given — gate time: plan.md does not exist, so the approval binds to a CREATE
     let root = try makeWorkspace()
     let tool = makeTool(root: root)
@@ -180,15 +188,17 @@ import Testing
     #expect(try String(contentsOfFile: target, encoding: .utf8) == "raced in")
   }
 
-  @Test func executeFailsClosedWhenAPathComponentIsRetargetedAfterApproval() async throws {
+  @Test
+  func executeFailsClosedWhenAPathComponentIsRetargetedAfterApproval() async throws {
     // given — gate time: sub/ is a real directory inside the workspace
     let root = try makeWorkspace()
     try FileManager.default.createDirectory(
       atPath: root.path + "/sub",
       withIntermediateDirectories: true
     )
-    let outside = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-filewrite-outside-\(UUID().uuidString)").path
+    let outside = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "claw-filewrite-outside-\(UUID().uuidString)"
+    ).path
     try FileManager.default.createDirectory(atPath: outside, withIntermediateDirectories: true)
     let tool = makeTool(root: root)
     let arguments = args(path: "sub/new.txt", content: "drift")
@@ -211,7 +221,8 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: target) == false)
   }
 
-  @Test func presentationDistinguishesCreateFromOverwriteAndRedactsSecrets() throws {
+  @Test
+  func presentationDistinguishesCreateFromOverwriteAndRedactsSecrets() throws {
     // given
     let root = try makeWorkspace()
     try Data("old".utf8).write(to: root.appendingPathComponent("plan.md"))
@@ -240,7 +251,8 @@ import Testing
     #expect(createPresentation.warnings.isEmpty)
   }
 
-  @Test func byteCountFormatsForOwners() {
+  @Test
+  func byteCountFormatsForOwners() {
     // given / when / then
     #expect(ByteCount.text(340) == "340 B")
     #expect(ByteCount.text(1229) == "1.2 KB")

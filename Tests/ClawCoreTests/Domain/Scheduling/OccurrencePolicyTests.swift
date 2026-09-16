@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct OccurrencePolicyTests {
+@Suite
+struct OccurrencePolicyTests {
   private let policy = OccurrencePolicy()
   private let utc = TimeZone(identifier: "UTC")
 
@@ -39,7 +40,7 @@ import Testing
   ) -> ScheduledJob {
     ScheduledJob(
       id: 1,
-      ownerChatId: 7,
+      ownerChatID: 7,
       label: "standup",
       prompt: "post the standup summary",
       recurrence: recurrence,
@@ -47,7 +48,7 @@ import Testing
       nextOccurrence: nextOccurrence,
       lastFiredAt: nil,
       status: .paused,
-      sessionId: nil,
+      sessionID: nil,
       createdTs: noon.addingTimeInterval(-86_400),
       updatedTs: noon
     )
@@ -62,7 +63,8 @@ import Testing
 
   // MARK: - confirmPreview
 
-  @Test func oneShotPreviewIsItsSingleInstant() {
+  @Test
+  func oneShotPreviewIsItsSingleInstant() {
     // given
     let schedule = validated(recurrence: nil, firstOccurrence: noon.addingTimeInterval(3_600))
 
@@ -73,7 +75,8 @@ import Testing
     #expect(preview == [schedule.firstOccurrence])
   }
 
-  @Test func unknownTimezonePreviewFallsBackToTheFirstOccurrence() throws {
+  @Test
+  func unknownTimezonePreviewFallsBackToTheFirstOccurrence() throws {
     // given — fail-safe, matching the arm fallback: never an empty preview for a valid draft
     let schedule = validated(
       recurrence: try envelope(),
@@ -88,7 +91,8 @@ import Testing
     #expect(preview == [schedule.firstOccurrence])
   }
 
-  @Test func recurringPreviewSeedsThePhaseFromTheValidationClock() throws {
+  @Test
+  func recurringPreviewSeedsThePhaseFromTheValidationClock() throws {
     // given
     let schedule = validated(
       recurrence: try envelope(),
@@ -107,7 +111,8 @@ import Testing
 
   // MARK: - armOccurrence
 
-  @Test func oneShotStillAheadArmsItsInstant() {
+  @Test
+  func oneShotStillAheadArmsItsInstant() {
     // given
     let schedule = validated(recurrence: nil, firstOccurrence: noon.addingTimeInterval(3_600))
 
@@ -115,7 +120,8 @@ import Testing
     #expect(policy.armOccurrence(for: schedule, at: noon) == schedule.firstOccurrence)
   }
 
-  @Test func oneShotWhoseInstantPassedArmsNothing() {
+  @Test
+  func oneShotWhoseInstantPassedArmsNothing() {
     // given — a draft confirmed long after its preview cannot arm an already-past occurrence
     let schedule = validated(recurrence: nil, firstOccurrence: noon.addingTimeInterval(-60))
 
@@ -123,7 +129,8 @@ import Testing
     #expect(policy.armOccurrence(for: schedule, at: noon) == nil)
   }
 
-  @Test func lateConfirmKeepsThePreviewedPhaseAndSkipsPastOccurrences() throws {
+  @Test
+  func lateConfirmKeepsThePreviewedPhaseAndSkipsPastOccurrences() throws {
     // given — parked at noon+10min, confirmed 25 minutes later
     let schedule = validated(
       recurrence: try envelope(),
@@ -140,7 +147,8 @@ import Testing
 
   // MARK: - resumeOccurrence
 
-  @Test func resumedOneShotStillAheadKeepsItsInstant() {
+  @Test
+  func resumedOneShotStillAheadKeepsItsInstant() {
     // given
     let paused = job(recurrence: nil, nextOccurrence: noon.addingTimeInterval(3_600))
 
@@ -148,7 +156,8 @@ import Testing
     #expect(policy.resumeOccurrence(for: paused, from: noon) == paused.nextOccurrence)
   }
 
-  @Test func resumedOneShotWhoseInstantPassedHasNothingLeftToFire() {
+  @Test
+  func resumedOneShotWhoseInstantPassedHasNothingLeftToFire() {
     // given
     let paused = job(recurrence: nil, nextOccurrence: noon.addingTimeInterval(-60))
 
@@ -156,7 +165,8 @@ import Testing
     #expect(policy.resumeOccurrence(for: paused, from: noon) == nil)
   }
 
-  @Test func resumeSkipsThePausedWindowButKeepsThePhase() throws {
+  @Test
+  func resumeSkipsThePausedWindowButKeepsThePhase() throws {
     // given — stale stored next at noon, resumed 25 minutes later
     let paused = job(recurrence: try envelope(), nextOccurrence: noon)
 
@@ -169,7 +179,8 @@ import Testing
 
   // MARK: - advance / coalescedFireTime / missedOccurrenceCount
 
-  @Test func advanceYieldsTheNextChainOccurrenceAndNilForOneShots() throws {
+  @Test
+  func advanceYieldsTheNextChainOccurrenceAndNilForOneShots() throws {
     // given
     let recurring = job(recurrence: try envelope(), nextOccurrence: noon)
     let oneShot = job(recurrence: nil, nextOccurrence: noon)
@@ -182,13 +193,13 @@ import Testing
         timezone: timezone,
         anchor: noon,
         after: noon.addingTimeInterval(90)
-      )
-        == noon.addingTimeInterval(600)
+      ) == noon.addingTimeInterval(600)
     )
     #expect(policy.advance(for: oneShot, timezone: timezone, anchor: noon, after: noon) == nil)
   }
 
-  @Test func coalesceFiresOnceAtTheLatestMissedOccurrence() throws {
+  @Test
+  func coalesceFiresOnceAtTheLatestMissedOccurrence() throws {
     // given — due at noon, tick arrives 25 minutes late: noon, +10, +20 were missed
     let recurring = job(recurrence: try envelope(), nextOccurrence: noon)
     let timezone = try #require(utc)
@@ -205,7 +216,8 @@ import Testing
     #expect(fireAt == noon.addingTimeInterval(1_200))
   }
 
-  @Test func coalesceForAOneShotIsItsStoredDue() throws {
+  @Test
+  func coalesceForAOneShotIsItsStoredDue() throws {
     // given
     let oneShot = job(recurrence: nil, nextOccurrence: noon)
     let timezone = try #require(utc)
@@ -217,12 +229,12 @@ import Testing
         timezone: timezone,
         due: noon,
         atOrBefore: noon.addingTimeInterval(1_500)
-      )
-        == noon
+      ) == noon
     )
   }
 
-  @Test func missedCountCoversTheWindowAndIsOneForOneShots() throws {
+  @Test
+  func missedCountCoversTheWindowAndIsOneForOneShots() throws {
     // given
     let recurring = job(recurrence: try envelope(), nextOccurrence: noon)
     let oneShot = job(recurrence: nil, nextOccurrence: noon)
@@ -237,8 +249,7 @@ import Testing
         due: noon,
         atOrBefore: tickTime,
         limit: 1_000
-      )
-        == 3
+      ) == 3
     )
     #expect(
       policy.missedOccurrenceCount(
@@ -247,8 +258,7 @@ import Testing
         due: noon,
         atOrBefore: tickTime,
         limit: 1_000
-      )
-        == 1
+      ) == 1
     )
   }
 }

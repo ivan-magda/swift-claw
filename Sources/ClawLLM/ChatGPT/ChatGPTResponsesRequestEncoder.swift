@@ -103,14 +103,12 @@ private extension ChatGPTResponsesRequestEncoder {
   /// System text leaves the conversation and becomes the route's `instructions`, joined in the order
   /// it was written wherever it appears in the history.
   static func instructions(from messages: [ChatMessage]) -> String {
-    messages
-      .filter { message in
-        message.role == .system
-      }
-      .map { message in
-        message.content.text
-      }
-      .joined(separator: "\n\n")
+    messages.filter { message in
+      message.role == .system
+    }.map { message in
+      message.content.text
+    }
+    .joined(separator: "\n\n")
   }
 
   /// Walks the history in its own order, emitting each turn's replayed reasoning material where the
@@ -122,13 +120,29 @@ private extension ChatGPTResponsesRequestEncoder {
     includePriorState: Bool
   ) -> [ChatGPTWireInputItem] {
     messages.enumerated().flatMap { index, message -> [ChatGPTWireInputItem] in
-      guard
-        includePriorState,
-        let turn = selection?.turns[index]
-      else {
+      guard includePriorState, let turn = selection?.turns[index] else {
         return inputItems(for: message)
       }
       return replayItems(for: turn, message: message)
+    }
+  }
+
+  static func inputItems(for message: ChatMessage) -> [ChatGPTWireInputItem] {
+    switch message.role {
+    case .system:
+      // Already folded into `instructions`; sending it again would say it twice.
+      return []
+    case .user:
+      return [.userMessage(message.content)]
+    case .assistant:
+      return assistantItems(for: message)
+    case .tool:
+      // A result that names no call has nothing the route can pair it with, and inventing an
+      // identity for it would attach it to someone else's call.
+      guard let callID = message.toolCallID else {
+        return []
+      }
+      return [.functionCallOutput(callID: callID, output: message.content.text)]
     }
   }
 
@@ -168,30 +182,9 @@ private extension ChatGPTResponsesRequestEncoder {
       }
     }
     for call in turn.toolCalls {
-      items.append(
-        .functionCall(callID: call.id, name: call.name, arguments: call.argumentsJSON)
-      )
+      items.append(.functionCall(callID: call.id, name: call.name, arguments: call.argumentsJSON))
     }
     return items
-  }
-
-  static func inputItems(for message: ChatMessage) -> [ChatGPTWireInputItem] {
-    switch message.role {
-    case .system:
-      // Already folded into `instructions`; sending it again would say it twice.
-      return []
-    case .user:
-      return [.userMessage(message.content)]
-    case .assistant:
-      return assistantItems(for: message)
-    case .tool:
-      // A result that names no call has nothing the route can pair it with, and inventing an
-      // identity for it would attach it to someone else's call.
-      guard let callID = message.toolCallId else {
-        return []
-      }
-      return [.functionCallOutput(callID: callID, output: message.content.text)]
-    }
   }
 
   /// An assistant turn becomes its text and its calls as separate items, in that order. The calls

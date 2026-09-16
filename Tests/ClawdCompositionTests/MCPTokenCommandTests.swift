@@ -12,10 +12,12 @@ import Testing
 /// `clawd mcp set-token` / `clear-token` write the same state root the daemon boots from, so both
 /// hold its single-instance lock: the daemon reads MCP credentials once at boot, and a token
 /// rewritten under a running daemon would be a change nothing picks up.
-@Suite struct MCPTokenCommandTests {
+@Suite
+struct MCPTokenCommandTests {
   // MARK: - set-token
 
-  @Test func setTokenBindsTheTokenToTheConfiguredServerURL() throws {
+  @Test
+  func setTokenBindsTheTokenToTheConfiguredServerURL() throws {
     // given
     let stateRoot = try makeTokenStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -32,7 +34,8 @@ import Testing
     #expect(stored == .token("mcp-token"))
   }
 
-  @Test func setTokenRefusesAServerTheConfigDoesNotDeclareAndStoresNothing() throws {
+  @Test
+  func setTokenRefusesAServerTheConfigDoesNotDeclareAndStoresNothing() throws {
     // given — the URL a token is bound to comes from the config, so a name that is not there is a
     // token nothing could ever be allowed to send.
     let stateRoot = try makeTokenStateRoot()
@@ -49,14 +52,13 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: envelopePath(in: stateRoot)) == false)
   }
 
-  @Test func setTokenRefusesWhileTheInstanceLockIsHeldAndStoresNothing() throws {
+  @Test
+  func setTokenRefusesWhileTheInstanceLockIsHeldAndStoresNothing() throws {
     // given — a running daemon (or another mutating command) owns the state root.
     let stateRoot = try makeTokenStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
     let context = try makeContext(stateRoot: stateRoot)
-    let heldLock = try InstanceLock(
-      path: SecretStatePaths(stateRoot: stateRoot).instanceLock.path
-    )
+    let heldLock = try InstanceLock(path: SecretStatePaths(stateRoot: stateRoot).instanceLock.path)
     defer { heldLock.release() }
 
     // when
@@ -69,7 +71,8 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: envelopePath(in: stateRoot)) == false)
   }
 
-  @Test func setTokenReleasesTheLockSoASecondVerbCanRun() throws {
+  @Test
+  func setTokenReleasesTheLockSoASecondVerbCanRun() throws {
     // given
     let stateRoot = try makeTokenStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -85,7 +88,8 @@ import Testing
     )
   }
 
-  @Test func setTokenAgainRepairsAServerThatWasRePointed() throws {
+  @Test
+  func setTokenAgainRepairsAServerThatWasRePointed() throws {
     // given — a token issued for the old host, and a config now naming a new one.
     let stateRoot = try makeTokenStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -108,7 +112,8 @@ import Testing
 
   // MARK: - clear-token
 
-  @Test func clearTokenRemovesAStoredTokenAndSaysSoOnlyOnce() throws {
+  @Test
+  func clearTokenRemovesAStoredTokenAndSaysSoOnlyOnce() throws {
     // given
     let stateRoot = try makeTokenStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -131,7 +136,8 @@ import Testing
     )
   }
 
-  @Test func clearTokenNeedsNoConfigSoARetiredServersTokenCanStillBeRemoved() throws {
+  @Test
+  func clearTokenNeedsNoConfigSoARetiredServersTokenCanStillBeRemoved() throws {
     // given — the server has been deleted from `mcp.yaml`, leaving its token behind.
     let stateRoot = try makeTokenStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -147,7 +153,8 @@ import Testing
     )
   }
 
-  @Test func clearTokenRefusesWhileTheInstanceLockIsHeldAndRemovesNothing() throws {
+  @Test
+  func clearTokenRefusesWhileTheInstanceLockIsHeldAndRemovesNothing() throws {
     // given
     let stateRoot = try makeTokenStateRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -156,9 +163,7 @@ import Testing
       server: "linear",
       context: try makeContext(stateRoot: stateRoot)
     )
-    let heldLock = try InstanceLock(
-      path: SecretStatePaths(stateRoot: stateRoot).instanceLock.path
-    )
+    let heldLock = try InstanceLock(path: SecretStatePaths(stateRoot: stateRoot).instanceLock.path)
     defer { heldLock.release() }
 
     // when
@@ -183,7 +188,7 @@ private extension MCPTokenCommandTests {
   func makeTokenStateRoot() throws -> URL {
     let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-token")
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
     return stateRoot

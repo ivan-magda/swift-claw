@@ -1,6 +1,6 @@
 /// Wire-agnostic update: `ClawCore` never imports the Telegram JSON model (it lives in `ClawTelegram`).
 public struct RawUpdate: Sendable, Equatable {
-  public let updateId: Int64
+  public let updateID: Int64
   public let message: RawMessage?
   public let editedMessage: RawMessage?
   public let callback: RawCallback?
@@ -8,13 +8,13 @@ public struct RawUpdate: Sendable, Equatable {
   public let myChatMember: RawChatMemberUpdate?
 
   public init(
-    updateId: Int64,
+    updateID: Int64,
     message: RawMessage?,
     editedMessage: RawMessage?,
     callback: RawCallback? = nil,
     myChatMember: RawChatMemberUpdate? = nil
   ) {
-    self.updateId = updateId
+    self.updateID = updateID
     self.message = message
     self.editedMessage = editedMessage
     self.callback = callback
@@ -23,26 +23,26 @@ public struct RawUpdate: Sendable, Equatable {
 }
 
 /// A tapped inline button, wire-agnostic like `RawUpdate` (ClawCore never imports the Telegram JSON
-/// model). `chatId`/`messageId` come from the prompt message (`callback.message`) and drive the
+/// model). `chatID`/`messageID` come from the prompt message (`callback.message`) and drive the
 /// keyboard-disarm edit; `data` is the raw `callback_data` parsed by `ApprovalKeyboard`.
 public struct RawCallback: Sendable, Equatable {
-  public let callbackId: String
-  public let fromUserId: Int64
-  public let chatId: Int64?
-  public let messageId: Int64?
+  public let callbackID: String
+  public let fromUserID: Int64
+  public let chatID: Int64?
+  public let messageID: Int64?
   public let data: String?
 
   public init(
-    callbackId: String,
-    fromUserId: Int64,
-    chatId: Int64?,
-    messageId: Int64?,
+    callbackID: String,
+    fromUserID: Int64,
+    chatID: Int64?,
+    messageID: Int64?,
     data: String?
   ) {
-    self.callbackId = callbackId
-    self.fromUserId = fromUserId
-    self.chatId = chatId
-    self.messageId = messageId
+    self.callbackID = callbackID
+    self.fromUserID = fromUserID
+    self.chatID = chatID
+    self.messageID = messageID
     self.data = data
   }
 }
@@ -53,13 +53,13 @@ public struct VoiceAttachment: Sendable, Equatable {
   /// The pluralized noun the wire layer and the canned "can't read X yet" reply share.
   public static let mediaKindDescription = "voice messages"
 
-  public let fileId: String
+  public let fileID: String
   public let durationSeconds: Int
   public let mimeType: String?
   public let fileSizeBytes: Int64?
 
-  public init(fileId: String, durationSeconds: Int, mimeType: String?, fileSizeBytes: Int64?) {
-    self.fileId = fileId
+  public init(fileID: String, durationSeconds: Int, mimeType: String?, fileSizeBytes: Int64?) {
+    self.fileID = fileID
     self.durationSeconds = durationSeconds
     self.mimeType = mimeType
     self.fileSizeBytes = fileSizeBytes
@@ -67,9 +67,9 @@ public struct VoiceAttachment: Sendable, Equatable {
 }
 
 public struct RawMessage: Sendable, Equatable {
-  public let messageId: Int64
-  public let fromUserId: Int64?
-  public let chatId: Int64
+  public let messageID: Int64
+  public let fromUserID: Int64?
+  public let chatID: Int64
   public let text: String?
   public let caption: String?
   /// Pluralized noun for unsupported media ("photos", "voice messages"), else nil.
@@ -82,21 +82,21 @@ public struct RawMessage: Sendable, Equatable {
   public let chatTitle: String?
   /// The forum topic. Absent in the General topic and in every non-forum chat, and never coerced
   /// to a topic id — the General topic and topic 1 are two different conversations.
-  public let messageThreadId: Int64?
-  public let replyToMessageId: Int64?
-  public let replyToUserId: Int64?
+  public let messageThreadID: Int64?
+  public let replyToMessageID: Int64?
+  public let replyToUserID: Int64?
   public let senderDisplayName: String?
   /// The message was sent on behalf of a chat (anonymous admin, channel post): the sender id
   /// identifies no human.
   public let hasSenderChat: Bool
   /// Telegram marked this message as forwarded; its sender did not author the content here.
   public let isForwarded: Bool
-  public let migratedToChatId: Int64?
+  public let migratedToChatID: Int64?
 
   public init(
-    messageId: Int64,
-    fromUserId: Int64?,
-    chatId: Int64,
+    messageID: Int64,
+    fromUserID: Int64?,
+    chatID: Int64,
     text: String?,
     caption: String?,
     mediaKind: String?,
@@ -104,17 +104,17 @@ public struct RawMessage: Sendable, Equatable {
     photo: PhotoAttachment? = nil,
     chatKind: ChatKind = .private,
     chatTitle: String? = nil,
-    messageThreadId: Int64? = nil,
-    replyToMessageId: Int64? = nil,
-    replyToUserId: Int64? = nil,
+    messageThreadID: Int64? = nil,
+    replyToMessageID: Int64? = nil,
+    replyToUserID: Int64? = nil,
     senderDisplayName: String? = nil,
     hasSenderChat: Bool = false,
     isForwarded: Bool = false,
-    migratedToChatId: Int64? = nil
+    migratedToChatID: Int64? = nil
   ) {
-    self.messageId = messageId
-    self.fromUserId = fromUserId
-    self.chatId = chatId
+    self.messageID = messageID
+    self.fromUserID = fromUserID
+    self.chatID = chatID
     self.text = text
     self.caption = caption
     self.mediaKind = mediaKind
@@ -122,13 +122,13 @@ public struct RawMessage: Sendable, Equatable {
     self.photo = photo
     self.chatKind = chatKind
     self.chatTitle = chatTitle
-    self.messageThreadId = messageThreadId
-    self.replyToMessageId = replyToMessageId
-    self.replyToUserId = replyToUserId
+    self.messageThreadID = messageThreadID
+    self.replyToMessageID = replyToMessageID
+    self.replyToUserID = replyToUserID
     self.senderDisplayName = senderDisplayName
     self.hasSenderChat = hasSenderChat
     self.isForwarded = isForwarded
-    self.migratedToChatId = migratedToChatId
+    self.migratedToChatID = migratedToChatID
   }
 }
 
@@ -140,50 +140,50 @@ public struct IncomingMessage: Sendable, Equatable {
     case unsupported(kind: String)
   }
 
-  public let updateId: Int64
-  public let messageId: Int64
-  public let userId: Int64
-  public let chatId: Int64
+  public let updateID: Int64
+  public let messageID: Int64
+  public let userID: Int64
+  public let chatID: Int64
   public let content: Content
   public let isEdited: Bool
   public let chatKind: ChatKind
   /// The room's name, absent in a DM.
   public let chatTitle: String?
   /// The forum topic, absent in the General topic and in every non-forum chat.
-  public let messageThreadId: Int64?
-  public let replyToMessageId: Int64?
-  public let replyToUserId: Int64?
+  public let messageThreadID: Int64?
+  public let replyToMessageID: Int64?
+  public let replyToUserID: Int64?
   public let senderDisplayName: String?
-  public let migratedToChatId: Int64?
+  public let migratedToChatID: Int64?
 
   public init(
-    updateId: Int64,
-    messageId: Int64,
-    userId: Int64,
-    chatId: Int64,
+    updateID: Int64,
+    messageID: Int64,
+    userID: Int64,
+    chatID: Int64,
     content: Content,
     isEdited: Bool,
     chatKind: ChatKind = .private,
     chatTitle: String? = nil,
-    messageThreadId: Int64? = nil,
-    replyToMessageId: Int64? = nil,
-    replyToUserId: Int64? = nil,
+    messageThreadID: Int64? = nil,
+    replyToMessageID: Int64? = nil,
+    replyToUserID: Int64? = nil,
     senderDisplayName: String? = nil,
-    migratedToChatId: Int64? = nil
+    migratedToChatID: Int64? = nil
   ) {
-    self.updateId = updateId
-    self.messageId = messageId
-    self.userId = userId
-    self.chatId = chatId
+    self.updateID = updateID
+    self.messageID = messageID
+    self.userID = userID
+    self.chatID = chatID
     self.content = content
     self.isEdited = isEdited
     self.chatKind = chatKind
     self.chatTitle = chatTitle
-    self.messageThreadId = messageThreadId
-    self.replyToMessageId = replyToMessageId
-    self.replyToUserId = replyToUserId
+    self.messageThreadID = messageThreadID
+    self.replyToMessageID = replyToMessageID
+    self.replyToUserID = replyToUserID
     self.senderDisplayName = senderDisplayName
-    self.migratedToChatId = migratedToChatId
+    self.migratedToChatID = migratedToChatID
   }
 
   /// Pure normalization (no I/O). Returns nil when there's nothing actionable:
@@ -195,10 +195,9 @@ public struct IncomingMessage: Sendable, Equatable {
   /// so a captioned voice stays a text message. A caption on media with no usable attachment counts
   /// as text; other bare media maps to `.unsupported`.
   public static func normalize(from raw: RawUpdate) -> IncomingMessage? {
-    guard
-      let message = raw.message ?? raw.editedMessage,
-      let fromUserId = message.fromUserId,
-      !message.hasSenderChat
+    guard let message = raw.message ?? raw.editedMessage,
+          let fromUserID = message.fromUserID,
+          !message.hasSenderChat
     else {
       return nil
     }
@@ -219,19 +218,19 @@ public struct IncomingMessage: Sendable, Equatable {
     }
 
     return IncomingMessage(
-      updateId: raw.updateId,
-      messageId: message.messageId,
-      userId: fromUserId,
-      chatId: message.chatId,
+      updateID: raw.updateID,
+      messageID: message.messageID,
+      userID: fromUserID,
+      chatID: message.chatID,
       content: content,
       isEdited: raw.message == nil && raw.editedMessage != nil,
       chatKind: message.chatKind,
       chatTitle: message.chatTitle,
-      messageThreadId: message.messageThreadId,
-      replyToMessageId: message.replyToMessageId,
-      replyToUserId: message.replyToUserId,
+      messageThreadID: message.messageThreadID,
+      replyToMessageID: message.replyToMessageID,
+      replyToUserID: message.replyToUserID,
       senderDisplayName: message.senderDisplayName,
-      migratedToChatId: message.migratedToChatId
+      migratedToChatID: message.migratedToChatID
     )
   }
 }

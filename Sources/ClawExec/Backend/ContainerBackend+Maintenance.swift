@@ -11,11 +11,7 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
       let engineVersion = try await probeAndReap(deadline: deadline)
       let initImage = try await resolveInitImage(engineVersion: engineVersion, deadline: deadline)
 
-      try await stageImages(
-        engineVersion: engineVersion,
-        initImage: initImage,
-        deadline: deadline
-      )
+      try await stageImages(engineVersion: engineVersion, initImage: initImage, deadline: deadline)
 
       return await verifyCanaryAndArm(
         engineVersion: engineVersion,
@@ -64,8 +60,9 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
 
   // swiftlint:disable:next discouraged_optional_collection
   func ownedContainerNamesForTesting() async -> [String]? {
-    await ownedContainers(deadline: now().advanced(by: Self.prepareTimeout))?
-      .compactMap(\.resolvedIdentifier)
+    await ownedContainers(deadline: now().advanced(by: Self.prepareTimeout))?.compactMap(
+      \.resolvedIdentifier
+    )
   }
 }
 
@@ -75,6 +72,8 @@ extension ContainerBackend: ExecutionBackend, SandboxMaintenance {
 private struct PrepareAbort: Error {
   let health: SandboxHealth
 }
+
+// MARK: - Sandbox Preparation
 
 private extension ContainerBackend {
   func refuseIfBusy() throws(PrepareAbort) {
@@ -96,8 +95,10 @@ private extension ContainerBackend {
     guard case .available(let engineVersion) = availability else {
       let reason =
         switch availability {
-        case .available: "container engine is unavailable"
-        case .unavailable(let reason): reason
+        case .available:
+          "container engine is unavailable"
+        case .unavailable(let reason):
+          reason
         }
       throw PrepareAbort(health: failedHealth(lastError: reason))
     }
@@ -119,13 +120,13 @@ private extension ContainerBackend {
     engineVersion: String,
     deadline: ContinuousClock.Instant
   ) async throws(PrepareAbort) -> String {
-    guard
-      let propertyData = await boundedCommandData(
-        ContainerInvocation.systemPropertyList(),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      ),
-      let properties = try? JSONDecoder().decode(SystemPropertiesDocument.self, from: propertyData)
+    guard let propertyData = await boundedCommandData(
+      ContainerInvocation.systemPropertyList(),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    ),
+          let properties = try? JSONDecoder()
+          .decode(SystemPropertiesDocument.self, from: propertyData)
     else {
       throw PrepareAbort(
         health: failedHealth(
@@ -169,17 +170,16 @@ private extension ContainerBackend {
       )
     }
 
-    guard
-      await boundedCommandSucceeded(
-        ContainerInvocation.pull(settings.workloadImage.description),
-        limit: Self.pullTimeout,
-        deadline: deadline
-      ),
-      await boundedCommandSucceeded(
-        ContainerInvocation.pull(initImage),
-        limit: Self.pullTimeout,
-        deadline: deadline
-      )
+    guard await boundedCommandSucceeded(
+      ContainerInvocation.pull(settings.workloadImage.description),
+      limit: Self.pullTimeout,
+      deadline: deadline
+    ),
+          await boundedCommandSucceeded(
+            ContainerInvocation.pull(initImage),
+            limit: Self.pullTimeout,
+            deadline: deadline
+          )
     else {
       throw PrepareAbort(
         health: failedHealth(

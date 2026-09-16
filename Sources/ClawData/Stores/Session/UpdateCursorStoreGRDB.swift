@@ -11,14 +11,11 @@ public struct UpdateCursorStoreGRDB: UpdateCursorStore {
 
   public func loadCursor() throws(StoreError) -> Int64? {
     try database.readMapping { db in
-      try Int64.fetchOne(
-        db,
-        sql: "SELECT last_update_id FROM update_cursor WHERE id = 0"
-      )
+      try Int64.fetchOne(db, sql: "SELECT last_update_id FROM update_cursor WHERE id = 0")
     }
   }
 
-  public func advanceCursor(to updateId: Int64) throws(StoreError) {
+  public func advanceCursor(to updateID: Int64) throws(StoreError) {
     try database.writeMapping { db in
       try db.execute(
         sql: """
@@ -26,7 +23,7 @@ public struct UpdateCursorStoreGRDB: UpdateCursorStore {
           ON CONFLICT(id) DO UPDATE SET
           last_update_id = MAX(last_update_id, excluded.last_update_id)
           """,
-        arguments: [updateId]
+        arguments: [updateID]
       )
     }
   }

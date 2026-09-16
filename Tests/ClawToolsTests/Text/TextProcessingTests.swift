@@ -4,14 +4,17 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct TextProcessingTests {
-  @Test func capPinsTheGraphemeEquivalentOfTwentyFiveThousandTokens() {
+@Suite
+struct TextProcessingTests {
+  @Test
+  func capPinsTheGraphemeEquivalentOfTwentyFiveThousandTokens() {
     // given / when / then — amendment §18-G's pinned unit conversion
     #expect(TokenEstimator.graphemeBudget(forInputTokens: 25_000) == 80_000)
     #expect(ToolOutputCap.maxGraphemes == 80_000)
   }
 
-  @Test func capCutsWithTheLiteralMarker() {
+  @Test
+  func capCutsWithTheLiteralMarker() {
     // given
     let text = String(repeating: "a", count: 100)
 
@@ -24,7 +27,8 @@ import Testing
     #expect(ToolOutputCap.cap("short", maxGraphemes: 50) == "short")
   }
 
-  @Test func redactorReplacesEveryExactSecretOccurrence() {
+  @Test
+  func redactorReplacesEveryExactSecretOccurrence() {
     // given
     let redactor = SecretRedactor(secretValues: ["tok-123", "", "key-9"])
 
@@ -37,7 +41,8 @@ import Testing
     )
   }
 
-  @Test func extractorDropsScriptStyleAndTags() {
+  @Test
+  func extractorDropsScriptStyleAndTags() {
     // given
     let html = """
       <html><head><style>body { color: red; }</style>
@@ -59,7 +64,8 @@ import Testing
     #expect(text.contains("<h1>") == false)
   }
 
-  @Test func extractorDropsScriptBodyOnCloseTagVariants() {
+  @Test
+  func extractorDropsScriptBodyOnCloseTagVariants() {
     // given — HTML5 accepts close tags with trailing space/junk/case; the naive literal-`</script>`
     // strip used to leak the body on these, so hidden script text reached the model as page text
     let variants = [
@@ -78,7 +84,8 @@ import Testing
     }
   }
 
-  @Test func extractorDoesNotCloseRawElementOnFakeCloseTagPrefix() {
+  @Test
+  func extractorDoesNotCloseRawElementOnFakeCloseTagPrefix() {
     // given — `</scriptx>` is NOT a close tag in HTML5 (the name needs a terminator), so the body
     // between a fake close and the real `</script>` must stay dropped, not leak into the text
     let cases = [
@@ -95,7 +102,8 @@ import Testing
     }
   }
 
-  @Test func extractorKeepsContentAfterAbruptlyClosedCommentsAndStrayAngleBrackets() {
+  @Test
+  func extractorKeepsContentAfterAbruptlyClosedCommentsAndStrayAngleBrackets() {
     // given — WHATWG treats `<!-->` / `<!--->` as complete comments (content after them kept), and a
     // `<` with no following `>` is literal text — the old code preserved both; the linear scan must too
     #expect(

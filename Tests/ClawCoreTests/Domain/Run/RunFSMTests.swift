@@ -2,14 +2,16 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct RunFSMTests {
+@Suite
+struct RunFSMTests {
   private struct Transition {
     let state: RunState
     let event: RunEvent
     let expected: RunState
   }
 
-  @Test func legalTransitions() {
+  @Test
+  func legalTransitions() {
     // given
     let legal = [
       Transition(state: .pending, event: .pickUp, expected: .running),
@@ -37,7 +39,8 @@ import Testing
     }
   }
 
-  @Test func illegalTransitionsHaveNoDefaultArm() {
+  @Test
+  func illegalTransitionsHaveNoDefaultArm() {
     // given
     let illegal: [(state: RunState, event: RunEvent)] = [
       (.done, .complete),

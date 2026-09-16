@@ -2,9 +2,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct NormalizerTests {
+@Suite
+struct NormalizerTests {
   private func msg(
-    messageId: Int64 = 10,
+    messageID: Int64 = 10,
     from: Int64? = 42,
     chat: Int64 = 42,
     text: String? = nil,
@@ -14,9 +15,9 @@ import Testing
     photo: PhotoAttachment? = nil
   ) -> RawMessage {
     RawMessage(
-      messageId: messageId,
-      fromUserId: from,
-      chatId: chat,
+      messageID: messageID,
+      fromUserID: from,
+      chatID: chat,
       text: text,
       caption: caption,
       mediaKind: media,
@@ -26,7 +27,7 @@ import Testing
   }
 
   private let voiceNote = VoiceAttachment(
-    fileId: "voice-file-1",
+    fileID: "voice-file-1",
     durationSeconds: 8,
     mimeType: "audio/ogg",
     fileSizeBytes: 31_942
@@ -34,33 +35,35 @@ import Testing
 
   private let rainbow = PhotoAttachment(sizes: [
     PhotoSize(
-      fileId: "y-id",
-      fileUniqueId: "y-u",
+      fileID: "y-id",
+      fileUniqueID: "y-u",
       width: 1280,
       height: 960,
       fileSizeBytes: 186_422
-    )
+    ),
   ])
 
-  @Test func plainTextMessageNormalizes() throws {
+  @Test
+  func plainTextMessageNormalizes() throws {
     // given
-    let raw = RawUpdate(updateId: 1, message: msg(text: "hi"), editedMessage: nil)
+    let raw = RawUpdate(updateID: 1, message: msg(text: "hi"), editedMessage: nil)
 
     // when
     let incoming = try #require(IncomingMessage.normalize(from: raw))
 
     // then
-    #expect(incoming.updateId == 1)
-    #expect(incoming.userId == 42)
-    #expect(incoming.chatId == 42)
+    #expect(incoming.updateID == 1)
+    #expect(incoming.userID == 42)
+    #expect(incoming.chatID == 42)
     #expect(incoming.content == .text("hi"))
     #expect(incoming.isEdited == false)
   }
 
-  @Test func captionOnMediaWithoutAnAttachmentIsTreatedAsText() throws {
+  @Test
+  func captionOnMediaWithoutAnAttachmentIsTreatedAsText() throws {
     // given — media presence with nothing fetchable behind it
     let raw = RawUpdate(
-      updateId: 2,
+      updateID: 2,
       message: msg(caption: "look", media: "photos", photo: nil),
       editedMessage: nil
     )
@@ -72,9 +75,10 @@ import Testing
     #expect(incoming.content == .text("look"))
   }
 
-  @Test func mediaWithoutCaptionIsUnsupported() throws {
+  @Test
+  func mediaWithoutCaptionIsUnsupported() throws {
     // given
-    let raw = RawUpdate(updateId: 3, message: msg(media: "voice messages"), editedMessage: nil)
+    let raw = RawUpdate(updateID: 3, message: msg(media: "voice messages"), editedMessage: nil)
 
     // when
     let incoming = try #require(IncomingMessage.normalize(from: raw))
@@ -83,10 +87,11 @@ import Testing
     #expect(incoming.content == .unsupported(kind: "voice messages"))
   }
 
-  @Test func bareVoiceNoteNormalizesToVoiceContent() throws {
+  @Test
+  func bareVoiceNoteNormalizesToVoiceContent() throws {
     // given — the real Telegram client shape: a voice attachment, no text, no caption
     let raw = RawUpdate(
-      updateId: 4,
+      updateID: 4,
       message: msg(media: VoiceAttachment.mediaKindDescription, voice: voiceNote),
       editedMessage: nil
     )
@@ -98,10 +103,11 @@ import Testing
     #expect(incoming.content == .voice(voiceNote))
   }
 
-  @Test func captionedVoiceStaysATextMessage() throws {
+  @Test
+  func captionedVoiceStaysATextMessage() throws {
     // given — written text always outranks the attachment
     let raw = RawUpdate(
-      updateId: 5,
+      updateID: 5,
       message: msg(
         caption: "listen to this",
         media: VoiceAttachment.mediaKindDescription,
@@ -117,10 +123,11 @@ import Testing
     #expect(incoming.content == .text("listen to this"))
   }
 
-  @Test func captionedPhotoKeepsTheImage() throws {
+  @Test
+  func captionedPhotoKeepsTheImage() throws {
     // given — the flow that used to answer "I don't see an attached image"
     let raw = RawUpdate(
-      updateId: 20,
+      updateID: 20,
       message: msg(caption: "Что это?", media: "photos", photo: rainbow),
       editedMessage: nil
     )
@@ -132,10 +139,11 @@ import Testing
     #expect(incoming.content == .photo(rainbow, caption: "Что это?"))
   }
 
-  @Test func barePhotoNormalizesToPhotoContent() throws {
+  @Test
+  func barePhotoNormalizesToPhotoContent() throws {
     // given
     let raw = RawUpdate(
-      updateId: 21,
+      updateID: 21,
       message: msg(media: "photos", photo: rainbow),
       editedMessage: nil
     )
@@ -147,13 +155,10 @@ import Testing
     #expect(incoming.content == .photo(rainbow, caption: nil))
   }
 
-  @Test func photoWithNoUsableRungFallsBackToUnsupported() throws {
+  @Test
+  func photoWithNoUsableRungFallsBackToUnsupported() throws {
     // given — the wire dropped every malformed rung, leaving presence only
-    let raw = RawUpdate(
-      updateId: 22,
-      message: msg(media: "photos", photo: nil),
-      editedMessage: nil
-    )
+    let raw = RawUpdate(updateID: 22, message: msg(media: "photos", photo: nil), editedMessage: nil)
 
     // when
     let incoming = try #require(IncomingMessage.normalize(from: raw))
@@ -162,9 +167,10 @@ import Testing
     #expect(incoming.content == .unsupported(kind: "photos"))
   }
 
-  @Test func editedMessageIsFlagged() throws {
+  @Test
+  func editedMessageIsFlagged() throws {
     // given
-    let raw = RawUpdate(updateId: 4, message: nil, editedMessage: msg(text: "fixed"))
+    let raw = RawUpdate(updateID: 4, message: nil, editedMessage: msg(text: "fixed"))
 
     // when
     let incoming = try #require(IncomingMessage.normalize(from: raw))
@@ -174,17 +180,19 @@ import Testing
     #expect(incoming.isEdited == true)
   }
 
-  @Test func missingSenderIsIgnored() {
+  @Test
+  func missingSenderIsIgnored() {
     // given
-    let raw = RawUpdate(updateId: 5, message: msg(from: nil, text: "hi"), editedMessage: nil)
+    let raw = RawUpdate(updateID: 5, message: msg(from: nil, text: "hi"), editedMessage: nil)
 
     // then
     #expect(IncomingMessage.normalize(from: raw) == nil)
   }
 
-  @Test func emptyUpdateIsIgnored() {
+  @Test
+  func emptyUpdateIsIgnored() {
     // given
-    let raw = RawUpdate(updateId: 6, message: nil, editedMessage: nil)
+    let raw = RawUpdate(updateID: 6, message: nil, editedMessage: nil)
 
     // then
     #expect(IncomingMessage.normalize(from: raw) == nil)

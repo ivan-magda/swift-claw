@@ -79,9 +79,7 @@ struct ObservedCredentialStore: LLMCredentialStore {
   let inner: EncryptedLLMCredentialStore
   let log: AuthEffectLog
 
-  func load(
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
+  func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
     log.record(.credentialLoaded)
     return try inner.load(providerID: providerID)
   }
@@ -111,7 +109,7 @@ struct ScriptedDeviceAuthorization: ChatGPTDeviceAuthorizing {
   let log: AuthEffectLog
 
   func authorize(
-    onDeviceCode: @escaping @Sendable (ChatGPTDeviceCode) async -> Void
+    onDeviceCode: @escaping @Sendable (_ deviceCode: ChatGPTDeviceCode) async -> Void
   ) async throws -> ChatGPTAuthorizationGrant {
     // Recorded before anything is reported: the question this marker answers is whether login
     // reached the vendor at all, not whether it got an answer.
@@ -193,7 +191,9 @@ final class CatalogSpyBox: @unchecked Sendable {
   var seenAuthorization: LLMRequestAuthorization? {
     lock.lock()
     defer { lock.unlock() }
-    return catalog?.seenAuthorization.withLock { $0 }
+    return catalog?.seenAuthorization.withLock {
+      $0
+    }
   }
 }
 
@@ -249,15 +249,18 @@ enum AuthFixture {
     userCode: "WDJB-MJHT",
     pollInterval: .seconds(5)
   )
+
   static let grant = ChatGPTAuthorizationGrant(
     authorizationCode: "authorization-code-value",
     codeVerifier: "code-verifier-value"
   )
+
   static let pair = ChatGPTTokenPair(
     accessToken: accessToken,
     refreshToken: refreshToken,
     expiresAt: expiry
   )
+
   static let catalog = [
     ChatGPTCatalogModel(slug: "gpt-5.4", priority: 1),
     ChatGPTCatalogModel(slug: "gpt-5.4-mini", priority: 2),
@@ -302,7 +305,9 @@ struct AuthWorld: Sendable {
     environment = [EnvSecretStore.EnvKey.botToken: AuthFixture.botToken]
   }
 
-  var paths: SecretStatePaths { SecretStatePaths(stateRoot: root) }
+  var paths: SecretStatePaths {
+    SecretStatePaths(stateRoot: root)
+  }
 
   /// The authorization the catalog fetch saw during the most recent `loginWorkflow().login()`.
   var seenCatalogAuthorization: LLMRequestAuthorization? {
@@ -338,24 +343,18 @@ struct AuthWorld: Sendable {
     builtCatalog.set(catalog)
     return AuthLoginWorkflow(
       bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
-      runtimeSecrets: RealRuntimeSecrets(
-        stateRoot: root,
-        environment: environment,
-        log: log
-      ),
+      runtimeSecrets: RealRuntimeSecrets(stateRoot: root, environment: environment, log: log),
       mutationLock: mutationLock ?? ScriptedLock(failure: lockFailure, log: log),
       makeCredentialStore: makeCredentialStore,
       makeDeviceAuthorization: {
-        ScriptedDeviceAuthorization(
-          device: AuthFixture.device,
-          outcome: device,
-          log: effects
-        )
+        ScriptedDeviceAuthorization(device: AuthFixture.device, outcome: device, log: effects)
       },
       tokenExchange: ScriptedExchange(outcome: exchangeOutcome, log: log),
       catalog: catalog,
       terminal: terminal,
-      profileID: { identity }
+      profileID: {
+        identity
+      }
     )
   }
 
@@ -363,7 +362,9 @@ struct AuthWorld: Sendable {
     AuthStatusWorkflow(
       bootstrap: AuthBootstrap(stateRoot: root, configuredModel: configuredModel),
       makeCredentialStore: makeCredentialStore,
-      wallDate: { AuthFixture.now }
+      wallDate: {
+        AuthFixture.now
+      }
     )
   }
 
@@ -378,14 +379,16 @@ struct AuthWorld: Sendable {
   /// a previous successful login would have.
   func seedPriorLogin() throws {
     _ = try RuntimeSecretPreparer.prepare(stateRoot: root, environment: environment)
-    try EncryptedLLMCredentialStore(stateRoot: root)
-      .save(AuthFixture.priorCredential, providerID: .openAIChatGPT)
+    try EncryptedLLMCredentialStore(stateRoot: root).save(
+      AuthFixture.priorCredential,
+      providerID: .openAIChatGPT
+    )
   }
 }
 
 func withAuthWorld<Value>(
   _ prefix: String,
-  _ body: (inout AuthWorld) async throws -> Value
+  _ body: (_ world: inout AuthWorld) async throws -> Value
 ) async throws -> Value {
   let root = try makeTemporaryRoot(prefix: prefix)
   defer { try? FileManager.default.removeItem(at: root) }

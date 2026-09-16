@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct ClawStoresTests {
-  @Test func openStoresMigratesAndReturnsWorkingStores() throws {
+@Suite
+struct ClawStoresTests {
+  @Test
+  func openStoresMigratesAndReturnsWorkingStores() throws {
     // given
     let path = makeTempDatabasePath(prefix: "claw-stores")
     defer { try? FileManager.default.removeItem(atPath: path) }
@@ -15,14 +17,15 @@ import Testing
     let stores = try ClawDatabase.openStores(path: path)
 
     // then
-    try stores.allowlist.seedAllowlist(userIds: [42])
-    #expect(try stores.allowlist.allowlistContains(userId: 42))
-    #expect(try stores.processed.claimUpdate(updateId: 1))
+    try stores.allowlist.seedAllowlist(userIDs: [42])
+    #expect(try stores.allowlist.allowlistContains(userID: 42))
+    #expect(try stores.processed.claimUpdate(updateID: 1))
     try stores.cursor.advanceCursor(to: 5)
     #expect(try stores.cursor.loadCursor() == 5)
   }
 
-  @Test func openStoresExposesMemoryStoresAndRetriever() throws {
+  @Test
+  func openStoresExposesMemoryStoresAndRetriever() throws {
     // given - a real temp-file pool, exercising the production composition path.
     let path = makeTempDatabasePath(prefix: "claw-stores-mem")
     defer { try? FileManager.default.removeItem(atPath: path) }
@@ -31,17 +34,17 @@ import Testing
 
     // when - the confirmed-write seam, the read seam, and the retriever are all reachable.
     let remembered = try stores.memoryCommands.applyRemember(
-      updateId: 1,
-      item: NewMemoryItem(text: "swift recall fact", kind: .project, sessionId: nil),
+      updateID: 1,
+      item: NewMemoryItem(text: "swift recall fact", kind: .project, sessionID: nil),
       now: now
     )
     let listed = try stores.memory.list(kind: .project, limit: 10)
     let recall = try stores.retriever.searchRelevantMessages(
       query: "swift",
-      currentSessionId: 1,
-      restrictToSessionId: nil,
-      windowStartMessageId: nil,
-      excludedMessageIds: [],
+      currentSessionID: 1,
+      restrictToSessionID: nil,
+      windowStartMessageID: nil,
+      excludedMessageIDs: [],
       limit: 5
     )
 

@@ -65,9 +65,7 @@ enum MCPProbe {
       )
     }
 
-    let metadataRedactor = SecretRedactor(
-      secretValues: credentials.values.compactMap(\.token)
-    )
+    let metadataRedactor = SecretRedactor(secretValues: credentials.values.compactMap(\.token))
     let outcomes = await MCPCatalogResolver.resolve(
       sessions: sessions,
       metadataRedactor: metadataRedactor

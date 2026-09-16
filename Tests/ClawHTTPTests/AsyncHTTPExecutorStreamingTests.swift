@@ -16,6 +16,7 @@ import Testing
 /// has actually left, so a test can wait for the whole burst to be in flight instead of guessing.
 private final class BurstingHandler: ChannelInboundHandler, @unchecked Sendable {
   typealias InboundIn = HTTPServerRequestPart
+
   typealias OutboundOut = HTTPServerResponsePart
 
   private let written: AsyncGate
@@ -62,17 +63,14 @@ private final class BurstingServer: @unchecked Sendable {
   static func chunkText(index: Int, bytes: Int) -> String {
     let marker = "data:\(index);"
     return marker.count >= bytes
-      ? String(marker.prefix(bytes))
-      : marker + String(repeating: "-", count: bytes - marker.count)
+      ? String(marker.prefix(bytes)) : marker + String(repeating: "-", count: bytes - marker.count)
   }
 
   static func expectedBody(chunkCount: Int, chunkBytes: Int) -> Data {
     Data(
       (0..<chunkCount).map { index in
         chunkText(index: index, bytes: chunkBytes)
-      }
-      .joined()
-      .utf8
+      }.joined().utf8
     )
   }
 
@@ -90,15 +88,16 @@ private final class BurstingServer: @unchecked Sendable {
   static func start(chunkCount: Int, chunkBytes: Int) async throws -> BurstingServer {
     let written = AsyncGate()
     let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-    let bootstrap = ServerBootstrap(group: group)
-      .serverChannelOption(ChannelOptions.backlog, value: 16)
-      .childChannelInitializer { channel in
-        channel.pipeline.configureHTTPServerPipeline().flatMap {
-          channel.pipeline.addHandler(
-            BurstingHandler(written: written, chunkCount: chunkCount, chunkBytes: chunkBytes)
-          )
-        }
+    let bootstrap = ServerBootstrap(group: group).serverChannelOption(
+      ChannelOptions.backlog,
+      value: 16
+    ).childChannelInitializer { channel in
+      channel.pipeline.configureHTTPServerPipeline().flatMap {
+        channel.pipeline.addHandler(
+          BurstingHandler(written: written, chunkCount: chunkCount, chunkBytes: chunkBytes)
+        )
       }
+    }
     let channel = try await bootstrap.bind(host: "127.0.0.1", port: 0).get()
     return BurstingServer(group: group, channel: channel, written: written)
   }
@@ -112,7 +111,7 @@ private final class BurstingServer: @unchecked Sendable {
 private func withBurstingServer<Result>(
   chunkCount: Int = 1,
   chunkBytes: Int = 24,
-  _ operation: (BurstingServer) async throws -> Result
+  _ operation: (_ server: BurstingServer) async throws -> Result
 ) async throws -> Result {
   let server = try await BurstingServer.start(chunkCount: chunkCount, chunkBytes: chunkBytes)
   do {
@@ -127,7 +126,8 @@ private func withBurstingServer<Result>(
 
 // MARK: - Executor streaming tests
 
-@Suite(.serialized) struct AsyncHTTPExecutorStreamingTests {
+@Suite(.serialized)
+struct AsyncHTTPExecutorStreamingTests {
   private func streaming(
     maximumUnreadBytes: Int = 4 * 1024 * 1024,
     errorBytes: Int = 64 * 1024
@@ -169,7 +169,7 @@ private func withBurstingServer<Result>(
 
         // then
         #expect(exchange.head.statusCode == 200)
-        #expect(exchange.head.getHeader(for: "Content-Type") == "text/event-stream")
+        #expect(exchange.head.header(for: "Content-Type") == "text/event-stream")
         #expect(collected == BurstingServer.expectedBody(chunkCount: 4, chunkBytes: 24))
         #expect(termination == .completed)
       }
@@ -235,12 +235,14 @@ private func withBurstingServer<Result>(
   @Test(.timeLimit(.minutes(1)))
   func nonSuccessStreamBodyIsCappedAtTheErrorAllowance() async throws {
     // given
-    try await withScriptedServer(routes: [
-      "/stream": ScriptedResponse(
-        status: .tooManyRequests,
-        body: String(repeating: "e", count: 4096)
-      )
-    ]) { server in
+    try await withScriptedServer(
+      routes: [
+        "/stream": ScriptedResponse(
+          status: .tooManyRequests,
+          body: String(repeating: "e", count: 4096)
+        ),
+      ]
+    ) { server in
       try await withExecutor { executor in
         // when
         let exchange = try await executor.openStream(
@@ -352,7 +354,8 @@ private func withBurstingServer<Result>(
 /// The ownership rules exercised directly, where a producer's exit can be driven rather than raced:
 /// the transport tests above prove the executor builds an exchange, these prove what an exchange
 /// promises whoever joins it.
-@Suite(.serialized) struct HTTPStreamExchangeOwnershipTests {
+@Suite(.serialized)
+struct HTTPStreamExchangeOwnershipTests {
   private let head = HTTPStreamHead(statusCode: 200, headers: [:])
 
   @Test(.timeLimit(.minutes(1)))
@@ -380,7 +383,11 @@ private func withBurstingServer<Result>(
     let termination = await joiner.value
 
     // then — the join cannot report an outcome the producer has not reached yet
-    #expect(hasExited.withLock { current in current })
+    #expect(
+      hasExited.withLock { current in
+        current
+      }
+    )
     #expect(termination == .completed)
   }
 

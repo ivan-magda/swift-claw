@@ -10,13 +10,13 @@ public struct TranscriptAuthor: Sendable, Equatable {
 
   public let label: String
 
-  public init(displayName: String?, userId: Int64) {
+  public init(displayName: String?, userID: Int64) {
     let sanitized = Self.sanitize(displayName)
-    label = sanitized.isEmpty ? "user \(userId)" : sanitized
+    label = sanitized.isEmpty ? "user \(userID)" : sanitized
   }
 
   public init(message: IncomingMessage) {
-    self.init(displayName: message.senderDisplayName, userId: message.userId)
+    self.init(displayName: message.senderDisplayName, userID: message.userID)
   }
 
   public func prefixing(_ text: String) -> String {
@@ -32,9 +32,7 @@ public struct TranscriptAuthor: Sendable, Equatable {
     let flattened = displayName.map { char in
       char == ":" || char.isNewline ? " " : char
     }
-    return String(flattened)
-      .split(whereSeparator: \.isWhitespace)
-      .joined(separator: " ")
+    return String(flattened).split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }
 }
 
@@ -43,8 +41,10 @@ extension ChatMode {
   /// group line is prefixed with its speaker.
   public func transcriptText(_ text: String, author: TranscriptAuthor) -> String {
     switch self {
-    case .direct: text
-    case .group: author.prefixing(text)
+    case .direct:
+      text
+    case .group:
+      author.prefixing(text)
     }
   }
 }

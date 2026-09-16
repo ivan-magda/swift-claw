@@ -21,10 +21,8 @@ enum MemoryReplies {
   static let cancelled = "Cancelled."
 
   /// Terminal owner-write failure copy: the pending intent was cleared; re-issue.
-  static let saveFailed =
-    "Couldn't save it. Nothing was written. Run /remember again."
-  static let deleteFailed =
-    "Couldn't delete it. Nothing changed. Run /memory delete <id> again."
+  static let saveFailed = "Couldn't save it. Nothing was written. Run /remember again."
+  static let deleteFailed = "Couldn't delete it. Nothing changed. Run /memory delete <id> again."
 
   /// `id` is nil only if a `MemoryCommandStore` violates its newlyClaimed-implies-item contract;
   /// the ack degrades instead of crashing the router.
@@ -57,7 +55,9 @@ enum MemoryReplies {
     var lines: [String] = []
 
     for kind in MemoryKind.allCases {
-      let groupedItems = limitedItems.filter { $0.kind == kind }
+      let groupedItems = limitedItems.filter {
+        $0.kind == kind
+      }
       guard groupedItems.isEmpty == false else {
         continue
       }
@@ -73,7 +73,7 @@ enum MemoryReplies {
 
   /// Full text and full provenance: kind, source, session, created, sensitivity.
   static func showItem(_ item: MemoryItem) -> String {
-    let sessionText = item.sessionId.map(String.init) ?? "none"
+    let sessionText = item.sessionID.map(String.init) ?? "none"
     let lines = [
       "Memory \(item.id): \(item.kind.rawValue)",
       "source: \(item.source.rawValue) · session: \(sessionText)",

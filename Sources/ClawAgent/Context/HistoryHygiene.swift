@@ -33,9 +33,9 @@ enum HistoryHygiene {
         cursor += 1
       }
 
-      let expectedIds = Set(anchorCalls.map(\.id))
-      let presentIds = Set(observationRows.compactMap(\.toolCallId))
-      if expectedIds.isSubset(of: presentIds) {
+      let expectedIDs = Set(anchorCalls.map(\.id))
+      let presentIDs = Set(observationRows.compactMap(\.toolCallID))
+      if expectedIDs.isSubset(of: presentIDs) {
         sanitized.append(message)
         sanitized.append(contentsOf: observationRows)
       }

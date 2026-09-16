@@ -22,9 +22,13 @@ public struct CoderCancelTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(30) }
+  public var timeout: Duration {
+    .seconds(30)
+  }
 
-  public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   public func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     CoderToolOutput.missingContext

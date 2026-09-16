@@ -6,15 +6,20 @@ import ClawAgent
 public enum Degradation {
   public static let providerUnavailable =
     "I couldn't reach the model. Please try again in a moment."
+
   public static let outputTruncated =
     "The model hit its output limit before answering. Try a shorter prompt."
+
   public static let contextUnavailable =
     "I couldn't build the context for this turn. Please trim workspace memory or try again."
+
   /// Used by boot reconciliation for a run that crashed mid-turn without delivering anything.
   public static let unfinished = "I didn't finish your last request. Please resend it."
+
   /// Used on the `SQLITE_FULL` path when the message can't even be persisted.
   public static let storageFull =
     "Storage is full, so I can't save messages. Please free up disk space."
+
   /// Used when a mid-run usage/audit write fails non-fatally; the run halts rather than spend
   /// further without a durable record.
   public static let accountingFailed =
@@ -108,6 +113,17 @@ public enum Degradation {
     }
   }
 
+  /// Maps a route transition to its owner-facing notice. Exhaustive over `RouteNotice`, so a new
+  /// case forces a deliberate copy decision here.
+  public static func message(for notice: RouteNotice) -> String {
+    switch notice {
+    case .switched(let primary, let fallback):
+      return routeSwitched(from: primary, to: fallback)
+    case .restored(let route):
+      return routeRestored(route: route)
+    }
+  }
+
   /// The one-time notice that a turn was answered by a route other than the configured primary.
   /// It names both routes because the owner's next question is which model actually replied, and
   /// because a metered fallback behind a flat-rate primary is a spend change they should see.
@@ -124,15 +140,4 @@ public enum Degradation {
   /// failed too, so the reply names the primary's cause without implying the fallback was never
   /// tried.
   public static let fallbackAlsoFailed = "I tried the backup model too, and it also failed."
-
-  /// Maps a route transition to its owner-facing notice. Exhaustive over `RouteNotice`, so a new
-  /// case forces a deliberate copy decision here.
-  public static func message(for notice: RouteNotice) -> String {
-    switch notice {
-    case .switched(let primary, let fallback):
-      return routeSwitched(from: primary, to: fallback)
-    case .restored(let route):
-      return routeRestored(route: route)
-    }
-  }
 }

@@ -4,13 +4,13 @@ import Foundation
 import Subprocess
 import Testing
 
-@testable import ClawCoder
-
 #if canImport(System)
   import System
 #else
   import SystemPackage
 #endif
+
+@testable import ClawCoder
 
 struct GitWorkspaceFixture {
   let root: URL
@@ -32,10 +32,14 @@ struct GitWorkspaceFixture {
     let result = try await Subprocess.run(
       .path("/usr/bin/git"),
       arguments: Arguments(arguments),
-      environment: .custom([
-        "PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0",
-      ]),
+      environment: .custom(
+        [
+          "PATH": "/usr/bin:/bin",
+          "GIT_CONFIG_NOSYSTEM": "1",
+          "GIT_CONFIG_GLOBAL": "/dev/null",
+          "GIT_TERMINAL_PROMPT": "0",
+        ]
+      ),
       workingDirectory: FilePath((directory ?? source).path),
       output: .string(limit: 1024 * 1024),
       error: .string(limit: 64 * 1024)

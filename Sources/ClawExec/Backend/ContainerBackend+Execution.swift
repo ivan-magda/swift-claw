@@ -27,23 +27,21 @@ extension ContainerBackend {
     executionTail = work
     executionAdmitted()
 
-    let result = await withTaskCancellationHandler {
-      await work.value
-    } onCancel: {
-      work.cancel()
-    }
+    let result = await withTaskCancellationHandler(
+      operation: {
+        await work.value
+      },
+      onCancel: {
+        work.cancel()
+      }
+    )
     executionTasks[taskIdentifier] = nil
 
     return result
   }
 
   static func cancelledResult() -> ExecutionResult {
-    ExecutionResult(
-      terminationReason: .cancelled,
-      stdout: "",
-      stderr: "",
-      truncatedRawBytes: false
-    )
+    ExecutionResult(terminationReason: .cancelled, stdout: "", stderr: "", truncatedRawBytes: false)
   }
 
   nonisolated static func defaultSupportedHost() -> Bool {
@@ -80,9 +78,7 @@ extension ContainerBackend {
         request: request
       )
     } catch {
-      return infrastructureResult(
-        "failed to materialize execution scratch: \(error)"
-      )
+      return infrastructureResult("failed to materialize execution scratch: \(error)")
     }
 
     let command = foregroundCommand(
@@ -107,18 +103,13 @@ extension ContainerBackend {
         self.result(.cancelled)
       }
 
-    let cleanupOK = await runShieldedCleanup(
-      identity: identity,
-      workspace: workspace
-    )
+    let cleanupOK = await runShieldedCleanup(identity: identity, workspace: workspace)
     if !cleanupOK {
       // The container provably survived the teardown ladder; fail closed and refuse new
       // admissions until a future successful prepare() reaps it, otherwise the next queued
       // run would boot a second VM beside the zombie.
       preparedInitImage = nil
-      result = infrastructureResult(
-        "could not confirm container removal for \(identity.name)"
-      )
+      result = infrastructureResult("could not confirm container removal for \(identity.name)")
     }
 
     return result
@@ -160,10 +151,7 @@ extension ContainerBackend {
     let commands = commands
     let remaining = now().duration(to: deadline)
 
-    return await DeadlineRace.race(
-      allowance: remaining,
-      sleep: watchdogSleep
-    ) {
+    return await DeadlineRace.race(allowance: remaining, sleep: watchdogSleep) {
       await commands.run(command)
     }
   }
@@ -182,32 +170,22 @@ extension ContainerBackend {
     case .startFailed(let reason):
       return infrastructureResult(reason)
     case .signaled(let signal):
-      return infrastructureResult(
-        "container CLI was terminated by host signal \(signal)"
-      )
+      return infrastructureResult("container CLI was terminated by host signal \(signal)")
     case .exited(let code):
       guard cidMatches(identity, at: cidFile) else {
-        return infrastructureResult(
-          "container did not create its identity file"
-        )
+        return infrastructureResult("container did not create its identity file")
       }
 
       guard await engineRunning(deadline: deadline) else {
-        return infrastructureResult(
-          "container engine became unavailable after execution"
-        )
+        return infrastructureResult("container engine became unavailable after execution")
       }
 
       guard let present = await containerPresent(identity.name, deadline: deadline) else {
-        return infrastructureResult(
-          "could not inspect container state after execution"
-        )
+        return infrastructureResult("could not inspect container state after execution")
       }
 
       guard !present else {
-        return infrastructureResult(
-          "container remained after the foreground CLI exited"
-        )
+        return infrastructureResult("container remained after the foreground CLI exited")
       }
 
       // swiftlint:disable optional_data_string_conversion

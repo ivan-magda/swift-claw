@@ -20,6 +20,7 @@ public actor ContainerBackend {
     "CONTAINER_DEBUG",
     "CONTAINER_DEFAULT_PLATFORM",
   ]
+
   // Head start the host watchdog grants the runner's own timeout + teardown, so in the
   // cooperative case the runner always reports its typed outcome before the watchdog fires.
   static let hostWatchdogSlack: Duration = .seconds(2)
@@ -28,13 +29,13 @@ public actor ContainerBackend {
   let stateRoot: URL
   let commands: any SubprocessRunning
 
-  let sanitizeReason: @Sendable (String) -> String
+  let sanitizeReason: @Sendable (_ reason: String) -> String
   let now: @Sendable () -> ContinuousClock.Instant
   let supportedHost: @Sendable () -> Bool
   let executionAdmitted: @Sendable () -> Void
   // Drives the host-watchdog deadline sleeps; injectable so tests can fire a watchdog
   // without waiting out a real per-command allowance.
-  let watchdogSleep: @Sendable (Duration) async throws -> Void
+  let watchdogSleep: @Sendable (_ duration: Duration) async throws -> Void
   // Longest-first so nested paths are replaced before the roots that contain them.
   let sensitiveHostPaths: [String]
 
@@ -48,8 +49,10 @@ public actor ContainerBackend {
     settings: ExecSandboxSettings,
     stateRoot: URL,
     commands: any SubprocessRunning,
-    sanitizeReason: @escaping @Sendable (String) -> String,
-    now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
+    sanitizeReason: @escaping @Sendable (_ reason: String) -> String,
+    now: @escaping @Sendable () -> ContinuousClock.Instant = {
+      ContinuousClock.now
+    }
   ) {
     self.init(
       settings: settings,
@@ -66,11 +69,11 @@ public actor ContainerBackend {
     settings: ExecSandboxSettings,
     stateRoot: URL,
     commands: any SubprocessRunning,
-    sanitizeReason: @escaping @Sendable (String) -> String,
+    sanitizeReason: @escaping @Sendable (_ reason: String) -> String,
     now: @escaping @Sendable () -> ContinuousClock.Instant,
     supportedHost: @escaping @Sendable () -> Bool,
     executionAdmitted: @escaping @Sendable () -> Void = {},
-    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
+    watchdogSleep: @escaping @Sendable (_ duration: Duration) async throws -> Void = { duration in
       try await Task.sleep(for: duration)
     }
   ) {
@@ -89,32 +92,34 @@ public actor ContainerBackend {
       stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,
       FileManager.default.homeDirectoryForCurrentUser.path,
       Self.cliPath,
-    ]
-    .filter { !$0.isEmpty }
-    .sorted { $0.count > $1.count }
+    ].filter {
+      !$0.isEmpty
+    }.sorted {
+      $0.count > $1.count
+    }
   }
 
   public func versionAvailability() async -> BackendAvailability {
     guard supportedHost() else {
-      return .unavailable(
-        reason: ownerSafe("execute_code requires macOS 26 or newer on arm64")
-      )
+      return .unavailable(reason: ownerSafe("execute_code requires macOS 26 or newer on arm64"))
     }
 
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
-    guard
-      let data = await boundedCommandData(
-        ContainerInvocation.systemVersion(),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      )
+    guard let data = await boundedCommandData(
+      ContainerInvocation.systemVersion(),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    )
     else {
       return .unavailable(reason: ownerSafe("container version command failed"))
     }
 
-    guard
-      let documents = try? JSONDecoder().decode([SystemVersionDocument].self, from: data),
-      let cli = documents.first(where: { $0.appName == "container" })
+    guard let documents = try? JSONDecoder().decode([SystemVersionDocument].self, from: data),
+          let cli = documents.first(
+        where: {
+          $0.appName == "container"
+        }
+          )
     else {
       return .unavailable(reason: ownerSafe("container version response was invalid"))
     }
@@ -125,9 +130,7 @@ public actor ContainerBackend {
 
     guard version >= ExecSandboxSettings.minimumContainerVersion else {
       return .unavailable(
-        reason: ownerSafe(
-          "container CLI \(cli.version) is older than the required 1.0.0"
-        )
+        reason: ownerSafe("container CLI \(cli.version) is older than the required 1.0.0")
       )
     }
 
@@ -136,20 +139,17 @@ public actor ContainerBackend {
 
   public func probe() async -> BackendAvailability {
     guard supportedHost() else {
-      return .unavailable(
-        reason: ownerSafe("execute_code requires macOS 26 or newer on arm64")
-      )
+      return .unavailable(reason: ownerSafe("execute_code requires macOS 26 or newer on arm64"))
     }
 
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
-    guard
-      let data = await boundedCommandData(
-        ContainerInvocation.systemStatus(),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      ),
-      let status = try? JSONDecoder().decode(SystemStatusDocument.self, from: data),
-      status.status == "running"
+    guard let data = await boundedCommandData(
+      ContainerInvocation.systemStatus(),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    ),
+          let status = try? JSONDecoder().decode(SystemStatusDocument.self, from: data),
+          status.status == "running"
     else {
       return .unavailable(reason: ownerSafe("container engine is not running"))
     }
@@ -178,9 +178,7 @@ public actor ContainerBackend {
 // MARK: - Results and Reason Boundary
 
 extension ContainerBackend {
-  func result(
-    _ termination: ExecTermination
-  ) -> ExecutionResult {
+  func result(_ termination: ExecTermination) -> ExecutionResult {
     ExecutionResult(
       terminationReason: termination,
       stdout: "",
@@ -198,9 +196,7 @@ extension ContainerBackend {
     )
   }
 
-  func infrastructureResult(
-    _ reason: String
-  ) -> ExecutionResult {
+  func infrastructureResult(_ reason: String) -> ExecutionResult {
     result(.startFailed(reason: ownerSafe(reason)))
   }
 

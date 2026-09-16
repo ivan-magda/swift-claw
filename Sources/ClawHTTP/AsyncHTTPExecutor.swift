@@ -52,8 +52,7 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
   }
 
   public func openStream(_ request: HTTPRequest) async throws -> HTTPStreamExchange {
-    guard
-      case .streaming(let maximumUnreadBytes, let errorBytes) = request.responseBodyPolicy
+    guard case .streaming(let maximumUnreadBytes, let errorBytes) = request.responseBodyPolicy
     else {
       throw HTTPTransportFailure.policyMismatch(
         HTTPResponseBodyPolicy.streamingPolicyRequiredMessage
@@ -66,10 +65,7 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
     let body = response.body
 
     return HTTPStreamExchange.make(
-      head: HTTPStreamHead(
-        statusCode: statusCode,
-        headers: Self.responseHeaders(response)
-      ),
+      head: HTTPStreamHead(statusCode: statusCode, headers: Self.responseHeaders(response)),
       maximumUnreadBodyBytes: isSuccess ? maximumUnreadBytes : errorBytes
     ) { sink in
       await Self.forward(body, into: sink, totalBytes: isSuccess ? nil : errorBytes)
@@ -85,10 +81,7 @@ private extension AsyncHTTPExecutor {
     try request.beginHandoff?()
 
     do {
-      return try await client.execute(
-        clientRequest,
-        timeout: TimeAmount(request.timeout)
-      )
+      return try await client.execute(clientRequest, timeout: TimeAmount(request.timeout))
     } catch {
       throw Self.classify(error)
     }
@@ -169,8 +162,11 @@ private extension AsyncHTTPExecutor {
 
   /// Pumps the response body into the exchange, suspending whenever the consumer is behind.
   ///
-  /// - Parameter totalBytes: a ceiling on the whole transfer, for a diagnostic body that is read to
-  ///   the end rather than streamed. `nil` streams everything, dropping nothing.
+  /// - Parameters:
+  ///   - body: The response body received from the HTTP client.
+  ///   - sink: The bounded exchange sink that receives each forwarded chunk.
+  ///   - totalBytes: The diagnostic body's total transfer cap, or nil to stream the entire body.
+  /// - Returns: Completion, cancellation, or the classified transfer failure.
   static func forward(
     _ body: HTTPClientResponse.Body,
     into sink: HTTPBodySink,
@@ -190,10 +186,7 @@ private extension AsyncHTTPExecutor {
             break
           }
 
-          chunk =
-            view.count > remaining
-            ? Data(view.prefix(remaining))
-            : Data(view)
+          chunk = view.count > remaining ? Data(view.prefix(remaining)) : Data(view)
         } else {
           chunk = Data(view)
         }
@@ -205,7 +198,9 @@ private extension AsyncHTTPExecutor {
       return .completed
     } catch is CancellationError {
       return .cancelled(.mayHaveBeenSent)
-    } catch let error as BoundedAsyncChannelError {
+    } catch let error
+      as BoundedAsyncChannelError
+    {
       return terminationForSink(error)
     } catch {
       return .failed(classifyPostHead(error))
@@ -265,7 +260,9 @@ extension AsyncHTTPExecutor {
 
     if let connectionError = error as? NIOConnectionError {
       return !connectionError.connectionErrors.isEmpty
-        && connectionError.connectionErrors.allSatisfy { isConnectionRefused($0.error) }
+        && connectionError.connectionErrors.allSatisfy {
+          isConnectionRefused($0.error)
+        }
     }
 
     return false

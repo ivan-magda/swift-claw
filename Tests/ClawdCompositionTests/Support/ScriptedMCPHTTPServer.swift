@@ -75,10 +75,7 @@ actor ScriptedMCPHTTPServer: HTTPExecuting, HTTPStreaming {
     let reply = try answer(to: request.body ?? Data())
     let head = HTTPStreamHead(
       statusCode: reply.status,
-      headers: [
-        "Content-Type": "application/json",
-        "Mcp-Session-Id": Self.sessionID,
-      ]
+      headers: ["Content-Type": "application/json", "Mcp-Session-Id": Self.sessionID]
     )
 
     return HTTPStreamExchange.make(head: head, maximumUnreadBodyBytes: maximumUnreadBytes) { sink in
@@ -99,9 +96,8 @@ actor ScriptedMCPHTTPServer: HTTPExecuting, HTTPStreaming {
 
 private extension ScriptedMCPHTTPServer {
   func answer(to body: Data) throws -> (status: Int, body: Data) {
-    guard
-      let message = try JSONSerialization.jsonObject(with: body) as? [String: Any],
-      let method = message["method"] as? String
+    guard let message = try JSONSerialization.jsonObject(with: body) as? [String: Any],
+          let method = message["method"] as? String
     else {
       return (400, Data())
     }
@@ -125,9 +121,7 @@ private extension ScriptedMCPHTTPServer {
   }
 
   func response(id: Any, result: [String: Any]) throws -> Data {
-    try JSONSerialization.data(
-      withJSONObject: ["jsonrpc": "2.0", "id": id, "result": result]
-    )
+    try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": id, "result": result])
   }
 
   func initializeResult() -> [String: Any] {
@@ -146,7 +140,7 @@ private extension ScriptedMCPHTTPServer {
           "description": tool.description,
           "inputSchema": try JSONSerialization.jsonObject(with: Data(tool.schemaJSON.utf8)),
         ]
-      }
+      },
     ]
   }
 

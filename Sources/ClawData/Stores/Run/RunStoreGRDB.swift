@@ -26,20 +26,19 @@ public struct RunStoreGRDB: RunStore {
 
 extension RunStoreGRDB {
   public func pickUp(
-    runId: Int64,
+    runID: Int64,
     policyVersion: String?,
     now: Date
   ) throws(StoreError) -> RunOrigin? {
     try database.writeMapping { db in
-      guard
-        try Self.transitionRun(
-          db,
-          runId: runId,
-          event: .pickUp,
-          now: now,
-          policyVersion: policyVersion,
-          terminal: nil
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: runID,
+        event: .pickUp,
+        now: now,
+        policyVersion: policyVersion,
+        terminal: nil
+      ) != nil
       else {
         return nil
       }
@@ -47,39 +46,34 @@ extension RunStoreGRDB {
       let rawOrigin = try String.fetchOne(
         db,
         sql: "SELECT origin FROM runs WHERE id = ?",
-        arguments: [runId]
+        arguments: [runID]
       )
       // Fail closed on a corrupted origin (same rule as decodeItem): a mislabeled origin would
       // silently re-route budget pools and delivery policy. The throw rolls back the pickUp
       // transition, so the run stays PENDING for the boot sweep.
       guard let rawOrigin, let origin = RunOrigin(rawValue: rawOrigin) else {
-        throw StoreError.unexpected("runs row \(runId) has an unrecognized origin")
+        throw StoreError.unexpected("runs row \(runID) has an unrecognized origin")
       }
 
       return origin
     }
   }
 
-  public func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
+  public func failRun(runID: Int64, cause: TerminalCause, now: Date) throws(StoreError) {
     try database.writeMapping { db in
-      guard
-        try Self.transitionRun(
-          db,
-          runId: runId,
-          event: .fail,
-          now: now,
-          terminal: .settled(cause)
-        ) != nil
+      guard try Self
+            .transitionRun(db, runID: runID, event: .fail, now: now, terminal: .settled(cause))
+            != nil
       else {
         return
       }
-      try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+      try Self.appendJobFailedIfJobRun(db, runID: runID, now: now)
     }
   }
 
   public func resolveDeniedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     content: String,
     cancel: CancelReason?,
     now: Date
@@ -92,7 +86,7 @@ extension RunStoreGRDB {
       // path where the command transaction moved the run but never touched this row.
       try db.execute(
         sql: "UPDATE messages SET content = ? WHERE id = ?",
-        arguments: [content, observationMessageId]
+        arguments: [content, observationMessageID]
       )
 
       // The owner-deny arm settles: the placeholder above was this run's last owed fact. The
@@ -101,22 +95,22 @@ extension RunStoreGRDB {
       let terminal =
         cancel.map { reason in
           TerminalDisposition.deferred(reason.terminalCause)
-        } ?? .settled(.approvalDenied)
+        }
+        ?? .settled(.approvalDenied)
       // For the command path the run is already CANCELLED/SUPERSEDED, so the FSM returns nil and we
       // report `.ignored`: the observation fix above was the only remaining work.
-      guard
-        let nextState = try Self.transitionRun(
-          db,
-          runId: runId,
-          event: event,
-          now: now,
-          terminal: terminal
-        )
+      guard let nextState = try Self.transitionRun(
+        db,
+        runID: runID,
+        event: event,
+        now: now,
+        terminal: terminal
+      )
       else {
         return .ignored
       }
       if nextState == .failed {
-        try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+        try Self.appendJobFailedIfJobRun(db, runID: runID, now: now)
       }
       return .committed
     }

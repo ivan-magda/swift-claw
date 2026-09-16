@@ -4,27 +4,16 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct OccurrenceCalculatorTests {
+@Suite
+struct OccurrenceCalculatorTests {
   private let calculator = OccurrenceCalculator()
   private let berlin = TimeZone(identifier: "Europe/Berlin") ?? .gmt
   private let utcZone = TimeZone.gmt
 
-  private func utcDate(
-    _ year: Int,
-    _ month: Int,
-    _ day: Int,
-    _ hour: Int,
-    _ minute: Int
-  ) -> Date {
+  private func utcDate(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = utcZone
-    let components = DateComponents(
-      year: year,
-      month: month,
-      day: day,
-      hour: hour,
-      minute: minute
-    )
+    let components = DateComponents(year: year, month: month, day: day, hour: hour, minute: minute)
     guard let date = calendar.date(from: components) else {
       Issue.record("bad fixture: \(components)")
       return Date(timeIntervalSince1970: 0)
@@ -52,7 +41,8 @@ import Testing
     return calendar.dateComponents([.hour, .minute], from: date)
   }
 
-  @Test func weekdaySevenStaysAtLocalSevenAcrossSpringForward() {
+  @Test
+  func weekdaySevenStaysAtLocalSevenAcrossSpringForward() {
     // given — anchored Thu 2026-03-26 12:00Z; Europe/Berlin springs forward Sun 2026-03-29
     let anchor = utcDate(2026, 3, 26, 12, 0)
 
@@ -80,7 +70,8 @@ import Testing
     }
   }
 
-  @Test func weekdaySevenStaysAtLocalSevenAcrossFallBack() {
+  @Test
+  func weekdaySevenStaysAtLocalSevenAcrossFallBack() {
     // given — anchored Thu 2026-10-22 12:00Z; Europe/Berlin falls back Sun 2026-10-25
     let anchor = utcDate(2026, 10, 22, 12, 0)
 
@@ -108,7 +99,8 @@ import Testing
     }
   }
 
-  @Test func nonexistentLocalTimeResolvesForwardAndRecoversNextDay() {
+  @Test
+  func nonexistentLocalTimeResolvesForwardAndRecoversNextDay() {
     // given — 02:30 does not exist on 2026-03-29 in Berlin (02:00 jumps to 03:00)
     let anchor = utcDate(2026, 3, 27, 12, 0)
 
@@ -132,7 +124,8 @@ import Testing
     #expect(nextDayLocal.minute == 30)
   }
 
-  @Test func ambiguousLocalTimeYieldsExactlyOneInstant() {
+  @Test
+  func ambiguousLocalTimeYieldsExactlyOneInstant() {
     // given — 02:30 occurs twice on 2026-10-25 in Berlin (03:00 CEST falls back to 02:00 CET)
     let anchor = utcDate(2026, 10, 23, 12, 0)
 
@@ -155,7 +148,8 @@ import Testing
     #expect(onTransitionDay.count == 1)
   }
 
-  @Test func everyThirtyMinutesKeepsTheAnchorPhase() {
+  @Test
+  func everyThirtyMinutesKeepsTheAnchorPhase() {
     // given — anchored at 10:07Z: the phase is :07/:37 forever, whatever the query time
     let anchor = utcDate(2026, 7, 6, 10, 7)
 
@@ -180,7 +174,8 @@ import Testing
     #expect(laterQuery == [utcDate(2026, 7, 6, 12, 7), utcDate(2026, 7, 6, 12, 37)])
   }
 
-  @Test func fractionalSecondAnchorsAreFlooredToWholeSeconds() {
+  @Test
+  func fractionalSecondAnchorsAreFlooredToWholeSeconds() {
     // given — a parse/arm-time anchor seeded from Date() carries fractional seconds;
     // RecurrenceRule would propagate them into every occurrence, breaking the store's
     // exact integer-epoch CAS (§5.2). The calculator floors the seed.
@@ -200,13 +195,12 @@ import Testing
     // then — whole seconds, identical to the whole-second anchor's chain
     #expect(occurrences == [utcDate(2026, 7, 6, 10, 37), utcDate(2026, 7, 6, 11, 7)])
     for occurrence in occurrences {
-      #expect(
-        occurrence.timeIntervalSince1970 == occurrence.timeIntervalSince1970.rounded(.down)
-      )
+      #expect(occurrence.timeIntervalSince1970 == occurrence.timeIntervalSince1970.rounded(.down))
     }
   }
 
-  @Test func occurrencesAreStrictlyAfterTheQueryInstant() {
+  @Test
+  func occurrencesAreStrictlyAfterTheQueryInstant() {
     // given — recurrences(of:) includes the anchor itself; `after` must exclude it
     let anchor = utcDate(2026, 7, 6, 10, 7)
 
@@ -223,7 +217,8 @@ import Testing
     #expect(occurrences == [utcDate(2026, 7, 6, 10, 37)])
   }
 
-  @Test func latestOccurrenceCoalescesToTheNewestMissedInstant() {
+  @Test
+  func latestOccurrenceCoalescesToTheNewestMissedInstant() {
     // given — five missed 30-minute occurrences: the §5.3 coalesce target is the LATEST one
     let anchor = utcDate(2026, 7, 6, 10, 7)
 
@@ -240,7 +235,8 @@ import Testing
     #expect(latest == utcDate(2026, 7, 6, 12, 37))
   }
 
-  @Test func latestOccurrenceIncludesTheBoundaryAndCanBeNil() {
+  @Test
+  func latestOccurrenceIncludesTheBoundaryAndCanBeNil() {
     // given
     let anchor = utcDate(2026, 7, 6, 10, 7)
 
@@ -265,7 +261,8 @@ import Testing
     #expect(none == nil)
   }
 
-  @Test func degenerateInputsAreEmpty() {
+  @Test
+  func degenerateInputsAreEmpty() {
     // given
     let anchor = utcDate(2026, 7, 6, 10, 7)
 

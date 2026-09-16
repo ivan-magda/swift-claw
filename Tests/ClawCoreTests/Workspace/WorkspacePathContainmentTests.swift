@@ -3,7 +3,8 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct WorkspacePathContainmentTests {
+@Suite
+struct WorkspacePathContainmentTests {
   private struct Sandbox {
     let root: String
     let outside: String
@@ -13,8 +14,9 @@ import Testing
   /// target. macOS `/tmp` is itself a symlink, so expectations are always built from the
   /// helper's own canonical form of `root`, never from the raw temp path.
   private func makeSandbox() throws -> Sandbox {
-    let base = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-containment-\(UUID().uuidString)").path
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "claw-containment-\(UUID().uuidString)"
+    ).path
     let root = base + "/ws"
     let outside = base + "/outside"
     try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
@@ -30,10 +32,7 @@ import Testing
     try Data(text.utf8).write(to: URL(fileURLWithPath: path))
   }
 
-  private func expectRefused(
-    _ resolution: WorkspacePathContainment.Resolution,
-    _ label: String
-  ) {
+  private func expectRefused(_ resolution: WorkspacePathContainment.Resolution, _ label: String) {
     guard case .refused = resolution else {
       Issue.record("\(label): expected .refused, got \(resolution)")
       return
@@ -42,7 +41,8 @@ import Testing
 
   // MARK: - resolveExisting (behavior-preserving extraction)
 
-  @Test func relativePathInsideTheWorkspaceResolves() throws {
+  @Test
+  func relativePathInsideTheWorkspaceResolves() throws {
     // given
     let sandbox = try makeSandbox()
     try write("hello", to: sandbox.root + "/notes/a.md")
@@ -58,7 +58,8 @@ import Testing
     #expect(resolution == .resolved(canonicalRoot + "/notes/a.md"))
   }
 
-  @Test func absolutePathIsRefused() throws {
+  @Test
+  func absolutePathIsRefused() throws {
     // given
     let sandbox = try makeSandbox()
 
@@ -73,7 +74,8 @@ import Testing
     )
   }
 
-  @Test func dotDotThatResolvesInsideStillReadsForExistingPaths() throws {
+  @Test
+  func dotDotThatResolvesInsideStillReadsForExistingPaths() throws {
     // given — realpath fully resolves `..`; the READ path keeps FileReadTool's current semantics
     let sandbox = try makeSandbox()
     try write("x", to: sandbox.root + "/sub/keep.txt")
@@ -90,7 +92,8 @@ import Testing
     #expect(resolution == .resolved(canonicalRoot + "/inside.txt"))
   }
 
-  @Test func dotDotEscapeIsRefusedForExistingPaths() throws {
+  @Test
+  func dotDotEscapeIsRefusedForExistingPaths() throws {
     // given
     let sandbox = try makeSandbox()
     try write("secret", to: sandbox.outside + "/loot.txt")
@@ -102,7 +105,8 @@ import Testing
     )
   }
 
-  @Test func symlinkedDirectoryEscapeIsRefused() throws {
+  @Test
+  func symlinkedDirectoryEscapeIsRefused() throws {
     // given — a link INSIDE the workspace pointing at a directory OUTSIDE it
     let sandbox = try makeSandbox()
     try write("secret", to: sandbox.outside + "/leak.txt")
@@ -122,7 +126,8 @@ import Testing
     )
   }
 
-  @Test func symlinkLeafEscapeIsRefused() throws {
+  @Test
+  func symlinkLeafEscapeIsRefused() throws {
     // given — the LEAF itself is a symlink to an outside file
     let sandbox = try makeSandbox()
     try write("secret", to: sandbox.outside + "/target.txt")
@@ -144,7 +149,8 @@ import Testing
 
   // MARK: - resolveForCreation
 
-  @Test func nestedToBeCreatedPathResolvesUnderTheDeepestExistingAncestor() throws {
+  @Test
+  func nestedToBeCreatedPathResolvesUnderTheDeepestExistingAncestor() throws {
     // given — only `sub/` exists; `a/b.txt` below it is new
     let sandbox = try makeSandbox()
     try FileManager.default.createDirectory(
@@ -163,7 +169,8 @@ import Testing
     #expect(resolution == .resolved(canonicalRoot + "/sub/a/b.txt"))
   }
 
-  @Test func dotDotComponentsAreRefusedForCreation() throws {
+  @Test
+  func dotDotComponentsAreRefusedForCreation() throws {
     // given — new components cannot be realpath-resolved, so `..` is refused outright
     let sandbox = try makeSandbox()
     try FileManager.default.createDirectory(
@@ -182,7 +189,8 @@ import Testing
     )
   }
 
-  @Test func danglingSymlinkLeafIsRefusedForCreation() throws {
+  @Test
+  func danglingSymlinkLeafIsRefusedForCreation() throws {
     // given — a broken symlink: realpath fails, but creating "through" it would follow the link
     let sandbox = try makeSandbox()
     try FileManager.default.createSymbolicLink(
@@ -197,7 +205,8 @@ import Testing
     )
   }
 
-  @Test func creationThroughAnInsideSymlinkedDirectoryResolvesToItsRealPath() throws {
+  @Test
+  func creationThroughAnInsideSymlinkedDirectoryResolvesToItsRealPath() throws {
     // given — a symlink to a directory INSIDE the workspace is legitimate; the resolved form is
     // what the approval binds to (§5.4: fully-resolved canonical target)
     let sandbox = try makeSandbox()
@@ -221,7 +230,8 @@ import Testing
     #expect(resolution == .resolved(canonicalRoot + "/real/new.txt"))
   }
 
-  @Test func fullyExistingPathResolvesForCreationToo() throws {
+  @Test
+  func fullyExistingPathResolvesForCreationToo() throws {
     // given — the overwrite case: every component exists
     let sandbox = try makeSandbox()
     try write("old", to: sandbox.root + "/plan.md")
@@ -239,7 +249,8 @@ import Testing
 
   // MARK: - Prefix collision
 
-  @Test func prefixCollisionSiblingIsNotContained() throws {
+  @Test
+  func prefixCollisionSiblingIsNotContained() throws {
     // given — /…/wsx shares the string prefix of /…/ws but is a SIBLING directory
     let sandbox = try makeSandbox()
     let sibling = sandbox.root + "x"

@@ -6,7 +6,8 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct RunStoreTests {
+@Suite
+struct RunStoreTests {
   private struct Fixture {
     let queue: DatabaseQueue
 
@@ -15,8 +16,8 @@ import Testing
     let usage: UsageStoreGRDB
     let outbox: OutboxStoreGRDB
 
-    let sessionId: Int64
-    let seedRunId: Int64
+    let sessionID: Int64
+    let seedRunID: Int64
   }
 
   private func fixture() throws -> Fixture {
@@ -24,84 +25,82 @@ import Testing
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "hi",
         isEdited: false,
         ts: Date()
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let seedRunId = try #require(claim.runId)
+    let sessionID = try #require(claim.sessionID)
+    let seedRunID = try #require(claim.runID)
     return Fixture(
       queue: queue,
       sessions: sessions,
       runs: RunStoreGRDB(writer: queue),
       usage: UsageStoreGRDB(writer: queue),
       outbox: OutboxStoreGRDB(writer: queue),
-      sessionId: sessionId,
-      seedRunId: seedRunId
+      sessionID: sessionID,
+      seedRunID: seedRunID
     )
   }
 
-  private func usage(runId: Int64, sessionId: Int64) -> ProviderUsage {
-    makeProviderUsage(
-      runId: runId,
-      sessionId: sessionId,
-      completionTokens: 20,
-      isEstimated: true
-    )
+  private func usage(runID: Int64, sessionID: Int64) -> ProviderUsage {
+    makeProviderUsage(runID: runID, sessionID: sessionID, completionTokens: 20, isEstimated: true)
   }
 
-  @Test func pickUpMovesPendingRunToRunningOnceAndReturnsTheOrigin() throws {
+  @Test
+  func pickUpMovesPendingRunToRunningOnceAndReturnsTheOrigin() throws {
     // given
     let env = try fixture()
 
     // when
-    let first = try env.runs.pickUp(runId: env.seedRunId, now: Date())
-    let second = try env.runs.pickUp(runId: env.seedRunId, now: Date())
+    let first = try env.runs.pickUp(runID: env.seedRunID, now: Date())
+    let second = try env.runs.pickUp(runID: env.seedRunID, now: Date())
 
     // then — the origin rides the pickup read; the not-PENDING guard is nil (preamble dev. 3)
     #expect(first == .interactive)  // v6 default backfill
     #expect(second == nil)
   }
 
-  @Test func pickUpReturnsTheScheduledOrigin() throws {
+  @Test
+  func pickUpReturnsTheScheduledOrigin() throws {
     // given
     let env = try fixture()
     try env.queue.write { db in
       try db.execute(
         sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
-        arguments: [env.seedRunId]
+        arguments: [env.seedRunID]
       )
     }
 
     // when / then
-    #expect(try env.runs.pickUp(runId: env.seedRunId, now: Date()) == .scheduled)
+    #expect(try env.runs.pickUp(runID: env.seedRunID, now: Date()) == .scheduled)
   }
 
-  @Test func assistantCommitAfterSupersedeRecordsUsageOnly() throws {
+  @Test
+  func assistantCommitAfterSupersedeRecordsUsageOnly() throws {
     // given
     let env = try fixture()
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
-      updateId: 100,
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      updateID: 100,
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date()
     )
     let turn = AssistantTurn(
-      runId: env.seedRunId,
-      sessionId: env.sessionId,
-      chatId: 42,
+      runID: env.seedRunID,
+      sessionID: env.sessionID,
+      chatID: 42,
       content: "answer",
-      usage: usage(runId: env.seedRunId, sessionId: env.sessionId),
-      chunks: [OutboxChunk(stepIndex: 0, chatId: 42, payload: "answer", payloadHash: "h")]
+      usage: usage(runID: env.seedRunID, sessionID: env.sessionID),
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")]
     )
 
     // when
     let result = try env.runs.commitAssistantTurn(turn, now: Date())
-    try env.runs.failRun(runId: env.seedRunId, cause: .providerFailure, now: Date())
+    try env.runs.failRun(runID: env.seedRunID, cause: .providerFailure, now: Date())
 
     // then
     let state = try #require(
@@ -109,7 +108,7 @@ import Testing
         try String.fetchOne(
           db,
           sql: "SELECT state FROM runs WHERE id = ?",
-          arguments: [env.seedRunId]
+          arguments: [env.seedRunID]
         )
       }
     )
@@ -130,18 +129,19 @@ import Testing
     #expect(assistantCount == 0)
   }
 
-  @Test func commitAssistantTurnWritesMessageDoneUsageAndOutboxTogether() throws {
+  @Test
+  func commitAssistantTurnWritesMessageDoneUsageAndOutboxTogether() throws {
     // given
     let env = try fixture()
-    let runId = env.seedRunId
-    _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
+    let runID = env.seedRunID
+    _ = try #require(try env.runs.pickUp(runID: runID, now: Date()))
     let turn = AssistantTurn(
-      runId: runId,
-      sessionId: env.sessionId,
-      chatId: 42,
+      runID: runID,
+      sessionID: env.sessionID,
+      chatID: 42,
       content: "answer",
-      usage: usage(runId: runId, sessionId: env.sessionId),
-      chunks: [OutboxChunk(stepIndex: 0, chatId: 42, payload: "answer", payloadHash: "h")]
+      usage: usage(runID: runID, sessionID: env.sessionID),
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")]
     )
 
     // when
@@ -153,14 +153,14 @@ import Testing
         try Int.fetchOne(
           db,
           sql: "SELECT COUNT(*) FROM messages WHERE run_id = ? AND role = 'assistant'",
-          arguments: [runId]
+          arguments: [runID]
         )
       }
     )
     #expect(assistantCount == 1)
     let state = try #require(
       try env.queue.read { db in
-        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
       }
     )
     #expect(state == RunState.done.rawValue)
@@ -170,29 +170,30 @@ import Testing
     #expect(tokens == 30)
   }
 
-  @Test func reconcileFlipsPendingAndRunningToFailed() throws {
+  @Test
+  func reconcileFlipsPendingAndRunningToFailed() throws {
     // given
     let env = try fixture()
-    let pendingRunId = env.seedRunId
+    let pendingRunID = env.seedRunID
     let runningClaim = try env.sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 2,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 2,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "running",
         isEdited: false,
         ts: Date()
       )
     )
-    let runningRunId = try #require(runningClaim.runId)
-    _ = try #require(try env.runs.pickUp(runId: runningRunId, now: Date()))
+    let runningRunID = try #require(runningClaim.runID)
+    _ = try #require(try env.runs.pickUp(runID: runningRunID, now: Date()))
 
     // when
     let replies = try env.runs.reconcileRunsAtBoot(
       now: Date(),
       degradationText: "didn't finish",
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
 
     // then
@@ -200,24 +201,25 @@ import Testing
       try String.fetchAll(db, sql: "SELECT state FROM runs ORDER BY id ASC")
     }
     #expect(states == [RunState.failed.rawValue, RunState.failed.rawValue])
-    #expect(Set(replies.map(\.runId)) == Set([pendingRunId, runningRunId]))
+    #expect(Set(replies.map(\.runID)) == Set([pendingRunID, runningRunID]))
     #expect(try env.outbox.pendingOutbound().count == 2)
   }
 
-  @Test func reconcileDoesNotEnqueueWhenARunAlreadyDelivered() throws {
+  @Test
+  func reconcileDoesNotEnqueueWhenARunAlreadyDelivered() throws {
     // given
     let env = try fixture()
-    let runId = env.seedRunId
-    _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
+    let runID = env.seedRunID
+    _ = try #require(try env.runs.pickUp(runID: runID, now: Date()))
     try OutboxFixture.seedLegacyRunDelivery(
       in: env.queue,
-      runId: runId,
-      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "x", payloadHash: "h"),
-      deliveryKey: OutboxDedupKey.make(runId: runId, stepIndex: 0)
+      runID: runID,
+      chunk: OutboxChunk(stepIndex: 0, chatID: 42, payload: "x", payloadHash: "h"),
+      deliveryKey: OutboxDedupKey.make(runID: runID, stepIndex: 0)
     )
     try env.outbox.markSent(
-      deliveryKey: OutboxDedupKey.make(runId: runId, stepIndex: 0),
-      telegramMessageId: 1001,
+      deliveryKey: OutboxDedupKey.make(runID: runID, stepIndex: 0),
+      telegramMessageID: 1001,
       now: Date()
     )
 
@@ -225,24 +227,25 @@ import Testing
     let replies = try env.runs.reconcileRunsAtBoot(
       now: Date(),
       degradationText: "didn't finish",
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
 
     // then
     #expect(replies.isEmpty)
     let state = try #require(
       try env.queue.read { db in
-        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
       }
     )
     #expect(state == RunState.failed.rawValue)
   }
 
-  @Test func commitAssistantTurnRollsBackEntirelyWhenTheOutboxInsertAborts() throws {
+  @Test
+  func commitAssistantTurnRollsBackEntirelyWhenTheOutboxInsertAborts() throws {
     // given
     let env = try fixture()
-    let runId = env.seedRunId
-    _ = try #require(try env.runs.pickUp(runId: runId, now: Date()))
+    let runID = env.seedRunID
+    _ = try #require(try env.runs.pickUp(runID: runID, now: Date()))
     try env.queue.write { db in
       try db.execute(
         sql: """
@@ -252,12 +255,12 @@ import Testing
       )
     }
     let turn = AssistantTurn(
-      runId: runId,
-      sessionId: env.sessionId,
-      chatId: 42,
+      runID: runID,
+      sessionID: env.sessionID,
+      chatID: 42,
       content: "answer",
-      usage: usage(runId: runId, sessionId: env.sessionId),
-      chunks: [OutboxChunk(stepIndex: 0, chatId: 42, payload: "answer", payloadHash: "h")]
+      usage: usage(runID: runID, sessionID: env.sessionID),
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")]
     )
 
     // when / then — the commit throws and writes NOTHING: no assistant message, run still RUNNING,
@@ -272,7 +275,7 @@ import Testing
     )
     let state = try #require(
       try env.queue.read { db in
-        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+        try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
       }
     )
     let usageCount = try #require(
@@ -287,16 +290,17 @@ import Testing
 
   // MARK: - Usage Fixture Distinctness
 
-  @Test func twoUnnamedFixtureRowsBothPersistRatherThanCollapsingIntoOne() throws {
+  @Test
+  func twoUnnamedFixtureRowsBothPersistRatherThanCollapsingIntoOne() throws {
     // given — a running run, and two spend rows built without naming their calls. Rows are unique
     // on the call identity and the insert resolves a conflict by doing nothing, so a shared fixture
     // default would drop the second row here with no error and leave the suite green.
     let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
 
     // when
-    try env.usage.recordUsage(makeProviderUsage(runId: env.seedRunId, sessionId: env.sessionId))
-    try env.usage.recordUsage(makeProviderUsage(runId: env.seedRunId, sessionId: env.sessionId))
+    try env.usage.recordUsage(makeProviderUsage(runID: env.seedRunID, sessionID: env.sessionID))
+    try env.usage.recordUsage(makeProviderUsage(runID: env.seedRunID, sessionID: env.sessionID))
 
     // then
     #expect(try usageRowCount(env) == 2)
@@ -304,16 +308,17 @@ import Testing
 
   // MARK: - Terminal Usage Idempotency
 
-  @Test func aLateTerminalRowIsRecordedEvenWhenAnEarlierRoundAlreadySpent() throws {
+  @Test
+  func aLateTerminalRowIsRecordedEvenWhenAnEarlierRoundAlreadySpent() throws {
     // given — a cancelled run whose tool loop already recorded round one's spend mid-flight. The
     // run-wide guard this replaces refused exactly this row, silently dropping the terminal
     // round's spend for every run whose loop got past its first round.
     let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
     try env.usage.recordUsage(
       makeProviderUsage(
-        runId: env.seedRunId,
-        sessionId: env.sessionId,
+        runID: env.seedRunID,
+        sessionID: env.sessionID,
         callID: "call-round-1",
         promptTokens: 10,
         completionTokens: 20,
@@ -321,8 +326,8 @@ import Testing
       )
     )
     _ = try CommandStoreGRDB(writer: env.queue).applyStop(
-      updateId: 100,
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      updateID: 100,
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date()
     )
 
@@ -337,14 +342,15 @@ import Testing
     #expect(try usageRowCount(env) == 2)
   }
 
-  @Test func recordingALateRowRecomputesTheRunTotalsFromEveryStoredRow() throws {
+  @Test
+  func recordingALateRowRecomputesTheRunTotalsFromEveryStoredRow() throws {
     // given
     let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
     try env.usage.recordUsage(
       makeProviderUsage(
-        runId: env.seedRunId,
-        sessionId: env.sessionId,
+        runID: env.seedRunID,
+        sessionID: env.sessionID,
         callID: "call-round-1",
         promptTokens: 10,
         completionTokens: 20,
@@ -352,8 +358,8 @@ import Testing
       )
     )
     _ = try CommandStoreGRDB(writer: env.queue).applyStop(
-      updateId: 100,
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      updateID: 100,
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date()
     )
 
@@ -370,15 +376,16 @@ import Testing
     #expect(abs(totals.cost - 0.504) < 1e-9)
   }
 
-  @Test func aCompletedRunsTotalsEqualTheSumOfEveryRoundItRecorded() throws {
+  @Test
+  func aCompletedRunsTotalsEqualTheSumOfEveryRoundItRecorded() throws {
     // given — a live multi-round loop: the intermediate round's row is already stored when the
     // terminal round commits
     let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
     try env.usage.recordUsage(
       makeProviderUsage(
-        runId: env.seedRunId,
-        sessionId: env.sessionId,
+        runID: env.seedRunID,
+        sessionID: env.sessionID,
         callID: "call-round-1",
         promptTokens: 10,
         completionTokens: 20,
@@ -400,14 +407,15 @@ import Testing
     #expect(abs(totals.cost - 0.504) < 1e-9)
   }
 
-  @Test func aDegradedRunsTotalsEqualTheSumOfEveryRoundItRecorded() throws {
+  @Test
+  func aDegradedRunsTotalsEqualTheSumOfEveryRoundItRecorded() throws {
     // given
     let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
     try env.usage.recordUsage(
       makeProviderUsage(
-        runId: env.seedRunId,
-        sessionId: env.sessionId,
+        runID: env.seedRunID,
+        sessionID: env.sessionID,
         callID: "call-round-1",
         promptTokens: 10,
         completionTokens: 20,
@@ -428,16 +436,17 @@ import Testing
     #expect(abs(totals.cost - 0.504) < 1e-9)
   }
 
-  @Test func aDegradedCommitWhoseUsageRowAlreadyLandedLeavesTheTotalsAlone() throws {
+  @Test
+  func aDegradedCommitWhoseUsageRowAlreadyLandedLeavesTheTotalsAlone() throws {
     // given — the round already recorded its row; the degradation commit re-presents the SAME call
     // under an estimate. The insert conflicts and writes nothing, so the totals it computes must
     // still describe the rows the run owns rather than the estimate that lost.
     let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
     try env.usage.recordUsage(
       makeProviderUsage(
-        runId: env.seedRunId,
-        sessionId: env.sessionId,
+        runID: env.seedRunID,
+        sessionID: env.sessionID,
         callID: "call-round-1",
         promptTokens: 10,
         completionTokens: 20,
@@ -465,13 +474,14 @@ import Testing
     #expect(abs(totals.cost - 0.004) < 1e-9)
   }
 
-  @Test func replayingTheTerminalCommitChangesNeitherTotalsNorDayBudgets() throws {
+  @Test
+  func replayingTheTerminalCommitChangesNeitherTotalsNorDayBudgets() throws {
     // given — a cancelled run whose terminal commit already landed
     let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
     _ = try CommandStoreGRDB(writer: env.queue).applyStop(
-      updateId: 100,
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      updateID: 100,
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date()
     )
     let turn = terminalTurn(
@@ -499,14 +509,15 @@ import Testing
     #expect(abs(cost - 0.5) < 1e-9)
   }
 
-  @Test func aLateRowIsRecordedAfterSupersessionToo() throws {
+  @Test
+  func aLateRowIsRecordedAfterSupersessionToo() throws {
     // given — supersession is the other terminal state a late commit can land against
     let env = try fixture()
-    _ = try #require(try env.runs.pickUp(runId: env.seedRunId, now: Date()))
+    _ = try #require(try env.runs.pickUp(runID: env.seedRunID, now: Date()))
     try env.usage.recordUsage(
       makeProviderUsage(
-        runId: env.seedRunId,
-        sessionId: env.sessionId,
+        runID: env.seedRunID,
+        sessionID: env.sessionID,
         callID: "call-round-1",
         promptTokens: 10,
         completionTokens: 20,
@@ -514,8 +525,8 @@ import Testing
       )
     )
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
-      updateId: 100,
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      updateID: 100,
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       now: Date()
     )
 
@@ -533,33 +544,34 @@ import Testing
     #expect(totals.output == 23)
   }
 
-  @Test func corruptOriginFailsClosedAtPickup() throws {
+  @Test
+  func corruptOriginFailsClosedAtPickup() throws {
     // given — a PENDING run whose origin left the vocabulary
     let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let runs = RunStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "hello",
         isEdited: false,
         ts: Date(timeIntervalSince1970: 1)
       )
     )
-    let runId = try #require(claim.runId)
+    let runID = try #require(claim.runID)
     try queue.write { db in
-      try db.execute(sql: "UPDATE runs SET origin = 'webhook' WHERE id = ?", arguments: [runId])
+      try db.execute(sql: "UPDATE runs SET origin = 'webhook' WHERE id = ?", arguments: [runID])
     }
 
     // when / then — pickUp throws and the transaction rolls back: the run stays PENDING
     #expect(throws: StoreError.self) {
-      _ = try runs.pickUp(runId: runId, now: Date(timeIntervalSince1970: 10))
+      _ = try runs.pickUp(runID: runID, now: Date(timeIntervalSince1970: 10))
     }
     let state = try queue.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
     }
     #expect(state == RunState.pending.rawValue)
   }
@@ -577,19 +589,19 @@ private extension RunStoreTests {
     costUSD: Double
   ) -> AssistantTurn {
     AssistantTurn(
-      runId: env.seedRunId,
-      sessionId: env.sessionId,
-      chatId: 42,
+      runID: env.seedRunID,
+      sessionID: env.sessionID,
+      chatID: 42,
       content: "answer",
       usage: makeProviderUsage(
-        runId: env.seedRunId,
-        sessionId: env.sessionId,
+        runID: env.seedRunID,
+        sessionID: env.sessionID,
         callID: callID,
         promptTokens: promptTokens,
         completionTokens: completionTokens,
         costUSD: costUSD
       ),
-      chunks: [OutboxChunk(stepIndex: 0, chatId: 42, payload: "answer", payloadHash: "h")]
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")]
     )
   }
 
@@ -603,18 +615,18 @@ private extension RunStoreTests {
     costUSD: Double
   ) -> DegradedTurn {
     DegradedTurn(
-      runId: env.seedRunId,
-      sessionId: env.sessionId,
-      chatId: 42,
+      runID: env.seedRunID,
+      sessionID: env.sessionID,
+      chatID: 42,
       usage: makeProviderUsage(
-        runId: env.seedRunId,
-        sessionId: env.sessionId,
+        runID: env.seedRunID,
+        sessionID: env.sessionID,
         callID: callID,
         promptTokens: promptTokens,
         completionTokens: completionTokens,
         costUSD: costUSD
       ),
-      chunk: OutboxChunk(stepIndex: 0, chatId: 42, payload: "degraded", payloadHash: "h"),
+      chunk: OutboxChunk(stepIndex: 0, chatID: 42, payload: "degraded", payloadHash: "h"),
       cause: .providerFailure
     )
   }
@@ -631,7 +643,7 @@ private extension RunStoreTests {
         try Row.fetchOne(
           db,
           sql: "SELECT input_tokens, output_tokens, cost_usd FROM runs WHERE id = ?",
-          arguments: [env.seedRunId]
+          arguments: [env.seedRunID]
         )
       }
     )

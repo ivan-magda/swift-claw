@@ -19,7 +19,9 @@ public enum MCPConfigError: Error, Sendable, Equatable {
   case dangerousRiskOverride(server: String, tool: String)
 
   /// Every case is the owner's file being wrong, so one exit code covers them all.
-  public var exitCode: Int32 { ClawExitCode.configInvalid.rawValue }
+  public var exitCode: Int32 {
+    ClawExitCode.configInvalid.rawValue
+  }
 }
 
 extension MCPConfigError: CustomStringConvertible {

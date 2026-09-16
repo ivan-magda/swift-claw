@@ -19,7 +19,7 @@ struct AdmissionStoreFixture {
 
   struct ReviewDelivery {
     let key: String
-    let runId: Int64?
+    let runID: Int64?
     let source: String
   }
 
@@ -34,16 +34,11 @@ struct AdmissionStoreFixture {
   ) throws -> CandidateArtifact {
     let reflection = try env.reflectionFixture()
     let operation = try env.startReflector(reflection)
-    let artifact = try env.candidate(
-      fixture: reflection,
-      operation: operation,
-      lessons: lessons
+    let artifact = try env.candidate(fixture: reflection, operation: operation, lessons: lessons)
+    guard try env.learning.finishOperation(
+      env.reflectionResult(operation: operation, product: .candidate(artifact)),
+      now: env.now
     )
-    guard
-      try env.learning.finishOperation(
-        env.reflectionResult(operation: operation, product: .candidate(artifact)),
-        now: env.now
-      )
     else {
       throw StoreError.unexpected("fixture candidate did not persist")
     }
@@ -61,7 +56,7 @@ struct AdmissionStoreFixture {
     )
     let state = try env.currentLearningState()
     let trigger = TriggerIdentity(
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: state.epoch,
       algorithm: .v1,
       stableDigest: state.stableDigest,
@@ -79,11 +74,10 @@ struct AdmissionStoreFixture {
     )
     let operation = try env.startReflector(reflection)
     let artifact = try env.candidate(fixture: reflection, operation: operation)
-    guard
-      try env.learning.finishOperation(
-        env.reflectionResult(operation: operation, product: .candidate(artifact)),
-        now: env.now
-      )
+    guard try env.learning.finishOperation(
+      env.reflectionResult(operation: operation, product: .candidate(artifact)),
+      now: env.now
+    )
     else {
       throw StoreError.unexpected("fixture feedback candidate did not persist")
     }
@@ -92,11 +86,7 @@ struct AdmissionStoreFixture {
 
   func trial(_ id: Int64) throws -> TrialProjection {
     let row = try env.queue.read { db in
-      try Row.fetchOne(
-        db,
-        sql: "SELECT * FROM learning_trials WHERE trial_id = ?",
-        arguments: [id]
-      )
+      try Row.fetchOne(db, sql: "SELECT * FROM learning_trials WHERE trial_id = ?", arguments: [id])
     }
     guard let row else {
       throw StoreError.unexpected("fixture trial is missing")
@@ -129,19 +119,12 @@ struct AdmissionStoreFixture {
 
   func insertCompetingDrainingTrial(from artifact: CandidateArtifact) throws {
     let replacement = try LessonSet.canonical(
-      jobId: env.jobId,
+      jobID: env.jobID,
       lessons: ["Use a different exact source."]
     )
-    let competitor = try CandidateArtifact(
-      replacement: replacement,
-      manifest: artifact.manifest
-    )
+    let competitor = try CandidateArtifact(replacement: replacement, manifest: artifact.manifest)
     try env.queue.write { db in
-      try ScheduledLearningStoreGRDB.recordCandidateArtifact(
-        db,
-        artifact: competitor,
-        now: env.now
-      )
+      try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: competitor, now: env.now)
       try db.execute(
         sql: """
           INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
@@ -150,32 +133,28 @@ struct AdmissionStoreFixture {
           VALUES (?, 1, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
           """,
         arguments: [
-          env.jobId,
+          env.jobID,
           competitor.manifest.baseDigest.rawValue,
           competitor.digest.rawValue,
           EpochSecondCodec.epoch(env.now),
-          EpochSecondCodec.epoch(
-            env.now.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow)
-          ),
-          EpochSecondCodec.epoch(
-            env.now.addingTimeInterval(TrialAdmissionPolicy.decisionWindow)
-          ),
+          EpochSecondCodec.epoch(env.now.addingTimeInterval(TrialAdmissionPolicy.assignmentWindow)),
+          EpochSecondCodec.epoch(env.now.addingTimeInterval(TrialAdmissionPolicy.decisionWindow)),
           EpochSecondCodec.epoch(env.now),
           LearningTrialState.draining.rawValue,
           LearningAlgorithm.v1.rawValue,
         ]
       )
-      let trialId = db.lastInsertedRowID
+      let trialID = db.lastInsertedRowID
       try ScheduledLearningStoreGRDB.insertDecision(
         db,
         kind: AdmissionReceipt.kind,
-        jobId: env.jobId,
+        jobID: env.jobID,
         epoch: competitor.manifest.epoch,
         inputs: AdmissionDecisionInputs(candidateDigest: competitor.digest),
         result: AdmissionReceipt(
           candidateDigest: competitor.digest,
           replacementDigest: competitor.replacement.digest,
-          trialId: trialId,
+          trialID: trialID,
           generation: 1
         ),
         algorithm: .v1,
@@ -223,7 +202,7 @@ struct AdmissionStoreFixture {
     }
     return ReviewDelivery(
       key: row["dedup_key"],
-      runId: row["run_id"],
+      runID: row["run_id"],
       source: row["delivery_source"]
     )
   }
@@ -245,26 +224,26 @@ struct AdmissionStoreFixture {
     var targets = [
       NewFeedbackTarget(
         nonce: "candidate-\(nonceSuffix)-\(candidateIdentity)",
-        jobId: candidate.manifest.jobId,
+        jobID: candidate.manifest.jobID,
         epoch: candidate.manifest.epoch,
         subjectKind: .candidate,
         subjectDigest: candidate.digest.rawValue,
         allowedActions: actions,
-        ownerUserId: 777,
-        chatId: 777,
+        ownerUserID: 777,
+        chatID: 777,
         expiresAt: expiry
-      )
+      ),
     ]
     targets += candidate.manifest.evaluations.enumerated().map { index, evaluation in
       NewFeedbackTarget(
         nonce: "evaluation-\(nonceSuffix)-\(index)-\(candidateIdentity)",
-        jobId: candidate.manifest.jobId,
+        jobID: candidate.manifest.jobID,
         epoch: candidate.manifest.epoch,
         subjectKind: .evaluation,
         subjectDigest: evaluation.digest.rawValue,
         allowedActions: [.evaluationConfirm, .evaluationDispute],
-        ownerUserId: 777,
-        chatId: 777,
+        ownerUserID: 777,
+        chatID: 777,
         expiresAt: expiry
       )
     }
@@ -283,11 +262,11 @@ struct AdmissionStoreFixture {
         LearningNoticeChunk(
           subjectDigest: subject,
           ordinal: 0,
-          chatId: 777,
+          chatID: 777,
           payload: payload,
           payloadHash: ContentHash.fnv1a(payload),
           replyMarkup: markup
-        )
+        ),
       ]
     )
   }

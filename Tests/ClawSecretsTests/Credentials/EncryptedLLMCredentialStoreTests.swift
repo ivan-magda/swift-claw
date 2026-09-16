@@ -6,14 +6,16 @@ import Testing
 
 @testable import ClawSecrets
 
-@Suite struct EncryptedLLMCredentialStoreTests {
+@Suite
+struct EncryptedLLMCredentialStoreTests {
   /// A second provider that is never the subject of a save or a delete. Every mutation test carries
   /// it so "preserves unrelated records" is proven by a record the operation had no reason to touch.
   private let synthetic = LLMProviderID(rawValue: "synthetic-provider")
 
   // MARK: - Round trip
 
-  @Test func loadOnAStateRootWithoutACredentialFileIsEmptyRatherThanAnError() throws {
+  @Test
+  func loadOnAStateRootWithoutACredentialFileIsEmptyRatherThanAnError() throws {
     // given — a root with no key and no envelope: the state before a first login.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -28,7 +30,8 @@ import Testing
     #expect(try entryNames(in: stateRoot).isEmpty)
   }
 
-  @Test func saveThenLoadRoundTripsTheCredential() throws {
+  @Test
+  func saveThenLoadRoundTripsTheCredential() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -42,7 +45,8 @@ import Testing
     #expect(try store.load(providerID: .openAIChatGPT) == credential)
   }
 
-  @Test func loadOnAProviderWithNoRecordIsEmptyEvenWhenTheMapExists() throws {
+  @Test
+  func loadOnAProviderWithNoRecordIsEmptyEvenWhenTheMapExists() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -53,7 +57,8 @@ import Testing
     #expect(try store.load(providerID: synthetic) == nil)
   }
 
-  @Test func aReplacedRecordCarriesTheProfileIDItWasSavedWith() throws {
+  @Test
+  func aReplacedRecordCarriesTheProfileIDItWasSavedWith() throws {
     // given — refresh preserves the profile; re-login mints a new one. Both arrive here as a save,
     // so the stored profile must be whatever the caller last wrote, never one the store invents.
     let stateRoot = try makeSealedRoot()
@@ -76,7 +81,8 @@ import Testing
     #expect(loaded.profileID == profileID)
   }
 
-  @Test func savingOneProviderPreservesAnUnrelatedProvidersRecord() throws {
+  @Test
+  func savingOneProviderPreservesAnUnrelatedProvidersRecord() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -92,7 +98,8 @@ import Testing
     #expect(try store.load(providerID: synthetic) == bystander)
   }
 
-  @Test func replacingOneProvidersRecordPreservesAnUnrelatedProvidersRecord() throws {
+  @Test
+  func replacingOneProvidersRecordPreservesAnUnrelatedProvidersRecord() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -110,7 +117,8 @@ import Testing
     #expect(try store.load(providerID: synthetic) == bystander)
   }
 
-  @Test func deletingOneProvidersRecordPreservesAnUnrelatedProvidersRecord() throws {
+  @Test
+  func deletingOneProvidersRecordPreservesAnUnrelatedProvidersRecord() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -127,7 +135,8 @@ import Testing
     #expect(try store.load(providerID: synthetic) == bystander)
   }
 
-  @Test func deletingTheLastRecordLeavesAValidEmptyMapAndTheRuntimeArtifacts() throws {
+  @Test
+  func deletingTheLastRecordLeavesAValidEmptyMapAndTheRuntimeArtifacts() throws {
     // given — logout with one provider stored.
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -143,16 +152,13 @@ import Testing
     #expect(try storedMap(in: stateRoot).providers.isEmpty)
     #expect(
       try entryNames(in: stateRoot)
-        == [
-          SecretStatePaths.credentialEnvelopeName,
-          SecretFile.key,
-          SecretFile.envelope,
-        ].sorted()
+        == [SecretStatePaths.credentialEnvelopeName, SecretFile.key, SecretFile.envelope].sorted()
     )
     #expect(try EncryptedFileSecretStore(stateRoot: stateRoot).loadSecrets() == runtimeSecrets)
   }
 
-  @Test func deletingARecordThatIsAlreadyGoneIsAQuietNoOp() throws {
+  @Test
+  func deletingARecordThatIsAlreadyGoneIsAQuietNoOp() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -169,7 +175,8 @@ import Testing
     #expect(try Data(contentsOf: envelopeURL(in: stateRoot)) == settled)
   }
 
-  @Test func deletingOnAStateRootWithoutACredentialFileCreatesNothing() throws {
+  @Test
+  func deletingOnAStateRootWithoutACredentialFileCreatesNothing() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -183,7 +190,8 @@ import Testing
 
   // MARK: - On-disk format
 
-  @Test func theStoredMapIsAVersionedJSONObjectKeyedByProviderID() throws {
+  @Test
+  func theStoredMapIsAVersionedJSONObjectKeyedByProviderID() throws {
     // given — the plaintext shape is a durable on-disk format: `LLMProviderID` conforms to
     // `CodingKeyRepresentable`, without which `Dictionary` would emit the flat alternating array
     // `["openai-chatgpt", {…}]` instead. Pinning the bytes is what stops that conformance from
@@ -220,16 +228,15 @@ import Testing
 
     // … and the same shape read back through a parser that cannot be fooled by a lucky substring:
     // `providers` must be a JSON object whose keys are the provider IDs, not an array.
-    let root = try #require(
-      try JSONSerialization.jsonObject(with: plaintext) as? [String: Any]
-    )
+    let root = try #require(try JSONSerialization.jsonObject(with: plaintext) as? [String: Any])
     #expect(root["version"] as? Int == 1)
     let providers = try #require(root["providers"] as? [String: Any])
     #expect(providers.keys.sorted() == ["openai-chatgpt", "synthetic-provider"])
     #expect(root["providers"] as? [Any] == nil)
   }
 
-  @Test func theCredentialEnvelopeIsPublishedOwnerOnly() throws {
+  @Test
+  func theCredentialEnvelopeIsPublishedOwnerOnly() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -244,7 +251,8 @@ import Testing
     #expect(try permissionBits(of: envelopeURL(in: stateRoot)) == 0o600)
   }
 
-  @Test func theCredentialEnvelopeCarriesNoPlaintextTokenProfileOrAccountMetadata() throws {
+  @Test
+  func theCredentialEnvelopeCarriesNoPlaintextTokenProfileOrAccountMetadata() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -285,7 +293,8 @@ import Testing
 
   // MARK: - Concurrency
 
-  @Test func concurrentLoadsObserveOnlyACompleteOldOrNewCredential() async throws {
+  @Test
+  func concurrentLoadsObserveOnlyACompleteOldOrNewCredential() async throws {
     // given — a reader takes no lock: the rename is what makes a load atomic, so a reader must
     // never catch a half-written map. Every observation is one of the two complete records.
     let stateRoot = try makeSealedRoot()
@@ -316,7 +325,8 @@ import Testing
 
   // MARK: - Key failures
 
-  @Test func aStateRootWithACredentialFileButNoKeyReportsTheMissingKey() throws {
+  @Test
+  func aStateRootWithACredentialFileButNoKeyReportsTheMissingKey() throws {
     // given — the credential map is sealed under the runtime key, so an envelope standing alone is
     // unopenable. It must not read as "no credential stored".
     let stateRoot = try makeTemporaryRoot(prefix: "claw-credentials")
@@ -329,7 +339,8 @@ import Testing
     }
   }
 
-  @Test func savingWithoutARuntimeKeyReportsTheMissingKeyAndWritesNothing() throws {
+  @Test
+  func savingWithoutARuntimeKeyReportsTheMissingKeyAndWritesNothing() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-credentials")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -345,7 +356,8 @@ import Testing
     #expect(try entryNames(in: stateRoot).isEmpty)
   }
 
-  @Test func aWorldReadableRuntimeKeyIsRefused() throws {
+  @Test
+  func aWorldReadableRuntimeKeyIsRefused() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -363,7 +375,8 @@ import Testing
 
   // MARK: - Envelope authentication
 
-  @Test func aCredentialMapSealedUnderADifferentKeyIsRefused() throws {
+  @Test
+  func aCredentialMapSealedUnderADifferentKeyIsRefused() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -383,7 +396,8 @@ import Testing
     }
   }
 
-  @Test func theRuntimeEnvelopeAtTheCredentialPathFailsAuthenticationNotDecoding() throws {
+  @Test
+  func theRuntimeEnvelopeAtTheCredentialPathFailsAuthenticationNotDecoding() throws {
     // given — both envelopes are sealed under the same key, so only the associated data can keep
     // them apart. Swapping them is what an owner does by accident and an attacker does on purpose.
     let stateRoot = try makeSealedRoot()
@@ -396,9 +410,7 @@ import Testing
     // would refuse it a moment later at the decoder and report the very same closed error. Only
     // here does sharing the associated data change the observable outcome — it would hand back the
     // runtime secrets' plaintext instead of throwing.
-    let key = try EncryptedFileSecretStore.openKey(
-      at: SecretStatePaths(stateRoot: stateRoot).key
-    )
+    let key = try EncryptedFileSecretStore.openKey(at: SecretStatePaths(stateRoot: stateRoot).key)
     #expect(throws: LLMCredentialStoreError.malformedStorage) {
       _ = try EncryptedLLMCredentialStore.openEnvelope(runtime, key: key)
     }
@@ -409,7 +421,8 @@ import Testing
     }
   }
 
-  @Test func theCredentialEnvelopeMovedToTheRuntimePathFailsAuthentication() throws {
+  @Test
+  func theCredentialEnvelopeMovedToTheRuntimePathFailsAuthentication() throws {
     // given — the same swap in the other direction, proving the distinction is symmetric rather
     // than an accident of one reader being stricter than the other.
     let stateRoot = try makeSealedRoot()
@@ -429,7 +442,8 @@ import Testing
     }
   }
 
-  @Test func anUnsupportedEnvelopeVersionIsRefusedBeforeDecryption() throws {
+  @Test
+  func anUnsupportedEnvelopeVersionIsRefusedBeforeDecryption() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -450,7 +464,8 @@ import Testing
     }
   }
 
-  @Test func aTamperedCiphertextIsRefused() throws {
+  @Test
+  func aTamperedCiphertextIsRefused() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -470,7 +485,8 @@ import Testing
     }
   }
 
-  @Test func aTruncatedEnvelopeIsRefused() throws {
+  @Test
+  func aTruncatedEnvelopeIsRefused() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -489,7 +505,8 @@ import Testing
     }
   }
 
-  @Test func anEmptyEnvelopeIsRefusedRatherThanReadAsAnEmptyMap() throws {
+  @Test
+  func anEmptyEnvelopeIsRefusedRatherThanReadAsAnEmptyMap() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -503,7 +520,8 @@ import Testing
     }
   }
 
-  @Test func anUnsupportedPlaintextMapVersionIsRefused() throws {
+  @Test
+  func anUnsupportedPlaintextMapVersionIsRefused() throws {
     // given — a genuinely authentic envelope under the right key and the right associated data,
     // carrying a map version this build does not know. Authentication is not the thing under test.
     let stateRoot = try makeSealedRoot()
@@ -516,7 +534,8 @@ import Testing
     }
   }
 
-  @Test func anAuthenticEnvelopeCarryingMalformedPlaintextIsRefused() throws {
+  @Test
+  func anAuthenticEnvelopeCarryingMalformedPlaintextIsRefused() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -529,7 +548,8 @@ import Testing
     }
   }
 
-  @Test func anAuthenticEnvelopeWithoutAMapVersionIsRefused() throws {
+  @Test
+  func anAuthenticEnvelopeWithoutAMapVersionIsRefused() throws {
     // given — the version is not optional with a default: a map that never carried one is a map
     // this build cannot vouch for.
     let stateRoot = try makeSealedRoot()
@@ -544,7 +564,8 @@ import Testing
 
   // MARK: - Bounds and metadata
 
-  @Test func anEnvelopeLargerThanTheCapIsRefused() throws {
+  @Test
+  func anEnvelopeLargerThanTheCapIsRefused() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -559,17 +580,15 @@ import Testing
     }
   }
 
-  @Test func anEnvelopeExactlyAtTheCapIsRefusedOnItsContentRatherThanItsSize() throws {
+  @Test
+  func anEnvelopeExactlyAtTheCapIsRefusedOnItsContentRatherThanItsSize() throws {
     // given — the boundary is inclusive. Reaching the tag check at exactly the cap is what proves
     // the oversize refusal above came from the size rule and not from the junk bytes.
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     // when
-    try writeEnvelope(
-      Data([1]) + Data(repeating: 0x01, count: 256 * 1024 - 1),
-      in: stateRoot
-    )
+    try writeEnvelope(Data([1]) + Data(repeating: 0x01, count: 256 * 1024 - 1), in: stateRoot)
 
     // then
     #expect(throws: LLMCredentialStoreError.malformedStorage) {
@@ -577,7 +596,8 @@ import Testing
     }
   }
 
-  @Test func theCredentialReadPolicyCapsTheEnvelopeAndDemandsOwnerOnlyMode() throws {
+  @Test
+  func theCredentialReadPolicyCapsTheEnvelopeAndDemandsOwnerOnlyMode() throws {
     // given — the policy the store hands the protocol. `read` proves these facts from `fstat`
     // before allocating a byte of payload, so the cap declared here is the cap enforced ahead of
     // the plaintext.
@@ -588,7 +608,8 @@ import Testing
     #expect(policy.requiredPermissionBits == SecureFilePublisher.ownerOnlyPermissions)
   }
 
-  @Test func aSymlinkAtTheCredentialPathIsRefusedWithoutFollowingIt() throws {
+  @Test
+  func aSymlinkAtTheCredentialPathIsRefusedWithoutFollowingIt() throws {
     // given — a link aimed at a file the daemon can read. Following it would let anyone who can
     // write the state root choose what the store decrypts.
     let stateRoot = try makeSealedRoot()
@@ -608,7 +629,8 @@ import Testing
     #expect(try Data(contentsOf: elsewhere) == Data("victim".utf8))
   }
 
-  @Test func aWorldReadableCredentialEnvelopeIsRefused() throws {
+  @Test
+  func aWorldReadableCredentialEnvelopeIsRefused() throws {
     // given — unlike `secrets.enc`, whose 0644 predates the publication protocol and must keep
     // opening, this file is new: nothing on any disk anywhere is allowed to be group-readable.
     let stateRoot = try makeSealedRoot()
@@ -625,7 +647,8 @@ import Testing
     }
   }
 
-  @Test func theCredentialReadPolicyAcceptsAnOwnerOnlyRegularFileWithinTheCap() {
+  @Test
+  func theCredentialReadPolicyAcceptsAnOwnerOnlyRegularFileWithinTheCap() {
     // given
     let facts = SecureFileFacts(
       device: 1,
@@ -682,9 +705,7 @@ private extension EncryptedLLMCredentialStoreTests {
   /// Seals arbitrary plaintext under the root's real key and the store's real associated data —
   /// an envelope that authenticates, so only what is inside it is on trial.
   func sealPlaintext(_ plaintext: Data, in stateRoot: URL) throws {
-    let key = try EncryptedFileSecretStore.openKey(
-      at: SecretStatePaths(stateRoot: stateRoot).key
-    )
+    let key = try EncryptedFileSecretStore.openKey(at: SecretStatePaths(stateRoot: stateRoot).key)
     try writeEnvelope(
       try EncryptedLLMCredentialStore.sealEnvelope(plaintext, key: key),
       in: stateRoot
@@ -692,9 +713,7 @@ private extension EncryptedLLMCredentialStoreTests {
   }
 
   func storedPlaintext(in stateRoot: URL) throws -> Data {
-    let key = try EncryptedFileSecretStore.openKey(
-      at: SecretStatePaths(stateRoot: stateRoot).key
-    )
+    let key = try EncryptedFileSecretStore.openKey(at: SecretStatePaths(stateRoot: stateRoot).key)
     return try EncryptedLLMCredentialStore.openEnvelope(
       try Data(contentsOf: envelopeURL(in: stateRoot)),
       key: key

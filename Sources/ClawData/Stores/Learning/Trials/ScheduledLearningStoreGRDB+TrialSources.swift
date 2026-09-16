@@ -28,28 +28,25 @@ extension ScheduledLearningStoreGRDB {
 
   static func strictEvidence(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     trial: LearningTrial
   ) throws -> StrictEvidence? {
-    guard let evidence = try readEvidence(db, runId: runId) else {
+    guard let evidence = try readEvidence(db, runID: runID) else {
       return nil
     }
-    guard
-      evidence.jobId == trial.jobId,
-      evidence.epoch == trial.epoch
-    else {
-      throw StoreError.unexpected("assignment \(runId) has an unreadable evidence receipt")
+    guard evidence.jobID == trial.jobID, evidence.epoch == trial.epoch else {
+      throw StoreError.unexpected("assignment \(runID) has an unreadable evidence receipt")
     }
     return StrictEvidence(digest: evidence.digest, eligibility: evidence.eligibility)
   }
 
   static func strictEvaluatorSource(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     trial: LearningTrial,
     evidence: StrictEvidence
   ) throws -> StrictEvaluatorSource {
-    let evaluations = try storedEvaluations(db, runId: runId)
+    let evaluations = try storedEvaluations(db, runID: runID)
     guard let attempt = try latestEvaluatorAttempt(db, trial: trial, evidence: evidence) else {
       guard evaluations.isEmpty else {
         throw StoreError.unexpected("evaluation has no exact evaluator operation")
@@ -69,7 +66,7 @@ extension ScheduledLearningStoreGRDB {
       attempt: attempt,
       evaluation: try strictEvaluation(
         db,
-        runId: runId,
+        runID: runID,
         trial: trial,
         evidence: evidence,
         operation: attempt.operation,
@@ -91,18 +88,17 @@ private extension ScheduledLearningStoreGRDB {
     let rows = try evaluatorAttemptRows(db, key: key, trial: trial, evidence: evidence)
     var attempts: [StrictAttempt] = []
     for row in rows {
-      guard
-        let idRaw = SQLiteStoredValue.string(in: row, column: "operation_id"),
-        let generation = SQLiteStoredValue.int(in: row, column: "attempt_generation"),
-        generation > 0,
-        let supersedesRaw = SQLiteStoredValue.nullableString(in: row, column: "supersedes"),
-        idRaw == LearningOperationID(key: key.digest, attemptGeneration: generation).rawValue,
-        let operation = try readOperation(db, id: LearningOperationID(rawValue: idRaw)),
-        operation.jobId == trial.jobId,
-        operation.epoch == trial.epoch,
-        operation.phase == .evaluator,
-        operation.sourceDigest == evidence.digest.rawValue,
-        operation.keyDigest == key.digest
+      guard let idRaw = SQLiteStoredValue.string(in: row, column: "operation_id"),
+            let generation = SQLiteStoredValue.int(in: row, column: "attempt_generation"),
+            generation > 0,
+            let supersedesRaw = SQLiteStoredValue.nullableString(in: row, column: "supersedes"),
+            idRaw == LearningOperationID(key: key.digest, attemptGeneration: generation).rawValue,
+            let operation = try readOperation(db, id: LearningOperationID(rawValue: idRaw)),
+            operation.jobID == trial.jobID,
+            operation.epoch == trial.epoch,
+            operation.phase == .evaluator,
+            operation.sourceDigest == evidence.digest.rawValue,
+            operation.keyDigest == key.digest
       else {
         throw StoreError.unexpected("evaluator operation lineage is unreadable")
       }
@@ -135,7 +131,7 @@ private extension ScheduledLearningStoreGRDB {
     evidence: StrictEvidence
   ) -> LearningOperationKey {
     LearningOperationKey(
-      jobId: trial.jobId,
+      jobID: trial.jobID,
       epoch: trial.epoch,
       phase: .evaluator,
       sourceDigest: evidence.digest.rawValue,
@@ -163,7 +159,7 @@ private extension ScheduledLearningStoreGRDB {
         """,
       arguments: [
         key.digest.rawValue,
-        trial.jobId,
+        trial.jobID,
         trial.epoch.value,
         LearningPhase.evaluator.rawValue,
         evidence.digest.rawValue,
@@ -174,22 +170,20 @@ private extension ScheduledLearningStoreGRDB {
   static func validateEvaluatorOperation(_ operation: OperationRow) throws {
     switch operation.state {
     case .pending, .claimed:
-      guard
-        operation.failure == nil,
-        operation.carrierDigest == nil,
-        operation.route == nil,
-        operation.providerCallID == nil,
-        operation.reservedTokens == nil,
-        operation.reservedCostUSD == nil,
-        operation.reservationState == nil
+      guard operation.failure == nil,
+            operation.carrierDigest == nil,
+            operation.route == nil,
+            operation.providerCallID == nil,
+            operation.reservedTokens == nil,
+            operation.reservedCostUSD == nil,
+            operation.reservationState == nil
       else {
         throw StoreError.unexpected("live evaluator operation has an invalid no-call shape")
       }
     case .started:
-      guard
-        operation.failure == nil,
-        let carrier = operation.carrierDigest,
-        carrier.rawValue.isEmpty == false
+      guard operation.failure == nil,
+            let carrier = operation.carrierDigest,
+            carrier.rawValue.isEmpty == false
       else {
         throw StoreError.unexpected("started evaluator operation has an invalid source shape")
       }
@@ -199,25 +193,22 @@ private extension ScheduledLearningStoreGRDB {
         throw StoreError.unexpected("terminal evaluator operation has an invalid call shape")
       }
     case .failed:
-      guard
-        operation.failure == .schemaInvalid || operation.failure == .providerTerminal,
-        terminalCallShapeIsValid(operation)
+      guard operation.failure == .schemaInvalid || operation.failure == .providerTerminal,
+            terminalCallShapeIsValid(operation)
       else {
         throw StoreError.unexpected("failed evaluator operation has an invalid call shape")
       }
     case .failedNoCall:
       let failureIsValid =
-        operation.failure == .budgetDenied
-        || operation.failure == .carrierPolicyDenied
+        operation.failure == .budgetDenied || operation.failure == .carrierPolicyDenied
         || operation.failure == .staleEpoch
-      guard
-        failureIsValid,
-        operation.carrierDigest == nil,
-        operation.route == nil,
-        operation.providerCallID == nil,
-        operation.reservedTokens == 0,
-        operation.reservedCostUSD == 0,
-        operation.reservationState == LearningReservationState.closed.rawValue
+      guard failureIsValid,
+            operation.carrierDigest == nil,
+            operation.route == nil,
+            operation.providerCallID == nil,
+            operation.reservedTokens == 0,
+            operation.reservedCostUSD == 0,
+            operation.reservationState == LearningReservationState.closed.rawValue
       else {
         throw StoreError.unexpected("failed evaluator operation has an invalid no-call shape")
       }
@@ -225,18 +216,16 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func terminalCallShapeIsValid(_ operation: OperationRow) -> Bool {
-    guard
-      let carrier = operation.carrierDigest,
-      carrier.rawValue.isEmpty == false,
-      let route = operation.route,
-      route.isEmpty == false,
-      let providerCallID = operation.providerCallID,
-      providerCallID.rawValue.isEmpty == false
+    guard let carrier = operation.carrierDigest,
+          carrier.rawValue.isEmpty == false,
+          let route = operation.route,
+          route.isEmpty == false,
+          let providerCallID = operation.providerCallID,
+          providerCallID.rawValue.isEmpty == false
     else {
       return false
     }
-    return operation.reservedTokens == 0
-      && operation.reservedCostUSD == 0
+    return operation.reservedTokens == 0 && operation.reservedCostUSD == 0
       && operation.reservationState == LearningReservationState.closed.rawValue
   }
 }
@@ -246,42 +235,41 @@ private extension ScheduledLearningStoreGRDB {
 private extension ScheduledLearningStoreGRDB {
   static func strictEvaluation(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     trial: LearningTrial,
     evidence: StrictEvidence,
     operation: OperationRow,
     stored: StoredEvaluationProjection
   ) throws -> StrictEvaluation {
-    guard
-      stored.jobId == trial.jobId,
-      stored.epoch == trial.epoch,
-      stored.runId == runId,
-      stored.evidenceDigest == evidence.digest,
-      stored.evaluation.evaluator.rubricVersion == EvaluatorRubric.v1.version,
-      stored.evaluation.evaluator.promptVersion == EvaluatorPrompt.v1.version,
-      stored.evaluation.evaluator.schemaVersion == EvaluatorOutput.currentSchemaVersion,
-      let compatibility = try readCompatibility(db, runId: runId),
-      let binding = try readBinding(db, runId: runId)
+    guard stored.jobID == trial.jobID,
+          stored.epoch == trial.epoch,
+          stored.runID == runID,
+          stored.evidenceDigest == evidence.digest,
+          stored.evaluation.evaluator.rubricVersion == EvaluatorRubric.v1.version,
+          stored.evaluation.evaluator.promptVersion == EvaluatorPrompt.v1.version,
+          stored.evaluation.evaluator.schemaVersion == EvaluatorOutput.currentSchemaVersion,
+          let compatibility = try readCompatibility(db, runID: runID),
+          let binding = try readBinding(db, runID: runID)
     else {
-      throw StoreError.unexpected("assignment \(runId) has an unreadable evaluation")
+      throw StoreError.unexpected("assignment \(runID) has an unreadable evaluation")
     }
     let compatibilityDigest = compatibility.digest(
       binding: binding,
-      terminalRoute: try readTerminalRoute(db, runId: runId),
+      terminalRoute: try readTerminalRoute(db, runID: runID),
       evaluator: stored.evaluation.evaluator
     )
     guard compatibilityDigest == stored.compatibilityDigest else {
-      throw StoreError.unexpected("assignment \(runId) evaluation surface does not match")
+      throw StoreError.unexpected("assignment \(runID) evaluation surface does not match")
     }
     let expectedDigest = digest(
       operation: operation,
-      runId: runId,
+      runID: runID,
       evaluation: stored.evaluation,
       issueCodes: stored.issueCodesJSON,
       compatibility: compatibilityDigest
     )
     guard expectedDigest == stored.digest else {
-      throw StoreError.unexpected("assignment \(runId) evaluation digest does not match")
+      throw StoreError.unexpected("assignment \(runID) evaluation digest does not match")
     }
     return StrictEvaluation(digest: expectedDigest, evaluation: stored.evaluation)
   }

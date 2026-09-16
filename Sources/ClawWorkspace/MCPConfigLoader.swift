@@ -22,8 +22,16 @@ public enum MCPConfigLoader {
     static let connectTimeoutSeconds = "connectTimeoutSeconds"
     static let requestTimeoutSeconds = "requestTimeoutSeconds"
     static let tools = "tools"
+
     static let all: Set<String> = [
-      name, url, enabled, headers, authHeader, connectTimeoutSeconds, requestTimeoutSeconds, tools,
+      name,
+      url,
+      enabled,
+      headers,
+      authHeader,
+      connectTimeoutSeconds,
+      requestTimeoutSeconds,
+      tools,
     ]
   }
 
@@ -49,9 +57,8 @@ public enum MCPConfigLoader {
       throw MCPConfigError.unreadableFile(path: path)
     }
 
-    guard
-      let data = fileManager.contents(atPath: path),
-      let text = String(data: data, encoding: .utf8)
+    guard let data = fileManager.contents(atPath: path),
+          let text = String(data: data, encoding: .utf8)
     else {
       throw MCPConfigError.unreadableFile(path: path)
     }
@@ -143,10 +150,7 @@ private extension MCPConfigLoader {
         mapping[ToolsKey.include],
         key: "\(context).\(ToolsKey.include)"
       ),
-      exclude: try stringList(
-        mapping[ToolsKey.exclude],
-        key: "\(context).\(ToolsKey.exclude)"
-      ),
+      exclude: try stringList(mapping[ToolsKey.exclude], key: "\(context).\(ToolsKey.exclude)"),
       risk: try parseRisk(mapping[ToolsKey.risk], context: "\(context).\(ToolsKey.risk)")
     )
   }
@@ -184,7 +188,11 @@ private extension MCPConfigLoader {
     context: String?
   ) throws {
     for key in mapping.keys.sorted() where allowed.contains(key) == false {
-      throw MCPConfigError.unknownKey(context.map { "\($0).\(key)" } ?? key)
+      throw MCPConfigError.unknownKey(
+        context.map {
+          "\($0).\(key)"
+        } ?? key
+      )
     }
   }
 

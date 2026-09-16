@@ -84,7 +84,7 @@ public struct EvaluatorCarrier: Sendable, Equatable, Codable {
   public static let currentSchemaVersion = EvaluatorOutput.currentSchemaVersion
 
   public let schemaVersion: Int
-  public let runId: Int64
+  public let runID: Int64
   public let jobPrompt: String
   public let rubric: String
   public let finalOutput: String
@@ -92,14 +92,14 @@ public struct EvaluatorCarrier: Sendable, Equatable, Codable {
 
   public init(
     schemaVersion: Int = EvaluatorCarrier.currentSchemaVersion,
-    runId: Int64,
+    runID: Int64,
     jobPrompt: String,
     rubric: String,
     finalOutput: String,
     evidence: EvidenceProjection
   ) {
     self.schemaVersion = schemaVersion
-    self.runId = runId
+    self.runID = runID
     self.jobPrompt = jobPrompt
     self.rubric = rubric
     self.finalOutput = finalOutput
@@ -109,9 +109,9 @@ public struct EvaluatorCarrier: Sendable, Equatable, Codable {
   /// Projects a sealed payload field by field. Deliberately not a forward: `EvidencePayload` also
   /// carries the lesson-set and job-definition digests the run was bound to, and handing the whole
   /// value to the encoder would put them on the wire.
-  public init(runId: Int64, jobPrompt: String, rubric: String, evidence: EvidencePayload) {
+  public init(runID: Int64, jobPrompt: String, rubric: String, evidence: EvidencePayload) {
     self.init(
-      runId: runId,
+      runID: runID,
       jobPrompt: jobPrompt,
       rubric: rubric,
       finalOutput: evidence.finalOutput,
@@ -124,7 +124,7 @@ public struct EvaluatorCarrier: Sendable, Equatable, Codable {
 
   enum CodingKeys: String, CodingKey {
     case schemaVersion = "schema_version"
-    case runId = "run_id"
+    case runID = "run_id"
     case jobPrompt = "job_prompt"
     case rubric
     case finalOutput = "final_output"
@@ -237,7 +237,10 @@ private extension EvaluatorOutput {
   /// compared against what actually arrived.
   struct AnyKey: CodingKey {
     let stringValue: String
-    var intValue: Int? { nil }
+
+    var intValue: Int? {
+      nil
+    }
 
     init(stringValue: String) {
       self.stringValue = stringValue

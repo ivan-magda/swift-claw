@@ -10,8 +10,8 @@ import Foundation
 /// without an image it stored earlier.
 package actor ImageCache {
   private struct Entry {
-    let sessionId: Int64
-    let messageId: Int64
+    let sessionID: Int64
+    let messageID: Int64
     let image: ImagePart
   }
 
@@ -31,16 +31,16 @@ package actor ImageCache {
     self.maximumBytes = maximumBytes
   }
 
-  package func store(_ image: ImagePart, sessionId: Int64, messageId: Int64) {
+  package func store(_ image: ImagePart, sessionID: Int64, messageID: Int64) {
     let existing = entries.firstIndex { entry in
-      entry.sessionId == sessionId && entry.messageId == messageId
+      entry.sessionID == sessionID && entry.messageID == messageID
     }
     if let existing {
       bytesHeld -= entries[existing].image.data.count
       entries.remove(at: existing)
     }
 
-    entries.append(Entry(sessionId: sessionId, messageId: messageId, image: image))
+    entries.append(Entry(sessionID: sessionID, messageID: messageID, image: image))
     bytesHeld += image.data.count
 
     // A lone image over the ceiling is kept rather than evicted into nothing: refusing it belongs to
@@ -51,11 +51,11 @@ package actor ImageCache {
     }
   }
 
-  package func images(sessionId: Int64) -> [Int64: ImagePart] {
+  package func images(sessionID: Int64) -> [Int64: ImagePart] {
     var found: [Int64: ImagePart] = [:]
 
-    for entry in entries where entry.sessionId == sessionId {
-      found[entry.messageId] = entry.image
+    for entry in entries where entry.sessionID == sessionID {
+      found[entry.messageID] = entry.image
     }
 
     return found

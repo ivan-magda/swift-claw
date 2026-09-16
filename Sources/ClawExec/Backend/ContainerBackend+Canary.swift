@@ -4,10 +4,7 @@ import Foundation
 // MARK: - Canary
 
 extension ContainerBackend {
-  func canaryOutcome(
-    initImage: String,
-    deadline: ContinuousClock.Instant
-  ) async -> CanaryOutcome? {
+  func canaryOutcome(initImage: String, deadline: ContinuousClock.Instant) async -> CanaryOutcome? {
     let identity = ExecutionIdentity()
     let request = ExecutionRequest(
       language: .python,
@@ -21,12 +18,11 @@ extension ContainerBackend {
       timeout: Self.ordinaryCommandTimeout
     )
 
-    guard
-      let workspace = try? ScratchWorkspace.create(
-        stateRoot: stateRoot,
-        identity: identity,
-        request: request
-      )
+    guard let workspace = try? ScratchWorkspace.create(
+      stateRoot: stateRoot,
+      identity: identity,
+      request: request
+    )
     else {
       return nil
     }
@@ -38,10 +34,7 @@ extension ContainerBackend {
       deadline: deadline
     )
 
-    let cleanupOK = await runShieldedCleanup(
-      identity: identity,
-      workspace: workspace
-    )
+    let cleanupOK = await runShieldedCleanup(identity: identity, workspace: workspace)
     guard cleanupOK else {
       return nil
     }
@@ -55,45 +48,44 @@ extension ContainerBackend {
     initImage: String,
     deadline: ContinuousClock.Instant
   ) async -> CanaryOutcome? {
-    guard
-      await boundedCommandSucceeded(
-        ContainerInvocation.detachedCanary(
+    guard await boundedCommandSucceeded(
+      ContainerInvocation.detachedCanary(
           context: ContainerLaunchContext(
             identity: identity,
             scratchPath: workspace.directory.path,
             settings: settings,
             initImage: initImage
           )
-        ),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      )
+      ),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    )
     else {
       return nil
     }
 
-    guard
-      let inspectData = await boundedCommandData(
-        ContainerInvocation.inspect(identity.name),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      ),
-      let inspections = try? JSONDecoder().decode(
-        [ContainerInspectDocument].self,
-        from: inspectData
-      ),
-      let inspection = inspections.first(where: { $0.configuration.id == identity.name })
+    guard let inspectData = await boundedCommandData(
+      ContainerInvocation.inspect(identity.name),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    ),
+          let inspections = try? JSONDecoder().decode(
+            [ContainerInspectDocument].self,
+            from: inspectData
+          ),
+          let inspection = inspections.first(where: {
+        $0.configuration.id == identity.name
+      })
     else {
       return nil
     }
 
-    guard
-      let guestData = await boundedCommandData(
-        ContainerInvocation.execCanary(identity.name, script: Self.guestCanaryScript),
-        limit: Self.ordinaryCommandTimeout,
-        deadline: deadline
-      ),
-      let guest = try? JSONDecoder().decode(GuestCanaryDocument.self, from: guestData)
+    guard let guestData = await boundedCommandData(
+      ContainerInvocation.execCanary(identity.name, script: Self.guestCanaryScript),
+      limit: Self.ordinaryCommandTimeout,
+      deadline: deadline
+    ),
+          let guest = try? JSONDecoder().decode(GuestCanaryDocument.self, from: guestData)
     else {
       return nil
     }
@@ -109,10 +101,8 @@ extension ContainerBackend {
       inspection.status.state == "running"
       && inspection.configuration.resources.cpus == settings.cpus
       && inspection.configuration.resources.memoryInBytes == memoryInBytes
-      && inspection.configuration.readOnly
-      && inspection.configuration.useInit
-      && inspection.configuration.capAdd.isEmpty
-      && inspection.configuration.capDrop == ["ALL"]
+      && inspection.configuration.readOnly && inspection.configuration.useInit
+      && inspection.configuration.capAdd.isEmpty && inspection.configuration.capDrop == ["ALL"]
 
     return CanaryOutcome(imageDigestOK: imageDigestOK, capsMatch: capsMatch, guest: guest)
   }
@@ -196,13 +186,7 @@ struct CanaryOutcome: Sendable {
   let guest: GuestCanaryDocument
 
   var isPassing: Bool {
-    imageDigestOK
-      && capsMatch
-      && guest.capsEmpty
-      && guest.netIsolated
-      && guest.reaperOK
-      && guest.rootfsRO
-      && guest.stagingRO
-      && guest.interpretersOK
+    imageDigestOK && capsMatch && guest.capsEmpty && guest.netIsolated && guest.reaperOK
+      && guest.rootfsRO && guest.stagingRO && guest.interpretersOK
   }
 }

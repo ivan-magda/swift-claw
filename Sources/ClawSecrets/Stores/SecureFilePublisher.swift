@@ -244,6 +244,18 @@ package struct SecureFilePublisher: Sendable {
     return Self.syncDirectory(directory)
   }
 
+  /// `fsync` on the directory, which is what makes a rename survive a crash. Returns whether it
+  /// was proven durable.
+  @discardableResult
+  static func syncDirectory(_ url: URL) -> Bool {
+    let descriptor = open(url.path, O_RDONLY | O_DIRECTORY)
+    guard descriptor >= 0 else {
+      return false
+    }
+    defer { close(descriptor) }
+    return fsync(descriptor) == 0
+  }
+
   /// Resolves the only recoverable publication ambiguity without following the target name. The
   /// file was already fsynced before it was committed; matching the returned inode identity proves
   /// that the exact published file still owns the name, so only the parent directory sync remains.
@@ -252,10 +264,7 @@ package struct SecureFilePublisher: Sendable {
     case .published:
       return true
     case .commitUncertain(let identity):
-      guard
-        let facts = Self.facts(ofEntryAt: url),
-        facts.isRegularFile,
-        facts.identity == identity
+      guard let facts = Self.facts(ofEntryAt: url), facts.isRegularFile, facts.identity == identity
       else {
         return false
       }
@@ -292,26 +301,10 @@ package struct SecureFilePublisher: Sendable {
   /// remove its own work. Returns whether the entry was removed.
   @discardableResult
   static func removeCreatedEntry(_ identity: SecureFileIdentity, at url: URL) -> Bool {
-    guard
-      let facts = facts(ofEntryAt: url),
-      facts.isRegularFile,
-      facts.identity == identity
-    else {
+    guard let facts = facts(ofEntryAt: url), facts.isRegularFile, facts.identity == identity else {
       return false
     }
     return unlink(url.path) == 0
-  }
-
-  /// `fsync` on the directory, which is what makes a rename survive a crash. Returns whether it
-  /// was proven durable.
-  @discardableResult
-  static func syncDirectory(_ url: URL) -> Bool {
-    let descriptor = open(url.path, O_RDONLY | O_DIRECTORY)
-    guard descriptor >= 0 else {
-      return false
-    }
-    defer { close(descriptor) }
-    return fsync(descriptor) == 0
   }
 
   /// `lstat`, not `stat`: a dangling symlink is an entry that exists, and must force the encrypted

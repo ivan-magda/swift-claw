@@ -32,7 +32,7 @@ private extension AddressingResolver {
     guard let identity else {
       return false
     }
-    if message.replyToUserId == identity.id {
+    if message.replyToUserID == identity.id {
       return true
     }
     guard let written = writtenText(message.content) else {
@@ -75,8 +75,7 @@ private extension AddressingResolver {
     var searched = text.startIndex..<text.endIndex
     while let hit = text.range(of: handle, options: .caseInsensitive, range: searched) {
       let leading =
-        hit.lowerBound == text.startIndex
-        ? nil : text[text.index(before: hit.lowerBound)]
+        hit.lowerBound == text.startIndex ? nil : text[text.index(before: hit.lowerBound)]
       let trailing = hit.upperBound == text.endIndex ? nil : text[hit.upperBound]
       if isHandleCharacter(leading) == false, isHandleCharacter(trailing) == false {
         return true

@@ -3,23 +3,31 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct PolicyFingerprintTests {
+@Suite
+struct PolicyFingerprintTests {
   // MARK: - hash(parts:)
 
-  @Test func hashIsDeterministicAcrossCalls() {
+  @Test
+  func hashIsDeterministicAcrossCalls() {
     // given / when / then — same inputs, same digest (the recompute-at-resolution seam relies on it)
     let parts = ["alpha", "beta", "gamma"]
     #expect(PolicyFingerprint.hash(parts: parts) == PolicyFingerprint.hash(parts: parts))
   }
 
-  @Test func hashRendersTheFullSHA256Hex() {
+  @Test
+  func hashRendersTheFullSHA256Hex() {
     // given / when / then — 32 digest bytes → 64 lowercase hex chars
     let digest = PolicyFingerprint.hash(parts: ["x"])
     #expect(digest.count == 64)
-    #expect(digest.allSatisfy { character in "0123456789abcdef".contains(character) })
+    #expect(
+      digest.allSatisfy { character in
+        "0123456789abcdef".contains(character)
+      }
+    )
   }
 
-  @Test func lengthPrefixDefeatsBoundaryConfusion() {
+  @Test
+  func lengthPrefixDefeatsBoundaryConfusion() {
     // given / when / then — "ab"+"c" and "a"+"bc" share the byte stream, but the 8-byte length
     // prefixes differ, so the digests must differ (spec §3.2)
     #expect(
@@ -27,7 +35,8 @@ import Testing
     )
   }
 
-  @Test func emptyPartCountsAsAField() {
+  @Test
+  func emptyPartCountsAsAField() {
     // given / when / then — a present-but-empty file (missing → "") is distinct from an absent one
     #expect(PolicyFingerprint.hash(parts: ["", ""]) != PolicyFingerprint.hash(parts: [""]))
   }
@@ -79,7 +88,8 @@ import Testing
     )
   }
 
-  @Test func staticSubhashIsIndependentOfToolInputOrder() {
+  @Test
+  func staticSubhashIsIndependentOfToolInputOrder() {
     // given
     let first = tool(name: "a")
     let second = tool(name: "b")
@@ -92,7 +102,8 @@ import Testing
     #expect(forward == reversed)
   }
 
-  @Test func staticSubhashIsDeterministicForMultiKeySchemas() {
+  @Test
+  func staticSubhashIsDeterministicForMultiKeySchemas() {
     // given — a multi-key parameter schema; `.sortedKeys` canonicalization makes the encoding
     // (and thus the hash) stable across calls
     let schema: JSONValue = .object([
@@ -107,12 +118,14 @@ import Testing
     )
   }
 
-  @Test func toolNameIsAnInputClass() {
+  @Test
+  func toolNameIsAnInputClass() {
     // given / when / then — the sorted tool name is a hashed surface class (§3.2)
     #expect(subhash(tools: [tool(name: "a")]) != subhash(tools: [tool(name: "b")]))
   }
 
-  @Test func toolParametersAreAnInputClass() {
+  @Test
+  func toolParametersAreAnInputClass() {
     // given / when / then — the canonical parameter JSON is a hashed surface class (§3.2)
     #expect(
       subhash(tools: [tool(name: "t", params: .object(["type": .string("object")]))])
@@ -120,7 +133,8 @@ import Testing
     )
   }
 
-  @Test func riskLevelIsAnInputClass() {
+  @Test
+  func riskLevelIsAnInputClass() {
     // given / when / then — the declared riskLevel is a hashed surface class (§3.2)
     #expect(
       subhash(tools: [tool(name: "t", risk: .safe)])
@@ -128,7 +142,8 @@ import Testing
     )
   }
 
-  @Test func metadataProvenanceIsAnInputClass() {
+  @Test
+  func metadataProvenanceIsAnInputClass() {
     // given / when / then
     #expect(
       subhash(tools: [tool(name: "t", provenance: .trusted)])
@@ -136,7 +151,8 @@ import Testing
     )
   }
 
-  @Test func fenceLabelIsAnInputClass() {
+  @Test
+  func fenceLabelIsAnInputClass() {
     // given / when / then — the declared fence label selects the prompt carve-out a tool's output
     // renders under, so changing it must void an outstanding approval the way a risk change does
     #expect(
@@ -145,7 +161,8 @@ import Testing
     )
   }
 
-  @Test func egressClassIsAnInputClass() {
+  @Test
+  func egressClassIsAnInputClass() {
     // given / when / then — the egress label is a hashed surface class (§3.2)
     #expect(
       subhash(tools: [tool(name: "t", egress: .none)])
@@ -153,7 +170,8 @@ import Testing
     )
   }
 
-  @Test func interactiveRequesterRequirementIsAnInputClass() {
+  @Test
+  func interactiveRequesterRequirementIsAnInputClass() {
     // given
     let ordinary = tool(name: "t")
     let interactive = tool(name: "t", requiresInteractiveRequester: true)
@@ -162,7 +180,8 @@ import Testing
     #expect(subhash(tools: [ordinary]) != subhash(tools: [interactive]))
   }
 
-  @Test func groupApprovalRequirementIsAnInputClass() {
+  @Test
+  func groupApprovalRequirementIsAnInputClass() {
     // given
     let automatic = tool(name: "t")
     let confirmed = tool(name: "t", requiresGroupApproval: true)
@@ -175,18 +194,18 @@ import Testing
     #expect(automaticHash != confirmedHash)
   }
 
-  @Test func invocationIdentityIsAnInputClass() {
+  @Test
+  func invocationIdentityIsAnInputClass() {
     // given / when / then — two identically advertised MCP tools at different endpoints are
     // different actions, so an outstanding approval may not survive the endpoint change.
     #expect(
       subhash(tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://a/mcp")])
-        != subhash(
-          tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://b/mcp")]
-        )
+        != subhash(tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://b/mcp")])
     )
   }
 
-  @Test func llmEgressEndpointIsAnInputClass() {
+  @Test
+  func llmEgressEndpointIsAnInputClass() {
     // given / when / then — the configured egress endpoint is a hashed config class
     #expect(
       subhash(egress: .configuredEndpoint("https://a"))
@@ -194,7 +213,8 @@ import Testing
     )
   }
 
-  @Test func llmEgressDiffersBetweenCurrentAndManagedSinks() {
+  @Test
+  func llmEgressDiffersBetweenCurrentAndManagedSinks() {
     // given — a configured endpoint and a managed provider whose fixed endpoint happens to be the
     // same string; the case prefix must still tell them apart so switching sinks voids an approval
     let sharedEndpoint = "https://chatgpt.com/backend-api/codex/responses"
@@ -202,13 +222,12 @@ import Testing
     // when / then — the current and managed cases never collide, even on an identical endpoint
     #expect(
       subhash(egress: .configuredEndpoint(sharedEndpoint))
-        != subhash(
-          egress: .managed(providerID: .openAIChatGPT, endpoint: sharedEndpoint)
-        )
+        != subhash(egress: .managed(providerID: .openAIChatGPT, endpoint: sharedEndpoint))
     )
   }
 
-  @Test func llmEgressManagedProviderIDIsAnInputClass() {
+  @Test
+  func llmEgressManagedProviderIDIsAnInputClass() {
     // given / when / then — two managed sinks on the same endpoint but different providers hash apart
     #expect(
       subhash(egress: .managed(providerID: .openAIChatGPT, endpoint: "https://x"))
@@ -216,17 +235,20 @@ import Testing
     )
   }
 
-  @Test func searchEndpointPresenceIsAnInputClass() {
+  @Test
+  func searchEndpointPresenceIsAnInputClass() {
     // given / when / then — the search-endpoint presence sentinel is a hashed config class (§3.2)
     #expect(subhash(search: true) != subhash(search: false))
   }
 
-  @Test func workspaceRootIsAnInputClass() {
+  @Test
+  func workspaceRootIsAnInputClass() {
     // given / when / then — the canonical workspace root is a hashed config class (§3.2)
     #expect(subhash(root: "/a") != subhash(root: "/b"))
   }
 
-  @Test func webFetchExemptCIDRsAreAnInputClass() throws {
+  @Test
+  func webFetchExemptCIDRsAreAnInputClass() throws {
     // given — the SSRF exemption list is egress policy; changing it must void an outstanding
     // web_fetch approval (else a pending action resolves under a policy that was not in force)
     let pool = try #require(CIDR.parse("198.18.0.0/15"))
@@ -235,7 +257,8 @@ import Testing
     #expect(subhash(exempt: []) != subhash(exempt: [pool]))
   }
 
-  @Test func webFetchExemptCIDRsAreOrderIndependent() throws {
+  @Test
+  func webFetchExemptCIDRsAreOrderIndependent() throws {
     // given — config list order is arbitrary; two owners with the same set must share a policy
     let poolV4 = try #require(CIDR.parse("198.18.0.0/15"))
     let poolV6 = try #require(CIDR.parse("fc00::/18"))
@@ -271,7 +294,8 @@ import Testing
     )
   }
 
-  @Test func everyExecPolicyFieldIsAnInputClass() throws {
+  @Test
+  func everyExecPolicyFieldIsAnInputClass() throws {
     // given
     let baseline = try execConfig()
     let mutations = try [
@@ -286,14 +310,21 @@ import Testing
 
     // when
     let baselineHash = subhash(exec: baseline)
-    let mutationHashes = mutations.map { config in subhash(exec: config) }
+    let mutationHashes = mutations.map { config in
+      subhash(exec: config)
+    }
 
     // then: each field change produces a different policy fingerprint
-    #expect(mutationHashes.allSatisfy { $0 != baselineHash })
+    #expect(
+      mutationHashes.allSatisfy {
+        $0 != baselineHash
+      }
+    )
     #expect(Set(mutationHashes).count == mutations.count)
   }
 
-  @Test func execRegistryOrderDoesNotChangeTheFingerprint() throws {
+  @Test
+  func execRegistryOrderDoesNotChangeTheFingerprint() throws {
     // given
     let forward = try execConfig(registries: ["cgr.dev", "images.example.com"])
     let reverse = try execConfig(registries: ["images.example.com", "cgr.dev"])
@@ -304,7 +335,8 @@ import Testing
 
   // MARK: - combined
 
-  @Test func combinedIsFirst16HexOfTheDigest() {
+  @Test
+  func combinedIsFirst16HexOfTheDigest() {
     // given / when
     let combined = PolicyFingerprint.combined(
       staticSubhash: "sub",
@@ -321,7 +353,8 @@ import Testing
     )
   }
 
-  @Test func combinedIsSensitiveToTheStaticSubhash() {
+  @Test
+  func combinedIsSensitiveToTheStaticSubhash() {
     // given / when / then — a different classes 2–3 sub-hash flips the persisted fingerprint (§3.2)
     #expect(
       PolicyFingerprint.combined(staticSubhash: "s1", promptMaterials: ["a", "b", "c", "d"])
@@ -340,8 +373,7 @@ import Testing
       PolicyFingerprint.combined(
         staticSubhash: "s",
         promptMaterials: ["sys", "soul", "agents", "tools"]
-      )
-        != PolicyFingerprint.combined(staticSubhash: "s", promptMaterials: mutated)
+      ) != PolicyFingerprint.combined(staticSubhash: "s", promptMaterials: mutated)
     )
   }
 }

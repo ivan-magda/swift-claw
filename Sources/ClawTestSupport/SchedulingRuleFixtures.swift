@@ -21,7 +21,11 @@ public enum SchedulingRuleFixtures {
       calendar: calendar(zone: zone),
       frequency: .weekly,
       weekdays: [
-        .every(.monday), .every(.tuesday), .every(.wednesday), .every(.thursday), .every(.friday),
+        .every(.monday),
+        .every(.tuesday),
+        .every(.wednesday),
+        .every(.thursday),
+        .every(.friday),
       ],
       hours: [7],
       minutes: [0],

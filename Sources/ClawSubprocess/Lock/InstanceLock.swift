@@ -21,15 +21,9 @@ package final class InstanceLock: @unchecked Sendable {
   private var released = false
 
   package init(path: String) throws {
-    let descriptor = open(
-      path,
-      O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC,
-      Self.lockFileMode
-    )
+    let descriptor = open(path, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, Self.lockFileMode)
     guard descriptor >= 0 else {
-      throw errno == ELOOP
-        ? LockError.insecureLockFile
-        : LockError.openFailed(errno: errno)
+      throw errno == ELOOP ? LockError.insecureLockFile : LockError.openFailed(errno: errno)
     }
 
     guard Self.secure(descriptor) else {
@@ -41,8 +35,7 @@ package final class InstanceLock: @unchecked Sendable {
       let lockErrno = errno
       close(descriptor)
       throw lockErrno == EWOULDBLOCK
-        ? LockError.alreadyLocked
-        : LockError.openFailed(errno: lockErrno)
+        ? LockError.alreadyLocked : LockError.openFailed(errno: lockErrno)
     }
 
     fileDescriptor = descriptor
@@ -67,20 +60,17 @@ package final class InstanceLock: @unchecked Sendable {
   private static func secure(_ descriptor: Int32) -> Bool {
     var status = stat()
 
-    guard
-      fstat(descriptor, &status) == 0,
-      (status.st_mode & S_IFMT) == S_IFREG,
-      status.st_nlink == 1,
-      status.st_uid == geteuid(),
-      fchmod(descriptor, lockFileMode) == 0,
-      fstat(descriptor, &status) == 0
+    guard fstat(descriptor, &status) == 0,
+          (status.st_mode & S_IFMT) == S_IFREG,
+          status.st_nlink == 1,
+          status.st_uid == geteuid(),
+          fchmod(descriptor, lockFileMode) == 0,
+          fstat(descriptor, &status) == 0
     else {
       return false
     }
 
-    return (status.st_mode & S_IFMT) == S_IFREG
-      && status.st_nlink == 1
-      && status.st_uid == geteuid()
-      && (status.st_mode & mode_t(0o777)) == lockFileMode
+    return (status.st_mode & S_IFMT) == S_IFREG && status.st_nlink == 1
+      && status.st_uid == geteuid() && (status.st_mode & (0o777 as mode_t)) == lockFileMode
   }
 }

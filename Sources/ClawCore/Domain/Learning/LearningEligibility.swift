@@ -1,10 +1,10 @@
 import Foundation
 
-public extension LearningEligibility {
+extension LearningEligibility {
   /// The one gate in front of learning model spend. Every other value is a terminal classification
   /// the loop records and stops on, so this stays a single equality rather than a list that could
   /// drift open.
-  var reachesEvaluator: Bool {
+  public var reachesEvaluator: Bool {
     self == .eligibleTaskEvidence
   }
 }

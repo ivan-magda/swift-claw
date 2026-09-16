@@ -40,15 +40,24 @@ public enum DegradationKind: Sendable, Equatable {
   /// The stable string recorded by the audit log. Categorical cases deliberately omit payloads.
   public var auditDecision: String {
     switch self {
-    case .providerUnavailable: "providerUnavailable"
-    case .outputTruncated: "outputTruncated"
-    case .contextUnavailable: "contextUnavailable"
-    case .accountingFailed: "accountingFailed"
-    case .authenticationRequired: "authenticationRequired"
-    case .accessDenied: "accessDenied"
-    case .quotaLimited: "quotaLimited"
-    case .invalidProviderState: "invalidProviderState"
-    case .visionUnsupported: "visionUnsupported"
+    case .providerUnavailable:
+      "providerUnavailable"
+    case .outputTruncated:
+      "outputTruncated"
+    case .contextUnavailable:
+      "contextUnavailable"
+    case .accountingFailed:
+      "accountingFailed"
+    case .authenticationRequired:
+      "authenticationRequired"
+    case .accessDenied:
+      "accessDenied"
+    case .quotaLimited:
+      "quotaLimited"
+    case .invalidProviderState:
+      "invalidProviderState"
+    case .visionUnsupported:
+      "visionUnsupported"
     }
   }
 }

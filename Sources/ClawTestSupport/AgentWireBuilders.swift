@@ -43,11 +43,11 @@ public func okOutcome(
   content: String = "ok",
   ingestedUntrusted: Bool = true,
   readPrivateData: Bool = false
-) -> @Sendable (ToolCall, ToolDispatchContext) -> ToolDispatchOutcome {
+) -> @Sendable (_ call: ToolCall, _ context: ToolDispatchContext) -> ToolDispatchOutcome {
   { call, _ in
     ToolDispatchOutcome(
       observation: ToolObservation(
-        callId: call.id,
+        callID: call.id,
         toolName: call.name,
         content: content,
         status: .ok,
@@ -79,12 +79,12 @@ public func fetchProposal(id: String = "c1", url: String = "https://example.com/
 }
 
 /// One `ProviderUsage` row for tests that build a `TurnOutcome` directly rather than deriving it
-/// from a provider round-trip. `sessionId` is required (not defaulted) because the row is only
+/// from a provider round-trip. `sessionID` is required (not defaulted) because the row is only
 /// insertable against a real session — an FK-mismatched default would fail silently for callers
 /// who forgot to pass their fixture's id.
 public func usageFixture(
-  sessionId: Int64,
-  runId: Int64? = nil,
+  sessionID: Int64,
+  runID: Int64? = nil,
   model: String = "test-model",
   promptTokens: Int = 10,
   completionTokens: Int = 5,
@@ -93,8 +93,8 @@ public func usageFixture(
 ) -> ProviderUsage {
   ProviderUsage(
     providerCallID: UUIDProviderCallIDGenerator().next(),
-    runId: runId,
-    sessionId: sessionId,
+    runID: runID,
+    sessionID: sessionID,
     model: model,
     promptTokens: promptTokens,
     completionTokens: completionTokens,

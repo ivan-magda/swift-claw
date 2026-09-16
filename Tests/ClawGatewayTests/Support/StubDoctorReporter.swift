@@ -6,10 +6,7 @@ struct StubDoctorReporter: DoctorReporting {
   let stubbed: DoctorReport
   private let skillScans: StubSkillScans
 
-  init(
-    stubbed: DoctorReport = DoctorReport(),
-    skillScans: [SkillScanResult] = []
-  ) {
+  init(stubbed: DoctorReport = DoctorReport(), skillScans: [SkillScanResult] = []) {
     self.stubbed = stubbed
     self.skillScans = StubSkillScans(skillScans)
   }

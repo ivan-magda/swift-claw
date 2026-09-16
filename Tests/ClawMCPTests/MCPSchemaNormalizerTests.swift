@@ -27,9 +27,7 @@ struct MCPSchemaNormalizerTests {
     let schema = JSONValue.object([
       "type": .string("object"),
       "definitions": .object(["Issue": .object(["type": .string("string")])]),
-      "properties": .object([
-        "issue": .object(["$ref": .string("#/definitions/Issue")])
-      ]),
+      "properties": .object(["issue": .object(["$ref": .string("#/definitions/Issue")])]),
     ])
 
     // when
@@ -49,11 +47,9 @@ struct MCPSchemaNormalizerTests {
         "nested/name": .object([
           "definitions": .object(["Value": .object(["type": .string("string")])]),
           "properties": .object([
-            "value": .object([
-              "$ref": .string("#/properties/nested~1name/definitions/Value")
-            ])
+            "value": .object(["$ref": .string("#/properties/nested~1name/definitions/Value")]),
           ]),
-        ])
+        ]),
       ]),
     ])
 
@@ -115,7 +111,7 @@ struct MCPSchemaNormalizerTests {
             .object(["type": .string("string")]),
             .object(["type": .string("null")]),
           ]),
-        ])
+        ]),
       ]),
     ])
 
@@ -124,13 +120,7 @@ struct MCPSchemaNormalizerTests {
     let cursor = try #require(normalized.objectValue?["properties"]?.objectValue?["cursor"])
 
     // then
-    #expect(
-      cursor
-        == .object([
-          "type": .string("string"),
-          "description": .string("page cursor"),
-        ])
-    )
+    #expect(cursor == .object(["type": .string("string"), "description": .string("page cursor")]))
   }
 
   @Test("a union without a null branch is left as it is")
@@ -158,8 +148,8 @@ struct MCPSchemaNormalizerTests {
     // given
     let schema = JSONValue.object([
       "properties": .object([
-        "filter": .object(["properties": .object(["done": .object(["type": .string("boolean")])])])
-      ])
+        "filter": .object(["properties": .object(["done": .object(["type": .string("boolean")])])]),
+      ]),
     ])
 
     // when
@@ -247,7 +237,7 @@ struct MCPSchemaNormalizerTests {
             "properties": .object(["id": .object(["type": .string("string")])]),
             "required": .array([.string("id"), .string("ghost")]),
           ]),
-        ])
+        ]),
       ]),
     ])
 
@@ -269,7 +259,7 @@ struct MCPSchemaNormalizerTests {
     let schema = JSONValue.object([
       "type": .string("object"),
       "properties": .object([
-        "issueId": .object(["type": .string("string"), "description": .string("issue id")])
+        "issueId": .object(["type": .string("string"), "description": .string("issue id")]),
       ]),
       "required": .array([.string("issueId")]),
       "additionalProperties": .bool(false),
@@ -299,9 +289,7 @@ struct MCPSchemaNormalizerTests {
 
     // then the tool advertises no arguments rather than sending a body every provider rejects,
     // which would fail the whole request the built-in tools travel in too
-    #expect(
-      normalized == .object(["type": .string("object"), "properties": .object([:])])
-    )
+    #expect(normalized == .object(["type": .string("object"), "properties": .object([:])]))
   }
 
   @Test("an object-shaped schema with a non-object root type becomes the safe empty schema")
@@ -325,9 +313,9 @@ struct MCPSchemaNormalizerTests {
     let schema = JSONValue.object([
       "type": .string("object"),
       "additionalProperties": .bool(false),
-      "properties": .object([
-        "mode": .object(["enum": .array([.string("fast"), .string("slow")])])
-      ]),
+      "properties": .object(
+        ["mode": .object(["enum": .array([.string("fast"), .string("slow")])])]
+      ),
     ])
 
     // when

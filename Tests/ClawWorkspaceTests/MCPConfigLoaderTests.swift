@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawWorkspace
 
-@Suite struct MCPConfigLoaderTests {
-  @Test func decodesServerListWithEveryFieldSet() throws {
+@Suite
+struct MCPConfigLoaderTests {
+  @Test
+  func decodesServerListWithEveryFieldSet() throws {
     // given
     let yaml = """
       servers:
@@ -42,7 +44,8 @@ import Testing
     #expect(server.tools.riskLevel(for: "create_issue") == .ask)
   }
 
-  @Test func appliesDefaultsWhenOnlyNameAndURLAreGiven() throws {
+  @Test
+  func appliesDefaultsWhenOnlyNameAndURLAreGiven() throws {
     // given
     let yaml = """
       servers:
@@ -64,7 +67,8 @@ import Testing
     #expect(server.worstCaseCallSeconds == 40)
   }
 
-  @Test func includeWinsWhenBothFiltersArePresent() throws {
+  @Test
+  func includeWinsWhenBothFiltersArePresent() throws {
     // given
     let yaml = """
       servers:
@@ -83,7 +87,8 @@ import Testing
     #expect(server.tools.allows("write") == false)
   }
 
-  @Test func explicitEmptyIncludeExposesNoRemoteTools() throws {
+  @Test
+  func explicitEmptyIncludeExposesNoRemoteTools() throws {
     // given
     let yaml = """
       servers:
@@ -101,15 +106,22 @@ import Testing
     #expect(server.tools.allows("search") == false)
   }
 
-  @Test func emptyDocumentAndAbsentServerListBothYieldNoServers() throws {
+  @Test
+  func emptyDocumentAndAbsentServerListBothYieldNoServers() throws {
     // given
     let documents = ["", "# only a comment\n", "servers:\n"]
 
     // when
-    let configs = try documents.map { try MCPConfigLoader.parse(yaml: $0) }
+    let configs = try documents.map {
+      try MCPConfigLoader.parse(yaml: $0)
+    }
 
     // then
-    #expect(configs.allSatisfy { $0.servers.isEmpty })
+    #expect(
+      configs.allSatisfy {
+        $0.servers.isEmpty
+      }
+    )
   }
 
   @Test(arguments: [
@@ -210,18 +222,16 @@ import Testing
       yaml: "servers: docs\n",
       expected: MCPConfigError.invalidValue(key: "servers", value: "expected a list")
     ),
-  ]) func rejectsInvalidConfig(
-    description: String,
-    yaml: String,
-    expected: MCPConfigError
-  ) {
+  ])
+  func rejectsInvalidConfig(description: String, yaml: String, expected: MCPConfigError) {
     // given / when / then
     #expect(throws: expected) {
       try MCPConfigLoader.parse(yaml: yaml)
     }
   }
 
-  @Test func malformedYAMLIsReportedAsMalformed() {
+  @Test
+  func malformedYAMLIsReportedAsMalformed() {
     // given
     let yaml = "servers:\n  - name: docs\n   url: [unclosed\n"
 
@@ -237,7 +247,8 @@ import Testing
     }
   }
 
-  @Test func missingProbedFileLeavesTheFeatureOff() throws {
+  @Test
+  func missingProbedFileLeavesTheFeatureOff() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -250,7 +261,8 @@ import Testing
     #expect(config.servers.isEmpty)
   }
 
-  @Test func missingExplicitFileIsAnOwnerError() throws {
+  @Test
+  func missingExplicitFileIsAnOwnerError() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -262,7 +274,8 @@ import Testing
     }
   }
 
-  @Test func readsAPresentFileFromDisk() throws {
+  @Test
+  func readsAPresentFileFromDisk() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -280,7 +293,8 @@ import Testing
     #expect(config.servers.map(\.name) == ["docs"])
   }
 
-  @Test func presentButNonUTF8FileIsUnreadable() throws {
+  @Test
+  func presentButNonUTF8FileIsUnreadable() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }

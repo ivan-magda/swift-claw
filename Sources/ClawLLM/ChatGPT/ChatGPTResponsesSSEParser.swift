@@ -71,9 +71,7 @@ struct ChatGPTResponsesSSEParser: Sendable {
     // it is framed would re-copy the whole remaining buffer every time, which turns one large
     // delivery of small events into quadratic work.
     var consumed = buffer.startIndex
-    defer {
-      buffer.removeSubrange(..<consumed)
-    }
+    defer { buffer.removeSubrange(..<consumed) }
 
     while let delimiter = SSEFraming.delimiterRange(in: buffer[consumed...]) {
       let eventData = buffer[consumed..<delimiter.lowerBound]
@@ -191,9 +189,8 @@ private extension ChatGPTResponsesSSEParser {
     }
 
     let payload = Data(payloadLines.joined(separator: "\n").utf8)
-    guard
-      let envelope = try? JSONDecoder().decode(ChatGPTWireEventType.self, from: payload),
-      let name = ChatGPTWireEventName(rawValue: envelope.type)
+    guard let envelope = try? JSONDecoder().decode(ChatGPTWireEventType.self, from: payload),
+          let name = ChatGPTWireEventName(rawValue: envelope.type)
     else {
       return nil
     }
@@ -388,8 +385,7 @@ struct ChatGPTResponsesTerminal: Sendable, Equatable {
   /// Whether another terminal says the same thing this one does. `response.done` is an observed
   /// alias for `response.completed`, so a stream that sends both has not contradicted itself.
   func restates(_ other: Self) -> Bool {
-    responseID == other.responseID
-      && effectiveStatus == other.effectiveStatus
+    responseID == other.responseID && effectiveStatus == other.effectiveStatus
       && incompleteReason == other.incompleteReason
   }
 

@@ -10,17 +10,13 @@ public enum MemoryWriteArguments {
     case invalid(reason: String)
   }
 
-  public static func parse(_ arguments: JSONValue, sessionId: Int64?) -> Outcome {
-    guard
-      let text = arguments.objectValue?["text"]?.stringValue,
-      text.isEmpty == false
-    else {
+  public static func parse(_ arguments: JSONValue, sessionID: Int64?) -> Outcome {
+    guard let text = arguments.objectValue?["text"]?.stringValue, text.isEmpty == false else {
       return .invalid(reason: "memory_write needs a non-empty \"text\" argument.")
     }
 
-    guard
-      let rawKind = arguments.objectValue?["kind"]?.stringValue,
-      let kind = MemoryKind(rawValue: rawKind)
+    guard let rawKind = arguments.objectValue?["kind"]?.stringValue,
+          let kind = MemoryKind(rawValue: rawKind)
     else {
       return .invalid(
         reason: "memory_write needs a \"kind\" of user, feedback, project, or reference."
@@ -53,7 +49,7 @@ public enum MemoryWriteArguments {
       let request = try MemoryWriteBuilder.build(
         rawText: text,
         kind: kind,
-        sessionId: sessionId,
+        sessionID: sessionID,
         source: .assistant,
         importance: importance,
         sensitivity: sensitivity

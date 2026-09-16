@@ -14,9 +14,7 @@ public struct VoiceConfig: Sendable, Equatable {
 // MARK: - Voice Parsing
 
 extension AppConfig {
-  static func parseVoiceConfig(
-    from env: [String: String]
-  ) throws -> VoiceConfig {
+  static func parseVoiceConfig(from env: [String: String]) throws -> VoiceConfig {
     let enabled = try boolValue(
       env[EnvKey.voiceTranscription],
       key: EnvKey.voiceTranscription,
@@ -24,10 +22,11 @@ extension AppConfig {
     )
 
     var seen = Set<String>()
-    let localeIdentifiers = (env[EnvKey.voiceLocales] ?? "")
-      .split(separator: ",")
-      .map { $0.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty && seen.insert($0).inserted }
+    let localeIdentifiers = (env[EnvKey.voiceLocales] ?? "").split(separator: ",").map {
+      $0.trimmingCharacters(in: .whitespaces)
+    }.filter {
+      !$0.isEmpty && seen.insert($0).inserted
+    }
 
     return VoiceConfig(
       enabled: enabled,

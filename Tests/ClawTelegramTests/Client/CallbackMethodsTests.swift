@@ -4,7 +4,8 @@ import Testing
 @testable import ClawCore
 @testable import ClawTelegram
 
-@Suite struct CallbackMethodsTests {
+@Suite
+struct CallbackMethodsTests {
   private static let okBool = HTTPResult(
     statusCode: 200,
     headers: [:],
@@ -13,7 +14,10 @@ import Testing
 
   private func makeClient(
     result: HTTPResult
-  ) -> (client: TelegramClient, recorder: RecordingHTTPExecutor.Recorder) {
+  ) -> (
+    client: TelegramClient,
+    recorder: RecordingHTTPExecutor.Recorder
+  ) {
     let recorder = RecordingHTTPExecutor.Recorder()
     let executor = RecordingHTTPExecutor(recorder: recorder, result: result)
     let client = TelegramClient(token: "T", http: executor, baseURL: "https://example.test")
@@ -24,7 +28,8 @@ import Testing
     try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
   }
 
-  @Test func answerCallbackQueryPostsTheCallbackId() async throws {
+  @Test
+  func answerCallbackQueryPostsTheCallbackID() async throws {
     // given
     let harness = makeClient(result: Self.okBool)
 
@@ -39,7 +44,8 @@ import Testing
     #expect(body["text"] as? String == "already handled")
   }
 
-  @Test func answerCallbackQueryOmitsAbsentText() async throws {
+  @Test
+  func answerCallbackQueryOmitsAbsentText() async throws {
     // given
     let harness = makeClient(result: Self.okBool)
 
@@ -52,13 +58,14 @@ import Testing
     #expect(body["text"] == nil)
   }
 
-  @Test func editMessageReplyMarkupSendsTheKeyboardObject() async throws {
+  @Test
+  func editMessageReplyMarkupSendsTheKeyboardObject() async throws {
     // given
     let harness = makeClient(result: Self.okBool)
     let markup = #"{"inline_keyboard":[[{"text":"Approve","callback_data":"apr:abc:y"}]]}"#
 
     // when
-    try await harness.client.editMessageReplyMarkup(chatId: 7, messageId: 500, replyMarkup: markup)
+    try await harness.client.editMessageReplyMarkup(chatID: 7, messageID: 500, replyMarkup: markup)
 
     // then — reply_markup rides as a JSON OBJECT (decoded from the string), never a string
     let call = try #require(await harness.recorder.calls.first)
@@ -71,19 +78,21 @@ import Testing
     #expect(rows[0][0]["callback_data"] == "apr:abc:y")
   }
 
-  @Test func editMessageReplyMarkupWithNilRemovesTheKeyboard() async throws {
+  @Test
+  func editMessageReplyMarkupWithNilRemovesTheKeyboard() async throws {
     // given
     let harness = makeClient(result: Self.okBool)
 
     // when — button disarm: nil markup omits reply_markup, telling Telegram to drop the keyboard
-    try await harness.client.editMessageReplyMarkup(chatId: 7, messageId: 500, replyMarkup: nil)
+    try await harness.client.editMessageReplyMarkup(chatID: 7, messageID: 500, replyMarkup: nil)
 
     // then
     let body = try bodyObject(try #require(await harness.recorder.calls.first).body)
     #expect(body["reply_markup"] == nil)
   }
 
-  @Test func sendMessageWithReplyMarkupCarriesTheKeyboard() async throws {
+  @Test
+  func sendMessageWithReplyMarkupCarriesTheKeyboard() async throws {
     // given
     let harness = makeClient(
       result: HTTPResult(
@@ -95,20 +104,21 @@ import Testing
     let markup = #"{"inline_keyboard":[[{"text":"Approve","callback_data":"apr:abc:y"}]]}"#
 
     // when
-    let messageId = try await harness.client.sendMessage(
-      chatId: 7,
+    let messageID = try await harness.client.sendMessage(
+      chatID: 7,
       text: "approve?",
       replyMarkup: markup
     )
 
     // then
-    #expect(messageId == 123)
+    #expect(messageID == 123)
     let body = try bodyObject(try #require(await harness.recorder.calls.first).body)
     let replyMarkup = try #require(body["reply_markup"] as? [String: Any])
     #expect(replyMarkup["inline_keyboard"] != nil)
   }
 
-  @Test func plainSendMessageOmitsReplyMarkup() async throws {
+  @Test
+  func plainSendMessageOmitsReplyMarkup() async throws {
     // given
     let harness = makeClient(
       result: HTTPResult(
@@ -119,7 +129,7 @@ import Testing
     )
 
     // when — the two-arg MessageDelivery path used by ordinary replies (unchanged behavior)
-    _ = try await harness.client.sendMessage(chatId: 7, text: "hi")
+    _ = try await harness.client.sendMessage(chatID: 7, text: "hi")
 
     // then — no keyboard key leaks onto non-approval replies
     let body = try bodyObject(try #require(await harness.recorder.calls.first).body)

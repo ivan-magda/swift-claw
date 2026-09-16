@@ -3,8 +3,7 @@ import ClawCore
 enum CommandReplies {
   static let stopped = "Stopped."
   static let nothingToStop = "Nothing to stop."
-  static let freshConversation =
-    "Started a fresh conversation — earlier context cleared."
+  static let freshConversation = "Started a fresh conversation — earlier context cleared."
 
   /// Refusal for the owner-scoped command families in a shared room. It names the private state so
   /// the attendee learns the rule, not just this one rejection.
@@ -54,8 +53,10 @@ enum CommandReplies {
   /// The manual this conversation can act on.
   static func help(mode: ChatMode) -> String {
     switch mode {
-    case .direct: help
-    case .group: groupHelp
+    case .direct:
+      help
+    case .group:
+      groupHelp
     }
   }
 }

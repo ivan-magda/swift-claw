@@ -28,15 +28,19 @@ struct StubTool: Tool {
     self.payload = payload
   }
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     payload
   }
 }
 
-@Suite struct ToolRegistryTests {
-  @Test func definitionsPreserveConstructionOrder() {
+@Suite
+struct ToolRegistryTests {
+  @Test
+  func definitionsPreserveConstructionOrder() {
     // given
     let registry = ToolRegistry(tools: [StubTool(name: "web_search"), StubTool(name: "file_read")])
 
@@ -44,7 +48,8 @@ struct StubTool: Tool {
     #expect(registry.definitions.map(\.name) == ["web_search", "file_read"])
   }
 
-  @Test func lookupResolvesByNameAndMissesUnknown() {
+  @Test
+  func lookupResolvesByNameAndMissesUnknown() {
     // given
     let registry = ToolRegistry(tools: [StubTool(name: "file_read")])
 

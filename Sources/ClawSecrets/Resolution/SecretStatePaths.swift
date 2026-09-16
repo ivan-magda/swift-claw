@@ -51,15 +51,25 @@ public struct SecretStatePaths: Sendable, Equatable {
     self.stateRoot = stateRoot
   }
 
-  public var key: URL { stateRoot.appendingPathComponent(Self.keyName) }
-  public var runtimeEnvelope: URL { stateRoot.appendingPathComponent(Self.runtimeEnvelopeName) }
+  public var key: URL {
+    stateRoot.appendingPathComponent(Self.keyName)
+  }
+
+  public var runtimeEnvelope: URL {
+    stateRoot.appendingPathComponent(Self.runtimeEnvelopeName)
+  }
+
   public var credentialEnvelope: URL {
     stateRoot.appendingPathComponent(Self.credentialEnvelopeName)
   }
+
   public var mcpCredentialEnvelope: URL {
     stateRoot.appendingPathComponent(Self.mcpCredentialEnvelopeName)
   }
-  public var instanceLock: URL { stateRoot.appendingPathComponent(Self.instanceLockName) }
+
+  public var instanceLock: URL {
+    stateRoot.appendingPathComponent(Self.instanceLockName)
+  }
 
   public func url(for entry: SecretCredentialEntry) -> URL {
     switch entry {
@@ -72,5 +82,7 @@ public struct SecretStatePaths: Sendable, Equatable {
 
   /// The directory every entry above is renamed within — the fsync target that makes a rename
   /// durable, and the only directory publication ever opens.
-  public var directory: URL { stateRoot }
+  public var directory: URL {
+    stateRoot
+  }
 }

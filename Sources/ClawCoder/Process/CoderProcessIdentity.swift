@@ -100,14 +100,13 @@ struct CoderProcessIdentity: Sendable {
         }
       }
     #else
-      return try FileManager.default.contentsOfDirectory(atPath: "/proc")
-        .compactMap { entry in
-          Int32(entry)
-        }.compactMap { pid in
-          try read(pid)
-        }.filter { member in
-          member.pgid == pgid
-        }
+      return try FileManager.default.contentsOfDirectory(atPath: "/proc").compactMap { entry in
+        Int32(entry)
+      }.compactMap { pid in
+        try read(pid)
+      }.filter { member in
+        member.pgid == pgid
+      }
     #endif
   }
 
@@ -121,4 +120,6 @@ struct CoderProcessIdentity: Sendable {
   }
 }
 
-enum IdentityError: Error { case unreadable }
+enum IdentityError: Error {
+  case unreadable
+}

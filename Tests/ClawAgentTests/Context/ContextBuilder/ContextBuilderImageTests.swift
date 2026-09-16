@@ -5,7 +5,8 @@ import Testing
 
 @testable import ClawAgent
 
-@Suite struct ContextBuilderImageTests {
+@Suite
+struct ContextBuilderImageTests {
   private let pixel = ImagePart(
     data: Data([0xFF, 0xD8, 0xFF, 0xE0]),
     mediaType: .jpeg,
@@ -13,7 +14,8 @@ import Testing
     height: 960
   )
 
-  @Test func anUntrustedUserMessageWithAnImageRendersImageFirstThenTheFence() throws {
+  @Test
+  func anUntrustedUserMessageWithAnImageRendersImageFirstThenTheFence() throws {
     // given — an inbound photo is untrusted by construction, so it lands on the fenced branch
     let stored = StoredMessage(
       role: .user,
@@ -42,7 +44,8 @@ import Testing
     #expect(text.contains("Что это?"))
   }
 
-  @Test func aTrustedUserMessageWithAnImageKeepsTheImageAndTakesNoFence() throws {
+  @Test
+  func aTrustedUserMessageWithAnImageKeepsTheImageAndTakesNoFence() throws {
     // given — only the fence is gated on provenance; the image must survive either tier, or a photo
     // dispatched as trusted would vanish with no error
     let stored = StoredMessage(
@@ -61,7 +64,8 @@ import Testing
     #expect(last.content.text == "look at this")
   }
 
-  @Test func anUntrustedUserMessageWithoutAnImageIsUnchanged() throws {
+  @Test
+  func anUntrustedUserMessageWithoutAnImageIsUnchanged() throws {
     // given — every existing untrusted message must render exactly as before
     let stored = StoredMessage(role: .user, content: "hi", provenance: .untrusted)
 
@@ -74,7 +78,8 @@ import Testing
     #expect(last.content.images.isEmpty)
   }
 
-  @Test func aPhotoRowWithNoCachedBytesSaysSoExplicitly() throws {
+  @Test
+  func aPhotoRowWithNoCachedBytesSaysSoExplicitly() throws {
     // given — evicted by LRU pressure, dropped by the replay budget, or lost to a restart
     let stored = StoredMessage(
       role: .user,
@@ -93,7 +98,8 @@ import Testing
     #expect(message.content.text.contains(ImageMarkers.unavailable))
   }
 
-  @Test func aCaptionedPhotoRowWithNoCachedBytesSaysSoAndKeepsTheCaption() throws {
+  @Test
+  func aCaptionedPhotoRowWithNoCachedBytesSaysSoAndKeepsTheCaption() throws {
     // given — the commonest shape: the owner asked a question ABOUT the photo, and only the bytes
     // are gone. The marker leads the stored content, so the row is still recognizable as a photo.
     let stored = StoredMessage(
@@ -113,7 +119,8 @@ import Testing
     #expect(message.content.text.contains("Что это?"))
   }
 
-  @Test func aCaptionedPhotoRowKeepsItsBytesAndTakesNoNotice() throws {
+  @Test
+  func aCaptionedPhotoRowKeepsItsBytesAndTakesNoNotice() throws {
     // given — the same persisted shape, bytes intact
     let stored = StoredMessage(
       role: .user,
@@ -131,7 +138,8 @@ import Testing
     #expect(message.content.text.contains(ImageMarkers.unavailable) == false)
   }
 
-  @Test func aTrustedPhotoRowWithNoCachedBytesStillSaysSo() throws {
+  @Test
+  func aTrustedPhotoRowWithNoCachedBytesStillSaysSo() throws {
     // given — `TurnDispatch.dispatch` defaults provenance to trusted, so a photo row can reach this
     // tier by an argument being dropped in a signature cleanup, with nothing failing to compile
     let stored = StoredMessage(
@@ -149,7 +157,8 @@ import Testing
     #expect(message.content.text.contains(ImageMarkers.unavailable))
   }
 
-  @Test func textThatOnlyRunsIntoTheMarkerIsNotAPhotoRow() throws {
+  @Test
+  func textThatOnlyRunsIntoTheMarkerIsNotAPhotoRow() throws {
     // given — the marker's separator is part of the format, so content butting straight up against
     // it never came from a photo
     let stored = StoredMessage(
@@ -176,14 +185,14 @@ import Testing
       budget: .default
     )
     let snapshot = SessionContextSnapshot(
-      sessionKey: SessionKey.telegramDM(chatId: 42),
+      sessionKey: SessionKey.telegramDM(chatID: 42),
       history: history,
-      historyMessageIds: Array(1...Int64(history.count)),
-      windowStartMessageId: nil,
+      historyMessageIDs: Array(1...Int64(history.count)),
+      windowStartMessageID: nil,
       isTainted: false,
       hasPrivateData: false
     )
 
-    return try builder.assemble(snapshot: snapshot, sessionId: 1, origin: .interactive).messages
+    return try builder.assemble(snapshot: snapshot, sessionID: 1, origin: .interactive).messages
   }
 }

@@ -37,7 +37,9 @@ public enum MCPHTTPHeader {
       "Trailer",
       "Transfer-Encoding",
       "Upgrade",
-    ].map { $0.lowercased() }
+    ].map {
+      $0.lowercased()
+    }
   )
 
   public static func isReserved(_ name: String) -> Bool {
@@ -64,8 +66,7 @@ public enum MCPHTTPHeader {
 
   private static func isTokenByte(_ byte: UInt8) -> Bool {
     switch byte {
-    case UInt8(ascii: "A")...UInt8(ascii: "Z"),
-      UInt8(ascii: "a")...UInt8(ascii: "z"),
+    case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"),
       UInt8(ascii: "0")...UInt8(ascii: "9"):
       return true
     default:
@@ -110,11 +111,7 @@ public struct MCPToolFilter: Sendable, Equatable {
 
   public static let allowAll = MCPToolFilter()
 
-  public init(
-    include: [String]? = nil,
-    exclude: [String] = [],
-    risk: [String: RiskLevel] = [:]
-  ) {
+  public init(include: [String]? = nil, exclude: [String] = [], risk: [String: RiskLevel] = [:]) {
     self.include = include
     self.exclude = exclude
     self.risk = risk
@@ -132,6 +129,7 @@ public struct MCPToolFilter: Sendable, Equatable {
     risk[remoteName] ?? .ask
   }
 }
+
 // swiftlint:enable discouraged_optional_collection
 
 /// One owner-configured MCP server. Construction validates, so a value of this type is always
@@ -159,8 +157,7 @@ public struct MCPServerConfig: Sendable, Equatable {
     tools: MCPToolFilter = .allowAll
   ) throws {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmedName.isEmpty == false,
-      MCPNaming.sanitizeFragment(trimmedName).isEmpty == false
+    guard trimmedName.isEmpty == false, MCPNaming.sanitizeFragment(trimmedName).isEmpty == false
     else {
       throw MCPConfigError.invalidServerName(name)
     }
@@ -226,10 +223,7 @@ public struct MCPServerConfig: Sendable, Equatable {
 // MARK: - Header Validation
 
 private extension MCPServerConfig {
-  static func validateHeaders(
-    _ headers: [String: String],
-    authHeader: String
-  ) throws -> String {
+  static func validateHeaders(_ headers: [String: String], authHeader: String) throws -> String {
     let trimmedAuthHeader = authHeader.trimmingCharacters(in: .whitespacesAndNewlines)
     guard MCPHTTPHeader.isValidName(trimmedAuthHeader) else {
       throw MCPConfigError.invalidValue(key: "authHeader", value: "invalid HTTP field name")

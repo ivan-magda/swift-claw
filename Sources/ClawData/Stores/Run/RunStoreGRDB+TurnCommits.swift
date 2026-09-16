@@ -10,20 +10,20 @@ extension RunStoreGRDB {
     now: Date
   ) throws(StoreError) -> RunCommitResult {
     try database.writeMapping { db in
-      guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
+      guard let currentState = try Self.currentRunState(db, runID: turn.runID) else {
         return .ignored
       }
 
       guard currentState == .running else {
         if turn.setTainted, currentState == .cancelled {
-          try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+          try Self.setSessionTainted(db, sessionID: turn.sessionID, now: now)
         }
         if turn.setPrivateData, currentState == .cancelled {
-          try Self.setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
+          try Self.setSessionPrivateData(db, sessionID: turn.sessionID, now: now)
         }
         return try Self.recordTerminalUsageIfNeeded(
           db,
-          runId: turn.runId,
+          runID: turn.runID,
           usage: turn.usage,
           state: currentState,
           now: now
@@ -32,14 +32,13 @@ extension RunStoreGRDB {
 
       // Settled with the terminal row: every primary fact of a DONE turn — the assistant message,
       // its usage and its outbox chunks — commits inside this same transaction.
-      guard
-        try Self.transitionRun(
-          db,
-          runId: turn.runId,
-          event: .complete,
-          now: now,
-          terminal: .settled(.taskCompleted)
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: turn.runID,
+        event: .complete,
+        now: now,
+        terminal: .settled(.taskCompleted)
+      ) != nil
       else {
         return .ignored
       }
@@ -61,21 +60,21 @@ extension RunStoreGRDB {
     now: Date
   ) throws(StoreError) -> RunCommitResult {
     try database.writeMapping { db in
-      guard let currentState = try Self.currentRunState(db, runId: turn.runId) else {
+      guard let currentState = try Self.currentRunState(db, runID: turn.runID) else {
         return .ignored
       }
 
       guard currentState == .running else {
         if turn.setTainted, currentState == .cancelled {
-          try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+          try Self.setSessionTainted(db, sessionID: turn.sessionID, now: now)
         }
         if turn.setPrivateData, currentState == .cancelled {
-          try Self.setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
+          try Self.setSessionPrivateData(db, sessionID: turn.sessionID, now: now)
         }
         if let usage = turn.usage {
           return try Self.recordTerminalUsageIfNeeded(
             db,
-            runId: turn.runId,
+            runID: turn.runID,
             usage: usage,
             state: currentState,
             now: now
@@ -84,18 +83,17 @@ extension RunStoreGRDB {
         return .ignored
       }
 
-      guard
-        try Self.transitionRun(
-          db,
-          runId: turn.runId,
-          event: .fail,
-          now: now,
-          terminal: .settled(turn.cause)
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: turn.runID,
+        event: .fail,
+        now: now,
+        terminal: .settled(turn.cause)
+      ) != nil
       else {
         return .ignored
       }
-      try Self.appendJobFailedIfJobRun(db, runId: turn.runId, now: now)
+      try Self.appendJobFailedIfJobRun(db, runID: turn.runID, now: now)
 
       // Executed tool work survives the failure commit: the same rows the success
       // path writes, so the next turn's context and the per-dispatch audit trail agree on what
@@ -103,8 +101,8 @@ extension RunStoreGRDB {
       for exchange in turn.exchanges {
         try Self.insertExchangeRows(
           db,
-          sessionId: turn.sessionId,
-          runId: turn.runId,
+          sessionID: turn.sessionID,
+          runID: turn.runID,
           exchange: exchange,
           now: now
         )
@@ -112,24 +110,24 @@ extension RunStoreGRDB {
 
       if let usage = turn.usage {
         _ = try Self.insertUsage(db, usage)
-        try Self.recomputeRunUsageTotals(db, runId: turn.runId, now: now)
+        try Self.recomputeRunUsageTotals(db, runID: turn.runID, now: now)
       }
 
       // Same collision guard as the completed path: a degraded RESUME must not silently drop
       // its owner-facing reply against the run's already-enqueued approval prompt.
-      let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runId: turn.runId)
+      let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runID: turn.runID)
       _ = try OutboxInsertion.insertOutbox(
         db,
-        runId: turn.runId,
+        runID: turn.runID,
         chunk: OutboxInsertion.shiftedChunk(turn.chunk, by: stepBase),
         now: now
       )
 
       if turn.setTainted {
-        try Self.setSessionTainted(db, sessionId: turn.sessionId, now: now)
+        try Self.setSessionTainted(db, sessionID: turn.sessionID, now: now)
       }
       if turn.setPrivateData {
-        try Self.setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
+        try Self.setSessionPrivateData(db, sessionID: turn.sessionID, now: now)
       }
 
       return .committed
@@ -151,8 +149,8 @@ private extension RunStoreGRDB {
     for exchange in turn.exchanges {
       try insertExchangeRows(
         db,
-        sessionId: turn.sessionId,
-        runId: turn.runId,
+        sessionID: turn.sessionID,
+        runID: turn.runID,
         exchange: exchange,
         now: now
       )
@@ -162,12 +160,18 @@ private extension RunStoreGRDB {
     try MessageRowInsert.execute(
       db,
       columns: [
-        "session_id", "run_id", "role", "content", "provenance", "ts", "prompt_tokens",
+        "session_id",
+        "run_id",
+        "role",
+        "content",
+        "provenance",
+        "ts",
+        "prompt_tokens",
         "completion_tokens",
       ],
       values: [
-        turn.sessionId,
-        turn.runId,
+        turn.sessionID,
+        turn.runID,
         MessageRole.assistant.rawValue,
         turn.content,
         Provenance.trusted.rawValue,
@@ -178,50 +182,42 @@ private extension RunStoreGRDB {
       providerState: turn.providerState
     )
     _ = try insertUsage(db, usage)
-    try recomputeRunUsageTotals(db, runId: turn.runId, now: now)
+    try recomputeRunUsageTotals(db, runID: turn.runID, now: now)
 
-    let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runId: turn.runId)
+    let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runID: turn.runID)
     for chunk in turn.chunks {
       let committedChunk =
         turn.feedbackTarget != nil && feedbackTargetCommitted == false
-        ? strippingReplyMarkup(from: chunk)
-        : chunk
+        ? strippingReplyMarkup(from: chunk) : chunk
       _ = try OutboxInsertion.insertOutbox(
         db,
-        runId: turn.runId,
+        runID: turn.runID,
         chunk: OutboxInsertion.shiftedChunk(committedChunk, by: stepBase),
         now: now
       )
     }
 
     if turn.setTainted {
-      try setSessionTainted(db, sessionId: turn.sessionId, now: now)
+      try setSessionTainted(db, sessionID: turn.sessionID, now: now)
     }
     if turn.setPrivateData {
-      try setSessionPrivateData(db, sessionId: turn.sessionId, now: now)
+      try setSessionPrivateData(db, sessionID: turn.sessionID, now: now)
     }
   }
 
   /// The cheap caller-side resolution is advisory. This query is the race-closing authority: the
   /// bound scheduled run, current epoch and exact effective lesson row must still agree here.
-  static func commitFeedbackTarget(
-    _ db: Database,
-    turn: AssistantTurn,
-    now: Date
-  ) throws -> Bool {
+  static func commitFeedbackTarget(_ db: Database, turn: AssistantTurn, now: Date) throws -> Bool {
     guard let target = turn.feedbackTarget else {
       return false
     }
-    let expectedActions: [OwnerSignal] = [
-      .resultUseful, .resultNotUseful, .resultCorrection,
-    ]
-    guard
-      target.subjectKind == .run,
-      target.subjectDigest == String(turn.runId),
-      target.ownerUserId == turn.chatId,
-      target.chatId == turn.chatId,
-      target.allowedActions == expectedActions,
-      target.expiresAt > now
+    let expectedActions: [OwnerSignal] = [.resultUseful, .resultNotUseful, .resultCorrection]
+    guard target.subjectKind == .run,
+          target.subjectDigest == String(turn.runID),
+          target.ownerUserID == turn.chatID,
+          target.chatID == turn.chatID,
+          target.allowedActions == expectedActions,
+          target.expiresAt > now
     else {
       return false
     }
@@ -240,14 +236,13 @@ private extension RunStoreGRDB {
           ON effective.job_id = binding.job_id AND effective.digest = binding.effective_digest
         WHERE binding.run_id = ? AND run.origin = ?
         """,
-      arguments: [turn.chatId, turn.runId, RunOrigin.scheduled.rawValue]
+      arguments: [turn.chatID, turn.runID, RunOrigin.scheduled.rawValue]
     )
-    guard
-      let row,
-      target.jobId == row["job_id"],
-      target.epoch.value == row["learning_epoch"],
-      let occurrenceAt = EpochSecondCodec.date(fromEpoch: row["occurrence_at"]),
-      target.expiresAt == occurrenceAt.addingTimeInterval(EvidenceWindow.maximumAge)
+    guard let row,
+          target.jobID == row["job_id"],
+          target.epoch.value == row["learning_epoch"],
+          let occurrenceAt = EpochSecondCodec.date(fromEpoch: row["occurrence_at"]),
+          target.expiresAt == occurrenceAt.addingTimeInterval(EvidenceWindow.maximumAge)
     else {
       return false
     }
@@ -268,17 +263,17 @@ private extension RunStoreGRDB {
   static func strippingReplyMarkup(from chunk: OutboxChunk) -> OutboxChunk {
     OutboxChunk(
       stepIndex: chunk.stepIndex,
-      chatId: chunk.chatId,
+      chatID: chunk.chatID,
       payload: chunk.payload,
       payloadHash: chunk.payloadHash,
-      approvalId: chunk.approvalId,
+      approvalID: chunk.approvalID,
       replyMarkup: nil
     )
   }
 
   static func recordTerminalUsageIfNeeded(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     usage: ProviderUsage,
     state: RunState,
     now: Date
@@ -290,7 +285,7 @@ private extension RunStoreGRDB {
     // Usage is a primary fact, and no primary fact may land once the run's evidence is frozen.
     // Deferring settlement on the cancel/supersede paths is what leaves this window open at all;
     // once the lane tail (or the boot backstop) has closed it, the spend has nowhere truthful to go.
-    guard try !ScheduledLearningStoreGRDB.isSettled(db, runId: runId) else {
+    guard try !ScheduledLearningStoreGRDB.isSettled(db, runID: runID) else {
       return .ignored
     }
 
@@ -303,8 +298,8 @@ private extension RunStoreGRDB {
       return .ignored
     }
 
-    if let runId = usage.runId {
-      try recomputeRunUsageTotals(db, runId: runId, now: now)
+    if let runID = usage.runID {
+      try recomputeRunUsageTotals(db, runID: runID, now: now)
     }
 
     return .usageRecordedAfterTerminal
@@ -319,7 +314,7 @@ private extension RunStoreGRDB {
   /// idempotent, so it needs no replay guard and is safe to run when the insert conflicted and wrote
   /// nothing. Adding the row in hand would instead let a late row erase the rounds before it, and
   /// let a conflicting insert debit spend the run never incurred.
-  static func recomputeRunUsageTotals(_ db: Database, runId: Int64, now: Date) throws {
+  static func recomputeRunUsageTotals(_ db: Database, runID: Int64, now: Date) throws {
     try db.execute(
       sql: """
         UPDATE runs SET
@@ -333,7 +328,7 @@ private extension RunStoreGRDB {
           cost_usd = (SELECT COALESCE(SUM(cost_usd), 0) FROM provider_usage WHERE run_id = ?)
         WHERE id = ?
         """,
-      arguments: [now, runId, runId, runId, runId]
+      arguments: [now, runID, runID, runID, runID]
     )
   }
 
@@ -342,20 +337,20 @@ private extension RunStoreGRDB {
   /// and it belongs to the proposal that made it, not to the untrusted output it fetched.
   static func insertExchangeRows(
     _ db: Database,
-    sessionId: Int64,
-    runId: Int64,
+    sessionID: Int64,
+    runID: Int64,
     exchange: ToolExchange,
     now: Date
   ) throws {
     try insertAnchoredObservationRows(
       db,
-      sessionId: sessionId,
-      runId: runId,
+      sessionID: sessionID,
+      runID: runID,
       assistantContent: exchange.assistantContent,
       toolCallsJSON: ToolCallCoding.encode(exchange.toolCalls),
       providerState: exchange.providerState,
       observations: exchange.observations.map { observation in
-        (toolCallId: observation.callId, content: observation.content)
+        (toolCallID: observation.callID, content: observation.content)
       },
       now: now
     )
@@ -372,20 +367,20 @@ extension RunStoreGRDB {
   /// between the two paths.
   static func insertAnchoredObservationRows(  // swiftlint:disable:this function_parameter_count
     _ db: Database,
-    sessionId: Int64,
-    runId: Int64,
+    sessionID: Int64,
+    runID: Int64,
     assistantContent: String,
     toolCallsJSON: String?,
     providerState: ProviderExchangeState?,
-    observations: [(toolCallId: String, content: String)],
+    observations: [(toolCallID: String, content: String)],
     now: Date
   ) throws {
     try MessageRowInsert.execute(
       db,
       columns: ["session_id", "run_id", "role", "content", "provenance", "ts", "tool_calls"],
       values: [
-        sessionId,
-        runId,
+        sessionID,
+        runID,
         MessageRole.assistant.rawValue,
         assistantContent,
         Provenance.trusted.rawValue,
@@ -399,13 +394,13 @@ extension RunStoreGRDB {
         db,
         columns: ["session_id", "run_id", "role", "content", "provenance", "ts", "tool_call_id"],
         values: [
-          sessionId,
-          runId,
+          sessionID,
+          runID,
           MessageRole.tool.rawValue,
           observation.content,
           Provenance.untrusted.rawValue,
           now,
-          observation.toolCallId,
+          observation.toolCallID,
         ],
         providerState: nil
       )

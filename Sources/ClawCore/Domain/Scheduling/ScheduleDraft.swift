@@ -62,7 +62,9 @@ public struct ValidatedSchedule: Sendable, Equatable {
 
   /// Derived rather than stored, so the confirm prompt and `/schedule list` cannot describe one job
   /// two ways.
-  public var recurrenceInWords: String { RecurrenceWords.describe(recurrence) }
+  public var recurrenceInWords: String {
+    RecurrenceWords.describe(recurrence)
+  }
 
   public init(
     label: String,
@@ -197,7 +199,9 @@ private extension RecurrenceWords {
       return "custom schedule"
     }
 
-    let names = days.map { fullName($0) }.joined(separator: ", ")
+    let names = days.map {
+      fullName($0)
+    }.joined(separator: ", ")
     return "every \(names) at \(clock(rule))"
   }
 
@@ -207,14 +211,22 @@ private extension RecurrenceWords {
 
   static func fullName(_ day: Locale.Weekday) -> String {
     switch day {
-    case .sunday: "sunday"
-    case .monday: "monday"
-    case .tuesday: "tuesday"
-    case .wednesday: "wednesday"
-    case .thursday: "thursday"
-    case .friday: "friday"
-    case .saturday: "saturday"
-    @unknown default: "weekday"
+    case .sunday:
+      "sunday"
+    case .monday:
+      "monday"
+    case .tuesday:
+      "tuesday"
+    case .wednesday:
+      "wednesday"
+    case .thursday:
+      "thursday"
+    case .friday:
+      "friday"
+    case .saturday:
+      "saturday"
+    @unknown default:
+      "weekday"
     }
   }
 }
@@ -241,7 +253,10 @@ public struct ScheduleDraftValidator: Sendable {
   public func validate(
     _ draft: ScheduleDraft,
     now: Date
-  ) -> Result<ValidatedSchedule, ScheduleDraftProblem> {
+  ) -> Result<
+    ValidatedSchedule,
+    ScheduleDraftProblem
+  > {
     let label = draft.label.trimmingCharacters(in: .whitespacesAndNewlines)
     guard label.isEmpty == false else {
       return .failure(.emptyLabel)
@@ -304,14 +319,13 @@ private extension ScheduleDraftValidator {
       // anchor = now: pre-arm there is no createdTs. The parked firstOccurrence is what arms
       // (it becomes the stored next_occurrence), so the preview's first fire and the armed
       // first fire are the same value by construction.
-      guard
-        let first = calculator.occurrences(
-          rule: rule,
-          timezone: timezone,
-          anchor: now,
-          after: now,
-          limit: 1
-        ).first
+      guard let first = calculator.occurrences(
+        rule: rule,
+        timezone: timezone,
+        anchor: now,
+        after: now,
+        limit: 1
+      ).first
       else {
         return .failure(.noUpcomingOccurrence)
       }
@@ -335,7 +349,10 @@ private extension ScheduleDraftValidator {
   func buildRule(
     _ schedule: DraftSchedule,
     timezone: TimeZone
-  ) -> Result<Calendar.RecurrenceRule, ScheduleDraftProblem> {
+  ) -> Result<
+    Calendar.RecurrenceRule,
+    ScheduleDraftProblem
+  > {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = timezone
 
@@ -348,9 +365,7 @@ private extension ScheduleDraftValidator {
       }
 
       guard interval >= minIntervalMinutes else {
-        return .failure(
-          .intervalTooSmall(minutes: interval, floorMinutes: minIntervalMinutes)
-        )
+        return .failure(.intervalTooSmall(minutes: interval, floorMinutes: minIntervalMinutes))
       }
 
       return .success(
@@ -377,7 +392,10 @@ private extension ScheduleDraftValidator {
           calendar: calendar,
           frequency: .weekly,
           weekdays: [
-            .every(.monday), .every(.tuesday), .every(.wednesday), .every(.thursday),
+            .every(.monday),
+            .every(.tuesday),
+            .every(.wednesday),
+            .every(.thursday),
             .every(.friday),
           ],
           hours: [clock.hour],
@@ -393,7 +411,10 @@ private extension ScheduleDraftValidator {
   func weeklyRule(
     _ schedule: DraftSchedule,
     calendar: Calendar
-  ) -> Result<Calendar.RecurrenceRule, ScheduleDraftProblem> {
+  ) -> Result<
+    Calendar.RecurrenceRule,
+    ScheduleDraftProblem
+  > {
     guard let rawWeekday = schedule.weekday else {
       return .failure(.missingField(kind: .weekly, field: "weekday"))
     }
@@ -450,9 +471,8 @@ private extension ScheduleDraftValidator {
       parts.second = 0
       // date(from:) silently normalizes overflow (2026-02-31 → March); the round-trip check
       // rejects that instead of arming a surprise date.
-      guard
-        let instant = calendar.date(from: parts),
-        Self.dayRoundTrips(parts, instant: instant, calendar: calendar)
+      guard let instant = calendar.date(from: parts),
+            Self.dayRoundTrips(parts, instant: instant, calendar: calendar)
       else {
         return .failure(.invalidDate(rawDate))
       }
@@ -465,12 +485,7 @@ private extension ScheduleDraftValidator {
       match.minute = clock.minute
       match.second = 0
 
-      guard
-        let instant = calendar.nextDate(
-          after: now,
-          matching: match,
-          matchingPolicy: .nextTime
-        )
+      guard let instant = calendar.nextDate(after: now, matching: match, matchingPolicy: .nextTime)
       else {
         return .failure(.noUpcomingOccurrence)
       }
@@ -500,7 +515,10 @@ extension ScheduleDraftValidator {
   private func clockComponents(
     _ schedule: DraftSchedule,
     kind: DraftScheduleKind
-  ) -> Result<(hour: Int, minute: Int), ScheduleDraftProblem> {
+  ) -> Result<
+    (hour: Int, minute: Int),
+    ScheduleDraftProblem
+  > {
     guard let rawTime = schedule.time else {
       return .failure(.missingField(kind: kind, field: "time"))
     }
@@ -514,12 +532,11 @@ extension ScheduleDraftValidator {
 
   static func parseClock(_ text: String) -> (hour: Int, minute: Int)? {
     let pieces = text.split(separator: ":", omittingEmptySubsequences: false)
-    guard
-      pieces.count == 2,
-      let hour = Int(pieces[0]),
-      let minute = Int(pieces[1]),
-      (0...23).contains(hour),
-      (0...59).contains(minute)
+    guard pieces.count == 2,
+          let hour = Int(pieces[0]),
+          let minute = Int(pieces[1]),
+          (0...23).contains(hour),
+          (0...59).contains(minute)
     else {
       return nil
     }
@@ -535,13 +552,12 @@ extension ScheduleDraftValidator {
 
   static func parseDay(_ text: String) -> DayParts? {
     let pieces = text.split(separator: "-", omittingEmptySubsequences: false)
-    guard
-      pieces.count == 3,
-      let year = Int(pieces[0]),
-      let month = Int(pieces[1]),
-      let day = Int(pieces[2]),
-      (1...12).contains(month),
-      (1...31).contains(day)
+    guard pieces.count == 3,
+          let year = Int(pieces[0]),
+          let month = Int(pieces[1]),
+          let day = Int(pieces[2]),
+          (1...12).contains(month),
+          (1...31).contains(day)
     else {
       return nil
     }
@@ -559,14 +575,22 @@ extension ScheduleDraftValidator {
 
   static func weekday(named raw: String) -> Locale.Weekday? {
     switch raw.trimmingCharacters(in: .whitespaces).lowercased() {
-    case "monday", "mon": .monday
-    case "tuesday", "tue": .tuesday
-    case "wednesday", "wed": .wednesday
-    case "thursday", "thu": .thursday
-    case "friday", "fri": .friday
-    case "saturday", "sat": .saturday
-    case "sunday", "sun": .sunday
-    default: nil
+    case "monday", "mon":
+      .monday
+    case "tuesday", "tue":
+      .tuesday
+    case "wednesday", "wed":
+      .wednesday
+    case "thursday", "thu":
+      .thursday
+    case "friday", "fri":
+      .friday
+    case "saturday", "sat":
+      .saturday
+    case "sunday", "sun":
+      .sunday
+    default:
+      nil
     }
   }
 }

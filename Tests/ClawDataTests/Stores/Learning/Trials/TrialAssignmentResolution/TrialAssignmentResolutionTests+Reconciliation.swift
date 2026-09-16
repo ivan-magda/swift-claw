@@ -12,18 +12,18 @@ extension TrialAssignmentResolutionTests {
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
     try env.apply(drift)
-    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+    let cacheBefore = try env.assignmentCacheSnapshot(runID: sealed.runID)
 
     // when / then — omitting the current-state strict decode accepts same-epoch live drift.
     #expect {
-      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+      _ = try env.learning.recomputeAssignment(runID: sealed.runID, now: env.now)
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
       }
       return true
     }
-    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+    #expect(try env.assignmentCacheSnapshot(runID: sealed.runID) == cacheBefore)
   }
 
   @Test(arguments: LiveTrialStateDrift.allCases)
@@ -33,7 +33,7 @@ extension TrialAssignmentResolutionTests {
     let sealed = try env.sealedTrialEvidence()
     let identity = try #require(try env.learning.liveTrialIdentities().first)
     try env.apply(drift)
-    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+    let cacheBefore = try env.assignmentCacheSnapshot(runID: sealed.runID)
 
     // when / then — omitting reconciliation's strict current-state decode accepts live drift.
     #expect {
@@ -44,10 +44,11 @@ extension TrialAssignmentResolutionTests {
       }
       return true
     }
-    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+    #expect(try env.assignmentCacheSnapshot(runID: sealed.runID) == cacheBefore)
   }
 
-  @Test func publicRecomputeDistinguishesMissingStaleAndFutureAssignments() throws {
+  @Test
+  func publicRecomputeDistinguishesMissingStaleAndFutureAssignments() throws {
     // given
     let missing = try trialEnvironment()
     let stale = try trialEnvironment()
@@ -58,17 +59,17 @@ extension TrialAssignmentResolutionTests {
     try future.queue.write { db in
       try db.execute(
         sql: "UPDATE job_learning_state SET learning_epoch = 0 WHERE job_id = ?",
-        arguments: [future.jobId]
+        arguments: [future.jobID]
       )
     }
 
     // when / then
     #expect(
-      try missing.learning.recomputeAssignment(runId: 999_999, now: missing.now) == .notAssigned
+      try missing.learning.recomputeAssignment(runID: 999_999, now: missing.now) == .notAssigned
     )
-    #expect(try stale.learning.recomputeAssignment(runId: staleRun, now: stale.now) == .stale)
+    #expect(try stale.learning.recomputeAssignment(runID: staleRun, now: stale.now) == .stale)
     #expect {
-      _ = try future.learning.recomputeAssignment(runId: futureRun, now: future.now)
+      _ = try future.learning.recomputeAssignment(runID: futureRun, now: future.now)
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
@@ -77,12 +78,13 @@ extension TrialAssignmentResolutionTests {
     }
   }
 
-  @Test func liveTrialIdentitiesAreStrictSortedAndRejectMultiplicity() throws {
+  @Test
+  func liveTrialIdentitiesAreStrictSortedAndRejectMultiplicity() throws {
     // given — insert the larger job first so row-id order differs from the public sort order.
     let env = try BoundRunEnvironment.make()
     let secondJob = try env.jobs.create(
       NewScheduledJob(
-        ownerChatId: 777,
+        ownerChatID: 777,
         label: "second trial",
         prompt: "Summarize the second archive",
         recurrence: nil,
@@ -91,8 +93,8 @@ extension TrialAssignmentResolutionTests {
       ),
       now: env.now
     )
-    let second = try env.installTrial(jobId: secondJob.id)
-    let first = try env.installTrial(jobId: env.jobId)
+    let second = try env.installTrial(jobID: secondJob.id)
+    let first = try env.installTrial(jobID: env.jobID)
 
     // when
     let identities = try env.learning.liveTrialIdentities()
@@ -101,7 +103,7 @@ extension TrialAssignmentResolutionTests {
     #expect(identities == [first, second])
 
     // given — v15 normally prevents this; removing the index exposes the defensive scan.
-    try env.insertDuplicateLiveTrial(jobId: env.jobId)
+    try env.insertDuplicateLiveTrial(jobID: env.jobID)
 
     // when / then — choosing the first row would starve one live trial indefinitely.
     #expect {
@@ -114,7 +116,8 @@ extension TrialAssignmentResolutionTests {
     }
   }
 
-  @Test func liveTrialIdentitiesRejectUnreadableAuthoritativeSource() throws {
+  @Test
+  func liveTrialIdentitiesRejectUnreadableAuthoritativeSource() throws {
     // given
     let env = try trialEnvironment()
     try env.queue.write { db in
@@ -138,9 +141,9 @@ extension TrialAssignmentResolutionTests {
   ) throws {
     // given
     let env = try trialEnvironment()
-    let runId = try env.settledBoundRun()
+    let runID = try env.settledBoundRun()
     let identity = try #require(try env.learning.liveTrialIdentities().first)
-    try env.apply(corruption, runId: runId, trialId: identity.trialId)
+    try env.apply(corruption, runID: runID, trialID: identity.trialID)
 
     // when / then
     #expect {
@@ -153,32 +156,28 @@ extension TrialAssignmentResolutionTests {
     }
   }
 
-  @Test func repeatedReconciliationPreservesResolvedTimestampAndReturnsStaleAfterEpochChange()
-    throws
-  {
+  @Test
+  func repeatedReconciliationPreservesResolvedTimestampAndReturnsStaleAfterEpochChange() throws {
     // given
     let env = try trialEnvironment()
     let evidence = try env.sealedTrialEvidence()
     let operation = try env.startedOperation(env.evaluatorKey(for: evidence))
     _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
     let identity = try #require(try env.learning.liveTrialIdentities().first)
-    let resolvedAt = try env.assignment(runId: evidence.runId)?.resolvedAt
+    let resolvedAt = try env.assignment(runID: evidence.runID)?.resolvedAt
 
     // when
     let first = try env.learning.reconcileTrial(identity, now: env.now.addingTimeInterval(20))
     let second = try env.learning.reconcileTrial(identity, now: env.now.addingTimeInterval(40))
 
     // then — identical projection work writes neither a new timestamp nor another drain.
-    guard
-      case .reconciled(let firstPass) = first,
-      case .reconciled(let secondPass) = second
-    else {
+    guard case .reconciled(let firstPass) = first, case .reconciled(let secondPass) = second else {
       Issue.record("expected two live reconciliation results")
       return
     }
     #expect(firstPass.didDrain == false)
     #expect(secondPass.didDrain == false)
-    #expect(try env.assignment(runId: evidence.runId)?.resolvedAt == resolvedAt)
+    #expect(try env.assignment(runID: evidence.runID)?.resolvedAt == resolvedAt)
 
     // when
     try env.advanceJobEpoch()

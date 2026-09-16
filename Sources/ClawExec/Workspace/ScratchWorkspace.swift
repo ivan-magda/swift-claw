@@ -48,7 +48,10 @@ struct ScratchWorkspace: Sendable {
     try ensurePrivateDirectory(scratchRoot)
     try ensurePrivateDirectory(controlRoot)
 
-    guard directory.path.withCString({ mkdir($0, 0o700) }) == 0 else {
+    guard directory.path.withCString({
+        mkdir($0, 0o700)
+      }) == 0
+    else {
       throw ScratchWorkspaceError.fileSystem("cannot create execution scratch")
     }
 
@@ -92,10 +95,9 @@ private extension ScratchWorkspace {
   static func validate(_ request: ExecutionRequest) throws {
     let expectedEntrypoint = ExecEntrypoint.fileName(for: request.language)
 
-    guard
-      request.entrypoint.name == expectedEntrypoint,
-      request.entrypoint.mode == .readExecute,
-      request.entrypoint.bytes.count <= maxEntrypointBytes
+    guard request.entrypoint.name == expectedEntrypoint,
+          request.entrypoint.mode == .readExecute,
+          request.entrypoint.bytes.count <= maxEntrypointBytes
     else {
       throw ScratchWorkspaceError.invalidRequest("invalid execution entrypoint")
     }
@@ -135,11 +137,7 @@ private extension ScratchWorkspace {
   }
 
   static func isBareName(_ name: String) -> Bool {
-    !name.isEmpty
-      && name != "."
-      && name != ".."
-      && !name.contains("/")
-      && !name.contains("\\")
+    !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains("\\")
       && URL(fileURLWithPath: name).lastPathComponent == name
   }
 
@@ -168,9 +166,7 @@ private extension ScratchWorkspace {
     guard descriptor >= 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot create staged copy")
     }
-    defer {
-      _ = close(descriptor)
-    }
+    defer { _ = close(descriptor) }
 
     guard fchmod(descriptor, mode_t(file.mode.rawValue)) == 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot set staged copy mode")
@@ -195,11 +191,7 @@ private extension ScratchWorkspace {
     }
   }
 
-  static func systemWrite(
-    _ descriptor: Int32,
-    _ bytes: UnsafeRawPointer,
-    _ count: Int
-  ) -> Int {
+  static func systemWrite(_ descriptor: Int32, _ bytes: UnsafeRawPointer, _ count: Int) -> Int {
     #if canImport(Darwin)
       Darwin.write(descriptor, bytes, count)
     #elseif canImport(Glibc)

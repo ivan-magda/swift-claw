@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawTelegram
 
-@Suite struct GroupWireTests {
+@Suite
+struct GroupWireTests {
   private let decoder = JSONDecoder()
 
   private func rawMessage(_ json: String) throws -> RawMessage {
@@ -12,7 +13,8 @@ import Testing
     return try #require(update.toRawUpdate().message)
   }
 
-  @Test func forumTopicMessageCarriesItsChatKindThreadAndAuthor() throws {
+  @Test
+  func forumTopicMessageCarriesItsChatKindThreadAndAuthor() throws {
     // given — a message posted in a forum supergroup topic, replying to another attendee
     let json = """
       {
@@ -36,15 +38,16 @@ import Testing
 
     // then
     #expect(raw.chatKind == .supergroup)
-    #expect(raw.messageThreadId == 77)
-    #expect(raw.replyToMessageId == 499)
-    #expect(raw.replyToUserId == 7)
+    #expect(raw.messageThreadID == 77)
+    #expect(raw.replyToMessageID == 499)
+    #expect(raw.replyToUserID == 7)
     #expect(raw.senderDisplayName == "Ada Lovelace")
     #expect(raw.hasSenderChat == false)
-    #expect(raw.migratedToChatId == nil)
+    #expect(raw.migratedToChatID == nil)
   }
 
-  @Test func unknownChatTypeDoesNotDecodeAsPrivate() throws {
+  @Test
+  func unknownChatTypeDoesNotDecodeAsPrivate() throws {
     // given — a chat type introduced after this build
     let json = """
       {
@@ -65,7 +68,8 @@ import Testing
     #expect(raw.chatKind == .other("hyperforum"))
   }
 
-  @Test func absentChatTypeKeepsTheDirectMessageShape() throws {
+  @Test
+  func absentChatTypeKeepsTheDirectMessageShape() throws {
     // given — the DM payloads every other suite decodes carry no explicit type
     let json = """
       {
@@ -84,11 +88,12 @@ import Testing
 
     // then
     #expect(raw.chatKind == .private)
-    #expect(raw.messageThreadId == nil)
+    #expect(raw.messageThreadID == nil)
     #expect(raw.senderDisplayName == nil)
   }
 
-  @Test func generalTopicHasNoThreadId() throws {
+  @Test
+  func generalTopicHasNoThreadID() throws {
     // given — the General topic of a forum omits message_thread_id entirely
     let json = """
       {
@@ -106,11 +111,12 @@ import Testing
     let raw = try rawMessage(json)
 
     // then — nil, never coerced to the first topic id
-    #expect(raw.messageThreadId == nil)
+    #expect(raw.messageThreadID == nil)
     #expect(raw.senderDisplayName == "Ada")
   }
 
-  @Test func anonymousAdminMessageCarriesItsSenderChat() throws {
+  @Test
+  func anonymousAdminMessageCarriesItsSenderChat() throws {
     // given — a message sent on behalf of the group, with no usable human sender
     let json = """
       {
@@ -132,7 +138,8 @@ import Testing
     #expect(raw.hasSenderChat)
   }
 
-  @Test func migratedGroupCarriesItsNewChatId() throws {
+  @Test
+  func migratedGroupCarriesItsNewChatID() throws {
     // given — Telegram upgrading a group to a supergroup
     let json = """
       {
@@ -151,11 +158,12 @@ import Testing
     let raw = try rawMessage(json)
 
     // then
-    #expect(raw.migratedToChatId == -1_001_234)
+    #expect(raw.migratedToChatID == -1_001_234)
     #expect(raw.chatKind == .group)
   }
 
-  @Test func displayNameFallsBackToTheUsername() throws {
+  @Test
+  func displayNameFallsBackToTheUsername() throws {
     // given — a sender with no first_name (bots and some deleted accounts)
     let json = """
       {

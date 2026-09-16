@@ -11,6 +11,7 @@ import Foundation
 /// nothing on disk yet.
 protocol SealedCredentialMap: Codable, Equatable, Sendable {
   static var currentVersion: Int { get }
+
   static var empty: Self { get }
 
   var version: Int { get }
@@ -26,7 +27,9 @@ protocol SealedCredentialMap: Codable, Equatable, Sendable {
 /// nobody notices is missing until a machine loses power, so a second copy of it is a copy that
 /// eventually differs.
 struct SealedCredentialFile<Map: SealedCredentialMap>: Sendable {
-  static var maximumEnvelopeByteCount: Int { AESGCMEnvelope.maximumByteCount }
+  static var maximumEnvelopeByteCount: Int {
+    AESGCMEnvelope.maximumByteCount
+  }
 
   /// Neither credential file has ever been written by anything but the protocol below, so both can
   /// demand the mode a secret deserves — unlike the runtime envelope, whose 0644 predates it and
@@ -61,7 +64,9 @@ struct SealedCredentialFile<Map: SealedCredentialMap>: Sendable {
     self.publisher = publisher
   }
 
-  var url: URL { paths.url(for: entry) }
+  var url: URL {
+    paths.url(for: entry)
+  }
 
   /// Takes no lock. The commit is a rename, so a reader sees the whole old map or the whole new one
   /// and never a torn one; making readers queue behind a writer's fsync would buy nothing.
@@ -78,7 +83,7 @@ struct SealedCredentialFile<Map: SealedCredentialMap>: Sendable {
   ///
   /// The lock is held across the entire cycle and never across an `await`: every step is a bounded
   /// synchronous syscall, so there is no suspension point at which a second mutation could interleave.
-  func mutate(_ body: (inout Map) -> Bool) throws(CredentialStoreError) {
+  func mutate(_ body: (_ map: inout Map) -> Bool) throws(CredentialStoreError) {
     mutation.lock()
     defer { mutation.unlock() }
 

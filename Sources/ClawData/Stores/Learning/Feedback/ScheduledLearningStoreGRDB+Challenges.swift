@@ -18,7 +18,7 @@ extension ScheduledLearningStoreGRDB {
           AND superseded_by IS NULL AND consumed_at IS NULL
         RETURNING challenge_id
         """,
-      arguments: [EpochSecondCodec.epoch(now), challenge.ownerUserId, challenge.chatId]
+      arguments: [EpochSecondCodec.epoch(now), challenge.ownerUserID, challenge.chatID]
     )
   }
 
@@ -36,9 +36,9 @@ extension ScheduledLearningStoreGRDB {
         VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)
         """,
       arguments: [
-        challenge.ownerUserId,
-        challenge.chatId,
-        challenge.jobId,
+        challenge.ownerUserID,
+        challenge.chatID,
+        challenge.jobID,
         challenge.epoch.value,
         challenge.subjectKind.rawValue,
         challenge.subjectDigest,
@@ -47,9 +47,9 @@ extension ScheduledLearningStoreGRDB {
     )
     return FeedbackChallenge(
       id: db.lastInsertedRowID,
-      ownerUserId: challenge.ownerUserId,
-      chatId: challenge.chatId,
-      jobId: challenge.jobId,
+      ownerUserID: challenge.ownerUserID,
+      chatID: challenge.chatID,
+      jobID: challenge.jobID,
       epoch: challenge.epoch,
       subjectKind: challenge.subjectKind,
       subjectDigest: challenge.subjectDigest,
@@ -61,10 +61,10 @@ extension ScheduledLearningStoreGRDB {
 
   static func finishChallengeSupersession(
     _ db: Database,
-    priorId: Int64?,
-    replacementId: Int64
+    priorID: Int64?,
+    replacementID: Int64
   ) throws {
-    guard let priorId else {
+    guard let priorID else {
       return
     }
     try db.execute(
@@ -72,17 +72,16 @@ extension ScheduledLearningStoreGRDB {
         UPDATE feedback_challenges SET superseded_by = ?, consumed_at = NULL
         WHERE challenge_id = ?
         """,
-      arguments: [replacementId, priorId]
+      arguments: [replacementID, priorID]
     )
   }
 
   static func readChallenge(_ db: Database, id: Int64) throws -> FeedbackChallenge? {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT * FROM feedback_challenges WHERE challenge_id = ?",
-        arguments: [id]
-      )
+    guard let row = try Row.fetchOne(
+      db,
+      sql: "SELECT * FROM feedback_challenges WHERE challenge_id = ?",
+      arguments: [id]
+    )
     else {
       return nil
     }
@@ -90,19 +89,18 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func decodeChallenge(_ row: Row) throws -> FeedbackChallenge {
-    guard
-      let subjectKind = FeedbackSubjectKind(rawValue: row["subject_kind"]),
-      subjectKind == .run || subjectKind == .candidate,
-      let expiresAt = EpochSecondCodec.date(fromEpoch: row["expires_at"])
+    guard let subjectKind = FeedbackSubjectKind(rawValue: row["subject_kind"]),
+          subjectKind == .run || subjectKind == .candidate,
+          let expiresAt = EpochSecondCodec.date(fromEpoch: row["expires_at"])
     else {
       throw StoreError.unexpected("feedback challenge row is unreadable")
     }
     let consumedEpoch: Int64? = row["consumed_at"]
     return FeedbackChallenge(
       id: row["challenge_id"],
-      ownerUserId: row["owner_user_id"],
-      chatId: row["chat_id"],
-      jobId: row["job_id"],
+      ownerUserID: row["owner_user_id"],
+      chatID: row["chat_id"],
+      jobID: row["job_id"],
       epoch: LearningEpoch(row["learning_epoch"]),
       subjectKind: subjectKind,
       subjectDigest: row["subject_digest"],
@@ -152,12 +150,11 @@ extension ScheduledLearningStoreGRDB {
     if challenge.expiresAt <= now {
       return .expired
     }
-    guard
-      let currentEpoch = try Int.fetchOne(
-        db,
-        sql: "SELECT learning_epoch FROM job_learning_state WHERE job_id = ?",
-        arguments: [challenge.jobId]
-      )
+    guard let currentEpoch = try Int.fetchOne(
+      db,
+      sql: "SELECT learning_epoch FROM job_learning_state WHERE job_id = ?",
+      arguments: [challenge.jobID]
+    )
     else {
       return .staleEpoch
     }
@@ -178,7 +175,7 @@ extension ScheduledLearningStoreGRDB {
         WHERE job_id = ? AND learning_epoch = ?
         RETURNING feedback_revision
         """,
-      arguments: [challenge.jobId, challenge.epoch.value]
+      arguments: [challenge.jobID, challenge.epoch.value]
     )
     return revision.map(FeedbackRevision.init)
   }
@@ -203,7 +200,7 @@ extension ScheduledLearningStoreGRDB {
         ORDER BY feedback_revision DESC, event_id DESC LIMIT 1
         """,
       arguments: [
-        challenge.jobId,
+        challenge.jobID,
         challenge.epoch.value,
         challenge.subjectKind.rawValue,
         challenge.subjectDigest,
@@ -216,7 +213,7 @@ extension ScheduledLearningStoreGRDB {
         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
         """,
       arguments: [
-        challenge.jobId,
+        challenge.jobID,
         challenge.epoch.value,
         challenge.subjectKind.rawValue,
         challenge.subjectDigest,
@@ -230,9 +227,9 @@ extension ScheduledLearningStoreGRDB {
     )
     return FeedbackEvent(
       id: db.lastInsertedRowID,
-      runId: try runId(
+      runID: try runID(
         db,
-        jobId: challenge.jobId,
+        jobID: challenge.jobID,
         subjectKind: challenge.subjectKind,
         subjectDigest: challenge.subjectDigest
       ),
@@ -242,7 +239,7 @@ extension ScheduledLearningStoreGRDB {
       supersedes: supersedes,
       occurredAt: now,
       actor: .owner,
-      transportUpdateId: nil
+      transportUpdateID: nil
     )
   }
 
@@ -257,18 +254,18 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  static func runId(_ db: Database, target: FeedbackTarget) throws -> Int64? {
-    try runId(
+  static func runID(_ db: Database, target: FeedbackTarget) throws -> Int64? {
+    try runID(
       db,
-      jobId: target.jobId,
+      jobID: target.jobID,
       subjectKind: target.subjectKind,
       subjectDigest: target.subjectDigest
     )
   }
 
-  static func runId(
+  static func runID(
     _ db: Database,
-    jobId: Int64,
+    jobID: Int64,
     subjectKind: FeedbackSubjectKind,
     subjectDigest: String
   ) throws -> Int64? {
@@ -282,7 +279,7 @@ extension ScheduledLearningStoreGRDB {
           SELECT run_id FROM learning_evaluations
           WHERE job_id = ? AND evaluation_digest = ?
           """,
-        arguments: [jobId, subjectDigest]
+        arguments: [jobID, subjectDigest]
       )
     case .candidate, .promotion:
       return nil
@@ -312,10 +309,10 @@ extension ScheduledLearningStoreGRDB {
         argsRedacted: auditSubject(challenge),
         resultSize: payloadByteCount,
         decision: outcome.auditDecision,
-        runId: try challenge.flatMap { value in
-          try runId(
+        runID: try challenge.flatMap { value in
+          try runID(
             db,
-            jobId: value.jobId,
+            jobID: value.jobID,
             subjectKind: value.subjectKind,
             subjectDigest: value.subjectDigest
           )

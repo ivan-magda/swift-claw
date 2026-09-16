@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct AllowlistSeedingTests {
-  @Test func seedsConfiguredOwnersWhenTheStoreAccepts() {
+@Suite
+struct AllowlistSeedingTests {
+  @Test
+  func seedsConfiguredOwnersWhenTheStoreAccepts() {
     // given a store that accepts the seed and one configured owner
     let store = StubAllowlist(allowed: [])
 
@@ -15,7 +17,8 @@ import Testing
     #expect(outcome == .seeded)
   }
 
-  @Test func strandsOwnersWhenSeedFailsWithOwnersConfigured() {
+  @Test
+  func strandsOwnersWhenSeedFailsWithOwnersConfigured() {
     // given a store whose seed throws and one configured owner
     let store = ThrowingAllowlist()
 
@@ -26,7 +29,8 @@ import Testing
     #expect(outcome == .strandedOwners(.unexpected("boom")))
   }
 
-  @Test func toleratesSeedFailureWhenNoOwnersAreConfigured() {
+  @Test
+  func toleratesSeedFailureWhenNoOwnersAreConfigured() {
     // given a store whose seed throws but no owners are configured (onboarding boot)
     let store = ThrowingAllowlist()
 

@@ -10,8 +10,8 @@ extension CoderService {
         let invocation = CoderInvocation(
           jobID: admitted.id,
           prepared: admitted.prepared,
-          jobDirectory: URL(fileURLWithPath: jobRoot)
-            .appendingPathComponent(admitted.id.uuidString).path,
+          jobDirectory: URL(fileURLWithPath: jobRoot).appendingPathComponent(admitted.id.uuidString)
+            .path,
           timeout: .seconds(config.jobTimeoutSeconds)
         )
         result = await backend.run(invocation) { event in
@@ -48,8 +48,10 @@ extension CoderService {
         now: Date()
       )
       switch outcome {
-      case .stateChanged(let current): job = current
-      case .alreadyTerminal: return
+      case .stateChanged(let current):
+        job = current
+      case .alreadyTerminal:
+        return
       case .committed:
         if !resolved {
           recoveryRequiredJobIDs.insert(id)
@@ -85,8 +87,7 @@ extension CoderService {
         ? CoderFailure(
           stage: .interrupted,
           message: "Daemon stopped before a terminal result committed."
-        )
-        : nil
+        ) : nil
     )
   }
 }
@@ -108,7 +109,9 @@ private extension CoderService {
 
   static func selectedResult(_ result: CoderResult, persistedState: CoderJobState) -> CoderResult {
     guard persistedState == .stopping,
-      result.state != .cancelled, result.state != .timedOut, result.state != .interrupted
+          result.state != .cancelled,
+          result.state != .timedOut,
+          result.state != .interrupted
     else {
       return result
     }

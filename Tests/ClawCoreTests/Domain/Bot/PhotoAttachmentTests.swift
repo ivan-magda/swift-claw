@@ -3,23 +3,20 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct PhotoAttachmentTests {
-  private func size(
-    _ fileId: String,
-    _ width: Int,
-    _ height: Int,
-    bytes: Int64?
-  ) -> PhotoSize {
+@Suite
+struct PhotoAttachmentTests {
+  private func size(_ fileID: String, _ width: Int, _ height: Int, bytes: Int64?) -> PhotoSize {
     PhotoSize(
-      fileId: fileId,
-      fileUniqueId: "uniq-\(fileId)",
+      fileID: fileID,
+      fileUniqueID: "uniq-\(fileID)",
       width: width,
       height: height,
       fileSizeBytes: bytes
     )
   }
 
-  @Test func picksTheLargestRungThatFitsTheBudget() throws {
+  @Test
+  func picksTheLargestRungThatFitsTheBudget() throws {
     // given — Telegram's ladder, deliberately NOT in ascending order
     let attachment = PhotoAttachment(sizes: [
       size("y", 1280, 960, bytes: 200_000),
@@ -32,10 +29,11 @@ import Testing
     let chosen = try #require(attachment.best(withinBytes: 512_000))
 
     // then — the 2560 rung is over budget, so the 1280 rung wins on pixels
-    #expect(chosen.fileId == "y")
+    #expect(chosen.fileID == "y")
   }
 
-  @Test func treatsAbsentFileSizeAsEligible() throws {
+  @Test
+  func treatsAbsentFileSizeAsEligible() throws {
     // given — Telegram omits file_size when it is zero, so nil must not disqualify a rung
     let attachment = PhotoAttachment(sizes: [
       size("x", 800, 600, bytes: 80_000),
@@ -46,10 +44,11 @@ import Testing
     let chosen = try #require(attachment.best(withinBytes: 512_000))
 
     // then
-    #expect(chosen.fileId == "y")
+    #expect(chosen.fileID == "y")
   }
 
-  @Test func fallsBackToLargestWhenEveryRungIsOverBudget() throws {
+  @Test
+  func fallsBackToLargestWhenEveryRungIsOverBudget() throws {
     // given — a hostile or unusual ladder where nothing fits
     let attachment = PhotoAttachment(sizes: [
       size("w", 2560, 1920, bytes: 900_000),
@@ -60,10 +59,11 @@ import Testing
     let chosen = try #require(attachment.best(withinBytes: 512_000))
 
     // then
-    #expect(chosen.fileId == "w")
+    #expect(chosen.fileID == "w")
   }
 
-  @Test func emptyLadderSelectsNothing() {
+  @Test
+  func emptyLadderSelectsNothing() {
     // given
     let attachment = PhotoAttachment(sizes: [])
 

@@ -58,15 +58,14 @@ public struct FileWriteTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(10) }
+  public var timeout: Duration {
+    .seconds(10)
+  }
 
   /// Gate-time resolution: the approval binds to the fully-resolved contained path.
   /// Overwrite policy and the size cap refuse HERE — a doomed write must never park an approval.
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
-    guard
-      let path = arguments.objectValue?["path"]?.stringValue,
-      path.isEmpty == false
-    else {
+    guard let path = arguments.objectValue?["path"]?.stringValue, path.isEmpty == false else {
       return .refused(reason: "file_write needs a non-empty \"path\" argument.")
     }
 
@@ -134,21 +133,19 @@ public struct FileWriteTool: Tool {
       return errorPayload("file_write was dispatched without a gate-resolved target.")
     }
 
-    guard
-      let path = arguments.objectValue?["path"]?.stringValue,
-      let content = arguments.objectValue?["content"]?.stringValue
+    guard let path = arguments.objectValue?["path"]?.stringValue,
+          let content = arguments.objectValue?["content"]?.stringValue
     else {
       return errorPayload("file_write needs \"path\" and \"content\" arguments.")
     }
 
     // Re-resolve NOW: if a component was retargeted since approval (symlink swap, replaced
     // directory), the resolution drifts from the approved target — fail closed, write nothing.
-    guard
-      case .resolved(let target) = WorkspacePathContainment.resolveForCreation(
-        path: path,
-        root: workspaceRoot.path
-      ),
-      target == approvedTarget
+    guard case .resolved(let target) = WorkspacePathContainment.resolveForCreation(
+      path: path,
+      root: workspaceRoot.path
+    ),
+          target == approvedTarget
     else {
       return errorPayload(
         "The approved path no longer resolves to the approved target; nothing was written."

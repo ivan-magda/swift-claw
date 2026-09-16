@@ -17,11 +17,10 @@ public struct QuietHours: Sendable, Equatable {
   public static func parse(_ raw: String) -> QuietHours? {
     let parts = raw.split(separator: "-", omittingEmptySubsequences: false)
 
-    guard
-      parts.count == 2,
-      let start = minuteOfDay(String(parts[0])),
-      let end = minuteOfDay(String(parts[1])),
-      start != end
+    guard parts.count == 2,
+          let start = minuteOfDay(String(parts[0])),
+          let end = minuteOfDay(String(parts[1])),
+          start != end
     else {
       return nil
     }
@@ -58,19 +57,18 @@ public struct QuietHours: Sendable, Equatable {
     // "09:0", and "+09:00" are config ERRORS — `Int(_:)` alone would accept all three.
     let pieces = text.split(separator: ":", omittingEmptySubsequences: false)
 
-    guard
-      pieces.count == 2,
-      pieces[0].count == 2,
-      pieces[1].count == 2,
-      pieces.allSatisfy({ piece in
+    guard pieces.count == 2,
+          pieces[0].count == 2,
+          pieces[1].count == 2,
+          pieces.allSatisfy({ piece in
         piece.allSatisfy { char in
           char.isASCII && char.isNumber
         }
       }),
-      let hour = Int(pieces[0]),
-      let minute = Int(pieces[1]),
-      (0...23).contains(hour),
-      (0...59).contains(minute)
+          let hour = Int(pieces[0]),
+          let minute = Int(pieces[1]),
+          (0...23).contains(hour),
+          (0...59).contains(minute)
     else {
       return nil
     }

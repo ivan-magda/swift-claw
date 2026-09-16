@@ -7,12 +7,14 @@ import Testing
 /// The replay codec's two halves, asserted against the specified encoding rather than against
 /// itself: the issuer goldens below were derived with `shasum -a 256` outside this process, so the
 /// two agreeing means the identity is the one the design pins rather than merely self-consistent.
-@Suite struct ChatGPTProviderStateCodecTests {
+@Suite
+struct ChatGPTProviderStateCodecTests {
   // MARK: - Identity
 
   /// The whole issuer, byte for byte. Every other compatibility test leans on this one being the
   /// specified string and not just a reproducible one.
-  @Test func issuerMatchesTheGoldenVector() {
+  @Test
+  func issuerMatchesTheGoldenVector() {
     // given
     let identity = ChatGPTReplayIdentity(
       profileID: Self.profileID,
@@ -29,7 +31,8 @@ import Testing
 
   /// The hashes are a function of the profile ID and the model text alone, so the same pair renders
   /// the same identity on every process — the property the derive-on-restart rule rests on.
-  @Test func profileAndModelHashesAreStable() {
+  @Test
+  func profileAndModelHashesAreStable() {
     // given
     let first = ChatGPTReplayIdentity(
       profileID: Self.profileID,
@@ -52,7 +55,8 @@ import Testing
   /// The issuer travels no further than this daemon's own database, but it is still an identity: a
   /// value that is exactly a fixed version and three hashed fields has nowhere to hide the profile
   /// or the account the state was minted for.
-  @Test func issuerCarriesNoProfileOrAccountIdentifier() {
+  @Test
+  func issuerCarriesNoProfileOrAccountIdentifier() {
     // given
     let identity = ChatGPTReplayIdentity(
       profileID: Self.profileID,
@@ -87,7 +91,8 @@ import Testing
   /// A refresh swaps the access token and leaves the profile ID alone, so the state a prior turn
   /// minted is still ours. This is the positive half of the re-login pair below: without it, a codec
   /// that dropped every state would pass the negative on its own.
-  @Test func refreshKeepsPriorStateReplayable() throws {
+  @Test
+  func refreshKeepsPriorStateReplayable() throws {
     // given
     let identity = Self.identity(epoch: Self.epoch)
     let history = [
@@ -114,14 +119,15 @@ import Testing
 
   /// Re-login mints a new profile ID, which is the only thing the hash is derived from — so every
   /// state the old profile minted reads as another origin's and is left behind.
-  @Test func reloginMakesPriorStateForeign() throws {
+  @Test
+  func reloginMakesPriorStateForeign() throws {
     // given
     let history = [
       ChatMessage(
         role: .assistant,
         content: "hi",
         providerState: try Self.state(reasoning: "ENC", identity: Self.identity(epoch: Self.epoch))
-      )
+      ),
     ]
     let mintedEpoch = Self.fixedUUID("99999999-9999-4999-8999-999999999999")
 
@@ -141,14 +147,15 @@ import Testing
 
   /// A model switch changes what the encrypted reasoning was produced by, so state minted under the
   /// other model is not replayable even for the same owner.
-  @Test func wrongModelIsForeign() throws {
+  @Test
+  func wrongModelIsForeign() throws {
     // given
     let history = [
       ChatMessage(
         role: .assistant,
         content: "hi",
         providerState: try Self.state(reasoning: "ENC", identity: Self.identity(epoch: Self.epoch))
-      )
+      ),
     ]
 
     // when
@@ -206,8 +213,7 @@ import Testing
     """
     openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:\
     b0a9d642d12f553129c39513f7ce2605:11111111-1111-4111-8111-111111111111
-    """
-    .uppercased(),
+    """.uppercased(),
     // An epoch that is not a UUID.
     """
     openai-chatgpt-responses-v1:11e594f481958c10e3015d0bf0447a22:\
@@ -224,7 +230,7 @@ import Testing
         role: .assistant,
         content: "hi",
         providerState: ProviderExchangeState(issuer: issuer, payload: payload.payload)
-      )
+      ),
     ]
 
     // when
@@ -242,7 +248,8 @@ import Testing
   /// The epoch is derived from the newest compatible state, and only that epoch replays. An older
   /// epoch in the same history is the poisoned material a recovery walked away from; replaying it
   /// would undo the recovery.
-  @Test func onlyTheNewestCompatibleEpochIsReplayed() throws {
+  @Test
+  func onlyTheNewestCompatibleEpochIsReplayed() throws {
     // given
     let history = [
       ChatMessage(
@@ -277,7 +284,8 @@ import Testing
 
   /// Two states of one epoch both replay. Paired with the test above, this is what separates
   /// "newest epoch only" from "newest state only".
-  @Test func everyStateOfTheNewestEpochIsReplayed() throws {
+  @Test
+  func everyStateOfTheNewestEpochIsReplayed() throws {
     // given
     let identity = Self.identity(epoch: Self.epoch)
     let history = [
@@ -307,7 +315,8 @@ import Testing
   }
 
   /// A history with nothing of ours in it starts an epoch rather than borrowing one.
-  @Test func historyWithoutCompatibleStateMintsAFreshEpoch() {
+  @Test
+  func historyWithoutCompatibleStateMintsAFreshEpoch() {
     // given
     let minted = Self.fixedUUID("77777777-7777-4777-8777-777777777777")
     let history = [
@@ -359,7 +368,7 @@ import Testing
           issuer: Self.identity(epoch: Self.epoch).issuer,
           payload: payload
         )
-      )
+      ),
     ]
 
     // when
@@ -376,7 +385,8 @@ import Testing
 
   /// A malformed newest state must not set the epoch either: it is not compatible, so the epoch is
   /// derived from the newest state that actually decodes.
-  @Test func malformedStateDoesNotSetTheEpoch() throws {
+  @Test
+  func malformedStateDoesNotSetTheEpoch() throws {
     // given
     let history = [
       ChatMessage(
@@ -409,7 +419,8 @@ import Testing
 
   /// An empty payload is a real state, not a missing one: it is what a state-free recovery stamps,
   /// and it must carry its epoch forward exactly like a populated one.
-  @Test func emptyPayloadStateIsCompatibleAndCarriesItsEpoch() throws {
+  @Test
+  func emptyPayloadStateIsCompatibleAndCarriesItsEpoch() throws {
     // given
     let identity = Self.identity(epoch: Self.otherEpoch)
     let history = [
@@ -420,7 +431,7 @@ import Testing
           items: ChatGPTReplayItems(),
           identity: identity
         )
-      )
+      ),
     ]
 
     // when
@@ -442,7 +453,8 @@ import Testing
   /// A session degrading to stateless replay is invisible without this. The selection carries the
   /// reasons counted, in a type with no field a payload or an issuer could travel in — which is what
   /// keeps the warning from becoming the leak it is warning about.
-  @Test func everyDropReasonIsCountedOnTheSelection() throws {
+  @Test
+  func everyDropReasonIsCountedOnTheSelection() throws {
     // given
     let codec = Self.codec()
     let history = [
@@ -493,14 +505,15 @@ import Testing
 
   /// Nothing dropped means nothing said: the provider logs only a non-empty count, so a warning on
   /// every clean history would train the owner to ignore the one that matters.
-  @Test func cleanHistoryReportsNoDrops() throws {
+  @Test
+  func cleanHistoryReportsNoDrops() throws {
     // given
     let history = [
       ChatMessage(
         role: .assistant,
         content: "hi",
         providerState: try Self.state(reasoning: "ENC", identity: Self.identity(epoch: Self.epoch))
-      )
+      ),
     ]
 
     // when
@@ -519,19 +532,18 @@ import Testing
   /// The durable payload, byte for byte. It is two arrays under sorted keys and nothing else — no
   /// item IDs, because `store: false` leaves the backend unable to resolve them on the replay this
   /// payload exists to feed.
-  @Test func encodedPayloadMatchesTheGoldenVector() throws {
+  @Test
+  func encodedPayloadMatchesTheGoldenVector() throws {
     // given
     let items = ChatGPTReplayItems(
-      reasoning: [
-        ChatGPTReasoningItem(encryptedContent: "ENC", summary: ["thought"])
-      ],
+      reasoning: [ChatGPTReasoningItem(encryptedContent: "ENC", summary: ["thought"])],
       assistantMessages: [
         ChatGPTAssistantMessageItem(
           role: "assistant",
           status: "completed",
           phase: "final",
           outputText: ["hi"]
-        )
+        ),
       ]
     )
 
@@ -553,7 +565,8 @@ import Testing
   }
 
   /// The stamp a recovery leaves when the response carried no reasoning at all.
-  @Test func emptyItemsEncodeToTheEmptyGoldenPayload() throws {
+  @Test
+  func emptyItemsEncodeToTheEmptyGoldenPayload() throws {
     // given
     let identity = Self.identity(epoch: Self.epoch)
 
@@ -564,23 +577,17 @@ import Testing
     )
 
     // then
-    #expect(
-      try Self.rendered(state)
-        == #"{"assistant_messages":[],"reasoning":[]}"#
-    )
+    #expect(try Self.rendered(state) == #"{"assistant_messages":[],"reasoning":[]}"#)
   }
 
   /// No server item ID ever reaches the persisted payload: the durable shape carries no `id` key, and
   /// the round-trip proves the material it does carry survives intact.
-  @Test func serverItemIDsAreRemovedBeforePersistence() throws {
+  @Test
+  func serverItemIDsAreRemovedBeforePersistence() throws {
     // given
     let items = ChatGPTReplayItems(
-      reasoning: [
-        ChatGPTReasoningItem(encryptedContent: "ENC", summary: ["s"])
-      ],
-      assistantMessages: [
-        ChatGPTAssistantMessageItem(outputText: ["hi"])
-      ]
+      reasoning: [ChatGPTReasoningItem(encryptedContent: "ENC", summary: ["s"])],
+      assistantMessages: [ChatGPTAssistantMessageItem(outputText: ["hi"])]
     )
 
     // when
@@ -600,7 +607,8 @@ import Testing
 
   /// A provider that omits the summary leaves an empty array, not a missing key: the replayed item
   /// has to be the shape the route reads back.
-  @Test func reasoningSummaryDefaultsToEmpty() throws {
+  @Test
+  func reasoningSummaryDefaultsToEmpty() throws {
     // given
     let payload = Data(
       #"{"assistant_messages":[],"reasoning":[{"encrypted_content":"ENC","type":"reasoning"}]}"#
@@ -620,14 +628,15 @@ import Testing
 
   /// Phase is written only when the provider stated one — pairing the two halves so that neither
   /// "always present" nor "always absent" passes.
-  @Test func assistantPhaseIsEncodedOnlyWhenPresent() throws {
+  @Test
+  func assistantPhaseIsEncodedOnlyWhenPresent() throws {
     // given
-    let withPhase = ChatGPTReplayItems(
-      assistantMessages: [ChatGPTAssistantMessageItem(phase: "final", outputText: ["hi"])]
-    )
-    let withoutPhase = ChatGPTReplayItems(
-      assistantMessages: [ChatGPTAssistantMessageItem(outputText: ["hi"])]
-    )
+    let withPhase = ChatGPTReplayItems(assistantMessages: [
+      ChatGPTAssistantMessageItem(phase: "final", outputText: ["hi"]),
+    ])
+    let withoutPhase = ChatGPTReplayItems(assistantMessages: [
+      ChatGPTAssistantMessageItem(outputText: ["hi"]),
+    ])
     let identity = Self.identity(epoch: Self.epoch)
 
     // when
@@ -643,7 +652,8 @@ import Testing
 
   /// The payload is two arrays and no third. A tool proposal that lived in here would be a proposal
   /// the request loses the moment its state is dropped for budget or corruption.
-  @Test func functionCallsAreNeverStoredInState() throws {
+  @Test
+  func functionCallsAreNeverStoredInState() throws {
     // given
     let items = ChatGPTReplayItems(
       reasoning: [ChatGPTReasoningItem(encryptedContent: "ENC")],
@@ -656,9 +666,7 @@ import Testing
       identity: Self.identity(epoch: Self.epoch)
     )
     let rendered = try Self.rendered(state)
-    let root = try #require(
-      try JSONSerialization.jsonObject(with: state.payload) as? [String: Any]
-    )
+    let root = try #require(try JSONSerialization.jsonObject(with: state.payload) as? [String: Any])
 
     // then
     #expect(root.keys.sorted() == ["assistant_messages", "reasoning"])
@@ -669,7 +677,8 @@ import Testing
   /// The rule the whole normalization exists to protect: state substitutes for the assistant text a
   /// turn would otherwise synthesize, and the calls travel beside it untouched. A codec that let
   /// state stand for the whole turn would silently drop the tool proposal.
-  @Test func stateReplacesSynthesizedTextButNeverFunctionCalls() throws {
+  @Test
+  func stateReplacesSynthesizedTextButNeverFunctionCalls() throws {
     // given
     let calls = [
       ToolCall(id: "call_1", name: "web_fetch", argumentsJSON: #"{"url":"https://example.com"}"#),
@@ -688,7 +697,7 @@ import Testing
           items: items,
           identity: Self.identity(epoch: Self.epoch)
         )
-      )
+      ),
     ]
 
     // when
@@ -707,17 +716,18 @@ import Testing
 
   /// Reasoning material is opaque bytes to everything but this codec, so the round-trip has to
   /// survive the text a naive encoder would mangle — slashes, quotes, and non-ASCII alike.
-  @Test func roundTripPreservesAwkwardContent() throws {
+  @Test
+  func roundTripPreservesAwkwardContent() throws {
     // given
     let items = ChatGPTReplayItems(
       reasoning: [
         ChatGPTReasoningItem(
           encryptedContent: "gAAAAA/+w==",
           summary: ["a \"quoted\" thought", "emoji 🧠 and ünïcode"]
-        )
+        ),
       ],
       assistantMessages: [
-        ChatGPTAssistantMessageItem(outputText: ["line one\nline two", "path/to/thing"])
+        ChatGPTAssistantMessageItem(outputText: ["line one\nline two", "path/to/thing"]),
       ]
     )
 
@@ -737,7 +747,8 @@ import Testing
 
   /// The per-state cap, from both sides. A state exactly at the cap is kept, so the drop below is a
   /// verdict on the size rather than on the codec refusing everything large.
-  @Test func perStateCapAdmitsTheBoundaryAndDropsTheByteAbove() throws {
+  @Test
+  func perStateCapAdmitsTheBoundaryAndDropsTheByteAbove() throws {
     // given
     let identity = Self.identity(epoch: Self.epoch)
     let atCap = try Self.state(
@@ -772,7 +783,8 @@ import Testing
   /// response is stamped its text and its tool calls have already arrived, so reasoning too large to
   /// store costs the turn its replay continuity and nothing else: the epoch is still written, and a
   /// restart still reads the stamp back as the live generation.
-  @Test func encodingOverThePerStateCapKeepsTheEpochAndDropsTheReasoning() throws {
+  @Test
+  func encodingOverThePerStateCapKeepsTheEpochAndDropsTheReasoning() throws {
     // given
     let oversized = ChatGPTReplayItems(
       reasoning: [
@@ -781,7 +793,7 @@ import Testing
             repeating: "a",
             count: ChatGPTProviderStateCodec.maximumStateBytes + 1
           )
-        )
+        ),
       ],
       assistantMessages: [ChatGPTAssistantMessageItem(outputText: ["the answer"])]
     )
@@ -808,7 +820,8 @@ import Testing
 
   /// Four states summing to exactly the aggregate cap all travel. This is the positive half that
   /// stops the eviction test below from passing on a codec that simply drops the oldest always.
-  @Test func aggregateCapAdmitsHistoryExactlyAtTheBoundary() throws {
+  @Test
+  func aggregateCapAdmitsHistoryExactlyAtTheBoundary() throws {
     // given
     let identity = Self.identity(epoch: Self.epoch)
     let quarter = ChatGPTProviderStateCodec.maximumAggregateStateBytes / 4
@@ -834,7 +847,8 @@ import Testing
 
   /// One byte over the aggregate and the oldest optional state is the one that goes — newest-first
   /// selection, chronological emission, and the ordinary turn left entirely intact underneath.
-  @Test func oldestStatesAreEvictedFirstAtTheAggregateCap() throws {
+  @Test
+  func oldestStatesAreEvictedFirstAtTheAggregateCap() throws {
     // given
     let identity = Self.identity(epoch: Self.epoch)
     let quarter = ChatGPTProviderStateCodec.maximumAggregateStateBytes / 4
@@ -867,7 +881,8 @@ import Testing
   /// Eviction counts every state it walks away from, not just the first one over the line. The
   /// per-state cap is what bounds each one, so it takes four to fill the aggregate and the three
   /// oldest of seven are the ones left behind.
-  @Test func everyStatePastTheAggregateCapIsCounted() throws {
+  @Test
+  func everyStatePastTheAggregateCapIsCounted() throws {
     // given
     let identity = Self.identity(epoch: Self.epoch)
     let history = try (0..<7).map { index in
@@ -897,7 +912,8 @@ import Testing
   // MARK: - Epoch recovery
 
   /// A recovery walks away from the epoch that poisoned the turn rather than from the session.
-  @Test func recoveryIdentityMintsANewEpoch() {
+  @Test
+  func recoveryIdentityMintsANewEpoch() {
     // given
     let minted = Self.fixedUUID("88888888-8888-4888-8888-888888888888")
     let codec = Self.codec(newEpoch: minted)
@@ -919,7 +935,8 @@ import Testing
   /// its stamp can say is the new epoch — and it must still be written, because that stamp is the
   /// entire record a restart derives the epoch from. Without it, the newest compatible state in
   /// history is the poisoned one again and the recovery is undone on reload.
-  @Test func emptyRecoveryStampSurvivesARestartAndBuriesThePoison() throws {
+  @Test
+  func emptyRecoveryStampSurvivesARestartAndBuriesThePoison() throws {
     // given
     let poisonedEpoch = Self.epoch
     let recoveredEpoch = Self.fixedUUID("88888888-8888-4888-8888-888888888888")
@@ -998,9 +1015,9 @@ extension ChatGPTProviderStateCodecTests {
   fileprivate static func codec(
     newEpoch: UUID = fixedUUID("00000000-0000-4000-8000-00000000ffff")
   ) -> ChatGPTProviderStateCodec {
-    ChatGPTProviderStateCodec(newEpoch: {
+    ChatGPTProviderStateCodec {
       newEpoch
-    })
+    }
   }
 
   fileprivate static func state(
@@ -1029,9 +1046,9 @@ extension ChatGPTProviderStateCodecTests {
     )
     let padding = canonicalBytes - empty.payload.count
     #expect(padding >= 0)
-    let items = ChatGPTReplayItems(
-      reasoning: [ChatGPTReasoningItem(encryptedContent: String(repeating: "a", count: padding))]
-    )
+    let items = ChatGPTReplayItems(reasoning: [
+      ChatGPTReasoningItem(encryptedContent: String(repeating: "a", count: padding)),
+    ])
     guard let json = CanonicalJSON.encode(ChatGPTDurableReplayPayload(items)) else {
       throw ProviderError.terminal(status: nil, message: "fixture could not be encoded")
     }

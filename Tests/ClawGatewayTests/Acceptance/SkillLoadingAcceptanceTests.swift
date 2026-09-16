@@ -12,7 +12,8 @@ import Testing
 /// drops one `SKILL.md` into the workspace, the index reaches the model under the `skills` fence,
 /// the model names the skill, and the body comes back under the SAME fence without tainting the
 /// session — so the next turn still recalls high-sensitivity memory.
-@Suite struct SkillLoadingAcceptanceTests {
+@Suite
+struct SkillLoadingAcceptanceTests {
   private static let manifest = """
     ---
     name: summarize
@@ -30,7 +31,8 @@ import Testing
   )
 
   // swiftlint:disable:next function_body_length
-  @Test func skillIsIndexedLoadedUnderTheSkillsFenceWithoutTaint() async throws {
+  @Test
+  func skillIsIndexedLoadedUnderTheSkillsFenceWithoutTaint() async throws {
     // given — one installed skill on disk and one high-sensitivity fact the taint guard would
     // suppress if loading a skill counted as ingesting untrusted content
     let harness = try makeSC3Harness(
@@ -42,12 +44,12 @@ import Testing
       workspaceFiles: ["skills/summarize/SKILL.md": Self.manifest]
     )
     _ = try harness.stores.memoryCommands.applyRemember(
-      updateId: -1,
+      updateID: -1,
       item: NewMemoryItem(
         text: "vault code omega",
         kind: .user,
         sensitivity: .high,
-        sessionId: nil
+        sessionID: nil
       ),
       now: Date(timeIntervalSince1970: 86_400)
     )
@@ -73,8 +75,11 @@ import Testing
     // its frontmatter and carrying the untrusted fence the prompt's carve-out is written against
     let loadRequest = try #require(requests.dropFirst().first)
     let observation = try #require(
-      loadRequest.messages.first { message in message.role == .tool }
-    ).content.text
+      loadRequest.messages.first { message in
+        message.role == .tool
+      }
+    )
+    .content.text
     #expect(observation.contains("label=\"skills\""))
     #expect(observation.contains("label=\"skill_load\"") == false)
     #expect(observation.contains("<claw-untrusted nonce="))
@@ -96,28 +101,29 @@ import Testing
       }
     ).content.text
     #expect(recall.contains("vault code omega"))
-    let replayed = try #require(nextRequest.messages.first { message in message.role == .tool })
-      .content.text
+    let replayed = try #require(
+      nextRequest.messages.first { message in
+        message.role == .tool
+      }
+    )
+    .content.text
     #expect(replayed.contains("label=\"skills\""))
     #expect(replayed.contains("Keep it to three bullets."))
   }
 
   /// The model names a skill; it never types a path. A path-shaped argument resolves against the
   /// scan like any other name — it misses, and the miss is the self-correcting list of real names.
-  @Test func aPathShapedNameNeverEscapesTheSkillsDirectory() async throws {
+  @Test
+  func aPathShapedNameNeverEscapesTheSkillsDirectory() async throws {
     // given — a secret file one level above the skills directory
     let harness = try makeSC3Harness(
       scripts: [
         [
           toolCallResponse([
-            ToolCall(
-              id: "s1",
-              name: "skill_load",
-              argumentsJSON: #"{"name":"../../secret"}"#
-            )
+            ToolCall(id: "s1", name: "skill_load", argumentsJSON: #"{"name":"../../secret"}"#),
           ]),
           okResponse(content: "I only have the summarize skill."),
-        ]
+        ],
       ],
       httpResponses: [:],
       workspaceFiles: [
@@ -134,8 +140,11 @@ import Testing
     let requests = await harness.provider.requests
     let loadRequest = try #require(requests.dropFirst().first)
     let observation = try #require(
-      loadRequest.messages.first { message in message.role == .tool }
-    ).content.text
+      loadRequest.messages.first { message in
+        message.role == .tool
+      }
+    )
+    .content.text
     #expect(observation.contains("Installed skills: summarize"))
     #expect(
       requests.allSatisfy { request in

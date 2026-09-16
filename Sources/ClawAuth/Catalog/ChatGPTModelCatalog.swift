@@ -132,20 +132,14 @@ extension ChatGPTModelCatalog {
   /// duplicate are all gone before a caller can print one. Deduplication runs before the cap, so a
   /// response repeating one slug cannot spend the whole allowance and hide the models behind it.
   static func eligibleModels(in payload: JSONValue) throws -> [ChatGPTCatalogModel] {
-    guard
-      case .object(let fields) = payload,
-      case .array(let rows)? = fields[Catalog.models]
-    else {
+    guard case .object(let fields) = payload, case .array(let rows)? = fields[Catalog.models] else {
       throw ChatGPTCatalogFailure.unavailable(detail: "the model list named no models array")
     }
 
     var seen: Set<String> = []
     var models: [ChatGPTCatalogModel] = []
     for row in rows {
-      guard
-        let model = eligibleModel(in: row),
-        seen.insert(model.slug).inserted
-      else {
+      guard let model = eligibleModel(in: row), seen.insert(model.slug).inserted else {
         continue
       }
       models.append(model)
@@ -153,8 +147,7 @@ extension ChatGPTModelCatalog {
 
     models.sort { first, second in
       first.priority == second.priority
-        ? first.slug < second.slug
-        : first.priority < second.priority
+        ? first.slug < second.slug : first.priority < second.priority
     }
     return Array(models.prefix(maximumRetainedModels))
   }
@@ -164,12 +157,11 @@ extension ChatGPTModelCatalog {
 
 private extension ChatGPTModelCatalog {
   static func eligibleModel(in row: JSONValue) -> ChatGPTCatalogModel? {
-    guard
-      case .object(let fields) = row,
-      case .string(let slug)? = fields[Catalog.slug],
-      LLMProviderRegistry.isValidQualifiedModelSuffix(slug),
-      isListed(fields[Catalog.visibility]),
-      isOfferedInPicker(fields[Catalog.showInPicker] ?? fields[Catalog.showInPickerAlias])
+    guard case .object(let fields) = row,
+          case .string(let slug)? = fields[Catalog.slug],
+          LLMProviderRegistry.isValidQualifiedModelSuffix(slug),
+          isListed(fields[Catalog.visibility]),
+          isOfferedInPicker(fields[Catalog.showInPicker] ?? fields[Catalog.showInPickerAlias])
     else {
       return nil
     }

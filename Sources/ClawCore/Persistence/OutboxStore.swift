@@ -2,25 +2,25 @@ import Foundation
 
 public struct OutboxChunk: Sendable, Equatable {
   public let stepIndex: Int
-  public let chatId: Int64
+  public let chatID: Int64
   public let payload: String
   public let payloadHash: String
-  public let approvalId: Int64?
+  public let approvalID: Int64?
   public let replyMarkup: String?
 
   public init(
     stepIndex: Int,
-    chatId: Int64,
+    chatID: Int64,
     payload: String,
     payloadHash: String,
-    approvalId: Int64? = nil,
+    approvalID: Int64? = nil,
     replyMarkup: String? = nil
   ) {
     self.stepIndex = stepIndex
-    self.chatId = chatId
+    self.chatID = chatID
     self.payload = payload
     self.payloadHash = payloadHash
-    self.approvalId = approvalId
+    self.approvalID = approvalID
     self.replyMarkup = replyMarkup
   }
 }
@@ -40,7 +40,7 @@ public struct LearningNoticeChunk: Sendable, Equatable {
   /// promotion — matching the `subject_digest` the feedback tables key on.
   public let subjectDigest: String
   public let ordinal: Int
-  public let chatId: Int64
+  public let chatID: Int64
   public let payload: String
   public let payloadHash: String
   public let replyMarkup: String?
@@ -48,14 +48,14 @@ public struct LearningNoticeChunk: Sendable, Equatable {
   public init(
     subjectDigest: String,
     ordinal: Int,
-    chatId: Int64,
+    chatID: Int64,
     payload: String,
     payloadHash: String,
     replyMarkup: String? = nil
   ) {
     self.subjectDigest = subjectDigest
     self.ordinal = ordinal
-    self.chatId = chatId
+    self.chatID = chatID
     self.payload = payload
     self.payloadHash = payloadHash
     self.replyMarkup = replyMarkup
@@ -66,55 +66,56 @@ public struct OutboxRow: Sendable, Equatable {
   /// The row's identity, from the table's existing unique `dedup_key`. A learning notice has no
   /// run, so the run cannot be the identity; it stays as provenance.
   public let deliveryKey: String
-  public let runId: Int64?
+  public let runID: Int64?
   public let stepIndex: Int
-  public let chatId: Int64
+  public let chatID: Int64
   public let payload: String
-  public let approvalId: Int64?
+  public let approvalID: Int64?
   public let replyMarkup: String?
   /// Stamped at enqueue from the run itself, so a row delivers into the topic that asked even
   /// after a restart, when no router is left to say where the answer belongs. Both nil in a DM.
-  public let messageThreadId: Int64?
-  public let replyToMessageId: Int64?
+  public let messageThreadID: Int64?
+  public let replyToMessageID: Int64?
 
   /// Where this row goes, as the delivery seam takes it.
   public var target: DeliveryTarget {
     DeliveryTarget(
-      chatId: chatId,
-      messageThreadId: messageThreadId,
-      replyToMessageId: replyToMessageId
+      chatID: chatID,
+      messageThreadID: messageThreadID,
+      replyToMessageID: replyToMessageID
     )
   }
 
   /// What a log line calls this row's origin: its run, or the learning source when it has none.
   public var originLabel: String {
-    runId.map(String.init) ?? DeliverySource.learning.rawValue
+    runID.map(String.init) ?? DeliverySource.learning.rawValue
   }
 
   public init(
     deliveryKey: String,
-    runId: Int64?,
+    runID: Int64?,
     stepIndex: Int,
-    chatId: Int64,
+    chatID: Int64,
     payload: String,
-    approvalId: Int64? = nil,
+    approvalID: Int64? = nil,
     replyMarkup: String? = nil,
-    messageThreadId: Int64? = nil,
-    replyToMessageId: Int64? = nil
+    messageThreadID: Int64? = nil,
+    replyToMessageID: Int64? = nil
   ) {
     self.deliveryKey = deliveryKey
-    self.runId = runId
+    self.runID = runID
     self.stepIndex = stepIndex
-    self.chatId = chatId
+    self.chatID = chatID
     self.payload = payload
-    self.approvalId = approvalId
-    self.messageThreadId = messageThreadId
-    self.replyToMessageId = replyToMessageId
+    self.approvalID = approvalID
+    self.messageThreadID = messageThreadID
+    self.replyToMessageID = replyToMessageID
     self.replyMarkup = replyMarkup
   }
 }
 
 public protocol OutboxStore: Sendable {
-  func markSent(deliveryKey: String, telegramMessageId: Int64, now: Date) throws(StoreError)
+  func markSent(deliveryKey: String, telegramMessageID: Int64, now: Date) throws(StoreError)
+
   func pendingOutbound() throws(StoreError) -> [OutboxRow]
 }

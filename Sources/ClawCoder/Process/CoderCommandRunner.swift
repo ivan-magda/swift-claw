@@ -15,14 +15,18 @@ struct CoderCommandRunner: Sendable {
 
   private let now: @Sendable () -> ContinuousClock.Instant
 
-  init(now: @Sendable @escaping () -> ContinuousClock.Instant = { ContinuousClock.now }) {
+  init(
+    now: @Sendable @escaping () -> ContinuousClock.Instant = {
+      ContinuousClock.now
+    }
+  ) {
     self.now = now
   }
 
   func run(
     _ command: CoderCommand,
     tracking: CoderCommandTracking,
-    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+    onStandardOutput: @Sendable @escaping (_ bytes: Data) async throws -> Void
   ) async -> CoderCommandResult {
     let control = CoderCommandControl(now: now)
     if Task.isCancelled {
@@ -30,8 +34,10 @@ struct CoderCommandRunner: Sendable {
     }
     let timeout: Duration
     switch tracking {
-    case .preApprovalReadOnly: timeout = Self.readOnlyTimeout
-    case .job: timeout = command.timeout
+    case .preApprovalReadOnly:
+      timeout = Self.readOnlyTimeout
+    case .job:
+      timeout = command.timeout
     }
     let deadline = now().advanced(by: timeout)
     let operation = Task {
@@ -41,11 +47,14 @@ struct CoderCommandRunner: Sendable {
         onStandardOutput: onStandardOutput
       )
     }
-    return await withTaskCancellationHandler {
-      await operation.value
-    } onCancel: {
-      control.requestCancellation()
-    }
+    return await withTaskCancellationHandler(
+      operation: {
+        await operation.value
+      },
+      onCancel: {
+        control.requestCancellation()
+      }
+    )
   }
 }
 
@@ -56,7 +65,7 @@ private struct CoderCommandOperation: Sendable {
   func run(
     _ command: CoderCommand,
     tracking: CoderCommandTracking,
-    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+    onStandardOutput: @Sendable @escaping (_ bytes: Data) async throws -> Void
   ) async -> CoderCommandResult {
     let launchID = UUID()
     do {
@@ -73,22 +82,14 @@ private struct CoderCommandOperation: Sendable {
         throw CancellationError()
       }
       await control.setReceipt(receipt)
-      let result = try await spawn(
-        command,
-        tracking: tracking,
-        onStandardOutput: onStandardOutput
-      )
+      let result = try await spawn(command, tracking: tracking, onStandardOutput: onStandardOutput)
       let resolved = await finish(
         tracking,
         launchID: launchID,
         resolved: result.closureResult.cleanupResolved
       )
       let capture = await control.capture(resolved: resolved)
-      return .completed(
-        result.terminationStatus,
-        capture: capture,
-        cleanupResolved: resolved
-      )
+      return .completed(result.terminationStatus, capture: capture, cleanupResolved: resolved)
     } catch {
       if !(await control.stopping) {
         await control.fail("Coder process launch failed.")
@@ -144,7 +145,9 @@ private extension CoderCommandResult {
 private extension CoderCommandOperation {
   func recordLaunchIntent(_ receipt: CoderProcessReceipt, tracking: CoderCommandTracking) async {
     await runCallbacks {
-      do { try await tracking.record(.willLaunch(receipt)) } catch {
+      do {
+        try await tracking.record(.willLaunch(receipt))
+      } catch {
         await control.recordCallbackFailure(
           error,
           message: "Coder launch receipt could not be persisted."
@@ -156,7 +159,7 @@ private extension CoderCommandOperation {
   func spawn(
     _ command: CoderCommand,
     tracking: CoderCommandTracking,
-    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+    onStandardOutput: @Sendable @escaping (_ bytes: Data) async throws -> Void
   ) async throws -> Subprocess.ExecutionResult<CoderScopedCapture, SequenceOutput, SequenceOutput> {
     let environment = Dictionary(
       uniqueKeysWithValues: command.environment.map { key, value in
@@ -166,7 +169,7 @@ private extension CoderCommandOperation {
     var options = PlatformOptions()
     options.createSession = true
     options.teardownSequence = [
-      .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(2))
+      .gracefulShutDown(toProcessGroup: true, allowedDurationToNextStep: .seconds(2)),
     ]
     if control.cancellationRequested {
       await control.latchCancelled()
@@ -182,18 +185,14 @@ private extension CoderCommandOperation {
       output: .sequence,
       error: .sequence
     ) { execution in
-      await runScoped(
-        execution: execution,
-        tracking: tracking,
-        onStandardOutput: onStandardOutput
-      )
+      await runScoped(execution: execution, tracking: tracking, onStandardOutput: onStandardOutput)
     }
   }
 
   func runScoped<Input: InputProtocol>(
     execution: Execution<Input, SequenceOutput, SequenceOutput>,
     tracking: CoderCommandTracking,
-    onStandardOutput: @Sendable @escaping (Data) async throws -> Void
+    onStandardOutput: @Sendable @escaping (_ bytes: Data) async throws -> Void
   ) async -> CoderScopedCapture {
     let pid = Int32(execution.processIdentifier.value)
     await control.markSpawned()
@@ -214,7 +213,9 @@ private extension CoderCommandOperation {
     let ownedGroup = ManagedCoderProcessGroup(receipt: receipt)
     async let supervision = supervise(execution: execution, group: ownedGroup, deadline: deadline)
     await runCallbacks {
-      do { try await tracking.record(.didLaunch(receipt)) } catch {
+      do {
+        try await tracking.record(.didLaunch(receipt))
+      } catch {
         await control.recordCallbackFailure(
           error,
           message: "Coder process receipt could not be persisted."
@@ -262,21 +263,25 @@ private extension CoderCommandOperation {
           }
           return await group.terminate()
         }
-      } catch { return false }
+      } catch {
+        return false
+      }
       try? await Task.sleep(for: ManagedCoderProcessGroup.pollInterval)
     }
   }
 
   func readOutput(
     _ sequence: SubprocessOutputSequence,
-    consumer: @Sendable (Data) async throws -> Void
+    consumer: @Sendable (_ bytes: Data) async throws -> Void
   ) async {
     do {
       for try await buffer in sequence {
         let data = buffer.withUnsafeBytes { bytes in
           Data(bytes)
         }
-        do { try await consumer(data) } catch {
+        do {
+          try await consumer(data)
+        } catch {
           await control.recordCallbackFailure(
             error,
             message: "Coder standard output consumer failed."
@@ -332,7 +337,9 @@ private extension CoderCommandOperation {
         resolved ? .stopped(launchID: launchID) : .unresolved(launchID: launchID)
       )
       return resolved
-    } catch { return false }
+    } catch {
+      return false
+    }
   }
 }
 
@@ -350,19 +357,32 @@ private actor CoderCommandControl {
     self.now = now
   }
 
-  var stopping: Bool { cancelled || timedOut || failed }
+  var stopping: Bool {
+    cancelled || timedOut || failed
+  }
 
-  nonisolated var cancellationRequested: Bool { cancellation.load(ordering: .acquiring) }
+  nonisolated var cancellationRequested: Bool {
+    cancellation.load(ordering: .acquiring)
+  }
 
-  nonisolated func requestCancellation() { cancellation.store(true, ordering: .releasing) }
-  func setReceipt(_ value: CoderProcessReceipt) { receipt = value }
-  func markSpawned() { spawned = true }
+  nonisolated func requestCancellation() {
+    cancellation.store(true, ordering: .releasing)
+  }
+
+  func setReceipt(_ value: CoderProcessReceipt) {
+    receipt = value
+  }
+
+  func markSpawned() {
+    spawned = true
+  }
 
   func latchCancelled() {
     if !timedOut {
       cancelled = true
     }
   }
+
   func callbackStopNeeded(deadline: ContinuousClock.Instant) -> Bool {
     guard !Task.isCancelled else {
       return false
@@ -378,6 +398,7 @@ private actor CoderCommandControl {
     }
     return stopping
   }
+
   func recordCallbackFailure(_ error: any Error, message: String) {
     if error is CancellationError, Task.isCancelled, stopping {
       return
@@ -389,12 +410,17 @@ private actor CoderCommandControl {
     failed = true
     appendDiagnostics(Data(message.utf8))
   }
-  func noteStreamError() { fail("Coder process stream failed.") }
+
+  func noteStreamError() {
+    fail("Coder process stream failed.")
+  }
+
   func appendDiagnostics(_ bytes: Data) {
     diagnostics.append(
       bytes.prefix(max(0, CoderCommandRunner.diagnosticByteLimit - diagnostics.count))
     )
   }
+
   func capture(resolved: Bool) -> CoderScopedCapture {
     CoderScopedCapture(
       cancelled: cancelled,
@@ -412,8 +438,9 @@ private extension CoderCommandControl {
   func renderedDiagnostics() -> String {
     // Malformed stderr remains diagnostic text through replacement of invalid UTF-8.
     // swiftlint:disable:next optional_data_string_conversion
-    var prefix = String(decoding: diagnostics, as: UTF8.self).utf8
-      .prefix(CoderCommandRunner.diagnosticByteLimit)
+    var prefix = String(decoding: diagnostics, as: UTF8.self).utf8.prefix(
+      CoderCommandRunner.diagnosticByteLimit
+    )
     while true {
       if let text = String(bytes: prefix, encoding: .utf8) {
         return text

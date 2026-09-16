@@ -11,7 +11,9 @@ public enum WorkspaceFile: String, Sendable, Equatable, CaseIterable {
   case heartbeat = "HEARTBEAT.md"
 
   /// Path relative to the workspace root.
-  public var relativePath: String { rawValue }
+  public var relativePath: String {
+    rawValue
+  }
 }
 
 extension WorkspaceFile {

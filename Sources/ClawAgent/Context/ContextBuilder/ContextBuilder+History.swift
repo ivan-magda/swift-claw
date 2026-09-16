@@ -23,7 +23,8 @@ extension ContextBuilder {
         id: group.id,
         content: group.messages.map { message in
           message.content + (message.toolCallsJSON ?? "")
-        }.joined(separator: "\n"),
+        }
+        .joined(separator: "\n"),
         canTruncate: false
       )
     }
@@ -35,10 +36,7 @@ extension ContextBuilder {
     return section(id: .history, cap: cap, units: units)
   }
 
-  func renderMessages(
-    fitted: [FittedSection],
-    snapshot: SessionContextSnapshot
-  ) -> [ChatMessage] {
+  func renderMessages(fitted: [FittedSection], snapshot: SessionContextSnapshot) -> [ChatMessage] {
     let historyMessages = fittedHistoryMessages(fitted: fitted, snapshot: snapshot)
     // Compare GROUPS, not raw rows: one unit per group by construction, so a kept-unit-count
     // shortfall against the full group count means an exchange (or plain row) was dropped.
@@ -50,27 +48,17 @@ extension ContextBuilder {
     let historyWasTruncated = keptHistoryGroupCount < historyGroups(from: snapshot.history).count
 
     let systemContent =
-      fitted
-      .filter { section in
+      fitted.filter { section in
         section.tier == .system
-      }
-      .map(\.content)
-      .joined(separator: "\n\n")
+      }.map(\.content).joined(separator: "\n\n")
       + (historyWasTruncated ? Self.historyTruncatedMarker : "")
     var messages = [ChatMessage(role: .system, content: systemContent)]
 
-    let untrusted =
-      fitted
-      .filter { section in
-        section.tier == .untrustedLabeled
-      }
-      .map { section in
-        LabeledContextFactory.make(
-          label: label(for: section.id),
-          content: section.content
-        ).render()
-      }
-      .joined(separator: "\n\n")
+    let untrusted = fitted.filter { section in
+      section.tier == .untrustedLabeled
+    }.map { section in
+      LabeledContextFactory.make(label: label(for: section.id), content: section.content).render()
+    }.joined(separator: "\n\n")
     if untrusted.isEmpty == false {
       messages.append(ChatMessage(role: .user, content: untrusted))
     }
@@ -125,7 +113,10 @@ private extension ContextBuilder {
     fitted: [FittedSection],
     snapshot: SessionContextSnapshot
   ) -> [ChatMessage] {
-    guard let historySection = fitted.first(where: { section in section.id == .history }) else {
+    guard let historySection = fitted.first(where: { section in
+        section.id == .history
+      })
+    else {
       return []
     }
 
@@ -139,38 +130,31 @@ private extension ContextBuilder {
       // trusts its content — so a duplicated id names nobody and its rows fall back to the
       // unattributed label, rather than the first declaration lending them its fence.
       let anchorCalls = group.messages.first?.toolCallsJSON.map(ToolCallCoding.decode) ?? []
-      let callsPerId = anchorCalls.reduce(into: [String: Int]()) { counts, call in
+      let callsPerID = anchorCalls.reduce(into: [String: Int]()) { counts, call in
         counts[call.id, default: 0] += 1
       }
-      let namesByCallId = Dictionary(
-        uniqueKeysWithValues:
-          anchorCalls
-          .filter { call in
-            callsPerId[call.id] == 1
-          }
-          .map { call in
-            (call.id, call.name)
-          }
+      let namesByCallID = Dictionary(
+        uniqueKeysWithValues: anchorCalls.filter { call in
+          callsPerID[call.id] == 1
+        }.map { call in
+          (call.id, call.name)
+        }
       )
 
       for message in group.messages {
         switch message.role {
         case .tool:
           let label =
-            message.toolCallId
-            .flatMap { callId in
-              namesByCallId[callId]
-            }
-            .map(fenceLabels.label(forToolNamed:))
-            ?? ToolFenceLabels.unattributed
+            message.toolCallID.flatMap { callID in
+              namesByCallID[callID]
+            }.map(
+              fenceLabels.label(forToolNamed:)
+            ) ?? ToolFenceLabels.unattributed
           rendered.append(
             ChatMessage(
               role: .tool,
-              content: LabeledContextFactory.make(
-                label: label,
-                content: message.content
-              ).render(),
-              toolCallId: message.toolCallId
+              content: LabeledContextFactory.make(label: label, content: message.content).render(),
+              toolCallID: message.toolCallID
             )
           )
         case .assistant:
@@ -203,10 +187,8 @@ private extension ContextBuilder {
   func userMessage(from message: StoredMessage) -> ChatMessage {
     var body = message.content
     if message.provenance == .untrusted {
-      body = LabeledContextFactory.make(
-        label: Self.untrustedUserLabel,
-        content: message.content
-      ).render()
+      body = LabeledContextFactory.make(label: Self.untrustedUserLabel, content: message.content)
+        .render()
     }
 
     // Outside the fence, deliberately: this is our own assertion about system state, and fencing it

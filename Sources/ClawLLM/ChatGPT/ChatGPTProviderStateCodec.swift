@@ -67,12 +67,8 @@ struct ChatGPTReplayIdentity: Sendable, Equatable {
   let epoch: UUID
 
   var issuer: String {
-    [
-      Self.providerVersion,
-      credentialProfileHash,
-      wireModelHash,
-      epoch.uuidString.lowercased(),
-    ].joined(separator: ":")
+    [Self.providerVersion, credentialProfileHash, wireModelHash, epoch.uuidString.lowercased()]
+      .joined(separator: ":")
   }
 
   init(profileID: UUID, wireModel: String, epoch: UUID) {
@@ -93,10 +89,9 @@ struct ChatGPTReplayIdentity: Sendable, Equatable {
     guard fields.count == 4, fields[0] == Self.providerVersion else {
       return nil
     }
-    guard
-      Self.isCanonicalHash(fields[1]),
-      Self.isCanonicalHash(fields[2]),
-      let epoch = Self.canonicalEpoch(fields[3])
+    guard Self.isCanonicalHash(fields[1]),
+          Self.isCanonicalHash(fields[2]),
+          let epoch = Self.canonicalEpoch(fields[3])
     else {
       return nil
     }
@@ -271,11 +266,7 @@ struct ChatGPTProviderStateCodec: Sendable {
   ) -> ChatGPTReplaySelection {
     var drops = ChatGPTReplayDrops()
     let origin = ChatGPTReplayOrigin(profileID: profileID, wireModel: wireModel)
-    let candidates = Self.compatibleCandidates(
-      in: messages,
-      origin: origin,
-      drops: &drops
-    )
+    let candidates = Self.compatibleCandidates(in: messages, origin: origin, drops: &drops)
 
     // The newest state that actually decoded is what names the live epoch. A damaged or foreign
     // newest state has already been discarded above, so it cannot drag the session onto a generation
@@ -380,9 +371,7 @@ private extension ChatGPTProviderStateCodec {
       guard let state = message.providerState else {
         continue
       }
-      guard
-        let identity = ChatGPTReplayIdentity(issuer: state.issuer),
-        origin.matches(identity)
+      guard let identity = ChatGPTReplayIdentity(issuer: state.issuer), origin.matches(identity)
       else {
         drops.foreign += 1
         continue
@@ -393,9 +382,8 @@ private extension ChatGPTProviderStateCodec {
         drops.oversized += 1
         continue
       }
-      guard
-        let items = ChatGPTDurableReplayPayload.decode(state.payload),
-        let json = CanonicalJSON.encode(ChatGPTDurableReplayPayload(items))
+      guard let items = ChatGPTDurableReplayPayload.decode(state.payload),
+            let json = CanonicalJSON.encode(ChatGPTDurableReplayPayload(items))
       else {
         drops.malformed += 1
         continue

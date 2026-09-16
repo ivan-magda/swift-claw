@@ -3,8 +3,10 @@ import Testing
 @testable import ClawCore
 @testable import ClawLLM
 
-@Suite struct PriceFileLoaderTests {
-  @Test func loadsVendoredPricesWithoutCrashing() {
+@Suite
+struct PriceFileLoaderTests {
+  @Test
+  func loadsVendoredPricesWithoutCrashing() {
     // when
     let table = PriceFileLoader.load()
 

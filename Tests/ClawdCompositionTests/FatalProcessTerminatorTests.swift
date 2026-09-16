@@ -4,8 +4,10 @@ import Testing
 
 @testable import clawd
 
-@Suite struct FatalProcessTerminatorTests {
-  @Test func terminatesWithNonzeroCodeAndNeverReturnsNormally() throws {
+@Suite
+struct FatalProcessTerminatorTests {
+  @Test
+  func terminatesWithNonzeroCodeAndNeverReturnsNormally() throws {
     // given — a substitute terminator that records the code and throws instead of exiting, so the
     // test never invokes the production `_exit`.
     let recorded = ExitCodeBox()
@@ -22,7 +24,8 @@ import Testing
     #expect(recorded.value == 1)
   }
 
-  @Test func writesTheActiveRunIDsBeforeTerminating() throws {
+  @Test
+  func writesTheActiveRunIDsBeforeTerminating() throws {
     // given
     let capture = CompositionLogCapture()
     let terminator = FatalProcessTerminator { _ in
@@ -33,7 +36,9 @@ import Testing
     #expect(throws: FatalExitSentinel.self) {
       try terminator.fatalLaneDrainTimeout(
         activeRunIDs: [7, 42],
-        logger: Logger(label: "test") { _ in CompositionLogHandler(capture: capture) }
+        logger: Logger(label: "test") { _ in
+          CompositionLogHandler(capture: capture)
+        }
       )
     }
 
@@ -45,7 +50,9 @@ import Testing
 }
 
 private enum SilentLog {
-  static let logger = Logger(label: "test.silent", factory: { _ in SwiftLogNoOpLogHandler() })
+  static let logger = Logger(label: "test.silent") { _ in
+    SwiftLogNoOpLogHandler()
+  }
 }
 
 private final class CompositionLogCapture: @unchecked Sendable {

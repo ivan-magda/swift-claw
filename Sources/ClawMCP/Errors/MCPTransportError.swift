@@ -36,8 +36,7 @@ enum MCPTransportError: Error, Sendable, Equatable {
     case .notConnected, .sessionExpired:
       return .definitelyNotExecuted
     case .requestFailed(let failure):
-      return failure.disposition == .definitelyNotSent
-        ? .definitelyNotExecuted : .mayHaveExecuted
+      return failure.disposition == .definitelyNotSent ? .definitelyNotExecuted : .mayHaveExecuted
     case .httpStatus, .unsupportedContentType, .oversizedMessage, .receiveBufferOverflow,
       .receiveStreamTerminated:
       return .mayHaveExecuted
@@ -72,11 +71,15 @@ extension MCPTransportError: CustomStringConvertible {
   /// when it is shaped like a media type; anything else is named rather than quoted, and a server
   /// gets no channel for arbitrary text through a diagnostic.
   private static func mediaTypeDescription(_ raw: String) -> String {
-    let mediaType = raw.prefix { $0 != ";" }.trimmingCharacters(in: .whitespaces)
+    let mediaType = raw.prefix {
+      $0 != ";"
+    }.trimmingCharacters(in: .whitespaces)
     let parts = mediaType.split(separator: "/", omittingEmptySubsequences: false)
     let wellFormed =
       parts.count == 2 && mediaType.count <= 64
-      && parts.allSatisfy { $0.isEmpty == false && $0.allSatisfy(isMediaTypeCharacter) }
+      && parts.allSatisfy {
+        $0.isEmpty == false && $0.allSatisfy(isMediaTypeCharacter)
+      }
 
     return wellFormed ? mediaType : "unrecognized"
   }

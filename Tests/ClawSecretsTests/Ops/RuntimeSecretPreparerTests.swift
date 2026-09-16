@@ -5,18 +5,20 @@ import Testing
 
 @testable import ClawSecrets
 
-@Suite struct RuntimeSecretPreparerTests {
+@Suite
+struct RuntimeSecretPreparerTests {
   private typealias EnvKey = EnvSecretStore.EnvKey
 
   private static let fullEnvironment = [
     EnvKey.botToken: "123:telegram",
-    EnvKey.llmApiKey: "sk-unused-by-chatgpt",
-    EnvKey.searchApiKey: "search-key",
+    EnvKey.llmAPIKey: "sk-unused-by-chatgpt",
+    EnvKey.searchAPIKey: "search-key",
   ]
 
   // MARK: - The transition
 
-  @Test func withNeitherArtifactPresentPreparationSealsTheEnvironmentSecrets() throws {
+  @Test
+  func withNeitherArtifactPresentPreparationSealsTheEnvironmentSecrets() throws {
     // given — an environment-backed installation: no encrypted artifact exists yet.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -30,22 +32,18 @@ import Testing
     // then — both artifacts exist and the encrypted backend is now authoritative for them.
     #expect(
       try entryNames(in: stateRoot)
-        == [
-          SecretStatePaths.keyName, SecretStatePaths.runtimeEnvelopeName,
-        ].sorted()
+        == [SecretStatePaths.keyName, SecretStatePaths.runtimeEnvelopeName].sorted()
     )
     #expect(prepared.telegramBotToken == "123:telegram")
     #expect(try EncryptedFileSecretStore(stateRoot: stateRoot).loadSecrets() == prepared)
     #expect(
-      SecretStoreResolver.resolve(
-        stateRoot: stateRoot,
-        environment: [:],
-        warn: { _ in }
-      ).backend == .encrypted
+      SecretStoreResolver.resolve(stateRoot: stateRoot, environment: [:]) { _ in }.backend
+        == .encrypted
     )
   }
 
-  @Test func aChatGPTLoginStillPreservesTheApiKeyItDoesNotNeed() throws {
+  @Test
+  func aChatGPTLoginStillPreservesTheAPIKeyItDoesNotNeed() throws {
     // given — a ChatGPT route never reads CLAW_LLM_API_KEY, but Telegram and search must stay
     // bootable once the encrypted backend takes over.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
@@ -58,17 +56,18 @@ import Testing
     )
 
     // then
-    #expect(prepared.llmApiKey == "sk-unused-by-chatgpt")
-    #expect(prepared.searchApiKey == "search-key")
+    #expect(prepared.llmAPIKey == "sk-unused-by-chatgpt")
+    #expect(prepared.searchAPIKey == "search-key")
     #expect(prepared.telegramBotToken == "123:telegram")
   }
 
-  @Test func withBothArtifactsPresentPreparationDecryptsAndLeavesTheBytesAlone() throws {
+  @Test
+  func withBothArtifactsPresentPreparationDecryptsAndLeavesTheBytesAlone() throws {
     // given — an already-encrypted installation whose env holds different, stale values.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
-    let sealed = Secrets(telegramBotToken: "999:sealed", llmApiKey: "sk-sealed")
+    let sealed = Secrets(telegramBotToken: "999:sealed", llmAPIKey: "sk-sealed")
     try EncryptedFileSecretStore.seal(sealed, stateRoot: stateRoot)
     let paths = SecretStatePaths(stateRoot: stateRoot)
     let envelopeBefore = try Data(contentsOf: paths.runtimeEnvelope)
@@ -87,15 +86,13 @@ import Testing
   }
 
   @Test(arguments: [SecretStatePaths.keyName, SecretStatePaths.runtimeEnvelopeName])
-  func withExactlyOneArtifactPresentPreparationFailsClosedAndMintsNothing(
-    survivor: String
-  ) throws {
+  func withExactlyOneArtifactPresentPreparationFailsClosedAndMintsNothing(survivor: String) throws {
     // given — a partial encrypted setup. Login must not mint the missing half.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "999:sealed", llmApiKey: nil),
+      Secrets(telegramBotToken: "999:sealed", llmAPIKey: nil),
       stateRoot: stateRoot
     )
     let paths = SecretStatePaths(stateRoot: stateRoot)
@@ -104,15 +101,13 @@ import Testing
 
     // when / then — the same fail-closed diagnostic the daemon gets at startup; never the env token.
     #expect(throws: SecretStoreError.self) {
-      _ = try RuntimeSecretPreparer.prepare(
-        stateRoot: stateRoot,
-        environment: Self.fullEnvironment
-      )
+      _ = try RuntimeSecretPreparer.prepare(stateRoot: stateRoot, environment: Self.fullEnvironment)
     }
     #expect(try entryNames(in: stateRoot) == [survivor])
   }
 
-  @Test func aMissingTelegramTokenFailsBeforeAnythingIsCreated() throws {
+  @Test
+  func aMissingTelegramTokenFailsBeforeAnythingIsCreated() throws {
     // given — the one required runtime secret is absent from the environment.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -121,7 +116,7 @@ import Testing
     #expect(throws: SecretStoreError.missingTelegramToken) {
       _ = try RuntimeSecretPreparer.prepare(
         stateRoot: stateRoot,
-        environment: [EnvKey.llmApiKey: "sk-only"]
+        environment: [EnvKey.llmAPIKey: "sk-only"]
       )
     }
     #expect(try entryNames(in: stateRoot).isEmpty)
@@ -129,7 +124,8 @@ import Testing
 
   // MARK: - Rollback
 
-  @Test func aFailedEnvelopePublicationRemovesEveryArtifactTheSealCreated() throws {
+  @Test
+  func aFailedEnvelopePublicationRemovesEveryArtifactTheSealCreated() throws {
     // given — a transition from an environment-backed installation.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -139,22 +135,22 @@ import Testing
       _ = try RuntimeSecretPreparer.prepare(
         stateRoot: stateRoot,
         environment: Self.fullEnvironment,
-        publisher: SecureFilePublisher(failpoint: .init(.commit, on: SecretFile.envelope))
+        publisher: SecureFilePublisher(
+          failpoint: SecureFilePublisher.Failpoint(.commit, on: SecretFile.envelope)
+        )
       )
     }
 
     // then — no half-sealed state survives; the installation is still environment-backed.
     #expect(try entryNames(in: stateRoot).isEmpty)
     #expect(
-      SecretStoreResolver.resolve(
-        stateRoot: stateRoot,
-        environment: Self.fullEnvironment,
-        warn: { _ in }
-      ).backend == .env
+      SecretStoreResolver.resolve(stateRoot: stateRoot, environment: Self.fullEnvironment) { _ in }
+        .backend == .env
     )
   }
 
-  @Test func anUncertainEnvelopeCommitAlsoUnwindsTheWholeTransition() throws {
+  @Test
+  func anUncertainEnvelopeCommitAlsoUnwindsTheWholeTransition() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -165,7 +161,9 @@ import Testing
       _ = try RuntimeSecretPreparer.prepare(
         stateRoot: stateRoot,
         environment: Self.fullEnvironment,
-        publisher: SecureFilePublisher(failpoint: .init(.directorySync, on: SecretFile.envelope))
+        publisher: SecureFilePublisher(
+          failpoint: SecureFilePublisher.Failpoint(.directorySync, on: SecretFile.envelope)
+        )
       )
     }
 
@@ -173,13 +171,14 @@ import Testing
     #expect(try entryNames(in: stateRoot).isEmpty)
   }
 
-  @Test func rollbackNeverRemovesAKeyTheSealDidNotCreate() throws {
+  @Test
+  func rollbackNeverRemovesAKeyTheSealDidNotCreate() throws {
     // given — a key the owner already had (a re-seal, not a transition).
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "999:sealed", llmApiKey: nil),
+      Secrets(telegramBotToken: "999:sealed", llmAPIKey: nil),
       stateRoot: stateRoot
     )
     let paths = SecretStatePaths(stateRoot: stateRoot)
@@ -189,9 +188,11 @@ import Testing
     // when
     #expect(throws: SecretStoreError.self) {
       _ = try EncryptedFileSecretStore.seal(
-        Secrets(telegramBotToken: "111:new", llmApiKey: nil),
+        Secrets(telegramBotToken: "111:new", llmAPIKey: nil),
         stateRoot: stateRoot,
-        publisher: SecureFilePublisher(failpoint: .init(.commit, on: SecretFile.envelope))
+        publisher: SecureFilePublisher(
+          failpoint: SecureFilePublisher.Failpoint(.commit, on: SecretFile.envelope)
+        )
       )
     }
 
@@ -205,7 +206,8 @@ import Testing
     )
   }
 
-  @Test func rollbackRemovesTheEnvelopeBeforeTheKey() throws {
+  @Test
+  func rollbackRemovesTheEnvelopeBeforeTheKey() throws {
     // given — a transition that created both artifacts.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-prepare")
     defer { try? FileManager.default.removeItem(at: stateRoot) }

@@ -94,7 +94,9 @@ enum CredentialFixture {
     store: RecordingCredentialStore = RecordingCredentialStore(),
     oauth: ScriptedRefresh = ScriptedRefresh(),
     clock: ScriptedClock = ScriptedClock { _ in },
-    wallDate: @escaping @Sendable () -> Date = { wallNow }
+    wallDate: @escaping @Sendable () -> Date = {
+      wallNow
+    }
   ) -> ChatGPTCredentialSource<ScriptedClock> {
     ChatGPTCredentialSource(
       initialCredential: credential,
@@ -140,7 +142,8 @@ extension ChatGPTCredentialError {
 
 @Suite(.timeLimit(.minutes(1)))
 struct ChatGPTCredentialSourceTests {
-  @Test func aMissingCredentialRequiresLoginWithoutTouchingTheStore() async throws {
+  @Test
+  func aMissingCredentialRequiresLoginWithoutTouchingTheStore() async throws {
     // given
     let store = RecordingCredentialStore()
     let source = CredentialFixture.source(credential: nil, store: store)
@@ -155,7 +158,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(store.saveAttempts == 0)
   }
 
-  @Test func aFreshCredentialAuthorizesAtGenerationOneWithNoNetwork() async throws {
+  @Test
+  func aFreshCredentialAuthorizesAtGenerationOneWithNoNetwork() async throws {
     // given
     let oauth = ScriptedRefresh()
     let source = CredentialFixture.source(
@@ -174,12 +178,7 @@ struct ChatGPTCredentialSourceTests {
 
   /// The skew is a boundary, so both sides of it are named: one second inside is still fresh, and the
   /// boundary itself is already expiring. A single-sided case would pass against a skew of any width.
-  @Test(arguments: [
-    (121, false),
-    (120, true),
-    (1, true),
-    (-1, true),
-  ])
+  @Test(arguments: [(121, false), (120, true), (1, true), (-1, true)])
   func freshnessDecidesWhetherACallRefreshes(expiresIn: Int, refreshes: Bool) async throws {
     // given
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
@@ -197,7 +196,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(authorization.headers["Authorization"] == "Bearer \(expected)")
   }
 
-  @Test func aRotatedPairIsDurableBeforeItAuthorizes() async throws {
+  @Test
+  func aRotatedPairIsDurableBeforeItAuthorizes() async throws {
     // given
     let store = RecordingCredentialStore()
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
@@ -218,7 +218,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(authorization.generation == CredentialFixture.secondGeneration)
   }
 
-  @Test func aWriteFailureWithholdsTheRotatedPairAndRetriesOnlyTheWrite() async throws {
+  @Test
+  func aWriteFailureWithholdsTheRotatedPairAndRetriesOnlyTheWrite() async throws {
     // given
     let store = RecordingCredentialStore(failing: .publicationFailed)
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
@@ -250,7 +251,8 @@ struct ChatGPTCredentialSourceTests {
   /// The store is bounded but not interruptible: once a write begins it runs to the end, because the
   /// alternative is abandoning a half-written envelope. So the caller's cancellation has exactly one
   /// place to be honored — before the write starts.
-  @Test func aCancelledCallerStartsNoPublication() async throws {
+  @Test
+  func aCancelledCallerStartsNoPublication() async throws {
     // given — a rotated pair the store refused, leaving the next caller nothing to do but the write
     let store = RecordingCredentialStore(failing: .publicationFailed)
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
@@ -292,7 +294,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(await oauth.callCount == 1)
   }
 
-  @Test func anOmittedRefreshTokenKeepsTheOldOne() async throws {
+  @Test
+  func anOmittedRefreshTokenKeepsTheOldOne() async throws {
     // given
     let store = RecordingCredentialStore()
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair(refresh: nil))])
@@ -312,7 +315,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(await oauth.tokensSeen == [OAuthFixture.refreshToken])
   }
 
-  @Test func aRotatedPairKeepsBothPairsRedactable() async throws {
+  @Test
+  func aRotatedPairKeepsBothPairsRedactable() async throws {
     // given
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
     let source = CredentialFixture.source(
@@ -343,7 +347,7 @@ struct ChatGPTCredentialSourceTests {
     "",
     "token with spaces",
     "token\r\nX-Injected: 1",
-    "token\u{0}embedded",
+    "token\0embedded",
     "tokén-not-ascii",
     String(repeating: "a", count: ChatGPTProviderMetadata.maximumTokenBytes + 1),
   ])
@@ -391,7 +395,8 @@ struct ChatGPTCredentialSourceTests {
 
   /// The positive half of the gate: the same shape of record, with tokens that pass, does authorize.
   /// Without it every case above would still pass against a source that simply never works.
-  @Test func aSafeStoredCredentialAtTheTokenBoundAuthorizes() async throws {
+  @Test
+  func aSafeStoredCredentialAtTheTokenBoundAuthorizes() async throws {
     // given
     let atBound = String(repeating: "a", count: ChatGPTProviderMetadata.maximumTokenBytes)
     let source = CredentialFixture.source(
@@ -407,7 +412,8 @@ struct ChatGPTCredentialSourceTests {
 
   /// A rotated pair reaches the actor as a `ChatGPTTokenPair`, whose initializer is public — the wire
   /// client's gate is a convention outside this module, so the same bar is re-applied here.
-  @Test func anUnsafeRotatedTokenNeverBecomesAuthorization() async throws {
+  @Test
+  func anUnsafeRotatedTokenNeverBecomesAuthorization() async throws {
     // given
     let store = RecordingCredentialStore()
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair(access: "rotated with spaces"))])
@@ -455,7 +461,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(await oauth.callCount == calls)
   }
 
-  @Test func aThrottledRefreshCoolsDownForTheNamedDelayAndStartsNoNetwork() async throws {
+  @Test
+  func aThrottledRefreshCoolsDownForTheNamedDelayAndStartsNoNetwork() async throws {
     // given
     let oauth = ScriptedRefresh([.failure(.throttled(retryAfter: .seconds(60)))])
     let source = CredentialFixture.source(
@@ -481,7 +488,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(await oauth.callCount == 1)
   }
 
-  @Test func anUnnamedThrottleCoolsDownForTheCeiling() async throws {
+  @Test
+  func anUnnamedThrottleCoolsDownForTheCeiling() async throws {
     // given
     let oauth = ScriptedRefresh([.failure(.throttled(retryAfter: nil))])
     let source = CredentialFixture.source(
@@ -498,7 +506,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(thrown?.throttleDelay == .seconds(30))
   }
 
-  @Test func transportFailuresSpendTheRetryBudgetThenCoolDownForTheCeiling() async throws {
+  @Test
+  func transportFailuresSpendTheRetryBudgetThenCoolDownForTheCeiling() async throws {
     // given — one entry more than the budget would spend, so an unbounded retry ends in a distinct
     // failure rather than a spin
     let oauth = ScriptedRefresh([
@@ -526,13 +535,18 @@ struct ChatGPTCredentialSourceTests {
 
     // then
     #expect(await oauth.callCount == 3)
-    #expect(backoffs.withLock { current in current } == [.seconds(1), .seconds(2)])
+    #expect(
+      backoffs.withLock { current in
+        current
+      } == [.seconds(1), .seconds(2)]
+    )
     #expect(thrown?.unavailableDelay == .seconds(30))
   }
 
   /// A vendor body nobody can parse is not evidence the credential is dead, so this cools down
   /// rather than demanding a login: forcing one here would log the owner out over a vendor bug.
-  @Test func anUnusableAnswerCoolsDownWithoutRetrying() async throws {
+  @Test
+  func anUnusableAnswerCoolsDownWithoutRetrying() async throws {
     // given
     let oauth = ScriptedRefresh([.failure(.malformedResponse(detail: "not JSON"))])
     let source = CredentialFixture.source(
@@ -550,7 +564,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(await oauth.callCount == 1)
   }
 
-  @Test func theFirstCallerAfterCooldownExpiryStartsOneNewFlight() async throws {
+  @Test
+  func theFirstCallerAfterCooldownExpiryStartsOneNewFlight() async throws {
     // given
     let oauth = ScriptedRefresh([
       .failure(.throttled(retryAfter: .seconds(60))),
@@ -577,7 +592,8 @@ struct ChatGPTCredentialSourceTests {
 
   // MARK: - Generation-aware rejection
 
-  @Test func aStaleGenerationRejectionIsIgnored() async throws {
+  @Test
+  func aStaleGenerationRejectionIsIgnored() async throws {
     // given
     let oauth = ScriptedRefresh()
     let source = CredentialFixture.source(
@@ -598,7 +614,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(await oauth.callCount == 0)
   }
 
-  @Test func aMatchingFirstRejectionDurablyForcesRefreshAfterRestart() async throws {
+  @Test
+  func aMatchingFirstRejectionDurablyForcesRefreshAfterRestart() async throws {
     // given
     let store = RecordingCredentialStore()
     let source = CredentialFixture.source(
@@ -619,18 +636,15 @@ struct ChatGPTCredentialSourceTests {
       ) == .expired
     )
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
-    let restarted = CredentialFixture.source(
-      credential: persisted,
-      store: store,
-      oauth: oauth
-    )
+    let restarted = CredentialFixture.source(credential: persisted, store: store, oauth: oauth)
     let authorization = try await restarted.authorization()
     #expect(await oauth.callCount == 1)
     #expect(authorization.generation == CredentialFixture.secondGeneration)
     #expect(authorization.headers["Authorization"] == "Bearer \(CredentialFixture.rotatedAccess)")
   }
 
-  @Test func aMatchingFirstRejectionImmediatelyRefreshesTheLiveSource() async throws {
+  @Test
+  func aMatchingFirstRejectionImmediatelyRefreshesTheLiveSource() async throws {
     // given
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
     let source = CredentialFixture.source(
@@ -650,7 +664,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(authorization.headers["Authorization"] == "Bearer \(CredentialFixture.rotatedAccess)")
   }
 
-  @Test func aRejectedTokenMarkerWriteFailureRetriesTheMarkerBeforeRefreshing() async throws {
+  @Test
+  func aRejectedTokenMarkerWriteFailureRetriesTheMarkerBeforeRefreshing() async throws {
     // given
     let store = RecordingCredentialStore(failing: .publicationFailed)
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
@@ -677,7 +692,8 @@ struct ChatGPTCredentialSourceTests {
     #expect(authorization.headers["Authorization"] == "Bearer \(CredentialFixture.rotatedAccess)")
   }
 
-  @Test func aMatchingSecondRejectionLatchesAndSilencesTheNetwork() async throws {
+  @Test
+  func aMatchingSecondRejectionLatchesAndSilencesTheNetwork() async throws {
     // given
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
     let source = CredentialFixture.source(
@@ -706,7 +722,8 @@ struct ChatGPTCredentialSourceTests {
 
   // MARK: - Single flight
 
-  @Test func concurrentCallersShareOneFlightAndOneAnswer() async throws {
+  @Test
+  func concurrentCallersShareOneFlightAndOneAnswer() async throws {
     // given — a flight that cannot finish until its gate opens, and an arrival count that only
     // reaches three once every caller is placed
     let release = AsyncGate()
@@ -746,7 +763,8 @@ struct ChatGPTCredentialSourceTests {
     )
   }
 
-  @Test func cancellingOneWaiterLeavesTheFlightAndTheOthersAlone() async throws {
+  @Test
+  func cancellingOneWaiterLeavesTheFlightAndTheOthersAlone() async throws {
     // given
     let release = AsyncGate()
     defer { release.open() }
@@ -786,7 +804,8 @@ struct ChatGPTCredentialSourceTests {
   /// completion belonging to an older flight cannot save, publish, bump the generation, clear the
   /// flight, or resume its waiters. Driven directly: no sequence of public calls can produce two
   /// overlapping flights, which is the point — the guard is what keeps it that way.
-  @Test func aStaleFlightCannotFinalizeANewerOperation() async throws {
+  @Test
+  func aStaleFlightCannotFinalizeANewerOperation() async throws {
     // given
     let release = AsyncGate()
     defer { release.open() }

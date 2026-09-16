@@ -6,7 +6,8 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct MemoryCommandStoreTests {
+@Suite
+struct MemoryCommandStoreTests {
   private struct InjectedCrash: Error {}
 
   private func freshStore() throws -> (MemoryCommandStoreGRDB, MemoryStoreGRDB, DatabaseQueue) {
@@ -23,24 +24,25 @@ import Testing
     }
   }
 
-  private func processedCount(_ queue: DatabaseQueue, updateId: Int64) throws -> Int {
+  private func processedCount(_ queue: DatabaseQueue, updateID: Int64) throws -> Int {
     try queue.read { db in
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM processed_updates WHERE update_id = ?",
-        arguments: [updateId]
+        arguments: [updateID]
       ) ?? 0
     }
   }
 
-  @Test func applyRememberClaimsInsertsAndAuditsInOneTransaction() throws {
+  @Test
+  func applyRememberClaimsInsertsAndAuditsInOneTransaction() throws {
     // given
     let (commands, reads, queue) = try freshStore()
     let now = Date(timeIntervalSince1970: 100)
-    let newItem = NewMemoryItem(text: "ship 3a", kind: .project, sessionId: nil)
+    let newItem = NewMemoryItem(text: "ship 3a", kind: .project, sessionID: nil)
 
     // when
-    let result = try commands.applyRemember(updateId: 10, item: newItem, now: now)
+    let result = try commands.applyRemember(updateID: 10, item: newItem, now: now)
 
     // then
     #expect(result.newlyClaimed)
@@ -49,7 +51,7 @@ import Testing
     #expect(stored.kind == .project)
     #expect(stored.createdAt == now)
     #expect(try reads.get(id: stored.id) == stored)
-    #expect(try processedCount(queue, updateId: 10) == 1)
+    #expect(try processedCount(queue, updateID: 10) == 1)
 
     let audits = try auditRows(queue)
     #expect(audits.count == 1)
@@ -59,15 +61,16 @@ import Testing
     #expect(audit["args_redacted"] as String == "/remember")
   }
 
-  @Test func redeliveredRememberIsSkippedWithNoDoubleWrite() throws {
+  @Test
+  func redeliveredRememberIsSkippedWithNoDoubleWrite() throws {
     // given
     let (commands, _, queue) = try freshStore()
     let now = Date(timeIntervalSince1970: 200)
-    let newItem = NewMemoryItem(text: "once", kind: .user, sessionId: nil)
-    let first = try commands.applyRemember(updateId: 20, item: newItem, now: now)
+    let newItem = NewMemoryItem(text: "once", kind: .user, sessionID: nil)
+    let first = try commands.applyRemember(updateID: 20, item: newItem, now: now)
 
     // when - the same update_id arrives again.
-    let duplicate = try commands.applyRemember(updateId: 20, item: newItem, now: now)
+    let duplicate = try commands.applyRemember(updateID: 20, item: newItem, now: now)
 
     // then
     #expect(first.newlyClaimed)
@@ -80,20 +83,21 @@ import Testing
     #expect(try auditRows(queue).count == 1)
   }
 
-  @Test func applyForgetClaimsDeletesAndAuditsInOneTransaction() throws {
+  @Test
+  func applyForgetClaimsDeletesAndAuditsInOneTransaction() throws {
     // given
     let (commands, reads, queue) = try freshStore()
     let remembered = try commands.applyRemember(
-      updateId: 29,
-      item: NewMemoryItem(text: "forget me", kind: .user, sessionId: nil),
+      updateID: 29,
+      item: NewMemoryItem(text: "forget me", kind: .user, sessionID: nil),
       now: Date(timeIntervalSince1970: 1)
     )
     let stored = try #require(remembered.item)
 
     // when
     let result = try commands.applyForget(
-      updateId: 30,
-      itemId: stored.id,
+      updateID: 30,
+      itemID: stored.id,
       now: Date(timeIntervalSince1970: 2)
     )
 
@@ -101,7 +105,7 @@ import Testing
     #expect(result.newlyClaimed)
     #expect(result.item == nil)
     #expect(try reads.get(id: stored.id) == nil)
-    #expect(try processedCount(queue, updateId: 30) == 1)
+    #expect(try processedCount(queue, updateID: 30) == 1)
 
     let audits = try auditRows(queue).filter { row in
       row["action"] as String == AuditAction.memoryDelete.rawValue
@@ -111,86 +115,93 @@ import Testing
     #expect(audit["decision"] as String == "deleted")
   }
 
-  @Test func applyForgetOnMissingItemStillClaimsAndAuditsAbsent() throws {
+  @Test
+  func applyForgetOnMissingItemStillClaimsAndAuditsAbsent() throws {
     // given
     let (commands, _, queue) = try freshStore()
 
     // when
     let result = try commands.applyForget(
-      updateId: 31,
-      itemId: 12_345,
+      updateID: 31,
+      itemID: 12_345,
       now: Date(timeIntervalSince1970: 2)
     )
 
     // then
     #expect(result.newlyClaimed)
-    #expect(try processedCount(queue, updateId: 31) == 1)
+    #expect(try processedCount(queue, updateID: 31) == 1)
     let audit = try #require(try auditRows(queue).first)
     #expect(audit["action"] as String == AuditAction.memoryDelete.rawValue)
     #expect(audit["decision"] as String == "absent")
   }
 
-  @Test func crashAfterClaimRollsBackClaimAndAllowsRetry() throws {
+  @Test
+  func crashAfterClaimRollsBackClaimAndAllowsRetry() throws {
     // given
     let queue = try TestDatabase.make()
-    let crashing = MemoryCommandStoreGRDB(
-      writer: queue,
-      afterClaimForTesting: { throw InjectedCrash() }
-    )
+    let crashing = MemoryCommandStoreGRDB(writer: queue) {
+      throw InjectedCrash()
+    }
     let now = Date(timeIntervalSince1970: 400)
-    let newItem = NewMemoryItem(text: "atomic", kind: .user, sessionId: nil)
+    let newItem = NewMemoryItem(text: "atomic", kind: .user, sessionID: nil)
 
     // when — the injected crash surfaces classified at the seam, never as its raw type
     #expect(throws: StoreError.self) {
-      try crashing.applyRemember(updateId: 40, item: newItem, now: now)
+      try crashing.applyRemember(updateID: 40, item: newItem, now: now)
     }
 
     // then - the claim and the insert both rolled back; a retry succeeds cleanly.
-    #expect(try processedCount(queue, updateId: 40) == 0)
+    #expect(try processedCount(queue, updateID: 40) == 0)
     let itemCount = try queue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM memory_items") ?? -1
     }
     #expect(itemCount == 0)
 
-    let retry = try MemoryCommandStoreGRDB(writer: queue)
-      .applyRemember(updateId: 40, item: newItem, now: now)
+    let retry = try MemoryCommandStoreGRDB(writer: queue).applyRemember(
+      updateID: 40,
+      item: newItem,
+      now: now
+    )
     #expect(retry.newlyClaimed)
-    #expect(try processedCount(queue, updateId: 40) == 1)
+    #expect(try processedCount(queue, updateID: 40) == 1)
   }
 
-  @Test func crashAfterClaimInForgetRollsBackClaimAndAllowsRetry() throws {
+  @Test
+  func crashAfterClaimInForgetRollsBackClaimAndAllowsRetry() throws {
     // given - seed one item so there is a row for applyForget to delete.
     let queue = try TestDatabase.make()
     let reads = MemoryStoreGRDB(writer: queue)
     let remembered = try MemoryCommandStoreGRDB(writer: queue).applyRemember(
-      updateId: 49,
-      item: NewMemoryItem(text: "to be forgotten", kind: .user, sessionId: nil),
+      updateID: 49,
+      item: NewMemoryItem(text: "to be forgotten", kind: .user, sessionID: nil),
       now: Date(timeIntervalSince1970: 1)
     )
     let stored = try #require(remembered.item)
-    let crashing = MemoryCommandStoreGRDB(
-      writer: queue,
-      afterClaimForTesting: { throw InjectedCrash() }
-    )
-    let updateId: Int64 = 50
+    let crashing = MemoryCommandStoreGRDB(writer: queue) {
+      throw InjectedCrash()
+    }
+    let updateID: Int64 = 50
     let now = Date(timeIntervalSince1970: 2)
 
     // when — the injected crash surfaces classified at the seam, never as its raw type
     #expect(throws: StoreError.self) {
-      try crashing.applyForget(updateId: updateId, itemId: stored.id, now: now)
+      try crashing.applyForget(updateID: updateID, itemID: stored.id, now: now)
     }
 
     // then - the crash fires inside the transaction: both the processed_updates claim
     // and the DELETE rolled back, so the item is still present and the claim is gone.
-    #expect(try processedCount(queue, updateId: updateId) == 0)
+    #expect(try processedCount(queue, updateID: updateID) == 0)
     #expect(try reads.get(id: stored.id) != nil)
 
     // A retry with a non-crashing store completes successfully: claim recorded,
     // item now deleted.
-    let retry = try MemoryCommandStoreGRDB(writer: queue)
-      .applyForget(updateId: updateId, itemId: stored.id, now: now)
+    let retry = try MemoryCommandStoreGRDB(writer: queue).applyForget(
+      updateID: updateID,
+      itemID: stored.id,
+      now: now
+    )
     #expect(retry.newlyClaimed)
     #expect(try reads.get(id: stored.id) == nil)
-    #expect(try processedCount(queue, updateId: updateId) == 1)
+    #expect(try processedCount(queue, updateID: updateID) == 1)
   }
 }

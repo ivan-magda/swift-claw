@@ -16,8 +16,10 @@ struct LearningAcceptanceHarness {
   static let owner: Int64 = 777
   static let now = Date(timeIntervalSince1970: 1_782_000_600)
   static let noIssue = #"{"schema_version":1,"outcome":"no_issue","issue_codes":[]}"#
+
   static let negative =
     #"{"schema_version":1,"outcome":"reusable_issue","issue_codes":["material.missed"]}"#
+
   static let candidate =
     #"{"schema_version":1,"candidate":{"lessons":["Report only material changes."]}}"#
 
@@ -32,12 +34,12 @@ struct LearningAcceptanceHarness {
   let outbox: OutboxDispatcher<ContinuousClock>
   let learning: ScheduledLearningService?
   let pollerTask: Task<Void, Never>
-  let jobId: Int64
+  let jobID: Int64
 
   static func withHarness(
     learningEnabled: Bool,
     negativeTrial: Bool = false,
-    body: (LearningAcceptanceHarness) async throws -> Void
+    body: (_ harness: LearningAcceptanceHarness) async throws -> Void
   ) async throws {
     let env = try await make(learningEnabled: learningEnabled, negativeTrial: negativeTrial)
     do {
@@ -55,7 +57,7 @@ struct LearningAcceptanceHarness {
     learningEnabled: Bool,
     negativeTrial: Bool = false,
     config existingConfig: AppConfig? = nil,
-    jobId existingJob: Int64? = nil
+    jobID existingJob: Int64? = nil
   ) async throws -> Self {
     var environment = CompositionAcceptanceHarness.validEnv()
     environment[AppConfig.EnvKey.learningEnabled] = learningEnabled ? "true" : nil
@@ -75,19 +77,18 @@ struct LearningAcceptanceHarness {
     let telegram = ScriptedHTTPExecutor(Array(repeating: response, count: 128))
     let replies =
       existingJob == nil
-      ? [
-        answer, noIssue, candidate, answer, negativeTrial ? negative : noIssue,
-        answer, noIssue,
-      ]
+      ? [answer, noIssue, candidate, answer, negativeTrial ? negative : noIssue, answer, noIssue]
       : [answer, noIssue]
     let llm = ScriptedHTTPExecutor(try replies.map(completion))
     var builder = try CompositionAcceptance.makeBuilder(
       http: telegram,
       config: config,
-      secrets: Secrets(telegramBotToken: "tg-token", llmApiKey: "sk-test")
+      secrets: Secrets(telegramBotToken: "tg-token", llmAPIKey: "sk-test")
     )
-    builder.now = { Self.now }
-    try builder.stores.allowlist.seedAllowlist(userIds: [owner])
+    builder.now = {
+      Self.now
+    }
+    try builder.stores.allowlist.seedAllowlist(userIDs: [owner])
     let roster = try builder.makeRosterStack(http: llm)
     let bundle = try await builder.build(
       rosterStack: roster,
@@ -97,25 +98,33 @@ struct LearningAcceptanceHarness {
       )
     )
     let scheduler = try #require(
-      bundle.daemon.services.compactMap { $0 as? SchedulerService }.first
+      bundle.daemon.services.compactMap {
+        $0 as? SchedulerService
+      }.first
     )
     let outbox = try #require(
-      bundle.daemon.services.compactMap { $0 as? OutboxDispatcher<ContinuousClock> }.first
+      bundle.daemon.services.compactMap {
+        $0 as? OutboxDispatcher<ContinuousClock>
+      }.first
     )
     let poller = try #require(
-      bundle.daemon.services.compactMap { $0 as? TelegramPollerService }.first
+      bundle.daemon.services.compactMap {
+        $0 as? TelegramPollerService
+      }.first
     )
-    let learning = bundle.daemon.services.compactMap { $0 as? ScheduledLearningService }.first
-    let jobId: Int64
+    let learning = bundle.daemon.services.compactMap {
+      $0 as? ScheduledLearningService
+    }.first
+    let jobID: Int64
     if let existingJob {
-      jobId = existingJob
+      jobID = existingJob
       await builder.bootReconcile(heartbeatOwner: nil)()
       await learning?.reconcileAtBoot(now: Self.now)
     } else {
       let now = Self.now
-      jobId = try builder.stores.scheduledJobs.create(
+      jobID = try builder.stores.scheduledJobs.create(
         NewScheduledJob(
-          ownerChatId: owner,
+          ownerChatID: owner,
           label: "digest",
           prompt: "Summarize material changes.",
           recurrence: SchedulingRuleFixtures.weekdayEnvelope(zone: .gmt),
@@ -148,7 +157,7 @@ struct LearningAcceptanceHarness {
           }
         }
       },
-      jobId: jobId
+      jobID: jobID
     )
   }
 
@@ -158,9 +167,9 @@ struct LearningAcceptanceHarness {
     await learning?.waitForPendingWork()
   }
 
-  func withRestarted(body: (Self) async throws -> Void) async throws {
+  func withRestarted(body: (_ harness: Self) async throws -> Void) async throws {
     await stop()
-    let restarted = try await Self.make(learningEnabled: true, config: config, jobId: jobId)
+    let restarted = try await Self.make(learningEnabled: true, config: config, jobID: jobID)
     do {
       try await body(restarted)
       await restarted.stop()
@@ -176,46 +185,44 @@ struct LearningAcceptanceHarness {
   }
 
   func runNow() async throws -> Int64 {
-    try await submit(message: "/runnow \(jobId)")
+    try await submit(message: "/runnow \(jobID)")
     return try await completedRun()
   }
 
   func completedRun() async throws -> Int64 {
-    let job = try #require(try stores.scheduledJobs.job(id: jobId))
-    let sessionId = try #require(job.sessionId)
+    let job = try #require(try stores.scheduledJobs.job(id: jobID))
+    let sessionID = try #require(job.sessionID)
     let complete = AsyncGate()
-    _ = await bundle.lanes.enqueue(sessionID: sessionId, runID: Int64.max) {
+    _ = await bundle.lanes.enqueue(sessionID: sessionID, runID: Int64.max) {
       complete.open()
     }
     await complete.wait()
     await learning?.waitForPendingWork()
     return try await writer.read { db in
       try #require(
-        try Int64.fetchOne(
-          db,
-          sql: "SELECT MAX(id) FROM runs WHERE job_id = ?",
-          arguments: [jobId]
-        )
+        try Int64.fetchOne(db, sql: "SELECT MAX(id) FROM runs WHERE job_id = ?", arguments: [jobID])
       )
     }
   }
 
-  func correct(runId: Int64) async throws {
+  func correct(runID: Int64) async throws {
     let nonce = try await writer.read { db in
       try #require(
         try String.fetchOne(
           db,
           sql: "SELECT nonce FROM feedback_targets WHERE subject_kind = ? AND subject_digest = ?",
-          arguments: [FeedbackSubjectKind.run.rawValue, String(runId)]
+          arguments: [FeedbackSubjectKind.run.rawValue, String(runID)]
         )
       )
     }
     let data = FeedbackKeyboard.callbackData(nonce: nonce, action: .resultCorrection)
     let callback: [String: Any] = [
       "callback_query": [
-        "id": "correction", "from": ["id": Self.owner], "data": data,
+        "id": "correction",
+        "from": ["id": Self.owner],
+        "data": data,
         "message": ["message_id": 900, "chat": ["id": Self.owner, "type": "private"]],
-      ]
+      ],
     ]
     try await submit(update: callback)
     try await submit(message: "Ignore counter-only changes.")
@@ -223,12 +230,16 @@ struct LearningAcceptanceHarness {
   }
 
   func submit(message: String) async throws {
-    try await submit(update: [
-      "message": [
-        "message_id": 1000, "from": ["id": Self.owner],
-        "chat": ["id": Self.owner, "type": "private"], "text": message,
+    try await submit(
+      update: [
+        "message": [
+          "message_id": 1000,
+          "from": ["id": Self.owner],
+          "chat": ["id": Self.owner, "type": "private"],
+          "text": message,
+        ],
       ]
-    ])
+    )
   }
 
   func submit(update: [String: Any]) async throws {
@@ -260,9 +271,9 @@ struct LearningAcceptanceHarness {
     }
   }
 
-  func runState(_ runId: Int64) throws -> RunState? {
+  func runState(_ runID: Int64) throws -> RunState? {
     try writer.read { db in
-      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runId])
+      try String.fetchOne(db, sql: "SELECT state FROM runs WHERE id = ?", arguments: [runID])
         .flatMap(RunState.init(rawValue:))
     }
   }
@@ -273,9 +284,11 @@ struct LearningAcceptanceHarness {
 extension LearningAcceptanceHarness {
   static func completion(_ content: String) throws -> ScriptedHTTPExecutor.Step {
     let object: [String: Any] = [
-      "id": "reply", "object": "chat.completion", "model": "gpt-4o",
+      "id": "reply",
+      "object": "chat.completion",
+      "model": "gpt-4o",
       "choices": [
-        ["message": ["role": "assistant", "content": content], "finish_reason": "stop"]
+        ["message": ["role": "assistant", "content": content], "finish_reason": "stop"],
       ],
       "usage": ["prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120],
     ]

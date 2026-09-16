@@ -8,9 +8,7 @@ import Testing
 /// Echoes the STAGED FILE's bytes back as text, proving the download really reached disk intact.
 private struct StagedBytesEchoTranscriber: VoiceTranscribing {
   func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String {
-    guard
-      let data = try? Data(contentsOf: url),
-      let text = String(bytes: data, encoding: .utf8)
+    guard let data = try? Data(contentsOf: url), let text = String(bytes: data, encoding: .utf8)
     else {
       throw VoiceTranscriptionError.undecodableAudio("unreadable staged file")
     }
@@ -18,9 +16,10 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
   }
 }
 
-@Suite struct VoiceMessageServiceTests {
+@Suite
+struct VoiceMessageServiceTests {
   private let attachment = VoiceAttachment(
-    fileId: "F1",
+    fileID: "F1",
     durationSeconds: 8,
     mimeType: "audio/ogg",
     fileSizeBytes: 4
@@ -47,7 +46,8 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     )
   }
 
-  @Test func stagesTheDownloadedBytesAndCleansUpAfterItself() async throws {
+  @Test
+  func stagesTheDownloadedBytesAndCleansUpAfterItself() async throws {
     // given — distinctive bytes arranged HERE, so the assertion has one visible source
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
@@ -66,7 +66,8 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     #expect(leftovers.isEmpty)
   }
 
-  @Test func sweepStagingRemovesCrashOrphanedAudio() throws {
+  @Test
+  func sweepStagingRemovesCrashOrphanedAudio() throws {
     // given — a staged file a crash left behind under the state root
     let stateRoot = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -86,7 +87,8 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     #expect(FileManager.default.fileExists(atPath: staging.path) == false)
   }
 
-  @Test func stagedFileIsCleanedUpOnTheFailurePathToo() async throws {
+  @Test
+  func stagedFileIsCleanedUpOnTheFailurePathToo() async throws {
     // given — a transcriber that fails after the audio was staged
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
@@ -104,7 +106,8 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     #expect(leftovers.isEmpty)
   }
 
-  @Test func passesTheConfiguredDownloadCapToTheFetcher() async throws {
+  @Test
+  func passesTheConfiguredDownloadCapToTheFetcher() async throws {
     // given — a distinctive cap so a hardcoded constant cannot pass by luck
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
@@ -121,10 +124,11 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
 
     // then — the bounded-download cap survives the middle of the chain
     let call = try #require(await fetcher.calls.first)
-    #expect(call == StubMediaFetcher.Call(fileId: "F1", maxBytes: 12_345))
+    #expect(call == StubMediaFetcher.Call(fileID: "F1", maxBytes: 12_345))
   }
 
-  @Test func redactsSecretsFromTheTranscript() async throws {
+  @Test
+  func redactsSecretsFromTheTranscript() async throws {
     // given — a transcript that happens to speak a configured secret aloud
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
@@ -141,7 +145,8 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     #expect(try result.get() == "the token is \(SecretRedactor.replacement) okay")
   }
 
-  @Test func capsAnOverlongTranscriptWithTheCanonicalMarker() async throws {
+  @Test
+  func capsAnOverlongTranscriptWithTheCanonicalMarker() async throws {
     // given
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
@@ -157,13 +162,14 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     // then — ToolOutputCap semantics: the marker fits WITHIN the cap
     let transcript = try result.get()
     #expect(
-      transcript
-        == String(repeating: "a", count: 30 - TextTruncation.marker.count) + TextTruncation.marker
+      transcript == String(repeating: "a", count: 30 - TextTruncation.marker.count)
+        + TextTruncation.marker
     )
     #expect(transcript.count == 30)
   }
 
-  @Test func whitespaceOnlyTranscriptIsAnEmptyTranscriptFailure() async throws {
+  @Test
+  func whitespaceOnlyTranscriptIsAnEmptyTranscriptFailure() async throws {
     // given
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
@@ -179,7 +185,8 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     #expect(result == .failure(.emptyTranscript))
   }
 
-  @Test func lowConfidenceFromTheEngineBecomesItsOwnFailure() async throws {
+  @Test
+  func lowConfidenceFromTheEngineBecomesItsOwnFailure() async throws {
     // given — every configured locale scored below the arbiter floor
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
@@ -195,10 +202,11 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     #expect(result == .failure(.lowConfidence))
   }
 
-  @Test func declaredFileSizeOverTheCapIsRefusedWithoutFetching() async throws {
+  @Test
+  func declaredFileSizeOverTheCapIsRefusedWithoutFetching() async throws {
     // given — Telegram declares a size beyond what we would download
     let oversized = VoiceAttachment(
-      fileId: "F1",
+      fileID: "F1",
       durationSeconds: 8,
       mimeType: "audio/ogg",
       fileSizeBytes: Int64(64 * 1024 * 1024)
@@ -220,7 +228,8 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     #expect(await fetcher.calls.isEmpty)
   }
 
-  @Test func wedgedTranscriptionHitsTheDeadlineInsteadOfStallingForever() async throws {
+  @Test
+  func wedgedTranscriptionHitsTheDeadlineInsteadOfStallingForever() async throws {
     // given — an engine that never returns until cancelled
     let staging = try makeTemporaryRoot(prefix: "voice-service-tests")
     defer { try? FileManager.default.removeItem(at: staging) }
@@ -265,7 +274,8 @@ private struct StagedBytesEchoTranscriber: VoiceTranscribing {
     #expect(result == .failure(expected))
   }
 
-  @Test func diskFullStagingErrorsClassifyAsStorageFull() {
+  @Test
+  func diskFullStagingErrorsClassifyAsStorageFull() {
     // given — the two spellings of ENOSPC plus an unrelated error
     let cocoaDiskFull = CocoaError(.fileWriteOutOfSpace)
     let posixDiskFull = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))

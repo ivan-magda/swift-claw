@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct V15MigrationTests {
-  @Test func freshLatestMigrationInstallsOnlyTheLiveTrialIndexAndIsIdempotent() throws {
+@Suite
+struct V15MigrationTests {
+  @Test
+  func freshLatestMigrationInstallsOnlyTheLiveTrialIndexAndIsIdempotent() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -23,24 +25,22 @@ import Testing
     #expect(try migrations(queue).last == "v15")
   }
 
-  @Test func v15PreservesSeededV14LiveAndTerminalRows() throws {
+  @Test
+  func v15PreservesSeededV14LiveAndTerminalRows() throws {
     // given
     let queue = try v14Queue()
-    try seedJob(queue, jobId: 1)
-    try insertTrial(queue, jobId: 1, trialId: 1, state: .draining, candidateByte: "b")
-    try insertTrial(queue, jobId: 1, trialId: 2, state: .promoted, candidateByte: "c")
-    try insertTrial(queue, jobId: 1, trialId: 3, state: .fellBack, candidateByte: "d")
+    try seedJob(queue, jobID: 1)
+    try insertTrial(queue, jobID: 1, trialID: 1, state: .draining, candidateByte: "b")
+    try insertTrial(queue, jobID: 1, trialID: 2, state: .promoted, candidateByte: "c")
+    try insertTrial(queue, jobID: 1, trialID: 3, state: .fellBack, candidateByte: "d")
 
     // when
     try ClawDatabase.migrate(queue)
 
     // then
     let rows = try queue.read { db in
-      try Row.fetchAll(
-        db,
-        sql: "SELECT trial_id, state FROM learning_trials ORDER BY trial_id"
-      )
-      .map { row in
+      try Row.fetchAll(db, sql: "SELECT trial_id, state FROM learning_trials ORDER BY trial_id").map
+      { row in
         "\(row["trial_id"] as Int64):\(row["state"] as String)"
       }
     }
@@ -52,24 +52,12 @@ import Testing
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
-    try seedJob(queue, jobId: 1)
-    try insertTrial(
-      queue,
-      jobId: 1,
-      trialId: 1,
-      state: pair.first,
-      candidateByte: "b"
-    )
+    try seedJob(queue, jobID: 1)
+    try insertTrial(queue, jobID: 1, trialID: 1, state: pair.first, candidateByte: "b")
 
     // when / then — every ordered pair independently reaches the partial-index predicate.
     #expect {
-      try insertTrialMapped(
-        queue,
-        jobId: 1,
-        trialId: 2,
-        state: pair.second,
-        candidateByte: "c"
-      )
+      try insertTrialMapped(queue, jobID: 1, trialID: 2, state: pair.second, candidateByte: "c")
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
@@ -79,28 +67,30 @@ import Testing
     #expect(try trialCount(queue) == 1)
   }
 
-  @Test func liveIndexAllowsEveryTerminalHistoryShape() throws {
+  @Test
+  func liveIndexAllowsEveryTerminalHistoryShape() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
-    try seedJob(queue, jobId: 1)
+    try seedJob(queue, jobID: 1)
 
     // when
-    try insertTrial(queue, jobId: 1, trialId: 1, state: .open, candidateByte: "b")
-    try insertTrial(queue, jobId: 1, trialId: 2, state: .promoted, candidateByte: "c")
-    try insertTrial(queue, jobId: 1, trialId: 3, state: .fellBack, candidateByte: "d")
-    try insertTrial(queue, jobId: 1, trialId: 4, state: .closed, candidateByte: "e")
+    try insertTrial(queue, jobID: 1, trialID: 1, state: .open, candidateByte: "b")
+    try insertTrial(queue, jobID: 1, trialID: 2, state: .promoted, candidateByte: "c")
+    try insertTrial(queue, jobID: 1, trialID: 3, state: .fellBack, candidateByte: "d")
+    try insertTrial(queue, jobID: 1, trialID: 4, state: .closed, candidateByte: "e")
 
     // then — widening the predicate to any terminal state rejects one of these rows.
     #expect(try trialCount(queue) == 4)
   }
 
-  @Test func conflictingV14UpgradeRollsBackAndRetriesAfterRepair() throws {
+  @Test
+  func conflictingV14UpgradeRollsBackAndRetriesAfterRepair() throws {
     // given
     let queue = try v14Queue()
-    try seedJob(queue, jobId: 1)
-    try insertTrial(queue, jobId: 1, trialId: 1, state: .open, candidateByte: "b")
-    try insertTrial(queue, jobId: 1, trialId: 2, state: .draining, candidateByte: "c")
+    try seedJob(queue, jobID: 1)
+    try insertTrial(queue, jobID: 1, trialID: 1, state: .open, candidateByte: "b")
+    try insertTrial(queue, jobID: 1, trialID: 2, state: .draining, candidateByte: "c")
 
     // when
     #expect {
@@ -166,7 +156,7 @@ private func v14Queue() throws -> DatabaseQueue {
   return queue
 }
 
-private func seedJob(_ queue: DatabaseQueue, jobId: Int64) throws {
+private func seedJob(_ queue: DatabaseQueue, jobID: Int64) throws {
   let base = String(repeating: "a", count: 64)
   try queue.write { db in
     try db.execute(
@@ -175,14 +165,14 @@ private func seedJob(_ queue: DatabaseQueue, jobId: Int64) throws {
           next_occurrence, last_fired_at, status, session_id, created_ts, updated_ts)
         VALUES (?, 1, 'job', 'prompt', '{}', 'UTC', NULL, NULL, 'active', NULL, 1, 1)
         """,
-      arguments: [jobId]
+      arguments: [jobID]
     )
     try db.execute(
       sql: """
         INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source, created_at)
         VALUES (?, ?, 1, X'00', 'canonical_empty', 1)
         """,
-      arguments: [jobId, base]
+      arguments: [jobID, base]
     )
     try db.execute(
       sql: """
@@ -190,39 +180,27 @@ private func seedJob(_ queue: DatabaseQueue, jobId: Int64) throws {
           stable_revision, open_trial_id, feedback_revision, armed_at)
         VALUES (?, 1, ?, 0, NULL, 0, 1)
         """,
-      arguments: [jobId, base]
+      arguments: [jobID, base]
     )
   }
 }
 
 private func insertTrial(
   _ queue: DatabaseQueue,
-  jobId: Int64,
-  trialId: Int64,
+  jobID: Int64,
+  trialID: Int64,
   state: LearningTrialState,
   candidateByte: String
 ) throws {
   try queue.write { db in
-    try insertTrial(db, jobId: jobId, trialId: trialId, state: state, candidateByte: candidateByte)
-  }
-}
-
-private func insertTrialMapped(
-  _ queue: DatabaseQueue,
-  jobId: Int64,
-  trialId: Int64,
-  state: LearningTrialState,
-  candidateByte: String
-) throws(StoreError) {
-  try MappedDatabase(writer: queue).writeMapping { db in
-    try insertTrial(db, jobId: jobId, trialId: trialId, state: state, candidateByte: candidateByte)
+    try insertTrial(db, jobID: jobID, trialID: trialID, state: state, candidateByte: candidateByte)
   }
 }
 
 private func insertTrial(
   _ db: Database,
-  jobId: Int64,
-  trialId: Int64,
+  jobID: Int64,
+  trialID: Int64,
   state: LearningTrialState,
   candidateByte: String
 ) throws {
@@ -235,7 +213,7 @@ private func insertTrial(
         source_manifest, predecessor_digest, algorithm, created_at)
       VALUES (?, ?, 1, ?, ?, 0, 0, 'reflection', '{}', NULL, ?, 1)
       """,
-    arguments: [candidate, jobId, base, base, LearningAlgorithm.v1.rawValue]
+    arguments: [candidate, jobID, base, base, LearningAlgorithm.v1.rawValue]
   )
   try db.execute(
     sql: """
@@ -245,15 +223,27 @@ private func insertTrial(
       VALUES (?, ?, 1, ?, ?, ?, 1, 2, 3, 3, 0, 1, ?, NULL, ?)
       """,
     arguments: [
-      trialId,
-      jobId,
+      trialID,
+      jobID,
       base,
       candidate,
-      Int(trialId),
+      Int(trialID),
       state.rawValue,
       LearningAlgorithm.v1.rawValue,
     ]
   )
+}
+
+private func insertTrialMapped(
+  _ queue: DatabaseQueue,
+  jobID: Int64,
+  trialID: Int64,
+  state: LearningTrialState,
+  candidateByte: String
+) throws(StoreError) {
+  try MappedDatabase(writer: queue).writeMapping { db in
+    try insertTrial(db, jobID: jobID, trialID: trialID, state: state, candidateByte: candidateByte)
+  }
 }
 
 private func indexSQL(_ queue: DatabaseQueue) throws -> [String: String] {

@@ -18,7 +18,8 @@ import Testing
 /// Responses SSE and real GRDB stores. Proves the resolved route, fixed endpoint and headers, wire vs
 /// qualified model identities, a multi-turn replay round-trip with a byte-golden for the replayed
 /// body, included-plan accounting, and `ProviderCallID` idempotency.
-@Suite struct ChatGPTSubscriptionAcceptanceTests {
+@Suite
+struct ChatGPTSubscriptionAcceptanceTests {
   private static let responsesURL = "https://chatgpt.com/backend-api/codex/responses"
 
   // MARK: - Production composition (RunComposition)
@@ -26,7 +27,8 @@ import Testing
   /// The composed stack is the included-plan managed stack, its envelope is opened exactly once
   /// (missing record is a logged-out boot, not a throw), and a failing build closes all **three
   /// distinct** HTTP client identities in order — llm, telegram, tool.
-  @Test func chatGPTRouteComposesIncludedPlanStackAndClosesThreeClientsOnFailure() async throws {
+  @Test
+  func chatGPTRouteComposesIncludedPlanStackAndClosesThreeClientsOnFailure() async throws {
     // given
     let recorder = CloseRecorder()
     let store = FreshCredentialStore(present: false)
@@ -55,13 +57,11 @@ import Testing
   /// The composed provider hits only the fixed HTTPS endpoint, carries the pinned Codex-CLI headers
   /// and the credential bearer, and sends the **unqualified** wire model — while the stack keeps the
   /// qualified reference for accounting.
-  @Test func composedProviderUsesFixedEndpointPinnedHeadersAndWireModel() async throws {
+  @Test
+  func composedProviderUsesFixedEndpointPinnedHeadersAndWireModel() async throws {
     // given
     let http = ScriptedHTTPExecutor([
-      .stream(
-        CompositionAcceptance.okHead,
-        CompositionAcceptance.terminalRound(tokens: (5, 2))
-      )
+      .stream(CompositionAcceptance.okHead, CompositionAcceptance.terminalRound(tokens: (5, 2))),
     ])
     let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
 
@@ -71,7 +71,7 @@ import Testing
         model: stack.binding.wireModel,
         messages: [ChatMessage(role: .user, content: "what time is it?")],
         maxOutputTokens: 256,
-        sessionId: "sess-acc"
+        sessionID: "sess-acc"
       )
     )
 
@@ -97,25 +97,26 @@ import Testing
   /// from **real GRDB**, and the terminal round replays it to the same issuer. The replayed reasoning
   /// input item's exact bytes are pinned so any future shape change (e.g. the `summary` field) is a
   /// visible diff, and the final assistant reply carries the same derived replay identity.
-  @Test func multiTurnReplayRoundTripThroughGRDBWithByteGolden() async throws {
+  @Test
+  func multiTurnReplayRoundTripThroughGRDBWithByteGolden() async throws {
     // given — a real session and a RUNNING run
     let stores = try CompositionAcceptance.makeStores()
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let chatId: Int64 = 4242
+    let chatID: Int64 = 4242
     let claim = try stores.sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        chatId: chatId,
-        userId: chatId,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: chatID),
+        chatID: chatID,
+        userID: chatID,
         text: "what time is it?",
         isEdited: false,
         ts: now
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
-    _ = try stores.runs.pickUp(runId: runId, policyVersion: nil, now: now)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
+    _ = try stores.runs.pickUp(runID: runID, policyVersion: nil, now: now)
 
     // A fixed key for turn 1's usage row: this test keys accounting rows, it does not exercise the
     // live per-round ID generator. That the generator mints distinct, lowercase, non-empty IDs is
@@ -128,10 +129,7 @@ import Testing
         CompositionAcceptance.okHead,
         CompositionAcceptance.toolRound(callID: "call_a", tokens: (7, 3))
       ),
-      .stream(
-        CompositionAcceptance.okHead,
-        CompositionAcceptance.terminalRound(tokens: (9, 4))
-      ),
+      .stream(CompositionAcceptance.okHead, CompositionAcceptance.terminalRound(tokens: (9, 4))),
     ])
     let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
 
@@ -146,14 +144,14 @@ import Testing
     let mintedState = try #require(firstReply.providerState)
     let commit = try stores.runs.commitAssistantTurn(
       AssistantTurn(
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
         content: firstReply.content,
         usage: ProviderUsage(
           providerCallID: firstCallID,
-          runId: runId,
-          sessionId: sessionId,
+          runID: runID,
+          sessionID: sessionID,
           model: CompositionAcceptance.qualifiedModel,
           promptTokens: 7,
           completionTokens: 3,
@@ -171,11 +169,15 @@ import Testing
 
     // when — reload the anchor from GRDB and thread it into turn 2
     let reloaded = try stores.sessions.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: .max,
+      sessionID: sessionID,
+      throughMessageID: .max,
       limit: 50
     ).history
-    let reloadedAssistant = try #require(reloaded.first { $0.role == .assistant })
+    let reloadedAssistant = try #require(
+      reloaded.first {
+        $0.role == .assistant
+      }
+    )
     let reloadedState = try #require(reloadedAssistant.providerState)
     #expect(reloadedState == mintedState)  // survived the round-trip byte-for-byte
 
@@ -219,25 +221,26 @@ import Testing
   /// derives the new epoch from the newest compatible state and never replays the older poisoned
   /// material again. Without the empty stamp surviving, the newest compatible state on reload would be
   /// the poisoned one and the recovery would be undone; this pins that it is not.
-  @Test func invalidStateEpochRecoverySurvivesRestart() async throws {
+  @Test
+  func invalidStateEpochRecoverySurvivesRestart() async throws {
     // given — a real session and a RUNNING run
     let stores = try CompositionAcceptance.makeStores()
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let chatId: Int64 = 5150
+    let chatID: Int64 = 5150
     let claim = try stores.sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        chatId: chatId,
-        userId: chatId,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: chatID),
+        chatID: chatID,
+        userID: chatID,
         text: "what time is it?",
         isEdited: false,
         ts: now
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let firstRunId = try #require(claim.runId)
-    _ = try stores.runs.pickUp(runId: firstRunId, policyVersion: nil, now: now)
+    let sessionID = try #require(claim.sessionID)
+    let firstRunID = try #require(claim.runID)
+    _ = try stores.runs.pickUp(runID: firstRunID, policyVersion: nil, now: now)
 
     // given — turn 1 mints replay state carrying the reasoning ENC-A under an initial epoch; turn 2
     // then replays it, the backend rejects it as poisoned, and the state-free recovery succeeds.
@@ -250,10 +253,7 @@ import Testing
         CompositionAcceptance.invalidEncryptedContentHead,
         CompositionAcceptance.invalidEncryptedContentBody()
       ),
-      .stream(
-        CompositionAcceptance.okHead,
-        CompositionAcceptance.terminalRound(tokens: (9, 4))
-      ),
+      .stream(CompositionAcceptance.okHead, CompositionAcceptance.terminalRound(tokens: (9, 4))),
     ])
     let firstStack = try CompositionAcceptance.makeStack(
       http: firstHTTP,
@@ -271,9 +271,9 @@ import Testing
     let poisonedState = try #require(firstReply.providerState)
     let firstCommit = try commitAssistantAnchor(
       stores,
-      runId: firstRunId,
-      sessionId: sessionId,
-      chatId: chatId,
+      runID: firstRunID,
+      sessionID: sessionID,
+      chatID: chatID,
       content: firstReply.content,
       state: poisonedState,
       callID: "epoch-r1",
@@ -283,9 +283,13 @@ import Testing
 
     // when — turn 2 replays the poisoned anchor; the backend rejects it and the provider recovers
     let poisonedAnchor = try #require(
-      try stores.sessions
-        .loadContextSnapshot(sessionId: sessionId, throughMessageId: .max, limit: 50).history
-        .first { $0.role == .assistant }
+      try stores.sessions.loadContextSnapshot(
+        sessionID: sessionID,
+        throughMessageID: .max,
+        limit: 50
+      ).history.first {
+        $0.role == .assistant
+      }
     )
     let poisonedAnchorState = try #require(poisonedAnchor.providerState)
     let recoveredReply = try await firstStack.binding.provider.complete(
@@ -316,22 +320,22 @@ import Testing
     // committed on its own run, as each turn is in production
     let secondClaim = try stores.sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 2,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        chatId: chatId,
-        userId: chatId,
+        updateID: 2,
+        sessionKey: SessionKey.telegramDM(chatID: chatID),
+        chatID: chatID,
+        userID: chatID,
         text: "and the date?",
         isEdited: false,
         ts: now
       )
     )
-    let secondRunId = try #require(secondClaim.runId)
-    _ = try stores.runs.pickUp(runId: secondRunId, policyVersion: nil, now: now)
+    let secondRunID = try #require(secondClaim.runID)
+    _ = try stores.runs.pickUp(runID: secondRunID, policyVersion: nil, now: now)
     let recoveredCommit = try commitAssistantAnchor(
       stores,
-      runId: secondRunId,
-      sessionId: sessionId,
-      chatId: chatId,
+      runID: secondRunID,
+      sessionID: sessionID,
+      chatID: chatID,
       content: recoveredReply.content,
       state: recoveredState,
       callID: "epoch-r2",
@@ -342,26 +346,30 @@ import Testing
     // when — RESTART: a fresh composed provider/codec over the same GRDB history threads the whole
     // conversation — both the poisoned anchor and the recovered one — into the next turn
     let restartHTTP = ScriptedHTTPExecutor([
-      .stream(
-        CompositionAcceptance.okHead,
-        CompositionAcceptance.terminalRound(tokens: (2, 1))
-      )
+      .stream(CompositionAcceptance.okHead, CompositionAcceptance.terminalRound(tokens: (2, 1))),
     ])
     let restartStack = try CompositionAcceptance.makeStack(
       http: restartHTTP,
       store: FreshCredentialStore()
     )
-    let anchors = try stores.sessions
-      .loadContextSnapshot(sessionId: sessionId, throughMessageId: .max, limit: 50).history
-      .filter { $0.role == .assistant }
+    let anchors = try stores.sessions.loadContextSnapshot(
+      sessionID: sessionID,
+      throughMessageID: .max,
+      limit: 50
+    ).history.filter {
+      $0.role == .assistant
+    }
     #expect(anchors.count == 2)  // both epochs are on disk
 
     let threaded =
       [ChatMessage(role: .user, content: "what time is it?")]
       + anchors.map { anchor in
-        ChatMessage(role: .assistant, content: anchor.content, providerState: anchor.providerState)
-      }
-      + [ChatMessage(role: .user, content: "still there?")]
+        ChatMessage(
+          role: .assistant,
+          content: anchor.content,
+          providerState: anchor.providerState
+        )
+      } + [ChatMessage(role: .user, content: "still there?")]
     _ = try await restartStack.binding.provider.complete(
       request: ChatRequest(
         model: restartStack.binding.wireModel,
@@ -381,7 +389,8 @@ import Testing
   /// Drives the exact CLI/composition doctor path — `LLMAuthDoctor.inspect` over a real
   /// `EncryptedLLMCredentialStore` folded into a real `DoctorReport` — across three real on-disk
   /// credential states, asserting the rendered `llm.auth` row and the report verdict for each.
-  @Test func doctorReportsTheLLMAuthRowForRealCredentialStates() async throws {
+  @Test
+  func doctorReportsTheLLMAuthRowForRealCredentialStates() async throws {
     // A usable, fresh credential → an OK oauth row that names the freshness class.
     let fresh = try Self.doctorRow { root in
       _ = try RuntimeSecretPreparer.prepare(
@@ -434,7 +443,8 @@ import Testing
   /// resolver. That an estimated-token row keeps that zero while flipping only the estimation flag is
   /// covered by `LLMAccountingTests.missingCountsRecordAnEstimatedIncludedPlanRowWhoseZeroStaysConfirmed`;
   /// asserting fields of a locally-built `ProviderUsage` here would prove only the initializer.
-  @Test func includedPlanResolvesConfirmedZeroUSD() {
+  @Test
+  func includedPlanResolvesConfirmedZeroUSD() {
     // given
     let resolver = CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_002)
     let usage = ChatUsage(promptTokens: 100, completionTokens: 40, totalTokens: 140)
@@ -455,30 +465,31 @@ import Testing
 
   /// Two tool-loop rounds each record usage keyed by a distinct `ProviderCallID`; replaying a commit
   /// with the same ID is idempotent, so run/day totals equal the sum of both rows exactly once.
-  @Test func providerCallIDMakesUsageIdempotentAndTotalsSum() async throws {
+  @Test
+  func providerCallIDMakesUsageIdempotentAndTotalsSum() async throws {
     // given — a real session and run over real GRDB
     let stores = try CompositionAcceptance.makeStores()
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let chatId: Int64 = 77
+    let chatID: Int64 = 77
     let claim = try stores.sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: chatId),
-        chatId: chatId,
-        userId: chatId,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: chatID),
+        chatID: chatID,
+        userID: chatID,
         text: "hi",
         isEdited: false,
         ts: now
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
 
     func usage(_ id: String, prompt: Int, completion: Int) -> ProviderUsage {
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: id),
-        runId: runId,
-        sessionId: sessionId,
+        runID: runID,
+        sessionID: sessionID,
         model: CompositionAcceptance.qualifiedModel,
         promptTokens: prompt,
         completionTokens: completion,
@@ -508,8 +519,11 @@ import Testing
   /// `DoctorCommand`/`DaemonDoctorReporter` call, over a real encrypted store — against a state root
   /// arranged by `arrange`, and returns the rendered report plus its verdict.
   private static func doctorRow(
-    arrange: (URL) throws -> Void
-  ) throws -> (render: String, ok: Bool) {
+    arrange: (_ stateRoot: URL) throws -> Void
+  ) throws -> (
+    render: String,
+    ok: Bool
+  ) {
     let root = try makeTemporaryRoot(prefix: "acc-doctor")
     defer { try? FileManager.default.removeItem(at: root) }
     try arrange(root)
@@ -517,12 +531,9 @@ import Testing
       AppConfig.EnvKey.stateRoot: root.path,
       AppConfig.EnvKey.llmModel: CompositionAcceptance.qualifiedModel,
     ])
-    let result = LLMAuthDoctor.inspect(
-      route: config.llm.route,
-      staticAPIKey: nil,
-      now: Date(),
-      makeManagedStore: { EncryptedLLMCredentialStore(stateRoot: config.stateRoot) }
-    )
+    let result = LLMAuthDoctor.inspect(route: config.llm.route, staticAPIKey: nil, now: Date()) {
+      EncryptedLLMCredentialStore(stateRoot: config.stateRoot)
+    }
     var report = DoctorReport()
     report.add(key: "config", value: "OK", group: .config)
     report.add(key: "llm.auth", value: result.value, ok: result.ok, group: .llmRuns)
@@ -538,9 +549,9 @@ import Testing
       runs: RunStoreGRDB,
       usage: UsageStoreGRDB
     ),
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     content: String,
     state: ProviderExchangeState,
     callID: String,
@@ -548,14 +559,14 @@ import Testing
   ) throws -> RunCommitResult {
     try stores.runs.commitAssistantTurn(
       AssistantTurn(
-        runId: runId,
-        sessionId: sessionId,
-        chatId: chatId,
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
         content: content,
         usage: ProviderUsage(
           providerCallID: ProviderCallID(rawValue: callID),
-          runId: runId,
-          sessionId: sessionId,
+          runID: runID,
+          sessionID: sessionID,
           model: CompositionAcceptance.qualifiedModel,
           promptTokens: 0,
           completionTokens: 0,
@@ -584,13 +595,21 @@ import Testing
     let config = try CompositionAcceptance.chatGPTConfig()
     var composition = RunComposition(
       config: config,
-      secrets: Secrets(telegramBotToken: "token", llmApiKey: nil, searchApiKey: nil),
+      secrets: Secrets(telegramBotToken: "token", llmAPIKey: nil, searchAPIKey: nil),
       stores: try EnvironmentLoader.openStores(config: config),
-      logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+      logger: Logger(label: "test") { _ in
+        SwiftLogNoOpLogHandler()
+      }
     )
-    composition.makeClients = { instrumentedClients(recorder: recorder) }
-    composition.makeManagedStore = { _ in store }
-    composition.fetchBotIdentity = { _, _ in nil }
+    composition.makeClients = {
+      instrumentedClients(recorder: recorder)
+    }
+    composition.makeManagedStore = { _ in
+      store
+    }
+    composition.fetchBotIdentity = { _, _ in
+      nil
+    }
     return composition
   }
 }
@@ -599,6 +618,10 @@ import Testing
 
 private struct StopBuild: Error {}
 
+// MARK: - Response Body Inspection
+
 private extension Data {
-  var utf8String: String { String(bytes: self, encoding: .utf8) ?? "" }
+  var utf8String: String {
+    String(bytes: self, encoding: .utf8) ?? ""
+  }
 }

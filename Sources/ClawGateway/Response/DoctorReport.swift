@@ -16,18 +16,30 @@ public enum DoctorGroup: String, Sendable, Codable, Equatable, CaseIterable {
 
   public var title: String {
     switch self {
-    case .config: "Config"
-    case .database: "Database"
-    case .llmRuns: "LLM & Runs"
-    case .context: "Context"
-    case .spend: "Spend"
-    case .storage: "Storage"
-    case .scheduler: "Scheduler"
-    case .approvals: "Approvals"
-    case .connectivity: "Connectivity"
-    case .mcp: "MCP"
-    case .sandbox: "Sandbox"
-    case .coder: "Coder"
+    case .config:
+      "Config"
+    case .database:
+      "Database"
+    case .llmRuns:
+      "LLM & Runs"
+    case .context:
+      "Context"
+    case .spend:
+      "Spend"
+    case .storage:
+      "Storage"
+    case .scheduler:
+      "Scheduler"
+    case .approvals:
+      "Approvals"
+    case .connectivity:
+      "Connectivity"
+    case .mcp:
+      "MCP"
+    case .sandbox:
+      "Sandbox"
+    case .coder:
+      "Coder"
     }
   }
 }
@@ -71,7 +83,9 @@ public struct DoctorReport: Sendable {
     self.checks = checks
   }
 
-  public var ok: Bool { checks.allSatisfy(\.ok) }
+  public var ok: Bool {
+    checks.allSatisfy(\.ok)
+  }
 
   public mutating func add(
     key: String,
@@ -88,19 +102,23 @@ public struct DoctorReport: Sendable {
   }
 
   public func renderText() -> String {
-    nonEmptyGroups()
-      .map { renderSection(group: $0.group, rows: $0.rows) }
-      .joined(separator: "\n\n")
+    nonEmptyGroups().map {
+      renderSection(group: $0.group, rows: $0.rows)
+    }.joined(separator: "\n\n")
   }
 
   public func renderTelegramSummary() -> String {
-    let failingCount = checks.count { !$0.ok }
+    let failingCount = checks.count {
+      !$0.ok
+    }
     let verdict =
       failingCount == 0
       ? "clawd: all systems healthy"
       : "clawd: \(failingCount) \(failingCount == 1 ? "check" : "checks") failing"
 
-    let sections = nonEmptyGroups().map { summarySection(group: $0.group, rows: $0.rows) }
+    let sections = nonEmptyGroups().map {
+      summarySection(group: $0.group, rows: $0.rows)
+    }
 
     return ([verdict, ""] + sections).joined(separator: "\n")
   }
@@ -109,7 +127,9 @@ public struct DoctorReport: Sendable {
   /// each heading, which is right when eleven groups compete for one message; a reply asking about a
   /// single subsystem is asking to read its rows.
   public func renderTelegramGroup(_ group: DoctorGroup) -> String {
-    let rows = checks.filter { $0.group == group }
+    let rows = checks.filter {
+      $0.group == group
+    }
     guard rows.isEmpty == false else {
       return "\(group.title): nothing reported"
     }
@@ -132,6 +152,8 @@ public struct DoctorReport: Sendable {
   }
 }
 
+// MARK: - Report Rendering
+
 private extension DoctorReport {
   static let headerStatusColumn = 40
 
@@ -139,7 +161,9 @@ private extension DoctorReport {
   /// order — the shared partition behind both the text table and the Telegram summary.
   func nonEmptyGroups() -> [(group: DoctorGroup, rows: [Check])] {
     DoctorGroup.allCases.compactMap { group in
-      let rows = checks.filter { $0.group == group }
+      let rows = checks.filter {
+        $0.group == group
+      }
       return rows.isEmpty ? nil : (group: group, rows: rows)
     }
   }
@@ -179,8 +203,9 @@ private extension DoctorReport {
     }.map { row in
       "\(Self.shortKey(row.key)) \(row.value)"
     }
-    let header = (["\(group.title): \(groupOK ? "ok" : "FAIL")"] + headlines)
-      .joined(separator: " · ")
+    let header = (["\(group.title): \(groupOK ? "ok" : "FAIL")"] + headlines).joined(
+      separator: " · "
+    )
 
     var lines = [header]
     for row in rows where !row.ok {
@@ -216,7 +241,7 @@ extension DoctorReport.Check {
     key: String,
     group: DoctorGroup,
     isHeadline: Bool = false,
-    render: (Value) -> String
+    render: (_ value: Value) -> String
   ) -> DoctorReport.Check {
     switch read {
     case .available(let value):

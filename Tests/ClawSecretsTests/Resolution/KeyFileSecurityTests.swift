@@ -4,21 +4,23 @@ import Crypto
 import Foundation
 import Testing
 
-@testable import ClawSecrets
-
 #if canImport(Glibc)
   import Glibc
 #else
   import Darwin
 #endif
 
-@Suite struct KeyFileSecurityTests {
+@testable import ClawSecrets
+
+@Suite
+struct KeyFileSecurityTests {
   private func writeKey(at url: URL, mode: Int) throws {
     try Data(repeating: 0xAB, count: EncryptedFileSecretStore.keyByteCount).write(to: url)
     try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: url.path)
   }
 
-  @Test func acceptsRegularOwned0600Key() throws {
+  @Test
+  func acceptsRegularOwned0600Key() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -32,7 +34,8 @@ import Testing
     }
   }
 
-  @Test func rejectsWorldReadableKey() throws {
+  @Test
+  func rejectsWorldReadableKey() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -46,7 +49,8 @@ import Testing
     }
   }
 
-  @Test func rejectsSymlinkedKey() throws {
+  @Test
+  func rejectsSymlinkedKey() throws {
     // given — a symlink whose target is a valid 0600 key; O_NOFOLLOW must still refuse it.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -62,7 +66,8 @@ import Testing
     }
   }
 
-  @Test func rejectsWrongLengthKey() throws {
+  @Test
+  func rejectsWrongLengthKey() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -77,7 +82,8 @@ import Testing
     }
   }
 
-  @Test func rejectsNonRegularKey() throws {
+  @Test
+  func rejectsNonRegularKey() throws {
     // given — a directory standing in for secret.key; open succeeds but fstat reports a non-regular
     // file, so the metadata policy must reject it before any read.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
@@ -92,7 +98,8 @@ import Testing
     }
   }
 
-  @Test func rejectsAnOversizedKey() throws {
+  @Test
+  func rejectsAnOversizedKey() throws {
     // given — the key policy caps the read at the key length, so a padded file is refused rather
     // than truncated into a plausible-looking key.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
@@ -110,7 +117,8 @@ import Testing
 
   // MARK: - Exclusive creation
 
-  @Test func ensureKeyReturnsAnExistingKeyRatherThanMintingOverIt() throws {
+  @Test
+  func ensureKeyReturnsAnExistingKeyRatherThanMintingOverIt() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -132,16 +140,14 @@ import Testing
     let after = try #require(SecureFilePublisher.facts(ofEntryAt: keyURL))
     #expect(after.identity == before.identity)
     #expect(
-      key
-        == SymmetricKey(
-          data: Data(repeating: 0xAB, count: EncryptedFileSecretStore.keyByteCount)
-        )
+      key == SymmetricKey(data: Data(repeating: 0xAB, count: EncryptedFileSecretStore.keyByteCount))
     )
     // Nothing was created, so rollback has nothing it could unlink.
     #expect(created.key == nil)
   }
 
-  @Test func ensureKeyRefusesToMintOverAnUnreadableIncumbent() throws {
+  @Test
+  func ensureKeyRefusesToMintOverAnUnreadableIncumbent() throws {
     // given — a key that exists but fails the metadata policy.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-keysec")
     defer { try? FileManager.default.removeItem(at: stateRoot) }

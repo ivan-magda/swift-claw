@@ -50,7 +50,9 @@ public struct ProviderUsageAccountant: Sendable {
     costResolver: CostResolver,
     usageResolver: UsageResolver = UsageResolver(),
     outputCap: Int,
-    now: @escaping @Sendable () -> Date = { Date() }
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    }
   ) {
     self.configuredReference = configuredReference
     self.costPolicy = costPolicy
@@ -70,16 +72,16 @@ public struct ProviderUsageAccountant: Sendable {
     callID: ProviderCallID,
     context: [ChatMessage],
     tools: [ToolDefinition] = [],
-    runId: Int64?,
-    sessionId: Int64
+    runID: Int64?,
+    sessionID: Int64
   ) -> ProviderUsage {
     let resolved = reconciled(for: response, context: context, tools: tools)
     let resolvedUsage = resolved.usage
     let resolvedCost = resolved.cost
     return ProviderUsage(
       providerCallID: callID,
-      runId: runId,
-      sessionId: sessionId,
+      runID: runID,
+      sessionID: sessionID,
       model: configuredReference,
       usage: resolvedUsage,
       cost: resolvedCost,
@@ -98,8 +100,8 @@ public struct ProviderUsageAccountant: Sendable {
     context: [ChatMessage],
     tools: [ToolDefinition] = [],
     observedCompletionTokens: Int,
-    runId: Int64?,
-    sessionId: Int64
+    runID: Int64?,
+    sessionID: Int64
   ) -> ProviderUsage {
     let resolved = conservative(
       context: context,
@@ -110,8 +112,8 @@ public struct ProviderUsageAccountant: Sendable {
     let resolvedCost = resolved.cost
     return ProviderUsage(
       providerCallID: callID,
-      runId: runId,
-      sessionId: sessionId,
+      runID: runID,
+      sessionID: sessionID,
       model: configuredReference,
       usage: resolvedUsage,
       cost: resolvedCost,
@@ -158,14 +160,11 @@ public struct ProviderUsageAccountant: Sendable {
     tools: [ToolDefinition] = [],
     observedCompletionTokens: Int
   ) -> Resolved {
-    let resolvedUsage =
-      usageResolver
-      .estimate(
-        context: context,
-        tools: tools,
-        maxOutputTokens: max(outputCap, observedCompletionTokens)
-      )
-      .addingReservation(reservationPolicy.additionalTokens(for: context))
+    let resolvedUsage = usageResolver.estimate(
+      context: context,
+      tools: tools,
+      maxOutputTokens: max(outputCap, observedCompletionTokens)
+    ).addingReservation(reservationPolicy.additionalTokens(for: context))
     return Resolved(
       usage: resolvedUsage,
       cost: costResolver.resolve(

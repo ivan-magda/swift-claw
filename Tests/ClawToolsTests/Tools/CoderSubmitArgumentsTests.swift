@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct CoderSubmitArgumentsTests {
+@Suite
+struct CoderSubmitArgumentsTests {
   @Test(arguments: [
     CoderSource.local(path: "/repository"),
     .githubRepository(url: "https://github.com/owner/repository"),
@@ -51,7 +52,8 @@ import Testing
     )
   }
 
-  @Test func rejectsMultipleIndividuallyValidSources() throws {
+  @Test
+  func rejectsMultipleIndividuallyValidSources() throws {
     // given
     let arguments = try #require(
       JSONValue.parse(

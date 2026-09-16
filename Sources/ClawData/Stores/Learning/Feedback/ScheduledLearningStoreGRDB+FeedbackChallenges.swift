@@ -29,17 +29,16 @@ extension ScheduledLearningStoreGRDB {
       guard prompt.isEmpty == false else {
         throw StoreError.unexpected("feedback challenge prompt has no chunks")
       }
-      guard
-        prompt.allSatisfy({ chunk in
-          chunk.subjectDigest == insertion.promptDigest && chunk.chatId == insertion.chatId
+      guard prompt.allSatisfy({ chunk in
+          chunk.subjectDigest == insertion.promptDigest && chunk.chatID == insertion.chatID
         })
       else {
         throw StoreError.unexpected("feedback challenge prompt identity does not match its target")
       }
 
-      let priorId = try Self.temporarilyConsumeLiveChallenge(db, challenge: insertion, now: now)
+      let priorID = try Self.temporarilyConsumeLiveChallenge(db, challenge: insertion, now: now)
       let challenge = try Self.insertChallenge(db, insertion)
-      try Self.finishChallengeSupersession(db, priorId: priorId, replacementId: challenge.id)
+      try Self.finishChallengeSupersession(db, priorID: priorID, replacementID: challenge.id)
 
       for chunk in prompt {
         guard try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now) else {
@@ -84,7 +83,7 @@ extension ScheduledLearningStoreGRDB {
       )
       try Self.recomputeFeedbackSubject(
         db,
-        jobId: challenge.jobId,
+        jobID: challenge.jobID,
         epoch: challenge.epoch,
         subjectKind: challenge.subjectKind,
         subjectDigest: challenge.subjectDigest,
@@ -103,20 +102,19 @@ extension ScheduledLearningStoreGRDB {
   }
 
   public func liveChallenge(
-    ownerUserId: Int64,
-    chatId: Int64
+    ownerUserID: Int64,
+    chatID: Int64
   ) throws(StoreError) -> FeedbackChallenge? {
     try database.readMapping { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: """
+      guard let row = try Row.fetchOne(
+        db,
+        sql: """
             SELECT * FROM feedback_challenges
             WHERE owner_user_id = ? AND chat_id = ?
               AND superseded_by IS NULL AND consumed_at IS NULL
             """,
-          arguments: [ownerUserId, chatId]
-        )
+        arguments: [ownerUserID, chatID]
+      )
       else {
         return nil
       }

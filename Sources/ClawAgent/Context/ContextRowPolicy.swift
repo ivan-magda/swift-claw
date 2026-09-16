@@ -69,30 +69,10 @@ struct RowSpec: Sendable, Equatable, Identifiable {
 
 enum ContextRowPolicy {
   static let specs: [RowSpec] = [
-    RowSpec(
-      id: .policy,
-      tier: .system,
-      priority: ContextPriority(0),
-      truncatable: false
-    ),
-    RowSpec(
-      id: .systemWorkspace,
-      tier: .system,
-      priority: ContextPriority(10),
-      truncatable: false
-    ),
-    RowSpec(
-      id: .tools,
-      tier: .system,
-      priority: ContextPriority(20),
-      truncatable: false
-    ),
-    RowSpec(
-      id: .metadata,
-      tier: .system,
-      priority: ContextPriority(30),
-      truncatable: false
-    ),
+    RowSpec(id: .policy, tier: .system, priority: ContextPriority(0), truncatable: false),
+    RowSpec(id: .systemWorkspace, tier: .system, priority: ContextPriority(10), truncatable: false),
+    RowSpec(id: .tools, tier: .system, priority: ContextPriority(20), truncatable: false),
+    RowSpec(id: .metadata, tier: .system, priority: ContextPriority(30), truncatable: false),
     RowSpec(
       id: .lessons,
       tier: .untrustedLabeled,
@@ -117,23 +97,8 @@ enum ContextRowPolicy {
       priority: ContextPriority(60),
       truncatable: true
     ),
-    RowSpec(
-      id: .history,
-      tier: .mixed,
-      priority: ContextPriority(70),
-      truncatable: true
-    ),
-    RowSpec(
-      id: .recall,
-      tier: .untrustedLabeled,
-      priority: ContextPriority(80),
-      truncatable: true
-    ),
-    RowSpec(
-      id: .skills,
-      tier: .untrustedLabeled,
-      priority: ContextPriority(90),
-      truncatable: true
-    ),
+    RowSpec(id: .history, tier: .mixed, priority: ContextPriority(70), truncatable: true),
+    RowSpec(id: .recall, tier: .untrustedLabeled, priority: ContextPriority(80), truncatable: true),
+    RowSpec(id: .skills, tier: .untrustedLabeled, priority: ContextPriority(90), truncatable: true),
   ]
 }

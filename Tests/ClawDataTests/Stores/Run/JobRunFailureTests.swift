@@ -6,12 +6,13 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct JobRunFailureTests {
+@Suite
+struct JobRunFailureTests {
   private struct JobFixture {
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
-    let runId: Int64
-    let sessionId: Int64
+    let runID: Int64
+    let sessionID: Int64
   }
 
   /// Seeds job 7 (owner chat 4242), its synthetic session, the trusted trigger message, and a
@@ -19,7 +20,7 @@ import Testing
   private func makeJobRunFixture() throws -> JobFixture {
     let queue = try TestDatabase.make()
     let now = Date()
-    let seeded: (runId: Int64, sessionId: Int64) = try queue.write { db in
+    let seeded: (runID: Int64, sessionID: Int64) = try queue.write { db in
       try db.execute(
         sql: """
           INSERT INTO scheduled_jobs(id, owner_chat_id, label, prompt, recurrence, timezone,
@@ -33,34 +34,34 @@ import Testing
         sql: "INSERT INTO sessions(session_key, created_ts, updated_ts) VALUES (?, ?, ?)",
         arguments: [SessionKey.scheduledJob(id: 7), now, now]
       )
-      let sessionId = db.lastInsertedRowID
+      let sessionID = db.lastInsertedRowID
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, role, content, provenance, ts)
           VALUES (?, 'user', 'Summarize my unread items', 'trusted', ?)
           """,
-        arguments: [sessionId, now]
+        arguments: [sessionID, now]
       )
-      let messageId = db.lastInsertedRowID
+      let messageID = db.lastInsertedRowID
       try db.execute(
         sql: """
           INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id,
             origin, job_id)
           VALUES (?, 'PENDING', ?, ?, ?, 'scheduled', 7)
           """,
-        arguments: [sessionId, now, now, messageId]
+        arguments: [sessionID, now, now, messageID]
       )
-      return (db.lastInsertedRowID, sessionId)
+      return (db.lastInsertedRowID, sessionID)
     }
     return JobFixture(
       queue: queue,
       runs: RunStoreGRDB(writer: queue),
-      runId: seeded.runId,
-      sessionId: seeded.sessionId
+      runID: seeded.runID,
+      sessionID: seeded.sessionID
     )
   }
 
-  private func jobFailedCount(_ queue: DatabaseQueue, runId: Int64) throws -> Int {
+  private func jobFailedCount(_ queue: DatabaseQueue, runID: Int64) throws -> Int {
     try queue.read { db in
       try Int.fetchOne(
         db,
@@ -68,26 +69,27 @@ import Testing
           SELECT COUNT(*) FROM audit_events
           WHERE action = 'job_failed' AND decision = 'job:7' AND run_id = ?
           """,
-        arguments: [runId]
+        arguments: [runID]
       ) ?? 0
     }
   }
 
-  @Test func degradedCommitOfAJobRunAppendsJobFailedInTheSameTransaction() throws {
+  @Test
+  func degradedCommitOfAJobRunAppendsJobFailedInTheSameTransaction() throws {
     // given
     let fixture = try makeJobRunFixture()
-    #expect(try fixture.runs.pickUp(runId: fixture.runId, now: Date()) == .scheduled)
+    #expect(try fixture.runs.pickUp(runID: fixture.runID, now: Date()) == .scheduled)
 
     // when
     let commit = try fixture.runs.commitDegradedTurn(
       DegradedTurn(
-        runId: fixture.runId,
-        sessionId: fixture.sessionId,
-        chatId: 4242,
+        runID: fixture.runID,
+        sessionID: fixture.sessionID,
+        chatID: 4242,
         usage: nil,
         chunk: OutboxChunk(
           stepIndex: 0,
-          chatId: 4242,
+          chatID: 4242,
           payload: "degraded",
           payloadHash: ContentHash.fnv1a("degraded")
         ),
@@ -98,69 +100,72 @@ import Testing
 
     // then
     #expect(commit == .committed)
-    #expect(try jobFailedCount(fixture.queue, runId: fixture.runId) == 1)
+    #expect(try jobFailedCount(fixture.queue, runID: fixture.runID) == 1)
   }
 
-  @Test func failRunOnAJobRunAppendsJobFailed() throws {
+  @Test
+  func failRunOnAJobRunAppendsJobFailed() throws {
     // given
     let fixture = try makeJobRunFixture()
-    #expect(try fixture.runs.pickUp(runId: fixture.runId, now: Date()) == .scheduled)
+    #expect(try fixture.runs.pickUp(runID: fixture.runID, now: Date()) == .scheduled)
 
     // when
-    try fixture.runs.failRun(runId: fixture.runId, cause: .providerFailure, now: Date())
+    try fixture.runs.failRun(runID: fixture.runID, cause: .providerFailure, now: Date())
 
     // then
-    #expect(try jobFailedCount(fixture.queue, runId: fixture.runId) == 1)
+    #expect(try jobFailedCount(fixture.queue, runID: fixture.runID) == 1)
   }
 
-  @Test func bootReconcileResolvesTheJobRunNoticeViaOwnerChatIdAndAuditsJobFailed() throws {
+  @Test
+  func bootReconcileResolvesTheJobRunNoticeViaOwnerChatIDAndAuditsJobFailed() throws {
     // given — a job run left RUNNING by a crash; its sched:job:7 session key has no chat id
     let fixture = try makeJobRunFixture()
-    #expect(try fixture.runs.pickUp(runId: fixture.runId, now: Date()) == .scheduled)
+    #expect(try fixture.runs.pickUp(runID: fixture.runID, now: Date()) == .scheduled)
 
     // when
     let replies = try fixture.runs.reconcileRunsAtBoot(
       now: Date(),
       degradationText: "unfinished",
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
 
     // then — the notice targets scheduled_jobs.owner_chat_id, no longer silently skipped (A6),
     // as the whole-chat row it has always been: a job session belongs to no topic
-    #expect(replies == [DegradationReply(chatId: 4242, runId: fixture.runId, text: "unfinished")])
+    #expect(replies == [DegradationReply(chatID: 4242, runID: fixture.runID, text: "unfinished")])
     let row = try #require(try OutboxStoreGRDB(writer: fixture.queue).pendingOutbound().first)
     #expect(row.target == .chat(4242))
-    #expect(try jobFailedCount(fixture.queue, runId: fixture.runId) == 1)
+    #expect(try jobFailedCount(fixture.queue, runID: fixture.runID) == 1)
     let state = try fixture.queue.read { db in
       try String.fetchOne(
         db,
         sql: "SELECT state FROM runs WHERE id = ?",
-        arguments: [fixture.runId]
+        arguments: [fixture.runID]
       )
     }
     #expect(state == "FAILED")
   }
 
-  @Test func nonJobRunsNeverEmitJobFailed() throws {
+  @Test
+  func nonJobRunsNeverEmitJobFailed() throws {
     // given — an ordinary interactive run (no job_id), failed the same way
     let queue = try TestDatabase.make()
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "hi",
         isEdited: false,
         ts: Date()
       )
     )
-    let runId = try #require(claim.runId)
+    let runID = try #require(claim.runID)
     let runs = RunStoreGRDB(writer: queue)
-    #expect(try runs.pickUp(runId: runId, now: Date()) == .interactive)
+    #expect(try runs.pickUp(runID: runID, now: Date()) == .interactive)
 
     // when
-    try runs.failRun(runId: runId, cause: .providerFailure, now: Date())
+    try runs.failRun(runID: runID, cause: .providerFailure, now: Date())
 
     // then
     let count = try queue.read { db in
@@ -172,36 +177,37 @@ import Testing
 
   /// Seeds the sched:heartbeat session, its untrusted trigger, and a heartbeat run left RUNNING
   /// by a crash — the §12 shape reconciliation must route via the config-derived owner target.
-  private func makeHeartbeatRunFixture() throws -> (queue: DatabaseQueue, runId: Int64) {
+  private func makeHeartbeatRunFixture() throws -> (queue: DatabaseQueue, runID: Int64) {
     let queue = try TestDatabase.make()
     let now = Date()
-    let runId: Int64 = try queue.write { db in
+    let runID: Int64 = try queue.write { db in
       try db.execute(
         sql: "INSERT INTO sessions(session_key, created_ts, updated_ts) VALUES (?, ?, ?)",
         arguments: [SessionKey.heartbeat, now, now]
       )
-      let sessionId = db.lastInsertedRowID
+      let sessionID = db.lastInsertedRowID
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, role, content, provenance, ts)
           VALUES (?, 'user', 'Review the checklist below…', 'untrusted', ?)
           """,
-        arguments: [sessionId, now]
+        arguments: [sessionID, now]
       )
-      let messageId = db.lastInsertedRowID
+      let messageID = db.lastInsertedRowID
       try db.execute(
         sql: """
           INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
           VALUES (?, 'RUNNING', ?, ?, ?, 'heartbeat')
           """,
-        arguments: [sessionId, now, now, messageId]
+        arguments: [sessionID, now, now, messageID]
       )
       return db.lastInsertedRowID
     }
-    return (queue, runId)
+    return (queue, runID)
   }
 
-  @Test func bootReconcileRoutesTheHeartbeatCrashNoticeViaTheConfigTarget() throws {
+  @Test
+  func bootReconcileRoutesTheHeartbeatCrashNoticeViaTheConfigTarget() throws {
     // given
     let fixture = try makeHeartbeatRunFixture()
     let runs = RunStoreGRDB(writer: fixture.queue)
@@ -210,16 +216,16 @@ import Testing
     let replies = try runs.reconcileRunsAtBoot(
       now: Date(),
       degradationText: "unfinished",
-      heartbeatNoticeChatId: 777
+      heartbeatNoticeChatID: 777
     )
 
     // then — the notice targets the owner; no jobFailed (a heartbeat run has no job)
-    #expect(replies == [DegradationReply(chatId: 777, runId: fixture.runId, text: "unfinished")])
+    #expect(replies == [DegradationReply(chatID: 777, runID: fixture.runID, text: "unfinished")])
     let state = try fixture.queue.read { db in
       try String.fetchOne(
         db,
         sql: "SELECT state FROM runs WHERE id = ?",
-        arguments: [fixture.runId]
+        arguments: [fixture.runID]
       )
     }
     #expect(state == RunState.failed.rawValue)
@@ -230,7 +236,8 @@ import Testing
     #expect(jobFailedRows == 0)
   }
 
-  @Test func bootReconcileWithoutAConfigTargetStillFailsTheHeartbeatRunSilently() throws {
+  @Test
+  func bootReconcileWithoutAConfigTargetStillFailsTheHeartbeatRunSilently() throws {
     // given — heartbeat disabled/misconfigured: no target, no notice, but never a wedged run
     let fixture = try makeHeartbeatRunFixture()
     let runs = RunStoreGRDB(writer: fixture.queue)
@@ -239,7 +246,7 @@ import Testing
     let replies = try runs.reconcileRunsAtBoot(
       now: Date(),
       degradationText: "unfinished",
-      heartbeatNoticeChatId: nil
+      heartbeatNoticeChatID: nil
     )
 
     // then
@@ -248,7 +255,7 @@ import Testing
       try String.fetchOne(
         db,
         sql: "SELECT state FROM runs WHERE id = ?",
-        arguments: [fixture.runId]
+        arguments: [fixture.runID]
       )
     }
     #expect(state == RunState.failed.rawValue)

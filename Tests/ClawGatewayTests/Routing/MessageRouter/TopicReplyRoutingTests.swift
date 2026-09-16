@@ -7,27 +7,29 @@ import Testing
 /// A room is many conversations at once. Every reply the router sends itself — an ack, a canned
 /// answer, a refusal — has to land in the topic that asked and under the message that asked, or an
 /// attendee reads an answer to somebody else's question.
-@Suite struct TopicReplyRoutingTests {
-  private static let groupChatId: Int64 = -1_001
-  private static let topicId: Int64 = 5
+@Suite
+struct TopicReplyRoutingTests {
+  private static let groupChatID: Int64 = -1_001
+  private static let topicID: Int64 = 5
 
   private func makeHarness() throws -> MemoryRoutingHarness {
-    try MemoryRoutingHarness.make(groupChats: [Self.groupChatId])
+    try MemoryRoutingHarness.make(groupChats: [Self.groupChatID])
   }
 
   private func groupUpdate(id: Int64, text: String) -> RawUpdate {
     textUpdate(
       id: id,
       from: 7,
-      chat: Self.groupChatId,
+      chat: Self.groupChatID,
       text: text,
       chatKind: .supergroup,
-      messageThreadId: Self.topicId,
+      messageThreadID: Self.topicID,
       senderDisplayName: "Ada"
     )
   }
 
-  @Test func aCannedReplyLandsInTheCallingTopicAsAReply() async throws {
+  @Test
+  func aCannedReplyLandsInTheCallingTopicAsAReply() async throws {
     // given
     let harness = try makeHarness()
 
@@ -43,14 +45,15 @@ import Testing
     #expect(
       sent.target
         == DeliveryTarget(
-          chatId: Self.groupChatId,
-          messageThreadId: Self.topicId,
-          replyToMessageId: 11
+          chatID: Self.groupChatID,
+          messageThreadID: Self.topicID,
+          replyToMessageID: 11
         )
     )
   }
 
-  @Test func aRefusalLandsInTheCallingTopicAsAReply() async throws {
+  @Test
+  func aRefusalLandsInTheCallingTopicAsAReply() async throws {
     // given
     let harness = try makeHarness()
 
@@ -60,19 +63,20 @@ import Testing
     // then
     let sent = try #require(await harness.transport.sent.first)
     #expect(sent.text == CommandReplies.directOnly)
-    #expect(sent.target.messageThreadId == Self.topicId)
-    #expect(sent.target.replyToMessageId == 12)
+    #expect(sent.target.messageThreadID == Self.topicID)
+    #expect(sent.target.replyToMessageID == 12)
   }
 
   /// The General topic carries no thread id, so its answers can only be threaded under the asking
   /// message — a fabricated thread id would address a topic that does not exist.
-  @Test func aGeneralTopicReplyCarriesNoThread() async throws {
+  @Test
+  func aGeneralTopicReplyCarriesNoThread() async throws {
     // given
     let harness = try makeHarness()
     let update = textUpdate(
       id: 13,
       from: 7,
-      chat: Self.groupChatId,
+      chat: Self.groupChatID,
       text: "/help",
       chatKind: .supergroup,
       senderDisplayName: "Ada"
@@ -83,10 +87,11 @@ import Testing
 
     // then
     let sent = try #require(await harness.transport.sent.first)
-    #expect(sent.target == DeliveryTarget(chatId: Self.groupChatId, replyToMessageId: 13))
+    #expect(sent.target == DeliveryTarget(chatID: Self.groupChatID, replyToMessageID: 13))
   }
 
-  @Test func aDirectReplyCarriesNeitherTopicNorReply() async throws {
+  @Test
+  func aDirectReplyCarriesNeitherTopicNorReply() async throws {
     // given
     let harness = try makeHarness()
 

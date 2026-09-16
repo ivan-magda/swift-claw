@@ -5,7 +5,7 @@ enum ConfigParse {
     _ raw: String?,
     default fallback: Int,
     range: ClosedRange<Int>,
-    onInvalid: (String) -> ConfigError
+    onInvalid: (_ value: String) -> ConfigError
   ) throws(ConfigError) -> Int {
     try boundedIntOrNil(raw, range: range, onInvalid: onInvalid) ?? fallback
   }
@@ -15,7 +15,7 @@ enum ConfigParse {
   static func boundedIntOrNil(
     _ raw: String?,
     range: ClosedRange<Int>,
-    onInvalid: (String) -> ConfigError
+    onInvalid: (_ value: String) -> ConfigError
   ) throws(ConfigError) -> Int? {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !trimmed.isEmpty else {
@@ -32,7 +32,7 @@ enum ConfigParse {
   static func positiveDouble(
     _ raw: String?,
     default fallback: Double,
-    onInvalid: (String) -> ConfigError
+    onInvalid: (_ value: String) -> ConfigError
   ) throws -> Double {
     let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !trimmed.isEmpty else {

@@ -71,10 +71,16 @@ struct CodexFixture {
 
   func report(_ changes: [String: Any] = [:]) throws {
     var object: [String: Any] = [
-      "status": CodexReportStatus.succeeded.rawValue, "summary": "Completed",
+      "status": CodexReportStatus.succeeded.rawValue,
+      "summary": "Completed",
       "starting_commit": NSNull(),
-      "base_branch": NSNull(), "changed_files": ["invented.txt"], "branch": "invented",
-      "commit": NSNull(), "pr_url": NSNull(), "checks": ["reported check"], "error": NSNull(),
+      "base_branch": NSNull(),
+      "changed_files": ["invented.txt"],
+      "branch": "invented",
+      "commit": NSNull(),
+      "pr_url": NSNull(),
+      "checks": ["reported check"],
+      "error": NSNull(),
     ]
     object.merge(changes) { _, updated in
       updated

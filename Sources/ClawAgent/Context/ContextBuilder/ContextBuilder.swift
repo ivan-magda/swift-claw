@@ -7,8 +7,10 @@ public struct ContextBuilder: Sendable {
   public static let recallInjectionLimit = 5
 
   static let untrustedUserLabel = "untrusted_user_message"
-  /// The fence label the pinned lesson row renders under. `package` so the gateway suite asserts
-  /// the label this builder emits instead of repeating the literal.
+  /// The fence label the pinned lesson row renders under.
+  ///
+  /// `package` so the gateway suite asserts the label this builder emits instead of repeating the
+  /// literal.
   package static let lessonsLabel = "job lessons"
 
   let systemPrompt: String
@@ -23,7 +25,7 @@ public struct ContextBuilder: Sendable {
   private let policyStaticSubhash: String
 
   let now: @Sendable () -> Date
-  let warn: @Sendable (String) -> Void
+  let warn: @Sendable (_ message: String) -> Void
 
   public init(
     systemPrompt: String,
@@ -35,7 +37,7 @@ public struct ContextBuilder: Sendable {
     fenceLabels: ToolFenceLabels = .undeclared,
     policyStaticSubhash: String = "",
     now: @escaping @Sendable () -> Date = Date.init,
-    warn: @escaping @Sendable (String) -> Void = { _ in }
+    warn: @escaping @Sendable (_ message: String) -> Void = { _ in }
   ) {
     self.systemPrompt = systemPrompt
     self.proactiveSystemPrompt = proactiveSystemPrompt
@@ -52,12 +54,20 @@ public struct ContextBuilder: Sendable {
     self.warn = warn
   }
 
-  /// - Parameter lessons: the set the run's binding froze, or nil for a run with no binding. A
-  ///   non-empty set is assembled whole ahead of every truncatable row and taints the memory
-  ///   selection, so a bound run can never be answered against a shortened or substituted set.
+  /// Assembles the run's context within its budget while preserving trust and pinned lessons.
+  ///
+  /// - Parameters:
+  ///   - snapshot: The session's visible history and persisted trust state.
+  ///   - sessionID: The session used to exclude visible history from message recall.
+  ///   - origin: Selects the interactive or proactive prompt and recall policy.
+  ///   - lessons: The set frozen by the run's binding, or nil for a run with no binding.
+  ///     A non-empty set is kept whole ahead of truncatable rows and excludes high-sensitivity
+  ///     memory items.
+  /// - Returns: The assembled messages, owner notices, privacy flags, and policy fingerprint.
+  /// - Throws: A fitting error when non-truncatable sections exceed the input cap.
   public func assemble(
     snapshot: SessionContextSnapshot,
-    sessionId: Int64,
+    sessionID: Int64,
     origin: RunOrigin,
     lessons: LessonSet? = nil
   ) throws -> BuildResult {
@@ -76,17 +86,14 @@ public struct ContextBuilder: Sendable {
     let residual = BudgetFitter.residual(for: fixedSections, budget: budget)
     let truncatableSections = buildTruncatableSections(
       snapshot: snapshot,
-      sessionId: sessionId,
+      sessionID: sessionID,
       origin: origin,
       residual: residual,
       excludeSensitiveMemory: snapshot.isTainted || pinned != nil,
       ownerNotices: &ownerNotices
     )
 
-    let fitted = try BudgetFitter.fitWithUnits(
-      fixedSections + truncatableSections,
-      budget: budget
-    )
+    let fitted = try BudgetFitter.fitWithUnits(fixedSections + truncatableSections, budget: budget)
     if let notice = droppedSkillsNotice(fitted: fitted, requested: truncatableSections) {
       ownerNotices.append(notice)
     }
@@ -104,16 +111,18 @@ public struct ContextBuilder: Sendable {
 
 // MARK: - Policy Fingerprint
 
-public extension ContextBuilder {
+extension ContextBuilder {
   /// The system-tier prompt materials in the pinned order (ARCHITECTURE.md §11), RAW (pre "## path"
-  /// wrapping), folded into the injected static sub-hash. Reused verbatim at pick-up (the
-  /// persisted `policy_version`, stamped by `TurnRunner`) and recomputed at callback resolution so
-  /// the two can never diverge. BOTH prompt variants fold in — the recompute seams are zero-argument
-  /// closures with no run (hence no origin) in scope, so the fingerprint must be origin-independent;
-  /// an edit to either variant conservatively invalidates parked approvals. `public` because
-  /// `TurnRunner` (ClawGateway) stamps with it cross-module and `assemble` returns it — a `private`
-  /// helper would be invisible to both the stamp seam and `@testable`.
-  func currentPolicyVersion() -> String {
+  /// wrapping), folded into the injected static sub-hash.
+  ///
+  /// Reused verbatim at pick-up (the persisted `policy_version`, stamped by `TurnRunner`) and
+  /// recomputed at callback resolution so the two can never diverge. BOTH prompt variants fold in —
+  /// the recompute seams are zero-argument closures with no run (hence no origin) in scope, so the
+  /// fingerprint must be origin-independent; an edit to either variant conservatively invalidates
+  /// parked approvals. `public` because `TurnRunner` (ClawGateway) stamps with it cross-module and
+  /// `assemble` returns it — a `private` helper would be invisible to both the stamp seam and
+  /// `@testable`.
+  public func currentPolicyVersion() -> String {
     PolicyFingerprint.combined(
       staticSubhash: policyStaticSubhash,
       promptMaterials: [
@@ -131,6 +140,7 @@ public extension ContextBuilder {
 
 private extension ContextBuilder {
   /// The uncapped raw file text for a system-tier prompt file; missing/unreadable folds in as "".
+  ///
   /// Uncapped because these files load uncapped in `buildFixedSections`.
   func rawPromptText(_ file: WorkspaceFile) -> String {
     let loadedFile = workspace.load(file: file, maxGraphemes: nil)

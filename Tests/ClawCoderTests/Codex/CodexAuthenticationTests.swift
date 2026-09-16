@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCoder
 
-@Suite struct CodexAuthenticationTests {
-  @Test func localStatusDistinguishesMissingLoginAndUnverifiableProfile() async throws {
+@Suite
+struct CodexAuthenticationTests {
+  @Test
+  func localStatusDistinguishesMissingLoginAndUnverifiableProfile() async throws {
     // given
     let fixture = try await CodexFixture()
     defer { try? FileManager.default.removeItem(at: fixture.git.root) }

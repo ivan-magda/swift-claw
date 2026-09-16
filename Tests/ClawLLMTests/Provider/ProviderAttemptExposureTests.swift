@@ -3,8 +3,10 @@ import Testing
 @testable import ClawCore
 @testable import ClawLLM
 
-@Suite struct ProviderAttemptExposureTests {
-  @Test func anAttemptStartsHavingExposedNothing() {
+@Suite
+struct ProviderAttemptExposureTests {
+  @Test
+  func anAttemptStartsHavingExposedNothing() {
     // given / when
     let exposure = ProviderAttemptExposure()
 
@@ -12,7 +14,8 @@ import Testing
     #expect(exposure.accounting == .notStarted)
   }
 
-  @Test func theHandoffMakesExposureConservative() throws {
+  @Test
+  func theHandoffMakesExposureConservative() throws {
     // given
     let exposure = ProviderAttemptExposure()
 
@@ -23,7 +26,8 @@ import Testing
     #expect(exposure.accounting == .mayHaveStarted(observing: 0))
   }
 
-  @Test func aCancelledCallerIsRefusedTheHandoffAndStaysNotStarted() async {
+  @Test
+  func aCancelledCallerIsRefusedTheHandoffAndStaysNotStarted() async {
     // given
     let exposure = ProviderAttemptExposure()
 
@@ -38,15 +42,15 @@ import Testing
       } catch {
         return error
       }
-    }
-    .value
+    }.value
 
     // then — the submission is refused outright, so the attempt still claims nothing was sent
     #expect(refusal is CancellationError)
     #expect(exposure.accounting == .notStarted)
   }
 
-  @Test func aProvenCleanAttemptReturnsToNotStarted() throws {
+  @Test
+  func aProvenCleanAttemptReturnsToNotStarted() throws {
     // given — an attempt that reached the transport
     let exposure = ProviderAttemptExposure()
     try exposure.beginHandoff()
@@ -58,7 +62,8 @@ import Testing
     #expect(exposure.accounting == .notStarted)
   }
 
-  @Test func observedTokensOnlyEverRise() throws {
+  @Test
+  func observedTokensOnlyEverRise() throws {
     // given
     let exposure = ProviderAttemptExposure()
     try exposure.beginHandoff()
@@ -71,7 +76,8 @@ import Testing
     #expect(exposure.accounting == .mayHaveStarted(observing: 12))
   }
 
-  @Test func aNegativeObservationCannotRefundTokens() throws {
+  @Test
+  func aNegativeObservationCannotRefundTokens() throws {
     // given
     let exposure = ProviderAttemptExposure()
     try exposure.beginHandoff()
@@ -83,7 +89,8 @@ import Testing
     #expect(exposure.accounting == .mayHaveStarted(observing: 0))
   }
 
-  @Test func cancellationBeforeTheHandoffIsRaw() {
+  @Test
+  func cancellationBeforeTheHandoffIsRaw() {
     // given
     let exposure = ProviderAttemptExposure()
 
@@ -94,7 +101,8 @@ import Testing
     #expect(error is CancellationError)
   }
 
-  @Test func cancellationAfterAnAmbiguousHandoffIsTyped() throws {
+  @Test
+  func cancellationAfterAnAmbiguousHandoffIsTyped() throws {
     // given
     let exposure = ProviderAttemptExposure()
     try exposure.beginHandoff()
@@ -107,7 +115,8 @@ import Testing
     #expect(error as? ProviderInferenceCancellation == ProviderInferenceCancellation(observing: 7))
   }
 
-  @Test func cancellationAfterACleanResetIsRawAgain() throws {
+  @Test
+  func cancellationAfterACleanResetIsRawAgain() throws {
     // given — a clean rejection won the race back to `notStarted`
     let exposure = ProviderAttemptExposure()
     try exposure.beginHandoff()
@@ -120,7 +129,8 @@ import Testing
     #expect(error is CancellationError)
   }
 
-  @Test func aCancellationThatWinsBeforeTheCleanResetStaysConservative() throws {
+  @Test
+  func aCancellationThatWinsBeforeTheCleanResetStaysConservative() throws {
     // given — an attempt that reached the transport
     let exposure = ProviderAttemptExposure()
     try exposure.beginHandoff()
@@ -132,7 +142,8 @@ import Testing
     #expect(error as? ProviderInferenceCancellation == ProviderInferenceCancellation(observing: 0))
   }
 
-  @Test func repeatedHandoffsDoNotWalkExposureBackToNotStarted() throws {
+  @Test
+  func repeatedHandoffsDoNotWalkExposureBackToNotStarted() throws {
     // given — an attempt whose clean reset returned it to `notStarted`
     let exposure = ProviderAttemptExposure()
     try exposure.beginHandoff()
@@ -147,7 +158,8 @@ import Testing
     #expect(exposure.accounting == .notStarted)
   }
 
-  @Test func failurePairsACauseWithTheCurrentAccounting() throws {
+  @Test
+  func failurePairsACauseWithTheCurrentAccounting() throws {
     // given — an attempt that reached the transport and observed some output
     let exposure = ProviderAttemptExposure()
     try exposure.beginHandoff()
@@ -161,7 +173,8 @@ import Testing
     #expect(failure.accounting == .mayHaveStarted(observing: 4))
   }
 
-  @Test func failureOnAProvenCleanAttemptIsNotStarted() throws {
+  @Test
+  func failureOnAProvenCleanAttemptIsNotStarted() throws {
     // given — a recognized non-success head returned the attempt to `notStarted`
     let exposure = ProviderAttemptExposure()
     try exposure.beginHandoff()

@@ -46,38 +46,38 @@ public enum AuditAction: String, Sendable, Equatable {
 }
 
 public struct AuditEvent: Sendable, Equatable {
-  public let actorUserId: Int64?
+  public let actorUserID: Int64?
   public let actor: AuditActor
   public let action: AuditAction
   public let tool: String?
   public let argsRedacted: String
   public let resultSize: Int
   public let decision: String
-  public let runId: Int64?
-  public let sessionId: Int64?
+  public let runID: Int64?
+  public let sessionID: Int64?
   public let ts: Date
 
   public init(
     actor: AuditActor,
-    actorUserId: Int64? = nil,
+    actorUserID: Int64? = nil,
     action: AuditAction,
     tool: String? = nil,
     argsRedacted: String = "",
     resultSize: Int = 0,
     decision: String = "ok",
-    runId: Int64? = nil,
-    sessionId: Int64? = nil,
+    runID: Int64? = nil,
+    sessionID: Int64? = nil,
     ts: Date
   ) {
     self.actor = actor
-    self.actorUserId = actorUserId
+    self.actorUserID = actorUserID
     self.action = action
     self.tool = tool
     self.argsRedacted = argsRedacted
     self.resultSize = resultSize
     self.decision = decision
-    self.runId = runId
-    self.sessionId = sessionId
+    self.runID = runID
+    self.sessionID = sessionID
     self.ts = ts
   }
 }

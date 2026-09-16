@@ -3,7 +3,8 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ToolFenceLabelsTests {
+@Suite
+struct ToolFenceLabelsTests {
   private func definition(name: String, fenceLabel: String? = nil) -> ToolDefinition {
     ToolDefinition(
       name: name,
@@ -16,7 +17,8 @@ import Testing
     )
   }
 
-  @Test func anUndeclaredLabelDefaultsToTheToolName() {
+  @Test
+  func anUndeclaredLabelDefaultsToTheToolName() {
     // given / when
     let undeclared = definition(name: "web_fetch")
 
@@ -24,20 +26,24 @@ import Testing
     #expect(undeclared.fenceLabel == "web_fetch")
   }
 
-  @Test func aDeclaredLabelResolvesForItsToolAndOnlyItsTool() {
+  @Test
+  func aDeclaredLabelResolvesForItsToolAndOnlyItsTool() {
     // given
-    let labels = ToolFenceLabels(
-      definitions: [definition(name: "skill_load", fenceLabel: "skills"), definition(name: "cat")]
-    )
+    let labels = ToolFenceLabels(definitions: [
+      definition(name: "skill_load", fenceLabel: "skills"),
+      definition(name: "cat"),
+    ])
 
     // when / then
     #expect(labels.label(forToolNamed: "skill_load") == "skills")
     #expect(labels.label(forToolNamed: "cat") == "cat")
   }
 
-  @Test func anUnknownToolNameFallsBackToTheUnattributedLabel() {
+  @Test
+  func anUnknownToolNameFallsBackToTheUnattributedLabel() {
     // given — history can replay a tool that is no longer registered
-    let labels = ToolFenceLabels(definitions: [definition(name: "skill_load", fenceLabel: "skills")]
+    let labels = ToolFenceLabels(
+      definitions: [definition(name: "skill_load", fenceLabel: "skills")]
     )
 
     // when / then
@@ -47,7 +53,8 @@ import Testing
     )
   }
 
-  @Test func anUnregisteredToolNameCannotClaimADeclaredLabel() {
+  @Test
+  func anUnregisteredToolNameCannotClaimADeclaredLabel() {
     // given — tool names arrive from the provider stream, so an injected turn can propose one that
     // spells a privileged label; the dispatcher answers an unknown name with an error observation
     // that still reaches the fence seam.

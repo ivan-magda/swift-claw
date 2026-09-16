@@ -4,25 +4,27 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct MemoryWriteToolTests {
+@Suite
+struct MemoryWriteToolTests {
   private let tool = MemoryWriteTool(redactor: SecretRedactor(secretValues: []))
 
   private func arguments(_ json: String) -> JSONValue {
     JSONValue.parse(json) ?? .null
   }
 
-  @Test func declaresAskTierWithNoEgress() {
+  @Test
+  func declaresAskTierWithNoEgress() {
     // given / when / then
     #expect(tool.definition.name == "memory_write")
     #expect(tool.definition.riskLevel == .ask)
     #expect(tool.definition.egressClass == .none)
   }
 
-  @Test func canonicalTargetIsTheKindAndHash16OfTheNormalizedText() throws {
+  @Test
+  func canonicalTargetIsTheKindAndHash16OfTheNormalizedText() throws {
     // given
     let callArguments = arguments(#"{"text":"prefers metric units","kind":"user"}"#)
-    guard
-      case .parsed(let request) = MemoryWriteArguments.parse(callArguments, sessionId: nil)
+    guard case .parsed(let request) = MemoryWriteArguments.parse(callArguments, sessionID: nil)
     else {
       Issue.record("parse failed")
       return
@@ -35,7 +37,8 @@ import Testing
     #expect(resolution == .resolved(MemoryWriteArguments.canonicalTarget(for: request)))
   }
 
-  @Test func malformedArgumentsRefuseAtGateTime() {
+  @Test
+  func malformedArgumentsRefuseAtGateTime() {
     // given / when / then
     guard case .refused = tool.canonicalTarget(arguments: arguments(#"{"kind":"user"}"#)) else {
       Issue.record("expected a refusal for missing text")
@@ -43,17 +46,15 @@ import Testing
     }
   }
 
-  @Test func presentationCarriesScanWarningsAndTheVerbatimCappedPreview() throws {
+  @Test
+  func presentationCarriesScanWarningsAndTheVerbatimCappedPreview() throws {
     // given — secret-shaped text: the §8.2 preview is VERBATIM (the owner judges exactly what
     // would be stored); the scan warning flags it instead of hiding it
     let callArguments = arguments(#"{"text":"the api_key is on the desk","kind":"reference"}"#)
     let target = "memory_item:reference:0000000000000000"
 
     // when
-    let presentation = tool.approvalPresentation(
-      arguments: callArguments,
-      canonicalTarget: target
-    )
+    let presentation = tool.approvalPresentation(arguments: callArguments, canonicalTarget: target)
 
     // then
     #expect(presentation.contentPreview == "the api_key is on the desk")
@@ -62,7 +63,8 @@ import Testing
     #expect(presentation.blastRadius.contains("sensitivity normal"))
   }
 
-  @Test func presentationRedactsConfiguredSecretValuesFromThePreview() {
+  @Test
+  func presentationRedactsConfiguredSecretValuesFromThePreview() {
     // given — the proposed text embeds an exact loaded secret (§12: exact-value redaction at the
     // outbound-reply boundary); the preview is otherwise verbatim
     let redactingTool = MemoryWriteTool(
@@ -80,12 +82,12 @@ import Testing
 
     // then
     #expect(
-      presentation.contentPreview
-        == "the bot token is \(SecretRedactor.replacement) on the pi"
+      presentation.contentPreview == "the bot token is \(SecretRedactor.replacement) on the pi"
     )
   }
 
-  @Test func executeIsAFailClosedStubOffTheApprovalPath() async {
+  @Test
+  func executeIsAFailClosedStubOffTheApprovalPath() async {
     // given / when — ask-tier means the gate never allows a direct dispatch (§4.3); the real
     // insert is the waiter's fused transaction (§6.3)
     let payload = await tool.execute(

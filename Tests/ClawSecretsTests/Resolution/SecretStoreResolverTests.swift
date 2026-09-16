@@ -5,10 +5,12 @@ import Testing
 
 @testable import ClawSecrets
 
-@Suite struct SecretStoreResolverTests {
+@Suite
+struct SecretStoreResolverTests {
   private typealias EnvKey = EnvSecretStore.EnvKey
 
-  @Test func picksEnvWhenNoEncryptedArtifacts() throws {
+  @Test
+  func picksEnvWhenNoEncryptedArtifacts() throws {
     // given — neither secrets.enc nor secret.key exists.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-resolve")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -16,56 +18,50 @@ import Testing
     // when
     let resolution = SecretStoreResolver.resolve(
       stateRoot: stateRoot,
-      environment: [EnvKey.botToken: "123:abc"],
-      warn: { _ in }
-    )
+      environment: [EnvKey.botToken: "123:abc"]
+    ) { _ in }
 
     // then
     #expect(resolution.backend == .env)
     #expect(try resolution.store.loadSecrets().telegramBotToken == "123:abc")
   }
 
-  @Test func picksEncryptedWhenSealed() throws {
+  @Test
+  func picksEncryptedWhenSealed() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-resolve")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
 
     // when
-    let resolution = SecretStoreResolver.resolve(
-      stateRoot: stateRoot,
-      environment: [:],
-      warn: { _ in }
-    )
+    let resolution = SecretStoreResolver.resolve(stateRoot: stateRoot, environment: [:]) { _ in }
 
     // then
     #expect(resolution.backend == .encrypted)
     #expect(try resolution.store.loadSecrets().telegramBotToken == "123:abc")
   }
 
-  @Test func envelopeWithoutKeyFailsClosedNeverFallsBackToEnv() throws {
+  @Test
+  func envelopeWithoutKeyFailsClosedNeverFallsBackToEnv() throws {
     // given — a partial encrypted setup: secrets.enc present, secret.key missing, env token set.
     let stateRoot = try makeTemporaryRoot(prefix: "claw-resolve")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
-    try FileManager.default.removeItem(
-      at: stateRoot.appendingPathComponent(SecretFile.key)
-    )
+    try FileManager.default.removeItem(at: stateRoot.appendingPathComponent(SecretFile.key))
 
     // when — selection must require encrypted (it exists partially), not fall back to env.
     let resolution = SecretStoreResolver.resolve(
       stateRoot: stateRoot,
-      environment: [EnvKey.botToken: "999:env-token"],
-      warn: { _ in }
-    )
+      environment: [EnvKey.botToken: "999:env-token"]
+    ) { _ in }
 
     // then
     #expect(resolution.backend == .encrypted)
@@ -74,7 +70,8 @@ import Testing
     }
   }
 
-  @Test func danglingKeySymlinkForcesEncryptedNotEnv() throws {
+  @Test
+  func danglingKeySymlinkForcesEncryptedNotEnv() throws {
     // given — secret.key is a BROKEN symlink (its target was never created) and an env token is set.
     // `FileManager.fileExists` follows symlinks and reports a broken one as absent (fail-open);
     // an `lstat`-based check sees the entry and must force the encrypted backend (fail-closed).
@@ -88,9 +85,8 @@ import Testing
     // when
     let resolution = SecretStoreResolver.resolve(
       stateRoot: stateRoot,
-      environment: [EnvKey.botToken: "999:env-token"],
-      warn: { _ in }
-    )
+      environment: [EnvKey.botToken: "999:env-token"]
+    ) { _ in }
 
     // then — a present (if broken) artifact entry requires encrypted; never the env token.
     #expect(resolution.backend == .encrypted)

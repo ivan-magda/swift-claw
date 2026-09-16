@@ -13,13 +13,15 @@ import Testing
 /// OAuth, and catalog clients across **scripted HTTP** and a **manual clock**. Where the per-command
 /// workflow suites inject scripted seams, this suite proves the integrated flow reaches the pinned
 /// ChatGPT URLs (or provably does not), so a broken transition surfaces as a wire-level assertion.
-@Suite struct ChatGPTAuthAcceptanceTests {
+@Suite
+struct ChatGPTAuthAcceptanceTests {
   // MARK: - The Whole Login, End to End
 
   /// Pending-then-grant is collapsed to a first-poll grant here (the scripted transport answers a URL
   /// once); the device suite covers multi-poll pacing. What this proves is the whole integrated walk:
   /// seal → device egress → exchange → save → catalog → the exact qualified assignment.
-  @Test func loginWalksTheRealClientsToTheQualifiedAssignment() async throws {
+  @Test
+  func loginWalksTheRealClientsToTheQualifiedAssignment() async throws {
     try await withAuthAcceptanceWorld("acc-auth-login") { world in
       // given
       let http = world.makeHTTP()
@@ -47,7 +49,8 @@ import Testing
   /// The gate before any egress: a root that cannot produce runtime secrets is one login stops at
   /// before the first wire call. Its pairing is the happy path above, where the same real client did
   /// reach the vendor.
-  @Test func missingRuntimeSecretsStopLoginBeforeAnyOAuthRequestOrFile() async throws {
+  @Test
+  func missingRuntimeSecretsStopLoginBeforeAnyOAuthRequestOrFile() async throws {
     try await withAuthAcceptanceWorld("acc-auth-no-secrets") { world in
       // given — nothing to seal
       world.environment = [:]
@@ -67,7 +70,8 @@ import Testing
 
   /// Exactly one encrypted artifact is a state login must never repair by minting the other; it fails
   /// closed and reaches no vendor.
-  @Test func aPartialEncryptedStateFailsClosedBeforeEgress() async throws {
+  @Test
+  func aPartialEncryptedStateFailsClosedBeforeEgress() async throws {
     try await withAuthAcceptanceWorld("acc-auth-partial") { world in
       // given — seal, then remove the envelope: the key alone remains
       _ = try RuntimeSecretPreparer.prepare(stateRoot: world.root, environment: world.environment)
@@ -87,7 +91,8 @@ import Testing
 
   /// ChatGPT auth is composed with neither a base URL nor an API key: the environment carries only the
   /// Telegram token that gets sealed, and login still completes over the pinned endpoints.
-  @Test func loginNeedsNeitherBaseURLNorAPIKey() async throws {
+  @Test
+  func loginNeedsNeitherBaseURLNorAPIKey() async throws {
     try await withAuthAcceptanceWorld("acc-auth-no-key") { world in
       // given — no CLAW_LLM_BASE_URL, no CLAW_LLM_API_KEY in the environment
       #expect(world.environment["CLAW_LLM_BASE_URL"] == nil)
@@ -111,7 +116,8 @@ import Testing
 
   // MARK: - Replacement and Preservation
 
-  @Test func aReloginMintsANewProfileID() async throws {
+  @Test
+  func aReloginMintsANewProfileID() async throws {
     try await withAuthAcceptanceWorld("acc-auth-relogin") { world in
       // given
       try world.seedPriorLogin()
@@ -128,7 +134,8 @@ import Testing
     }
   }
 
-  @Test func aFailedExchangePreservesThePriorCredential() async throws {
+  @Test
+  func aFailedExchangePreservesThePriorCredential() async throws {
     try await withAuthAcceptanceWorld("acc-auth-exchange-fails") { world in
       // given — the token endpoint rejects the grant
       try world.seedPriorLogin()
@@ -151,7 +158,8 @@ import Testing
 
   // MARK: - The Catalog Is Not The Login
 
-  @Test func aCatalogFailureKeepsTheLoginAndPrintsTheManualForm() async throws {
+  @Test
+  func aCatalogFailureKeepsTheLoginAndPrintsTheManualForm() async throws {
     try await withAuthAcceptanceWorld("acc-auth-catalog-fails") { world in
       // given — the catalog endpoint 500s after the credential has been stored
       world.responses[ChatGPTProviderMetadata.modelsURL] = AcceptanceAuthFixture.result(
@@ -173,7 +181,8 @@ import Testing
 
   // MARK: - The Lock
 
-  @Test func aHeldLockStopsLoginBeforeAnyEgress() async throws {
+  @Test
+  func aHeldLockStopsLoginBeforeAnyEgress() async throws {
     try await withAuthAcceptanceWorld("acc-auth-locked") { world in
       // given
       world.lockFailure = .held
@@ -193,16 +202,14 @@ import Testing
   /// Status reads through a held daemon lock: no lock acquisition and no token bytes. That it also
   /// makes no wire call is no longer something a test can catch it at — `AuthStatusWorkflow` is
   /// handed no transport to reach for — so what is asserted here is the half that stayed behavioral.
-  @Test func statusReadsThroughAHeldLockWithoutNetwork() async throws {
+  @Test
+  func statusReadsThroughAHeldLockWithoutNetwork() async throws {
     try await withAuthAcceptanceWorld("acc-auth-status") { world in
       // given — a daemon holds the instance lock
       try world.seedPriorLogin()
       let daemon = try InstanceLock(path: world.paths.instanceLock.path)
       defer { daemon.release() }
-      world.mutationLock = RealInstanceLocking(
-        path: world.paths.instanceLock.path,
-        log: world.log
-      )
+      world.mutationLock = RealInstanceLocking(path: world.paths.instanceLock.path, log: world.log)
       let workflow = world.statusWorkflow()
 
       // when

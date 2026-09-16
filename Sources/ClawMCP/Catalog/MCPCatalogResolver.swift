@@ -118,6 +118,8 @@ public enum MCPCatalogResolver {
   }
 }
 
+// MARK: - Catalog Admission
+
 private extension MCPCatalogResolver {
   static var providerDefinitionBudgetReason: String {
     """
@@ -173,12 +175,9 @@ private extension MCPCatalogResolver {
         scheduled += 1
       }
 
-      return
-        collected
-        .sorted { left, right in
-          left.offset < right.offset
-        }
-        .map(\.discovery)
+      return collected.sorted { left, right in
+        left.offset < right.offset
+      }.map(\.discovery)
     }
   }
 
@@ -235,6 +234,8 @@ private extension MCPCatalogResolver {
     }
   }
 }
+
+// MARK: - Provider Tool Definitions
 
 private extension ResolvedMCPTool {
   var providerDefinition: ToolDefinition {

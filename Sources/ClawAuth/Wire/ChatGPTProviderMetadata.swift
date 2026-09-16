@@ -165,7 +165,7 @@ public enum ChatGPTProviderMetadata {
     _ request: HTTPRequest,
     on http: any HTTPExecuting,
     redacting secrets: [String],
-    onTransportFailure asFailure: (String) -> Failure
+    onTransportFailure asFailure: (_ message: String) -> Failure
   ) async throws -> HTTPResult {
     do {
       return try await http.execute(request)

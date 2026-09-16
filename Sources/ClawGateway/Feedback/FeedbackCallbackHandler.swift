@@ -61,35 +61,35 @@ public struct FeedbackCallbackHandler: Sendable {
     )
   }
 
-  public func handle(_ callback: RawCallback, updateId: Int64) async -> HandleOutcome {
-    let noticeChatId = callback.chatId ?? callback.fromUserId
+  public func handle(_ callback: RawCallback, updateID: Int64) async -> HandleOutcome {
+    let noticeChatID = callback.chatID ?? callback.fromUserID
     do throws(RoutingHalt) {
-      try await replies.claimUpdate(updateId: updateId, target: .chat(noticeChatId))
+      try await replies.claimUpdate(updateID: updateID, target: .chat(noticeChatID))
     } catch {
       return error.outcome
     }
-    return await resolve(callback, updateId: updateId)
+    return await resolve(callback, updateID: updateID)
   }
 }
 
 // MARK: - Auth Chain
 
 private extension FeedbackCallbackHandler {
-  func resolve(_ callback: RawCallback, updateId: Int64) async -> HandleOutcome {
-    guard accessControl.isAllowed(userId: callback.fromUserId) else {
+  func resolve(_ callback: RawCallback, updateID: Int64) async -> HandleOutcome {
+    guard accessControl.isAllowed(userID: callback.fromUserID) else {
       return await deny(callback, target: nil, signal: nil, decision: Self.forbiddenDecision)
     }
     guard let parsed = callback.data.flatMap(FeedbackKeyboard.parse) else {
       return await deny(callback, target: nil, signal: nil, decision: Self.malformedDecision)
     }
 
-    return await resolveParsed(callback, parsed: parsed, updateId: updateId)
+    return await resolveParsed(callback, parsed: parsed, updateID: updateID)
   }
 
   func resolveParsed(
     _ callback: RawCallback,
     parsed: (nonce: String, action: FeedbackAction),
-    updateId: Int64
+    updateID: Int64
   ) async -> HandleOutcome {
     let target: FeedbackTarget?
     do {
@@ -105,7 +105,7 @@ private extension FeedbackCallbackHandler {
         decision: Self.unknownDecision
       )
     }
-    guard callback.fromUserId == target.ownerUserId else {
+    guard callback.fromUserID == target.ownerUserID else {
       return await deny(
         callback,
         target: target,
@@ -113,10 +113,9 @@ private extension FeedbackCallbackHandler {
         decision: Self.ownerMismatchDecision
       )
     }
-    guard
-      let callbackChatId = callback.chatId,
-      callbackChatId == callback.fromUserId,
-      target.chatId == callbackChatId
+    guard let callbackChatID = callback.chatID,
+          callbackChatID == callback.fromUserID,
+          target.chatID == callbackChatID
     else {
       return await deny(
         callback,
@@ -125,9 +124,8 @@ private extension FeedbackCallbackHandler {
         decision: Self.chatMismatchDecision
       )
     }
-    guard
-      target.allowedActions.contains(parsed.action.signal),
-      target.subjectKind == parsed.action.subjectKind
+    guard target.allowedActions.contains(parsed.action.signal),
+          target.subjectKind == parsed.action.subjectKind
     else {
       return await deny(
         callback,
@@ -141,16 +139,11 @@ private extension FeedbackCallbackHandler {
         callback,
         target: target,
         signal: parsed.action.signal,
-        updateId: updateId,
+        updateID: updateID,
         challenges: challenges
       )
     }
-    return await consume(
-      callback,
-      target: target,
-      signal: parsed.action.signal,
-      updateId: updateId
-    )
+    return await consume(callback, target: target, signal: parsed.action.signal, updateID: updateID)
   }
 }
 
@@ -161,14 +154,14 @@ private extension FeedbackCallbackHandler {
     _ callback: RawCallback,
     target: FeedbackTarget,
     signal: OwnerSignal,
-    updateId: Int64
+    updateID: Int64
   ) async -> HandleOutcome {
     let tap = FeedbackTap(
       nonce: target.nonce,
       signal: signal,
-      ownerUserId: callback.fromUserId,
-      chatId: target.chatId,
-      transportUpdateId: updateId
+      ownerUserID: callback.fromUserID,
+      chatID: target.chatID,
+      transportUpdateID: updateID
     )
     let outcome: FeedbackOutcome
     do {
@@ -178,10 +171,10 @@ private extension FeedbackCallbackHandler {
     }
     switch outcome {
     case .recorded:
-      await workflow?.notifyChanged(jobId: target.jobId)
+      await workflow?.notifyChanged(jobID: target.jobID)
       return await finish(callback, toast: Self.recordedToast)
-    case .challengeOpened, .targetMissing, .ownerMismatch, .chatMismatch, .expired,
-      .actionMismatch, .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
+    case .challengeOpened, .targetMissing, .ownerMismatch, .chatMismatch, .expired, .actionMismatch,
+      .staleEpoch, .alreadyConsumed, .requiresPayloadChallenge:
       return await finish(callback, toast: Self.neutralToast)
     }
   }
@@ -194,7 +187,7 @@ private extension FeedbackCallbackHandler {
     _ callback: RawCallback,
     target: FeedbackTarget,
     signal: OwnerSignal,
-    updateId: Int64,
+    updateID: Int64,
     challenges: FeedbackChallengeHandler?
   ) async -> HandleOutcome {
     guard let challenges else {
@@ -209,7 +202,7 @@ private extension FeedbackCallbackHandler {
       callback,
       target: target,
       signal: signal,
-      updateId: updateId,
+      updateID: updateID,
       challenges: challenges
     )
   }
@@ -218,15 +211,15 @@ private extension FeedbackCallbackHandler {
     _ callback: RawCallback,
     target: FeedbackTarget,
     signal: OwnerSignal,
-    updateId: Int64,
+    updateID: Int64,
     challenges: FeedbackChallengeHandler
   ) async -> HandleOutcome {
     let tap = FeedbackTap(
       nonce: target.nonce,
       signal: signal,
-      ownerUserId: callback.fromUserId,
-      chatId: target.chatId,
-      transportUpdateId: updateId
+      ownerUserID: callback.fromUserID,
+      chatID: target.chatID,
+      transportUpdateID: updateID
     )
     let outcome: FeedbackOutcome
     do {
@@ -253,14 +246,14 @@ private extension FeedbackCallbackHandler {
     signal: OwnerSignal?,
     decision: String
   ) async -> HandleOutcome {
-    let actor: AuditActor = target?.ownerUserId == callback.fromUserId ? .owner : .system
+    let actor: AuditActor = target?.ownerUserID == callback.fromUserID ? .owner : .system
     let event = AuditEvent(
       actor: actor,
       action: .learningFeedback,
       tool: signal?.rawValue,
       argsRedacted: Self.auditSubject(target),
       decision: decision,
-      runId: Self.runId(target),
+      runID: Self.runID(target),
       ts: now()
     )
     do {
@@ -294,9 +287,9 @@ private extension FeedbackCallbackHandler {
 
   func finish(_ callback: RawCallback, toast: String) async -> HandleOutcome {
     do {
-      try await callbacks.answerCallbackQuery(id: callback.callbackId, text: toast)
+      try await callbacks.answerCallbackQuery(id: callback.callbackID, text: toast)
     } catch {
-      logger.warning("failed to answer feedback callback \(callback.callbackId): \(error)")
+      logger.warning("failed to answer feedback callback \(callback.callbackID): \(error)")
     }
     return .processed
   }
@@ -308,7 +301,7 @@ private extension FeedbackCallbackHandler {
     return "subject_kind=\(target.subjectKind.rawValue),subject_digest=\(target.subjectDigest)"
   }
 
-  static func runId(_ target: FeedbackTarget?) -> Int64? {
+  static func runID(_ target: FeedbackTarget?) -> Int64? {
     guard target?.subjectKind == .run else {
       return nil
     }

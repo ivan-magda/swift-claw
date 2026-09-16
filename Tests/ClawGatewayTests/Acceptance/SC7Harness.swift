@@ -16,8 +16,8 @@ final class ManualClock: @unchecked Sendable {
   private let lock = NSLock()
   private var instant: Date
 
-  init(startAt: Date) {
-    instant = startAt
+  init(startAt instant: Date) {
+    self.instant = instant
   }
 
   var now: Date {
@@ -70,10 +70,15 @@ struct SC7Harness {
   /// durable audit trail instead.
   func waitForAudit(action: String, atLeast count: Int) async throws -> Int {
     let matched = try await pollUntil {
-      let matches = try auditRows().filter { row in row.action == action }.count
+      let matches = try auditRows().filter { row in
+        row.action == action
+      }.count
       return matches >= count ? matches : nil
     }
-    return try matched ?? auditRows().filter { row in row.action == action }.count
+    return try matched
+      ?? auditRows().filter { row in
+        row.action == action
+      }.count
   }
 
   func auditRows() throws -> [AuditRow] {
@@ -93,35 +98,29 @@ struct SC7Harness {
     }
   }
 
-  func ownerSessionId() throws -> Int64 {
-    try stores.sessionMessages.findSession(sessionKey: SessionKey.telegramDM(chatId: 7)) ?? 0
+  func ownerSessionID() throws -> Int64 {
+    try stores.sessionMessages.findSession(sessionKey: SessionKey.telegramDM(chatID: 7)) ?? 0
   }
 
   func ownerPending() async throws -> CommandConfirmation? {
-    await registry.pending(sessionId: try ownerSessionId())
+    await registry.pending(sessionID: try ownerSessionID())
   }
 
   func jobCount() throws -> Int {
     try stores.scheduledJobs.listAll().count
   }
 
-  func runCount(jobId: Int64) throws -> Int {
+  func runCount(jobID: Int64) throws -> Int {
     try readPool.read { db in
-      try Int.fetchOne(
-        db,
-        sql: "SELECT COUNT(*) FROM runs WHERE job_id = ?",
-        arguments: [jobId]
-      ) ?? 0
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM runs WHERE job_id = ?", arguments: [jobID])
+        ?? 0
     }
   }
 
   func runCount(origin: String) throws -> Int {
     try readPool.read { db in
-      try Int.fetchOne(
-        db,
-        sql: "SELECT COUNT(*) FROM runs WHERE origin = ?",
-        arguments: [origin]
-      ) ?? 0
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM runs WHERE origin = ?", arguments: [origin])
+        ?? 0
     }
   }
 
@@ -161,13 +160,16 @@ func makeSC7Harness(
   let resolvedDatabasePath =
     databasePath
     ?? fileManager.temporaryDirectory
-    .appendingPathComponent("claw-sc7-\(UUID().uuidString).sqlite").path
+    .appendingPathComponent("claw-sc7-\(UUID().uuidString).sqlite")
+    .path
   let stores = try ClawDatabase.openStores(path: resolvedDatabasePath)
-  try stores.allowlist.seedAllowlist(userIds: [7])
+  try stores.allowlist.seedAllowlist(userIDs: [7])
 
   // 2. Temp workspace dir; write `workspaceFiles` (relative path → content) into it.
-  let workspaceRoot = fileManager.temporaryDirectory
-    .appendingPathComponent("claw-sc7-ws-\(UUID().uuidString)", isDirectory: true)
+  let workspaceRoot = fileManager.temporaryDirectory.appendingPathComponent(
+    "claw-sc7-ws-\(UUID().uuidString)",
+    isDirectory: true
+  )
   try fileManager.createDirectory(at: workspaceRoot, withIntermediateDirectories: true)
   for (relativePath, content) in workspaceFiles {
     let destination = workspaceRoot.appendingPathComponent(relativePath)
@@ -248,7 +250,9 @@ func makeSC7Harness(
     notifyOutbox: {},
     breaker: withBreaker ? BudgetBreaker(budget: .default) : nil,
     delivery: withBreaker ? transport : nil,
-    now: { clock.now },
+    now: {
+      clock.now
+    },
     // Inert on purpose: the SC7 assertions never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     approvalExpirySeconds: testApprovalExpirySeconds,
@@ -285,7 +289,9 @@ func makeSC7Harness(
     ),
     coordinator: ApprovalCoordinator(),
     doctor: StubDoctorReporter(),
-    now: { clock.now },
+    now: {
+      clock.now
+    },
     logger: logger
   )
 
@@ -299,7 +305,9 @@ func makeSC7Harness(
     heartbeat: heartbeat,
     workspace: workspace,
     audit: stores.audit,
-    now: { clock.now },
+    now: {
+      clock.now
+    },
     clock: ScriptedClock { _ in },
     logger: logger
   )

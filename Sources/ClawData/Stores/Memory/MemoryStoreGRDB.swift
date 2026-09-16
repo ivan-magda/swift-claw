@@ -36,12 +36,11 @@ public struct MemoryStoreGRDB: MemoryStore {
 
   public func get(id: Int64) throws(StoreError) -> MemoryItem? {
     try database.readMapping { db in
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: "SELECT * FROM memory_items WHERE id = ?",
-          arguments: [id]
-        )
+      guard let row = try Row.fetchOne(
+        db,
+        sql: "SELECT * FROM memory_items WHERE id = ?",
+        arguments: [id]
+      )
       else {
         return nil
       }
@@ -81,7 +80,7 @@ public struct MemoryStoreGRDB: MemoryStore {
         item.sensitivity.rawValue,
         item.importance.rawValue,
         item.source.rawValue,
-        item.sessionId,
+        item.sessionID,
         now,
       ]
     )
@@ -92,7 +91,7 @@ public struct MemoryStoreGRDB: MemoryStore {
       sensitivity: item.sensitivity,
       importance: item.importance,
       source: item.source,
-      sessionId: item.sessionId,
+      sessionID: item.sessionID,
       createdAt: now
     )
   }
@@ -102,25 +101,24 @@ public struct MemoryStoreGRDB: MemoryStore {
   /// and falsify the taint guard or `/memory` provenance. Context reads degrade by omitting the row
   /// at the assembler boundary, not by inventing a value here.
   static func decodeItem(_ row: Row) throws -> MemoryItem {
-    let rowId: Int64 = row["id"]
+    let rowID: Int64 = row["id"]
 
-    guard
-      let kind = MemoryKind(rawValue: row["kind"]),
-      let sensitivity = Sensitivity(rawValue: row["sensitivity"]),
-      let importance = Importance(rawValue: row["importance"]),
-      let source = MemorySource(rawValue: row["source"])
+    guard let kind = MemoryKind(rawValue: row["kind"]),
+          let sensitivity = Sensitivity(rawValue: row["sensitivity"]),
+          let importance = Importance(rawValue: row["importance"]),
+          let source = MemorySource(rawValue: row["source"])
     else {
-      throw StoreError.unexpected("memory_items row \(rowId) has an unrecognized enum value")
+      throw StoreError.unexpected("memory_items row \(rowID) has an unrecognized enum value")
     }
 
     return MemoryItem(
-      id: rowId,
+      id: rowID,
       text: row["text"],
       kind: kind,
       sensitivity: sensitivity,
       importance: importance,
       source: source,
-      sessionId: row["session_id"],
+      sessionID: row["session_id"],
       createdAt: row["created_at"]
     )
   }

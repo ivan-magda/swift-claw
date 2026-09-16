@@ -49,16 +49,16 @@ private extension LearningSurface {
         } ?? "no decision"
       let warning = readable.warnings.isEmpty ? "" : " · warning"
       return """
-        \(readable.job.jobId) · \(readable.job.label) · \(readable.job.status.rawValue) · \
+        \(readable.job.jobID) · \(readable.job.label) · \(readable.job.status.rawValue) · \
         epoch \(readable.epoch.value) · \(readable.stableLessons.lessons.count) lessons · \
         \(trial) · \(decision)\(warning)
         """
     case .unreadable(let job):
-      return "\(job.jobId) · \(job.validatedLabel ?? "unknown label") · learning state unreadable"
+      return "\(job.jobID) · \(job.validatedLabel ?? "unknown label") · learning state unreadable"
     case .unarmed(let job):
-      return "\(job.jobId) · \(job.label) · no learning state"
-    case .notFound(let jobId):
-      return "No schedule with id \(jobId). See /schedule list."
+      return "\(job.jobID) · \(job.label) · no learning state"
+    case .notFound(let jobID):
+      return "No schedule with id \(jobID). See /schedule list."
     }
   }
 }
@@ -75,18 +75,18 @@ private extension LearningSurface {
 
   static func detail(_ view: JobLearningView) -> String {
     switch view {
-    case .notFound(let jobId):
-      return "No schedule with id \(jobId). See /schedule list."
+    case .notFound(let jobID):
+      return "No schedule with id \(jobID). See /schedule list."
     case .unarmed(let job):
       return """
-        Schedule \(job.jobId) · \(job.label)
+        Schedule \(job.jobID) · \(job.label)
         status: \(job.status.rawValue)
         timezone: \(job.timezone)
         learning state: not created
         """
     case .unreadable(let job):
       return """
-        Schedule \(job.jobId) · \(job.validatedLabel ?? "unknown label")
+        Schedule \(job.jobID) · \(job.validatedLabel ?? "unknown label")
         learning state: unreadable
         Run /doctor and inspect the daemon logs; this read did not change or repair stored state.
         """
@@ -97,7 +97,7 @@ private extension LearningSurface {
 
   static func readableDetail(_ view: ReadableJobLearningView) -> String {
     var lines = [
-      "Schedule \(view.job.jobId) · \(view.job.label)",
+      "Schedule \(view.job.jobID) · \(view.job.label)",
       "status: \(view.job.status.rawValue)",
       "timezone: \(view.job.timezone)",
       "learning epoch: \(view.epoch.value)",
@@ -125,7 +125,7 @@ private extension LearningSurface {
       return ["live trial: none"]
     }
     return [
-      "live trial: \(trial.trialId)",
+      "live trial: \(trial.trialID)",
       "trial epoch: \(trial.epoch.value)",
       "trial generation: \(trial.generation)",
       "trial state: \(trial.state.rawValue)",
@@ -140,17 +140,14 @@ private extension LearningSurface {
     ]
   }
 
-  static func decisionLines(
-    _ decision: LearningDecisionView?,
-    timezone: TimeZone
-  ) -> [String] {
+  static func decisionLines(_ decision: LearningDecisionView?, timezone: TimeZone) -> [String] {
     guard let decision else {
       return ["last decision: none"]
     }
     var lines = [
-      "last decision: \(decision.decisionId)",
+      "last decision: \(decision.decisionID)",
       "decision kind: \(decisionKind(decision.detail))",
-      "decision job: \(decision.jobId)",
+      "decision job: \(decision.jobID)",
       "decision epoch: \(decision.epoch.value)",
       "decision algorithm: \(decision.algorithm.rawValue)",
       "decided at: \(time(decision.decidedAt, timezone: timezone))",
@@ -163,10 +160,10 @@ private extension LearningSurface {
       lines.append("decision base: \(receipt.inputs.baseDigest.rawValue)")
       lines.append("decision replacement: \(receipt.inputs.replacementDigest.rawValue)")
       lines.append("decision reviewed feedback: \(receipt.inputs.feedbackRevision.value)")
-      let runIds = receipt.cohort.map { support in
-        String(support.runId)
+      let runIDs = receipt.cohort.map { support in
+        String(support.runID)
       }.joined(separator: ", ")
-      lines.append("decision cohort runs: \(runIds)")
+      lines.append("decision cohort runs: \(runIDs)")
       let confirmed = receipt.cohort.count { support in
         support.outcome == .positive && support.ownerConfirmed
       }
@@ -175,11 +172,11 @@ private extension LearningSurface {
       lines.append("decision input candidate: \(inputs.candidateDigest.rawValue)")
       lines.append("decision result candidate: \(result.candidateDigest.rawValue)")
       lines.append("decision result replacement: \(result.replacementDigest.rawValue)")
-      lines.append("decision result trial: \(result.trialId)")
+      lines.append("decision result trial: \(result.trialID)")
       lines.append("decision result generation: \(result.generation)")
     case .reflectionNoCandidate(let inputs, let result):
       lines.append("decision input trigger: \(inputs.triggerDigest.rawValue)")
-      lines.append("decision input operation: \(inputs.operationId.rawValue)")
+      lines.append("decision input operation: \(inputs.operationID.rawValue)")
       lines.append("decision input carrier: \(inputs.carrierDigest.rawValue)")
       lines.append("decision result digest: \(result.resultDigest.rawValue)")
     case .learningReset(let inputs, let result):
@@ -190,12 +187,12 @@ private extension LearningSurface {
       lines.append("reset old stable revision: \(inputs.oldStableRevision.value)")
       lines.append("reset new stable revision: \(result.newStableRevision.value)")
       lines.append("reset feedback revision: \(inputs.feedbackRevisionAtCut.value)")
-      lines.append("reset prior live trial: \(inputs.priorOpenTrialId.map(String.init) ?? "none")")
+      lines.append("reset prior live trial: \(inputs.priorOpenTrialID.map(String.init) ?? "none")")
       lines.append("reset closed trials: \(result.closedTrials.count)")
       lines.append("reset invalidated targets: \(result.invalidatedTargetCount)")
       lines.append("reset invalidated challenges: \(result.invalidatedChallengeCount)")
-      lines.append("reset abandoned calls: \(result.staleNoCallOperationIds.count)")
-      lines.append("reset in-flight calls: \(result.inFlightOperationIds.count)")
+      lines.append("reset abandoned calls: \(result.staleNoCallOperationIDs.count)")
+      lines.append("reset in-flight calls: \(result.inFlightOperationIDs.count)")
     }
     return lines
   }

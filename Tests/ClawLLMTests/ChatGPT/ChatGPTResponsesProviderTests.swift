@@ -9,7 +9,8 @@ import Testing
 /// The assembled ChatGPT Responses provider: one fixed endpoint, one allowlisted header set, and one
 /// attempt engine that both `complete` and `stream` drive. Every HTTP outcome is scripted at the
 /// unmanaged seam and every delay runs on a manual clock, so nothing here waits on real time.
-@Suite struct ChatGPTResponsesProviderTests {
+@Suite
+struct ChatGPTResponsesProviderTests {
   // MARK: - Endpoint and headers
 
   @Test(.timeLimit(.minutes(1)))
@@ -152,8 +153,12 @@ import Testing
       clock: ScriptedClock { delay in
         await sleeps.record(delay / .seconds(1))
       },
-      jitter: { duration in duration },
-      epochID: { fixedEpoch }
+      jitter: { duration in
+        duration
+      },
+      epochID: {
+        fixedEpoch
+      }
     )
     let request = ChatRequest(
       model: "gpt-5",
@@ -222,9 +227,7 @@ import Testing
   func terminalModelMetadataSurvivesTheResponsesAdapter() async throws {
     // given
     let events =
-      Fixtures.basicSuccess().dropLast() + [
-        Fixtures.completedTerminal(model: "gpt-5.6-sol")
-      ]
+      Fixtures.basicSuccess().dropLast() + [Fixtures.completedTerminal(model: "gpt-5.6-sol")]
     let harness = ProviderHarness(steps: [.stream(okHead, Array(events))])
 
     // when
@@ -244,7 +247,7 @@ import Testing
           {"type":"response.done","response":{"id":"resp_1","status":"completed",\#
           "model":"gpt-5.6-sol"}}
           """#
-        )
+        ),
       ]
     let harness = ProviderHarness(steps: [.stream(okHead, body)])
     let request = ChatRequest(
@@ -267,18 +270,14 @@ import Testing
   @Test(.timeLimit(.minutes(1)))
   func completeAndStreamShareOneRetryBudgetOnTheSameScript() async throws {
     // given — a clean 5xx then success, on both entry points
-    let completeHarness = ProviderHarness(
-      steps: [
-        .stream(head(500), Fixtures.errorBody("boom")),
-        .stream(okHead, Fixtures.richSuccess()),
-      ]
-    )
-    let streamHarness = ProviderHarness(
-      steps: [
-        .stream(head(500), Fixtures.errorBody("boom")),
-        .stream(okHead, Fixtures.richSuccess()),
-      ]
-    )
+    let completeHarness = ProviderHarness(steps: [
+      .stream(head(500), Fixtures.errorBody("boom")),
+      .stream(okHead, Fixtures.richSuccess()),
+    ])
+    let streamHarness = ProviderHarness(steps: [
+      .stream(head(500), Fixtures.errorBody("boom")),
+      .stream(okHead, Fixtures.richSuccess()),
+    ])
 
     // when
     let completed = try await completeHarness.provider.complete(request: plainRequest)
@@ -399,7 +398,11 @@ import Testing
     _ = try await harness.provider.complete(request: request)
 
     // then — the foreign state was counted and reported as counts, carrying no payload or issuer
-    let line = try #require(capture.entries.first { $0.message.contains("replay state dropped") })
+    let line = try #require(
+      capture.entries.first {
+        $0.message.contains("replay state dropped")
+      }
+    )
     #expect(line.message.contains("foreign=1"))
     #expect(line.message.contains("staleEpoch=0"))
     #expect(line.message.contains("deadbeef") == false)
@@ -416,7 +419,9 @@ import Testing
       wireModel: "gpt-5",
       epoch: fixedEpoch
     )
-    let codec = ChatGPTProviderStateCodec(newEpoch: { fixedEpoch })
+    let codec = ChatGPTProviderStateCodec {
+      fixedEpoch
+    }
     let stateA = try codec.encodeResponseState(
       items: ChatGPTReplayItems(
         reasoning: [ChatGPTReasoningItem(encryptedContent: "ENC-A")],
@@ -451,7 +456,9 @@ import Testing
     let recorded = try #require(await harness.http.recorded.first)
     let body = try decodeBody(recorded.body)
     let input = try #require(body["input"] as? [[String: Any]])
-    let encrypted = input.compactMap { item in item["encrypted_content"] as? String }
+    let encrypted = input.compactMap { item in
+      item["encrypted_content"] as? String
+    }
     #expect(encrypted == ["ENC-A", "ENC-B"])
     let assistantTexts = assistantOutputTexts(input)
     #expect(assistantTexts == ["first answer", "second answer"])
@@ -523,9 +530,7 @@ private func head(_ status: Int) -> HTTPStreamHead {
 
 // MARK: - Assertions
 
-private func requireProviderFailure(
-  _ body: () async throws -> some Any
-) async -> ProviderFailure {
+private func requireProviderFailure(_ body: () async throws -> some Any) async -> ProviderFailure {
   do {
     _ = try await body()
     Issue.record("expected the call to throw a ProviderFailure")
@@ -546,13 +551,14 @@ private func requireProviderFailure(
 
 private func assistantOutputTexts(_ input: [[String: Any]]) -> [String] {
   input.compactMap { item -> String? in
-    guard
-      item["type"] as? String == "message",
-      item["role"] as? String == "assistant",
-      let content = item["content"] as? [[String: Any]]
+    guard item["type"] as? String == "message",
+          item["role"] as? String == "assistant",
+          let content = item["content"] as? [[String: Any]]
     else {
       return nil
     }
-    return content.compactMap { part in part["text"] as? String }.joined()
+    return content.compactMap { part in
+      part["text"] as? String
+    }.joined()
   }
 }

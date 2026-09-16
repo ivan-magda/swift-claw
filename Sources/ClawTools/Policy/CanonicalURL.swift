@@ -13,10 +13,7 @@ enum CanonicalURLError: Error, Sendable, Equatable {
 /// IDN), so a URL can never win approval at gate time and then be refused at dispatch time.
 enum CanonicalURL {
   static func canonicalize(_ raw: String) -> Result<String, CanonicalURLError> {
-    guard
-      let components = URLComponents(string: raw),
-      let rawScheme = components.scheme
-    else {
+    guard let components = URLComponents(string: raw), let rawScheme = components.scheme else {
       return .failure(.unparseable)
     }
 
@@ -75,8 +72,10 @@ enum CanonicalURL {
     while index < scalars.count {
       let scalar = scalars[index]
 
-      guard scalar == "%", index + 2 < scalars.count,
-        isHexDigit(scalars[index + 1]), isHexDigit(scalars[index + 2])
+      guard scalar == "%",
+            index + 2 < scalars.count,
+            isHexDigit(scalars[index + 1]),
+            isHexDigit(scalars[index + 2])
       else {
         output.append(scalar)
         index += 1

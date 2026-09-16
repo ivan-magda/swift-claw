@@ -96,8 +96,10 @@ actor StreamingAcceptanceProvider: LLMProvider {
 
   private(set) var completeCalls = 0
   private(set) var streamCalls = 0
+
   private var requestWaiters: [(threshold: Int, continuation: CheckedContinuation<Void, Never>)] =
     []
+
   private var script: StreamScript = .success
   private var postDeltaRelease: CheckedContinuation<Void, Never>?
   private var postDeltaReleased = false
@@ -133,9 +135,7 @@ actor StreamingAcceptanceProvider: LLMProvider {
       case .afterDraft(let failure):
         try? await sink.sendDelta("stream ")
         await self.waitForPostDeltaRelease()
-        return .failed(
-          ProviderFailure(cause: failure, accounting: .mayHaveStarted(observing: 0))
-        )
+        return .failed(ProviderFailure(cause: failure, accounting: .mayHaveStarted(observing: 0)))
       }
     }
   }
@@ -150,12 +150,7 @@ actor StreamingAcceptanceProvider: LLMProvider {
   }
 
   func setStreamFailure(_ failure: ProviderError?) {
-    script =
-      if let failure {
-        .beforeDelta(failure)
-      } else {
-        .success
-      }
+    script = if let failure { .beforeDelta(failure) } else { .success }
     postDeltaReleased = false
     postDeltaRelease = nil
   }
@@ -175,7 +170,9 @@ actor StreamingAcceptanceProvider: LLMProvider {
   private func recordStreamCall() {
     streamCalls += 1
     let pending = requestWaiters
-    requestWaiters = pending.filter { $0.threshold > streamCalls }
+    requestWaiters = pending.filter {
+      $0.threshold > streamCalls
+    }
     for waiter in pending where waiter.threshold <= streamCalls {
       waiter.continuation.resume()
     }
@@ -197,6 +194,7 @@ actor StreamingAcceptanceProvider: LLMProvider {
 
 actor StopNewProvider: LLMProvider {
   private(set) var requests: [[ChatMessage]] = []
+
   private var requestContinuations: [(count: Int, continuation: CheckedContinuation<Void, Never>)] =
     []
 
@@ -230,8 +228,12 @@ actor StopNewProvider: LLMProvider {
 
   private func resumeRequestContinuations() {
     let currentCount = requests.count
-    let ready = requestContinuations.filter { $0.count <= currentCount }
-    requestContinuations.removeAll { $0.count <= currentCount }
+    let ready = requestContinuations.filter {
+      $0.count <= currentCount
+    }
+    requestContinuations.removeAll {
+      $0.count <= currentCount
+    }
     for waiter in ready {
       waiter.continuation.resume()
     }
@@ -269,7 +271,7 @@ struct Stack {
   let usage: UsageStoreGRDB
   let outbox: OutboxStoreGRDB
   let cursor: UpdateCursorStoreGRDB
-  let chatId: Int64
+  let chatID: Int64
   let lanes: SessionLaneRegistry
 }
 
@@ -280,7 +282,7 @@ struct StopNewStack {
   let signal: OutboxSignal
   let writer: any DatabaseWriter
   let outbox: OutboxStoreGRDB
-  let chatId: Int64
+  let chatID: Int64
 }
 
 struct StreamingStack {
@@ -290,7 +292,7 @@ struct StreamingStack {
   let provider: StreamingAcceptanceProvider
   let signal: OutboxSignal
   let outbox: OutboxStoreGRDB
-  let chatId: Int64
+  let chatID: Int64
 }
 
 struct AcceptanceWorkspace: WorkspaceReading {
@@ -316,11 +318,11 @@ func makeAcceptanceContextBuilder(
   )
 }
 
-/// Assembles the production lane stack over `writer`, seeding `chatId` onto the allowlist and
+/// Assembles the production lane stack over `writer`, seeding `chatID` onto the allowlist and
 /// scripting the provider with `outcome`.
 func makeStack(
   writer: any DatabaseWriter,
-  allow chatId: Int64 = 42,
+  allow chatID: Int64 = 42,
   outcome: RecordingProvider.Outcome,
   blocksFirstProviderCall: Bool = false,
   providerState: ProviderExchangeState? = nil,
@@ -328,7 +330,7 @@ func makeStack(
   images: (any ImageMessageHandling)? = nil
 ) throws -> Stack {
   let allowlist = AllowlistStoreGRDB(writer: writer)
-  try allowlist.seedAllowlist(userIds: [chatId])
+  try allowlist.seedAllowlist(userIDs: [chatID])
 
   let processed = ProcessedUpdateStoreGRDB(writer: writer)
   let cursor = UpdateCursorStoreGRDB(writer: writer)
@@ -373,7 +375,9 @@ func makeStack(
     agent: agent,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer, workspace: workspace),
     imageCache: imageCache,
-    notifyOutbox: { signal.poke() },
+    notifyOutbox: {
+      signal.poke()
+    },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
@@ -421,17 +425,17 @@ func makeStack(
     usage: usage,
     outbox: outbox,
     cursor: cursor,
-    chatId: chatId,
+    chatID: chatID,
     lanes: lanes
   )
 }
 
 func makeStreamingStack(
   writer: any DatabaseWriter,
-  allow chatId: Int64 = 42
+  allow chatID: Int64 = 42
 ) throws -> StreamingStack {
   let allowlist = AllowlistStoreGRDB(writer: writer)
-  try allowlist.seedAllowlist(userIds: [chatId])
+  try allowlist.seedAllowlist(userIDs: [chatID])
   let processed = ProcessedUpdateStoreGRDB(writer: writer)
   let sessionMessages = SessionMessageStoreGRDB(writer: writer)
   let commands = CommandStoreGRDB(writer: writer)
@@ -471,7 +475,9 @@ func makeStreamingStack(
     agent: agent,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer),
     imageCache: imageCache,
-    notifyOutbox: { signal.poke() },
+    notifyOutbox: {
+      signal.poke()
+    },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
@@ -510,16 +516,13 @@ func makeStreamingStack(
     provider: provider,
     signal: signal,
     outbox: outbox,
-    chatId: chatId
+    chatID: chatID
   )
 }
 
-func makeStopNewStack(
-  writer: any DatabaseWriter,
-  allow chatId: Int64 = 42
-) throws -> StopNewStack {
+func makeStopNewStack(writer: any DatabaseWriter, allow chatID: Int64 = 42) throws -> StopNewStack {
   let allowlist = AllowlistStoreGRDB(writer: writer)
-  try allowlist.seedAllowlist(userIds: [chatId])
+  try allowlist.seedAllowlist(userIDs: [chatID])
 
   let processed = ProcessedUpdateStoreGRDB(writer: writer)
   let sessionMessages = SessionMessageStoreGRDB(writer: writer)
@@ -559,7 +562,9 @@ func makeStopNewStack(
     agent: agent,
     contextBuilder: makeAcceptanceContextBuilder(writer: writer),
     imageCache: imageCache,
-    notifyOutbox: { signal.poke() },
+    notifyOutbox: {
+      signal.poke()
+    },
     breaker: BudgetBreaker(budget: .default),
     delivery: transport,
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
@@ -594,11 +599,12 @@ func makeStopNewStack(
     signal: signal,
     writer: writer,
     outbox: outbox,
-    chatId: chatId
+    chatID: chatID
   )
 }
 
-@Suite(.timeLimit(.minutes(1))) struct LLMTurnPersistenceAcceptanceTests {
+@Suite(.timeLimit(.minutes(1)))
+struct LLMTurnPersistenceAcceptanceTests {
   // MARK: - Durable-state probes
 
   /// The most recently inserted run's `state` — DONE / FAILED / RUNNING.
@@ -642,14 +648,15 @@ func makeStopNewStack(
 
   // MARK: - Tests
 
-  @Test func streamedTurnPublishesDraftsThenFinalizesViaOutbox() async throws {
+  @Test
+  func streamedTurnPublishesDraftsThenFinalizesViaOutbox() async throws {
     // given
     let queue = try TestDatabase.make()
     let stack = try makeStreamingStack(writer: queue)
 
     // when
     let outcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 501, from: stack.chatId, text: "stream please")
+      rawUpdate: textUpdate(id: 501, from: stack.chatID, text: "stream please")
     )
     await stack.provider.waitForStreamCalls(1)
     await stack.transport.waitForDrafts(atLeast: 1)
@@ -660,7 +667,7 @@ func makeStopNewStack(
     #expect(outcome == .processed)
     let drafts = await stack.transport.drafts
     #expect(drafts.count >= 2)
-    #expect(Set(drafts.map(\.draftId)).count == 1)
+    #expect(Set(drafts.map(\.draftID)).count == 1)
     #expect(drafts.last?.markdown == "stream answer")
     #expect(await stack.transport.richSends.isEmpty)
     #expect(try stack.outbox.pendingOutbound().count == 1)
@@ -673,7 +680,8 @@ func makeStopNewStack(
     #expect(try stack.outbox.pendingOutbound().isEmpty)
   }
 
-  @Test func streamingConnectFailureFallsBackToBlockingPath() async throws {
+  @Test
+  func streamingConnectFailureFallsBackToBlockingPath() async throws {
     // given
     let queue = try TestDatabase.make()
     let stack = try makeStreamingStack(writer: queue)
@@ -681,7 +689,7 @@ func makeStopNewStack(
 
     // when
     let outcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 502, from: stack.chatId, text: "fallback")
+      rawUpdate: textUpdate(id: 502, from: stack.chatID, text: "fallback")
     )
     try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.done.rawValue])
     await stack.dispatcher.drainOnce()
@@ -693,7 +701,8 @@ func makeStopNewStack(
     #expect(await stack.transport.richSends.first?.markdown == "blocking fallback")
   }
 
-  @Test func postSendStreamingFailureDoesNotIssueBlockingFallback() async throws {
+  @Test
+  func postSendStreamingFailureDoesNotIssueBlockingFallback() async throws {
     // given
     let queue = try TestDatabase.make()
     let stack = try makeStreamingStack(writer: queue)
@@ -701,7 +710,7 @@ func makeStopNewStack(
 
     // when
     let outcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 503, from: stack.chatId, text: "drop")
+      rawUpdate: textUpdate(id: 503, from: stack.chatID, text: "drop")
     )
     await stack.provider.waitForStreamCalls(1)
     await stack.transport.waitForDrafts(atLeast: 1)
@@ -718,14 +727,15 @@ func makeStopNewStack(
   /// §1: a real answer is persisted across the whole spine and committed BEFORE any send — the turn
   /// leaves a DONE run, one usage row, an audit trail, and a single PENDING outbox row, while the
   /// transport stays silent; only the dispatcher's drain delivers it (richly).
-  @Test func turnPersistsEverythingThenDelivers() async throws {
+  @Test
+  func turnPersistsEverythingThenDelivers() async throws {
     // given
     let queue = try TestDatabase.make()
     let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
 
     // when — route one allowlisted message, then wait for the queued turn to commit
     let outcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello")
+      rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "hello")
     )
     try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.done.rawValue])
 
@@ -750,15 +760,16 @@ func makeStopNewStack(
   /// §1: the conversation is multi-turn — the second turn assembles the prior turn's user message and
   /// the committed assistant reply, so the provider sees four messages (system + user₁ + assistant +
   /// user₂), proving recent history is threaded back within the context budget.
-  @Test func secondTurnSeesPriorHistory() async throws {
+  @Test
+  func secondTurnSeesPriorHistory() async throws {
     // given
     let queue = try TestDatabase.make()
     let stack = try makeStack(writer: queue, outcome: .respond("stub answer"))
 
     // when — two sequential turns from the same chat (distinct update ids)
-    await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "first"))
+    await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "first"))
     try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.done.rawValue])
-    await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "second"))
+    await stack.router.handle(rawUpdate: textUpdate(id: 2, from: stack.chatID, text: "second"))
     await stack.provider.waitForRequestCount(2)
     try await waitForRunStates(
       queue,
@@ -778,7 +789,8 @@ func makeStopNewStack(
   /// §1: a provider outage that survives retries degrades to a plain-language message rather than
   /// silence — the run is FAILED and the owner still receives the canned "couldn't reach the model"
   /// reply through the outbox.
-  @Test func providerOutageDegradesGracefully() async throws {
+  @Test
+  func providerOutageDegradesGracefully() async throws {
     // given — every attempt fails retryably, so the agent exhausts retries and degrades
     let queue = try TestDatabase.make()
     let stack = try makeStack(
@@ -787,7 +799,7 @@ func makeStopNewStack(
     )
 
     // when
-    await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
+    await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "hello"))
     try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.failed.rawValue])
     #expect(try stack.outbox.pendingOutbound().count == 1)
     await stack.dispatcher.drainOnce()
@@ -800,7 +812,8 @@ func makeStopNewStack(
   /// §1: when today's spend already meets the daily cap, the offline gate refuses BEFORE any provider
   /// call and the owner gets a plain stop message — the breaker is enforced from durable
   /// `provider_usage`, not the live call.
-  @Test func dailyCapStopsTheTurnWithAMessage() async throws {
+  @Test
+  func dailyCapStopsTheTurnWithAMessage() async throws {
     // given — seed today's usage at the daily USD cap against a throwaway run, so the FK holds and
     // the running total (global per UTC day) already sits at the limit
     let queue = try TestDatabase.make()
@@ -808,22 +821,22 @@ func makeStopNewStack(
 
     let seedClaim = try stack.sessionMessages.claimAndPersistInbound(
       InboundMessage(
-        updateId: 900,
-        sessionKey: SessionKey.telegramDM(chatId: 999),
-        chatId: 999,
-        userId: 999,
+        updateID: 900,
+        sessionKey: SessionKey.telegramDM(chatID: 999),
+        chatID: 999,
+        userID: 999,
         text: "seed",
         isEdited: false,
         ts: Date()
       )
     )
-    let seedSession = try #require(seedClaim.sessionId)
-    let seedRun = try #require(seedClaim.runId)
+    let seedSession = try #require(seedClaim.sessionID)
+    let seedRun = try #require(seedClaim.runID)
     try stack.usage.recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-day-cap-seed"),
-        runId: seedRun,
-        sessionId: seedSession,
+        runID: seedRun,
+        sessionID: seedSession,
         model: "gpt-4o",
         promptTokens: 0,
         completionTokens: 0,
@@ -834,13 +847,13 @@ func makeStopNewStack(
       )
     )
     _ = try CommandStoreGRDB(writer: queue).applyNew(
-      updateId: 901,
-      sessionKey: SessionKey.telegramDM(chatId: 999),
+      updateID: 901,
+      sessionKey: SessionKey.telegramDM(chatID: 999),
       now: Date()
     )
 
     // when — an allowlisted turn arrives with the cap already met
-    await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
+    await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "hello"))
     try await waitForRunStates(
       queue,
       signal: stack.signal,
@@ -861,11 +874,12 @@ func makeStopNewStack(
   /// §1: the conversation survives a restart. A turn processed against a file-backed pool, with the
   /// cursor advanced, is fully recoverable after reopening the same file: the offset persists and
   /// both the user message and the committed assistant reply are still in history.
-  @Test func cursorAndHistorySurviveRestart() async throws {
+  @Test
+  func cursorAndHistorySurviveRestart() async throws {
     // given — a file-backed pool so the state outlives the "process"
     let path = makeTempDatabasePath(prefix: "claw-restart")
     defer { try? FileManager.default.removeItem(atPath: path) }
-    let sessionKey = SessionKey.telegramDM(chatId: 42)
+    let sessionKey = SessionKey.telegramDM(chatID: 42)
 
     // when — first run: process a turn, then advance the cursor (the poller's last step). The scope
     // releases the pool, modeling the process exiting.
@@ -873,7 +887,7 @@ func makeStopNewStack(
       let pool = try ClawDatabase.makePool(path: path)
       try ClawDatabase.migrate(pool)
       let stack = try makeStack(writer: pool, outcome: .respond("stub answer"))
-      await stack.router.handle(rawUpdate: textUpdate(id: 100, from: stack.chatId, text: "hello"))
+      await stack.router.handle(rawUpdate: textUpdate(id: 100, from: stack.chatID, text: "hello"))
       try await waitForRunStates(pool, signal: stack.signal, expected: [RunState.done.rawValue])
       try stack.cursor.advanceCursor(to: 100)
     }
@@ -882,20 +896,29 @@ func makeStopNewStack(
     let reopened = try ClawDatabase.openStores(path: path)
     #expect(try reopened.cursor.loadCursor() == 100)
 
-    let sessionId = try reopened.sessionMessages.loadOrCreateSession(
+    let sessionID = try reopened.sessionMessages.loadOrCreateSession(
       sessionKey: sessionKey,
       now: Date()
     )
     let history = try reopened.sessionMessages.loadContextSnapshot(
-      sessionId: sessionId,
-      throughMessageId: .max,
+      sessionID: sessionID,
+      throughMessageID: .max,
       limit: 50
     ).history
-    #expect(history.contains { $0.role == .user && $0.content == "hello" })
-    #expect(history.contains { $0.role == .assistant && $0.content == "stub answer" })
+    #expect(
+      history.contains {
+        $0.role == .user && $0.content == "hello"
+      }
+    )
+    #expect(
+      history.contains {
+        $0.role == .assistant && $0.content == "stub answer"
+      }
+    )
   }
 
-  @Test func twoQuickMessagesRunFifoAndFirstContextExcludesSecond() async throws {
+  @Test
+  func twoQuickMessagesRunFifoAndFirstContextExcludesSecond() async throws {
     // given
     let queue = try TestDatabase.make()
     let stack = try makeStack(
@@ -903,21 +926,21 @@ func makeStopNewStack(
       outcome: .respond("stub answer"),
       blocksFirstProviderCall: true
     )
-    let sessionId = try stack.sessionMessages.loadOrCreateSession(
-      sessionKey: SessionKey.telegramDM(chatId: stack.chatId),
+    let sessionID = try stack.sessionMessages.loadOrCreateSession(
+      sessionKey: SessionKey.telegramDM(chatID: stack.chatID),
       now: Date()
     )
     let gate = Gate()
-    _ = await stack.lanes.enqueue(sessionID: sessionId, runID: -1) {
+    _ = await stack.lanes.enqueue(sessionID: sessionID, runID: -1) {
       await gate.wait()
     }
 
     // when
     let firstOutcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "first")
+      rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "first")
     )
     let secondOutcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "second")
+      rawUpdate: textUpdate(id: 2, from: stack.chatID, text: "second")
     )
     #expect(firstOutcome == .processed)
     #expect(secondOutcome == .processed)
@@ -940,35 +963,36 @@ func makeStopNewStack(
     #expect(firstContents.contains("first"))
     #expect(firstContents.contains("second") == false)
     #expect(secondContents.contains("second"))
-    let assistantRunIds = try await queue.read { db in
+    let assistantRunIDs = try await queue.read { db in
       try Int64.fetchAll(
         db,
         sql: "SELECT run_id FROM messages WHERE role = 'assistant' ORDER BY id ASC"
       )
     }
-    let runIds = try await queue.read { db in
+    let runIDs = try await queue.read { db in
       try Int64.fetchAll(db, sql: "SELECT id FROM runs ORDER BY id ASC")
     }
-    #expect(runIds.count == 2)
-    #expect(assistantRunIds == runIds)  // one assistant reply per run, in run order
-    #expect(assistantRunIds[0] < assistantRunIds[1])  // strictly ascending, not the literal [1, 2]
+    #expect(runIDs.count == 2)
+    #expect(assistantRunIDs == runIDs)  // one assistant reply per run, in run order
+    #expect(assistantRunIDs[0] < assistantRunIDs[1])  // strictly ascending, not the literal [1, 2]
   }
 
-  @Test func stopMidTurnCancelsRunAndNextPlainMessageStillReplies() async throws {
+  @Test
+  func stopMidTurnCancelsRunAndNextPlainMessageStillReplies() async throws {
     // given
     let queue = try TestDatabase.make()
     let stack = try makeStopNewStack(writer: queue)
 
     // when
     let firstOutcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "before stop")
+      rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "before stop")
     )
     await stack.provider.waitForRequestCount(1)
     let stopOutcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "/stop")
+      rawUpdate: textUpdate(id: 2, from: stack.chatID, text: "/stop")
     )
     let afterStopOutcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 3, from: stack.chatId, text: "after stop")
+      rawUpdate: textUpdate(id: 3, from: stack.chatID, text: "after stop")
     )
     await stack.provider.waitForRequestCount(2)
     await waitForOutboxPoke(stack.signal)
@@ -977,34 +1001,34 @@ func makeStopNewStack(
     #expect(firstOutcome == .processed)
     #expect(stopOutcome == .processed)
     #expect(afterStopOutcome == .processed)
+    #expect(try runStates(queue) == [RunState.cancelled.rawValue, RunState.done.rawValue])
     #expect(
-      try runStates(queue) == [
-        RunState.cancelled.rawValue,
-        RunState.done.rawValue,
-      ]
+      await stack.transport.sent.contains {
+        $0.text == CommandReplies.stopped
+      }
     )
-    #expect(await stack.transport.sent.contains { $0.text == CommandReplies.stopped })
     #expect(try stack.outbox.pendingOutbound().map(\.payload) == ["fresh reply"])
   }
 
-  @Test func newSupersedesRunningAndQueuedRunsAndClearsContextWindow() async throws {
+  @Test
+  func newSupersedesRunningAndQueuedRunsAndClearsContextWindow() async throws {
     // given
     let queue = try TestDatabase.make()
     let stack = try makeStopNewStack(writer: queue)
 
     // when
     let firstOutcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "before one")
+      rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "before one")
     )
     await stack.provider.waitForRequestCount(1)
     let secondOutcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 2, from: stack.chatId, text: "before two")
+      rawUpdate: textUpdate(id: 2, from: stack.chatID, text: "before two")
     )
     let newOutcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 3, from: stack.chatId, text: "/new")
+      rawUpdate: textUpdate(id: 3, from: stack.chatID, text: "/new")
     )
     let afterNewOutcome = await stack.router.handle(
-      rawUpdate: textUpdate(id: 4, from: stack.chatId, text: "after new")
+      rawUpdate: textUpdate(id: 4, from: stack.chatID, text: "after new")
     )
     await stack.provider.waitForRequestCount(2)
     await waitForOutboxPoke(stack.signal)
@@ -1021,7 +1045,11 @@ func makeStopNewStack(
         RunState.done.rawValue,
       ]
     )
-    #expect(await stack.transport.sent.contains { $0.text == CommandReplies.freshConversation })
+    #expect(
+      await stack.transport.sent.contains {
+        $0.text == CommandReplies.freshConversation
+      }
+    )
 
     let requests = await stack.provider.requests
     #expect(requests.count == 2)
@@ -1036,7 +1064,8 @@ func makeStopNewStack(
   /// bytes never reach any owner-readable text sink. Every absence is paired with a live positive on
   /// the same turn: the ordinary reply text IS indexed by FTS and IS the outbox payload, while the
   /// replay marker is in none of FTS, message content, the outbox, or the audit trail.
-  @Test func providerReplayStateRoundTripsButStaysOutOfFTSOutboxAndAudit() async throws {
+  @Test
+  func providerReplayStateRoundTripsButStaysOutOfFTSOutboxAndAudit() async throws {
     // given — a reply carrying a distinctive replay-state payload
     let queue = try TestDatabase.make()
     let marker = "REPLAYSTATESECRETMARKER7f3c"
@@ -1047,7 +1076,7 @@ func makeStopNewStack(
     let stack = try makeStack(writer: queue, outcome: .respond("stub answer"), providerState: state)
 
     // when
-    await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatId, text: "hello"))
+    await stack.router.handle(rawUpdate: textUpdate(id: 1, from: stack.chatID, text: "hello"))
     try await waitForRunStates(queue, signal: stack.signal, expected: [RunState.done.rawValue])
     await stack.dispatcher.drainOnce()
 
@@ -1060,7 +1089,9 @@ func makeStopNewStack(
           AND provider_state IS NOT NULL
           """
       )
-      return blob.map { (String(bytes: $0, encoding: .utf8) ?? "").contains(marker) } ?? false
+      return blob.map {
+        (String(bytes: $0, encoding: .utf8) ?? "").contains(marker)
+      } ?? false
     }
     #expect(storedStateHasMarker)
 
@@ -1075,14 +1106,12 @@ func makeStopNewStack(
         try Int.fetchOne(
           db,
           sql: "SELECT COUNT(*) FROM messages_fts WHERE messages_fts MATCH 'answer'"
-        )
-        ?? 0
+        ) ?? 0
       let outboxHit =
         try Int.fetchOne(
           db,
           sql: "SELECT COUNT(*) FROM outbound_deliveries WHERE payload LIKE '%stub answer%'"
-        )
-        ?? 0
+        ) ?? 0
       return (contentHit, ftsHit, outboxHit)
     }
     #expect(matches.contentHit >= 1)
@@ -1096,8 +1125,7 @@ func makeStopNewStack(
           db,
           sql: "SELECT COUNT(*) FROM messages WHERE content LIKE ?",
           arguments: ["%\(marker)%"]
-        )
-        ?? 0
+        ) ?? 0
       let fts =
         try Int.fetchOne(
           db,
@@ -1109,8 +1137,7 @@ func makeStopNewStack(
           db,
           sql: "SELECT COUNT(*) FROM outbound_deliveries WHERE payload LIKE ?",
           arguments: ["%\(marker)%"]
-        )
-        ?? 0
+        ) ?? 0
       let audit =
         try Int.fetchOne(
           db,
@@ -1124,5 +1151,4 @@ func makeStopNewStack(
     #expect(leaks.outbox == 0)
     #expect(leaks.audit == 0)
   }
-}
-// swiftlint:enable function_body_length
+}  // swiftlint:enable function_body_length

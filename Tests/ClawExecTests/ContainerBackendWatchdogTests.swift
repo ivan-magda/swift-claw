@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawExec
 
-@Suite struct ContainerBackendWatchdogTests {
-  @Test func hostWatchdogBoundsHungForegroundRunThenRunsShieldedIdentityLadder() async throws {
+@Suite
+struct ContainerBackendWatchdogTests {
+  @Test
+  func hostWatchdogBoundsHungForegroundRunThenRunsShieldedIdentityLadder() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -18,12 +20,15 @@ import Testing
         }
         return commandResult(.cancelled)
       }
-      return command.arguments.first == "list"
-        ? jsonCommandResult("[]")
-        : commandResult(.exited(0))
+      return command.arguments.first == "list" ? jsonCommandResult("[]") : commandResult(.exited(0))
     }
     let nowSource = SteppingNowSource()
-    let backend = fixture.backend(commands: runner, now: { nowSource.next() })
+    let backend = fixture.backend(
+      commands: runner,
+      now: {
+        nowSource.next()
+      }
+    )
     await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
 
     // when
@@ -41,7 +46,8 @@ import Testing
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
 
-  @Test func hostWatchdogCompletesWhenRunnerIgnoresCancellationEntirely() async throws {
+  @Test
+  func hostWatchdogCompletesWhenRunnerIgnoresCancellationEntirely() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -55,12 +61,15 @@ import Testing
         await wedge.wait()
         return commandResult(.cancelled)
       }
-      return command.arguments.first == "list"
-        ? jsonCommandResult("[]")
-        : commandResult(.exited(0))
+      return command.arguments.first == "list" ? jsonCommandResult("[]") : commandResult(.exited(0))
     }
     let nowSource = SteppingNowSource()
-    let backend = fixture.backend(commands: runner, now: { nowSource.next() })
+    let backend = fixture.backend(
+      commands: runner,
+      now: {
+        nowSource.next()
+      }
+    )
     await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
 
     // when
@@ -78,7 +87,8 @@ import Testing
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
 
-  @Test func hostWatchdogBoundsWedgedControlCommandAndDisarmsAdmission() async throws {
+  @Test
+  func hostWatchdogBoundsWedgedControlCommandAndDisarmsAdmission() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }

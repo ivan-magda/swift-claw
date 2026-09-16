@@ -5,12 +5,14 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct V9MigrationTests {
+@Suite
+struct V9MigrationTests {
   private static let seededAt = Date(timeIntervalSince1970: 1_700_000_000)
 
   // MARK: - Legacy Upgrade
 
-  @Test func vNineCarriesEveryPopulatedVEightRowForward() throws {
+  @Test
+  func vNineCarriesEveryPopulatedVEightRowForward() throws {
     // given — a v8 database holding the shapes v9 rebuilds: messages with tool metadata plus
     // run-bound and run-less usage rows
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -66,7 +68,8 @@ import Testing
     #expect(usage[1]["is_estimated"] == true)
   }
 
-  @Test func everyLegacyUsageRowKeepsItsOwnRowIdDerivedCallIdentity() throws {
+  @Test
+  func everyLegacyUsageRowKeepsItsOwnRowIDDerivedCallIdentity() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVEight(queue)
@@ -82,11 +85,16 @@ import Testing
       (row["id"] as Int64, row["provider_call_id"] as String)
     }
     #expect(pairs.map(\.1) == ["legacy:1", "legacy:2"])
-    #expect(pairs.allSatisfy { identifier in identifier.1 == "legacy:\(identifier.0)" })
+    #expect(
+      pairs.allSatisfy { identifier in
+        identifier.1 == "legacy:\(identifier.0)"
+      }
+    )
     #expect(Set(pairs.map(\.1)).count == pairs.count)
   }
 
-  @Test func vOneDatabaseUpgradesToVNineKeepingItsRowsAndReachingTheFullSchema() throws {
+  @Test
+  func vOneDatabaseUpgradesToVNineKeepingItsRowsAndReachingTheFullSchema() throws {
     // given — the oldest shipped schema, holding rows only its three tables can hold
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrator.migrate(queue, upTo: "v1")
@@ -127,7 +135,8 @@ import Testing
 
   // MARK: - Provider State Pair
 
-  @Test func sqliteAcceptsBothStateColumnsNull() throws {
+  @Test
+  func sqliteAcceptsBothStateColumnsNull() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -143,7 +152,8 @@ import Testing
     #expect(stored == 1)
   }
 
-  @Test func sqliteAcceptsBothStateColumnsPopulated() throws {
+  @Test
+  func sqliteAcceptsBothStateColumnsPopulated() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -162,7 +172,8 @@ import Testing
     #expect((stored?["provider_state"] as Data?) == Data([0x01, 0x02, 0x03]))
   }
 
-  @Test func sqliteRejectsAnIssuerWithoutState() throws {
+  @Test
+  func sqliteRejectsAnIssuerWithoutState() throws {
     // given — state without the issuer that produced it is unreplayable, and an issuer without
     // state names nothing; the check makes either half unrepresentable
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -179,7 +190,8 @@ import Testing
     }
   }
 
-  @Test func sqliteRejectsStateWithoutAnIssuer() throws {
+  @Test
+  func sqliteRejectsStateWithoutAnIssuer() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -195,7 +207,8 @@ import Testing
     }
   }
 
-  @Test func providerStateIsDeclaredAsABlob() throws {
+  @Test
+  func providerStateIsDeclaredAsABlob() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -211,7 +224,8 @@ import Testing
 
   // MARK: - Rebuild Fidelity
 
-  @Test func messagesRetainsEveryColumnAndForeignKeyAfterTheRebuild() throws {
+  @Test
+  func messagesRetainsEveryColumnAndForeignKeyAfterTheRebuild() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -222,8 +236,18 @@ import Testing
     let columns = Set(try Self.columnNames(queue, table: "messages"))
     #expect(
       columns.isSuperset(of: [
-        "id", "session_id", "run_id", "role", "content", "provenance", "ts", "prompt_tokens",
-        "completion_tokens", "tool_calls", "tool_call_id", "provider_state_issuer",
+        "id",
+        "session_id",
+        "run_id",
+        "role",
+        "content",
+        "provenance",
+        "ts",
+        "prompt_tokens",
+        "completion_tokens",
+        "tool_calls",
+        "tool_call_id",
+        "provider_state_issuer",
         "provider_state",
       ])
     )
@@ -239,7 +263,8 @@ import Testing
     #expect(described == ["session_id->sessions.CASCADE", "run_id->runs.SET NULL"])
   }
 
-  @Test func providerUsageRetainsEveryColumnAndForeignKeyAfterTheRebuild() throws {
+  @Test
+  func providerUsageRetainsEveryColumnAndForeignKeyAfterTheRebuild() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -250,8 +275,17 @@ import Testing
     let columns = Set(try Self.columnNames(queue, table: "provider_usage"))
     #expect(
       columns.isSuperset(of: [
-        "id", "run_id", "session_id", "model", "prompt_tokens", "completion_tokens", "cost_usd",
-        "cost_source", "is_estimated", "ts", "provider_call_id",
+        "id",
+        "run_id",
+        "session_id",
+        "model",
+        "prompt_tokens",
+        "completion_tokens",
+        "cost_usd",
+        "cost_source",
+        "is_estimated",
+        "ts",
+        "provider_call_id",
       ])
     )
 
@@ -276,7 +310,8 @@ import Testing
     #expect(runColumn["notnull"] == 0)
   }
 
-  @Test func theApprovalSchemaSurvivesTheRebuild() throws {
+  @Test
+  func theApprovalSchemaSurvivesTheRebuild() throws {
     // given — v8's approvals live alongside the rebuilt tables and must be untouched by v9
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -287,16 +322,32 @@ import Testing
     let columns = Set(try Self.columnNames(queue, table: "approvals"))
     #expect(
       columns.isSuperset(of: [
-        "id", "run_id", "session_id", "state", "tool", "canonical_args", "canonical_target",
-        "args_hash", "policy_version", "owner_user_id", "nonce", "observation_message_id",
-        "tool_call_id", "reason", "prompt_message_id", "created_ts", "expires_ts", "resolved_ts",
+        "id",
+        "run_id",
+        "session_id",
+        "state",
+        "tool",
+        "canonical_args",
+        "canonical_target",
+        "args_hash",
+        "policy_version",
+        "owner_user_id",
+        "nonce",
+        "observation_message_id",
+        "tool_call_id",
+        "reason",
+        "prompt_message_id",
+        "created_ts",
+        "expires_ts",
+        "resolved_ts",
       ])
     )
     let indexNames = try Self.indexNames(queue, table: "approvals")
     #expect(indexNames.contains("index_approvals_pending_run"))
   }
 
-  @Test func everyPreVNineIndexSurvivesTheRebuild() throws {
+  @Test
+  func everyPreVNineIndexSurvivesTheRebuild() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -305,18 +356,22 @@ import Testing
 
     // then
     #expect(
-      try Self.indexNames(queue, table: "memory_items")
-        .isSuperset(of: ["index_memory_items_created_at", "index_memory_items_kind"])
+      try Self.indexNames(queue, table: "memory_items").isSuperset(of: [
+        "index_memory_items_created_at",
+        "index_memory_items_kind",
+      ])
     )
     #expect(
-      try Self.indexNames(queue, table: "scheduled_jobs")
-        .contains("index_scheduled_jobs_status_next_occurrence")
+      try Self.indexNames(queue, table: "scheduled_jobs").contains(
+        "index_scheduled_jobs_status_next_occurrence"
+      )
     )
   }
 
   // MARK: - FTS Synchronization
 
-  @Test func theFtsIndexCarriesNoProviderStateColumn() throws {
+  @Test
+  func theFTSIndexCarriesNoProviderStateColumn() throws {
     // given — replay state is opaque bytes only its adapter may read; indexing it would both
     // corrupt the index and expose the payload to a content search
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -331,15 +386,13 @@ import Testing
     #expect(columns.contains("provider_state_issuer") == false)
   }
 
-  @Test func messagesWrittenBeforeVNineStaySearchableAfterTheRebuild() throws {
+  @Test
+  func messagesWrittenBeforeVNineStaySearchableAfterTheRebuild() throws {
     // given — a v8 database whose FTS index was populated by the v4 triggers
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVEight(queue)
     let beforeRebuild = try queue.read { db in
-      try Int64.fetchOne(
-        db,
-        sql: "SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'plan'"
-      )
+      try Int64.fetchOne(db, sql: "SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'plan'")
     }
     #expect(beforeRebuild == 1)
 
@@ -356,14 +409,15 @@ import Testing
     #expect(Set(matched) == [1, 3])
   }
 
-  @Test func aMessageWrittenAfterTheRebuildTracksInsertUpdateAndDelete() throws {
+  @Test
+  func aMessageWrittenAfterTheRebuildTracksInsertUpdateAndDelete() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVEight(queue)
     try ClawDatabase.migrate(queue)
 
     // when
-    let messageId = try queue.write { db -> Int64 in
+    let messageID = try queue.write { db -> Int64 in
       try Self.insertMessage(db, content: "postmigration needle", issuer: nil, state: nil)
       return db.lastInsertedRowID
     }
@@ -375,13 +429,13 @@ import Testing
         sql: "SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'postmigration'"
       )
     }
-    #expect(indexed == messageId)
+    #expect(indexed == messageID)
 
     // when
     try queue.write { db in
       try db.execute(
         sql: "UPDATE messages SET content = 'renamed needle' WHERE id = ?",
-        arguments: [messageId]
+        arguments: [messageID]
       )
     }
 
@@ -399,11 +453,11 @@ import Testing
       )
     }
     #expect(oldContentCount == 0)
-    #expect(updated == messageId)
+    #expect(updated == messageID)
 
     // when
     try queue.write { db in
-      try db.execute(sql: "DELETE FROM messages WHERE id = ?", arguments: [messageId])
+      try db.execute(sql: "DELETE FROM messages WHERE id = ?", arguments: [messageID])
     }
 
     // then
@@ -418,7 +472,8 @@ import Testing
 
   // MARK: - Call Identity Constraints
 
-  @Test func aDuplicateCallIdentifierIsRejected() throws {
+  @Test
+  func aDuplicateCallIdentifierIsRejected() throws {
     // given — the migrated rows already hold their legacy identities
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVEight(queue)
@@ -429,12 +484,14 @@ import Testing
       try queue.write { db in
         try Self.insertUsageSQL(db, callID: "legacy:1")
       }
-    } throws: { error in
+    } throws: {
+      (error) in
       Self.isUniqueViolation(error)
     }
   }
 
-  @Test func theCallIdentifierIndexIsUnique() throws {
+  @Test
+  func theCallIdentifierIndexIsUnique() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -455,7 +512,8 @@ import Testing
     #expect(indexSQL?.contains("provider_call_id") == true)
   }
 
-  @Test func theCallIdentifierIsNotNull() throws {
+  @Test
+  func theCallIdentifierIsNotNull() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -480,7 +538,8 @@ import Testing
 
   // MARK: - Conflict Clause Targeting
 
-  @Test func theInsertStatementSilencesOnlyTheCallIdentityConflict() throws {
+  @Test
+  func theInsertStatementSilencesOnlyTheCallIdentityConflict() throws {
     // given — the production statement, replayed with the identity it already stored
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVEight(queue)
@@ -503,7 +562,8 @@ import Testing
     #expect(rows == 2)
   }
 
-  @Test func theInsertStatementStillRaisesAnUnrelatedNotNullViolation() throws {
+  @Test
+  func theInsertStatementStillRaisesAnUnrelatedNotNullViolation() throws {
     // given — an untargeted conflict clause would silence this alongside the identity conflict,
     // turning a corrupt row into a no-op the caller reads as an idempotent replay
     let queue = try ClawDatabase.makeInMemoryQueue()
@@ -523,7 +583,8 @@ import Testing
     }
   }
 
-  @Test func theInsertStatementStillRaisesAnUnrelatedForeignKeyViolation() throws {
+  @Test
+  func theInsertStatementStillRaisesAnUnrelatedForeignKeyViolation() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVEight(queue)
@@ -534,7 +595,7 @@ import Testing
       try queue.write { db in
         try db.execute(
           sql: RunStoreGRDB.insertUsageStatement,
-          arguments: Self.usageArguments(callID: "call-fresh", runId: 9999)
+          arguments: Self.usageArguments(callID: "call-fresh", runID: 9999)
         )
       }
     } throws: { error in
@@ -646,13 +707,23 @@ private extension V9MigrationTests {
 
   static func usageArguments(
     callID: String,
-    runId: Int64? = 1,
+    runID: Int64? = 1,
     model: String? = "gpt-4o"
   ) -> StatementArguments {
     // The trailing pair is the learning scope, null for every call a run made.
     [
-      runId, 1, model, 11, 5, 0.004, CostSource.priceFile.rawValue, false, seededAt, callID,
-      nil, nil,
+      runID,
+      1,
+      model,
+      11,
+      5,
+      0.004,
+      CostSource.priceFile.rawValue,
+      false,
+      seededAt,
+      callID,
+      nil,
+      nil,
     ]
   }
 }
@@ -670,9 +741,11 @@ private extension V9MigrationTests {
 
   static func columnType(_ queue: DatabaseQueue, table: String, column: String) throws -> String? {
     try queue.read { db in
-      try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))")
-        .first { row in row["name"] as String == column }
-        .map { row in row["type"] as String }
+      try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").first { row in
+        row["name"] as String == column
+      }.map { row in
+        row["type"] as String
+      }
     }
   }
 

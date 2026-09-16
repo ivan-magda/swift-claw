@@ -10,8 +10,7 @@ extension ClawDatabase {
   /// collides across jobs the moment a second job arms.
   static func createLearningStateTables(_ db: Database) throws {
     try db.create(table: "job_learning_state") { table in
-      table.column("job_id", .integer).primaryKey()
-        .references("scheduled_jobs", onDelete: .cascade)
+      table.column("job_id", .integer).primaryKey().references("scheduled_jobs", onDelete: .cascade)
       table.column("learning_epoch", .integer).notNull().defaults(to: 1)
       table.column("stable_lesson_set_digest", .text).notNull()
       table.column("stable_revision", .integer).notNull().defaults(to: 0)
@@ -40,8 +39,7 @@ extension ClawDatabase {
   /// read back at sealing time would file the run under a surface it never ran on.
   static func createLearningRunTables(_ db: Database) throws {
     try db.create(table: "run_learning_bindings") { table in
-      table.column("run_id", .integer).primaryKey()
-        .references("runs", onDelete: .cascade)
+      table.column("run_id", .integer).primaryKey().references("runs", onDelete: .cascade)
       table.column("job_id", .integer).notNull()
       table.column("learning_epoch", .integer).notNull()
       table.column("occurrence_at", .integer).notNull()
@@ -56,8 +54,7 @@ extension ClawDatabase {
     try db.create(index: "idx_bindings_job", on: "run_learning_bindings", columns: ["job_id"])
 
     try db.create(table: "run_compatibility") { table in
-      table.column("run_id", .integer).primaryKey()
-        .references("runs", onDelete: .cascade)
+      table.column("run_id", .integer).primaryKey().references("runs", onDelete: .cascade)
       table.column("job_id", .integer).notNull()
       table.column("learning_epoch", .integer).notNull()
       table.column("context_schema_version", .text)
@@ -82,8 +79,7 @@ extension ClawDatabase {
   /// learning state of its own.
   private static func createSettlementTables(_ db: Database) throws {
     try db.create(table: "run_settlements") { table in
-      table.column("run_id", .integer).primaryKey()
-        .references("runs", onDelete: .cascade)
+      table.column("run_id", .integer).primaryKey().references("runs", onDelete: .cascade)
       table.column("winning_state", .text).notNull()
       table.column("terminal_cause", .text).notNull()
       table.column("terminal_at", .integer).notNull()
@@ -91,15 +87,10 @@ extension ClawDatabase {
       table.column("configured_route", .text)
       table.column("terminal_route", .text)
     }
-    try db.create(
-      index: "idx_settlements_settled",
-      on: "run_settlements",
-      columns: ["settled_at"]
-    )
+    try db.create(index: "idx_settlements_settled", on: "run_settlements", columns: ["settled_at"])
 
     try db.create(table: "learning_evidence") { table in
-      table.column("run_id", .integer).primaryKey()
-        .references("runs", onDelete: .cascade)
+      table.column("run_id", .integer).primaryKey().references("runs", onDelete: .cascade)
       table.column("job_id", .integer).notNull()
       table.column("learning_epoch", .integer).notNull()
       table.column("evidence_digest", .text).notNull()
@@ -304,8 +295,7 @@ extension ClawDatabase {
   /// One assignment per created trial run, and the decision receipts the trial policy emits.
   static func createLearningTrialResolutionTables(_ db: Database) throws {
     try db.create(table: "trial_assignments") { table in
-      table.column("run_id", .integer).primaryKey()
-        .references("runs", onDelete: .cascade)
+      table.column("run_id", .integer).primaryKey().references("runs", onDelete: .cascade)
       table.column("trial_id", .integer).notNull().references("learning_trials")
       table.column("job_id", .integer).notNull()
       table.column("learning_epoch", .integer).notNull()
@@ -392,11 +382,8 @@ extension ClawDatabase {
       table.column("reply_markup", .text)
       table.column("message_thread_id", .integer)
       table.column("reply_to_message_id", .integer)
-      table.column("delivery_source", .text).notNull()
-        .defaults(to: DeliverySource.run.rawValue)
-      table.check(
-        sql: "run_id IS NOT NULL OR delivery_source <> '\(DeliverySource.run.rawValue)'"
-      )
+      table.column("delivery_source", .text).notNull().defaults(to: DeliverySource.run.rawValue)
+      table.check(sql: "run_id IS NOT NULL OR delivery_source <> '\(DeliverySource.run.rawValue)'")
     }
     // Columns are listed explicitly: a bare `SELECT *` would bind by position and silently
     // mis-seat every value if either table's column order ever drifted.

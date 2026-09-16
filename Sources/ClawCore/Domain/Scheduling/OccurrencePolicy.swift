@@ -19,9 +19,8 @@ public struct OccurrencePolicy: Sendable {
     from nowDate: Date,
     limit: Int
   ) -> [Date] {
-    guard
-      let envelope = validated.recurrence,
-      let timezone = TimeZone(identifier: validated.timezone)
+    guard let envelope = validated.recurrence,
+          let timezone = TimeZone(identifier: validated.timezone)
     else {
       return [validated.firstOccurrence]
     }
@@ -45,9 +44,8 @@ public struct OccurrencePolicy: Sendable {
   /// when nothing valid remains to arm: a one-shot whose instant has passed, or (pathological)
   /// a rule with no upcoming occurrence.
   public func armOccurrence(for validated: ValidatedSchedule, at nowDate: Date) -> Date? {
-    guard
-      let envelope = validated.recurrence,
-      let timezone = TimeZone(identifier: validated.timezone)
+    guard let envelope = validated.recurrence,
+          let timezone = TimeZone(identifier: validated.timezone)
     else {
       return validated.firstOccurrence > nowDate ? validated.firstOccurrence : nil
     }
@@ -67,10 +65,7 @@ public struct OccurrencePolicy: Sendable {
   /// everyNMinutes keeps its phase — while `after: nowDate` skips everything inside the paused
   /// window (pause = "be quiet", never catch up).
   public func resumeOccurrence(for job: ScheduledJob, from nowDate: Date) -> Date? {
-    guard
-      let envelope = job.recurrence,
-      let timezone = TimeZone(identifier: job.timezone)
-    else {
+    guard let envelope = job.recurrence, let timezone = TimeZone(identifier: job.timezone) else {
       guard let instant = job.nextOccurrence, instant > nowDate else {
         return nil
       }

@@ -9,9 +9,7 @@ struct StubVoiceTranscriber: VoiceTranscribing {
   var result: Result<String, VoiceTranscriptionError> = .success("spoken words")
 
   var callCount: Int {
-    get async {
-      await calls.count
-    }
+    get async { await calls.count }
   }
 
   func transcribe(audioFileAt url: URL) async throws(VoiceTranscriptionError) -> String {
@@ -49,7 +47,10 @@ struct ScriptedVoiceService: VoiceMessageTranscribing {
 
   func transcribe(
     _ attachment: VoiceAttachment
-  ) async -> Result<String, VoiceMessageService.Failure> {
+  ) async -> Result<
+    String,
+    VoiceMessageService.Failure
+  > {
     result
   }
 }

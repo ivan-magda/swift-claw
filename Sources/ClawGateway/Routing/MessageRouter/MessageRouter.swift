@@ -68,7 +68,9 @@ public struct MessageRouter: Sendable {
     typing: (any TypingIndicator)? = nil,
     coordinator: ApprovalCoordinator,
     doctor: any DoctorReporting,
-    now: @escaping @Sendable () -> Date = { Date() },
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    },
     logger: Logger
   ) {
     self.botUsername = botIdentity?.username
@@ -195,7 +197,7 @@ private extension MessageRouter {
     // would .skipped and the cursor would advance past it. The handler returns a real
     // HandleOutcome, so cursor semantics are unchanged.
     if let callback = rawUpdate.callback {
-      return await routeCallback(callback, updateId: rawUpdate.updateId)
+      return await routeCallback(callback, updateID: rawUpdate.updateID)
     }
 
     if let observed = noteObservedEvent(in: rawUpdate) {
@@ -205,17 +207,17 @@ private extension MessageRouter {
     guard let message = IncomingMessage.normalize(from: rawUpdate) else {
       let dropped = rawUpdate.message ?? rawUpdate.editedMessage
       if dropped?.hasSenderChat == true {
-        logger.debug("update \(rawUpdate.updateId) was sent on behalf of a chat, skipping")
+        logger.debug("update \(rawUpdate.updateID) was sent on behalf of a chat, skipping")
       } else {
-        logger.debug("update \(rawUpdate.updateId) has nothing actionable, skipping")
+        logger.debug("update \(rawUpdate.updateID) has nothing actionable, skipping")
       }
       return .skipped
     }
 
     let decision = accessControl.decide(
       chatKind: message.chatKind,
-      chatId: message.chatId,
-      userId: message.userId
+      chatID: message.chatID,
+      userID: message.userID
     )
     let mode: ChatMode
     switch decision {
@@ -234,7 +236,7 @@ private extension MessageRouter {
     switch message.content {
     case .unsupported(let kind):
       return await replies.sendCanned(
-        updateId: rawUpdate.updateId,
+        updateID: rawUpdate.updateID,
         target: .reply(to: message, mode: mode),
         text: Self.unsupportedMediaText(kind: kind)
       )

@@ -85,27 +85,20 @@ private extension ReflectionPersistenceTests {
   ) throws -> CandidateArtifact {
     let manifest = artifact.manifest
     let feedback = CandidateFeedbackSource(
-      eventId: 91,
+      eventID: 91,
       digest: FeedbackEventDigest(rawValue: "feedback-event"),
       revision: manifest.feedbackRevision,
       subjectKind: .run,
-      subjectDigest: String(manifest.evidence[0].runId),
+      subjectDigest: String(manifest.evidence[0].runID),
       signal: .resultCorrection
     )
     return try CandidateArtifact(
       replacement: artifact.replacement,
-      manifest: copyManifest(
-        manifest,
-        schemaVersion: schemaVersion,
-        feedback: [feedback]
-      )
+      manifest: copyManifest(manifest, schemaVersion: schemaVersion, feedback: [feedback])
     )
   }
 
-  func insertArtifactForReload(
-    _ artifact: CandidateArtifact,
-    env: BoundRunEnvironment
-  ) throws {
+  func insertArtifactForReload(_ artifact: CandidateArtifact, env: BoundRunEnvironment) throws {
     try env.queue.write { db in
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: artifact, now: env.now)
     }
@@ -148,10 +141,7 @@ private extension ReflectionPersistenceTests {
     return object
   }
 
-  func nestedObjects(
-    _ object: [String: Any],
-    key: String
-  ) throws -> [[String: Any]] {
+  func nestedObjects(_ object: [String: Any], key: String) throws -> [[String: Any]] {
     guard let values = object[key] as? [[String: Any]], values.isEmpty == false else {
       throw ArtifactFixtureError.missingNestedObject(key)
     }
@@ -224,7 +214,7 @@ private extension ReflectionPersistenceTests {
         env: env
       )
     case .replacementDigest:
-      let replacement = try LessonSet.canonical(jobId: env.jobId, lessons: ["A different lesson."])
+      let replacement = try LessonSet.canonical(jobID: env.jobID, lessons: ["A different lesson."])
       try insertLessonSet(replacement, env: env)
       try updateCandidateColumn(
         "replacement_digest",
@@ -233,17 +223,17 @@ private extension ReflectionPersistenceTests {
         env: env
       )
     case .rowJob:
-      let otherJobId = env.jobId + 10_000
+      let otherJobID = env.jobID + 10_000
       let replacement = try LessonSet.canonical(
-        jobId: otherJobId,
+        jobID: otherJobID,
         lessons: artifact.replacement.lessons
       )
       try insertLessonSet(replacement, env: env)
-      try updateCandidateColumn("job_id", value: otherJobId, artifact: artifact, env: env)
+      try updateCandidateColumn("job_id", value: otherJobID, artifact: artifact, env: env)
     case .manifestJob:
       let changedManifest = copyManifest(
         artifact.manifest,
-        jobId: env.jobId + 20_000,
+        jobID: env.jobID + 20_000,
         feedback: artifact.manifest.feedback
       )
       let changedArtifact = try CandidateArtifact(
@@ -299,7 +289,7 @@ private extension ReflectionPersistenceTests {
           VALUES (?, ?, ?, ?, ?, ?)
           """,
         arguments: [
-          lessonSet.jobId,
+          lessonSet.jobID,
           lessonSet.digest.rawValue,
           lessonSet.schemaVersion,
           lessonSet.canonicalBytes,
@@ -313,19 +303,19 @@ private extension ReflectionPersistenceTests {
   func copyManifest(
     _ manifest: CandidateSourceManifest,
     schemaVersion: Int? = nil,
-    jobId: Int64? = nil,
+    jobID: Int64? = nil,
     feedback: [CandidateFeedbackSource]
   ) -> CandidateSourceManifest {
     CandidateSourceManifest(
       schemaVersion: schemaVersion ?? manifest.schemaVersion,
       origin: manifest.origin,
       algorithm: manifest.algorithm,
-      jobId: jobId ?? manifest.jobId,
+      jobID: jobID ?? manifest.jobID,
       epoch: manifest.epoch,
       triggerDigest: manifest.triggerDigest,
       triggerReason: manifest.triggerReason,
       qualifyingIssueCodes: manifest.qualifyingIssueCodes,
-      operationId: manifest.operationId,
+      operationID: manifest.operationID,
       carrierDigest: manifest.carrierDigest,
       resultDigest: manifest.resultDigest,
       baseDigest: manifest.baseDigest,

@@ -11,10 +11,9 @@ public struct CIDR: Sendable, Equatable {
   /// Parses `<address>/<prefix-length>`; nil for anything malformed or out of prefix bounds.
   public static func parse(_ text: String) -> CIDR? {
     let parts = text.split(separator: "/", omittingEmptySubsequences: false)
-    guard
-      parts.count == 2,
-      let address = ResolvedAddress.parse(String(parts[0])),
-      let prefixLength = Int(parts[1])
+    guard parts.count == 2,
+          let address = ResolvedAddress.parse(String(parts[0])),
+          let prefixLength = Int(parts[1])
     else {
       return nil
     }
@@ -55,7 +54,7 @@ extension CIDR: CustomStringConvertible {
 
 private extension CIDR {
   static func v4Mask(_ prefixLength: Int) -> UInt32 {
-    prefixLength == 0 ? 0 : ~UInt32(0) << (32 - prefixLength)
+    prefixLength == 0 ? 0 : ~(0 as UInt32) << (32 - prefixLength)
   }
 
   static func maskedV6(_ bytes: [UInt8], _ prefixLength: Int) -> [UInt8] {
@@ -67,7 +66,7 @@ private extension CIDR {
       masked[index] = bytes[index]
     }
     if remainderBits > 0, fullBytes < 16 {
-      masked[fullBytes] = bytes[fullBytes] & (~UInt8(0) << (8 - remainderBits))
+      masked[fullBytes] = bytes[fullBytes] & (~(0 as UInt8) << (8 - remainderBits))
     }
 
     return masked

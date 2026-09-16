@@ -3,34 +3,29 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct MemoryWriteRequestTests {
-  @Test func normalizesStoredTextToNFC() throws {
+@Suite
+struct MemoryWriteRequestTests {
+  @Test
+  func normalizesStoredTextToNFC() throws {
     // given
     let decomposed = "cafe\u{0301}"
     let expectedScalars = Array("caf\u{00E9}".unicodeScalars)
 
     // when
-    let request = try MemoryWriteBuilder.build(
-      rawText: decomposed,
-      kind: .user,
-      sessionId: 12
-    )
+    let request = try MemoryWriteBuilder.build(rawText: decomposed, kind: .user, sessionID: 12)
 
     // then
     #expect(Array(request.item.text.unicodeScalars) == expectedScalars)
     #expect(request.confirmationText.contains("caf\u{00E9}"))
   }
 
-  @Test func stripsInvisibleAndBidiControlsFromStoredTextButShowsThemForConfirm() throws {
+  @Test
+  func stripsInvisibleAndBidiControlsFromStoredTextButShowsThemForConfirm() throws {
     // given
     let rawText = "alpha\u{200B}beta\u{202E}gamma"
 
     // when
-    let request = try MemoryWriteBuilder.build(
-      rawText: rawText,
-      kind: .project,
-      sessionId: nil
-    )
+    let request = try MemoryWriteBuilder.build(rawText: rawText, kind: .project, sessionID: nil)
 
     // then
     #expect(request.item.text == "alphabetagamma")
@@ -38,16 +33,13 @@ import Testing
     #expect(request.confirmationText.contains("<U+202E>"))
   }
 
-  @Test func stripsAdditionalBidiAndZeroWidthControlsButShowsThemForConfirm() throws {
+  @Test
+  func stripsAdditionalBidiAndZeroWidthControlsButShowsThemForConfirm() throws {
     // given
     let rawText = "alpha\u{061C}beta\u{200E}gamma\u{200F}delta\u{2060}omega"
 
     // when
-    let request = try MemoryWriteBuilder.build(
-      rawText: rawText,
-      kind: .project,
-      sessionId: nil
-    )
+    let request = try MemoryWriteBuilder.build(rawText: rawText, kind: .project, sessionID: nil)
 
     // then
     #expect(request.item.text == "alphabetagammadeltaomega")
@@ -57,26 +49,24 @@ import Testing
     #expect(request.confirmationText.contains("<U+2060>"))
   }
 
-  @Test func emptyAfterNormalizationIsRejected() {
+  @Test
+  func emptyAfterNormalizationIsRejected() {
     // given
     let rawText = "\u{200B}\u{202E}   "
 
     // when / then
     #expect(throws: MemoryWriteBuildError.emptyAfterNormalization) {
-      try MemoryWriteBuilder.build(rawText: rawText, kind: .user, sessionId: nil)
+      try MemoryWriteBuilder.build(rawText: rawText, kind: .user, sessionID: nil)
     }
   }
 
-  @Test func patternScanWarnsButDoesNotBlock() throws {
+  @Test
+  func patternScanWarnsButDoesNotBlock() throws {
     // given
     let rawText = "My token is sk-test and this is still owner-confirmed."
 
     // when
-    let request = try MemoryWriteBuilder.build(
-      rawText: rawText,
-      kind: .reference,
-      sessionId: 99
-    )
+    let request = try MemoryWriteBuilder.build(rawText: rawText, kind: .reference, sessionID: 99)
 
     // then
     #expect(request.item.text == rawText)
@@ -84,9 +74,10 @@ import Testing
     #expect(request.confirmationText.contains("Warnings: possible secret-shaped text"))
   }
 
-  @Test func defaultsPreserveTheRememberCallSiteVerbatim() throws {
+  @Test
+  func defaultsPreserveTheRememberCallSiteVerbatim() throws {
     // given / when — no new arguments: the /remember flow must be byte-identical
-    let request = try MemoryWriteBuilder.build(rawText: "likes tea", kind: .user, sessionId: 3)
+    let request = try MemoryWriteBuilder.build(rawText: "likes tea", kind: .user, sessionID: 3)
 
     // then
     #expect(request.item.source == .owner)
@@ -95,12 +86,13 @@ import Testing
     #expect(request.confirmationText.contains("Reply yes to save, no to cancel."))
   }
 
-  @Test func parameterizedBuildCarriesSourceImportanceAndSensitivity() throws {
+  @Test
+  func parameterizedBuildCarriesSourceImportanceAndSensitivity() throws {
     // given / when — the memory_write call shape (§8.2)
     let request = try MemoryWriteBuilder.build(
       rawText: "prefers metric units",
       kind: .user,
-      sessionId: nil,
+      sessionID: nil,
       source: .assistant,
       importance: .high,
       sensitivity: .high
@@ -113,12 +105,13 @@ import Testing
     #expect(request.item.text == "prefers metric units")
   }
 
-  @Test func buildsOwnerNormalImportanceMemoryItem() throws {
+  @Test
+  func buildsOwnerNormalImportanceMemoryItem() throws {
     // given / when
     let request = try MemoryWriteBuilder.build(
       rawText: "prefers focused implementation plans",
       kind: .feedback,
-      sessionId: 5
+      sessionID: 5
     )
 
     // then
@@ -126,6 +119,6 @@ import Testing
     #expect(request.item.sensitivity == .normal)
     #expect(request.item.importance == .normal)
     #expect(request.item.source == .owner)
-    #expect(request.item.sessionId == 5)
+    #expect(request.item.sessionID == 5)
   }
 }

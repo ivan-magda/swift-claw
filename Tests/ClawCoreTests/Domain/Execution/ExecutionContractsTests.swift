@@ -2,8 +2,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ExecutionContractsTests {
-  @Test func healthIsReadyWhenEveryGatePasses() {
+@Suite
+struct ExecutionContractsTests {
+  @Test
+  func healthIsReadyWhenEveryGatePasses() {
     // given
     let health = SandboxHealth.passingForTests
 
@@ -14,7 +16,8 @@ import Testing
     #expect(isReady)
   }
 
-  @Test func healthIsNotReadyWhenAnyGateFails() {
+  @Test
+  func healthIsNotReadyWhenAnyGateFails() {
     // given
     let failedHealth = HealthGate.allCases.map(Self.health(failing:))
 
@@ -59,18 +62,30 @@ private extension ExecutionContractsTests {
     var lastError: String?
 
     switch gate {
-    case .available: available = false
-    case .operatingSystem: osOK = false
-    case .version: versionOK = false
-    case .imageDigest: imageDigestOK = false
-    case .emptyCapabilities: capsEmpty = false
-    case .networkIsolation: netIsolated = false
-    case .matchingCapabilities: capsMatch = false
-    case .reaper: reaperOK = false
-    case .readOnlyRoot: rootfsRO = false
-    case .readOnlyStaging: stagingRO = false
-    case .interpreters: interpretersOK = false
-    case .lastError: lastError = "probe failed"
+    case .available:
+      available = false
+    case .operatingSystem:
+      osOK = false
+    case .version:
+      versionOK = false
+    case .imageDigest:
+      imageDigestOK = false
+    case .emptyCapabilities:
+      capsEmpty = false
+    case .networkIsolation:
+      netIsolated = false
+    case .matchingCapabilities:
+      capsMatch = false
+    case .reaper:
+      reaperOK = false
+    case .readOnlyRoot:
+      rootfsRO = false
+    case .readOnlyStaging:
+      stagingRO = false
+    case .interpreters:
+      interpretersOK = false
+    case .lastError:
+      lastError = "probe failed"
     }
 
     return SandboxHealth(

@@ -45,7 +45,9 @@ struct MCPMetadataSanitizer: Sendable {
         return String(scalar)
       }
     }.joined()
-    let singleLine = visible.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    let singleLine = visible.split {
+      $0.isWhitespace
+    }.joined(separator: " ")
     let usable = singleLine.isEmpty ? "remote tool" : singleLine
     return TextTruncation.cap(usable, maxGraphemes: MCPToolNamer.nameLimit)
   }

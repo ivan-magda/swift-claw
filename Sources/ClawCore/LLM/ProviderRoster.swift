@@ -57,7 +57,9 @@ public struct ProviderRoster: Sendable {
     self.fallback = fallback
   }
 
-  public var hasFallback: Bool { fallback != nil }
+  public var hasFallback: Bool {
+    fallback != nil
+  }
 
   /// The route a call starts on: the fallback when the primary is inside a live cooldown window and
   /// a fallback exists, so the call is not spent re-proving a wall it already knows about.

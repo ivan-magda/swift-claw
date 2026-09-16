@@ -5,8 +5,10 @@ import Testing
 @testable import ClawCore
 @testable import ClawLLM
 
-@Suite struct OpenAICompatibleProviderTests {
-  @Test func sendsModelMessagesAndDefaultMaxCompletionTokens() async throws {
+@Suite
+struct OpenAICompatibleProviderTests {
+  @Test
+  func sendsModelMessagesAndDefaultMaxCompletionTokens() async throws {
     // given
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(config: makeConfig(), http: exec)
@@ -28,7 +30,8 @@ import Testing
     #expect(recorded.url == "https://api.test/v1/chat/completions")
   }
 
-  @Test func switchesToMaxTokensFieldAndOmitsAuthWhenKeyEmpty() async throws {
+  @Test
+  func switchesToMaxTokensFieldAndOmitsAuthWhenKeyEmpty() async throws {
     // given
     let config = makeConfig(maxTokensField: .maxTokens, apiKey: "")
     let exec = ScriptedHTTPExecutor([okStep()])
@@ -45,7 +48,8 @@ import Testing
     #expect(recorded.headers["Authorization"] == nil)
   }
 
-  @Test func omitsResponseFormatWhenUnset() async throws {
+  @Test
+  func omitsResponseFormatWhenUnset() async throws {
     // given — a plain turn request carries no structured-output directive
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(config: makeConfig(), http: exec)
@@ -59,7 +63,8 @@ import Testing
     #expect(body["response_format"] == nil)
   }
 
-  @Test func encodesJSONObjectResponseFormat() async throws {
+  @Test
+  func encodesJSONObjectResponseFormat() async throws {
     // given
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(config: makeConfig(), http: exec)
@@ -80,7 +85,8 @@ import Testing
     #expect(responseFormat["type"] as? String == "json_object")
   }
 
-  @Test func encodesJSONSchemaResponseFormatAsStrict() async throws {
+  @Test
+  func encodesJSONSchemaResponseFormatAsStrict() async throws {
     // given
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(config: makeConfig(), http: exec)
@@ -105,7 +111,8 @@ import Testing
     #expect(jsonSchema["schema"] is [String: Any])
   }
 
-  @Test func emitsSessionIdWhenProviderIsOpenRouter() async throws {
+  @Test
+  func emitsSessionIDWhenProviderIsOpenRouter() async throws {
     // given — an OpenRouter base URL and a request carrying a session trace id
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(
@@ -116,7 +123,7 @@ import Testing
       model: "gpt-4o",
       messages: [ChatMessage(role: .user, content: "hi")],
       maxOutputTokens: 256,
-      sessionId: "clawd-session-7"
+      sessionID: "clawd-session-7"
     )
 
     // when
@@ -128,7 +135,8 @@ import Testing
     #expect(body["session_id"] as? String == "clawd-session-7")
   }
 
-  @Test func omitsSessionIdWhenProviderIsNotOpenRouter() async throws {
+  @Test
+  func omitsSessionIDWhenProviderIsNotOpenRouter() async throws {
     // given — the same session-carrying request but a non-OpenRouter host
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(
@@ -139,7 +147,7 @@ import Testing
       model: "gpt-4o",
       messages: [ChatMessage(role: .user, content: "hi")],
       maxOutputTokens: 256,
-      sessionId: "clawd-session-7"
+      sessionID: "clawd-session-7"
     )
 
     // when
@@ -151,7 +159,8 @@ import Testing
     #expect(body["session_id"] == nil)
   }
 
-  @Test func omitsSessionIdWhenRequestHasNone() async throws {
+  @Test
+  func omitsSessionIDWhenRequestHasNone() async throws {
     // given — OpenRouter host but the request carries no session id
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(
@@ -173,26 +182,25 @@ import Testing
     #expect(body["session_id"] == nil)
   }
 
-  @Test(
-    arguments: [
-      ("https://openrouter.ai/api/v1", true),
-      ("https://OpenRouter.ai/api/v1", true),
-      ("https://api.openai.com/v1", false),
-      ("http://localhost:11434/v1", false),
-      ("", false),
-      ("not a url", false),
-    ]
-  )
+  @Test(arguments: [
+    ("https://openrouter.ai/api/v1", true),
+    ("https://OpenRouter.ai/api/v1", true),
+    ("https://api.openai.com/v1", false),
+    ("http://localhost:11434/v1", false),
+    ("", false),
+    ("not a url", false),
+  ])
   func baseURLIsOpenRouterDetectsHost(baseURL: String, expected: Bool) {
     // given / when / then — detection is an exact, case-insensitive host match
     #expect(OpenAICompatibleProvider.baseURLIsOpenRouter(baseURL) == expected)
   }
 
-  @Test func nullContentBecomesEmptyAndAbsentUsageBecomesNil() async throws {
+  @Test
+  func nullContentBecomesEmptyAndAbsentUsageBecomesNil() async throws {
     // given — Ollama-style: null content and no usage object
     let json = #"{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":null}}]}"#
     let exec = ScriptedHTTPExecutor([
-      .ok(HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8)))
+      .ok(HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8))),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
@@ -205,7 +213,8 @@ import Testing
     #expect(response.usage == nil)
   }
 
-  @Test func parsesProviderCostFromUsageField() async throws {
+  @Test
+  func parsesProviderCostFromUsageField() async throws {
     // given — OpenRouter carries cost in usage.cost
     let json = """
       {"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},
@@ -213,32 +222,34 @@ import Testing
       "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"cost":0.0012}}
       """
     let exec = ScriptedHTTPExecutor([
-      .ok(HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8)))
+      .ok(HTTPResult(statusCode: 200, headers: [:], body: Data(json.utf8))),
     ])
 
     // when
-    let response = try await makeProvider(config: makeConfig(), http: exec)
-      .complete(request: sampleRequest)
+    let response = try await makeProvider(config: makeConfig(), http: exec).complete(
+      request: sampleRequest
+    )
 
     // then
     #expect(response.costFromProvider == 0.0012)
   }
 
-  @Test func parsesProviderCostFromLiteLLMHeader() async throws {
+  @Test
+  func parsesProviderCostFromLiteLLMHeader() async throws {
     // given — LiteLLM carries cost in a response header
-    let exec = ScriptedHTTPExecutor([
-      okStep(headers: ["x-litellm-response-cost": "0.0034"])
-    ])
+    let exec = ScriptedHTTPExecutor([okStep(headers: ["x-litellm-response-cost": "0.0034"])])
 
     // when
-    let response = try await makeProvider(config: makeConfig(), http: exec)
-      .complete(request: sampleRequest)
+    let response = try await makeProvider(config: makeConfig(), http: exec).complete(
+      request: sampleRequest
+    )
 
     // then
     #expect(response.costFromProvider == 0.0034)
   }
 
-  @Test func maps400ToTerminalWithoutRetry() async throws {
+  @Test
+  func maps400ToTerminalWithoutRetry() async throws {
     // given
     let exec = ScriptedHTTPExecutor([errorStep(400)])
     let provider = makeProvider(config: makeConfig(), http: exec)
@@ -258,7 +269,8 @@ import Testing
     #expect(attempts == 1)
   }
 
-  @Test func retriesRetryableUntilSuccessHonoringRetryAfter() async throws {
+  @Test
+  func retriesRetryableUntilSuccessHonoringRetryAfter() async throws {
     // given — two 503s (first carries Retry-After: 2), then a 200
     let exec = ScriptedHTTPExecutor([
       errorStep(503, headers: ["Retry-After": "2"]),
@@ -281,7 +293,8 @@ import Testing
     #expect(delays[1] == 0.0)
   }
 
-  @Test func exhaustedRetriesThrowRetryable() async throws {
+  @Test
+  func exhaustedRetriesThrowRetryable() async throws {
     // given — every attempt is a 500; the retry budget is 3
     let exec = ScriptedHTTPExecutor([errorStep(500), errorStep(500), errorStep(500)])
     let provider = makeProvider(config: makeConfig(retryBudget: 3), http: exec)
@@ -301,18 +314,17 @@ import Testing
     #expect(attempts == 3)
   }
 
-  @Test func backoffGrowsExponentiallyAndClampsAtTheMaxCap() async throws {
+  @Test
+  func backoffGrowsExponentiallyAndClampsAtTheMaxCap() async throws {
     // given — every attempt is a retryable 500 with no Retry-After, so each retry uses the
     // exponential schedule; an identity jitter exposes the raw computed delay and the recorder
     // captures every sleep the provider requests
     let exec = ScriptedHTTPExecutor(Array(repeating: errorStep(500), count: 9))
     let recorder = SleepRecorder()
-    let provider = makeProvider(
-      config: makeConfig(retryBudget: 9),
-      http: exec,
-      recorder: recorder,
-      jitter: { $0 }
-    )
+    let provider = makeProvider(config: makeConfig(retryBudget: 9), http: exec, recorder: recorder)
+    {
+      $0
+    }
 
     // when — the budget is exhausted after 9 attempts (8 backoffs between them)
     await #expect {
@@ -330,7 +342,8 @@ import Testing
     #expect(await exec.recorded.count == 9)
   }
 
-  @Test func transportErrorRedactsTheApiKey() async throws {
+  @Test
+  func transportErrorRedactsTheAPIKey() async throws {
     // given — a proven-clean transport error whose text embeds the key; retried then surfaced. The
     // disposition is definitely-not-sent so the retry-through-to-exhaustion path this test covers is
     // the one the new rule still permits.
@@ -366,7 +379,8 @@ import Testing
     #expect(attempts == 3)
   }
 
-  @Test func definitelyNotSentTransportFailureRetriesUpToBudget() async throws {
+  @Test
+  func definitelyNotSentTransportFailureRetriesUpToBudget() async throws {
     // given — two proven-clean transport failures then a success; nothing could have reached the
     // model, so the attempt is safe to replay up to the budget
     let exec = ScriptedHTTPExecutor([
@@ -388,7 +402,8 @@ import Testing
     #expect(await exec.recorded.count == 3)
   }
 
-  @Test func mayHaveBeenSentTransportFailureIsNotRetried() async throws {
+  @Test
+  func mayHaveBeenSentTransportFailureIsNotRetried() async throws {
     // given — an ambiguous send a retry could double-charge; a success step waits behind it that the
     // provider must never reach
     let exec = ScriptedHTTPExecutor([
@@ -416,14 +431,13 @@ import Testing
     #expect(await exec.recorded.count == 1)
   }
 
-  @Test func streamRequestEnablesStreamOptionsAndYieldsEvents() async throws {
+  @Test
+  func streamRequestEnablesStreamOptionsAndYieldsEvents() async throws {
     // given
     let chunks = [
       Data(#"data: {"choices":[{"delta":{"content":"he"}}]}"#.utf8),
       Data("\n\n".utf8),
-      Data(
-        #"data: {"choices":[{"delta":{"content":"llo"},"finish_reason":"stop"}]}"#.utf8
-      ),
+      Data(#"data: {"choices":[{"delta":{"content":"llo"},"finish_reason":"stop"}]}"#.utf8),
       Data("\n\n".utf8),
       Data(
         #"data: {"choices":[],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}"#
@@ -432,9 +446,9 @@ import Testing
       Data("\n\n".utf8),
       Data("data: [DONE]\n\n".utf8),
     ]
-    let exec = ScriptedHTTPExecutor([
-      .stream(HTTPStreamHead(statusCode: 200, headers: [:]), chunks)
-    ])
+    let exec = ScriptedHTTPExecutor(
+      [.stream(HTTPStreamHead(statusCode: 200, headers: [:]), chunks)]
+    )
     let provider = makeProvider(config: makeConfig(), http: exec)
 
     // when
@@ -467,7 +481,8 @@ import Testing
     #expect(terminal == .completed(reply))
   }
 
-  @Test func streamUsesLiteLLMCostHeaderWhenUsageCostIsAbsent() async throws {
+  @Test
+  func streamUsesLiteLLMCostHeaderWhenUsageCostIsAbsent() async throws {
     // given
     let chunks = [
       Data(#"data: {"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}"#.utf8),
@@ -483,7 +498,7 @@ import Testing
       .stream(
         HTTPStreamHead(statusCode: 200, headers: ["x-litellm-response-cost": "0.0034"]),
         chunks
-      )
+      ),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
@@ -504,11 +519,12 @@ import Testing
     )
   }
 
-  @Test func streamNon2xxMapsWithoutRetrying() async throws {
+  @Test
+  func streamNon2xxMapsWithoutRetrying() async throws {
     // given
     let errorBody = Data(#"{"error":{"message":"bad auth"}}"#.utf8)
     let exec = ScriptedHTTPExecutor([
-      .stream(HTTPStreamHead(statusCode: 401, headers: [:]), [errorBody])
+      .stream(HTTPStreamHead(statusCode: 401, headers: [:]), [errorBody]),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
@@ -530,11 +546,12 @@ import Testing
     #expect(await exec.recorded.count == 1)
   }
 
-  @Test func streamRetryableClassNon2xxMapsToRejectedWithoutRetrying() async throws {
+  @Test
+  func streamRetryableClassNon2xxMapsToRejectedWithoutRetrying() async throws {
     // given
     let errorBody = Data(#"{"error":{"message":"rate limited"}}"#.utf8)
     let exec = ScriptedHTTPExecutor([
-      .stream(HTTPStreamHead(statusCode: 429, headers: ["Retry-After": "2"]), [errorBody])
+      .stream(HTTPStreamHead(statusCode: 429, headers: ["Retry-After": "2"]), [errorBody]),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
@@ -557,14 +574,15 @@ import Testing
     #expect(await exec.recorded.count == 1)
   }
 
-  @Test func streamPostSendFailureDoesNotRetryOrFallbackInsideProvider() async throws {
+  @Test
+  func streamPostSendFailureDoesNotRetryOrFallbackInsideProvider() async throws {
     // given
     let exec = ScriptedHTTPExecutor([
       .streamFailure(
         HTTPStreamHead(statusCode: 200, headers: [:]),
         [],
         ScriptedTransportFailure(message: "dropped after request")
-      )
+      ),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
@@ -585,7 +603,8 @@ import Testing
     #expect(await exec.recorded.count == 1)
   }
 
-  @Test func cancellingTheStreamJoinsItsHTTPExchange() async throws {
+  @Test
+  func cancellingTheStreamJoinsItsHTTPExchange() async throws {
     // given — a transfer whose producer acknowledges nothing until its gate opens, so the join
     // cannot resolve early by luck
     let gate = AsyncGate()
@@ -595,7 +614,7 @@ import Testing
         HTTPStreamHead(statusCode: 200, headers: [:]),
         [Data("data: [DONE]\n\n".utf8)],
         ScriptedStreamHold(release: gate)
-      )
+      ),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
     let stream = provider.stream(request: sampleRequest)
@@ -626,7 +645,8 @@ import Testing
     #expect(terminal == .cancelled(.mayHaveStarted(observing: 0)))
   }
 
-  @Test func streamConnectFailureIsTypedForRuntimeFallback() async throws {
+  @Test
+  func streamConnectFailureIsTypedForRuntimeFallback() async throws {
     // given — a transport failure that proves nothing was sent; the runtime's stream-to-buffered
     // fallback turns on that fact and nothing else
     let exec = ScriptedHTTPExecutor([
@@ -635,7 +655,7 @@ import Testing
           disposition: .definitelyNotSent,
           safeMessage: "connection refused sk-test"
         )
-      )
+      ),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
@@ -655,12 +675,13 @@ import Testing
     #expect(terminal == .failed(failure))
   }
 
-  @Test func staticSourceSuppliesTheBearerAndItsRedaction() async throws {
+  @Test
+  func staticSourceSuppliesTheBearerAndItsRedaction() async throws {
     // given — the composition-root pairing: a configured key reaches the wire through the static
     // source, and the same value is what a diagnostic gets scrubbed of
     let apiKey = "sk-static-999"
     let exec = ScriptedHTTPExecutor([
-      .fail(ScriptedTransportFailure(message: "reset with key \(apiKey)"))
+      .fail(ScriptedTransportFailure(message: "reset with key \(apiKey)")),
     ])
     let provider = makeProvider(
       config: makeConfig(apiKey: "ignored-by-the-source", retryBudget: 1),
@@ -688,15 +709,18 @@ import Testing
     #expect(message.contains(SecretRedactor.replacement))
   }
 
-  @Test func credentialHeadersOutsideTheAllowlistAreRefusedBeforeAnyRequest() async throws {
+  @Test
+  func credentialHeadersOutsideTheAllowlistAreRefusedBeforeAnyRequest() async throws {
     // given — a source that tries to redirect the exchange through the header seam
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(
       config: makeConfig(),
       http: exec,
-      credentials: ScriptedLLMCredentialSource(
-        headers: ["Authorization": "Bearer ok", "Host": "evil.test", "X-Route": "elsewhere"]
-      )
+      credentials: ScriptedLLMCredentialSource(headers: [
+        "Authorization": "Bearer ok",
+        "Host": "evil.test",
+        "X-Route": "elsewhere",
+      ])
     )
 
     // when
@@ -713,7 +737,8 @@ import Testing
     #expect(await exec.recorded.isEmpty)
   }
 
-  @Test func credentialSourceCannotReplaceAnAdapterOwnedHeader() async throws {
+  @Test
+  func credentialSourceCannotReplaceAnAdapterOwnedHeader() async throws {
     // given — a source offering the one header the adapter owns
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(
@@ -734,7 +759,8 @@ import Testing
     #expect(await exec.recorded.isEmpty)
   }
 
-  @Test func authorizationFailureRequestsLoginWithoutSendingAnything() async throws {
+  @Test
+  func authorizationFailureRequestsLoginWithoutSendingAnything() async throws {
     // given
     let exec = ScriptedHTTPExecutor([.stream(HTTPStreamHead(statusCode: 200, headers: [:]), [])])
     let provider = makeProvider(
@@ -748,13 +774,13 @@ import Testing
 
     // then — a redaction-safe cause that names the state rather than the source's own error
     #expect(
-      terminal
-        == .failed(ProviderFailure(cause: .authenticationRequired, accounting: .notStarted))
+      terminal == .failed(ProviderFailure(cause: .authenticationRequired, accounting: .notStarted))
     )
     #expect(await exec.recorded.isEmpty)
   }
 
-  @Test func bufferedAuthorizationFailureRequestsLoginWithoutSendingAnything() async throws {
+  @Test
+  func bufferedAuthorizationFailureRequestsLoginWithoutSendingAnything() async throws {
     // given — the throwing source the streamed path is already proved against
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(
@@ -773,7 +799,8 @@ import Testing
     #expect(await exec.recorded.isEmpty)
   }
 
-  @Test func providerStateIsNotEncodedByChatCompletions() async throws {
+  @Test
+  func providerStateIsNotEncodedByChatCompletions() async throws {
     // given — replay state on the outbound history; this route mints and understands none
     let exec = ScriptedHTTPExecutor([okStep()])
     let provider = makeProvider(config: makeConfig(), http: exec)

@@ -272,7 +272,7 @@ public struct ToolPayload: Sendable, Equatable {
 /// The uniform result of one dispatched call — success and failure are both observations
 /// (failures-as-observations), never a thrown error crossing the loop.
 public struct ToolObservation: Sendable, Equatable {
-  public let callId: String
+  public let callID: String
   public let toolName: String
   public let content: String
   public let status: ToolObservationStatus
@@ -280,14 +280,14 @@ public struct ToolObservation: Sendable, Equatable {
   public let readPrivateData: Bool
 
   public init(
-    callId: String,
+    callID: String,
     toolName: String,
     content: String,
     status: ToolObservationStatus,
     ingestedUntrusted: Bool,
     readPrivateData: Bool = false
   ) {
-    self.callId = callId
+    self.callID = callID
     self.toolName = toolName
     self.content = content
     self.status = status
@@ -297,7 +297,7 @@ public struct ToolObservation: Sendable, Equatable {
 
   public init(call: ToolCall, payload: ToolPayload) {
     self.init(
-      callId: call.id,
+      callID: call.id,
       toolName: call.name,
       content: payload.content,
       status: payload.status,
@@ -313,6 +313,7 @@ public struct ToolObservation: Sendable, Equatable {
 /// enforcement lives exclusively in the gate.
 public protocol Tool: Sendable {
   var definition: ToolDefinition { get }
+
   var timeout: Duration { get }
 
   /// The canonical, owner-visible target this call would act on — REQUIRED for

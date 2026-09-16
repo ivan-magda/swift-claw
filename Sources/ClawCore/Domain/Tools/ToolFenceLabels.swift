@@ -22,11 +22,10 @@ public struct ToolFenceLabels: Sendable, Equatable {
     labelsByToolName = Dictionary(
       definitions.map { definition in
         (definition.name, definition.fenceLabel)
-      },
-      uniquingKeysWith: { first, _ in
-        first
       }
-    )
+    ) { first, _ in
+      first
+    }
   }
 
   public func label(forToolNamed name: String) -> String {

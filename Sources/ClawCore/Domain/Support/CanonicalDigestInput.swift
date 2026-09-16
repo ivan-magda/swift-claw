@@ -1,5 +1,3 @@
-import Foundation
-
 /// The canonical byte form of a digest's input fields.
 ///
 /// Fields join on a separator no field may contain, rather than on a printable character. Route
@@ -10,7 +8,7 @@ import Foundation
 public enum CanonicalDigestInput {
   /// Not representable in a route reference, a version string or a hex digest, so no field can
   /// contain it and no escaping is needed.
-  private static let separator = "\u{0}"
+  private static let separator = "\0"
 
   /// What an absent optional field reads as. Distinct from the separator so a nil field can never
   /// read as a field boundary, and distinct from `""` so it cannot collide with a field that is

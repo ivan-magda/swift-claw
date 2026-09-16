@@ -12,6 +12,7 @@ struct TResponse<R: Decodable>: Decodable {
   let description: String?
   let parameters: TResponseParameters?
 }
+
 struct TResponseParameters: Decodable {
   let retry_after: Int?
 }
@@ -28,10 +29,13 @@ struct TUser: Decodable {
     let parts = [first_name, last_name].compactMap { part in
       part?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    let name = parts.filter { !$0.isEmpty }.joined(separator: " ")
+    let name = parts.filter {
+      !$0.isEmpty
+    }.joined(separator: " ")
     return name.isEmpty ? username : name
   }
 }
+
 struct TChat: Decodable {
   let id: Int64
   let type: String?
@@ -70,7 +74,7 @@ struct TVoice: Decodable {
       return nil
     }
     return VoiceAttachment(
-      fileId: file_id,
+      fileID: file_id,
       durationSeconds: duration ?? 0,
       mimeType: mime_type,
       fileSizeBytes: file_size
@@ -92,8 +96,8 @@ struct TPhotoSize: Decodable {
       return nil
     }
     return PhotoSize(
-      fileId: file_id,
-      fileUniqueId: file_unique_id,
+      fileID: file_id,
+      fileUniqueID: file_unique_id,
       width: width,
       height: height,
       fileSizeBytes: file_size
@@ -158,9 +162,9 @@ struct TMessage: Decodable {
 
   func toRawMessage() -> RawMessage {
     RawMessage(
-      messageId: message_id,
-      fromUserId: from?.id,
-      chatId: chat.id,
+      messageID: message_id,
+      fromUserID: from?.id,
+      chatID: chat.id,
       text: text,
       caption: caption,
       mediaKind: mediaKind,
@@ -168,13 +172,13 @@ struct TMessage: Decodable {
       photo: photoAttachment,
       chatKind: chat.kind,
       chatTitle: chat.title,
-      messageThreadId: message_thread_id,
-      replyToMessageId: reply_to_message?.message_id,
-      replyToUserId: reply_to_message?.from?.id,
+      messageThreadID: message_thread_id,
+      replyToMessageID: reply_to_message?.message_id,
+      replyToUserID: reply_to_message?.from?.id,
       senderDisplayName: from?.displayName,
       hasSenderChat: sender_chat != nil,
       isForwarded: forward_origin != nil,
-      migratedToChatId: migrate_to_chat_id
+      migratedToChatID: migrate_to_chat_id
     )
   }
 }
@@ -193,8 +197,15 @@ struct LinkPreviewOptions: Encodable {
 }
 
 struct SendRichMessageDraftRequest: Encodable {
-  let chatId: Int64
-  let draftId: Int64
+  private enum CodingKeys: String, CodingKey {
+    case chatID = "chatId"
+    case draftID = "draftId"
+    case richMessage
+    case linkPreviewOptions
+  }
+
+  let chatID: Int64
+  let draftID: Int64
   let richMessage: InputRichMessage
   let linkPreviewOptions: LinkPreviewOptions
 }
@@ -238,10 +249,10 @@ struct TChatMemberUpdated: Decodable {
 
   func toRawChatMemberUpdate() -> RawChatMemberUpdate {
     RawChatMemberUpdate(
-      chatId: chat.id,
+      chatID: chat.id,
       chatKind: chat.kind,
       chatTitle: chat.title,
-      actorUserId: from?.id,
+      actorUserID: from?.id,
       actorDisplayName: from?.displayName,
       oldStatus: Self.status(old_chat_member),
       newStatus: Self.status(new_chat_member)
@@ -261,20 +272,19 @@ struct TUpdate: Decodable {
   // an inline-keyboard tap.
   func toRawUpdate() -> RawUpdate {
     RawUpdate(
-      updateId: update_id,
+      updateID: update_id,
       message: message?.toRawMessage(),
       editedMessage: edited_message?.toRawMessage(),
       callback: callback_query.map { query in
         RawCallback(
-          callbackId: query.id,
-          fromUserId: query.from.id,
-          chatId: query.message?.chat.id,
-          messageId: query.message?.message_id,
+          callbackID: query.id,
+          fromUserID: query.from.id,
+          chatID: query.message?.chat.id,
+          messageID: query.message?.message_id,
           data: query.data
         )
       },
       myChatMember: my_chat_member?.toRawChatMemberUpdate()
     )
   }
-}
-// swiftlint:enable identifier_name discouraged_optional_boolean discouraged_optional_collection
+}  // swiftlint:enable identifier_name discouraged_optional_boolean discouraged_optional_collection

@@ -38,11 +38,12 @@ struct CodexOutcome {
     guard workspace == nil, invocation.prepared.request.workspace == .separate else {
       return
     }
-    let destination = URL(fileURLWithPath: invocation.jobDirectory)
-      .appendingPathComponent("repository").path
+    let destination = URL(fileURLWithPath: invocation.jobDirectory).appendingPathComponent(
+      "repository"
+    ).path
     var directory: ObjCBool = false
     guard FileManager.default.fileExists(atPath: destination, isDirectory: &directory),
-      directory.boolValue
+          directory.boolValue
     else {
       return
     }
@@ -61,12 +62,14 @@ struct CodexOutcome {
     }
     let publication: CoderPublication
     switch self.publication {
-    case .absent: publication = .absent
-    case .confirmed(let url): publication = .confirmed(url: clean(url))
-    case .unknown(let url): publication = .unknown(reportedURL: url.map(clean))
+    case .absent:
+      publication = .absent
+    case .confirmed(let url):
+      publication = .confirmed(url: clean(url))
+    case .unknown(let url):
+      publication = .unknown(reportedURL: url.map(clean))
     }
-    let starting =
-      localStartObserved ? workspace?.startingCommit : report?.startingCommit
+    let starting = localStartObserved ? workspace?.startingCommit : report?.startingCommit
     return CoderResult(
       state: state,
       summary: clean(report?.summary ?? failure?.message ?? "Coder task stopped."),
@@ -86,5 +89,4 @@ struct CodexOutcome {
       }
     )
   }
-}
-// swiftlint:enable discouraged_optional_collection
+}  // swiftlint:enable discouraged_optional_collection

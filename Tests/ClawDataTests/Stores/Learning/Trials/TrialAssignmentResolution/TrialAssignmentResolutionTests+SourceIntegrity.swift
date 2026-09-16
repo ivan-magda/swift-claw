@@ -13,35 +13,33 @@ extension TrialAssignmentResolutionTests {
     // given
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
-    try env.apply(corruption, runId: sealed.runId)
-    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+    try env.apply(corruption, runID: sealed.runID)
+    let cacheBefore = try env.assignmentCacheSnapshot(runID: sealed.runID)
 
     // when / then — removing any binding or assignment identity predicate admits its own case.
     #expect {
-      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+      _ = try env.learning.recomputeAssignment(runID: sealed.runID, now: env.now)
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
       }
       return true
     }
-    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+    #expect(try env.assignmentCacheSnapshot(runID: sealed.runID) == cacheBefore)
   }
 
   @Test(arguments: EvaluationCorruption.allCases)
-  func succeededEvaluatorRequiresOneExactEvaluation(
-    _ corruption: EvaluationCorruption
-  ) throws {
+  func succeededEvaluatorRequiresOneExactEvaluation(_ corruption: EvaluationCorruption) throws {
     // given
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
     let claim = try env.startedOperation(env.evaluatorKey(for: sealed))
     _ = try env.learning.finishOperation(env.result(for: claim.id), now: env.now)
-    try env.apply(corruption, runId: sealed.runId)
+    try env.apply(corruption, runID: sealed.runID)
 
     // when / then
     #expect {
-      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+      _ = try env.learning.recomputeAssignment(runID: sealed.runID, now: env.now)
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
@@ -59,24 +57,25 @@ extension TrialAssignmentResolutionTests {
     let sealed = try env.sealedTrialEvidence()
     let operation = try env.startedOperation(env.evaluatorKey(for: sealed))
     _ = try env.learning.finishOperation(env.result(for: operation.id), now: env.now)
-    try env.resetAssignmentCache(runId: sealed.runId, state: .primaryRunSettled)
-    try env.apply(corruption, operationId: operation.id, runId: sealed.runId)
-    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+    try env.resetAssignmentCache(runID: sealed.runID, state: .primaryRunSettled)
+    try env.apply(corruption, operationID: operation.id, runID: sealed.runID)
+    let cacheBefore = try env.assignmentCacheSnapshot(runID: sealed.runID)
 
     // when / then — removing independent evaluation counting or state-shape validation admits
     // the matching impossible source combination.
     #expect {
-      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+      _ = try env.learning.recomputeAssignment(runID: sealed.runID, now: env.now)
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
       }
       return true
     }
-    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+    #expect(try env.assignmentCacheSnapshot(runID: sealed.runID) == cacheBefore)
   }
 
-  @Test func supersededEvaluatorAttemptMustBeInterrupted() throws {
+  @Test
+  func supersededEvaluatorAttemptMustBeInterrupted() throws {
     // given
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
@@ -84,20 +83,20 @@ extension TrialAssignmentResolutionTests {
     _ = try env.learning.reconcileOperationsAtBoot(now: env.now)
     let second = try env.startedOperation(env.evaluatorKey(for: sealed))
     _ = try env.learning.finishOperation(env.result(for: second.id), now: env.now)
-    try env.resetAssignmentCache(runId: sealed.runId, state: .primaryRunSettled)
+    try env.resetAssignmentCache(runID: sealed.runID, state: .primaryRunSettled)
     try env.replaceInterruptedOperationWithFailed(first.id)
-    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+    let cacheBefore = try env.assignmentCacheSnapshot(runID: sealed.runID)
 
     // when / then — accepting a non-interrupted predecessor loses the retry lineage invariant.
     #expect {
-      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+      _ = try env.learning.recomputeAssignment(runID: sealed.runID, now: env.now)
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
       }
       return true
     }
-    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+    #expect(try env.assignmentCacheSnapshot(runID: sealed.runID) == cacheBefore)
   }
 
   @Test(arguments: EvidenceReceiptCorruption.allCases)
@@ -107,13 +106,13 @@ extension TrialAssignmentResolutionTests {
     // given
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
-    try env.apply(corruption, runId: sealed.runId)
-    let cacheBefore = try env.assignmentCacheSnapshot(runId: sealed.runId)
+    try env.apply(corruption, runID: sealed.runID)
+    let cacheBefore = try env.assignmentCacheSnapshot(runID: sealed.runID)
 
     // when / then — removing receipt shape, canonical-payload, or digest validation admits the
     // matching corruption through both public readers.
     #expect {
-      _ = try env.learning.evidence(runId: sealed.runId)
+      _ = try env.learning.evidence(runID: sealed.runID)
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
@@ -121,25 +120,26 @@ extension TrialAssignmentResolutionTests {
       return true
     }
     #expect {
-      _ = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+      _ = try env.learning.recomputeAssignment(runID: sealed.runID, now: env.now)
     } throws: { error in
       guard case StoreError.unexpected = error else {
         return false
       }
       return true
     }
-    #expect(try env.assignmentCacheSnapshot(runId: sealed.runId) == cacheBefore)
+    #expect(try env.assignmentCacheSnapshot(runID: sealed.runID) == cacheBefore)
   }
 
-  @Test func eligibleReceiptMayLoseItsPayloadAfterRetention() throws {
+  @Test
+  func eligibleReceiptMayLoseItsPayloadAfterRetention() throws {
     // given
     let env = try trialEnvironment()
     let sealed = try env.sealedTrialEvidence()
-    try env.removeEvidencePayload(runId: sealed.runId)
+    try env.removeEvidencePayload(runID: sealed.runID)
 
     // when
-    let retained = try #require(try env.learning.evidence(runId: sealed.runId))
-    let recomputed = try env.learning.recomputeAssignment(runId: sealed.runId, now: env.now)
+    let retained = try #require(try env.learning.evidence(runID: sealed.runID))
+    let recomputed = try env.learning.recomputeAssignment(runID: sealed.runID, now: env.now)
 
     // then — requiring payload bytes for every eligible receipt breaks compact retention.
     #expect(retained.eligibility == .eligibleTaskEvidence)

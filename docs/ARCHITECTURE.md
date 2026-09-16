@@ -100,7 +100,7 @@ clawd  (composes every target below)
 | `clawd`           | exe                 | Thin entry: load config + secrets → acquire startup lock → build ServiceGroup → run.                                                                                                                                                                                                                                                                                                                            | `main`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `*Tests`          | test                | One suite per lib; shared doubles in `ClawTestSupport`, in-memory DB. (Real `ClawTools` mocks introduced when read-only tools land in Inc 3.)                                                                                                                                                                                                                                                                   | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
-`SearchProviding` is a `ClawCore` protocol; the default backend is Exa (`https://api.exa.ai/search`, a pinned trusted endpoint and documented trust dependency like `base_url`, including Exa's right to use query input/output to provide/improve its services). `Secrets.searchApiKey` keys it; unconfigured means the tool is absent and doctor reports info, not an error.
+`SearchProviding` is a `ClawCore` protocol; the default backend is Exa (`https://api.exa.ai/search`, a pinned trusted endpoint and documented trust dependency like `base_url`, including Exa's right to use query input/output to provide/improve its services). `Secrets.searchAPIKey` keys it; unconfigured means the tool is absent and doctor reports info, not an error.
 
 **Generic Coder** adds the pure `CoderRequest`/`CoderPreparedRequest`, `CoderJob`, `CoderResult`,
 `CoderBackend`, `CoderRequestPreparing`, `CoderProcessInspecting`, and `CoderServing` contracts
@@ -512,7 +512,7 @@ inserts nothing. An outbox failure rolls back the terminal transition and reserv
 - select the durable approval by its unguessable nonce before applying the approval's mode-specific
   access rule;
 - for a DM approval, pass the numeric-user allowlist and
-  `callback.from.id == approval.ownerUserId` checks;
+  `callback.from.id == approval.ownerUserID` checks;
 - for a group Coder submission, name the exact original approval prompt message in the exact original
   allowlisted group, belong to the approval's interactive run/session, and pass a fresh fail-closed
   Telegram `getChatMember` check for `callback.from.id`; any current participant, including the
@@ -550,7 +550,7 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 | `learning_operations`, `learning_evaluations`                                        | Learning | migration `v13`: durable inference claims/reservations and blind evaluator verdicts; migration `v14` adds `learning_operations.key_digest` and the partial unique index that makes "one live attempt per hypothesis" a database invariant                                                                                                                                                                                                                                                                                                                                                                                 | evaluation → `runs`; operation supersession → prior operation                              |
 | `feedback_targets`, `feedback_challenges`, `feedback_events`                         | Learning | migration `v13`: single-use nonce targets, owner payload prompts and exact-subject append-only signals                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | challenge/event supersession → prior or replacement row                                    |
 | `learning_candidates`, `learning_trials`, `trial_assignments`, `learning_decisions`  | Learning | migration `v13`: typed candidate provenance, bounded exposure and immutable decision receipts; migration `v15` replaces the open-trial index with one covering every live state                                                                                                                                                                                                                                                                                                                                                                                                                                           | trial → candidate; assignment → trial/run; candidate replacement → `lesson_sets`           |
-| `approvals`                                                                          | 5a       | PENDING/APPROVED/REJECTED/EXPIRED (EXPIRED resolves to a DENY outcome at execution), tool + canonical args, **canonical-args hash, policy_version, delivery chat in `ownerUserId`, random callback nonce and prompt message ID**; the callback resolver derives DM-owner or group-participant authority from the original run                                                                                                                                                                                                                                                                                             | `approvals.run_id → runs.id`                                                               |
+| `approvals`                                                                          | 5a       | PENDING/APPROVED/REJECTED/EXPIRED (EXPIRED resolves to a DENY outcome at execution), tool + canonical args, **canonical-args hash, policy_version, delivery chat in `ownerUserID`, random callback nonce and prompt message ID**; the callback resolver derives DM-owner or group-participant authority from the original run                                                                                                                                                                                                                                                                                             | `approvals.run_id → runs.id`                                                               |
 
 `runs.state = AWAITING_APPROVAL` references `approvals.id` as the **one** canonical source of truth for "blocked on approval" (no ambiguous dual flags).
 
@@ -558,7 +558,7 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 
 The `approvals` row (Inc 5a) additionally carries `session_id`, `observation_message_id`, `tool_call_id`, `reason` (`ask_tier | exfil_trifecta | code_exec | coder_submit`), `prompt_message_id`, and `resolved_ts`, and enforces a **UNIQUE partial index `WHERE state = 'PENDING'`** — at most one live approval per run. `outbound_deliveries` gains nullable `approval_id` + `reply_markup` (additive, so pre-upgrade PENDING rows stay valid; the envelope is not smuggled into `payload`): the button prompt travels through the transactional outbox, and when `approval_id` is set `markSent` writes the resulting `telegram_message_id` onto the linked approval's `prompt_message_id` **in the same transaction**.
 
-Synthetic session keys (Inc 4): `sched:job:<id>` (one dedicated session per scheduled job, created lazily at first fire) and `sched:heartbeat`. `sessions` carries no chat id — a job run's delivery/notice target is `scheduled_jobs.owner_chat_id`; the heartbeat's is the config-resolved owner DM. `SessionKey.chatId(from:)` returns nil for both by design, so boot reconciliation resolves crashed-run owner notices for job runs via `scheduled_jobs.owner_chat_id` and for heartbeat runs via the config-derived target passed in at boot (§6.3, spec §5.2/§12).
+Synthetic session keys (Inc 4): `sched:job:<id>` (one dedicated session per scheduled job, created lazily at first fire) and `sched:heartbeat`. `sessions` carries no chat id — a job run's delivery/notice target is `scheduled_jobs.owner_chat_id`; the heartbeat's is the config-resolved owner DM. `SessionKey.chatID(from:)` returns nil for both by design, so boot reconciliation resolves crashed-run owner notices for job runs via `scheduled_jobs.owner_chat_id` and for heartbeat runs via the config-derived target passed in at boot (§6.3, spec §5.2/§12).
 
 ### 7.2 Audit (Inc 1) — ordinary append-only, NOT tamper-evident
 
@@ -939,7 +939,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   `approval_expiry`; enforced by a periodic expiry ticker and the boot reconciliation sweep (§19.1).
 - **Escaping a pending approval:** a plain message **queues** behind it (strict FIFO — it never supersedes, §5.1); to abandon the parked action before expiry the owner uses `/stop` (cancel) or `/new` (reset + detaint), both of which resolve `AWAITING_APPROVAL` (§19.1). Otherwise silence rides out to `EXPIRED → DENY`.
 - **Queue-behind survives restart:** boot reconciliation **re-parks a waiter on the lane** of every unexpired `AWAITING_APPROVAL` run, preserving the FIFO queue-behind contract across restart and giving **exactly one execution locus** — the callback handler, expiry ticker, and `/stop`//`new` command paths only CAS the row and signal the coordinator; the waiter task performs the resume/deny (observation update, run transition, owner notice, button disarm).
-- **Approval destination and requester resolution:** `Approval.ownerUserId` retains its historical
+- **Approval destination and requester resolution:** `Approval.ownerUserID` retains its historical
   name but stores the run's **delivery chat id** — the DM chat id for interactive direct runs, the
   allowlisted group id for a group Coder submission, `scheduled_jobs.owner_chat_id` for job runs, and
   the config-resolved owner DM for heartbeat runs. Migration `v12` stores the original interactive
@@ -989,11 +989,11 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 `CLAW_GROUP_CHATS` is a comma-separated list of Telegram chat ids `clawd` serves as a **shared room** instead of the owner's DM. Empty is the default, and with it empty nothing in this subsection exists: every claim in §1–§12 above is the DM's, unqualified. Group mode remains a deployment-scoped exception to `docs/PRD.md` NG1 rather than a general multi-user product. It exists for a supervised, time-boxed event on a separate installation, and the trade it makes below is only defensible under exactly those conditions. Public operating docs describe the opt-in and its Coder approval requirement so an operator can deploy it safely.
 
-- **The mode is derived from the session key, never re-read from config.** `SessionKey` mints `tg:dm:<chatId>` for a DM and `tg:topic:<chatId>:<threadId|general>` for one forum topic; `SessionKey.mode(from:)`, `chatId(from:)` and `threadId(from:)` recover the three facts every consumer needs from the key alone. That matters because most consumers hold only a session id: `TurnRunner.resume`, a scheduled fire, and boot reconciliation all read the mode off the row they already loaded. **`AppConfig.groupChats` has exactly one reader** — the access decision — so no second component can drift about which conversation is which. The General topic carries no `message_thread_id` on the wire, so its key takes a `general` suffix that no numeric thread id can collide with; a non-forum group has one conversation and lands on that same key correctly.
+- **The mode is derived from the session key, never re-read from config.** `SessionKey` mints `tg:dm:<chatId>` for a DM and `tg:topic:<chatId>:<threadId|general>` for one forum topic; `SessionKey.mode(from:)`, `chatID(from:)` and `threadID(from:)` recover the three facts every consumer needs from the key alone. That matters because most consumers hold only a session id: `TurnRunner.resume`, a scheduled fire, and boot reconciliation all read the mode off the row they already loaded. **`AppConfig.groupChats` has exactly one reader** — the access decision — so no second component can drift about which conversation is which. The General topic carries no `message_thread_id` on the wire, so its key takes a `general` suffix that no numeric thread id can collide with; a non-forum group has one conversation and lands on that same key correctly.
 - **Conversation access is an allowlist of chats, not of users.** `AccessControl.decide` keeps the numeric-ID default-deny boundary for `.private` (the owner's allowlist, unchanged) and adds a **chat-id** grant for `.group`/`.supergroup`: being in an allowlisted room admits ordinary conversation without a per-attendee allowlist entry. Group Coder approval is the narrow exception: every button tap also needs a fresh Telegram `getChatMember` result for that user and group. The check is fail-closed and uncached; Telegram guarantees lookups for other users only when the bot is a group administrator, so that status is an operating prerequisite for reliable group Coder approval. `.channel` and any chat kind this build has never seen are refused, so a new Telegram surface can never inherit either grant. A refused DM is answered (the stranger can ask the owner for access); a refused chat is answered with **silence**, so the bot never announces itself to a room it was added to uninvited.
 - **Intake observes before it decides to answer.** `AddressingResolver` decides whether a message is talking to the bot — an `@handle` mention, a slash command this build recognizes, or a reply to something the bot itself said — **before** the content switch, so an unaddressed photo or voice note is never downloaded or transcribed. An addressed message takes the ordinary `claimAndPersistInbound` path. Unaddressed text takes `claimAndPersistObserved`: the same claim, the same session upsert, the same message insert, **no run**. The router skips unaddressed media without downloading, transcribing, or storing a transcript row. The addressed and observed text paths share the claim key, so Telegram stores one text update at most once whichever path it takes. The bot follows the topic's text and speaks only when called. Group mode makes the bot's own `@handle` load-bearing, so a daemon configured with group chats **refuses to boot** without a resolved bot username rather than sitting silently in every room.
 - **A stored group line names its speaker.** `TranscriptAuthor` renders `<display name>: <text>` at persist time, not at assembly time, so a recall hit pulled back out of history still says who said it and the name is in the FTS index. The separator and every line break are folded out of a display name first, so one line can never present itself as two speakers. A DM line is stored exactly as typed.
-- **Recall never leaves the topic.** `Retriever.searchRelevantMessages` takes a `restrictToSessionId`; a group topic passes its own session id, a DM passes `nil` and keeps its cross-session reach. Without that restriction one room's words would surface in another room's prompt, because a group line is stored trusted (below) and trusted rows are exactly what recall returns.
+- **Recall never leaves the topic.** `Retriever.searchRelevantMessages` takes a `restrictToSessionID`; a group topic passes its own session id, a DM passes `nil` and keeps its cross-session reach. Without that restriction one room's words would surface in another room's prompt, because a group line is stored trusted (below) and trusted rows are exactly what recall returns.
 - **Coder submission is the one group approval.** Existing group behavior is unchanged for every
   other tool: the ask tier allows on the gate-resolved target rather than parking; `memory_write` is
   refused; writes to privileged prompt files are refused; ordinary dangerous tools execute their
@@ -1356,7 +1356,7 @@ advances the stable revision; owner reset remains its separate epoch-raising tra
 or rolled-back replacement cannot open another trial against the same base and algorithm.
 
 The owner view decodes terminal receipts as well as admission, reflection and reset receipts.
-`currentPromotion(jobId:)` finds the exact active promotion independently of the last decision.
+`currentPromotion(jobID:)` finds the exact active promotion independently of the last decision.
 For `/learning <jobId>`, `commitPromotionReply` rechecks that promotion, claims the transport update,
 and writes the exact promotion feedback target and all command-reply outbox chunks in one
 transaction. Only the final chunk carries the rollback button. The gateway pokes `OutboxSignal`
@@ -1367,7 +1367,7 @@ workflow coordinator; the feedback boundary still authenticates, consumes and re
 
 `ScheduledLearningService` queues lane-settlement and authenticated-feedback notifications on its
 stored drain task. Owner callbacks and challenge acknowledgements enqueue work without awaiting
-an inference. Direct `advance(runId:)` and `advance(jobId:)` calls await a bounded `LearningWorkflow`
+an inference. Direct `advance(runID:)` and `advance(jobID:)` calls await a bounded `LearningWorkflow`
 pass. The composition root supplies the actual provider roster, shared primary cooldown, configured
 budget and cost resolver, the redactor including MCP secrets, and notices using the shared outbox
 signal. Operation orphan reconciliation succeeds once per service instance before learning dispatch.
@@ -1641,7 +1641,7 @@ empty healthy state.
 | LLM provider              | **One `LLMProvider` domain contract, two wire adapters** — configured OpenAI-compatible Chat Completions + ChatGPT Codex Responses — with authentication behind a **separate `LLMCredentialSource` seam**; an ordered roster with one active route per provider call (§8.6)                                                                    | swap providers/models via one config value; keeps OAuth and wire formats out of the agent loop; pinned/allowlisted `base_url` on the configured route, a compile-time endpoint on the managed one                                                  | native Anthropic adapter later; teaching `LLMProvider` about OAuth (rejected — forces unrelated providers to implement ChatGPT concepts)                                                                                                  | Med      |
 | ChatGPT subscription auth | Codex **device-code** OAuth + the private ChatGPT Codex Responses route, behind `ClawAuth`/`ClawLLM` adapters, on a **swift-claw-owned** credential envelope [P-auth]                                                                                                                                                                          | direct native route: no Codex subprocess coupling daemon availability/upgrades to another program, no shared credential file with cross-process rotation hazards, logout unambiguous, fully testable with scripted HTTP                            | **unofficial and vendor-dependent (§8.3)** — the escape hatch is the supported OpenAI-compatible route, always one `CLAW_LLM_MODEL` change away; rejected alternatives: import `~/.codex/auth.json`, shell out to Codex, add an API proxy | **High** |
 | MCP client                | official `modelcontextprotocol/swift-sdk` for the protocol, **our own Streamable HTTP transport** over the shared HTTP seam [P-mcp]                                                                                                                                                                                                            | the SDK owns the wire format and its evolution; its bundled transport is URLSession-based and cannot stream SSE on Linux, and our own sits on the seam every test already scripts                                                                  | SDK `HTTPClientTransport` on macOS-only builds; stdio for local servers (deferred, §10.3)                                                                                                                                                 | Low–Med  |
-| Web search backend        | Exa (`https://api.exa.ai/search`) behind `SearchProviding` [Inc 3b]                                                                                                                                                                                                                                                                            | pinned trusted endpoint, documented trust dependency like `base_url` (Exa may use query input/output to provide/improve its services)                                                                                                              | unconfigured `Secrets.searchApiKey` ⇒ tool absent, doctor reports info not error                                                                                                                                                          | Low      |
+| Web search backend        | Exa (`https://api.exa.ai/search`) behind `SearchProviding` [Inc 3b]                                                                                                                                                                                                                                                                            | pinned trusted endpoint, documented trust dependency like `base_url` (Exa may use query input/output to provide/improve its services)                                                                                                              | unconfigured `Secrets.searchAPIKey` ⇒ tool absent, doctor reports info not error                                                                                                                                                          | Low      |
 | HTTP/SSE                  | AsyncHTTPClient + small SSE parser (**streaming in v1**)                                                                                                                                                                                                                                                                                       | URLSession can't stream SSE on Linux                                                                                                                                                                                                               | —                                                                                                                                                                                                                                         | Low      |
 | Sandbox                   | `apple/container` (macOS) + microVM/Podman (Linux) behind `ExecutionBackend` [Inc 5b]                                                                                                                                                                                                                                                          | hardware-virt boundary for untrusted code                                                                                                                                                                                                          | colima (weaker, older-macOS)                                                                                                                                                                                                              | Med      |
 | Secrets                   | `SecretStore` over a swift-crypto AES-GCM envelope + a local `0600` key                                                                                                                                                                                                                                                                        | daemon can't use macOS Keychain; portable                                                                                                                                                                                                          | 0600 env file (dev)                                                                                                                                                                                                                       | Low      |
@@ -1703,12 +1703,66 @@ A cancelled/superseded run resolves its PENDING approval to **`REJECTED`** — t
 
 ### 19.2 Source formatting and lint
 
-Run `scripts/lint.sh` for the complete lint gate. Apple swift-format owns general layout;
-SwiftFormat supplies the conditional- and loop-body rules in
-`BuildTools/conditional-bodies.swiftformat`. SwiftLint checks correctness, idiom, and the hard
-line-length limit configured in `.swiftlint.yml`.
+The **Google Swift Style Guide** is the source-style baseline for all maintained Swift files,
+including tests and build tools. The adopted revision is
+[`79459b39f2ab0330ee05a90f20c3f716d8406b24`](https://github.com/google/swift/blob/79459b39f2ab0330ee05a90f20c3f716d8406b24/index.md).
+Its Naming section incorporates the Swift API Design Guidelines. A guide update is an explicit
+reviewed change to this revision, the tool configuration, and affected source; a live upstream
+edit does not silently change the repository contract. Generated build products and dependency
+checkouts are excluded. [CODE_STYLE.md](CODE_STYLE.md) provides the contributor workflow.
 
-Keep Swift source lines in `Sources` and `Tests` within 100 characters. SwiftLint reports longer
+Run `scripts/lint.sh` for the complete local and CI gate. The canonical formatting result is the
+output of the whole ordered pipeline: SwiftLint corrections, Apple layout, then targeted Google and
+local layout rules. Apple and SwiftFormat each format once; the final SwiftFormat pass keeps `)`
+through `->` together and the first condition beside its keyword.
+Check mode formats temporary copies and compares the
+final bytes; fix mode writes that same result. Apple's non-correctable checks inspect its normalized
+intermediate output, and SwiftLint checks correctness and idiom on the final source. Standalone
+formatter invocations are not a substitute for this gate. Versions are pinned and validated before
+source mutation in `BuildTools/lint-versions.env`; `.swift-version` selects the corresponding Swift
+toolchain. Local, CI, per-file, and editor-buffer formatting share this pipeline.
+
+Apple owns general spacing, indentation and wrapping, braces, and declaration layout
+through `.swift-format`. It preserves existing line breaks so reviewed multiline layouts survive.
+The targeted SwiftFormat pass owns return-arrow and first-condition placement, attributes,
+collection trailing commas, multiline statement/function/property bodies, switch case bodies, and
+final width wrapping. SwiftLint owns the
+hard line limit, correctness, idiom, and configured identifier/complexity limits in `.swiftlint.yml`,
+including test-specific overrides. Duplicate layout rules are disabled there. The gate's idempotence
+and editor/check/fix agreement must be verified when these owners change.
+
+Automation uses these existing tools only. Reviewers check the remaining Google/local details:
+import ordering and conditional-import group placement, blank lines between bodyless or short members, multiline
+type/extension, closure and `do`/`catch` bodies, wrapped signatures, function effect placement, vertical inheritance
+lists, and argument boundaries in short calls containing multiline closures. Passing lint does not waive these rules. Do not add a
+repository-owned formatter or parser dependency merely to automate those review checks.
+
+The following local rules refine or explicitly depart from Google:
+
+- Nonempty conditional and loop statement bodies are multiline. Inline `if` expressions remain
+  allowed. Every nonempty closure body starts on its own line, including after an explicit `in`.
+- Nonempty `do` and `catch` bodies are multiline, including single-statement bodies.
+- Switch case bodies start on their own line, including single-statement bodies.
+- Nonempty type, extension, function, initializer, subscript, and computed-property bodies are
+  multiline. Empty bodies may remain `{}`.
+- Private helpers are grouped by responsibility in `private extension` blocks, each immediately
+  preceded by a bare `// MARK: - <Group Name>` heading. This is the sole extension-access exception;
+  other access levels belong on members, preserving their effective visibility.
+- Tests use `// given`, `// when`, and `// then` sections under [TESTING.md](TESTING.md).
+- Documentation begins with a concise, normally one- or two-line contract summary. Necessary
+  details and parameter/return/throw tags may follow. Document non-obvious public contracts;
+  obvious declarations do not need boilerplate. Ordinary comments explain enduring constraints
+  that the code cannot express. Change rationale belongs in the commit or PR.
+- Domain seams and shared errors remain in `ClawCore`. Google's preference for nesting related
+  types does not override the accepted dependency graph or justify moving a shared seam into an
+  implementation target.
+- `Subprocess.Environment.Key(stringLiteral:)` may convert dynamic environment keys while the
+  pinned swift-subprocess 1.0.0 API offers no public nonfailable dynamic-string initializer.
+  Its unlabeled initializer is package-scoped and `init?(rawValue:)` is failable. This exception
+  preserves existing environment installation/removal semantics; reconsider it when upgrading
+  that dependency. It does not exempt other literal-protocol initializer calls.
+
+Keep maintained Swift source lines within 100 characters. SwiftLint reports longer
 lines as errors without requiring `STRICT=1`. Its URL and comment exemptions apply; interpolated
 and multiline string literals remain subject to the limit. Wrap long literals at logical boundaries
 with multiline continuations, preserving runtime whitespace, escapes, and interpolation evaluation.
@@ -1718,6 +1772,13 @@ choose these changes for you.
 For an opaque value that needs to remain intact for review, such as a pinned image digest, use
 `swiftlint:disable:next line_length` with a reason after ` // `. Do not exempt a whole file or test
 suite to accommodate individual literals.
+
+Passing tools verifies the automated subset, not every semantic rule. Reviews also check file
+responsibility/names, meaningful API and closure-parameter names, initialism spelling, overload
+grouping, import necessity, and documentation contracts. Preserve wire keys, stored formats,
+runtime string bytes, effective access, and test intent during style migrations. Reasoned guide
+preferences (such as early exits or related-type nesting) require contextual judgment, not a
+blanket rewrite. New exceptions require a concrete reason in this section.
 
 ## 20. Roadmap (technical increments)
 

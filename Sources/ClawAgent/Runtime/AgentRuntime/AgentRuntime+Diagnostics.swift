@@ -10,17 +10,17 @@ extension AgentRuntime {
   /// Only a group turn stamps the conversation's shape, so a DM's log lines stay exactly as they
   /// were and a group turn is greppable by topic.
   static func turnMetadata(
-    runId: Int64,
-    sessionId: Int64,
+    runID: Int64,
+    sessionID: Int64,
     mode: ChatMode = .direct,
-    threadId: Int64? = nil
+    threadID: Int64? = nil
   ) -> Logger.Metadata {
-    var metadata: Logger.Metadata = ["run": "\(runId)", "session": "\(sessionId)"]
+    var metadata: Logger.Metadata = ["run": "\(runID)", "session": "\(sessionID)"]
     guard mode == .group else {
       return metadata
     }
     metadata["mode"] = "\(mode.rawValue)"
-    metadata["topic"] = "\(threadId.map(String.init) ?? "general")"
+    metadata["topic"] = "\(threadID.map(String.init) ?? "general")"
     return metadata
   }
 
@@ -72,8 +72,8 @@ extension AgentRuntime {
   func recordToolAudit(
     for call: ToolCall,
     outcome dispatched: ToolDispatchOutcome,
-    runId: Int64,
-    sessionId: Int64
+    runID: Int64,
+    sessionID: Int64
   ) throws {
     try recordAudit(
       AuditEvent(
@@ -83,18 +83,18 @@ extension AgentRuntime {
         argsRedacted: dispatched.argsRedacted,
         resultSize: dispatched.observation.content.utf8.count,
         decision: dispatched.observation.status.rawValue,
-        runId: runId,
-        sessionId: sessionId,
+        runID: runID,
+        sessionID: sessionID,
         ts: Date()
       ),
-      runId: runId,
-      sessionId: sessionId
+      runID: runID,
+      sessionID: sessionID
     )
   }
 
   /// Writes one audit row on the turn's single throwing contract. Audit is observability, not a
   /// gate: only a full disk stops the turn, any other write failure logs and the run continues.
-  func recordAudit(_ event: AuditEvent, runId: Int64, sessionId: Int64) throws {
+  func recordAudit(_ event: AuditEvent, runID: Int64, sessionID: Int64) throws {
     do {
       try auditLog.appendAudit(event)
     } catch StoreError.diskFull {
@@ -102,7 +102,7 @@ extension AgentRuntime {
     } catch {
       logger.warning(
         "audit write failed (continuing): \(error)",
-        metadata: Self.turnMetadata(runId: runId, sessionId: sessionId)
+        metadata: Self.turnMetadata(runID: runID, sessionID: sessionID)
       )
     }
   }

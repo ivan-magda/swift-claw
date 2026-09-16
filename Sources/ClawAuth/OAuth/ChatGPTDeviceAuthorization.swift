@@ -28,7 +28,7 @@ where ClockType.Duration == Duration {
   /// - Throws: `ChatGPTOAuthFailure.deadlineExceeded` once the window closes, the wire client's
   ///   typed failure for a terminal answer, or `CancellationError` if the owner walks away.
   public func authorize(
-    onDeviceCode: @escaping @Sendable (ChatGPTDeviceCode) async -> Void
+    onDeviceCode: @escaping @Sendable (_ deviceCode: ChatGPTDeviceCode) async -> Void
   ) async throws -> ChatGPTAuthorizationGrant {
     let deadline = clock.now.advanced(by: ChatGPTProviderMetadata.maximumLoginWait)
 

@@ -57,7 +57,9 @@ enum MCPDoctorRows {
   /// needs the names because `clear-token` is the only thing that removes them.
   static func orphanTokenRow(storedServers: [String], config: MCPConfig) -> DoctorReport.Check? {
     let configured = Set(config.servers.map(\.name))
-    let orphans = storedServers.filter { configured.contains($0) == false }.sorted()
+    let orphans = storedServers.filter {
+      configured.contains($0) == false
+    }.sorted()
     guard orphans.isEmpty == false else {
       return nil
     }

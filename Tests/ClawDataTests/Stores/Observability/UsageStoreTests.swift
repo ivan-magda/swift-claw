@@ -6,31 +6,33 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct UsageStoreTests {
-  @Test func todayTotalsSumTokensAndCostInTheUtcDay() throws {
+@Suite
+struct UsageStoreTests {
+  @Test
+  func todayTotalsSumTokensAndCostInTheUtcDay() throws {
     // given
     let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "seed",
         isEdited: false,
         ts: Date()
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
     let usage = UsageStoreGRDB(writer: queue)
     let now = Date()
     try usage.recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-1"),
-        runId: runId,
-        sessionId: sessionId,
+        runID: runID,
+        sessionID: sessionID,
         model: "m",
         promptTokens: 100,
         completionTokens: 50,
@@ -49,16 +51,17 @@ import Testing
     #expect(abs(cost - 0.0123) < 1e-9)
   }
 
-  @Test func originFilteredTotalsSumOnlyJoinedOriginUsage() throws {
+  @Test
+  func originFilteredTotalsSumOnlyJoinedOriginUsage() throws {
     // given — one interactive run and one scheduled run, each with usage recorded today
     let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let interactiveClaim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "seed",
         isEdited: false,
         ts: Date()
@@ -66,21 +69,21 @@ import Testing
     )
     let scheduledClaim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 2,
-        sessionKey: SessionKey.telegramDM(chatId: 43),
-        chatId: 43,
-        userId: 43,
+        updateID: 2,
+        sessionKey: SessionKey.telegramDM(chatID: 43),
+        chatID: 43,
+        userID: 43,
         text: "seed",
         isEdited: false,
         ts: Date()
       )
     )
-    let interactiveRunId = try #require(interactiveClaim.runId)
-    let scheduledRunId = try #require(scheduledClaim.runId)
+    let interactiveRunID = try #require(interactiveClaim.runID)
+    let scheduledRunID = try #require(scheduledClaim.runID)
     try queue.write { db in
       try db.execute(
         sql: "UPDATE runs SET origin = 'scheduled' WHERE id = ?",
-        arguments: [scheduledRunId]
+        arguments: [scheduledRunID]
       )
     }
 
@@ -89,8 +92,8 @@ import Testing
     try usage.recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-interactive"),
-        runId: interactiveRunId,
-        sessionId: try #require(interactiveClaim.sessionId),
+        runID: interactiveRunID,
+        sessionID: try #require(interactiveClaim.sessionID),
         model: "m",
         promptTokens: 100,
         completionTokens: 50,
@@ -103,8 +106,8 @@ import Testing
     try usage.recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-scheduled"),
-        runId: scheduledRunId,
-        sessionId: try #require(scheduledClaim.sessionId),
+        runID: scheduledRunID,
+        sessionID: try #require(scheduledClaim.sessionID),
         model: "m",
         promptTokens: 10,
         completionTokens: 5,
@@ -120,8 +123,8 @@ import Testing
     try usage.recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-runless"),
-        runId: nil,
-        sessionId: try #require(interactiveClaim.sessionId),
+        runID: nil,
+        sessionID: try #require(interactiveClaim.sessionID),
         model: "m",
         promptTokens: 6,
         completionTokens: 3,
@@ -145,7 +148,8 @@ import Testing
     #expect(none.costUSD == 0)
   }
 
-  @Test func todayTotalsCountOnlyTheCurrentUtcDayAcrossTheBoundary() throws {
+  @Test
+  func todayTotalsCountOnlyTheCurrentUtcDayAcrossTheBoundary() throws {
     // given — a fixed UTC "now" at noon, its UTC day start, and a ~25h-old instant (previous day)
     var utc = Calendar(identifier: .gregorian)
     utc.timeZone = try #require(TimeZone(identifier: "UTC"))
@@ -159,25 +163,25 @@ import Testing
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let claim = try sessions.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "seed",
         isEdited: false,
         ts: now
       )
     )
-    let sessionId = try #require(claim.sessionId)
-    let runId = try #require(claim.runId)
+    let sessionID = try #require(claim.sessionID)
+    let runID = try #require(claim.runID)
     let usage = UsageStoreGRDB(writer: queue)
 
     // when — previous-day (excluded), exactly at the UTC day start (included via `>=`), and midday
     try usage.recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-previous-day"),
-        runId: runId,
-        sessionId: sessionId,
+        runID: runID,
+        sessionID: sessionID,
         model: "m",
         promptTokens: 900,
         completionTokens: 99,
@@ -190,8 +194,8 @@ import Testing
     try usage.recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-day-start"),
-        runId: runId,
-        sessionId: sessionId,
+        runID: runID,
+        sessionID: sessionID,
         model: "m",
         promptTokens: 10,
         completionTokens: 0,
@@ -204,8 +208,8 @@ import Testing
     try usage.recordUsage(
       ProviderUsage(
         providerCallID: ProviderCallID(rawValue: "call-midday"),
-        runId: runId,
-        sessionId: sessionId,
+        runID: runID,
+        sessionID: sessionID,
         model: "m",
         promptTokens: 100,
         completionTokens: 50,
@@ -225,14 +229,15 @@ import Testing
 
   // MARK: - Latest Prompt Usage
 
-  @Test func latestPromptUsageReturnsTheNewestRow() throws {
+  @Test
+  func latestPromptUsageReturnsTheNewestRow() throws {
     // given — two calls of one run; the later call carries the run's full context
     let env = try Self.fixture()
     try env.usage.recordUsage(
-      Self.usage(callID: "call-1", runId: env.runId, sessionId: env.sessionId)
+      Self.usage(callID: "call-1", runID: env.runID, sessionID: env.sessionID)
     )
     try env.usage.recordUsage(
-      Self.usage(callID: "call-2", runId: env.runId, sessionId: env.sessionId, promptTokens: 44853)
+      Self.usage(callID: "call-2", runID: env.runID, sessionID: env.sessionID, promptTokens: 44853)
     )
 
     // when
@@ -240,18 +245,19 @@ import Testing
 
     // then — the most recently recorded call, not the largest or the first
     #expect(latest?.promptTokens == 44853)
-    #expect(latest?.runId == env.runId)
+    #expect(latest?.runID == env.runID)
     #expect(latest?.isEstimated == false)
   }
 
-  @Test func latestPromptUsageCarriesTheEstimateFlagOfAConservativeRow() throws {
+  @Test
+  func latestPromptUsageCarriesTheEstimateFlagOfAConservativeRow() throws {
     // given — a deadline/failure books an estimated row; its guess must not read as provider truth
     let env = try Self.fixture()
     try env.usage.recordUsage(
       Self.usage(
         callID: "call-degraded",
-        runId: env.runId,
-        sessionId: env.sessionId,
+        runID: env.runID,
+        sessionID: env.sessionID,
         promptTokens: 52012,
         isEstimated: true
       )
@@ -265,7 +271,8 @@ import Testing
     #expect(latest?.isEstimated == true)
   }
 
-  @Test func latestPromptUsageIsNilBeforeAnyCallWasRecorded() throws {
+  @Test
+  func latestPromptUsageIsNilBeforeAnyCallWasRecorded() throws {
     // given
     let env = try Self.fixture()
 
@@ -275,10 +282,11 @@ import Testing
 
   // MARK: - Call Idempotency
 
-  @Test func recordingTheSameCallTwiceStoresOneRowAndDebitsTheDayOnce() throws {
+  @Test
+  func recordingTheSameCallTwiceStoresOneRowAndDebitsTheDayOnce() throws {
     // given — the shape a commit retried after its first attempt already landed produces
     let env = try Self.fixture()
-    let row = Self.usage(callID: "call-1", runId: env.runId, sessionId: env.sessionId)
+    let row = Self.usage(callID: "call-1", runID: env.runID, sessionID: env.sessionID)
 
     // when
     try env.usage.recordUsage(row)
@@ -291,16 +299,17 @@ import Testing
     #expect(abs(cost - 0.002) < 1e-9)
   }
 
-  @Test func twoDifferentCallsForOneRunBothStoreAndBothDebitTheDay() throws {
+  @Test
+  func twoDifferentCallsForOneRunBothStoreAndBothDebitTheDay() throws {
     // given — a run's tool loop legitimately spends once per round
     let env = try Self.fixture()
 
     // when
     try env.usage.recordUsage(
-      Self.usage(callID: "call-1", runId: env.runId, sessionId: env.sessionId)
+      Self.usage(callID: "call-1", runID: env.runID, sessionID: env.sessionID)
     )
     try env.usage.recordUsage(
-      Self.usage(callID: "call-2", runId: env.runId, sessionId: env.sessionId)
+      Self.usage(callID: "call-2", runID: env.runID, sessionID: env.sessionID)
     )
 
     // then — idempotency is per call, never per run
@@ -310,10 +319,11 @@ import Testing
     #expect(abs(cost - 0.004) < 1e-9)
   }
 
-  @Test func aRunlessScheduleParseIsIdempotentOnItsOwnCall() throws {
+  @Test
+  func aRunlessScheduleParseIsIdempotentOnItsOwnCall() throws {
     // given — command spend carries no run, so the run can not be what distinguishes its rows
     let env = try Self.fixture()
-    let row = Self.usage(callID: "call-parse", runId: nil, sessionId: env.sessionId)
+    let row = Self.usage(callID: "call-parse", runID: nil, sessionID: env.sessionID)
 
     // when
     try env.usage.recordUsage(row)
@@ -324,20 +334,22 @@ import Testing
     #expect(try env.usage.todayTokensAndCost(now: Self.fixedNow).tokens == 15)
   }
 
-  @Test func twoRunlessParsesWithDistinctCallsBothStore() throws {
+  @Test
+  func twoRunlessParsesWithDistinctCallsBothStore() throws {
     // given — the run id is NULL on both, so only the call identity separates them
     let env = try Self.fixture()
 
     // when
-    try env.usage.recordUsage(Self.usage(callID: "call-a", runId: nil, sessionId: env.sessionId))
-    try env.usage.recordUsage(Self.usage(callID: "call-b", runId: nil, sessionId: env.sessionId))
+    try env.usage.recordUsage(Self.usage(callID: "call-a", runID: nil, sessionID: env.sessionID))
+    try env.usage.recordUsage(Self.usage(callID: "call-b", runID: nil, sessionID: env.sessionID))
 
     // then
     #expect(try Self.rowCount(env.queue) == 2)
     #expect(try env.usage.todayTokensAndCost(now: Self.fixedNow).tokens == 30)
   }
 
-  @Test func aRecordNamingAnUnknownRunSurfacesTheFailureRatherThanBeingSilenced() throws {
+  @Test
+  func aRecordNamingAnUnknownRunSurfacesTheFailureRatherThanBeingSilenced() throws {
     // given — the conflict clause silences a repeated call identity and nothing else; a corrupt
     // row must not reach the caller wearing the same "already recorded, nothing to do" face
     let env = try Self.fixture()
@@ -345,20 +357,21 @@ import Testing
     // when / then
     #expect(throws: StoreError.self) {
       try env.usage.recordUsage(
-        Self.usage(callID: "call-orphan", runId: 9999, sessionId: env.sessionId)
+        Self.usage(callID: "call-orphan", runID: 9999, sessionID: env.sessionID)
       )
     }
     #expect(try Self.rowCount(env.queue) == 0)
   }
 
-  @Test func aRecordNamingAnUnknownSessionSurfacesTheFailureRatherThanBeingSilenced() throws {
+  @Test
+  func aRecordNamingAnUnknownSessionSurfacesTheFailureRatherThanBeingSilenced() throws {
     // given
     let env = try Self.fixture()
 
     // when / then
     #expect(throws: StoreError.self) {
       try env.usage.recordUsage(
-        Self.usage(callID: "call-orphan", runId: env.runId, sessionId: 9999)
+        Self.usage(callID: "call-orphan", runID: env.runID, sessionID: 9999)
       )
     }
     #expect(try Self.rowCount(env.queue) == 0)
@@ -371,8 +384,8 @@ private extension UsageStoreTests {
   struct Fixture {
     let queue: DatabaseQueue
     let usage: UsageStoreGRDB
-    let sessionId: Int64
-    let runId: Int64
+    let sessionID: Int64
+    let runID: Int64
   }
 
   static let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
@@ -381,10 +394,10 @@ private extension UsageStoreTests {
     let queue = try TestDatabase.make()
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 42),
-        chatId: 42,
-        userId: 42,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 42),
+        chatID: 42,
+        userID: 42,
         text: "seed",
         isEdited: false,
         ts: fixedNow
@@ -393,22 +406,22 @@ private extension UsageStoreTests {
     return Fixture(
       queue: queue,
       usage: UsageStoreGRDB(writer: queue),
-      sessionId: try #require(claim.sessionId),
-      runId: try #require(claim.runId)
+      sessionID: try #require(claim.sessionID),
+      runID: try #require(claim.runID)
     )
   }
 
   static func usage(
     callID: String,
-    runId: Int64?,
-    sessionId: Int64,
+    runID: Int64?,
+    sessionID: Int64,
     promptTokens: Int = 10,
     isEstimated: Bool = false
   ) -> ProviderUsage {
     ProviderUsage(
       providerCallID: ProviderCallID(rawValue: callID),
-      runId: runId,
-      sessionId: sessionId,
+      runID: runID,
+      sessionID: sessionID,
       model: "m",
       promptTokens: promptTokens,
       completionTokens: 5,

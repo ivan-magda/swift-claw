@@ -70,10 +70,29 @@ public struct EvidenceToolFact: Sendable, Equatable, Codable {
 /// there, and the frozen surface it ran on. It deliberately excludes raw tool arguments, secrets,
 /// private raw observations, replay state and audit projections.
 public struct EvidencePayload: Sendable, Equatable, Codable {
+  private enum CodingKeys: String, CodingKey {
+    case schemaVersion
+    case jobDefinitionDigest
+    case effectiveLessonSetDigest
+    case sourceMessageID = "sourceMessageId"
+    case sourceDigest
+    case finalOutput
+    case toolFacts
+    case proposedCalls
+    case observedCalls
+    case contextSchemaVersion
+    case toolCatalogDigest
+    case policyVersion
+    case skillSetDigest
+    case configuredRoute
+    case terminalRoute
+    case usageRowIDs = "usageRowIds"
+  }
+
   public let schemaVersion: String
   public let jobDefinitionDigest: String
   public let effectiveLessonSetDigest: String
-  public let sourceMessageId: Int64
+  public let sourceMessageID: Int64
   public let sourceDigest: String
   public let finalOutput: String
   public let toolFacts: [EvidenceToolFact]
@@ -87,13 +106,13 @@ public struct EvidencePayload: Sendable, Equatable, Codable {
   public let skillSetDigest: String
   public let configuredRoute: String
   public let terminalRoute: String?
-  public let usageRowIds: [Int64]
+  public let usageRowIDs: [Int64]
 
   public init(  // swiftlint:disable:this function_parameter_count
     schemaVersion: String,
     jobDefinitionDigest: String,
     effectiveLessonSetDigest: String,
-    sourceMessageId: Int64,
+    sourceMessageID: Int64,
     sourceDigest: String,
     finalOutput: String,
     toolFacts: [EvidenceToolFact],
@@ -105,12 +124,12 @@ public struct EvidencePayload: Sendable, Equatable, Codable {
     skillSetDigest: String,
     configuredRoute: String,
     terminalRoute: String?,
-    usageRowIds: [Int64]
+    usageRowIDs: [Int64]
   ) {
     self.schemaVersion = schemaVersion
     self.jobDefinitionDigest = jobDefinitionDigest
     self.effectiveLessonSetDigest = effectiveLessonSetDigest
-    self.sourceMessageId = sourceMessageId
+    self.sourceMessageID = sourceMessageID
     self.sourceDigest = sourceDigest
     self.finalOutput = finalOutput
     self.toolFacts = toolFacts
@@ -122,7 +141,7 @@ public struct EvidencePayload: Sendable, Equatable, Codable {
     self.skillSetDigest = skillSetDigest
     self.configuredRoute = configuredRoute
     self.terminalRoute = terminalRoute
-    self.usageRowIds = usageRowIds
+    self.usageRowIDs = usageRowIDs
   }
 }
 
@@ -147,8 +166,8 @@ public enum EvidenceExclusion: String, Sendable, Equatable, CaseIterable {
 /// One sealed `learning_evidence` row: the eligibility receipt always, the payload only when the
 /// run is task evidence the evaluator may read.
 public struct SealedEvidence: Sendable, Equatable {
-  public let runId: Int64
-  public let jobId: Int64
+  public let runID: Int64
+  public let jobID: Int64
   public let epoch: LearningEpoch
   public let digest: EvidenceDigest
   public let eligibility: LearningEligibility
@@ -160,8 +179,8 @@ public struct SealedEvidence: Sendable, Equatable {
   public let sealedAt: Date
 
   public init(
-    runId: Int64,
-    jobId: Int64,
+    runID: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     digest: EvidenceDigest,
     eligibility: LearningEligibility,
@@ -170,8 +189,8 @@ public struct SealedEvidence: Sendable, Equatable {
     payload: EvidencePayload?,
     sealedAt: Date
   ) {
-    self.runId = runId
-    self.jobId = jobId
+    self.runID = runID
+    self.jobID = jobID
     self.epoch = epoch
     self.digest = digest
     self.eligibility = eligibility

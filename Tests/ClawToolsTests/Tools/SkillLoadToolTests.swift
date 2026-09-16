@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawTools
 
-@Suite struct SkillLoadToolTests {
+@Suite
+struct SkillLoadToolTests {
   /// A real temp workspace (containment is realpath-based, so it needs real files) plus a sibling
   /// "outside" directory an escaping symlink can point at.
   private struct Fixture {
@@ -14,8 +15,10 @@ import Testing
   }
 
   private func makeFixture() throws -> Fixture {
-    let base = FileManager.default.temporaryDirectory
-      .appendingPathComponent("claw-skillload-\(UUID().uuidString)", isDirectory: true)
+    let base = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "claw-skillload-\(UUID().uuidString)",
+      isDirectory: true
+    )
     let root = base.appendingPathComponent("workspace", isDirectory: true)
     let outside = base.appendingPathComponent("outside", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -30,9 +33,7 @@ import Testing
     under root: URL,
     directory: String? = nil
   ) throws -> SkillDescriptor {
-    let skillDirectory =
-      root
-      .appendingPathComponent("skills", isDirectory: true)
+    let skillDirectory = root.appendingPathComponent("skills", isDirectory: true)
       .appendingPathComponent(directory ?? name, isDirectory: true)
     try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
     try Data(manifest.utf8).write(to: skillDirectory.appendingPathComponent("SKILL.md"))
@@ -47,7 +48,9 @@ import Testing
   ) -> SkillLoadTool {
     SkillLoadTool(
       workspaceRoot: root,
-      scanSkills: { scan },
+      scanSkills: {
+        scan
+      },
       redactor: SecretRedactor(secretValues: secretValues),
       outputCapGraphemes: outputCapGraphemes
     )
@@ -69,7 +72,8 @@ import Testing
 
   // MARK: - Success
 
-  @Test func loadsTheStrippedBodyWithoutTaintingTheSession() async throws {
+  @Test
+  func loadsTheStrippedBodyWithoutTaintingTheSession() async throws {
     // given
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -94,7 +98,8 @@ import Testing
     #expect(payload.readPrivateData == false)
   }
 
-  @Test func declaresTheSkillsFenceLabelAndASafeNoEgressPosture() throws {
+  @Test
+  func declaresTheSkillsFenceLabelAndASafeNoEgressPosture() throws {
     // given
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -111,7 +116,8 @@ import Testing
     #expect(tool.canonicalTarget(arguments: .object(["name": .string("summarize")])) == nil)
   }
 
-  @Test func redactsSecretsAndCapsTheBody() async throws {
+  @Test
+  func redactsSecretsAndCapsTheBody() async throws {
     // given
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -140,7 +146,8 @@ import Testing
     #expect(payload.content.hasSuffix(ToolOutputCap.truncationMarker))
   }
 
-  @Test func loadsABodyThatContainsAHorizontalRule() async throws {
+  @Test
+  func loadsABodyThatContainsAHorizontalRule() async throws {
     // given — the body's own `---` must not be mistaken for the frontmatter fence
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -171,15 +178,12 @@ import Testing
 
   // MARK: - Errors
 
-  @Test func unknownNameSucceedsAndListsTheInstalledNames() async throws {
+  @Test
+  func unknownNameSucceedsAndListsTheInstalledNames() async throws {
     // given — a self-correcting miss, not a failure
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
-    let summarize = try writeSkill(
-      named: "summarize",
-      manifest: Self.manifest,
-      under: fixture.root
-    )
+    let summarize = try writeSkill(named: "summarize", manifest: Self.manifest, under: fixture.root)
     let review = SkillDescriptor(
       name: "review",
       description: "d",
@@ -200,7 +204,8 @@ import Testing
     #expect(payload.ingestedUntrusted == false)
   }
 
-  @Test func aMissNeverEchoesTheRequestedNameBack() async throws {
+  @Test
+  func aMissNeverEchoesTheRequestedNameBack() async throws {
     // given — the argument is model-supplied text, and every payload renders under the one fence
     // label the prompt licenses as owner-authored guidance
     let fixture = try makeFixture()
@@ -224,7 +229,8 @@ import Testing
     #expect(payload.content.contains("summarize"))
   }
 
-  @Test func resolvesTheManifestByDirectoryEvenWhenTheNameDiffers() async throws {
+  @Test
+  func resolvesTheManifestByDirectoryEvenWhenTheNameDiffers() async throws {
     // given — a provider whose descriptor name is not its directory name
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -247,7 +253,8 @@ import Testing
     #expect(payload.content == "# Summarize\n\nKeep it to three bullets.")
   }
 
-  @Test func resolvesAgainstAFreshScanOnEveryCall() async throws {
+  @Test
+  func resolvesAgainstAFreshScanOnEveryCall() async throws {
     // given — a workspace whose second scan sees a skill the first one did not
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -290,7 +297,8 @@ import Testing
     #expect(box.calls == 2)
   }
 
-  @Test func unknownNameWithNoSkillsInstalledSaysSo() async throws {
+  @Test
+  func unknownNameWithNoSkillsInstalledSaysSo() async throws {
     // given
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -304,7 +312,8 @@ import Testing
     #expect(payload.content.contains("no skills"))
   }
 
-  @Test func duplicateClaimantsRefuseNamingBothDirectories() async throws {
+  @Test
+  func duplicateClaimantsRefuseNamingBothDirectories() async throws {
     // given — the scanner drops both claimants and warns; silent shadowing is the named bug class
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -323,7 +332,8 @@ import Testing
     #expect(payload.content.contains("rename"))
   }
 
-  @Test func duplicateDescriptorsFromAProviderAlsoRefuse() async throws {
+  @Test
+  func duplicateDescriptorsFromAProviderAlsoRefuse() async throws {
     // given — the invariant guard: two descriptors claiming one name never resolve to a body
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -346,7 +356,8 @@ import Testing
     #expect(payload.content.contains("other"))
   }
 
-  @Test func aSymlinkedSkillDirectoryPointingOutsideIsRefused() async throws {
+  @Test
+  func aSymlinkedSkillDirectoryPointingOutsideIsRefused() async throws {
     // given — a skill directory that is a symlink to a directory outside the workspace
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -371,7 +382,8 @@ import Testing
     #expect(payload.content.contains("outside the workspace"))
   }
 
-  @Test func aSymlinkedSkillsDirectoryPointingOutsideIsRefused() async throws {
+  @Test
+  func aSymlinkedSkillsDirectoryPointingOutsideIsRefused() async throws {
     // given — the skills directory itself links out, so it cannot be its own containment boundary
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -396,7 +408,8 @@ import Testing
     #expect(payload.content.contains("outside the workspace"))
   }
 
-  @Test func aMissingOrUnreadableManifestSurfacesAnError() async throws {
+  @Test
+  func aMissingOrUnreadableManifestSurfacesAnError() async throws {
     // given — the file vanished between the scan and the load
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -419,7 +432,8 @@ import Testing
     #expect(payload.ingestedUntrusted == false)
   }
 
-  @Test func aManifestThatLostItsFenceErrorsInsteadOfGuessing() async throws {
+  @Test
+  func aManifestThatLostItsFenceErrorsInsteadOfGuessing() async throws {
     // given — the file changed on disk and no longer has a frontmatter fence
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -441,7 +455,8 @@ import Testing
     #expect(payload.content.contains("frontmatter fence"))
   }
 
-  @Test func aManifestThatIsNotUTF8SurfacesAnError() async throws {
+  @Test
+  func aManifestThatIsNotUTF8SurfacesAnError() async throws {
     // given — a SKILL.md the scanner could once read, rewritten as binary
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -466,7 +481,8 @@ import Testing
     #expect(payload.content.contains("could not be read"))
   }
 
-  @Test func aManifestWithNoInstructionsUnderItsFrontmatterErrors() async throws {
+  @Test
+  func aManifestWithNoInstructionsUnderItsFrontmatterErrors() async throws {
     // given — the author wrote the frontmatter and stopped; the scan indexes it either way
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }
@@ -494,7 +510,8 @@ import Testing
     #expect(payload.content.contains("no instructions"))
   }
 
-  @Test func aMissingOrEmptyNameArgumentIsRefused() async throws {
+  @Test
+  func aMissingOrEmptyNameArgumentIsRefused() async throws {
     // given
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.base) }

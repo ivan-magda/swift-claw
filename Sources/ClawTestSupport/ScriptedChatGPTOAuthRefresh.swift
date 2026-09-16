@@ -15,15 +15,14 @@ public actor ScriptedChatGPTOAuthRefresh: ChatGPTOAuthRefreshing {
   public private(set) var tokensSeen: [String] = []
   public let started = AsyncGate()
 
-  public init(
-    _ script: [Result<ChatGPTTokenPair, ChatGPTOAuthFailure>] = [],
-    hold: Hold = .none
-  ) {
+  public init(_ script: [Result<ChatGPTTokenPair, ChatGPTOAuthFailure>] = [], hold: Hold = .none) {
     self.script = script
     self.hold = hold
   }
 
-  public var callCount: Int { tokensSeen.count }
+  public var callCount: Int {
+    tokensSeen.count
+  }
 
   public func refresh(refreshToken: String, timeout: Duration) async throws -> ChatGPTTokenPair {
     tokensSeen.append(refreshToken)

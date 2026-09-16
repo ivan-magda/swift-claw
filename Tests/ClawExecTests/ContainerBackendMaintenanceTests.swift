@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawExec
 
-@Suite struct ContainerBackendMaintenanceTests {
-  @Test func prepareReapsPullsExactImagesAndPassesHardenedCanary() async throws {
+@Suite
+struct ContainerBackendMaintenanceTests {
+  @Test
+  func prepareReapsPullsExactImagesAndPassesHardenedCanary() async throws {
     // given
     let fixture = try MaintenanceFixture()
     defer { fixture.remove() }
@@ -22,17 +24,14 @@ import Testing
     #expect(health.isReady)
     #expect(health.engineVersion == "1.1.0")
     #expect(
-      await backend.preparedInitImageForTesting
-        == "ghcr.io/apple/containerization/vminit:1.1.0"
+      await backend.preparedInitImageForTesting == "ghcr.io/apple/containerization/vminit:1.1.0"
     )
     let arguments = await runner.recorded().map(\.arguments)
     #expect(
       arguments.contains(ContainerInvocation.pull(fixture.settings.workloadImage.description))
     )
     #expect(
-      arguments.contains(
-        ContainerInvocation.pull("ghcr.io/apple/containerization/vminit:1.1.0")
-      )
+      arguments.contains(ContainerInvocation.pull("ghcr.io/apple/containerization/vminit:1.1.0"))
     )
     #expect(
       !arguments.contains(
@@ -44,11 +43,20 @@ import Testing
         ContainerInvocation.inspectImage(fixture.settings.workloadImage.description)
       )
     )
-    #expect(arguments.contains { $0.first == "run" && $0.contains("--detach") })
-    #expect(arguments.contains { $0.first == "exec" && $0.contains("--user") })
+    #expect(
+      arguments.contains {
+        $0.first == "run" && $0.contains("--detach")
+      }
+    )
+    #expect(
+      arguments.contains {
+        $0.first == "exec" && $0.contains("--user")
+      }
+    )
   }
 
-  @Test func prepareRejectsUnqualifiedRuntimeInitImageBeforePullOrCanary() async throws {
+  @Test
+  func prepareRejectsUnqualifiedRuntimeInitImageBeforePullOrCanary() async throws {
     // given
     let fixture = try MaintenanceFixture(initImage: "vminit:latest")
     defer { fixture.remove() }
@@ -65,11 +73,20 @@ import Testing
     #expect(health.lastError == "container runtime init image is not a registry-qualified tag")
     #expect(await backend.preparedInitImageForTesting == nil)
     let arguments = await runner.recorded().map(\.arguments)
-    #expect(!arguments.contains { $0.starts(with: ["image", "pull"]) })
-    #expect(!arguments.contains { $0.first == "run" })
+    #expect(
+      !arguments.contains {
+        $0.starts(with: ["image", "pull"])
+      }
+    )
+    #expect(
+      !arguments.contains {
+        $0.first == "run"
+      }
+    )
   }
 
-  @Test func reaperRequiresBothOwnedPrefixAndLabel() async throws {
+  @Test
+  func reaperRequiresBothOwnedPrefixAndLabel() async throws {
     // given
     let fixture = try MaintenanceFixture()
     defer { fixture.remove() }
@@ -110,7 +127,8 @@ import Testing
     #expect(!arguments.contains(ContainerInvocation.remove(labelOnly)))
   }
 
-  @Test func workloadDigestMismatchFailsBeforeCanary() async throws {
+  @Test
+  func workloadDigestMismatchFailsBeforeCanary() async throws {
     // given
     let fixture = try MaintenanceFixture(
       inspectedDigest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -128,10 +146,15 @@ import Testing
     #expect(!health.imageDigestOK)
     #expect(!health.isReady)
     #expect(await backend.preparedInitImageForTesting == nil)
-    #expect(!(await runner.recorded()).contains { $0.arguments.first == "run" })
+    #expect(
+      !(await runner.recorded()).contains {
+        $0.arguments.first == "run"
+      }
+    )
   }
 
-  @Test func canaryReportsEachGuestAndHostHardeningBit() async throws {
+  @Test
+  func canaryReportsEachGuestAndHostHardeningBit() async throws {
     // given
     let fixture = try MaintenanceFixture(
       guestProbe: GuestProbeFixture(
@@ -167,7 +190,8 @@ import Testing
     #expect(await backend.preparedInitImageForTesting == nil)
   }
 
-  @Test func truncatedPropertyOrInspectJSONFailsClosed() async throws {
+  @Test
+  func truncatedPropertyOrInspectJSONFailsClosed() async throws {
     // given
     let fixture = try MaintenanceFixture()
     defer { fixture.remove() }
@@ -192,7 +216,8 @@ import Testing
     #expect(health.lastError == "could not read container runtime properties")
   }
 
-  @Test func prepareRefusesWithoutIssuingCommandsWhileAnExecutionIsInFlight() async throws {
+  @Test
+  func prepareRefusesWithoutIssuingCommandsWhileAnExecutionIsInFlight() async throws {
     // given
     let fixture = try MaintenanceFixture()
     defer { fixture.remove() }
@@ -205,12 +230,13 @@ import Testing
         return commandResult(.cancelled)
       }
       return command.arguments == ContainerInvocation.listAll()
-        ? jsonCommandResult("[]")
-        : commandResult(.exited(0))
+        ? jsonCommandResult("[]") : commandResult(.exited(0))
     }
     let backend = fixture.backend(commands: runner)
     await backend.setPreparedInitImageForTesting(fixture.initImage)
-    let run = Task { await backend.run(maintenanceRequest()) }
+    let run = Task {
+      await backend.run(maintenanceRequest())
+    }
     await runner.waitForCount(1)
     let commandsBeforePrepare = await runner.recorded().count
 
@@ -225,7 +251,8 @@ import Testing
     _ = await run.value
   }
 
-  @Test func shutdownCancelsRunningWorkThenReapsAndSweeps() async throws {
+  @Test
+  func shutdownCancelsRunningWorkThenReapsAndSweeps() async throws {
     // given
     let fixture = try MaintenanceFixture()
     defer { fixture.remove() }
@@ -238,12 +265,13 @@ import Testing
         return commandResult(.cancelled)
       }
       return command.arguments == ContainerInvocation.listAll()
-        ? jsonCommandResult("[]")
-        : commandResult(.exited(0))
+        ? jsonCommandResult("[]") : commandResult(.exited(0))
     }
     let backend = fixture.backend(commands: runner)
     await backend.setPreparedInitImageForTesting(fixture.initImage)
-    let run = Task { await backend.run(maintenanceRequest()) }
+    let run = Task {
+      await backend.run(maintenanceRequest())
+    }
     await runner.waitForCount(1)
 
     // when
@@ -255,7 +283,11 @@ import Testing
     #expect(result.terminationReason == .cancelled)
     #expect(await backend.preparedInitImageForTesting == nil)
     #expect(try scratchChildren(fixture.root).isEmpty)
-    #expect((await runner.recorded()).contains { $0.arguments == ContainerInvocation.listAll() })
+    #expect(
+      (await runner.recorded()).contains {
+        $0.arguments == ContainerInvocation.listAll()
+      }
+    )
   }
 }
 
@@ -298,22 +330,18 @@ private final class MaintenanceFixture: @unchecked Sendable {
       "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     guestProbe: GuestProbeFixture = .passing
   ) throws {
-    root = FileManager.default.temporaryDirectory
-      .appending(path: "clawd-maintenance-tests-\(UUID().uuidString.lowercased())")
+    root = FileManager.default.temporaryDirectory.appending(
+      path: "clawd-maintenance-tests-\(UUID().uuidString.lowercased())"
+    )
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
-    guard
-      let workloadImage = PinnedImageReference.parse(
+    guard let workloadImage = PinnedImageReference.parse(
         // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
         "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      )
+    )
     else {
       throw MaintenanceFixtureError.missingIdentity
     }
-    settings = ExecSandboxSettings(
-      workloadImage: workloadImage,
-      memoryMiB: 1024,
-      cpus: 4
-    )
+    settings = ExecSandboxSettings(workloadImage: workloadImage, memoryMiB: 1024, cpus: 4)
     self.initImage = initImage
     self.inspectedDigest = inspectedDigest
     self.guestProbe = guestProbe
@@ -324,9 +352,15 @@ private final class MaintenanceFixture: @unchecked Sendable {
       settings: settings,
       stateRoot: root,
       commands: commands,
-      sanitizeReason: { $0 },
-      now: { ContinuousClock.now },
-      supportedHost: { true }
+      sanitizeReason: {
+        $0
+      },
+      now: {
+        ContinuousClock.now
+      },
+      supportedHost: {
+        true
+      }
     )
   }
 

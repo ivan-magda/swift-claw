@@ -10,7 +10,8 @@ import Testing
 /// which also sees the history recorded so far (including the current command).
 actor ScriptedCommandRunner: SubprocessRunning {
   typealias Handler =
-    @Sendable (SubprocessCommand, [SubprocessCommand]) async -> SubprocessResult
+    @Sendable (_ command: SubprocessCommand, _ history: [SubprocessCommand]) async ->
+    SubprocessResult
 
   private let handler: Handler
   private var commands: [SubprocessCommand] = []
@@ -23,15 +24,21 @@ actor ScriptedCommandRunner: SubprocessRunning {
   func run(_ command: SubprocessCommand) async -> SubprocessResult {
     commands.append(command)
     let history = commands
-    let ready = waiters.filter { history.count >= $0.0 }
-    waiters.removeAll { history.count >= $0.0 }
+    let ready = waiters.filter {
+      history.count >= $0.0
+    }
+    waiters.removeAll {
+      history.count >= $0.0
+    }
     for waiter in ready {
       waiter.1.resume()
     }
     return await handler(command, history)
   }
 
-  func recorded() -> [SubprocessCommand] { commands }
+  func recorded() -> [SubprocessCommand] {
+    commands
+  }
 
   func waitForCount(_ count: Int) async {
     if commands.count >= count {
@@ -115,13 +122,10 @@ func value(after flag: String, in arguments: [String]) -> String? {
 // A foreground run invocation always carries both flags; failing loudly here beats a silent
 // no-op that would only surface later as an unrelated classification failure.
 func writeCidfile(from arguments: [String]) {
-  guard
-    let path = value(after: "--cidfile", in: arguments),
-    let name = value(after: "--name", in: arguments),
-    (try? Data(name.utf8).write(
-      to: URL(fileURLWithPath: path),
-      options: .withoutOverwriting
-    )) != nil
+  guard let path = value(after: "--cidfile", in: arguments),
+        let name = value(after: "--name", in: arguments),
+        (try? Data(name.utf8).write(to: URL(fileURLWithPath: path), options: .withoutOverwriting))
+        != nil
   else {
     preconditionFailure("run invocation did not carry cidfile identity")
   }
@@ -132,18 +136,16 @@ func scratchChildren(_ stateRoot: URL) throws -> [URL] {
   guard FileManager.default.fileExists(atPath: root.path) else {
     return []
   }
-  return try FileManager.default.contentsOfDirectory(
-    at: root,
-    includingPropertiesForKeys: nil
-  )
+  return try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
 }
 
 struct ScratchFixture {
   let root: URL
 
   init() throws {
-    root = FileManager.default.temporaryDirectory
-      .appending(path: "clawd-scratch-tests-\(UUID().uuidString.lowercased())")
+    root = FileManager.default.temporaryDirectory.appending(
+      path: "clawd-scratch-tests-\(UUID().uuidString.lowercased())"
+    )
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
   }
 
@@ -185,8 +187,9 @@ struct BackendFixture {
   let settings: ExecSandboxSettings
 
   init() throws {
-    root = FileManager.default.temporaryDirectory
-      .appending(path: "clawd-backend-tests-\(UUID().uuidString.lowercased())")
+    root = FileManager.default.temporaryDirectory.appending(
+      path: "clawd-backend-tests-\(UUID().uuidString.lowercased())"
+    )
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
     settings = ExecSandboxSettings(
       workloadImage: try #require(
@@ -202,11 +205,17 @@ struct BackendFixture {
 
   func backend(
     commands: any SubprocessRunning = NoopCommandRunner(),
-    sanitizeReason: @escaping @Sendable (String) -> String = { $0 },
-    now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now },
-    supportedHost: @escaping @Sendable () -> Bool = { true },
+    sanitizeReason: @escaping @Sendable (_ reason: String) -> String = {
+      $0
+    },
+    now: @escaping @Sendable () -> ContinuousClock.Instant = {
+      ContinuousClock.now
+    },
+    supportedHost: @escaping @Sendable () -> Bool = {
+      true
+    },
     executionAdmitted: @escaping @Sendable () -> Void = {},
-    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
+    watchdogSleep: @escaping @Sendable (_ duration: Duration) async throws -> Void = { duration in
       try await Task.sleep(for: duration)
     }
   ) -> ContainerBackend {
@@ -287,8 +296,12 @@ final class ExecutionAdmissionRecorder: Sendable {
   func record() {
     let ready = state.withLock { current in
       current.count += 1
-      let ready = current.waiters.filter { current.count >= $0.0 }
-      current.waiters.removeAll { current.count >= $0.0 }
+      let ready = current.waiters.filter {
+        current.count >= $0.0
+      }
+      current.waiters.removeAll {
+        current.count >= $0.0
+      }
       return ready
     }
     for waiter in ready {

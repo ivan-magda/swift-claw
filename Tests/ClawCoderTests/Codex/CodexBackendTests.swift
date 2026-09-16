@@ -5,7 +5,8 @@ import Testing
 @testable import ClawCoder
 
 struct CodexBackendTests {
-  @Test func cliBoundary() async throws {
+  @Test
+  func cliBoundary() async throws {
     // given
     let fixture = try await CodexFixture()
     defer { try? FileManager.default.removeItem(at: fixture.git.root) }
@@ -26,7 +27,8 @@ struct CodexBackendTests {
     try fixture.report(["summary": "token-fixture Done", "checks": ["token-fixture check"]])
     let backend = try fixture.backend(
       extraEnvironment: [
-        "UNRELATED_SENTINEL": "private", "GH_TOKEN": "token-fixture",
+        "UNRELATED_SENTINEL": "private",
+        "GH_TOKEN": "token-fixture",
         "CLAW_TELEGRAM_BOT_TOKEN": "telegram-private",
       ],
       profile: "coding"
@@ -51,10 +53,24 @@ struct CodexBackendTests {
     let resultPath = try #require(argv.firstIndex(of: "-o")).advanced(by: 1)
     #expect(
       argv == [
-        "exec", "--json", "--approve-for-me", "-c",
+        "exec",
+        "--json",
+        "--approve-for-me",
+        "-c",
         "approval_policy=\"\(CodexBackend.approvalPolicy)\"",
-        "--skip-git-repo-check", "--ephemeral", "--color", "never", "-C", fixture.git.source.path,
-        "--output-schema", argv[schemaPath], "-o", argv[resultPath], "--profile", "coding", "-",
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--color",
+        "never",
+        "-C",
+        fixture.git.source.path,
+        "--output-schema",
+        argv[schemaPath],
+        "-o",
+        argv[resultPath],
+        "--profile",
+        "coding",
+        "-",
       ]
     )
     #expect(try fixture.read("stdin").contains(task))
@@ -75,7 +91,14 @@ struct CodexBackendTests {
   }
 
   @Test(arguments: [
-    "blocked", "failed", "eventFailed", "exit", "terminal", "missing", "invalid", "symlink",
+    "blocked",
+    "failed",
+    "eventFailed",
+    "exit",
+    "terminal",
+    "missing",
+    "invalid",
+    "symlink",
     "largeReport",
     "largeFrame",
   ])
@@ -84,11 +107,16 @@ struct CodexBackendTests {
     let fixture = try await CodexFixture()
     defer { try? FileManager.default.removeItem(at: fixture.git.root) }
     switch mode {
-    case "blocked", "failed": try fixture.report(["status": mode, "error": "Worker reason"])
-    case "eventFailed": try fixture.write("events", "{\"type\":\"turn.failed\"}\n")
-    case "exit": try fixture.write("exit", "7")
-    case "terminal": try fixture.write("events", "{\"type\":\"item.completed\"}\n")
-    case "missing": try fixture.write("no-report", "")
+    case "blocked", "failed":
+      try fixture.report(["status": mode, "error": "Worker reason"])
+    case "eventFailed":
+      try fixture.write("events", "{\"type\":\"turn.failed\"}\n")
+    case "exit":
+      try fixture.write("exit", "7")
+    case "terminal":
+      try fixture.write("events", "{\"type\":\"item.completed\"}\n")
+    case "missing":
+      try fixture.write("no-report", "")
     case "invalid":
       let data = Data(try fixture.read("report").utf8)
       var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -109,7 +137,8 @@ struct CodexBackendTests {
       let bytes = try JSONSerialization.data(withJSONObject: event)
       let eventText = try #require(String(data: bytes, encoding: .utf8))
       try fixture.write("events", eventText + "\n" + fixture.read("events"))
-    default: break
+    default:
+      break
     }
     let invocation = try await fixture.invocation()
 
@@ -151,18 +180,22 @@ private extension CodexBackendTests {
     #expect(status["type"] as? String == "string")
     let statuses = try #require(status["enum"] as? [String])
     let expectedStatuses = Set([
-      CodexReportStatus.succeeded.rawValue, CodexReportStatus.blocked.rawValue,
+      CodexReportStatus.succeeded.rawValue,
+      CodexReportStatus.blocked.rawValue,
       CodexReportStatus.failed.rawValue,
     ])
     #expect(Set(statuses) == expectedStatuses)
     #expect(statuses.count == expectedStatuses.count)
     #expect(
-      properties[CodexReport.CodingKeys.summary.rawValue] as? [String: String] == [
-        "type": "string"
-      ]
+      properties[CodexReport.CodingKeys.summary.rawValue] as? [String: String] == ["type": "string"]
     )
     let nullableStrings: [CodexReport.CodingKeys] = [
-      .startingCommit, .baseBranch, .branch, .commit, .prURL, .error,
+      .startingCommit,
+      .baseBranch,
+      .branch,
+      .commit,
+      .prURL,
+      .error,
     ]
     for key in nullableStrings {
       let property = try #require(properties[key.rawValue])

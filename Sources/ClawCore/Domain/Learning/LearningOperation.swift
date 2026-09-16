@@ -5,7 +5,7 @@ import Foundation
 /// prompt change asks a different question about the same evidence, and the answer to the old one
 /// must not be reused as the answer to the new.
 public struct LearningOperationKey: Sendable, Hashable {
-  public let jobId: Int64
+  public let jobID: Int64
   public let epoch: LearningEpoch
   public let phase: LearningPhase
   /// The evaluator's sealed evidence digest, or the reflector's frozen trigger identity.
@@ -15,7 +15,7 @@ public struct LearningOperationKey: Sendable, Hashable {
   public let rubricVersion: Int
 
   public init(
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     phase: LearningPhase,
     sourceDigest: String,
@@ -23,7 +23,7 @@ public struct LearningOperationKey: Sendable, Hashable {
     schemaVersion: Int,
     rubricVersion: Int
   ) {
-    self.jobId = jobId
+    self.jobID = jobID
     self.epoch = epoch
     self.phase = phase
     self.sourceDigest = sourceDigest
@@ -37,7 +37,7 @@ public struct LearningOperationKey: Sendable, Hashable {
   public var digest: LearningOperationKeyDigest {
     let fields = [
       Self.canonicalPrefix,
-      String(jobId),
+      String(jobID),
       String(epoch.value),
       phase.rawValue,
       sourceDigest,
@@ -97,7 +97,7 @@ public struct CarrierAuthorization: Sendable, Equatable {
 /// budget gate travels with the request because the policy belongs to the caller, while the totals
 /// it is applied to may only be read inside the transaction that writes the reservation.
 public struct LearningAuthorization: Sendable {
-  public let operationId: LearningOperationID
+  public let operationID: LearningOperationID
   public let carrier: CarrierAuthorization
   public let estimatedTokens: Int
   public let estimatedCostUSD: Double
@@ -107,7 +107,7 @@ public struct LearningAuthorization: Sendable {
   public let context: LearningAuthorizationContext
 
   public init(
-    operationId: LearningOperationID,
+    operationID: LearningOperationID,
     carrier: CarrierAuthorization,
     estimatedTokens: Int,
     estimatedCostUSD: Double,
@@ -116,7 +116,7 @@ public struct LearningAuthorization: Sendable {
     budget: BudgetGate,
     context: LearningAuthorizationContext = .evaluation
   ) {
-    self.operationId = operationId
+    self.operationID = operationID
     self.carrier = carrier
     self.estimatedTokens = estimatedTokens
     self.estimatedCostUSD = estimatedCostUSD
@@ -246,7 +246,7 @@ public struct LearningEvaluation: Sendable, Equatable {
 public struct NoCandidateResult: Sendable, Equatable {
   public let algorithm: LearningAlgorithm
   public let triggerDigest: TriggerDigest
-  public let operationId: LearningOperationID
+  public let operationID: LearningOperationID
   public let carrierDigest: CarrierDigest
   public let resultDigest: ReflectionResultDigest
   public let authorization: ReflectionAuthorization
@@ -254,14 +254,14 @@ public struct NoCandidateResult: Sendable, Equatable {
   public init(
     algorithm: LearningAlgorithm,
     triggerDigest: TriggerDigest,
-    operationId: LearningOperationID,
+    operationID: LearningOperationID,
     carrierDigest: CarrierDigest,
     resultDigest: ReflectionResultDigest,
     authorization: ReflectionAuthorization
   ) {
     self.algorithm = algorithm
     self.triggerDigest = triggerDigest
-    self.operationId = operationId
+    self.operationID = operationID
     self.carrierDigest = carrierDigest
     self.resultDigest = resultDigest
     self.authorization = authorization
@@ -287,16 +287,16 @@ public enum LearningOperationProduct: Sendable, Equatable {
 /// One network boundary crossing, closed. Every product travels with the result because a
 /// finished key is never reopened after an ordinary completed generation.
 public struct LearningOperationResult: Sendable, Equatable {
-  public let operationId: LearningOperationID
+  public let operationID: LearningOperationID
   public let usage: LearningCallUsage
   public let product: LearningOperationProduct
 
   public init(
-    operationId: LearningOperationID,
+    operationID: LearningOperationID,
     usage: LearningCallUsage,
     product: LearningOperationProduct
   ) {
-    self.operationId = operationId
+    self.operationID = operationID
     self.usage = usage
     self.product = product
   }
@@ -305,12 +305,12 @@ public struct LearningOperationResult: Sendable, Equatable {
 /// The learning scope on a `provider_usage` row. A learning call belongs to no run, so without
 /// this pair its spend cannot reach the origin-filtered proactive total the algorithm charges.
 public struct LearningUsageScope: Sendable, Equatable {
-  public let operationId: LearningOperationID
-  public let jobId: Int64
+  public let operationID: LearningOperationID
+  public let jobID: Int64
 
-  public init(operationId: LearningOperationID, jobId: Int64) {
-    self.operationId = operationId
-    self.jobId = jobId
+  public init(operationID: LearningOperationID, jobID: Int64) {
+    self.operationID = operationID
+    self.jobID = jobID
   }
 }
 

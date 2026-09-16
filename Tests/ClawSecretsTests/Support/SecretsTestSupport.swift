@@ -3,19 +3,19 @@ import ClawTestSupport
 import Foundation
 import Testing
 
-@testable import ClawSecrets
-
 #if canImport(Glibc)
   import Glibc
 #else
   import Darwin
 #endif
 
+@testable import ClawSecrets
+
 // MARK: - Fixtures
 
 /// The runtime secrets a login seals: a Telegram token and no LLM key (the ChatGPT route needs
 /// none). One notion of the sealed runtime fixture for every suite in the target.
-let runtimeSecrets = Secrets(telegramBotToken: "123:runtime", llmApiKey: nil)
+let runtimeSecrets = Secrets(telegramBotToken: "123:runtime", llmAPIKey: nil)
 
 /// A state root as login leaves it: the runtime secrets sealed, so `secret.key` exists and the
 /// credential store has something to seal under.

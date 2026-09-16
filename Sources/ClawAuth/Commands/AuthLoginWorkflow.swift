@@ -12,7 +12,7 @@ public protocol AuthRuntimeSecretPreparing: Sendable {
 /// depends on the outcome, not on the poll loop that produced it.
 public protocol ChatGPTDeviceAuthorizing: Sendable {
   func authorize(
-    onDeviceCode: @escaping @Sendable (ChatGPTDeviceCode) async -> Void
+    onDeviceCode: @escaping @Sendable (_ deviceCode: ChatGPTDeviceCode) async -> Void
   ) async throws -> ChatGPTAuthorizationGrant
 }
 
@@ -84,7 +84,9 @@ private extension AuthLoginWorkflow {
       }
     } catch is CancellationError {
       return AuthCommandResultMapper.cancelled
-    } catch let failure as ChatGPTOAuthFailure {
+    } catch let failure
+      as ChatGPTOAuthFailure
+    {
       return AuthCommandResultMapper.result(for: failure)
     } catch {
       return AuthCommandResultMapper.unexpected()
@@ -98,7 +100,9 @@ private extension AuthLoginWorkflow {
       )
     } catch is CancellationError {
       return AuthCommandResultMapper.cancelled
-    } catch let failure as ChatGPTOAuthFailure {
+    } catch let failure
+      as ChatGPTOAuthFailure
+    {
       return AuthCommandResultMapper.result(for: failure)
     } catch {
       return AuthCommandResultMapper.unexpected()
@@ -127,9 +131,7 @@ private extension AuthLoginWorkflow {
       return AuthCommandResultMapper.credentialStoreResult(for: error)
     }
 
-    await transcript.emit([
-      .output("Logged in to \(ChatGPTProviderMetadata.providerID.rawValue).")
-    ])
+    await transcript.emit([.output("Logged in to \(ChatGPTProviderMetadata.providerID.rawValue).")])
     await selectModel(pair: pair, transcript: transcript)
 
     return AuthCommandResult(exit: .success, events: [])
@@ -171,13 +173,12 @@ private extension AuthLoginWorkflow {
     // The default is computed by the same pure selector the prompt uses, with the terminal denied.
     // That is what makes the choice an unattended run takes provably the one a terminal would have
     // offered rather than a second rule that happens to agree today.
-    guard
-      case .chose(let fallback) = ChatGPTModelPicker.select(
-        catalog: models,
-        configuredSuffix: configuredSuffix,
-        isInteractive: false,
-        chosenIndex: nil
-      )
+    guard case .chose(let fallback) = ChatGPTModelPicker.select(
+      catalog: models,
+      configuredSuffix: configuredSuffix,
+      isInteractive: false,
+      chosenIndex: nil
+    )
     else {
       return nil
     }
@@ -195,7 +196,8 @@ private extension AuthLoginWorkflow {
       }
 
       guard let index = Int(typed) else {
-        await transcript.emit([.error("That is not a number. Enter a row number, or press return.")]
+        await transcript.emit(
+          [.error("That is not a number. Enter a row number, or press return.")]
         )
         continue
       }
@@ -210,7 +212,7 @@ private extension AuthLoginWorkflow {
         return choice
       case .indexOutOfRange:
         await transcript.emit([
-          .error("There is no row \(index). Enter a number from 1 to \(models.count).")
+          .error("There is no row \(index). Enter a number from 1 to \(models.count)."),
         ])
       case .noEligibleModels:
         return nil

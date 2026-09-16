@@ -6,8 +6,7 @@ struct AgentFailureClassification {
 
   init(error: any Error) {
     let isDeadline =
-      error is ProviderNoStartDeadline
-      || error is RacedDeadlineSuccess
+      error is ProviderNoStartDeadline || error is RacedDeadlineSuccess
       || error is ProviderInferenceCancellation
     if isDeadline {
       self = Self.unavailable(failureCause: .deadline)
@@ -27,10 +26,7 @@ struct AgentFailureClassification {
     self = Self.classify(providerCause)
   }
 
-  private init(
-    degradationKind: DegradationKind,
-    attemptFailureCause: AttemptFailureCause?
-  ) {
+  private init(degradationKind: DegradationKind, attemptFailureCause: AttemptFailureCause?) {
     self.degradationKind = degradationKind
     self.attemptFailureCause = attemptFailureCause
   }
@@ -49,30 +45,18 @@ private extension AgentFailureClassification {
     case .retryable, .rejected, .terminal, .cleanRejection:
       unavailable()
     case .authenticationRequired:
-      Self(
-        degradationKind: .authenticationRequired,
-        attemptFailureCause: nil
-      )
+      Self(degradationKind: .authenticationRequired, attemptFailureCause: nil)
     case .accessDenied:
-      Self(
-        degradationKind: .accessDenied,
-        attemptFailureCause: nil
-      )
+      Self(degradationKind: .accessDenied, attemptFailureCause: nil)
     case .quotaLimited(let retryAfterSeconds):
       Self(
         degradationKind: .quotaLimited(retryAfterSeconds: retryAfterSeconds),
         attemptFailureCause: nil
       )
     case .invalidProviderState:
-      Self(
-        degradationKind: .invalidProviderState,
-        attemptFailureCause: nil
-      )
+      Self(degradationKind: .invalidProviderState, attemptFailureCause: nil)
     case .visionUnsupported:
-      Self(
-        degradationKind: .visionUnsupported,
-        attemptFailureCause: nil
-      )
+      Self(degradationKind: .visionUnsupported, attemptFailureCause: nil)
     case .credentialRefreshCompleted:
       unavailable(failureCause: .credentialRefreshCompleted)
     case .credentialRefreshExhausted:
@@ -88,12 +72,7 @@ private extension AgentFailureClassification {
     }
   }
 
-  static func unavailable(
-    failureCause: AttemptFailureCause? = nil
-  ) -> Self {
-    Self(
-      degradationKind: .providerUnavailable,
-      attemptFailureCause: failureCause
-    )
+  static func unavailable(failureCause: AttemptFailureCause? = nil) -> Self {
+    Self(degradationKind: .providerUnavailable, attemptFailureCause: failureCause)
   }
 }

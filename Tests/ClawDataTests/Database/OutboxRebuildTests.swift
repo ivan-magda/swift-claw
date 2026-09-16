@@ -5,10 +5,12 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct OutboxRebuildTests {
+@Suite
+struct OutboxRebuildTests {
   private static let seededAt = Date(timeIntervalSince1970: 1_700_000_000)
 
-  @Test func vThirteenCarriesEveryDeliveredRowAcrossTheRebuildAsRunSourced() throws {
+  @Test
+  func vThirteenCarriesEveryDeliveredRowAcrossTheRebuildAsRunSourced() throws {
     // given — a populated v10 database, i.e. rows written while run_id was still NOT NULL
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVTen(queue)
@@ -30,7 +32,8 @@ import Testing
     #expect(deliveries[0]["delivery_source"] == DeliverySource.run.rawValue)
   }
 
-  @Test func aRunSourcedRowMayNeverLoseItsRun() throws {
+  @Test
+  func aRunSourcedRowMayNeverLoseItsRun() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)

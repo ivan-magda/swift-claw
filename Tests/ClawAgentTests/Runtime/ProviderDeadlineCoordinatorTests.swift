@@ -51,33 +51,39 @@ private func awaitCancellation() async {
 /// The streaming runtime's consumer, reduced to what a coordinator test needs: read to the terminal,
 /// claim the race on it, and defer everything else — content included — to the stream's own join.
 private let consumeToTerminal:
-  @Sendable (LLMEventStream, ProviderRaceBox) async -> StreamConsumerOutcome = { stream, box in
-    do {
-      for try await event in stream {
-        try Task.checkCancellation()
-        switch event {
-        case .delta:
-          continue
-        case .finished:
-          _ = box.claim(.provider)
-          return .completed
+  @Sendable (_ stream: LLMEventStream, _ box: ProviderRaceBox)
+    async -> StreamConsumerOutcome = {
+      stream,
+      box in
+      do {
+        for try await event in stream {
+          try Task.checkCancellation()
+          switch event {
+          case .delta:
+            continue
+          case .finished:
+            _ = box.claim(.provider)
+            return .completed
+          }
         }
+        return .cut
+      } catch {
+        return .cut
       }
-      return .cut
-    } catch {
-      return .cut
     }
-  }
 
 /// A consumer that never reads — it parks until cancelled — so the terminal's final event stays
 /// unconsumed while the deadline takes the lock.
 private let neverReadingConsume:
-  @Sendable (LLMEventStream, ProviderRaceBox) async -> StreamConsumerOutcome = { _, _ in
-    await awaitCancellation()
-    return .cut
-  }
+  @Sendable (_ stream: LLMEventStream, _ box: ProviderRaceBox)
+    async -> StreamConsumerOutcome = {
+      _,
+      _ in
+      await awaitCancellation()
+      return .cut
+    }
 
-private let noAuxiliary: @Sendable (ProviderRaceBox) async -> Void = { _ in }
+private let noAuxiliary: @Sendable (_ box: ProviderRaceBox) async -> Void = { _ in }
 
 // MARK: - Outcome plumbing
 
@@ -159,7 +165,9 @@ private actor GatedSend {
   private(set) var observedCancellation = false
 
   /// True once `run` has begun, so a test can wait for the send to be in flight before cancelling it.
-  var started: Bool { startGate.isOpen }
+  var started: Bool {
+    startGate.isOpen
+  }
 
   func run() async {
     startGate.open()
@@ -180,121 +188,123 @@ private actor GatedSend {
 }
 
 // One @Suite of deadline-coordinator behaviors sharing the fixtures above.
-@Suite struct ProviderDeadlineCoordinatorTests {
+@Suite
+struct ProviderDeadlineCoordinatorTests {
   // MARK: - Buffered race
 
-  @Test func providerSuccessBeforeTheDeadlineReturnsTheResponse() async throws {
+  @Test
+  func providerSuccessBeforeTheDeadlineReturnsTheResponse() async throws {
     // given — the deadline parks until cancelled, so the provider wins outright
     let expected = racedResponse(content: "won")
 
     // when
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: 180,
-      clock: deadlineParkedUntilCancelledClock,
-      call: {
-        .response(expected)
-      }
-    )
+      clock: deadlineParkedUntilCancelledClock
+    ) {
+      .response(expected)
+    }
 
     // then
     let response = try requireResponse(outcome)
     #expect(response == expected)
   }
 
-  @Test func providerFailureBeforeTheDeadlineSurfacesTheFailure() async throws {
+  @Test
+  func providerFailureBeforeTheDeadlineSurfacesTheFailure() async throws {
     // given
     let failure = ProviderError.terminal(status: 400, message: "bad request")
 
     // when
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: 180,
-      clock: deadlineParkedUntilCancelledClock,
-      call: {
-        .failed(failure)
-      }
-    )
+      clock: deadlineParkedUntilCancelledClock
+    ) {
+      .failed(failure)
+    }
 
     // then
     let error = try requireFailed(outcome)
     #expect(error as? ProviderError == failure)
   }
 
-  @Test func aNotStartedFailureUnderAWonDeadlineTimesOutNotStarted() async throws {
+  @Test
+  func aNotStartedFailureUnderAWonDeadlineTimesOutNotStarted() async throws {
     // given — the deadline fires instantly; the provider, cancelled during authorization, hands back
     // a typed failure tagged `.notStarted`, so the timeout owes nothing
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: 180,
-      clock: instantDeadlineClock,
-      call: {
-        await awaitCancellation()
-        return .failed(
-          ProviderFailure(
-            cause: .terminal(status: nil, message: "cancelled before send"),
-            accounting: .notStarted
-          )
+      clock: instantDeadlineClock
+    ) {
+      await awaitCancellation()
+      return .failed(
+        ProviderFailure(
+          cause: .terminal(status: nil, message: "cancelled before send"),
+          accounting: .notStarted
         )
-      }
-    )
+      )
+    }
 
     // then
     let accounting = try requireTimedOut(outcome)
     #expect(accounting == .notStarted)
   }
 
-  @Test func aRawCancellationErrorUnderAWonDeadlineTimesOutNotStarted() async throws {
+  @Test
+  func aRawCancellationErrorUnderAWonDeadlineTimesOutNotStarted() async throws {
     // given — the deadline fires first; the provider, cancelled before it reached transport, surfaces
     // the bare CancellationError its `complete` contract produces for a proven no-start. That is a
     // no-debit timeout, the same disposition the non-deadline path reads it as.
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: 180,
-      clock: instantDeadlineClock,
-      call: {
-        await awaitCancellation()
-        return .failed(CancellationError())
-      }
-    )
+      clock: instantDeadlineClock
+    ) {
+      await awaitCancellation()
+      return .failed(CancellationError())
+    }
 
     // then
     let accounting = try requireTimedOut(outcome)
     #expect(accounting == .notStarted)
   }
 
-  @Test func aBareTerminalProviderErrorUnderAWonDeadlineTimesOutNotStarted() async throws {
+  @Test
+  func aBareTerminalProviderErrorUnderAWonDeadlineTimesOutNotStarted() async throws {
     // given — a bare ProviderError head rejection (a 4xx whose head proves the server answered
     // instead of inferring) loses under the deadline. Routed through the one accounting reducer, it
     // resolves to the same no-start the non-deadline path gives it — never a conservative debit.
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: 180,
-      clock: instantDeadlineClock,
-      call: {
-        await awaitCancellation()
-        return .failed(ProviderError.terminal(status: 400, message: "bad request"))
-      }
-    )
+      clock: instantDeadlineClock
+    ) {
+      await awaitCancellation()
+      return .failed(ProviderError.terminal(status: 400, message: "bad request"))
+    }
 
     // then
     let accounting = try requireTimedOut(outcome)
     #expect(accounting == .notStarted)
   }
 
-  @Test func typedCancellationUnderAWonDeadlineKeepsTheObservedCount() async throws {
+  @Test
+  func typedCancellationUnderAWonDeadlineKeepsTheObservedCount() async throws {
     // given — the provider, cancelled after an ambiguous handoff, reports a typed inference
     // cancellation; the timeout is conservative and keeps the observed lower bound
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: 180,
-      clock: instantDeadlineClock,
-      call: {
-        await awaitCancellation()
-        return .failed(ProviderInferenceCancellation(observing: 7))
-      }
-    )
+      clock: instantDeadlineClock
+    ) {
+      await awaitCancellation()
+      return .failed(ProviderInferenceCancellation(observing: 7))
+    }
 
     // then
     let accounting = try requireTimedOut(outcome)
     #expect(accounting == .mayHaveStarted(observedCompletionTokens: 7))
   }
 
-  @Test func aResponseRacingUnderAWonDeadlineSurvivesAsAuthoritativeUsage() async throws {
+  @Test
+  func aResponseRacingUnderAWonDeadlineSurvivesAsAuthoritativeUsage() async throws {
     // given — the deadline takes the lock first, but the provider finishes with a real response
     // anyway. The loser is drained, not discarded: the response survives for its authoritative usage,
     // while the owner-visible outcome stays a timeout.
@@ -303,19 +313,19 @@ private actor GatedSend {
     // when
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: 180,
-      clock: instantDeadlineClock,
-      call: {
-        await awaitCancellation()
-        return .response(expected)
-      }
-    )
+      clock: instantDeadlineClock
+    ) {
+      await awaitCancellation()
+      return .response(expected)
+    }
 
     // then
     let accounting = try requireTimedOut(outcome)
     #expect(accounting == .completed(expected))
   }
 
-  @Test func aProviderWinCancelsAndDrainsTheDeadlineTimer() async throws {
+  @Test
+  func aProviderWinCancelsAndDrainsTheDeadlineTimer() async throws {
     // given — a clock whose sleep records that it was cancelled, so "the timer was cancelled and
     // drained" is observable rather than inferred from the test merely finishing
     let timerCancelled = CompletionFlag()
@@ -330,11 +340,10 @@ private actor GatedSend {
     // when
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: 180,
-      clock: recordingClock,
-      call: {
-        .response(expected)
-      }
-    )
+      clock: recordingClock
+    ) {
+      .response(expected)
+    }
 
     // then — the response returns and the timer was cancelled, never left to fire its full window
     let response = try requireResponse(outcome)
@@ -354,13 +363,12 @@ private actor GatedSend {
     let box = runOutcome {
       let outcome = await ProviderDeadlineCoordinator.raceBuffered(
         deadlineSeconds: 180,
-        clock: instantDeadlineClock,
-        call: {
-          await providerGate.markStartedAndWaitForRelease()
-          await providerExited.markDone()
-          return .failed(ProviderInferenceCancellation(observing: 3))
-        }
-      )
+        clock: instantDeadlineClock
+      ) {
+        await providerGate.markStartedAndWaitForRelease()
+        await providerExited.markDone()
+        return .failed(ProviderInferenceCancellation(observing: 3))
+      }
       await returned.markDone()
       return outcome
     }
@@ -379,7 +387,8 @@ private actor GatedSend {
 
   // MARK: - Streaming race
 
-  @Test func aCachedTerminalUnderAWonDeadlineStillSucceeds() async throws {
+  @Test
+  func aCachedTerminalUnderAWonDeadlineStillSucceeds() async throws {
     // given — a stream that commits its terminal at once, a consumer that never reads it, and a
     // deadline gated until after the commit is observable. The deadline takes the lock, yet the
     // cached completion means the response still succeeds.
@@ -410,7 +419,8 @@ private actor GatedSend {
     #expect(response == expected)
   }
 
-  @Test func aTerminalWhoseContentDiffersFromTheDeltasWinsOverTheAccumulation() async throws {
+  @Test
+  func aTerminalWhoseContentDiffersFromTheDeltasWinsOverTheAccumulation() async throws {
     // given — the deltas the drafts showed and the terminal's own content diverge (a done item that
     // supersedes the delta assembly), and the consumer reads all the way to that terminal
     let terminal = racedResponse(content: "authoritative done text")
@@ -435,7 +445,8 @@ private actor GatedSend {
     #expect(response.content == "authoritative done text")
   }
 
-  @Test func aDeadlineBeforeTheTerminalDrainsTheConsumerThenTimesOut() async throws {
+  @Test
+  func aDeadlineBeforeTheTerminalDrainsTheConsumerThenTimesOut() async throws {
     // given — a stream that parks after a partial delta and reports a may-have-started cancellation
     // once released; the deadline fires first
     let gate = NonCooperativeStreamGate()
@@ -463,7 +474,8 @@ private actor GatedSend {
     #expect(accounting == .mayHaveStarted(observedCompletionTokens: 4))
   }
 
-  @Test func aNotStartedStreamCancellationTimesOutWithNoDebit() async throws {
+  @Test
+  func aNotStartedStreamCancellationTimesOutWithNoDebit() async throws {
     // given — a stream that never starts the inference and reports notStarted on cancel
     let gate = NonCooperativeStreamGate()
     let stream = LLMEventStream.make { _ in
@@ -489,7 +501,8 @@ private actor GatedSend {
     #expect(accounting == .notStarted)
   }
 
-  @Test func aFailedStreamSurfacesItsTypedFailure() async throws {
+  @Test
+  func aFailedStreamSurfacesItsTypedFailure() async throws {
     // given
     let failure = ProviderFailure(
       cause: .retryable(status: nil, message: "mid-stream drop"),
@@ -556,18 +569,18 @@ private actor GatedSend {
 
   // MARK: - Bounded ephemeral send
 
-  @Test func aBoundedSendReturnsWhenTheSendCompletes() async throws {
+  @Test
+  func aBoundedSendReturnsWhenTheSendCompletes() async throws {
     // given
     let sent = CompletionFlag()
 
     // when — the deadline parks until cancelled, so the send wins
     await ProviderDeadlineCoordinator.sendBounded(
       timeout: .seconds(3),
-      clock: deadlineParkedUntilCancelledClock,
-      send: {
-        await sent.markDone()
-      }
-    )
+      clock: deadlineParkedUntilCancelledClock
+    ) {
+      await sent.markDone()
+    }
 
     // then
     #expect(await sent.done == true)
@@ -579,13 +592,10 @@ private actor GatedSend {
     let send = GatedSend()
 
     // when
-    await ProviderDeadlineCoordinator.sendBounded(
-      timeout: .seconds(3),
-      clock: instantDeadlineClock,
-      send: {
-        await send.run()
-      }
-    )
+    await ProviderDeadlineCoordinator.sendBounded(timeout: .seconds(3), clock: instantDeadlineClock)
+    {
+      await send.run()
+    }
 
     // then — the send did not wedge the turn; it was cancelled and drained, never orphaned
     #expect(await send.started == true)

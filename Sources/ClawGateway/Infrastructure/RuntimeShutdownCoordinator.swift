@@ -62,7 +62,9 @@ public struct RuntimeShutdownCoordinator: Sendable {
     }
 
     if let coder {
-      do { try await coder.shutdown() } catch {
+      do {
+        try await coder.shutdown()
+      } catch {
         logger.critical("Coder shutdown could not prove persisted, joined cleanup")
         return .fatalCoderCleanup
       }

@@ -30,8 +30,7 @@ final class FreshCredentialStore: LLMCredentialStore, @unchecked Sendable {
           accessToken: "acc-token",
           refreshToken: "ref-token",
           expiresAt: Date(timeIntervalSince1970: 4_000_000_000)
-        )
-        : nil
+        ) : nil
     )
   }
 
@@ -92,8 +91,12 @@ enum CompositionAcceptance {
     return try ProviderStackFactory.make(
       route: config.llm.route,
       settings: config.llm,
-      loadStaticBearer: { nil },
-      makeManagedCredentialStore: { store },
+      loadStaticBearer: {
+        nil
+      },
+      makeManagedCredentialStore: {
+        store
+      },
       http: http,
       buildVersion: "acc-1.0.0"
     )
@@ -102,11 +105,7 @@ enum CompositionAcceptance {
   static func makeBuilder(
     http: any HTTPExecuting & HTTPStreaming,
     config: AppConfig? = nil,
-    secrets: Secrets = Secrets(
-      telegramBotToken: "tg-token",
-      llmApiKey: nil,
-      searchApiKey: nil
-    ),
+    secrets: Secrets = Secrets(telegramBotToken: "tg-token", llmAPIKey: nil, searchAPIKey: nil),
     mcp: MCPBootInputs = .empty
   ) throws -> DaemonBuilder {
     let config = try config ?? chatGPTConfig()
@@ -118,14 +117,20 @@ enum CompositionAcceptance {
       transport: TelegramClient(token: secrets.telegramBotToken, http: http),
       botIdentity: nil,
       mcp: mcp,
-      logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() }),
-      makeManagedStore: { FreshCredentialStore(present: false) }
+      logger: Logger(label: "test") { _ in
+        SwiftLogNoOpLogHandler()
+      },
+      makeManagedStore: {
+        FreshCredentialStore(present: false)
+      }
     )
   }
 
   // MARK: - SSE Fixtures
 
-  static func event(_ json: String) -> Data { Data("data: \(json)\n\n".utf8) }
+  static func event(_ json: String) -> Data {
+    Data("data: \(json)\n\n".utf8)
+  }
 
   static let okHead = HTTPStreamHead(statusCode: 200, headers: [:])
 
@@ -280,13 +285,10 @@ func instrumentedClients(recorder: CloseRecorder) -> RuntimeHTTPClients<RuntimeH
       eventLoopGroupProvider: .singleton,
       configuration: role.egressProfile.configuration
     )
-    return RuntimeHTTPClient(
-      executor: AsyncHTTPExecutor(client: client),
-      close: {
-        await recorder.record(role)
-        try await client.shutdown()
-      }
-    )
+    return RuntimeHTTPClient(executor: AsyncHTTPExecutor(client: client)) {
+      await recorder.record(role)
+      try await client.shutdown()
+    }
   }
 }
 
@@ -332,8 +334,10 @@ struct CompositionAcceptanceHarness {
 
   static func boot(
     environment: [String: String],
-    secrets: Secrets = Secrets(telegramBotToken: "token", llmApiKey: "sk-static"),
-    managedStore: @escaping @Sendable () -> any LLMCredentialStore = { FreshCredentialStore() }
+    secrets: Secrets = Secrets(telegramBotToken: "token", llmAPIKey: "sk-static"),
+    managedStore: @escaping @Sendable () -> any LLMCredentialStore = {
+      FreshCredentialStore()
+    }
   ) async throws -> CompositionAcceptanceHarness {
     let config = try AppConfig.load(environment: environment)
     let stores = try EnvironmentLoader.openStores(config: config)
@@ -343,15 +347,21 @@ struct CompositionAcceptanceHarness {
       config: config,
       secrets: secrets,
       stores: stores,
-      logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+      logger: Logger(label: "test") { _ in
+        SwiftLogNoOpLogHandler()
+      }
     )
     composition.makeClients = {
       RuntimeHTTPClients { _ in
-        RuntimeHTTPClient(executor: AsyncHTTPExecutor(client: .shared), close: {})
+        RuntimeHTTPClient(executor: AsyncHTTPExecutor(client: .shared)) {}
       }
     }
-    composition.makeManagedStore = { _ in managedStore() }
-    composition.fetchBotIdentity = { _, _ in nil }
+    composition.makeManagedStore = { _ in
+      managedStore()
+    }
+    composition.fetchBotIdentity = { _, _ in
+      nil
+    }
     composition.buildDaemon = { builder, rosterStack, cooldown in
       capture.record(builder: builder, rosterStack: rosterStack, cooldown: cooldown)
       return try await RunComposition.assembleDaemon(builder, rosterStack, cooldown)
@@ -373,7 +383,9 @@ struct CompositionAcceptanceHarness {
     )
   }
 
-  func healthRow(_ key: String) -> String? { rows[key] }
+  func healthRow(_ key: String) -> String? {
+    rows[key]
+  }
 
   /// Re-reads the rows from the same reporter, so a test that changes live state (arming the shared
   /// cooldown, say) sees what the daemon would report now rather than what it reported at boot.
@@ -399,9 +411,12 @@ struct CompositionAcceptanceHarness {
   private static func rowValues(_ reporter: DaemonDoctorReporter) async -> [String: String] {
     let report = await reporter.report()
     return Dictionary(
-      report.checks.map { check in (check.key, check.value) },
-      uniquingKeysWith: { first, _ in first }
-    )
+      report.checks.map { check in
+        (check.key, check.value)
+      }
+    ) { first, _ in
+      first
+    }
   }
 }
 

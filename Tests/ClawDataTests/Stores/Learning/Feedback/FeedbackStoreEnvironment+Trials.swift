@@ -32,25 +32,25 @@ enum TrialPointerState: CaseIterable {
 
 extension FeedbackStoreEnvironment {
   struct Trial {
-    let trialId: Int64
+    let trialID: Int64
     let candidateDigest: String
     let replacementDigest: String
     let generation: Int
   }
 
   func seedOpenTrial() throws -> Trial {
-    let replacement = try LessonSet.canonical(jobId: jobId, lessons: ["Prefer exact evidence."])
+    let replacement = try LessonSet.canonical(jobID: jobID, lessons: ["Prefer exact evidence."])
     let manifest = CandidateSourceManifest(
       origin: .reflection,
       algorithm: .v1,
-      jobId: jobId,
+      jobID: jobID,
       epoch: state.epoch,
-      triggerDigest: TriggerDigest(rawValue: SHA256Digest.hex("feedback-trigger-\(jobId)")),
+      triggerDigest: TriggerDigest(rawValue: SHA256Digest.hex("feedback-trigger-\(jobID)")),
       triggerReason: .ownerCorrection,
       qualifyingIssueCodes: [],
-      operationId: LearningOperationID(rawValue: "feedback-operation"),
-      carrierDigest: CarrierDigest(rawValue: SHA256Digest.hex("feedback-carrier-\(jobId)")),
-      resultDigest: ReflectionResultDigest(rawValue: SHA256Digest.hex("feedback-result-\(jobId)")),
+      operationID: LearningOperationID(rawValue: "feedback-operation"),
+      carrierDigest: CarrierDigest(rawValue: SHA256Digest.hex("feedback-carrier-\(jobID)")),
+      resultDigest: ReflectionResultDigest(rawValue: SHA256Digest.hex("feedback-result-\(jobID)")),
       baseDigest: state.stableDigest,
       baseRevision: state.stableRevision,
       feedbackRevision: state.feedbackRevision,
@@ -63,11 +63,7 @@ extension FeedbackStoreEnvironment {
     let artifact = try CandidateArtifact(replacement: replacement, manifest: manifest)
     let generation = 3
     return try queue.write { db in
-      try ScheduledLearningStoreGRDB.recordCandidateArtifact(
-        db,
-        artifact: artifact,
-        now: now
-      )
+      try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: artifact, now: now)
       try db.execute(
         sql: """
           INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
@@ -76,7 +72,7 @@ extension FeedbackStoreEnvironment {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
           """,
         arguments: [
-          jobId,
+          jobID,
           state.epoch.value,
           state.stableDigest.rawValue,
           artifact.digest.rawValue,
@@ -89,17 +85,17 @@ extension FeedbackStoreEnvironment {
           LearningAlgorithm.v1.rawValue,
         ]
       )
-      let trialId = db.lastInsertedRowID
+      let trialID = db.lastInsertedRowID
       try ScheduledLearningStoreGRDB.insertDecision(
         db,
         kind: AdmissionReceipt.kind,
-        jobId: jobId,
+        jobID: jobID,
         epoch: state.epoch,
         inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
         result: AdmissionReceipt(
           candidateDigest: artifact.digest,
           replacementDigest: replacement.digest,
-          trialId: trialId,
+          trialID: trialID,
           generation: generation
         ),
         algorithm: .v1,
@@ -107,10 +103,10 @@ extension FeedbackStoreEnvironment {
       )
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
-        arguments: [trialId, jobId]
+        arguments: [trialID, jobID]
       )
       return Trial(
-        trialId: trialId,
+        trialID: trialID,
         candidateDigest: artifact.digest.rawValue,
         replacementDigest: replacement.digest.rawValue,
         generation: generation
@@ -124,12 +120,12 @@ extension FeedbackStoreEnvironment {
     state trialState: LearningTrialState
   ) throws -> Trial {
     let replacement = try LessonSet.canonical(
-      jobId: jobId,
+      jobID: jobID,
       lessons: ["Prefer exact typed evidence."]
     )
     let evaluation = EvaluationDigest(rawValue: evaluationDigest)
     let evidence = CandidateEvidenceSource(
-      runId: 91,
+      runID: 91,
       digest: EvidenceDigest(rawValue: "evidence-91"),
       evaluationDigest: evaluation,
       evaluationRequired: evaluationRequired
@@ -137,19 +133,19 @@ extension FeedbackStoreEnvironment {
     let manifest = CandidateSourceManifest(
       origin: .reflection,
       algorithm: .v1,
-      jobId: jobId,
+      jobID: jobID,
       epoch: state.epoch,
       triggerDigest: TriggerDigest(rawValue: "typed-feedback-trigger"),
       triggerReason: .recurringIssue,
       qualifyingIssueCodes: ["typed.feedback"],
-      operationId: LearningOperationID(rawValue: "typed-feedback-operation"),
+      operationID: LearningOperationID(rawValue: "typed-feedback-operation"),
       carrierDigest: CarrierDigest(rawValue: "typed-feedback-carrier"),
       resultDigest: ReflectionResultDigest(rawValue: "typed-feedback-result"),
       baseDigest: state.stableDigest,
       baseRevision: state.stableRevision,
       feedbackRevision: state.feedbackRevision,
       evidence: [evidence],
-      evaluations: [CandidateEvaluationSource(runId: evidence.runId, digest: evaluation)],
+      evaluations: [CandidateEvaluationSource(runID: evidence.runID, digest: evaluation)],
       feedback: [],
       predecessorCandidate: nil,
       predecessorFeedback: nil
@@ -157,11 +153,7 @@ extension FeedbackStoreEnvironment {
     let artifact = try CandidateArtifact(replacement: replacement, manifest: manifest)
     let generation = 3
     return try queue.write { db in
-      try ScheduledLearningStoreGRDB.recordCandidateArtifact(
-        db,
-        artifact: artifact,
-        now: now
-      )
+      try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: artifact, now: now)
       try db.execute(
         sql: """
           INSERT INTO learning_trials(job_id, learning_epoch, base_digest, candidate_digest,
@@ -170,7 +162,7 @@ extension FeedbackStoreEnvironment {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 3, 0, ?, ?, ?)
           """,
         arguments: [
-          jobId,
+          jobID,
           state.epoch.value,
           state.stableDigest.rawValue,
           artifact.digest.rawValue,
@@ -183,17 +175,17 @@ extension FeedbackStoreEnvironment {
           LearningAlgorithm.v1.rawValue,
         ]
       )
-      let trialId = db.lastInsertedRowID
+      let trialID = db.lastInsertedRowID
       try ScheduledLearningStoreGRDB.insertDecision(
         db,
         kind: AdmissionReceipt.kind,
-        jobId: jobId,
+        jobID: jobID,
         epoch: state.epoch,
         inputs: AdmissionDecisionInputs(candidateDigest: artifact.digest),
         result: AdmissionReceipt(
           candidateDigest: artifact.digest,
           replacementDigest: replacement.digest,
-          trialId: trialId,
+          trialID: trialID,
           generation: generation
         ),
         algorithm: .v1,
@@ -201,10 +193,10 @@ extension FeedbackStoreEnvironment {
       )
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
-        arguments: [trialId, jobId]
+        arguments: [trialID, jobID]
       )
       return Trial(
-        trialId: trialId,
+        trialID: trialID,
         candidateDigest: artifact.digest.rawValue,
         replacementDigest: replacement.digest.rawValue,
         generation: generation
@@ -217,17 +209,17 @@ extension FeedbackStoreEnvironment {
       let pointer: Int64? = state == .absent ? nil : 999_999
       try db.execute(
         sql: "UPDATE job_learning_state SET open_trial_id = ? WHERE job_id = ?",
-        arguments: [pointer, jobId]
+        arguments: [pointer, jobID]
       )
     }
   }
 
-  func trialState(_ trialId: Int64) throws -> LearningTrialState? {
+  func trialState(_ trialID: Int64) throws -> LearningTrialState? {
     try queue.read { db in
       let raw = try String.fetchOne(
         db,
         sql: "SELECT state FROM learning_trials WHERE trial_id = ?",
-        arguments: [trialId]
+        arguments: [trialID]
       )
       return raw.flatMap(LearningTrialState.init(rawValue:))
     }
@@ -248,7 +240,7 @@ extension FeedbackStoreEnvironment {
     switch mismatch {
     case .job:
       column = "job_id"
-      value = jobId + 1_000
+      value = jobID + 1_000
     case .epoch:
       column = "learning_epoch"
       value = state.epoch.value + 1
@@ -262,7 +254,7 @@ extension FeedbackStoreEnvironment {
     try queue.write { db in
       try db.execute(
         sql: "UPDATE learning_trials SET \(column) = ? WHERE trial_id = ?",
-        arguments: [value, trial.trialId]
+        arguments: [value, trial.trialID]
       )
     }
   }
@@ -271,7 +263,7 @@ extension FeedbackStoreEnvironment {
     switch mismatch {
     case .job:
       try queue.write { db in
-        let otherJobId = jobId + 1_000
+        let otherJobID = jobID + 1_000
         try db.execute(
           sql: """
             INSERT INTO lesson_sets(job_id, digest, schema_version, canonical_bytes, source,
@@ -279,11 +271,11 @@ extension FeedbackStoreEnvironment {
             SELECT ?, digest, schema_version, canonical_bytes, source, created_at
             FROM lesson_sets WHERE job_id = ? AND digest = ?
             """,
-          arguments: [otherJobId, jobId, trial.replacementDigest]
+          arguments: [otherJobID, jobID, trial.replacementDigest]
         )
         try db.execute(
           sql: "UPDATE learning_candidates SET job_id = ? WHERE candidate_digest = ?",
-          arguments: [otherJobId, trial.candidateDigest]
+          arguments: [otherJobID, trial.candidateDigest]
         )
       }
     case .epoch:
@@ -293,16 +285,12 @@ extension FeedbackStoreEnvironment {
         digest: trial.candidateDigest
       )
     case .candidateBase:
-      try updateCandidate(
-        column: "base_digest",
-        value: "stale-base",
-        digest: trial.candidateDigest
-      )
+      try updateCandidate(column: "base_digest", value: "stale-base", digest: trial.candidateDigest)
     case .stableBase:
       try queue.write { db in
         try db.execute(
           sql: "UPDATE job_learning_state SET stable_lesson_set_digest = ? WHERE job_id = ?",
-          arguments: [trial.replacementDigest, jobId]
+          arguments: [trial.replacementDigest, jobID]
         )
       }
     case .algorithm:
@@ -320,18 +308,18 @@ extension FeedbackStoreEnvironment {
       try queue.write { db in
         try db.execute(
           sql: "UPDATE learning_trials SET state = ? WHERE trial_id = ?",
-          arguments: [LearningTrialState.promoted.rawValue, trial.trialId]
+          arguments: [LearningTrialState.promoted.rawValue, trial.trialID]
         )
       }
     }
   }
 
-  func trialCloseReason(_ trialId: Int64) throws -> String? {
+  func trialCloseReason(_ trialID: Int64) throws -> String? {
     try queue.read { db in
       try String.fetchOne(
         db,
         sql: "SELECT close_reason FROM learning_trials WHERE trial_id = ?",
-        arguments: [trialId]
+        arguments: [trialID]
       )
     }
   }
@@ -353,10 +341,7 @@ private extension FeedbackStoreEnvironment {
     }
   }
 
-  func updateWithForeignKeysDisabled(
-    sql: String,
-    arguments: StatementArguments
-  ) throws {
+  func updateWithForeignKeysDisabled(sql: String, arguments: StatementArguments) throws {
     try queue.writeWithoutTransaction { db in
       try db.execute(sql: "PRAGMA foreign_keys = OFF")
       do {

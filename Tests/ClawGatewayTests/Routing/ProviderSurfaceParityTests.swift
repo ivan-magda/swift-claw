@@ -13,7 +13,8 @@ import Testing
 /// request-recording provider drives a turn and a scheduled parse; both are asserted to get the same
 /// treatment, to share the one trace formatter, and to split the wire model from the accounting
 /// identity.
-@Suite struct ProviderSurfaceParityTests {
+@Suite
+struct ProviderSurfaceParityTests {
   private static let draftJSON = """
     {"label":"morning digest","prompt":"Summarize my unread items",\
     "schedule":{"kind":"weekdays","time":"07:00","timezone":"Europe/Berlin"}}
@@ -125,16 +126,16 @@ import Testing
   private func claimSession(_ queue: DatabaseQueue) throws -> Int64 {
     let claim = try SessionMessageStoreGRDB(writer: queue).claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
+        updateID: 1,
         sessionKey: "tg:dm:7",
-        chatId: 7,
-        userId: 7,
+        chatID: 7,
+        userID: 7,
         text: "/schedule",
         isEdited: false,
         ts: Date()
       )
     )
-    return claim.sessionId ?? 0
+    return claim.sessionID ?? 0
   }
 
   private func inMemoryQueue() throws -> DatabaseQueue {
@@ -147,13 +148,15 @@ import Testing
     }
   }
 
-  @Test func authSentenceMatchesTheSpecCopyByteForByte() {
+  @Test
+  func authSentenceMatchesTheSpecCopyByteForByte() {
     // given / when / then — the shared constant is the spec sentence verbatim, not merely a string
     // that contains the recovery command; pinned to the literal, drift in either direction fails
     #expect(Degradation.authenticationRequired == Self.specAuthSentence)
   }
 
-  @Test func sameAuthFailureGivesIdenticalCopyAndNoDebitOnBothSurfaces() async throws {
+  @Test
+  func sameAuthFailureGivesIdenticalCopyAndNoDebitOnBothSurfaces() async throws {
     // given — one refused-credential failure driving a turn and a scheduled parse
     let turnQueue = try inMemoryQueue()
     let parseQueue = try inMemoryQueue()
@@ -171,9 +174,9 @@ import Testing
 
     // when
     let turnOutcome = try await agent.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -181,7 +184,7 @@ import Testing
       todayTokens: 0,
       todayUSD: 0
     )
-    let parseResult = await parser.parse(ownerText: "x", sessionId: parseSession)
+    let parseResult = await parser.parse(ownerText: "x", sessionID: parseSession)
 
     // then — both carry the SAME vendor-neutral failure rather than collapsing to a generic outage
     #expect(turnOutcome.result == .degraded(.authenticationRequired, usage: nil))
@@ -199,7 +202,8 @@ import Testing
     #expect(try usageRowCount(parseQueue) == 0)
   }
 
-  @Test func quotaFailureGivesIdenticalRetryCopyThatNeverSaysLoginOnBothSurfaces() async throws {
+  @Test
+  func quotaFailureGivesIdenticalRetryCopyThatNeverSaysLoginOnBothSurfaces() async throws {
     // given
     let turnQueue = try inMemoryQueue()
     let parseQueue = try inMemoryQueue()
@@ -215,9 +219,9 @@ import Testing
 
     // when
     let turnOutcome = try await agent.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -225,7 +229,7 @@ import Testing
       todayTokens: 0,
       todayUSD: 0
     )
-    let parseResult = await parser.parse(ownerText: "x", sessionId: parseSession)
+    let parseResult = await parser.parse(ownerText: "x", sessionID: parseSession)
 
     // then — the bounded hint rides both surfaces, and the copy names retry, never login
     #expect(turnOutcome.result == .degraded(.quotaLimited(retryAfterSeconds: 30), usage: nil))
@@ -241,15 +245,20 @@ import Testing
     // given
     let queue = try inMemoryQueue()
     let usageStore = UsageStoreGRDB(writer: queue)
-    let sessionId = try claimSession(queue)
+    let sessionID = try claimSession(queue)
     let primary = SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: nil))
     let fallback = SequenceProvider([
-      ChatResponse(content: Self.draftJSON, finishReason: "stop", usage: nil, costFromProvider: nil)
+      ChatResponse(
+        content: Self.draftJSON,
+        finishReason: "stop",
+        usage: nil,
+        costFromProvider: nil
+      ),
     ])
     let parser = makeParser(primary: primary, fallback: fallback, usageStore: usageStore)
 
     // when
-    let result = await parser.parse(ownerText: "every weekday at 7am Berlin", sessionId: sessionId)
+    let result = await parser.parse(ownerText: "every weekday at 7am Berlin", sessionID: sessionID)
 
     // then
     #expect(result == .draft(Self.expectedDraft))
@@ -265,9 +274,14 @@ import Testing
     try await cooldownClock.sleep(for: .seconds(901))
     let queue = try inMemoryQueue()
     let usageStore = UsageStoreGRDB(writer: queue)
-    let sessionId = try claimSession(queue)
+    let sessionID = try claimSession(queue)
     let primary = SequenceProvider([
-      ChatResponse(content: Self.draftJSON, finishReason: "stop", usage: nil, costFromProvider: nil)
+      ChatResponse(
+        content: Self.draftJSON,
+        finishReason: "stop",
+        usage: nil,
+        costFromProvider: nil
+      ),
     ])
     let parser = makeParser(
       primary: primary,
@@ -277,7 +291,7 @@ import Testing
     )
 
     // when — the recovered primary answers
-    let result = await parser.parse(ownerText: "every weekday at 7am", sessionId: sessionId)
+    let result = await parser.parse(ownerText: "every weekday at 7am", sessionID: sessionID)
 
     // then — the window is cleared, not merely lapsed: a fresh arm starts at the tier default
     // rather than doubling the stale armed duration a lapsed-but-uncleared window would carry
@@ -292,13 +306,13 @@ import Testing
     // (also switchable, but there is no third route to try)
     let queue = try inMemoryQueue()
     let usageStore = UsageStoreGRDB(writer: queue)
-    let sessionId = try claimSession(queue)
+    let sessionID = try claimSession(queue)
     let primary = SequenceProvider([], then: ProviderError.quotaLimited(retryAfterSeconds: 42))
     let fallback = SequenceProvider([], then: ProviderError.connectFailed(message: "down"))
     let parser = makeParser(primary: primary, fallback: fallback, usageStore: usageStore)
 
     // when
-    let result = await parser.parse(ownerText: "x", sessionId: sessionId)
+    let result = await parser.parse(ownerText: "x", sessionID: sessionID)
 
     // then — the primary's actionable "quota limited" survives, not the fallback's generic outage
     #expect(result == .quotaLimited(retryAfterSeconds: 42))
@@ -324,9 +338,9 @@ import Testing
 
     // when both fail with .quotaLimited(retryAfterSeconds: 42)
     let turnOutcome = try await agent.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: 3,
+      runID: 1,
+      sessionID: 2,
+      chatID: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -334,7 +348,7 @@ import Testing
       todayTokens: 0,
       todayUSD: 0
     )
-    let parseResult = await parser.parse(ownerText: "x", sessionId: parseSession)
+    let parseResult = await parser.parse(ownerText: "x", sessionID: parseSession)
 
     // then both replies equal Degradation.quotaLimited(retryAfterSeconds: 42)
     #expect(turnOutcome.result == .degraded(.quotaLimited(retryAfterSeconds: 42), usage: nil))
@@ -343,7 +357,8 @@ import Testing
     #expect(copy == ScheduleReplies.quotaLimited(retryAfterSeconds: 42))
   }
 
-  @Test func bothSurfacesSendCanonicalTraceIdentityAndSplitWireModelFromIdentity() async throws {
+  @Test
+  func bothSurfacesSendCanonicalTraceIdentityAndSplitWireModelFromIdentity() async throws {
     // given — a recording provider that succeeds, so each surface's request and usage row are visible
     let wireModel = "wire-model"
     let identity = "identity-ref"
@@ -353,7 +368,7 @@ import Testing
         finishReason: "stop",
         usage: ChatUsage(promptTokens: 5, completionTokens: 3, totalTokens: 8),
         costFromProvider: 0.001
-      )
+      ),
     ])
     let parseProvider = SequenceProvider([
       ChatResponse(
@@ -361,7 +376,7 @@ import Testing
         finishReason: "stop",
         usage: ChatUsage(promptTokens: 7, completionTokens: 4, totalTokens: 11),
         costFromProvider: 0.002
-      )
+      ),
     ])
     let parseQueue = try inMemoryQueue()
     let agent = makeAgent(
@@ -381,9 +396,9 @@ import Testing
 
     // when
     let turnOutcome = try await agent.runTurn(
-      runId: 1,
-      sessionId: turnSession,
-      chatId: 3,
+      runID: 1,
+      sessionID: turnSession,
+      chatID: 3,
       buildResult: userBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -391,13 +406,13 @@ import Testing
       todayTokens: 0,
       todayUSD: 0
     )
-    let parseResult = await parser.parse(ownerText: "x", sessionId: parseSession)
+    let parseResult = await parser.parse(ownerText: "x", sessionID: parseSession)
 
     // then — both requests stamp the canonical wire identity, keyed on the database session id
     let turnRequest = try #require(await turnProvider.requests.first)
     let parseRequest = try #require(await parseProvider.requests.first)
-    #expect(turnRequest.sessionId == SessionTraceID.format(sessionID: turnSession))
-    #expect(parseRequest.sessionId == SessionTraceID.format(sessionID: parseSession))
+    #expect(turnRequest.sessionID == SessionTraceID.format(sessionID: turnSession))
+    #expect(parseRequest.sessionID == SessionTraceID.format(sessionID: parseSession))
 
     // and — the wire model crosses the wire on both; the configured identity is used only for usage
     #expect(turnRequest.model == wireModel)

@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct BudgetBreakerTests {
+@Suite
+struct BudgetBreakerTests {
   /// A fixed instant so the per-UTC-day latch is deterministic across calls.
   private let now = Date(timeIntervalSince1970: 1_700_000_000)
 

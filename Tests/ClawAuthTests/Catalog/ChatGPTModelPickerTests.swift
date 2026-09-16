@@ -3,7 +3,8 @@ import Testing
 
 @testable import ClawAuth
 
-@Suite struct ChatGPTModelPickerTests {
+@Suite
+struct ChatGPTModelPickerTests {
   private static let catalog = [
     ChatGPTCatalogModel(slug: "gpt-5.4", priority: 1),
     ChatGPTCatalogModel(slug: "gpt-5.4-codex", priority: 2),
@@ -21,19 +22,10 @@ import Testing
     )
 
     // then
-    #expect(
-      outcome
-        == .chose(ChatGPTModelChoice(slug: "gpt-5.4-mini", origin: .configuredDefault))
-    )
+    #expect(outcome == .chose(ChatGPTModelChoice(slug: "gpt-5.4-mini", origin: .configuredDefault)))
   }
 
-  @Test(arguments: [
-    String?.none,
-    "gpt-4-retired",
-    "gpt 5",
-    "",
-    "-invalid",
-  ])
+  @Test(arguments: [String?.none, "gpt-4-retired", "gpt 5", "", "-invalid"])
   func theFirstReturnedModelIsTheDefaultWhenNoConfiguredModelApplies(configured: String?) {
     // given / when
     let outcome = ChatGPTModelPicker.select(
@@ -108,7 +100,8 @@ import Testing
     #expect(outcome == .noEligibleModels)
   }
 
-  @Test func aChoiceRendersTheExactQualifiedShellAssignment() {
+  @Test
+  func aChoiceRendersTheExactQualifiedShellAssignment() {
     // given
     let choice = ChatGPTModelChoice(slug: "gpt-5.4", origin: .owner)
 

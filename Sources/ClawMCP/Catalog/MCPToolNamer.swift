@@ -56,8 +56,7 @@ private extension MCPToolNamer {
 
   static func composed(server: String, tool: String) -> String {
     let head =
-      prefix + fragment(server, fallback: Fallback.server, limit: serverFragmentLimit)
-      + separator
+      prefix + fragment(server, fallback: Fallback.server, limit: serverFragmentLimit) + separator
     let available = max(nameLimit - head.count, 1)
 
     return head + fragment(tool, fallback: Fallback.tool, limit: available)

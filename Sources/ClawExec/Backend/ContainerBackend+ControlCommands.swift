@@ -6,12 +6,11 @@ import Foundation
 
 extension ContainerBackend {
   func engineRunning(deadline: ContinuousClock.Instant) async -> Bool {
-    guard
-      let data = await boundedCommandData(
-        ContainerInvocation.systemStatus(),
-        limit: Self.lifecycleCommandTimeout,
-        deadline: deadline
-      )
+    guard let data = await boundedCommandData(
+      ContainerInvocation.systemStatus(),
+      limit: Self.lifecycleCommandTimeout,
+      deadline: deadline
+    )
     else {
       return false
     }
@@ -21,20 +20,19 @@ extension ContainerBackend {
   }
 
   // swiftlint:disable discouraged_optional_boolean
-  func containerPresent(
-    _ identity: String,
-    deadline: ContinuousClock.Instant
-  ) async -> Bool? {
-    guard
-      let containers = await listedContainers(
-        limit: Self.lifecycleCommandTimeout,
-        deadline: deadline
-      )
+  func containerPresent(_ identity: String, deadline: ContinuousClock.Instant) async -> Bool? {
+    guard let containers = await listedContainers(
+      limit: Self.lifecycleCommandTimeout,
+      deadline: deadline
+    )
     else {
       return nil
     }
-    return containers.contains { $0.resolvedIdentifier == identity }
+    return containers.contains {
+      $0.resolvedIdentifier == identity
+    }
   }
+
   // swiftlint:enable discouraged_optional_boolean
 
   func cidMatches(_ identity: ExecutionIdentity, at url: URL) -> Bool {
@@ -104,13 +102,14 @@ extension ContainerBackend {
     }
     return nil
   }
+
   // swiftlint:enable discouraged_optional_collection
 
   // swiftlint:disable discouraged_optional_collection
   static func fetchContainerList(
     timeout: Duration,
     commands: any SubprocessRunning,
-    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void
+    watchdogSleep: @escaping @Sendable (_ duration: Duration) async throws -> Void
   ) async -> [ListedContainer]? {
     let result = await runControlCommand(
       ContainerInvocation.listAll(),
@@ -125,6 +124,7 @@ extension ContainerBackend {
 
     return try? JSONDecoder().decode([ListedContainer].self, from: data)
   }
+
   // swiftlint:enable discouraged_optional_collection
 
   // Control commands (stop/kill/rm/list/probe/pull) get the same host-side watchdog as the
@@ -136,7 +136,7 @@ extension ContainerBackend {
     _ arguments: [String],
     timeout: Duration,
     commands: any SubprocessRunning,
-    watchdogSleep: @escaping @Sendable (Duration) async throws -> Void
+    watchdogSleep: @escaping @Sendable (_ duration: Duration) async throws -> Void
   ) async -> SubprocessResult {
     let command = SubprocessCommand(
       arguments: arguments,
@@ -166,9 +166,7 @@ extension ContainerBackend {
 
   // Synthesized when the runner never reported: every consumer treats it fail-closed
   // (successOutput → nil, lifecycle/absence checks → false, bounded helpers → nil).
-  private static func failClosedResult(
-    _ termination: SubprocessTermination
-  ) -> SubprocessResult {
+  private static func failClosedResult(_ termination: SubprocessTermination) -> SubprocessResult {
     let empty = CapturedCommandStream(bytes: Data(), totalBytes: 0, truncated: false)
     return SubprocessResult(
       termination: termination,
@@ -179,16 +177,15 @@ extension ContainerBackend {
   }
 
   static func successOutput(of result: SubprocessResult) -> Data? {
-    guard
-      case .exited(0) = result.termination,
-      !result.stdout.truncated,
-      !result.stderr.truncated
+    guard case .exited(0) = result.termination, !result.stdout.truncated, !result.stderr.truncated
     else {
       return nil
     }
     return result.stdout.bytes
   }
 }
+
+// MARK: - Command Deadlines
 
 private extension ContainerBackend {
   func clampedTimeout(limit: Duration, deadline: ContinuousClock.Instant) -> Duration? {

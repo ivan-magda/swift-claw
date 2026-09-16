@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawWorkspace
 
-@Suite struct WorkspaceLoaderTests {
-  @Test func missingFileLoadsAsMissingAndNeverThrows() throws {
+@Suite
+struct WorkspaceLoaderTests {
+  @Test
+  func missingFileLoadsAsMissingAndNeverThrows() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -17,7 +19,8 @@ import Testing
     #expect(loaded == .missing)
   }
 
-  @Test func presentFileUnderCapLoadsFullText() throws {
+  @Test
+  func presentFileUnderCapLoadsFullText() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -33,7 +36,8 @@ import Testing
     #expect(loaded.graphemeCount == 13)
   }
 
-  @Test func overCapFileReportsOriginalCountButYieldsNoConsumableText() throws {
+  @Test
+  func overCapFileReportsOriginalCountButYieldsNoConsumableText() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -50,7 +54,8 @@ import Testing
     #expect(loaded.text.isEmpty)
   }
 
-  @Test func capCountsGraphemeClustersNotUnicodeScalars() throws {
+  @Test
+  func capCountsGraphemeClustersNotUnicodeScalars() throws {
     // given - each "e\u{0301}" is one grapheme cluster made of two scalars: 4 clusters, 8 scalars.
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -67,7 +72,8 @@ import Testing
     #expect(loaded.text.unicodeScalars.count == 8)
   }
 
-  @Test func nilCapLoadsFullTextRegardlessOfSize() throws {
+  @Test
+  func nilCapLoadsFullTextRegardlessOfSize() throws {
     // given
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -83,7 +89,8 @@ import Testing
     #expect(loaded.text == content)
   }
 
-  @Test func presentButUndecodableFileLoadsAsUnreadable() throws {
+  @Test
+  func presentButUndecodableFileLoadsAsUnreadable() throws {
     // given - invalid UTF-8 bytes force a decode failure on an existing file.
     let root = try makeTemporaryRoot()
     defer { try? FileManager.default.removeItem(at: root) }

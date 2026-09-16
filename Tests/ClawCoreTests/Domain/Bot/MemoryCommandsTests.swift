@@ -2,7 +2,8 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct RememberCommandTests {
+@Suite
+struct RememberCommandTests {
   @Test(arguments: [
     ("project: ship 3a", RememberCommand.save(kind: .project, text: "ship 3a")),
     ("buy milk", .save(kind: .user, text: "buy milk")),
@@ -13,7 +14,8 @@ import Testing
     ),
     ("note: buy milk", .save(kind: .user, text: "note: buy milk")),
     (
-      "  feedback: prefers concise status  ", .save(kind: .feedback, text: "prefers concise status")
+      "  feedback: prefers concise status  ",
+      .save(kind: .feedback, text: "prefers concise status")
     ),
   ])
   func parsesExpectedForms(arguments: String, expected: RememberCommand) {
@@ -27,12 +29,7 @@ import Testing
     #expect(command == expected)
   }
 
-  @Test(arguments: [
-    "",
-    "   ",
-    "project:",
-    "project:   ",
-  ])
+  @Test(arguments: ["", "   ", "project:", "project:   "])
   func rejectsInvalidForms(arguments: String) {
     // given
     let input = Substring(arguments)
@@ -45,7 +42,8 @@ import Testing
   }
 }
 
-@Suite struct MemoryCommandParseTests {
+@Suite
+struct MemoryCommandParseTests {
   @Test(arguments: [
     ("", MemoryCommand.review),
     ("   ", .review),

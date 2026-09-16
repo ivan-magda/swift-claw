@@ -35,8 +35,10 @@ struct OpenAICompatibleProvider: LLMProvider {
     credentials: any LLMCredentialSource,
     http: any HTTPExecuting & HTTPStreaming,
     clock: any Clock<Duration>,
-    jitter: @escaping @Sendable (Duration) -> Duration,
-    logger: Logger = Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() })
+    jitter: @escaping @Sendable (_ duration: Duration) -> Duration,
+    logger: Logger = Logger(label: "clawd.llm") { _ in
+      SwiftLogNoOpLogHandler()
+    }
   ) {
     self.config = config
     self.endpoint = endpoint
@@ -195,7 +197,7 @@ struct OpenAICompatibleProvider: LLMProvider {
         role: message.role.rawValue,
         content: content,
         toolCalls: wireCalls.isEmpty ? nil : wireCalls,
-        toolCallId: message.toolCallId
+        toolCallID: message.toolCallID
       )
     }
     let wireTools = request.tools.map { definition in
@@ -209,7 +211,7 @@ struct OpenAICompatibleProvider: LLMProvider {
       )
     }
 
-    let sessionId = Self.baseURLIsOpenRouter(endpoint) ? request.sessionId : nil
+    let sessionID = Self.baseURLIsOpenRouter(endpoint) ? request.sessionID : nil
     let payload = RequestBody(
       model: request.model,
       messages: wireMessages,
@@ -220,7 +222,7 @@ struct OpenAICompatibleProvider: LLMProvider {
       streamOptions: streaming ? StreamOptions(includeUsage: true) : nil,
       tools: wireTools.isEmpty ? nil : wireTools,
       responseFormat: request.responseFormat,
-      sessionId: sessionId
+      sessionID: sessionID
     )
     return try JSONEncoder().encode(payload)
   }
@@ -237,18 +239,17 @@ struct OpenAICompatibleProvider: LLMProvider {
     }
 
     let choice = decoded.choices.first
-    let usage =
-      decoded.usage.map { wireUsage in
-        wireUsage.toChatUsage()
-      }
+    let usage = decoded.usage.map { wireUsage in
+      wireUsage.toChatUsage()
+    }
     // OpenRouter reports cost in usage.cost; LiteLLM in a response header.
     let providerCost = decoded.usage?.cost ?? providerCost(from: result)
 
     let toolCalls = (choice?.message.toolCalls ?? []).compactMap { decoded -> ToolCall? in
-      guard let callId = decoded.id, let name = decoded.function?.name else {
+      guard let callID = decoded.id, let name = decoded.function?.name else {
         return nil
       }
-      return ToolCall(id: callId, name: name, argumentsJSON: decoded.function?.arguments ?? "{}")
+      return ToolCall(id: callID, name: name, argumentsJSON: decoded.function?.arguments ?? "{}")
     }
 
     return ChatResponse(
@@ -313,9 +314,10 @@ private extension OpenAICompatibleProvider {
       responseBodyPolicy: .streaming(
         maximumUnreadBytes: HTTPResponseBodyPolicy.maximumUnreadStreamBytes,
         errorBytes: HTTPResponseBodyPolicy.diagnosticBodyBytes
-      ),
-      beginHandoff: { try exposure.beginHandoff() }
-    )
+      )
+    ) {
+      try exposure.beginHandoff()
+    }
   }
 
   /// Reads the exchange and joins it on the way out, whichever way it ends. The exchange owns the
@@ -427,11 +429,7 @@ private extension OpenAICompatibleProvider {
     if Self.isRetryableStatus(exchange.head.statusCode) {
       return ProviderError.rejected(status: exchange.head.statusCode, message: message)
     }
-    return Self.headRejection(
-      status: exchange.head.statusCode,
-      body: collected,
-      message: message
-    )
+    return Self.headRejection(status: exchange.head.statusCode, body: collected, message: message)
   }
 
   /// The body sequence ending says only that no more bytes are coming; the termination says whether
@@ -545,9 +543,10 @@ private extension OpenAICompatibleProvider {
       responseBodyPolicy: .buffered(
         successBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes,
         errorBytes: HTTPResponseBodyPolicy.defaultBufferedBodyBytes
-      ),
-      beginHandoff: { try exposure.beginHandoff() }
-    )
+      )
+    ) {
+      try exposure.beginHandoff()
+    }
   }
 }
 
@@ -557,9 +556,8 @@ private extension OpenAICompatibleProvider {
   static let liteLLMResponseCostHeader = "x-litellm-response-cost"
 
   func errorMessage(from body: Data) -> String {
-    guard
-      let decoded = try? JSONDecoder().decode(ErrorBody.self, from: body),
-      let message = decoded.error?.message
+    guard let decoded = try? JSONDecoder().decode(ErrorBody.self, from: body),
+          let message = decoded.error?.message
     else {
       return String(data: body, encoding: .utf8) ?? "unknown error"
     }
@@ -567,11 +565,11 @@ private extension OpenAICompatibleProvider {
   }
 
   func providerCost(from head: HTTPStreamHead) -> Double? {
-    head.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
+    head.header(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
   }
 
   func providerCost(from result: HTTPResult) -> Double? {
-    result.getHeader(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
+    result.header(for: Self.liteLLMResponseCostHeader).flatMap(Double.init)
   }
 }
 
@@ -582,10 +580,12 @@ private extension OpenAICompatibleProvider {
   /// before falling back to whole/fractional seconds. The wait itself clamps this hint, so the raw
   /// value is returned here without a ceiling of its own.
   func retryAfterDelay(from result: HTTPResult) -> Duration? {
-    if let milliseconds = result.getHeader(for: "retry-after-ms").flatMap(Double.init) {
+    if let milliseconds = result.header(for: "retry-after-ms").flatMap(Double.init) {
       return .milliseconds(milliseconds)
     }
-    return result.getHeader(for: "retry-after").flatMap(Double.init).map { .seconds($0) }
+    return result.header(for: "retry-after").flatMap(Double.init).map {
+      .seconds($0)
+    }
   }
 }
 
@@ -593,7 +593,10 @@ private extension OpenAICompatibleProvider {
 
 private struct DynamicKey: CodingKey {
   let stringValue: String
-  var intValue: Int? { nil }
+
+  var intValue: Int? {
+    nil
+  }
 
   init(_ stringValue: String) {
     self.stringValue = stringValue
@@ -672,13 +675,13 @@ private struct WireMessage: Encodable {
   let content: WireContent?
   // swiftlint:disable:next discouraged_optional_collection
   let toolCalls: [WireToolCall]?
-  let toolCallId: String?
+  let toolCallID: String?
 
   enum CodingKeys: String, CodingKey {
     case role
     case content
     case toolCalls = "tool_calls"
-    case toolCallId = "tool_call_id"
+    case toolCallID = "tool_call_id"
   }
 }
 
@@ -694,7 +697,7 @@ private struct RequestBody: Encodable {
   // swiftlint:disable:next discouraged_optional_collection
   let tools: [WireToolDefinition]?
   let responseFormat: ResponseFormat?
-  let sessionId: String?
+  let sessionID: String?
 
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: DynamicKey.self)
@@ -706,7 +709,7 @@ private struct RequestBody: Encodable {
     try container.encodeIfPresent(streamOptions, forKey: DynamicKey("stream_options"))
     try container.encodeIfPresent(stop, forKey: DynamicKey("stop"))
     try container.encodeIfPresent(tools, forKey: DynamicKey("tools"))
-    try container.encodeIfPresent(sessionId, forKey: DynamicKey("session_id"))
+    try container.encodeIfPresent(sessionID, forKey: DynamicKey("session_id"))
 
     if let responseFormat {
       try container.encode(

@@ -9,11 +9,12 @@ import Testing
 
 /// Exercises the rich-send path and the plain fallback on a rich-send error (F8), over the real
 /// outbox store.
-@Suite struct OutboxFallbackTests {
+@Suite
+struct OutboxFallbackTests {
   private struct Fixture {
     let outbox: OutboxStoreGRDB
-    let runId: Int64
-    let chatId: Int64
+    let runID: Int64
+    let chatID: Int64
   }
 
   /// Commits a completed turn with one PENDING `"**hi**"` reply.
@@ -21,17 +22,12 @@ import Testing
     let seeded = try makeSeededFixture()
     try OutboxFixture.commitReply(
       in: seeded.writer,
-      runId: seeded.runId,
+      runID: seeded.runID,
       chunks: [
-        OutboxChunk(
-          stepIndex: 0,
-          chatId: seeded.chatId,
-          payload: "**hi**",
-          payloadHash: "hash"
-        )
+        OutboxChunk(stepIndex: 0, chatID: seeded.chatID, payload: "**hi**", payloadHash: "hash"),
       ]
     )
-    return Fixture(outbox: seeded.outbox, runId: seeded.runId, chatId: seeded.chatId)
+    return Fixture(outbox: seeded.outbox, runID: seeded.runID, chatID: seeded.chatID)
   }
 
   private func makeDispatcher(
@@ -46,7 +42,8 @@ import Testing
     )
   }
 
-  @Test func usesSendRichMessage() async throws {
+  @Test
+  func usesSendRichMessage() async throws {
     // given — a clean transport
     let fixture = try makeFixtureWithPendingHi()
     let transport = RecordingTransport()
@@ -62,7 +59,8 @@ import Testing
     #expect(try fixture.outbox.pendingOutbound().isEmpty)
   }
 
-  @Test func richErrorFallsBackToPlainSendMessage() async throws {
+  @Test
+  func richErrorFallsBackToPlainSendMessage() async throws {
     // given — every rich send fails, so the dispatcher must fall back to plain
     let fixture = try makeFixtureWithPendingHi()
     let transport = RecordingTransport(richError: .apiError(code: 400, description: "bad markdown"))

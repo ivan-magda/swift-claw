@@ -4,14 +4,16 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct MemorySchemaMigrationTests {
+@Suite
+struct MemorySchemaMigrationTests {
   private func migratedQueue() throws -> DatabaseQueue {
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
     return queue
   }
 
-  @Test func v4CreatesMemoryItemsWithExpectedColumns() throws {
+  @Test
+  func v4CreatesMemoryItemsWithExpectedColumns() throws {
     // given
     let queue = try migratedQueue()
 
@@ -21,21 +23,39 @@ import Testing
     }
 
     // then
-    let names = Set(columns.map { row in row["name"] as String })
+    let names = Set(
+      columns.map { row in
+        row["name"] as String
+      }
+    )
     #expect(
       names.isSuperset(of: [
-        "id", "text", "kind", "sensitivity", "importance", "source", "session_id", "created_at",
+        "id",
+        "text",
+        "kind",
+        "sensitivity",
+        "importance",
+        "source",
+        "session_id",
+        "created_at",
       ])
     )
     let importanceColumn = try #require(
-      columns.first { row in (row["name"] as String) == "importance" }
+      columns.first { row in
+        (row["name"] as String) == "importance"
+      }
     )
     #expect((importanceColumn["type"] as String).uppercased().contains("INT"))
-    let textColumn = try #require(columns.first { row in (row["name"] as String) == "text" })
+    let textColumn = try #require(
+      columns.first { row in
+        (row["name"] as String) == "text"
+      }
+    )
     #expect((textColumn["notnull"] as Int) == 1)
   }
 
-  @Test func v4CreatesCreatedAtAndKindIndexes() throws {
+  @Test
+  func v4CreatesCreatedAtAndKindIndexes() throws {
     // given
     let queue = try migratedQueue()
 
@@ -54,7 +74,8 @@ import Testing
     #expect(indexNames.contains("index_memory_items_kind"))
   }
 
-  @Test func deletingASessionNullsMemoryItemProvenance() throws {
+  @Test
+  func deletingASessionNullsMemoryItemProvenance() throws {
     // given - ON DELETE SET NULL keeps an owner fact after its learned-in session is gone.
     let queue = try migratedQueue()
     let createdAt = Date(timeIntervalSince1970: 1_000)
@@ -82,13 +103,13 @@ import Testing
     }
 
     // then
-    let sessionId = try queue.read { db in
+    let sessionID = try queue.read { db in
       try Int64.fetchOne(db, sql: "SELECT session_id FROM memory_items WHERE id = 1")
     }
     let survivingText = try queue.read { db in
       try String.fetchOne(db, sql: "SELECT text FROM memory_items WHERE id = 1")
     }
-    #expect(sessionId == nil)
+    #expect(sessionID == nil)
     #expect(survivingText == "owner fact")
   }
 }

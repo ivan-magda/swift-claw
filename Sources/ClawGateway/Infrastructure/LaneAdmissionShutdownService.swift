@@ -39,17 +39,20 @@ public struct LaneAdmissionShutdownService: Service {
       bufferingPolicy: .bufferingNewest(1)
     )
 
-    await withGracefulShutdownHandler {
-      var iterator = wake.makeAsyncIterator()
-      _ = await iterator.next()
-    } onGracefulShutdown: {
-      // Synchronous and nonblocking: stop admitting at once — touching no actor state — then wake the
-      // operation. Draining is deliberately NOT done here; the handler must not block the shutdown
-      // signal.
-      lanes.closeAdmission()
-      wakeContinuation.yield(())
-      wakeContinuation.finish()
-    }
+    await withGracefulShutdownHandler(
+      operation: {
+        var iterator = wake.makeAsyncIterator()
+        _ = await iterator.next()
+      },
+      onGracefulShutdown: {
+        // Synchronous and nonblocking: stop admitting at once — touching no actor state — then wake the
+        // operation. Draining is deliberately NOT done here; the handler must not block the shutdown
+        // signal.
+        lanes.closeAdmission()
+        wakeContinuation.yield(())
+        wakeContinuation.finish()
+      }
+    )
 
     // Cancellation-insensitive from here: cancel every registered turn, then await the bounded drain.
     await lanes.stopAcceptingAndCancel()
@@ -62,9 +65,7 @@ public struct LaneAdmissionShutdownService: Service {
     case .timedOut(let activeRunIDs):
       // A drain timeout is a failure path, not a clean shutdown: report the runs still in flight so
       // the caller can exit before tearing dependent resources down underneath them.
-      logger.error(
-        "session lane drain timed out; runs still in flight: \(activeRunIDs)"
-      )
+      logger.error("session lane drain timed out; runs still in flight: \(activeRunIDs)")
     }
   }
 }

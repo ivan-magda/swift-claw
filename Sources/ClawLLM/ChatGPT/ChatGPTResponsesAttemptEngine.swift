@@ -62,11 +62,13 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
     credentials: any LLMCredentialSource,
     http: any HTTPStreaming,
     clock: any Clock<Duration>,
-    jitter: @escaping @Sendable (Duration) -> Duration,
+    jitter: @escaping @Sendable (_ duration: Duration) -> Duration,
     retryBudget: Int,
     requestTimeoutSeconds: Int,
     treatsQuotaAsTerminal: Bool = false,
-    logger: Logger = Logger(label: "clawd.llm", factory: { _ in SwiftLogNoOpLogHandler() })
+    logger: Logger = Logger(label: "clawd.llm") { _ in
+      SwiftLogNoOpLogHandler()
+    }
   ) {
     self.credentials = credentials
     self.http = http
@@ -86,7 +88,7 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
   /// delta; `complete` passes a sink that discards them.
   func run(
     plan: ChatGPTResponsesAttemptPlan,
-    emitDelta: @escaping @Sendable (String) async throws -> Void
+    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
   ) async -> LLMStreamTermination {
     if Task.isCancelled {
       return .cancelled(.notStarted)
@@ -136,7 +138,7 @@ private extension ChatGPTResponsesAttemptEngine {
   func runAttempt(
     plan: ChatGPTResponsesAttemptPlan,
     state: inout CallState,
-    emitDelta: @escaping @Sendable (String) async throws -> Void
+    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
   ) async -> LoopControl {
     state.attempt += 1
     if Task.isCancelled {
@@ -256,18 +258,16 @@ private extension ChatGPTResponsesAttemptEngine {
   /// Drives credential acquisition after a clean 401 without re-entering the Responses attempt
   /// loop. A successful rotation is intentionally discarded here: it is durable for use in a later
   /// planned attempt, while this logical attempt terminates without a second inference send.
-  func finishRefreshWithoutInferenceRetry(
-    exposure: ProviderAttemptExposure
-  ) async -> LoopControl {
+  func finishRefreshWithoutInferenceRetry(exposure: ProviderAttemptExposure) async -> LoopControl {
     do {
       _ = try await credentials.authorization()
       return .stop(.failed(exposure.failure(.credentialRefreshCompleted)))
     } catch is CancellationError {
       return .stop(.cancelled(.notStarted))
-    } catch let credentialError as ChatGPTCredentialError {
-      return .stop(
-        .failed(exposure.failure(Self.cause(for: credentialError)))
-      )
+    } catch let credentialError
+      as ChatGPTCredentialError
+    {
+      return .stop(.failed(exposure.failure(Self.cause(for: credentialError))))
     } catch {
       return .stop(.failed(exposure.failure(.authenticationRequired)))
     }
@@ -394,7 +394,7 @@ private extension ChatGPTResponsesAttemptEngine {
     _ request: HTTPRequest,
     exposure: ProviderAttemptExposure,
     context: ResponseContext,
-    emitDelta: @escaping @Sendable (String) async throws -> Void
+    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
   ) async -> Dispatch {
     let exchange: HTTPStreamExchange
     do {
@@ -464,7 +464,7 @@ private extension ChatGPTResponsesAttemptEngine {
     _ exchange: HTTPStreamExchange,
     exposure: ProviderAttemptExposure,
     context: ResponseContext,
-    emitDelta: @escaping @Sendable (String) async throws -> Void
+    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
   ) async -> LLMStreamTermination {
     var parser = ChatGPTResponsesSSEParser()
     var accumulator = ChatGPTResponsesAccumulator(
@@ -481,9 +481,7 @@ private extension ChatGPTResponsesAttemptEngine {
         // `accumulator.consume` may first observe tokens and then throw (for example when the
         // evaluation output cap is crossed). Debit that observation before the error leaves this
         // chunk so cancellation cannot turn known provider work into a zero-token exposure.
-        defer {
-          exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens)
-        }
+        defer { exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens) }
         for streamEvent in try accumulator.consume(try parser.push(chunk)) {
           switch streamEvent {
           case .delta(let text):
@@ -564,10 +562,7 @@ private extension ChatGPTResponsesAttemptEngine {
 
   /// Reads and sanitizes the diagnostic body, then joins the exchange. The body is already capped by
   /// the executor at the diagnostic allowance, so reading it whole holds no more than that.
-  func diagnose(
-    _ exchange: HTTPStreamExchange,
-    redactionValues: [String]
-  ) async -> HeadDiagnosis {
+  func diagnose(_ exchange: HTTPStreamExchange, redactionValues: [String]) async -> HeadDiagnosis {
     var body = Data()
     do {
       for try await chunk in exchange.body {
@@ -664,7 +659,7 @@ private extension ChatGPTResponsesAttemptEngine {
   }
 
   static func retryAfterSeconds(_ head: HTTPStreamHead) -> Int? {
-    guard let raw = head.getHeader(for: "retry-after") else {
+    guard let raw = head.header(for: "retry-after") else {
       return nil
     }
     // Whole delta-seconds only; an HTTP-date form is not honored as a bounded hint.

@@ -2,16 +2,21 @@ import ClawCore
 import Foundation
 import Logging
 
-/// The pure orchestration of one blocking turn: preflight → typing + wall-clock deadline →
-/// provider call → classify. No persistence or sending (the gateway owns that); all
-/// collaborators are injected `ClawCore` protocols so tests drive it with mocks.
+/// Runs provider rounds and gated tools under the run's budgets.
+///
+/// The runtime records intermediate usage and audit events; the gateway owns terminal persistence
+/// and delivery. Collaborators are injected through ClawCore protocols.
 public struct AgentRuntime: Sendable {
-  /// The routes a turn may drive. A turn starts on the primary unless it is cooling, and
-  /// re-resolves its `ActiveRoute` when it fails over, so accounting and the budget gate follow
-  /// whichever route really answered rather than one stamped at init.
+  /// The routes a turn may drive.
+  ///
+  /// A turn starts on the primary unless it is cooling, and re-resolves its `ActiveRoute` when it
+  /// fails over, so accounting and the budget gate follow whichever route really answered rather
+  /// than one stamped at init.
   private let roster: ProviderRoster
-  /// The primary's cooldown window, armed by a switch and cleared by a healthy answer. Absent when
-  /// nothing composed one — a lone route has nowhere to switch, so it has nothing to remember.
+  /// The primary's cooldown window, armed by a switch and cleared by a healthy answer.
+  ///
+  /// Absent when nothing composed one — a lone route has nowhere to switch, so it has nothing to
+  /// remember.
   let cooldown: (any PrimaryRouteCooldownTracking)?
   let typingIndicator: any TypingIndicator
   let draftStreamer: any RichDraftStreaming
@@ -30,11 +35,15 @@ public struct AgentRuntime: Sendable {
 
   private let usageStore: any UsageStore
   let auditLog: any AuditLog
-  /// Mints the identity each round-trip's usage row is recorded under. Injected so a test can pin
-  /// the identities a run records rather than assert against a random UUID.
+  /// Mints the identity each round-trip's usage row is recorded under.
+  ///
+  /// Injected so a test can pin the identities a run records rather than assert against a random
+  /// UUID.
   private let providerCallIDGenerator: any ProviderCallIDGenerating
-  /// Developer-facing diagnostics (swift-log). Distinct from `auditLog`, which is the durable
-  /// business/security trail. Defaults to a no-op so tests stay silent unless they inject one.
+  /// Developer-facing diagnostics (swift-log).
+  ///
+  /// Distinct from `auditLog`, which is the durable business/security trail. Defaults to a no-op so
+  /// tests stay silent unless they inject one.
   let logger: Logger
   /// Injected so tests can script pacing (deadline, backoff) instead of waiting on wall-clock.
   let clock: any Clock<Duration>
@@ -53,7 +62,9 @@ public struct AgentRuntime: Sendable {
     usageStore: any UsageStore,
     auditLog: any AuditLog,
     providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
-    logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
+    logger: Logger = Logger(label: "clawd.agent") { _ in
+      SwiftLogNoOpLogHandler()
+    },
     clock: any Clock<Duration>
   ) {
     self.init(
@@ -71,9 +82,10 @@ public struct AgentRuntime: Sendable {
       auditLog: auditLog,
       providerCallIDGenerator: providerCallIDGenerator,
       logger: logger,
-      clock: clock,
-      now: { ContinuousClock.now }
-    )
+      clock: clock
+    ) {
+      ContinuousClock.now
+    }
   }
 
   package init(
@@ -90,9 +102,13 @@ public struct AgentRuntime: Sendable {
     usageStore: any UsageStore,
     auditLog: any AuditLog,
     providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
-    logger: Logger = Logger(label: "clawd.agent", factory: { _ in SwiftLogNoOpLogHandler() }),
+    logger: Logger = Logger(label: "clawd.agent") { _ in
+      SwiftLogNoOpLogHandler()
+    },
     clock: any Clock<Duration>,
-    now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
+    now: @escaping @Sendable () -> ContinuousClock.Instant = {
+      ContinuousClock.now
+    }
   ) {
     self.roster = roster
     self.cooldown = cooldown
@@ -121,19 +137,35 @@ public struct AgentRuntime: Sendable {
 
 extension AgentRuntime {
   // swiftlint:disable function_parameter_count function_body_length cyclomatic_complexity
-  /// The bounded agentic loop: one context assembly, then up to `maxTurns` round-trips
-  /// with per-round-trip budget preflight, gated tool dispatch, and immediate usage/audit writes.
-  /// A DELIBERATE SOFTENING of "no persistence here": `usageStore`/`auditLog` are injected
-  /// so mid-run rows survive a crash. Throws ONLY `StoreError.diskFull`; every
-  /// other failure resolves in-band to a `TurnResult`.
+  /// Runs the bounded provider and tool loop using an assembled context.
   ///
-  /// - Parameter hasPinnedLessons: whether the assembled context carries a non-empty pinned lesson
-  ///   set. A model wrote those lessons, so they arm the run's untrusted-ingestion flag before the
-  ///   first dispatch instead of waiting for a tool observation to do it.
+  /// Each round checks budgets and policy before dispatch and records intermediate usage and audit
+  /// events. Failures other than disk-full resolve in the returned outcome.
+  ///
+  /// - Parameters:
+  ///   - runID: The durable run to charge and audit.
+  ///   - sessionID: The conversation that owns the run.
+  ///   - chatID: The chat receiving progress updates.
+  ///   - buildResult: The assembled messages and their privacy and policy metadata.
+  ///   - sessionTainted: The session's persisted untrusted-ingestion state at entry.
+  ///   - hasPinnedLessons: Whether non-empty model-written lessons are present, arming the run's
+  ///     untrusted-ingestion flag before the first dispatch.
+  ///   - sessionHasPrivateData: The session's persisted private-data flag at entry.
+  ///   - todayTokens: The persisted daily token total loaded when this run segment starts.
+  ///   - todayUSD: The persisted daily metered spend loaded when this run segment starts.
+  ///   - origin: Selects interactive or proactive budget and privilege restrictions.
+  ///   - proactiveTodayUSD: The persisted daily proactive spend loaded at segment start.
+  ///   - carryOver: Usage already recorded for a suspended run, or nil for a fresh run.
+  ///   - mode: The conversation's frozen direct or group mode.
+  ///   - threadID: The forum topic receiving progress, or nil for a chat without a topic ID.
+  ///   - requesterUserID: The original sender whose identity follows group actions.
+  /// - Returns: The run-segment result, including approval suspension, plus the tool exchanges,
+  ///   accumulated trust flags, and route notice needed by the gateway.
+  /// - Throws: `StoreError.diskFull` when a required intermediate write cannot fit on disk.
   public func runTurn(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     buildResult: BuildResult,
     sessionTainted: Bool,
     hasPinnedLessons: Bool,
@@ -144,8 +176,8 @@ extension AgentRuntime {
     proactiveTodayUSD: Double = 0,
     carryOver: ResumeUsage? = nil,
     mode: ChatMode = .direct,
-    threadId: Int64? = nil,
-    requesterUserId: Int64? = nil
+    threadID: Int64? = nil,
+    requesterUserID: Int64? = nil
   ) async throws -> TurnOutcome {
     let deadline = now() + .seconds(budget.wallClockDeadlineSeconds)
     var attemptState = AttemptRuntimeState(policy: attemptPolicy)
@@ -154,9 +186,7 @@ extension AgentRuntime {
     // A cooling primary starts the turn on the fallback, so the round-trip is spent on a route
     // that can answer instead of re-proving the wall.
     var active = ActiveRoute(
-      selection: roster.startingRoute(
-        primaryIsCooling: await cooldown?.isCooling() == true
-      ),
+      selection: roster.startingRoute(primaryIsCooling: await cooldown?.isCooling() == true),
       budget: budget,
       costResolver: costResolver,
       usageResolver: usageResolver
@@ -167,10 +197,10 @@ extension AgentRuntime {
     // ties the round-trips, tool calls, and outcome of a single turn together.
     var turnLog = logger
     let metadata = Self.turnMetadata(
-      runId: runId,
-      sessionId: sessionId,
+      runID: runID,
+      sessionID: sessionID,
       mode: mode,
-      threadId: threadId
+      threadID: threadID
     )
     for (key, value) in metadata {
       turnLog[metadataKey: key] = value
@@ -206,10 +236,7 @@ extension AgentRuntime {
     // Terminal choke-point for the RESULT paths: every `return outcome(...)` flows through here, so a
     // turn that produces a `TurnOutcome` emits exactly one finished line (see `logFinish`). The
     // `StoreError.diskFull` fast-path throws to the gateway instead, which logs that terminal.
-    func outcome(
-      _ result: TurnResult,
-      failureCause: AttemptFailureCause? = nil
-    ) -> TurnOutcome {
+    func outcome(_ result: TurnResult, failureCause: AttemptFailureCause? = nil) -> TurnOutcome {
       Self.logFinish(result, on: turnLog, elapsed: now() - turnStart)
       return TurnOutcome(
         result: result,
@@ -235,8 +262,8 @@ extension AgentRuntime {
           context: wire,
           tools: definitions,
           observedCompletionTokens: 0,
-          runId: runId,
-          sessionId: sessionId
+          runID: runID,
+          sessionID: sessionID
         )
       )
     }
@@ -283,10 +310,7 @@ extension AgentRuntime {
       let remaining = deadline - now()
       guard remaining > .zero else {
         turnLog.notice("round-trip \(roundTripIndex) wall-clock exhausted before send; degrading")
-        return outcome(
-          .degraded(.providerUnavailable, usage: nil),
-          failureCause: .deadline
-        )
+        return outcome(.degraded(.providerUnavailable, usage: nil), failureCause: .deadline)
       }
 
       turnLog.debug(
@@ -319,10 +343,7 @@ extension AgentRuntime {
           turnLog.notice(
             "round-trip \(roundTripIndex) wall-clock cannot admit another bounded send; degrading"
           )
-          return outcome(
-            .degraded(.providerUnavailable, usage: nil),
-            failureCause: .deadline
-          )
+          return outcome(.degraded(.providerUnavailable, usage: nil), failureCause: .deadline)
         }
         let outputScope = attemptState.beginRound(outboundModel: active.binding.wireModel)
         let request = ChatRequest(
@@ -330,7 +351,7 @@ extension AgentRuntime {
           messages: wire,
           maxOutputTokens: budget.maxOutputTokens,
           tools: definitions,
-          sessionId: SessionTraceID.format(sessionID: sessionId),
+          sessionID: SessionTraceID.format(sessionID: sessionID),
           outputScope: outputScope,
           terminalValidationPolicy: attemptState.terminalValidationPolicy
         )
@@ -343,7 +364,7 @@ extension AgentRuntime {
         do {
           response = try await roundTrip(
             provider: active.binding.provider,
-            target: TurnProgressTarget(chatId: chatId, threadId: threadId, draftId: runId),
+            target: TurnProgressTarget(chatID: chatID, threadID: threadID, draftID: runID),
             request: request,
             deadlineSeconds: Int(sendBudget.components.seconds)
           )
@@ -356,8 +377,8 @@ extension AgentRuntime {
                   callID: callID,
                   context: wire,
                   tools: definitions,
-                  runId: runId,
-                  sessionId: sessionId
+                  runID: runID,
+                  sessionID: sessionID
                 )
               ),
               failureCause: .modelIdentityMismatch
@@ -375,8 +396,8 @@ extension AgentRuntime {
                   callID: callID,
                   context: wire,
                   tools: definitions,
-                  runId: runId,
-                  sessionId: sessionId
+                  runID: runID,
+                  sessionID: sessionID
                 )
               ),
               failureCause: .localOutputLimit
@@ -388,9 +409,8 @@ extension AgentRuntime {
           let reportedKind = firstFailureKind ?? failure.degradationKind
           firstFailureKind = reportedKind
 
-          guard
-            let persistence = RouteSwitch.permits(error),
-            let next = roster.failover(from: active.position)
+          guard let persistence = RouteSwitch.permits(error),
+                let next = roster.failover(from: active.position)
           else {
             turnLog.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
             return outcome(
@@ -398,8 +418,8 @@ extension AgentRuntime {
                 error,
                 callID: callID,
                 context: wire,
-                runId: runId,
-                sessionId: sessionId,
+                runID: runID,
+                sessionID: sessionID,
                 accountant: active.accountant,
                 degradationKind: reportedKind
               ),
@@ -429,12 +449,12 @@ extension AgentRuntime {
               actor: .system,
               action: .providerFallback,
               decision: reason,
-              runId: runId,
-              sessionId: sessionId,
+              runID: runID,
+              sessionID: sessionID,
               ts: Date()
             ),
-            runId: runId,
-            sessionId: sessionId
+            runID: runID,
+            sessionID: sessionID
           )
         }
       }
@@ -450,8 +470,8 @@ extension AgentRuntime {
           response: response,
           callID: callID,
           context: wire,
-          runId: runId,
-          sessionId: sessionId,
+          runID: runID,
+          sessionID: sessionID,
           accountant: active.accountant
         )
         return outcome(classified)
@@ -462,8 +482,8 @@ extension AgentRuntime {
         callID: callID,
         context: wire,
         tools: definitions,
-        runId: runId,
-        sessionId: sessionId
+        runID: runID,
+        sessionID: sessionID
       )
       do {
         try usageStore.recordUsage(intermediate)
@@ -479,7 +499,7 @@ extension AgentRuntime {
         attemptState.recordMissingUsage(intermediate)
       }
 
-      await typingIndicator.sendTyping(chatId: chatId, messageThreadId: threadId)
+      await typingIndicator.sendTyping(chatID: chatID, messageThreadID: threadID)
       var observations: [ToolObservation] = []
       for call in response.toolCalls {
         proposedToolCalls += 1
@@ -488,23 +508,20 @@ extension AgentRuntime {
         }
 
         guard deadline > now() else {
-          return outcome(
-            deadlineDegradation(callID),
-            failureCause: .deadline
-          )
+          return outcome(deadlineDegradation(callID), failureCause: .deadline)
         }
 
-        let effectiveRequesterUserId: Int64?
+        let effectiveRequesterUserID: Int64?
         if origin == .interactive {
-          if let requesterUserId {
-            effectiveRequesterUserId = requesterUserId
+          if let requesterUserID {
+            effectiveRequesterUserID = requesterUserID
           } else if mode == .direct {
-            effectiveRequesterUserId = chatId
+            effectiveRequesterUserID = chatID
           } else {
-            effectiveRequesterUserId = nil
+            effectiveRequesterUserID = nil
           }
         } else {
-          effectiveRequesterUserId = nil
+          effectiveRequesterUserID = nil
         }
 
         let context = ToolDispatchContext(
@@ -516,21 +533,21 @@ extension AgentRuntime {
           approvalAlreadyPending: pendingSuspension != nil,
           mode: mode,
           executionContext: ToolExecutionContext(
-            runId: runId,
-            sessionId: sessionId,
-            chatId: chatId,
-            requesterUserId: effectiveRequesterUserId,
+            runID: runID,
+            sessionID: sessionID,
+            chatID: chatID,
+            requesterUserID: effectiveRequesterUserID,
             origin: origin,
             mode: mode,
-            toolCallId: call.id,
-            approvalId: nil
+            toolCallID: call.id,
+            approvalID: nil
           )
         )
 
         guard let toolDispatcher else {
           observations.append(
             ToolObservation(
-              callId: call.id,
+              callID: call.id,
               toolName: call.name,
               content: "No tools are available.",
               status: .error,
@@ -552,11 +569,11 @@ extension AgentRuntime {
         )
 
         if pendingSuspension == nil, let recordedAction = dispatched.requiresApproval {
-          pendingSuspension = PendingToolAction(toolCallId: call.id, recorded: recordedAction)
+          pendingSuspension = PendingToolAction(toolCallID: call.id, recorded: recordedAction)
           continue
         }
 
-        try recordToolAudit(for: call, outcome: dispatched, runId: runId, sessionId: sessionId)
+        try recordToolAudit(for: call, outcome: dispatched, runID: runID, sessionID: sessionID)
 
         observations.append(dispatched.observation)
         if dispatched.observation.ingestedUntrusted {
@@ -583,7 +600,7 @@ extension AgentRuntime {
               label: fenceLabels.label(forToolNamed: observation.toolName),
               content: observation.content
             ).render(),
-            toolCallId: observation.callId
+            toolCallID: observation.callID
           )
         )
       }
@@ -603,6 +620,5 @@ extension AgentRuntime {
     }
 
     return outcome(.budgetStopped(cap: "per-run turn"))
-  }
-  // swiftlint:enable function_parameter_count function_body_length cyclomatic_complexity
+  }  // swiftlint:enable function_parameter_count function_body_length cyclomatic_complexity
 }

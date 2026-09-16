@@ -3,24 +3,21 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ImageReservationTests {
+@Suite
+struct ImageReservationTests {
   private func photo(width: Int, height: Int) -> ImagePart {
-    ImagePart(
-      data: Data([0xFF, 0xD8, 0xFF, 0xE0]),
-      mediaType: .jpeg,
-      width: width,
-      height: height
-    )
+    ImagePart(data: Data([0xFF, 0xD8, 0xFF, 0xE0]), mediaType: .jpeg, width: width, height: height)
   }
 
-  @Test func imagesAreReservedEvenOnTheTextOnlyPolicy() {
+  @Test
+  func imagesAreReservedEvenOnTheTextOnlyPolicy() {
     // given — a route with no replay state still sends images, so the reservation cannot live
     // inside the replay-state branch
     let messages = [
       ChatMessage(
         role: .user,
         content: MessageContent(parts: [.image(photo(width: 1280, height: 960))])
-      )
+      ),
     ]
 
     // when
@@ -30,7 +27,8 @@ import Testing
     #expect(reserved == 1_610)
   }
 
-  @Test func everyImageInTheRequestIsCountedIncludingReplayedOnes() {
+  @Test
+  func everyImageInTheRequestIsCountedIncludingReplayedOnes() {
     // given — one image on the newest message and one carried in from history
     let messages = [
       ChatMessage(
@@ -51,7 +49,8 @@ import Testing
     #expect(reserved == 1_610 + 638)
   }
 
-  @Test func textOnlyRequestsReserveNothing() {
+  @Test
+  func textOnlyRequestsReserveNothing() {
     // given
     let messages = [ChatMessage(role: .user, content: "hi")]
 
@@ -61,7 +60,8 @@ import Testing
 
   /// The route that actually carries replay state is the one shipped for ChatGPT, so the image
   /// charge has to survive alongside the replay charge rather than only on the stateless route.
-  @Test func theReplayStateRouteChargesImagesOnTopOfItsReplayReservation() {
+  @Test
+  func theReplayStateRouteChargesImagesOnTopOfItsReplayReservation() {
     // given — a photo the owner sent, then a reply whose reasoning state is replayed next turn
     let messages = [
       ChatMessage(
@@ -80,7 +80,8 @@ import Testing
 
   /// Pins that the two subtotals are combined saturatingly: a plain addition traps here instead of
   /// clamping, and only an image on the same request makes the left operand nonzero.
-  @Test func anAlreadySaturatedReplayReservationAbsorbsImagesInsteadOfOverflowing() {
+  @Test
+  func anAlreadySaturatedReplayReservationAbsorbsImagesInsteadOfOverflowing() {
     // given
     let absurd = LLMInputReservationPolicy.replayState(
       tokensPerByte: .max,

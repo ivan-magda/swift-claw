@@ -71,9 +71,12 @@ struct SearchLikeTool: Tool {
     egressClass: .fixedEndpoint,
     riskLevel: .safe
   )
+
   let timeout: Duration = .seconds(1)
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     ToolPayload(content: "results", status: .ok, ingestedUntrusted: true)
@@ -100,7 +103,9 @@ struct WriteLikeTool: Tool {
 
   let timeout: Duration = .seconds(1)
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { resolution }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    resolution
+  }
 
   func approvalPresentation(
     arguments: JSONValue,
@@ -135,9 +140,13 @@ private struct PreparedDangerousTool: Tool {
     )
   }
 
-  var timeout: Duration { .seconds(30) }
+  var timeout: Duration {
+    .seconds(30)
+  }
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
     resolution
@@ -173,9 +182,13 @@ private struct ProbedDangerousTool: Tool {
     )
   }
 
-  var timeout: Duration { .seconds(30) }
+  var timeout: Duration {
+    .seconds(30)
+  }
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   func prepareAction(arguments: JSONValue) async -> PreparedActionResolution? {
     await probe.mark()
@@ -187,7 +200,8 @@ private struct ProbedDangerousTool: Tool {
   }
 }
 
-@Suite struct ToolPolicyGateTests {
+@Suite
+struct ToolPolicyGateTests {
   /// Every combination of the five trifecta inputs, exhaustive so no leg can go unexercised. Both
   /// the gating test and the tier-agreement test read this one list: the branch that removed the
   /// duplicated predicate from the gate must not leave two leg matrices behind to drift instead.
@@ -209,14 +223,15 @@ private struct ProbedDangerousTool: Tool {
   ) -> ToolPolicyGate {
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: ["s3cret-value-1"]),
-      privateFileLoader: { privateFiles },
+      privateFileLoader: {
+        privateFiles
+      },
       enabledDangerousTools: execEnabled ? [ExecuteCodeTool.name] : []
     )
   }
 
   private func dangerousAction(
-    canonicalArgsJSON: String =
-      #"{"code":"print('hello')","language":"python","network":false,"#
+    canonicalArgsJSON: String = #"{"code":"print('hello')","language":"python","network":false,"#
       + #""readsPrivateData":false,"stage":[]}"#,
     guardTexts: [String] = ["print('hello')"],
     canExfiltrate: Bool = false
@@ -268,7 +283,8 @@ private struct ProbedDangerousTool: Tool {
     ToolCall(id: "c1", name: "web_fetch", argumentsJSON: #"{"url":"\#(url)"}"#)
   }
 
-  @Test func classDeclarationNotToolNameDrivesTheApprovalTier() async {
+  @Test
+  func classDeclarationNotToolNameDrivesTheApprovalTier() async {
     // given — an egress tool the gate has never heard of by name, declared arbitrary-destination
     let webhookTool = FetchLikeTool(name: "send_webhook")
 
@@ -293,7 +309,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(recorded.reason == .exfilTrifecta)
   }
 
-  @Test func cleanFetchOutsideTrifectaIsAllowed() async {
+  @Test
+  func cleanFetchOutsideTrifectaIsAllowed() async {
     // given / when
     let verdict = await makeGate().evaluate(
       call: fetchCall("https://example.com/a"),
@@ -342,7 +359,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(searchPayload.status == .blockedArgs)
   }
 
-  @Test func fileReadIsNeverArgBlocked() async {
+  @Test
+  func fileReadIsNeverArgBlocked() async {
     // given — tiers 2/3 target egress tools only; file_read args are not an egress sink
     let verdict = await makeGate().evaluate(
       call: ToolCall(
@@ -407,7 +425,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.status == .blockedArgs)
   }
 
-  @Test func firstTripRequiresApprovalLaterTripsObserveTheBlock() async {
+  @Test
+  func firstTripRequiresApprovalLaterTripsObserveTheBlock() async {
     // given
     let gate = makeGate()
     let context = makeContext(tainted: true, assemblyPrivate: true)
@@ -440,7 +459,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(laterPayload.status == .blockedPendingApproval)
   }
 
-  @Test func urlPolicyRefusalUnderTrifectaIsAnErrorBeforeAnyPrompt() async {
+  @Test
+  func urlPolicyRefusalUnderTrifectaIsAnErrorBeforeAnyPrompt() async {
     // given — userinfo/IDN refused at gate time, BEFORE an approval is requested (§9.2)
     let verdict = await makeGate().evaluate(
       call: fetchCall("https://user:pw@example.com/"),
@@ -457,7 +477,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.content == "That is not a valid URL.")
   }
 
-  @Test func missingUrlUnderTrifectaRefusesWithTheResolutionCopy() async {
+  @Test
+  func missingURLUnderTrifectaRefusesWithTheResolutionCopy() async {
     // given — a fetch with no "url" argument resolves to a refusal at the gate (delta: unified copy)
     let verdict = await makeGate().evaluate(
       call: ToolCall(id: "c1", name: "web_fetch", argumentsJSON: "{}"),
@@ -474,7 +495,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.content == #"web_fetch needs a non-empty "url" argument."#)
   }
 
-  @Test func askTierReachesApprovalDespiteNoneEgress() async {
+  @Test
+  func askTierReachesApprovalDespiteNoneEgress() async {
     // given — an ask-tier tool whose egress class is .none; the old gate short-circuited every
     // .none tool to .allow before any evaluation (§4.3 breaks that)
     let call = ToolCall(
@@ -567,7 +589,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(blocksOnPrivateData(askVerdict) == legs.holds)
   }
 
-  @Test func askTierRecordsCanonicalArgsHashAndPresentation() async {
+  @Test
+  func askTierRecordsCanonicalArgsHashAndPresentation() async {
     // given
     let call = ToolCall(
       id: "c1",
@@ -594,7 +617,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(recorded.presentation.contentPreview == "hi")
   }
 
-  @Test func askTierRefusedTargetBlocksBeforeApproval() async {
+  @Test
+  func askTierRefusedTargetBlocksBeforeApproval() async {
     // given — an ask-tier tool that refuses to resolve a target (as web_fetch does on a bad URL)
     let refusing = WriteLikeTool(resolution: .refused(reason: "path escapes the workspace."))
 
@@ -614,7 +638,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.content == "path escapes the workspace.")
   }
 
-  @Test func askTierWithAPendingApprovalYieldsTheBlockedObservation() async {
+  @Test
+  func askTierWithAPendingApprovalYieldsTheBlockedObservation() async {
     // given — the run's single approval slot is already occupied (§5.2, one pending per run)
     // when
     let verdict = await makeGate().evaluate(
@@ -635,7 +660,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.status == .blockedPendingApproval)
   }
 
-  @Test func persistedPrivateDataFlagArmsTheTrifectaAndRequiresApproval() async throws {
+  @Test
+  func persistedPrivateDataFlagArmsTheTrifectaAndRequiresApproval() async throws {
     // given — taint present; the ONLY private-data source is the persisted session flag (assembly
     // and run legs both false). This is the §12 over-cap gap the flag closes.
     let gate = makeGate()
@@ -659,7 +685,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(recorded.canonicalTarget == "https://x.example/")
   }
 
-  @Test func trifectaWithoutAnyPrivateLegDoesNotRequireApproval() async throws {
+  @Test
+  func trifectaWithoutAnyPrivateLegDoesNotRequireApproval() async throws {
     // given — taint but NO private-data source of any kind
     let gate = makeGate()
     let call = ToolCall(
@@ -680,7 +707,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(action?.target == "https://x.example/")
   }
 
-  @Test func trifectaWithAnApprovalAlreadyPendingBlocksWithoutRequiringAnother() async throws {
+  @Test
+  func trifectaWithAnApprovalAlreadyPendingBlocksWithoutRequiringAnother() async throws {
     // given — one pending approval already exists for the run (§5.2)
     let gate = makeGate()
     let call = ToolCall(
@@ -701,7 +729,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.status == .blockedPendingApproval)
   }
 
-  @Test func restructureKeepsRedactionAheadOfTheTrifectaApproval() async {
+  @Test
+  func restructureKeepsRedactionAheadOfTheTrifectaApproval() async {
     // given — a .safe egress tool under trifecta whose args carry a MEMORY.md substring: the
     // ask-tier arm is skipped (safe), so the tier-3 redaction block must still win over the
     // trifecta approval exactly as before the reorder (§5.1(b) — arg-guard/redaction ordering
@@ -723,7 +752,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.status == .blockedArgs)
   }
 
-  @Test func dangerousToolAlwaysParksItsPreparedCanonicalAction() async {
+  @Test
+  func dangerousToolAlwaysParksItsPreparedCanonicalAction() async {
     // given
     let action = dangerousAction()
     let tool = PreparedDangerousTool(resolution: .prepared(action))
@@ -745,7 +775,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(recorded.presentation == action.presentation)
   }
 
-  @Test func disabledDangerousGateBlocksBeforeApproval() async {
+  @Test
+  func disabledDangerousGateBlocksBeforeApproval() async {
     // given
     let tool = PreparedDangerousTool(resolution: .prepared(dangerousAction()))
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
@@ -766,7 +797,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.content.contains("disabled"))
   }
 
-  @Test func dangerousNilAndRefusedPreparationFailClosed() async {
+  @Test
+  func dangerousNilAndRefusedPreparationFailClosed() async {
     // given
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
     let gate = makeGate(execEnabled: true)
@@ -784,8 +816,7 @@ private struct ProbedDangerousTool: Tool {
     )
 
     // then
-    guard case .block(let missingPayload, _) = missing,
-      case .block(let refusedPayload, _) = refused
+    guard case .block(let missingPayload, _) = missing, case .block(let refusedPayload, _) = refused
     else {
       Issue.record("expected both preparation failures to block")
       return
@@ -837,11 +868,7 @@ private struct ProbedDangerousTool: Tool {
 
     // when
     let allowed = await gate.evaluate(call: call, tool: noNetwork, context: makeContext(mode: mode))
-    let blocked = await gate.evaluate(
-      call: call,
-      tool: networked,
-      context: makeContext(mode: mode)
-    )
+    let blocked = await gate.evaluate(call: call, tool: networked, context: makeContext(mode: mode))
 
     // then
     switch mode {
@@ -863,7 +890,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(blockedPayload.status == .blockedArgs)
   }
 
-  @Test func dangerousToolCannotTakeASecondApprovalSlot() async {
+  @Test
+  func dangerousToolCannotTakeASecondApprovalSlot() async {
     // given
     let tool = PreparedDangerousTool(resolution: .prepared(dangerousAction()))
 
@@ -882,7 +910,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(payload.status == .blockedPendingApproval)
   }
 
-  @Test func pendingApprovalBlocksBeforeAnyStagingOrScan() async {
+  @Test
+  func pendingApprovalBlocksBeforeAnyStagingOrScan() async {
     // given
     let probe = PrepareCallProbe()
     let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
@@ -904,7 +933,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(prepareCalls == 0)
   }
 
-  @Test func openApprovalSlotStillPreparesTheDangerousAction() async {
+  @Test
+  func openApprovalSlotStillPreparesTheDangerousAction() async {
     // given — the control: with the slot open, preparation must run so the action can park
     let probe = PrepareCallProbe()
     let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
@@ -926,7 +956,8 @@ private struct ProbedDangerousTool: Tool {
   }
 }
 
-@Suite struct GatedToolDispatcherTests {
+@Suite
+struct GatedToolDispatcherTests {
   private func makeDispatcher(
     tools: [any Tool],
     privateFiles: [String] = [],
@@ -936,7 +967,9 @@ private struct ProbedDangerousTool: Tool {
       registry: ToolRegistry(tools: tools),
       gate: ToolPolicyGate(
         argGuard: ExfilArgGuard(secretValues: []),
-        privateFileLoader: { privateFiles },
+        privateFileLoader: {
+          privateFiles
+        },
         enabledDangerousTools: []
       ),
       clock: clock
@@ -952,7 +985,8 @@ private struct ProbedDangerousTool: Tool {
     approvalAlreadyPending: false
   )
 
-  @Test func unknownToolIsAnErrorObservationNeverACrash() async {
+  @Test
+  func unknownToolIsAnErrorObservationNeverACrash() async {
     // given
     let dispatcher = makeDispatcher(tools: [StubTool(name: "file_read")])
 
@@ -968,7 +1002,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(outcome.observation.ingestedUntrusted == false)
   }
 
-  @Test func errorPathArgsAreRedactedNotRaw() async {
+  @Test
+  func errorPathArgsAreRedactedNotRaw() async {
     // given — an unknown tool called with a secret-SHAPED token in its args: even though the call
     // never reaches the gate, the audit rendering must not re-contain it (seam contract)
     let dispatcher = makeDispatcher(tools: [StubTool(name: "file_read")])
@@ -988,7 +1023,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(outcome.argsRedacted.contains("sk-abcdefghijklmnop1234") == false)
   }
 
-  @Test func malformedArgumentsAreAnErrorObservation() async {
+  @Test
+  func malformedArgumentsAreAnErrorObservation() async {
     // given
     let dispatcher = makeDispatcher(tools: [StubTool(name: "file_read")])
 
@@ -1002,14 +1038,17 @@ private struct ProbedDangerousTool: Tool {
     #expect(outcome.observation.status == .error)
   }
 
-  @Test func allowedCallExecutesAndStampsIdentity() async {
+  @Test
+  func allowedCallExecutesAndStampsIdentity() async {
     // given
-    let dispatcher = makeDispatcher(tools: [
-      StubTool(
-        name: "file_read",
-        payload: ToolPayload(content: "file text", status: .ok, ingestedUntrusted: true)
-      )
-    ])
+    let dispatcher = makeDispatcher(
+      tools: [
+        StubTool(
+          name: "file_read",
+          payload: ToolPayload(content: "file text", status: .ok, ingestedUntrusted: true)
+        ),
+      ]
+    )
 
     // when
     let outcome = await dispatcher.dispatch(
@@ -1018,21 +1057,25 @@ private struct ProbedDangerousTool: Tool {
     )
 
     // then
-    #expect(outcome.observation.callId == "c7")
+    #expect(outcome.observation.callID == "c7")
     #expect(outcome.observation.toolName == "file_read")
     #expect(outcome.observation.content == "file text")
     #expect(outcome.observation.ingestedUntrusted)
   }
 
-  @Test func executeReceivesTheGateResolvedCanonicalTarget() async {
+  @Test
+  func executeReceivesTheGateResolvedCanonicalTarget() async {
     // given — a recording arbitrary-destination tool
     actor TargetRecorder {
       private(set) var received: String?
 
-      func record(_ target: String?) { received = target }
+      func record(_ target: String?) {
+        received = target
+      }
     }
     struct RecordingFetchTool: Tool {
       let recorder: TargetRecorder
+
       let definition = ToolDefinition(
         name: "web_fetch",
         description: "stub",
@@ -1041,6 +1084,7 @@ private struct ProbedDangerousTool: Tool {
         egressClass: .arbitraryDestination,
         riskLevel: .safe
       )
+
       let timeout: Duration = .seconds(1)
 
       func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
@@ -1048,8 +1092,10 @@ private struct ProbedDangerousTool: Tool {
           return .refused(reason: "web_fetch needs a non-empty \"url\" argument.")
         }
         switch CanonicalURL.canonicalize(rawURL) {
-        case .success(let canonical): return .resolved(canonical)
-        case .failure: return .refused(reason: "That is not a valid URL.")
+        case .success(let canonical):
+          return .resolved(canonical)
+        case .failure:
+          return .refused(reason: "That is not a valid URL.")
         }
       }
 
@@ -1075,7 +1121,8 @@ private struct ProbedDangerousTool: Tool {
     #expect(await recorder.received == "https://example.com/a")
   }
 
-  @Test func slowToolTimesOutWithAnErrorObservation() async {
+  @Test
+  func slowToolTimesOutWithAnErrorObservation() async {
     // given — a tool that sleeps past its own tiny timeout
     struct SlowTool: Tool {
       let definition = ToolDefinition(
@@ -1086,9 +1133,12 @@ private struct ProbedDangerousTool: Tool {
         egressClass: .none,
         riskLevel: .safe
       )
+
       let timeout: Duration = .milliseconds(20)
 
-      func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+      func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+        nil
+      }
 
       func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
         try? await Task.sleep(for: .seconds(10))
@@ -1145,7 +1195,9 @@ actor WedgeRelease {
     if released {
       return
     }
-    await withCheckedContinuation { waiters.append($0) }
+    await withCheckedContinuation {
+      waiters.append($0)
+    }
   }
 
   func release() {
@@ -1159,6 +1211,7 @@ actor WedgeRelease {
 
 struct WedgedTool: Tool {
   let release: WedgeRelease
+
   let definition = ToolDefinition(
     name: "wedged",
     description: "wedged",
@@ -1167,9 +1220,12 @@ struct WedgedTool: Tool {
     egressClass: .none,
     riskLevel: .safe
   )
+
   let timeout: Duration = .seconds(30)
 
-  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? { nil }
+  func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
+    nil
+  }
 
   func execute(arguments: JSONValue, canonicalTarget: String?) async -> ToolPayload {
     await release.wait()

@@ -33,9 +33,7 @@ extension ScheduledLearningStoreGRDB {
   }
 
   @discardableResult
-  public func reconcileOperationsAtBoot(
-    now: Date
-  ) throws(StoreError) -> OperationReconciliation {
+  public func reconcileOperationsAtBoot(now: Date) throws(StoreError) -> OperationReconciliation {
     try database.writeMapping { db in
       try Self.reconcile(db, now: now)
     }
@@ -53,10 +51,10 @@ private extension ScheduledLearningStoreGRDB {
     key: LearningOperationKey,
     now: Date
   ) throws -> ClaimedOperation? {
-    guard try readState(db, jobId: key.jobId)?.epoch == key.epoch else {
+    guard try readState(db, jobID: key.jobID)?.epoch == key.epoch else {
       return nil
     }
-    guard try jobPermitsLearningCalls(db, jobId: key.jobId) else {
+    guard try jobPermitsLearningCalls(db, jobID: key.jobID) else {
       return nil
     }
     guard try sourceIsClaimable(db, key: key) else {
@@ -86,7 +84,7 @@ private extension ScheduledLearningStoreGRDB {
     if claimed != nil, key.phase == .evaluator {
       try recomputeEvaluatorSource(
         db,
-        jobId: key.jobId,
+        jobID: key.jobID,
         epoch: key.epoch,
         evidenceDigest: key.sourceDigest,
         now: now
@@ -109,7 +107,7 @@ private extension ScheduledLearningStoreGRDB {
             SELECT 1 FROM learning_evaluations WHERE job_id = ? AND evidence_digest = ?
           )
           """,
-        arguments: [key.jobId, key.sourceDigest]
+        arguments: [key.jobID, key.sourceDigest]
       ) ?? false
     case .reflector:
       // The reflector's source is a frozen trigger identity, not a run receipt. What makes a
@@ -128,7 +126,7 @@ private extension ScheduledLearningStoreGRDB {
         SELECT eligibility FROM learning_evidence
         WHERE job_id = ? AND learning_epoch = ? AND evidence_digest = ?
         """,
-      arguments: [key.jobId, key.epoch.value, key.sourceDigest]
+      arguments: [key.jobID, key.epoch.value, key.sourceDigest]
     )
     guard let eligibility = raw.flatMap(LearningEligibility.init(rawValue:)) else {
       return false
@@ -152,7 +150,7 @@ private extension ScheduledLearningStoreGRDB {
         """,
       arguments: [
         id.rawValue,
-        key.jobId,
+        key.jobID,
         key.epoch.value,
         key.phase.rawValue,
         key.sourceDigest,
@@ -163,12 +161,7 @@ private extension ScheduledLearningStoreGRDB {
         EpochSecondCodec.epoch(now),
       ]
     )
-    return ClaimedOperation(
-      id: id,
-      key: key,
-      attemptGeneration: generation,
-      supersedes: supersedes
-    )
+    return ClaimedOperation(id: id, key: key, attemptGeneration: generation, supersedes: supersedes)
   }
 
   static func reclaim(
@@ -203,11 +196,11 @@ extension ScheduledLearningStoreGRDB {
   /// blocks here: a paused or completed job's settled evidence is still evidence, and the wider
   /// "repeatable, non-cancelled" rule belongs to candidate admission rather than to one inference.
   /// A job row that has gone missing fails closed — nothing may be spent on a job that is not there.
-  static func jobPermitsLearningCalls(_ db: Database, jobId: Int64) throws -> Bool {
+  static func jobPermitsLearningCalls(_ db: Database, jobID: Int64) throws -> Bool {
     let status = try String.fetchOne(
       db,
       sql: "SELECT status FROM scheduled_jobs WHERE id = ?",
-      arguments: [jobId]
+      arguments: [jobID]
     )
     guard let status else {
       return false
@@ -257,20 +250,22 @@ extension ScheduledLearningStoreGRDB {
     guard let row else {
       return nil
     }
-    guard
-      let jobId = SQLiteStoredValue.int64(in: row, column: "job_id"),
-      let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
-      let phaseRaw = SQLiteStoredValue.string(in: row, column: "phase"),
-      let sourceDigest = SQLiteStoredValue.string(in: row, column: "source_digest"),
-      let keyDigest = SQLiteStoredValue.string(in: row, column: "key_digest"),
-      let carrier = SQLiteStoredValue.nullableString(in: row, column: "carrier_digest"),
-      let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
-      let failureRaw = SQLiteStoredValue.nullableString(in: row, column: "failure_code"),
-      let route = SQLiteStoredValue.nullableString(in: row, column: "route"),
-      let providerCall = SQLiteStoredValue.nullableString(in: row, column: "provider_call_id"),
-      let reservedTokens = SQLiteStoredValue.nullableInt(in: row, column: "reserved_tokens"),
-      let reservedCost = SQLiteStoredValue.nullableDouble(in: row, column: "reserved_cost_usd"),
-      let reservationState = SQLiteStoredValue.nullableString(in: row, column: "reservation_state")
+    guard let jobID = SQLiteStoredValue.int64(in: row, column: "job_id"),
+          let epoch = SQLiteStoredValue.int64(in: row, column: "learning_epoch"),
+          let phaseRaw = SQLiteStoredValue.string(in: row, column: "phase"),
+          let sourceDigest = SQLiteStoredValue.string(in: row, column: "source_digest"),
+          let keyDigest = SQLiteStoredValue.string(in: row, column: "key_digest"),
+          let carrier = SQLiteStoredValue.nullableString(in: row, column: "carrier_digest"),
+          let stateRaw = SQLiteStoredValue.string(in: row, column: "state"),
+          let failureRaw = SQLiteStoredValue.nullableString(in: row, column: "failure_code"),
+          let route = SQLiteStoredValue.nullableString(in: row, column: "route"),
+          let providerCall = SQLiteStoredValue.nullableString(in: row, column: "provider_call_id"),
+          let reservedTokens = SQLiteStoredValue.nullableInt(in: row, column: "reserved_tokens"),
+          let reservedCost = SQLiteStoredValue.nullableDouble(in: row, column: "reserved_cost_usd"),
+          let reservationState = SQLiteStoredValue.nullableString(
+            in: row,
+            column: "reservation_state"
+          )
     else {
       throw StoreError.unexpected("operation \(id.rawValue) holds unreadable stored values")
     }
@@ -280,7 +275,7 @@ extension ScheduledLearningStoreGRDB {
     }
     return OperationRow(
       id: id,
-      jobId: jobId,
+      jobID: jobID,
       epoch: LearningEpoch(epoch),
       phase: try learningPhase(phaseRaw, of: id),
       sourceDigest: sourceDigest,
@@ -299,17 +294,16 @@ extension ScheduledLearningStoreGRDB {
   static func startedOperationReservation(
     _ operation: OperationRow
   ) throws -> StartedOperationReservation {
-    guard
-      let providerCallID = operation.providerCallID,
-      providerCallID.rawValue.isEmpty == false,
-      let route = operation.route,
-      route.isEmpty == false,
-      let reservedTokens = operation.reservedTokens,
-      reservedTokens >= 0,
-      let reservedCostUSD = operation.reservedCostUSD,
-      reservedCostUSD.isFinite,
-      reservedCostUSD >= 0,
-      operation.reservationState == LearningReservationState.open.rawValue
+    guard let providerCallID = operation.providerCallID,
+          providerCallID.rawValue.isEmpty == false,
+          let route = operation.route,
+          route.isEmpty == false,
+          let reservedTokens = operation.reservedTokens,
+          reservedTokens >= 0,
+          let reservedCostUSD = operation.reservedCostUSD,
+          reservedCostUSD.isFinite,
+          reservedCostUSD >= 0,
+          operation.reservationState == LearningReservationState.open.rawValue
     else {
       throw StoreError.unexpected(
         "started operation \(operation.id.rawValue) has an unreadable call reservation"
@@ -349,7 +343,7 @@ extension ScheduledLearningStoreGRDB {
 
   struct OperationRow {
     let id: LearningOperationID
-    let jobId: Int64
+    let jobID: Int64
     let epoch: LearningEpoch
     let phase: LearningPhase
     let sourceDigest: String

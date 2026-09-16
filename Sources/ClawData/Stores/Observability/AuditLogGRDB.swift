@@ -30,9 +30,9 @@ public struct AuditLogGRDB: AuditLog {
         event.argsRedacted,
         event.resultSize,
         event.decision,
-        event.runId,
-        event.sessionId,
-        event.actorUserId,
+        event.runID,
+        event.sessionID,
+        event.actorUserID,
       ]
     )
   }

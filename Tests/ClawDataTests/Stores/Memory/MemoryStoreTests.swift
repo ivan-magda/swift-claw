@@ -6,13 +6,15 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct MemoryStoreTests {
+@Suite
+struct MemoryStoreTests {
   private func freshStore() throws -> (MemoryStoreGRDB, DatabaseQueue) {
     let queue = try TestDatabase.make()
     return (MemoryStoreGRDB(writer: queue), queue)
   }
 
-  @Test func getReturnsNilForMissingId() throws {
+  @Test
+  func getReturnsNilForMissingID() throws {
     // given
     let (store, _) = try freshStore()
 
@@ -20,23 +22,24 @@ import Testing
     #expect(try store.get(id: 999) == nil)
   }
 
-  @Test func listFiltersByKindMostRecentFirst() throws {
+  @Test
+  func listFiltersByKindMostRecentFirst() throws {
     // given
     let (store, queue) = try freshStore()
     let commands = MemoryCommandStoreGRDB(writer: queue)
     _ = try commands.applyRemember(
-      updateId: 1,
-      item: NewMemoryItem(text: "user older", kind: .user, sessionId: nil),
+      updateID: 1,
+      item: NewMemoryItem(text: "user older", kind: .user, sessionID: nil),
       now: Date(timeIntervalSince1970: 10)
     )
     _ = try commands.applyRemember(
-      updateId: 2,
-      item: NewMemoryItem(text: "project fact", kind: .project, sessionId: nil),
+      updateID: 2,
+      item: NewMemoryItem(text: "project fact", kind: .project, sessionID: nil),
       now: Date(timeIntervalSince1970: 20)
     )
     _ = try commands.applyRemember(
-      updateId: 3,
-      item: NewMemoryItem(text: "user newer", kind: .user, sessionId: nil),
+      updateID: 3,
+      item: NewMemoryItem(text: "user newer", kind: .user, sessionID: nil),
       now: Date(timeIntervalSince1970: 30)
     )
 
@@ -50,7 +53,8 @@ import Testing
     #expect(allItems.first?.text == "user newer")
   }
 
-  @Test func fetchRankedOrdersByImportanceThenRecency() throws {
+  @Test
+  func fetchRankedOrdersByImportanceThenRecency() throws {
     // given
     let (store, queue) = try freshStore()
     try insertItem(queue, text: "low old", importance: 0, sensitivity: "normal", at: 10)
@@ -65,7 +69,8 @@ import Testing
     #expect(ranked.map(\.text) == ["high new", "high old", "normal new", "low old"])
   }
 
-  @Test func fetchRankedExcludesHighSensitivityWhenAsked() throws {
+  @Test
+  func fetchRankedExcludesHighSensitivityWhenAsked() throws {
     // given - the dormant taint guard (③): a tainted turn must not auto-inject high-sensitivity.
     let (store, queue) = try freshStore()
     try insertItem(queue, text: "normal fact", importance: 2, sensitivity: "normal", at: 10)
@@ -80,7 +85,8 @@ import Testing
     #expect(Set(unguarded.map(\.text)) == ["normal fact", "secret fact"])
   }
 
-  @Test func sqliteFailureSurfacesAsStoreErrorNotRawDatabaseError() throws {
+  @Test
+  func sqliteFailureSurfacesAsStoreErrorNotRawDatabaseError() throws {
     // given
     let (store, queue) = try freshStore()
     try queue.write { db in
@@ -96,7 +102,8 @@ import Testing
     #expect(throws: StoreError.self, performing: readItem)
   }
 
-  @Test func decodeFailsClosedOnUnrecognizedEnumValue() throws {
+  @Test
+  func decodeFailsClosedOnUnrecognizedEnumValue() throws {
     // given - a corrupted sensitivity value must not silently decode to a permissive default.
     let (store, queue) = try freshStore()
     try queue.write { db in

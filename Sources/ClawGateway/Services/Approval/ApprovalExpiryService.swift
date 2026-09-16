@@ -75,7 +75,7 @@ public struct ApprovalExpiryService: Service {
       return
     }
     for approval in expired {
-      await coordinator.signal(approvalId: approval.id, .denied(.expired))
+      await coordinator.signal(.denied(.expired), forApprovalID: approval.id)
     }
   }
 }

@@ -7,7 +7,8 @@ import Testing
 @testable import ClawGateway
 
 extension CoderServiceTests {
-  @Test func completionRerendersAfterCancellationRace() async throws {
+  @Test
+  func completionRerendersAfterCancellationRace() async throws {
     // given
     let fixture = try CoderServiceFixture()
     defer { fixture.cleanup() }
@@ -17,7 +18,9 @@ extension CoderServiceTests {
           for job in try fixture.store.reservedJobs() {
             _ = try fixture.store.requestCancellation(id: job.id, now: Date())
           }
-        } catch { Issue.record(error) }
+        } catch {
+          Issue.record(error)
+        }
       }
       return text
     }
@@ -38,7 +41,8 @@ extension CoderServiceTests {
     try await service.shutdown()
   }
 
-  @Test func selectedStopSurvivesCancellation() async throws {
+  @Test
+  func selectedStopSurvivesCancellation() async throws {
     // given
     let script = ScriptedCoderBackend.Invocation(
       result: CoderServiceFixture.result(state: .timedOut),
@@ -98,8 +102,7 @@ extension CoderServiceTests {
     let outcome = await running.result
     // then
     #expect(finishedWithoutCancellation)
-    guard case .failure(let error) = outcome,
-      case .persistence = error as? CoderServiceFailure
+    guard case .failure(let error) = outcome, case .persistence = error as? CoderServiceFailure
     else {
       Issue.record("Service did not propagate terminal persistence failure")
       return
@@ -141,7 +144,8 @@ extension CoderServiceTests {
     }
   }
 
-  @Test func completionReportPreservesEvidenceAndRedacts() async throws {
+  @Test
+  func completionReportPreservesEvidenceAndRedacts() async throws {
     // given
     let secret = "fixture-secret-value"
     let result = CoderResult(
@@ -162,7 +166,7 @@ extension CoderServiceTests {
     )
     let redactor = SecretRedactor(secretValues: [secret])
     let fixture = try CoderServiceFixture(
-      scripts: [.init(result: result)],
+      scripts: [ScriptedCoderBackend.Invocation(result: result)],
       redactor: redactor.redact
     )
     defer { fixture.cleanup() }

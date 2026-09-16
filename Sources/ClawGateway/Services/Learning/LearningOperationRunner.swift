@@ -58,11 +58,11 @@ public struct LearningOperationRunner: Sendable {
 
   /// One evaluation of one run, or nothing at all. Never throws: a run the evaluator cannot judge
   /// must not disturb the pass that asked for it, let alone ordinary scheduled execution.
-  public func runEvaluation(runId: Int64, now: Date) async {
+  public func runEvaluation(runID: Int64, now: Date) async {
     do {
-      try await evaluate(runId: runId, now: now)
+      try await evaluate(runID: runID, now: now)
     } catch {
-      logger.error("run \(runId) could not be evaluated: \(error)")
+      logger.error("run \(runID) could not be evaluated: \(error)")
     }
   }
 }
@@ -70,16 +70,15 @@ public struct LearningOperationRunner: Sendable {
 // MARK: - Evaluation Sequence
 
 private extension LearningOperationRunner {
-  func evaluate(runId: Int64, now: Date) async throws {
-    guard
-      let evidence = try learning.evidence(runId: runId),
-      evidence.eligibility.reachesEvaluator,
-      let payload = evidence.payload,
-      let job = try jobs.job(id: evidence.jobId),
-      // A job that has never fired has no session for the result commit to charge against. It
-      // cannot own a settled bound run either, so this refuses before the claim rather than
-      // leaving a `started` row for boot to charge conservatively.
-      job.sessionId != nil
+  func evaluate(runID: Int64, now: Date) async throws {
+    guard let evidence = try learning.evidence(runID: runID),
+          evidence.eligibility.reachesEvaluator,
+          let payload = evidence.payload,
+          let job = try jobs.job(id: evidence.jobID),
+          // A job that has never fired has no session for the result commit to charge against. It
+          // cannot own a settled bound run either, so this refuses before the claim rather than
+          // leaving a `started` row for boot to charge conservatively.
+          job.sessionID != nil
     else {
       return
     }
@@ -88,7 +87,7 @@ private extension LearningOperationRunner {
     }
 
     let carrier = EvaluatorCarrier(
-      runId: runId,
+      runID: runID,
       jobPrompt: job.prompt,
       rubric: EvaluatorRubric.v1.text,
       evidence: payload
@@ -102,7 +101,7 @@ private extension LearningOperationRunner {
 
     let route = roster.startingRoute(primaryIsCooling: await cooldown?.isCooling() == true)
     let call = Call(
-      operationId: claim.id,
+      operationID: claim.id,
       callID: providerCallIDGenerator.next(),
       messages: messages
     )
@@ -134,7 +133,7 @@ private extension LearningOperationRunner {
   ) throws -> Bool {
     let estimate = accountant(for: route.binding).preflightEstimate(context: call.messages)
     let authorization = LearningAuthorization(
-      operationId: call.operationId,
+      operationID: call.operationID,
       carrier: carrier,
       estimatedTokens: estimate.totalTokens,
       estimatedCostUSD: estimate.costUSD,
@@ -146,7 +145,7 @@ private extension LearningOperationRunner {
     case .started:
       return true
     case .deniedNoCall(let failure):
-      logger.info("learning call \(call.operationId.rawValue) refused: \(failure.rawValue)")
+      logger.info("learning call \(call.operationID.rawValue) refused: \(failure.rawValue)")
       return false
     case .superseded:
       return false
@@ -168,9 +167,8 @@ private extension LearningOperationRunner {
         commit(response, call: call, route: active.binding, now: now)
         return
       } catch {
-        guard
-          let persistence = RouteSwitch.permits(error),
-          let next = roster.failover(from: active.position)
+        guard let persistence = RouteSwitch.permits(error),
+              let next = roster.failover(from: active.position)
         else {
           commit(failure: error, call: call, route: active.binding, now: now)
           return
@@ -206,7 +204,7 @@ private extension LearningOperationRunner {
     } catch {
       // The reason, not just the refusal: a run's evidence is unjudgeable from here on, and the
       // decoder's own message is the only record of why. It quotes the schema, never the reply.
-      logger.info("learning call \(call.operationId.rawValue) returned an unusable reply: \(error)")
+      logger.info("learning call \(call.operationID.rawValue) returned an unusable reply: \(error)")
       finish(call, usage: usage, product: .failure(.schemaInvalid), now: now)
       return
     }
@@ -250,7 +248,7 @@ private extension LearningOperationRunner {
         isEstimated: false
       )
     }
-    logger.info("learning call \(call.operationId.rawValue) failed at the provider: \(error)")
+    logger.info("learning call \(call.operationID.rawValue) failed at the provider: \(error)")
     finish(call, usage: usage, product: .failure(.providerTerminal), now: now)
   }
 
@@ -265,17 +263,13 @@ private extension LearningOperationRunner {
   ) {
     do {
       _ = try learning.finishOperation(
-        LearningOperationResult(
-          operationId: call.operationId,
-          usage: usage,
-          product: product
-        ),
+        LearningOperationResult(operationID: call.operationID, usage: usage, product: product),
         now: now
       )
     } catch {
       // Boot reconciliation is the backstop: the row is still `started`, so the next start charges
       // it conservatively under its saved call id and closes it as interrupted.
-      logger.error("learning call \(call.operationId.rawValue) could not be committed: \(error)")
+      logger.error("learning call \(call.operationID.rawValue) could not be committed: \(error)")
     }
   }
 }
@@ -286,14 +280,14 @@ private extension LearningOperationRunner {
   /// The identities one crossing needs in every arm of the dispatch, kept together so a retry on
   /// another route cannot quietly mint a second call id for the same reservation.
   struct Call {
-    let operationId: LearningOperationID
+    let operationID: LearningOperationID
     let callID: ProviderCallID
     let messages: [ChatMessage]
   }
 
   static func key(for evidence: SealedEvidence) -> LearningOperationKey {
     LearningOperationKey(
-      jobId: evidence.jobId,
+      jobID: evidence.jobID,
       epoch: evidence.epoch,
       phase: .evaluator,
       sourceDigest: evidence.digest.rawValue,

@@ -10,6 +10,10 @@ public enum MCPNaming {
   /// Maps one name fragment into the tool-name charset, character for character so the fold stays
   /// deterministic and reversible enough for an owner to recognize their server in a prompt.
   public static func sanitizeFragment(_ raw: String) -> String {
-    String(raw.map { allowed.contains($0) ? $0 : "_" })
+    String(
+      raw.map {
+        allowed.contains($0) ? $0 : "_"
+      }
+    )
   }
 }

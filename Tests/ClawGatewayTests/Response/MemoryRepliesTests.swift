@@ -4,13 +4,14 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct MemoryRepliesTests {
+@Suite
+struct MemoryRepliesTests {
   private func makeItem(
     id: Int64,
     text: String,
     kind: MemoryKind,
     sensitivity: Sensitivity = .normal,
-    sessionId: Int64? = nil,
+    sessionID: Int64? = nil,
     createdAt: Date = Date(timeIntervalSince1970: 86_400)
   ) -> MemoryItem {
     MemoryItem(
@@ -20,12 +21,13 @@ import Testing
       sensitivity: sensitivity,
       importance: .normal,
       source: .owner,
-      sessionId: sessionId,
+      sessionID: sessionID,
       createdAt: createdAt
     )
   }
 
-  @Test func reviewListGroupsByKindWithProvenanceLines() {
+  @Test
+  func reviewListGroupsByKindWithProvenanceLines() {
     // given
     let items = [
       makeItem(id: 12, text: "ship 3a", kind: .project),
@@ -53,15 +55,11 @@ import Testing
     #expect(rendered == expected)
   }
 
-  @Test func reviewLineFlagsHighSensitivityAndTruncatesLongText() {
+  @Test
+  func reviewLineFlagsHighSensitivityAndTruncatesLongText() {
     // given
     let longText = String(repeating: "1234567890", count: 6) + "1"
-    let item = makeItem(
-      id: 5,
-      text: longText,
-      kind: .reference,
-      sensitivity: .high
-    )
+    let item = makeItem(id: 5, text: longText, kind: .reference, sensitivity: .high)
 
     // when
     let rendered = MemoryReplies.reviewList(items: [item])
@@ -76,14 +74,10 @@ import Testing
     )
   }
 
-  @Test func showItemRendersFullProvenanceAndText() {
+  @Test
+  func showItemRendersFullProvenanceAndText() {
     // given
-    let item = makeItem(
-      id: 9,
-      text: "ship 3a",
-      kind: .project,
-      sessionId: 4
-    )
+    let item = makeItem(id: 9, text: "ship 3a", kind: .project, sessionID: 4)
 
     // when
     let rendered = MemoryReplies.showItem(item)
@@ -100,9 +94,10 @@ import Testing
     )
   }
 
-  @Test func showItemWithoutSessionSaysNone() {
+  @Test
+  func showItemWithoutSessionSaysNone() {
     // given
-    let item = makeItem(id: 2, text: "fact", kind: .user, sessionId: nil)
+    let item = makeItem(id: 2, text: "fact", kind: .user, sessionID: nil)
 
     // when
     let rendered = MemoryReplies.showItem(item)
@@ -111,7 +106,8 @@ import Testing
     #expect(rendered.contains("session: none"))
   }
 
-  @Test func deleteConfirmPromptShowsIdAndFullText() {
+  @Test
+  func deleteConfirmPromptShowsIDAndFullText() {
     // given
     let item = makeItem(id: 7, text: "obsolete fact", kind: .user)
 
@@ -122,14 +118,14 @@ import Testing
     #expect(prompt == "Delete memory 7?\n«obsolete fact»\nReply yes to delete, no to cancel.")
   }
 
-  @Test func usageAndAckCopyAreExact() {
+  @Test
+  func usageAndAckCopyAreExact() {
     // given / when / then
     #expect(
       MemoryReplies.rememberUsage == "Usage: /remember [user|feedback|project|reference:] <text>"
     )
     #expect(
-      MemoryReplies.memoryUsage
-        == """
+      MemoryReplies.memoryUsage == """
         Usage: /memory [user|feedback|project|reference] | \
         /memory show <id> | /memory delete <id>
         """
@@ -137,8 +133,7 @@ import Testing
     #expect(MemoryReplies.nothingToSave == "No savable text.")
     #expect(MemoryReplies.cancelled == "Cancelled.")
     #expect(
-      MemoryReplies.saveFailed
-        == "Couldn't save it. Nothing was written. Run /remember again."
+      MemoryReplies.saveFailed == "Couldn't save it. Nothing was written. Run /remember again."
     )
     #expect(
       MemoryReplies.deleteFailed

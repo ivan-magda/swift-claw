@@ -10,16 +10,16 @@ import Testing
 /// uncertain one is allowed to report. Every failpoint here names `llm-credentials.enc` explicitly —
 /// a bare failpoint would fire on the runtime seal's own publications and abort these tests before
 /// they reached the code they claim to exercise.
-@Suite struct LLMCredentialStorePublicationTests {
+@Suite
+struct LLMCredentialStorePublicationTests {
   // MARK: - Pre-commit failure
 
-  @Test(
-    arguments: [
-      SecureFilePublisher.Failpoint.Step.tempWrite,
-      SecureFilePublisher.Failpoint.Step.fileSync,
-      SecureFilePublisher.Failpoint.Step.commit,
-    ]
-  ) func aFailureBeforeTheCommitLeavesTheOldMapWhole(
+  @Test(arguments: [
+    SecureFilePublisher.Failpoint.Step.tempWrite,
+    SecureFilePublisher.Failpoint.Step.fileSync,
+    SecureFilePublisher.Failpoint.Step.commit,
+  ])
+  func aFailureBeforeTheCommitLeavesTheOldMapWhole(
     step: SecureFilePublisher.Failpoint.Step
   ) throws {
     // given — a map already holding a record for another provider, which the failed save must not
@@ -52,7 +52,8 @@ import Testing
     #expect(try entryNames(in: stateRoot) == expectedFullStateRoot)
   }
 
-  @Test func aFailureBeforeTheCommitOnAFirstSaveCreatesNoCredentialFile() throws {
+  @Test
+  func aFailureBeforeTheCommitOnAFirstSaveCreatesNoCredentialFile() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -70,7 +71,8 @@ import Testing
 
   // MARK: - Uncertain commit
 
-  @Test func aCommitThatCannotBeProvenDurableIsNotReportedAsASavedCredential() throws {
+  @Test
+  func aCommitThatCannotBeProvenDurableIsNotReportedAsASavedCredential() throws {
     // given — the rotation case that matters: an old credential on disk, a new one being written.
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -100,7 +102,8 @@ import Testing
 
   // MARK: - Uncertain-commit recovery
 
-  @Test func recoveringACommitWhoseIntendedBytesAlreadyLandedSyncsRatherThanRepublishes() throws {
+  @Test
+  func recoveringACommitWhoseIntendedBytesAlreadyLandedSyncsRatherThanRepublishes() throws {
     // given — the ordinary uncertain commit: the rename took, only its durability is unproven.
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -122,16 +125,18 @@ import Testing
     #expect(try store.load(providerID: .openAIChatGPT) == credential)
   }
 
-  @Test func recoveringACommitWhoseBytesAreAbsentRepublishesTheCompleteMap() throws {
+  @Test
+  func recoveringACommitWhoseBytesAreAbsentRepublishesTheCompleteMap() throws {
     // given — the rename is not known to have happened at all, so the path may hold nothing.
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
     let store = EncryptedLLMCredentialStore(stateRoot: stateRoot)
     let credential = makeCredential()
     let bystander = makeCredential(accessToken: "bystander-access")
-    let intended = EncryptedLLMCredentialStore.CredentialMap(
-      providers: [.openAIChatGPT: credential, syntheticProvider: bystander]
-    )
+    let intended = EncryptedLLMCredentialStore.CredentialMap(providers: [
+      .openAIChatGPT: credential,
+      syntheticProvider: bystander,
+    ])
 
     // when
     try store.recoverUncertainCommit(intended, key: try openKey(in: stateRoot))
@@ -142,7 +147,8 @@ import Testing
     #expect(try entryNames(in: stateRoot) == expectedFullStateRoot)
   }
 
-  @Test func recoveringACommitThatFindsAStaleMapRepublishesTheCompleteMap() throws {
+  @Test
+  func recoveringACommitThatFindsAStaleMapRepublishesTheCompleteMap() throws {
     // given — the path holds the previous map: the rename did not take.
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -164,7 +170,8 @@ import Testing
     #expect(try store.load(providerID: .openAIChatGPT) == intended)
   }
 
-  @Test func recoveringACommitOverAnUnreadableMapRepublishesRatherThanFailing() throws {
+  @Test
+  func recoveringACommitOverAnUnreadableMapRepublishesRatherThanFailing() throws {
     // given — a torn or foreign envelope at the path. Recovery is deciding whether the intended
     // bytes are there, and anything it cannot read is by definition not them.
     let stateRoot = try makeSealedRoot()
@@ -187,7 +194,8 @@ import Testing
     #expect(try store.load(providerID: .openAIChatGPT) == credential)
   }
 
-  @Test func recoveryThatStillCannotProveDurabilitySurfacesTheUncertainCommit() throws {
+  @Test
+  func recoveryThatStillCannotProveDurabilitySurfacesTheUncertainCommit() throws {
     // given — the republishing branch, with a directory fsync that keeps failing.
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -203,7 +211,8 @@ import Testing
     }
   }
 
-  @Test func recoveryThatCannotWriteAtAllSurfacesThePublicationFailure() throws {
+  @Test
+  func recoveryThatCannotWriteAtAllSurfacesThePublicationFailure() throws {
     // given
     let stateRoot = try makeSealedRoot()
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -224,7 +233,9 @@ import Testing
 // MARK: - Fixtures
 
 private extension LLMCredentialStorePublicationTests {
-  var syntheticProvider: LLMProviderID { LLMProviderID(rawValue: "synthetic-provider") }
+  var syntheticProvider: LLMProviderID {
+    LLMProviderID(rawValue: "synthetic-provider")
+  }
 
   /// Every entry a sealed root with a credential map holds. Named once so a test that means to
   /// assert "nothing was stranded" cannot quietly assert "nothing exists".
@@ -241,10 +252,7 @@ private extension LLMCredentialStorePublicationTests {
     EncryptedLLMCredentialStore(
       stateRoot: stateRoot,
       publisher: SecureFilePublisher(
-        failpoint: SecureFilePublisher.Failpoint(
-          step,
-          on: SecretStatePaths.credentialEnvelopeName
-        )
+        failpoint: SecureFilePublisher.Failpoint(step, on: SecretStatePaths.credentialEnvelopeName)
       )
     )
   }

@@ -17,19 +17,17 @@ extension BoundRunEnvironment {
     try queue.write { db in
       try db.execute(
         sql: "UPDATE scheduled_jobs SET recurrence = ? WHERE id = ?",
-        arguments: [try recurrence.encodedJSON(), jobId]
+        arguments: [try recurrence.encodedJSON(), jobID]
       )
     }
   }
 
-  func reflectionFixture(
-    issueCode: String = "material.missed"
-  ) throws -> ReflectionFixture {
+  func reflectionFixture(issueCode: String = "material.missed") throws -> ReflectionFixture {
     try makeRepeatable()
     let first = try evaluatedEvidence(issueCode: issueCode)
     let second = try evaluatedEvidence(issueCode: issueCode)
     let trigger = TriggerIdentity(
-      jobId: jobId,
+      jobID: jobID,
       epoch: first.evidence.epoch,
       algorithm: .v1,
       stableDigest: try currentLearningState().stableDigest,
@@ -48,14 +46,11 @@ extension BoundRunEnvironment {
     issueCode: String,
     output: String = "The result missed a material change."
   ) throws -> (evidence: SealedEvidence, evaluation: CandidateEvaluationSource) {
-    let runId = try runningBoundRun()
-    try freezeSurface(runId: runId, skillSetDigest: Self.pickupSkillSetDigest)
-    _ = try runs.commitAssistantTurn(
-      assistantTurn(runId: runId, content: output),
-      now: now
-    )
-    _ = try learning.sealEvidence(runId: runId, now: now)
-    let evidence = try requireEvidence(runId: runId)
+    let runID = try runningBoundRun()
+    try freezeSurface(runID: runID, skillSetDigest: Self.pickupSkillSetDigest)
+    _ = try runs.commitAssistantTurn(assistantTurn(runID: runID, content: output), now: now)
+    _ = try learning.sealEvidence(runID: runID, now: now)
+    let evidence = try requireEvidence(runID: runID)
     let started = try startedOperation(evaluatorKey(for: evidence))
     _ = try learning.finishOperation(
       result(
@@ -68,24 +63,21 @@ extension BoundRunEnvironment {
       try String.fetchOne(
         db,
         sql: "SELECT evaluation_digest FROM learning_evaluations WHERE run_id = ?",
-        arguments: [runId]
+        arguments: [runID]
       )
     }
     guard let evaluationDigest else {
-      throw StoreError.unexpected("fixture run \(runId) has no evaluation digest")
+      throw StoreError.unexpected("fixture run \(runID) has no evaluation digest")
     }
     return (
       evidence,
-      CandidateEvaluationSource(
-        runId: runId,
-        digest: EvaluationDigest(rawValue: evaluationDigest)
-      )
+      CandidateEvaluationSource(runID: runID, digest: EvaluationDigest(rawValue: evaluationDigest))
     )
   }
 
   func startReflector(_ fixture: ReflectionFixture) throws -> ClaimedOperation {
     let key = LearningOperationKey(
-      jobId: jobId,
+      jobID: jobID,
       epoch: fixture.trigger.epoch,
       phase: .reflector,
       sourceDigest: fixture.trigger.digest.rawValue,
@@ -102,7 +94,7 @@ extension BoundRunEnvironment {
     )
     let bytes = try CanonicalJSON.data(encoding: carrier)
     let authorization = LearningAuthorization(
-      operationId: claim.id,
+      operationID: claim.id,
       carrier: CarrierAuthorization(
         sourceDigest: fixture.trigger.digest.rawValue,
         digest: CarrierDigest(rawValue: SHA256Digest.hex(bytes)),
@@ -126,7 +118,7 @@ extension BoundRunEnvironment {
     product: LearningOperationProduct
   ) -> LearningOperationResult {
     LearningOperationResult(
-      operationId: operation.id,
+      operationID: operation.id,
       usage: LearningCallUsage(
         model: "openai-compatible/test-model",
         promptTokens: 900,
@@ -144,7 +136,7 @@ extension BoundRunEnvironment {
     operation: ClaimedOperation,
     lessons: [String] = ["Report only material changes."]
   ) throws -> CandidateArtifact {
-    let replacement = try LessonSet.canonical(jobId: jobId, lessons: lessons)
+    let replacement = try LessonSet.canonical(jobID: jobID, lessons: lessons)
     let carrierDigest = try requireCarrierDigest(operation.id)
     let resultDigest = ReflectionResultDigest.of(Data("candidate-result".utf8))
     let trigger = fixture.trigger
@@ -153,12 +145,12 @@ extension BoundRunEnvironment {
       manifest: CandidateSourceManifest(
         origin: .reflection,
         algorithm: trigger.algorithm,
-        jobId: jobId,
+        jobID: jobID,
         epoch: trigger.epoch,
         triggerDigest: trigger.digest,
         triggerReason: trigger.reason,
         qualifyingIssueCodes: trigger.issueCodes,
-        operationId: operation.id,
+        operationID: operation.id,
         carrierDigest: carrierDigest,
         resultDigest: resultDigest,
         baseDigest: trigger.stableDigest,
@@ -180,7 +172,7 @@ extension BoundRunEnvironment {
     NoCandidateResult(
       algorithm: .v1,
       triggerDigest: fixture.trigger.digest,
-      operationId: operation.id,
+      operationID: operation.id,
       carrierDigest: try requireCarrierDigest(operation.id),
       resultDigest: ReflectionResultDigest.of(Data("no-candidate".utf8)),
       authorization: ReflectionAuthorization(preparation: fixture.preparation)
@@ -192,18 +184,18 @@ extension BoundRunEnvironment {
       try Row.fetchOne(
         db,
         sql: "SELECT * FROM job_learning_state WHERE job_id = ?",
-        arguments: [jobId]
+        arguments: [jobID]
       )
     }
     guard let row else {
       throw StoreError.unexpected("fixture job has no learning state")
     }
     return JobLearningState(
-      jobId: jobId,
+      jobID: jobID,
       epoch: LearningEpoch(row["learning_epoch"]),
       stableDigest: LessonSetDigest(rawValue: row["stable_lesson_set_digest"]),
       stableRevision: StableRevision(row["stable_revision"]),
-      openTrialId: row["open_trial_id"],
+      openTrialID: row["open_trial_id"],
       feedbackRevision: FeedbackRevision(row["feedback_revision"])
     )
   }
@@ -221,7 +213,7 @@ extension BoundRunEnvironment {
           UPDATE job_learning_state SET feedback_revision = feedback_revision + 1 \
           WHERE job_id = ?
           """,
-        arguments: [jobId]
+        arguments: [jobID]
       )
     }
   }
@@ -237,7 +229,7 @@ extension BoundRunEnvironment {
           VALUES (?, ?, ?, ?, 1, ?, ?, ?, 3, 0, ?, ?, ?)
           """,
         arguments: [
-          jobId,
+          jobID,
           candidate.manifest.epoch.value,
           candidate.manifest.baseDigest.rawValue,
           candidate.digest.rawValue,
@@ -249,17 +241,17 @@ extension BoundRunEnvironment {
           LearningAlgorithm.v1.rawValue,
         ]
       )
-      let trialId = db.lastInsertedRowID
+      let trialID = db.lastInsertedRowID
       try ScheduledLearningStoreGRDB.insertDecision(
         db,
         kind: AdmissionReceipt.kind,
-        jobId: jobId,
+        jobID: jobID,
         epoch: candidate.manifest.epoch,
         inputs: AdmissionDecisionInputs(candidateDigest: candidate.digest),
         result: AdmissionReceipt(
           candidateDigest: candidate.digest,
           replacementDigest: candidate.replacement.digest,
-          trialId: trialId,
+          trialID: trialID,
           generation: 1
         ),
         algorithm: .v1,
@@ -284,7 +276,7 @@ extension BoundRunEnvironment {
             UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
             WHERE job_id = ? RETURNING feedback_revision
             """,
-          arguments: [jobId]
+          arguments: [jobID]
         ) ?? -1
       try db.execute(
         sql: """
@@ -293,7 +285,7 @@ extension BoundRunEnvironment {
           VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
           """,
         arguments: [
-          jobId,
+          jobID,
           subjectKind.rawValue,
           subjectDigest,
           signal.rawValue,
@@ -305,17 +297,17 @@ extension BoundRunEnvironment {
         ]
       )
       return CandidateFeedbackSource(
-        eventId: db.lastInsertedRowID,
+        eventID: db.lastInsertedRowID,
         digest: try FeedbackEventDigest.of(
-          eventId: db.lastInsertedRowID,
-          jobId: jobId,
+          eventID: db.lastInsertedRowID,
+          jobID: jobID,
           epoch: LearningEpoch(1),
           subjectKind: subjectKind,
           subjectDigest: subjectDigest,
           signal: signal,
           payload: payload,
           actor: .owner,
-          transportUpdateId: nil,
+          transportUpdateID: nil,
           revision: FeedbackRevision(revision),
           supersedes: supersedes,
           occurredAtEpochSecond: EpochSecondCodec.epoch(now)
@@ -328,10 +320,7 @@ extension BoundRunEnvironment {
     }
   }
 
-  func markAsClosedTrialEvidence(
-    runId: Int64,
-    candidate: CandidateArtifact
-  ) throws {
+  func markAsClosedTrialEvidence(runID: Int64, candidate: CandidateArtifact) throws {
     try queue.write { db in
       try ScheduledLearningStoreGRDB.recordCandidateArtifact(db, artifact: candidate, now: now)
       try db.execute(
@@ -342,7 +331,7 @@ extension BoundRunEnvironment {
           VALUES (?, ?, ?, ?, 1, ?, ?, ?, 5, 1, ?, ?, ?)
           """,
         arguments: [
-          jobId,
+          jobID,
           candidate.manifest.epoch.value,
           candidate.manifest.baseDigest.rawValue,
           candidate.digest.rawValue,
@@ -354,10 +343,10 @@ extension BoundRunEnvironment {
           LearningAlgorithm.v1.rawValue,
         ]
       )
-      let trialId = db.lastInsertedRowID
+      let trialID = db.lastInsertedRowID
       try db.execute(
         sql: "UPDATE run_learning_bindings SET trial_id = ?, trial_generation = 1 WHERE run_id = ?",
-        arguments: [trialId, runId]
+        arguments: [trialID, runID]
       )
     }
   }
@@ -366,9 +355,9 @@ extension BoundRunEnvironment {
 // MARK: - Private Reads
 
 private extension BoundRunEnvironment {
-  func requireEvidence(runId: Int64) throws -> SealedEvidence {
-    guard let evidence = try learning.evidence(runId: runId) else {
-      throw StoreError.unexpected("fixture run \(runId) has no sealed evidence")
+  func requireEvidence(runID: Int64) throws -> SealedEvidence {
+    guard let evidence = try learning.evidence(runID: runID) else {
+      throw StoreError.unexpected("fixture run \(runID) has no sealed evidence")
     }
     return evidence
   }

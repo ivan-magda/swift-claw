@@ -17,9 +17,8 @@ enum ModelSelection {
   /// The ChatGPT model a raw reference names, or nil when it names another route's model, no model,
   /// or a suffix the registry would refuse.
   static func configuredChatGPTSuffix(in rawModel: String?) -> String? {
-    guard
-      let trimmed = rawModel?.trimmingCharacters(in: .whitespaces),
-      trimmed.hasPrefix(ChatGPTProviderMetadata.modelPrefix)
+    guard let trimmed = rawModel?.trimmingCharacters(in: .whitespaces),
+          trimmed.hasPrefix(ChatGPTProviderMetadata.modelPrefix)
     else {
       return nil
     }

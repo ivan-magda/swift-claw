@@ -22,37 +22,43 @@ public actor ApprovalCoordinator {
   /// Returns `nil` when the awaiting task is cancelled before a signal arrives (graceful shutdown /
   /// lane cancel): the continuation is resumed and its slot cleared so nothing leaks, and the
   /// durable row is left untouched for boot re-park to rebuild.
-  public func awaitResolution(approvalId: Int64) async -> ApprovalSignal? {
-    if let signal = buffered.removeValue(forKey: approvalId) {
+  public func awaitResolution(approvalID: Int64) async -> ApprovalSignal? {
+    if let signal = buffered.removeValue(forKey: approvalID) {
       return signal
     }
-    return await withTaskCancellationHandler {
-      await withCheckedContinuation { (continuation: CheckedContinuation<ApprovalSignal?, Never>) in
-        if Task.isCancelled {
-          continuation.resume(returning: nil)
-        } else {
-          waiters[approvalId] = continuation
+    return await withTaskCancellationHandler(
+      operation: {
+        await withCheckedContinuation {
+          (continuation: CheckedContinuation<ApprovalSignal?, Never>) in
+          if Task.isCancelled {
+            continuation.resume(returning: nil)
+          } else {
+            waiters[approvalID] = continuation
+          }
+        }
+      },
+      onCancel: {
+        Task {
+          await self.cancelWaiter(approvalID)
         }
       }
-    } onCancel: {
-      Task { await self.cancelWaiter(approvalId) }
-    }
+    )
   }
 
   /// Delivers to a registered waiter, or buffers until one registers (never dropped).
-  public func signal(approvalId: Int64, _ signal: ApprovalSignal) {
-    if let continuation = waiters.removeValue(forKey: approvalId) {
+  public func signal(_ signal: ApprovalSignal, forApprovalID approvalID: Int64) {
+    if let continuation = waiters.removeValue(forKey: approvalID) {
       continuation.resume(returning: signal)
     } else {
-      buffered[approvalId] = signal
+      buffered[approvalID] = signal
     }
   }
 
   /// Resumes a still-parked waiter with `nil` on cancellation. A no-op if a `signal` already removed
   /// it (the resolver won the race), so a resolution is never dropped. Actor isolation guarantees
   /// the `waiters[id] = continuation` registration completes before this can observe the slot.
-  private func cancelWaiter(_ approvalId: Int64) {
-    if let continuation = waiters.removeValue(forKey: approvalId) {
+  private func cancelWaiter(_ approvalID: Int64) {
+    if let continuation = waiters.removeValue(forKey: approvalID) {
       continuation.resume(returning: nil)
     }
   }
@@ -63,10 +69,10 @@ public actor ApprovalCoordinator {
 /// `DeferredApprovalParker` can stand in during composition and so tests can park without a waiter.
 public protocol ApprovalParking: Sendable {
   func park(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    approvalID: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     revalidatePolicyOnApprove: Bool
   ) async
 }
@@ -86,20 +92,20 @@ public final class DeferredApprovalParker: ApprovalParking {
   }
 
   public func park(
-    approvalId: Int64,
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    approvalID: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     revalidatePolicyOnApprove: Bool
   ) async {
     let parker = wrapped.withLock { boxed in
       boxed
     }
     await parker?.park(
-      approvalId: approvalId,
-      runId: runId,
-      sessionId: sessionId,
-      chatId: chatId,
+      approvalID: approvalID,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: chatID,
       revalidatePolicyOnApprove: revalidatePolicyOnApprove
     )
   }

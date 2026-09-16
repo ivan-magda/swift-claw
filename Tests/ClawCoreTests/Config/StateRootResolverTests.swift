@@ -11,10 +11,12 @@ private func posixPermissions(of url: URL) throws -> Int? {
   return (attributes[.posixPermissions] as? NSNumber)?.intValue
 }
 
-@Suite struct StateRootResolverTests {
+@Suite
+struct StateRootResolverTests {
   // MARK: - Creation
 
-  @Test func anExplicitPathIsCreatedAtTheOwnerOnlyMode() throws {
+  @Test
+  func anExplicitPathIsCreatedAtTheOwnerOnlyMode() throws {
     // given
     let parent = try makeTemporaryRoot(prefix: "state-root-explicit")
     defer { try? FileManager.default.removeItem(at: parent) }
@@ -28,7 +30,8 @@ private func posixPermissions(of url: URL) throws -> Int? {
     #expect(try posixPermissions(of: resolved) == 0o700)
   }
 
-  @Test func anExistingStateRootIsAcceptedRatherThanRecreated() throws {
+  @Test
+  func anExistingStateRootIsAcceptedRatherThanRecreated() throws {
     // given
     let existing = try makeTemporaryRoot(prefix: "state-root-existing")
     defer { try? FileManager.default.removeItem(at: existing) }
@@ -43,7 +46,8 @@ private func posixPermissions(of url: URL) throws -> Int? {
     #expect(FileManager.default.fileExists(atPath: marker.path))
   }
 
-  @Test func anUncreatableStateRootIsAConfigErrorNamingThePath() throws {
+  @Test
+  func anUncreatableStateRootIsAConfigErrorNamingThePath() throws {
     // given — a regular file stands where the parent directory would have to be
     let parent = try makeTemporaryRoot(prefix: "state-root-blocked")
     defer { try? FileManager.default.removeItem(at: parent) }
@@ -62,10 +66,13 @@ private func posixPermissions(of url: URL) throws -> Int? {
 
   // MARK: - The Default Root
 
-  @Test func theDefaultRootIsTheDottedDirectoryInTheOwnersHome() throws {
+  @Test
+  func theDefaultRootIsTheDottedDirectoryInTheOwnersHome() throws {
     // given
-    let expected = FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent(StateRootResolver.defaultDirectoryName, isDirectory: true)
+    let expected = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(
+      StateRootResolver.defaultDirectoryName,
+      isDirectory: true
+    )
 
     // when
     let resolved = try StateRootResolver.createStateRoot(for: nil)
@@ -97,7 +104,8 @@ private func posixPermissions(of url: URL) throws -> Int? {
   /// The promotion's whole point: daemon config resolves its state root through this resolver, so an
   /// owner cannot have `clawd run` and `clawd auth login` disagree about where credentials live — or
   /// have one of the two create the directory at a laxer mode than the other.
-  @Test func appConfigResolvesTheSameRootAtTheSameMode() throws {
+  @Test
+  func appConfigResolvesTheSameRootAtTheSameMode() throws {
     // given
     let parent = try makeTemporaryRoot(prefix: "state-root-appconfig")
     defer { try? FileManager.default.removeItem(at: parent) }
@@ -115,7 +123,8 @@ private func posixPermissions(of url: URL) throws -> Int? {
     #expect(try posixPermissions(of: config.stateRoot) == 0o700)
   }
 
-  @Test func appConfigFailsTheSameWayOnAnUncreatableRoot() throws {
+  @Test
+  func appConfigFailsTheSameWayOnAnUncreatableRoot() throws {
     // given
     let parent = try makeTemporaryRoot(prefix: "state-root-appconfig-blocked")
     defer { try? FileManager.default.removeItem(at: parent) }

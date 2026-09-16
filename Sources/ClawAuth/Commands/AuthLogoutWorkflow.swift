@@ -47,7 +47,7 @@ private extension AuthLogoutWorkflow {
               No stored \(ChatGPTProviderMetadata.providerID.rawValue) credential — \
               already logged out.
               """
-            )
+            ),
           ]
         )
       }

@@ -14,26 +14,40 @@ public enum ChatMembershipStatus: Sendable, Equatable {
 
   public init(apiValue: String) {
     switch apiValue {
-    case "creator": self = .creator
-    case "administrator": self = .administrator
-    case "member": self = .member
-    case "restricted": self = .restricted
-    case "left": self = .left
-    case "kicked": self = .kicked
-    default: self = .other(apiValue)
+    case "creator":
+      self = .creator
+    case "administrator":
+      self = .administrator
+    case "member":
+      self = .member
+    case "restricted":
+      self = .restricted
+    case "left":
+      self = .left
+    case "kicked":
+      self = .kicked
+    default:
+      self = .other(apiValue)
     }
   }
 
   /// The Bot API `status` string this case came from.
   public var apiValue: String {
     switch self {
-    case .creator: "creator"
-    case .administrator: "administrator"
-    case .member: "member"
-    case .restricted: "restricted"
-    case .left: "left"
-    case .kicked: "kicked"
-    case .other(let value): value
+    case .creator:
+      "creator"
+    case .administrator:
+      "administrator"
+    case .member:
+      "member"
+    case .restricted:
+      "restricted"
+    case .left:
+      "left"
+    case .kicked:
+      "kicked"
+    case .other(let value):
+      value
     }
   }
 
@@ -41,8 +55,10 @@ public enum ChatMembershipStatus: Sendable, Equatable {
   /// what it may send, not whether it is there.
   public var isPresent: Bool {
     switch self {
-    case .left, .kicked: false
-    case .creator, .administrator, .member, .restricted, .other: true
+    case .left, .kicked:
+      false
+    case .creator, .administrator, .member, .restricted, .other:
+      true
     }
   }
 }
@@ -62,28 +78,28 @@ public enum ChatMembershipChange: Sendable, Equatable {
 /// Its whole purpose is the operator-facing log — being added to a room is the only moment the
 /// chat id that would have to go into `CLAW_GROUP_CHATS` is announced.
 public struct RawChatMemberUpdate: Sendable, Equatable {
-  public let chatId: Int64
+  public let chatID: Int64
   public let chatKind: ChatKind
   public let chatTitle: String?
   /// Who made the change. Absent when Telegram reports one with no acting user.
-  public let actorUserId: Int64?
+  public let actorUserID: Int64?
   public let actorDisplayName: String?
   public let oldStatus: ChatMembershipStatus
   public let newStatus: ChatMembershipStatus
 
   public init(
-    chatId: Int64,
+    chatID: Int64,
     chatKind: ChatKind,
     chatTitle: String? = nil,
-    actorUserId: Int64? = nil,
+    actorUserID: Int64? = nil,
     actorDisplayName: String? = nil,
     oldStatus: ChatMembershipStatus,
     newStatus: ChatMembershipStatus
   ) {
-    self.chatId = chatId
+    self.chatID = chatID
     self.chatKind = chatKind
     self.chatTitle = chatTitle
-    self.actorUserId = actorUserId
+    self.actorUserID = actorUserID
     self.actorDisplayName = actorDisplayName
     self.oldStatus = oldStatus
     self.newStatus = newStatus
@@ -91,9 +107,12 @@ public struct RawChatMemberUpdate: Sendable, Equatable {
 
   public var change: ChatMembershipChange {
     switch (oldStatus.isPresent, newStatus.isPresent) {
-    case (false, true): .added
-    case (true, false): .removed
-    case (true, true), (false, false): oldStatus == newStatus ? .unchanged : sameSideChange
+    case (false, true):
+      .added
+    case (true, false):
+      .removed
+    case (true, true), (false, false):
+      oldStatus == newStatus ? .unchanged : sameSideChange
     }
   }
 

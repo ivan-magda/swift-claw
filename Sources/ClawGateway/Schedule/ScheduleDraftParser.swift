@@ -24,7 +24,7 @@ public enum ScheduleDraftParseResult: Sendable, Equatable {
 /// Seam for the router so tests script drafts without an LLM. `sessionId` attributes the parse's
 /// usage row (spend is metered per session even without a run).
 public protocol ScheduleDraftParsing: Sendable {
-  func parse(ownerText: String, sessionId: Int64) async -> ScheduleDraftParseResult
+  func parse(ownerText: String, sessionID: Int64) async -> ScheduleDraftParseResult
 }
 
 /// The ONE LLM call in the `/schedule` flow: a system-authored prompt at the trusted tier turns
@@ -83,7 +83,9 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     costResolver: CostResolver,
     structuredOutput: StructuredOutputMode = .off,
     providerCallIDGenerator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
-    now: @escaping @Sendable () -> Date = { Date() },
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    },
     clock: any Clock<Duration>,
     logger: Logger
   ) {
@@ -103,7 +105,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
   }
 
   // swiftlint:disable:next function_body_length
-  public func parse(ownerText: String, sessionId: Int64) async -> ScheduleDraftParseResult {
+  public func parse(ownerText: String, sessionID: Int64) async -> ScheduleDraftParseResult {
     // The parse is one provider call, so it is one identity — shared by the reconciled row a reply
     // yields and the estimate a deadline or brownout forces, since only one of them can ever be
     // recorded for this call.
@@ -114,7 +116,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     ]
     // The one shared trace identity — the same formatter a turn stamps — so a session's parse and
     // its turns never split across two trace identities.
-    let sessionTraceID = SessionTraceID.format(sessionID: sessionId)
+    let sessionTraceID = SessionTraceID.format(sessionID: sessionID)
 
     // A cooling primary starts the parse on the fallback, so the one call it gets goes to a route
     // that can answer instead of re-proving the wall.
@@ -136,7 +138,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       messages: messages,
       maxOutputTokens: Self.maxParseOutputTokens,
       responseFormat: responseFormat,
-      sessionId: sessionTraceID
+      sessionID: sessionTraceID
     )
     // The cause reported to the router when every route fails: the FIRST one, never the last. When
     // the primary's quota is out and the fallback then can't connect, "your plan quota is out" is
@@ -157,14 +159,14 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
           usageFor: landed,
           request: request,
           callID: callID,
-          sessionId: sessionId,
+          sessionID: sessionID,
           accountant: accountant
         )
         return .providerUnavailable
       } catch is ParseDeadlineExceeded {
         // The request may still be billing server-side; debit the estimate so the day cap
         // sees the spend, exactly like a deadline-hit turn.
-        record(estimatedFor: request, callID: callID, sessionId: sessionId, accountant: accountant)
+        record(estimatedFor: request, callID: callID, sessionID: sessionID, accountant: accountant)
         return .providerUnavailable
       } catch is CancellationError {
         // The command was cancelled: nothing was generated to bill, and cancellation is never an
@@ -174,9 +176,8 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
         if firstFailureError == nil {
           firstFailureError = error
         }
-        guard
-          let persistence = RouteSwitch.permits(error),
-          let next = roster.failover(from: active.position)
+        guard let persistence = RouteSwitch.permits(error),
+              let next = roster.failover(from: active.position)
         else {
           // One decision for every natural failure, keyed on the same vendor-neutral disposition a
           // turn reads. `mayHaveStarted` (exhausted retries, transport loss) debits an estimate so a
@@ -188,7 +189,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
             record(
               estimatedFor: request,
               callID: callID,
-              sessionId: sessionId,
+              sessionID: sessionID,
               accountant: accountant
             )
           }
@@ -206,7 +207,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
           messages: messages,
           maxOutputTokens: Self.maxParseOutputTokens,
           responseFormat: responseFormat,
-          sessionId: sessionTraceID
+          sessionID: sessionTraceID
         )
       }
     }
@@ -224,7 +225,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       usageFor: response,
       request: request,
       callID: callID,
-      sessionId: sessionId,
+      sessionID: sessionID,
       accountant: accountant
     )
 
@@ -421,8 +422,8 @@ private extension ScheduleDraftParser {
       return .quotaLimited(retryAfterSeconds: retryAfterSeconds)
     case .terminal, .cleanRejection, .transportFailure, .retryable, .connectFailed, .rejected,
       .credentialRefreshCompleted, .credentialRefreshExhausted, .credentialStateUnavailable,
-      .invalidProviderState, .visionUnsupported,
-      .partialStreamWithoutCompletedTerminal, .localOutputLimit, .modelIdentityMismatch, .none:
+      .invalidProviderState, .visionUnsupported, .partialStreamWithoutCompletedTerminal,
+      .localOutputLimit, .modelIdentityMismatch, .none:
       // A draft parse sends no images, so a vision refusal here could only be a mislabelled
       // rejection; it stays generic rather than telling the owner to change models over a schedule.
       return .providerUnavailable
@@ -439,7 +440,7 @@ private extension ScheduleDraftParser {
     usageFor response: ChatResponse,
     request: ChatRequest,
     callID: ProviderCallID,
-    sessionId: Int64,
+    sessionID: Int64,
     accountant: ProviderUsageAccountant
   ) {
     persist(
@@ -447,8 +448,8 @@ private extension ScheduleDraftParser {
         for: response,
         callID: callID,
         context: request.messages,
-        runId: nil,
-        sessionId: sessionId
+        runID: nil,
+        sessionID: sessionID
       )
     )
   }
@@ -459,7 +460,7 @@ private extension ScheduleDraftParser {
   func record(
     estimatedFor request: ChatRequest,
     callID: ProviderCallID,
-    sessionId: Int64,
+    sessionID: Int64,
     accountant: ProviderUsageAccountant
   ) {
     persist(
@@ -467,8 +468,8 @@ private extension ScheduleDraftParser {
         callID: callID,
         context: request.messages,
         observedCompletionTokens: 0,
-        runId: nil,
-        sessionId: sessionId
+        runID: nil,
+        sessionID: sessionID
       )
     )
   }
@@ -505,15 +506,14 @@ private extension ScheduleDraftParser {
   ) async throws -> ChatResponse {
     let outcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: Self.parseDeadlineSeconds,
-      clock: clock,
-      call: {
-        do {
-          return .response(try await provider.complete(request: request))
-        } catch {
-          return .failed(error)
-        }
+      clock: clock
+    ) {
+      do {
+        return .response(try await provider.complete(request: request))
+      } catch {
+        return .failed(error)
       }
-    )
+    }
 
     switch outcome {
     case .response(let response):

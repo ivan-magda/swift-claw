@@ -1,7 +1,9 @@
 import ClawTestSupport
 import Testing
 
-enum CoderToolCleanupError: Error { case lanesNotDrained }
+enum CoderToolCleanupError: Error {
+  case lanesNotDrained
+}
 
 actor CoderToolStorageCleanup {
   private(set) var deletionAllowed = true
@@ -51,7 +53,11 @@ private func withCoderToolCleanup(
     try await operation()
   } catch {
     let operationError = error
-    do { try await cleanup() } catch { Issue.record(error) }
+    do {
+      try await cleanup()
+    } catch {
+      Issue.record(error)
+    }
     throw operationError
   }
   try await cleanup()

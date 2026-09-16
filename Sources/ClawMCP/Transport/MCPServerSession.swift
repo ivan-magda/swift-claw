@@ -58,11 +58,7 @@ public struct MCPToolCallResult: Sendable {
   /// The server's own report that the call failed, which is a result, not a transport failure.
   public let isError: Bool
 
-  public init(
-    content: [MCP.Tool.Content],
-    structuredContent: JSONValue? = nil,
-    isError: Bool
-  ) {
+  public init(content: [MCP.Tool.Content], structuredContent: JSONValue? = nil, isError: Bool) {
     self.content = content
     self.structuredContent = structuredContent
     self.isError = isError
@@ -82,7 +78,7 @@ public struct MCPToolCallResult: Sendable {
 public actor MCPServerSession {
   nonisolated public let config: MCPServerConfig
 
-  private let factory: any MCPTransportFactory
+  private let transportFactory: any MCPTransportFactory
   private let clientVersion: String
   private let logger: Logger
   private let connectAllowance: Duration
@@ -105,7 +101,7 @@ public actor MCPServerSession {
     callAllowance: Duration? = nil
   ) {
     self.config = config
-    self.factory = transportFactory
+    self.transportFactory = transportFactory
     self.clientVersion = clientVersion
     self.logger = logger
     self.connectAllowance = connectAllowance ?? .seconds(config.connectTimeoutSeconds)
@@ -136,8 +132,9 @@ public actor MCPServerSession {
       let requested = cursor
       let request =
         requested.map { cursor in
-          ListTools.request(.init(cursor: cursor))
-        } ?? ListTools.request(.init())
+          ListTools.request(ListTools.Parameters(cursor: cursor))
+        }
+        ?? ListTools.request(ListTools.Parameters())
       let cancellation = MCPRequestCancellation()
       let context: RequestContext<ListTools.Result> = try await client.send(request)
       await cancellation.track(client: client, requestID: context.requestID)
@@ -316,7 +313,7 @@ private extension MCPServerSession {
   }
 
   func open() async throws -> Client {
-    let transport = try await factory.makeTransport()
+    let transport = try await transportFactory.makeTransport()
     let client = Client(name: MCPProtocol.clientName, version: clientVersion)
     let budget = config.connectTimeoutSeconds
 
@@ -329,10 +326,7 @@ private extension MCPServerSession {
       }
       logger.debug(
         "MCP session established",
-        metadata: [
-          "server": .string(config.name),
-          "protocol": .string(result.protocolVersion),
-        ]
+        metadata: ["server": .string(config.name), "protocol": .string(result.protocolVersion)]
       )
       return client
     } catch {

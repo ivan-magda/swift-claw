@@ -60,10 +60,7 @@ struct ScriptedLLMCredentialSource: LLMCredentialSource {
     )
   }
 
-  func reject(
-    generation: LLMCredentialGeneration,
-    disposition: LLMCredentialRejection
-  ) async {}
+  func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {}
 
   func shutdown() async throws {}
 }
@@ -178,7 +175,9 @@ func makeProvider(
   http: any HTTPExecuting & HTTPStreaming,
   credentials: (any LLMCredentialSource)? = nil,
   recorder: SleepRecorder = SleepRecorder(),
-  jitter: @escaping @Sendable (Duration) -> Duration = { _ in .zero }
+  jitter: @escaping @Sendable (_ duration: Duration) -> Duration = { _ in
+    .zero
+  }
 ) -> OpenAICompatibleProvider {
   OpenAICompatibleProvider(
     config: config.config,
@@ -197,7 +196,11 @@ func makeProvider(
 /// so a test can assert on both without repeating the join.
 func drain(
   _ stream: LLMEventStream
-) async -> (events: [StreamEvent], thrown: (any Error)?, terminal: LLMStreamTermination) {
+) async -> (
+  events: [StreamEvent],
+  thrown: (any Error)?,
+  terminal: LLMStreamTermination
+) {
   var events: [StreamEvent] = []
   var thrown: (any Error)?
   do {

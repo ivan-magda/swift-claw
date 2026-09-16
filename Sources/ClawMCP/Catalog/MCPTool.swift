@@ -69,8 +69,7 @@ public struct MCPTool: ClawCore.Tool {
     canonicalTarget: String
   ) -> ToolApprovalPresentation {
     ToolApprovalPresentation(
-      blastRadius:
-        "MCP: \(config.name) · "
+      blastRadius: "MCP: \(config.name) · "
         + MCPMetadataSanitizer(redactor: redactor).displayName(resolved.coordinate.remoteName),
       contentPreview: preview(of: arguments),
       warnings: []
@@ -108,7 +107,9 @@ public struct MCPTool: ClawCore.Tool {
 // MARK: - Identity
 
 private extension MCPTool {
-  var config: MCPServerConfig { session.config }
+  var config: MCPServerConfig {
+    session.config
+  }
 
   /// Names the server and its complete endpoint: scheme, port, path, and query can each select a
   /// different recipient, so a host-only label is not an exact-action binding.
@@ -124,10 +125,7 @@ private extension MCPTool {
       left.name == right.name ? left.value < right.value : left.name < right.name
     }
     let headerIdentity: [JSONValue] = headers.map { header in
-      JSONValue.object([
-        "name": .string(header.name),
-        "value": .string(header.value),
-      ])
+      JSONValue.object(["name": .string(header.name), "value": .string(header.value)])
     }
     let identity = JSONValue.object([
       "authHeader": .string(config.authHeader.lowercased()),
@@ -141,7 +139,10 @@ private extension MCPTool {
           config.url.absoluteString,
           resolved.coordinate.remoteName,
           config.authHeader.lowercased(),
-        ] + headers.flatMap { [$0.name, $0.value] }
+        ]
+          + headers.flatMap {
+            [$0.name, $0.value]
+          }
       )
   }
 
@@ -229,9 +230,7 @@ private extension MCPTool {
   /// Text parts join as text; everything else is noted by kind, because the model can act on
   /// knowing a picture came back even though it cannot see one.
   static func render(_ content: [MCP.Tool.Content]) -> String {
-    content
-      .map(part)
-      .joined(separator: "\n")
+    content.map(part).joined(separator: "\n")
   }
 
   static func part(_ content: MCP.Tool.Content) -> String {

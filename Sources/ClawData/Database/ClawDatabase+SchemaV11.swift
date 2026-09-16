@@ -4,7 +4,14 @@ import GRDB
 extension ClawDatabase {
   static func createCoderJobs(_ db: Database) throws {
     let states: [CoderJobState] = [
-      .admitted, .running, .stopping, .succeeded, .failed, .cancelled, .timedOut, .interrupted,
+      .admitted,
+      .running,
+      .stopping,
+      .succeeded,
+      .failed,
+      .cancelled,
+      .timedOut,
+      .interrupted,
     ]
     let ownerships: [CoderProcessOwnership] = [.none, .launching, .owned, .stopped, .unresolved]
     let stateCheck = states.map {

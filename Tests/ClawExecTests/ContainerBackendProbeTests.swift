@@ -4,15 +4,22 @@ import Testing
 
 @testable import ClawExec
 
-@Suite struct ContainerBackendProbeTests {
-  @Test func probeRejectsUnsupportedHostBeforeAnySubprocess() async throws {
+@Suite
+struct ContainerBackendProbeTests {
+  @Test
+  func probeRejectsUnsupportedHostBeforeAnySubprocess() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
     let runner = ScriptedCommandRunner { _, _ in
       commandResult(.exited(0))
     }
-    let backend = fixture.backend(commands: runner, supportedHost: { false })
+    let backend = fixture.backend(
+      commands: runner,
+      supportedHost: {
+        false
+      }
+    )
 
     // when
     let availability = await backend.probe()
@@ -24,14 +31,20 @@ import Testing
     #expect(await runner.recorded().isEmpty)
   }
 
-  @Test func versionAvailabilityRejectsUnsupportedHostBeforeAnySubprocess() async throws {
+  @Test
+  func versionAvailabilityRejectsUnsupportedHostBeforeAnySubprocess() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
     let runner = ScriptedCommandRunner { _, _ in
       commandResult(.exited(0))
     }
-    let backend = fixture.backend(commands: runner, supportedHost: { false })
+    let backend = fixture.backend(
+      commands: runner,
+      supportedHost: {
+        false
+      }
+    )
 
     // when
     let availability = await backend.versionAvailability()
@@ -43,16 +56,21 @@ import Testing
     #expect(await runner.recorded().isEmpty)
   }
 
-  @Test func probeRequiresRunningTypedSystemStatus() async throws {
+  @Test
+  func probeRequiresRunningTypedSystemStatus() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
     let runner = ScriptedCommandRunner { command, _ in
       command.arguments == ContainerInvocation.systemStatus()
-        ? jsonCommandResult(#"{"status":"not running"}"#)
-        : jsonCommandResult("[]")
+        ? jsonCommandResult(#"{"status":"not running"}"#) : jsonCommandResult("[]")
     }
-    let backend = fixture.backend(commands: runner, supportedHost: { true })
+    let backend = fixture.backend(
+      commands: runner,
+      supportedHost: {
+        true
+      }
+    )
 
     // when
     let availability = await backend.probe()
@@ -62,7 +80,8 @@ import Testing
     #expect(await runner.recorded().map(\.arguments) == [ContainerInvocation.systemStatus()])
   }
 
-  @Test func versionAvailabilitySelectsCLIComponentAndAcceptsTheFloor() async throws {
+  @Test
+  func versionAvailabilitySelectsCLIComponentAndAcceptsTheFloor() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -75,10 +94,14 @@ import Testing
       """
     let runner = ScriptedCommandRunner { command, _ in
       command.arguments == ContainerInvocation.systemVersion()
-        ? jsonCommandResult(json)
-        : jsonCommandResult(#"{"status":"running"}"#)
+        ? jsonCommandResult(json) : jsonCommandResult(#"{"status":"running"}"#)
     }
-    let backend = fixture.backend(commands: runner, supportedHost: { true })
+    let backend = fixture.backend(
+      commands: runner,
+      supportedHost: {
+        true
+      }
+    )
 
     // when
     let direct = await backend.versionAvailability()
@@ -89,12 +112,7 @@ import Testing
     #expect(probe == .available(engineVersion: "1.0.0"))
   }
 
-  @Test(arguments: [
-    "0.12.3",
-    "1.0",
-    "v1.0.0",
-    "1.0.0-beta.1",
-  ])
+  @Test(arguments: ["0.12.3", "1.0", "v1.0.0", "1.0.0-beta.1"])
   func versionAvailabilityFailsClosedForOldOrMalformedCLI(version: String) async throws {
     // given
     let fixture = try BackendFixture()
@@ -105,7 +123,12 @@ import Testing
     let runner = ScriptedCommandRunner { _, _ in
       jsonCommandResult(json)
     }
-    let backend = fixture.backend(commands: runner, supportedHost: { true })
+    let backend = fixture.backend(
+      commands: runner,
+      supportedHost: {
+        true
+      }
+    )
 
     // when
     let availability = await backend.versionAvailability()
@@ -117,7 +140,8 @@ import Testing
     }
   }
 
-  @Test func truncatedOrMalformedVersionJSONFailsClosed() async throws {
+  @Test
+  func truncatedOrMalformedVersionJSONFailsClosed() async throws {
     // given
     let fixture = try BackendFixture()
     defer { fixture.remove() }
@@ -128,10 +152,14 @@ import Testing
           stdout: Data("[]".utf8),
           stdoutTotal: 2_000_000,
           stdoutTruncated: true
-        )
-        : jsonCommandResult("not-json")
+        ) : jsonCommandResult("not-json")
     }
-    let backend = fixture.backend(commands: runner, supportedHost: { true })
+    let backend = fixture.backend(
+      commands: runner,
+      supportedHost: {
+        true
+      }
+    )
 
     // when
     let truncated = await backend.versionAvailability()

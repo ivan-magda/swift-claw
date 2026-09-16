@@ -126,10 +126,7 @@ public struct EncryptedMCPCredentialStore: Sendable {
   /// Binds `token` to the server's current URL. A second call for the same name replaces the record,
   /// which is how a re-pointed server is repaired.
   public func save(token: String, for server: MCPServerConfig) throws(CredentialStoreError) {
-    let record = StoredMCPCredential(
-      token: token,
-      urlFingerprint: Self.fingerprint(of: server.url)
-    )
+    let record = StoredMCPCredential(token: token, urlFingerprint: Self.fingerprint(of: server.url))
     try file.mutate { map in
       map.servers[server.name] = record
       return true
@@ -223,10 +220,8 @@ extension EncryptedMCPCredentialStore {
     try envelopeCodec.sealCredential(plaintext, key: key)
   }
 
-  static func openEnvelope(
-    _ envelope: Data,
-    key: SymmetricKey
-  ) throws(CredentialStoreError) -> Data {
+  static func openEnvelope(_ envelope: Data, key: SymmetricKey) throws(CredentialStoreError) -> Data
+  {
     try envelopeCodec.openCredential(envelope, key: key)
   }
 }

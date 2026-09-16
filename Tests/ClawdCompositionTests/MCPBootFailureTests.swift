@@ -15,8 +15,10 @@ import Testing
 /// is unusable. Neither may be tolerated into a boot: a catalog the owner mistyped is an ordinary
 /// config error, and an envelope that will not open would otherwise put a daemon on the wire talking
 /// to configured servers with no credential at all.
-@Suite struct MCPBootFailureTests {
-  @Test func aMalformedCatalogRefusesTheBootWithTheConfigExit() throws {
+@Suite
+struct MCPBootFailureTests {
+  @Test
+  func aMalformedCatalogRefusesTheBootWithTheConfigExit() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-boot")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -31,12 +33,13 @@ import Testing
     #expect(thrown == ExitCode(ClawExitCode.configInvalid.rawValue))
   }
 
-  @Test func anUnopenableTokenEnvelopeRefusesTheBootRatherThanBootingUnauthenticated() throws {
+  @Test
+  func anUnopenableTokenEnvelopeRefusesTheBootRatherThanBootingUnauthenticated() throws {
     // given a valid catalog and a credential envelope that is not one
     let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-boot")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
     try write("servers:\n  - name: linear\n    url: https://mcp.test.invalid/mcp\n", to: stateRoot)
@@ -53,7 +56,8 @@ import Testing
     #expect(thrown == ExitCode(ClawExitCode.secretLoadFailed.rawValue))
   }
 
-  @Test func noCatalogAtAllIsNotAFailure() throws {
+  @Test
+  func noCatalogAtAllIsNotAFailure() throws {
     // given a state root with no mcp.yaml in it
     let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-boot")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -65,12 +69,13 @@ import Testing
     #expect(inputs.config.servers.isEmpty)
   }
 
-  @Test func corruptOrphanedTokenEnvelopeStillRefusesTheBoot() throws {
+  @Test
+  func corruptOrphanedTokenEnvelopeStillRefusesTheBoot() throws {
     // given no catalog, but a stale credential envelope whose integrity cannot be trusted
     let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-boot")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
     try Data("not an envelope".utf8).write(
@@ -86,12 +91,13 @@ import Testing
     #expect(thrown == ExitCode(ClawExitCode.secretLoadFailed.rawValue))
   }
 
-  @Test func doctorClassifiesAnUnopenableTokenEnvelopeAsASecretFailure() throws {
+  @Test
+  func doctorClassifiesAnUnopenableTokenEnvelopeAsASecretFailure() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-mcp-doctor")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
     try write("servers:\n  - name: linear\n    url: https://mcp.test.invalid/mcp\n", to: stateRoot)
@@ -101,10 +107,7 @@ import Testing
     var report = DoctorReport()
 
     // when
-    let result = DoctorCommand.addMCPRows(
-      to: &report,
-      config: try config(stateRoot: stateRoot)
-    )
+    let result = DoctorCommand.addMCPRows(to: &report, config: try config(stateRoot: stateRoot))
 
     // then
     #expect(result.failureExitCode == .secretLoadFailed)
@@ -114,8 +117,10 @@ import Testing
 
 /// Sessions opened at boot outlive the tools that use them — a server may contribute none at all —
 /// so hanging up is the service graph's job rather than any adapter's.
-@Suite struct MCPSessionLifecycleServiceTests {
-  @Test func shutdownHangsUpEverySessionEvenOnesNoToolHolds() async throws {
+@Suite
+struct MCPSessionLifecycleServiceTests {
+  @Test
+  func shutdownHangsUpEverySessionEvenOnesNoToolHolds() async throws {
     // given two live sessions against a server that advertises nothing, so no `MCPTool` retains
     // either one
     let scripted = ScriptedMCPHTTPServer(tools: [])
@@ -124,7 +129,9 @@ import Testing
         server: try MCPServerConfig(name: name, url: "https://\(name).test.invalid/mcp"),
         token: nil,
         http: scripted,
-        logger: Logger(label: "test", factory: { _ in SwiftLogNoOpLogHandler() })
+        logger: Logger(label: "test") { _ in
+          SwiftLogNoOpLogHandler()
+        }
       )
     }
     for session in sessions {

@@ -1,14 +1,21 @@
 import Foundation
 
 public struct LearningTrialIdentity: Sendable, Equatable, Hashable, Codable {
-  public let trialId: Int64
-  public let jobId: Int64
+  private enum CodingKeys: String, CodingKey {
+    case trialID = "trialId"
+    case jobID = "jobId"
+    case epoch
+    case generation
+  }
+
+  public let trialID: Int64
+  public let jobID: Int64
   public let epoch: LearningEpoch
   public let generation: Int
 
-  public init(trialId: Int64, jobId: Int64, epoch: LearningEpoch, generation: Int) {
-    self.trialId = trialId
-    self.jobId = jobId
+  public init(trialID: Int64, jobID: Int64, epoch: LearningEpoch, generation: Int) {
+    self.trialID = trialID
+    self.jobID = jobID
     self.epoch = epoch
     self.generation = generation
   }
@@ -16,11 +23,11 @@ public struct LearningTrialIdentity: Sendable, Equatable, Hashable, Codable {
 
 public struct TrialAssignmentIdentity: Sendable, Equatable, Hashable {
   public let trial: LearningTrialIdentity
-  public let runId: Int64
+  public let runID: Int64
 
-  public init(trial: LearningTrialIdentity, runId: Int64) {
+  public init(trial: LearningTrialIdentity, runID: Int64) {
     self.trial = trial
-    self.runId = runId
+    self.runID = runID
   }
 }
 
@@ -85,9 +92,17 @@ public struct ResolvedRunEvidence: Sendable, Equatable {
     return issueCodes
   }
 
-  public var evaluationRequired: Bool { effective.evaluationRequired }
-  public var ownerConfirmed: Bool { effective.ownerConfirmed }
-  public var hardVetoes: Set<HardVeto> { effective.hardVetoes }
+  public var evaluationRequired: Bool {
+    effective.evaluationRequired
+  }
+
+  public var ownerConfirmed: Bool {
+    effective.ownerConfirmed
+  }
+
+  public var hardVetoes: Set<HardVeto> {
+    effective.hardVetoes
+  }
 }
 
 public struct TrialAssignment: Sendable, Equatable {
@@ -158,7 +173,10 @@ public enum TrialPolicy {
     if hasHardVeto {
       return .fallback(reason: .hardVeto)
     }
-    if resolved.contains(where: { $0.outcome == .negative }) {
+    let hasNegativeOutcome = resolved.contains {
+      $0.outcome == .negative
+    }
+    if hasNegativeOutcome {
       return .fallback(reason: .negativeOutcome)
     }
 
@@ -167,15 +185,14 @@ public enum TrialPolicy {
       return .fallback(reason: .decisionDeadlineIncomplete)
     }
 
-    let positiveCount = resolved.count { $0.outcome == .positive }
+    let positiveCount = resolved.count {
+      $0.outcome == .positive
+    }
     let limitReached = trial.consumedAssignments >= trial.maxAssignments
     let deadlineReached = now >= trial.assignmentDeadline
     let positiveCohortComplete = positiveCount >= 2 && hasUnresolved == false
     let exposureClosed =
-      trial.state == .draining
-      || limitReached
-      || deadlineReached
-      || positiveCohortComplete
+      trial.state == .draining || limitReached || deadlineReached || positiveCohortComplete
     guard exposureClosed else {
       return .wait
     }

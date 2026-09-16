@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct HealthRowsBuilderTests {
+@Suite
+struct HealthRowsBuilderTests {
   private func inputs(
     allowlist: AllowlistHealth = AllowlistHealth(seeded: 1, configured: 1),
     freeBytes: Int = 1000,
@@ -12,7 +13,7 @@ import Testing
     perDayUSD: Double = 10,
     latestContext: LatestPromptUsage? = LatestPromptUsage(
       promptTokens: 13155,
-      runId: 136,
+      runID: 136,
       isEstimated: false
     ),
     routeHealth: LLMRouteHealth = LLMRouteHealth(
@@ -51,10 +52,17 @@ import Testing
     )
   }
 
-  @Test func tagsEachSubsystemWithItsGroup() {
+  @Test
+  func tagsEachSubsystemWithItsGroup() {
     // given / when
     let checks = HealthRowsBuilder.checks(inputs())
-    let byKey = Dictionary(checks.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
+    let byKey = Dictionary(
+      checks.map {
+        ($0.key, $0)
+      }
+    ) { first, _ in
+      first
+    }
 
     // then
     #expect(byKey["allowlist.owners"]?.group == .database)
@@ -64,12 +72,15 @@ import Testing
   }
 
   private func allowlistRow(seeded: Int?, configured: Int) -> DoctorReport.Check? {
-    HealthRowsBuilder
-      .checks(inputs(allowlist: AllowlistHealth(seeded: seeded, configured: configured)))
-      .first { $0.key == "allowlist.owners" }
+    HealthRowsBuilder.checks(
+      inputs(allowlist: AllowlistHealth(seeded: seeded, configured: configured))
+    ).first {
+      $0.key == "allowlist.owners"
+    }
   }
 
-  @Test func allowlistFailsWhenNoOwnersConfiguredOrSeeded() {
+  @Test
+  func allowlistFailsWhenNoOwnersConfiguredOrSeeded() {
     // given — genuinely ownerless: config names nobody and nothing was ever seeded
     // when
     let row = allowlistRow(seeded: 0, configured: 0)
@@ -79,7 +90,8 @@ import Testing
     #expect(row?.value == "0")
   }
 
-  @Test func allowlistPassesOnConfiguredOwnersBeforeFirstRunSeedsTheTable() {
+  @Test
+  func allowlistPassesOnConfiguredOwnersBeforeFirstRunSeedsTheTable() {
     // given — a fresh install: CLAW_ALLOWLIST names the owner, `run` has not seeded the table yet
     // when
     let row = allowlistRow(seeded: 0, configured: 1)
@@ -89,7 +101,8 @@ import Testing
     #expect(row?.value == "0 seeded, 1 configured (seeded at daemon start)")
   }
 
-  @Test func allowlistReportsTheSeededCountOnceTheTableHasOwners() {
+  @Test
+  func allowlistReportsTheSeededCountOnceTheTableHasOwners() {
     // given — pairing grew the table beyond config; the table is the enforced boundary
     // when
     let row = allowlistRow(seeded: 2, configured: 1)
@@ -99,7 +112,8 @@ import Testing
     #expect(row?.value == "2")
   }
 
-  @Test func allowlistKeepsPassingWhenConfigIsTrimmedBelowTheSeededTable() {
+  @Test
+  func allowlistKeepsPassingWhenConfigIsTrimmedBelowTheSeededTable() {
     // given — seeding is additive, so owners persist after their ID leaves CLAW_ALLOWLIST
     // when
     let row = allowlistRow(seeded: 1, configured: 0)
@@ -109,7 +123,8 @@ import Testing
     #expect(row?.value == "1")
   }
 
-  @Test func allowlistFailsWhenTheStoreReadFailsEvenWithConfiguredOwners() {
+  @Test
+  func allowlistFailsWhenTheStoreReadFailsEvenWithConfiguredOwners() {
     // given — the allowlist read threw; the boundary fails closed, locking every owner out
     // when
     let row = allowlistRow(seeded: nil, configured: 3)
@@ -119,26 +134,43 @@ import Testing
     #expect(row?.value == "unreadable (db read failed)")
   }
 
-  @Test func zeroFreeDiskFails() {
+  @Test
+  func zeroFreeDiskFails() {
     // when
     let checks = HealthRowsBuilder.checks(inputs(freeBytes: 0))
 
     // then
-    #expect(checks.first { $0.key == "db.free_disk" }?.ok == false)
+    #expect(
+      checks.first {
+        $0.key == "db.free_disk"
+      }?.ok == false
+    )
   }
 
-  @Test func remainingSpendClampsAtZeroWhenOverBudget() {
+  @Test
+  func remainingSpendClampsAtZeroWhenOverBudget() {
     // when
     let checks = HealthRowsBuilder.checks(inputs(todayUSD: 20, perDayUSD: 10))
 
     // then
-    #expect(checks.first { $0.key == "spend.remaining_day_usd" }?.value == USD.display(0))
+    #expect(
+      checks.first {
+        $0.key == "spend.remaining_day_usd"
+      }?.value == USD.display(0)
+    )
   }
 
-  @Test func dynamicSignalsAreHeadlinesStaticConfigIsNot() {
+  @Test
+  func dynamicSignalsAreHeadlinesStaticConfigIsNot() {
     // given / when
     let checks = HealthRowsBuilder.checks(inputs())
-    let byKey = Dictionary(checks.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
+    let byKey = Dictionary(
+      checks.map {
+        ($0.key, $0)
+      }
+    ) { first, _ in
+      first
+    }
 
     // then — figures the owner checks /status for ride the group line…
     #expect(byKey["llm.consecutive_failures"]?.isHeadline == true)
@@ -157,15 +189,16 @@ import Testing
   }
 
   private func contextRow(latestContext: LatestPromptUsage?) -> DoctorReport.Check? {
-    HealthRowsBuilder
-      .checks(inputs(latestContext: latestContext))
-      .first { $0.key == "context.last_prompt_tokens" }
+    HealthRowsBuilder.checks(inputs(latestContext: latestContext)).first {
+      $0.key == "context.last_prompt_tokens"
+    }
   }
 
-  @Test func contextRowReportsTheLastPromptSizeAnchoredToItsRun() {
+  @Test
+  func contextRowReportsTheLastPromptSizeAnchoredToItsRun() {
     // when
     let row = contextRow(
-      latestContext: LatestPromptUsage(promptTokens: 13155, runId: 136, isEstimated: false)
+      latestContext: LatestPromptUsage(promptTokens: 13155, runID: 136, isEstimated: false)
     )
 
     // then — an informational headline in its own group, never a failing check
@@ -175,29 +208,32 @@ import Testing
     #expect(row?.ok == true)
   }
 
-  @Test func contextRowOmitsTheRunAnchorForRunlessSpend() {
+  @Test
+  func contextRowOmitsTheRunAnchorForRunlessSpend() {
     // given — schedule parses record usage without a run
     // when
     let row = contextRow(
-      latestContext: LatestPromptUsage(promptTokens: 210, runId: nil, isEstimated: false)
+      latestContext: LatestPromptUsage(promptTokens: 210, runID: nil, isEstimated: false)
     )
 
     // then
     #expect(row?.value == "210")
   }
 
-  @Test func contextRowMarksAnEstimatedRowAsApproximate() {
+  @Test
+  func contextRowMarksAnEstimatedRowAsApproximate() {
     // given — the newest row came from a degraded call, so its prompt count is a guess
     // when
     let row = contextRow(
-      latestContext: LatestPromptUsage(promptTokens: 52012, runId: 140, isEstimated: true)
+      latestContext: LatestPromptUsage(promptTokens: 52012, runID: 140, isEstimated: true)
     )
 
     // then
     #expect(row?.value == "~52012 (run 140)")
   }
 
-  @Test func contextRowRendersNoneBeforeAnyProviderCall() {
+  @Test
+  func contextRowRendersNoneBeforeAnyProviderCall() {
     // when
     let row = contextRow(latestContext: nil)
 
@@ -206,7 +242,8 @@ import Testing
     #expect(row?.ok == true)
   }
 
-  @Test func skillRowPassesWithNoInstalledSkills() {
+  @Test
+  func skillRowPassesWithNoInstalledSkills() {
     // given
     let diagnostics = skillDiagnostics()
 
@@ -220,11 +257,13 @@ import Testing
     #expect(row?.isHeadline == true)
   }
 
-  @Test func skillRowReportsAcceptedSkills() {
+  @Test
+  func skillRowReportsAcceptedSkills() {
     // given
-    let diagnostics = skillDiagnostics(
-      descriptors: [skill(name: "summarize"), skill(name: "translate")]
-    )
+    let diagnostics = skillDiagnostics(descriptors: [
+      skill(name: "summarize"),
+      skill(name: "translate"),
+    ])
 
     // when
     let row = skillRow(diagnostics)
@@ -234,11 +273,10 @@ import Testing
     #expect(row?.ok == true)
   }
 
-  @Test func skillRowFailsWhenTheScanRejectsAnEntry() {
+  @Test
+  func skillRowFailsWhenTheScanRejectsAnEntry() {
     // given
-    let diagnostics = skillDiagnostics(
-      warnings: [.invalidSkillManifest(skill: "broken")]
-    )
+    let diagnostics = skillDiagnostics(warnings: [.invalidSkillManifest(skill: "broken")])
 
     // when
     let row = skillRow(diagnostics)
@@ -248,7 +286,8 @@ import Testing
     #expect(row?.ok == false)
   }
 
-  @Test func skillRowPassesWhenTheCompleteIndexExactlyFitsTheCap() {
+  @Test
+  func skillRowPassesWhenTheCompleteIndexExactlyFitsTheCap() {
     // given
     let descriptor = skill(name: "summarize")
     let exactCap = WorkspaceSkills.completeIndexGraphemeCount(for: [descriptor])
@@ -262,7 +301,8 @@ import Testing
     #expect(row?.ok == true)
   }
 
-  @Test func skillRowFailsWhenTheCompleteIndexExceedsTheCap() {
+  @Test
+  func skillRowFailsWhenTheCompleteIndexExceedsTheCap() {
     // given
     let descriptor = skill(name: "summarize")
     let indexSize = WorkspaceSkills.completeIndexGraphemeCount(for: [descriptor])
@@ -276,7 +316,8 @@ import Testing
     #expect(row?.ok == false)
   }
 
-  @Test func telegramShowsHealthySkillsAsAContextHeadline() {
+  @Test
+  func telegramShowsHealthySkillsAsAContextHeadline() {
     // given
     var report = DoctorReport()
     report.add(contentsOf: HealthRowsBuilder.checks(inputs()))
@@ -288,11 +329,10 @@ import Testing
     #expect(summary.contains("skills accepted=0 rejected=0 fits_cap=true"))
   }
 
-  @Test func telegramExpandsFailingSkillDetails() {
+  @Test
+  func telegramExpandsFailingSkillDetails() {
     // given
-    let diagnostics = skillDiagnostics(
-      warnings: [.invalidSkillManifest(skill: "broken")]
-    )
+    let diagnostics = skillDiagnostics(warnings: [.invalidSkillManifest(skill: "broken")])
     var report = DoctorReport()
     report.add(contentsOf: HealthRowsBuilder.checks(inputs(skillDiagnostics: diagnostics)))
 
@@ -304,20 +344,32 @@ import Testing
     #expect(summary.contains("context.skills: accepted=0 rejected=1 fits_cap=true"))
   }
 
-  @Test func emptyCostMixRendersAsNone() {
+  @Test
+  func emptyCostMixRendersAsNone() {
     // when
     let checks = HealthRowsBuilder.checks(inputs())
 
     // then
-    #expect(checks.first { $0.key == "spend.cost_source_mix" }?.value == "none")
+    #expect(
+      checks.first {
+        $0.key == "spend.cost_source_mix"
+      }?.value == "none"
+    )
   }
 
   private func routeRows(_ health: LLMRouteHealth) -> [String: String] {
     let checks = HealthRowsBuilder.checks(inputs(routeHealth: health))
-    return Dictionary(checks.map { ($0.key, $0.value) }, uniquingKeysWith: { first, _ in first })
+    return Dictionary(
+      checks.map {
+        ($0.key, $0.value)
+      }
+    ) { first, _ in
+      first
+    }
   }
 
-  @Test func aLoneRouteReportsItselfActiveAndNoFallback() {
+  @Test
+  func aLoneRouteReportsItselfActiveAndNoFallback() {
     // when
     let rows = routeRows(
       LLMRouteHealth(primaryReference: "gpt-4o", fallbackReference: nil, cooldown: .clear)
@@ -329,7 +381,8 @@ import Testing
     #expect(rows["llm.primary_cooldown_s"] == "none")
   }
 
-  @Test func aCoolingPrimaryNamesTheFallbackAndTheWindow() {
+  @Test
+  func aCoolingPrimaryNamesTheFallbackAndTheWindow() {
     // when
     let rows = routeRows(
       LLMRouteHealth(
@@ -345,7 +398,8 @@ import Testing
     #expect(rows["llm.primary_cooldown_s"] == "840")
   }
 
-  @Test func aReaderOutsideTheDaemonClaimsNoLiveRoute() {
+  @Test
+  func aReaderOutsideTheDaemonClaimsNoLiveRoute() {
     // given — the windows live in the daemon's memory; this reader is another process
     // when
     let rows = routeRows(
@@ -368,7 +422,8 @@ import Testing
     return report.renderTelegramSummary()
   }
 
-  @Test func telegramNamesTheAnsweringRouteOnEveryHealthyTurn() {
+  @Test
+  func telegramNamesTheAnsweringRouteOnEveryHealthyTurn() {
     // given — a healthy pair, the primary answering
     // when
     let summary = telegramSummary(
@@ -386,7 +441,8 @@ import Testing
     #expect(summary.contains("primary_cooldown_s") == false)
   }
 
-  @Test func telegramCarriesTheWindowOnlyWhileThePrimaryIsCooling() {
+  @Test
+  func telegramCarriesTheWindowOnlyWhileThePrimaryIsCooling() {
     // when
     let summary = telegramSummary(
       LLMRouteHealth(
@@ -401,21 +457,19 @@ import Testing
     #expect(summary.contains("primary_cooldown_s 840"))
   }
 
-  @Test func fallbackConfigurationStaysOffTheTelegramSummary() {
+  @Test
+  func fallbackConfigurationStaysOffTheTelegramSummary() {
     // given / when — configuration an owner set themselves, unchanged between turns
     let summary = telegramSummary(
-      LLMRouteHealth(
-        primaryReference: "gpt-4o",
-        fallbackReference: "gpt-4o-mini",
-        cooldown: .clear
-      )
+      LLMRouteHealth(primaryReference: "gpt-4o", fallbackReference: "gpt-4o-mini", cooldown: .clear)
     )
 
     // then — `doctor --check-config` is where a config echo belongs; the group line stays for state
     #expect(summary.contains("fallback_configured") == false)
   }
 
-  @Test func groupModeRowReadsOffWithNoConfiguredChats() {
+  @Test
+  func groupModeRowReadsOffWithNoConfiguredChats() {
     // given / when
     let row = HealthRowsBuilder.groupModeCheck(chatCount: 0)
 
@@ -426,7 +480,8 @@ import Testing
     #expect(row.ok)
   }
 
-  @Test func groupModeRowCountsTheConfiguredChats() {
+  @Test
+  func groupModeRowCountsTheConfiguredChats() {
     // given / when
     let one = HealthRowsBuilder.groupModeCheck(chatCount: 1)
     let several = HealthRowsBuilder.groupModeCheck(chatCount: 3)
@@ -436,6 +491,8 @@ import Testing
     #expect(several.value == "on (3 chats)")
   }
 }
+
+// MARK: - Skill Health Fixtures
 
 private extension HealthRowsBuilderTests {
   func skill(name: String) -> SkillDescriptor {
@@ -458,8 +515,8 @@ private extension HealthRowsBuilderTests {
   }
 
   func skillRow(_ diagnostics: SkillDiagnostics) -> DoctorReport.Check? {
-    HealthRowsBuilder
-      .checks(inputs(skillDiagnostics: diagnostics))
-      .first { $0.key == "context.skills" }
+    HealthRowsBuilder.checks(inputs(skillDiagnostics: diagnostics)).first {
+      $0.key == "context.skills"
+    }
   }
 }

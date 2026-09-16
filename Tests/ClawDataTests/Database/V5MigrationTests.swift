@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct V5MigrationTests {
-  @Test func vFiveAddsNullableToolColumns() throws {
+@Suite
+struct V5MigrationTests {
+  @Test
+  func vFiveAddsNullableToolColumns() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -15,13 +17,16 @@ import Testing
 
     // then
     let columns = try queue.read { db in
-      try Row.fetchAll(db, sql: "PRAGMA table_info(messages)").map { row in row["name"] as String }
+      try Row.fetchAll(db, sql: "PRAGMA table_info(messages)").map { row in
+        row["name"] as String
+      }
     }
     #expect(columns.contains("tool_calls"))
     #expect(columns.contains("tool_call_id"))
   }
 
-  @Test func vFiveUpgradesAPopulatedVFourDatabase() throws {
+  @Test
+  func vFiveUpgradesAPopulatedVFourDatabase() throws {
     // given — a v4 database that already holds a message row
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrator.migrate(queue, upTo: "v4")
@@ -59,7 +64,8 @@ import Testing
 
   /// §20 item 5 — BLOCKING verification: GRDB's generated external-content sync triggers must
   /// stay consistent when a non-indexed column is updated, and delete must still de-index.
-  @Test func ftsSurvivesToolColumnWritesAndDeletes() throws {
+  @Test
+  func ftsSurvivesToolColumnWritesAndDeletes() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)

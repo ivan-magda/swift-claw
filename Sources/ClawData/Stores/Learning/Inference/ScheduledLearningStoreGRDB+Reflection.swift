@@ -38,26 +38,23 @@ extension ScheduledLearningStoreGRDB {
     requiresNoLiveTrial: Bool
   ) throws -> ReflectionPreparation? {
     let trialRequirementIsMet =
-      requiresNoLiveTrial == false
-      ? true : try liveTrial(db, jobId: trigger.jobId) == nil
+      requiresNoLiveTrial == false ? true : try liveTrial(db, jobID: trigger.jobID) == nil
     guard trigger.algorithm == .v1 else {
       return nil
     }
-    guard
-      let state = try readState(db, jobId: trigger.jobId),
-      state.epoch == trigger.epoch,
-      state.stableDigest == trigger.stableDigest,
-      state.feedbackRevision == requiredStateFeedbackRevision,
-      try jobIsRepeatable(db, jobId: trigger.jobId),
-      trialRequirementIsMet,
-      let stable = try readLessonSet(db, jobId: trigger.jobId, digest: trigger.stableDigest)
+    guard let state = try readState(db, jobID: trigger.jobID),
+          state.epoch == trigger.epoch,
+          state.stableDigest == trigger.stableDigest,
+          state.feedbackRevision == requiredStateFeedbackRevision,
+          try jobIsRepeatable(db, jobID: trigger.jobID),
+          trialRequirementIsMet,
+          let stable = try readLessonSet(db, jobID: trigger.jobID, digest: trigger.stableDigest)
     else {
       return nil
     }
-    guard
-      trigger.evidenceDigests.isEmpty == false,
-      Set(trigger.evidenceDigests).count == trigger.evidenceDigests.count,
-      trigger.evidenceDigests.count <= EvidenceWindow.maximumCount
+    guard trigger.evidenceDigests.isEmpty == false,
+          Set(trigger.evidenceDigests).count == trigger.evidenceDigests.count,
+          trigger.evidenceDigests.count <= EvidenceWindow.maximumCount
     else {
       return nil
     }
@@ -66,18 +63,12 @@ extension ScheduledLearningStoreGRDB {
     guard rows.count == trigger.evidenceDigests.count else {
       return nil
     }
-    let feedback = try reflectionFeedback(
-      db,
-      trigger: trigger,
-      rows: rows,
-      cutoff: feedbackCutoff
-    )
+    let feedback = try reflectionFeedback(db, trigger: trigger, rows: rows, cutoff: feedbackCutoff)
     let reduced = try reduceReflectionRows(rows, feedback: feedback, trigger: trigger)
     guard reduced.vetoed == false else {
       return nil
     }
-    guard
-      LearningTrigger.detect(window: reduced.effective, corrections: reduced.events) == trigger
+    guard LearningTrigger.detect(window: reduced.effective, corrections: reduced.events) == trigger
     else {
       return nil
     }
@@ -96,7 +87,7 @@ extension ScheduledLearningStoreGRDB {
 
 private extension ScheduledLearningStoreGRDB {
   struct ReflectionRow {
-    let runId: Int64
+    let runID: Int64
     let evidenceDigest: EvidenceDigest
     let evaluationDigest: EvaluationDigest
     let evaluatorOutcome: EvaluatorOutcome
@@ -116,16 +107,12 @@ private extension ScheduledLearningStoreGRDB {
     let vetoed: Bool
   }
 
-  static func reflectionRows(
-    _ db: Database,
-    trigger: TriggerIdentity
-  ) throws -> [ReflectionRow] {
+  static func reflectionRows(_ db: Database, trigger: TriggerIdentity) throws -> [ReflectionRow] {
     var rows: [ReflectionRow] = []
     for evidenceDigest in trigger.evidenceDigests {
-      guard
-        let row = try Row.fetchOne(
-          db,
-          sql: """
+      guard let row = try Row.fetchOne(
+        db,
+        sql: """
             SELECT evaluation.evaluation_digest, evaluation.run_id, evaluation.outcome,
               evaluation.issue_codes, evaluation.compatibility_digest, evaluation.created_at,
               evidence.payload, binding.occurrence_at, binding.stable_digest, binding.trial_id
@@ -136,25 +123,25 @@ private extension ScheduledLearningStoreGRDB {
             WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
               AND evaluation.evidence_digest = ?
             """,
-          arguments: [trigger.jobId, trigger.epoch.value, evidenceDigest.rawValue]
-        ),
-        row["trial_id"] as Int64? == nil,
-        (row["stable_digest"] as String) == trigger.stableDigest.rawValue,
-        let outcome = EvaluatorOutcome(rawValue: row["outcome"]),
-        let issueCodes = try? JSONDecoder().decode(
-          [String].self,
-          from: Data((row["issue_codes"] as String).utf8)
-        ),
-        let occurrenceAt = EpochSecondCodec.date(fromEpoch: row["occurrence_at"]),
-        let evaluatedAt = EpochSecondCodec.date(fromEpoch: row["created_at"]),
-        let payloadBytes: Data = row["payload"],
-        let payload = try? JSONDecoder().decode(EvidencePayload.self, from: payloadBytes)
+        arguments: [trigger.jobID, trigger.epoch.value, evidenceDigest.rawValue]
+      ),
+            row["trial_id"] as Int64? == nil,
+            (row["stable_digest"] as String) == trigger.stableDigest.rawValue,
+            let outcome = EvaluatorOutcome(rawValue: row["outcome"]),
+            let issueCodes = try? JSONDecoder().decode(
+              [String].self,
+              from: Data((row["issue_codes"] as String).utf8)
+            ),
+            let occurrenceAt = EpochSecondCodec.date(fromEpoch: row["occurrence_at"]),
+            let evaluatedAt = EpochSecondCodec.date(fromEpoch: row["created_at"]),
+            let payloadBytes: Data = row["payload"],
+            let payload = try? JSONDecoder().decode(EvidencePayload.self, from: payloadBytes)
       else {
         return []
       }
       rows.append(
         ReflectionRow(
-          runId: row["run_id"],
+          runID: row["run_id"],
           evidenceDigest: evidenceDigest,
           evaluationDigest: EvaluationDigest(rawValue: row["evaluation_digest"]),
           evaluatorOutcome: outcome,
@@ -180,16 +167,16 @@ private extension ScheduledLearningStoreGRDB {
   ) throws -> [StoredFeedbackProjection] {
     var evaluationRuns: [String: Int64] = [:]
     for row in rows {
-      guard evaluationRuns.updateValue(row.runId, forKey: row.evaluationDigest.rawValue) == nil
+      guard evaluationRuns.updateValue(row.runID, forKey: row.evaluationDigest.rawValue) == nil
       else {
         throw StoreError.unexpected("reflection source has a duplicate evaluation digest")
       }
     }
     return try storedFeedback(
       db,
-      jobId: trigger.jobId,
+      jobID: trigger.jobID,
       epoch: trigger.epoch,
-      runIds: Set(rows.map(\.runId)),
+      runIDs: Set(rows.map(\.runID)),
       evaluationRuns: evaluationRuns,
       cutoff: cutoff
     )
@@ -214,7 +201,7 @@ private extension ScheduledLearningStoreGRDB {
   ) throws -> ReducedReflectionRows {
     let reduced = rows.map { row in
       let sources = feedback.filter { stored in
-        stored.event.runId == row.runId
+        stored.event.runID == row.runID
       }
       return reduceReflectionRow(row, feedback: sources, trigger: trigger)
     }
@@ -222,11 +209,13 @@ private extension ScheduledLearningStoreGRDB {
     var payloads = reduced.compactMap(\.payload)
     let events = feedback.map(\.event)
     feedbackSources.sort { lhs, rhs in
-      (lhs.revision.value, lhs.eventId) < (rhs.revision.value, rhs.eventId)
+      (lhs.revision.value, lhs.eventID) < (rhs.revision.value, rhs.eventID)
     }
     payloads.sort { lhs, rhs in
-      (lhs.source.revision.value, lhs.source.eventId)
-        < (rhs.source.revision.value, rhs.source.eventId)
+      (lhs.source.revision.value, lhs.source.eventID) < (
+        rhs.source.revision.value,
+        rhs.source.eventID
+      )
     }
     return ReducedReflectionRows(
       prepared: reduced.map(\.prepared),
@@ -251,11 +240,9 @@ private extension ScheduledLearningStoreGRDB {
     )
     let effectiveEvents = FeedbackEvent.unsuperseded(events)
     let feedbackSources = feedback.compactMap { source in
-      effectiveEvents.contains(where: { event in
+      effectiveEvents.contains { event in
         event.id == source.event.id
-      })
-        ? source.source
-        : nil
+      } ? source.source : nil
     }
     let correction = FeedbackEvent.latestUnsupersededResult(in: events)
     let payload = ownerPayload(
@@ -266,28 +253,28 @@ private extension ScheduledLearningStoreGRDB {
     return ReducedReflectionRow(
       prepared: PreparedReflectionEvaluation(
         evidence: CandidateEvidenceSource(
-          runId: row.runId,
+          runID: row.runID,
           digest: row.evidenceDigest,
           evaluationDigest: row.evaluationDigest,
           evaluationRequired: outcome.evaluationRequired
         ),
-        evaluation: CandidateEvaluationSource(runId: row.runId, digest: row.evaluationDigest),
+        evaluation: CandidateEvaluationSource(runID: row.runID, digest: row.evaluationDigest),
         summary: ReflectorEvaluationSummary(
-          runId: row.runId,
+          runID: row.runID,
           finalOutput: row.finalOutput,
           outcome: outcome.outcome
         )
       ),
       effective: EffectiveEvaluation(
-        runId: row.runId,
-        jobId: trigger.jobId,
+        runID: row.runID,
+        jobID: trigger.jobID,
         epoch: trigger.epoch,
         stableDigest: trigger.stableDigest,
         evidenceDigest: row.evidenceDigest,
         compatibility: row.compatibility,
         occurrenceAt: row.occurrenceAt,
         evaluatorCompletedAt: row.evaluatedAt,
-        trialId: nil,
+        trialID: nil,
         outcome: outcome.outcome,
         feedbackRevision: trigger.feedbackRevision
       ),
@@ -302,14 +289,13 @@ private extension ScheduledLearningStoreGRDB {
     feedback: [StoredFeedbackProjection],
     effectiveEvents: [FeedbackEvent]
   ) -> PreparedOwnerPayload? {
-    guard
-      let correction,
-      correction.signal == .resultCorrection,
-      let body = correction.payload,
-      let stored = feedback.first(where: { source in
+    guard let correction,
+          correction.signal == .resultCorrection,
+          let body = correction.payload,
+          let stored = feedback.first(where: { source in
         source.event.id == correction.id
       }),
-      effectiveEvents.contains(where: { event in
+          effectiveEvents.contains(where: { event in
         event.id == correction.id
       })
     else {
@@ -325,20 +311,20 @@ extension ScheduledLearningStoreGRDB {
   static func recordNoCandidate(
     _ db: Database,
     result: NoCandidateResult,
-    jobId: Int64,
+    jobID: Int64,
     epoch: LearningEpoch,
     now: Date
   ) throws {
     let inputs = ReflectionNoCandidateInputs(
       triggerDigest: result.triggerDigest,
-      operationId: result.operationId,
+      operationID: result.operationID,
       carrierDigest: result.carrierDigest
     )
     let receipt = ReflectionNoCandidateReceipt(resultDigest: result.resultDigest)
     try insertDecision(
       db,
       kind: ReflectionNoCandidateReceipt.kind,
-      jobId: jobId,
+      jobID: jobID,
       epoch: epoch,
       inputs: inputs,
       result: receipt,
@@ -351,11 +337,11 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Workflow Trigger Discovery
 
 extension ScheduledLearningStoreGRDB {
-  public func workflowTriggers(jobId: Int64, now: Date) throws(StoreError) -> [TriggerIdentity] {
+  public func workflowTriggers(jobID: Int64, now: Date) throws(StoreError) -> [TriggerIdentity] {
     try database.readMapping { db in
-      guard let state = try Self.readState(db, jobId: jobId),
-        try Self.jobIsRepeatable(db, jobId: jobId),
-        try Self.liveTrial(db, jobId: jobId) == nil
+      guard let state = try Self.readState(db, jobID: jobID),
+            try Self.jobIsRepeatable(db, jobID: jobID),
+            try Self.liveTrial(db, jobID: jobID) == nil
       else {
         return []
       }
@@ -375,9 +361,13 @@ extension ScheduledLearningStoreGRDB {
           ) WHERE position <= ? ORDER BY compatibility_digest, position DESC
           """,
         arguments: [
-          jobId, state.epoch.value, state.stableDigest.rawValue,
+          jobID,
+          state.epoch.value,
+          state.stableDigest.rawValue,
           EpochSecondCodec.epoch(now.addingTimeInterval(-EvidenceWindow.maximumAge)),
-          EpochSecondCodec.epoch(now), EpochSecondCodec.epoch(now), EvidenceWindow.maximumCount,
+          EpochSecondCodec.epoch(now),
+          EpochSecondCodec.epoch(now),
+          EvidenceWindow.maximumCount,
         ]
       )
       let grouped = Dictionary(grouping: rows) { row in
@@ -388,7 +378,7 @@ extension ScheduledLearningStoreGRDB {
           EvidenceDigest(rawValue: row["evidence_digest"])
         }
         let snapshot = TriggerIdentity(
-          jobId: jobId,
+          jobID: jobID,
           epoch: state.epoch,
           algorithm: .v1,
           stableDigest: state.stableDigest,
@@ -414,8 +404,8 @@ extension ScheduledLearningStoreGRDB {
           cutoff: now
         )
         guard let trigger = LearningTrigger.detect(window: window, corrections: reduced.events),
-          try Self.workflowReflectionIsClaimable(db, trigger: trigger),
-          try Self.onlyControlsChangedSinceAttempt(db, trigger: trigger) == false
+              try Self.workflowReflectionIsClaimable(db, trigger: trigger),
+              try Self.onlyControlsChangedSinceAttempt(db, trigger: trigger) == false
         else {
           return nil
         }
@@ -428,10 +418,12 @@ extension ScheduledLearningStoreGRDB {
 // MARK: - Effective Trigger Changes
 
 private extension ScheduledLearningStoreGRDB {
-  static func workflowReflectionIsClaimable(_ db: Database, trigger: TriggerIdentity) throws -> Bool
-  {
+  static func workflowReflectionIsClaimable(
+    _ db: Database,
+    trigger: TriggerIdentity
+  ) throws -> Bool {
     let key = LearningOperationKey(
-      jobId: trigger.jobId,
+      jobID: trigger.jobID,
       epoch: trigger.epoch,
       phase: .reflector,
       sourceDigest: trigger.digest.rawValue,
@@ -451,9 +443,10 @@ private extension ScheduledLearningStoreGRDB {
       || raw == LearningOperationState.interruptedUnknown.rawValue
   }
 
-  static func onlyControlsChangedSinceAttempt(_ db: Database, trigger: TriggerIdentity) throws
-    -> Bool
-  {
+  static func onlyControlsChangedSinceAttempt(
+    _ db: Database,
+    trigger: TriggerIdentity
+  ) throws -> Bool {
     let revisions = try Int64.fetchAll(
       db,
       sql: """
@@ -464,16 +457,20 @@ private extension ScheduledLearningStoreGRDB {
           AND feedback_revision <= ? ORDER BY feedback_revision DESC
         """,
       arguments: [
-        trigger.jobId, trigger.epoch.value,
-        FeedbackSubjectKind.candidate.rawValue, FeedbackSubjectKind.promotion.rawValue,
-        trigger.jobId, trigger.epoch.value,
-        FeedbackSubjectKind.candidate.rawValue, FeedbackSubjectKind.promotion.rawValue,
+        trigger.jobID,
+        trigger.epoch.value,
+        FeedbackSubjectKind.candidate.rawValue,
+        FeedbackSubjectKind.promotion.rawValue,
+        trigger.jobID,
+        trigger.epoch.value,
+        FeedbackSubjectKind.candidate.rawValue,
+        FeedbackSubjectKind.promotion.rawValue,
         trigger.feedbackRevision.value,
       ]
     )
     for revision in revisions {
       let prior = TriggerIdentity(
-        jobId: trigger.jobId,
+        jobID: trigger.jobID,
         epoch: trigger.epoch,
         algorithm: trigger.algorithm,
         stableDigest: trigger.stableDigest,
@@ -483,7 +480,7 @@ private extension ScheduledLearningStoreGRDB {
         reason: trigger.reason
       )
       let key = LearningOperationKey(
-        jobId: prior.jobId,
+        jobID: prior.jobID,
         epoch: prior.epoch,
         phase: .reflector,
         sourceDigest: prior.digest.rawValue,
@@ -493,8 +490,7 @@ private extension ScheduledLearningStoreGRDB {
       )
       if try Bool.fetchOne(
         db,
-        sql:
-          "SELECT EXISTS(SELECT 1 FROM learning_operations WHERE key_digest = ?)",
+        sql: "SELECT EXISTS(SELECT 1 FROM learning_operations WHERE key_digest = ?)",
         arguments: [key.digest.rawValue]
       ) == true {
         return true

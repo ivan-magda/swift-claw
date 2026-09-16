@@ -78,6 +78,8 @@ struct ProviderRosterTests {
   }
 }
 
+// MARK: - Route Fixtures
+
 private extension ProviderRosterTests {
   /// Bindings named after their position, so a selection's identity is readable in the expectation
   /// rather than inferred from the position it was asked for.

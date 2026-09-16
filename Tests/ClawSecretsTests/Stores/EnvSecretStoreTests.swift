@@ -4,7 +4,8 @@ import Testing
 
 @testable import ClawSecrets
 
-@Suite struct EnvSecretStoreTests {
+@Suite
+struct EnvSecretStoreTests {
   private typealias EnvKey = EnvSecretStore.EnvKey
 
   /// A concurrency-safe test spy for the `@Sendable` warn closure. A `@Sendable` closure may not
@@ -27,24 +28,26 @@ import Testing
     }
   }
 
-  @Test func loadsTokenAndKeyFromEnvironment() throws {
+  @Test
+  func loadsTokenAndKeyFromEnvironment() throws {
     // given
-    let store = EnvSecretStore(
-      environment: [EnvKey.botToken: "123:abc", EnvKey.llmApiKey: "sk-test"],
-      warn: { _ in }
-    )
+    let store = EnvSecretStore(environment: [
+      EnvKey.botToken: "123:abc",
+      EnvKey.llmAPIKey: "sk-test",
+    ]) { _ in }
 
     // when
     let secrets = try store.loadSecrets()
 
     // then
     #expect(secrets.telegramBotToken == "123:abc")
-    #expect(secrets.llmApiKey == "sk-test")
+    #expect(secrets.llmAPIKey == "sk-test")
   }
 
-  @Test func missingTokenFailsClosed() {
+  @Test
+  func missingTokenFailsClosed() {
     // given
-    let store = EnvSecretStore(environment: [:], warn: { _ in })
+    let store = EnvSecretStore(environment: [:]) { _ in }
 
     // when / then
     #expect(throws: SecretStoreError.missingTelegramToken) {
@@ -52,27 +55,27 @@ import Testing
     }
   }
 
-  @Test func blankApiKeyBecomesNil() throws {
+  @Test
+  func blankAPIKeyBecomesNil() throws {
     // given
-    let store = EnvSecretStore(
-      environment: [EnvKey.botToken: "123:abc", EnvKey.llmApiKey: ""],
-      warn: { _ in }
-    )
+    let store = EnvSecretStore(environment: [EnvKey.botToken: "123:abc", EnvKey.llmAPIKey: ""]) {
+      _ in
+    }
 
     // when
     let secrets = try store.loadSecrets()
 
     // then — local servers need no key; a blank value is nil, not "".
-    #expect(secrets.llmApiKey == nil)
+    #expect(secrets.llmAPIKey == nil)
   }
 
-  @Test func loadWarnsThatSecretsArePlaintext() throws {
+  @Test
+  func loadWarnsThatSecretsArePlaintext() throws {
     // given
     let spy = WarningSpy()
-    let store = EnvSecretStore(
-      environment: [EnvKey.botToken: "123:abc"],
-      warn: { spy.record($0) }
-    )
+    let store = EnvSecretStore(environment: [EnvKey.botToken: "123:abc"]) {
+      spy.record($0)
+    }
 
     // when
     _ = try store.loadSecrets()
@@ -82,14 +85,15 @@ import Testing
     #expect(spy.recorded.first?.contains("PLAINTEXT") == true)
   }
 
-  @Test func everySealedKeyIsOneTheLoaderActuallyReads() throws {
+  @Test
+  func everySealedKeyIsOneTheLoaderActuallyReads() throws {
     // given — every sealed variable populated with a distinct value
     let environment = Dictionary(
       uniqueKeysWithValues: EnvKey.sealed.enumerated().map { index, key in
         (key, index == 0 ? "123:abc" : "value-\(index)")
       }
     )
-    let store = EnvSecretStore(environment: environment, warn: { _ in })
+    let store = EnvSecretStore(environment: environment) { _ in }
 
     // when
     let secrets = try store.loadSecrets()
@@ -99,15 +103,16 @@ import Testing
     #expect(Set(secrets.redactionValues) == Set(environment.values))
   }
 
-  @Test func sealedKeyListCoversEverySecretTheEnvelopeCarries() {
+  @Test
+  func sealedKeyListCoversEverySecretTheEnvelopeCarries() {
     // given — the envelope carries a `Secrets`, so every sealed secret is one of its stored
     // properties. Reflection counts them, which is what ties the scrub list to the payload:
     // comparing `sealed` against another hand-written list would only prove two lists match.
     let secrets = Secrets(
       telegramBotToken: "123:abc",
-      llmApiKey: "sk-x",
-      searchApiKey: "exa-x",
-      llmFallbackApiKey: "sk-fallback-x"
+      llmAPIKey: "sk-x",
+      searchAPIKey: "exa-x",
+      llmFallbackAPIKey: "sk-fallback-x"
     )
 
     // when
@@ -126,7 +131,8 @@ import Testing
     SecretStoreError.decryptionFailed,
     SecretStoreError.unreadable("x"),
     SecretStoreError.publicationFailed("x"),
-  ]) func everySecretErrorMapsToExit11(error: SecretStoreError) {
+  ])
+  func everySecretErrorMapsToExit11(error: SecretStoreError) {
     // then — a secret-load failure is non-retryable and exits 11 (acceptance #5/#11).
     #expect(error.exitCode == ClawExitCode.secretLoadFailed.rawValue)
     #expect(error.exitCode == 11)

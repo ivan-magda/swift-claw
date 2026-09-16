@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct CoderJobProcessTests {
-  @Test func launchEventsRequireCurrentLaunchAndRunningReservation() throws {
+@Suite
+struct CoderJobProcessTests {
+  @Test
+  func launchEventsRequireCurrentLaunchAndRunningReservation() throws {
     // given
     let fixture = try CoderStoreFixture()
     let id = try fixture.admittedID()

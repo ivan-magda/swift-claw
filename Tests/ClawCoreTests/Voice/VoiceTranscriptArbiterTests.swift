@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct VoiceTranscriptArbiterTests {
-  @Test func picksTheHighestConfidenceCandidateAboveTheFloor() {
+@Suite
+struct VoiceTranscriptArbiterTests {
+  @Test
+  func picksTheHighestConfidenceCandidateAboveTheFloor() {
     // given — the measured mismatch shape: garbage scores ~0.02, the right language ~0.84
     let english = ScoredTranscript(text: ", , ,", confidence: 0.02)
     let russian = ScoredTranscript(text: "Привет, это голосовое сообщение", confidence: 0.84)
@@ -16,7 +18,8 @@ import Testing
     #expect(winner == russian)
   }
 
-  @Test func rejectsWhenEveryScoredCandidateIsBelowTheFloor() {
+  @Test
+  func rejectsWhenEveryScoredCandidateIsBelowTheFloor() {
     // given — wrong-language output can look like plausible text, so low scores must lose
     let candidates = [
       ScoredTranscript(text: ", , ,", confidence: 0.02),
@@ -30,7 +33,8 @@ import Testing
     #expect(winner == nil)
   }
 
-  @Test func fallsBackToTheFirstCandidateWhenNoConfidenceExists() {
+  @Test
+  func fallsBackToTheFirstCandidateWhenNoConfidenceExists() {
     // given — an engine that emits no confidence data must not brick the feature
     let first = ScoredTranscript(text: "first lane", confidence: nil)
     let second = ScoredTranscript(text: "second lane", confidence: nil)
@@ -42,7 +46,8 @@ import Testing
     #expect(winner == first)
   }
 
-  @Test func unscoredCandidatesLoseToScoredOnes() {
+  @Test
+  func unscoredCandidatesLoseToScoredOnes() {
     // given
     let unscored = ScoredTranscript(text: "no data", confidence: nil)
     let scored = ScoredTranscript(text: "confident", confidence: 0.9)
@@ -54,7 +59,8 @@ import Testing
     #expect(winner == scored)
   }
 
-  @Test func unscoredCandidatesCannotRescueAScoredFieldBelowTheFloor() {
+  @Test
+  func unscoredCandidatesCannotRescueAScoredFieldBelowTheFloor() {
     // given — once any lane produced a measurable score, an unmeasurable lane must not win
     let unscored = ScoredTranscript(text: "no data", confidence: nil)
     let garbage = ScoredTranscript(text: ", , ,", confidence: 0.02)
@@ -66,7 +72,8 @@ import Testing
     #expect(winner == nil)
   }
 
-  @Test func emptyCandidateListHasNoWinner() {
+  @Test
+  func emptyCandidateListHasNoWinner() {
     // given / when
     let winner = VoiceTranscriptArbiter.winner(among: [])
 
@@ -74,7 +81,8 @@ import Testing
     #expect(winner == nil)
   }
 
-  @Test func prefersTheEarlierCandidateOnEqualConfidence() {
+  @Test
+  func prefersTheEarlierCandidateOnEqualConfidence() {
     // given — candidate order is the configured locale priority
     let preferred = ScoredTranscript(text: "preferred locale", confidence: 0.8)
     let secondary = ScoredTranscript(text: "secondary locale", confidence: 0.8)
@@ -86,7 +94,8 @@ import Testing
     #expect(winner == preferred)
   }
 
-  @Test func averageConfidenceIsTheMeanOfTheRunValues() {
+  @Test
+  func averageConfidenceIsTheMeanOfTheRunValues() {
     // given / when
     let average = VoiceTranscriptArbiter.averageConfidence([0.5, 1.0])
 
@@ -94,7 +103,8 @@ import Testing
     #expect(average == 0.75)
   }
 
-  @Test func averageConfidenceIsNilWithoutRunValues() {
+  @Test
+  func averageConfidenceIsNilWithoutRunValues() {
     // given / when
     let average = VoiceTranscriptArbiter.averageConfidence([])
 
@@ -102,7 +112,8 @@ import Testing
     #expect(average == nil)
   }
 
-  @Test func thresholdsMatchTheMeasuredSeparation() {
+  @Test
+  func thresholdsMatchTheMeasuredSeparation() {
     // given / then — measured lanes: right language ≥ 0.84 average, wrong language ≤ 0.21;
     // the floor must sit between them and the early-accept must only fire on a clear match
     #expect(VoiceTranscriptArbiter.floorConfidence > 0.21)

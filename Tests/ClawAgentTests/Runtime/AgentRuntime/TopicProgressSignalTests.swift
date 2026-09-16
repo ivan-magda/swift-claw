@@ -10,12 +10,12 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
   private(set) var postDraftTypingCount = 0
   private var postDraftTicks = 0
 
-  func sendDraft(chatId: Int64, draftId: Int64, markdown: String) async -> Bool {
+  func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool {
     drafts.append(markdown)
     return true
   }
 
-  func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
+  func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
     if drafts.isEmpty == false {
       postDraftTypingCount += 1
     }
@@ -33,7 +33,8 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
 /// A turn's cosmetic progress signals have to reach the topic that asked, not the supergroup's
 /// General feed. Telegram takes a draft only in a private chat, so in a topic that leaves the
 /// "typing…" action carrying the whole job — and it has to keep carrying it.
-@Suite struct TopicProgressSignalTests {
+@Suite
+struct TopicProgressSignalTests {
   private func buildResult() -> BuildResult {
     BuildResult(
       messages: [ChatMessage(role: .user, content: "hi")],
@@ -42,7 +43,8 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
     )
   }
 
-  @Test func aGroupTurnPulsesTypingIntoTheCallingTopic() async throws {
+  @Test
+  func aGroupTurnPulsesTypingIntoTheCallingTopic() async throws {
     // given
     let typing = RecordingTyping()
     let runtime = makeRuntime(
@@ -52,9 +54,9 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
 
     // when
     _ = try await runtime.runTurn(
-      runId: 1,
-      sessionId: 2,
-      chatId: -1_001,
+      runID: 1,
+      sessionID: 2,
+      chatID: -1_001,
       buildResult: buildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -62,7 +64,7 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
       todayTokens: 0,
       todayUSD: 0,
       mode: .group,
-      threadId: 77
+      threadID: 77
     )
 
     // then
@@ -70,7 +72,7 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
     #expect(!pulses.isEmpty)
     #expect(
       pulses.allSatisfy { pulse in
-        pulse == RecordingTyping.Pulse(chatId: -1_001, messageThreadId: 77)
+        pulse == RecordingTyping.Pulse(chatID: -1_001, messageThreadID: 77)
       }
     )
   }
@@ -82,7 +84,8 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
   /// The gate holds the stream's terminal until three pulses have gone out *after* the first delta,
   /// so a regression that stops pulsing once a draft has been attempted deadlocks the script rather
   /// than passing on a lucky tick.
-  @Test func aGroupStreamingTurnKeepsPulsingTypingWhenNoDraftLands() async throws {
+  @Test
+  func aGroupStreamingTurnKeepsPulsingTypingWhenNoDraftLands() async throws {
     // given
     let gate = TypingReleaseGate()
     let typing = CountingReleaseTyping(releaseAfter: 3, gate: gate)
@@ -93,7 +96,7 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
         [
           .finished(
             ChatResponse(content: "hello", finishReason: "stop", usage: nil, costFromProvider: nil)
-          )
+          ),
         ]
       )
     )
@@ -107,9 +110,9 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
 
     // when
     _ = try await runtime.runTurn(
-      runId: 11,
-      sessionId: 22,
-      chatId: -1_001,
+      runID: 11,
+      sessionID: 22,
+      chatID: -1_001,
       buildResult: buildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -117,7 +120,7 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
       todayTokens: 0,
       todayUSD: 0,
       mode: .group,
-      threadId: 77
+      threadID: 77
     )
 
     // then
@@ -125,12 +128,13 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
     #expect(pulses.count >= 3)
     #expect(
       pulses.allSatisfy { pulse in
-        pulse == RecordingTyping.Pulse(chatId: -1_001, messageThreadId: 77)
+        pulse == RecordingTyping.Pulse(chatID: -1_001, messageThreadID: 77)
       }
     )
   }
 
-  @Test func aDirectTurnPulsesTypingIntoNoThread() async throws {
+  @Test
+  func aDirectTurnPulsesTypingIntoNoThread() async throws {
     // given
     let typing = RecordingTyping()
     let runtime = makeRuntime(
@@ -140,9 +144,9 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
 
     // when — the DM spelling: no mode, no thread, exactly as before group mode existed
     _ = try await runtime.runTurn(
-      runId: 11,
-      sessionId: 22,
-      chatId: 42,
+      runID: 11,
+      sessionID: 22,
+      chatID: 42,
       buildResult: buildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -154,12 +158,17 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
     // then
     let pulses = await typing.pulses
     #expect(!pulses.isEmpty)
-    #expect(pulses.allSatisfy { $0.messageThreadId == nil })
+    #expect(
+      pulses.allSatisfy {
+        $0.messageThreadID == nil
+      }
+    )
   }
 
   /// The DM counterpart: a delivered draft is the bubble, so it takes the typing action's place
   /// rather than pulsing alongside it.
-  @Test func aDirectStreamingDraftSilencesTheTypingPulse() async throws {
+  @Test
+  func aDirectStreamingDraftSilencesTheTypingPulse() async throws {
     // given — hold the stream open for a full typing interval after the first draft lands
     let terminalGate = TypingReleaseGate()
     let progress = DirectDraftProgressProbe()
@@ -175,7 +184,7 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
               usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
               costFromProvider: 0.001
             )
-          )
+          ),
         ]
       )
     )
@@ -199,9 +208,9 @@ private actor DirectDraftProgressProbe: TypingIndicator, RichDraftStreaming {
 
     // when
     _ = try await runtime.runTurn(
-      runId: 11,
-      sessionId: 22,
-      chatId: 42,
+      runID: 11,
+      sessionID: 22,
+      chatID: 42,
       buildResult: buildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,

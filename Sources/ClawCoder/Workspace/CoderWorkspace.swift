@@ -11,7 +11,7 @@ struct CoderWorkspace: Sendable {
   func prepare(
     _ invocation: CoderInvocation,
     deadline: ContinuousClock.Instant? = nil,
-    recordProcess: @Sendable @escaping (CoderProcessEvent) async throws -> Void
+    recordProcess: @Sendable @escaping (_ event: CoderProcessEvent) async throws -> Void
   ) async throws -> CoderWorkspaceState {
     let git = CoderGit(
       tracking: .job(record: recordProcess),

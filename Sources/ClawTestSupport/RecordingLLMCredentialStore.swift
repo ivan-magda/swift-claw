@@ -25,7 +25,9 @@ public final class RecordingLLMCredentialStore: LLMCredentialStore, Sendable {
   }
 
   /// Every accepted write, including writes the script rejects.
-  public var saveAttempts: Int { saved.count }
+  public var saveAttempts: Int {
+    saved.count
+  }
 
   public func stopFailing() {
     ledger.withLock { current in

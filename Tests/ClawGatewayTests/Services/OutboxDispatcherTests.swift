@@ -14,15 +14,13 @@ import Testing
 private struct MarkSentFailingOutbox: OutboxStore {
   let base: OutboxStoreGRDB
 
-  func markSent(
-    deliveryKey: String,
-    telegramMessageId: Int64,
-    now: Date
-  ) throws(StoreError) {
+  func markSent(deliveryKey: String, telegramMessageID: Int64, now: Date) throws(StoreError) {
     throw StoreError.diskFull
   }
 
-  func pendingOutbound() throws(StoreError) -> [OutboxRow] { try base.pendingOutbound() }
+  func pendingOutbound() throws(StoreError) -> [OutboxRow] {
+    try base.pendingOutbound()
+  }
 }
 
 /// Records every send the dispatcher makes — its target, its `replyMarkup` and its payload — and
@@ -57,8 +55,8 @@ private actor DeliverySpy: MessageDelivery {
     text: String,
     replyMarkup: String?
   ) async throws -> Int64 {
-    plainAttempts.append(target.chatId)
-    try answer(for: target.chatId)
+    plainAttempts.append(target.chatID)
+    try answer(for: target.chatID)
     plainMarkups.append(replyMarkup)
     targets.append(target)
     deliveredPayloads.append(text)
@@ -70,8 +68,8 @@ private actor DeliverySpy: MessageDelivery {
     markdown: String,
     replyMarkup: String?
   ) async throws -> Int64 {
-    richAttempts.append(target.chatId)
-    try answer(for: target.chatId)
+    richAttempts.append(target.chatID)
+    try answer(for: target.chatID)
     if failRich {
       throw TelegramError.transport("rich down")
     }
@@ -81,17 +79,17 @@ private actor DeliverySpy: MessageDelivery {
     return 1
   }
 
-  private func answer(for chatId: Int64) throws {
-    switch outcomes[chatId] {
+  private func answer(for chatID: Int64) throws {
+    switch outcomes[chatID] {
     case .none:
       return
     case .some(.unreachable):
-      throw TelegramError.transport("chat \(chatId) down")
+      throw TelegramError.transport("chat \(chatID) down")
     case .some(.floodControl(let retryAfter, let times)):
       guard times > 0 else {
         return
       }
-      outcomes[chatId] = .floodControl(retryAfter: retryAfter, times: times - 1)
+      outcomes[chatID] = .floodControl(retryAfter: retryAfter, times: times - 1)
       throw TelegramError.floodControl(retryAfter: retryAfter)
     }
   }
@@ -136,12 +134,13 @@ private final class RetryWaitHold: Sendable {
   }
 }
 
-@Suite struct OutboxDispatcherTests {
+@Suite
+struct OutboxDispatcherTests {
   private struct Fixture {
     let writer: any DatabaseWriter
     let outbox: OutboxStoreGRDB
-    let runId: Int64
-    let chatId: Int64
+    let runID: Int64
+    let chatID: Int64
   }
 
   private func makeFixture() throws -> Fixture {
@@ -149,8 +148,8 @@ private final class RetryWaitHold: Sendable {
     return Fixture(
       writer: seeded.writer,
       outbox: seeded.outbox,
-      runId: seeded.runId,
-      chatId: seeded.chatId
+      runID: seeded.runID,
+      chatID: seeded.chatID
     )
   }
 
@@ -161,8 +160,8 @@ private final class RetryWaitHold: Sendable {
   ) throws {
     try seedPending(
       in: fixture.writer,
-      runId: fixture.runId,
-      chatId: fixture.chatId,
+      runID: fixture.runID,
+      chatID: fixture.chatID,
       payloads: payloads,
       replyMarkup: replyMarkup
     )
@@ -174,18 +173,18 @@ private final class RetryWaitHold: Sendable {
 
   private func seedPending(
     in writer: any DatabaseWriter,
-    runId: Int64,
-    chatId: Int64,
+    runID: Int64,
+    chatID: Int64,
     payloads: [String],
     replyMarkup: String? = nil
   ) throws {
     try OutboxFixture.commitReply(
       in: writer,
-      runId: runId,
+      runID: runID,
       chunks: payloads.enumerated().map { index, payload in
         OutboxChunk(
           stepIndex: index,
-          chatId: chatId,
+          chatID: chatID,
           payload: payload,
           payloadHash: ContentHash.fnv1a(payload),
           replyMarkup: replyMarkup
@@ -198,38 +197,39 @@ private final class RetryWaitHold: Sendable {
   /// its row first — the shape a per-chat failure has to be judged on.
   private struct TwoChatFixture {
     let outbox: OutboxStoreGRDB
-    let firstChatId: Int64
-    let secondChatId: Int64
+    let firstChatID: Int64
+    let secondChatID: Int64
   }
 
   private func makeTwoChatFixture(
     firstPayload: String,
     secondPayload: String
   ) throws -> TwoChatFixture {
-    let firstChatId: Int64 = -1_001
-    let secondChatId: Int64 = -1_002
-    let seeded = try makeSeededFixture(chatId: firstChatId)
-    let secondRunId = try seedRun(in: seeded.writer, chatId: secondChatId, updateId: 2)
+    let firstChatID: Int64 = -1_001
+    let secondChatID: Int64 = -1_002
+    let seeded = try makeSeededFixture(chatID: firstChatID)
+    let secondRunID = try seedRun(in: seeded.writer, chatID: secondChatID, updateID: 2)
     try seedPending(
       in: seeded.writer,
-      runId: seeded.runId,
-      chatId: firstChatId,
+      runID: seeded.runID,
+      chatID: firstChatID,
       payloads: [firstPayload]
     )
     try seedPending(
       in: seeded.writer,
-      runId: secondRunId,
-      chatId: secondChatId,
+      runID: secondRunID,
+      chatID: secondChatID,
       payloads: [secondPayload]
     )
     return TwoChatFixture(
       outbox: seeded.outbox,
-      firstChatId: firstChatId,
-      secondChatId: secondChatId
+      firstChatID: firstChatID,
+      secondChatID: secondChatID
     )
   }
 
-  @Test func drainSendsPendingRowsAndMarksThemSent() async throws {
+  @Test
+  func drainSendsPendingRowsAndMarksThemSent() async throws {
     // given — one PENDING row and a transport that sends cleanly
     let fixture = try makeFixture()
     try seedPending(fixture, payload: "hello")
@@ -249,14 +249,12 @@ private final class RetryWaitHold: Sendable {
     #expect(try fixture.outbox.pendingOutbound().isEmpty)
   }
 
-  @Test func sendFailureLeavesRowPendingForRetry() async throws {
+  @Test
+  func sendFailureLeavesRowPendingForRetry() async throws {
     // given — the transport fails every send: rich and the plain fallback both error out
     let fixture = try makeFixture()
     try seedPending(fixture, payload: "hello")
-    let transport = RecordingTransport(
-      sendError: .transport("down"),
-      richError: .transport("down")
-    )
+    let transport = RecordingTransport(sendError: .transport("down"), richError: .transport("down"))
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
       delivery: transport,
@@ -271,7 +269,8 @@ private final class RetryWaitHold: Sendable {
     #expect(try fixture.outbox.pendingOutbound().count == 1)
   }
 
-  @Test func bootDrainRecoversRowsCommittedByAPriorRun() async throws {
+  @Test
+  func bootDrainRecoversRowsCommittedByAPriorRun() async throws {
     // given — a row already PENDING before the dispatcher starts (a prior run committed but never
     // sent it); no poke will fire, so only the boot drain can deliver it
     let fixture = try makeFixture()
@@ -286,16 +285,23 @@ private final class RetryWaitHold: Sendable {
     )
 
     // when — run the service; its boot drain delivers the pre-committed row, then we stop it
-    let task = Task { try await dispatcher.run() }
+    let task = Task {
+      try await dispatcher.run()
+    }
     await transport.waitForSends(atLeast: 1)
     signal.finish()
     task.cancel()
 
     // then
-    #expect(await transport.richSends.contains { $0.markdown == "recovered" })
+    #expect(
+      await transport.richSends.contains {
+        $0.markdown == "recovered"
+      }
+    )
   }
 
-  @Test func midBatchSendFailureStopsAndLeavesLaterRowsPendingInOrder() async throws {
+  @Test
+  func midBatchSendFailureStopsAndLeavesLaterRowsPendingInOrder() async throws {
     // given — three ordered chunks; the transport fails the second send
     let fixture = try makeFixture()
     try seedPending(fixture, payloads: ["first", "second", "third"])
@@ -312,13 +318,16 @@ private final class RetryWaitHold: Sendable {
 
     // then — only the first chunk went out; the failed chunk and the one after it stay PENDING in
     // order, never sent ahead (the break preserves multi-chunk delivery order)
-    let deliveredMarkdown = await transport.richSends.map { $0.markdown }
+    let deliveredMarkdown = await transport.richSends.map {
+      $0.markdown
+    }
     #expect(deliveredMarkdown == ["first"])
     let pendingPayloads = try fixture.outbox.pendingOutbound().map(\.payload)
     #expect(pendingPayloads == ["second", "third"])
   }
 
-  @Test func sendSucceedsButMarkSentFailsLeavesRowPendingForResend() async throws {
+  @Test
+  func sendSucceedsButMarkSentFailsLeavesRowPendingForResend() async throws {
     // given — the send will succeed but recording it fails (disk full)
     let fixture = try makeFixture()
     try seedPending(fixture, payload: "hello")
@@ -335,12 +344,15 @@ private final class RetryWaitHold: Sendable {
 
     // then — it was delivered, but stays PENDING and re-sends next drain (accepted at-least-once
     // duplicate)
-    let deliveredMarkdown = await transport.richSends.map { $0.markdown }
+    let deliveredMarkdown = await transport.richSends.map {
+      $0.markdown
+    }
     #expect(deliveredMarkdown == ["hello"])
     #expect(try fixture.outbox.pendingOutbound().count == 1)
   }
 
-  @Test func dispatcherForwardsReplyMarkupOnTheRichSend() async throws {
+  @Test
+  func dispatcherForwardsReplyMarkupOnTheRichSend() async throws {
     // given — a PENDING row carrying an inline keyboard
     let fixture = try makeFixture()
     let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
@@ -360,7 +372,8 @@ private final class RetryWaitHold: Sendable {
     #expect(await spy.richMarkups == [markup])
   }
 
-  @Test func dispatcherForwardsReplyMarkupOnThePlainFallback() async throws {
+  @Test
+  func dispatcherForwardsReplyMarkupOnThePlainFallback() async throws {
     // given — the rich send fails, forcing the plain fallback
     let fixture = try makeFixture()
     let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
@@ -380,19 +393,20 @@ private final class RetryWaitHold: Sendable {
     #expect(await spy.plainMarkups == [markup])
   }
 
-  @Test func aTopicRowIsDeliveredIntoItsTopicAsAReply() async throws {
+  @Test
+  func aTopicRowIsDeliveredIntoItsTopicAsAReply() async throws {
     // given — a row committed by a run in topic 5, answering message 88
-    let groupChatId: Int64 = -1_001
+    let groupChatID: Int64 = -1_001
     let seeded = try makeSeededFixture(
-      chatId: groupChatId,
-      sessionKey: SessionKey.telegramTopic(chatId: groupChatId, threadId: 5),
-      telegramMessageId: 88
+      chatID: groupChatID,
+      sessionKey: SessionKey.telegramTopic(chatID: groupChatID, threadID: 5),
+      telegramMessageID: 88
     )
     let fixture = Fixture(
       writer: seeded.writer,
       outbox: seeded.outbox,
-      runId: seeded.runId,
-      chatId: seeded.chatId
+      runID: seeded.runID,
+      chatID: seeded.chatID
     )
     try seedPending(fixture, payload: "in the room")
     let spy = DeliverySpy()
@@ -408,12 +422,14 @@ private final class RetryWaitHold: Sendable {
 
     // then — the stamped target reached the delivery seam untouched
     #expect(
-      await spy.targets
-        == [DeliveryTarget(chatId: groupChatId, messageThreadId: 5, replyToMessageId: 88)]
+      await spy.targets == [
+        DeliveryTarget(chatID: groupChatID, messageThreadID: 5, replyToMessageID: 88),
+      ]
     )
   }
 
-  @Test func aDirectRowIsDeliveredToItsChatAlone() async throws {
+  @Test
+  func aDirectRowIsDeliveredToItsChatAlone() async throws {
     // given
     let fixture = try makeFixture()
     try seedPending(fixture, payload: "hello")
@@ -429,15 +445,16 @@ private final class RetryWaitHold: Sendable {
     await dispatcher.drainOnce()
 
     // then
-    #expect(await spy.targets == [.chat(fixture.chatId)])
+    #expect(await spy.targets == [.chat(fixture.chatID)])
   }
 
-  @Test func floodControlOnOneChatStillDrainsTheOtherChats() async throws {
+  @Test
+  func floodControlOnOneChatStillDrainsTheOtherChats() async throws {
     // given — two chats with a row each, and Telegram throttling the first
     let fixture = try makeTwoChatFixture(firstPayload: "throttled", secondPayload: "unaffected")
-    let spy = DeliverySpy(
-      outcomes: [fixture.firstChatId: .floodControl(retryAfter: 30, times: .max)]
-    )
+    let spy = DeliverySpy(outcomes: [
+      fixture.firstChatID: .floodControl(retryAfter: 30, times: .max),
+    ])
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
       delivery: spy,
@@ -454,16 +471,15 @@ private final class RetryWaitHold: Sendable {
     #expect(try fixture.outbox.pendingOutbound().map(\.payload) == ["throttled"])
   }
 
-  @Test func aThrottledChatIsSkippedUntilItsRetryAfterHasPassed() async throws {
+  @Test
+  func aThrottledChatIsSkippedUntilItsRetryAfterHasPassed() async throws {
     // given — one chat, throttled on its first send only, and a clock whose retry wait is parked
     let hold = RetryWaitHold(retryAfter: .seconds(30))
     defer { hold.release() }
     let clock = hold.clock
     let fixture = try makeFixture()
     try seedPending(fixture, payload: "hello")
-    let spy = DeliverySpy(
-      outcomes: [fixture.chatId: .floodControl(retryAfter: 30, times: 1)]
-    )
+    let spy = DeliverySpy(outcomes: [fixture.chatID: .floodControl(retryAfter: 30, times: 1)])
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
       delivery: spy,
@@ -477,7 +493,7 @@ private final class RetryWaitHold: Sendable {
     await dispatcher.drainOnce()
 
     // then — it did not spend another request against the limit
-    #expect(await spy.richAttempts == [fixture.chatId])
+    #expect(await spy.richAttempts == [fixture.chatID])
     #expect(try fixture.outbox.pendingOutbound().count == 1)
 
     // when — the retry window passes and the drain comes round again
@@ -489,13 +505,12 @@ private final class RetryWaitHold: Sendable {
     #expect(try fixture.outbox.pendingOutbound().isEmpty)
   }
 
-  @Test func floodControlOnTheRichSendIsNotRetriedAsPlainText() async throws {
+  @Test
+  func floodControlOnTheRichSendIsNotRetriedAsPlainText() async throws {
     // given — a chat Telegram is throttling
     let fixture = try makeFixture()
     try seedPending(fixture, payload: "hello")
-    let spy = DeliverySpy(
-      outcomes: [fixture.chatId: .floodControl(retryAfter: 30, times: .max)]
-    )
+    let spy = DeliverySpy(outcomes: [fixture.chatID: .floodControl(retryAfter: 30, times: .max)])
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
       delivery: spy,
@@ -508,19 +523,18 @@ private final class RetryWaitHold: Sendable {
     await dispatcher.drainOnce()
 
     // then — one 429 cost one request, not two: the plain fallback answers formatting, not limits
-    #expect(await spy.richAttempts == [fixture.chatId])
+    #expect(await spy.richAttempts == [fixture.chatID])
     #expect(await spy.plainAttempts.isEmpty)
   }
 
-  @Test func floodControlSchedulesADrainOnceTheRetryWindowPasses() async throws {
+  @Test
+  func floodControlSchedulesADrainOnceTheRetryWindowPasses() async throws {
     // given — nothing else will poke: the producer only pokes on a fresh commit
     let hold = RetryWaitHold(retryAfter: .seconds(30))
     defer { hold.release() }
     let fixture = try makeFixture()
     try seedPending(fixture, payload: "hello")
-    let spy = DeliverySpy(
-      outcomes: [fixture.chatId: .floodControl(retryAfter: 30, times: .max)]
-    )
+    let spy = DeliverySpy(outcomes: [fixture.chatID: .floodControl(retryAfter: 30, times: .max)])
     let signal = OutboxSignal()
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
@@ -542,10 +556,11 @@ private final class RetryWaitHold: Sendable {
     }
   }
 
-  @Test func aNonFloodControlFailureStillStopsTheWholeDrain() async throws {
+  @Test
+  func aNonFloodControlFailureStillStopsTheWholeDrain() async throws {
     // given — the first chat is undeliverable for a reason Telegram gave no retry window for
     let fixture = try makeTwoChatFixture(firstPayload: "stuck", secondPayload: "behind it")
-    let spy = DeliverySpy(outcomes: [fixture.firstChatId: .unreachable])
+    let spy = DeliverySpy(outcomes: [fixture.firstChatID: .unreachable])
     let dispatcher = OutboxDispatcher(
       outbox: fixture.outbox,
       delivery: spy,

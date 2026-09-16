@@ -4,8 +4,10 @@ import Testing
 @testable import ClawCore
 @testable import ClawLLM
 
-@Suite struct SSEParserTests {
-  @Test func parsesDeltasAcrossChunkBoundariesAndDone() throws {
+@Suite
+struct SSEParserTests {
+  @Test
+  func parsesDeltasAcrossChunkBoundariesAndDone() throws {
     // given
     var parser = SSEParser()
 
@@ -29,13 +31,14 @@ import Testing
       third == [
         .finished(
           ChatResponse(content: "hello", finishReason: "stop", usage: nil, costFromProvider: nil)
-        )
+        ),
       ]
     )
     #expect(try parser.finish() == nil)
   }
 
-  @Test func doneStopsParsingTrailingEventsInSamePush() throws {
+  @Test
+  func doneStopsParsingTrailingEventsInSamePush() throws {
     // given
     var parser = SSEParser()
     let stream = Data(
@@ -53,19 +56,19 @@ import Testing
     // then
     #expect(
       events == [
-        .finished(ChatResponse(content: "", finishReason: nil, usage: nil, costFromProvider: nil))
+        .finished(ChatResponse(content: "", finishReason: nil, usage: nil, costFromProvider: nil)),
       ]
     )
     #expect(later.isEmpty)
     #expect(try parser.finish() == nil)
   }
 
-  @Test func handlesCRLFAndMultilineData() throws {
+  @Test
+  func handlesCRLFAndMultilineData() throws {
     // given
     var parser = SSEParser()
     let event = Data(
-      (": keep alive\r\n"
-        + "data: {\"choices\":[{\"delta\":{\"content\":\"one\"}}],\r\n"
+      (": keep alive\r\n" + "data: {\"choices\":[{\"delta\":{\"content\":\"one\"}}],\r\n"
         + "data: \"usage\":null}\r\n\r\n").utf8
     )
 
@@ -76,7 +79,8 @@ import Testing
     #expect(events == [.delta("one")])
   }
 
-  @Test func latchesUsageFromEmptyChoicesChunk() throws {
+  @Test
+  func latchesUsageFromEmptyChoicesChunk() throws {
     // given
     var parser = SSEParser()
     _ = try parser.push(
@@ -106,12 +110,13 @@ import Testing
             usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
             costFromProvider: 0.0042
           )
-        )
+        ),
       ]
     )
   }
 
-  @Test func usesFallbackProviderCostWhenUsageOmitsCost() throws {
+  @Test
+  func usesFallbackProviderCostWhenUsageOmitsCost() throws {
     // given
     var parser = SSEParser(fallbackProviderCost: 0.0034)
 
@@ -136,12 +141,13 @@ import Testing
             usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
             costFromProvider: 0.0034
           )
-        )
+        ),
       ]
     )
   }
 
-  @Test func usageCostOverridesFallbackProviderCost() throws {
+  @Test
+  func usageCostOverridesFallbackProviderCost() throws {
     // given
     var parser = SSEParser(fallbackProviderCost: 0.0034)
 
@@ -167,12 +173,13 @@ import Testing
             usage: ChatUsage(promptTokens: 7, completionTokens: 3, totalTokens: 10),
             costFromProvider: 0.0042
           )
-        )
+        ),
       ]
     )
   }
 
-  @Test func preservesLatchedProviderCostWhenLaterUsageOmitsCost() throws {
+  @Test
+  func preservesLatchedProviderCostWhenLaterUsageOmitsCost() throws {
     // given
     var parser = SSEParser()
     _ = try parser.push(
@@ -205,12 +212,13 @@ import Testing
             usage: ChatUsage(promptTokens: 8, completionTokens: 4, totalTokens: 12),
             costFromProvider: 0.0042
           )
-        )
+        ),
       ]
     )
   }
 
-  @Test func eofWithoutDoneAfterCompleteEventFinishes() throws {
+  @Test
+  func eofWithoutDoneAfterCompleteEventFinishes() throws {
     // given
     var parser = SSEParser()
 
@@ -232,7 +240,8 @@ import Testing
     )
   }
 
-  @Test func eofMidEventThrowsTruncated() throws {
+  @Test
+  func eofMidEventThrowsTruncated() throws {
     // given
     var parser = SSEParser()
     _ = try parser.push(Data("data: {\"choices\":[".utf8))
@@ -243,7 +252,8 @@ import Testing
     }
   }
 
-  @Test func successfulEmptyContentStreamIsValid() throws {
+  @Test
+  func successfulEmptyContentStreamIsValid() throws {
     // given
     var parser = SSEParser()
 
@@ -258,12 +268,13 @@ import Testing
       finished == [
         .finished(
           ChatResponse(content: "", finishReason: "stop", usage: nil, costFromProvider: nil)
-        )
+        ),
       ]
     )
   }
 
-  @Test func boundsSingleEventAndBufferedStream() throws {
+  @Test
+  func boundsSingleEventAndBufferedStream() throws {
     // given
     var parser = SSEParser(maxEventBytes: 8, maxBufferedBytes: 64)
 
@@ -273,7 +284,8 @@ import Testing
     }
   }
 
-  @Test func boundsBufferedStreamBeforeDelimiter() throws {
+  @Test
+  func boundsBufferedStreamBeforeDelimiter() throws {
     // given
     var parser = SSEParser(maxEventBytes: 128, maxBufferedBytes: 8)
 
@@ -283,7 +295,8 @@ import Testing
     }
   }
 
-  @Test func boundsAccumulatedContentAcrossManySmallValidDeltas() throws {
+  @Test
+  func boundsAccumulatedContentAcrossManySmallValidDeltas() throws {
     // given
     var parser = SSEParser(
       maxEventBytes: 128,

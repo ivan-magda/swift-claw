@@ -11,10 +11,13 @@ struct BearerCase: Sendable, CustomTestStringConvertible {
   let expectedHeaders: [String: String]
   let expectedRedactionValues: [String]
 
-  var testDescription: String { scenario }
+  var testDescription: String {
+    scenario
+  }
 }
 
-@Suite struct StaticLLMCredentialSourceTests {
+@Suite
+struct StaticLLMCredentialSourceTests {
   // MARK: - Authorization
 
   @Test(arguments: [
@@ -74,7 +77,8 @@ struct BearerCase: Sendable, CustomTestStringConvertible {
     #expect(after == before)
   }
 
-  @Test func shutdownNeitherThrowsNorRevokesAuthorization() async throws {
+  @Test
+  func shutdownNeitherThrowsNorRevokesAuthorization() async throws {
     // given
     let source = StaticLLMCredentialSource(bearer: "sk-test-value")
     let before = try await source.authorization()

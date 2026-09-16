@@ -12,9 +12,9 @@ struct AgentRuntimeFallbackTests {
     origin: RunOrigin = .interactive
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
-      runId: 1,
-      sessionId: 1,
-      chatId: 1,
+      runID: 1,
+      sessionID: 1,
+      chatID: 1,
       buildResult: makeBuildResult(),
       sessionTainted: false,
       hasPinnedLessons: false,
@@ -215,11 +215,7 @@ struct AgentRuntimeFallbackTests {
     // given — a one-round-trip turn: a switch that consumed the round would budget-stop instead.
     let primary = StubProvider(.fail(.quotaLimited(retryAfterSeconds: nil)))
     let fallback = StubProvider(.respond(okResponse(content: "answered")))
-    let runtime = makeRuntime(
-      primary: primary,
-      fallback: fallback,
-      budget: makeBudget(maxTurns: 1)
-    )
+    let runtime = makeRuntime(primary: primary, fallback: fallback, budget: makeBudget(maxTurns: 1))
 
     // when
     let outcome = try await run(runtime)
@@ -246,7 +242,7 @@ struct AgentRuntimeFallbackTests {
     }
     #expect(recorded.count == 1)
     #expect(recorded.first?.decision == "quotaLimited")
-    #expect(recorded.first?.runId == 1)
+    #expect(recorded.first?.runID == 1)
   }
 
   @Test("no fallback configured degrades exactly as before")

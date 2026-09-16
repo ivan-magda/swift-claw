@@ -33,8 +33,11 @@ extension CoderJobStoreGRDB {
           WHERE id = ?
           """,
         arguments: [
-          result.state.rawValue, try CoderJobRecord.encodeJSON(result),
-          releaseReservation ? false : job.slotReserved, EpochSecondCodec.epoch(now), id.uuidString,
+          result.state.rawValue,
+          try CoderJobRecord.encodeJSON(result),
+          releaseReservation ? false : job.slotReserved,
+          EpochSecondCodec.epoch(now),
+          id.uuidString,
         ]
       )
       try Self.insertCompletion(db, job: job, chunks: chunks, now: now)
@@ -71,19 +74,19 @@ private extension CoderJobStoreGRDB {
     chunks: [OutboxChunk],
     now: Date
   ) throws {
-    let base = try OutboxInsertion.nextOutboxStepBase(db, runId: job.origin.runID)
+    let base = try OutboxInsertion.nextOutboxStepBase(db, runID: job.origin.runID)
     for chunk in chunks {
       let addressed = OutboxChunk(
         stepIndex: chunk.stepIndex,
-        chatId: job.origin.chatID,
+        chatID: job.origin.chatID,
         payload: chunk.payload,
         payloadHash: chunk.payloadHash,
-        approvalId: chunk.approvalId,
+        approvalID: chunk.approvalID,
         replyMarkup: chunk.replyMarkup
       )
       let inserted = try OutboxInsertion.insertOutbox(
         db,
-        runId: job.origin.runID,
+        runID: job.origin.runID,
         chunk: OutboxInsertion.shiftedChunk(addressed, by: base),
         now: now
       )

@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct V11MigrationTests {
-  @Test func vElevenPreservesPendingOutboxAndConstrainsOriginCall() throws {
+@Suite
+struct V11MigrationTests {
+  @Test
+  func vElevenPreservesPendingOutboxAndConstrainsOriginCall() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedLegacyOutbox(queue)
@@ -18,10 +20,10 @@ import Testing
     let id = try fixture.admittedID()
     // then
     let preserved = try #require(try outbox.pendingOutbound().first)
-    #expect(preserved.runId == legacy.runId)
+    #expect(preserved.runID == legacy.runID)
     #expect(preserved.payload == legacy.payload)
     #expect(preserved.stepIndex == legacy.stepIndex)
-    #expect(preserved.approvalId == legacy.approvalId)
+    #expect(preserved.approvalID == legacy.approvalID)
     #expect(throws: DatabaseError.self) {
       try fixture.queue.write { db in
         try db.execute(
@@ -48,12 +50,12 @@ private extension V11MigrationTests {
     try queue.write { db in
       try db.execute(
         sql: "INSERT INTO sessions(session_key, created_ts, updated_ts) VALUES (?, ?, ?)",
-        arguments: [SessionKey.telegramDM(chatId: 42), Date(), Date()]
+        arguments: [SessionKey.telegramDM(chatID: 42), Date(), Date()]
       )
-      let sessionId = db.lastInsertedRowID
+      let sessionID = db.lastInsertedRowID
       try db.execute(
         sql: "INSERT INTO runs(session_id, state, created_ts, updated_ts) VALUES (?, ?, ?, ?)",
-        arguments: [sessionId, RunState.done.rawValue, Date(), Date()]
+        arguments: [sessionID, RunState.done.rawValue, Date(), Date()]
       )
       try db.execute(
         sql: """

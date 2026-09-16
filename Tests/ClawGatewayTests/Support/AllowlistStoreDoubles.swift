@@ -4,20 +4,28 @@ import ClawCore
 struct StubAllowlist: AllowlistStore {
   let allowed: Set<Int64>
 
-  func seedAllowlist(userIds: [Int64]) throws(StoreError) {}
+  func seedAllowlist(userIDs: [Int64]) throws(StoreError) {}
 
-  func allowlistContains(userId: Int64) throws(StoreError) -> Bool { allowed.contains(userId) }
+  func allowlistContains(userID: Int64) throws(StoreError) -> Bool {
+    allowed.contains(userID)
+  }
 
-  func allowlistCount() throws(StoreError) -> Int { allowed.count }
+  func allowlistCount() throws(StoreError) -> Int {
+    allowed.count
+  }
 }
 
 /// Allowlist double whose every operation throws, to exercise fail-closed and seed-failure paths.
 struct ThrowingAllowlist: AllowlistStore {
-  func seedAllowlist(userIds: [Int64]) throws(StoreError) { throw StoreError.unexpected("boom") }
-
-  func allowlistContains(userId: Int64) throws(StoreError) -> Bool {
+  func seedAllowlist(userIDs: [Int64]) throws(StoreError) {
     throw StoreError.unexpected("boom")
   }
 
-  func allowlistCount() throws(StoreError) -> Int { throw StoreError.unexpected("boom") }
+  func allowlistContains(userID: Int64) throws(StoreError) -> Bool {
+    throw StoreError.unexpected("boom")
+  }
+
+  func allowlistCount() throws(StoreError) -> Int {
+    throw StoreError.unexpected("boom")
+  }
 }

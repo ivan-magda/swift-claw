@@ -7,12 +7,16 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct ApprovedMemoryWriteExactlyOnceTests {
+@Suite
+struct ApprovedMemoryWriteExactlyOnceTests {
   private func sha256Hex(_ text: String) -> String {
-    SHA256.hash(data: Data(text.utf8)).map { byte in String(format: "%02x", byte) }.joined()
+    SHA256.hash(data: Data(text.utf8)).map { byte in
+      String(format: "%02x", byte)
+    }.joined()
   }
 
-  @Test func rerunningTheFusedWriteIsANoOpOnceTheObservationIsFilled() throws {
+  @Test
+  func rerunningTheFusedWriteIsANoOpOnceTheObservationIsFilled() throws {
     // given — a real suspended run holding a memory_write approval
     let queue = try TestDatabase.make()
     let sessionMessages = SessionMessageStoreGRDB(writer: queue)
@@ -21,18 +25,18 @@ import Testing
 
     let claim = try sessionMessages.claimAndPersistInbound(
       InboundMessage(
-        updateId: 1,
-        sessionKey: SessionKey.telegramDM(chatId: 7),
-        chatId: 7,
-        userId: 7,
+        updateID: 1,
+        sessionKey: SessionKey.telegramDM(chatID: 7),
+        chatID: 7,
+        userID: 7,
         text: "remember this",
         isEdited: false,
         ts: now
       )
     )
-    let runId = try #require(claim.runId)
-    let sessionId = try #require(claim.sessionId)
-    _ = try runs.pickUp(runId: runId, policyVersion: "0123456789abcdef", now: now)
+    let runID = try #require(claim.runID)
+    let sessionID = try #require(claim.sessionID)
+    _ = try runs.pickUp(runID: runID, policyVersion: "0123456789abcdef", now: now)
 
     let canonicalArgs = #"{"kind":"user","text":"prefers metric units"}"#
     let recorded = RecordedToolAction(
@@ -48,18 +52,16 @@ import Testing
       )
     )
     let receipt = try runs.commitSuspendedTurn(
-      runId: runId,
-      sessionId: sessionId,
+      runID: runID,
+      sessionID: sessionID,
       commit: SuspendedTurnCommit(
         assistantContent: "",
         toolCallsJSON: #"[{"id":"m1","name":"memory_write","arguments":{}}]"#,
         completedObservations: [],
-        pending: PendingToolAction(toolCallId: "m1", recorded: recorded),
-        ownerUserId: 7,
+        pending: PendingToolAction(toolCallID: "m1", recorded: recorded),
+        ownerUserID: 7,
         nonce: ApprovalNonce.generate(),
-        promptChunks: [
-          OutboxChunk(stepIndex: 0, chatId: 7, payload: "approve?", payloadHash: "h")
-        ],
+        promptChunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "approve?", payloadHash: "h")],
         setTainted: false,
         setPrivateData: false,
         expiresTs: now.addingTimeInterval(3600)
@@ -73,13 +75,13 @@ import Testing
       sensitivity: .normal,
       importance: .normal,
       source: .assistant,
-      sessionId: sessionId
+      sessionID: sessionID
     )
 
     // when — the fused write runs twice (the §6.3 crash-window re-run shape)
     let first = try runs.applyApprovedMemoryWrite(
-      runId: runId,
-      observationMessageId: receipt.observationMessageId,
+      runID: runID,
+      observationMessageID: receipt.observationMessageID,
       item: item,
       observationContent: "Saved memory item.",
       audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
@@ -87,8 +89,8 @@ import Testing
       now: now
     )
     let second = try runs.applyApprovedMemoryWrite(
-      runId: runId,
-      observationMessageId: receipt.observationMessageId,
+      runID: runID,
+      observationMessageID: receipt.observationMessageID,
       item: item,
       observationContent: "Saved memory item.",
       audit: ApprovedExecutionAudit(tool: "memory_write", argsRedacted: "[REDACTED]"),
@@ -108,7 +110,7 @@ import Testing
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM messages WHERE id = ? AND content = 'Saved memory item.'",
-        arguments: [receipt.observationMessageId]
+        arguments: [receipt.observationMessageID]
       ) ?? 0
     }
     #expect(observationCount == 1)
@@ -116,7 +118,7 @@ import Testing
       try Int.fetchOne(
         db,
         sql: "SELECT COUNT(*) FROM audit_events WHERE run_id = ? AND action = ?",
-        arguments: [runId, AuditAction.toolCall.rawValue]
+        arguments: [runID, AuditAction.toolCall.rawValue]
       ) ?? 0
     }
     #expect(auditCount == 1)

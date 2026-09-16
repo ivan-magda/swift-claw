@@ -22,18 +22,18 @@ struct RunTranscript {
 // MARK: - Transcript Derivation
 
 extension ScheduledLearningStoreGRDB {
-  static func readTranscript(_ db: Database, runId: Int64) throws -> RunTranscript {
+  static func readTranscript(_ db: Database, runID: Int64) throws -> RunTranscript {
     let rows = try Row.fetchAll(
       db,
       sql: """
         SELECT role, content, tool_calls, tool_call_id FROM messages
         WHERE run_id = ? ORDER BY id
         """,
-      arguments: [runId]
+      arguments: [runID]
     )
 
     var proposed: [ToolCall] = []
-    var observedCallIds: Set<String> = []
+    var observedCallIDs: Set<String> = []
     var observedCalls = 0
     var finalOutput = ""
 
@@ -49,8 +49,8 @@ extension ScheduledLearningStoreGRDB {
         finalOutput = row["content"]
       case (.tool, _):
         observedCalls += 1
-        if let callId: String = row["tool_call_id"] {
-          observedCallIds.insert(callId)
+        if let callID: String = row["tool_call_id"] {
+          observedCallIDs.insert(callID)
         }
       default:
         continue
@@ -63,7 +63,7 @@ extension ScheduledLearningStoreGRDB {
         EvidenceToolFact(
           ordinal: ordinal,
           name: call.name,
-          observed: observedCallIds.contains(call.id)
+          observed: observedCallIDs.contains(call.id)
         )
       },
       proposedCalls: proposed.count,
@@ -80,17 +80,17 @@ extension ScheduledLearningStoreGRDB {
   /// a payload stamped with today's surface would file the run in the wrong evidence window.
   static func buildPayload(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     binding: RunLearningBinding,
     compatibility: RunCompatibility,
     transcript: RunTranscript
   ) throws -> EvidencePayload {
-    let source = try readSource(db, runId: runId)
+    let source = try readSource(db, runID: runID)
     return EvidencePayload(
       schemaVersion: EvidenceLimits.schemaVersion,
       jobDefinitionDigest: binding.jobDefinitionDigest.rawValue,
       effectiveLessonSetDigest: binding.effectiveDigest.rawValue,
-      sourceMessageId: source.messageId,
+      sourceMessageID: source.messageID,
       sourceDigest: source.digest,
       finalOutput: transcript.finalOutput,
       toolFacts: transcript.facts,
@@ -101,11 +101,11 @@ extension ScheduledLearningStoreGRDB {
       policyVersion: compatibility.policyVersion,
       skillSetDigest: compatibility.skillSetDigest,
       configuredRoute: compatibility.configuredRoute,
-      terminalRoute: try readTerminalRoute(db, runId: runId),
-      usageRowIds: try Int64.fetchAll(
+      terminalRoute: try readTerminalRoute(db, runID: runID),
+      usageRowIDs: try Int64.fetchAll(
         db,
         sql: "SELECT id FROM provider_usage WHERE run_id = ? ORDER BY id",
-        arguments: [runId]
+        arguments: [runID]
       )
     )
   }
@@ -117,8 +117,10 @@ private extension ScheduledLearningStoreGRDB {
   /// The trigger message identifies the task the run answered. Its content is digested rather than
   /// copied: the evidence row exists to judge the answer, and the prompt already reaches the
   /// evaluator through the job definition.
-  static func readSource(_ db: Database, runId: Int64) throws -> (messageId: Int64, digest: String)
-  {
+  static func readSource(
+    _ db: Database,
+    runID: Int64
+  ) throws -> (messageID: Int64, digest: String) {
     let row = try Row.fetchOne(
       db,
       sql: """
@@ -126,12 +128,12 @@ private extension ScheduledLearningStoreGRDB {
         FROM runs JOIN messages ON messages.id = runs.trigger_message_id
         WHERE runs.id = ?
         """,
-      arguments: [runId]
+      arguments: [runID]
     )
     guard let row else {
-      return (messageId: 0, digest: "")
+      return (messageID: 0, digest: "")
     }
     let content: String = row["content"]
-    return (messageId: row["message_id"], digest: SHA256Digest.hex(content))
+    return (messageID: row["message_id"], digest: SHA256Digest.hex(content))
   }
 }

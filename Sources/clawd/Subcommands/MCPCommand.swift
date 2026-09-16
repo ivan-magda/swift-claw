@@ -165,17 +165,17 @@ extension MCPCommand {
     server name: String,
     context: MCPCommandContext
   ) throws -> MCPTokenOutcome {
-    guard let server = context.config.servers.first(where: { $0.name == name }) else {
+    guard let server = context.config.servers.first(where: {
+        $0.name == name
+      })
+    else {
       throw fail(
         MCPConfigError.unknownServer(name: name, known: context.config.servers.map(\.name))
       )
     }
 
     return try underInstanceLock(stateRoot: context.stateRoot) {
-      try EncryptedMCPCredentialStore(stateRoot: context.stateRoot).save(
-        token: token,
-        for: server
-      )
+      try EncryptedMCPCredentialStore(stateRoot: context.stateRoot).save(token: token, for: server)
       return .stored(server: server.name)
     }
   }
@@ -204,7 +204,10 @@ extension MCPCommand {
     guard let name else {
       return config.enabledServers
     }
-    guard let server = config.servers.first(where: { $0.name == name }) else {
+    guard let server = config.servers.first(where: {
+        $0.name == name
+      })
+    else {
       throw fail(MCPConfigError.unknownServer(name: name, known: config.servers.map(\.name)))
     }
     return [server]
@@ -305,10 +308,7 @@ private extension MCPCommand {
     let stateRoot = try resolveStateRoot(environment: environment)
     let source = AppConfig.mcpConfigSource(from: environment, stateRoot: stateRoot)
     do {
-      return MCPCommandContext(
-        stateRoot: stateRoot,
-        config: try MCPConfigLoader.load(from: source)
-      )
+      return MCPCommandContext(stateRoot: stateRoot, config: try MCPConfigLoader.load(from: source))
     } catch let error as MCPConfigError {
       throw fail(error)
     }

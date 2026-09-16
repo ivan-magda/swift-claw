@@ -24,7 +24,10 @@ public struct UsageStoreGRDB: UsageStore {
   public func todayTokensAndCost(
     origins: [RunOrigin],
     now: Date
-  ) throws(StoreError) -> (tokens: Int, costUSD: Double) {
+  ) throws(StoreError) -> (
+    tokens: Int,
+    costUSD: Double
+  ) {
     try database.readMapping { db in
       try Self.dayTotals(db, origins: origins, now: now)
     }
@@ -59,7 +62,10 @@ extension UsageStoreGRDB {
     _ db: Database,
     origins: [RunOrigin],
     now: Date
-  ) throws -> (tokens: Int, costUSD: Double) {
+  ) throws -> (
+    tokens: Int,
+    costUSD: Double
+  ) {
     guard origins.isEmpty == false else {
       return (0, 0)
     }
@@ -106,7 +112,7 @@ extension UsageStoreGRDB {
 
       return LatestPromptUsage(
         promptTokens: row["prompt_tokens"],
-        runId: row["run_id"],
+        runID: row["run_id"],
         isEstimated: row["is_estimated"]
       )
     }

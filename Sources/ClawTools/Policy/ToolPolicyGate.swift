@@ -175,10 +175,11 @@ private extension ToolPolicyGate {
       return nil
     }
     guard let execution = context.executionContext,
-      context.mode == execution.mode,
-      execution.origin == .interactive,
-      let requester = execution.requesterUserId, requester > 0,
-      execution.mode == .group || requester == execution.chatId
+          context.mode == execution.mode,
+          execution.origin == .interactive,
+          let requester = execution.requesterUserID,
+          requester > 0,
+          execution.mode == .group || requester == execution.chatID
     else {
       return dangerousBlock(
         reason: "\(call.name) requires an interactive message with a known requester.",
@@ -252,11 +253,7 @@ private extension ToolPolicyGate {
   /// An ask-tier tool MUST resolve a canonical target regardless of egress class —
   /// the approval binds to the resolved form. Malformed args or a `.refused` resolution block as
   /// they do for web_fetch; a `nil` resolution is a contract violation and fails CLOSED.
-  func evaluateAskTier(
-    call: ToolCall,
-    tool: any Tool,
-    context: ToolDispatchContext
-  ) -> Verdict {
+  func evaluateAskTier(call: ToolCall, tool: any Tool, context: ToolDispatchContext) -> Verdict {
     let argsRedacted: String
     if tool.definition.egressClass == .none {
       argsRedacted = argGuard.renderRedacted(argsJSON: call.argumentsJSON)
@@ -292,12 +289,7 @@ private extension ToolPolicyGate {
     }
 
     if context.mode == .group {
-      return groupAskTierVerdict(
-        call: call,
-        tool: tool,
-        target: target,
-        argsRedacted: argsRedacted
-      )
+      return groupAskTierVerdict(call: call, tool: tool, target: target, argsRedacted: argsRedacted)
     }
 
     // The run holds one approval slot: a further ask-tier call while one is pending gets the
@@ -368,10 +360,7 @@ private extension ToolPolicyGate {
       )
     }
 
-    return .allow(
-      argsRedacted: argsRedacted,
-      action: ToolAction(tool: call.name, target: target)
-    )
+    return .allow(argsRedacted: argsRedacted, action: ToolAction(tool: call.name, target: target))
   }
 
   func askTierBlock(reason: String, argsRedacted: String) -> Verdict {
@@ -534,7 +523,7 @@ public struct GatedToolDispatcher: ToolDispatching {
       // persists in place and updates at resolution — the pending call itself does not execute now.
       return ToolDispatchOutcome(
         observation: ToolObservation(
-          callId: call.id,
+          callID: call.id,
           toolName: call.name,
           content: "awaiting owner approval",
           status: .blockedPendingApproval,
@@ -623,7 +612,7 @@ public struct GatedToolDispatcher: ToolDispatching {
   private func errorOutcome(call: ToolCall, reason: String) -> ToolDispatchOutcome {
     ToolDispatchOutcome(
       observation: ToolObservation(
-        callId: call.id,
+        callID: call.id,
         toolName: call.name,
         content: reason,
         status: .error,

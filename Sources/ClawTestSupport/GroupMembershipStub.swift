@@ -1,20 +1,20 @@
 import ClawCore
 
 public struct GroupMembershipStub: GroupMembershipChecking {
-  private let chatId: Int64
-  private let memberUserIds: Set<Int64>
+  private let chatID: Int64
+  private let memberUserIDs: Set<Int64>
   private let fails: Bool
 
-  public init(chatId: Int64, memberUserIds: Set<Int64>, fails: Bool = false) {
-    self.chatId = chatId
-    self.memberUserIds = memberUserIds
+  public init(chatID: Int64, memberUserIDs: Set<Int64>, fails: Bool = false) {
+    self.chatID = chatID
+    self.memberUserIDs = memberUserIDs
     self.fails = fails
   }
 
-  public func isCurrentMember(chatId: Int64, userId: Int64) async throws -> Bool {
+  public func isCurrentMember(chatID: Int64, userID: Int64) async throws -> Bool {
     if fails {
       throw TelegramError.transport("membership unavailable")
     }
-    return chatId == self.chatId && memberUserIds.contains(userId)
+    return chatID == self.chatID && memberUserIDs.contains(userID)
   }
 }

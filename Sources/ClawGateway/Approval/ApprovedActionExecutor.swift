@@ -44,7 +44,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
   private let tools: [String: any Tool]
   private let runs: any RunStore
 
-  private let redactArguments: @Sendable (String) -> String
+  private let redactArguments: @Sendable (_ arguments: String) -> String
   private let now: @Sendable () -> Date
 
   private let logger: Logger
@@ -52,8 +52,10 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
   public init(
     tools: [String: any Tool],
     runs: any RunStore,
-    redactArguments: @escaping @Sendable (String) -> String,
-    now: @escaping @Sendable () -> Date = { Date() },
+    redactArguments: @escaping @Sendable (_ arguments: String) -> String,
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    },
     logger: Logger
   ) {
     self.tools = tools
@@ -83,13 +85,13 @@ private extension ApprovedActionExecutor {
     let claim: ApprovedExecutionClaim
     do {
       claim = try runs.claimApprovedExecution(
-        runId: approval.runId,
-        observationMessageId: approval.observationMessageId,
+        runID: approval.runID,
+        observationMessageID: approval.observationMessageID,
         notResumableObservationContent: Self.notResumableObservationContent,
         now: now()
       )
     } catch {
-      logger.error("approved-execution claim failed for run \(approval.runId): \(error)")
+      logger.error("approved-execution claim failed for run \(approval.runID): \(error)")
       return .storeFailed
     }
     switch claim {
@@ -105,8 +107,8 @@ private extension ApprovedActionExecutor {
 
     do {
       try runs.fillClaimedObservation(
-        runId: approval.runId,
-        observationMessageId: approval.observationMessageId,
+        runID: approval.runID,
+        observationMessageID: approval.observationMessageID,
         fill: ClaimedObservationFill(
           content: payload.content,
           status: payload.status,
@@ -117,7 +119,7 @@ private extension ApprovedActionExecutor {
         )
       )
     } catch {
-      logger.error("recording the executed result failed for run \(approval.runId): \(error)")
+      logger.error("recording the executed result failed for run \(approval.runID): \(error)")
       return .recordFailed
     }
     return .committed
@@ -126,9 +128,8 @@ private extension ApprovedActionExecutor {
   /// Runs the claimed action and returns its full payload — a truthful error payload when the
   /// recorded tool vanished or its args no longer parse.
   func executedPayload(for approval: Approval) async -> ToolPayload {
-    guard
-      let tool = tools[approval.tool],
-      let arguments = JSONValue.parse(approval.canonicalArgsJSON)
+    guard let tool = tools[approval.tool],
+          let arguments = JSONValue.parse(approval.canonicalArgsJSON)
     else {
       logger.error("approved action \(approval.tool) has no registered tool or unparsable args")
       return ToolPayload(
@@ -140,35 +141,33 @@ private extension ApprovedActionExecutor {
     let context: ToolExecutionContext?
     do {
       if let restored = try runs.executionContext(
-        runId: approval.runId,
-        fallbackChatId: approval.ownerUserId
+        runID: approval.runID,
+        fallbackChatID: approval.ownerUserID
       ) {
-        guard
-          restored.sessionId == approval.sessionId,
-          restored.deliveryTarget.chatId == approval.ownerUserId
+        guard restored.sessionID == approval.sessionID,
+              restored.deliveryTarget.chatID == approval.ownerUserID
         else {
           return missingExecutionContext()
         }
 
         if restored.mode == .group {
-          guard
-            restored.origin == .interactive,
-            restored.requesterUserId != nil,
-            approval.reason == .coderSubmit,
-            approval.tool == CoderToolNames.submit
+          guard restored.origin == .interactive,
+                restored.requesterUserID != nil,
+                approval.reason == .coderSubmit,
+                approval.tool == CoderToolNames.submit
           else {
             return missingExecutionContext()
           }
         }
         context = ToolExecutionContext(
-          runId: approval.runId,
-          sessionId: restored.sessionId,
-          chatId: restored.deliveryTarget.chatId,
-          requesterUserId: restored.requesterUserId,
+          runID: approval.runID,
+          sessionID: restored.sessionID,
+          chatID: restored.deliveryTarget.chatID,
+          requesterUserID: restored.requesterUserID,
           origin: restored.origin,
           mode: restored.mode,
-          toolCallId: approval.toolCallId,
-          approvalId: approval.id
+          toolCallID: approval.toolCallID,
+          approvalID: approval.id
         )
       } else {
         return missingExecutionContext()
@@ -176,7 +175,7 @@ private extension ApprovedActionExecutor {
     } catch {
       return missingExecutionContext()
     }
-    let hasInteractiveRequester = context?.origin == .interactive && context?.requesterUserId != nil
+    let hasInteractiveRequester = context?.origin == .interactive && context?.requesterUserID != nil
     if tool.definition.requiresInteractiveRequester && !hasInteractiveRequester {
       return missingExecutionContext()
     }
@@ -211,12 +210,11 @@ private extension ApprovedActionExecutor {
 
 private extension ApprovedActionExecutor {
   func applyMemoryWrite(_ approval: Approval) -> ApprovedCommitOutcome {
-    guard
-      let arguments = JSONValue.parse(approval.canonicalArgsJSON),
-      case .parsed(let request) = MemoryWriteArguments.parse(
-        arguments,
-        sessionId: approval.sessionId
-      )
+    guard let arguments = JSONValue.parse(approval.canonicalArgsJSON),
+          case .parsed(let request) = MemoryWriteArguments.parse(
+            arguments,
+            sessionID: approval.sessionID
+          )
     else {
       logger.error("memory_write approval \(approval.id) has unreadable recorded args")
       return resumeWithSyntheticObservation(
@@ -234,8 +232,8 @@ private extension ApprovedActionExecutor {
       """
     do {
       let claim = try runs.applyApprovedMemoryWrite(
-        runId: approval.runId,
-        observationMessageId: approval.observationMessageId,
+        runID: approval.runID,
+        observationMessageID: approval.observationMessageID,
         item: request.item,
         observationContent: content,
         audit: audit(for: approval),
@@ -251,7 +249,7 @@ private extension ApprovedActionExecutor {
         return .runNotResumable
       }
     } catch {
-      logger.error("applyApprovedMemoryWrite failed for run \(approval.runId): \(error)")
+      logger.error("applyApprovedMemoryWrite failed for run \(approval.runID): \(error)")
       return .storeFailed
     }
   }
@@ -264,8 +262,8 @@ private extension ApprovedActionExecutor {
   ) -> ApprovedCommitOutcome {
     do {
       let claim = try runs.claimApprovedExecution(
-        runId: approval.runId,
-        observationMessageId: approval.observationMessageId,
+        runID: approval.runID,
+        observationMessageID: approval.observationMessageID,
         notResumableObservationContent: Self.notResumableObservationContent,
         now: now()
       )
@@ -278,8 +276,8 @@ private extension ApprovedActionExecutor {
         break
       }
       try runs.fillClaimedObservation(
-        runId: approval.runId,
-        observationMessageId: approval.observationMessageId,
+        runID: approval.runID,
+        observationMessageID: approval.observationMessageID,
         fill: ClaimedObservationFill(
           content: content,
           status: .error,
@@ -291,7 +289,7 @@ private extension ApprovedActionExecutor {
       )
       return .committed
     } catch {
-      logger.error("synthetic observation resume failed for run \(approval.runId): \(error)")
+      logger.error("synthetic observation resume failed for run \(approval.runID): \(error)")
       return .storeFailed
     }
   }

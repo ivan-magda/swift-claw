@@ -8,7 +8,9 @@ public enum CoderServiceFailure: Error, Sendable, Equatable {
 }
 
 public actor CoderService: CoderServing, Service {
-  enum Lifecycle { case created, starting, accepting, stopping, stopped }
+  enum Lifecycle {
+    case created, starting, accepting, stopping, stopped
+  }
 
   let store: any CoderJobStore
   let backend: (any CoderBackend)?
@@ -35,7 +37,7 @@ public actor CoderService: CoderServing, Service {
     config: CoderConfig,
     jobRoot: String,
     executionPolicyID: String,
-    redact: @escaping @Sendable (String) -> String,
+    redact: @escaping @Sendable (_ text: String) -> String,
     notifyOutbox: @escaping @Sendable () async -> Void
   ) {
     self.store = store
@@ -56,14 +58,17 @@ public actor CoderService: CoderServing, Service {
       throw failure
     }
     switch lifecycle {
-    case .accepting: return
-    case .stopping, .stopped: throw CoderError.unavailable("Coder is stopping.")
+    case .accepting:
+      return
+    case .stopping, .stopped:
+      throw CoderError.unavailable("Coder is stopping.")
     case .created:
       lifecycle = .starting
       startup = Task {
         try await self.reconcile()
       }
-    case .starting: break
+    case .starting:
+      break
     }
     try await startup?.value
     guard lifecycle == .starting || lifecycle == .accepting else {
@@ -73,7 +78,9 @@ public actor CoderService: CoderServing, Service {
   }
 
   public func run() async throws {
-    do { try await start() } catch {
+    do {
+      try await start()
+    } catch {
       try await shutdown()
       throw error
     }
@@ -96,7 +103,9 @@ public actor CoderService: CoderServing, Service {
   public func shutdown() async throws {
     lifecycle = .stopping
     for (id, task) in tasks {
-      do { _ = try store.requestCancellation(id: id, now: Date()) } catch {
+      do {
+        _ = try store.requestCancellation(id: id, now: Date())
+      } catch {
         fail(.persistence(error))
       }
       task.cancel()
@@ -127,9 +136,13 @@ public actor CoderService: CoderServing, Service {
       throw CoderError.staleApproval
     }
     let current: CoderPreparedRequest
-    do { current = try await preparer.prepare(prepared.request) } catch is CancellationError {
+    do {
+      current = try await preparer.prepare(prepared.request)
+    } catch is CancellationError {
       throw CancellationError()
-    } catch { throw CoderError.staleApproval }
+    } catch {
+      throw CoderError.staleApproval
+    }
     try Task.checkCancellation()
     let backend = try requireAdmission()
     guard current == prepared else {
@@ -149,10 +162,14 @@ public actor CoderService: CoderServing, Service {
           await self.execute(job, backend: backend)
         }
         return job
-      case .existing(let job): return job
-      case .busy: throw CoderError.busy
-      case .workspaceBusy: throw CoderError.workspaceBusy
-      case .recoveryRequired: throw CoderError.recoveryRequired
+      case .existing(let job):
+        return job
+      case .busy:
+        throw CoderError.busy
+      case .workspaceBusy:
+        throw CoderError.workspaceBusy
+      case .recoveryRequired:
+        throw CoderError.recoveryRequired
       }
     } catch let error as StoreError {
       fail(.persistence(error))
@@ -180,8 +197,10 @@ public actor CoderService: CoderServing, Service {
 
   func fail(_ error: CoderServiceFailure) {
     switch (failure, error) {
-    case (nil, _), (.cleanup?, .persistence): failure = error
-    default: break
+    case (nil, _), (.cleanup?, .persistence):
+      failure = error
+    default:
+      break
     }
     failureSignal.yield(())
   }
@@ -199,26 +218,28 @@ private extension CoderService {
 
   func approvedOrigin(_ context: ToolExecutionContext) throws -> CoderOrigin {
     guard context.origin == .interactive,
-      let requester = context.requesterUserId, requester > 0,
-      context.mode == .group || requester == context.chatId,
-      let approval = context.approvalId
+          let requester = context.requesterUserID,
+          requester > 0,
+          context.mode == .group || requester == context.chatID,
+          let approval = context.approvalID
     else {
       throw CoderError.forbidden
     }
     return CoderOrigin(
-      runID: context.runId,
-      sessionID: context.sessionId,
+      runID: context.runID,
+      sessionID: context.sessionID,
       requesterUserID: requester,
-      chatID: context.chatId,
-      toolCallID: context.toolCallId,
+      chatID: context.chatID,
+      toolCallID: context.toolCallID,
       approvalID: approval
     )
   }
 
   func scopedJob(id: UUID, context: ToolExecutionContext) throws -> CoderJob {
     guard context.origin == .interactive,
-      let requester = context.requesterUserId, requester > 0,
-      context.mode == .group || requester == context.chatId
+          let requester = context.requesterUserID,
+          requester > 0,
+          context.mode == .group || requester == context.chatID
     else {
       throw CoderError.forbidden
     }
@@ -227,8 +248,8 @@ private extension CoderService {
         throw CoderError.invalidRequest("Coder job was not found.")
       }
       guard job.origin.requesterUserID == requester,
-        job.origin.chatID == context.chatId,
-        context.mode == .direct || job.origin.sessionID == context.sessionId
+            job.origin.chatID == context.chatID,
+            context.mode == .direct || job.origin.sessionID == context.sessionID
       else {
         throw CoderError.forbidden
       }

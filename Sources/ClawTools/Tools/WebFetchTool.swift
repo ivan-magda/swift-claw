@@ -7,9 +7,13 @@ import Foundation
 /// TOCTOU (DNS rebinding) is the documented v1 residual.
 public struct WebFetchTool: Tool {
   static let contentTypeAllowlistPrefixes = ["text/"]
+
   static let contentTypeAllowlistExact = [
-    "application/json", "application/xml", "application/xhtml+xml",
+    "application/json",
+    "application/xml",
+    "application/xhtml+xml",
   ]
+
   static let userAgent = "swift-claw/1.0 (+https://github.com/ivan-magda/swift-claw)"
 
   private let http: any HTTPExecuting
@@ -49,23 +53,31 @@ public struct WebFetchTool: Tool {
     ToolDefinition(
       name: "web_fetch",
       description: "Fetch a public http(s) URL and return its readable text.",
-      parameters: .object([
-        "type": .string("object"),
-        "properties": .object([
-          "url": .object([
-            "type": .string("string"),
-            "description": .string("The absolute http(s) URL to fetch."),
-          ])
-        ]),
-        "required": .array([.string("url")]),
-      ]),
+      parameters: .object(
+        [
+          "type": .string("object"),
+          "properties": .object(
+            [
+              "url": .object(
+                [
+                  "type": .string("string"),
+                  "description": .string("The absolute http(s) URL to fetch."),
+                ]
+              ),
+            ]
+          ),
+          "required": .array([.string("url")]),
+        ]
+      ),
       metadataProvenance: .trusted,
       egressClass: .arbitraryDestination,
       riskLevel: .safe
     )
   }
 
-  public var timeout: Duration { .seconds(30) }
+  public var timeout: Duration {
+    .seconds(30)
+  }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
     guard let rawURL = arguments.objectValue?["url"]?.stringValue, rawURL.isEmpty == false else {
@@ -171,7 +183,12 @@ private extension WebFetchTool {
     // Literals stay on the pure blocklist — including the legacy numeric spellings getaddrinfo
     // resolves without DNS (http://3323068500/), which strict IP-literal parsing would miss.
     if ResolvedAddress.denotesIPLiteral(host: host) {
-      guard addresses.allSatisfy({ SSRFGuard.isPublic($0) }) else {
+      guard addresses.allSatisfy(
+          {
+            SSRFGuard.isPublic($0)
+          }
+      )
+      else {
         return refusalPayload("Refused: \(host) is a private or reserved address.")
       }
       return nil
@@ -225,7 +242,7 @@ private extension WebFetchTool {
     }
     hopsRemaining -= 1
 
-    guard let location = result.getHeader(for: "Location") else {
+    guard let location = result.header(for: "Location") else {
       return .refused(
         errorPayload("Redirect (HTTP \(result.statusCode)) without a Location header.")
       )
@@ -244,15 +261,15 @@ private extension WebFetchTool {
 
 private extension WebFetchTool {
   func successPayload(_ result: HTTPResult) -> ToolPayload {
-    let contentType = (result.getHeader(for: "Content-Type") ?? "").lowercased()
+    let contentType = (result.header(for: "Content-Type") ?? "").lowercased()
     let mediaType = contentType.split(separator: ";").first.map(String.init) ?? ""
 
     let allowed =
       Self.contentTypeAllowlistPrefixes.contains { prefix in
         mediaType.hasPrefix(prefix)
       }
-      || Self.contentTypeAllowlistExact.contains(mediaType)
-      || mediaType.hasSuffix("+xml") || mediaType.hasSuffix("+json")
+      || Self.contentTypeAllowlistExact.contains(mediaType) || mediaType.hasSuffix("+xml")
+      || mediaType.hasSuffix("+json")
 
     guard allowed else {
       return errorPayload("Refused content type \(mediaType.isEmpty ? "unknown" : mediaType).")
@@ -279,9 +296,7 @@ private extension WebFetchTool {
       return location
     }
 
-    guard
-      let base = URL(string: current),
-      let resolved = URL(string: location, relativeTo: base)
+    guard let base = URL(string: current), let resolved = URL(string: location, relativeTo: base)
     else {
       return location
     }

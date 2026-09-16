@@ -8,10 +8,7 @@ import Foundation
 import Logging
 
 struct RunCommand: AsyncParsableCommand {
-  static let configuration = CommandConfiguration(
-    commandName: "run",
-    abstract: "Start the daemon."
-  )
+  static let configuration = CommandConfiguration(commandName: "run", abstract: "Start the daemon.")
 
   func run() async throws {
     let config = try Self.loadConfigOrExit()
@@ -99,13 +96,21 @@ extension RunCommand {
       laneDrain: laneDrain,
       coder: bundle.coder,
       dependent: RuntimeShutdownCoordinator.DependentCleanup(
-        commitCredentials: { try await Self.commitCredentials(bundle.credentialSources) },
+        commitCredentials: {
+          try await Self.commitCredentials(bundle.credentialSources)
+        },
         // The dedicated redirect-disabled LLM client, now its own resource rather than the Telegram
         // client it shared: its transport stays alive across the credential commit above so a
         // refresh's token rotation can finish, then closes here.
-        closeLLMClient: { try await clients.llm.close() },
-        closeTelegramClient: { try await clients.telegram.close() },
-        closeToolClient: { try await clients.tool.close() }
+        closeLLMClient: {
+          try await clients.llm.close()
+        },
+        closeTelegramClient: {
+          try await clients.telegram.close()
+        },
+        closeToolClient: {
+          try await clients.tool.close()
+        }
       )
     )
 
@@ -117,10 +122,7 @@ extension RunCommand {
     case .fatalCoderCleanup:
       try terminator.fatalCoderCleanup(logger: logger)
     case .fatalLaneTimeout(let activeRunIDs):
-      try terminator.fatalLaneDrainTimeout(
-        activeRunIDs: activeRunIDs,
-        logger: logger
-      )
+      try terminator.fatalLaneDrainTimeout(activeRunIDs: activeRunIDs, logger: logger)
     }
   }
 
@@ -147,7 +149,7 @@ extension RunCommand {
 // MARK: - Environment Bootstrap
 
 extension RunCommand {
-  typealias LoggerBootstrap = @Sendable ([String]) -> Logger
+  typealias LoggerBootstrap = @Sendable (_ redactionValues: [String]) -> Logger
 
   struct BootLogging {
     let logger: Logger
@@ -160,10 +162,7 @@ extension RunCommand {
     bootstrap: LoggerBootstrap
   ) -> BootLogging {
     let redactionValues = mcp.redactionValues(with: secrets)
-    return BootLogging(
-      logger: bootstrap(redactionValues),
-      redactionValues: redactionValues
-    )
+    return BootLogging(logger: bootstrap(redactionValues), redactionValues: redactionValues)
   }
 
   static func makeBootLogging(secrets: Secrets, mcp: MCPBootInputs) -> BootLogging {
@@ -172,6 +171,8 @@ extension RunCommand {
     }
   }
 }
+
+// MARK: - Daemon Bootstrap
 
 private extension RunCommand {
   /// Installs the redacting swift-log backend (level from `CLAW_LOG_LEVEL`, default `.info`) over
@@ -183,9 +184,10 @@ private extension RunCommand {
     let redactor = SecretRedactor(secretValues: redactionValues)
 
     DeveloperLogging.bootstrap(
-      level: DeveloperLogging.level(from: environment[DeveloperLogging.levelEnvKey]),
-      redact: { redactor.redact($0) }
-    )
+      level: DeveloperLogging.level(from: environment[DeveloperLogging.levelEnvKey])
+    ) {
+      redactor.redact($0)
+    }
 
     return Logger(label: "clawd")
   }
@@ -205,7 +207,9 @@ private extension RunCommand {
   static func loadSecretsOrExit(config: AppConfig) throws -> Secrets {
     do {
       return try EnvironmentLoader.loadSecrets(config: config)
-    } catch let error as SecretStoreError {
+    } catch let error
+      as SecretStoreError
+    {
       FileHandle.standardError.write(Data("secret error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
     }
@@ -271,7 +275,9 @@ extension RunCommand {
     let catalog: MCPConfig
     do {
       catalog = try EnvironmentLoader.loadMCPConfig(config: config)
-    } catch let error as MCPConfigError {
+    } catch let error
+      as MCPConfigError
+    {
       FileHandle.standardError.write(Data("mcp config error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
     } catch {

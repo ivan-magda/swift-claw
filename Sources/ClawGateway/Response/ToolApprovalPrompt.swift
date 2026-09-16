@@ -73,7 +73,7 @@ enum ToolApprovalPrompt {
   /// outbox. The inline keyboard rides the FINAL chunk — the one ending with the tap instruction —
   /// and the suspend commit stamps `approval_id` onto exactly that keyboard-carrying chunk
   /// (`enqueuePromptChunks`), so button disarm keeps working across a split.
-  static func chunks(for input: Input, chatId: Int64, nonce: String) -> [OutboxChunk] {
+  static func chunks(for input: Input, chatID: Int64, nonce: String) -> [OutboxChunk] {
     let prompt = text(for: input)
     let parts =
       input.recorded.reason == .coderSubmit
@@ -81,10 +81,10 @@ enum ToolApprovalPrompt {
     return parts.enumerated().map { index, payload in
       OutboxChunk(
         stepIndex: index,
-        chatId: chatId,
+        chatID: chatID,
         payload: payload,
         payloadHash: ContentHash.fnv1a(payload),
-        approvalId: nil,
+        approvalID: nil,
         replyMarkup: index == parts.count - 1 ? ApprovalKeyboard.markup(nonce: nonce) : nil
       )
     }
@@ -111,7 +111,7 @@ private extension ToolApprovalPrompt {
       blocks.append(preview)
     }
     for warning in recorded.presentation.warnings {
-      blocks.append(CoderCardMarkdown.field("⚠ Native access", warning))
+      blocks.append(CoderCardMarkdown.field(label: "⚠ Native access", value: warning))
     }
     if input.isGroup {
       blocks.append("Any member of this group can approve or deny this one action.")
@@ -122,6 +122,7 @@ private extension ToolApprovalPrompt {
 
   static let taintBannerText =
     "⚠ TAINT: this turn read external/untrusted content — inspect the target before approving."
+
   static let privilegedFileBannerText =
     "⚠ PRIVILEGED FILE: this path feeds my system prompt / private-data tier."
 

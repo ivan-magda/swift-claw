@@ -13,8 +13,8 @@ struct BoundRunEnvironment {
   let jobs: ScheduledJobStoreGRDB
   let runs: RunStoreGRDB
   let learning: ScheduledLearningStoreGRDB
-  let jobId: Int64
-  let sessionId: Int64
+  let jobID: Int64
+  let sessionID: Int64
   let now: Date
 
   static func make(
@@ -42,7 +42,7 @@ struct BoundRunEnvironment {
     let now = Date(timeIntervalSince1970: 1_782_000_600)
     let job = try jobs.create(
       NewScheduledJob(
-        ownerChatId: 777,
+        ownerChatID: 777,
         label: "digest",
         prompt: "Summarize my unread items",
         recurrence: nil,
@@ -53,25 +53,25 @@ struct BoundRunEnvironment {
     )
     // The fire path creates the job's session lazily; establishing it up front lets the fixture
     // seed unbound runs on the same lane without firing first.
-    let sessionId = try writer.write { db in
-      let sessionId = try SessionMessageStoreGRDB.upsertSession(
+    let sessionID = try writer.write { db in
+      let sessionID = try SessionMessageStoreGRDB.upsertSession(
         db,
         sessionKey: SessionKey.scheduledJob(id: job.id),
         now: now
       )
       try db.execute(
         sql: "UPDATE scheduled_jobs SET session_id = ? WHERE id = ?",
-        arguments: [sessionId, job.id]
+        arguments: [sessionID, job.id]
       )
-      return sessionId
+      return sessionID
     }
     return BoundRunEnvironment(
       queue: writer,
       jobs: jobs,
       runs: RunStoreGRDB(writer: writer),
       learning: ScheduledLearningStoreGRDB(writer: writer),
-      jobId: job.id,
-      sessionId: sessionId,
+      jobID: job.id,
+      sessionID: sessionID,
       now: now
     )
   }
@@ -79,14 +79,14 @@ struct BoundRunEnvironment {
   /// A fresh bound run on the job's session, already picked up and RUNNING. The job's previous run
   /// must be terminal — the fire path's overlap guard skips an occurrence while one is live.
   func runningBoundRun() throws -> Int64 {
-    let runId = try pendingBoundRun()
-    _ = try runs.pickUp(runId: runId, now: now)
-    return runId
+    let runID = try pendingBoundRun()
+    _ = try runs.pickUp(runID: runID, now: now)
+    return runID
   }
 
   /// A fresh bound run left PENDING — the shape `/stop` cancels before any lane picks it up.
   func pendingBoundRun() throws -> Int64 {
-    try Self.fire(jobs, jobId: jobId, now: now).runId
+    try Self.fire(jobs, jobID: jobID, now: now).runID
   }
 
   /// A run on the job's session with no learning binding: the heartbeat/pre-upgrade shape, and the
@@ -99,17 +99,25 @@ struct BoundRunEnvironment {
           VALUES (?, ?, ?, ?, ?)
           """,
         arguments: [
-          sessionId, MessageRole.user.rawValue, "no binding", Provenance.trusted.rawValue, now,
+          sessionID,
+          MessageRole.user.rawValue,
+          "no binding",
+          Provenance.trusted.rawValue,
+          now,
         ]
       )
-      let triggerMessageId = db.lastInsertedRowID
+      let triggerMessageID = db.lastInsertedRowID
       try db.execute(
         sql: """
           INSERT INTO runs(session_id, state, created_ts, updated_ts, trigger_message_id, origin)
           VALUES (?, ?, ?, ?, ?, ?)
           """,
         arguments: [
-          sessionId, RunState.running.rawValue, now, now, triggerMessageId,
+          sessionID,
+          RunState.running.rawValue,
+          now,
+          now,
+          triggerMessageID,
           RunOrigin.scheduled.rawValue,
         ]
       )
@@ -117,26 +125,22 @@ struct BoundRunEnvironment {
     }
   }
 
-  func assistantTurn(
-    runId: Int64,
-    model: String = "m",
-    content: String = "done"
-  ) -> AssistantTurn {
+  func assistantTurn(runID: Int64, model: String = "m", content: String = "done") -> AssistantTurn {
     AssistantTurn(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: 777,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: 777,
       content: content,
-      usage: makeProviderUsage(runId: runId, sessionId: sessionId, model: model),
+      usage: makeProviderUsage(runID: runID, sessionID: sessionID, model: model),
       chunks: [chunk(payload: content)]
     )
   }
 
-  func degradedTurn(runId: Int64, cause: TerminalCause) -> DegradedTurn {
+  func degradedTurn(runID: Int64, cause: TerminalCause) -> DegradedTurn {
     DegradedTurn(
-      runId: runId,
-      sessionId: sessionId,
-      chatId: 777,
+      runID: runID,
+      sessionID: sessionID,
+      chatID: 777,
       usage: nil,
       chunk: chunk(payload: "degraded"),
       cause: cause
@@ -145,20 +149,20 @@ struct BoundRunEnvironment {
 
   /// A bound run parked on an approval: assistant anchor, an unresolved placeholder observation,
   /// and AWAITING_APPROVAL — the shape `commitSuspendedTurn` leaves behind.
-  func suspendedApproval() throws -> (runId: Int64, observationMessageId: Int64) {
-    let runId = try runningBoundRun()
-    let observationMessageId = try park(runId: runId)
-    return (runId, observationMessageId)
+  func suspendedApproval() throws -> (runID: Int64, observationMessageID: Int64) {
+    let runID = try runningBoundRun()
+    let observationMessageID = try park(runID: runID)
+    return (runID, observationMessageID)
   }
 
   /// The approval crash window: the pre-execution claim committed (AWAITING_APPROVAL → RUNNING)
   /// and the process died before the result record, so the placeholder is still unresolved.
-  func claimedApprovalCrashWindow() throws -> (runId: Int64, observationMessageId: Int64) {
+  func claimedApprovalCrashWindow() throws -> (runID: Int64, observationMessageID: Int64) {
     let parked = try suspendedApproval()
     try queue.write { db in
       _ = try RunStoreGRDB.transitionRun(
         db,
-        runId: parked.runId,
+        runID: parked.runID,
         event: .resumeApproved,
         now: now,
         terminal: nil
@@ -167,8 +171,8 @@ struct BoundRunEnvironment {
     return parked
   }
 
-  func settledAt(runId: Int64) throws -> Date? {
-    try TestLearningFixtures(writer: queue).settlement(runId: runId)?.settledAt
+  func settledAt(runID: Int64) throws -> Date? {
+    try TestLearningFixtures(writer: queue).settlement(runID: runID)?.settledAt
   }
 
   func settlementRowCount() throws -> Int {
@@ -181,20 +185,16 @@ struct BoundRunEnvironment {
 // MARK: - Fixture Plumbing
 
 private extension BoundRunEnvironment {
-  static func fire(
-    _ jobs: ScheduledJobStoreGRDB,
-    jobId: Int64,
-    now: Date
-  ) throws -> ClaimedFire {
-    guard case .fired(let fired) = try jobs.fireNow(jobId: jobId, now: now) else {
-      throw StoreError.unexpected("job \(jobId) refused to fire")
+  static func fire(_ jobs: ScheduledJobStoreGRDB, jobID: Int64, now: Date) throws -> ClaimedFire {
+    guard case .fired(let fired) = try jobs.fireNow(jobID: jobID, now: now) else {
+      throw StoreError.unexpected("job \(jobID) refused to fire")
     }
     return fired
   }
 
   /// The anchor + placeholder observation pair and the suspend transition, written directly so the
   /// fixture does not need a `PendingToolAction` it never inspects.
-  func park(runId: Int64) throws -> Int64 {
+  func park(runID: Int64) throws -> Int64 {
     try queue.write { db in
       try db.execute(
         sql: """
@@ -202,31 +202,31 @@ private extension BoundRunEnvironment {
           VALUES (?, ?, 'assistant', '', 'trusted', ?,
             '[{"id":"c1","name":"file_write","arguments":"{}"}]')
           """,
-        arguments: [sessionId, runId, now]
+        arguments: [sessionID, runID, now]
       )
       try db.execute(
         sql: """
           INSERT INTO messages(session_id, run_id, role, content, provenance, ts, tool_call_id)
           VALUES (?, ?, 'tool', ?, 'untrusted', ?, 'c1')
           """,
-        arguments: [sessionId, runId, RunStoreGRDB.placeholderObservationContent, now]
+        arguments: [sessionID, runID, RunStoreGRDB.placeholderObservationContent, now]
       )
-      let observationMessageId = db.lastInsertedRowID
+      let observationMessageID = db.lastInsertedRowID
       _ = try RunStoreGRDB.transitionRun(
         db,
-        runId: runId,
+        runID: runID,
         event: .suspendForApproval,
         now: now,
         terminal: nil
       )
-      return observationMessageId
+      return observationMessageID
     }
   }
 
   func chunk(payload: String) -> OutboxChunk {
     OutboxChunk(
       stepIndex: 0,
-      chatId: 777,
+      chatID: 777,
       payload: payload,
       payloadHash: ContentHash.fnv1a(payload)
     )

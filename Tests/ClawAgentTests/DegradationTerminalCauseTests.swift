@@ -7,7 +7,8 @@ import Testing
 /// always an infrastructure, entitlement or context failure — never evidence about the task. Two
 /// provider outages must not be able to synthesize a behavioral lesson about the model, which is
 /// the boundary this mapping holds.
-@Suite struct DegradationTerminalCauseTests {
+@Suite
+struct DegradationTerminalCauseTests {
   @Test(arguments: [
     (DegradationKind.providerUnavailable, TerminalCause.providerFailure),
     (.authenticationRequired, .providerFailure),

@@ -3,17 +3,14 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct ImageReplaySelectionTests {
+@Suite
+struct ImageReplaySelectionTests {
   private func photo(bytes: Int) -> ImagePart {
-    ImagePart(
-      data: Data(repeating: 0xFF, count: bytes),
-      mediaType: .jpeg,
-      width: 1280,
-      height: 960
-    )
+    ImagePart(data: Data(repeating: 0xFF, count: bytes), mediaType: .jpeg, width: 1280, height: 960)
   }
 
-  @Test func keepsNewestFirstUntilTheAggregateCapIsCrossed() {
+  @Test
+  func keepsNewestFirstUntilTheAggregateCapIsCrossed() {
     // given — row ids increase monotonically, so the highest id is the newest image
     let images: [Int64: ImagePart] = [
       10: photo(bytes: 400_000),
@@ -28,7 +25,8 @@ import Testing
     #expect(Set(kept.keys) == [20, 30])
   }
 
-  @Test func aSingleOversizedImageIsDroppedRatherThanFailing() {
+  @Test
+  func aSingleOversizedImageIsDroppedRatherThanFailing() {
     // given
     let images: [Int64: ImagePart] = [10: photo(bytes: 2_000_000)]
 
@@ -39,7 +37,8 @@ import Testing
     #expect(kept.isEmpty)
   }
 
-  @Test func everythingUnderTheCapSurvives() {
+  @Test
+  func everythingUnderTheCapSurvives() {
     // given
     let images: [Int64: ImagePart] = [10: photo(bytes: 100_000), 20: photo(bytes: 100_000)]
 
@@ -50,7 +49,8 @@ import Testing
     #expect(Set(kept.keys) == [10, 20])
   }
 
-  @Test func stopsAtTheFirstImageThatCrossesTheCapRatherThanSkippingIt() {
+  @Test
+  func stopsAtTheFirstImageThatCrossesTheCapRatherThanSkippingIt() {
     // given — a small ancient image sits behind a large recent one
     let images: [Int64: ImagePart] = [
       10: photo(bytes: 1_000),

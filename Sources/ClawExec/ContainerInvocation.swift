@@ -14,29 +14,26 @@ enum ContainerInvocation {
     language: ExecLanguage,
     network: Bool
   ) -> [String] {
-    secureRunPrefix(context: context, cidFilePath: cidFilePath)
-      + networkArguments(network)
-      + [
-        "--entrypoint",
-        interpreter(for: language),
-        context.settings.workloadImage.description,
-        ExecEntrypoint.guestPath(for: language),
-      ]
+    secureRunPrefix(context: context, cidFilePath: cidFilePath) + networkArguments(network) + [
+      "--entrypoint",
+      interpreter(for: language),
+      context.settings.workloadImage.description,
+      ExecEntrypoint.guestPath(for: language),
+    ]
   }
 
   static func detachedCanary(context: ContainerLaunchContext) -> [String] {
-    secureRunPrefix(context: context, cidFilePath: nil)
-      + [
-        "--detach",
-        "--network",
-        "none",
-        "--no-dns",
-        "--entrypoint",
-        ExecSandboxSettings.pythonInterpreter,
-        context.settings.workloadImage.description,
-        "-c",
-        "import signal; signal.pause()",
-      ]
+    secureRunPrefix(context: context, cidFilePath: nil) + [
+      "--detach",
+      "--network",
+      "none",
+      "--no-dns",
+      "--entrypoint",
+      ExecSandboxSettings.pythonInterpreter,
+      context.settings.workloadImage.description,
+      "-c",
+      "import signal; signal.pause()",
+    ]
   }
 
   static func systemStatus() -> [String] {
@@ -93,13 +90,19 @@ enum ContainerInvocation {
 // MARK: - Secure Run Grammar
 
 private extension ContainerInvocation {
-  static func secureRunPrefix(
-    context: ContainerLaunchContext,
-    cidFilePath: String?
-  ) -> [String] {
+  static func secureRunPrefix(context: ContainerLaunchContext, cidFilePath: String?) -> [String] {
     var arguments = [
-      "run", "--scheme", "https", "--progress", "none", "--platform",
-      ExecSandboxSettings.platform, "--rm", "--name", context.identity.name, "--label",
+      "run",
+      "--scheme",
+      "https",
+      "--progress",
+      "none",
+      "--platform",
+      ExecSandboxSettings.platform,
+      "--rm",
+      "--name",
+      context.identity.name,
+      "--label",
       ExecutionIdentity.ownershipLabelArgument,
     ]
 
@@ -108,9 +111,19 @@ private extension ContainerInvocation {
     }
 
     arguments += [
-      "--cap-drop", "ALL", "--init", "--init-image", context.initImage, "--read-only", "--tmpfs",
-      "/tmp", "--cpus", String(context.settings.cpus), "--memory",
-      "\(context.settings.memoryMiB)M", "--mount",
+      "--cap-drop",
+      "ALL",
+      "--init",
+      "--init-image",
+      context.initImage,
+      "--read-only",
+      "--tmpfs",
+      "/tmp",
+      "--cpus",
+      String(context.settings.cpus),
+      "--memory",
+      "\(context.settings.memoryMiB)M",
+      "--mount",
       """
       type=bind,source=\(context.scratchPath),\
       target=\(ExecEntrypoint.guestWorkDirectory),readonly

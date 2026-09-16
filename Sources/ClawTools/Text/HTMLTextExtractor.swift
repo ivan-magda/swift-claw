@@ -85,7 +85,10 @@ private extension HTMLTextExtractor {
   static func rawElementOpening(
     _ scalars: [Unicode.Scalar],
     tagAt index: Int
-  ) -> (name: [Unicode.Scalar], close: [Unicode.Scalar])? {
+  ) -> (
+    name: [Unicode.Scalar],
+    close: [Unicode.Scalar]
+  )? {
     let nameStart = index + 1
 
     guard nameStart < scalars.count, scalars[nameStart] != "/" else {
@@ -227,7 +230,9 @@ private extension HTMLTextExtractor {
         continue
       }
 
-      if let entity = entities.first(where: { matchesExact($0.token, in: scalars, at: index) }) {
+      if let entity = entities.first(where: {
+        matchesExact($0.token, in: scalars, at: index)
+      }) {
         output.append(entity.replacement)
         index += entity.token.count
       } else {

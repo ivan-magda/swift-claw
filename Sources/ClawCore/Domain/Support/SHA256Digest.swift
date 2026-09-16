@@ -3,7 +3,10 @@ import Foundation
 
 public enum SHA256Digest {
   package static func isCanonicalHex(_ value: String) -> Bool {
-    value.count == 64 && value.allSatisfy { "0123456789abcdef".contains($0) }
+    value.count == 64
+      && value.allSatisfy {
+        "0123456789abcdef".contains($0)
+      }
   }
 
   public static func hex(_ data: Data) -> String {

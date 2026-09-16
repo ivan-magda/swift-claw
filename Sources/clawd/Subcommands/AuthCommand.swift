@@ -4,6 +4,7 @@ import ClawAuth
 import ClawCore
 import ClawHTTP
 import ClawSecrets
+import Dispatch
 import Foundation
 
 #if canImport(Glibc)
@@ -88,7 +89,9 @@ private extension AuthCommand {
     executor: any HTTPExecuting
   ) -> AuthLoginWorkflow {
     let stateRoot = bootstrap.stateRoot
-    let oauth = ChatGPTOAuthClient(http: executor, wallDate: { Date() })
+    let oauth = ChatGPTOAuthClient(http: executor) {
+      Date()
+    }
 
     return AuthLoginWorkflow(
       bootstrap: bootstrap,
@@ -101,7 +104,9 @@ private extension AuthCommand {
       tokenExchange: oauth,
       catalog: ChatGPTModelCatalog(http: executor),
       terminal: StandardAuthTerminal(),
-      profileID: { UUID() }
+      profileID: {
+        UUID()
+      }
     )
   }
 
@@ -110,7 +115,9 @@ private extension AuthCommand {
     AuthStatusWorkflow(
       bootstrap: bootstrap,
       makeCredentialStore: credentialStore(in: bootstrap.stateRoot),
-      wallDate: { Date() }
+      wallDate: {
+        Date()
+      }
     )
   }
 
@@ -125,7 +132,9 @@ private extension AuthCommand {
   /// Deferred rather than built here, because opening the store touches the state root and a
   /// mutating command must not have touched it before the lock says it may.
   static func credentialStore(in stateRoot: URL) -> @Sendable () -> any LLMCredentialStore {
-    { EncryptedLLMCredentialStore(stateRoot: stateRoot) }
+    {
+      EncryptedLLMCredentialStore(stateRoot: stateRoot)
+    }
   }
 
   /// Resolves the state root and the raw model reference, and nothing else. Deliberately not
@@ -213,6 +222,8 @@ private struct StandardAuthTerminal: AuthTerminal {
     AuthCommand.write(event)
   }
 }
+
+// MARK: - Terminal Input Queue
 
 private extension StandardAuthTerminal {
   static let input = DispatchQueue(label: "clawd.auth.stdin")

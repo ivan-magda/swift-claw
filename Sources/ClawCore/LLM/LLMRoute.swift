@@ -18,7 +18,9 @@ public struct LLMProviderID: RawRepresentable, Sendable, Hashable, Codable {
 extension LLMProviderID: CodingKeyRepresentable {}
 
 extension LLMProviderID: CustomStringConvertible {
-  public var description: String { rawValue }
+  public var description: String {
+    rawValue
+  }
 }
 
 public enum LLMCredentialMode: Sendable, Equatable {
@@ -35,10 +37,7 @@ public struct LLMProviderCapabilities: Sendable, Equatable {
   public let supportsStructuredOutput: Bool
   public let outputTokenField: LLMWireOutputTokenField
 
-  public init(
-    supportsStructuredOutput: Bool,
-    outputTokenField: LLMWireOutputTokenField
-  ) {
+  public init(supportsStructuredOutput: Bool, outputTokenField: LLMWireOutputTokenField) {
     self.supportsStructuredOutput = supportsStructuredOutput
     self.outputTokenField = outputTokenField
   }
@@ -79,10 +78,7 @@ extension LLMProviderDescriptor {
   public static let openAIChatGPT = LLMProviderDescriptor(
     providerID: .openAIChatGPT,
     qualifiedPrefix: "openai-chatgpt/",
-    egress: .managed(
-      providerID: .openAIChatGPT,
-      endpoint: chatGPTResponsesEndpoint
-    ),
+    egress: .managed(providerID: .openAIChatGPT, endpoint: chatGPTResponsesEndpoint),
     credentialMode: .managedOAuth,
     capabilities: LLMProviderCapabilities(
       supportsStructuredOutput: false,
@@ -106,17 +102,16 @@ extension LLMProviderDescriptor {
 
 // MARK: - Resolved route
 
-/// `CLAW_LLM_MODEL` parsed once. `configuredReference` is the accounting and diagnostic identity;
+/// A model route resolved once from `CLAW_LLM_MODEL`.
+///
+/// `configuredReference` retains the configured accounting and diagnostic identity; `wireModel`
+/// is the model name sent to the provider.
 public struct ResolvedLLMRoute: Sendable, Equatable {
   public let descriptor: LLMProviderDescriptor
   public let configuredReference: String
   public let wireModel: String
 
-  public init(
-    descriptor: LLMProviderDescriptor,
-    configuredReference: String,
-    wireModel: String
-  ) {
+  public init(descriptor: LLMProviderDescriptor, configuredReference: String, wireModel: String) {
     self.descriptor = descriptor
     self.configuredReference = configuredReference
     self.wireModel = wireModel
@@ -131,9 +126,8 @@ public enum LLMProviderRegistry {
     configuredBaseURL: @autoclosure () throws -> String
   ) throws -> ResolvedLLMRoute {
     for descriptor in qualifiedDescriptors {
-      guard
-        let prefix = descriptor.qualifiedPrefix,
-        let suffix = strippingPrefix(prefix, from: modelReference)
+      guard let prefix = descriptor.qualifiedPrefix,
+            let suffix = strippingPrefix(prefix, from: modelReference)
       else {
         continue
       }
@@ -148,9 +142,7 @@ public enum LLMProviderRegistry {
     }
 
     return ResolvedLLMRoute(
-      descriptor: .openAICompatible(
-        endpoint: canonicalEndpoint(try configuredBaseURL())
-      ),
+      descriptor: .openAICompatible(endpoint: canonicalEndpoint(try configuredBaseURL())),
       configuredReference: modelReference,
       wireModel: modelReference
     )
@@ -196,10 +188,7 @@ private extension LLMProviderRegistry {
       return .oversized
     }
 
-    guard
-      isAlphanumeric(leading),
-      scalars.dropFirst().allSatisfy(isSafeTrailing)
-    else {
+    guard isAlphanumeric(leading), scalars.dropFirst().allSatisfy(isSafeTrailing) else {
       return .unsafe
     }
 

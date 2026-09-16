@@ -12,7 +12,7 @@
   "lineBreakBeforeControlFlowKeywords" : false,
   "lineBreakBeforeEachArgument" : true,
   "lineBreakBeforeEachGenericRequirement" : false,
-  "lineBreakBetweenDeclarationAttributes" : false,
+  "lineBreakBetweenDeclarationAttributes" : true,
   "lineLength" : 100,
   "maximumBlankLines" : 1,
   "multiElementCollectionTrailingCommas" : true,
@@ -24,7 +24,7 @@
   "orderedImports" : {
     "includeConditionalImports" : false
   },
-  "prioritizeKeepingFunctionOutputTogether" : false,
+  "prioritizeKeepingFunctionOutputTogether" : true,
   "reflowMultilineStringLiterals" : "never",
   "respectsExistingLineBreaks" : true,
   "rules" : {
@@ -38,7 +38,7 @@
     "DontRepeatTypeInStaticProperties" : true,
     "FileScopedDeclarationPrivacy" : true,
     "FullyIndirectEnum" : true,
-    "GroupNumericLiterals" : true,
+    "GroupNumericLiterals" : false,
     "IdentifiersMustBeASCII" : true,
     "NeverForceUnwrap" : false,
     "NeverUseForceTry" : false,
@@ -58,7 +58,7 @@
     "OneCasePerLine" : true,
     "OneVariableDeclarationPerLine" : true,
     "OnlyOneTrailingClosureArgument" : true,
-    "OrderedImports" : true,
+    "OrderedImports" : false,
     "ReplaceForEachWithForLoop" : true,
     "ReturnVoidInsteadOfEmptyTuple" : true,
     "TypeNamesShouldBeCapitalized" : true,

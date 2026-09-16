@@ -6,13 +6,15 @@ import Testing
 
 @testable import ClawSecrets
 
-@Suite struct EncryptedFileSecretStoreTests {
-  @Test func sealThenLoadRoundTrips() throws {
+@Suite
+struct EncryptedFileSecretStoreTests {
+  @Test
+  func sealThenLoadRoundTrips() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
-    let original = Secrets(telegramBotToken: "123:abc", llmApiKey: "sk-secret")
+    let original = Secrets(telegramBotToken: "123:abc", llmAPIKey: "sk-secret")
 
     // when
     try EncryptedFileSecretStore.seal(original, stateRoot: stateRoot)
@@ -22,7 +24,8 @@ import Testing
     #expect(loaded == original)
   }
 
-  @Test func anEnvelopeWrittenBeforeThePublicationProtocolStillDecrypts() throws {
+  @Test
+  func anEnvelopeWrittenBeforeThePublicationProtocolStillDecrypts() throws {
     // given — a byte-for-byte reconstruction of what an installation sealed by the previous
     // implementation has on disk: a version-1 envelope authenticated under AAD [1], written by
     // Foundation's atomic write (which creates 0644), beside a 0600 key. Nothing about the new
@@ -61,13 +64,14 @@ import Testing
       loaded
         == Secrets(
           telegramBotToken: "123:legacy",
-          llmApiKey: "sk-legacy",
-          searchApiKey: "search-legacy"
+          llmAPIKey: "sk-legacy",
+          searchAPIKey: "search-legacy"
         )
     )
   }
 
-  @Test func sealPublishesTheEnvelopeOwnerOnly() throws {
+  @Test
+  func sealPublishesTheEnvelopeOwnerOnly() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -75,7 +79,7 @@ import Testing
     // when — going forward the envelope is published owner-only even though the reader tolerates
     // the 0644 that Foundation's atomic write left on older installations.
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
 
@@ -88,7 +92,8 @@ import Testing
     }
   }
 
-  @Test func sealedEnvelopeContainsNoPlaintextToken() throws {
+  @Test
+  func sealedEnvelopeContainsNoPlaintextToken() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -97,24 +102,23 @@ import Testing
 
     // when
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: token, llmApiKey: nil),
+      Secrets(telegramBotToken: token, llmAPIKey: nil),
       stateRoot: stateRoot
     )
-    let envelope = try Data(
-      contentsOf: stateRoot.appendingPathComponent(SecretFile.envelope)
-    )
+    let envelope = try Data(contentsOf: stateRoot.appendingPathComponent(SecretFile.envelope))
 
     // then — the token's bytes never appear in the ciphertext at rest.
     #expect(envelope.range(of: Data(token.utf8)) == nil)
   }
 
-  @Test func tamperedCiphertextFailsClosed() throws {
+  @Test
+  func tamperedCiphertextFailsClosed() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
     let envelopeURL = stateRoot.appendingPathComponent(SecretFile.envelope)
@@ -130,13 +134,14 @@ import Testing
     }
   }
 
-  @Test func tamperedVersionByteFailsClosed() throws {
+  @Test
+  func tamperedVersionByteFailsClosed() throws {
     // given
     let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
     defer { try? FileManager.default.removeItem(at: stateRoot) }
 
     try EncryptedFileSecretStore.seal(
-      Secrets(telegramBotToken: "123:abc", llmApiKey: nil),
+      Secrets(telegramBotToken: "123:abc", llmAPIKey: nil),
       stateRoot: stateRoot
     )
     let envelopeURL = stateRoot.appendingPathComponent(SecretFile.envelope)
@@ -152,7 +157,8 @@ import Testing
     }
   }
 
-  @Test func envelopeAuthenticatedUnderDifferentVersionFailsAuthentication() throws {
+  @Test
+  func envelopeAuthenticatedUnderDifferentVersionFailsAuthentication() throws {
     // given — a valid on-disk version byte (1, supported) but ciphertext authenticated under a
     // DIFFERENT associated-data byte. This proves the version byte is bound as AEAD AAD: the reader
     // passes the version guard, then authentication fails because the AAD it uses ([1]) differs

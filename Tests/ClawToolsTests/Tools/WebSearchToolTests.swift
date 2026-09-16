@@ -8,12 +8,12 @@ import Testing
 struct ScriptedSearch: SearchProviding {
   let results: [SearchResult]
   let thrown: (any Error)?
-  let recordedCount: @Sendable (Int) -> Void
+  let recordedCount: @Sendable (_ count: Int) -> Void
 
   init(
     results: [SearchResult] = [],
     thrown: (any Error)? = nil,
-    recordedCount: @escaping @Sendable (Int) -> Void = { _ in }
+    recordedCount: @escaping @Sendable (_ count: Int) -> Void = { _ in }
   ) {
     self.results = results
     self.thrown = thrown
@@ -29,12 +29,14 @@ struct ScriptedSearch: SearchProviding {
   }
 }
 
-@Suite struct WebSearchToolTests {
-  @Test func rendersThePinnedListShapeAndSetsUntrusted() async throws {
+@Suite
+struct WebSearchToolTests {
+  @Test
+  func rendersThePinnedListShapeAndSetsUntrusted() async throws {
     // given
     let tool = WebSearchTool(
       search: ScriptedSearch(results: [
-        SearchResult(title: "Swift.org", url: "https://swift.org/", snippet: "The Swift language.")
+        SearchResult(title: "Swift.org", url: "https://swift.org/", snippet: "The Swift language."),
       ])
     )
 
@@ -50,7 +52,8 @@ struct ScriptedSearch: SearchProviding {
     #expect(payload.ingestedUntrusted)
   }
 
-  @Test func countClampsToOneThroughTenAndDefaultsToFive() async throws {
+  @Test
+  func countClampsToOneThroughTenAndDefaultsToFive() async throws {
     // given — recordedCount fires synchronously inside each awaited execute, so a lock-guarded
     // box captures the counts in deterministic call order (no detached Tasks to race)
     final class CountBox: @unchecked Sendable {
@@ -65,7 +68,9 @@ struct ScriptedSearch: SearchProviding {
     }
     let box = CountBox()
     let tool = WebSearchTool(
-      search: ScriptedSearch(recordedCount: { value in box.record(value) })
+      search: ScriptedSearch { value in
+        box.record(value)
+      }
     )
 
     // when
@@ -83,7 +88,8 @@ struct ScriptedSearch: SearchProviding {
     #expect(box.counts == [5, 10, 1])
   }
 
-  @Test func hugeCountClampsWithoutTrapping() async {
+  @Test
+  func hugeCountClampsWithoutTrapping() async {
     // given — recordedCount fires synchronously inside the awaited execute, so a lock-guarded
     // box captures the count without racing (no detached Tasks)
     final class CountBox: @unchecked Sendable {
@@ -98,7 +104,9 @@ struct ScriptedSearch: SearchProviding {
     }
     let box = CountBox()
     let tool = WebSearchTool(
-      search: ScriptedSearch(recordedCount: { value in box.record(value) })
+      search: ScriptedSearch { value in
+        box.record(value)
+      }
     )
 
     // when
@@ -112,7 +120,8 @@ struct ScriptedSearch: SearchProviding {
     #expect(box.counts == [10])
   }
 
-  @Test func backendFailureIsAPlainErrorObservation() async throws {
+  @Test
+  func backendFailureIsAPlainErrorObservation() async throws {
     // given — v1 tools do not retry internally (§7.4)
     let tool = WebSearchTool(
       search: ScriptedSearch(
@@ -132,7 +141,8 @@ struct ScriptedSearch: SearchProviding {
     #expect(payload.ingestedUntrusted == false)
   }
 
-  @Test func missingQueryIsAnError() async throws {
+  @Test
+  func missingQueryIsAnError() async throws {
     // given
     let tool = WebSearchTool(search: ScriptedSearch())
 

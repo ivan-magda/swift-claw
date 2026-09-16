@@ -11,10 +11,10 @@ public struct RetrieverGRDB: Retriever {
 
   public func searchRelevantMessages(
     query: String,
-    currentSessionId: Int64,
-    restrictToSessionId: Int64?,
-    windowStartMessageId: Int64?,
-    excludedMessageIds: [Int64],
+    currentSessionID: Int64,
+    restrictToSessionID: Int64?,
+    windowStartMessageID: Int64?,
+    excludedMessageIDs: [Int64],
     limit: Int
   ) throws(StoreError) -> [RecallHit] {
     // A tokenless query (empty/punctuation) yields nil -> zero results; never raw-interpolate text.
@@ -38,21 +38,21 @@ public struct RetrieverGRDB: Retriever {
         """
       var arguments: StatementArguments = [pattern]
 
-      if let onlySessionId = restrictToSessionId {
+      if let onlySessionID = restrictToSessionID {
         sql += "\n  AND m.session_id = ?"
-        arguments += [onlySessionId]
+        arguments += [onlySessionID]
       }
 
-      if let windowStart = windowStartMessageId {
+      if let windowStart = windowStartMessageID {
         // Dedup against the current session's in-window range.
         sql += "\n  AND NOT (m.session_id = ? AND m.id >= ?)"
-        arguments += [currentSessionId, windowStart]
+        arguments += [currentSessionID, windowStart]
       }
 
-      if excludedMessageIds.isEmpty == false {
-        let placeholders = databaseQuestionMarks(count: excludedMessageIds.count)
+      if excludedMessageIDs.isEmpty == false {
+        let placeholders = databaseQuestionMarks(count: excludedMessageIDs.count)
         sql += "\n  AND m.id NOT IN (\(placeholders))"
-        arguments += StatementArguments(excludedMessageIds)
+        arguments += StatementArguments(excludedMessageIDs)
       }
 
       sql += "\n  ORDER BY bm25(messages_fts) ASC\n  LIMIT ?"
@@ -67,7 +67,7 @@ public struct RetrieverGRDB: Retriever {
         }
         return RecallHit(
           id: row["id"],
-          sessionId: row["session_id"],
+          sessionID: row["session_id"],
           role: role,
           content: row["content"],
           score: RecallScore(sqliteBM25: row["bm25_score"]),

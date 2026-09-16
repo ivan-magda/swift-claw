@@ -8,7 +8,8 @@ import Testing
 /// The refusal a provider returns when the configured model cannot see. It carries a null `code`, so
 /// the message text is the only discriminator; these tests pin how narrow the match is, because a
 /// false positive would tell the owner to change models over an unrelated failure.
-@Suite struct VisionRefusalClassificationTests {
+@Suite
+struct VisionRefusalClassificationTests {
   /// The observed OpenAI shape: `invalid_request_error`, a null code, and the offending content-part
   /// type named in the message.
   private static let openAIRefusalBody = """
@@ -16,7 +17,8 @@ import Testing
     "type":"invalid_request_error","param":null,"code":null}}
     """
 
-  @Test func recognisesTheOpenAiVisionRefusal() {
+  @Test
+  func recognisesTheOpenAiVisionRefusal() {
     // given
     let body = Self.openAIRefusalBody
 
@@ -27,7 +29,8 @@ import Testing
     #expect(matched)
   }
 
-  @Test func recognisesTheResponsesRouteContentPartName() {
+  @Test
+  func recognisesTheResponsesRouteContentPartName() {
     // given — the managed route names the part `input_image` rather than `image_url`
     let body = """
       {"error":{"message":"Invalid value: 'input_image'. \
@@ -42,7 +45,8 @@ import Testing
     #expect(matched)
   }
 
-  @Test func doesNotMisreadAnUnrelatedBadRequest() {
+  @Test
+  func doesNotMisreadAnUnrelatedBadRequest() {
     // given
     let body = """
       {"error":{"message":"Unsupported parameter: 'stop'.","type":"invalid_request_error"}}
@@ -55,7 +59,8 @@ import Testing
     #expect(matched == false)
   }
 
-  @Test func ignoresNonBadRequestStatuses() {
+  @Test
+  func ignoresNonBadRequestStatuses() {
     // given — a 500 mentioning images is an outage, not a capability answer
     let body = """
       {"error":{"message":"image_url processing failed","type":"server_error"}}
@@ -68,7 +73,8 @@ import Testing
     #expect(matched == false)
   }
 
-  @Test func ignoresTheRefusalTextItselfOnANonBadRequestStatus() {
+  @Test
+  func ignoresTheRefusalTextItselfOnANonBadRequestStatus() {
     // given — byte-for-byte the refusal body, arriving on a status that means the server broke
     let body = Self.openAIRefusalBody
 
@@ -80,7 +86,8 @@ import Testing
     #expect(matched == false)
   }
 
-  @Test func ignoresABadRequestOfAnotherErrorTypeThatQuotesAnImagePart() {
+  @Test
+  func ignoresABadRequestOfAnotherErrorTypeThatQuotesAnImagePart() {
     // given — an image part named inside a body that is not an invalid-request rejection
     let body = """
       {"error":{"message":"Rate limit reached while processing image_url parts.",\
@@ -94,7 +101,8 @@ import Testing
     #expect(matched == false)
   }
 
-  @Test func toleratesAMalformedBody() {
+  @Test
+  func toleratesAMalformedBody() {
     // given — classification must never throw on a body it cannot parse
     let body = "not json"
 
@@ -105,7 +113,8 @@ import Testing
     #expect(matched == false)
   }
 
-  @Test func toleratesABodyThatIsNotText() {
+  @Test
+  func toleratesABodyThatIsNotText() {
     // given — a diagnostic that is not valid UTF-8 at all
     let body = Data([0xff, 0xfe, 0xfd])
 
@@ -119,7 +128,8 @@ import Testing
 
 /// The refusal must reach the runtime as a distinct, text-free provider cause on both of the Chat
 /// Completions adapter's execution paths, so the owner reply can name it.
-@Suite struct VisionRefusalProviderMappingTests {
+@Suite
+struct VisionRefusalProviderMappingTests {
   private static let refusalBody = Data(
     """
     {"error":{"message":"Invalid content type. image_url is only supported by certain models.",\
@@ -127,10 +137,11 @@ import Testing
     """.utf8
   )
 
-  @Test func bufferedCompletionRaisesVisionUnsupported() async throws {
+  @Test
+  func bufferedCompletionRaisesVisionUnsupported() async throws {
     // given
     let exec = ScriptedHTTPExecutor([
-      .ok(HTTPResult(statusCode: 400, headers: [:], body: Self.refusalBody))
+      .ok(HTTPResult(statusCode: 400, headers: [:], body: Self.refusalBody)),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
@@ -149,10 +160,11 @@ import Testing
     #expect(await exec.recorded.count == 1)
   }
 
-  @Test func streamingRaisesVisionUnsupported() async throws {
+  @Test
+  func streamingRaisesVisionUnsupported() async throws {
     // given
     let exec = ScriptedHTTPExecutor([
-      .stream(HTTPStreamHead(statusCode: 400, headers: [:]), [Self.refusalBody])
+      .stream(HTTPStreamHead(statusCode: 400, headers: [:]), [Self.refusalBody]),
     ])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
@@ -166,14 +178,13 @@ import Testing
     #expect((thrown as? ProviderFailure)?.cause == .visionUnsupported)
   }
 
-  @Test func anUnrelatedBadRequestStaysTheGenericTerminalFailure() async throws {
+  @Test
+  func anUnrelatedBadRequestStaysTheGenericTerminalFailure() async throws {
     // given
     let body = Data(
       #"{"error":{"message":"Unsupported parameter: 'stop'.","type":"invalid_request_error"}}"#.utf8
     )
-    let exec = ScriptedHTTPExecutor([
-      .ok(HTTPResult(statusCode: 400, headers: [:], body: body))
-    ])
+    let exec = ScriptedHTTPExecutor([.ok(HTTPResult(statusCode: 400, headers: [:], body: body))])
     let provider = makeProvider(config: makeConfig(), http: exec)
 
     // when

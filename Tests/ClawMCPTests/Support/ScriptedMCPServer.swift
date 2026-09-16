@@ -10,8 +10,11 @@ import MCP
 /// like from the client side — so reconnect scenarios need no special support beyond counting how
 /// many times a session came back.
 actor ScriptedMCPServer {
-  typealias ListHandler = @Sendable (ListTools.Parameters) async throws -> ListTools.Result
-  typealias CallHandler = @Sendable (Int, CallTool.Parameters) async throws -> CallTool.Result
+  typealias ListHandler =
+    @Sendable (_ parameters: ListTools.Parameters) async throws -> ListTools.Result
+
+  typealias CallHandler =
+    @Sendable (_ connection: Int, _ parameters: CallTool.Parameters) async throws -> CallTool.Result
 
   private let name: String
   private let list: ListHandler
@@ -83,7 +86,7 @@ actor ScriptedMCPServer {
   static let echo: CallHandler = { connection, parameters in
     CallTool.Result(
       content: [
-        .text(text: "\(parameters.name) on connection \(connection)", annotations: nil, _meta: nil)
+        .text(text: "\(parameters.name) on connection \(connection)", annotations: nil, _meta: nil),
       ]
     )
   }

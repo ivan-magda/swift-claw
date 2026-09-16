@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct MemoryTests {
-  @Test func memoryKindHasStableRawValuesAndListingOrder() {
+@Suite
+struct MemoryTests {
+  @Test
+  func memoryKindHasStableRawValuesAndListingOrder() {
     // given / when
     let kinds = MemoryKind.allCases
 
@@ -12,7 +14,8 @@ import Testing
     #expect(kinds.map(\.rawValue) == ["user", "feedback", "project", "reference"])
   }
 
-  @Test func importanceHasSqlSortableOrdinals() {
+  @Test
+  func importanceHasSqlSortableOrdinals() {
     // given / when / then
     #expect(Importance.low.rawValue == 0)
     #expect(Importance.normal.rawValue == 1)
@@ -21,13 +24,10 @@ import Testing
     #expect(Importance.normal > Importance.low)
   }
 
-  @Test func newMemoryItemDefaultsToOwnerNormalMemory() {
+  @Test
+  func newMemoryItemDefaultsToOwnerNormalMemory() {
     // given
-    let item = NewMemoryItem(
-      text: "ship increment 3a",
-      kind: .project,
-      sessionId: 42
-    )
+    let item = NewMemoryItem(text: "ship increment 3a", kind: .project, sessionID: 42)
 
     // then
     #expect(item.text == "ship increment 3a")
@@ -35,10 +35,11 @@ import Testing
     #expect(item.sensitivity == .normal)
     #expect(item.importance == .normal)
     #expect(item.source == .owner)
-    #expect(item.sessionId == 42)
+    #expect(item.sessionID == 42)
   }
 
-  @Test func newMemoryItemAcceptsFullInitializerOrder() {
+  @Test
+  func newMemoryItemAcceptsFullInitializerOrder() {
     // given
     let item = NewMemoryItem(
       text: "prefer concise replies",
@@ -46,7 +47,7 @@ import Testing
       sensitivity: .high,
       importance: .low,
       source: .owner,
-      sessionId: 99
+      sessionID: 99
     )
 
     // then
@@ -55,10 +56,11 @@ import Testing
     #expect(item.sensitivity == .high)
     #expect(item.importance == .low)
     #expect(item.source == .owner)
-    #expect(item.sessionId == 99)
+    #expect(item.sessionID == 99)
   }
 
-  @Test func storedMemoryItemCarriesProvenanceAndDate() {
+  @Test
+  func storedMemoryItemCarriesProvenanceAndDate() {
     // given
     let createdAt = Date(timeIntervalSince1970: 100)
 
@@ -70,7 +72,7 @@ import Testing
       sensitivity: .normal,
       importance: .high,
       source: .owner,
-      sessionId: nil,
+      sessionID: nil,
       createdAt: createdAt
     )
 
@@ -81,7 +83,7 @@ import Testing
     #expect(item.sensitivity == .normal)
     #expect(item.importance == .high)
     #expect(item.source == .owner)
-    #expect(item.sessionId == nil)
+    #expect(item.sessionID == nil)
     #expect(item.createdAt == createdAt)
   }
 }

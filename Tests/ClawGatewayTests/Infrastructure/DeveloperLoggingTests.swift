@@ -6,8 +6,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct DeveloperLoggingTests {
-  @Test func levelDefaultsToInfoWhenAbsentBlankOrUnrecognized() {
+@Suite
+struct DeveloperLoggingTests {
+  @Test
+  func levelDefaultsToInfoWhenAbsentBlankOrUnrecognized() {
     // given / when / then
     #expect(DeveloperLogging.level(from: nil) == .info)
     #expect(DeveloperLogging.level(from: "") == .info)
@@ -15,7 +17,8 @@ import Testing
     #expect(DeveloperLogging.level(from: "verbose") == .info)
   }
 
-  @Test func levelParsesSwiftLogRawValuesCaseInsensitively() {
+  @Test
+  func levelParsesSwiftLogRawValuesCaseInsensitively() {
     // given / when / then
     #expect(DeveloperLogging.level(from: "debug") == .debug)
     #expect(DeveloperLogging.level(from: "DEBUG") == .debug)
@@ -24,7 +27,8 @@ import Testing
     #expect(DeveloperLogging.level(from: "critical") == .critical)
   }
 
-  @Test func redactsSecretInterpolatedIntoMessage() {
+  @Test
+  func redactsSecretInterpolatedIntoMessage() {
     // given
     let secret = "1234567:AA-super-secret-bot-token"
     let capture = CaptureBox()
@@ -39,7 +43,8 @@ import Testing
     #expect(line.contains(SecretRedactor.replacement))
   }
 
-  @Test func redactsSecretInStringMetadataValue() {
+  @Test
+  func redactsSecretInStringMetadataValue() {
     // given
     let secret = "sk-live-abcdef-api-key"
     let capture = CaptureBox()
@@ -49,12 +54,16 @@ import Testing
     logger.info("fetch done", metadata: ["url": .string("https://api.example/\(secret)/v1")])
 
     // then
-    let rendered = capture.metadatas.last.map { "\($0)" } ?? ""
+    let rendered =
+      capture.metadatas.last.map {
+        "\($0)"
+      } ?? ""
     #expect(!rendered.contains(secret))
     #expect(rendered.contains(SecretRedactor.replacement))
   }
 
-  @Test func passesThroughNonSecretContentUnchanged() {
+  @Test
+  func passesThroughNonSecretContentUnchanged() {
     // given
     let capture = CaptureBox()
     let logger = Self.redactingLogger(secret: "unused-secret", into: capture)
@@ -66,34 +75,37 @@ import Testing
     #expect(capture.messages.last == "turn finished outcome=completed tokens=1200 usd=0.004")
   }
 
-  @Test func redactsSecretSetAsPersistentMetadata() {
+  @Test
+  func redactsSecretSetAsPersistentMetadata() {
     // given — a secret stamped via the persistent-metadata subscript (merged by the base handler,
     // so it must be scrubbed at ingress, not in log(event:)).
     let secret = "1234:AA-persistent-token"
     let redactor = SecretRedactor(secretValues: [secret])
-    var handler = RedactingLogHandler(
-      base: CapturingLogHandler(box: CaptureBox()),
-      redact: { redactor.redact($0) }
-    )
+    var handler = RedactingLogHandler(base: CapturingLogHandler(box: CaptureBox())) {
+      redactor.redact($0)
+    }
 
     // when
     handler[metadataKey: "authorization"] = .string("Bearer \(secret)")
 
     // then — reading it back reflects what was stored on the base handler.
-    let stored = handler[metadataKey: "authorization"].map { "\($0)" } ?? ""
+    let stored =
+      handler[metadataKey: "authorization"].map {
+        "\($0)"
+      } ?? ""
     #expect(!stored.contains(secret))
     #expect(stored.contains(SecretRedactor.replacement))
   }
 
-  @Test func redactsSecretCarriedByStructuredError() {
+  @Test
+  func redactsSecretCarriedByStructuredError() {
     // given
     let secret = "sk-live-error-embedded-key"
     let redactor = SecretRedactor(secretValues: [secret])
     let capture = CaptureBox()
-    let handler = RedactingLogHandler(
-      base: CapturingLogHandler(box: capture),
-      redact: { redactor.redact($0) }
-    )
+    let handler = RedactingLogHandler(base: CapturingLogHandler(box: capture)) {
+      redactor.redact($0)
+    }
 
     // when — a structured error whose description embeds a secret.
     handler.log(
@@ -110,7 +122,10 @@ import Testing
     )
 
     // then — the base handler receives the error only as redacted metadata.
-    let rendered = capture.metadatas.last.map { "\($0)" } ?? ""
+    let rendered =
+      capture.metadatas.last.map {
+        "\($0)"
+      } ?? ""
     #expect(!rendered.contains(secret))
     #expect(rendered.contains(SecretRedactor.replacement))
   }
@@ -118,7 +133,9 @@ import Testing
   private static func redactingLogger(secret: String, into capture: CaptureBox) -> Logger {
     let redactor = SecretRedactor(secretValues: [secret])
     var logger = Logger(label: "test") { _ in
-      RedactingLogHandler(base: CapturingLogHandler(box: capture), redact: { redactor.redact($0) })
+      RedactingLogHandler(base: CapturingLogHandler(box: capture)) {
+        redactor.redact($0)
+      }
     }
     logger.logLevel = .trace
     return logger
@@ -127,7 +144,10 @@ import Testing
 
 private struct FakeSecretError: Error, CustomStringConvertible {
   let detail: String
-  var description: String { "write failed: \(detail)" }
+
+  var description: String {
+    "write failed: \(detail)"
+  }
 }
 
 /// Thread-safe sink so the test can read back what the wrapped handler received post-redaction.

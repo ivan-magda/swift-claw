@@ -15,10 +15,13 @@ struct ManagedCoderProcessGroup: Sendable {
   let receipt: CoderProcessReceipt
 
   func liveMembers() throws -> [CoderProcessIdentity] {
-    guard let pid = receipt.pid, let pgid = receipt.pgid, pid == pgid,
-      receipt.hostBootID == (try CoderProcessIdentity.bootID()),
-      let leader = try CoderProcessIdentity.read(pid),
-      leader.pgid == pgid, leader.birth == receipt.birthIdentity
+    guard let pid = receipt.pid,
+          let pgid = receipt.pgid,
+          pid == pgid,
+          receipt.hostBootID == (try CoderProcessIdentity.bootID()),
+          let leader = try CoderProcessIdentity.read(pid),
+          leader.pgid == pgid,
+          leader.birth == receipt.birthIdentity
     else {
       throw IdentityError.unreadable
     }
@@ -35,7 +38,9 @@ struct ManagedCoderProcessGroup: Sendable {
       }
       try signal(SIGKILL)
       return try await waitUntilEmpty(for: Self.killGrace)
-    } catch { return false }
+    } catch {
+      return false
+    }
   }
 }
 

@@ -46,10 +46,7 @@ struct SecretsCommand: AsyncParsableCommand {
 
       let secrets: Secrets
       do {
-        secrets = try EnvSecretStore(
-          environment: mergedEnvironment,
-          warn: { _ in }
-        ).loadSecrets()
+        secrets = try EnvSecretStore(environment: mergedEnvironment) { _ in }.loadSecrets()
       } catch let error as SecretStoreError {
         FileHandle.standardError.write(Data("secrets seal: \(error)\n".utf8))
         throw ExitCode(error.exitCode)
@@ -129,9 +126,9 @@ extension SecretsCommand.Seal {
     var merged = environment
     let existingByKey: [String: String?] = [
       EnvSecretStore.EnvKey.botToken: existing.telegramBotToken,
-      EnvSecretStore.EnvKey.llmApiKey: existing.llmApiKey,
-      EnvSecretStore.EnvKey.searchApiKey: existing.searchApiKey,
-      EnvSecretStore.EnvKey.llmFallbackApiKey: existing.llmFallbackApiKey,
+      EnvSecretStore.EnvKey.llmAPIKey: existing.llmAPIKey,
+      EnvSecretStore.EnvKey.searchAPIKey: existing.searchAPIKey,
+      EnvSecretStore.EnvKey.llmFallbackAPIKey: existing.llmFallbackAPIKey,
     ]
 
     for (key, existingValue) in existingByKey {
@@ -175,9 +172,8 @@ extension SecretsCommand.Seal {
 
     let resolvedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
 
-    guard
-      let data = FileManager.default.contents(atPath: resolvedPath),
-      let contents = String(data: data, encoding: .utf8)
+    guard let data = FileManager.default.contents(atPath: resolvedPath),
+          let contents = String(data: data, encoding: .utf8)
     else {
       return .failed(path: resolvedPath, reason: "unreadable or not UTF-8")
     }

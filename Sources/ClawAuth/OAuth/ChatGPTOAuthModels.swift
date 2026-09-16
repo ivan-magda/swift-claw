@@ -122,10 +122,7 @@ public enum ChatGPTOAuthFailure: Error, Sendable, Equatable {
 /// The refresh half of the token endpoint, named separately so the credential source can depend on
 /// the one call it makes rather than on the whole login flow.
 public protocol ChatGPTOAuthRefreshing: Sendable {
-  func refresh(
-    refreshToken: String,
-    timeout: Duration
-  ) async throws -> ChatGPTTokenPair
+  func refresh(refreshToken: String, timeout: Duration) async throws -> ChatGPTTokenPair
 }
 
 public protocol ChatGPTOAuthExchanging: Sendable {

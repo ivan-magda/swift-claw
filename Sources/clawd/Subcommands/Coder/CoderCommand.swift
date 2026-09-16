@@ -30,8 +30,7 @@ struct CoderCommand: ParsableCommand {
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
       let filePath =
-        envFile ?? environment["CLAW_ENV_FILE"]
-        ?? NSHomeDirectory() + "/.swift-claw/clawd.env"
+        envFile ?? environment["CLAW_ENV_FILE"] ?? NSHomeDirectory() + "/.swift-claw/clawd.env"
       let file = try CoderSetupFile(path: filePath)
       let path = try Self.capturePath(environment["PATH"])
 
@@ -60,10 +59,7 @@ struct CoderCommand: ParsableCommand {
         throw ValidationError("Coder checks failed; configuration was not changed.")
       }
 
-      let updates = [
-        AppConfig.EnvKey.coderEnabled: "true",
-        AppConfig.EnvKey.coderPath: path,
-      ]
+      let updates = [AppConfig.EnvKey.coderEnabled: "true", AppConfig.EnvKey.coderPath: path]
       Self.emit(
         """
         \nSettings for \(file.url.path):

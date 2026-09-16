@@ -82,9 +82,9 @@ public enum ClaimedApprovalBootOutcome: Sendable, Equatable {
 }
 
 public struct AssistantTurn: Sendable, Equatable {
-  public let runId: Int64
-  public let sessionId: Int64
-  public let chatId: Int64
+  public let runID: Int64
+  public let sessionID: Int64
+  public let chatID: Int64
   public let content: String
   public let usage: ProviderUsage
   public let chunks: [OutboxChunk]
@@ -99,9 +99,9 @@ public struct AssistantTurn: Sendable, Equatable {
   public let feedbackTarget: NewFeedbackTarget?
 
   public init(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     content: String,
     usage: ProviderUsage,
     chunks: [OutboxChunk],
@@ -111,9 +111,9 @@ public struct AssistantTurn: Sendable, Equatable {
     providerState: ProviderExchangeState? = nil,
     feedbackTarget: NewFeedbackTarget? = nil
   ) {
-    self.runId = runId
-    self.sessionId = sessionId
-    self.chatId = chatId
+    self.runID = runID
+    self.sessionID = sessionID
+    self.chatID = chatID
     self.content = content
     self.usage = usage
     self.chunks = chunks
@@ -126,9 +126,9 @@ public struct AssistantTurn: Sendable, Equatable {
 }
 
 public struct DegradedTurn: Sendable, Equatable {
-  public let runId: Int64
-  public let sessionId: Int64
-  public let chatId: Int64
+  public let runID: Int64
+  public let sessionID: Int64
+  public let chatID: Int64
   public let usage: ProviderUsage?
   public let chunk: OutboxChunk
   public let exchanges: [ToolExchange]
@@ -141,9 +141,9 @@ public struct DegradedTurn: Sendable, Equatable {
   public let cause: TerminalCause
 
   public init(
-    runId: Int64,
-    sessionId: Int64,
-    chatId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
     usage: ProviderUsage?,
     chunk: OutboxChunk,
     exchanges: [ToolExchange] = [],
@@ -151,9 +151,9 @@ public struct DegradedTurn: Sendable, Equatable {
     setPrivateData: Bool = false,
     cause: TerminalCause
   ) {
-    self.runId = runId
-    self.sessionId = sessionId
-    self.chatId = chatId
+    self.runID = runID
+    self.sessionID = sessionID
+    self.chatID = chatID
     self.usage = usage
     self.chunk = chunk
     self.exchanges = exchanges
@@ -186,24 +186,24 @@ public struct RunsHealth: Sendable, Equatable {
 }
 
 public struct DegradationReply: Sendable, Equatable {
-  public let chatId: Int64
-  public let runId: Int64
+  public let chatID: Int64
+  public let runID: Int64
   public let text: String
 
-  public init(chatId: Int64, runId: Int64, text: String) {
-    self.chatId = chatId
-    self.runId = runId
+  public init(chatID: Int64, runID: Int64, text: String) {
+    self.chatID = chatID
+    self.runID = runID
     self.text = text
   }
 }
 
 /// One already-executed observation of the suspending batch, in the order it ran.
 public struct ToolObservationRow: Sendable, Equatable {
-  public let toolCallId: String
+  public let toolCallID: String
   public let content: String
 
-  public init(toolCallId: String, content: String) {
-    self.toolCallId = toolCallId
+  public init(toolCallID: String, content: String) {
+    self.toolCallID = toolCallID
     self.content = content
   }
 }
@@ -219,7 +219,7 @@ public struct SuspendedTurnCommit: Sendable {
 
   public let pending: PendingToolAction
 
-  public let ownerUserId: Int64  // the run's delivery chat id
+  public let ownerUserID: Int64  // the run's delivery chat id
   public let nonce: String  // caller-generated via ApprovalNonce.generate()
 
   public let promptChunks: [OutboxChunk]
@@ -232,6 +232,7 @@ public struct SuspendedTurnCommit: Sendable {
   public let providerState: ProviderExchangeState?
 
   public let expiresTs: Date  // now + approval_expiry
+
   // NOTE: no `usage` field. The suspending round-trip's `provider_usage` row is already written
   // mid-loop by `AgentRuntime` before dispatch (crash-safe), so the commit has nothing left to
   // persist: it carries the checkpoint only, never usage.
@@ -241,7 +242,7 @@ public struct SuspendedTurnCommit: Sendable {
     toolCallsJSON: String,
     completedObservations: [ToolObservationRow],
     pending: PendingToolAction,
-    ownerUserId: Int64,
+    ownerUserID: Int64,
     nonce: String,
     promptChunks: [OutboxChunk],
     setTainted: Bool,
@@ -255,7 +256,7 @@ public struct SuspendedTurnCommit: Sendable {
 
     self.pending = pending
 
-    self.ownerUserId = ownerUserId
+    self.ownerUserID = ownerUserID
     self.nonce = nonce
 
     self.promptChunks = promptChunks
@@ -272,12 +273,12 @@ public struct SuspendedTurnCommit: Sendable {
 /// The suspend commit's outputs the waiter and boot re-park need: the new approval id and the
 /// placeholder observation row's message id (the continuation bound).
 public struct SuspendedCommitReceipt: Sendable, Equatable {
-  public let approvalId: Int64
-  public let observationMessageId: Int64
+  public let approvalID: Int64
+  public let observationMessageID: Int64
 
-  public init(approvalId: Int64, observationMessageId: Int64) {
-    self.approvalId = approvalId
-    self.observationMessageId = observationMessageId
+  public init(approvalID: Int64, observationMessageID: Int64) {
+    self.approvalID = approvalID
+    self.observationMessageID = observationMessageID
   }
 }
 
@@ -332,47 +333,43 @@ public struct ClaimedObservationFill: Sendable, Equatable {
 public protocol RunStore: Sendable {
   /// Restores the original requester and conversation target without treating a group chat as a user.
   func executionContext(
-    runId: Int64,
-    fallbackChatId: Int64
+    runID: Int64,
+    fallbackChatID: Int64
   ) throws(StoreError) -> RunExecutionContext?
 
   /// PENDING → RUNNING through `RunFSM`, returning the run's origin in the same write; nil means
   /// the run is absent or no longer pending (one query, no separate origin read). `policyVersion`
   /// is stamped onto `runs.policy_version` in the SAME UPDATE as the flip; nil records no
   /// fingerprint.
-  func pickUp(
-    runId: Int64,
-    policyVersion: String?,
-    now: Date
-  ) throws(StoreError) -> RunOrigin?
+  func pickUp(runID: Int64, policyVersion: String?, now: Date) throws(StoreError) -> RunOrigin?
+
   /// Atomicity: assistant message + run→DONE + provider_usage + outbox chunk(s) in ONE txn,
   /// committed before any send. If cancellation/supersede already won, records usage only.
-  func commitAssistantTurn(
-    _ turn: AssistantTurn,
-    now: Date
-  ) throws(StoreError) -> RunCommitResult
+  func commitAssistantTurn(_ turn: AssistantTurn, now: Date) throws(StoreError) -> RunCommitResult
+
   /// Failure/degradation commit: executed exchange rows + provider_usage + run→FAILED +
   /// degradation outbox in ONE txn. If cancellation/supersede already won, records usage when
   /// present but writes no reply and no exchanges.
-  func commitDegradedTurn(
-    _ turn: DegradedTurn,
-    now: Date
-  ) throws(StoreError) -> RunCommitResult
+  func commitDegradedTurn(_ turn: DegradedTurn, now: Date) throws(StoreError) -> RunCommitResult
+
   /// RUNNING → FAILED through `RunFSM`; no-ops unless the run is RUNNING. `cause` is the caller's
   /// own reason for failing the run — the terminal receipt records it verbatim.
-  func failRun(runId: Int64, cause: TerminalCause, now: Date) throws(StoreError)
+  func failRun(runID: Int64, cause: TerminalCause, now: Date) throws(StoreError)
+
   /// Boot sweep: every PENDING/RUNNING orphan → FAILED (+ jobFailed for job runs), one
-  /// degradation notice per run that never delivered. `heartbeatNoticeChatId` is the
+  /// degradation notice per run that never delivered. `heartbeatNoticeChatID` is the
   /// config-resolved owner DM for crashed heartbeat runs — their synthetic
   /// session key carries no chat id; nil (heartbeat unconfigured) skips the notice only.
   func reconcileRunsAtBoot(
     now: Date,
     degradationText: String,
-    heartbeatNoticeChatId: Int64?
+    heartbeatNoticeChatID: Int64?
   ) throws(StoreError) -> [DegradationReply]
+
   /// Snapshot of run-table health: in-flight count, age of oldest running run, last
   /// success/failure timestamps, and count of consecutive failures at the head of the table.
   func runsHealth(now: Date) throws(StoreError) -> RunsHealth
+
   /// Suspend checkpoint — ONE txn (mirrors `commitAssistantTurn`): the anchor assistant row
   /// (content + tool_calls JSON), every completed observation, a real PLACEHOLDER observation row
   /// (role tool, the pending toolCallId, content "awaiting owner approval") to pin rowid adjacency,
@@ -380,11 +377,12 @@ public protocol RunStore: Sendable {
   /// `setTainted`/`setPrivateData`, the `approvalRequested` audit, and the approval-prompt outbox
   /// chunk(s). Commit, then send.
   func commitSuspendedTurn(
-    runId: Int64,
-    sessionId: Int64,
+    runID: Int64,
+    sessionID: Int64,
     commit: SuspendedTurnCommit,
     now: Date
   ) throws(StoreError) -> SuspendedCommitReceipt
+
   /// Approve resume, pre-execution half (file_write / web_fetch): one txn, guarded on the
   /// placeholder check (per-approval exactly-once) and the AWAITING_APPROVAL → RUNNING flip. The
   /// caller executes the recorded action ONLY on `.committed` — claiming BEFORE the external
@@ -392,35 +390,38 @@ public protocol RunStore: Sendable {
   /// `.runNotResumable` the placeholder is resolved with `notResumableObservationContent` in the
   /// same txn so history never dangles.
   func claimApprovedExecution(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim
+
   /// Approve resume, post-execution half: UPDATE the claimed placeholder observation in place with
   /// the tool's real result, apply the state-guarded taint/private-data provenance, and append the
   /// `.toolCall` audit — all in ONE transaction, so a fault rolls back content, flags, and audit
   /// together. Only ever called after `claimApprovedExecution` returned `.committed` for the same
   /// ids.
   func fillClaimedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     fill: ClaimedObservationFill
   ) throws(StoreError)
+
   /// memory_write fused path (exactly-once): the memory item insert (via
   /// `MemoryStoreGRDB.insertItem`), the observation UPDATE, and the `.toolCall` audit share ONE
   /// txn, gated by the SAME placeholder + AWAITING_APPROVAL → RUNNING guards as
   /// `claimApprovedExecution` — the side effect is in-DB, so claim and effect fuse instead of
   /// splitting.
   func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     item: NewMemoryItem,
     observationContent: String,
     audit: ApprovedExecutionAudit,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim
+
   /// Boot settlement of the claimed crash window: an APPROVED approval whose observation
   /// is still the placeholder but whose run left AWAITING_APPROVAL means the pre-execution claim
   /// committed and the process died before the result record — whether the external effect landed
@@ -429,23 +430,27 @@ public protocol RunStore: Sendable {
   /// (the generic boot degradation notice is suppressed only when the newest delivered chunk is a
   /// genuine reply rather than an approval prompt).
   func settleClaimedApprovalAtBoot(  // swiftlint:disable:this function_parameter_count
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
-    noticeChatId: Int64,
+    noticeChatID: Int64,
     noticeText: String,
     now: Date
   ) throws(StoreError) -> ClaimedApprovalBootOutcome
+
   /// Budget carry-over inputs: rounds = COUNT(role='assistant'),
   /// toolCalls = COUNT(role='tool') for the run; tokens/costUSD summed over `provider_usage`.
-  func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage
+  func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage
+
   /// The run's origin, read WITHOUT a re-pick-up (the resume path never re-flips PENDING).
-  func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin?
+  func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin?
+
   /// The scheduled job this run fired for, as the fire that created it wrote it and nothing since
   /// has changed it. Nil for every run with no job — inbound turns and heartbeats. The pinned
   /// lesson read compares it against the job its learning binding claims: a lesson set is named by
   /// the pair `(job_id, digest)`, so a digest that resolves is not yet proof of the right owner.
-  func jobId(runId: Int64) throws(StoreError) -> Int64?
+  func jobID(runID: Int64) throws(StoreError) -> Int64?
+
   /// Stale-policy crash-window belt: fail the run (AWAITING_APPROVAL → FAILED), resolve the
   /// placeholder observation with `observationContent` (left dangling it would assert a pending
   /// approval to every later assembly and false-trigger the boot claimed-window settlement), and
@@ -453,12 +458,13 @@ public protocol RunStore: Sendable {
   /// APPROVED (the one documented granted-then-denied pair). Returns false when the run was not
   /// AWAITING.
   func failRunStalePolicy(
-    runId: Int64,
-    sessionId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
     now: Date
   ) throws(StoreError) -> Bool
+
   /// Deny/cancel resolution: fill the placeholder observation row in place with the synthetic
   /// denial `content` so persisted history never holds a dangling tool_call, then drive the run to
   /// its terminal state. `cancel == nil` is the owner-deny / expiry path
@@ -467,18 +473,18 @@ public protocol RunStore: Sendable {
   /// so the FSM no-ops the transition and the method returns `.ignored` after fixing the
   /// observation. One transaction.
   func resolveDeniedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     content: String,
     cancel: CancelReason?,
     now: Date
   ) throws(StoreError) -> RunCommitResult
 }
 
-public extension RunStore {
+extension RunStore {
   /// The no-stamp pick-up (the resume path, which never re-stamps, and every non-interactive
   /// caller): PENDING → RUNNING without touching `runs.policy_version`.
-  func pickUp(runId: Int64, now: Date) throws(StoreError) -> RunOrigin? {
-    try pickUp(runId: runId, policyVersion: nil, now: now)
+  public func pickUp(runID: Int64, now: Date) throws(StoreError) -> RunOrigin? {
+    try pickUp(runID: runID, policyVersion: nil, now: now)
   }
 }

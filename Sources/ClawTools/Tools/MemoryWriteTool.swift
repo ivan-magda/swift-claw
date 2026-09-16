@@ -32,7 +32,10 @@ public struct MemoryWriteTool: Tool {
           "kind": .object([
             "type": .string("string"),
             "enum": .array([
-              .string("user"), .string("feedback"), .string("project"), .string("reference"),
+              .string("user"),
+              .string("feedback"),
+              .string("project"),
+              .string("reference"),
             ]),
           ]),
           "importance": .object([
@@ -52,12 +55,16 @@ public struct MemoryWriteTool: Tool {
     )
   }
 
-  public var timeout: Duration { .seconds(5) }
+  public var timeout: Duration {
+    .seconds(5)
+  }
 
-  public var executesOnlyViaApproval: Bool { true }
+  public var executesOnlyViaApproval: Bool {
+    true
+  }
 
   public func canonicalTarget(arguments: JSONValue) -> CanonicalTargetResolution? {
-    switch MemoryWriteArguments.parse(arguments, sessionId: nil) {
+    switch MemoryWriteArguments.parse(arguments, sessionID: nil) {
     case .invalid(let reason):
       .refused(reason: reason)
     case .parsed(let request):
@@ -69,14 +76,8 @@ public struct MemoryWriteTool: Tool {
     arguments: JSONValue,
     canonicalTarget: String
   ) -> ToolApprovalPresentation {
-    guard
-      case .parsed(let request) = MemoryWriteArguments.parse(arguments, sessionId: nil)
-    else {
-      return ToolApprovalPresentation(
-        blastRadius: "memory item",
-        contentPreview: nil,
-        warnings: []
-      )
+    guard case .parsed(let request) = MemoryWriteArguments.parse(arguments, sessionID: nil) else {
+      return ToolApprovalPresentation(blastRadius: "memory item", contentPreview: nil, warnings: [])
     }
 
     return ToolApprovalPresentation(

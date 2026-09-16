@@ -3,7 +3,8 @@ import GRDB
 import Testing
 
 struct TestDatabaseTests {
-  @Test func copiesIsolateExistingAndFutureFixtures() throws {
+  @Test
+  func copiesIsolateExistingAndFutureFixtures() throws {
     // given
     let first = try TestDatabase.make()
     let second = try TestDatabase.make()

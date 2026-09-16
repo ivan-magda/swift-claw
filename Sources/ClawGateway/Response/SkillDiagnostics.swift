@@ -41,6 +41,8 @@ public struct SkillDiagnostics: Sendable, Equatable {
   }
 }
 
+// MARK: - Diagnostic Sections
+
 private extension SkillDiagnostics {
   static func section(title: String, count: Int, lines: [String]) -> String {
     let body = lines.isEmpty ? ["None."] : lines

@@ -4,14 +4,16 @@ import ClawTestSupport
 import Foundation
 import Testing
 
-@Suite struct GroupMembershipCheckingTests {
+@Suite
+struct GroupMembershipCheckingTests {
   struct MembershipCase: Sendable {
     let status: ChatMembershipStatus
     let presenceJSON: String
     let expected: Bool
   }
 
-  @Test func lookupPostsTheRequestedChatAndUser() async throws {
+  @Test
+  func lookupPostsTheRequestedChatAndUser() async throws {
     // given
     let http = ClawTestSupport.RecordingHTTPExecutor(
       cannedResult: Self.response(Self.memberJSON(status: .member))
@@ -19,7 +21,7 @@ import Testing
     let checker: any GroupMembershipChecking = TelegramClient(token: "T", http: http)
 
     // when
-    _ = try await checker.isCurrentMember(chatId: -100_123, userId: 42)
+    _ = try await checker.isCurrentMember(chatID: -100_123, userID: 42)
 
     // then
     let request = try #require(await http.requests.first)
@@ -50,18 +52,19 @@ import Testing
     let checker = makeClient(json: json)
 
     // when
-    let isMember = try await checker.isCurrentMember(chatId: -100_123, userId: 42)
+    let isMember = try await checker.isCurrentMember(chatID: -100_123, userID: 42)
 
     // then
     #expect(isMember == testCase.expected)
   }
 
-  @Test func anotherUsersMembershipDoesNotAuthorizeTheRequester() async throws {
+  @Test
+  func anotherUsersMembershipDoesNotAuthorizeTheRequester() async throws {
     // given
-    let checker = makeClient(json: Self.memberJSON(status: .member, userId: 99))
+    let checker = makeClient(json: Self.memberJSON(status: .member, userID: 99))
 
     // when
-    let isMember = try await checker.isCurrentMember(chatId: -100_123, userId: 42)
+    let isMember = try await checker.isCurrentMember(chatID: -100_123, userID: 42)
 
     // then
     #expect(!isMember)
@@ -78,8 +81,9 @@ import Testing
 
     // when / then
     await #expect {
-      _ = try await checker.isCurrentMember(chatId: -100_123, userId: 42)
-    } throws: { error in
+      _ = try await checker.isCurrentMember(chatID: -100_123, userID: 42)
+    } throws: {
+      (error) in
       guard case TelegramError.decoding = error else {
         return false
       }
@@ -87,14 +91,16 @@ import Testing
     }
   }
 
-  @Test func transportWithoutMembershipSupportFailsClosed() async {
+  @Test
+  func transportWithoutMembershipSupportFailsClosed() async {
     // given
     let checker: any GroupMembershipChecking = DraftTransport()
 
     // when / then
     await #expect {
-      _ = try await checker.isCurrentMember(chatId: -100_123, userId: 42)
-    } throws: { error in
+      _ = try await checker.isCurrentMember(chatID: -100_123, userID: 42)
+    } throws: {
+      (error) in
       guard case TelegramError.transport = error else {
         return false
       }
@@ -108,21 +114,17 @@ import Testing
 private extension GroupMembershipCheckingTests {
   static func memberJSON(
     status: ChatMembershipStatus,
-    userId: Int64 = 42,
+    userID: Int64 = 42,
     presenceJSON: String = ""
   ) -> String {
     """
     {"status":"\(status.apiValue)",
-     "user":{"id":\(userId),"is_bot":false,"first_name":"Ada"}\(presenceJSON)}
+     "user":{"id":\(userID),"is_bot":false,"first_name":"Ada"}\(presenceJSON)}
     """
   }
 
   static func response(_ member: String) -> HTTPResult {
-    HTTPResult(
-      statusCode: 200,
-      headers: [:],
-      body: Data(#"{"ok":true,"result":\#(member)}"#.utf8)
-    )
+    HTTPResult(statusCode: 200, headers: [:], body: Data(#"{"ok":true,"result":\#(member)}"#.utf8))
   }
 
   func makeClient(json: String) -> TelegramClient {

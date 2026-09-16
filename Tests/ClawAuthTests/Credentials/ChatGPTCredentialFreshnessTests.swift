@@ -3,7 +3,8 @@ import Testing
 
 @testable import ClawAuth
 
-@Suite struct ChatGPTCredentialFreshnessTests {
+@Suite
+struct ChatGPTCredentialFreshnessTests {
   /// An arbitrary fixed wall date. Classification is relative, so the absolute instant is
   /// immaterial — but it must not be `Date()`, or the boundary cases would race the clock.
   static let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -40,7 +41,8 @@ import Testing
 
   // MARK: - Skew Boundary
 
-  @Test func aTokenIsFreshOnlyStrictlyBeyondTheSkew() {
+  @Test
+  func aTokenIsFreshOnlyStrictlyBeyondTheSkew() {
     // given
     // The rule is `expiresAt > now + skew`, so the instant exactly on the skew is not fresh.
     let onTheSkew = Self.now.addingTimeInterval(120)
@@ -51,7 +53,8 @@ import Testing
     #expect(ChatGPTCredentialFreshness.classify(expiresAt: justBeyond, now: Self.now) == .fresh)
   }
 
-  @Test func aTokenIsExpiredAtItsExpiryInstantRatherThanAfterIt() {
+  @Test
+  func aTokenIsExpiredAtItsExpiryInstantRatherThanAfterIt() {
     // given
     let atExpiry = Self.now
     let justBefore = Self.now.addingTimeInterval(-0.001)
@@ -65,7 +68,8 @@ import Testing
 
   // MARK: - Pinned Skew
 
-  @Test func classifyReadsTheSkewFromTheProviderMetadataRatherThanASecondCopy() {
+  @Test
+  func classifyReadsTheSkewFromTheProviderMetadataRatherThanASecondCopy() {
     // given
     // Derives the boundary from the pinned skew, so widening the constant without widening the
     // classifier — or vice versa — fails here rather than silently splitting the two.
@@ -80,7 +84,8 @@ import Testing
 
   // MARK: - Wall-Date Independence
 
-  @Test func classificationFollowsTheSuppliedWallDateNotTheProcessClock() {
+  @Test
+  func classificationFollowsTheSuppliedWallDateNotTheProcessClock() {
     // given
     // A credential that expired long ago in real time is fresh against a `now` that precedes it,
     // which is what lets status, refresh, and doctor share one classifier under an injected date.

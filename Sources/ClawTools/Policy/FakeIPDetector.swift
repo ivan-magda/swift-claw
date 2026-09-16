@@ -49,10 +49,11 @@ public struct FakeIPDetector: FakeIPDetecting {
     var sample: ResolvedAddress?
 
     for host in publicCanaryHosts + [makeNonexistentHost()] {
-      guard
-        let addresses = try? await resolver.resolve(host: host),
-        addresses.isEmpty == false,
-        addresses.allSatisfy({ SSRFGuard.benchmarkRange.contains($0) })
+      guard let addresses = try? await resolver.resolve(host: host),
+            addresses.isEmpty == false,
+            addresses.allSatisfy({
+          SSRFGuard.benchmarkRange.contains($0)
+        })
       else {
         return .inactive
       }

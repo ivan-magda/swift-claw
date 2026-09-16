@@ -66,7 +66,10 @@ extension CoderRequestPreparer {
   static func localIdentity(
     at path: String,
     git: CoderGit
-  ) async throws -> (checkout: String, common: String) {
+  ) async throws -> (
+    checkout: String,
+    common: String
+  ) {
     let directory = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
     let checkout = try await git.text(["rev-parse", "--show-toplevel"], at: directory)
     let common = try await git.text(
@@ -88,8 +91,7 @@ extension CoderRequestPreparer {
       at: directory
     )
     let values = data.split(separator: 0, omittingEmptySubsequences: false)
-    guard values.count == 2, !values[0].isEmpty, values[1].isEmpty
-    else {
+    guard values.count == 2, !values[0].isEmpty, values[1].isEmpty else {
       throw CoderError.invalidRequest("Publication requires one unambiguous GitHub origin URL.")
     }
     let effective = try await git.text(["remote", "get-url", "--all", "origin"], at: directory)

@@ -63,8 +63,10 @@ extension ChatGPTCatalogFailure {
 
 // MARK: - Parsing
 
-@Suite struct ChatGPTModelCatalogParsingTests {
-  @Test func aTopLevelModelsArrayYieldsItsSlugs() throws {
+@Suite
+struct ChatGPTModelCatalogParsingTests {
+  @Test
+  func aTopLevelModelsArrayYieldsItsSlugs() throws {
     // given
     let rows = [
       CatalogFixture.row(slug: "gpt-5.4", priority: .number(1)),
@@ -83,7 +85,8 @@ extension ChatGPTCatalogFailure {
     )
   }
 
-  @Test func anEmptyModelsArrayInventsNothing() throws {
+  @Test
+  func anEmptyModelsArrayInventsNothing() throws {
     // given / when
     let models = try ChatGPTModelCatalog.eligibleModels(in: CatalogFixture.payload([]))
 
@@ -127,7 +130,8 @@ extension ChatGPTCatalogFailure {
 
 // MARK: - Visibility
 
-@Suite struct ChatGPTModelCatalogVisibilityTests {
+@Suite
+struct ChatGPTModelCatalogVisibilityTests {
   /// The allowlist and its opposites in one table. The excluded values are deliberately not the
   /// `hide`/`hidden` a denylist would name: a parser that only refused those would still offer
   /// `internal` and `unlisted`, and this table is what says so.
@@ -177,11 +181,7 @@ extension ChatGPTCatalogFailure {
     ("show_in_picker", JSONValue.number(0), false),
     ("showInPicker", JSONValue.string("false"), false),
   ])
-  func bothPickerSpellingsGateTheRow(
-    key: String,
-    value: JSONValue,
-    isEligible: Bool
-  ) throws {
+  func bothPickerSpellingsGateTheRow(key: String, value: JSONValue, isEligible: Bool) throws {
     // given
     let rows = [CatalogFixture.row(picker: (key: key, value: value))]
 
@@ -192,7 +192,8 @@ extension ChatGPTCatalogFailure {
     #expect(slugs == (isEligible ? [CatalogFixture.slug] : []))
   }
 
-  @Test func anAbsentPickerFlagLeavesTheRowEligible() throws {
+  @Test
+  func anAbsentPickerFlagLeavesTheRowEligible() throws {
     // given
     let rows = [CatalogFixture.row()]
 
@@ -203,7 +204,8 @@ extension ChatGPTCatalogFailure {
     #expect(slugs == [CatalogFixture.slug])
   }
 
-  @Test func aHiddenRowIsDiscardedEvenWhenItsVisibilityIsList() throws {
+  @Test
+  func aHiddenRowIsDiscardedEvenWhenItsVisibilityIsList() throws {
     // given
     let rows = [
       CatalogFixture.row(
@@ -224,7 +226,8 @@ extension ChatGPTCatalogFailure {
 
 // MARK: - Slugs
 
-@Suite struct ChatGPTModelCatalogSlugTests {
+@Suite
+struct ChatGPTModelCatalogSlugTests {
   @Test(arguments: [
     "gpt-5.4",
     "gpt-5.4-codex",
@@ -248,9 +251,9 @@ extension ChatGPTCatalogFailure {
   @Test(arguments: [
     "",
     "gpt 5",
-    "gpt\u{0009}5",
+    "gpt\t5",
     "gpt\n5",
-    "gpt\u{0000}5",
+    "gpt\05",
     "gpt;rm -rf /",
     "$(id)",
     "gpt&5",
@@ -297,7 +300,8 @@ extension ChatGPTCatalogFailure {
 
 // MARK: - Priority
 
-@Suite struct ChatGPTModelCatalogPriorityTests {
+@Suite
+struct ChatGPTModelCatalogPriorityTests {
   @Test(
     arguments: [(JSONValue?, Double)]([
       (nil, ChatGPTCatalogModel.unrankedPriority),
@@ -324,7 +328,8 @@ extension ChatGPTCatalogFailure {
     #expect(models == [ChatGPTCatalogModel(slug: CatalogFixture.slug, priority: expected)])
   }
 
-  @Test func rowsSortByPriorityThenSlug() throws {
+  @Test
+  func rowsSortByPriorityThenSlug() throws {
     // given
     let rows = [
       CatalogFixture.row(slug: "delta", priority: .number(2)),
@@ -340,7 +345,8 @@ extension ChatGPTCatalogFailure {
     #expect(slugs == ["charlie", "bravo", "delta", "alpha"])
   }
 
-  @Test func anUnrankedRowSortsBehindEveryRankedOne() throws {
+  @Test
+  func anUnrankedRowSortsBehindEveryRankedOne() throws {
     // given
     let rows = [
       CatalogFixture.row(slug: "alpha", priority: .number(.nan)),
@@ -358,8 +364,10 @@ extension ChatGPTCatalogFailure {
 
 // MARK: - Dedup and Cap
 
-@Suite struct ChatGPTModelCatalogBoundsTests {
-  @Test func aDuplicateSlugIsKeptOnceAtItsFirstStatedPriority() throws {
+@Suite
+struct ChatGPTModelCatalogBoundsTests {
+  @Test
+  func aDuplicateSlugIsKeptOnceAtItsFirstStatedPriority() throws {
     // given
     let rows = [
       CatalogFixture.row(slug: "gpt-5.4", priority: .number(1)),
@@ -376,7 +384,8 @@ extension ChatGPTCatalogFailure {
 
   /// The row that only a dedup-before-cap parser keeps. A parser that capped first would spend its
   /// whole allowance on one repeated slug and never see the second model at all.
-  @Test func deduplicationPrecedesTheRetainedCap() throws {
+  @Test
+  func deduplicationPrecedesTheRetainedCap() throws {
     // given
     let repeated = Array(
       repeating: CatalogFixture.row(slug: "repeated", priority: .number(1)),
@@ -391,7 +400,8 @@ extension ChatGPTCatalogFailure {
     #expect(slugs == ["repeated", "zulu"])
   }
 
-  @Test func atMostFiveHundredAndTwelveModelsAreRetained() throws {
+  @Test
+  func atMostFiveHundredAndTwelveModelsAreRetained() throws {
     // given
     let rows = (0..<600).map { index in
       CatalogFixture.row(
@@ -409,7 +419,8 @@ extension ChatGPTCatalogFailure {
     #expect(slugs.last == "model-511")
   }
 
-  @Test func exactlyFiveHundredAndTwelveModelsSurviveWhole() throws {
+  @Test
+  func exactlyFiveHundredAndTwelveModelsSurviveWhole() throws {
     // given
     let rows = (0..<ChatGPTModelCatalog.maximumRetainedModels).map { index in
       CatalogFixture.row(
@@ -428,8 +439,10 @@ extension ChatGPTCatalogFailure {
 
 // MARK: - Fetch
 
-@Suite struct ChatGPTModelCatalogFetchTests {
-  @Test func fetchAsksTheFixedModelsURLWithTheSharedAuthorizationHeaders() async throws {
+@Suite
+struct ChatGPTModelCatalogFetchTests {
+  @Test
+  func fetchAsksTheFixedModelsURLWithTheSharedAuthorizationHeaders() async throws {
     // given
     let body = try CatalogFixture.body([CatalogFixture.row(priority: .number(1))])
     let executor = OAuthFixture.executor(
@@ -458,7 +471,8 @@ extension ChatGPTCatalogFailure {
     #expect(request.selectedBodyCap == ChatGPTProviderMetadata.maximumCatalogResponseBytes)
   }
 
-  @Test func aNonSuccessStatusIsUnavailableWithASanitizedDetail() async throws {
+  @Test
+  func aNonSuccessStatusIsUnavailableWithASanitizedDetail() async throws {
     // given
     let executor = OAuthFixture.executor(
       ChatGPTProviderMetadata.modelsURL,
@@ -479,7 +493,8 @@ extension ChatGPTCatalogFailure {
     #expect(detail.contains("pwned") == false)
   }
 
-  @Test func aMalformedSuccessBodyIsUnavailable() async throws {
+  @Test
+  func aMalformedSuccessBodyIsUnavailable() async throws {
     // given
     let executor = OAuthFixture.executor(
       ChatGPTProviderMetadata.modelsURL,
@@ -493,7 +508,8 @@ extension ChatGPTCatalogFailure {
     }
   }
 
-  @Test func aTransportFailureIsUnavailableWithARedactedDetail() async throws {
+  @Test
+  func aTransportFailureIsUnavailableWithARedactedDetail() async throws {
     // given
     let executor = FailingHTTP {
       HTTPTransportFailure(
@@ -512,9 +528,12 @@ extension ChatGPTCatalogFailure {
     #expect(failure.detailText.contains(CatalogFixture.accessToken) == false)
   }
 
-  @Test func cancellationIsRethrownRatherThanReportedAsAnUnavailableCatalog() async throws {
+  @Test
+  func cancellationIsRethrownRatherThanReportedAsAnUnavailableCatalog() async throws {
     // given
-    let executor = FailingHTTP { CancellationError() }
+    let executor = FailingHTTP {
+      CancellationError()
+    }
     let catalog = ChatGPTModelCatalog(http: executor)
 
     // when / then

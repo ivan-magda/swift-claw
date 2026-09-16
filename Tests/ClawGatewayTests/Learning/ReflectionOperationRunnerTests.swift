@@ -6,8 +6,10 @@ import Testing
 @testable import ClawData
 @testable import ClawGateway
 
-@Suite struct ReflectionOperationRunnerTests {
-  @Test func oneTriggerMakesOneFreshToolFreeCallAndAdmitsTheCurrentArtifact() async throws {
+@Suite
+struct ReflectionOperationRunnerTests {
+  @Test
+  func oneTriggerMakesOneFreshToolFreeCallAndAdmitsTheCurrentArtifact() async throws {
     // given
     let env = try ReflectionRunEnvironment.make()
 
@@ -29,7 +31,8 @@ import Testing
     #expect(try env.operationState() == .succeeded)
   }
 
-  @Test func exactRenderedRequestBytesBindAuthorizationAndManifest() async throws {
+  @Test
+  func exactRenderedRequestBytesBindAuthorizationAndManifest() async throws {
     // given
     let env = try ReflectionRunEnvironment.make()
 
@@ -50,7 +53,8 @@ import Testing
     #expect(try env.candidate()?.manifest.carrierDigest == expected)
   }
 
-  @Test func reflectionUsesRosterFailoverWithoutChangingLogicalCallIdentity() async throws {
+  @Test
+  func reflectionUsesRosterFailoverWithoutChangingLogicalCallIdentity() async throws {
     // given
     let env = try ReflectionRunEnvironment.make(
       primaryFailure: ProviderError.quotaLimited(retryAfterSeconds: nil)
@@ -70,21 +74,17 @@ import Testing
     let user = try #require(primary.messages.last?.content.text)
     let expected = CarrierDigest(rawValue: SHA256Digest.hex(Data(user.utf8)))
     #expect(try env.reflectorOperationCount() == 1)
-    #expect(
-      try env.operationProviderCallID()
-        == ProviderCallID(rawValue: "reflection-call-1")
-    )
+    #expect(try env.operationProviderCallID() == ProviderCallID(rawValue: "reflection-call-1"))
     #expect(try env.operationCarrierDigest() == expected)
-    #expect(try env.candidate()?.manifest.operationId == env.reflectorOperationId())
+    #expect(try env.candidate()?.manifest.operationID == env.reflectorOperationID())
     #expect(try env.candidate()?.manifest.carrierDigest == expected)
     #expect(try env.reflectionUsageModel() == ReflectionRunEnvironment.fallbackRoute)
   }
 
-  @Test func nullCandidateClosesWithAReceiptAndNeverRetries() async throws {
+  @Test
+  func nullCandidateClosesWithAReceiptAndNeverRetries() async throws {
     // given
-    let env = try ReflectionRunEnvironment.make(
-      reply: #"{"schema_version":1,"candidate":null}"#
-    )
+    let env = try ReflectionRunEnvironment.make(reply: #"{"schema_version":1,"candidate":null}"#)
 
     // when
     await env.runner.runReflection(trigger: env.trigger, now: env.now)
@@ -97,7 +97,8 @@ import Testing
     #expect(try env.rowCount("learning_candidates") == 0)
   }
 
-  @Test func emptyReplacementRemainsACandidateRatherThanNoCandidate() async throws {
+  @Test
+  func emptyReplacementRemainsACandidateRatherThanNoCandidate() async throws {
     // given — empty equals the initial stable lesson set but remains valid output until Task 13
     let env = try ReflectionRunEnvironment.make(
       reply: #"{"schema_version":1,"candidate":{"lessons":[]}}"#
@@ -113,7 +114,8 @@ import Testing
     #expect(try env.rowCount("learning_decisions") == 0)
   }
 
-  @Test func schemaInvalidReplyFailsWithoutARepairCallOrArtifact() async throws {
+  @Test
+  func schemaInvalidReplyFailsWithoutARepairCallOrArtifact() async throws {
     // given — the nested candidate contains an unknown field
     let env = try ReflectionRunEnvironment.make(
       reply: #"{"schema_version":1,"candidate":{"lessons":[],"extra":true}}"#
@@ -130,7 +132,8 @@ import Testing
     #expect(try env.rowCount("learning_decisions") == 0)
   }
 
-  @Test func exactCarrierNeedingRedactionIsDeniedBeforeTheNetwork() async throws {
+  @Test
+  func exactCarrierNeedingRedactionIsDeniedBeforeTheNetwork() async throws {
     // given
     let secret = "secret-in-evidence-41"
     let env = try ReflectionRunEnvironment.make(
@@ -147,7 +150,8 @@ import Testing
     #expect(try env.failureCode() == .carrierPolicyDenied)
   }
 
-  @Test func candidateSecretLeakFailsAfterOneCallWithoutPersistingBytes() async throws {
+  @Test
+  func candidateSecretLeakFailsAfterOneCallWithoutPersistingBytes() async throws {
     // given
     let secret = "secret-in-candidate-99"
     let env = try ReflectionRunEnvironment.make(
@@ -189,7 +193,8 @@ import Testing
     #expect(try env.reflectorLessonSetCount() == 0)
   }
 
-  @Test func unavailableLearningBudgetRefusesTheCall() async throws {
+  @Test
+  func unavailableLearningBudgetRefusesTheCall() async throws {
     // given — the two source runs already consumed the zero proactive allowance
     let env = try ReflectionRunEnvironment.make(proactivePerDayUSD: 0)
 
@@ -202,7 +207,8 @@ import Testing
     #expect(try env.failureCode() == .budgetDenied)
   }
 
-  @Test func cancelledAndOneShotJobsNeverReachTheReflectionNetwork() async throws {
+  @Test
+  func cancelledAndOneShotJobsNeverReachTheReflectionNetwork() async throws {
     // given
     let cancelled = try ReflectionRunEnvironment.make()
     try cancelled.cancelJob()
@@ -219,7 +225,8 @@ import Testing
     #expect(try oneShot.reflectorOperationCount() == 0)
   }
 
-  @Test func liveTrialAndHardVetoNeverReachTheReflectionNetwork() async throws {
+  @Test
+  func liveTrialAndHardVetoNeverReachTheReflectionNetwork() async throws {
     // given — each source otherwise supports the same recurring-issue trigger
     let liveTrial = try ReflectionRunEnvironment.make()
     try liveTrial.openLiveTrialWithoutPointer()
@@ -237,13 +244,11 @@ import Testing
     #expect(try vetoed.reflectorOperationCount() == 0)
   }
 
-  @Test func admissionFailureAfterDurableFinishNeverRepeatsTheProviderCall() async throws {
+  @Test
+  func admissionFailureAfterDurableFinishNeverRepeatsTheProviderCall() async throws {
     // given
     let logs = RecordingLogCapture()
-    let env = try ReflectionRunEnvironment.make(
-      admissionFails: true,
-      logger: logs.logger()
-    )
+    let env = try ReflectionRunEnvironment.make(admissionFails: true, logger: logs.logger())
 
     // when
     await env.runner.runReflection(trigger: env.trigger, now: env.now)
@@ -258,9 +263,15 @@ import Testing
     #expect(try env.rowCount("learning_trials") == 0)
     #expect(try env.rowCount("learning_decisions") == 0)
     #expect(env.runnerLearning.admissionAttempts == 1)
-    #expect(logs.entries.contains { entry in entry.message.contains("admission was deferred") })
     #expect(
-      logs.entries.contains { entry in entry.message.contains("could not be committed") } == false
+      logs.entries.contains { entry in
+        entry.message.contains("admission was deferred")
+      }
+    )
+    #expect(
+      logs.entries.contains { entry in
+        entry.message.contains("could not be committed")
+      } == false
     )
   }
 }
@@ -277,10 +288,7 @@ private extension ReflectionOperationRunnerTests {
   }
 
   func candidateReply(lesson: String) throws -> String {
-    let object: [String: Any] = [
-      "schema_version": 1,
-      "candidate": ["lessons": [lesson]],
-    ]
+    let object: [String: Any] = ["schema_version": 1, "candidate": ["lessons": [lesson]]]
     let bytes = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     guard let reply = String(data: bytes, encoding: .utf8) else {
       throw StoreError.unexpected("candidate reply was not UTF-8")

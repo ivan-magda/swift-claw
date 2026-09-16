@@ -3,8 +3,10 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct FrontmatterFenceTests {
-  @Test func splitsFrontmatterFromBody() {
+@Suite
+struct FrontmatterFenceTests {
+  @Test
+  func splitsFrontmatterFromBody() {
     // given
     let text = """
       ---
@@ -24,7 +26,8 @@ import Testing
     #expect(document?.body == "# Summarize\n\nStep one.")
   }
 
-  @Test func crlfLineEndingsSplitAtTheSameFences() {
+  @Test
+  func crlfLineEndingsSplitAtTheSameFences() {
     // given — an editor that writes CRLF leaves "\r" on every trimmed fence line
     let text = "---\r\nname: summarize\r\n---\r\nBody line.\r\n"
 
@@ -36,7 +39,8 @@ import Testing
     #expect(document?.body == "Body line.")
   }
 
-  @Test func fencesWithTrailingWhitespaceStillClose() {
+  @Test
+  func fencesWithTrailingWhitespaceStillClose() {
     // given
     let text = "---  \nname: summarize\n---\t\nBody line."
 
@@ -47,7 +51,8 @@ import Testing
     #expect(document?.body == "Body line.")
   }
 
-  @Test func horizontalRuleInsideTheBodyStaysInTheBody() {
+  @Test
+  func horizontalRuleInsideTheBodyStaysInTheBody() {
     // given — the closing fence is the FIRST one after the opener; later rules are content
     let text = """
       ---
@@ -68,7 +73,8 @@ import Testing
     #expect(document?.body == "Intro.\n\n---\n\nOutro.")
   }
 
-  @Test func emptyBodyAfterTheClosingFenceIsEmptyNotNil() {
+  @Test
+  func emptyBodyAfterTheClosingFenceIsEmptyNotNil() {
     // given
     let text = "---\nname: summarize\n---\n"
 
@@ -79,7 +85,8 @@ import Testing
     #expect(document?.body.isEmpty == true)
   }
 
-  @Test func missingOpeningOrClosingFenceYieldsNil() {
+  @Test
+  func missingOpeningOrClosingFenceYieldsNil() {
     // given
     let noOpener = "name: summarize\n---\nBody."
     let noCloser = "---\nname: summarize\nBody."

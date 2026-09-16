@@ -54,7 +54,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           db,
           approval: approval,
           actor: actor?.actor ?? .owner,
-          actorUserId: actor?.userId,
+          actorUserID: actor?.userID,
           action: .approvalDenied,
           decision: .stalePolicy,
           now: now
@@ -75,7 +75,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         db,
         approval: approval,
         actor: actor?.actor ?? .owner,
-        actorUserId: actor?.userId,
+        actorUserID: actor?.userID,
         action: .approvalGranted,
         decision: nil,
         now: now
@@ -115,7 +115,7 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         db,
         approval: approval,
         actor: actor?.actor ?? auditActor,
-        actorUserId: actor?.userId,
+        actorUserID: actor?.userID,
         action: .approvalDenied,
         decision: decision,
         now: now
@@ -246,14 +246,13 @@ public struct ApprovalStoreGRDB: ApprovalStore {
           arguments: [ApprovalState.pending.rawValue]
         ) ?? 0
 
-      let oldestPendingAgeSeconds =
-        try Int64.fetchOne(
-          db,
-          sql: "SELECT MIN(created_ts) FROM approvals WHERE state = ?",
-          arguments: [ApprovalState.pending.rawValue]
-        ).map { oldestEpoch in
-          Int(EpochSecondCodec.epoch(now) - oldestEpoch)
-        }
+      let oldestPendingAgeSeconds = try Int64.fetchOne(
+        db,
+        sql: "SELECT MIN(created_ts) FROM approvals WHERE state = ?",
+        arguments: [ApprovalState.pending.rawValue]
+      ).map { oldestEpoch in
+        Int(EpochSecondCodec.epoch(now) - oldestEpoch)
+      }
 
       return ApprovalsHealth(
         pendingCount: pendingCount,
@@ -277,18 +276,18 @@ extension ApprovalStoreGRDB {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [
-        approval.runId,
-        approval.sessionId,
+        approval.runID,
+        approval.sessionID,
         ApprovalState.pending.rawValue,
         approval.tool,
         approval.canonicalArgsJSON,
         approval.canonicalTarget,
         approval.argsHash,
         approval.policyVersion,
-        approval.ownerUserId,
+        approval.ownerUserID,
         approval.nonce,
-        approval.observationMessageId,
-        approval.toolCallId,
+        approval.observationMessageID,
+        approval.toolCallID,
         approval.reason.rawValue,
         EpochSecondCodec.epoch(approval.createdTs),
         EpochSecondCodec.epoch(approval.expiresTs),
@@ -305,9 +304,8 @@ extension ApprovalStoreGRDB {
     on event: ApprovalEvent,
     now: Date
   ) throws -> ApprovalState? {
-    guard
-      let state = try currentApprovalState(db, id: id),
-      let nextState = ApprovalFSM.reduce(state: state, on: event)
+    guard let state = try currentApprovalState(db, id: id),
+          let nextState = ApprovalFSM.reduce(state: state, on: event)
     else {
       return nil
     }
@@ -320,24 +318,24 @@ extension ApprovalStoreGRDB {
     return nextState
   }
 
-  /// Command-path resolution: CAS every PENDING approval of `runIds` → REJECTED (cancel and
+  /// Command-path resolution: CAS every PENDING approval of `runIDs` → REJECTED (cancel and
   /// supersede both land in REJECTED — the four-state rule; the audit `decision` records why) and
   /// append its `approvalDenied` audit inside the CALLER's transaction (the CAS is the
   /// recorded transition). Returns the resolved ids for the coordinator signals. Reused by
   /// `CommandStoreGRDB.applyStop`/`applyNew` so the run flip and the approval CAS share one commit.
   static func resolvePendingApprovals(
     _ db: Database,
-    runIds: [Int64],
+    runIDs: [Int64],
     decision: ApprovalDecision,
     now: Date
   ) throws -> [Int64] {
-    guard runIds.isEmpty == false else {
+    guard runIDs.isEmpty == false else {
       return []
     }
 
-    let placeholders = databaseQuestionMarks(count: runIds.count)
+    let placeholders = databaseQuestionMarks(count: runIDs.count)
     var arguments: [any DatabaseValueConvertible] = [ApprovalState.pending.rawValue]
-    arguments.append(contentsOf: runIds)
+    arguments.append(contentsOf: runIDs)
     let pending = try fetchApprovals(
       db,
       whereClause: "state = ? AND run_id IN (\(placeholders))",
@@ -411,8 +409,7 @@ private extension ApprovalStoreGRDB {
       db,
       sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause) ORDER BY id ASC",
       arguments: arguments
-    )
-    .map(mapApproval)
+    ).map(mapApproval)
   }
 
   /// Fail closed on a corrupted enum column or missing epoch (same rule as `decodeItem`): a
@@ -426,29 +423,28 @@ private extension ApprovalStoreGRDB {
       throw StoreError.unexpected("approvals row has an unrecognized reason")
     }
 
-    guard
-      let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
-      let expiresTs = EpochSecondCodec.date(fromEpoch: row["expires_ts"])
+    guard let createdTs = EpochSecondCodec.date(fromEpoch: row["created_ts"]),
+          let expiresTs = EpochSecondCodec.date(fromEpoch: row["expires_ts"])
     else {
       throw StoreError.unexpected("approvals row is missing a required timestamp")
     }
 
     return Approval(
       id: row["id"],
-      runId: row["run_id"],
-      sessionId: row["session_id"],
+      runID: row["run_id"],
+      sessionID: row["session_id"],
       state: state,
       tool: row["tool"],
       canonicalArgsJSON: row["canonical_args"],
       canonicalTarget: row["canonical_target"],
       argsHash: row["args_hash"],
       policyVersion: row["policy_version"],
-      ownerUserId: row["owner_user_id"],
+      ownerUserID: row["owner_user_id"],
       nonce: row["nonce"],
-      observationMessageId: row["observation_message_id"],
-      toolCallId: row["tool_call_id"],
+      observationMessageID: row["observation_message_id"],
+      toolCallID: row["tool_call_id"],
       reason: reason,
-      promptMessageId: row["prompt_message_id"],
+      promptMessageID: row["prompt_message_id"],
       createdTs: createdTs,
       expiresTs: expiresTs,
       resolvedTs: EpochSecondCodec.date(fromEpoch: row["resolved_ts"])
@@ -466,7 +462,7 @@ private extension ApprovalStoreGRDB {
     _ db: Database,
     approval: Approval,
     actor: AuditActor,
-    actorUserId: Int64? = nil,
+    actorUserID: Int64? = nil,
     action: AuditAction,
     decision: ApprovalDecision?,
     now: Date
@@ -475,12 +471,12 @@ private extension ApprovalStoreGRDB {
       db,
       AuditEvent(
         actor: actor,
-        actorUserId: actorUserId,
+        actorUserID: actorUserID,
         action: action,
         tool: approval.tool,
         decision: decision?.rawValue ?? "ok",
-        runId: approval.runId,
-        sessionId: approval.sessionId,
+        runID: approval.runID,
+        sessionID: approval.sessionID,
         ts: now
       )
     )

@@ -6,57 +6,65 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct ResultFeedbackCommitTests {
-  @Test func validResultTargetAndFinalChunkKeyboardCommitTogether() throws {
+@Suite
+struct ResultFeedbackCommitTests {
+  @Test
+  func validResultTargetAndFinalChunkKeyboardCommitTogether() throws {
     // given — a running bound scheduled result split across two delivery chunks
     let env = try BoundRunEnvironment.make()
-    let runId = try env.runningBoundRun()
-    let target = try resultTarget(env: env, runId: runId, nonce: "valid-result")
-    let turn = assistantTurn(env: env, runId: runId, target: target)
+    let runID = try env.runningBoundRun()
+    let target = try resultTarget(env: env, runID: runID, nonce: "valid-result")
+    let turn = assistantTurn(env: env, runID: runID, target: target)
 
     // when
     let outcome = try env.runs.commitAssistantTurn(turn, now: env.now)
 
     // then — moving target insertion after the terminal commit breaks their shared visibility
     #expect(outcome == .committed)
-    #expect(try env.learning.feedbackTarget(nonce: target.nonce)?.subjectDigest == String(runId))
+    #expect(try env.learning.feedbackTarget(nonce: target.nonce)?.subjectDigest == String(runID))
     let deliveries = try OutboxStoreGRDB(writer: env.queue).pendingOutbound()
     #expect(deliveries.count == 2)
     #expect(deliveries.first?.replyMarkup == nil)
     #expect(deliveries.last?.replyMarkup == Self.keyboard)
-    #expect(try runState(env, runId: runId) == .done)
+    #expect(try runState(env, runID: runID) == .done)
   }
 
-  @Test func staleMissingOrCollidingTargetKeepsPlainCompletedDelivery() throws {
+  @Test
+  func staleMissingOrCollidingTargetKeepsPlainCompletedDelivery() throws {
     // given — each case invalidates one commit-time feedback predicate after pre-resolution
     for invalidation in ResultTargetInvalidation.allCases {
       let env = try BoundRunEnvironment.make()
-      let runId = try env.runningBoundRun()
-      let target = try resultTarget(env: env, runId: runId, nonce: "invalid-\(invalidation)")
-      try invalidate(invalidation, target: target, env: env, runId: runId)
+      let runID = try env.runningBoundRun()
+      let target = try resultTarget(env: env, runID: runID, nonce: "invalid-\(invalidation)")
+      try invalidate(invalidation, target: target, env: env, runID: runID)
 
       // when
       let outcome = try env.runs.commitAssistantTurn(
-        assistantTurn(env: env, runId: runId, target: target),
+        assistantTurn(env: env, runID: runID, target: target),
         now: env.now
       )
 
       // then — a feedback race never costs the owner the answer or terminal success
       #expect(outcome == .committed)
-      #expect(try runState(env, runId: runId) == .done)
+      #expect(try runState(env, runID: runID) == .done)
       let deliveries = try OutboxStoreGRDB(writer: env.queue).pendingOutbound()
       #expect(deliveries.map(\.payload) == ["first", "answer"])
-      #expect(deliveries.allSatisfy { $0.replyMarkup == nil })
+      #expect(
+        deliveries.allSatisfy {
+          $0.replyMarkup == nil
+        }
+      )
       let stored = try env.learning.feedbackTarget(nonce: target.nonce)
       #expect((stored != nil) == (invalidation == .nonceCollision))
     }
   }
 
-  @Test func feedbackTargetAbortRollsBackTheWholeAssistantCommit() throws {
+  @Test
+  func feedbackTargetAbortRollsBackTheWholeAssistantCommit() throws {
     // given — the target insert fails after the run transition but before the outbox chunks
     let env = try BoundRunEnvironment.make()
-    let runId = try env.runningBoundRun()
-    let target = try resultTarget(env: env, runId: runId, nonce: "target-abort")
+    let runID = try env.runningBoundRun()
+    let target = try resultTarget(env: env, runID: runID, nonce: "target-abort")
     try env.queue.write { db in
       try db.execute(
         sql: """
@@ -69,22 +77,23 @@ import Testing
     // when / then — any split commit would leave at least one of these durable effects behind
     #expect(throws: StoreError.self) {
       _ = try env.runs.commitAssistantTurn(
-        assistantTurn(env: env, runId: runId, target: target),
+        assistantTurn(env: env, runID: runID, target: target),
         now: env.now
       )
     }
-    #expect(try runState(env, runId: runId) == .running)
+    #expect(try runState(env, runID: runID) == .running)
     #expect(try rowCount(env, table: "messages", where: "role = 'assistant'") == 0)
     #expect(try rowCount(env, table: "provider_usage") == 0)
     #expect(try rowCount(env, table: "feedback_targets") == 0)
     #expect(try rowCount(env, table: "outbound_deliveries") == 0)
   }
 
-  @Test func outboxAbortRollsBackTheFeedbackTargetAndAssistantCommit() throws {
+  @Test
+  func outboxAbortRollsBackTheFeedbackTargetAndAssistantCommit() throws {
     // given — target insertion succeeds, then the first owner-delivery insert aborts
     let env = try BoundRunEnvironment.make()
-    let runId = try env.runningBoundRun()
-    let target = try resultTarget(env: env, runId: runId, nonce: "outbox-abort")
+    let runID = try env.runningBoundRun()
+    let target = try resultTarget(env: env, runID: runID, nonce: "outbox-abort")
     try env.queue.write { db in
       try db.execute(
         sql: """
@@ -97,11 +106,11 @@ import Testing
     // when / then — a target may never survive without the keyboard-carrying delivery
     #expect(throws: StoreError.self) {
       _ = try env.runs.commitAssistantTurn(
-        assistantTurn(env: env, runId: runId, target: target),
+        assistantTurn(env: env, runID: runID, target: target),
         now: env.now
       )
     }
-    #expect(try runState(env, runId: runId) == .running)
+    #expect(try runState(env, runID: runID) == .running)
     #expect(try rowCount(env, table: "feedback_targets") == 0)
     #expect(try rowCount(env, table: "messages", where: "role = 'assistant'") == 0)
   }
@@ -121,39 +130,39 @@ private extension ResultFeedbackCommitTests {
 
   func resultTarget(
     env: BoundRunEnvironment,
-    runId: Int64,
+    runID: Int64,
     nonce: String
   ) throws -> NewFeedbackTarget {
-    let binding = try #require(try env.learning.binding(runId: runId))
+    let binding = try #require(try env.learning.binding(runID: runID))
     return NewFeedbackTarget(
       nonce: nonce,
-      jobId: binding.jobId,
+      jobID: binding.jobID,
       epoch: binding.epoch,
       subjectKind: .run,
-      subjectDigest: String(runId),
+      subjectDigest: String(runID),
       allowedActions: [.resultUseful, .resultNotUseful, .resultCorrection],
-      ownerUserId: 777,
-      chatId: 777,
+      ownerUserID: 777,
+      chatID: 777,
       expiresAt: binding.occurrenceAt.addingTimeInterval(EvidenceWindow.maximumAge)
     )
   }
 
   func assistantTurn(
     env: BoundRunEnvironment,
-    runId: Int64,
+    runID: Int64,
     target: NewFeedbackTarget
   ) -> AssistantTurn {
     AssistantTurn(
-      runId: runId,
-      sessionId: env.sessionId,
-      chatId: 777,
+      runID: runID,
+      sessionID: env.sessionID,
+      chatID: 777,
       content: "answer",
-      usage: makeProviderUsage(runId: runId, sessionId: env.sessionId),
+      usage: makeProviderUsage(runID: runID, sessionID: env.sessionID),
       chunks: [
-        OutboxChunk(stepIndex: 0, chatId: 777, payload: "first", payloadHash: "h0"),
+        OutboxChunk(stepIndex: 0, chatID: 777, payload: "first", payloadHash: "h0"),
         OutboxChunk(
           stepIndex: 1,
-          chatId: 777,
+          chatID: 777,
           payload: "answer",
           payloadHash: "h1",
           replyMarkup: Self.keyboard
@@ -167,31 +176,31 @@ private extension ResultFeedbackCommitTests {
     _ invalidation: ResultTargetInvalidation,
     target: NewFeedbackTarget,
     env: BoundRunEnvironment,
-    runId: Int64
+    runID: Int64
   ) throws {
     switch invalidation {
     case .missingBinding:
       try env.queue.write { db in
         try db.execute(
           sql: "DELETE FROM run_learning_bindings WHERE run_id = ?",
-          arguments: [runId]
+          arguments: [runID]
         )
       }
     case .staleEpoch:
       try env.queue.write { db in
         try db.execute(
           sql: "UPDATE job_learning_state SET learning_epoch = learning_epoch + 1 WHERE job_id = ?",
-          arguments: [env.jobId]
+          arguments: [env.jobID]
         )
       }
     case .missingEffectiveSet:
-      let binding = try #require(try env.learning.binding(runId: runId))
+      let binding = try #require(try env.learning.binding(runID: runID))
       try env.queue.writeWithoutTransaction { db in
         try db.execute(sql: "PRAGMA foreign_keys = OFF")
         defer { try? db.execute(sql: "PRAGMA foreign_keys = ON") }
         try db.execute(
           sql: "DELETE FROM lesson_sets WHERE job_id = ? AND digest = ?",
-          arguments: [binding.jobId, binding.effectiveDigest.rawValue]
+          arguments: [binding.jobID, binding.effectiveDigest.rawValue]
         )
       }
     case .nonceCollision:
@@ -199,12 +208,12 @@ private extension ResultFeedbackCommitTests {
     }
   }
 
-  func runState(_ env: BoundRunEnvironment, runId: Int64) throws -> RunState? {
+  func runState(_ env: BoundRunEnvironment, runID: Int64) throws -> RunState? {
     try env.queue.read { db in
       let raw = try String.fetchOne(
         db,
         sql: "SELECT state FROM runs WHERE id = ?",
-        arguments: [runId]
+        arguments: [runID]
       )
       return raw.flatMap(RunState.init(rawValue:))
     }

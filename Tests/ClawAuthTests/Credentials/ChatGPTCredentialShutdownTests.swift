@@ -10,7 +10,8 @@ import Testing
 /// is the only boundary that decides whether a rotation is accepted or abandoned.
 @Suite(.timeLimit(.minutes(1)))
 struct ChatGPTCredentialShutdownTests {
-  @Test func shutdownBeforeAPairIsDecodedAcceptsNothing() async throws {
+  @Test
+  func shutdownBeforeAPairIsDecodedAcceptsNothing() async throws {
     // given — a flight parked short of any answer, which reports the cancellation it is handed
     let release = AsyncGate()
     defer { release.open() }
@@ -41,7 +42,8 @@ struct ChatGPTCredentialShutdownTests {
     }
   }
 
-  @Test func aPairDecodedAsShutdownCancelsIsStillCommitted() async throws {
+  @Test
+  func aPairDecodedAsShutdownCancelsIsStillCommitted() async throws {
     // given — a flight whose answer arrives exactly when cancellation reaches it, so the handoff and
     // the cancellation are genuinely racing rather than merely ordered by the test
     let commitPoint = AsyncGate()
@@ -81,7 +83,8 @@ struct ChatGPTCredentialShutdownTests {
     #expect(late == .shuttingDown)
   }
 
-  @Test func shutdownWaitsOutNetworkWorkBeforeReturning() async throws {
+  @Test
+  func shutdownWaitsOutNetworkWorkBeforeReturning() async throws {
     // given — a flight that ignores cancellation, standing in for a transport still mid-exchange.
     // Composition closes the HTTP client only after this call returns, so returning early would pull
     // the transport out from under a rotation that is still being decided.
@@ -125,7 +128,8 @@ struct ChatGPTCredentialShutdownTests {
     }
   }
 
-  @Test func shutdownFromPendingPersistenceRetriesOnlyTheWrite() async throws {
+  @Test
+  func shutdownFromPendingPersistenceRetriesOnlyTheWrite() async throws {
     // given — a rotation that reached the actor but could not be written
     let store = RecordingCredentialStore(failing: .publicationFailed)
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
@@ -149,7 +153,8 @@ struct ChatGPTCredentialShutdownTests {
     #expect(await oauth.callCount == 1)
   }
 
-  @Test func aPersistentWriteFailureIsReportedRatherThanSwallowed() async throws {
+  @Test
+  func aPersistentWriteFailureIsReportedRatherThanSwallowed() async throws {
     // given
     let store = RecordingCredentialStore(failing: .publicationFailed)
     let oauth = ScriptedRefresh([.success(CredentialFixture.pair())])
@@ -174,7 +179,8 @@ struct ChatGPTCredentialShutdownTests {
 
   /// The clean-stop counterpart: without it, every case above would still pass against a `shutdown()`
   /// that threw unconditionally.
-  @Test func aQuietShutdownSucceedsAndThenRefusesNewCallers() async throws {
+  @Test
+  func aQuietShutdownSucceedsAndThenRefusesNewCallers() async throws {
     // given
     let oauth = ScriptedRefresh()
     let source = CredentialFixture.source(
@@ -194,7 +200,8 @@ struct ChatGPTCredentialShutdownTests {
     #expect(await oauth.callCount == 0)
   }
 
-  @Test func shutdownResumesEveryWaiterExactlyOnce() async throws {
+  @Test
+  func shutdownResumesEveryWaiterExactlyOnce() async throws {
     // given
     let release = AsyncGate()
     defer { release.open() }

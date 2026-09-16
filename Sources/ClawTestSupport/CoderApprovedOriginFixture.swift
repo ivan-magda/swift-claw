@@ -32,31 +32,26 @@ public enum CoderApprovedOriginFixture {
         now: now
       )
     )
-    let runID = try required(claim.runId)
-    let sessionID = try required(claim.sessionId)
+    let runID = try required(claim.runID)
+    let sessionID = try required(claim.sessionID)
     let pickedUpOrigin = try required(
-      try runs.pickUp(runId: runID, policyVersion: policyVersion, now: now)
+      try runs.pickUp(runID: runID, policyVersion: policyVersion, now: now)
     )
     guard pickedUpOrigin == .interactive else {
       throw StoreError.unexpected("Coder fixture did not create an interactive run")
     }
     let receipt = try runs.commitSuspendedTurn(
-      runId: runID,
-      sessionId: sessionID,
-      commit: approvalCommit(
-        prepared: prepared,
-        chatID: chatID,
-        toolCallID: toolCallID,
-        now: now
-      ),
+      runID: runID,
+      sessionID: sessionID,
+      commit: approvalCommit(prepared: prepared, chatID: chatID, toolCallID: toolCallID, now: now),
       now: now
     )
     let resolution = try approvals.approve(
-      id: receipt.approvalId,
+      id: receipt.approvalID,
       currentPolicyVersion: policyVersion,
       actor: ApprovalResolutionActor(
         actor: groupChatID == nil ? .owner : .groupMember,
-        userId: ownerID
+        userID: ownerID
       ),
       now: now
     )
@@ -64,8 +59,8 @@ public enum CoderApprovedOriginFixture {
       throw StoreError.unexpected("Coder fixture approval was not granted")
     }
     let executionClaim = try runs.claimApprovedExecution(
-      runId: approval.runId,
-      observationMessageId: approval.observationMessageId,
+      runID: approval.runID,
+      observationMessageID: approval.observationMessageID,
       notResumableObservationContent: "The task was stopped before admission.",
       now: now
     )
@@ -73,11 +68,11 @@ public enum CoderApprovedOriginFixture {
       throw StoreError.unexpected("Coder fixture could not claim its approved execution")
     }
     return CoderOrigin(
-      runID: approval.runId,
-      sessionID: approval.sessionId,
+      runID: approval.runID,
+      sessionID: approval.sessionID,
       requesterUserID: ownerID,
       chatID: chatID,
-      toolCallID: approval.toolCallId,
+      toolCallID: approval.toolCallID,
       approvalID: approval.id
     )
   }
@@ -96,16 +91,17 @@ private extension CoderApprovedOriginFixture {
   ) -> InboundMessage {
     let sessionKey =
       groupChatID.map { chatID in
-        SessionKey.telegramTopic(chatId: chatID, threadId: threadID)
-      } ?? SessionKey.telegramDM(chatId: ownerID)
+        SessionKey.telegramTopic(chatID: chatID, threadID: threadID)
+      }
+      ?? SessionKey.telegramDM(chatID: ownerID)
     return InboundMessage(
-      updateId: updateID,
+      updateID: updateID,
       sessionKey: sessionKey,
-      chatId: groupChatID ?? ownerID,
-      userId: ownerID,
+      chatID: groupChatID ?? ownerID,
+      userID: ownerID,
       text: "Use Coder for \(prepared.canonicalSource).",
       isEdited: false,
-      telegramMessageId: 11,
+      telegramMessageID: 11,
       ts: now
     )
   }
@@ -119,8 +115,7 @@ private extension CoderApprovedOriginFixture {
     let canonicalArgsJSON = try required(CanonicalJSON.encode(prepared))
     let task = prepared.request.task ?? "Resolve the issue"
     let blastRadius =
-      "\(prepared.request.workspace.rawValue); local changes; "
-      + "native Codex with network access"
+      "\(prepared.request.workspace.rawValue); local changes; " + "native Codex with network access"
     let recorded = RecordedToolAction(
       tool: CoderToolNames.submit,
       canonicalArgsJSON: canonicalArgsJSON,
@@ -138,16 +133,16 @@ private extension CoderApprovedOriginFixture {
       assistantContent: "I can delegate this repository task to Coder.",
       toolCallsJSON: try proposedToolCalls(prepared: prepared, toolCallID: toolCallID),
       completedObservations: [],
-      pending: PendingToolAction(toolCallId: toolCallID, recorded: recorded),
-      ownerUserId: chatID,
+      pending: PendingToolAction(toolCallID: toolCallID, recorded: recorded),
+      ownerUserID: chatID,
       nonce: ApprovalNonce.generate(),
       promptChunks: [
         OutboxChunk(
           stepIndex: 0,
-          chatId: chatID,
+          chatID: chatID,
           payload: prompt,
           payloadHash: ContentHash.fnv1a(prompt)
-        )
+        ),
       ],
       setTainted: false,
       setPrivateData: false,
@@ -172,7 +167,7 @@ private extension CoderApprovedOriginFixture {
     let proposedArgsJSON = try required(CanonicalJSON.encode(proposedArguments))
     return try required(
       ToolCallCoding.encode([
-        ToolCall(id: toolCallID, name: CoderToolNames.submit, argumentsJSON: proposedArgsJSON)
+        ToolCall(id: toolCallID, name: CoderToolNames.submit, argumentsJSON: proposedArgsJSON),
       ])
     )
   }

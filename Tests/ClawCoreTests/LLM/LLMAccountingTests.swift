@@ -10,7 +10,9 @@ struct ReservationCase: Sendable, CustomTestStringConvertible {
   let payloadByteCounts: [Int?]
   let expected: Int
 
-  var testDescription: String { scenario }
+  var testDescription: String {
+    scenario
+  }
 }
 
 /// Payload bytes are deliberately invalid UTF-8 and the issuer is a plausible-looking identity, so
@@ -31,7 +33,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
   }
 }
 
-@Suite struct LLMAccountingTests {
+@Suite
+struct LLMAccountingTests {
   // MARK: - Input Reservation
 
   /// A cap of 1024 bytes at two tokens each keeps every expectation distinguishable from the two
@@ -83,7 +86,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(reserved == sample.expected)
   }
 
-  @Test func textOnlyReservesNothingEvenWhenHistoryCarriesState() {
+  @Test
+  func textOnlyReservesNothingEvenWhenHistoryCarriesState() {
     // given
     let messages = history([4096, 4096])
 
@@ -94,7 +98,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(reserved == 0)
   }
 
-  @Test func aPathologicalConfigurationSaturatesInsteadOfOverflowing() {
+  @Test
+  func aPathologicalConfigurationSaturatesInsteadOfOverflowing() {
     // given
     let absurd = LLMInputReservationPolicy.replayState(
       tokensPerByte: .max,
@@ -109,7 +114,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(reserved == .max)
   }
 
-  @Test func theChatGPTReservationChargesTwoTokensPerByteAndFramesEachState() {
+  @Test
+  func theChatGPTReservationChargesTwoTokensPerByteAndFramesEachState() {
     // given
     let messages = history([1000])
 
@@ -122,7 +128,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
 
   /// Pins the aggregate cap itself: history well past it must reserve the capped budget, because a
   /// cap set too low would under-reserve — the one direction the reservation may not err.
-  @Test func theChatGPTReservationCapsAggregateBytesAtFourMebibytes() {
+  @Test
+  func theChatGPTReservationCapsAggregateBytesAtFourMebibytes() {
     // given
     let threeMebibytes = 3 * 1024 * 1024
     let messages = history([threeMebibytes, threeMebibytes])
@@ -134,7 +141,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(reserved == 8_389_120)
   }
 
-  @Test func theTextEstimatorNeverAccountsForReplayState() {
+  @Test
+  func theTextEstimatorNeverAccountsForReplayState() {
     // given
     let bare = [ChatMessage(role: .assistant, content: "reply")]
     let stateful = history([4096])
@@ -147,7 +155,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(statefulTokens == bareTokens)
   }
 
-  @Test func messageBudgetSubtractsTheAdvertisedToolDefinitions() {
+  @Test
+  func messageBudgetSubtractsTheAdvertisedToolDefinitions() {
     // given
     let definition = ToolDefinition(
       name: "search",
@@ -172,9 +181,9 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
   // MARK: - Included-Plan Cost
 
   private static let resolver = CostResolver(
-    priceTable: PriceTable(
-      prices: ["gpt-5.4-codex": ModelPrice(inputUSDPerMTok: 5, outputUSDPerMTok: 15)]
-    ),
+    priceTable: PriceTable(prices: [
+      "gpt-5.4-codex": ModelPrice(inputUSDPerMTok: 5, outputUSDPerMTok: 15),
+    ]),
     referenceUSDPerToken: 0.000_01
   )
 
@@ -184,12 +193,14 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     totalTokens: 150
   )
 
-  @Test func theIncludedPlanCostSourceKeepsItsDurableSpelling() {
+  @Test
+  func theIncludedPlanCostSourceKeepsItsDurableSpelling() {
     // given / when / then
     #expect(CostSource.includedPlan.rawValue == "included_plan")
   }
 
-  @Test func includedPlanConfirmsAZeroCostAndIgnoresProviderReportedDollars() {
+  @Test
+  func includedPlanConfirmsAZeroCostAndIgnoresProviderReportedDollars() {
     // given
     let policy = LLMCostPolicy.includedPlan
 
@@ -207,7 +218,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(cost.isEstimated == false)
   }
 
-  @Test func includedPlanOutranksTheVendoredPriceFile() {
+  @Test
+  func includedPlanOutranksTheVendoredPriceFile() {
     // given
     let policy = LLMCostPolicy.includedPlan
 
@@ -224,7 +236,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(cost.source == .includedPlan)
   }
 
-  @Test func meteredStaysTheDefaultPolicy() {
+  @Test
+  func meteredStaysTheDefaultPolicy() {
     // given / when
     let cost = Self.resolver.resolve(
       model: "gpt-5.4-codex",
@@ -237,7 +250,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(cost.costUSD == 1.23)
   }
 
-  @Test func providerReturnedCountsRecordAnIncludedPlanRowAsConfirmed() {
+  @Test
+  func providerReturnedCountsRecordAnIncludedPlanRowAsConfirmed() {
     // given
     let usage = ResolvedUsage(usage: Self.reportedUsage, isEstimated: false)
     let cost = Self.resolver.resolve(
@@ -250,8 +264,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     // when
     let row = ProviderUsage(
       providerCallID: ProviderCallID(rawValue: "call-1"),
-      runId: 1,
-      sessionId: 2,
+      runID: 1,
+      sessionID: 2,
       model: "openai-chatgpt/gpt-5.4-codex",
       usage: usage,
       cost: cost,
@@ -264,7 +278,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     #expect(row.isEstimated == false)
   }
 
-  @Test func missingCountsRecordAnEstimatedIncludedPlanRowWhoseZeroStaysConfirmed() {
+  @Test
+  func missingCountsRecordAnEstimatedIncludedPlanRowWhoseZeroStaysConfirmed() {
     // given
     let usage = UsageResolver().resolve(
       response: ChatResponse(
@@ -285,8 +300,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     // when
     let row = ProviderUsage(
       providerCallID: ProviderCallID(rawValue: "call-1"),
-      runId: 1,
-      sessionId: 2,
+      runID: 1,
+      sessionID: 2,
       model: "openai-chatgpt/gpt-5.4-codex",
       usage: usage,
       cost: cost,
@@ -301,7 +316,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
 
   // MARK: - Provider Call Identity
 
-  @Test func theLiveGeneratorMintsDistinctLowercaseIdentifiers() {
+  @Test
+  func theLiveGeneratorMintsDistinctLowercaseIdentifiers() {
     // given
     let generator: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator()
 
@@ -319,7 +335,8 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
     )
   }
 
-  @Test func migrationAndLiveIdentifiersShareOneDomain() {
+  @Test
+  func migrationAndLiveIdentifiersShareOneDomain() {
     // given
     let legacy = ProviderCallID(rawValue: "legacy:42")
     let live = UUIDProviderCallIDGenerator().next()
@@ -335,10 +352,7 @@ private func history(_ payloadByteCounts: [Int?]) -> [ChatMessage] {
   // MARK: - Failure Accounting
 
   @Test(arguments: [(-5, 0), (0, 0), (7, 7)])
-  func observedCompletionTokensAreClampedToANonnegativeLowerBound(
-    observed: Int,
-    expected: Int
-  ) {
+  func observedCompletionTokensAreClampedToANonnegativeLowerBound(observed: Int, expected: Int) {
     // given / when
     let accounting = ProviderFailureAccounting.mayHaveStarted(observing: observed)
 

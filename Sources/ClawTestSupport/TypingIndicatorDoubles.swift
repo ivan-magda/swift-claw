@@ -8,12 +8,12 @@ package typealias NoopTyping = ClawAgent.NoopTypingIndicator
 /// calling topic" are all observable.
 public actor RecordingTyping: TypingIndicator {
   public struct Pulse: Sendable, Equatable {
-    public let chatId: Int64
-    public let messageThreadId: Int64?
+    public let chatID: Int64
+    public let messageThreadID: Int64?
 
-    public init(chatId: Int64, messageThreadId: Int64?) {
-      self.chatId = chatId
-      self.messageThreadId = messageThreadId
+    public init(chatID: Int64, messageThreadID: Int64?) {
+      self.chatID = chatID
+      self.messageThreadID = messageThreadID
     }
   }
 
@@ -25,8 +25,8 @@ public actor RecordingTyping: TypingIndicator {
 
   public init() {}
 
-  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
-    pulses.append(Pulse(chatId: chatId, messageThreadId: messageThreadId))
+  public func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
+    pulses.append(Pulse(chatID: chatID, messageThreadID: messageThreadID))
   }
 }
 
@@ -65,7 +65,7 @@ public actor GatingTyping: TypingIndicator {
     self.gate = gate
   }
 
-  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
+  public func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
     calls += 1
     await gate.release()
   }
@@ -83,8 +83,8 @@ public actor CountingReleaseTyping: TypingIndicator {
     self.gate = gate
   }
 
-  public func sendTyping(chatId: Int64, messageThreadId: Int64?) async {
-    pulses.append(RecordingTyping.Pulse(chatId: chatId, messageThreadId: messageThreadId))
+  public func sendTyping(chatID: Int64, messageThreadID: Int64?) async {
+    pulses.append(RecordingTyping.Pulse(chatID: chatID, messageThreadID: messageThreadID))
     if pulses.count >= releaseAfter {
       await gate.release()
     }

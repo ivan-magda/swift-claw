@@ -5,8 +5,10 @@ import Testing
 
 @testable import ClawGateway
 
-@Suite struct LearningWorkflowTests {
-  @Test func settlementChain() async throws {
+@Suite
+struct LearningWorkflowTests {
+  @Test
+  func settlementChain() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(reply: EvaluationRunEnvironment.noIssueReply)
     let workflow = LearningWorkflow(
@@ -20,14 +22,16 @@ import Testing
     let service = ScheduledLearningService(
       store: env.learning,
       workflow: workflow,
-      now: { env.now },
+      now: {
+        env.now
+      },
       logger: TestLog.silent
     )
     // when
-    await service.advance(runId: env.runId)
-    await service.advance(runId: env.runId)
+    await service.advance(runID: env.runID)
+    await service.advance(runID: env.runID)
     // then
-    #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
+    #expect(try env.learning.evaluation(runID: env.runID)?.outcome == .noIssue)
     #expect(await env.provider.requests.count == 1)
     #expect(try env.evaluationAuditCount() == 1)
   }
@@ -37,7 +41,8 @@ extension LearningWorkflowTests {
   static let negative =
     #"{"schema_version":1,"outcome":"reusable_issue","issue_codes":["material.missed"]}"#
 
-  @Test func secondNegativeOpensTrialAndNotifies() async throws {
+  @Test
+  func secondNegativeOpensTrialAndNotifies() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(
       reply: Self.negative,
@@ -46,14 +51,14 @@ extension LearningWorkflowTests {
       sealsEvidence: false
     )
     let service = Self.service(env)
-    await service.advance(runId: env.runId)
-    #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
+    await service.advance(runID: env.runID)
+    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
     let second = try env.settledBoundRun()
     // when
-    await service.advance(runId: second)
-    await service.advance(jobId: env.jobId)
+    await service.advance(runID: second)
+    await service.advance(jobID: env.jobID)
     // then
-    let trial = try #require(try env.learning.openTrial(jobId: env.jobId))
+    let trial = try #require(try env.learning.openTrial(jobID: env.jobID))
     #expect(trial.consumedAssignments == 0)
     #expect(await env.provider.requests.count == 3)
     let targets = try env.candidateTargets()
@@ -65,7 +70,8 @@ extension LearningWorkflowTests {
     )
   }
 
-  @Test func sweepRecoversSealedEvidenceAndDeadline() async throws {
+  @Test
+  func sweepRecoversSealedEvidenceAndDeadline() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(
       reply: Self.negative,
@@ -76,18 +82,19 @@ extension LearningWorkflowTests {
     // when
     await service.sweep(now: env.now)
     let second = try env.settledBoundRun()
-    await service.advance(runId: second)
-    let trial = try #require(try env.learning.openTrial(jobId: env.jobId))
+    await service.advance(runID: second)
+    let trial = try #require(try env.learning.openTrial(jobID: env.jobID))
     await service.sweep(now: trial.assignmentDeadline)
     await service.sweep(now: trial.assignmentDeadline)
     // then
-    #expect(try env.learning.evaluation(runId: env.runId) != nil)
-    #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
-    #expect(try env.learning.learningState(jobId: env.jobId)?.stableDigest == trial.baseDigest)
+    #expect(try env.learning.evaluation(runID: env.runID) != nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
+    #expect(try env.learning.learningState(jobID: env.jobID)?.stableDigest == trial.baseDigest)
     #expect(await env.provider.requests.count == 3)
   }
 
-  @Test func terminalReflectionWaitsWithoutRetry() async throws {
+  @Test
+  func terminalReflectionWaitsWithoutRetry() async throws {
     // given
     let env = try ReflectionRunEnvironment.make(reply: #"{"schema_version":1,"candidate":null}"#)
     let workflow = LearningWorkflow(
@@ -101,18 +108,21 @@ extension LearningWorkflowTests {
     let service = ScheduledLearningService(
       store: env.learning,
       workflow: workflow,
-      now: { env.now },
+      now: {
+        env.now
+      },
       logger: TestLog.silent
     )
     // when
-    await service.advance(jobId: env.jobId)
+    await service.advance(jobID: env.jobID)
     await service.sweep(now: env.now)
     // then
     #expect(await env.provider.requests.count == 1)
-    #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
   }
 
-  @Test func budgetDeniedWaitsWithoutRetry() async throws {
+  @Test
+  func budgetDeniedWaitsWithoutRetry() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(
       reply: Self.negative,
@@ -121,34 +131,37 @@ extension LearningWorkflowTests {
     )
     let service = Self.service(env)
     // when
-    await service.advance(runId: env.runId)
+    await service.advance(runID: env.runID)
     await service.sweep(now: env.now)
     // then
     #expect(await env.provider.requests.isEmpty)
     #expect(try env.failureCode() == .budgetDenied)
-    #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
   }
 
-  @Test func failedBootReconciliationNeverDispatches() async throws {
+  @Test
+  func failedBootReconciliationNeverDispatches() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(reply: EvaluationRunEnvironment.noIssueReply)
     env.authorizing.failBootReconciliation = true
     let service = Self.service(env, bootStore: env.authorizing)
     // when
     await service.reconcileAtBoot(now: env.now)
-    await service.advance(runId: env.runId)
+    await service.advance(runID: env.runID)
     await service.sweep(now: env.now)
     // then
     #expect(await env.provider.requests.isEmpty)
-    #expect(try env.learning.evaluation(runId: env.runId) == nil)
+    #expect(try env.learning.evaluation(runID: env.runID) == nil)
     // when
     env.authorizing.failBootReconciliation = false
     await service.sweep(now: env.now)
     // then
-    #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
+    #expect(try env.learning.evaluation(runID: env.runID)?.outcome == .noIssue)
     #expect(await env.provider.requests.count == 1)
   }
 }
+
+// MARK: - Workflow Service Fixtures
 
 private extension LearningWorkflowTests {
   static func service(
@@ -166,14 +179,17 @@ private extension LearningWorkflowTests {
     return ScheduledLearningService(
       store: bootStore ?? env.learning,
       workflow: workflow,
-      now: { env.now },
+      now: {
+        env.now
+      },
       logger: TestLog.silent
     )
   }
 }
 
 extension LearningWorkflowTests {
-  @Test func concurrentAdvancesClaimOneInference() async throws {
+  @Test
+  func concurrentAdvancesClaimOneInference() async throws {
     // given
     let entered = AsyncGate()
     let release = AsyncGate()
@@ -187,18 +203,21 @@ extension LearningWorkflowTests {
     )
     let service = Self.service(env)
     // when
-    let first = Task { await service.advance(runId: env.runId) }
+    let first = Task {
+      await service.advance(runID: env.runID)
+    }
     await entered.wait()
-    await service.advance(runId: env.runId)
+    await service.advance(runID: env.runID)
     #expect(await env.provider.requests.count == 1)
     release.open()
     await first.value
     // then
-    #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
+    #expect(try env.learning.evaluation(runID: env.runID)?.outcome == .noIssue)
     #expect(await env.provider.requests.count == 1)
   }
 
-  @Test func realEditReplyCreatesUnapprovedSuccessorAndRealApprovalAdmitsIt() async throws {
+  @Test
+  func realEditReplyCreatesUnapprovedSuccessorAndRealApprovalAdmitsIt() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(
       reply: Self.negative,
@@ -206,9 +225,9 @@ extension LearningWorkflowTests {
       repeatable: true
     )
     let service = Self.service(env)
-    await service.advance(runId: env.runId)
-    await service.advance(runId: try env.settledBoundRun())
-    let original = try #require(try env.learning.openTrial(jobId: env.jobId))
+    await service.advance(runID: env.runID)
+    await service.advance(runID: try env.settledBoundRun())
+    let original = try #require(try env.learning.openTrial(jobID: env.jobID))
     let target = try #require(try env.candidateTargets().first)
     let router = try env.workflowRouter(service: service)
     // when
@@ -216,14 +235,14 @@ extension LearningWorkflowTests {
     _ = await router.handle(
       rawUpdate: textUpdate(
         id: 2,
-        from: EvaluationRunEnvironment.chatId,
+        from: EvaluationRunEnvironment.chatID,
         text: #"{"lessons":["Report price changes only."]}"#
       )
     )
     await service.waitForPendingWork()
     await service.sweep(now: env.now)
     // then
-    #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
     #expect(await env.provider.requests.count == 3)
     let successorTarget = try #require(
       try env.candidateTargets().first {
@@ -240,42 +259,41 @@ extension LearningWorkflowTests {
     #expect(successor.manifest.predecessorCandidate == original.candidateDigest)
     // when
     _ = await router.handle(
-      rawUpdate: env.callback(
-        target: successorTarget,
-        action: .candidateApprove,
-        id: 3
-      )
+      rawUpdate: env.callback(target: successorTarget, action: .candidateApprove, id: 3)
     )
     await service.waitForPendingWork()
     // then
-    let approved = try #require(try env.learning.openTrial(jobId: env.jobId))
+    let approved = try #require(try env.learning.openTrial(jobID: env.jobID))
     #expect(approved.candidateDigest != successor.digest)
     #expect(approved.replacementDigest == successor.replacement.digest)
     #expect(await env.provider.requests.count == 3)
   }
 
-  @Test func realRollbackTapRestoresRetainedBase() async throws {
+  @Test
+  func realRollbackTapRestoresRetainedBase() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(
       reply: Self.negative,
       followingReplies: [
-        Self.negative, ReflectionRunEnvironment.candidateReply,
-        EvaluationRunEnvironment.noIssueReply, EvaluationRunEnvironment.noIssueReply,
+        Self.negative,
+        ReflectionRunEnvironment.candidateReply,
+        EvaluationRunEnvironment.noIssueReply,
+        EvaluationRunEnvironment.noIssueReply,
       ],
       repeatable: true
     )
     let service = Self.service(env)
-    await service.advance(runId: env.runId)
-    await service.advance(runId: try env.settledBoundRun())
-    await service.advance(runId: try env.settledBoundRun())
-    await service.advance(runId: try env.settledBoundRun())
-    let promotion = try #require(try env.learning.currentPromotion(jobId: env.jobId))
+    await service.advance(runID: env.runID)
+    await service.advance(runID: try env.settledBoundRun())
+    await service.advance(runID: try env.settledBoundRun())
+    await service.advance(runID: try env.settledBoundRun())
+    let promotion = try #require(try env.learning.currentPromotion(jobID: env.jobID))
     let router = try env.workflowRouter(service: service)
     _ = await router.handle(
       rawUpdate: textUpdate(
         id: 10,
-        from: EvaluationRunEnvironment.chatId,
-        text: "/learning \(env.jobId)"
+        from: EvaluationRunEnvironment.chatID,
+        text: "/learning \(env.jobID)"
       )
     )
     let target = try #require(try env.promotionTarget())
@@ -286,14 +304,15 @@ extension LearningWorkflowTests {
     await service.waitForPendingWork()
     // then
     #expect(
-      try env.learning.learningState(jobId: env.jobId)?.stableDigest == promotion.inputs.baseDigest
+      try env.learning.learningState(jobID: env.jobID)?.stableDigest == promotion.inputs.baseDigest
     )
-    #expect(try env.learning.currentPromotion(jobId: env.jobId) == nil)
+    #expect(try env.learning.currentPromotion(jobID: env.jobID) == nil)
   }
 }
 
 extension LearningWorkflowTests {
-  @Test func correctionAcknowledgementDoesNotWaitForReflection() async throws {
+  @Test
+  func correctionAcknowledgementDoesNotWaitForReflection() async throws {
     // given
     let setupFinished = AsyncGate()
     let entered = AsyncGate()
@@ -311,18 +330,18 @@ extension LearningWorkflowTests {
       }
     )
     let service = Self.service(env)
-    await service.advance(runId: env.runId)
+    await service.advance(runID: env.runID)
     setupFinished.open()
-    let state = try #require(try env.learning.learningState(jobId: env.jobId))
+    let state = try #require(try env.learning.learningState(jobID: env.jobID))
     let target = NewFeedbackTarget(
       nonce: "workflow-correction",
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: state.epoch,
       subjectKind: .run,
-      subjectDigest: String(env.runId),
+      subjectDigest: String(env.runID),
       allowedActions: [.resultCorrection],
-      ownerUserId: EvaluationRunEnvironment.chatId,
-      chatId: EvaluationRunEnvironment.chatId,
+      ownerUserID: EvaluationRunEnvironment.chatID,
+      chatID: EvaluationRunEnvironment.chatID,
       expiresAt: env.now.addingTimeInterval(3_600)
     )
     try TestLearningFixtures(writer: env.queue).seedTargets([target])
@@ -335,26 +354,27 @@ extension LearningWorkflowTests {
     let acknowledgement = await router.handle(
       rawUpdate: textUpdate(
         id: 2,
-        from: EvaluationRunEnvironment.chatId,
+        from: EvaluationRunEnvironment.chatID,
         text: "Report material price changes."
       )
     )
     await entered.wait()
     // then
     #expect(acknowledgement == .processed)
-    #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
     release.open()
     await service.waitForPendingWork()
-    #expect(try env.learning.openTrial(jobId: env.jobId) != nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) != nil)
   }
 }
 
 extension LearningWorkflowTests {
-  @Test func sweepRecoversArtifactAbandonedBeforeAdmissionAndNotice() async throws {
+  @Test
+  func sweepRecoversArtifactAbandonedBeforeAdmissionAndNotice() async throws {
     // given
     let env = try ReflectionRunEnvironment.make(admissionFails: true)
     await env.runner.runReflection(trigger: env.trigger, now: env.now)
-    #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
     let workflow = LearningWorkflow(
       store: env.learning,
       jobs: env.jobs,
@@ -366,18 +386,21 @@ extension LearningWorkflowTests {
     let service = ScheduledLearningService(
       store: env.learning,
       workflow: workflow,
-      now: { env.now },
+      now: {
+        env.now
+      },
       logger: TestLog.silent
     )
     // when
     await service.sweep(now: env.now)
     // then
-    #expect(try env.learning.openTrial(jobId: env.jobId) != nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) != nil)
     #expect(try env.rowCount("feedback_targets") > 0)
     #expect(await env.provider.requests.count == 1)
   }
 
-  @Test func reflectorBudgetDenialStopsMidChain() async throws {
+  @Test
+  func reflectorBudgetDenialStopsMidChain() async throws {
     // given
     let env = try ReflectionRunEnvironment.make(proactivePerDayUSD: 0)
     let workflow = LearningWorkflow(
@@ -391,21 +414,24 @@ extension LearningWorkflowTests {
     let service = ScheduledLearningService(
       store: env.learning,
       workflow: workflow,
-      now: { env.now },
+      now: {
+        env.now
+      },
       logger: TestLog.silent
     )
     // when
-    await service.advance(jobId: env.jobId)
+    await service.advance(jobID: env.jobID)
     await service.sweep(now: env.now)
     // then
     #expect(await env.provider.requests.isEmpty)
     #expect(try env.failureCode() == .budgetDenied)
-    #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
+    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
   }
 }
 
 extension LearningWorkflowTests {
-  @Test func transitionBudgetYieldsAndCompletedWindowsDoNotStarveLaterWork() async throws {
+  @Test
+  func transitionBudgetYieldsAndCompletedWindowsDoNotStarveLaterWork() async throws {
     // given
     let transitionLimit = 2
     let windowCount = transitionLimit + 1
@@ -419,13 +445,13 @@ extension LearningWorkflowTests {
       followingReplies: replies,
       repeatable: true
     )
-    await env.runner.runEvaluation(runId: env.runId, now: env.now)
+    await env.runner.runEvaluation(runID: env.runID, now: env.now)
     for index in 1..<evaluationCount {
       let window = index / LearningTrigger.recurringRunThreshold
       let catalog = window == 0 ? "tools-v1" : "tools-version-\(window)"
-      let runId = try env.settledBoundRun(toolCatalog: catalog)
-      try env.learning.sealEvidence(runId: runId, now: env.now)
-      await env.runner.runEvaluation(runId: runId, now: env.now)
+      let runID = try env.settledBoundRun(toolCatalog: catalog)
+      try env.learning.sealEvidence(runID: runID, now: env.now)
+      await env.runner.runEvaluation(runID: runID, now: env.now)
     }
     let logs = RecordingLogCapture()
     let workflow = LearningWorkflow(
@@ -437,27 +463,25 @@ extension LearningWorkflowTests {
       logger: logs.logger()
     )
     // when
-    await workflow.advance(jobId: env.jobId, now: env.now, transitionLimit: transitionLimit)
+    await workflow.advance(jobID: env.jobID, now: env.now, transitionLimit: transitionLimit)
     // then
-    #expect(
-      await env.provider.requests.count
-        == evaluationCount + transitionLimit
-    )
+    #expect(await env.provider.requests.count == evaluationCount + transitionLimit)
     #expect(
       logs.entries.contains {
-        $0.level == .error
-          && $0.message.contains("learning workflow hit its transition budget")
+        $0.level == .error && $0.message.contains("learning workflow hit its transition budget")
       }
     )
     // when
-    await workflow.advance(jobId: env.jobId, now: env.now, transitionLimit: transitionLimit)
+    await workflow.advance(jobID: env.jobID, now: env.now, transitionLimit: transitionLimit)
     // then
     #expect(await env.provider.requests.count == evaluationCount + windowCount)
   }
 }
 
 extension LearningWorkflowTests {
-  enum SourceChange: CaseIterable { case evidence, ownerOutcome }
+  enum SourceChange: CaseIterable {
+    case evidence, ownerOutcome
+  }
 
   @Test(arguments: SourceChange.allCases)
   func actualSourceChangeAfterEditCanReflect(_ change: SourceChange) async throws {
@@ -465,13 +489,14 @@ extension LearningWorkflowTests {
     let newReplies = change == .evidence ? [Self.negative] : []
     let env = try EvaluationRunEnvironment.make(
       reply: Self.negative,
-      followingReplies: [Self.negative, ReflectionRunEnvironment.candidateReply]
-        + newReplies + [#"{"schema_version":1,"candidate":null}"#],
+      followingReplies: [Self.negative, ReflectionRunEnvironment.candidateReply] + newReplies + [
+        #"{"schema_version":1,"candidate":null}"#,
+      ],
       repeatable: true
     )
     let service = Self.service(env)
-    await service.advance(runId: env.runId)
-    await service.advance(runId: try env.settledBoundRun())
+    await service.advance(runID: env.runID)
+    await service.advance(runID: try env.settledBoundRun())
     let candidate = try #require(try env.candidateTargets().first)
     let router = try env.workflowRouter(service: service)
     _ = await router.handle(
@@ -480,7 +505,7 @@ extension LearningWorkflowTests {
     _ = await router.handle(
       rawUpdate: textUpdate(
         id: 2,
-        from: EvaluationRunEnvironment.chatId,
+        from: EvaluationRunEnvironment.chatID,
         text: #"{"lessons":["Report price changes only."]}"#
       )
     )
@@ -489,17 +514,17 @@ extension LearningWorkflowTests {
     // when
     switch change {
     case .evidence:
-      await service.advance(runId: try env.settledBoundRun())
+      await service.advance(runID: try env.settledBoundRun())
     case .ownerOutcome:
       let target = NewFeedbackTarget(
         nonce: "new-source-outcome",
-        jobId: env.jobId,
+        jobID: env.jobID,
         epoch: candidate.epoch,
         subjectKind: .run,
-        subjectDigest: String(env.runId),
+        subjectDigest: String(env.runID),
         allowedActions: [.resultNotUseful],
-        ownerUserId: EvaluationRunEnvironment.chatId,
-        chatId: EvaluationRunEnvironment.chatId,
+        ownerUserID: EvaluationRunEnvironment.chatID,
+        chatID: EvaluationRunEnvironment.chatID,
         expiresAt: candidate.expiresAt
       )
       try TestLearningFixtures(writer: env.queue).seedTargets([target])
@@ -515,31 +540,33 @@ extension LearningWorkflowTests {
 }
 
 extension LearningWorkflowTests {
-  @Test func realNegativeFeedbackDecidesTheOpenTrial() async throws {
+  @Test
+  func realNegativeFeedbackDecidesTheOpenTrial() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(
       reply: Self.negative,
       followingReplies: [
-        Self.negative, ReflectionRunEnvironment.candidateReply,
+        Self.negative,
+        ReflectionRunEnvironment.candidateReply,
         EvaluationRunEnvironment.noIssueReply,
       ],
       repeatable: true
     )
     let service = Self.service(env)
-    await service.advance(runId: env.runId)
-    await service.advance(runId: try env.settledBoundRun())
-    let trial = try #require(try env.learning.openTrial(jobId: env.jobId))
-    let runId = try env.settledBoundRun()
-    await service.advance(runId: runId)
+    await service.advance(runID: env.runID)
+    await service.advance(runID: try env.settledBoundRun())
+    let trial = try #require(try env.learning.openTrial(jobID: env.jobID))
+    let runID = try env.settledBoundRun()
+    await service.advance(runID: runID)
     let target = NewFeedbackTarget(
       nonce: "negative-trial-run",
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: trial.epoch,
       subjectKind: .run,
-      subjectDigest: String(runId),
+      subjectDigest: String(runID),
       allowedActions: [.resultNotUseful],
-      ownerUserId: EvaluationRunEnvironment.chatId,
-      chatId: EvaluationRunEnvironment.chatId,
+      ownerUserID: EvaluationRunEnvironment.chatID,
+      chatID: EvaluationRunEnvironment.chatID,
       expiresAt: trial.assignmentDeadline
     )
     try TestLearningFixtures(writer: env.queue).seedTargets([target])
@@ -551,16 +578,17 @@ extension LearningWorkflowTests {
     )
     await service.waitForPendingWork()
     // then
-    #expect(try env.learning.openTrial(jobId: env.jobId) == nil)
-    #expect(try env.learning.learningState(jobId: env.jobId)?.stableDigest == trial.baseDigest)
+    #expect(try env.learning.openTrial(jobID: env.jobID) == nil)
+    #expect(try env.learning.learningState(jobID: env.jobID)?.stableDigest == trial.baseDigest)
   }
 
-  @Test func bootReturnsAnUnstartedClaimToTheWorkflow() async throws {
+  @Test
+  func bootReturnsAnUnstartedClaimToTheWorkflow() async throws {
     // given
     let env = try EvaluationRunEnvironment.make(reply: EvaluationRunEnvironment.noIssueReply)
-    let evidence = try #require(try env.learning.evidence(runId: env.runId))
+    let evidence = try #require(try env.learning.evidence(runID: env.runID))
     let key = LearningOperationKey(
-      jobId: env.jobId,
+      jobID: env.jobID,
       epoch: evidence.epoch,
       phase: .evaluator,
       sourceDigest: evidence.digest.rawValue,
@@ -574,13 +602,14 @@ extension LearningWorkflowTests {
     await service.reconcileAtBoot(now: env.now)
     await service.sweep(now: env.now)
     // then
-    #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
+    #expect(try env.learning.evaluation(runID: env.runID)?.outcome == .noIssue)
     #expect(await env.provider.requests.count == 1)
   }
 }
 
 extension LearningWorkflowTests {
-  @Test func explicitBootPreservesNotificationStartedInference() async throws {
+  @Test
+  func explicitBootPreservesNotificationStartedInference() async throws {
     // given
     let entered = AsyncGate()
     let release = AsyncGate()
@@ -593,7 +622,7 @@ extension LearningWorkflowTests {
       }
     )
     let service = Self.service(env)
-    await service.notifySettled(runId: env.runId)
+    await service.notifySettled(runID: env.runID)
     await entered.wait()
     // when
     await service.reconcileAtBoot(now: env.now)
@@ -604,7 +633,7 @@ extension LearningWorkflowTests {
     await service.waitForPendingWork()
     await service.sweep(now: env.now)
     #expect(try env.operationState() == .succeeded)
-    #expect(try env.learning.evaluation(runId: env.runId)?.outcome == .noIssue)
+    #expect(try env.learning.evaluation(runID: env.runID)?.outcome == .noIssue)
     #expect(await env.provider.requests.count == 1)
     let usages = try env.learningUsage()
     #expect(usages.count == 1)
@@ -618,7 +647,8 @@ extension LearningWorkflowTests {
 }
 
 extension LearningWorkflowTests {
-  @Test func runtimeCancellationJoinsNotificationStartedInference() async throws {
+  @Test
+  func runtimeCancellationJoinsNotificationStartedInference() async throws {
     // given
     let setupFinished = AsyncGate()
     let entered = AsyncGate()
@@ -629,7 +659,8 @@ extension LearningWorkflowTests {
     let env = try EvaluationRunEnvironment.make(
       reply: Self.negative,
       followingReplies: [
-        Self.negative, EvaluationRunEnvironment.noIssueReply,
+        Self.negative,
+        EvaluationRunEnvironment.noIssueReply,
         #"{"schema_version":1,"candidate":null}"#,
       ],
       repeatable: true,
@@ -644,10 +675,10 @@ extension LearningWorkflowTests {
     )
     let bootStore = RecordingLearningStore(base: env.learning, onUnsealed: sweeping.open)
     let service = Self.service(env, bootStore: bootStore)
-    await service.advance(runId: env.runId)
+    await service.advance(runID: env.runID)
     setupFinished.open()
     let secondRun = try env.settledBoundRun()
-    await service.notifySettled(runId: secondRun)
+    await service.notifySettled(runID: secondRun)
     await entered.wait()
 
     // when
@@ -661,21 +692,21 @@ extension LearningWorkflowTests {
     // then
     #expect(release.isOpen == false)
     #expect(returned.isOpen)
-    #expect(try env.learning.evaluation(runId: secondRun)?.outcome == .reusableIssue)
+    #expect(try env.learning.evaluation(runID: secondRun)?.outcome == .reusableIssue)
     #expect(try env.learningUsage().count == 2)
     #expect(await env.provider.requests.count == 2)
 
     // when
     let lateRun = try env.settledBoundRun()
-    await service.notifySettled(runId: lateRun)
+    await service.notifySettled(runID: lateRun)
     await service.waitForPendingWork()
 
     // then
-    #expect(try env.learning.evaluation(runId: lateRun) == nil)
+    #expect(try env.learning.evaluation(runID: lateRun) == nil)
     #expect(await env.provider.requests.count == 2)
     release.open()
     let restarted = Self.service(env)
     await restarted.sweep(now: env.now)
-    #expect(try env.learning.evaluation(runId: lateRun)?.outcome == .noIssue)
+    #expect(try env.learning.evaluation(runID: lateRun)?.outcome == .noIssue)
   }
 }

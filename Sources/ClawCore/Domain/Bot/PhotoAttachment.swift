@@ -2,21 +2,21 @@ import Foundation
 
 /// One rung of Telegram's server-rendered size ladder.
 public struct PhotoSize: Sendable, Equatable {
-  public let fileId: String
-  public let fileUniqueId: String?
+  public let fileID: String
+  public let fileUniqueID: String?
   public let width: Int
   public let height: Int
   public let fileSizeBytes: Int64?
 
   public init(
-    fileId: String,
-    fileUniqueId: String?,
+    fileID: String,
+    fileUniqueID: String?,
     width: Int,
     height: Int,
     fileSizeBytes: Int64?
   ) {
-    self.fileId = fileId
-    self.fileUniqueId = fileUniqueId
+    self.fileID = fileID
+    self.fileUniqueID = fileUniqueID
     self.width = width
     self.height = height
     self.fileSizeBytes = fileSizeBytes

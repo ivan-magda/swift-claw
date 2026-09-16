@@ -3,23 +3,27 @@ import Testing
 
 @testable import ClawCore
 
-@Suite struct RunBudgetToolPinsTests {
+@Suite
+struct RunBudgetToolPinsTests {
   private func baseEnvironment() -> [String: String] {
     [
       "CLAW_LLM_BASE_URL": "http://localhost:1234/v1",
       "CLAW_LLM_MODEL": "test-model",
-      "CLAW_STATE_ROOT": FileManager.default.temporaryDirectory
-        .appendingPathComponent("claw-test-\(UUID().uuidString)").path,
+      "CLAW_STATE_ROOT": FileManager.default.temporaryDirectory.appendingPathComponent(
+        "claw-test-\(UUID().uuidString)"
+      ).path,
     ]
   }
 
-  @Test func defaultsArePinnedToSpecValues() {
+  @Test
+  func defaultsArePinnedToSpecValues() {
     // given / when / then — §5.3 pins
     #expect(RunBudget.default.maxTurns == 12)
     #expect(RunBudget.default.maxToolCalls == 20)
   }
 
-  @Test func envOverridesParsePositiveIntegers() throws {
+  @Test
+  func envOverridesParsePositiveIntegers() throws {
     // given
     var environment = baseEnvironment()
     environment["CLAW_MAX_TURNS"] = "3"
@@ -33,7 +37,8 @@ import Testing
     #expect(config.budget.maxToolCalls == 7)
   }
 
-  @Test func invalidOverrideFailsClosed() {
+  @Test
+  func invalidOverrideFailsClosed() {
     // given
     var environment = baseEnvironment()
     environment["CLAW_MAX_TURNS"] = "zero"

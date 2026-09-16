@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawMCP
 
-@Suite struct MCPValueBridgeTests {
-  @Test func integerIdentifiersRoundTripWithoutLosingPrecision() {
+@Suite
+struct MCPValueBridgeTests {
+  @Test
+  func integerIdentifiersRoundTripWithoutLosingPrecision() {
     // given
     let identifier = 9_007_199_254_740_993
 

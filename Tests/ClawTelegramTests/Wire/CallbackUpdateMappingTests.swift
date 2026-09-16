@@ -4,8 +4,10 @@ import Testing
 @testable import ClawCore
 @testable import ClawTelegram
 
-@Suite struct CallbackUpdateMappingTests {
-  @Test func mapsCallbackQueryIntoRawUpdateCallback() throws {
+@Suite
+struct CallbackUpdateMappingTests {
+  @Test
+  func mapsCallbackQueryIntoRawUpdateCallback() throws {
     // given — a Bot API update carrying only a callback_query (no message/edited_message)
     let json = """
       {"update_id":77,"callback_query":{"id":"cbX","from":{"id":42},
@@ -21,14 +23,15 @@ import Testing
     let callback = try #require(raw.callback)
     #expect(raw.message == nil)
     #expect(raw.editedMessage == nil)
-    #expect(callback.callbackId == "cbX")
-    #expect(callback.fromUserId == 42)
-    #expect(callback.chatId == 99)
-    #expect(callback.messageId == 9)
+    #expect(callback.callbackID == "cbX")
+    #expect(callback.fromUserID == 42)
+    #expect(callback.chatID == 99)
+    #expect(callback.messageID == 9)
     #expect(callback.data == "apr:NONCE:y")
   }
 
-  @Test func plainMessageUpdateHasNilCallback() throws {
+  @Test
+  func plainMessageUpdateHasNilCallback() throws {
     // given
     let json = """
       {"update_id":78,"message":{"message_id":3,"from":{"id":42},"chat":{"id":42},"text":"hi"}}

@@ -9,37 +9,36 @@ extension RunStoreGRDB {
   static let placeholderObservationContent = "awaiting owner approval"
 
   public func commitSuspendedTurn(
-    runId: Int64,
-    sessionId: Int64,
+    runID: Int64,
+    sessionID: Int64,
     commit: SuspendedTurnCommit,
     now: Date
   ) throws(StoreError) -> SuspendedCommitReceipt {
     try database.writeMapping { db in
-      guard
-        try Self.transitionRun(
-          db,
-          runId: runId,
-          event: .suspendForApproval,
-          now: now,
-          terminal: nil
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: runID,
+        event: .suspendForApproval,
+        now: now,
+        terminal: nil
+      ) != nil
       else {
-        throw StoreError.unexpected("run \(runId) was not RUNNING at suspend commit")
+        throw StoreError.unexpected("run \(runID) was not RUNNING at suspend commit")
       }
 
       let parked = try Self.parkPendingApproval(
         db,
-        runId: runId,
-        sessionId: sessionId,
+        runID: runID,
+        sessionID: sessionID,
         commit: commit,
         now: now
       )
 
       if commit.setTainted {
-        try Self.setSessionTainted(db, sessionId: sessionId, now: now)
+        try Self.setSessionTainted(db, sessionID: sessionID, now: now)
       }
       if commit.setPrivateData {
-        try Self.setSessionPrivateData(db, sessionId: sessionId, now: now)
+        try Self.setSessionPrivateData(db, sessionID: sessionID, now: now)
       }
 
       // No usage insert here — the suspending round's `provider_usage` row was already written
@@ -47,9 +46,9 @@ extension RunStoreGRDB {
 
       try Self.enqueuePromptChunks(
         db,
-        runId: runId,
+        runID: runID,
         chunks: commit.promptChunks,
-        approvalId: parked.approvalId,
+        approvalID: parked.approvalID,
         now: now
       )
 
@@ -61,8 +60,8 @@ extension RunStoreGRDB {
           action: .approvalRequested,
           tool: recorded.tool,
           decision: recorded.reason.rawValue,
-          runId: runId,
-          sessionId: sessionId,
+          runID: runID,
+          sessionID: sessionID,
           ts: now
         )
       )
@@ -70,8 +69,8 @@ extension RunStoreGRDB {
       try suspendCommitFault()
 
       return SuspendedCommitReceipt(
-        approvalId: parked.approvalId,
-        observationMessageId: parked.observationMessageId
+        approvalID: parked.approvalID,
+        observationMessageID: parked.observationMessageID
       )
     }
   }
@@ -88,21 +87,21 @@ extension RunStoreGRDB {
   /// never dangles) and tell the caller nothing may execute.
   static func claimResume(
     _ db: Database,
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     notResumableObservationContent: String,
     now: Date
   ) throws -> ApprovedExecutionClaim {
-    guard try observationIsPlaceholder(db, runId: runId, messageId: observationMessageId) else {
+    guard try observationIsPlaceholder(db, runID: runID, messageID: observationMessageID) else {
       return .alreadyResumed
     }
-    guard
-      try transitionRun(db, runId: runId, event: .resumeApproved, now: now, terminal: nil) != nil
+    guard try transitionRun(db, runID: runID, event: .resumeApproved, now: now, terminal: nil) !=
+          nil
     else {
       try fillApprovedObservation(
         db,
-        runId: runId,
-        messageId: observationMessageId,
+        runID: runID,
+        messageID: observationMessageID,
         content: notResumableObservationContent
       )
       return .runNotResumable
@@ -111,16 +110,16 @@ extension RunStoreGRDB {
   }
 
   public func claimApprovedExecution(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     notResumableObservationContent: String,
     now: Date
   ) throws(StoreError) -> ApprovedExecutionClaim {
     try database.writeMapping { db in
       try Self.claimResume(
         db,
-        runId: runId,
-        observationMessageId: observationMessageId,
+        runID: runID,
+        observationMessageID: observationMessageID,
         notResumableObservationContent: notResumableObservationContent,
         now: now
       )
@@ -128,24 +127,78 @@ extension RunStoreGRDB {
   }
 
   public func fillClaimedObservation(
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     fill: ClaimedObservationFill
   ) throws(StoreError) {
     try database.writeMapping { db in
       try Self.fillClaimedObservation(
         db,
-        runId: runId,
-        observationMessageId: observationMessageId,
+        runID: runID,
+        observationMessageID: observationMessageID,
         fill: fill
       )
       try claimedFillFault()
     }
   }
 
+  /// Fills a claimed observation with its result, the state-guarded provenance flags, and the
+  /// `.toolCall` audit in the caller's transaction so all three commit or roll back together.
+  static func fillClaimedObservation(
+    _ db: Database,
+    runID: Int64,
+    observationMessageID: Int64,
+    fill: ClaimedObservationFill
+  ) throws {
+    guard let row = try Row.fetchOne(
+      db,
+      sql: "SELECT session_id, state FROM runs WHERE id = ?",
+      arguments: [runID]
+    ),
+          let state = RunState(rawValue: row["state"])
+    else {
+      throw StoreError.unexpected("run \(runID) is missing or has an unrecognized state")
+    }
+    let sessionID: Int64 = row["session_id"]
+
+    try fillApprovedObservation(
+      db,
+      runID: runID,
+      messageID: observationMessageID,
+      content: fill.content
+    )
+
+    // Provenance follows the run that claimed the action: a running or `/stop`-cancelled window
+    // still owns the taint, but a `/new`-superseded window already detainted, so re-flagging it
+    // would recontaminate the fresh window. The observation and audit above stay truthful either way.
+    if state == .running || state == .cancelled {
+      if fill.setTainted {
+        try setSessionTainted(db, sessionID: sessionID, now: fill.now)
+      }
+      if fill.setPrivateData {
+        try setSessionPrivateData(db, sessionID: sessionID, now: fill.now)
+      }
+    }
+
+    try AuditLogGRDB.insertAudit(
+      db,
+      AuditEvent(
+        actor: .assistant,
+        action: .toolCall,
+        tool: fill.audit.tool,
+        argsRedacted: fill.audit.argsRedacted,
+        resultSize: fill.content.utf8.count,
+        decision: fill.status.rawValue,
+        runID: runID,
+        sessionID: sessionID,
+        ts: fill.now
+      )
+    )
+  }
+
   public func applyApprovedMemoryWrite(  // swiftlint:disable:this function_parameter_count
-    runId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    observationMessageID: Int64,
     item: NewMemoryItem,
     observationContent: String,
     audit: ApprovedExecutionAudit,
@@ -155,8 +208,8 @@ extension RunStoreGRDB {
     try database.writeMapping { db in
       let claim = try Self.claimResume(
         db,
-        runId: runId,
-        observationMessageId: observationMessageId,
+        runID: runID,
+        observationMessageID: observationMessageID,
         notResumableObservationContent: notResumableObservationContent,
         now: now
       )
@@ -169,8 +222,8 @@ extension RunStoreGRDB {
       _ = try MemoryStoreGRDB.insertItem(db, item: item, now: now)
       try Self.fillClaimedObservation(
         db,
-        runId: runId,
-        observationMessageId: observationMessageId,
+        runID: runID,
+        observationMessageID: observationMessageID,
         fill: ClaimedObservationFill(
           content: observationContent,
           status: .ok,
@@ -185,7 +238,7 @@ extension RunStoreGRDB {
     }
   }
 
-  public func resumeUsage(runId: Int64) throws(StoreError) -> ResumeUsage {
+  public func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage {
     try database.readMapping { db in
       let rounds =
         try Int.fetchOne(
@@ -194,7 +247,7 @@ extension RunStoreGRDB {
             SELECT COUNT(*) FROM messages \
             WHERE run_id = ? AND role = '\(MessageRole.assistant.rawValue)'
             """,
-          arguments: [runId]
+          arguments: [runID]
         ) ?? 0
       let toolCalls =
         try Int.fetchOne(
@@ -203,7 +256,7 @@ extension RunStoreGRDB {
             SELECT COUNT(*) FROM messages \
             WHERE run_id = ? AND role = '\(MessageRole.tool.rawValue)'
             """,
-          arguments: [runId]
+          arguments: [runID]
         ) ?? 0
       let tokens =
         try Int.fetchOne(
@@ -212,30 +265,30 @@ extension RunStoreGRDB {
             SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0)
             FROM provider_usage WHERE run_id = ?
             """,
-          arguments: [runId]
+          arguments: [runID]
         ) ?? 0
       let costUSD =
         try Double.fetchOne(
           db,
           sql: "SELECT COALESCE(SUM(cost_usd), 0) FROM provider_usage WHERE run_id = ?",
-          arguments: [runId]
+          arguments: [runID]
         ) ?? 0
       return ResumeUsage(rounds: rounds, toolCalls: toolCalls, tokens: tokens, costUSD: costUSD)
     }
   }
 
-  public func jobId(runId: Int64) throws(StoreError) -> Int64? {
+  public func jobID(runID: Int64) throws(StoreError) -> Int64? {
     try database.readMapping { db in
-      try Int64.fetchOne(db, sql: "SELECT job_id FROM runs WHERE id = ?", arguments: [runId])
+      try Int64.fetchOne(db, sql: "SELECT job_id FROM runs WHERE id = ?", arguments: [runID])
     }
   }
 
-  public func runOrigin(runId: Int64) throws(StoreError) -> RunOrigin? {
+  public func runOrigin(runID: Int64) throws(StoreError) -> RunOrigin? {
     try database.readMapping { db in
       let rawOrigin = try String.fetchOne(
         db,
         sql: "SELECT origin FROM runs WHERE id = ?",
-        arguments: [runId]
+        arguments: [runID]
       )
       guard let rawOrigin else {
         return nil
@@ -243,46 +296,45 @@ extension RunStoreGRDB {
       // Fail closed on a corrupted origin, same rule as `pickUp`: a mislabeled origin would
       // misroute the continuation's budget pool.
       guard let origin = RunOrigin(rawValue: rawOrigin) else {
-        throw StoreError.unexpected("runs row \(runId) has an unrecognized origin")
+        throw StoreError.unexpected("runs row \(runID) has an unrecognized origin")
       }
       return origin
     }
   }
 
   public func failRunStalePolicy(
-    runId: Int64,
-    sessionId: Int64,
-    observationMessageId: Int64,
+    runID: Int64,
+    sessionID: Int64,
+    observationMessageID: Int64,
     observationContent: String,
     now: Date
   ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
-      guard
-        try Self.transitionRun(
-          db,
-          runId: runId,
-          event: .fail,
-          now: now,
-          terminal: .settled(.policyBlocked)
-        ) != nil
+      guard try Self.transitionRun(
+        db,
+        runID: runID,
+        event: .fail,
+        now: now,
+        terminal: .settled(.policyBlocked)
+      ) != nil
       else {
         return false
       }
       try Self.fillApprovedObservation(
         db,
-        runId: runId,
-        messageId: observationMessageId,
+        runID: runID,
+        messageID: observationMessageID,
         content: observationContent
       )
-      try Self.appendJobFailedIfJobRun(db, runId: runId, now: now)
+      try Self.appendJobFailedIfJobRun(db, runID: runID, now: now)
       try AuditLogGRDB.insertAudit(
         db,
         AuditEvent(
           actor: .system,
           action: .approvalDenied,
           decision: ApprovalDecision.stalePolicy.rawValue,
-          runId: runId,
-          sessionId: sessionId,
+          runID: runID,
+          sessionID: sessionID,
           ts: now
         )
       )
@@ -295,8 +347,8 @@ extension RunStoreGRDB {
   /// THIS approval. Same row scoping as `fillApprovedObservation`.
   static func observationIsPlaceholder(
     _ db: Database,
-    runId: Int64,
-    messageId: Int64
+    runID: Int64,
+    messageID: Int64
   ) throws -> Bool {
     try Bool.fetchOne(
       db,
@@ -306,7 +358,7 @@ extension RunStoreGRDB {
           WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)' AND content = ?
         )
         """,
-      arguments: [messageId, runId, placeholderObservationContent]
+      arguments: [messageID, runID, placeholderObservationContent]
     ) ?? false
   }
 
@@ -315,8 +367,8 @@ extension RunStoreGRDB {
   /// synchronize triggers cover the UPDATE — no extra index work.
   static func fillApprovedObservation(
     _ db: Database,
-    runId: Int64,
-    messageId: Int64,
+    runID: Int64,
+    messageID: Int64,
     content: String
   ) throws {
     try db.execute(
@@ -324,62 +376,7 @@ extension RunStoreGRDB {
         UPDATE messages SET content = ? \
         WHERE id = ? AND run_id = ? AND role = '\(MessageRole.tool.rawValue)'
         """,
-      arguments: [content, messageId, runId]
-    )
-  }
-
-  /// Fills a claimed observation with its result, the state-guarded provenance flags, and the
-  /// `.toolCall` audit in the caller's transaction so all three commit or roll back together.
-  static func fillClaimedObservation(
-    _ db: Database,
-    runId: Int64,
-    observationMessageId: Int64,
-    fill: ClaimedObservationFill
-  ) throws {
-    guard
-      let row = try Row.fetchOne(
-        db,
-        sql: "SELECT session_id, state FROM runs WHERE id = ?",
-        arguments: [runId]
-      ),
-      let state = RunState(rawValue: row["state"])
-    else {
-      throw StoreError.unexpected("run \(runId) is missing or has an unrecognized state")
-    }
-    let sessionId: Int64 = row["session_id"]
-
-    try fillApprovedObservation(
-      db,
-      runId: runId,
-      messageId: observationMessageId,
-      content: fill.content
-    )
-
-    // Provenance follows the run that claimed the action: a running or `/stop`-cancelled window
-    // still owns the taint, but a `/new`-superseded window already detainted, so re-flagging it
-    // would recontaminate the fresh window. The observation and audit above stay truthful either way.
-    if state == .running || state == .cancelled {
-      if fill.setTainted {
-        try setSessionTainted(db, sessionId: sessionId, now: fill.now)
-      }
-      if fill.setPrivateData {
-        try setSessionPrivateData(db, sessionId: sessionId, now: fill.now)
-      }
-    }
-
-    try AuditLogGRDB.insertAudit(
-      db,
-      AuditEvent(
-        actor: .assistant,
-        action: .toolCall,
-        tool: fill.audit.tool,
-        argsRedacted: fill.audit.argsRedacted,
-        resultSize: fill.content.utf8.count,
-        decision: fill.status.rawValue,
-        runId: runId,
-        sessionId: sessionId,
-        ts: fill.now
-      )
+      arguments: [content, messageID, runID]
     )
   }
 }
@@ -391,11 +388,11 @@ private extension RunStoreGRDB {
   /// PLACEHOLDER row, then the approval row that points back at the placeholder.
   static func parkPendingApproval(
     _ db: Database,
-    runId: Int64,
-    sessionId: Int64,
+    runID: Int64,
+    sessionID: Int64,
     commit: SuspendedTurnCommit,
     now: Date
-  ) throws -> (approvalId: Int64, observationMessageId: Int64) {
+  ) throws -> (approvalID: Int64, observationMessageID: Int64) {
     // Anchor + completed observations + the PLACEHOLDER, in the one write sequence the
     // exchange-commit path shares, so the column lists cannot drift between them. The PLACEHOLDER
     // goes last: a real `tool` row satisfying the anchor's expected tool_call_id so `HistoryHygiene`
@@ -403,47 +400,47 @@ private extension RunStoreGRDB {
     // edit), and being last leaves `lastInsertedRowID` pointing at it.
     try insertAnchoredObservationRows(
       db,
-      sessionId: sessionId,
-      runId: runId,
+      sessionID: sessionID,
+      runID: runID,
       assistantContent: commit.assistantContent,
       toolCallsJSON: commit.toolCallsJSON,
       providerState: commit.providerState,
       observations: commit.completedObservations.map { observation in
-        (toolCallId: observation.toolCallId, content: observation.content)
-      } + [(toolCallId: commit.pending.toolCallId, content: placeholderObservationContent)],
+        (toolCallID: observation.toolCallID, content: observation.content)
+      } + [(toolCallID: commit.pending.toolCallID, content: placeholderObservationContent)],
       now: now
     )
-    let observationMessageId = db.lastInsertedRowID
+    let observationMessageID = db.lastInsertedRowID
 
     // policy_version copied from the run row IN-txn; empty when unstamped.
     let policyVersion =
       try String.fetchOne(
         db,
         sql: "SELECT policy_version FROM runs WHERE id = ?",
-        arguments: [runId]
+        arguments: [runID]
       ) ?? ""
 
     let recorded = commit.pending.recorded
-    let approvalId = try ApprovalStoreGRDB.insertApproval(
+    let approvalID = try ApprovalStoreGRDB.insertApproval(
       db,
       NewApproval(
-        runId: runId,
-        sessionId: sessionId,
+        runID: runID,
+        sessionID: sessionID,
         tool: recorded.tool,
         canonicalArgsJSON: recorded.canonicalArgsJSON,
         canonicalTarget: recorded.canonicalTarget,
         argsHash: recorded.argsHash,
         policyVersion: policyVersion,
-        ownerUserId: commit.ownerUserId,
+        ownerUserID: commit.ownerUserID,
         nonce: commit.nonce,
-        observationMessageId: observationMessageId,
-        toolCallId: commit.pending.toolCallId,
+        observationMessageID: observationMessageID,
+        toolCallID: commit.pending.toolCallID,
         reason: recorded.reason,
         createdTs: now,
         expiresTs: commit.expiresTs
       )
     )
-    return (approvalId, observationMessageId)
+    return (approvalID, observationMessageID)
   }
 
   /// Stamp the new approval id onto the button-carrying chunk so `markSent` can link
@@ -453,24 +450,24 @@ private extension RunStoreGRDB {
   /// and be dropped silently — the run would park with no prompt for the owner to answer.
   static func enqueuePromptChunks(
     _ db: Database,
-    runId: Int64,
+    runID: Int64,
     chunks: [OutboxChunk],
-    approvalId: Int64,
+    approvalID: Int64,
     now: Date
   ) throws {
-    let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runId: runId)
+    let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runID: runID)
     for chunk in chunks {
       let linked = OutboxChunk(
         stepIndex: chunk.stepIndex,
-        chatId: chunk.chatId,
+        chatID: chunk.chatID,
         payload: chunk.payload,
         payloadHash: chunk.payloadHash,
-        approvalId: chunk.replyMarkup != nil ? approvalId : chunk.approvalId,
+        approvalID: chunk.replyMarkup != nil ? approvalID : chunk.approvalID,
         replyMarkup: chunk.replyMarkup
       )
       _ = try OutboxInsertion.insertOutbox(
         db,
-        runId: runId,
+        runID: runID,
         chunk: OutboxInsertion.shiftedChunk(linked, by: stepBase),
         now: now
       )

@@ -5,21 +5,20 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct V10MigrationTests {
+@Suite
+struct V10MigrationTests {
   private static let seededAt = Date(timeIntervalSince1970: 1_700_000_000)
 
   // MARK: - Legacy Upgrade
 
-  @Test func vTenAddsTheTelegramAddressingColumnsWithoutTouchingExistingRows() throws {
+  @Test
+  func vTenAddsTheTelegramAddressingColumnsWithoutTouchingExistingRows() throws {
     // given — a populated v9 database, i.e. rows written before the columns existed
     let queue = try ClawDatabase.makeInMemoryQueue()
     try Self.seedVNine(queue)
     let legacyRun = try queue.read { db in
       let row = try #require(try Row.fetchOne(db, sql: "SELECT * FROM runs"))
-      return (
-        id: row["id"] as Int64,
-        triggerMessageId: row["trigger_message_id"] as Int64
-      )
+      return (id: row["id"] as Int64, triggerMessageID: row["trigger_message_id"] as Int64)
     }
 
     // when
@@ -32,7 +31,7 @@ import Testing
     #expect(runs.count == 1)
     #expect(runs[0]["id"] == legacyRun.id)
     #expect(runs[0]["state"] == "DONE")
-    #expect(runs[0]["trigger_message_id"] == legacyRun.triggerMessageId)
+    #expect(runs[0]["trigger_message_id"] == legacyRun.triggerMessageID)
     #expect((runs[0]["trigger_telegram_message_id"] as Int64?) == nil)
 
     // and the delivery survives with null topic and reply-target columns

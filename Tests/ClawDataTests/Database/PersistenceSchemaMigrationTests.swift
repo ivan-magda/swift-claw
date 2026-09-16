@@ -4,8 +4,10 @@ import Testing
 
 @testable import ClawData
 
-@Suite struct PersistenceSchemaMigrationTests {
-  @Test func createsPersistenceTables() throws {
+@Suite
+struct PersistenceSchemaMigrationTests {
+  @Test
+  func createsPersistenceTables() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 
@@ -26,12 +28,18 @@ import Testing
     }
     #expect(
       tables.isSuperset(of: [
-        "sessions", "messages", "runs", "provider_usage", "outbound_deliveries", "audit_events",
+        "sessions",
+        "messages",
+        "runs",
+        "provider_usage",
+        "outbound_deliveries",
+        "audit_events",
       ])
     )
   }
 
-  @Test func foreignKeysAreEnforced() throws {
+  @Test
+  func foreignKeysAreEnforced() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
     try ClawDatabase.migrate(queue)
@@ -56,7 +64,8 @@ import Testing
     }
   }
 
-  @Test func migrationV3AddsLaneLifecycleColumns() throws {
+  @Test
+  func migrationV3AddsLaneLifecycleColumns() throws {
     // given
     let queue = try ClawDatabase.makeInMemoryQueue()
 

@@ -4,10 +4,12 @@ import Testing
 
 @testable import ClawTelegram
 
-@Suite struct PhotoWireTests {
+@Suite
+struct PhotoWireTests {
   private let decoder = JSONDecoder()
 
-  @Test func photoUpdateCapturesTheWholeSizeLadder() throws {
+  @Test
+  func photoUpdateCapturesTheWholeSizeLadder() throws {
     // given — a getUpdates payload carrying a real-client compressed photo
     let json = """
       {
@@ -36,7 +38,7 @@ import Testing
     // then — every rung survives, and the caption rides alongside rather than replacing it
     let photo = try #require(raw.photo)
     #expect(photo.sizes.count == 3)
-    #expect(photo.sizes.map(\.fileId) == ["s-id", "x-id", "y-id"])
+    #expect(photo.sizes.map(\.fileID) == ["s-id", "x-id", "y-id"])
     #expect(photo.sizes[2].width == 1280)
     #expect(photo.sizes[2].height == 960)
     #expect(photo.sizes[2].fileSizeBytes == 186_422)
@@ -44,7 +46,8 @@ import Testing
     #expect(raw.mediaKind == PhotoAttachment.mediaKindDescription)
   }
 
-  @Test func rungsWithOptionalFieldsAbsentStillDecode() throws {
+  @Test
+  func rungsWithOptionalFieldsAbsentStillDecode() throws {
     // given — file_size is emitted only when non-zero, per the Bot API
     let json = """
       {
@@ -66,10 +69,11 @@ import Testing
     let photo = try #require(raw.photo)
     #expect(photo.sizes.count == 1)
     #expect(photo.sizes[0].fileSizeBytes == nil)
-    #expect(photo.sizes[0].fileUniqueId == nil)
+    #expect(photo.sizes[0].fileUniqueID == nil)
   }
 
-  @Test func malformedRungsDegradeToPresenceOnlyWithoutFailingTheBatch() throws {
+  @Test
+  func malformedRungsDegradeToPresenceOnlyWithoutFailingTheBatch() throws {
     // given — a rung missing file_id, which no future API shape may be allowed to turn into a
     // decode failure that stalls the whole getUpdates batch
     let json = """

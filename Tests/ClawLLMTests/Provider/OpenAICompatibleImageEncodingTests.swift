@@ -5,7 +5,8 @@ import Testing
 
 @testable import ClawLLM
 
-@Suite struct OpenAICompatibleImageEncodingTests {
+@Suite
+struct OpenAICompatibleImageEncodingTests {
   /// Calls the wire encoder directly. The empty script is not a stub the encoder reaches — it makes
   /// an accidental dispatch throw rather than quietly pass.
   private func encodedBody(for request: ChatRequest) throws -> [String: Any] {
@@ -13,7 +14,8 @@ import Testing
     return try decodeBody(provider.encode(request: request))
   }
 
-  @Test func textOnlyMessagesStillEncodeContentAsAString() throws {
+  @Test
+  func textOnlyMessagesStillEncodeContentAsAString() throws {
     // given — the compatibility guarantee: no existing turn may change shape on the wire
     let request = ChatRequest(
       model: "gpt-5.4",
@@ -29,7 +31,8 @@ import Testing
     #expect(content as? String == "hi")
   }
 
-  @Test func imagePartsEncodeAsAnImageUrlContentArray() throws {
+  @Test
+  func imagePartsEncodeAsAnImageURLContentArray() throws {
     // given
     let content = MessageContent(parts: [.image(samplePixel), .text("what is this?")])
     let request = ChatRequest(
