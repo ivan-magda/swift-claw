@@ -34,13 +34,13 @@ SwiftPM package, executable `clawd`. The dependency graph is a layered DAG: **se
 
 ## Code style
 
-- **Google Swift Style Guide is the baseline** — adopted revision, local exceptions, rule ownership, and update policy → `docs/ARCHITECTURE.md` §19.2; contributor workflow → `docs/CODE_STYLE.md`.
-- **Lint gate = `scripts/lint.sh`** — the pinned, ordered SwiftLint/Apple swift-format/targeted layout pipeline is shared by local checks, CI, and editor formatting. Run `scripts/lint.sh --fix`, read the diff it produced, then `scripts/lint.sh` to check. The whole gate must pass before committing. `.swiftlint.yml` remains the source of truth for identifier limits and domain exceptions.
+- **Google Swift Style Guide is the baseline.** Before a style review, or before changing lint/formatter config, tool pins, or a local exception → `docs/ARCHITECTURE.md` §19.2 and `docs/CODE_STYLE.md`.
+- **Lint gate = `scripts/lint.sh`** — run `scripts/lint.sh --fix`, read the diff it produced, then `scripts/lint.sh` to check. The whole gate must pass before committing. `.swiftlint.yml` is the source of truth for identifier limits and domain exceptions.
 - **Conditional and loop bodies are always multiline** — never `guard c else { return }`, `if c { doThing() }`, or `for x in xs { use(x) }`. `if` *expressions* (`let n = if c { 1 } else { 2 }`) stay inline. `--fix` expands them for you; the gate rejects it if you skip that.
 - **SwiftLint enforces a 100-character line limit.** `--fix` does not choose string continuations or named locals for you; preserve runtime string contents when wrapping. Exemptions and suppression policy → `docs/ARCHITECTURE.md` §19.2.
-- **Closure bodies go on their own line** — break after `in`, even for a single expression. This remains a manual review rule.
+- **Closure bodies go on their own line** — break after `in`, even for a single expression. The lint gate does not enforce this one.
 - **Tests follow Given-When-Then** — separate the body with `// given` / `// when` / `// then` sections (AAA equivalent).
-- **Comments: signal, not noise.** Start `///` with a concise, normally 1–2-line contract summary the signature can't express; necessary details and tags may follow. `//` is for a constraint invisible in the code *and* not tied to the current change. Rationale for a change goes in the commit and the PR, never beside the code. Never cite a bare `§N` — write the why in place, or use the full `ARCHITECTURE.md §N` only where code would otherwise read as a bug (the durable direction is docs→code; see the `ARCHITECTURE.md` §3.1 code map).
+- **Comments: signal, not noise.** Start `///` with a 1–2-line contract summary the signature can't express. Add details or tags only for contract the summary can't carry; obvious declarations get no `///`. `//` is for a constraint invisible in the code *and* not tied to the current change. Rationale for a change goes in the commit and the PR, never beside the code. Never cite a bare `§N` — write the why in place, or use the full `ARCHITECTURE.md §N` only where code would otherwise read as a bug (the durable direction is docs→code; see the `ARCHITECTURE.md` §3.1 code map).
 - **Group private helpers into `private extension TypeName { }` blocks** by logical grouping, headed by a bare `// MARK: - <Group Name>` comment, no prose above it (see `RunCommand.swift`).
 
 ## Definition of done
