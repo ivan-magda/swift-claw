@@ -189,7 +189,11 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
       throw ProviderError.localOutputLimit
     }
   }
+}
 
+// MARK: - Output Accounting
+
+private extension AttemptOutputLimiter {
   private static func merge(fields: [AttemptOutputField], into highWater: inout [String: Counts]) {
     precondition(Set(fields.map(\.key)).count == fields.count, "output field keys must be unique")
     for field in fields {

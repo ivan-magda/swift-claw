@@ -92,7 +92,11 @@ enum MemoryReplies {
     ]
     return lines.joined(separator: "\n")
   }
+}
 
+// MARK: - Memory Rendering
+
+private extension MemoryReplies {
   private static var kindNames: String {
     MemoryKind.allCases.map(\.rawValue).joined(separator: "|")
   }

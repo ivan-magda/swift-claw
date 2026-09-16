@@ -117,7 +117,11 @@ struct RedactingLogHandler: LogHandler {
       }
     }
   }
+}
 
+// MARK: - Metadata Redaction
+
+private extension RedactingLogHandler {
   private static func redacted(
     _ metadata: Logger.Metadata,
     using redact: (_ text: String) -> String
