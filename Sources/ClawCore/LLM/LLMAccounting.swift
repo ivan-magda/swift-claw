@@ -113,8 +113,7 @@ private extension LLMInputReservationPolicy {
   }
 
   static func accumulate(_ running: Int, adding bytes: Int, cap: Int) -> Int {
-    let (sum, overflowed) = running.addingReportingOverflow(bytes)
-    return overflowed ? cap : min(sum, cap)
+    min(SaturatingArithmetic.sum(running, bytes), cap)
   }
 }
 
