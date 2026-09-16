@@ -45,7 +45,7 @@ jobs:
           printf '%s\n' /opt/swiftlint >> "$GITHUB_PATH"
 
       - name: Cache lint build tools
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: BuildTools/.build
           key: >-
