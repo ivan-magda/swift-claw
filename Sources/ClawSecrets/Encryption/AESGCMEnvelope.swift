@@ -1,14 +1,14 @@
 import Crypto
 import Foundation
 
-/// The on-disk AES-GCM envelope shared by both secret stores: `[1-byte version] +
+/// The on-disk AES-GCM envelope shared by the secret stores: `[1-byte version] +
 /// AES.GCM.SealedBox.combined` (12-byte random nonce ‖ ciphertext ‖ 16-byte tag). The version byte is
 /// bound as AEAD associated data, so it can't be swapped without failing authentication; each store
-/// supplies its own associated-data label, which is what keeps the two envelopes under the shared
+/// supplies its own associated-data label, which is what keeps the envelopes under the shared
 /// `secret.key` from ever opening as each other.
 ///
 /// One codec, parameterized by `(version, associatedData)`: a future format change is then made once,
-/// not copied into two framing implementations that can drift apart under a single key.
+/// not copied into separate framing implementations that can drift apart under a single key.
 package struct AESGCMEnvelope: Sendable {
   /// Cap on the envelope before its plaintext is allocated.
   package static let maximumByteCount = 256 * 1024
@@ -52,9 +52,8 @@ package struct AESGCMEnvelope: Sendable {
   }
 }
 
-/// The codec's closed failure set. Each store maps these into its own seam error: "unknown version"
-/// and "failed tag" carry different remedies to the owner, and one store distinguishes them while the
-/// other collapses both, so the taxonomy stays with the store rather than the codec.
+/// The codec's closed failure set. Each store maps these cases into its own seam errors,
+/// so callers receive the store-specific taxonomy rather than codec failures.
 package enum AESGCMEnvelopeError: Error {
   case missingVersion
   case unsupportedVersion
