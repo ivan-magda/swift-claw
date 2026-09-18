@@ -44,7 +44,6 @@ struct CodexInvocation: Sendable {
   ]
 
   static let credentialKeys = ["GH_TOKEN", "GITHUB_TOKEN"]
-  let schemaPath: String
   let reportPath: String
   let input: String
   let arguments: [String]
@@ -55,7 +54,7 @@ struct CodexInvocation: Sendable {
     directory: URL,
     profile: String?
   ) throws {
-    schemaPath = directory.appendingPathComponent("schema.json").path
+    let schemaPath = directory.appendingPathComponent("schema.json").path
     reportPath = directory.appendingPathComponent("result.json").path
     let schema = Data(PackageResources.CodexResult_schema_json)
     guard FileManager.default.createFile(

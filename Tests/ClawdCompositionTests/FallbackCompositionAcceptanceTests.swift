@@ -177,7 +177,6 @@ struct FallbackCompositionAcceptanceTests {
 /// plan on every attempt, and an OpenAI-compatible fallback that answers.
 private enum FallbackWire {
   static let baseURL = "https://fallback.example/v1"
-  static let chatCompletionsURL = baseURL + "/chat/completions"
   static let chatGPTURL = "https://chatgpt.com/backend-api/codex/responses"
   static let fallbackKey = "sk-fallback-key"
 
