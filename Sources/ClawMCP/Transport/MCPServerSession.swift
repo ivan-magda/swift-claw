@@ -185,16 +185,7 @@ public actor MCPServerSession {
   /// Cancels and joins any opening before ending the session. Concurrent disconnects share the
   /// teardown; a call arriving during it waits before opening a fresh connection.
   public func disconnect() async {
-    if let closing {
-      await closing.value
-      return
-    }
-    let task = Task {
-      defer { closing = nil }
-      await teardown()
-    }
-    closing = task
-    await task.value
+    await beginTeardown().value
   }
 }
 
@@ -318,6 +309,18 @@ private extension MCPServerSession {
 // MARK: - Connection lifecycle
 
 private extension MCPServerSession {
+  func beginTeardown() -> Task<Void, Never> {
+    if let closing {
+      return closing
+    }
+    let task = Task {
+      defer { closing = nil }
+      await teardown()
+    }
+    closing = task
+    return task
+  }
+
   func connected() async throws -> Client {
     while let closing {
       await closing.value
@@ -369,6 +372,8 @@ private extension MCPServerSession {
       handshake.cancel()
       await client.disconnect()
       await transport.disconnect()
+      // SDK send can register a request after the first disconnect drained pending requests.
+      await client.disconnect()
       _ = await handshake.result
       // SDK connect can install its receive task after an earlier disconnect suspended it.
       await client.disconnect()
@@ -401,7 +406,6 @@ private extension MCPServerSession {
       guard Self.isSpentSession(error) else {
         throw error
       }
-      await disconnect()
       return try await invoke(name: name, arguments: arguments, cancellation: cancellation)
     }
   }
@@ -412,22 +416,29 @@ private extension MCPServerSession {
     cancellation: MCPRequestCancellation
   ) async throws -> MCPToolCallResult {
     let client = try await connected()
-    let context: RequestContext<CallTool.Result> = try await client.callTool(
-      name: name,
-      arguments: arguments
-    )
-    let result = try await response(
-      to: context,
-      from: client,
-      timingOutWith: .callTimedOut(seconds: config.requestTimeoutSeconds),
-      cancellation: cancellation
-    )
+    do {
+      let context: RequestContext<CallTool.Result> = try await client.callTool(
+        name: name,
+        arguments: arguments
+      )
+      let result = try await response(
+        to: context,
+        from: client,
+        timingOutWith: .callTimedOut(seconds: config.requestTimeoutSeconds),
+        cancellation: cancellation
+      )
 
-    return MCPToolCallResult(
-      content: result.content,
-      structuredContent: result.structuredContent.map(MCPValueBridge.jsonValue),
-      isError: result.isError ?? false
-    )
+      return MCPToolCallResult(
+        content: result.content,
+        structuredContent: result.structuredContent.map(MCPValueBridge.jsonValue),
+        isError: result.isError ?? false
+      )
+    } catch {
+      if Self.isSpentSession(error), self.client === client {
+        await beginTeardown().value
+      }
+      throw error
+    }
   }
 
   /// Whether the failure says the session is gone *and* the call provably never ran. Anything that

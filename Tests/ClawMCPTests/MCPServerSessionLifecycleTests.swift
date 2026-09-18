@@ -168,9 +168,9 @@ private actor GatedReceiveTransport: Transport {
     if !cleaningUp.isOpen {
       receiverCancelledOnDisconnect = receiverCancelled.isOpen
     }
+    await inner.disconnect()
     cleaningUp.open()
     await release.waitIgnoringCancellation()
-    await inner.disconnect()
   }
 
   func send(_ data: Data) async throws {

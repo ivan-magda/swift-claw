@@ -910,8 +910,10 @@ swift-claw is an MCP **client** and only a client: it consumes tools from owner-
   Disconnect also cancels and joins an in-flight opening before returning. The opening task alone
   publishes its client and clears its handle; concurrent disconnects share teardown, and subsequent
   connection attempts recheck active teardown after each wait before opening. Cancellation and
-  handshake timeout cancel the SDK receiver before awaiting transport cleanup, and join the SDK
-  connect task before its final disconnect; reconnect cleanup uses the same teardown owner.
+  handshake timeout cancel the SDK receiver before awaiting transport cleanup, drain late SDK
+  request registrations after transport admission closes, and join SDK connect before its final
+  disconnect. Retry cleanup uses the same teardown owner only for the client that failed; an old
+  opening or request failure must not cancel another caller's newer connection.
   The transport closes send admission, cancels and joins every admitted HTTP exchange (including
   requests awaiting response headers), then DELETEs the final captured session. Concurrent transport
   disconnects await that same cleanup. Disconnect also consumes an idle transport, so a delayed
