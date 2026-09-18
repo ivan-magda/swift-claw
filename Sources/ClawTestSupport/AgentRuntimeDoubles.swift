@@ -178,8 +178,10 @@ public actor ScriptedDispatcher: ToolDispatching {
   public init(
     definitions: [ToolDefinition] = [],
     respond:
-      @escaping @Sendable (_ call: ToolCall, _ context: ToolDispatchContext) async ->
-      ToolDispatchOutcome
+      @escaping @Sendable (
+        _ call: ToolCall,
+        _ context: ToolDispatchContext
+      ) async -> ToolDispatchOutcome
   ) {
     self.definitions = definitions
     self.respond = respond
