@@ -505,6 +505,7 @@ extension AgentRuntime {
         guard !Task.isCancelled else {
           break
         }
+
         proposedToolCalls += 1
         guard proposedToolCalls <= budget.maxToolCalls else {
           return outcome(.budgetStopped(cap: "per-run tool-call"))
@@ -639,6 +640,7 @@ extension AgentRuntime {
           failureCause: .processInterruption
         )
       }
+
       if let pending = pendingSuspension {
         return outcome(.suspended(pending: pending, usage: intermediate))
       }
