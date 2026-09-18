@@ -1,13 +1,24 @@
 import ClawCore
 import Foundation
 
+/// A complete tool exchange or one plain conversational row, kept or dropped atomically by fitting.
+struct HistoryGroup {
+  let id: String
+  let messages: [StoredMessage]
+}
+
 /// The renderer's belt-and-braces guard: drops tool rows with no owning anchor and
 /// any anchor whose observations are incomplete, so a malformed history (crash, partial commit)
 /// can never become a wire-protocol 400. The LOAD seam already bounds windows by conversational
 /// rows; no-orphan holds only because BOTH seams enforce it.
 enum HistoryHygiene {
   static func sanitize(_ history: [StoredMessage]) -> [StoredMessage] {
-    var sanitized: [StoredMessage] = []
+    groups(from: history).flatMap(\.messages)
+  }
+
+  static func groups(from history: [StoredMessage]) -> [HistoryGroup] {
+    var groups: [HistoryGroup] = []
+    var sanitizedRowCount = 0
     var index = 0
 
     while index < history.count {
@@ -20,7 +31,8 @@ enum HistoryHygiene {
 
       let anchorCalls = message.toolCallsJSON.map(ToolCallCoding.decode) ?? []
       guard message.role == .assistant, anchorCalls.isEmpty == false else {
-        sanitized.append(message)
+        groups.append(HistoryGroup(id: "history-\(sanitizedRowCount)", messages: [message]))
+        sanitizedRowCount += 1
         index += 1
         continue
       }
@@ -36,13 +48,14 @@ enum HistoryHygiene {
       let expectedIDs = Set(anchorCalls.map(\.id))
       let presentIDs = Set(observationRows.compactMap(\.toolCallID))
       if expectedIDs.isSubset(of: presentIDs) {
-        sanitized.append(message)
-        sanitized.append(contentsOf: observationRows)
+        let messages = [message] + observationRows
+        groups.append(HistoryGroup(id: "history-\(sanitizedRowCount)", messages: messages))
+        sanitizedRowCount += messages.count
       }
       // else: drop the anchor AND its partial rows — the exchange is incomplete.
       index = cursor
     }
 
-    return sanitized
+    return groups
   }
 }

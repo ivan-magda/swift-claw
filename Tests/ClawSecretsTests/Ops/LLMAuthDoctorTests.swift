@@ -1,44 +1,11 @@
 import ClawCore
+import ClawTestSupport
 import Foundation
 import Testing
 
 @testable import ClawSecrets
 
 // MARK: - Doubles
-
-/// A credential store whose single behavior a test scripts: a present record, an absent one (logged
-/// out), or a typed store failure. It counts loads, so the current route can be proven never to open
-/// it and the ChatGPT route proven to read exactly once.
-private final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Sendable {
-  enum Behavior: Sendable {
-    case value(StoredOAuthCredential?)
-    case failure(LLMCredentialStoreError)
-  }
-
-  let behavior: Behavior
-  private(set) var loadCount = 0
-
-  init(_ behavior: Behavior) {
-    self.behavior = behavior
-  }
-
-  func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
-    loadCount += 1
-    switch behavior {
-    case .value(let credential):
-      return credential
-    case .failure(let error):
-      throw error
-    }
-  }
-
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) {}
-
-  func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
-}
 
 /// A store factory that must never run for the current route. Marking it fails the paired assertion,
 /// which is how "the current route constructs no store" is proven rather than assumed.

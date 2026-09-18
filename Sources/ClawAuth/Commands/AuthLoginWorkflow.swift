@@ -77,23 +77,11 @@ private extension AuthLoginWorkflow {
       return AuthCommandResultMapper.runtimeSecretResult(for: error)
     }
 
-    let grant: ChatGPTAuthorizationGrant
-    do {
-      grant = try await makeDeviceAuthorization().authorize { device in
-        await transcript.emit(Self.deviceEvents(for: device))
-      }
-    } catch is CancellationError {
-      return AuthCommandResultMapper.cancelled
-    } catch let failure
-      as ChatGPTOAuthFailure
-    {
-      return AuthCommandResultMapper.result(for: failure)
-    } catch {
-      return AuthCommandResultMapper.unexpected()
-    }
-
     let pair: ChatGPTTokenPair
     do {
+      let grant = try await makeDeviceAuthorization().authorize { device in
+        await transcript.emit(Self.deviceEvents(for: device))
+      }
       pair = try await tokenExchange.exchange(
         grant: grant,
         timeout: ChatGPTProviderMetadata.requestTimeout
@@ -287,11 +275,7 @@ private extension AuthLoginWorkflow {
     switch failure {
     case .unavailable(let detail):
       return "the model list could not be read — "
-        + ChatGPTWireValues.safeRemoteDiagnostic(
-          detail,
-          redacting: [],
-          maxBytes: ChatGPTProviderMetadata.maximumDiagnosticBytes
-        )
+        + ChatGPTProviderMetadata.safeDiagnostic(detail, redacting: [])
     }
   }
 }

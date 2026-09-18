@@ -204,24 +204,11 @@ extension EncryptedFileSecretStore {
       throw .malformedEnvelope
     }
 
-    guard !payload.telegramBotToken.isEmpty else {
-      throw .missingTelegramToken
-    }
-    let apiKey = payload.llmAPIKey.flatMap { value in
-      value.isEmpty ? nil : value
-    }
-    let searchKey = payload.searchAPIKey.flatMap { value in
-      value.isEmpty ? nil : value
-    }
-    let fallbackAPIKey = payload.llmFallbackAPIKey.flatMap { value in
-      value.isEmpty ? nil : value
-    }
-
-    return Secrets(
-      telegramBotToken: payload.telegramBotToken,
-      llmAPIKey: apiKey,
-      searchAPIKey: searchKey,
-      llmFallbackAPIKey: fallbackAPIKey
+    return try Secrets(
+      validatingTelegramBotToken: payload.telegramBotToken,
+      llmAPIKey: payload.llmAPIKey,
+      searchAPIKey: payload.searchAPIKey,
+      llmFallbackAPIKey: payload.llmFallbackAPIKey
     )
   }
 }

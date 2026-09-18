@@ -101,9 +101,10 @@ struct ReflectionRunEnvironment {
     let callIDs = RecordingProviderCallIDGenerator()
     let runnerLearning = RecordingLearningStore(base: learning, admissionFails: admissionFails)
     let roster = ProviderRoster(
-      primary: routeBinding(provider: provider, reference: route),
+      primary: LearningRunFixtures.routeBinding(provider: provider, reference: route),
       fallback: primaryFailure == nil
-        ? nil : routeBinding(provider: fallbackProvider, reference: fallbackRoute)
+        ? nil
+        : LearningRunFixtures.routeBinding(provider: fallbackProvider, reference: fallbackRoute)
     )
     return ReflectionRunEnvironment(
       queue: queue,
@@ -117,7 +118,7 @@ struct ReflectionRunEnvironment {
         learning: runnerLearning,
         jobs: jobs,
         roster: roster,
-        budget: budget(proactivePerDayUSD: proactivePerDayUSD),
+        budget: LearningRunFixtures.budget(proactivePerDayUSD: proactivePerDayUSD),
         costResolver: CostResolver(
           priceTable: .empty,
           referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
@@ -434,7 +435,7 @@ private extension ReflectionRunEnvironment {
       estimatedCostUSD: 0.001,
       configuredRoute: route,
       providerCallID: UUIDProviderCallIDGenerator().next(),
-      budget: BudgetGate(budget: budget(proactivePerDayUSD: 1_000))
+      budget: BudgetGate(budget: LearningRunFixtures.budget(proactivePerDayUSD: 1_000))
     )
     guard try learning.authorizeAndStartOperation(authorization, now: now) == .started else {
       throw StoreError.unexpected("reflection fixture failed to start evaluator")
@@ -483,30 +484,6 @@ private extension ReflectionRunEnvironment {
           payloadHash: ContentHash.fnv1a(output)
         ),
       ]
-    )
-  }
-
-  static func budget(proactivePerDayUSD: Double) -> RunBudget {
-    let base = RunBudget.default
-    return RunBudget(
-      maxInputTokens: base.maxInputTokens,
-      maxOutputTokens: base.maxOutputTokens,
-      wallClockDeadlineSeconds: base.wallClockDeadlineSeconds,
-      retryBudget: base.retryBudget,
-      perRunUSD: base.perRunUSD,
-      perDayUSD: base.perDayUSD,
-      proactivePerDayUSD: proactivePerDayUSD,
-      referenceUSDPerToken: base.referenceUSDPerToken
-    )
-  }
-
-  static func routeBinding(provider: any LLMProvider, reference: String) -> LLMRouteBinding {
-    LLMRouteBinding(
-      provider: provider,
-      wireModel: reference,
-      configuredReference: reference,
-      costPolicy: .metered,
-      reservationPolicy: .textOnly
     )
   }
 

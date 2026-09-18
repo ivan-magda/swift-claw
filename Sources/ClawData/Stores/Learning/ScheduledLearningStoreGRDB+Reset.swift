@@ -315,7 +315,7 @@ extension ScheduledLearningStoreGRDB {
     states: [LearningOperationState]
   ) throws -> [LearningOperationID] {
     let stateValues = states.map(\.rawValue)
-    let placeholders = Array(repeating: "?", count: stateValues.count).joined(separator: ", ")
+    let placeholders = databaseQuestionMarks(count: stateValues.count)
     let rows = try Row.fetchAll(
       db,
       sql: """

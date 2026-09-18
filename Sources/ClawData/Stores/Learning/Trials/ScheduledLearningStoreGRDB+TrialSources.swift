@@ -130,14 +130,10 @@ private extension ScheduledLearningStoreGRDB {
     trial: LearningTrial,
     evidence: StrictEvidence
   ) -> LearningOperationKey {
-    LearningOperationKey(
+    LearningOperationKey.evaluation(
       jobID: trial.jobID,
       epoch: trial.epoch,
-      phase: .evaluator,
-      sourceDigest: evidence.digest.rawValue,
-      promptVersion: EvaluatorPrompt.v1.version,
-      schemaVersion: EvaluatorOutput.currentSchemaVersion,
-      rubricVersion: EvaluatorRubric.v1.version
+      evidenceDigest: evidence.digest
     )
   }
 

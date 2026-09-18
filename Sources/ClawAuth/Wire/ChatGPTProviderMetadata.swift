@@ -143,9 +143,9 @@ public enum ChatGPTProviderMetadata {
   // MARK: - Diagnostics
 
   /// Sanitizes and redacts vendor-supplied text for display, bounded by the diagnostic cap. The one
-  /// wrapper the two wire clients and the result mapper share, so the byte bound they scrub to and the
-  /// sanitizer they route through cannot drift between them.
-  static func safeDiagnostic(_ raw: String, redacting secrets: [String]) -> String {
+  /// wrapper the auth and inference paths share, so the byte bound they scrub to and the sanitizer
+  /// they route through cannot drift between them.
+  package static func safeDiagnostic(_ raw: String, redacting secrets: [String]) -> String {
     ChatGPTWireValues.safeRemoteDiagnostic(
       raw,
       redacting: secrets,

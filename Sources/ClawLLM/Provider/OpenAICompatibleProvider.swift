@@ -118,7 +118,7 @@ struct OpenAICompatibleProvider: LLMProvider {
         continue
       }
 
-      if (200..<300).contains(result.statusCode) {
+      if HTTPResponseBodyPolicy.isSuccess(result.statusCode) {
         do {
           return try parse(result: result, redactor: redactor)
         } catch let cause as ProviderError {
@@ -330,7 +330,7 @@ private extension OpenAICompatibleProvider {
     redactor: SecretRedactor
   ) async -> LLMStreamTermination {
     do {
-      guard (200..<300).contains(exchange.head.statusCode) else {
+      guard HTTPResponseBodyPolicy.isSuccess(exchange.head.statusCode) else {
         // A recognized non-success head proves the server answered instead of inferring, so the
         // attempt returns to `notStarted` before its diagnostic body is even read.
         exposure.noteProvenClean()

@@ -187,7 +187,7 @@ struct MCPServerSessionTests {
       return FaultyTransport(
         wrapping: transport,
         failingSend: FaultyTransport.firstCallSend,
-        with: .sessionExpired
+        with: MCPTransportError.sessionExpired
       )
     }
     try await session.connect()
@@ -214,7 +214,7 @@ struct MCPServerSessionTests {
       return FaultyTransport(
         wrapping: transport,
         failingSend: FaultyTransport.firstCallSend,
-        with: .httpStatus(500)
+        with: MCPTransportError.httpStatus(500)
       )
     }
     try await session.connect()

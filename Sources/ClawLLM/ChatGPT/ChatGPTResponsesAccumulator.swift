@@ -636,11 +636,7 @@ private extension ChatGPTResponsesAccumulator {
     guard let message = remote?.message, message.isEmpty == false else {
       return Self.terminal(fallback)
     }
-    let safe = ChatGPTWireValues.safeRemoteDiagnostic(
-      message,
-      redacting: redactionValues,
-      maxBytes: ChatGPTProviderMetadata.maximumDiagnosticBytes
-    )
+    let safe = ChatGPTProviderMetadata.safeDiagnostic(message, redacting: redactionValues)
     return Self.terminal("\(fallback) — \(safe)")
   }
 }

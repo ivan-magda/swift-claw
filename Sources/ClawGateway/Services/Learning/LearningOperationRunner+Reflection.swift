@@ -23,7 +23,11 @@ private extension LearningOperationRunner {
     guard let preparation = try learning.prepareReflection(trigger: trigger) else {
       return
     }
-    let key = reflectionKey(for: trigger)
+    let key = LearningOperationKey.reflection(
+      jobID: trigger.jobID,
+      epoch: trigger.epoch,
+      triggerDigest: trigger.digest
+    )
     guard let claim = try learning.claimOperation(key, now: now) else {
       return
     }
@@ -60,9 +64,8 @@ private extension LearningOperationRunner {
     serialized: String,
     now: Date
   ) throws -> Bool {
-    let estimate = reflectionAccountant(for: route.binding).preflightEstimate(
-      context: call.messages
-    )
+    let usageAccountant = accountant(for: route.binding, outputCap: Self.reflectorOutputTokenCap)
+    let estimate = usageAccountant.preflightEstimate(context: call.messages)
     let authorization = LearningAuthorization(
       operationID: call.operationID,
       carrier: CarrierAuthorization(
@@ -98,36 +101,22 @@ private extension LearningOperationRunner {
     starting: RouteSelection,
     now: Date
   ) async {
-    var active = starting
-    var request = reflectionRequest(model: active.binding.wireModel, messages: call.messages)
-    while true {
-      do {
-        let response = try await active.binding.provider.complete(request: request)
-        if active.position == .primary {
-          _ = await cooldown?.recordSuccess()
-        }
-        commitReflection(
-          response,
-          call: call,
-          preparation: preparation,
-          route: active.binding,
-          now: now
-        )
-        return
-      } catch {
-        guard let persistence = RouteSwitch.permits(error),
-              let next = roster.failover(from: active.position)
-        else {
-          commitReflection(failure: error, call: call, route: active.binding, now: now)
-          return
-        }
-        await cooldown?.arm(
-          persistence: persistence,
-          retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
-        )
-        active = next
-        request = reflectionRequest(model: active.binding.wireModel, messages: call.messages)
-      }
+    let attempt = await dispatchInference(
+      messages: call.messages,
+      outputCap: Self.reflectorOutputTokenCap,
+      starting: starting
+    )
+    switch attempt.result {
+    case .response(let response):
+      commitReflection(
+        response,
+        call: call,
+        preparation: preparation,
+        route: attempt.route,
+        now: now
+      )
+    case .failed(let error):
+      commitReflection(failure: error, call: call, route: attempt.route, now: now)
     }
   }
 }
@@ -142,9 +131,10 @@ private extension LearningOperationRunner {
     route: LLMRouteBinding,
     now: Date
   ) {
+    let usageAccountant = accountant(for: route, outputCap: Self.reflectorOutputTokenCap)
     let usage = LearningCallUsage(
       model: route.configuredReference,
-      resolved: reflectionAccountant(for: route).reconciled(for: response, context: call.messages)
+      resolved: usageAccountant.reconciled(for: response, context: call.messages)
     )
     let product: LearningOperationProduct
     do {
@@ -170,26 +160,11 @@ private extension LearningOperationRunner {
     route: LLMRouteBinding,
     now: Date
   ) {
-    let usage: LearningCallUsage
-    switch ProviderFailureAccounting.classify(error) {
-    case .mayHaveStarted(let observedCompletionTokens):
-      usage = LearningCallUsage(
-        model: route.configuredReference,
-        resolved: reflectionAccountant(for: route).conservative(
-          context: call.messages,
-          observedCompletionTokens: observedCompletionTokens
-        )
-      )
-    case .notStarted:
-      usage = LearningCallUsage(
-        model: route.configuredReference,
-        promptTokens: 0,
-        completionTokens: 0,
-        costUSD: 0,
-        costSource: .providerReturned,
-        isEstimated: false
-      )
-    }
+    let usage = failedCallUsage(
+      error,
+      context: call.messages,
+      accountant: accountant(for: route, outputCap: Self.reflectorOutputTokenCap)
+    )
     logger.info("reflection \(call.operationID.rawValue) failed at the provider: \(error)")
     finishReflection(call, usage: usage, product: .failure(.providerTerminal), now: now)
   }
@@ -291,41 +266,10 @@ private extension LearningOperationRunner {
     case secretLeak
   }
 
-  func reflectionKey(for trigger: TriggerIdentity) -> LearningOperationKey {
-    LearningOperationKey(
-      jobID: trigger.jobID,
-      epoch: trigger.epoch,
-      phase: .reflector,
-      sourceDigest: trigger.digest.rawValue,
-      promptVersion: ReflectorPrompt.v1.version,
-      schemaVersion: ReflectorOutput.currentSchemaVersion,
-      rubricVersion: ReflectorRubric.v1
-    )
-  }
-
   func reflectionMessages(carrier: String) -> [ChatMessage] {
     [
       ChatMessage(role: .system, content: ReflectorPrompt.v1.text),
       ChatMessage(role: .user, content: carrier),
     ]
-  }
-
-  func reflectionRequest(model: String, messages: [ChatMessage]) -> ChatRequest {
-    ChatRequest(
-      model: model,
-      messages: messages,
-      maxOutputTokens: Self.reflectorOutputTokenCap,
-      tools: []
-    )
-  }
-
-  func reflectionAccountant(for route: LLMRouteBinding) -> ProviderUsageAccountant {
-    ProviderUsageAccountant(
-      configuredReference: route.configuredReference,
-      costPolicy: route.costPolicy,
-      reservationPolicy: route.reservationPolicy,
-      costResolver: costResolver,
-      outputCap: Self.reflectorOutputTokenCap
-    )
   }
 }

@@ -71,13 +71,25 @@ extension ScheduledLearningStoreGRDB {
         return outcome
       }
 
-      guard let revision = try Self.advanceFeedbackRevision(db, challenge: challenge) else {
+      guard let revision = try Self.advanceFeedbackRevision(
+        db,
+        jobID: challenge.jobID,
+        epoch: challenge.epoch
+      )
+      else {
         throw StoreError.unexpected("feedback revision CAS lost after challenge consumption")
       }
       let event = try Self.insertEvent(
         db,
-        challenge: challenge,
-        payload: payload,
+        insertion: FeedbackEventInsertion(
+          jobID: challenge.jobID,
+          epoch: challenge.epoch,
+          subjectKind: challenge.subjectKind,
+          subjectDigest: challenge.subjectDigest,
+          signal: try Self.challengeSignal(challenge.subjectKind),
+          payload: payload,
+          transportUpdateID: nil
+        ),
         revision: revision,
         now: now
       )

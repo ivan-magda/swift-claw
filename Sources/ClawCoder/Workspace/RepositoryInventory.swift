@@ -20,6 +20,19 @@ struct RepositoryInventory: Sendable, Equatable {
     case symlink(target: Data)
   }
 
+  /// Missing file evidence stays unknown; cancellation, deadlines and supervision failures propagate.
+  static func captureIfAvailable(at directory: String, git: CoderGit) async throws -> Self? {
+    do {
+      return try await capture(at: directory, git: git)
+    } catch Failure.unavailable {
+      return nil
+    } catch CoderGitFailure.command {
+      return nil
+    } catch CoderGitFailure.output {
+      return nil
+    }
+  }
+
   static func capture(at directory: String, git: CoderGit) async throws -> RepositoryInventory {
     let output = try await git.run(
       ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],

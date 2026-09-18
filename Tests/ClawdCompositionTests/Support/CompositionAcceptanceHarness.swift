@@ -12,65 +12,26 @@ import Logging
 
 @testable import clawd
 
-// MARK: - Fixed fresh credential
-
-/// A managed store that hands back one fresh credential (far-future expiry, so the source never
-/// refreshes) and records how many times it was opened — the load-count proof.
-final class FreshCredentialStore: LLMCredentialStore, @unchecked Sendable {
-  static let profileID = UUID(uuid: (0xCE, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1))
-  private let outcome: Result<StoredOAuthCredential?, LLMCredentialStoreError>
-  private let lock = NSLock()
-  private var loads = 0
-
-  init(present: Bool = true) {
-    outcome = .success(
-      present
-        ? StoredOAuthCredential(
-          profileID: Self.profileID,
-          accessToken: "acc-token",
-          refreshToken: "ref-token",
-          expiresAt: Date(timeIntervalSince1970: 4_000_000_000)
-        ) : nil
-    )
-  }
-
-  /// A store whose `load` throws — the managed-store failure a boot must propagate and close every
-  /// client on.
-  init(failure: LLMCredentialStoreError) {
-    outcome = .failure(failure)
-  }
-
-  var loadCount: Int {
-    lock.lock()
-    defer { lock.unlock() }
-    return loads
-  }
-
-  func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
-    lock.lock()
-    loads += 1
-    lock.unlock()
-    switch outcome {
-    case .success(let credential):
-      return credential
-    case .failure(let error):
-      throw error
-    }
-  }
-
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) {}
-
-  func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
-}
-
 // MARK: - Composition
 
 enum CompositionAcceptance {
   static let qualifiedModel = "openai-chatgpt/gpt-5.4"
   static let wireModel = "gpt-5.4"
+
+  /// A far-future credential keeps composition tests out of the refresh path.
+  static func freshCredentialStore(present: Bool = true) -> ScriptedCredentialStore {
+    ScriptedCredentialStore(
+      .value(
+        present
+          ? StoredOAuthCredential(
+            profileID: UUID(uuid: (0xCE, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)),
+            accessToken: "acc-token",
+            refreshToken: "ref-token",
+            expiresAt: Date(timeIntervalSince1970: 4_000_000_000)
+          ) : nil
+      )
+    )
+  }
 
   /// The ChatGPT route as production resolves it from `CLAW_LLM_MODEL`, plus its `LLMConfig`.
   static func chatGPTConfig() throws -> AppConfig {
@@ -121,7 +82,7 @@ enum CompositionAcceptance {
         SwiftLogNoOpLogHandler()
       },
       makeManagedStore: {
-        FreshCredentialStore(present: false)
+        CompositionAcceptance.freshCredentialStore(present: false)
       }
     )
   }
@@ -336,7 +297,7 @@ struct CompositionAcceptanceHarness {
     environment: [String: String],
     secrets: Secrets = Secrets(telegramBotToken: "token", llmAPIKey: "sk-static"),
     managedStore: @escaping @Sendable () -> any LLMCredentialStore = {
-      FreshCredentialStore()
+      CompositionAcceptance.freshCredentialStore()
     }
   ) async throws -> CompositionAcceptanceHarness {
     let config = try AppConfig.load(environment: environment)

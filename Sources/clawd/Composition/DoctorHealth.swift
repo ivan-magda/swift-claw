@@ -5,6 +5,19 @@ import ClawWorkspace
 import Foundation
 
 enum DoctorHealth {
+  static func checks(
+    stores: ClawStores,
+    config: AppConfig,
+    now: Date,
+    routeHealth: LLMRouteHealth
+  ) -> [DoctorReport.Check] {
+    HealthRowsBuilder.checks(
+      inputs(stores: stores, config: config, now: now, routeHealth: routeHealth)
+    )
+      + schedulerChecks(stores: stores, config: config, now: now)
+      + approvalChecks(stores: stores, config: config, now: now)
+  }
+
   static func inputs(
     stores: ClawStores,
     config: AppConfig,

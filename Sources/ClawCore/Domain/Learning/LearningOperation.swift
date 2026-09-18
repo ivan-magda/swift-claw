@@ -54,6 +54,44 @@ public struct LearningOperationKey: Sendable, Hashable {
   private static let canonicalPrefix = "learning-operation/v1"
 }
 
+// MARK: - Current Operation Identities
+
+extension LearningOperationKey {
+  /// The current evaluator identity used both to dispatch a call and verify its durable lineage.
+  package static func evaluation(
+    jobID: Int64,
+    epoch: LearningEpoch,
+    evidenceDigest: EvidenceDigest
+  ) -> LearningOperationKey {
+    LearningOperationKey(
+      jobID: jobID,
+      epoch: epoch,
+      phase: .evaluator,
+      sourceDigest: evidenceDigest.rawValue,
+      promptVersion: EvaluatorPrompt.v1.version,
+      schemaVersion: EvaluatorOutput.currentSchemaVersion,
+      rubricVersion: EvaluatorRubric.v1.version
+    )
+  }
+
+  /// The current reflector identity used for dispatch, authorization and claimability checks.
+  package static func reflection(
+    jobID: Int64,
+    epoch: LearningEpoch,
+    triggerDigest: TriggerDigest
+  ) -> LearningOperationKey {
+    LearningOperationKey(
+      jobID: jobID,
+      epoch: epoch,
+      phase: .reflector,
+      sourceDigest: triggerDigest.rawValue,
+      promptVersion: ReflectorPrompt.v1.version,
+      schemaVersion: ReflectorOutput.currentSchemaVersion,
+      rubricVersion: ReflectorRubric.v1
+    )
+  }
+}
+
 /// One durable attempt at a key. Two attempts at one key are two rows joined by `supersedes`, never
 /// one row rewritten: the earlier attempt's provider-call id has to stay readable and unreused.
 public struct ClaimedOperation: Sendable, Equatable {

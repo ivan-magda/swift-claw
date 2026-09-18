@@ -61,7 +61,7 @@ struct SecretsCommand: AsyncParsableCommand {
         noScrub
         ? nil
         : Self.scrubEnvFile(
-          at: resolvedEnvFilePath(environment: environment),
+          at: EnvironmentLoader.envFilePath(explicit: envFile, environment: environment),
           keys: EnvSecretStore.EnvKey.sealed
         )
       // swiftlint:disable:next no_print_in_production
@@ -152,16 +152,6 @@ enum SealScrubOutcome: Equatable {
 }
 
 extension SecretsCommand.Seal {
-  func resolvedEnvFilePath(environment: [String: String]) -> String {
-    if let explicit = envFile {
-      return explicit
-    }
-    if let fromEnv = environment["CLAW_ENV_FILE"] {
-      return fromEnv
-    }
-    return NSHomeDirectory() + "/.swift-claw/clawd.env"
-  }
-
   /// Blanks sealed secret values in the env file via crash-safe publication (0600 temp, fsync,
   /// POSIX rename): on any failure the original file is left intact, and the result is mode 0600.
   /// A symlinked env file is resolved first, so the target is rewritten and the link preserved.

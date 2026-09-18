@@ -1,9 +1,7 @@
 import ArgumentParser
-import AsyncHTTPClient
 import ClawAuth
 import ClawCore
 import ClawGateway
-import ClawHTTP
 import ClawSecrets
 import ClawWorkspace
 import Foundation
@@ -223,20 +221,10 @@ extension MCPCommand {
       try EncryptedMCPCredentialStore(stateRoot: context.stateRoot).loadAll(servers: targets)
     }
 
-    // The daemon's own tool client posture, not the library default: a probe run over a
-    // redirect-following client with decompression off would be proving something about a road the
-    // daemon never takes.
-    let client = HTTPClient(
-      eventLoopGroupProvider: .singleton,
-      configuration: HTTPClientProfile.protectedEgress.configuration
-    )
     let outcomes = await MCPProbe.run(
       servers: targets,
-      credentials: credentials,
-      http: AsyncHTTPExecutor(client: client),
-      logger: MCPProbe.quietLogger()
+      credentials: credentials
     )
-    try? await client.shutdown()
 
     return DoctorReport(checks: MCPDoctorRows.bootRows(outcomes: outcomes))
   }
@@ -256,9 +244,8 @@ extension MCPCommand {
 // MARK: - Token Store
 
 private extension MCPCommand {
-  /// Runs a read against the token store, mapping its closed taxonomy to the exit code the owner
-  /// gets for any unopenable envelope. The read-only verbs take no lock: the daemon writes nothing
-  /// there, so the worst a concurrent mutation can do is answer from the previous envelope.
+  /// Maps every token-store operation's closed taxonomy to the same operator exit code.
+  /// Read-only verbs need no lock: atomic publication exposes a complete old or new envelope.
   static func openingTokenStore<Value>(_ body: () throws -> Value) throws -> Value {
     do {
       return try body()
@@ -290,11 +277,7 @@ private extension MCPCommand {
     }
     defer { lease.release() }
 
-    do {
-      return try body()
-    } catch let error as CredentialStoreError {
-      throw fail("token store: \(error)", code: .secretLoadFailed)
-    }
+    return try openingTokenStore(body)
   }
 }
 

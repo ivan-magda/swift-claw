@@ -32,7 +32,10 @@ struct RuntimeShutdownAcceptanceTests {
         hold
       ),
     ])
-    let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
+    let stack = try CompositionAcceptance.makeStack(
+      http: http,
+      store: CompositionAcceptance.freshCredentialStore()
+    )
     let coordination = DaemonBuilder.TurnCoordination()
     let join = TerminationBox()
 

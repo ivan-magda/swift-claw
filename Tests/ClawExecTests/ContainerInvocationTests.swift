@@ -118,31 +118,14 @@ struct ContainerInvocationTests {
     #expect(identity.name == "clawd-exec-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
   }
 
-  private func makeIdentity() throws -> ExecutionIdentity {
-    ExecutionIdentity(uuid: try #require(UUID(uuidString: "11111111-2222-3333-4444-555555555555")))
-  }
-
-  private func makeSettings() throws -> ExecSandboxSettings {
-    ExecSandboxSettings(
-      workloadImage: try #require(
-        PinnedImageReference.parse(
-          // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
-          "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        )
-      ),
-      memoryMiB: 1024,
-      cpus: 4
-    )
-  }
-
   @Test
   func noEgressRunArgvIsExactAndFullyExplicit() throws {
     // given / when
     let arguments = ContainerInvocation.run(
       context: ContainerLaunchContext(
-        identity: try makeIdentity(),
+        identity: try fixedIdentity(),
         scratchPath: "/state/exec-scratch/11111111-2222-3333-4444-555555555555",
-        settings: try makeSettings(),
+        settings: try sandboxSettings(),
         initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
       ),
       cidFilePath: "/state/exec-control/11111111-2222-3333-4444-555555555555.cid",
@@ -201,9 +184,9 @@ struct ContainerInvocationTests {
     // given / when
     let arguments = ContainerInvocation.run(
       context: ContainerLaunchContext(
-        identity: try makeIdentity(),
+        identity: try fixedIdentity(),
         scratchPath: "/scratch",
-        settings: try makeSettings(),
+        settings: try sandboxSettings(),
         initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
       ),
       cidFilePath: "/control/run.cid",
@@ -223,9 +206,9 @@ struct ContainerInvocationTests {
     // given
     let arguments = ContainerInvocation.run(
       context: ContainerLaunchContext(
-        identity: try makeIdentity(),
+        identity: try fixedIdentity(),
         scratchPath: "/approved-scratch",
-        settings: try makeSettings(),
+        settings: try sandboxSettings(),
         initImage: "ghcr.io/apple/containerization/vminit:1.1.0"
       ),
       cidFilePath: "/control/run.cid",
@@ -258,12 +241,12 @@ struct ContainerInvocationTests {
   @Test
   func detachedCanaryUsesTheSameHardeningAuthority() throws {
     // given
-    let settings = try makeSettings()
+    let settings = try sandboxSettings()
 
     // when
     let arguments = ContainerInvocation.detachedCanary(
       context: ContainerLaunchContext(
-        identity: try makeIdentity(),
+        identity: try fixedIdentity(),
         scratchPath: "/canary",
         settings: settings,
         initImage: "ghcr.io/apple/containerization/vminit:1.1.0"

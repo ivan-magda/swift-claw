@@ -1,4 +1,6 @@
+import AsyncHTTPClient
 import ClawCore
+import ClawHTTP
 import ClawMCP
 import ClawSecrets
 import Foundation
@@ -38,6 +40,26 @@ enum MCPSessionFactory {
 /// so `clawd mcp probe`, a full `clawd doctor` run, and the daemon's own report read one row shape.
 /// The only difference between them is when the servers were contacted.
 enum MCPProbe {
+  /// Owns the probe's protected-egress client until every session has disconnected. Shutdown
+  /// failures do not replace the server outcomes the operator is diagnosing.
+  static func run(
+    servers: [MCPServerConfig],
+    credentials: [String: MCPCredentialLoad]
+  ) async -> [MCPServerOutcome] {
+    let client = HTTPClient(
+      eventLoopGroupProvider: .singleton,
+      configuration: HTTPClientProfile.protectedEgress.configuration
+    )
+    let outcomes = await run(
+      servers: servers,
+      credentials: credentials,
+      http: AsyncHTTPExecutor(client: client),
+      logger: quietLogger()
+    )
+    try? await client.shutdown()
+    return outcomes
+  }
+
   /// The logger a one-shot probe runs under. Quiet by design: the report already carries why a
   /// server failed, and a transport warning interleaved into stdout would read as part of it.
   static func quietLogger() -> Logger {

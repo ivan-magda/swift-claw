@@ -18,6 +18,21 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
+  static func liveTrialRows(_ db: Database, jobID: Int64) throws -> [Row] {
+    try Row.fetchAll(
+      db,
+      sql: """
+        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
+          admitted_at, assignment_deadline, decision_deadline, max_assignments,
+          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
+        FROM learning_trials
+        WHERE job_id = ? AND state IN (?, ?)
+        ORDER BY trial_id
+        """,
+      arguments: [jobID, LearningTrialState.open.rawValue, LearningTrialState.draining.rawValue]
+    )
+  }
+
   static func strictTrial(
     _ db: Database,
     row: Row,

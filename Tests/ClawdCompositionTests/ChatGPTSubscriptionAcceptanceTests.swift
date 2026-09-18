@@ -31,7 +31,7 @@ struct ChatGPTSubscriptionAcceptanceTests {
   func chatGPTRouteComposesIncludedPlanStackAndClosesThreeClientsOnFailure() async throws {
     // given
     let recorder = CloseRecorder()
-    let store = FreshCredentialStore(present: false)
+    let store = CompositionAcceptance.freshCredentialStore(present: false)
     let box = StackBox()
     var composition = try Self.makeComposition(recorder: recorder, store: store)
     composition.buildDaemon = { _, stack, _ in
@@ -63,7 +63,10 @@ struct ChatGPTSubscriptionAcceptanceTests {
     let http = ScriptedHTTPExecutor([
       .stream(CompositionAcceptance.okHead, CompositionAcceptance.terminalRound(tokens: (5, 2))),
     ])
-    let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
+    let stack = try CompositionAcceptance.makeStack(
+      http: http,
+      store: CompositionAcceptance.freshCredentialStore()
+    )
 
     // when
     let response = try await stack.binding.provider.complete(
@@ -131,7 +134,10 @@ struct ChatGPTSubscriptionAcceptanceTests {
       ),
       .stream(CompositionAcceptance.okHead, CompositionAcceptance.terminalRound(tokens: (9, 4))),
     ])
-    let stack = try CompositionAcceptance.makeStack(http: http, store: FreshCredentialStore())
+    let stack = try CompositionAcceptance.makeStack(
+      http: http,
+      store: CompositionAcceptance.freshCredentialStore()
+    )
 
     // when — turn 1 (tool round), then commit its assistant anchor + state to GRDB
     let firstReply = try await stack.binding.provider.complete(
@@ -257,7 +263,7 @@ struct ChatGPTSubscriptionAcceptanceTests {
     ])
     let firstStack = try CompositionAcceptance.makeStack(
       http: firstHTTP,
-      store: FreshCredentialStore()
+      store: CompositionAcceptance.freshCredentialStore()
     )
 
     // when — turn 1, then commit its assistant anchor + poisoned-epoch state
@@ -350,7 +356,7 @@ struct ChatGPTSubscriptionAcceptanceTests {
     ])
     let restartStack = try CompositionAcceptance.makeStack(
       http: restartHTTP,
-      store: FreshCredentialStore()
+      store: CompositionAcceptance.freshCredentialStore()
     )
     let anchors = try stores.sessions.loadContextSnapshot(
       sessionID: sessionID,

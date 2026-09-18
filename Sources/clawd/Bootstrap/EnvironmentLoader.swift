@@ -4,10 +4,16 @@ import ClawSecrets
 import ClawWorkspace
 import Foundation
 
-/// The single implementation of each environment-bootstrap step shared by `run` and `doctor`.
+/// Environment-bootstrap steps shared by the daemon and its operator commands.
 /// `run` consumes the steps through its `*OrExit` wrappers (mapping each failure to a distinct
 /// exit code); `doctor` calls them individually so it can keep reporting per-row diagnostics.
 enum EnvironmentLoader {
+  /// The operator env file is independent of the configured state root; explicit paths, including
+  /// empty ones, retain precedence so the command can report the same file error the owner chose.
+  static func envFilePath(explicit: String?, environment: [String: String]) -> String {
+    explicit ?? environment["CLAW_ENV_FILE"] ?? NSHomeDirectory() + "/.swift-claw/clawd.env"
+  }
+
   /// Loads and validates config from the process environment.
   static func loadConfig(
     environment: [String: String] = ProcessInfo.processInfo.environment
