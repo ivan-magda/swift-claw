@@ -9,6 +9,39 @@ import Testing
 
 @Suite("MCP session lifecycle")
 struct MCPServerSessionLifecycleTests {
+  @Test("handshake cleanup cancels the SDK receiver before waiting for transport teardown")
+  func handshakeCleanupCancelsReceiver() async throws {
+    // given
+    let transport = GatedReceiveTransport()
+    defer { transport.release.open() }
+    let session = MCPServerSession(
+      config: try MCPServerConfig(name: "fixture", url: "https://mcp.example.com/mcp"),
+      transportFactory: StubTransportFactory {
+        transport
+      },
+      clientVersion: "0.0.0-test",
+      logger: transport.logger
+    )
+    let opening = Task {
+      try await session.connect()
+    }
+    #expect(await transport.receiving.waitUntilOpen())
+
+    // when
+    let closing = Task {
+      await session.disconnect()
+    }
+    let cleanupStarted = await transport.cleaningUp.waitUntilOpen()
+    let receiverCancelled = await transport.receiverCancelledOnDisconnect
+    transport.release.open()
+    await closing.value
+    _ = await opening.result
+
+    // then
+    #expect(cleanupStarted)
+    #expect(receiverCancelled)
+  }
+
   @Test("disconnect forwards cancellation into an SDK handshake already awaiting transport")
   func disconnectDuringHandshake() async throws {
     // given
@@ -112,6 +145,48 @@ struct MCPServerSessionLifecycleTests {
       .text(text: "fresh on connection 2", annotations: nil, _meta: nil),
     ]
     #expect(fresh?.content == expected)
+  }
+}
+
+private actor GatedReceiveTransport: Transport {
+  nonisolated let logger = Logger(label: "test.silent") { _ in
+    SwiftLogNoOpLogHandler()
+  }
+
+  nonisolated let receiving = AsyncGate()
+  nonisolated let cleaningUp = AsyncGate()
+  nonisolated let release = AsyncGate()
+  private let receiverCancelled = AsyncGate()
+  private let inner = SilentTransport()
+  private(set) var receiverCancelledOnDisconnect = false
+
+  func connect() async throws {
+    try await inner.connect()
+  }
+
+  func disconnect() async {
+    if !cleaningUp.isOpen {
+      receiverCancelledOnDisconnect = receiverCancelled.isOpen
+    }
+    cleaningUp.open()
+    await release.waitIgnoringCancellation()
+    await inner.disconnect()
+  }
+
+  func send(_ data: Data) async throws {
+    try await inner.send(data)
+  }
+
+  func receive() -> AsyncThrowingStream<Data, any Error> {
+    AsyncThrowingStream(unfolding: { [receiving, release, receiverCancelled] in
+      await withTaskCancellationHandler {
+        receiving.open()
+        await release.waitIgnoringCancellation()
+      } onCancel: {
+        receiverCancelled.open()
+      }
+      return nil
+    })
   }
 }
 

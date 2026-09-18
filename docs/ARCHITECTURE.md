@@ -262,6 +262,10 @@ The lane mechanism is explicit:
 - **Cancellation semantics.** Cancellation threads through the run loop and (Inc 2+) streaming + tool execution via structured concurrency (`withThrowingTaskGroup`, cancellation handlers). On cancel: stop further LLM/tool work; any already-sent Telegram chunks remain (they are committed side effects, recorded in the outbox); no orphan `AWAITING_APPROVAL` row is left (the reconciliation sweep / FSM resolves it — §7).
   The tool loop checks cancellation before each proposed call, including after an earlier tool
   returns from cancelled work; a cancelled batch never admits its remaining proposals.
+  Its interrupted exchange retains completed observations and supplies error observations for
+  unstarted calls, including an action prepared for approval but not yet parked. Every original
+  proposal therefore has a result for history replay; cancellation takes precedence over parking
+  a new approval after the last dispatch returns.
 - **The registry owns the turn lifecycle, not just a map of actors.** `enqueue(sessionID:runID:work:)` **atomically** checks an `accepting` state and registers the new task, closing the lookup-then-enqueue race. Shutdown flips that state to `stopping`, rejects racing enqueues with a typed shutting-down result, cancels every queued or running lane task, and awaits all registered tasks; completion unregisters through a `defer`, including cancellation while still waiting on a preceding lane task. **A turn does not unregister until its `LLMEventStream`, if any, has joined** (§8.4) — so "the lane drained" means the provider producer and its nested HTTP exchange actually finished, not merely that they were signaled. Enqueues that win before admission closes are registered and drained. Provider children outside a lane (schedule drafting) use the same loser-draining deadline coordinator below, so their service cannot return while provider work remains.
 
 ### 5.2 Dependencies and state
@@ -917,7 +921,8 @@ swift-claw is an MCP **client** and only a client: it consumes tools from owner-
 - **The wire says what was agreed, and a session is handed back.** The handshake offers the newest revision the SDK speaks and the server answers with the one it will use; every request after it carries **that** answer, since a server pinned to an older revision may refuse anything else. A session is a resource on someone else's server, so the shutdown graph disconnects every one the boot opened — including a server that contributed no tool and is therefore held by no adapter — while the tool HTTP client is still open to carry the spec's `DELETE`.
   Disconnect also cancels and joins an in-flight opening before returning. The opening task alone
   publishes its client and clears its handle; concurrent disconnects share teardown, and subsequent
-  connection attempts wait for that teardown. Cancellation and handshake timeout also join the SDK
+  connection attempts recheck active teardown after each wait before opening. Cancellation and
+  handshake timeout cancel the SDK receiver before awaiting transport cleanup, and join the SDK
   connect task before its final disconnect; reconnect cleanup uses the same teardown owner. The
   transport closes send admission, cancels and joins every admitted HTTP exchange (including
   requests awaiting response headers), then DELETEs

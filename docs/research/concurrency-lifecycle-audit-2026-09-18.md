@@ -22,7 +22,9 @@ A tool dispatcher may start independently owned work, so inheriting a cancelled 
 **Consequence:** a cancelled turn can still initiate another tool operation or side effect.
 
 **Minimal fix:** check cancellation before each proposed call and use the existing process-interruption
-outcome. Already-recorded provider usage and the completed tool's audit remain recorded.
+outcome. Keep the completed observations; fill missing results for unstarted proposals with explicit
+cancellation errors so the exchange remains replayable. Cancellation after the last dispatch also
+takes precedence over parking a prepared approval. Already-recorded usage and audits remain recorded.
 
 **Evidence:** `AgentRuntimeCancellationTests.cancellationDuringAToolStopsTheRemainingBatch` gates the
 first dispatcher, cancels the turn externally, and observes only the first proposal dispatched.
@@ -147,9 +149,12 @@ that could start after the assertion.
 | Risk | Production seam | Nearest existing test | Distinct mutant | Primary regression |
 | --- | --- | --- | --- | --- |
 | Remaining tools run after cancellation | Agent tool loop | `midBatchToolCallCapDispatchesPrefixThenStops` tests a budget cap | Remove per-call cancellation checkpoint | `cancellationDuringAToolStopsTheRemainingBatch` |
+| Cancellation loses the completed batch prefix | Agent outcome → degraded commit → history replay | Same cancellation test originally checked only dispatch and diagnostics | Return before assembling the interrupted exchange, or leave missing outputs | Existing batch cancellation test strengthened |
+| Last approval proposal parks despite cancellation | Post-dispatch outcome selection | Batch cancellation test has no approval and has a later proposal | Return suspended without the post-loop cancellation checkpoint | `cancellationDuringTheLastApprovalProposalDoesNotSuspend` |
 | Retry sleeper outlives service | Outbox service exit | `floodControlSchedulesADrainOnceTheRetryWindowPasses` tests natural expiry | Restore discarded retry task | `shutdownCancelsAndJoinsFloodControlRetry` |
 | Opening installs client after disconnect | MCP session opening/closing | `callAfterRestart` starts teardown after connection | Ignore opening at disconnect | `disconnectDuringOpening` |
 | Late SDK handshake survives cleanup | SDK connect suspension | Opening-factory test stops before SDK connect | Omit cancellation forwarding to the owned SDK handshake | `disconnectDuringHandshake` |
+| SDK receiver stays active during transport cleanup | Real SDK Client / Transport stream seam | Handshake test suspends before the SDK creates a receiver | Await transport teardown before cancelling the SDK receiver | `handshakeCleanupCancelsReceiver` |
 | Late head creates unreleased session | MCP transport admission/head | `disconnectDeletesSession` completes send first | Omit ownership before response head | `disconnectJoinsExchange(.opening)` |
 | Body producer survives deletion | MCP transport body termination | `disconnectDeletesSession` has no active body | Delete without cancelling/joining active send | `disconnectJoinsExchange(.body)` |
 | Idle transport reopens after cleanup | MCP transport idle state | Existing `reconnectRefused` disconnects only connected transport | Return early on idle disconnect | `reconnectRefused` idle argument |
@@ -199,6 +204,77 @@ changes; no public guide edits are needed. Normative lifecycle details are updat
 Actor suspension alone, an unstructured task with explicit ownership, a strong capture with a finite
 lifetime, and the documented outer watchdog abandonment were not treated as defects.
 
+## Second-pass review
+
+Four independent reviewers revisited runtime/gateway ownership, MCP session lifecycle, HTTP/process
+teardown, and test value. The review found the following gaps in the first version of this PR.
+
+### Interrupted batch persistence
+
+**Invariant:** stopping further tool work must preserve the results of work already completed and
+must not create a new approval wait.
+
+**Sequence:** shutdown cancels a lane while tool A runs in a batch `[A, B]`; A returns and its audit
+is saved; the newly added guard before B returns before `exchanges.append`. Shutdown has not changed
+the durable run from `RUNNING`, so `TurnRunner.commitDegraded` commits an outcome with no A result.
+Separately, cancellation during the final proposal could return `.suspended` because no next loop
+iteration checked cancellation. `/stop` and `/new` have distinct terminal-row arbitration; this
+history-loss finding concerns the still-running shutdown path.
+
+**Code/consequence:** `AgentRuntime.runTurn`'s early return discarded the batch prefix. Merely keeping
+the original calls and a partial list of observations would still lose the exchange on the next
+turn: `HistoryHygiene` drops anchors with missing results. Returning suspended could instead create
+an approval checkpoint after cancellation.
+
+**Fix:** break tool admission, take one cancellation snapshot, complete the exchange with explicit
+error results for unstarted/prepared calls, then return interruption before approval suspension.
+Preserve the original calls, provider state, completed observations and trust flags. Synthetic
+results do not claim the skipped calls were dispatched and do not produce execution audit rows.
+
+**Evidence:** the strengthened batch test failed on the initial PR head with an empty exchange list.
+The final-approval test failed with no interruption diagnostic and no observation. Both pass after
+the correction; the existing suspend and persistence suites also pass.
+
+### A waiter could miss a newer MCP teardown
+
+**Invariant:** no new opening overlaps the active session teardown.
+
+**Sequence:** concurrent calls wait for closing D1. D1 finishes, a resumed call opens C1, and another
+call sees that remote session expire and starts D2. A caller still resuming from D1 sees no published
+client or opening (D2 cleared C1) and opens C2 while D2 is still disconnecting C1. The shared MCP
+session can receive these calls from different session lanes.
+
+**Code/consequence:** `MCPServerSession.connected` awaited one captured closing task, allowing a new
+connection to overlap a later cleanup and letting that cleanup return while the new opening remains.
+
+**Fix/evidence:** recheck `closing` in a loop after each suspension. This is supported by the public
+call path and the permitted actor interleaving; no scheduler-dependent test or claim of reproduced
+graceful-shutdown resurrection is made. Normal graceful shutdown closes and drains lanes first.
+
+### SDK receiver cancellation came after transport cleanup
+
+**Invariant:** handshake cleanup cancels the SDK receive task before waiting for network teardown.
+
+**Sequence:** a handshake has a live receiver; cancellation enters `open`'s cleanup, which awaited
+`transport.disconnect()` first. That transport finishes the incoming stream, then may await sends
+and session DELETE. The pinned SDK repeats receive on normal stream completion until its task is
+cancelled, so the still-active receiver can repeatedly read the completed stream during cleanup.
+
+**Code/consequence:** the ordering in `MCPServerSession.open` kept SDK receive work active for the
+duration of transport cleanup. This is a source-established busy-loop path, not a measured CPU claim.
+
+**Fix/evidence:** call `client.disconnect()` first so the SDK cancels its receiver; retain explicit
+transport cleanup, handshake join and final disconnect for a late-installed receiver. The new test
+uses the real SDK and a gated stream to observe cancellation at the transport boundary. It failed
+on the initial PR head (`receiverCancelled == false`) and passes with the corrected order.
+
+### A regression test could hang on the defect it should report
+
+The outbox shutdown test joined the service before releasing its held clock. A mutant that lost
+retry cancellation but kept the join could wait forever. It now awaits an explicit service-finished
+signal with the shared missing-signal watchdog, releases the held clock on either outcome, and then
+joins. Success still depends on emitted signals, never on elapsed time. No duplicate test was added.
+
 ## Validation
 
 Eight selected regression tests were rerun with the original production implementations restored
@@ -208,7 +284,7 @@ SDK handshake, late connection reuse, and HTTP body/session teardown. The fixed 
 were then restored before the final checks. The already-cancelled-launch test was excluded from this
 whole-original-code experiment because its precise mutant assumes the joined-return fix.
 
-Final checks, in required order, on Apple Swift 6.3.3 / arm64 macOS:
+First-pass checks, in required order, on Apple Swift 6.3.3 / arm64 macOS:
 
 - `scripts/lint.sh --fix`: three formatting-only corrections reviewed, `lint: ok`.
 - `scripts/lint.sh`: `lint: ok`; advisory warnings occur only in unchanged files.
@@ -216,7 +292,21 @@ Final checks, in required order, on Apple Swift 6.3.3 / arm64 macOS:
 - `swift test`: 3437 tests in 443 suites passed in 14.831 seconds of test execution.
 - `git diff --check` and all local links in this report passed.
 
-The independent test-value/redundancy review found no blocking issue. Linux validation belongs to
-the PR CI run.
+The original PR head subsequently passed all seven CI checks, including Linux and macOS tests.
+
+Second-pass checks on the corrected combined tree, before splitting into focused PRs:
+
+- Three regression scenarios failed on the initial PR code: lost batch observations, a final
+  approval proposal suspending after cancellation, and the SDK receiver remaining uncancelled at
+  transport teardown. All pass with the corrections.
+- The targeted run passed 17 tests in 5 suites.
+- `scripts/lint.sh --fix`: one test-layout correction reviewed; final rerun changed zero files.
+- `scripts/lint.sh`: `lint: ok`, with no new advisory warnings.
+- `swift build`: `Build complete! (4.93s)`.
+- `swift test`: 3439 tests in 443 suites passed in 15.948 seconds.
+- `git diff --check` and audit-report local link validation passed.
+
+The independent second test-value review found no remaining blocker after adding direct degraded
+outcome and one-result-per-call assertions. Focused PRs record their own branch-specific checks.
 This audit uses deterministic scripted/local process tests; it does not claim live Telegram/MCP,
 paid inference, Apple Speech cancellation profiling, or production daemon deployment validation.

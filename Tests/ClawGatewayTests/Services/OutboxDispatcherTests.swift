@@ -561,6 +561,7 @@ struct OutboxDispatcherTests {
     // given
     let waitStarted = AsyncGate()
     let waitFinished = AsyncGate()
+    let serviceFinished = AsyncGate()
     let releaseWait = AsyncGate()
     defer { releaseWait.open() }
     let clock = ScriptedClock { _ in
@@ -580,18 +581,21 @@ struct OutboxDispatcherTests {
       clock: clock
     )
     let service = Task {
+      defer { serviceFinished.open() }
       try await dispatcher.run()
     }
     let started = await waitStarted.waitUntilOpen()
 
     // when
     service.cancel()
-    try await service.value
+    let stopped = await serviceFinished.waitUntilOpen()
     let retryFinishedAtShutdown = waitFinished.isOpen
     releaseWait.open()
+    try await service.value
 
     // then
     #expect(started)
+    #expect(stopped)
     #expect(retryFinishedAtShutdown)
     #expect(try fixture.outbox.pendingOutbound().map(\.payload) == ["held until retry"])
     #expect(await spy.deliveredPayloads.isEmpty)

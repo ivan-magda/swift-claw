@@ -319,7 +319,9 @@ private extension MCPServerSession {
 
 private extension MCPServerSession {
   func connected() async throws -> Client {
-    await closing?.value
+    while let closing {
+      await closing.value
+    }
     try Task.checkCancellation()
     if let client {
       return client
@@ -365,8 +367,8 @@ private extension MCPServerSession {
       return client
     } catch {
       handshake.cancel()
-      await transport.disconnect()
       await client.disconnect()
+      await transport.disconnect()
       _ = await handshake.result
       // SDK connect can install its receive task after an earlier disconnect suspended it.
       await client.disconnect()
