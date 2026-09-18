@@ -502,6 +502,10 @@ extension AgentRuntime {
       await typingIndicator.sendTyping(chatID: chatID, messageThreadID: threadID)
       var observations: [ToolObservation] = []
       for call in response.toolCalls {
+        guard !Task.isCancelled else {
+          break
+        }
+
         proposedToolCalls += 1
         guard proposedToolCalls <= budget.maxToolCalls else {
           return outcome(.budgetStopped(cap: "per-run tool-call"))
@@ -584,6 +588,22 @@ extension AgentRuntime {
         }
       }
 
+      let interrupted = Task.isCancelled
+      if interrupted {
+        let observedIDs = Set(observations.map(\.callID))
+        for call in response.toolCalls where !observedIDs.contains(call.id) {
+          observations.append(
+            ToolObservation(
+              callID: call.id,
+              toolName: call.name,
+              content: "Tool call was not executed because the run was cancelled.",
+              status: .error,
+              ingestedUntrusted: false
+            )
+          )
+        }
+      }
+
       wire.append(
         ChatMessage(
           role: .assistant,
@@ -613,6 +633,13 @@ extension AgentRuntime {
           providerState: response.providerState
         )
       )
+
+      if interrupted {
+        return outcome(
+          .degraded(.providerUnavailable, usage: nil),
+          failureCause: .processInterruption
+        )
+      }
 
       if let pending = pendingSuspension {
         return outcome(.suspended(pending: pending, usage: intermediate))
