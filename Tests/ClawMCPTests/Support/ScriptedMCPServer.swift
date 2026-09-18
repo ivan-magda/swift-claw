@@ -110,8 +110,7 @@ struct StubTransportFactory: MCPTransportFactory {
   }
 }
 
-/// A transport that accepts everything and answers nothing: `connect` and `send` succeed, and the
-/// receive stream stays open and empty.
+/// A single-use transport that accepts messages and answers nothing until disconnected.
 ///
 /// This is the server that no HTTP timeout catches — the exchange completed, so nothing is in
 /// flight, but no reply carrying our request's id ever arrives, and the SDK resolves a request only
@@ -119,6 +118,7 @@ struct StubTransportFactory: MCPTransportFactory {
 actor SilentTransport: Transport {
   nonisolated let logger = Logger(label: "test.mcp.silent")
 
+  private var closed = false
   private let messages: AsyncThrowingStream<Data, any Error>
   private let continuation: AsyncThrowingStream<Data, any Error>.Continuation
 
@@ -131,13 +131,22 @@ actor SilentTransport: Transport {
     self.continuation = continuation
   }
 
-  func connect() async throws {}
+  func connect() async throws {
+    guard !closed else {
+      throw MCPTransportError.notConnected
+    }
+  }
 
   func disconnect() async {
+    closed = true
     continuation.finish()
   }
 
-  func send(_ data: Data) async throws {}
+  func send(_ data: Data) async throws {
+    guard !closed else {
+      throw MCPTransportError.notConnected
+    }
+  }
 
   func receive() -> AsyncThrowingStream<Data, any Error> {
     messages
