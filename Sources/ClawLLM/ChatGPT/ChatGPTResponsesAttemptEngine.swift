@@ -42,9 +42,9 @@ struct ChatGPTResponsesAttemptPlan: Sendable {
 ///
 /// Two facts hold the no-double-billing guarantee together. A recognized non-success head proves the
 /// server answered instead of inferring, so exposure resets to `notStarted` and a clean retryable
-/// class may be replayed. And the retry boundary closes on the first non-comment SSE `data:` byte:
-/// after it, an ambiguous sent attempt must never be replayed, so a disconnect, malformed frame, or
-/// in-band error degrades conservatively instead. One budget counts every wire attempt — clean-401
+/// class may be replayed. A successful head makes every subsequent stream failure terminal:
+/// a disconnect, malformed frame, or in-band error degrades conservatively even if no data field
+/// has arrived. One budget counts every wire attempt — clean-401
 /// refresh, replay-state recovery, 408, 429, 5xx, and definitely-not-sent transport retries — so no
 /// path silently resets it.
 struct ChatGPTResponsesAttemptEngine: Sendable {
@@ -457,9 +457,9 @@ private extension ChatGPTResponsesAttemptEngine {
 private extension ChatGPTResponsesAttemptEngine {
   /// Reads a 2xx stream, emitting owner-visible deltas and joining the exchange on every exit. The
   /// production policy cancels and joins promptly after its first terminal; strict evaluation drains
-  /// terminal aliases through transport EOF. Nothing here is ever retried: a 2xx head has already
-  /// moved exposure past the point a replay would be safe, and the first data byte has closed the
-  /// retry boundary.
+  /// terminal aliases through transport EOF. Nothing here is ever retried: request handoff already
+  /// made exposure conservative, and a successful head supplies no proof that would make the
+  /// attempt replayable.
   func consume(
     _ exchange: HTTPStreamExchange,
     exposure: ProviderAttemptExposure,

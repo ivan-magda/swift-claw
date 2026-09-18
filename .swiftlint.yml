@@ -6,7 +6,6 @@ included:
   - Tests
   - Package.swift
   - BuildTools/Package.swift
-  - BuildTools/Sources
 excluded:
   - .build
 

@@ -155,10 +155,9 @@ private func requireTimedOut(
 
 // MARK: - Cancellation-aware send double
 
-/// A send that blocks until released OR cancelled — the ephemeral-send analog of a production HTTP
+/// A send that blocks until cancelled — the ephemeral-send analog of a production HTTP
 /// POST, so the bounded-send drain can abandon it without wedging on a sink that ignores cancellation.
-/// Both blocking halves are `AsyncGate`s, so this observes cancellation without hand-rolling its own
-/// continuation bookkeeping.
+/// An `AsyncGate` observes cancellation without hand-rolling its own continuation bookkeeping.
 private actor GatedSend {
   private let startGate = AsyncGate()
   private let releaseGate = AsyncGate()
@@ -176,14 +175,6 @@ private actor GatedSend {
     if !releaseGate.isOpen {
       observedCancellation = true
     }
-  }
-
-  func waitUntilStarted() async {
-    await startGate.waitIgnoringCancellation()
-  }
-
-  func release() {
-    releaseGate.open()
   }
 }
 

@@ -14,7 +14,6 @@ struct CommandApprovalResolutionTests {
     let commands: CommandStoreGRDB
     let approvals: ApprovalStoreGRDB
 
-    let sessionID: Int64
     let runID: Int64
     let approvalID: Int64
   }
@@ -75,7 +74,6 @@ struct CommandApprovalResolutionTests {
       queue: queue,
       commands: CommandStoreGRDB(writer: queue),
       approvals: ApprovalStoreGRDB(writer: queue),
-      sessionID: sessionID,
       runID: runID,
       approvalID: approvalID
     )

@@ -6,11 +6,9 @@ import Testing
 
 struct CodexFixture {
   let git: GitWorkspaceFixture
-  let executable: URL
 
   init() async throws {
     git = try await GitWorkspaceFixture()
-    executable = git.root.appendingPathComponent("codex")
     try write(
       "help",
       """

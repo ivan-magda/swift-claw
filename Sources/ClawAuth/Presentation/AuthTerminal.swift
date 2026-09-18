@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - Presentation
 
 /// Where a line belongs. The distinction is not decoration: an owner piping `auth status` into a

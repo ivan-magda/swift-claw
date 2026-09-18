@@ -1,5 +1,4 @@
 import ClawCore
-import Foundation
 import MCP
 
 /// One remote tool, ready to become a `Tool`: named for the registry, schema repaired, description

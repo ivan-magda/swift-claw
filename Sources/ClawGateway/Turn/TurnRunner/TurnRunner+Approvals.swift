@@ -11,15 +11,13 @@ extension TurnRunner {
   /// commit back — there is nothing to park, so the turn simply ends (in-band, no throw escapes).
   func suspendForApproval(
     pending: PendingToolAction,
-    usage: ProviderUsage,
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
     // Invariant: `.suspended` is only returned after `outcome.exchanges.append(...)` upstream, so
     // `exchanges.last` is never nil on this path — this branch is defensive-only, unreachable today.
-    // `usage` here is the SAME intermediate usage AgentRuntime already recorded mid-loop; passing it
-    // to `commitDegradation` would debit `provider_usage` a second time for the same round. Pass
-    // `nil` so this dead fallback can never double-debit even if the invariant above ever broke.
+    // AgentRuntime already recorded the intermediate usage mid-loop. The context-unavailable
+    // fallback commits no usage, so it cannot debit the same round twice.
     guard let anchor = outcome.exchanges.last else {
       logger.error("suspended turn for run \(context.runID) carried no exchange; failing in-band")
       try commitContextUnavailable(

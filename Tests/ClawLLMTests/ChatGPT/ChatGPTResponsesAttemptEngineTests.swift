@@ -8,7 +8,7 @@ import Testing
 @testable import ClawLLM
 
 /// The shared Responses attempt engine: one exposure reducer, one wire-attempt budget across every
-/// retry class, and a retry boundary that closes at the first SSE `data:` byte. Every HTTP outcome is
+/// retry class, and no retry after a successful SSE response head. Every HTTP outcome is
 /// scripted at the unmanaged seam and every delay runs on a manual clock, so nothing here waits on
 /// real time.
 @Suite
@@ -534,7 +534,7 @@ struct ChatGPTResponsesAttemptEngineTests {
     // when
     let outcome = await harness.run()
 
-    // then — the boundary closed on the first data byte, so the drop is not retried, and the
+    // then — the successful head made stream failures terminal, so the drop is not retried, and the
     // generated deltas are carried as a conservative lower bound
     #expect(await harness.attemptCount == 1)
     let failure = try #require(failureCause(outcome))

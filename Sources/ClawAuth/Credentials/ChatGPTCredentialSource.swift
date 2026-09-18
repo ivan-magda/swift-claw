@@ -173,20 +173,22 @@ where ClockType.Duration == Duration {
       throw ChatGPTCredentialError.authenticationRequired
     case .pendingPersistence(let pending):
       return try await retryPublication(of: pending)
-    case .refreshing(let flight):
-      return try await join(flight)
+    case .refreshing:
+      return try await join()
     case .cooldown(let cooling):
       let remaining = clock.now.duration(to: cooling.until)
       guard remaining <= .zero else {
         throw cooling.failure(retryAfter: remaining)
       }
-      return try await join(startFlight(from: cooling.credential, replacing: cooling.generation))
+      startFlight(from: cooling.credential, replacing: cooling.generation)
+      return try await join()
     case .ready(let credential, let generation):
       let freshness = ChatGPTCredentialFreshness.classify(expiresAt: credential.expiresAt, now: now)
       guard freshness != .fresh else {
         return authorization(for: credential, generation: generation)
       }
-      return try await join(startFlight(from: credential, replacing: generation))
+      startFlight(from: credential, replacing: generation)
+      return try await join()
     }
   }
 
@@ -377,9 +379,8 @@ private extension ChatGPTCredentialSource {
     case .publishRotation:
       return install(pending)
     case .forceRefresh:
-      return try await join(
-        startFlight(from: pending.credential, replacing: pending.baseGeneration)
-      )
+      startFlight(from: pending.credential, replacing: pending.baseGeneration)
+      return try await join()
     }
   }
 
@@ -436,7 +437,7 @@ private extension ChatGPTCredentialSource {
   func startFlight(
     from credential: ChatGPTValidatedCredential,
     replacing generation: LLMCredentialGeneration
-  ) -> Flight {
+  ) {
     lastFlightID += 1
     let flightID = lastFlightID
     let task = Task {
@@ -449,7 +450,6 @@ private extension ChatGPTCredentialSource {
       task: task
     )
     state = .refreshing(flight)
-    return flight
   }
 
   /// The refresh worker. It is deliberately outside the actor: only its finalizer touches state, and
@@ -489,7 +489,7 @@ private extension ChatGPTCredentialSource {
     return true
   }
 
-  func join(_ flight: Flight) async throws -> LLMRequestAuthorization {
+  func join() async throws -> LLMRequestAuthorization {
     lastWaiterID += 1
     let waiterID = lastWaiterID
     return try await withTaskCancellationHandler(

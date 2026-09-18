@@ -14,7 +14,6 @@ extension ScheduledLearningStoreGRDB {
     let evaluation: LearningEvaluation
     let issueCodesJSON: String
     let compatibilityDigest: CompatibilityDigest
-    let createdAt: Date
   }
 
   public func evaluation(runID: Int64) throws(StoreError) -> LearningEvaluation? {
@@ -231,7 +230,7 @@ extension ScheduledLearningStoreGRDB {
           let compatibilityRaw = SQLiteStoredValue.string(in: row, column: "compatibility_digest"),
           isCanonicalDigest(compatibilityRaw),
           let createdRaw = SQLiteStoredValue.int64(in: row, column: "created_at"),
-          let createdAt = EpochSecondCodec.date(fromEpoch: createdRaw),
+          EpochSecondCodec.date(fromEpoch: createdRaw) != nil,
           let route = SQLiteStoredValue.string(in: row, column: "evaluator_route"),
           route.isEmpty == false
     else {
@@ -258,8 +257,7 @@ extension ScheduledLearningStoreGRDB {
       evidenceDigest: EvidenceDigest(rawValue: evidenceRaw),
       evaluation: evaluation,
       issueCodesJSON: issueJSON,
-      compatibilityDigest: CompatibilityDigest(rawValue: compatibilityRaw),
-      createdAt: createdAt
+      compatibilityDigest: CompatibilityDigest(rawValue: compatibilityRaw)
     )
   }
 }

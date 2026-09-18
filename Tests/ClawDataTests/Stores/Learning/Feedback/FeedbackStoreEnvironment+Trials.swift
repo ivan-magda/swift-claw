@@ -35,7 +35,6 @@ extension FeedbackStoreEnvironment {
     let trialID: Int64
     let candidateDigest: String
     let replacementDigest: String
-    let generation: Int
   }
 
   func seedOpenTrial() throws -> Trial {
@@ -108,8 +107,7 @@ extension FeedbackStoreEnvironment {
       return Trial(
         trialID: trialID,
         candidateDigest: artifact.digest.rawValue,
-        replacementDigest: replacement.digest.rawValue,
-        generation: generation
+        replacementDigest: replacement.digest.rawValue
       )
     }
   }
@@ -198,8 +196,7 @@ extension FeedbackStoreEnvironment {
       return Trial(
         trialID: trialID,
         candidateDigest: artifact.digest.rawValue,
-        replacementDigest: replacement.digest.rawValue,
-        generation: generation
+        replacementDigest: replacement.digest.rawValue
       )
     }
   }

@@ -102,7 +102,6 @@ struct ChatGPTResponsesBoundsTests {
 
     // then
     #expect(count == 0)
-    #expect(parser.hasSeenDataFieldByte)
   }
 
   @Test

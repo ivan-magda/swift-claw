@@ -102,10 +102,6 @@ struct SC3Harness {
     try stores.sessionMessages.findSession(sessionKey: sessionKey) ?? 0
   }
 
-  func pending() async throws -> CommandConfirmation? {
-    await registry.pending(sessionID: try sessionID())
-  }
-
   func snapshot() throws -> SessionContextSnapshot {
     try stores.sessionMessages.loadContextSnapshot(
       sessionID: try sessionID(),
