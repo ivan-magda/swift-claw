@@ -15,16 +15,11 @@ struct CodexInspection: Sendable {
       throw CoderError.unavailable("Coder destination is not the expected Git repository root.")
     }
     if let baseline = workspace.baseline {
-      do {
-        let current = try await RepositoryInventory.capture(at: workspace.directory, git: git)
-        outcome.changedFiles = current.changedPaths(comparedWith: baseline)
-      } catch RepositoryInventory.Failure.unavailable {
-        outcome.changedFiles = nil
-      } catch CoderGitFailure.command {
-        outcome.changedFiles = nil
-      } catch CoderGitFailure.output {
-        outcome.changedFiles = nil
-      }
+      let current = try await RepositoryInventory.captureIfAvailable(
+        at: workspace.directory,
+        git: git
+      )
+      outcome.changedFiles = current?.changedPaths(comparedWith: baseline)
     }
     do {
       outcome.branch = try await git.text(

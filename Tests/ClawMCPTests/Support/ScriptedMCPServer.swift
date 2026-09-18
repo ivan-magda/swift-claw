@@ -202,11 +202,11 @@ actor FaultyTransport: Transport {
 
   private let inner: InMemoryTransport
   private let failingSend: Int
-  private let failure: MCPTransportError
+  private let failure: any Error
   private var stream: AsyncThrowingStream<Data, any Error>?
   private var sends = 0
 
-  init(wrapping inner: InMemoryTransport, failingSend: Int, with failure: MCPTransportError) {
+  init(wrapping inner: InMemoryTransport, failingSend: Int, with failure: any Error) {
     self.inner = inner
     self.failingSend = failingSend
     self.failure = failure

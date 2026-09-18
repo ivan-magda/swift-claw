@@ -180,22 +180,7 @@ private extension ScheduledLearningStoreGRDB {
     guard try currentEpochHasOnlyKnownTrialStates(db, state: state) else {
       throw ViewCorruption.invalid
     }
-    let rows = try Row.fetchAll(
-      db,
-      sql: """
-        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-          admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
-        FROM learning_trials
-        WHERE job_id = ? AND state IN (?, ?)
-        ORDER BY trial_id
-        """,
-      arguments: [
-        job.jobID,
-        LearningTrialState.open.rawValue,
-        LearningTrialState.draining.rawValue,
-      ]
-    )
+    let rows = try liveTrialRows(db, jobID: job.jobID)
     guard rows.count <= 1 else {
       throw ViewCorruption.invalid
     }

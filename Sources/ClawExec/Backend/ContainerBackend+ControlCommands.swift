@@ -5,10 +5,10 @@ import Foundation
 // MARK: - Typed Control Evidence
 
 extension ContainerBackend {
-  func engineRunning(deadline: ContinuousClock.Instant) async -> Bool {
+  func engineRunning(limit: Duration, deadline: ContinuousClock.Instant) async -> Bool {
     guard let data = await boundedCommandData(
       ContainerInvocation.systemStatus(),
-      limit: Self.lifecycleCommandTimeout,
+      limit: limit,
       deadline: deadline
     )
     else {

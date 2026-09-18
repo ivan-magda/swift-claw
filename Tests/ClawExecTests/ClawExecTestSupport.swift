@@ -158,6 +158,19 @@ func fixedIdentity() throws -> ExecutionIdentity {
   ExecutionIdentity(uuid: try #require(UUID(uuidString: "11111111-2222-3333-4444-555555555555")))
 }
 
+func sandboxSettings() throws -> ExecSandboxSettings {
+  ExecSandboxSettings(
+    workloadImage: try #require(
+      PinnedImageReference.parse(
+        // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
+        "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      )
+    ),
+    memoryMiB: 1024,
+    cpus: 4
+  )
+}
+
 func pythonEntrypoint() -> StagedFile {
   StagedFile(name: ".clawd-entrypoint.py", bytes: Data("print('ok')".utf8), mode: .readExecute)
 }
@@ -191,16 +204,7 @@ struct BackendFixture {
       path: "clawd-backend-tests-\(UUID().uuidString.lowercased())"
     )
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
-    settings = ExecSandboxSettings(
-      workloadImage: try #require(
-        PinnedImageReference.parse(
-          // swiftlint:disable:next line_length // Keep the full pinned image digest intact.
-          "cgr.dev/swift-claw/python@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        )
-      ),
-      memoryMiB: 1024,
-      cpus: 4
-    )
+    settings = try sandboxSettings()
   }
 
   func backend(

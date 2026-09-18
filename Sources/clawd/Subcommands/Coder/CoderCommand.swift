@@ -29,8 +29,7 @@ struct CoderCommand: ParsableCommand {
 
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
-      let filePath =
-        envFile ?? environment["CLAW_ENV_FILE"] ?? NSHomeDirectory() + "/.swift-claw/clawd.env"
+      let filePath = EnvironmentLoader.envFilePath(explicit: envFile, environment: environment)
       let file = try CoderSetupFile(path: filePath)
       let path = try Self.capturePath(environment["PATH"])
 

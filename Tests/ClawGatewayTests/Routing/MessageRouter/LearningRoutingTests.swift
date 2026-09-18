@@ -133,7 +133,9 @@ struct LearningRoutingTests {
       now: harness.now
     )
     try harness.insertUnreadableCurrentDecision(jobID: job.id)
-    #expect(try harness.learning.learningView(jobID: job.id).isOnlyUnreadable)
+    #expect(
+      try LearningViewInspection.isOnlyUnreadable(harness.learning.learningView(jobID: job.id))
+    )
 
     // when
     let parked = await harness.router.handle(
@@ -150,7 +152,11 @@ struct LearningRoutingTests {
     #expect(prompt?.contains(SecretRedactor.replacement) == true)
     #expect(prompt?.contains("secret-label") == false)
     #expect(try harness.learningEpoch(jobID: job.id) == LearningEpoch(2))
-    #expect(try harness.learning.learningView(jobID: job.id).onlyReadable != nil)
+    #expect(
+      try LearningViewInspection.onlyReadable(
+        in: harness.learning.learningView(jobID: job.id)
+      ) != nil
+    )
   }
 
   @Test
@@ -449,23 +455,5 @@ enum ResetConfirmationRace: CaseIterable {
     case .notFound:
       "No schedule with id \(jobID). Nothing was reset."
     }
-  }
-}
-
-// MARK: - Learning View Inspection
-
-private extension Array where Element == JobLearningView {
-  var onlyReadable: ReadableJobLearningView? {
-    guard count == 1, case .readable(let view) = self[0] else {
-      return nil
-    }
-    return view
-  }
-
-  var isOnlyUnreadable: Bool {
-    guard count == 1, case .unreadable = self[0] else {
-      return false
-    }
-    return true
   }
 }

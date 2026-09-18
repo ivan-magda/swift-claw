@@ -94,18 +94,7 @@ extension ScheduledLearningStoreGRDB {
   /// The job's trial while it still owns the job's learning position — open or draining. A decided
   /// trial is gone from this read, which is what makes the job admissible for a new candidate.
   static func liveTrial(_ db: Database, jobID: Int64) throws -> LearningTrial? {
-    let rows = try Row.fetchAll(
-      db,
-      sql: """
-        SELECT trial_id, job_id, learning_epoch, base_digest, candidate_digest, generation,
-          admitted_at, assignment_deadline, decision_deadline, max_assignments,
-          consumed_assignments, cohort_cutoff, state, close_reason, algorithm
-        FROM learning_trials
-        WHERE job_id = ? AND state IN (?, ?)
-        ORDER BY trial_id
-        """,
-      arguments: [jobID, LearningTrialState.open.rawValue, LearningTrialState.draining.rawValue]
-    )
+    let rows = try liveTrialRows(db, jobID: jobID)
     guard rows.count <= 1 else {
       throw StoreError.unexpected("job \(jobID) has multiple live trials")
     }

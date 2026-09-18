@@ -174,11 +174,7 @@ public struct ExfilArgGuard: Sendable {
   /// The rendering pass on its own — used for ALLOWED calls' audit rows too, so an audit row
   /// can never re-contain a secret whatever the verdict.
   public func renderRedacted(argsJSON: String) -> String {
-    var rendered = argsJSON
-
-    for secret in secretValues {
-      rendered = rendered.replacingOccurrences(of: secret, with: SecretRedactor.replacement)
-    }
+    var rendered = SecretRedactor(secretValues: secretValues).redact(argsJSON)
 
     for shape in Self.shapePatterns {
       // Rebuilt each iteration: an earlier rule's replacement mutates `rendered`, and a stale

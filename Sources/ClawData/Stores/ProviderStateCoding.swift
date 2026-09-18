@@ -42,16 +42,8 @@ enum ProviderStateCoding {
   /// never selected. Each drops the optional state alone; the message it belongs to stays whole,
   /// because the state was never what made the message usable.
   static func decode(_ row: Row) -> ProviderExchangeState? {
-    // The optional subscript, because GRDB's non-optional one is a `try!` that traps on a column
-    // the SELECT never named. A caller that forgets `selection` should lose the state, not the
-    // process.
-    let issuerValue = row[issuerColumn] as DatabaseValue? ?? .null
-    let payloadValue = row[payloadColumn] as DatabaseValue? ?? .null
-
-    // Storage classes, not typed decodes: `row["…"] as Data?` would happily coerce a TEXT value
-    // into bytes and hand the adapter a payload no issuer ever wrote.
-    guard case .string(let issuer) = issuerValue.storage,
-          case .blob(let payload) = payloadValue.storage,
+    guard let issuer = SQLiteStoredValue.string(in: row, column: issuerColumn),
+          let payload = SQLiteStoredValue.data(in: row, column: payloadColumn),
           payload.count <= maxPayloadBytes
     else {
       return nil
@@ -75,7 +67,7 @@ enum MessageRowInsert {
   ) throws {
     let allColumns =
       columns + [ProviderStateCoding.issuerColumn, ProviderStateCoding.payloadColumn]
-    let placeholders = Array(repeating: "?", count: allColumns.count).joined(separator: ", ")
+    let placeholders = databaseQuestionMarks(count: allColumns.count)
 
     try db.execute(
       sql: """

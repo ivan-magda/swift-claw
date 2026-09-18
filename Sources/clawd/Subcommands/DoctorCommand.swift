@@ -261,19 +261,10 @@ private extension DoctorCommand {
       return
     }
 
-    // Same posture the daemon's tool client runs under, so what probes clean here is what will
-    // load there.
-    let client = HTTPClient(
-      eventLoopGroupProvider: .singleton,
-      configuration: HTTPClientProfile.protectedEgress.configuration
-    )
     let outcomes = await MCPProbe.run(
       servers: mcp.config.enabledServers,
-      credentials: mcp.credentials,
-      http: AsyncHTTPExecutor(client: client),
-      logger: MCPProbe.quietLogger()
+      credentials: mcp.credentials
     )
-    try? await client.shutdown()
 
     report.add(contentsOf: MCPDoctorRows.bootRows(outcomes: outcomes))
   }
@@ -394,24 +385,20 @@ private extension DoctorCommand {
   func addHealthRows(to report: inout DoctorReport, stores: ClawStores, config: AppConfig) {
     let now = Date()
     report.add(
-      contentsOf: HealthRowsBuilder.checks(
-        DoctorHealth.inputs(
-          stores: stores,
-          config: config,
-          now: now,
-          // The cooldown windows live in the running daemon's memory. This command is a separate
-          // process, so it reports the configured routes and says plainly that it cannot see which
-          // one is answering.
-          routeHealth: LLMRouteHealth(
-            primaryReference: config.llm.route.configuredReference,
-            fallbackReference: config.llm.fallbackRoute?.configuredReference,
-            cooldown: .unobservable
-          )
+      contentsOf: DoctorHealth.checks(
+        stores: stores,
+        config: config,
+        now: now,
+        // The cooldown windows live in the running daemon's memory. This command is a separate
+        // process, so it reports the configured routes and says plainly that it cannot see which
+        // one is answering.
+        routeHealth: LLMRouteHealth(
+          primaryReference: config.llm.route.configuredReference,
+          fallbackReference: config.llm.fallbackRoute?.configuredReference,
+          cooldown: .unobservable
         )
       )
     )
-    report.add(contentsOf: DoctorHealth.schedulerChecks(stores: stores, config: config, now: now))
-    report.add(contentsOf: DoctorHealth.approvalChecks(stores: stores, config: config, now: now))
     let secrets = try? EnvironmentLoader.loadSecrets(config: config)
     report.add(
       contentsOf: CoderHealthRows.persisted(

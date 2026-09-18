@@ -143,13 +143,10 @@ public actor ContainerBackend {
     }
 
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
-    guard let data = await boundedCommandData(
-      ContainerInvocation.systemStatus(),
+    guard await engineRunning(
       limit: Self.ordinaryCommandTimeout,
       deadline: deadline
-    ),
-          let status = try? JSONDecoder().decode(SystemStatusDocument.self, from: data),
-          status.status == "running"
+    )
     else {
       return .unavailable(reason: ownerSafe("container engine is not running"))
     }

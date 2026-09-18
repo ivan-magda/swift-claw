@@ -82,7 +82,12 @@ private extension LearningOperationRunner {
     else {
       return
     }
-    guard let claim = try learning.claimOperation(Self.key(for: evidence), now: now) else {
+    let key = LearningOperationKey.evaluation(
+      jobID: evidence.jobID,
+      epoch: evidence.epoch,
+      evidenceDigest: evidence.digest
+    )
+    guard let claim = try learning.claimOperation(key, now: now) else {
       return
     }
 
@@ -131,7 +136,8 @@ private extension LearningOperationRunner {
     carrier: CarrierAuthorization,
     now: Date
   ) throws -> Bool {
-    let estimate = accountant(for: route.binding).preflightEstimate(context: call.messages)
+    let usageAccountant = accountant(for: route.binding, outputCap: Self.evaluatorOutputTokenCap)
+    let estimate = usageAccountant.preflightEstimate(context: call.messages)
     let authorization = LearningAuthorization(
       operationID: call.operationID,
       carrier: carrier,
@@ -156,30 +162,16 @@ private extension LearningOperationRunner {
   /// budget beyond that: a learning inference the roster cannot serve is spend the algorithm
   /// declines rather than a request to keep trying.
   func dispatch(_ call: Call, starting: RouteSelection, now: Date) async {
-    var active = starting
-    var request = Self.request(model: active.binding.wireModel, messages: call.messages)
-    while true {
-      do {
-        let response = try await active.binding.provider.complete(request: request)
-        if active.position == .primary {
-          _ = await cooldown?.recordSuccess()
-        }
-        commit(response, call: call, route: active.binding, now: now)
-        return
-      } catch {
-        guard let persistence = RouteSwitch.permits(error),
-              let next = roster.failover(from: active.position)
-        else {
-          commit(failure: error, call: call, route: active.binding, now: now)
-          return
-        }
-        await cooldown?.arm(
-          persistence: persistence,
-          retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
-        )
-        active = next
-        request = Self.request(model: active.binding.wireModel, messages: call.messages)
-      }
+    let attempt = await dispatchInference(
+      messages: call.messages,
+      outputCap: Self.evaluatorOutputTokenCap,
+      starting: starting
+    )
+    switch attempt.result {
+    case .response(let response):
+      commit(response, call: call, route: attempt.route, now: now)
+    case .failed(let error):
+      commit(failure: error, call: call, route: attempt.route, now: now)
     }
   }
 }
@@ -190,9 +182,10 @@ private extension LearningOperationRunner {
   /// A reply outside the frozen schema is terminal spend, not a prompt to ask again: there is no
   /// schema-repair call, so the operation closes `schema_invalid` with the call it already paid for.
   func commit(_ response: ChatResponse, call: Call, route: LLMRouteBinding, now: Date) {
+    let usageAccountant = accountant(for: route, outputCap: Self.evaluatorOutputTokenCap)
     let usage = LearningCallUsage(
       model: route.configuredReference,
-      resolved: accountant(for: route).reconciled(for: response, context: call.messages)
+      resolved: usageAccountant.reconciled(for: response, context: call.messages)
     )
     let output: EvaluatorOutput
     do {
@@ -226,28 +219,11 @@ private extension LearningOperationRunner {
   /// it holds is real. What it is charged depends on the provider's own verdict: a call that may
   /// have generated tokens owes the conservative estimate, and a proven `notStarted` owes nothing.
   func commit(failure error: any Error, call: Call, route: LLMRouteBinding, now: Date) {
-    let usage: LearningCallUsage
-    switch ProviderFailureAccounting.classify(error) {
-    case .mayHaveStarted(let observedCompletionTokens):
-      usage = LearningCallUsage(
-        model: route.configuredReference,
-        resolved: accountant(for: route).conservative(
-          context: call.messages,
-          observedCompletionTokens: observedCompletionTokens
-        )
-      )
-    case .notStarted:
-      // A confirmed zero, not a guess: the provider proved it generated nothing, which is what
-      // `providerReturned` at $0 means everywhere else in the tree.
-      usage = LearningCallUsage(
-        model: route.configuredReference,
-        promptTokens: 0,
-        completionTokens: 0,
-        costUSD: 0,
-        costSource: .providerReturned,
-        isEstimated: false
-      )
-    }
+    let usage = failedCallUsage(
+      error,
+      context: call.messages,
+      accountant: accountant(for: route, outputCap: Self.evaluatorOutputTokenCap)
+    )
     logger.info("learning call \(call.operationID.rawValue) failed at the provider: \(error)")
     finish(call, usage: usage, product: .failure(.providerTerminal), now: now)
   }
@@ -285,18 +261,6 @@ private extension LearningOperationRunner {
     let messages: [ChatMessage]
   }
 
-  static func key(for evidence: SealedEvidence) -> LearningOperationKey {
-    LearningOperationKey(
-      jobID: evidence.jobID,
-      epoch: evidence.epoch,
-      phase: .evaluator,
-      sourceDigest: evidence.digest.rawValue,
-      promptVersion: EvaluatorPrompt.v1.version,
-      schemaVersion: EvaluatorOutput.currentSchemaVersion,
-      rubricVersion: EvaluatorRubric.v1.version
-    )
-  }
-
   static func surface(servedBy route: LLMRouteBinding) -> EvaluatorSurface {
     EvaluatorSurface(
       route: route.configuredReference,
@@ -314,26 +278,5 @@ private extension LearningOperationRunner {
       ChatMessage(role: .system, content: EvaluatorPrompt.v1.text),
       ChatMessage(role: .user, content: fenced),
     ]
-  }
-
-  static func request(model: String, messages: [ChatMessage]) -> ChatRequest {
-    // No tools, ever: a judging call that could act would stop being a judgement, and the frozen
-    // algorithm gives the evaluator nothing to act with.
-    ChatRequest(
-      model: model,
-      messages: messages,
-      maxOutputTokens: evaluatorOutputTokenCap,
-      tools: []
-    )
-  }
-
-  func accountant(for route: LLMRouteBinding) -> ProviderUsageAccountant {
-    ProviderUsageAccountant(
-      configuredReference: route.configuredReference,
-      costPolicy: route.costPolicy,
-      reservationPolicy: route.reservationPolicy,
-      costResolver: costResolver,
-      outputCap: Self.evaluatorOutputTokenCap
-    )
   }
 }

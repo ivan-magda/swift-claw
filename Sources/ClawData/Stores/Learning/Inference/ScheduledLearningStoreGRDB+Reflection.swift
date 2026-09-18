@@ -422,14 +422,10 @@ private extension ScheduledLearningStoreGRDB {
     _ db: Database,
     trigger: TriggerIdentity
   ) throws -> Bool {
-    let key = LearningOperationKey(
+    let key = LearningOperationKey.reflection(
       jobID: trigger.jobID,
       epoch: trigger.epoch,
-      phase: .reflector,
-      sourceDigest: trigger.digest.rawValue,
-      promptVersion: ReflectorPrompt.v1.version,
-      schemaVersion: ReflectorOutput.currentSchemaVersion,
-      rubricVersion: ReflectorRubric.v1
+      triggerDigest: trigger.digest
     )
     let raw = try String.fetchOne(
       db,
@@ -479,14 +475,10 @@ private extension ScheduledLearningStoreGRDB {
         issueCodes: trigger.issueCodes,
         reason: trigger.reason
       )
-      let key = LearningOperationKey(
+      let key = LearningOperationKey.reflection(
         jobID: prior.jobID,
         epoch: prior.epoch,
-        phase: .reflector,
-        sourceDigest: prior.digest.rawValue,
-        promptVersion: ReflectorPrompt.v1.version,
-        schemaVersion: ReflectorOutput.currentSchemaVersion,
-        rubricVersion: ReflectorRubric.v1
+        triggerDigest: prior.digest
       )
       if try Bool.fetchOne(
         db,

@@ -57,7 +57,10 @@ public struct ExecuteCodeTool: Tool {
               "language": .object(
                 [
                   "type": .string("string"),
-                  "enum": .array([.string("python"), .string("sh")]),
+                  "enum": .array([
+                    .string(ExecLanguage.python.rawValue),
+                    .string(ExecLanguage.sh.rawValue),
+                  ]),
                 ]
               ),
               "code": .object(["type": .string("string")]),

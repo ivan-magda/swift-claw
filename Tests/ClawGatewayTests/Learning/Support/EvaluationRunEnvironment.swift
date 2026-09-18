@@ -125,8 +125,8 @@ struct EvaluationRunEnvironment {
       )
     let fallback = SequenceProvider(primaryFailure == nil ? [] : [answer])
     let roster = ProviderRoster(
-      primary: routeBinding(provider: primary, reference: primaryRoute),
-      fallback: routeBinding(provider: fallback, reference: fallbackRoute)
+      primary: LearningRunFixtures.routeBinding(provider: primary, reference: primaryRoute),
+      fallback: LearningRunFixtures.routeBinding(provider: fallback, reference: fallbackRoute)
     )
 
     let authorizing = RecordingLearningStore(base: learning, supersedes: supersedeAuthorization)
@@ -141,7 +141,7 @@ struct EvaluationRunEnvironment {
         learning: authorizing,
         jobs: jobs,
         roster: roster,
-        budget: budget(proactivePerDayUSD: proactivePerDayUSD),
+        budget: LearningRunFixtures.budget(proactivePerDayUSD: proactivePerDayUSD),
         costResolver: CostResolver(
           priceTable: .empty,
           referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
@@ -240,30 +240,6 @@ private extension EvaluationRunEnvironment {
           payloadHash: ContentHash.fnv1a(finalOutput)
         ),
       ]
-    )
-  }
-
-  static func routeBinding(provider: any LLMProvider, reference: String) -> LLMRouteBinding {
-    LLMRouteBinding(
-      provider: provider,
-      wireModel: reference,
-      configuredReference: reference,
-      costPolicy: .metered,
-      reservationPolicy: .textOnly
-    )
-  }
-
-  static func budget(proactivePerDayUSD: Double) -> RunBudget {
-    let base = RunBudget.default
-    return RunBudget(
-      maxInputTokens: base.maxInputTokens,
-      maxOutputTokens: base.maxOutputTokens,
-      wallClockDeadlineSeconds: base.wallClockDeadlineSeconds,
-      retryBudget: base.retryBudget,
-      perRunUSD: base.perRunUSD,
-      perDayUSD: base.perDayUSD,
-      proactivePerDayUSD: proactivePerDayUSD,
-      referenceUSDPerToken: base.referenceUSDPerToken
     )
   }
 

@@ -201,4 +201,49 @@ struct OperationRunnerTests {
     #expect(try env.evaluatorRoute() == EvaluationRunEnvironment.fallbackRoute)
     #expect(try env.learningUsage().first?.model == EvaluationRunEnvironment.fallbackRoute)
   }
+
+  @Test
+  func aPossiblyStartedFailureCannotSwitchAndKeepsItsObservedUsage() async throws {
+    // given
+    let observedTokens = 10_000
+    let env = try EvaluationRunEnvironment.make(
+      reply: EvaluationRunEnvironment.noIssueReply,
+      primaryFailure: ProviderFailure(
+        cause: .quotaLimited(retryAfterSeconds: nil),
+        accounting: .mayHaveStarted(observedCompletionTokens: observedTokens)
+      )
+    )
+
+    // when
+    await env.runner.runEvaluation(runID: env.runID, now: env.now)
+
+    // then
+    #expect(try env.operationState() == .failed)
+    #expect(try env.failureCode() == .providerTerminal)
+    #expect(try env.learning.evaluation(runID: env.runID) == nil)
+    let charged = try #require(try env.learningUsage().first)
+    #expect(charged.model == EvaluationRunEnvironment.primaryRoute)
+    #expect(charged.tokens >= observedTokens)
+    #expect(charged.costUSD > 0)
+  }
+
+  @Test
+  func aProvenNoStartFailureClosesWithConfirmedZeroUsage() async throws {
+    // given
+    let env = try EvaluationRunEnvironment.make(
+      reply: EvaluationRunEnvironment.noIssueReply,
+      primaryFailure: ProviderError.terminal(status: 400, message: "Invalid request")
+    )
+
+    // when
+    await env.runner.runEvaluation(runID: env.runID, now: env.now)
+
+    // then
+    #expect(try env.operationState() == .failed)
+    #expect(try env.failureCode() == .providerTerminal)
+    let charged = try #require(try env.learningUsage().first)
+    #expect(charged.tokens == 0)
+    #expect(charged.costUSD == 0)
+    #expect(charged.costSource == CostSource.providerReturned.rawValue)
+  }
 }

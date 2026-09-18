@@ -164,85 +164,6 @@ extension ScheduledLearningStoreGRDB {
     throw StoreError.unexpected("feedback challenge CAS lost without a classified predicate")
   }
 
-  static func advanceFeedbackRevision(
-    _ db: Database,
-    challenge: FeedbackChallenge
-  ) throws -> FeedbackRevision? {
-    let revision = try Int64.fetchOne(
-      db,
-      sql: """
-        UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
-        WHERE job_id = ? AND learning_epoch = ?
-        RETURNING feedback_revision
-        """,
-      arguments: [challenge.jobID, challenge.epoch.value]
-    )
-    return revision.map(FeedbackRevision.init)
-  }
-}
-
-// MARK: - Challenge Events
-
-extension ScheduledLearningStoreGRDB {
-  static func insertEvent(
-    _ db: Database,
-    challenge: FeedbackChallenge,
-    payload: String,
-    revision: FeedbackRevision,
-    now: Date
-  ) throws -> FeedbackEvent {
-    let signal = try challengeSignal(challenge.subjectKind)
-    let supersedes = try Int64.fetchOne(
-      db,
-      sql: """
-        SELECT event_id FROM feedback_events
-        WHERE job_id = ? AND learning_epoch = ? AND subject_kind = ? AND subject_digest = ?
-        ORDER BY feedback_revision DESC, event_id DESC LIMIT 1
-        """,
-      arguments: [
-        challenge.jobID,
-        challenge.epoch.value,
-        challenge.subjectKind.rawValue,
-        challenge.subjectDigest,
-      ]
-    )
-    try db.execute(
-      sql: """
-        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
-          payload, actor, transport_update_id, feedback_revision, supersedes, occurred_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
-        """,
-      arguments: [
-        challenge.jobID,
-        challenge.epoch.value,
-        challenge.subjectKind.rawValue,
-        challenge.subjectDigest,
-        signal.rawValue,
-        payload,
-        AuditActor.owner.rawValue,
-        revision.value,
-        supersedes,
-        EpochSecondCodec.epoch(now),
-      ]
-    )
-    return FeedbackEvent(
-      id: db.lastInsertedRowID,
-      runID: try runID(
-        db,
-        jobID: challenge.jobID,
-        subjectKind: challenge.subjectKind,
-        subjectDigest: challenge.subjectDigest
-      ),
-      signal: signal,
-      payload: payload,
-      revision: revision,
-      supersedes: supersedes,
-      occurredAt: now,
-      actor: .owner,
-      transportUpdateID: nil
-    )
-  }
-
   static func challengeSignal(_ subjectKind: FeedbackSubjectKind) throws -> OwnerSignal {
     switch subjectKind {
     case .run:
@@ -251,38 +172,6 @@ extension ScheduledLearningStoreGRDB {
       return .candidateEdit
     case .evaluation, .promotion:
       throw StoreError.unexpected("feedback challenge subject kind cannot carry free text")
-    }
-  }
-
-  static func runID(_ db: Database, target: FeedbackTarget) throws -> Int64? {
-    try runID(
-      db,
-      jobID: target.jobID,
-      subjectKind: target.subjectKind,
-      subjectDigest: target.subjectDigest
-    )
-  }
-
-  static func runID(
-    _ db: Database,
-    jobID: Int64,
-    subjectKind: FeedbackSubjectKind,
-    subjectDigest: String
-  ) throws -> Int64? {
-    switch subjectKind {
-    case .run:
-      return Int64(subjectDigest)
-    case .evaluation:
-      return try Int64.fetchOne(
-        db,
-        sql: """
-          SELECT run_id FROM learning_evaluations
-          WHERE job_id = ? AND evaluation_digest = ?
-          """,
-        arguments: [jobID, subjectDigest]
-      )
-    case .candidate, .promotion:
-      return nil
     }
   }
 }

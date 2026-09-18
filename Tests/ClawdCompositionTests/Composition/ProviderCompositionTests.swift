@@ -3,6 +3,7 @@ import ClawCore
 import ClawGateway
 import ClawLLM
 import ClawTelegram
+import ClawTestSupport
 import Foundation
 import Logging
 import Testing
@@ -92,7 +93,7 @@ struct ProviderCompositionTests {
       recorder: recorder,
       makeManagedStore: { _ in
         storeBuilt.mark()
-        return FreshCredentialStore(present: false)
+        return CompositionAcceptance.freshCredentialStore(present: false)
       },
       buildDaemon: { _, stack, _ in
         box.stack = stack
@@ -120,7 +121,7 @@ struct ProviderCompositionTests {
       config: config(model: "gpt-4o", baseURL: "https://api.test/v1", groupChats: "-1001234567890"),
       recorder: recorder,
       makeManagedStore: { _ in
-        FreshCredentialStore(present: false)
+        CompositionAcceptance.freshCredentialStore(present: false)
       },
       buildDaemon: { _, _, _ in
         Issue.record("assembly must not run when group mode has no bot identity")
@@ -147,7 +148,7 @@ struct ProviderCompositionTests {
       config: config(model: "openai-chatgpt/gpt-5.4", baseURL: nil),
       recorder: recorder,
       makeManagedStore: { _ in
-        FreshCredentialStore(failure: .malformedStorage)
+        ScriptedCredentialStore(.failure(.malformedStorage))
       },
       buildDaemon: { _, _, _ in
         Issue.record("assembly must not run when the stack build fails")

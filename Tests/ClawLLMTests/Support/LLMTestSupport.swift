@@ -7,40 +7,6 @@ import Testing
 
 // MARK: - Test doubles
 
-/// A credential store whose one behavior a test scripts: a present record, an absent one (logged
-/// out), or a typed store failure. It records whether it was opened at all, so the current route can
-/// be proven never to touch it.
-final class ScriptedCredentialStore: LLMCredentialStore, @unchecked Sendable {
-  enum Behavior: Sendable {
-    case value(StoredOAuthCredential?)
-    case failure(LLMCredentialStoreError)
-  }
-
-  let behavior: Behavior
-  private(set) var loadCount = 0
-
-  init(_ behavior: Behavior) {
-    self.behavior = behavior
-  }
-
-  func load(providerID: LLMProviderID) throws(LLMCredentialStoreError) -> StoredOAuthCredential? {
-    loadCount += 1
-    switch behavior {
-    case .value(let credential):
-      return credential
-    case .failure(let error):
-      throw error
-    }
-  }
-
-  func save(
-    _ credential: StoredOAuthCredential,
-    providerID: LLMProviderID
-  ) throws(LLMCredentialStoreError) {}
-
-  func delete(providerID: LLMProviderID) throws(LLMCredentialStoreError) {}
-}
-
 /// Offers exactly the headers and redaction values a test names. `StaticLLMCredentialSource` can
 /// only ever offer `Authorization`, so it cannot drive the adapter's header allowlist at all — that
 /// is precisely what this double exists to reach.

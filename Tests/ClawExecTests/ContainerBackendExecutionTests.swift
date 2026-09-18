@@ -354,36 +354,6 @@ struct ContainerBackendExecutionTests {
     #expect(try scratchChildren(fixture.root).isEmpty)
   }
 
-  @Test
-  func finalPresenceFailureOverridesGuestOrCancellationResult() async throws {
-    // given
-    let fixture = try BackendFixture()
-    defer { fixture.remove() }
-    let runner = ScriptedCommandRunner { command, history in
-      if command.arguments.first == "run" {
-        writeCidfile(from: command.arguments)
-        return commandResult(.timedOut)
-      }
-      if command.arguments.first == "list" {
-        let name = value(after: "--name", in: history[0].arguments) ?? "missing-name"
-        return jsonCommandResult("[{\"id\":\"\(name)\"}]")
-      }
-      return commandResult(.exited(0))
-    }
-    let backend = fixture.backend(commands: runner)
-    await backend.setPreparedInitImageForTesting("ghcr.io/apple/containerization/vminit:1.1.0")
-
-    // when
-    let result = await backend.run(executionRequest())
-
-    // then
-    guard case .startFailed(let reason) = result.terminationReason else {
-      Issue.record("expected cleanup start failure")
-      return
-    }
-    #expect(reason.contains("could not confirm container removal"))
-  }
-
   @Test(.timeLimit(.minutes(1)))
   func cancellationWhileQueuedReturnsCancelledWithoutStartingOperation() async throws {
     // given

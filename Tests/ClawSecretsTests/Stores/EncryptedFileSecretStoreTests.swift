@@ -25,6 +25,26 @@ struct EncryptedFileSecretStoreTests {
   }
 
   @Test
+  func sealNormalizesEmptyAPIKeysWithoutTrimmingCredentialBytes() throws {
+    // given
+    let stateRoot = try makeTemporaryRoot(prefix: "claw-secrets")
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let original = Secrets(
+      telegramBotToken: " 123:abc ",
+      llmAPIKey: "",
+      searchAPIKey: " \t"
+    )
+
+    // when
+    let loaded = try EncryptedFileSecretStore.seal(original, stateRoot: stateRoot)
+
+    // then
+    #expect(loaded.telegramBotToken == original.telegramBotToken)
+    #expect(loaded.llmAPIKey == nil)
+    #expect(loaded.searchAPIKey == original.searchAPIKey)
+  }
+
+  @Test
   func anEnvelopeWrittenBeforeThePublicationProtocolStillDecrypts() throws {
     // given — a byte-for-byte reconstruction of what an installation sealed by the previous
     // implementation has on disk: a version-1 envelope authenticated under AAD [1], written by

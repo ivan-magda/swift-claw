@@ -137,15 +137,12 @@ public actor MCPServerSession {
         ?? ListTools.request(ListTools.Parameters())
       let cancellation = MCPRequestCancellation()
       let context: RequestContext<ListTools.Result> = try await client.send(request)
-      await cancellation.track(client: client, requestID: context.requestID)
-      let listing = try await bounded(
-        allowance: requestAllowance,
+      let listing = try await response(
+        to: context,
+        from: client,
         timingOutWith: .discoveryTimedOut(seconds: budget),
         cancellation: cancellation
-      ) {
-        try await context.value
-      }
-      await cancellation.clear(requestID: context.requestID)
+      )
       page += 1
 
       discovered.append(contentsOf: listing.tools)
@@ -258,6 +255,24 @@ private actor MCPRequestCancellation {
 // MARK: - Budget
 
 private extension MCPServerSession {
+  func response<Value>(
+    to context: RequestContext<Value>,
+    from client: Client,
+    timingOutWith timeout: MCPSessionError,
+    cancellation: MCPRequestCancellation
+  ) async throws -> Value {
+    await cancellation.track(client: client, requestID: context.requestID)
+    let result = try await bounded(
+      allowance: requestAllowance,
+      timingOutWith: timeout,
+      cancellation: cancellation
+    ) {
+      try await context.value
+    }
+    await cancellation.clear(requestID: context.requestID)
+    return result
+  }
+
   /// Runs one exchange under the server's whole-chain budget.
   ///
   /// The HTTP timeouts bound each request and response, which is not the same guarantee: the SDK
@@ -374,16 +389,12 @@ private extension MCPServerSession {
       name: name,
       arguments: arguments
     )
-    await cancellation.track(client: client, requestID: context.requestID)
-
-    let result = try await bounded(
-      allowance: requestAllowance,
+    let result = try await response(
+      to: context,
+      from: client,
       timingOutWith: .callTimedOut(seconds: config.requestTimeoutSeconds),
       cancellation: cancellation
-    ) {
-      try await context.value
-    }
-    await cancellation.clear(requestID: context.requestID)
+    )
 
     return MCPToolCallResult(
       content: result.content,

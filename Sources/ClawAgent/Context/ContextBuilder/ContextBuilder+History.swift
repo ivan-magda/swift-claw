@@ -1,13 +1,6 @@
 import ClawCore
 import Foundation
 
-/// One exchange-grouping unit: an assistant anchor (`tool_calls`) plus its tool rows, or a single
-/// plain conversational message. The atomic droppable unit — never a partial exchange on the wire.
-private struct HistoryGroup {
-  let id: String
-  let messages: [StoredMessage]
-}
-
 // MARK: - History Section and Message Rendering
 
 extension ContextBuilder {
@@ -16,7 +9,7 @@ extension ContextBuilder {
     // history unit (the current turn) must reach the fitter, which keeps it as a non-droppable
     // floor so the model always sees the message it is answering.
     let cap = cap(for: .history, residual: residual)
-    let groups = historyGroups(from: snapshot.history)
+    let groups = HistoryHygiene.groups(from: snapshot.history)
 
     let units = groups.reversed().map { group in
       SectionUnit(
@@ -45,7 +38,8 @@ extension ContextBuilder {
         section.id == .history
       }?.units.map(\.id) ?? []
     ).count
-    let historyWasTruncated = keptHistoryGroupCount < historyGroups(from: snapshot.history).count
+    let historyWasTruncated =
+      keptHistoryGroupCount < HistoryHygiene.groups(from: snapshot.history).count
 
     let systemContent =
       fitted.filter { section in
@@ -73,38 +67,6 @@ extension ContextBuilder {
 private extension ContextBuilder {
   static let historyTruncatedMarker = "\n\n[…earlier conversation truncated]"
 
-  /// Groups sanitized history so each exchange is ONE atomic droppable unit. Group ids are stable
-  /// per assembly ("history-<index of the group's first row>").
-  func historyGroups(from history: [StoredMessage]) -> [HistoryGroup] {
-    let sanitized = HistoryHygiene.sanitize(history)
-    var groups: [HistoryGroup] = []
-    var index = 0
-
-    while index < sanitized.count {
-      let message = sanitized[index]
-      let anchorCalls = message.toolCallsJSON.map(ToolCallCoding.decode) ?? []
-
-      guard message.role == .assistant, anchorCalls.isEmpty == false else {
-        groups.append(HistoryGroup(id: "history-\(index)", messages: [message]))
-        index += 1
-        continue
-      }
-
-      var grouped = [message]
-      var cursor = index + 1
-
-      while cursor < sanitized.count, sanitized[cursor].role == .tool {
-        grouped.append(sanitized[cursor])
-        cursor += 1
-      }
-
-      groups.append(HistoryGroup(id: "history-\(index)", messages: grouped))
-      index = cursor
-    }
-
-    return groups
-  }
-
   /// The one render seam for both native assistant anchors (with decoded `toolCalls`) and fenced
   /// tool rows (labeled by the owning anchor's declared fence label). Kept groups come from the
   /// fitter verbatim — one `SectionUnit` per group — so this only re-expands each surviving
@@ -121,7 +83,7 @@ private extension ContextBuilder {
     }
 
     let keptIDs = Set(historySection.units.map(\.id))
-    let groups = historyGroups(from: snapshot.history)
+    let groups = HistoryHygiene.groups(from: snapshot.history)
     var rendered: [ChatMessage] = []
 
     for group in groups where keptIDs.contains(group.id) {

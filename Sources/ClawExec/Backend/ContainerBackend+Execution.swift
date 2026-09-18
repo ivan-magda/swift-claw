@@ -176,7 +176,7 @@ extension ContainerBackend {
         return infrastructureResult("container did not create its identity file")
       }
 
-      guard await engineRunning(deadline: deadline) else {
+      guard await engineRunning(limit: Self.lifecycleCommandTimeout, deadline: deadline) else {
         return infrastructureResult("container engine became unavailable after execution")
       }
 

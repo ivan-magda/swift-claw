@@ -267,7 +267,9 @@ struct ResetTests {
       now: fixture.env.now
     )
     let readable = try #require(
-      try fixture.env.learning.learningView(jobID: fixture.env.jobID).onlyReadable
+      try LearningViewInspection.onlyReadable(
+        in: fixture.env.learning.learningView(jobID: fixture.env.jobID)
+      )
     )
     guard case .learningReset(_, let result) = readable.lastDecision?.detail else {
       Issue.record("expected a readable reset receipt")
@@ -283,7 +285,7 @@ struct ResetTests {
 
     // then — bypassing started-reservation validation in the shared receipt matcher survives the
     // effective-reset and clean-replay tests because neither calls the owner view after corruption.
-    #expect(view.isOnlyUnreadable)
+    #expect(LearningViewInspection.isOnlyUnreadable(view))
     #expect(after == before)
   }
 
@@ -722,7 +724,9 @@ struct ResetTests {
 
     // when
     let view = try #require(
-      try fixture.env.learning.learningView(jobID: fixture.env.jobID).onlyReadable
+      try LearningViewInspection.onlyReadable(
+        in: fixture.env.learning.learningView(jobID: fixture.env.jobID)
+      )
     )
 
     // then — an unknown reset decision kind would make the successful reset unreadable.
@@ -735,7 +739,11 @@ struct ResetTests {
 
     // when
     try fixture.corruptResetResult(corruption)
-    #expect(try fixture.env.learning.learningView(jobID: fixture.env.jobID).isOnlyUnreadable)
+    #expect(
+      try LearningViewInspection.isOnlyUnreadable(
+        fixture.env.learning.learningView(jobID: fixture.env.jobID)
+      )
+    )
     let repaired = try fixture.env.learning.applyReset(
       updateID: 9_017,
       jobID: fixture.env.jobID,
@@ -744,7 +752,11 @@ struct ResetTests {
 
     // then — malformed current receipt is not a clean-repeat proof.
     #expect(repaired.appliedReceipt?.result.newEpoch == first.result.newEpoch.next())
-    #expect(try fixture.env.learning.learningView(jobID: fixture.env.jobID).onlyReadable != nil)
+    #expect(
+      try LearningViewInspection.onlyReadable(
+        in: fixture.env.learning.learningView(jobID: fixture.env.jobID)
+      ) != nil
+    )
   }
 
   @Test
@@ -825,23 +837,5 @@ private extension AdmissionOutcome {
       return nil
     }
     return receipt
-  }
-}
-
-// MARK: - Learning View Inspection
-
-private extension Array where Element == JobLearningView {
-  var onlyReadable: ReadableJobLearningView? {
-    guard count == 1, case .readable(let view) = self[0] else {
-      return nil
-    }
-    return view
-  }
-
-  var isOnlyUnreadable: Bool {
-    guard count == 1, case .unreadable = self[0] else {
-      return false
-    }
-    return true
   }
 }

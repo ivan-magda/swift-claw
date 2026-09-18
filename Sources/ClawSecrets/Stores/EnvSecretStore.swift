@@ -28,9 +28,12 @@ public struct EnvSecretStore: SecretStore {
   }
 
   public func loadSecrets() throws -> Secrets {
-    guard let botToken = environment[EnvKey.botToken], !botToken.isEmpty else {
-      throw SecretStoreError.missingTelegramToken
-    }
+    let secrets = try Secrets(
+      validatingTelegramBotToken: environment[EnvKey.botToken],
+      llmAPIKey: environment[EnvKey.llmAPIKey],
+      searchAPIKey: environment[EnvKey.searchAPIKey],
+      llmFallbackAPIKey: environment[EnvKey.llmFallbackAPIKey]
+    )
 
     warn(
       """
@@ -39,22 +42,7 @@ public struct EnvSecretStore: SecretStore {
       """
     )
 
-    let apiKey = environment[EnvKey.llmAPIKey].flatMap {
-      $0.isEmpty ? nil : $0
-    }
-    let searchKey = environment[EnvKey.searchAPIKey].flatMap {
-      $0.isEmpty ? nil : $0
-    }
-    let fallbackAPIKey = environment[EnvKey.llmFallbackAPIKey].flatMap {
-      $0.isEmpty ? nil : $0
-    }
-
-    return Secrets(
-      telegramBotToken: botToken,
-      llmAPIKey: apiKey,
-      searchAPIKey: searchKey,
-      llmFallbackAPIKey: fallbackAPIKey
-    )
+    return secrets
   }
 
   /// Writes to stderr — used as the default warn so the daemon always emits the warning

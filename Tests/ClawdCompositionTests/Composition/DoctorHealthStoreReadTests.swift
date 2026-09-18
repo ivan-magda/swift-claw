@@ -126,7 +126,7 @@ private extension DoctorHealthStoreReadTests {
 
   func rows(stores: ClawStores, config: AppConfig) -> [String: DoctorReport.Check] {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let inputs = DoctorHealth.inputs(
+    let checks = DoctorHealth.checks(
       stores: stores,
       config: config,
       now: now,
@@ -136,10 +136,6 @@ private extension DoctorHealthStoreReadTests {
         cooldown: .unobservable
       )
     )
-    let checks =
-      HealthRowsBuilder.checks(inputs)
-      + DoctorHealth.schedulerChecks(stores: stores, config: config, now: now)
-      + DoctorHealth.approvalChecks(stores: stores, config: config, now: now)
     return Dictionary(
       checks.map { check in
         (check.key, check)

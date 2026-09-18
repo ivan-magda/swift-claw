@@ -13,15 +13,6 @@ struct GroupModeToolPolicyTests {
 
   // MARK: - Fixtures
 
-  private func makeWorkspace() throws -> URL {
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent(
-      "claw-group-gate-\(UUID().uuidString)",
-      isDirectory: true
-    )
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    return root
-  }
-
   private func makeGate() -> ToolPolicyGate {
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: ["s3cret-value-1"]),
@@ -86,7 +77,7 @@ struct GroupModeToolPolicyTests {
   @Test
   func groupModeFileWriteCreatesTheFile() async throws {
     // given
-    let root = try makeWorkspace()
+    let root = try makeTemporaryRoot(prefix: "claw-group-gate")
     let dispatcher = makeDispatcher(tools: [
       FileWriteTool(workspaceRoot: root, redactor: SecretRedactor(secretValues: [])),
     ])
@@ -110,7 +101,7 @@ struct GroupModeToolPolicyTests {
   @Test
   func groupModeExecuteCodeProducesProgramOutput() async throws {
     // given
-    let root = try makeWorkspace()
+    let root = try makeTemporaryRoot(prefix: "claw-group-gate")
     let backend = FakeExecutionBackend()
     await backend.enqueue(
       ExecutionResult(
@@ -180,7 +171,7 @@ struct GroupModeToolPolicyTests {
   @Test
   func groupModeRefusesPrivilegedPromptFileWrite() async throws {
     // given — filename enumeration belongs to WorkspaceValuesTests
-    let root = try makeWorkspace()
+    let root = try makeTemporaryRoot(prefix: "claw-group-gate")
     let name = WorkspaceFile.soul.relativePath
     let dispatcher = makeDispatcher(tools: [
       FileWriteTool(workspaceRoot: root, redactor: SecretRedactor(secretValues: [])),

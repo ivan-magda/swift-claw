@@ -430,9 +430,9 @@ struct MCPToolTests {
     let timedOut = MCPSessionError.callTimedOut(seconds: 40)
     let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
     let harness = try ToolFixture.harness(against: scripted) { transport, _ in
-      ThrowingTransport(
+      FaultyTransport(
         wrapping: transport,
-        failingSend: ThrowingTransport.firstCallSend,
+        failingSend: FaultyTransport.firstCallSend,
         with: timedOut
       )
     }
@@ -461,9 +461,9 @@ struct MCPToolTests {
     )
     let scripted = ScriptedMCPServer(list: ScriptedMCPServer.paged([[]]))
     let harness = try ToolFixture.harness(against: scripted) { transport, _ in
-      ThrowingTransport(
+      FaultyTransport(
         wrapping: transport,
-        failingSend: ThrowingTransport.firstCallSend,
+        failingSend: FaultyTransport.firstCallSend,
         with: failure
       )
     }
@@ -522,9 +522,9 @@ struct MCPToolTests {
       guard connection == 1 else {
         return transport
       }
-      return ThrowingTransport(
+      return FaultyTransport(
         wrapping: transport,
-        failingSend: ThrowingTransport.firstCallSend,
+        failingSend: FaultyTransport.firstCallSend,
         with: MCPTransportError.sessionExpired
       )
     }
@@ -573,55 +573,6 @@ private actor ArgumentRecorder {
   func record(name: String, arguments: [String: Value]) {
     self.name = name
     self.arguments = arguments
-  }
-}
-
-/// Wraps a live transport and throws a scripted error from one `send`, standing in for whatever
-/// the session would have raised at that point in the exchange.
-///
-/// Sends are counted from the handshake: 1 is the initialize request, 2 the initialized
-/// notification, and 3 the first request a caller makes.
-private actor ThrowingTransport: Transport {
-  static let firstCallSend = 3
-
-  nonisolated let logger = Logger(label: "test.mcp.throwing")
-
-  private let inner: InMemoryTransport
-  private let failingSend: Int
-  private let failure: any Error
-  private var stream: AsyncThrowingStream<Data, any Error>?
-  private var sends = 0
-
-  init(wrapping inner: InMemoryTransport, failingSend: Int, with failure: any Error) {
-    self.inner = inner
-    self.failingSend = failingSend
-    self.failure = failure
-  }
-
-  func connect() async throws {
-    try await inner.connect()
-    // Only after connecting: an in-memory transport hands out an already-finished stream while it
-    // is still disconnected, and a finished stream ends the client's message loop before it starts.
-    stream = await inner.receive()
-  }
-
-  func disconnect() async {
-    await inner.disconnect()
-  }
-
-  func send(_ data: Data) async throws {
-    sends += 1
-    guard sends != failingSend else {
-      throw failure
-    }
-    try await inner.send(data)
-  }
-
-  func receive() -> AsyncThrowingStream<Data, any Error> {
-    stream
-      ?? AsyncThrowingStream { continuation in
-        continuation.finish()
-      }
   }
 }
 

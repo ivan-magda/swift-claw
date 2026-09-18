@@ -27,15 +27,13 @@ extension ScheduledLearningStoreGRDB {
     var subjectPredicates: [String] = []
     var arguments: [any DatabaseValueConvertible] = [jobID, epoch.value]
     if runSubjects.isEmpty == false {
-      let placeholders = Array(repeating: "?", count: runSubjects.count).joined(separator: ", ")
+      let placeholders = databaseQuestionMarks(count: runSubjects.count)
       subjectPredicates.append("(subject_kind = ? AND subject_digest IN (\(placeholders)))")
       arguments.append(FeedbackSubjectKind.run.rawValue)
       arguments.append(contentsOf: runSubjects)
     }
     if evaluationSubjects.isEmpty == false {
-      let placeholders = Array(repeating: "?", count: evaluationSubjects.count).joined(
-        separator: ", "
-      )
+      let placeholders = databaseQuestionMarks(count: evaluationSubjects.count)
       subjectPredicates.append("(subject_kind = ? AND subject_digest IN (\(placeholders)))")
       arguments.append(FeedbackSubjectKind.evaluation.rawValue)
       arguments.append(contentsOf: evaluationSubjects)

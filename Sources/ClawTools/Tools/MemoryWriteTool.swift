@@ -15,12 +15,16 @@ public struct MemoryWriteTool: Tool {
   }
 
   public var definition: ToolDefinition {
-    ToolDefinition(
+    let kinds = MemoryKind.allCases.map(\.rawValue)
+    let importanceLevels = Importance.allCases.map(\.wireLabel)
+    let sensitivityLevels = Sensitivity.allCases.map(\.rawValue)
+    return ToolDefinition(
       name: "memory_write",
       description: """
         Save one durable memory item (owner approval required). kind is one of \
-        user|feedback|project|reference; importance low|normal|high (default normal); \
-        sensitivity normal|high (default normal).
+        \(kinds.joined(separator: "|")); importance \(importanceLevels.joined(separator: "|")) \
+        (default \(Importance.normal.wireLabel)); sensitivity \
+        \(sensitivityLevels.joined(separator: "|")) (default \(Sensitivity.normal.rawValue)).
         """,
       parameters: .object([
         "type": .string("object"),
@@ -31,20 +35,15 @@ public struct MemoryWriteTool: Tool {
           ]),
           "kind": .object([
             "type": .string("string"),
-            "enum": .array([
-              .string("user"),
-              .string("feedback"),
-              .string("project"),
-              .string("reference"),
-            ]),
+            "enum": .array(kinds.map(JSONValue.string)),
           ]),
           "importance": .object([
             "type": .string("string"),
-            "enum": .array([.string("low"), .string("normal"), .string("high")]),
+            "enum": .array(importanceLevels.map(JSONValue.string)),
           ]),
           "sensitivity": .object([
             "type": .string("string"),
-            "enum": .array([.string("normal"), .string("high")]),
+            "enum": .array(sensitivityLevels.map(JSONValue.string)),
           ]),
         ]),
         "required": .array([.string("text"), .string("kind")]),

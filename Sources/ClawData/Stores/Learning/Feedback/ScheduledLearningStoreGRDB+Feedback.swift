@@ -28,10 +28,28 @@ extension ScheduledLearningStoreGRDB {
         return outcome
       }
 
-      guard let revision = try Self.advanceFeedbackRevision(db, target: target) else {
+      guard let revision = try Self.advanceFeedbackRevision(
+        db,
+        jobID: target.jobID,
+        epoch: target.epoch
+      )
+      else {
         throw StoreError.unexpected("feedback revision CAS lost after target consumption")
       }
-      let event = try Self.insertEvent(db, tap: tap, target: target, revision: revision, now: now)
+      let event = try Self.insertEvent(
+        db,
+        insertion: FeedbackEventInsertion(
+          jobID: target.jobID,
+          epoch: target.epoch,
+          subjectKind: target.subjectKind,
+          subjectDigest: target.subjectDigest,
+          signal: tap.signal,
+          payload: nil,
+          transportUpdateID: tap.transportUpdateID
+        ),
+        revision: revision,
+        now: now
+      )
       try Self.recomputeFeedbackSubject(
         db,
         jobID: target.jobID,
@@ -197,82 +215,6 @@ extension ScheduledLearningStoreGRDB {
       return .staleEpoch
     }
     throw StoreError.unexpected("feedback target CAS lost without a classified predicate")
-  }
-}
-
-// MARK: - Event Rows
-
-private extension ScheduledLearningStoreGRDB {
-  static func advanceFeedbackRevision(
-    _ db: Database,
-    target: FeedbackTarget
-  ) throws -> FeedbackRevision? {
-    let revision = try Int64.fetchOne(
-      db,
-      sql: """
-        UPDATE job_learning_state SET feedback_revision = feedback_revision + 1
-        WHERE job_id = ? AND learning_epoch = ?
-        RETURNING feedback_revision
-        """,
-      arguments: [target.jobID, target.epoch.value]
-    )
-    return revision.map { value in
-      FeedbackRevision(value)
-    }
-  }
-
-  static func insertEvent(
-    _ db: Database,
-    tap: FeedbackTap,
-    target: FeedbackTarget,
-    revision: FeedbackRevision,
-    now: Date
-  ) throws -> FeedbackEvent {
-    let supersedes = try Int64.fetchOne(
-      db,
-      sql: """
-        SELECT event_id FROM feedback_events
-        WHERE job_id = ? AND learning_epoch = ? AND subject_kind = ? AND subject_digest = ?
-        ORDER BY feedback_revision DESC, event_id DESC LIMIT 1
-        """,
-      arguments: [
-        target.jobID,
-        target.epoch.value,
-        target.subjectKind.rawValue,
-        target.subjectDigest,
-      ]
-    )
-    try db.execute(
-      sql: """
-        INSERT INTO feedback_events(job_id, learning_epoch, subject_kind, subject_digest, signal,
-          payload, actor, transport_update_id, feedback_revision, supersedes, occurred_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-      arguments: [
-        target.jobID,
-        target.epoch.value,
-        target.subjectKind.rawValue,
-        target.subjectDigest,
-        tap.signal.rawValue,
-        nil as String?,
-        AuditActor.owner.rawValue,
-        tap.transportUpdateID,
-        revision.value,
-        supersedes,
-        EpochSecondCodec.epoch(now),
-      ]
-    )
-    return FeedbackEvent(
-      id: db.lastInsertedRowID,
-      runID: try runID(db, target: target),
-      signal: tap.signal,
-      payload: nil,
-      revision: revision,
-      supersedes: supersedes,
-      occurredAt: now,
-      actor: .owner,
-      transportUpdateID: tap.transportUpdateID
-    )
   }
 }
 

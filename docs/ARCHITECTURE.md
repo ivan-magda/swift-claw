@@ -1365,6 +1365,10 @@ workflow coordinator; the feedback boundary still authenticates, consumes and re
 
 ### 14.2 Scheduled learning workflow
 
+`ClawCore.LearningOperationKey` owns the current evaluator and reflector key construction used by
+gateway dispatch and persistence authorization, claimability and lineage checks. Each keeps its
+phase, source digest and prompt/schema/rubric versions together without changing the stored digest.
+
 `ScheduledLearningService` queues lane-settlement and authenticated-feedback notifications on its
 stored drain task. Owner callbacks and challenge acknowledgements enqueue work without awaiting
 an inference. Direct `advance(runID:)` and `advance(jobID:)` calls await a bounded `LearningWorkflow`

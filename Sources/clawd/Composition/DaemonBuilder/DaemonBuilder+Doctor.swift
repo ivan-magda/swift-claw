@@ -64,21 +64,17 @@ struct DaemonDoctorReporter: DoctorReporting {
     report.add(key: "llm.auth", value: auth.value, ok: auth.ok, group: .llmRuns)
 
     report.add(
-      contentsOf: HealthRowsBuilder.checks(
-        DoctorHealth.inputs(
-          stores: stores,
-          config: config,
-          now: now,
-          routeHealth: await LLMRouteHealth.live(
-            primaryReference: config.llm.route.configuredReference,
-            fallbackReference: config.llm.fallbackRoute?.configuredReference,
-            cooldown: cooldown
-          )
+      contentsOf: DoctorHealth.checks(
+        stores: stores,
+        config: config,
+        now: now,
+        routeHealth: await LLMRouteHealth.live(
+          primaryReference: config.llm.route.configuredReference,
+          fallbackReference: config.llm.fallbackRoute?.configuredReference,
+          cooldown: cooldown
         )
       )
     )
-    report.add(contentsOf: DoctorHealth.schedulerChecks(stores: stores, config: config, now: now))
-    report.add(contentsOf: DoctorHealth.approvalChecks(stores: stores, config: config, now: now))
     report.add(
       contentsOf: DoctorHealth.bootSandboxChecks(
         execEnabled: config.exec.enabled,

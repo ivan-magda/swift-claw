@@ -67,14 +67,10 @@ private extension ScheduledLearningStoreGRDB {
       return true
     case (.reflector, .reflection(let reflection)):
       let sourcesAreCurrent = try reflectionAuthorizationIsCurrent(db, authorization: reflection)
-      let expectedKey = LearningOperationKey(
+      let expectedKey = LearningOperationKey.reflection(
         jobID: operation.jobID,
         epoch: operation.epoch,
-        phase: .reflector,
-        sourceDigest: reflection.trigger.digest.rawValue,
-        promptVersion: ReflectorPrompt.v1.version,
-        schemaVersion: ReflectorOutput.currentSchemaVersion,
-        rubricVersion: ReflectorRubric.v1
+        triggerDigest: reflection.trigger.digest
       )
       return operation.keyDigest == expectedKey.digest
         && operation.sourceDigest == reflection.trigger.digest.rawValue

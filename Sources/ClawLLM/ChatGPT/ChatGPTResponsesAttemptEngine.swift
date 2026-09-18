@@ -408,7 +408,7 @@ private extension ChatGPTResponsesAttemptEngine {
       return .terminal(.failed(exposure.failure(context.redactedCause(for: error))))
     }
 
-    guard (200..<300).contains(exchange.head.statusCode) else {
+    guard HTTPResponseBodyPolicy.isSuccess(exchange.head.statusCode) else {
       // The server answered instead of inferring, so this attempt generated nothing.
       exposure.noteProvenClean()
       let diagnosis = await diagnose(exchange, redactionValues: context.redactionValues)
@@ -576,11 +576,7 @@ private extension ChatGPTResponsesAttemptEngine {
 
     let decoded = try? JSONDecoder().decode(ResponsesErrorBody.self, from: body)
     let rawMessage = decoded?.error?.message ?? String(data: body, encoding: .utf8) ?? ""
-    let message = ChatGPTWireValues.safeRemoteDiagnostic(
-      rawMessage,
-      redacting: redactionValues,
-      maxBytes: ChatGPTProviderMetadata.maximumDiagnosticBytes
-    )
+    let message = ChatGPTProviderMetadata.safeDiagnostic(rawMessage, redacting: redactionValues)
     logger.notice("chatgpt responses status \(exchange.head.statusCode)")
 
     return HeadDiagnosis(
