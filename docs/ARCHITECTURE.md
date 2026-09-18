@@ -496,6 +496,9 @@ key, so runless messages use the same retry and idempotent completion path.
 
 **Ordering invariant:** the inbound message + the run row **COMMIT before** the outbound reply is sent. So a disk-full/crash stops the turn before an unrecoverable side effect.
 
+**Retry ownership:** the dispatcher owns its flood-control retry wakeups, cancels and joins them
+before its service returns, and never requests another drain from a cancelled wait.
+
 **Coder completion** commits the first terminal job result and its report chunks together in one
 transaction, without another LLM turn. Shared `OutboxInsertion` retains exact-step insertion for
 ordinary claims; append callers allocate after the maximum existing run-relative step, including

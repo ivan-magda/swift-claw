@@ -557,6 +557,52 @@ struct OutboxDispatcherTests {
   }
 
   @Test
+  func shutdownCancelsAndJoinsFloodControlRetry() async throws {
+    // given
+    let waitStarted = AsyncGate()
+    let waitFinished = AsyncGate()
+    let serviceFinished = AsyncGate()
+    let releaseWait = AsyncGate()
+    defer { releaseWait.open() }
+    let clock = ScriptedClock { _ in
+      waitStarted.open()
+      await releaseWait.wait()
+      waitFinished.open()
+      try Task.checkCancellation()
+    }
+    let fixture = try makeFixture()
+    try seedPending(fixture, payload: "held until retry")
+    let spy = DeliverySpy(outcomes: [fixture.chatID: .floodControl(retryAfter: 30, times: 1)])
+    let dispatcher = OutboxDispatcher(
+      outbox: fixture.outbox,
+      delivery: spy,
+      signal: OutboxSignal(),
+      logger: TestLog.silent,
+      clock: clock
+    )
+    let service = Task {
+      defer { serviceFinished.open() }
+      try await dispatcher.run()
+    }
+    let started = await waitStarted.waitUntilOpen()
+
+    // when
+    service.cancel()
+    let stopped = await serviceFinished.waitUntilOpen()
+    let retryFinishedAtShutdown = waitFinished.isOpen
+    releaseWait.open()
+    try await service.value
+
+    // then
+    #expect(started)
+    #expect(stopped)
+    #expect(retryFinishedAtShutdown)
+    #expect(try fixture.outbox.pendingOutbound().map(\.payload) == ["held until retry"])
+    #expect(await spy.deliveredPayloads.isEmpty)
+    #expect(await waitFinished.waitUntilOpen())
+  }
+
+  @Test
   func aNonFloodControlFailureStillStopsTheWholeDrain() async throws {
     // given — the first chat is undeliverable for a reason Telegram gave no retry window for
     let fixture = try makeTwoChatFixture(firstPayload: "stuck", secondPayload: "behind it")
