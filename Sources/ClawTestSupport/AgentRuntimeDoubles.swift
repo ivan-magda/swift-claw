@@ -171,14 +171,17 @@ public actor ScriptedDispatcher: ToolDispatching {
   nonisolated public let definitions: [ToolDefinition]
 
   private let respond:
-    @Sendable (_ call: ToolCall, _ context: ToolDispatchContext) -> ToolDispatchOutcome
+    @Sendable (_ call: ToolCall, _ context: ToolDispatchContext) async -> ToolDispatchOutcome
 
   public private(set) var records: [Record] = []
 
   public init(
     definitions: [ToolDefinition] = [],
     respond:
-      @escaping @Sendable (_ call: ToolCall, _ context: ToolDispatchContext) -> ToolDispatchOutcome
+      @escaping @Sendable (
+        _ call: ToolCall,
+        _ context: ToolDispatchContext
+      ) async -> ToolDispatchOutcome
   ) {
     self.definitions = definitions
     self.respond = respond
@@ -186,7 +189,7 @@ public actor ScriptedDispatcher: ToolDispatching {
 
   public func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
     records.append(Record(call: call, context: context))
-    return respond(call, context)
+    return await respond(call, context)
   }
 }
 
