@@ -581,9 +581,8 @@ private extension ChatGPTResponsesAccumulator {
   static let stopFinishReason = "stop"
   static let toolFinishReason = "tool_calls"
 
-  /// Every failure this type builds is terminal. Once a `data:` field byte has been consumed the
-  /// turn can no longer be re-issued without risking a second bill for it, so an error class that
-  /// invited a retry would contradict the policy the boundary exists to enforce.
+  /// Every failure this type builds is terminal. An accepted response may already have generated
+  /// tokens, so inviting a retry would risk charging for the same turn twice.
   static func terminal(_ message: String) -> ProviderError {
     ProviderError.terminal(status: nil, message: message)
   }

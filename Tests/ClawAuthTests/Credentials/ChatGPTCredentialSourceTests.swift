@@ -26,12 +26,6 @@ final class ArrivalCounter: Sendable {
     self.target = target
   }
 
-  var count: Int {
-    arrivals.withLock { current in
-      current
-    }
-  }
-
   var wallDate: @Sendable () -> Date {
     { [self] in
       let arrived = arrivals.withLock { current -> Int in

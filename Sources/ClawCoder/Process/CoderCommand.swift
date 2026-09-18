@@ -1,5 +1,4 @@
 import ClawCore
-import Foundation
 
 struct CoderCommand: Sendable {
   let executable: String

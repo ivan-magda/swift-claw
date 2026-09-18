@@ -13,7 +13,6 @@ import Testing
 struct PrivateDataLifecycleTests {
   private struct Fixture {
     let queue: DatabaseQueue
-    let sessions: SessionMessageStoreGRDB
     let runs: RunStoreGRDB
 
     let sessionID: Int64
@@ -36,7 +35,6 @@ struct PrivateDataLifecycleTests {
     )
     return Fixture(
       queue: queue,
-      sessions: sessions,
       runs: RunStoreGRDB(writer: queue),
       sessionID: try #require(claim.sessionID),
       runID: try #require(claim.runID)

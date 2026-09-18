@@ -34,7 +34,7 @@ struct SuspendedTurnCommitTests {
     return Fixture(queue: queue, sessionID: try #require(claim.sessionID), runID: runID)
   }
 
-  private func makeCommit(_ fixture: Fixture) -> SuspendedTurnCommit {
+  private func makeCommit() -> SuspendedTurnCommit {
     let recorded = RecordedToolAction(
       tool: "file_write",
       canonicalArgsJSON: #"{"content":"hi","path":"notes/plan.md"}"#,
@@ -85,7 +85,7 @@ struct SuspendedTurnCommitTests {
     let receipt = try runs.commitSuspendedTurn(
       runID: fixture.runID,
       sessionID: fixture.sessionID,
-      commit: makeCommit(fixture),
+      commit: makeCommit(),
       now: Date()
     )
 
@@ -170,7 +170,7 @@ struct SuspendedTurnCommitTests {
       _ = try runs.commitSuspendedTurn(
         runID: fixture.runID,
         sessionID: fixture.sessionID,
-        commit: makeCommit(fixture),
+        commit: makeCommit(),
         now: Date()
       )
     }
@@ -222,8 +222,8 @@ extension SuspendedTurnCommitTests {
 
   // swiftlint:enable optional_data_string_conversion
 
-  private func statefulCommit(_ fixture: Fixture) -> SuspendedTurnCommit {
-    let base = makeCommit(fixture)
+  private func statefulCommit() -> SuspendedTurnCommit {
+    let base = makeCommit()
     return SuspendedTurnCommit(
       assistantContent: base.assistantContent,
       toolCallsJSON: base.toolCallsJSON,
@@ -249,7 +249,7 @@ extension SuspendedTurnCommitTests {
     _ = try runs.commitSuspendedTurn(
       runID: fixture.runID,
       sessionID: fixture.sessionID,
-      commit: statefulCommit(fixture),
+      commit: statefulCommit(),
       now: Date()
     )
 
@@ -281,7 +281,7 @@ extension SuspendedTurnCommitTests {
     _ = try runs.commitSuspendedTurn(
       runID: fixture.runID,
       sessionID: fixture.sessionID,
-      commit: statefulCommit(fixture),
+      commit: statefulCommit(),
       now: Date()
     )
 
@@ -310,7 +310,7 @@ extension SuspendedTurnCommitTests {
     let receipt = try runs.commitSuspendedTurn(
       runID: fixture.runID,
       sessionID: fixture.sessionID,
-      commit: statefulCommit(fixture),
+      commit: statefulCommit(),
       now: Date()
     )
 

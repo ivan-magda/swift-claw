@@ -12,7 +12,6 @@ struct ResolveDeniedObservationTests {
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
 
-    let sessionID: Int64
     let runID: Int64
     let observationMessageID: Int64
   }
@@ -69,7 +68,6 @@ struct ResolveDeniedObservationTests {
     return Fixture(
       queue: queue,
       runs: runs,
-      sessionID: sessionID,
       runID: runID,
       observationMessageID: observationMessageID
     )

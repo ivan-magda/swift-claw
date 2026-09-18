@@ -65,7 +65,6 @@ struct FeedbackStoreEnvironment {
     let signal: OwnerSignal
     let revision: FeedbackRevision
     let supersedes: Int64?
-    let subjectDigest: String
     let payload: String?
     let occurredAt: Date
   }
@@ -385,7 +384,7 @@ private extension FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT event_id, signal, feedback_revision, supersedes, subject_digest, payload,
+          SELECT event_id, signal, feedback_revision, supersedes, payload,
             occurred_at
           FROM feedback_events
           WHERE \(whereClause)
@@ -403,7 +402,6 @@ private extension FeedbackStoreEnvironment {
           signal: signal,
           revision: FeedbackRevision(row["feedback_revision"]),
           supersedes: row["supersedes"],
-          subjectDigest: row["subject_digest"],
           payload: row["payload"],
           occurredAt: occurredAt
         )

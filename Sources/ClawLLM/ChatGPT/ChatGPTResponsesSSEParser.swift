@@ -30,35 +30,20 @@ struct ChatGPTResponsesBounds: Sendable, Equatable {
 
 // MARK: - Parser
 
-/// Frames a Responses SSE body into the events the route models, and reports when the bytes it has
-/// consumed stopped being replayable.
+/// Frames a Responses SSE body into the events the route models.
 ///
 /// It decides nothing about the reply. Where an event ends and what it decodes to is all this owns;
 /// which event is the terminal, and what the answer is, belongs to the accumulator.
 struct ChatGPTResponsesSSEParser: Sendable {
-  /// Whether a byte belonging to an SSE `data:` field has been consumed. It closes the automatic-
-  /// retry boundary: past this point the server has begun answering, so re-issuing the request could
-  /// bill the owner for the same turn twice. It is set from the field's own bytes rather than from a
-  /// decoded event, so a fragmented, malformed, or unknown data event closes the boundary just as a
-  /// good one does — while framing comments, which carry no answer, never do.
-  private(set) var hasSeenDataFieldByte = false
-
   private let bounds: ChatGPTResponsesBounds
   private var buffer = Data()
   private var dataEventCount = 0
-  private var boundary = DataFieldScan()
 
   init(bounds: ChatGPTResponsesBounds = .standard) {
     self.bounds = bounds
   }
 
   mutating func push(_ chunk: Data) throws -> [ChatGPTResponsesEvent] {
-    // Scanned before the buffer is bounded: these bytes arrived whatever the parser goes on to make
-    // of them, and the boundary only ever answers what the wire has already delivered.
-    if hasSeenDataFieldByte == false {
-      hasSeenDataFieldByte = boundary.scan(chunk)
-    }
-
     buffer.append(chunk)
     // Bounded before the delimiter is searched for, so a body that would have framed perfectly well
     // still cannot grow the buffer past its cap on the way to being drained.
@@ -92,49 +77,6 @@ struct ChatGPTResponsesSSEParser: Sendable {
     }
 
     return events
-  }
-}
-
-// MARK: - Retry Boundary
-
-/// Recognizes the first byte of an SSE `data:` field as it streams past, one line at a time.
-///
-/// It runs over raw bytes rather than the framed event because the boundary has to close before the
-/// delimiter arrives — an event that is still half-delivered has already been generated.
-private struct DataFieldScan {
-  private static let fieldName = Array("data:".utf8)
-
-  private var matched = 0
-  private var isCandidate = true
-
-  /// Whether these bytes carried the first `data:` field byte.
-  mutating func scan(_ chunk: Data) -> Bool {
-    for byte in chunk {
-      guard byte != 0x0A, byte != 0x0D else {
-        // A field line with no colon names a field with an empty value, so a bare `data` line is a
-        // data field and closes the boundary exactly as a filled one does.
-        let wasBareField = isCandidate && matched == Self.fieldName.count - 1
-        matched = 0
-        isCandidate = true
-        if wasBareField {
-          return true
-        }
-        continue
-      }
-      guard isCandidate else {
-        continue
-      }
-      guard byte == Self.fieldName[matched] else {
-        // A comment (`:`) or any other field name: this line cannot become a data field.
-        isCandidate = false
-        continue
-      }
-      matched += 1
-      if matched == Self.fieldName.count {
-        return true
-      }
-    }
-    return false
   }
 }
 

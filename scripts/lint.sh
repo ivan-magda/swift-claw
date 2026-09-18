@@ -63,7 +63,7 @@ if [[ $# -eq 0 ]]; then
   while IFS= read -r -d '' file; do
     files+=("$file")
   done < <(git ls-files -z --cached --others --exclude-standard -- \
-    Sources Tests Package.swift BuildTools/Package.swift BuildTools/Sources | \
+    Sources Tests Package.swift BuildTools/Package.swift | \
     while IFS= read -r -d '' file; do
       [[ "$file" != *.swift || ! -f "$file" ]] || printf '%s\0' "$file"
     done)
@@ -78,7 +78,7 @@ else
     [[ "$absolute" == "$repository_root/"* ]] || fail "outside repository: $supplied"
     file=${absolute#"$repository_root/"}
     case "$file" in
-      Sources/*.swift|Tests/*.swift|Package.swift|BuildTools/Package.swift|BuildTools/Sources/*.swift) ;;
+      Sources/*.swift|Tests/*.swift|Package.swift|BuildTools/Package.swift) ;;
       *) fail "outside maintained Swift source: $file" ;;
     esac
     files+=("$file")

@@ -84,7 +84,7 @@ struct V9PersistenceAcceptanceTests {
     let receipt = try env.runs.commitSuspendedTurn(
       runID: env.runID,
       sessionID: env.sessionID,
-      commit: Self.suspendCommit(env),
+      commit: Self.suspendCommit(),
       now: Self.seededAt
     )
     let claim = try env.runs.claimApprovedExecution(
@@ -433,7 +433,7 @@ private extension V9PersistenceAcceptanceTests {
     )
   }
 
-  static func suspendCommit(_ env: Fixture) -> SuspendedTurnCommit {
+  static func suspendCommit() -> SuspendedTurnCommit {
     SuspendedTurnCommit(
       assistantContent: "Let me save that.",
       toolCallsJSON: #"[{"id":"w1","name":"file_write","arguments":"{}"}]"#,

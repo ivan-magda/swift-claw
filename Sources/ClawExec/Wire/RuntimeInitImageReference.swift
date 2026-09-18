@@ -1,5 +1,4 @@
 import ClawCore
-import Foundation
 
 enum RuntimeInitImageReference {
   // Host/port and repository grammar defer to the same authority that validates the pinned

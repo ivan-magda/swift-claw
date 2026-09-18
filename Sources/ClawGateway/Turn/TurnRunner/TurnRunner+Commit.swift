@@ -56,8 +56,8 @@ extension TurnRunner {
       try await commitDegraded(kind: degradationKind, usage: usage, outcome: outcome, in: context)
     case .budgetStopped(let cap):
       try await commitBudgetStopped(cap: cap, outcome: outcome, in: context)
-    case .suspended(let pending, let usage):
-      try await suspendForApproval(pending: pending, usage: usage, outcome: outcome, in: context)
+    case .suspended(let pending, _):
+      try await suspendForApproval(pending: pending, outcome: outcome, in: context)
     }
   }
 
