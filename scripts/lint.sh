@@ -90,7 +90,11 @@ for file in "${files[@]}"; do
   [[ "$mode" == stdin || -f "$file" ]] || fail "file not found: $file"
 done
 
-stage 'Prepare pinned SwiftFormat' swift build --package-path BuildTools -c release --product swiftformat
+# SwiftPM adds -color-diagnostics on a terminal, and that flag change recompiles SwiftFormat.
+build_formatter() {
+  swift build --package-path BuildTools -c release --product swiftformat 2>&1 | cat
+}
+stage 'Prepare pinned SwiftFormat' build_formatter
 formatter_directory=$(swift build --package-path BuildTools -c release --show-bin-path)
 formatter="$formatter_directory/swiftformat"
 [[ "$("$formatter" --version)" == "$CLAW_LINT_SWIFTFORMAT_VERSION" ]] ||
@@ -114,14 +118,19 @@ while IFS= read -r -d '' config; do
   cp "$config" "$formatted/$config"
 done < <(git ls-files -z --cached --others --exclude-standard -- '*.swiftlint.yml')
 
+# swift-format --parallel threads contend on macOS; batches in separate processes scale everywhere.
+apple_format() {
+  printf '%s\0' "${files[@]}" |
+    xargs -0 -P "$(getconf _NPROCESSORS_ONLN)" -n 25 \
+      swift format "$@" --configuration "$repository_root/.swift-format"
+}
+
 format_copies() {
   cd "$formatted"
   stage "SwiftLint automatic fixes" swiftlint lint --fix --quiet "${files[@]}"
-  stage "Apple layout" swift format format --in-place --parallel \
-    --configuration "$repository_root/.swift-format" "${files[@]}"
+  stage "Apple layout" apple_format format --in-place
   # Non-correctable Apple rules inspect Apple's intermediate layout.
-  stage "Apple rules" swift format lint --strict --parallel \
-    --configuration "$repository_root/.swift-format" "${files[@]}"
+  stage "Apple rules" apple_format lint --strict
   stage "Targeted layout" "$formatter" \
     --config "$repository_root/BuildTools/conditional-bodies.swiftformat" \
     --quiet --cache ignore "${files[@]}"
@@ -134,9 +143,13 @@ if [[ "$mode" == stdin ]]; then
   exit 0
 fi
 
+(cd "$original" && git hash-object -- "${files[@]}") > "$scratch/original.hashes"
+(cd "$formatted" && git hash-object -- "${files[@]}") > "$scratch/formatted.hashes"
 changed=0
 for file in "${files[@]}"; do
-  if ! cmp -s "$original/$file" "$formatted/$file"; then
+  read -r original_hash <&3
+  read -r formatted_hash <&4
+  if [[ "$original_hash" != "$formatted_hash" ]]; then
     changed=$((changed + 1))
     if [[ "$mode" == fix ]]; then
       # Do not overwrite an editor save that arrived while the pipeline ran.
@@ -146,7 +159,7 @@ for file in "${files[@]}"; do
       printf '%s:1:1: error: canonical formatting differs; run scripts/lint.sh --fix\n' "$file" >&2
     fi
   fi
-done
+done 3< "$scratch/original.hashes" 4< "$scratch/formatted.hashes"
 
 lint_arguments=(lint --quiet)
 [[ "${STRICT:-0}" != 1 ]] || lint_arguments+=(--strict)
