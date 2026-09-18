@@ -90,6 +90,7 @@ public actor MCPServerSession {
   /// The in-flight connect, shared by every caller that arrives during it. An actor does not
   /// serialize across `await`, so without this two concurrent calls would each open a session.
   private var opening: Task<Client, any Error>?
+  private var closing: Task<Void, Never>?
 
   public init(
     config: MCPServerConfig,
@@ -181,9 +182,19 @@ public actor MCPServerSession {
     }
   }
 
-  /// Ends the session. The next call opens a fresh one.
+  /// Cancels and joins any opening before ending the session. Concurrent disconnects share the
+  /// teardown; a call arriving during it waits before opening a fresh connection.
   public func disconnect() async {
-    await teardown()
+    if let closing {
+      await closing.value
+      return
+    }
+    let task = Task {
+      defer { closing = nil }
+      await teardown()
+    }
+    closing = task
+    await task.value
   }
 }
 
@@ -308,6 +319,8 @@ private extension MCPServerSession {
 
 private extension MCPServerSession {
   func connected() async throws -> Client {
+    await closing?.value
+    try Task.checkCancellation()
     if let client {
       return client
     }
@@ -316,28 +329,34 @@ private extension MCPServerSession {
     }
 
     let attempt = Task {
-      try await self.open()
+      defer { opening = nil }
+      let opened = try await open()
+      client = opened
+      return opened
     }
     opening = attempt
-    defer { opening = nil }
-
-    let opened = try await attempt.value
-    client = opened
-
-    return opened
+    return try await attempt.value
   }
 
   func open() async throws -> Client {
     let transport = try await transportFactory.makeTransport()
+    if Task.isCancelled {
+      await transport.disconnect()
+      throw CancellationError()
+    }
     let client = Client(name: MCPProtocol.clientName, version: clientVersion)
     let budget = config.connectTimeoutSeconds
+    let handshake = Task {
+      try Task.checkCancellation()
+      return try await client.connect(transport: transport)
+    }
 
     do {
       let result = try await bounded(
         allowance: connectAllowance,
         timingOutWith: .discoveryTimedOut(seconds: budget)
       ) {
-        try await client.connect(transport: transport)
+        try await handshake.value
       }
       logger.debug(
         "MCP session established",
@@ -345,13 +364,19 @@ private extension MCPServerSession {
       )
       return client
     } catch {
-      // The client already owns the transport at this point; only it can close both.
+      handshake.cancel()
+      await transport.disconnect()
+      await client.disconnect()
+      _ = await handshake.result
+      // SDK connect can install its receive task after an earlier disconnect suspended it.
       await client.disconnect()
       throw error
     }
   }
 
   func teardown() async {
+    opening?.cancel()
+    _ = await opening?.result
     guard let live = client else {
       return
     }
@@ -374,7 +399,7 @@ private extension MCPServerSession {
       guard Self.isSpentSession(error) else {
         throw error
       }
-      await teardown()
+      await disconnect()
       return try await invoke(name: name, arguments: arguments, cancellation: cancellation)
     }
   }

@@ -78,16 +78,20 @@ public protocol ApprovalParking: Sendable {
 }
 
 /// Breaks the `turnRunner` ⇄ `approvalWaiter` construction cycle: `TurnRunner` needs a `parker`,
-/// and the real parker (the waiter) needs `turnRunner` as its dispatcher. Adopted once during
-/// composition, before the service group (or the first test update) runs.
+/// and the real parker (the waiter) needs `turnRunner` as its dispatcher. The root owns the waiter;
+/// this back-reference is weak so releasing the root also releases the turn's dependencies.
 public final class DeferredApprovalParker: ApprovalParking {
-  private let wrapped = Mutex<(any ApprovalParking)?>(nil)
+  private struct Reference {
+    weak var waiter: ApprovalWaiter?
+  }
+
+  private let wrapped = Mutex(Reference())
 
   public init() {}
 
-  public func adopt(_ parker: any ApprovalParking) {
+  public func adopt(_ parker: ApprovalWaiter) {
     wrapped.withLock { boxed in
-      boxed = parker
+      boxed.waiter = parker
     }
   }
 
@@ -99,7 +103,7 @@ public final class DeferredApprovalParker: ApprovalParking {
     revalidatePolicyOnApprove: Bool
   ) async {
     let parker = wrapped.withLock { boxed in
-      boxed
+      boxed.waiter
     }
     await parker?.park(
       approvalID: approvalID,

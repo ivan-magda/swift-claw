@@ -502,6 +502,12 @@ extension AgentRuntime {
       await typingIndicator.sendTyping(chatID: chatID, messageThreadID: threadID)
       var observations: [ToolObservation] = []
       for call in response.toolCalls {
+        guard !Task.isCancelled else {
+          return outcome(
+            .degraded(.providerUnavailable, usage: nil),
+            failureCause: .processInterruption
+          )
+        }
         proposedToolCalls += 1
         guard proposedToolCalls <= budget.maxToolCalls else {
           return outcome(.budgetStopped(cap: "per-run tool-call"))

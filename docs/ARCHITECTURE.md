@@ -232,6 +232,9 @@ form `ARCHITECTURE.md §N` is used, sparingly.
   to prepare an approval. Enabled status/cancel retain owner scope and access to persisted jobs;
   disabled Coder contributes no tools.
 - **Logging:** `swift-log` to stdout/stderr; journald/newsyslog handle rotation.
+- **Approval graph ownership:** the daemon root retains the approval waiter for its full lifetime.
+  The turn runner's deferred parker holds a weak back-reference to that waiter, so releasing the
+  drained root also releases its stores, providers and transports.
 
 ## 5. Concurrency model
 
@@ -257,6 +260,8 @@ The lane mechanism is explicit:
 - **Default = strict FIFO queue per session.** A plain inbound message **QUEUES** behind the current turn. Cross-session work runs concurrently; within a session, strictly ordered and non-interleaved. User-facing contract: two quick messages produce two in-order, non-interleaved replies.
 - **Only `/stop` and `/new` SUPERSEDE.** `/stop` cancels the current turn cooperatively (`RunState → CANCELLED`). `/new` resets the session window, detaints it, and cancels the current turn (`RunState → SUPERSEDED`). A plain message never supersedes. `/new` resolves any pending durable approval as `superseded` (audited, §11) and still clears the session's pending command confirmation entry. `/new` also clears `sessions.has_private_data` in the same detaint transaction (Inc 5a, §12).
 - **Cancellation semantics.** Cancellation threads through the run loop and (Inc 2+) streaming + tool execution via structured concurrency (`withThrowingTaskGroup`, cancellation handlers). On cancel: stop further LLM/tool work; any already-sent Telegram chunks remain (they are committed side effects, recorded in the outbox); no orphan `AWAITING_APPROVAL` row is left (the reconciliation sweep / FSM resolves it — §7).
+  The tool loop checks cancellation before each proposed call, including after an earlier tool
+  returns from cancelled work; a cancelled batch never admits its remaining proposals.
 - **The registry owns the turn lifecycle, not just a map of actors.** `enqueue(sessionID:runID:work:)` **atomically** checks an `accepting` state and registers the new task, closing the lookup-then-enqueue race. Shutdown flips that state to `stopping`, rejects racing enqueues with a typed shutting-down result, cancels every queued or running lane task, and awaits all registered tasks; completion unregisters through a `defer`, including cancellation while still waiting on a preceding lane task. **A turn does not unregister until its `LLMEventStream`, if any, has joined** (§8.4) — so "the lane drained" means the provider producer and its nested HTTP exchange actually finished, not merely that they were signaled. Enqueues that win before admission closes are registered and drained. Provider children outside a lane (schedule drafting) use the same loser-draining deadline coordinator below, so their service cannot return while provider work remains.
 
 ### 5.2 Dependencies and state
@@ -495,6 +500,9 @@ key, so runless messages use the same retry and idempotent completion path.
 - **(b) External side effects** via the transactional outbox — intent committed → effect performed **at-least-once** → completion recorded idempotently.
 
 **Ordering invariant:** the inbound message + the run row **COMMIT before** the outbound reply is sent. So a disk-full/crash stops the turn before an unrecoverable side effect.
+
+**Retry ownership:** the dispatcher owns its flood-control retry wakeups, cancels and joins them
+before its service returns, and never requests another drain from a cancelled wait.
 
 **Coder completion** commits the first terminal job result and its report chunks together in one
 transaction, without another LLM turn. Shared `OutboxInsertion` retains exact-step insertion for
@@ -907,6 +915,13 @@ swift-claw is an MCP **client** and only a client: it consumes tools from owner-
 - **Nothing the model can call manages MCP.** There is no admin tool, no credential tool, and no catalog-mutating tool — the registry holds only adapters bound to one discovered remote tool each. Management is CLI-only under the instance lock (§17), and the Telegram `/mcp` command renders boot status and nothing else. The client advertises **no** capabilities in the handshake, so no server can drive sampling, elicitation, or roots back into the daemon; resources and prompts are not consumed.
 
 - **The wire says what was agreed, and a session is handed back.** The handshake offers the newest revision the SDK speaks and the server answers with the one it will use; every request after it carries **that** answer, since a server pinned to an older revision may refuse anything else. A session is a resource on someone else's server, so the shutdown graph disconnects every one the boot opened — including a server that contributed no tool and is therefore held by no adapter — while the tool HTTP client is still open to carry the spec's `DELETE`.
+  Disconnect also cancels and joins an in-flight opening before returning. The opening task alone
+  publishes its client and clears its handle; concurrent disconnects share teardown, and subsequent
+  connection attempts wait for that teardown. Cancellation and handshake timeout also join the SDK
+  connect task before its final disconnect; reconnect cleanup uses the same teardown owner. The
+  transport closes send admission, cancels and joins every admitted HTTP exchange (including
+  requests awaiting response headers), then DELETEs
+  the final captured session. Concurrent transport disconnects await that same cleanup.
 
 stdio transport, OAuth 2.1 client auth, and live catalog refresh are deferred, each behind the seams above rather than behind a rewrite.
 
@@ -1079,6 +1094,9 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
   execution chain and reaps again.
 - **swift-subprocess is only a launcher.** It provides no isolation. Pin exact release 1.0.0, use
   streaming capture and an explicit teardown sequence, and keep the hardware VM as the boundary.
+  The low-level runner refuses already-cancelled calls and joins native teardown and reaping before
+  returning a cancellation or timeout result. The container's outer watchdog still bounds a stuck
+  adapter; that deliberate abandonment does not weaken the runner's own completion contract.
 - `sandbox-exec`/Seatbelt may wrap the launcher only as optional defense-in-depth; it is never the
   isolation boundary.
 
