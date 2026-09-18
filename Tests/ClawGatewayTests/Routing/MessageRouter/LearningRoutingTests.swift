@@ -133,7 +133,9 @@ struct LearningRoutingTests {
       now: harness.now
     )
     try harness.insertUnreadableCurrentDecision(jobID: job.id)
-    #expect(try harness.learning.learningView(jobID: job.id).isOnlyUnreadable)
+    #expect(
+      try LearningViewInspection.isOnlyUnreadable(harness.learning.learningView(jobID: job.id))
+    )
 
     // when
     let parked = await harness.router.handle(
@@ -150,7 +152,11 @@ struct LearningRoutingTests {
     #expect(prompt?.contains(SecretRedactor.replacement) == true)
     #expect(prompt?.contains("secret-label") == false)
     #expect(try harness.learningEpoch(jobID: job.id) == LearningEpoch(2))
-    #expect(try harness.learning.learningView(jobID: job.id).onlyReadable != nil)
+    #expect(
+      try LearningViewInspection.onlyReadable(
+        in: harness.learning.learningView(jobID: job.id)
+      ) != nil
+    )
   }
 
   @Test

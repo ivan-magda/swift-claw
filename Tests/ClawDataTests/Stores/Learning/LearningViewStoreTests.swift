@@ -57,7 +57,7 @@ struct LearningViewStoreTests {
     // then — substituting an empty/newest set erases the requested pointer's exact state.
     #expect(missingView == [.notFound(jobID: 9_999)])
     #expect(unarmedView == [.unarmed(fixture.identity(for: unarmed))])
-    let readable = try #require(armedView.onlyReadable)
+    let readable = try #require(LearningViewInspection.onlyReadable(in: armedView))
     #expect(readable.stableLessons == stable)
     #expect(readable.stableRevision == StableRevision(7))
   }
@@ -78,7 +78,7 @@ struct LearningViewStoreTests {
 
     // then — substituting a missing, foreign, noncanonical, digest-mismatched set, or malformed
     // job identity would survive the positive exact-set test for correctly stored rows.
-    #expect(view.isOnlyUnreadable)
+    #expect(LearningViewInspection.isOnlyUnreadable(view))
   }
 
   @Test
@@ -150,7 +150,9 @@ struct LearningViewStoreTests {
     }
     _ = try fixture.env.pendingBoundRun()
     let baseline = try #require(
-      try fixture.env.learning.learningView(jobID: fixture.env.jobID).onlyReadable
+      try LearningViewInspection.onlyReadable(
+        in: fixture.env.learning.learningView(jobID: fixture.env.jobID)
+      )
     )
     let trial = try #require(baseline.liveTrial)
     #expect(trial.candidateDigest == artifact.digest)
@@ -180,7 +182,7 @@ struct LearningViewStoreTests {
     let view = try fixture.env.learning.learningView(jobID: fixture.env.jobID)
 
     // then — following the convenience pointer or omitting assignment identity hides corruption.
-    #expect(view.isOnlyUnreadable)
+    #expect(LearningViewInspection.isOnlyUnreadable(view))
   }
 
   @Test
@@ -212,7 +214,9 @@ struct LearningViewStoreTests {
     let before = try env.trialAssignmentSnapshot()
 
     // when
-    let view = try #require(try env.learning.learningView(jobID: env.jobID).onlyReadable)
+    let view = try #require(
+      try LearningViewInspection.onlyReadable(in: env.learning.learningView(jobID: env.jobID))
+    )
     let after = try env.trialAssignmentSnapshot()
 
     // then — counting cache state or mutating it during the read would survive the unresolved-only
@@ -244,7 +248,9 @@ struct LearningViewStoreTests {
     let before = try env.trialAssignmentSnapshot()
 
     // when
-    let view = try #require(try env.learning.learningView(jobID: env.jobID).onlyReadable)
+    let view = try #require(
+      try LearningViewInspection.onlyReadable(in: env.learning.learningView(jobID: env.jobID))
+    )
     let after = try env.trialAssignmentSnapshot()
 
     // then — the cache says unresolved, but the succeeded exact evaluation says positive.
@@ -279,7 +285,9 @@ struct LearningViewStoreTests {
     let before = try env.trialAssignmentSnapshot()
 
     // when
-    let view = try #require(try env.learning.learningView(jobID: env.jobID).onlyReadable)
+    let view = try #require(
+      try LearningViewInspection.onlyReadable(in: env.learning.learningView(jobID: env.jobID))
+    )
     let after = try env.trialAssignmentSnapshot()
 
     // then — reading cached positive would hide the newer current owner verdict.
@@ -319,7 +327,7 @@ struct LearningViewStoreTests {
     let after = try env.trialAssignmentSnapshot()
 
     // then — guessing from the cached outcome would expose unsupported quality evidence.
-    #expect(view.isOnlyUnreadable)
+    #expect(LearningViewInspection.isOnlyUnreadable(view))
     #expect(after == before)
   }
 
@@ -350,11 +358,11 @@ struct LearningViewStoreTests {
     #expect(after == before)
     switch mutation {
     case .cancelledJob:
-      #expect(detail.isOnlyUnreadable)
-      #expect(list.isOnlyUnreadable)
+      #expect(LearningViewInspection.isOnlyUnreadable(detail))
+      #expect(LearningViewInspection.isOnlyUnreadable(list))
     case .stalePointer:
-      let detailed = try #require(detail.onlyReadable)
-      let listed = try #require(list.onlyReadable)
+      let detailed = try #require(LearningViewInspection.onlyReadable(in: detail))
+      let listed = try #require(LearningViewInspection.onlyReadable(in: list))
       #expect(detailed.liveTrial?.trialID == receipt.trialID)
       #expect(detailed.warnings == [.trialPointerMismatch])
       #expect(listed.liveTrial?.trialID == receipt.trialID)
@@ -376,7 +384,9 @@ struct LearningViewStoreTests {
     try env.insertNonCurrentDecision(decidedAt: env.now.addingTimeInterval(60))
 
     // when
-    let current = try #require(try env.learning.learningView(jobID: env.jobID).onlyReadable)
+    let current = try #require(
+      try LearningViewInspection.onlyReadable(in: env.learning.learningView(jobID: env.jobID))
+    )
 
     // then — dropping the epoch predicate lets a newer receipt from another epoch win.
     guard case .reflectionNoCandidate(let inputs, let result) = current.lastDecision?.detail else {
@@ -391,7 +401,7 @@ struct LearningViewStoreTests {
     let corrupt = try env.learning.learningView(jobID: env.jobID)
 
     // then — omitting decision_id from the tie break can hide the latest malformed receipt.
-    #expect(corrupt.isOnlyUnreadable)
+    #expect(LearningViewInspection.isOnlyUnreadable(corrupt))
   }
 
   @Test(arguments: CurrentDecisionCorruption.allCases)
@@ -416,7 +426,7 @@ struct LearningViewStoreTests {
 
     // then — treating an unknown kind as absent or trusting receipt fields without their durable
     // identity would survive the current-epoch ordering test's otherwise valid receipt.
-    #expect(view.isOnlyUnreadable)
+    #expect(LearningViewInspection.isOnlyUnreadable(view))
   }
 
   @Test(arguments: ViewPrimitiveCorruption.allCases)
@@ -443,7 +453,7 @@ struct LearningViewStoreTests {
 
     // then — a non-optional typed Row subscript can abort instead of isolating a bad job;
     // existing semantic tests keep the expected SQLite storage classes and cannot kill it.
-    #expect(view.isOnlyUnreadable)
+    #expect(LearningViewInspection.isOnlyUnreadable(view))
   }
 
   @Test
@@ -462,7 +472,7 @@ struct LearningViewStoreTests {
 
     // then — accepting a wrong-class nullable value as SQL NULL makes this job readable; the
     // nearest primitive matrix reaches only non-optional fields.
-    #expect(view.isOnlyUnreadable)
+    #expect(LearningViewInspection.isOnlyUnreadable(view))
   }
 
   @Test
@@ -487,7 +497,7 @@ struct LearningViewStoreTests {
 
     // then — treating every nonzero INTEGER as true accepts the damaged assignment; the nearest
     // primitive matrix changes an integer's storage class and never tests the Boolean domain.
-    #expect(view.isOnlyUnreadable)
+    #expect(LearningViewInspection.isOnlyUnreadable(view))
   }
 }
 
