@@ -46,11 +46,8 @@ enum FeedbackFailureCase: CaseIterable {
 struct FeedbackStoreEnvironment {
   struct DeliveryRow {
     let deliveryKey: String
-    let runID: Int64?
-    let source: String
     let payload: String
     let replyMarkup: String?
-    let createdAt: Date
   }
 
   struct AuditRow {
@@ -270,10 +267,6 @@ struct FeedbackStoreEnvironment {
     }
   }
 
-  func targetCount() throws -> Int {
-    try rowCount(table: "feedback_targets")
-  }
-
   func eventCount() throws -> Int {
     try rowCount(table: "feedback_events")
   }
@@ -289,19 +282,15 @@ struct FeedbackStoreEnvironment {
       try Row.fetchAll(
         db,
         sql: """
-          SELECT dedup_key, run_id, delivery_source, payload, reply_markup, created_ts
+          SELECT dedup_key, payload, reply_markup
           FROM outbound_deliveries
           ORDER BY step_index
           """
       ).map { row in
-        let createdAt: Date = row["created_ts"]
-        return DeliveryRow(
+        DeliveryRow(
           deliveryKey: row["dedup_key"],
-          runID: row["run_id"],
-          source: row["delivery_source"],
           payload: row["payload"],
-          replyMarkup: row["reply_markup"],
-          createdAt: createdAt
+          replyMarkup: row["reply_markup"]
         )
       }
     }
