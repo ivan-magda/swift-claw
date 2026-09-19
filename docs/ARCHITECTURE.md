@@ -913,6 +913,10 @@ swift-claw is an MCP **client** and only a client: it consumes tools from owner-
 - **Nothing the model can call manages MCP.** There is no admin tool, no credential tool, and no catalog-mutating tool — the registry holds only adapters bound to one discovered remote tool each. Management is CLI-only under the instance lock (§17), and the Telegram `/mcp` command renders boot status and nothing else. The client advertises **no** capabilities in the handshake, so no server can drive sampling, elicitation, or roots back into the daemon; resources and prompts are not consumed.
 
 - **The wire says what was agreed, and a session is handed back.** The handshake offers the newest revision the SDK speaks and the server answers with the one it will use; every request after it carries **that** answer, since a server pinned to an older revision may refuse anything else. A session is a resource on someone else's server, so the shutdown graph disconnects every one the boot opened — including a server that contributed no tool and is therefore held by no adapter — while the tool HTTP client is still open to carry the spec's `DELETE`.
+  The transport closes send admission, cancels and joins every admitted HTTP exchange (including
+  requests awaiting response headers), then DELETEs the final captured session. Concurrent transport
+  disconnects await that same cleanup. Disconnect also consumes an idle transport, so a delayed
+  connect cannot reopen it after cleanup.
 
 stdio transport, OAuth 2.1 client auth, and live catalog refresh are deferred, each behind the seams above rather than behind a rewrite.
 
