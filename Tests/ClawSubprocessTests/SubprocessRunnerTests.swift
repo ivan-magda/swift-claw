@@ -142,6 +142,30 @@ struct SubprocessRunnerTests {
   }
 
   @Test
+  func alreadyCancelledCallerDoesNotLaunchAProcess() async {
+    // given
+    let spawned = CompletionFlag()
+    let runner = SwiftSubprocessRunner(executablePath: "/bin/sh") { _ in
+      await spawned.markDone()
+    }
+    let command = testCommand(["-c", "printf unexpected"])
+
+    // when
+    let task = Task {
+      withUnsafeCurrentTask { current in
+        current?.cancel()
+      }
+      return await runner.run(command)
+    }
+    let result = await task.value
+
+    // then
+    #expect(result.termination == .cancelled)
+    #expect(result.processIdentifier == nil)
+    #expect(await spawned.done == false)
+  }
+
+  @Test
   func callerCancellationTearsDownTheCreatedProcessGroup() async throws {
     // given
     let (spawned, continuation) = AsyncStream.makeStream(of: Int32.self)
@@ -175,6 +199,7 @@ struct SubprocessRunnerTests {
     let grandchild = try #require(await readProcessIdentifier(from: grandchildPIDFile))
     task.cancel()
     let result = await task.value
+    let childWasReaped = kill(processIdentifier, 0) == -1 && errno == ESRCH
     let grandchildBecameUnreachable = await processBecameUnreachable(grandchild)
 
     // then
@@ -182,6 +207,7 @@ struct SubprocessRunnerTests {
     #expect(grandchild > 0)
     #expect(result.termination == .cancelled)
     #expect(result.processIdentifier == processIdentifier)
+    #expect(childWasReaped)
     #expect(grandchildBecameUnreachable)
   }
 

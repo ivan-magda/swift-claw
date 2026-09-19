@@ -25,12 +25,30 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
   }
 
   package func run(_ command: SubprocessCommand) async -> SubprocessResult {
+    guard !Task.isCancelled else {
+      return SubprocessResult(
+        termination: .cancelled,
+        stdout: Self.emptyStream,
+        stderr: Self.emptyStream,
+        processIdentifier: nil
+      )
+    }
+
     let clock = ContinuousClock()
     let spawnedProcessIdentifier = SpawnedProcessIdentifierBox()
     let (spawned, spawnedContinuation) = AsyncStream.makeStream(
       of: Void.self,
       bufferingPolicy: .bufferingNewest(1)
     )
+    let operation = Task {
+      defer { spawnedContinuation.finish() }
+      return await self.spawnAndCapture(
+        command,
+        spawnedProcessIdentifier: spawnedProcessIdentifier
+      ) {
+        spawnedContinuation.yield()
+      }
+    }
 
     let outcome = await DeadlineRace.race(
       allowance: command.timeout,
@@ -44,15 +62,11 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
         try await clock.sleep(for: allowance)
       },
       operation: {
-        defer { spawnedContinuation.finish() }
-        return await self.spawnAndCapture(
-          command,
-          spawnedProcessIdentifier: spawnedProcessIdentifier
-        ) {
-          spawnedContinuation.yield()
-        }
+        await operation.value
       }
     )
+    operation.cancel()
+    _ = await operation.value
 
     switch outcome {
     case .operationReturned(let result):
@@ -82,6 +96,7 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
     let teardownSequence = Self.teardownSequence(gracePeriod: command.teardownGracePeriod)
 
     do {
+      try Task.checkCancellation()
       let result = try await Subprocess.run(
         .path(FilePath(executablePath)),
         arguments: Arguments(command.arguments),
