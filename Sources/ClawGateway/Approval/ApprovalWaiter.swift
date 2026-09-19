@@ -10,7 +10,7 @@ import Logging
 ///
 /// Conforms to the `ApprovalParking` seam (which refines `Sendable`) so `TurnRunner` can
 /// hold it as `parker`; the `park` signature is exactly the protocol requirement.
-public struct ApprovalWaiter: ApprovalParking {
+public final class ApprovalWaiter: ApprovalParking {
   private let approvals: any ApprovalStore
   private let runs: any RunStore
 
