@@ -66,8 +66,9 @@ Day-to-day commands, including how to run the daemon locally, live in
 
 ## Ground rules
 
-- Swift 6 strict concurrency throughout: mutable state lives in actors, domain
-  types are `Sendable` value types.
+- Swift 6 strict concurrency throughout: actors own mutable asynchronous state; domain
+  types are `Sendable` value types. Preserve the GRDB and synchronous-lock contracts in
+  [ARCHITECTURE.md §5.2](docs/ARCHITECTURE.md#52-dependencies-and-state).
 - Security policy is enforced in code, never in the prompt. Untrusted input
   (messages, web content, tool output, stored memory) is data, not instructions.
 - Reuse before you add: search for an existing helper, constant, or test double

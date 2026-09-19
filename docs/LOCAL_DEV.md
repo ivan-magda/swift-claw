@@ -6,15 +6,20 @@ Day-to-day commands for building, running, and operating `clawd` locally.
 
 ## Prerequisites
 
-`clawd` reads config from environment variables. The file `~/.swift-claw/clawd.env`
-holds those variables but is never loaded automatically — you source it before each
-invocation. Get in the habit of doing this at the start of a dev session:
+Build, lint and ordinary unit tests need no runtime configuration or secrets. Install the
+toolchain from [CODE_STYLE.md](CODE_STYLE.md#setup). For isolated CLI/config probes, follow
+[the verification skill](../.claude/skills/verify/SKILL.md), which uses a clean environment
+and a disposable state root.
+
+For intentional operations on your configured installation, `clawd` reads environment variables.
+The file `~/.swift-claw/clawd.env` is never loaded automatically; source it before those commands:
 
 ```bash
 set -a && source ~/.swift-claw/clawd.env && set +a
 ```
 
-All commands below assume a sourced shell unless noted.
+Operational commands below assume that configured shell unless noted. Do not source personal
+runtime secrets just to build, lint, test or run an isolated probe.
 
 ---
 
@@ -74,11 +79,15 @@ set -a && source ~/.swift-claw/clawd.env && set +a
 .build/debug/clawd doctor
 ```
 
-Config-and-secrets only (no DB or network):
+Offline config/secrets checks (no database or network probes):
 
 ```bash
 .build/debug/clawd doctor --check-config
 ```
+
+This also checks configured MCP credentials and optional local sandbox CLI availability, and
+may create the configured state directory. Valid config without a Telegram token exits 11;
+invalid config exits 10. Use the isolated verification skill above when testing config changes.
 
 Machine-readable output:
 
@@ -389,7 +398,7 @@ or cancel the Coder job from the same topic. All non-Coder group tool behavior r
 Verify with `doctor` — the `group.mode` row reports `off`, or `on (1 chat)` / `on (N chats)`:
 
 ```bash
-.build/debug/clawd doctor --check-config | grep group.mode
+.build/debug/clawd doctor --check-config
 ```
 
 A daemon configured with group chats **refuses to start** if it cannot resolve its own `@handle`
