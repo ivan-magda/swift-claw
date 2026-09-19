@@ -2,7 +2,6 @@ import ClawCore
 import Foundation
 import Logging
 import ServiceLifecycle
-import Synchronization
 
 /// A one-shot, coalescing wake-up signal between a turn commit (producer) and the dispatcher
 /// (consumer). `poke()` requests a drain; `finish()` ends the stream so the dispatcher's loop exits.
@@ -49,8 +48,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
   private let delivery: any MessageDelivery
   private let signal: OutboxSignal
   private let logger: Logger
-  private let clock: ClockType
-  private let holds: FloodControlHolds<ClockType.Instant>
+  private let holds: FloodControlHolds<ClockType>
 
   public init(
     outbox: any OutboxStore,
@@ -63,8 +61,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
     self.delivery = delivery
     self.signal = signal
     self.logger = logger
-    self.clock = clock
-    holds = FloodControlHolds()
+    holds = FloodControlHolds(clock: clock, signal: signal)
   }
 
   public func run() async throws {
@@ -76,6 +73,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
         await drainOnce()
       }
     }
+    await holds.cancelAndAwait()
     logger.info("outbox dispatcher stopped")
   }
 
@@ -103,7 +101,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
 
       // A chat Telegram is throttling waits out its hold; the rows of every other chat carry on.
       // Order inside a run survives because a run answers exactly one chat.
-      if holds.isHeld(row.chatID, now: clock.now) {
+      if await holds.isHeld(row.chatID) {
         continue
       }
 
@@ -117,7 +115,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
           break
         }
         if let retryAfter = Self.floodControlRetryAfter(error) {
-          hold(chat: row.chatID, forSeconds: retryAfter)
+          await hold(chat: row.chatID, forSeconds: retryAfter)
           continue
         }
         // Recoverable: leave this row and any later ones PENDING and stop, so a multi-chunk reply
@@ -194,14 +192,9 @@ private extension OutboxDispatcher {
   /// Parks one chat for the `retry_after` Telegram asked for and arranges the drain that resumes it:
   /// the producer only pokes on a fresh commit, so without this wake-up a held chat would wait for
   /// unrelated traffic before its rows moved.
-  func hold(chat chatID: Int64, forSeconds retryAfter: Int) {
-    let wait = Duration.seconds(retryAfter)
-    holds.hold(chatID, until: clock.now.advanced(by: wait))
+  func hold(chat chatID: Int64, forSeconds retryAfter: Int) async {
+    await holds.hold(chatID, for: .seconds(retryAfter))
     logger.warning("flood control on chat \(chatID); holding its rows for \(retryAfter)s")
-    Task { [signal, clock] in
-      try? await clock.sleep(for: wait)
-      signal.poke()
-    }
   }
 
   static func floodControlRetryAfter(_ error: any Error) -> Int? {
@@ -212,31 +205,60 @@ private extension OutboxDispatcher {
   }
 }
 
-/// The instants before which each throttled chat must not be sent to. Reference-typed so a hold
-/// outlives the drain that recorded it — a hold living only for one drain would let the next poke
-/// walk straight back into the same rate limit.
-private final class FloodControlHolds<Instant: InstantProtocol>: Sendable {
-  private let notBefore = Mutex<[Int64: Instant]>([:])
+/// Keeps each chat's retry deadline across drains and owns the wakeups until service shutdown.
+private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Duration {
+  private let clock: ClockType
+  private let signal: OutboxSignal
+  private var notBefore: [Int64: ClockType.Instant] = [:]
+  private var wakeups: [UUID: Task<Void, Never>] = [:]
+  private var stopping = false
+
+  init(clock: ClockType, signal: OutboxSignal) {
+    self.clock = clock
+    self.signal = signal
+  }
 
   /// Whether `chatID` is still inside a hold; an elapsed hold is dropped on the way out so the map
   /// stays the size of the currently-throttled chats.
-  func isHeld(_ chatID: Int64, now: Instant) -> Bool {
-    notBefore.withLock { held in
-      guard let deadline = held[chatID] else {
-        return false
-      }
-      if now < deadline {
-        return true
-      }
-      held[chatID] = nil
+  func isHeld(_ chatID: Int64) -> Bool {
+    guard let deadline = notBefore[chatID] else {
       return false
     }
+    if clock.now < deadline {
+      return true
+    }
+    notBefore[chatID] = nil
+    return false
   }
 
   /// Extends the chat's hold, never shortens it: two 429s in one drain leave the later deadline.
-  func hold(_ chatID: Int64, until deadline: Instant) {
-    notBefore.withLock { held in
-      held[chatID] = max(held[chatID] ?? deadline, deadline)
+  func hold(_ chatID: Int64, for wait: Duration) {
+    guard !stopping else {
+      return
+    }
+    let deadline = clock.now.advanced(by: wait)
+    notBefore[chatID] = max(notBefore[chatID] ?? deadline, deadline)
+    let id = UUID()
+    wakeups[id] = Task {
+      defer { wakeups[id] = nil }
+      do {
+        try await clock.sleep(until: deadline, tolerance: nil)
+        try Task.checkCancellation()
+        signal.poke()
+      } catch {
+        return
+      }
+    }
+  }
+
+  func cancelAndAwait() async {
+    stopping = true
+    let owned = Array(wakeups.values)
+    for wakeup in owned {
+      wakeup.cancel()
+    }
+    for wakeup in owned {
+      await wakeup.value
     }
   }
 }
