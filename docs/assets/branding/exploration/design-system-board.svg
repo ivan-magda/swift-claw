@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="700" viewBox="0 0 1400 700">
+  <rect width="1400" height="700" fill="#F3F2EE"/>
+  <text x="72" y="78" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="12" font-weight="700" fill="#F05138" letter-spacing="2.2">SWIFT-CLAW / VISUAL SYSTEM</text>
+  <text x="72" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="54" font-weight="600" fill="#111113" letter-spacing="-1.6">Quiet, local, precise.</text>
+  <text x="72" y="194" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="20" fill="#6E6E73">Product-first branding for a persistent personal daemon.</text>
+  <rect x="72" y="252" width="270" height="112" rx="22" fill="#111113"/><text x="90" y="338" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#FFFFFF" letter-spacing="1.5">WARM BLACK · #111113</text>
+  <rect x="382" y="252" width="270" height="112" rx="22" fill="#F05138"/><text x="400" y="338" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#FFFFFF" letter-spacing="1.5">SWIFT ORANGE · #F05138</text>
+  <rect x="692" y="252" width="270" height="112" rx="22" fill="#F3F2EE" stroke="#D8D7D2"/><text x="710" y="338" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#111113" letter-spacing="1.5">WARM WHITE · #F3F2EE</text>
+  <rect x="1002" y="252" width="270" height="112" rx="22" fill="#6E6E73"/><text x="1020" y="338" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#FFFFFF" letter-spacing="1.5">SYSTEM GREY · #6E6E73</text>
+  <text x="72" y="438" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#6E6E73" letter-spacing="1.8">TYPE</text>
+  <text x="72" y="508" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="68" font-weight="650" fill="#111113" letter-spacing="-2.2">swift-claw</text>
+  <text x="72" y="550" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="17" fill="#6E6E73">System sans — calm, legible, non-futuristic</text>
+  <text x="770" y="438" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#6E6E73" letter-spacing="1.8">TECHNICAL</text>
+  <text x="770" y="504" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="30" fill="#111113">$ clawd status</text>
+  <text x="770" y="550" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="17" fill="#6E6E73">System mono for implementation details</text>
+  <line x1="72" y1="612" x2="1328" y2="612" stroke="#D8D7D2"/>
+  <text x="72" y="650" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="11" font-weight="700" fill="#F05138" letter-spacing="1.8">RULE</text>
+  <text x="132" y="650" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="16" font-weight="520" fill="#111113">One accent. No glow. No speed lines. Product proof over illustration.</text>
+</svg>
