@@ -92,7 +92,9 @@ A flaky test — one that passes and fails with no change to code — is worse t
 ### 6.1 Swift Testing / async specifics
 
 - Use **Swift Testing** (`@Test`, `#expect`, `#require`, `@Suite`). Prefer `#require` to unwrap a precondition so a failure stops the test at the right line rather than trapping later.
-- To observe an intermediate async state deterministically, insert **`await Task.yield()`** before the assertion to force the suspension point, instead of sleeping.
+- Observe an intermediate async state by awaiting an explicit gate or emitted signal that proves
+  the state was reached. `Task.yield()` only offers the executor a scheduling opportunity; it does
+  not prove another task has started, suspended, or completed.
 - Prefer **explicit emitted signals** to control async timing points. `withMainSerialExecutor` (Swift
   Concurrency Extras) changes a process-global executor hook and is safe only when the entire test
   process is isolated from unrelated tests. `.serialized` on one suite does **not** provide that
@@ -198,7 +200,7 @@ Apply in order, when writing a new test or triaging an existing one:
 1. **What fault would this fail on that no other test would?** No answer → do not write it / delete it (it is tautological or redundant).
 2. **Would it survive a behavior-preserving refactor?** No → assert the outcome, not the mechanism.
 3. **Managed or unmanaged dependency?** Managed (SQLite/GRDB) → use the real thing. Unmanaged (LLM/Telegram) → stub at the protocol seam; assert the outbound contract, never internal call order.
-4. **Signal or stopwatch?** Synchronizing on `sleep` → replace with a gate / `Task.yield()` / emitted signal.
+4. **Signal or stopwatch?** Synchronizing on `sleep` or relying on `Task.yield()` for readiness → replace with a gate or emitted signal.
 
 ### 9.1 Pre-commit redundancy pass
 
@@ -250,4 +252,4 @@ Verified against primary and authoritative secondary sources:
 - Codecov, _Mutation testing_ — coverage as a vanity metric; mutation testing as the true value signal.
 - Datadog, _Flaky tests_ — the order / concurrency / environment taxonomy of flakiness.
 - Shai Yallin, _Fake Don't Mock_; enterprisecraftsmanship, _DRY and DAMP in unit tests_.
-- Antoine van der Lee, _Unit testing async/await_ — `Task.yield()` before assertions; `withMainSerialExecutor` for deterministic ordering.
+- Antoine van der Lee, _Unit testing async/await_ — async scheduling and executor overrides; the repository-specific limits in §6.1 apply.

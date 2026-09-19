@@ -17,7 +17,10 @@ The adopted revision, explicit local exceptions, and tool ownership are normativ
   `// MARK: - <Group Name>`. Put other access modifiers on members.
 - Structure tests with `// given`, `// when`, and `// then`.
 - Keep documentation summaries concise, normally one or two lines; add necessary contract
-  details and tags. Ordinary comments explain enduring constraints.
+  details and tags. Obvious declarations need no documentation boilerplate. Ordinary comments
+  explain enduring constraints the code cannot express; change rationale belongs in the commit
+  or PR. Never cite a bare `§N`: explain the constraint, or use `ARCHITECTURE.md §N` only where
+  the code would otherwise read as a bug. The code map in architecture §3.1 points from docs to code.
 - The 100-character gate exempts comments and URLs. An intact opaque literal needs a reasoned
   single-line suppression, as specified in the architecture.
 - Preserve the `ClawCore` seam/error placement when considering Google's nesting preference.
