@@ -15,8 +15,21 @@ concurrency:
 
 jobs:
   test-linux:
-    runs-on: ubuntu-24.04-arm
-    container: swift:6.3-noble
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: test-linux
+            runner: ubuntu-24.04-arm
+            image: swift:6.3-noble
+            swift: '6.3'
+          - name: test-linux-swift-6.4
+            runner: ubuntu-24.04
+            image: swift:6.4.0-noble
+            swift: '6.4'
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
     timeout-minutes: 30
 
     steps:
@@ -36,8 +49,14 @@ jobs:
 
       - name: Show toolchain
         id: toolchain
+        env:
+          EXPECTED_SWIFT: ${{ matrix.swift }}
         run: |
           swift --version
+          swift --version 2>&1 | grep -qF "Swift version $EXPECTED_SWIFT" || {
+            echo "::error::Expected a Swift $EXPECTED_SWIFT.x toolchain on this runner"
+            exit 1
+          }
 
           toolchain_key=$(swift --version | sha256sum | cut -d ' ' -f 1)
           echo "cache-key=$toolchain_key" >> "$GITHUB_OUTPUT"
@@ -59,6 +78,12 @@ jobs:
               '.github/workflows/ci.yml'
             ) }}-
 
+      - name: Validate candidate Linux release build
+        if: matrix.swift == '6.4'
+        run: |
+          swift build -c release --static-swift-stdlib --product clawd
+          .build/release/clawd --version
+
       - name: Build and run tests
         run: swift test -Xswiftc -enable-incremental-file-hashing
         env:
@@ -76,7 +101,20 @@ jobs:
             --filter TrialSerializationTests
 
   test-macos:
-    runs-on: macos-26
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: test-macos
+            runner: macos-26
+            xcode: '26.6'
+            swift: '6.3'
+          - name: test-macos-xcode-27
+            runner: xcode-27
+            xcode: '27.0'
+            swift: '6.4'
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
 
     steps:
@@ -85,15 +123,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Select Swift 6.3 toolchain
+      - name: Select Xcode toolchain
         id: toolchain
+        env:
+          XCODE_VERSION: ${{ matrix.xcode }}
+          EXPECTED_SWIFT: ${{ matrix.swift }}
         run: |
           ls -d /Applications/Xcode*.app 2>/dev/null || true
-          sudo xcode-select -s /Applications/Xcode_26.6.app
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
 
+          xcodebuild -version
           swift --version
-          swift --version 2>&1 | grep -qF "Swift version 6.3" || {
-            echo "::error::Expected a Swift 6.3.x toolchain on this runner"
+          swift --version 2>&1 | grep -qF "Swift version $EXPECTED_SWIFT" || {
+            echo "::error::Expected a Swift $EXPECTED_SWIFT.x toolchain on this runner"
             exit 1
           }
 
@@ -122,6 +164,12 @@ jobs:
               'Package.resolved',
               '.github/workflows/ci.yml'
             ) }}-
+
+      - name: Validate candidate macOS release build
+        if: matrix.swift == '6.4'
+        run: |
+          swift build -c release --product clawd
+          .build/release/clawd --version
 
       - name: Build and run tests outside native Coder integration
         run: swift test -Xswiftc -enable-incremental-file-hashing --skip ClawCoderTests
