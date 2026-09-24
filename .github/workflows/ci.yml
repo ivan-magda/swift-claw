@@ -81,8 +81,9 @@ jobs:
       - name: Validate candidate Linux release build
         if: matrix.swift == '6.4'
         run: |
-          swift build -c release --static-swift-stdlib --product clawd
-          .build/release/clawd --version
+          swift build --build-system native -c release --static-swift-stdlib --product clawd
+          binary_directory=$(swift build --build-system native -c release --show-bin-path)
+          "$binary_directory/clawd" --version
 
       - name: Build and run tests
         run: swift test -Xswiftc -enable-incremental-file-hashing
