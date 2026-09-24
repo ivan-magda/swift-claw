@@ -7,10 +7,8 @@ Day-to-day commands for building, running, and operating `clawd` locally.
 ## Prerequisites
 
 Build, lint and ordinary unit tests need no runtime configuration or secrets. Install the
-toolchain from [CODE_STYLE.md](CODE_STYLE.md#setup): Xcode 27.0 (27A266a) with its bundled
-Swift 6.4 on macOS, or the official Swift 6.4.0 release on Linux. For isolated CLI/config probes, follow
-[the verification skill](../.claude/skills/verify/SKILL.md), which uses a clean environment
-and a disposable state root.
+[pinned toolchain](CODE_STYLE.md#setup). For isolated CLI/config probes, use the
+[verification skill](../.claude/skills/verify/SKILL.md)'s clean environment and disposable state root.
 
 For intentional operations on your configured installation, `clawd` reads environment variables.
 The file `~/.swift-claw/clawd.env` is never loaded automatically; source it before those commands:
@@ -31,28 +29,16 @@ scripts/check-toolchain.sh
 swift build
 ```
 
-The preflight checks the compiler build identity; on macOS it also checks Xcode and refuses an
-alternate toolchain on PATH. SwiftPM exposes the debug binary at `.build/debug/clawd`; use
-`swift build --show-bin-path` to find its concrete directory. For a release build:
+SwiftPM exposes the debug binary at `.build/debug/clawd`; use `swift build --show-bin-path`
+to find its concrete directory. For a release build:
 
 ```bash
 swift build -c release
 ```
 
-For the Linux release artifact, bundle the Swift runtime with the native build backend:
-
-```bash
-swift build --build-system native -c release --static-swift-stdlib --product clawd
-binary_directory=$(swift build --build-system native -c release --show-bin-path)
-"$binary_directory/clawd" --version
-```
-
-Swift 6.4.0's default Swift Build backend cannot link static Foundation on Linux
-([swift-build #1764](https://github.com/swiftlang/swift-build/issues/1764)). The native backend
-works around that failure; ordinary builds and tests use the default backend.
-
-The release binary links the system SQLite. Linux hosts need `libsqlite3-0`; macOS includes it.
-The Linux release command above bundles the Swift runtime.
+Before installing or distributing a release build, follow the [packaging recipe](INSTALL.md#build-from-source):
+macOS needs its compatibility library beside the executable; Linux bundles the Swift runtime.
+Builds link system SQLite: Linux hosts need `libsqlite3-0`; macOS includes it.
 
 ---
 
@@ -75,22 +61,28 @@ See [the formatting contract](ARCHITECTURE.md#192-source-formatting-and-lint) fo
 
 ### Workflow and shell checks
 
-Use actionlint 1.7.12, zizmor 1.30.1 and ShellCheck 0.11.0, matching
-`BuildTools/lint-versions.env`. Run these from the repository root after workflow or shell edits:
+Install actionlint, zizmor and ShellCheck at the versions in `BuildTools/lint-versions.env`.
+Run these from the repository root after editing workflows or the listed shell scripts:
 
 ```bash
 source BuildTools/lint-versions.env
 test "$(actionlint --version | sed -n '1p')" = "$CLAW_ACTIONLINT_VERSION" && actionlint
 test "$(zizmor --version)" = "zizmor $CLAW_ZIZMOR_VERSION" && zizmor .
 test "$(shellcheck --version | sed -n 's/^version: //p')" = "$CLAW_SHELLCHECK_VERSION" &&
-  shellcheck -s sh install.sh deploy/run-clawd.sh &&
-  shellcheck -x scripts/check-toolchain.sh scripts/test-toolchain.sh \
-    scripts/lint.sh scripts/test-lint.sh
+  shellcheck -s sh install.sh deploy/run-clawd.sh scripts/test-install.sh &&
+  shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
+    scripts/package-macos.sh
 ```
 
-Each version comparison must succeed before its checker runs. Formatter or toolchain changes also
-need `scripts/test-lint.sh`, a second `scripts/lint.sh --fix` with no diff, and the lint/build/test
-gate. The compiler preflight is shared by local lint, CI and release builds.
+Each version comparison must succeed. Formatter or toolchain changes also need `scripts/test-lint.sh`,
+a second `scripts/lint.sh --fix` with no diff, and the lint/build/test gate.
+
+Installer changes also need the disposable Docker acceptance test (it uses the container's home):
+
+```bash
+docker run --rm --network none --tmpfs /tmp:noexec \
+  -v "$PWD:/repo:ro" -w /repo ubuntu:24.04 sh scripts/test-install.sh
+```
 
 ---
 

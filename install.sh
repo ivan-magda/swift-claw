@@ -18,6 +18,7 @@ REPO="ivan-magda/swift-claw"
 SERVICE_LABEL="com.ivanmagda.swift-claw"
 CLAW_HOME="${HOME}/.swift-claw"
 BIN_DIR="${CLAW_HOME}/bin"
+MACOS_SWIFT_RUNTIME="libswiftCompatibilitySpan.dylib"
 # The Linux binary is built in the swift:6.4.0-noble container and links its glibc.
 # Bump in lockstep with the builder image in .github/workflows/release.yml.
 GLIBC_FLOOR="2.38"
@@ -101,6 +102,10 @@ download_and_verify() {
   for asset_name in "$ASSET" SHA256SUMS clawd.env.example run-clawd.sh "$UNIT_ASSET"; do
     fetch "$(release_url "$asset_name")" "$workdir/$asset_name"
   done
+  if [ "$host_os" = Darwin ] && awk -v asset="$MACOS_SWIFT_RUNTIME" \
+    '$2 == asset { found = 1 } END { exit !found }' "$workdir/SHA256SUMS"; then
+    fetch "$(release_url "$MACOS_SWIFT_RUNTIME")" "$workdir/$MACOS_SWIFT_RUNTIME"
+  fi
   say "Verifying checksums..."
   (cd "$workdir" && sha256_check) \
     || die "checksum verification FAILED — aborting; nothing was installed"
@@ -140,17 +145,25 @@ install_files() {
   umask 077
   mkdir -p "$BIN_DIR"
   chmod 700 "$CLAW_HOME"
-  # Two-phase move: smoke-test the candidate first, so a binary that cannot run
-  # here never replaces a working install and no half-written file lands at the
-  # final path.
-  install -m 755 "$workdir/$ASSET" "$BIN_DIR/.clawd.new"
-  if ! INSTALLED_VERSION="$("$BIN_DIR/.clawd.new" --version 2>/dev/null)"; then
-    rm -f "$BIN_DIR/.clawd.new"
+  # Stage beside the installed binary: the download filesystem may be mounted noexec.
+  candidate_dir="$(mktemp -d "$BIN_DIR/.clawd-new.XXXXXX")"
+  trap 'rm -rf "$workdir" "$candidate_dir"' EXIT
+  install -m 755 "$workdir/$ASSET" "$candidate_dir/clawd"
+  if [ -f "$workdir/$MACOS_SWIFT_RUNTIME" ]; then
+    install -m 755 "$workdir/$MACOS_SWIFT_RUNTIME" "$candidate_dir/$MACOS_SWIFT_RUNTIME"
+  fi
+  if ! INSTALLED_VERSION="$("$candidate_dir/clawd" --version 2>/dev/null)"; then
     die "the installed binary failed to run on this machine.
   On Linux this usually means glibc is older than $GLIBC_FLOOR. Build from source:
   https://github.com/${REPO}#install"
   fi
-  mv -f "$BIN_DIR/.clawd.new" "$BIN_DIR/clawd"
+  if [ -f "$candidate_dir/$MACOS_SWIFT_RUNTIME" ]; then
+    mv -f "$candidate_dir/$MACOS_SWIFT_RUNTIME" "$BIN_DIR/$MACOS_SWIFT_RUNTIME"
+  fi
+  mv -f "$candidate_dir/clawd" "$BIN_DIR/clawd"
+  if [ "$host_os" = Darwin ] && [ ! -f "$workdir/$MACOS_SWIFT_RUNTIME" ]; then
+    rm -f "$BIN_DIR/$MACOS_SWIFT_RUNTIME"
+  fi
   # run-clawd.sh defaults to /usr/local/bin/clawd; point the default here instead.
   sed 's|/usr/local/bin/clawd|'"$BIN_DIR"'/clawd|' "$workdir/run-clawd.sh" \
     > "$BIN_DIR/run-clawd.sh"

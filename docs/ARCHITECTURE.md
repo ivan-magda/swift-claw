@@ -1637,12 +1637,18 @@ empty healthy state.
 
 - **Build:** SwiftPM with Swift tools **6.4** in the product and BuildTools manifests. The runtime
   **platform floor remains macOS 15** because `Calendar.RecurrenceRule` requires it (Inc 4/§14).
-  Releases ship a **macOS `arm64` binary built with Xcode 27.0 (27A266a)** and a
-  **Linux `x86_64` binary built in `swift:6.4.0-noble`**. The Linux release uses
+  Releases ship **macOS `arm64`** and **Linux `x86_64`** binaries using the
+  [pinned toolchains](CODE_STYLE.md#setup). The macOS release also ships
+  `libswiftCompatibilitySpan.dylib` from that toolchain: Swift 6.4 requires it and macOS 15 does
+  not provide it. `scripts/package-macos.sh` prepares the executable to load the library from
+  `@loader_path`, restores its ad hoc signature, and smoke-checks the pair. Both files belong in
+  the release checksum manifest and must stay together. The installer verifies and smoke-checks
+  the staged pair before replacing an installation; older manifests without the library remain valid.
+  The Linux release uses
   `--build-system native --static-swift-stdlib` to bundle the Swift runtime; Swift 6.4.0's default
   Swift Build backend fails to link static Foundation
   ([upstream issue #1764](https://github.com/swiftlang/swift-build/issues/1764)). Ordinary builds
-  and tests use the default backend. The system `libsqlite3` remains the external library dependency.
+  and tests use the default backend. Both platforms link system `libsqlite3`.
   A musl **Static Linux SDK** → fully-static/distroless image is deferred: GRDB v7 declares SQLite
   as a `.systemLibrary` and the musl SDK ships none, so a musl cross-compile cannot link
   (see §18 Deployment escape hatch).
@@ -1671,7 +1677,7 @@ empty healthy state.
 | Scheduling                | `Calendar.RecurrenceRule` + custom ticker/store [Inc 4]; **raises the platform floor to macOS 15**                                                                                                                                                                                                                                             | in-toolchain, DST-correct; Codable round-trip + DST suite pinned as toolchain-drift tripwires                                                                                                                                                      | SwifCron (vendored)                                                                                                                                                                                                                       | Low      |
 | Concurrency               | std-lib actors + stored per-session task chains (await-to-order, cancel-to-supersede)                                                                                                                                                                                                                                                        | per-session lanes without an external queue lib                                                                                                                                                                                                    | `dfed/swift-async-queue` (escape hatch only)                                                                                                                                                                                              | Low      |
 | Config files              | YAML for SKILL.md frontmatter via Yams                                                                                                                                                                                                                                                                                                         | maintained YAML parser                                                                                                                                                                                                                             | —                                                                                                                                                                                                                                         | Low      |
-| Deployment                | native-container Linux `x86_64` binary (`swift:6.4.0-noble`, `--build-system native --static-swift-stdlib`) + macOS `arm64` binary (Xcode 27.0); GitHub Releases with SHA256 checksums + provenance attestations; launchd + systemd                                                                                                                                          | Swift runtime bundled; only `libsqlite3` needed at runtime; publishes without a container registry                                                                                                                                                 | musl Static Linux SDK → distroless/scratch (blocked today: GRDB links system SQLite, musl SDK ships none) / swift-sdk-generator (glibc)                                                                                                   | Low      |
+| Deployment                | Linux `x86_64` binary with the Swift runtime bundled + macOS `arm64` binary with its compatibility library (§17); GitHub Releases with SHA256 checksums + provenance attestations; launchd + systemd | System SQLite on both platforms; no separate Swift runtime installation | musl Static Linux SDK → distroless/scratch (blocked: GRDB links system SQLite, musl SDK ships none) / swift-sdk-generator (glibc) | Low |
 
 ## 19. Cross-cutting concerns
 
@@ -1741,26 +1747,17 @@ through `->` together and the first condition beside its keyword.
 Check mode formats temporary copies and compares the
 final bytes; fix mode writes that same result. Apple's non-correctable checks inspect its normalized
 intermediate output, and SwiftLint checks correctness and idiom on the final source. Standalone
-formatter invocations are not a substitute for this gate. Versions are pinned and validated before
-source mutation in `BuildTools/lint-versions.env`. Local, CI, per-file, and editor-buffer formatting
-share this pipeline.
+formatter invocations are not a substitute for this gate. Local, CI, per-file, and editor-buffer
+formatting share this pipeline and validate prerequisites before source mutation.
 
-The supported macOS toolchain is **Xcode 27.0, build 27A266a**, with its bundled **Apple Swift 6.4**
-(`swiftlang-6.4.0.34.1 clang-2100.3.34.1`). Linux uses the official **Swift 6.4.0** distribution
-(`swift:6.4.0-noble`), whose compiler reports **Swift 6.4** (`swift-6.4-RELEASE`). Both bundled
-Apple formatters report `main`; that string alone does not establish the compiler distribution.
-`scripts/check-toolchain.sh` checks the exact compiler version and build identity. On macOS it
-also verifies the Xcode version/build, requires `xcrun --find swift` to resolve to its default
-toolchain, and accepts only that compiler or `/usr/bin/swift` on PATH. The lint gate invokes
-`xcrun --toolchain XcodeDefault swift-format` on macOS and `swift format` on Linux. It checks
-formatter versions before source mutation. `.swift-version` names `6.4`; it does not authorize a
-standalone macOS toolchain in place of Xcode. Local build preflight, CI and release jobs share the
-compiler check.
-
-SwiftLint remains pinned to **0.65.1** and the locked BuildTools SwiftFormat package to **0.62.1**;
-the gate builds and uses that package's executable without requiring a global SwiftFormat install.
-Workflow checks use **actionlint 1.7.12**, **zizmor 1.30.1** and **ShellCheck 0.11.0**, with pins in
-the same environment file. CI validates the canonical lint pipeline on both macOS and Linux.
+`.swift-version` pins the Swift version; `BuildTools/lint-versions.env` pins the remaining
+tool identities. Local build preflight, CI and releases share `scripts/check-toolchain.sh`,
+which verifies the compiler build identity and the macOS Xcode version/build. The lint gate uses
+`xcrun --toolchain XcodeDefault swift-format` on macOS and `swift format` on Linux; their `main`
+labels are not version pins. It checks SwiftLint and the locked BuildTools SwiftFormat executable
+against the shared pins. Actionlint, zizmor and ShellCheck use the same pins file.
+CI validates the canonical lint pipeline on both platforms; [CODE_STYLE.md](CODE_STYLE.md#setup)
+documents installation.
 
 Apple owns general spacing, indentation and wrapping, braces, and declaration layout
 through `.swift-format`. It preserves existing line breaks so reviewed multiline layouts survive.

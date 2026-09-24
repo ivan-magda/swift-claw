@@ -15,16 +15,7 @@ concurrency:
 
 jobs:
   test-linux:
-    name: ${{ matrix.name }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: test-linux
-            runner: ubuntu-24.04-arm
-          - name: test-linux-x86_64
-            runner: ubuntu-24.04
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04
     container: swift:6.4.0-noble
     timeout-minutes: 30
 
@@ -69,7 +60,6 @@ jobs:
             ) }}-
 
       - name: Validate Linux release build
-        if: runner.arch == 'X64'
         run: |
           swift build --build-system native -c release --static-swift-stdlib --product clawd
           binary_directory=$(swift build --build-system native -c release --show-bin-path)
@@ -164,13 +154,64 @@ jobs:
         run: |
           swift build -c release --product clawd
           binary_directory=$(swift build -c release --show-bin-path)
-          "$binary_directory/clawd" --version
+          scripts/package-macos.sh "$binary_directory/clawd" "$RUNNER_TEMP/macos-package"
+
+      - name: Upload macOS release package for runtime validation
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-release-package
+          path: ${{ runner.temp }}/macos-package/
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Build and run tests outside native Coder integration
         run: swift test -Xswiftc -enable-incremental-file-hashing --skip ClawCoderTests
 
       - name: Run native Coder integration in a separate test process
         run: swift test --skip-build --filter ClawCoderTests
+
+  macos-release-runtime:
+    needs: test-macos
+    runs-on: macos-15
+    timeout-minutes: 5
+
+    steps:
+      - name: Download the Xcode 27 release package
+        uses: actions/download-artifact@v8
+        with:
+          name: macos-release-package
+          path: ${{ runner.temp }}/macos-package
+
+      - name: Validate the package on the oldest supported macOS
+        working-directory: ${{ runner.temp }}/macos-package
+        run: |
+          shasum -a 256 -c clawd-macos-arm64.sha256
+          chmod 755 clawd-macos-arm64 libswiftCompatibilitySpan.dylib
+          python3 - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import tempfile
+
+          binary = str(Path("clawd-macos-arm64").resolve())
+          with tempfile.TemporaryDirectory(prefix="clawd-release-") as state_root:
+              environment = {
+                  "PATH": os.environ["PATH"],
+                  "CLAW_STATE_ROOT": state_root,
+                  "CLAW_LLM_BASE_URL": "http://localhost:9/v1",
+                  "CLAW_LLM_MODEL": "test-model",
+              }
+              subprocess.run([binary, "--version"], env=environment, check=True, timeout=30)
+              result = subprocess.run(
+                  [binary, "doctor", "--check-config", "--json"], env=environment,
+                  capture_output=True, text=True, timeout=30,
+              )
+              assert result.returncode == 11, (result.returncode, result.stdout, result.stderr)
+              rows = {row["key"]: row for row in json.loads(result.stdout)["checks"]}
+              assert rows["config"]["ok"] and rows["config"]["value"] == "OK", rows
+              print("Packaged release: version and isolated config checks passed")
+          PYTHON
 
   install-script:
     strategy:
@@ -184,6 +225,13 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Verify installer staging without network access
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm --network none --tmpfs /tmp:noexec \
+            -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo \
+            ubuntu:24.04 sh scripts/test-install.sh
 
       - name: Install, re-run, uninstall against the latest release
         run: |

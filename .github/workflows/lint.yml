@@ -78,7 +78,7 @@ jobs:
           source BuildTools/lint-versions.env
           docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo \
             "koalaman/shellcheck:v${CLAW_SHELLCHECK_VERSION}" \
-            -s sh install.sh deploy/run-clawd.sh
+            -s sh install.sh deploy/run-clawd.sh scripts/test-install.sh
           docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo \
             "koalaman/shellcheck:v${CLAW_SHELLCHECK_VERSION}" \
-            -x scripts/check-toolchain.sh scripts/test-toolchain.sh scripts/lint.sh scripts/test-lint.sh
+            -x scripts/check-toolchain.sh scripts/package-macos.sh scripts/lint.sh scripts/test-lint.sh

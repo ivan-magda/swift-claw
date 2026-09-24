@@ -23,7 +23,7 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 
 ## Features
 
-- **One binary. Your machine.** Run your always-on personal assistant as a single Swift
+- **One daemon. Your machine.** Run your always-on personal assistant as a single Swift
   daemon, with persistent state stored on hardware you own.
 - **Coding tasks from chat.** Opt in to Coder to delegate an approved task from your DM or a
   configured group topic to your native Codex installation, then receive a structured result card
@@ -84,17 +84,8 @@ Pin a release with `curl … | CLAWD_VERSION=v0.2.0 sh`, read the
 [script source](install.sh) first, or follow the manual route in
 [docs/INSTALL.md](docs/INSTALL.md) (macOS 15+ arm64; Linux x86_64 with glibc 2.38+).
 
-Or build from source with the [pinned Swift 6.4 toolchain](docs/CODE_STYLE.md#setup):
-Xcode 27.0 on macOS, or the official Swift 6.4.0 toolchain on Linux. Linux also needs
-`libsqlite3-dev`.
-
-```bash
-git clone https://github.com/ivan-magda/swift-claw.git && cd swift-claw
-scripts/check-toolchain.sh
-swift build -c release --product clawd
-binary_directory=$(swift build -c release --show-bin-path)
-sudo install -m755 "$binary_directory/clawd" /usr/local/bin/clawd
-```
+Or [build from source](docs/INSTALL.md#build-from-source) with the pinned Swift 6.4 toolchain.
+The guide covers macOS compatibility-library packaging and Linux's SQLite prerequisite.
 
 ## Quick start
 

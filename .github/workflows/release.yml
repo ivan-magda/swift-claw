@@ -92,22 +92,25 @@ jobs:
       - name: Build release binary
         run: swift build -c release --product clawd
 
-      - name: Package macOS binary and checksum
+      - name: Package macOS binary, compatibility runtime and checksums
         run: |
           binary_directory=$(swift build -c release --show-bin-path)
-          cp "$binary_directory/clawd" clawd-macos-arm64
-          shasum -a 256 clawd-macos-arm64 > clawd-macos-arm64.sha256
+          scripts/package-macos.sh "$binary_directory/clawd" .
 
       - name: Attest provenance
         uses: actions/attest@v4.2.2
         with:
-          subject-path: clawd-macos-arm64
+          subject-path: |
+            clawd-macos-arm64
+            libswiftCompatibilitySpan.dylib
 
       - name: Upload macOS release artifacts
         uses: actions/upload-artifact@v7
         with:
           name: macos
-          path: clawd-macos-arm64*
+          path: |
+            clawd-macos-arm64*
+            libswiftCompatibilitySpan.dylib
 
   publish:
     needs: [linux-binary, macos-binary]
@@ -168,6 +171,7 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" "${flags[@]}" \
             dist/linux/clawd-linux-x86_64 \
             dist/macos/clawd-macos-arm64 \
+            dist/macos/libswiftCompatibilitySpan.dylib \
             dist/SHA256SUMS \
             dist/clawd.env.example \
             dist/run-clawd.sh \

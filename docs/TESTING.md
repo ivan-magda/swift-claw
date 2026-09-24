@@ -127,12 +127,9 @@ The `.build` cache key includes the revision so successful builds refresh compil
 prefixes match the toolchain, package manifest, dependency lockfile, and workflow configuration;
 changing one of these starts a new compatible cache. The first such build is cold.
 
-CI uses Swift 6.4 from Xcode 27.0 (27A266a) on macOS and the official `swift:6.4.0-noble`
-container on Linux. `scripts/check-toolchain.sh` verifies the selected compiler build before
-building. Tests use the default Swift Build backend. Linux's optimized binary smoke check uses
-`--build-system native --static-swift-stdlib` for the
-[static Foundation linker workaround](https://github.com/swiftlang/swift-build/issues/1764);
-this does not change the test backend. Both platforms also validate the canonical lint pipeline.
+CI runs tests and canonical lint on macOS and Linux with the [pinned toolchain](CODE_STYLE.md#setup).
+Tests use the default build backend; release smoke checks follow the
+[deployment build policy](ARCHITECTURE.md#17-deployment--portability).
 
 ## 7. Readability: DAMP and DRY are not opposites
 

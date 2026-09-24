@@ -25,13 +25,9 @@ For vulnerabilities, never open a public issue. Follow [SECURITY.md](SECURITY.md
 
 ## Development setup
 
-Use the [pinned Swift style toolchain](docs/CODE_STYLE.md#setup): Xcode 27.0 (27A266a)
-with its bundled Apple Swift 6.4 on macOS, or the official Swift 6.4.0 Linux toolchain.
-Both bundled Apple formatters report `main`; the preflight checks the compiler build identity
-as well as that formatter value. SwiftLint stays at 0.65.1, and BuildTools supplies SwiftFormat
-0.62.1 from its locked dependency. Its first run needs dependency access.
-Linux development also needs `libsqlite3-dev` for GRDB. Run `scripts/check-toolchain.sh`
-before building; the lint gate runs the same check before changing source.
+Install the [pinned Swift style toolchain](docs/CODE_STYLE.md#setup) and, on Linux,
+`libsqlite3-dev`. Run `scripts/check-toolchain.sh` before building; the lint gate runs
+the same check before changing source.
 
 The [Google Swift style workflow](docs/CODE_STYLE.md) covers installation, the seven
 review sections, local exceptions, per-file checks, and editor formatting. CI calls
