@@ -7,7 +7,8 @@ Day-to-day commands for building, running, and operating `clawd` locally.
 ## Prerequisites
 
 Build, lint and ordinary unit tests need no runtime configuration or secrets. Install the
-toolchain from [CODE_STYLE.md](CODE_STYLE.md#setup). For isolated CLI/config probes, follow
+toolchain from [CODE_STYLE.md](CODE_STYLE.md#setup): Xcode 27.0 (27A266a) with its bundled
+Swift 6.4 on macOS, or the official Swift 6.4.0 release on Linux. For isolated CLI/config probes, follow
 [the verification skill](../.claude/skills/verify/SKILL.md), which uses a clean environment
 and a disposable state root.
 
@@ -26,16 +27,32 @@ runtime secrets just to build, lint, test or run an isolated probe.
 ## Build
 
 ```bash
+scripts/check-toolchain.sh
 swift build
 ```
 
-The debug binary lands at `.build/debug/clawd`. For a release build:
+The preflight checks the compiler build identity; on macOS it also checks Xcode and refuses an
+alternate toolchain on PATH. SwiftPM exposes the debug binary at `.build/debug/clawd`; use
+`swift build --show-bin-path` to find its concrete directory. For a release build:
 
 ```bash
 swift build -c release
 ```
 
-> The release binary links the **system** SQLite (GRDB uses `libsqlite3`, not a vendored copy). On Linux the target host needs `libsqlite3-0`; on macOS it's part of the OS. Released Linux binaries are built with `--static-swift-stdlib`, so the Swift runtime is bundled and only `libsqlite3` is an external dependency.
+For the Linux release artifact, bundle the Swift runtime with the native build backend:
+
+```bash
+swift build --build-system native -c release --static-swift-stdlib --product clawd
+binary_directory=$(swift build --build-system native -c release --show-bin-path)
+"$binary_directory/clawd" --version
+```
+
+Swift 6.4.0's default Swift Build backend cannot link static Foundation on Linux
+([swift-build #1764](https://github.com/swiftlang/swift-build/issues/1764)). The native backend
+works around that failure; ordinary builds and tests use the default backend.
+
+The release binary links the system SQLite. Linux hosts need `libsqlite3-0`; macOS includes it.
+The Linux release command above bundles the Swift runtime.
 
 ---
 
@@ -55,6 +72,25 @@ SwiftLint rejects source lines over 100 characters,
 including interpolated and multiline strings; it exempts comments and URLs. Wrap long literals
 with continuations that preserve their runtime text. `--fix` does not perform that conversion.
 See [the formatting contract](ARCHITECTURE.md#192-source-formatting-and-lint) for exceptions.
+
+### Workflow and shell checks
+
+Use actionlint 1.7.12, zizmor 1.30.1 and ShellCheck 0.11.0, matching
+`BuildTools/lint-versions.env`. Run these from the repository root after workflow or shell edits:
+
+```bash
+source BuildTools/lint-versions.env
+test "$(actionlint --version | sed -n '1p')" = "$CLAW_ACTIONLINT_VERSION" && actionlint
+test "$(zizmor --version)" = "zizmor $CLAW_ZIZMOR_VERSION" && zizmor .
+test "$(shellcheck --version | sed -n 's/^version: //p')" = "$CLAW_SHELLCHECK_VERSION" &&
+  shellcheck -s sh install.sh deploy/run-clawd.sh &&
+  shellcheck -x scripts/check-toolchain.sh scripts/test-toolchain.sh \
+    scripts/lint.sh scripts/test-lint.sh
+```
+
+Each version comparison must succeed before its checker runs. Formatter or toolchain changes also
+need `scripts/test-lint.sh`, a second `scripts/lint.sh --fix` with no diff, and the lint/build/test
+gate. The compiler preflight is shared by local lint, CI and release builds.
 
 ---
 

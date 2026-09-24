@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/ivan-magda/swift-claw/actions/workflows/ci.yml"><img src="https://github.com/ivan-magda/swift-claw/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/ivan-magda/swift-claw" alt="Release"></a>
-  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6.3-F05138?logo=swift&logoColor=white" alt="Swift 6.3"></a>
+  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6.4-F05138?logo=swift&logoColor=white" alt="Swift 6.4"></a>
   <a href="#install"><img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-blue" alt="Platforms: macOS | Linux"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
 </p>
@@ -84,12 +84,16 @@ Pin a release with `curl … | CLAWD_VERSION=v0.2.0 sh`, read the
 [script source](install.sh) first, or follow the manual route in
 [docs/INSTALL.md](docs/INSTALL.md) (macOS 15+ arm64; Linux x86_64 with glibc 2.38+).
 
-Or build from source with a Swift 6.3 toolchain (Linux needs `libsqlite3-dev`):
+Or build from source with the [pinned Swift 6.4 toolchain](docs/CODE_STYLE.md#setup):
+Xcode 27.0 on macOS, or the official Swift 6.4.0 toolchain on Linux. Linux also needs
+`libsqlite3-dev`.
 
 ```bash
 git clone https://github.com/ivan-magda/swift-claw.git && cd swift-claw
-swift build -c release
-sudo install -m755 .build/release/clawd /usr/local/bin/clawd
+scripts/check-toolchain.sh
+swift build -c release --product clawd
+binary_directory=$(swift build -c release --show-bin-path)
+sudo install -m755 "$binary_directory/clawd" /usr/local/bin/clawd
 ```
 
 ## Quick start

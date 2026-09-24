@@ -2,6 +2,7 @@
 # Acceptance checks for the public formatter workflow; all sources live in a temporary repository.
 set -euo pipefail
 repository_root=$(cd "$(dirname "$0")/.." && pwd -P)
+"$repository_root/scripts/test-toolchain.sh"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/swift-claw-lint-test.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 
@@ -12,7 +13,8 @@ fail() {
 
 # given: a maintained source file with violations that the canonical pipeline can correct.
 mkdir -p "$scratch/scripts" "$scratch/Sources" "$scratch/Tests"
-cp "$repository_root/scripts/lint.sh" "$scratch/scripts/"
+cp "$repository_root/scripts/lint.sh" "$repository_root/scripts/check-toolchain.sh" \
+  "$scratch/scripts/"
 cp "$repository_root/.swift-format" "$repository_root/.swiftlint.yml" \
   "$repository_root/.swift-version" "$scratch/"
 cp "$repository_root/Tests/.swiftlint.yml" "$scratch/Tests/"
@@ -91,4 +93,29 @@ fi
 # then: a version error replaces the success message and the source remains unchanged.
 grep -q 'SwiftLint .* required' "$scratch/version.log"
 cmp Sources/StyleFixture.swift "$scratch/before-preflight.swift"
-printf 'lint workflow: ok (drift, one-pass fix, idempotence, buffer, missing tool, version)\n'
+
+# given: an unformatted source and a mismatched compiler identity in isolated toolchain pins.
+rm "$scratch/BuildTools"
+mkdir "$scratch/BuildTools"
+for entry in "$repository_root/BuildTools/"* "$repository_root/BuildTools/.build"; do
+  [[ -e "$entry" && "$(basename "$entry")" != lint-versions.env ]] || continue
+  ln -s "$entry" "$scratch/BuildTools/"
+done
+cp "$repository_root/BuildTools/lint-versions.env" "$scratch/BuildTools/"
+case "$(uname -s)" in
+  Darwin) compiler_build_pin=CLAW_LINT_SWIFT_MACOS_BUILD ;;
+  Linux) compiler_build_pin=CLAW_LINT_SWIFT_LINUX_BUILD ;;
+esac
+printf '%s=unsupported-test-build\n' "$compiler_build_pin" >> BuildTools/lint-versions.env
+cp "$repository_root/BuildTools/Fixtures/style-pipeline.swift.txt" Sources/StyleFixture.swift
+cp Sources/StyleFixture.swift "$scratch/before-toolchain-preflight.swift"
+
+# when: fix is requested with the unsupported compiler build.
+if scripts/lint.sh --fix Sources/StyleFixture.swift > "$scratch/toolchain.log" 2>&1; then
+  fail 'fix accepted an unsupported compiler build'
+fi
+
+# then: toolchain preflight fails before applying any formatter correction.
+grep -q '^toolchain: compiler identity mismatch' "$scratch/toolchain.log"
+cmp Sources/StyleFixture.swift "$scratch/before-toolchain-preflight.swift"
+printf 'lint workflow: ok (drift, one-pass fix, idempotence, buffer, missing tool, preflight)\n'

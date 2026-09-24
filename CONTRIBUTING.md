@@ -25,11 +25,13 @@ For vulnerabilities, never open a public issue. Follow [SECURITY.md](SECURITY.md
 
 ## Development setup
 
-Use the [pinned Swift style toolchain](docs/CODE_STYLE.md#setup): Swift 6.3.3,
-Apple swift-format 6.3.0 on macOS / 6.3.3 on Linux, SwiftLint 0.65.1, and SwiftFormat 0.62.1. The lint script
-validates versions before changing source; BuildTools supplies SwiftFormat from a
-locked dependency. Its first run needs dependency access.
-Linux development also needs `libsqlite3-dev` for GRDB.
+Use the [pinned Swift style toolchain](docs/CODE_STYLE.md#setup): Xcode 27.0 (27A266a)
+with its bundled Apple Swift 6.4 on macOS, or the official Swift 6.4.0 Linux toolchain.
+Both bundled Apple formatters report `main`; the preflight checks the compiler build identity
+as well as that formatter value. SwiftLint stays at 0.65.1, and BuildTools supplies SwiftFormat
+0.62.1 from its locked dependency. Its first run needs dependency access.
+Linux development also needs `libsqlite3-dev` for GRDB. Run `scripts/check-toolchain.sh`
+before building; the lint gate runs the same check before changing source.
 
 The [Google Swift style workflow](docs/CODE_STYLE.md) covers installation, the seven
 review sections, local exceptions, per-file checks, and editor formatting. CI calls
@@ -46,7 +48,9 @@ swift test
 The gate reports its current stage and elapsed time. SwiftLint warnings are advisory
 unless `STRICT=1` is set; errors always fail. Run the complete gate rather than
 standalone formatter commands, whose intermediate layouts differ from the final
-Google style. Tooling/configuration changes also run `scripts/test-lint.sh`.
+Google style. Tooling/configuration changes also run `scripts/test-lint.sh` and verify that a
+second fix changes nothing. Workflow and shell edits use the
+[pinned workflow checks](docs/LOCAL_DEV.md#workflow-and-shell-checks).
 
 Day-to-day commands, including how to run the daemon locally, live in
 [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md).
@@ -55,7 +59,7 @@ Day-to-day commands, including how to run the daemon locally, live in
 
 - A linked issue with an agreed approach (except trivial fixes).
 - For Swift changes, `scripts/lint.sh`, then `swift build`, then `swift test` green.
-  CI runs the tests on macOS and Linux, and the lint gate on Linux. For documentation-only
+  CI runs the tests and lint gate on macOS and Linux. For documentation-only
   changes, check affected links, examples, and template syntax as applicable.
 - Tests for behavior changes, structured as Given-When-Then
   (`// given` / `// when` / `// then`). [docs/TESTING.md](docs/TESTING.md) is

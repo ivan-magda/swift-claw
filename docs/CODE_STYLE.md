@@ -29,20 +29,43 @@ The adopted revision, explicit local exceptions, and tool ownership are normativ
 
 ## Setup
 
-Use Swift **6.3.3**, SwiftLint **0.65.1**, and SwiftFormat **0.62.1**. The bundled Apple
-swift-format reports **6.3.0** in Xcode on macOS and **6.3.3** in the Linux toolchain;
-the gate checks the exact platform-specific version. The checked pins live in
-[`BuildTools/lint-versions.env`](../BuildTools/lint-versions.env); `.swift-version` selects the
-Swift toolchain for tools that support it. SwiftFormat builds in release mode from the locked
-`BuildTools` package on the first run, which needs dependency access.
+Use the compiler and formatter bundled with the pinned distribution:
 
-On macOS, select the matching Xcode toolchain and install SwiftLint 0.65.1 from its
-[official release](https://github.com/realm/SwiftLint/releases/tag/0.65.1). Homebrew is also
-usable when its installed version matches the pin. Check `swift --version`,
-`swift format --version`, and `swiftlint version`; the gate rejects mismatches before changing
-source files. Installing another version and bypassing that check is not a supported setup.
+| Platform | Distribution | Compiler identity | Apple formatter version |
+| --- | --- | --- | --- |
+| macOS | Xcode **27.0**, build **27A266a** | Apple Swift **6.4**, `swiftlang-6.4.0.34.1 clang-2100.3.34.1` | `main` |
+| Linux | Official **Swift 6.4.0** release (`swift:6.4.0-noble`) | Swift **6.4**, `swift-6.4-RELEASE` | `main` |
 
-On Linux, use the Swift 6.3.3 toolchain and install the same SwiftLint release as CI:
+The exact pins live in [`BuildTools/lint-versions.env`](../BuildTools/lint-versions.env).
+`scripts/check-toolchain.sh` verifies the compiler identity and, on macOS, the Xcode version,
+build and selected executable. Both package manifests require Swift tools 6.4. The
+`.swift-version` file names `6.4`; on macOS, use Xcode's bundled compiler even if a toolchain
+manager can install a standalone release with that name.
+
+For an Xcode installation at `/Applications/Xcode.app`, select its tools in your current shell:
+
+```bash
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+unset TOOLCHAINS
+export PATH="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin:$PATH"
+scripts/check-toolchain.sh
+xcrun --toolchain XcodeDefault swift-format --version
+```
+
+Adjust `DEVELOPER_DIR` if you installed Xcode elsewhere. The preflight accepts either
+`/usr/bin/swift` or the selected Xcode default toolchain's `swift` on PATH and rejects an
+alternate toolchain. The lint gate invokes Xcode's `swift-format` through
+`xcrun --toolchain XcodeDefault`; its `main` version string is checked together with the
+Xcode and compiler build pins.
+
+Install SwiftLint **0.65.1** from its
+[official release](https://github.com/realm/SwiftLint/releases/tag/0.65.1). Homebrew is usable
+when `swiftlint version` matches that pin. BuildTools builds SwiftFormat **0.62.1** in release
+mode from its locked dependency on the first lint run, which needs dependency access. A global
+`swiftformat` installation is unnecessary. The lint gate checks its prerequisites before
+changing source files.
+
+On Linux, use the official Swift 6.4.0 toolchain and install the same SwiftLint release as CI:
 
 ```bash
 source BuildTools/lint-versions.env
@@ -53,12 +76,17 @@ printf '%s  /tmp/swift-claw-swiftlint.zip\n' "$CLAW_LINT_SWIFTLINT_LINUX_SHA256"
 mkdir -p .build/swiftlint
 unzip -q /tmp/swift-claw-swiftlint.zip -d .build/swiftlint
 export PATH="$PWD/.build/swiftlint:$PATH"
+scripts/check-toolchain.sh
 ```
 
 This archive is for Linux amd64. `curl`, `unzip`, and `sha256sum` must be installed.
 The [lint workflow](../.github/workflows/lint.yml) shows the complete container setup.
 SwiftLint must be able to read temporary files outside the checkout, so a Docker wrapper that
 mounts only the repository cannot implement this native executable contract.
+
+Workflow validation also uses pinned actionlint **1.7.12**, zizmor **1.30.1**, and ShellCheck
+**0.11.0**. Their pins share `BuildTools/lint-versions.env`; see
+[the local workflow checks](LOCAL_DEV.md#workflow-and-shell-checks) for commands.
 
 ## Daily workflow
 

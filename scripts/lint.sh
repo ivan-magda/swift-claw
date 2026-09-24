@@ -42,21 +42,13 @@ fi
 for executable in swift swiftlint git; do
   command -v "$executable" >/dev/null 2>&1 || fail "$executable not found; see docs/LOCAL_DEV.md"
 done
-swift_version=$(swift --version 2>&1 | sed -nE 's/.*Swift version ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
-[[ "$swift_version" == "$CLAW_LINT_SWIFT_VERSION" ]] ||
-  fail "Swift $CLAW_LINT_SWIFT_VERSION required; found $swift_version"
+scripts/check-toolchain.sh
 case "$(uname -s)" in
-  Darwin) apple_format_version=$CLAW_LINT_APPLE_FORMAT_MACOS_VERSION ;;
-  Linux) apple_format_version=$CLAW_LINT_APPLE_FORMAT_LINUX_VERSION ;;
-  *) fail 'supported lint platforms are macOS and Linux' ;;
+  Darwin) apple_formatter=(xcrun --toolchain XcodeDefault swift-format) ;;
+  Linux) apple_formatter=(swift format) ;;
 esac
-installed_apple_format_version=$(swift format --version)
-[[ "$installed_apple_format_version" == "$apple_format_version" ]] ||
-  fail "Apple swift-format $apple_format_version required; found $installed_apple_format_version"
 [[ "$(swiftlint version)" == "$CLAW_LINT_SWIFTLINT_VERSION" ]] ||
   fail "SwiftLint $CLAW_LINT_SWIFTLINT_VERSION required"
-[[ "$(cat .swift-version)" == "$CLAW_LINT_SWIFT_VERSION" ]] ||
-  fail '.swift-version and BuildTools/lint-versions.env disagree'
 
 files=()
 if [[ $# -eq 0 ]]; then
@@ -122,7 +114,7 @@ done < <(git ls-files -z --cached --others --exclude-standard -- '*.swiftlint.ym
 apple_format() {
   printf '%s\0' "${files[@]}" |
     xargs -0 -P "$(getconf _NPROCESSORS_ONLN)" -n 25 \
-      swift format "$@" --configuration "$repository_root/.swift-format"
+      "${apple_formatter[@]}" "$@" --configuration "$repository_root/.swift-format"
 }
 
 format_copies() {

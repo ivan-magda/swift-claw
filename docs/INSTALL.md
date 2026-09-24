@@ -75,14 +75,30 @@ mkdir -p -m 700 ~/.swift-claw
 install -m 600 clawd.env.example ~/.swift-claw/clawd.env
 ```
 
-Or build from source with a Swift 6.3 toolchain. On Linux, install the SQLite headers
-first (`sudo apt-get install -y libsqlite3-dev`); the runtime package alone will not link:
+Or build from source with the [pinned Swift 6.4 toolchain](CODE_STYLE.md#setup):
+Xcode 27.0 (27A266a) and its bundled compiler on macOS, or the official Swift 6.4.0 release
+on Linux. On Linux, install the SQLite headers first (`sudo apt-get install -y libsqlite3-dev`);
+the runtime package alone will not link:
 
 ```bash
 git clone https://github.com/ivan-magda/swift-claw.git && cd swift-claw
-swift build -c release
-sudo install -m755 .build/release/clawd /usr/local/bin/clawd
+scripts/check-toolchain.sh
+swift build -c release --product clawd
+binary_directory=$(swift build -c release --show-bin-path)
+sudo install -m755 "$binary_directory/clawd" /usr/local/bin/clawd
 ```
+
+To bundle the Swift runtime in a Linux source build, as the release workflow does, replace the
+build and install commands with:
+
+```bash
+swift build --build-system native -c release --static-swift-stdlib --product clawd
+binary_directory=$(swift build --build-system native -c release --show-bin-path)
+sudo install -m755 "$binary_directory/clawd" /usr/local/bin/clawd
+```
+
+Swift 6.4.0 needs the native build backend for static Foundation linking on Linux; see
+[swift-build issue #1764](https://github.com/swiftlang/swift-build/issues/1764).
 
 From a source checkout the config template is `.env.example` in the repository root, and
 the service files are under `deploy/`.

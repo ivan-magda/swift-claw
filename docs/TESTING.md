@@ -105,7 +105,7 @@ A flaky test — one that passes and fails with no change to code — is worse t
   never proves readiness, successful joining, or the correct absence of progress. Reuse
   `AsyncGate.waitUntilOpen` for this failure bound.
 - A bounded poll (loop-until-signal with a ceiling) is a last resort; if used, factor it into one shared helper so the ceiling is tunable in a single place — set generously enough to survive a CPU-starved CI runner — and prefer awaiting the emitted signal over polling state.
-- **Never block a Swift-concurrency cooperative thread.** A parked cooperative thread can't run other tasks; on a low-core CI runner enough parked threads deadlock the whole suite, though a many-core dev box hides it entirely (it presents as a CI-only "freeze"). Two traps seen here: a loopback server bound or torn down with NIO's blocking `EventLoopFuture.wait()` / `EventLoopGroup.syncShutdownGracefully()` (use async `bind(...).get()` and `shutdownGracefully` instead — a `defer` can't `await`, so wrap setup/teardown in a `withServer { }` helper), and an injected `sleep` double that returns without ever suspending (`{ _ in }` turns a throttled probe loop into a thread-hog — make it `try? await Task.sleep(for: .milliseconds(1))`). Reproduce a suspected pool deadlock deterministically in a one-core container (`docker run --cpuset-cpus=0 swift:6.3-noble … swift test`); an lldb `thread backtrace all` on the hung process names the blocking frame.
+- **Never block a Swift-concurrency cooperative thread.** A parked cooperative thread can't run other tasks; on a low-core CI runner enough parked threads deadlock the whole suite, though a many-core dev box hides it entirely (it presents as a CI-only "freeze"). Two traps seen here: a loopback server bound or torn down with NIO's blocking `EventLoopFuture.wait()` / `EventLoopGroup.syncShutdownGracefully()` (use async `bind(...).get()` and `shutdownGracefully` instead — a `defer` can't `await`, so wrap setup/teardown in a `withServer { }` helper), and an injected `sleep` double that returns without ever suspending (`{ _ in }` turns a throttled probe loop into a thread-hog — make it `try? await Task.sleep(for: .milliseconds(1))`). Reproduce a suspected pool deadlock deterministically in a one-core container (`docker run --cpuset-cpus=0 swift:6.4.0-noble … swift test`); an lldb `thread backtrace all` on the hung process names the blocking frame.
 
 ### 6.2 Native integration workload in macOS CI
 
@@ -119,13 +119,20 @@ constrained host capacity.
 ### 6.3 Build caching and timing in CI
 
 Measure compilation and test execution separately: `Build complete!` and the Swift Testing summary
-report different phases. CI enables Swift 6.3's `-enable-incremental-file-hashing` so checkout
+report different phases. CI enables `-enable-incremental-file-hashing` so checkout
 timestamp changes do not force compilation of otherwise unchanged source files. Build planning and
 module emission can still run. Subsequent test invocations in the same job use `--skip-build`.
 
 The `.build` cache key includes the revision so successful builds refresh compiled artifacts. Restore
 prefixes match the toolchain, package manifest, dependency lockfile, and workflow configuration;
 changing one of these starts a new compatible cache. The first such build is cold.
+
+CI uses Swift 6.4 from Xcode 27.0 (27A266a) on macOS and the official `swift:6.4.0-noble`
+container on Linux. `scripts/check-toolchain.sh` verifies the selected compiler build before
+building. Tests use the default Swift Build backend. Linux's optimized binary smoke check uses
+`--build-system native --static-swift-stdlib` for the
+[static Foundation linker workaround](https://github.com/swiftlang/swift-build/issues/1764);
+this does not change the test backend. Both platforms also validate the canonical lint pipeline.
 
 ## 7. Readability: DAMP and DRY are not opposites
 
