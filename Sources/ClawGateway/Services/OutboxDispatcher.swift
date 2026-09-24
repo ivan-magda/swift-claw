@@ -93,14 +93,10 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
     }
 
     for row in pendingRows {
-      // Stop promptly on graceful shutdown: leave the rest PENDING for boot recovery rather
-      // than starting new sends while the task is unwinding.
       if Task.isCancelled {
         break
       }
-
-      // A chat Telegram is throttling waits out its hold; the rows of every other chat carry on.
-      // Order inside a run survives because a run answers exactly one chat.
+      
       if await holds.isHeld(row.chatID) {
         continue
       }
@@ -109,21 +105,15 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
       do {
         messageID = try await send(row)
       } catch {
-        // A send interrupted by shutdown is not a fault — the row stays PENDING and boot recovery
-        // redelivers it; only a genuine failure is worth a warning.
         if Task.isCancelled {
           break
         }
+        
         if let retryAfter = Self.floodControlRetryAfter(error) {
           await hold(chat: row.chatID, forSeconds: retryAfter)
           continue
         }
-        // Recoverable: leave this row and any later ones PENDING and stop, so a multi-chunk reply
-        // redelivers in order on the next drain rather than racing later chunks ahead of this one.
-        // A row that *permanently* fails to send therefore stalls itself and every later row on
-        // every drain — there is no hot-retry, attempt cap, or dead-letter path yet. Rate limiting
-        // is the one failure that does not stall the drain, because it is the one failure Telegram
-        // tells us how long to wait out.
+        
         logger.warning(
           """
           outbox send failed for \(row.originLabel) step \(row.stepIndex); \
@@ -139,8 +129,6 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
           "outbox delivered \(row.originLabel) step \(row.stepIndex) as message \(messageID)"
         )
       } catch {
-        // The send already went out; we just couldn't record it, so the row stays PENDING and
-        // re-sends next drain — an accepted at-least-once duplicate.
         logger.error(
           """
           outbox delivered \(row.originLabel) step \(row.stepIndex) (message \(messageID)) \
@@ -171,12 +159,14 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
       if Self.floodControlRetryAfter(error) != nil {
         throw error
       }
+      
       logger.warning(
         """
         rich send failed for \(row.originLabel) step \(row.stepIndex), \
         falling back to plain: \(error)
         """
       )
+      
       return try await delivery.sendMessage(
         to: row.target,
         text: row.payload,
@@ -224,10 +214,12 @@ private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Du
     guard let deadline = notBefore[chatID] else {
       return false
     }
+    
     if clock.now < deadline {
       return true
     }
     notBefore[chatID] = nil
+    
     return false
   }
 
@@ -236,11 +228,14 @@ private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Du
     guard !stopping else {
       return
     }
+    
     let deadline = clock.now.advanced(by: wait)
     notBefore[chatID] = max(notBefore[chatID] ?? deadline, deadline)
+    
     let id = UUID()
     wakeups[id] = Task {
       defer { wakeups[id] = nil }
+      
       do {
         try await clock.sleep(until: deadline, tolerance: nil)
         try Task.checkCancellation()
@@ -253,10 +248,12 @@ private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Du
 
   func cancelAndAwait() async {
     stopping = true
+    
     let owned = Array(wakeups.values)
     for wakeup in owned {
       wakeup.cancel()
     }
+    
     for wakeup in owned {
       await wakeup.value
     }
