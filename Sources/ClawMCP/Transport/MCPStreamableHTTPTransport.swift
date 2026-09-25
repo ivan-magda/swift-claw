@@ -48,6 +48,8 @@ actor MCPStreamableHTTPTransport: Transport {
   /// Whether a reply has landed since `connect()`. Until one has, the exchange in flight is the
   /// initialize handshake, which is what `connectTimeoutSeconds` is there to bound.
   private var handshakeCompleted = false
+  private var sends: [UUID: Task<Void, any Error>] = [:]
+  private var closing: Task<Void, Never>?
 
   private let messages: AsyncThrowingStream<Data, any Error>
   private let messageContinuation: AsyncThrowingStream<Data, any Error>.Continuation
@@ -87,25 +89,39 @@ actor MCPStreamableHTTPTransport: Transport {
     }
   }
 
-  /// Ends the receive stream, then tells the server the session is over. The order matters: the
-  /// SDK's message loop is parked on our stream and is awaited by `Client.disconnect`, so finishing
-  /// first means a slow teardown request cannot hold up a shutdown.
+  /// Ends receiving, cancels and joins every HTTP exchange, then returns the remote session.
+  /// Concurrent callers join the same teardown, including its best-effort DELETE.
   func disconnect() async {
-    switch lifecycle {
-    case .idle, .disconnected:
+    if let closing {
+      await closing.value
       return
-    case .connected:
+    }
+    switch lifecycle {
+    case .disconnected:
+      return
+    case .idle, .connected:
       lifecycle = .disconnected
       messageContinuation.finish()
     case .broken:
       lifecycle = .disconnected
     }
 
-    guard let session = sessionID else {
-      return
+    let pending = Array(sends.values)
+    for send in pending {
+      send.cancel()
     }
-    sessionID = nil
-    await deleteSession(session)
+    let teardown = Task {
+      for send in pending {
+        _ = await send.result
+      }
+      guard let session = self.sessionID else {
+        return
+      }
+      self.sessionID = nil
+      await self.deleteSession(session)
+    }
+    closing = teardown
+    await teardown.value
   }
 
   func send(_ data: Data) async throws {
@@ -113,10 +129,34 @@ actor MCPStreamableHTTPTransport: Transport {
       throw MCPTransportError.notConnected
     }
 
+    let id = UUID()
+    let task = Task {
+      try await self.exchange(data)
+    }
+    sends[id] = task
+    defer { sends[id] = nil }
+    try await withTaskCancellationHandler {
+      try await task.value
+    } onCancel: {
+      task.cancel()
+    }
+  }
+
+  func receive() -> AsyncThrowingStream<Data, any Error> {
+    messages
+  }
+}
+
+// MARK: - Exchange ownership
+
+private extension MCPStreamableHTTPTransport {
+  func exchange(_ data: Data) async throws {
+    try Task.checkCancellation()
     let exchange = try await open(data)
     capture(from: exchange.head)
 
     do {
+      try Task.checkCancellation()
       try validate(exchange.head)
       try await deliver(exchange)
     } catch {
@@ -125,10 +165,6 @@ actor MCPStreamableHTTPTransport: Transport {
     }
 
     handshakeCompleted = true
-  }
-
-  func receive() -> AsyncThrowingStream<Data, any Error> {
-    messages
   }
 }
 
