@@ -29,20 +29,37 @@ The adopted revision, explicit local exceptions, and tool ownership are normativ
 
 ## Setup
 
-Use Swift **6.3.3**, SwiftLint **0.65.1**, and SwiftFormat **0.62.1**. The bundled Apple
-swift-format reports **6.3.0** in Xcode on macOS and **6.3.3** in the Linux toolchain;
-the gate checks the exact platform-specific version. The checked pins live in
-[`BuildTools/lint-versions.env`](../BuildTools/lint-versions.env); `.swift-version` selects the
-Swift toolchain for tools that support it. SwiftFormat builds in release mode from the locked
-`BuildTools` package on the first run, which needs dependency access.
+Use the compiler and formatter bundled with the pinned distribution:
 
-On macOS, select the matching Xcode toolchain and install SwiftLint 0.65.1 from its
-[official release](https://github.com/realm/SwiftLint/releases/tag/0.65.1). Homebrew is also
-usable when its installed version matches the pin. Check `swift --version`,
-`swift format --version`, and `swiftlint version`; the gate rejects mismatches before changing
-source files. Installing another version and bypassing that check is not a supported setup.
+| Platform | Distribution | Compiler identity | Apple formatter report |
+| --- | --- | --- | --- |
+| macOS | Xcode **27.0**, build **27A266a** | Apple Swift **6.4**, `swiftlang-6.4.0.34.1 clang-2100.3.34.1` | `main` |
+| Linux | Official **Swift 6.4.0** release (`swift:6.4.0-noble`) | Swift **6.4**, `swift-6.4-RELEASE` | `main` |
 
-On Linux, use the Swift 6.3.3 toolchain and install the same SwiftLint release as CI:
+[`.swift-version`](../.swift-version) pins the Swift version; the remaining pins live in
+[`BuildTools/lint-versions.env`](../BuildTools/lint-versions.env). Both package manifests require
+Swift tools 6.4. `scripts/check-toolchain.sh` verifies the compiler identity and, on macOS,
+the Xcode version and build. The formatters' `main` label is diagnostic, not a version pin.
+
+For an Xcode installation at `/Applications/Xcode.app`, select its tools in your current shell:
+
+```bash
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+unset TOOLCHAINS
+export PATH="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin:$PATH"
+scripts/check-toolchain.sh
+```
+
+Adjust `DEVELOPER_DIR` if you installed Xcode elsewhere. The lint gate uses
+`xcrun --toolchain XcodeDefault swift-format` on macOS and `swift format` on Linux.
+
+Install SwiftLint **0.65.1** from its
+[official release](https://github.com/realm/SwiftLint/releases/tag/0.65.1). Homebrew is usable
+when `swiftlint version` matches that pin. The lint gate builds SwiftFormat **0.62.1** from
+the locked BuildTools dependency, so the first run needs network access. It checks prerequisites
+before changing source; you do not need a global `swiftformat` install.
+
+On Linux, install the same SwiftLint release as CI:
 
 ```bash
 source BuildTools/lint-versions.env
@@ -53,12 +70,16 @@ printf '%s  /tmp/swift-claw-swiftlint.zip\n' "$CLAW_LINT_SWIFTLINT_LINUX_SHA256"
 mkdir -p .build/swiftlint
 unzip -q /tmp/swift-claw-swiftlint.zip -d .build/swiftlint
 export PATH="$PWD/.build/swiftlint:$PATH"
+scripts/check-toolchain.sh
 ```
 
 This archive is for Linux amd64. `curl`, `unzip`, and `sha256sum` must be installed.
 The [lint workflow](../.github/workflows/lint.yml) shows the complete container setup.
 SwiftLint must be able to read temporary files outside the checkout, so a Docker wrapper that
 mounts only the repository cannot implement this native executable contract.
+
+For actionlint, zizmor and ShellCheck, use the versions in `BuildTools/lint-versions.env`
+and the [local workflow checks](LOCAL_DEV.md#workflow-and-shell-checks).
 
 ## Daily workflow
 

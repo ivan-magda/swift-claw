@@ -7,9 +7,8 @@ Day-to-day commands for building, running, and operating `clawd` locally.
 ## Prerequisites
 
 Build, lint and ordinary unit tests need no runtime configuration or secrets. Install the
-toolchain from [CODE_STYLE.md](CODE_STYLE.md#setup). For isolated CLI/config probes, follow
-[the verification skill](../.claude/skills/verify/SKILL.md), which uses a clean environment
-and a disposable state root.
+[pinned toolchain](CODE_STYLE.md#setup). For isolated CLI/config probes, use the
+[verification skill](../.claude/skills/verify/SKILL.md)'s clean environment and disposable state root.
 
 For intentional operations on your configured installation, `clawd` reads environment variables.
 The file `~/.swift-claw/clawd.env` is never loaded automatically; source it before those commands:
@@ -26,16 +25,20 @@ runtime secrets just to build, lint, test or run an isolated probe.
 ## Build
 
 ```bash
+scripts/check-toolchain.sh
 swift build
 ```
 
-The debug binary lands at `.build/debug/clawd`. For a release build:
+SwiftPM exposes the debug binary at `.build/debug/clawd`; use `swift build --show-bin-path`
+to find its concrete directory. For a release build:
 
 ```bash
 swift build -c release
 ```
 
-> The release binary links the **system** SQLite (GRDB uses `libsqlite3`, not a vendored copy). On Linux the target host needs `libsqlite3-0`; on macOS it's part of the OS. Released Linux binaries are built with `--static-swift-stdlib`, so the Swift runtime is bundled and only `libsqlite3` is an external dependency.
+For a Linux binary with the Swift runtime bundled, use the native-backend build command in
+[INSTALL.md](INSTALL.md#build-from-source). Builds link system SQLite: Linux hosts need
+`libsqlite3-0`; macOS includes it.
 
 ---
 
@@ -55,6 +58,23 @@ SwiftLint rejects source lines over 100 characters,
 including interpolated and multiline strings; it exempts comments and URLs. Wrap long literals
 with continuations that preserve their runtime text. `--fix` does not perform that conversion.
 See [the formatting contract](ARCHITECTURE.md#192-source-formatting-and-lint) for exceptions.
+
+### Workflow and shell checks
+
+Install actionlint, zizmor and ShellCheck at the versions in `BuildTools/lint-versions.env`.
+Run these from the repository root after editing workflows or the listed shell scripts:
+
+```bash
+source BuildTools/lint-versions.env
+test "$(actionlint --version | sed -n '1p')" = "$CLAW_ACTIONLINT_VERSION" && actionlint
+test "$(zizmor --version)" = "zizmor $CLAW_ZIZMOR_VERSION" && zizmor .
+test "$(shellcheck --version | sed -n 's/^version: //p')" = "$CLAW_SHELLCHECK_VERSION" &&
+  shellcheck -s sh install.sh deploy/run-clawd.sh &&
+  shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh
+```
+
+Each version comparison must succeed. Formatter or toolchain changes also need `scripts/test-lint.sh`,
+a second `scripts/lint.sh --fix` with no diff, and the lint/build/test gate.
 
 ---
 
@@ -220,7 +240,7 @@ is treated as able to exfiltrate, so its output taints the session and forces th
 call through the trifecta approval.
 
 **If the tool never appears** (calls are refused as unknown), `clawd doctor` explains why. It is
-absent — by design, fail-closed — on Linux, macOS 15, Intel macOS, with `CLAW_EXEC_ENABLED=false`,
+absent — by design, fail-closed — on Linux, Intel macOS, with `CLAW_EXEC_ENABLED=false`,
 when the `container` CLI is missing or below `1.0.0`, or when any hardening canary assertion failed.
 An unpinned `CLAW_EXEC_IMAGE` override is stricter still: config validation rejects it and the
 process exits 10, so no daemon runs at all. An owner-enabled sandbox that fails a gate prints a loud
@@ -254,7 +274,7 @@ message" reply instead of a garbage transcript. The **first** voice message in a
 its speech model (one-time, needs network, no UI); transcription itself runs offline. File-based
 transcription needs no TCC grant, entitlement, or app bundle.
 
-On Linux or macOS 15 the flag is inert and voice messages get the canned "I can't read voice
+On Linux the flag is inert and voice messages get the canned "I can't read voice
 messages yet." reply — same behavior as before the feature.
 
 The suite's engine test is opt-in (first model download needs network):

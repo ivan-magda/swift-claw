@@ -12,7 +12,8 @@ fail() {
 
 # given: a maintained source file with violations that the canonical pipeline can correct.
 mkdir -p "$scratch/scripts" "$scratch/Sources" "$scratch/Tests"
-cp "$repository_root/scripts/lint.sh" "$scratch/scripts/"
+cp "$repository_root/scripts/lint.sh" "$repository_root/scripts/check-toolchain.sh" \
+  "$scratch/scripts/"
 cp "$repository_root/.swift-format" "$repository_root/.swiftlint.yml" \
   "$repository_root/.swift-version" "$scratch/"
 cp "$repository_root/Tests/.swiftlint.yml" "$scratch/Tests/"
@@ -91,4 +92,44 @@ fi
 # then: a version error replaces the success message and the source remains unchanged.
 grep -q 'SwiftLint .* required' "$scratch/version.log"
 cmp Sources/StyleFixture.swift "$scratch/before-preflight.swift"
-printf 'lint workflow: ok (drift, one-pass fix, idempotence, buffer, missing tool, version)\n'
+
+# given: an unformatted source and a compiler with the right version but a different build.
+mkdir "$scratch/wrong-compiler"
+cat > "$scratch/wrong-compiler/swift" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == --version ]]; then
+  printf 'Swift version %s (unsupported-test-build)\n' "$TEST_SWIFT_VERSION"
+else
+  exec "$TEST_SWIFT_EXECUTABLE" "$@"
+fi
+STUB
+chmod +x "$scratch/wrong-compiler/swift"
+cp "$repository_root/BuildTools/Fixtures/style-pipeline.swift.txt" Sources/StyleFixture.swift
+cp Sources/StyleFixture.swift "$scratch/before-toolchain-preflight.swift"
+
+# when: fix is requested with the unsupported compiler build.
+if TEST_SWIFT_VERSION=$(cat .swift-version) TEST_SWIFT_EXECUTABLE=$(command -v swift) \
+  PATH="$scratch/wrong-compiler:$PATH" scripts/lint.sh --fix Sources/StyleFixture.swift \
+  > "$scratch/toolchain.log" 2>&1; then
+  fail 'fix accepted an unsupported compiler build'
+fi
+
+# then: toolchain preflight fails before applying any formatter correction.
+grep -q '^toolchain: compiler identity mismatch' "$scratch/toolchain.log"
+cmp Sources/StyleFixture.swift "$scratch/before-toolchain-preflight.swift"
+
+if [[ "$(uname -s)" == Darwin ]]; then
+  # given: Swift matches, but Xcode/SDK selection does not.
+  mkdir "$scratch/wrong-xcode"
+  printf '#!/bin/sh\nprintf "unsupported-test-xcode\\n"\n' > "$scratch/wrong-xcode/xcodebuild"
+  chmod +x "$scratch/wrong-xcode/xcodebuild"
+
+  # when / then: the independent Xcode check rejects the fix without modifying source.
+  if PATH="$scratch/wrong-xcode:$PATH" scripts/lint.sh --fix Sources/StyleFixture.swift \
+    > "$scratch/xcode.log" 2>&1; then
+    fail 'fix accepted an unsupported Xcode build'
+  fi
+  grep -q '^toolchain: Xcode .* required' "$scratch/xcode.log"
+  cmp Sources/StyleFixture.swift "$scratch/before-toolchain-preflight.swift"
+fi
+printf 'lint workflow: ok (drift, one-pass fix, idempotence, buffer, missing tool, preflight)\n'
