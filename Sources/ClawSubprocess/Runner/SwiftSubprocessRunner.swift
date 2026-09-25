@@ -40,7 +40,7 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
       of: Void.self,
       bufferingPolicy: .bufferingNewest(1)
     )
-    let operation = Task {
+    let processTask = Task {
       defer { spawnedContinuation.finish() }
       return await self.spawnAndCapture(
         command,
@@ -62,11 +62,13 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
         try await clock.sleep(for: allowance)
       },
       operation: {
-        await operation.value
+        await processTask.value
       }
     )
-    operation.cancel()
-    _ = await operation.value
+    // DeadlineRace cancels its waiter without joining native work.
+    // Join the process task so teardown and reaping finish before returning.
+    processTask.cancel()
+    _ = await processTask.value
 
     switch outcome {
     case .operationReturned(let result):
