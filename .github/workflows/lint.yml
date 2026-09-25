@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: swift:6.3.3
+      image: swift:6.4.0-noble
 
     steps:
       - name: Check out repository
@@ -72,5 +72,10 @@ jobs:
           persist-credentials: false
       - name: Run shellcheck
         run: |
-          shellcheck -s sh install.sh deploy/run-clawd.sh
-          shellcheck -x scripts/lint.sh scripts/test-lint.sh
+          source BuildTools/lint-versions.env
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo \
+            "koalaman/shellcheck:v${CLAW_SHELLCHECK_VERSION}" \
+            -s sh install.sh deploy/run-clawd.sh
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo \
+            "koalaman/shellcheck:v${CLAW_SHELLCHECK_VERSION}" \
+            -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh

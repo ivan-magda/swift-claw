@@ -92,7 +92,9 @@ A flaky test — one that passes and fails with no change to code — is worse t
 ### 6.1 Swift Testing / async specifics
 
 - Use **Swift Testing** (`@Test`, `#expect`, `#require`, `@Suite`). Prefer `#require` to unwrap a precondition so a failure stops the test at the right line rather than trapping later.
-- To observe an intermediate async state deterministically, insert **`await Task.yield()`** before the assertion to force the suspension point, instead of sleeping.
+- Observe an intermediate async state by awaiting an explicit gate or emitted signal that proves
+  the state was reached. `Task.yield()` only offers the executor a scheduling opportunity; it does
+  not prove another task has started, suspended, or completed.
 - Prefer **explicit emitted signals** to control async timing points. `withMainSerialExecutor` (Swift
   Concurrency Extras) changes a process-global executor hook and is safe only when the entire test
   process is isolated from unrelated tests. `.serialized` on one suite does **not** provide that
@@ -103,7 +105,7 @@ A flaky test — one that passes and fails with no change to code — is worse t
   never proves readiness, successful joining, or the correct absence of progress. Reuse
   `AsyncGate.waitUntilOpen` for this failure bound.
 - A bounded poll (loop-until-signal with a ceiling) is a last resort; if used, factor it into one shared helper so the ceiling is tunable in a single place — set generously enough to survive a CPU-starved CI runner — and prefer awaiting the emitted signal over polling state.
-- **Never block a Swift-concurrency cooperative thread.** A parked cooperative thread can't run other tasks; on a low-core CI runner enough parked threads deadlock the whole suite, though a many-core dev box hides it entirely (it presents as a CI-only "freeze"). Two traps seen here: a loopback server bound or torn down with NIO's blocking `EventLoopFuture.wait()` / `EventLoopGroup.syncShutdownGracefully()` (use async `bind(...).get()` and `shutdownGracefully` instead — a `defer` can't `await`, so wrap setup/teardown in a `withServer { }` helper), and an injected `sleep` double that returns without ever suspending (`{ _ in }` turns a throttled probe loop into a thread-hog — make it `try? await Task.sleep(for: .milliseconds(1))`). Reproduce a suspected pool deadlock deterministically in a one-core container (`docker run --cpuset-cpus=0 swift:6.3-noble … swift test`); an lldb `thread backtrace all` on the hung process names the blocking frame.
+- **Never block a Swift-concurrency cooperative thread.** A parked cooperative thread can't run other tasks; on a low-core CI runner enough parked threads deadlock the whole suite, though a many-core dev box hides it entirely (it presents as a CI-only "freeze"). Two traps seen here: a loopback server bound or torn down with NIO's blocking `EventLoopFuture.wait()` / `EventLoopGroup.syncShutdownGracefully()` (use async `bind(...).get()` and `shutdownGracefully` instead — a `defer` can't `await`, so wrap setup/teardown in a `withServer { }` helper), and an injected `sleep` double that returns without ever suspending (`{ _ in }` turns a throttled probe loop into a thread-hog — make it `try? await Task.sleep(for: .milliseconds(1))`). Reproduce a suspected pool deadlock deterministically in a one-core container (`docker run --cpuset-cpus=0 swift:6.4.0-noble … swift test`); an lldb `thread backtrace all` on the hung process names the blocking frame.
 
 ### 6.2 Native integration workload in macOS CI
 
@@ -117,13 +119,17 @@ constrained host capacity.
 ### 6.3 Build caching and timing in CI
 
 Measure compilation and test execution separately: `Build complete!` and the Swift Testing summary
-report different phases. CI enables Swift 6.3's `-enable-incremental-file-hashing` so checkout
+report different phases. CI enables `-enable-incremental-file-hashing` so checkout
 timestamp changes do not force compilation of otherwise unchanged source files. Build planning and
 module emission can still run. Subsequent test invocations in the same job use `--skip-build`.
 
 The `.build` cache key includes the revision so successful builds refresh compiled artifacts. Restore
 prefixes match the toolchain, package manifest, dependency lockfile, and workflow configuration;
 changing one of these starts a new compatible cache. The first such build is cold.
+
+CI runs tests on macOS and Linux, and canonical lint on Linux, with the
+[pinned toolchain](CODE_STYLE.md#setup). Tests use the default build backend; release builds follow the
+[deployment build policy](ARCHITECTURE.md#17-deployment--portability).
 
 ## 7. Readability: DAMP and DRY are not opposites
 
@@ -198,7 +204,7 @@ Apply in order, when writing a new test or triaging an existing one:
 1. **What fault would this fail on that no other test would?** No answer → do not write it / delete it (it is tautological or redundant).
 2. **Would it survive a behavior-preserving refactor?** No → assert the outcome, not the mechanism.
 3. **Managed or unmanaged dependency?** Managed (SQLite/GRDB) → use the real thing. Unmanaged (LLM/Telegram) → stub at the protocol seam; assert the outbound contract, never internal call order.
-4. **Signal or stopwatch?** Synchronizing on `sleep` → replace with a gate / `Task.yield()` / emitted signal.
+4. **Signal or stopwatch?** Synchronizing on `sleep` or relying on `Task.yield()` for readiness → replace with a gate or emitted signal.
 
 ### 9.1 Pre-commit redundancy pass
 
@@ -250,4 +256,4 @@ Verified against primary and authoritative secondary sources:
 - Codecov, _Mutation testing_ — coverage as a vanity metric; mutation testing as the true value signal.
 - Datadog, _Flaky tests_ — the order / concurrency / environment taxonomy of flakiness.
 - Shai Yallin, _Fake Don't Mock_; enterprisecraftsmanship, _DRY and DAMP in unit tests_.
-- Antoine van der Lee, _Unit testing async/await_ — `Task.yield()` before assertions; `withMainSerialExecutor` for deterministic ordering.
+- Antoine van der Lee, _Unit testing async/await_ — async scheduling and executor overrides; the repository-specific limits in §6.1 apply.

@@ -18,7 +18,7 @@ REPO="ivan-magda/swift-claw"
 SERVICE_LABEL="com.ivanmagda.swift-claw"
 CLAW_HOME="${HOME}/.swift-claw"
 BIN_DIR="${CLAW_HOME}/bin"
-# The Linux binary is built in the swift:6.3-noble container and links its glibc.
+# The Linux binary is built in the swift:6.4.0-noble container and links its glibc.
 # Bump in lockstep with the builder image in .github/workflows/release.yml.
 GLIBC_FLOOR="2.38"
 
@@ -51,8 +51,8 @@ detect_platform() {
   https://github.com/${REPO}#install"
       fi
       macos_major="$(sw_vers -productVersion | cut -d. -f1)"
-      [ "$macos_major" -ge 15 ] \
-        || die "macOS 15 or newer required (found $(sw_vers -productVersion))"
+      [ "$macos_major" -ge 26 ] \
+        || die "macOS 26 or newer required (found $(sw_vers -productVersion))"
       ASSET="clawd-macos-arm64"
       UNIT_ASSET="${SERVICE_LABEL}.plist"
       ;;
