@@ -1,9 +1,9 @@
-// swift-tools-version: 6.1
+// swift-tools-version: 6.4
 import PackageDescription
 
 let package = Package(
   name: "swift-claw",
-  platforms: [.macOS(.v15)],
+  platforms: [.macOS(.v26)],
   products: [.executable(name: "clawd", targets: ["clawd"])],
   dependencies: [
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
