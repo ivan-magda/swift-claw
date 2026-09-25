@@ -1,36 +1,67 @@
 ---
 name: verify
-description: Drive clawd's real CLI surface to verify a change end-to-end (build, doctor, config probes) without needing Telegram/LLM secrets.
+description: Verify clawd CLI or configuration changes with isolated doctor probes that need no real Telegram or LLM credentials.
 ---
 
-# Verifying clawd changes at the CLI surface
+# Verify clawd at the CLI surface
 
-Build once: `swift build` → binary at `./.build/debug/clawd`.
+Run from the repository root. Build with `swift build`; use `./.build/debug/clawd`.
+These probes supplement the root instructions' lint/build/test gate.
 
-The daemon (`clawd run`) needs a real Telegram bot token, so most changes are verified through
-the `doctor` surface, which exercises config loading, the state root, GRDB stores, and live
-DNS/network rows without secrets.
+## Isolated offline probe
 
-## Minimal env handle
+Use a clean environment and a disposable state root. Changing only `CLAW_STATE_ROOT` still
+inherits real credentials and enabled MCP/Coder/sandbox configuration. Do not source the
+owner's `clawd.env` or start `clawd run` for this probe.
 
-`AppConfig.load` fails closed without an LLM base URL/model. A scratch state root keeps the real
-`~/.swift-claw` untouched:
+This example requires Python 3, bounds the invocation, retains its actual exit code,
+and removes its scratch root. Add only the env keys needed for the case under test:
 
 ```bash
-CLAW_LLM_BASE_URL=http://localhost:9/v1 CLAW_LLM_MODEL=test-model \
-CLAW_STATE_ROOT="$(mktemp -d)" ./.build/debug/clawd doctor
+python3 - <<'PYTHON'
+import json
+import os
+import subprocess
+import tempfile
+
+with tempfile.TemporaryDirectory(prefix="clawd-verify-") as state_root:
+    environment = {
+        "PATH": os.environ["PATH"],
+        "CLAW_STATE_ROOT": state_root,
+        "CLAW_LLM_BASE_URL": "http://localhost:9/v1",
+        "CLAW_LLM_MODEL": "test-model",
+    }
+    result = subprocess.run(
+        ["./.build/debug/clawd", "doctor", "--check-config", "--json"],
+        env=environment, capture_output=True, text=True, timeout=30,
+    )
+    print(result.stdout, end="")
+    print(result.stderr, end="")
+    print(f"exit={result.returncode}")
+    report = json.loads(result.stdout)
+    rows = {row["key"]: row for row in report["checks"]}
+    assert result.returncode == 11, "valid config without secrets must exit 11"
+    assert rows["config"]["ok"] and rows["config"]["value"] == "OK", report
+PYTHON
 ```
 
-- Full `doctor` runs config + db + connectivity rows; `secrets` shows FAIL without a token —
-  expected, not breakage.
-- `doctor --check-config` is the config-only surface: fastest probe for new env keys
-  (row output + fail-closed exit codes; invalid config exits 10).
-- `doctor --json` for machine-readable assertions.
+- The example selects the OpenAI-compatible route, which requires a base URL. The managed
+  `openai-chatgpt/<model>` route does not require one; its credentials are checked separately.
+- `doctor --check-config` validates config **and secrets**, including MCP config/credentials
+  and optional local sandbox availability. It may create the state directory, but does not
+  open the database or run live network/Codex probes. Missing secrets exit **11** even when
+  `config` is `OK`; invalid config exits **10** (`ClawExitCode`).
+- For a negative config case, change the relevant key and assert exit 10 and the failed config
+  row. Check the intended row as well as the exit code; another failure can mask your case.
 
-## Gotchas
+## Live diagnostics, only when relevant
 
-- Piping doctor output through `grep` eats the exit code — capture `$?` on a separate run.
-- This machine may run a fake-IP VPN/proxy: ALL hostnames (even nonexistent ones) can resolve
-  into `198.18.0.0/15` (`dns.fake_ip` doctor row reports it). Anything asserting on real DNS
-  answers must account for that.
-- `timeout <s>` every clawd invocation; a hung doctor (network rows) should not park the session.
+Before deliberately checking a configured installation or tool backend, read the corresponding
+section of `docs/LOCAL_DEV.md`. Full `doctor` can open/migrate the database and probe DNS,
+Telegram, MCP, native Coder or the VM sandbox depending on config. It needs explicit test
+configuration and can have additional failures beyond missing secrets.
+
+Bound every clawd invocation with a process timeout (as above, or GNU `timeout`/`gtimeout` if
+installed); tool output-yield intervals are not process deadlines. Preserve the command's status
+before filtering output. For DNS checks, inspect the `dns.fake_ip` row: a fake-IP VPN/proxy can
+answer even nonexistent hostnames from `198.18.0.0/15`.
