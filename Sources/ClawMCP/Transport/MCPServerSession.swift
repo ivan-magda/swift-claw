@@ -369,16 +369,25 @@ private extension MCPServerSession {
       )
       return client
     } catch {
-      handshake.cancel()
-      await client.disconnect()
-      await transport.disconnect()
-      // SDK send can register a request after the first disconnect drained pending requests.
-      await client.disconnect()
-      _ = await handshake.result
-      // SDK connect can install its receive task after an earlier disconnect suspended it.
-      await client.disconnect()
+      await cleanUpFailedHandshake(handshake, client: client, transport: transport)
       throw error
     }
+  }
+
+  func cleanUpFailedHandshake(
+    _ handshake: Task<Initialize.Result, any Error>,
+    client: Client,
+    transport: any Transport
+  ) async {
+    handshake.cancel()
+    // Stop the SDK receiver first; SDK connect may not own the transport yet.
+    await client.disconnect()
+    await transport.disconnect()
+    // With transport admission closed, drain requests registered during the first disconnect.
+    await client.disconnect()
+    _ = await handshake.result
+    // SDK connect can install its receive task after an earlier disconnect suspended it.
+    await client.disconnect()
   }
 
   func teardown() async {

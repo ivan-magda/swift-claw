@@ -54,9 +54,7 @@ struct MCPServerSessionLifecycleTests {
         transport
       },
       clientVersion: "0.0.0-test",
-      logger: Logger(label: "test.silent") { _ in
-        SwiftLogNoOpLogHandler()
-      }
+      logger: transport.logger
     )
     let opening = Task {
       try await session.connect()
@@ -66,11 +64,11 @@ struct MCPServerSessionLifecycleTests {
     // when
     let closing = Task {
       await session.disconnect()
+      return transport.finished.isOpen
     }
     let cancelled = await transport.cancelled.waitUntilOpen()
     transport.release.open()
-    await closing.value
-    let joined = transport.finished.isOpen
+    let joined = await closing.value
     let result = await opening.result
     await session.disconnect()
     await server.stop()
@@ -86,7 +84,7 @@ struct MCPServerSessionLifecycleTests {
     }
   }
 
-  @Test("disconnect cancels and joins an opening before a later call reconnects")
+  @Test("a connect during teardown waits for the cancelled opening before reconnecting")
   func disconnectDuringOpening() async throws {
     // given
     let openingStarted = AsyncGate()
@@ -126,7 +124,7 @@ struct MCPServerSessionLifecycleTests {
       await session.disconnect()
     }
     let cancelled = await openingCancelled.waitUntilOpen()
-    allowOpening.open()
+    let reconnection = await Self.connectDuringTeardown(session, releaseOpening: allowOpening)
     let result = await opening.result
     await closing.value
     let fresh = try? await session.callTool(name: "fresh", arguments: [:])
@@ -135,6 +133,9 @@ struct MCPServerSessionLifecycleTests {
 
     // then
     #expect(cancelled)
+    #expect(throws: Never.self) {
+      try reconnection.get()
+    }
     switch result {
     case .success:
       Issue.record("The opening completed after disconnect had cancelled it")
@@ -145,6 +146,22 @@ struct MCPServerSessionLifecycleTests {
       .text(text: "fresh on connection 2", annotations: nil, _meta: nil),
     ]
     #expect(fresh?.content == expected)
+  }
+}
+
+// MARK: - Lifecycle coordination
+
+private extension MCPServerSessionLifecycleTests {
+  static func connectDuringTeardown(
+    _ session: isolated MCPServerSession,
+    releaseOpening: AsyncGate
+  ) async -> Result<Void, any Error> {
+    // Enter connect on the session actor before allowing the cancelled opening to finish.
+    let connecting = Task.immediate {
+      try await session.connect()
+    }
+    releaseOpening.open()
+    return await connecting.result
   }
 }
 
