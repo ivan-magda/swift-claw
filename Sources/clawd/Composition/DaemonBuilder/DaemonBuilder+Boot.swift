@@ -25,6 +25,7 @@ extension DaemonBuilder {
 
   /// Reconciles runs and Coder before approval replay can start native work or restore parked lanes.
   /// The graph starts after this boot hook; every resulting owner must also support fallback shutdown.
+  /// The daemon retains this closure for its full lifetime to keep the approval waiter alive.
   func bootSequence(
     coordination: TurnCoordination,
     waiter: ApprovalWaiter,
