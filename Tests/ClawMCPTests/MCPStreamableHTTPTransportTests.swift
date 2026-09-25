@@ -480,11 +480,16 @@ struct MCPStreamableHTTPTransportTests {
     #expect(await executor.requestedURLs.isEmpty)
   }
 
-  @Test("a spent transport cannot be reconnected")
-  func reconnectRefused() async throws {
+  @Test(
+    "disconnect prevents a later connection even before first connect",
+    arguments: [false, true]
+  )
+  func reconnectRefused(connectFirst: Bool) async throws {
     // given
     let transport = try TransportFixture.transport(http: ScriptedHTTPExecutor([]))
-    try await transport.connect()
+    if connectFirst {
+      try await transport.connect()
+    }
     await transport.disconnect()
 
     // when / then
