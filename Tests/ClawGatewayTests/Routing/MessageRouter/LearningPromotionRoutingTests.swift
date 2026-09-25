@@ -29,21 +29,22 @@ struct LearningPromotionRoutingTests {
     #expect(outcome == .processed)
     #expect(poked)
     #expect(await harness.transport.sent.isEmpty)
-    let rows = try harness.queue.read { db in
-      try Row.fetchAll(
+    let (payload, markup) = try await harness.queue.read { db in
+      let rows = try Row.fetchAll(
         db,
         sql: "SELECT payload, reply_markup FROM outbound_deliveries ORDER BY step_index"
       )
+      let last = try #require(rows.last)
+      let markup = try #require(last["reply_markup"] as String?)
+      return (last["payload"] as String, markup)
     }
-    let last = try #require(rows.last)
-    let markup = try #require(last["reply_markup"] as String?)
     let button = try #require(try FeedbackKeyboard.parseMarkup(markup).first?.first)
     #expect(button.action == .promotionRollback)
     let target = try #require(try harness.learning.feedbackTarget(nonce: button.nonce))
     #expect(target.subjectDigest == String(promotionID))
     #expect(target.ownerUserID == 42)
     #expect(target.chatID == 42)
-    #expect((last["payload"] as String).contains(LearningDecisionResult.stale.rawValue))
+    #expect(payload.contains(LearningDecisionResult.stale.rawValue))
   }
 }
 

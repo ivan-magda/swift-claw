@@ -4,9 +4,8 @@ From nothing to a running assistant that answers you in Telegram.
 
 ## What you need
 
-- **A machine that stays on.** A Mac on macOS 15 or newer, or a Linux box with
-  `libsqlite3-0`. Voice transcription needs macOS 26, and the code sandbox needs macOS 26
-  on Apple Silicon; everything else runs anywhere.
+- **A machine that stays on.** A Mac on macOS 26 or newer, or a Linux box with
+  `libsqlite3-0`. Voice transcription needs macOS; the code sandbox also needs Apple Silicon.
 - **A Telegram account.**
 - **LLM access.** Either an OpenAI-compatible endpoint with an API key (Anthropic,
   OpenAI, OpenRouter, or a local server), or a ChatGPT subscription.
@@ -320,8 +319,7 @@ are in [CUSTOMIZATION.md](CUSTOMIZATION.md#coder-configuration).
   `clear-token` take the same lock, so stop the daemon before running them.
 - **Telegram reports a 409 conflict:** another process is long-polling the same bot
   token, usually a forgotten instance on another machine.
-- **Voice notes get a canned refusal:** voice transcription needs macOS 26; on Linux and
-  older macOS the feature is off.
+- **Voice notes get a canned refusal:** voice transcription is off on Linux.
 - **clawd says your model can't look at images:** send `/new` first — the photo stays in
   the conversation otherwise, and every question after it gets the same refusal. Photos
   need a vision-capable `CLAW_LLM_MODEL`; switch models, or set `CLAW_IMAGE_INPUT=false`

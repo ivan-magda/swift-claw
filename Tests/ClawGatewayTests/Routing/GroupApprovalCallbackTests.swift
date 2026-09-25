@@ -54,16 +54,16 @@ struct GroupApprovalCallbackTests {
     let expectedState: ApprovalState = approve ? .approved : .rejected
     let expectedAction: AuditAction = approve ? .approvalGranted : .approvalDenied
     #expect(try fixture.approvals.approval(id: fixture.approval.id)?.state == expectedState)
-    let row = try fixture.queue.read { database in
-      try Row.fetchOne(
+    try await fixture.queue.read { database in
+      let row = try Row.fetchOne(
         database,
         sql: "SELECT actor, actor_user_id FROM audit_events WHERE action = ?",
         arguments: [expectedAction.rawValue]
       )
+      let grant = try #require(row)
+      #expect(grant["actor"] as String == AuditActor.groupMember.rawValue)
+      #expect(grant["actor_user_id"] as Int64 == GroupApprovalFixture.participantID)
     }
-    let grant = try #require(row)
-    #expect(grant["actor"] as String == AuditActor.groupMember.rawValue)
-    #expect(grant["actor_user_id"] as Int64 == GroupApprovalFixture.participantID)
   }
 
   enum Refusal: CaseIterable {

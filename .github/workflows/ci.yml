@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test-linux:
     runs-on: ubuntu-24.04-arm
-    container: swift:6.3-noble
+    container: swift:6.4.0-noble
     timeout-minutes: 30
 
     steps:
@@ -34,10 +34,10 @@ jobs:
               tzdata \
               zstd
 
-      - name: Show toolchain
+      - name: Verify pinned toolchain
         id: toolchain
         run: |
-          swift --version
+          scripts/check-toolchain.sh
 
           toolchain_key=$(swift --version | sha256sum | cut -d ' ' -f 1)
           echo "cache-key=$toolchain_key" >> "$GITHUB_OUTPUT"
@@ -76,7 +76,7 @@ jobs:
             --filter TrialSerializationTests
 
   test-macos:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
 
     steps:
@@ -85,17 +85,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Select Swift 6.3 toolchain
+      - name: Select and verify pinned Xcode toolchain
         id: toolchain
         run: |
-          ls -d /Applications/Xcode*.app 2>/dev/null || true
-          sudo xcode-select -s /Applications/Xcode_26.6.app
-
-          swift --version
-          swift --version 2>&1 | grep -qF "Swift version 6.3" || {
-            echo "::error::Expected a Swift 6.3.x toolchain on this runner"
-            exit 1
-          }
+          source BuildTools/lint-versions.env
+          sudo xcode-select -s "/Applications/Xcode_${CLAW_XCODE_VERSION}.app"
+          scripts/check-toolchain.sh
 
           toolchain_key=$(
             {
@@ -167,10 +162,13 @@ jobs:
 
       - name: actionlint
         run: |
+          source BuildTools/lint-versions.env
           docker run --rm \
-            -v "${{ github.workspace }}:/repo" \
+            -v "$GITHUB_WORKSPACE:/repo" \
             -w /repo \
-            rhysd/actionlint:1.7.12 -color
+            "rhysd/actionlint:${CLAW_ACTIONLINT_VERSION}" -color
 
       - name: zizmor
-        run: pipx run zizmor==1.26.1 .
+        run: |
+          source BuildTools/lint-versions.env
+          pipx run "zizmor==${CLAW_ZIZMOR_VERSION}" .

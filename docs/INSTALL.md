@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/install.
 
 What the script does:
 
-- Checks the platform: macOS 15+ on Apple Silicon, or Linux x86_64 with glibc 2.38+
+- Checks the platform: macOS 26+ on Apple Silicon, or Linux x86_64 with glibc 2.38+
   (anything else gets a build-from-source pointer, and the script installs nothing).
 - Downloads the release binary, `SHA256SUMS`, the config template, `run-clawd.sh`, and
   the service unit for your platform.
@@ -75,14 +75,31 @@ mkdir -p -m 700 ~/.swift-claw
 install -m 600 clawd.env.example ~/.swift-claw/clawd.env
 ```
 
-Or build from source with a Swift 6.3 toolchain. On Linux, install the SQLite headers
-first (`sudo apt-get install -y libsqlite3-dev`); the runtime package alone will not link:
+### Build from source
+
+Use the [pinned toolchain](CODE_STYLE.md#setup). Linux also needs SQLite headers
+(`sudo apt-get install -y libsqlite3-dev`):
 
 ```bash
 git clone https://github.com/ivan-magda/swift-claw.git && cd swift-claw
-swift build -c release
-sudo install -m755 .build/release/clawd /usr/local/bin/clawd
+scripts/check-toolchain.sh
+swift build -c release --product clawd
+binary_directory=$(swift build -c release --show-bin-path)
+sudo mkdir -p /usr/local/bin
+sudo install -m755 "$binary_directory/clawd" /usr/local/bin/clawd
 ```
+
+To bundle the Swift runtime in a Linux source build, as the release workflow does, replace the
+build and install commands with:
+
+```bash
+swift build --build-system native -c release --static-swift-stdlib --product clawd
+binary_directory=$(swift build --build-system native -c release --show-bin-path)
+sudo install -m755 "$binary_directory/clawd" /usr/local/bin/clawd
+```
+
+Swift 6.4.0 needs the native build backend for static Foundation linking on Linux; see
+[swift-build issue #1764](https://github.com/swiftlang/swift-build/issues/1764).
 
 From a source checkout the config template is `.env.example` in the repository root, and
 the service files are under `deploy/`.
@@ -205,9 +222,11 @@ state root; see [LOCAL_DEV.md](LOCAL_DEV.md#group-mode-telegram-forum-supergroup
 A second `clawd` against the same state root refuses to boot (file lock), and a Telegram
 409 conflict is logged as critical. The commands that write into the state root take that
 same lock — `clawd secrets seal`, `clawd auth login` / `logout`, and `clawd mcp set-token`
-/ `clear-token` — so stop the service before running them. Read-only commands
+/ `clear-token` — so stop the service before running them. Diagnostic commands
 (`clawd doctor`, `clawd auth status`, `clawd mcp list` / `probe`) are safe against a
-running daemon. Exit codes are diagnostic:
+running daemon, but full `doctor` opens/migrates the database and runs enabled backend probes;
+it is not a read-only operation. `doctor --check-config` skips database and live network probes.
+Exit codes are diagnostic:
 
 | Code | Meaning                                    |
 | ---- | ------------------------------------------ |

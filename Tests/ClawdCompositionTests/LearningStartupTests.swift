@@ -118,16 +118,16 @@ struct LearningStartupTests {
       _ = await daemon.result
       #expect(await llm.recorded.count == 1)
       let writer = try DatabaseQueue(path: EnvironmentLoader.databasePath(config: config))
-      let usage = try writer.read { db in
-        try Row.fetchAll(
+      try await writer.read { db in
+        let usage = try Row.fetchAll(
           db,
           sql: "SELECT * FROM provider_usage WHERE learning_operation_id IS NOT NULL"
         )
+        #expect(usage.count == 1)
+        #expect(usage.first?["prompt_tokens"] as Int? == 100)
+        #expect(usage.first?["completion_tokens"] as Int? == 20)
+        #expect((usage.first?["cost_usd"] as Double? ?? 0) > 0)
       }
-      #expect(usage.count == 1)
-      #expect(usage.first?["prompt_tokens"] as Int? == 100)
-      #expect(usage.first?["completion_tokens"] as Int? == 20)
-      #expect((usage.first?["cost_usd"] as Double? ?? 0) > 0)
     } catch {
       release.open()
       daemon.cancel()

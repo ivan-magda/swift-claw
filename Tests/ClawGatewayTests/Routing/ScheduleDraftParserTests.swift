@@ -267,16 +267,16 @@ struct ScheduleDraftParserTests {
 
     // then — spend is durable (§6): one provider_usage row, attributed to the session, no run
     #expect(result == .draft(Self.expectedDraft))
-    let row = try fixture.queue.read { db in
-      try Row.fetchOne(
+    try await fixture.queue.read { db in
+      let row = try Row.fetchOne(
         db,
         sql: "SELECT run_id, session_id, model, is_estimated FROM provider_usage"
       )
+      let usageRow = try #require(row)
+      #expect(usageRow["run_id"] == nil as Int64?)
+      #expect(usageRow["session_id"] == fixture.sessionID)
+      #expect(usageRow["model"] == "test-model")
     }
-    let usageRow = try #require(row)
-    #expect(usageRow["run_id"] == nil as Int64?)
-    #expect(usageRow["session_id"] == fixture.sessionID)
-    #expect(usageRow["model"] == "test-model")
   }
 
   @Test
@@ -345,13 +345,13 @@ struct ScheduleDraftParserTests {
 
     // then — the owner still sees the timeout, but the recorded row is authoritative (not estimated)
     #expect(result == .providerUnavailable)
-    let row = try #require(
-      try fixture.queue.read { db in
+    try await fixture.queue.read { db in
+      let row = try #require(
         try Row.fetchOne(db, sql: "SELECT is_estimated, completion_tokens FROM provider_usage")
-      }
-    )
-    #expect(row["is_estimated"] == false)
-    #expect(row["completion_tokens"] == 13)
+      )
+      #expect(row["is_estimated"] == false)
+      #expect(row["completion_tokens"] == 13)
+    }
   }
 
   @Test
@@ -462,15 +462,15 @@ struct ScheduleDraftParserTests {
     // then
     #expect(meteredResult == .budgetDenied(cap: BudgetGate.perRunSpendCap))
     #expect(planResult == .draft(Self.expectedDraft))
-    let row = try #require(
-      try plan.queue.read { db in
+    try await plan.queue.read { db in
+      let row = try #require(
         try Row.fetchOne(db, sql: "SELECT cost_usd, cost_source FROM provider_usage")
-      }
-    )
-    // A confirmed zero booked under its own source — not a guessed $0 — is what keeps the
-    // never-a-silent-$0 rule satisfied while the USD gate is skipped.
-    #expect(row["cost_usd"] == 0.0)
-    #expect(row["cost_source"] == CostSource.includedPlan.rawValue)
+      )
+      // A confirmed zero booked under its own source — not a guessed $0 — is what keeps the
+      // never-a-silent-$0 rule satisfied while the USD gate is skipped.
+      #expect(row["cost_usd"] == 0.0)
+      #expect(row["cost_source"] == CostSource.includedPlan.rawValue)
+    }
   }
 
   @Test

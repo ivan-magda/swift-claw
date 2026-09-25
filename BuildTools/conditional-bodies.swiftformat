@@ -2,7 +2,7 @@
 --rules blankLinesBetweenScopes,trailingCommas,trailingSpace,wrapAttributes,wrapGuardStatementBodies,wrapIfStatementBodies,wrapLoopBodies,wrapCaseBodies,wrapFunctionBodies,wrapPropertyBodies,wrap,wrapArguments
 --indent 2
 --linebreaks lf
---swift-version 6.3
+--swift-version 6.4
 --trailing-commas collections-only
 --func-attributes prev-line
 --type-attributes prev-line
