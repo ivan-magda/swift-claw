@@ -96,7 +96,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
       if Task.isCancelled {
         break
       }
-      
+
       if await holds.isHeld(row.chatID) {
         continue
       }
@@ -108,12 +108,12 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
         if Task.isCancelled {
           break
         }
-        
+
         if let retryAfter = Self.floodControlRetryAfter(error) {
           await hold(chat: row.chatID, forSeconds: retryAfter)
           continue
         }
-        
+
         logger.warning(
           """
           outbox send failed for \(row.originLabel) step \(row.stepIndex); \
@@ -159,14 +159,14 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
       if Self.floodControlRetryAfter(error) != nil {
         throw error
       }
-      
+
       logger.warning(
         """
         rich send failed for \(row.originLabel) step \(row.stepIndex), \
         falling back to plain: \(error)
         """
       )
-      
+
       return try await delivery.sendMessage(
         to: row.target,
         text: row.payload,
@@ -214,12 +214,12 @@ private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Du
     guard let deadline = notBefore[chatID] else {
       return false
     }
-    
+
     if clock.now < deadline {
       return true
     }
     notBefore[chatID] = nil
-    
+
     return false
   }
 
@@ -228,14 +228,14 @@ private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Du
     guard !stopping else {
       return
     }
-    
+
     let deadline = clock.now.advanced(by: wait)
     notBefore[chatID] = max(notBefore[chatID] ?? deadline, deadline)
-    
+
     let id = UUID()
     wakeups[id] = Task {
       defer { wakeups[id] = nil }
-      
+
       do {
         try await clock.sleep(until: deadline, tolerance: nil)
         try Task.checkCancellation()
@@ -248,12 +248,12 @@ private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Du
 
   func cancelAndAwait() async {
     stopping = true
-    
+
     let owned = Array(wakeups.values)
     for wakeup in owned {
       wakeup.cancel()
     }
-    
+
     for wakeup in owned {
       await wakeup.value
     }
