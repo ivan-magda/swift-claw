@@ -232,6 +232,9 @@ form `ARCHITECTURE.md §N` is used, sparingly.
   to prepare an approval. Enabled status/cancel retain owner scope and access to persisted jobs;
   disabled Coder contributes no tools.
 - **Logging:** `swift-log` to stdout/stderr; journald/newsyslog handle rotation.
+- **Approval graph ownership:** the daemon root retains the approval waiter for its full lifetime.
+  The turn runner's deferred parker holds a weak back-reference to that waiter, so releasing the
+  drained root also releases its stores, providers and transports.
 
 ## 5. Concurrency model
 
