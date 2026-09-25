@@ -926,19 +926,21 @@ struct AppConfigTests {
     #expect(image.description == "cgr.dev/chainguard/python@sha256:\(digest)")
   }
 
-  @Test(arguments: [
-    "chainguard/python@sha256:" + String(repeating: "a", count: 64),
-    "https://cgr.dev/chainguard/python@sha256:" + String(repeating: "a", count: 64),
-    "cgr.dev/chainguard/python:latest",
-    "cgr.dev/chainguard/python@sha256:" + String(repeating: "A", count: 64),
-    "localhost/python@sha256:" + String(repeating: "a", count: 64),
-    "127.0.0.1/python@sha256:" + String(repeating: "a", count: 64),
-    "éxample.com/python@sha256:" + String(repeating: "a", count: 64),
-    "cgr.dev/pythön@sha256:" + String(repeating: "a", count: 64),
-    "cgr.dev:+443/python@sha256:" + String(repeating: "a", count: 64),
-    "cgr.dev/python@sha256:abc",
-    " cgr.dev/python@sha256:" + String(repeating: "a", count: 64),
-  ])
+  @Test(
+    arguments: [
+      "chainguard/python@sha256:" + String(repeating: "a", count: 64),
+      "https://cgr.dev/chainguard/python@sha256:" + String(repeating: "a", count: 64),
+      "cgr.dev/chainguard/python:latest",
+      "cgr.dev/chainguard/python@sha256:" + String(repeating: "A", count: 64),
+      "localhost/python@sha256:" + String(repeating: "a", count: 64),
+      "127.0.0.1/python@sha256:" + String(repeating: "a", count: 64),
+      "éxample.com/python@sha256:" + String(repeating: "a", count: 64),
+      "cgr.dev/pythön@sha256:" + String(repeating: "a", count: 64),
+      "cgr.dev:+443/python@sha256:" + String(repeating: "a", count: 64),
+      "cgr.dev/python@sha256:abc",
+      " cgr.dev/python@sha256:" + String(repeating: "a", count: 64),
+    ] as [String]
+  )
   func pinnedImageParserRejectsAmbiguousOrUntrustedReferences(_ rawValue: String) {
     // given / when / then
     #expect(PinnedImageReference.parse(rawValue) == nil)

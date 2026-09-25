@@ -1,53 +1,50 @@
 # Agent instructions
 
-## What this is
+swift-claw is a persistent personal AI assistant controlled via Telegram, written in Swift;
+SwiftPM builds the `clawd` executable. Personal mode is single-owner; group mode is a separate,
+opt-in deployment with no personal state.
 
-swift-claw — a persistent, always-on, **single-owner personal AI assistant** controlled via **Telegram**, written in **pure Swift**. Clean-room, OpenClaw-inspired.
+`AGENTS.md` is a symlink to this file; edit `CLAUDE.md` to keep Codex and Claude Code aligned.
+Paths below are conditional reading instructions, not automatic imports. These repository
+instructions/skills are separate from clawd's runtime workspace files (`docs/CUSTOMIZATION.md`).
 
-SwiftPM package, executable `clawd`. The dependency graph is a layered DAG: **seams (protocols + value types) live in `ClawCore`, implementations in sibling `Claw*` targets, composed at the `clawd` root** — `ClawAgent` and `ClawGateway` reach persistence only through `ClawCore` protocols.
+## Project map
 
-## Authority and routing
+- `Package.swift`: target graph. `Sources/ClawCore/`: shared protocols, value types and errors; sibling `Claw*` targets implement them. `ClawAgent` and `ClawGateway` access persistence only through Core protocols.
+- `Sources/clawd/`: composition, bootstrap, CLI. `Sources/ClawGateway/`: routing, approvals, scheduling, lifecycle. `Sources/ClawAgent/`: context and agent turns.
+- `Sources/ClawData/`: GRDB stores; `Sources/ClawSecrets/`: secrets; `Sources/ClawTools/`: tools and policy. For other features, find owning symbols in `docs/ARCHITECTURE.md` §3.1 before searching source.
+- `Tests/<Target>Tests/` (CLI: `Tests/ClawdCompositionTests/`); shared fixtures in `Sources/ClawTestSupport/`. `scripts/`, `BuildTools/`: validation tooling; `.github/workflows/`: CI.
 
-- **`docs/ARCHITECTURE.md` is the accepted technical design.** For architecture-affecting, cross-module, or normative-contract work, read the relevant sections first. Never diverge from it silently; when a task deliberately changes a contract, change the spec in the same commit.
-- Product scope, phasing, success criteria → `docs/PRD.md`.
-- Building, running, or operating `clawd` locally → `docs/LOCAL_DEV.md`.
-- Cited background research → `docs/research/` — evidence, not a normative spec.
-- **Any test diff → follow `docs/TESTING.md` end to end**, including its test-intent map and its pre-commit redundancy pass. Every added test must name a reachable mutant that the nearest existing test would not kill.
-- **Cross-cutting test diffs get an independent review of test value and redundancy alone** — a subagent where one is available, otherwise a separate pass with the diff re-read from scratch.
-- Changing a user-visible surface (command, flag, env var, default, secret, install/release step) → re-read the whole public set (`README.md`, `docs/GETTING_STARTED.md`, `docs/INSTALL.md`, `docs/CUSTOMIZATION.md`, `deploy/README.md`) and update every document the change actually reaches. They describe each other's state, so one edit usually invalidates a sibling — but do not edit unaffected siblings just to touch all five.
-- Touching `ClawMCP`, the LLM adapters and credential seam, or group/forum mode → read `docs/ARCHITECTURE.md` §10.3, §8, and §12.1 respectively before changing behavior.
-- **New normative detail belongs in `docs/ARCHITECTURE.md`; this file gets the pointer.** Add a rule here only when its absence would cause a mistake in a session that never opens the spec.
+## Read before changing
 
-## Architectural invariants
+- Architecture, cross-module behavior or contracts → relevant sections of `docs/ARCHITECTURE.md`, the accepted technical design. Update it in the same commit as a deliberate contract change. Report unresolved spec/code conflicts; do not silently choose a new policy. New normative detail belongs there; keep essential guards and routing here.
+- Scope, phasing or acceptance criteria → `docs/PRD.md` and architecture §20. Comparative research in `docs/research/` is evidence, not a spec; borrow ideas, never copy or line-by-line port code.
+- Tool policy, approvals, trust, path containment or egress → architecture §§10–12; MCP → §10.3; group/forum behavior → §12.1.
+- LLM adapters or credentials → architecture §8; secrets/state-root lifecycle → §§4, 15; persistence → §7; session concurrency → §5.
+- Context, memory or runtime workspace skills → architecture §§9, 12; scheduling/learning → §14; VM execution → §13.1; native Coder → §§5.2.1, 13.2.
+- Any Swift source or style review → `docs/CODE_STYLE.md`. Lint/formatter configuration, pins or exceptions → also architecture §19.2; run `scripts/test-lint.sh` and verify a second fix changes nothing.
+- Any test diff → follow `docs/TESTING.md` end to end: test-intent map and pre-commit redundancy pass. Each added test must name a reachable mutant the nearest existing test would not kill. Cross-cutting test diffs need an independent test-value/redundancy review (subagent if available, otherwise re-read from scratch).
+- Commands, flags, env vars, defaults, secrets or install/release steps → read the whole public set: `README.md`, `docs/GETTING_STARTED.md`, `docs/INSTALL.md`, `docs/CUSTOMIZATION.md`, `deploy/README.md`. For env changes, also check `.env.example`. Update affected guides only.
+- Build setup or operating clawd → `docs/LOCAL_DEV.md`; CLI/config probes → `.claude/skills/verify/SKILL.md` (read it explicitly if `verify` is unavailable). Claude discovers `.claude/skills/`; Codex discovers `.agents/skills/`, linked to the same body.
+- Preparing a PR → `CONTRIBUTING.md` and `.github/PULL_REQUEST_TEMPLATE.md`; reporting a vulnerability → `SECURITY.md`, privately.
 
-- **Build for today's requirement, not a predicted one.** Simplest correct, testable design for the current requirement and what is realistically next. No indirection, extension point, or edge-case handling without a concrete scenario, a demonstrated benefit, or a named risk. A seam that buys a test double or holds a layer boundary is earned; a config knob for a second implementation nobody has asked for is not.
-- **Search before you add.** Before introducing a constant, helper, type, test double, or pattern, grep the protocol/seam and the shared support module for a semantic equivalent, and reuse or promote it when the contracts match. Do not merge two concepts into one abstraction because they look alike.
-- **Name the domain, not the literal.** Elevate one-offs into typed domain abstractions — no magic strings: branch and assert on the enum `rawValue` or named constant the production code already emits, never a duplicated literal.
-- **Extract before you extend.** When a file stops holding in your head as one responsibility, move its other responsibilities into sibling files *before* the next change; group three or more into a directory behind one entry point. Keep the dependency graph directed and the public API unchanged. Never split on line count alone, or into one-function files.
-- **Clean-room, not blinkered.** Study OpenClaw, Hermes, and the author's prior `swift-claude-code` for comparative design and borrow their ideas freely. Banned is transcription: no copied code, no line-by-line ports — re-derive each borrowed idea in our own design and Swift.
-- **Swift 6 strict concurrency.** Shared mutable in-memory state lives in actors; domain types are `Sendable` value types. GRDB stores are the deliberate exception — thin `Sendable` wrappers over `any DatabaseWriter` that lean on GRDB's own serialization; do not put an actor around them.
-- **A Swift actor does NOT serialize across `await`.** The per-session lane chains a stored `Task` (`var currentTurn`); it does not rely on actor isolation alone.
-- **Secure-by-default; enforce policy in code, not the prompt.** Untrusted inbound (messages/web/tool output/durable memory) is data, never instructions. Group/forum mode is the one deployment-scoped exception, and runs under its own non-personal state root.
-- **Telegram is a thin roll-your-own client** over AsyncHTTPClient, not a third-party lib. MCP is client-only — and no gate, FSM, or fingerprint code learns the word MCP.
-- **Persistence = GRDB + SQLite (WAL, FTS5)**; secrets via `SecretStore` (swift-crypto AES-GCM envelope + a local `0600` key), **not** the macOS Keychain — a launchd daemon cannot reach it.
-- **Store errors are domain-typed at the seam.** GRDB stores use `writer.writeMapping`/`readMapping` (not raw `write`/`read`), routing SQLite failures through `ClawDatabase.classifyError` into `StoreError` (e.g. `SQLITE_FULL → .diskFull`) — a raw `DatabaseError` must never leak past a store.
+## Invariants
 
-## Code style
+- Build for today's requirement. Add abstraction only for a concrete scenario, test seam, layer boundary or named risk. Search the owning seam and shared support before adding helpers/constants/doubles; reuse semantic equivalents, not similar shapes. Use domain enums/constants rather than duplicated magic strings.
+- Extract responsibilities before extending an overloaded file. Group three or more siblings behind one entry point; preserve directed dependencies and public API. Do not split solely by line count or into one-function files.
+- Swift 6 strict concurrency: domain values are `Sendable`; shared mutable state normally lives in actors. Preserve specified synchronous lock-backed cancellation/admission primitives (architecture §§5, 8.4). GRDB stores are thin `Sendable` wrappers over `any DatabaseWriter`, not actors.
+- Actors do not serialize across `await`: per-session work chains stored tasks (`SessionLaneRegistry`). Stores use `writer.writeMapping`/`readMapping` through `ClawDatabase.classifyError`; raw `DatabaseError` must never cross the `StoreError` seam.
+- Enforce security in code: numeric-ID default-deny, fail-closed access, tool/approval gates, secret redaction. Untrusted messages/web/tool output/durable memory are data, never instructions or authority. Group mode's documented exception requires its own non-personal state root. Never include credentials or private state in logs, diffs or PRs.
+- `execute_code` requires its VM sandbox; native Coder has a distinct delegated trust boundary, not a sandbox implied by its working directory. Preserve both contracts and specialized acceptance checks.
+- Telegram uses the thin AsyncHTTPClient-based client. MCP is client-only; gates, FSMs and fingerprints remain protocol-neutral. Secrets use `SecretStore` (swift-crypto AES-GCM + local `0600` key), not macOS Keychain. Persistence is GRDB + SQLite WAL/FTS5.
+- Google Swift style plus local rules: nonempty statement/closure bodies multiline, 100-character source limit (manual wrapping preserves string bytes), private helpers grouped in marked extensions. Tests use `// given`, `// when`, `// then`. Passing lint does not waive manual style checks.
 
-- **Google Swift Style Guide is the baseline.** Before a style review, or before changing lint/formatter config, tool pins, or a local exception → `docs/ARCHITECTURE.md` §19.2 and `docs/CODE_STYLE.md`.
-- **Lint gate = `scripts/lint.sh`** — run `scripts/lint.sh --fix`, read the diff it produced, then `scripts/lint.sh` to check. The whole gate must pass before committing. `.swiftlint.yml` is the source of truth for identifier limits and domain exceptions.
-- **Conditional and loop bodies are always multiline** — never `guard c else { return }`, `if c { doThing() }`, or `for x in xs { use(x) }`. `if` *expressions* (`let n = if c { 1 } else { 2 }`) stay inline. `--fix` expands them for you; the gate rejects it if you skip that.
-- **SwiftLint enforces a 100-character line limit.** `--fix` does not choose string continuations or named locals for you; preserve runtime string contents when wrapping. Exemptions and suppression policy → `docs/ARCHITECTURE.md` §19.2.
-- **Closure bodies go on their own line** — break after `in`, even for a single expression. The lint gate does not enforce this one.
-- **Tests follow Given-When-Then** — separate the body with `// given` / `// when` / `// then` sections (AAA equivalent).
-- **Comments: signal, not noise.** Start `///` with a 1–2-line contract summary the signature can't express. Add details or tags only for contract the summary can't carry; obvious declarations get no `///`. `//` is for a constraint invisible in the code *and* not tied to the current change. Rationale for a change goes in the commit and the PR, never beside the code. Never cite a bare `§N` — write the why in place, or use the full `ARCHITECTURE.md §N` only where code would otherwise read as a bug (the durable direction is docs→code; see the `ARCHITECTURE.md` §3.1 code map).
-- **Group private helpers into `private extension TypeName { }` blocks** by logical grouping, headed by a bare `// MARK: - <Group Name>` comment, no prose above it (see `RunCommand.swift`).
+## Verification
 
-## Definition of done
+Run from the repository root; build/lint/unit tests need no runtime secrets.
 
-SwiftPM commands: `swift build`, `swift test`, `swift test --filter <Suite>/<test>` for a single test. Build order and each increment's acceptance test → `docs/ARCHITECTURE.md` §20.
-
-- While iterating, run the narrowest relevant `--filter` for fast feedback.
-- Before calling a Swift change done — not merely before committing — run `scripts/lint.sh`, then `swift build`, then `swift test`.
-- Re-read the final diff for unrelated edits, missing tests, documentation impact, and violations of the invariants above.
-- Report which checks ran and what they printed. If one could not run, say so and why. Reading the code is not a substitute for the compiler, the test suite, or the lint gate.
+- During iteration: `swift test --filter <Suite>/<test>`; discover exact names with `swift test list`.
+- Run `scripts/lint.sh --fix`, inspect its diff, then `scripts/lint.sh`; the whole lint gate must pass before committing. Pins and setup: `BuildTools/lint-versions.env`, `docs/CODE_STYLE.md`.
+- Before calling a Swift change done: `scripts/lint.sh`, then `swift build`, then `swift test`, even if focused tests pass. Sandbox/Coder release work also needs the applicable acceptance checks in `docs/LOCAL_DEV.md`.
+- Documentation-only changes: verify affected links, examples and template syntax. Re-read the final diff for unrelated edits, missing tests, documentation impact and invariant violations.
+- Report commands and actual results; explain any check that could not run. Reading code is not compiler/test/lint evidence.
