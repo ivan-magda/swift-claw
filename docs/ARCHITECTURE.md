@@ -1104,6 +1104,9 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
   execution chain and reaps again.
 - **swift-subprocess is only a launcher.** It provides no isolation. Pin exact release 1.0.0, use
   streaming capture and an explicit teardown sequence, and keep the hardware VM as the boundary.
+  The low-level runner refuses already-cancelled calls and joins native teardown and reaping before
+  returning a cancellation or timeout result. The container's outer watchdog still bounds a stuck
+  adapter; that deliberate abandonment does not weaken the runner's own completion contract.
 - `sandbox-exec`/Seatbelt may wrap the launcher only as optional defense-in-depth; it is never the
   isolation boundary.
 
