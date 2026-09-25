@@ -47,41 +47,13 @@ public struct LearningNotices: Sendable {
     else {
       throw LearningReviewError.invalidCandidate
     }
-    let nonces = try distinctNonces(count: candidate.manifest.evaluations.count + 1)
-    let expiry = now.addingTimeInterval(EvidenceWindow.maximumAge)
-    let candidateActions: [OwnerSignal]
-    switch state {
-    case .admitted:
-      candidateActions = [.candidateReject, .candidateEdit]
-    case .awaitingApproval:
-      candidateActions = [.candidateApprove, .candidateReject, .candidateEdit]
-    }
-    var targets = [
-      NewFeedbackTarget(
-        nonce: nonces[0],
-        jobID: candidate.manifest.jobID,
-        epoch: candidate.manifest.epoch,
-        subjectKind: .candidate,
-        subjectDigest: candidate.digest.rawValue,
-        allowedActions: candidateActions,
-        ownerUserID: ownerUserID,
-        chatID: chatID,
-        expiresAt: expiry
-      ),
-    ]
-    targets += candidate.manifest.evaluations.enumerated().map { index, evaluation in
-      NewFeedbackTarget(
-        nonce: nonces[index + 1],
-        jobID: candidate.manifest.jobID,
-        epoch: candidate.manifest.epoch,
-        subjectKind: .evaluation,
-        subjectDigest: evaluation.digest.rawValue,
-        allowedActions: [.evaluationConfirm, .evaluationDispute],
-        ownerUserID: ownerUserID,
-        chatID: chatID,
-        expiresAt: expiry
-      )
-    }
+    let targets = try reviewTargets(
+      candidate: candidate,
+      state: state,
+      ownerUserID: ownerUserID,
+      chatID: chatID,
+      now: now
+    )
     let subject = CandidateReviewIdentity.digest(candidateDigest: candidate.digest)
     let parts = ReplySplitter.split(text: reviewText(candidate), limit: chunkLimit)
     guard parts.isEmpty == false else {
@@ -175,6 +147,54 @@ public struct LearningNotices: Sendable {
 // MARK: - Candidate Review
 
 private extension LearningNotices {
+  func reviewTargets(
+    candidate: CandidateArtifact,
+    state: CandidateReviewState,
+    ownerUserID: Int64,
+    chatID: Int64,
+    now: Date
+  ) throws -> [NewFeedbackTarget] {
+    let nonces = try distinctNonces(count: candidate.manifest.evaluations.count + 1)
+    let expiry = now.addingTimeInterval(EvidenceWindow.maximumAge)
+
+    let candidateActions: [OwnerSignal]
+    switch state {
+    case .admitted:
+      candidateActions = [.candidateReject, .candidateEdit]
+    case .awaitingApproval:
+      candidateActions = [.candidateApprove, .candidateReject, .candidateEdit]
+    }
+
+    var targets = [
+      NewFeedbackTarget(
+        nonce: nonces[0],
+        jobID: candidate.manifest.jobID,
+        epoch: candidate.manifest.epoch,
+        subjectKind: .candidate,
+        subjectDigest: candidate.digest.rawValue,
+        allowedActions: candidateActions,
+        ownerUserID: ownerUserID,
+        chatID: chatID,
+        expiresAt: expiry
+      ),
+    ]
+    targets += candidate.manifest.evaluations.enumerated().map { index, evaluation in
+      NewFeedbackTarget(
+        nonce: nonces[index + 1],
+        jobID: candidate.manifest.jobID,
+        epoch: candidate.manifest.epoch,
+        subjectKind: .evaluation,
+        subjectDigest: evaluation.digest.rawValue,
+        allowedActions: [.evaluationConfirm, .evaluationDispute],
+        ownerUserID: ownerUserID,
+        chatID: chatID,
+        expiresAt: expiry
+      )
+    }
+
+    return targets
+  }
+
   func distinctNonces(count: Int) throws -> [String] {
     var seen: Set<String> = []
     var nonces: [String] = []

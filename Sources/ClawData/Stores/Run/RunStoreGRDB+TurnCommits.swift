@@ -95,40 +95,7 @@ extension RunStoreGRDB {
       }
       try Self.appendJobFailedIfJobRun(db, runID: turn.runID, now: now)
 
-      // Executed tool work survives the failure commit: the same rows the success
-      // path writes, so the next turn's context and the per-dispatch audit trail agree on what
-      // actually ran.
-      for exchange in turn.exchanges {
-        try Self.insertExchangeRows(
-          db,
-          sessionID: turn.sessionID,
-          runID: turn.runID,
-          exchange: exchange,
-          now: now
-        )
-      }
-
-      if let usage = turn.usage {
-        _ = try Self.insertUsage(db, usage)
-        try Self.recomputeRunUsageTotals(db, runID: turn.runID, now: now)
-      }
-
-      // Same collision guard as the completed path: a degraded RESUME must not silently drop
-      // its owner-facing reply against the run's already-enqueued approval prompt.
-      let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runID: turn.runID)
-      _ = try OutboxInsertion.insertOutbox(
-        db,
-        runID: turn.runID,
-        chunk: OutboxInsertion.shiftedChunk(turn.chunk, by: stepBase),
-        now: now
-      )
-
-      if turn.setTainted {
-        try Self.setSessionTainted(db, sessionID: turn.sessionID, now: now)
-      }
-      if turn.setPrivateData {
-        try Self.setSessionPrivateData(db, sessionID: turn.sessionID, now: now)
-      }
+      try Self.finalizeDegradedTurn(db, turn: turn, now: now)
 
       return .committed
     }
@@ -138,6 +105,44 @@ extension RunStoreGRDB {
 // MARK: - Turn Commit Helpers
 
 private extension RunStoreGRDB {
+  static func finalizeDegradedTurn(_ db: Database, turn: DegradedTurn, now: Date) throws {
+    // Executed tool work survives the failure commit: the same rows the success
+    // path writes, so the next turn's context and the per-dispatch audit trail agree on what
+    // actually ran.
+    for exchange in turn.exchanges {
+      try Self.insertExchangeRows(
+        db,
+        sessionID: turn.sessionID,
+        runID: turn.runID,
+        exchange: exchange,
+        now: now
+      )
+    }
+
+    if let usage = turn.usage {
+      _ = try Self.insertUsage(db, usage)
+      try Self.recomputeRunUsageTotals(db, runID: turn.runID, now: now)
+    }
+
+    // Same collision guard as the completed path: a degraded RESUME must not silently drop
+    // its owner-facing reply against the run's already-enqueued approval prompt.
+    let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runID: turn.runID)
+    _ = try OutboxInsertion.insertOutbox(
+      db,
+      runID: turn.runID,
+      chunk: OutboxInsertion.shiftedChunk(turn.chunk, by: stepBase),
+      now: now
+    )
+
+    if turn.setTainted {
+      try Self.setSessionTainted(db, sessionID: turn.sessionID, now: now)
+    }
+
+    if turn.setPrivateData {
+      try Self.setSessionPrivateData(db, sessionID: turn.sessionID, now: now)
+    }
+  }
+
   /// The run's terminal state is already written by the `transitionRun` that authorised this
   /// commit, so nothing here restates it.
   static func finalizeCompletedTurn(

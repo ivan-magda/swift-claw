@@ -34,12 +34,7 @@ public enum CoderApprovedOriginFixture {
     )
     let runID = try required(claim.runID)
     let sessionID = try required(claim.sessionID)
-    let pickedUpOrigin = try required(
-      try runs.pickUp(runID: runID, policyVersion: policyVersion, now: now)
-    )
-    guard pickedUpOrigin == .interactive else {
-      throw StoreError.unexpected("Coder fixture did not create an interactive run")
-    }
+    try pickUpInteractiveRun(runs, runID: runID, policyVersion: policyVersion, now: now)
     let receipt = try runs.commitSuspendedTurn(
       runID: runID,
       sessionID: sessionID,
@@ -81,6 +76,21 @@ public enum CoderApprovedOriginFixture {
 // MARK: - Approved Turn Construction
 
 private extension CoderApprovedOriginFixture {
+  static func pickUpInteractiveRun(
+    _ runs: RunStoreGRDB,
+    runID: Int64,
+    policyVersion: String,
+    now: Date
+  ) throws {
+    let pickedUpOrigin = try required(
+      try runs.pickUp(runID: runID, policyVersion: policyVersion, now: now)
+    )
+
+    guard pickedUpOrigin == .interactive else {
+      throw StoreError.unexpected("Coder fixture did not create an interactive run")
+    }
+  }
+
   static func inbound(
     prepared: CoderPreparedRequest,
     updateID: Int64,

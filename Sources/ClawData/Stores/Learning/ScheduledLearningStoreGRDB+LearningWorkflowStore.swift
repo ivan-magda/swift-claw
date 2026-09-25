@@ -164,33 +164,49 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
         arguments: [jobID, LearningDecisionKind.rollback.rawValue]
       ).map(Self.decodeTerminalReceipt)
       return rows.compactMap { row in
-        let subject: String = row["subject_digest"]
-        let kind = FeedbackSubjectKind(rawValue: row["subject_kind"])
-        let signal = OwnerSignal(rawValue: row["signal"])
-        let trigger: RollbackTrigger
-        if signal == .promotionRollback || signal == .candidateReject {
-          guard (kind == .promotion && subject == promotion.promotionSubject)
-                || (kind == .candidate && subject == promotion.inputs.candidateDigest.rawValue)
-          else {
-            return nil
-          }
-          trigger = .ownerFeedback(promotionID: promotion.decisionID, eventID: row["event_id"])
-        } else {
-          guard promotion.cohort.contains(where: { support in
-              support.outcome == .positive
-                && ((kind == .run && subject == String(support.runID))
-                  || (kind == .evaluation && subject == support.evaluationDigest?.rawValue))
-            })
-          else {
-            return nil
-          }
-          trigger = .supportWithdrawal(promotionID: promotion.decisionID, eventID: row["event_id"])
-        }
-        return receipts.contains { receipt in
-          receipt.record.rollbackTrigger == trigger
-        }
-          ? nil : trigger
+        Self.rollbackTrigger(row, promotion: promotion, receipts: receipts)
       }
     }
+  }
+}
+
+// MARK: - Rollback Triggers
+
+private extension ScheduledLearningStoreGRDB {
+  static func rollbackTrigger(
+    _ row: Row,
+    promotion: DecisionReceipt,
+    receipts: [DecisionReceipt]
+  ) -> RollbackTrigger? {
+    let subject: String = row["subject_digest"]
+    let kind = FeedbackSubjectKind(rawValue: row["subject_kind"])
+    let signal = OwnerSignal(rawValue: row["signal"])
+
+    let trigger: RollbackTrigger
+    if signal == .promotionRollback || signal == .candidateReject {
+      guard (kind == .promotion && subject == promotion.promotionSubject)
+            || (kind == .candidate && subject == promotion.inputs.candidateDigest.rawValue)
+      else {
+        return nil
+      }
+
+      trigger = .ownerFeedback(promotionID: promotion.decisionID, eventID: row["event_id"])
+    } else {
+      guard promotion.cohort.contains(where: { support in
+          support.outcome == .positive
+            && ((kind == .run && subject == String(support.runID))
+              || (kind == .evaluation && subject == support.evaluationDigest?.rawValue))
+        })
+      else {
+        return nil
+      }
+
+      trigger = .supportWithdrawal(promotionID: promotion.decisionID, eventID: row["event_id"])
+    }
+
+    return receipts.contains { receipt in
+      receipt.record.rollbackTrigger == trigger
+    }
+      ? nil : trigger
   }
 }

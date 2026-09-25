@@ -56,19 +56,8 @@ extension ScheduledLearningStoreGRDB {
         return nil
       }
       let inputs = promotion.inputs
-      let priorRows = try Row.fetchAll(
-        db,
-        sql: """
-          SELECT decision_id, inputs, result FROM learning_decisions \
-          WHERE job_id = ? AND kind = ?
-          """,
-        arguments: [inputs.identity.jobID, LearningDecisionKind.rollback.rawValue]
-      )
-      for priorRow in priorRows {
-        let prior = try Self.decodeTerminalReceipt(priorRow)
-        if prior.record.rollbackTrigger == trigger {
-          return prior
-        }
+      if let prior = try Self.rollbackReceipt(db, trigger: trigger, jobID: inputs.identity.jobID) {
+        return prior
       }
       let state = try Self.readState(db, jobID: inputs.identity.jobID)
       let current =
@@ -95,26 +84,65 @@ extension ScheduledLearningStoreGRDB {
       )
       let receipt = try Self.persistTerminalDecision(db, inputs: inputs, record: record, now: now)
       if valid {
-        try db.execute(
-          sql: """
-            UPDATE job_learning_state SET stable_lesson_set_digest = ?, stable_revision = ?
-            WHERE job_id = ? AND learning_epoch = ? AND stable_lesson_set_digest = ?
-              AND stable_revision = ?
-            """,
-          arguments: [
-            inputs.baseDigest.rawValue,
-            revision.value,
-            inputs.identity.jobID,
-            inputs.identity.epoch.value,
-            inputs.replacementDigest.rawValue,
-            promotion.record.stableRevision.value,
-          ]
-        )
-        guard db.changesCount == 1 else {
-          throw StoreError.unexpected("rollback CAS changed inside its write transaction")
-        }
+        try Self.restorePromotionBase(db, promotion: promotion, revision: revision)
       }
       return receipt
+    }
+  }
+}
+
+// MARK: - Rollback Persistence
+
+private extension ScheduledLearningStoreGRDB {
+  static func rollbackReceipt(
+    _ db: Database,
+    trigger: RollbackTrigger,
+    jobID: Int64
+  ) throws -> DecisionReceipt? {
+    let priorRows = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT decision_id, inputs, result FROM learning_decisions \
+        WHERE job_id = ? AND kind = ?
+        """,
+      arguments: [jobID, LearningDecisionKind.rollback.rawValue]
+    )
+
+    for priorRow in priorRows {
+      let prior = try decodeTerminalReceipt(priorRow)
+      if prior.record.rollbackTrigger == trigger {
+        return prior
+      }
+    }
+
+    return nil
+  }
+
+  static func restorePromotionBase(
+    _ db: Database,
+    promotion: DecisionReceipt,
+    revision: StableRevision
+  ) throws {
+    let inputs = promotion.inputs
+
+    try db.execute(
+      sql: """
+        UPDATE job_learning_state SET stable_lesson_set_digest = ?, stable_revision = ?
+        WHERE job_id = ? AND learning_epoch = ? AND stable_lesson_set_digest = ?
+          AND stable_revision = ?
+        """,
+      arguments: [
+        inputs.baseDigest.rawValue,
+        revision.value,
+        inputs.identity.jobID,
+        inputs.identity.epoch.value,
+        inputs.replacementDigest.rawValue,
+        promotion.record.stableRevision.value,
+      ]
+    )
+
+    guard db.changesCount == 1 else {
+      throw StoreError.unexpected("rollback CAS changed inside its write transaction")
     }
   }
 }
@@ -160,9 +188,11 @@ private extension ScheduledLearningStoreGRDB {
       guard let event = try effectiveOwnerEvent(db, id: eventID, promotion: promotion) else {
         return false
       }
+
       let signal: String = event["signal"]
       let kind: String = event["subject_kind"]
       let digest: String = event["subject_digest"]
+
       return
         (signal == OwnerSignal.promotionRollback.rawValue
         && kind == FeedbackSubjectKind.promotion.rawValue && digest == promotion.promotionSubject)

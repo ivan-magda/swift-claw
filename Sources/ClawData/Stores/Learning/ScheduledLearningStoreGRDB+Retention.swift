@@ -132,17 +132,7 @@ extension LearningRetentionSnapshot {
     for row in candidates where !retained.candidates.contains(row["candidate_digest"]) {
       try delete(db, table: "learning_candidates", key: "candidate_digest", row: row)
     }
-    for row in bindings where !retained.runs.contains(row["run_id"]) {
-      for table in [
-        "learning_evaluations",
-        "learning_evidence",
-        "run_compatibility",
-        "run_settlements",
-        "run_learning_bindings",
-      ] {
-        try delete(db, table: table, key: "run_id", row: row)
-      }
-    }
+    try collectRunReceipts(db, excluding: retained)
     for row in targets where (row["expires_at"] as Int64) < cutoff {
       guard !subjectIsRetained(row, retained: retained) else {
         continue
@@ -163,6 +153,27 @@ extension LearningRetentionSnapshot {
       )
     }
     return db.totalChangesCount - before
+  }
+}
+
+// MARK: - Run Receipt Collection
+
+private extension LearningRetentionSnapshot {
+  func collectRunReceipts(
+    _ db: Database,
+    excluding retained: LearningRetentionReferences
+  ) throws {
+    for row in bindings where !retained.runs.contains(row["run_id"]) {
+      for table in [
+        "learning_evaluations",
+        "learning_evidence",
+        "run_compatibility",
+        "run_settlements",
+        "run_learning_bindings",
+      ] {
+        try delete(db, table: table, key: "run_id", row: row)
+      }
+    }
   }
 }
 

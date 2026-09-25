@@ -144,21 +144,12 @@ struct DaemonBuilder: Sendable {
       learning: learning
     )
 
-    var services: [any Service] = [
-      consumers.poller,
-      consumers.outbox,
-      consumers.scheduler,
-      consumers.approvals.expiry,
-    ]
-    if let learning {
-      services.append(learning)
-    }
-    if let maintenance = sandbox.maintenance {
-      services.append(SandboxLifecycleService(maintenance: maintenance))
-    }
-    if mcpStack.sessions.isEmpty == false {
-      services.append(MCPSessionLifecycleService(sessions: mcpStack.sessions))
-    }
+    let services = makeRuntimeServices(
+      consumers: consumers,
+      learning: learning,
+      sandbox: sandbox,
+      mcpStack: mcpStack
+    )
 
     return runtimeBundle(
       services: services,
@@ -306,5 +297,37 @@ struct DaemonBuilder: Sendable {
     laneAdmission: LaneAdmissionShutdownService
   ) -> [any Service] {
     base + [laneAdmission]
+  }
+}
+
+// MARK: - Runtime Services
+
+private extension DaemonBuilder {
+  func makeRuntimeServices(
+    consumers: RunnerConsumers,
+    learning: ScheduledLearningService?,
+    sandbox: SandboxStack,
+    mcpStack: MCPStack
+  ) -> [any Service] {
+    var services: [any Service] = [
+      consumers.poller,
+      consumers.outbox,
+      consumers.scheduler,
+      consumers.approvals.expiry,
+    ]
+
+    if let learning {
+      services.append(learning)
+    }
+
+    if let maintenance = sandbox.maintenance {
+      services.append(SandboxLifecycleService(maintenance: maintenance))
+    }
+
+    if mcpStack.sessions.isEmpty == false {
+      services.append(MCPSessionLifecycleService(sessions: mcpStack.sessions))
+    }
+
+    return services
   }
 }

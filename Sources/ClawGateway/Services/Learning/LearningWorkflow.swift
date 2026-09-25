@@ -125,37 +125,7 @@ private extension LearningWorkflow {
       let outcome = try store.admitCandidate(digest: digest, redactor: redactor, now: now)
       try notify(outcome, jobID: jobID, now: now)
     case .control(let eventID):
-      guard let control = try store.workflowControls(jobID: jobID).first(where: { control in
-          control.eventID == eventID
-        })
-      else {
-        return
-      }
-      let outcome: AdmissionOutcome
-      switch control.signal {
-      case .candidateApprove:
-        outcome = try store.approveCandidate(
-          CandidateApproval(predecessorDigest: control.candidate, feedbackEventID: control.eventID),
-          redactor: redactor,
-          now: now
-        )
-      case .candidateEdit:
-        guard let payload = control.payload else {
-          return
-        }
-        outcome = try store.editCandidate(
-          CandidateEdit(
-            predecessorDigest: control.candidate,
-            feedbackEventID: control.eventID,
-            payload: Data(payload.utf8)
-          ),
-          redactor: redactor,
-          now: now
-        )
-      default:
-        return
-      }
-      try notify(outcome, jobID: jobID, now: now)
+      try applyControl(eventID: eventID, jobID: jobID, now: now)
     case .trial:
       guard let trial = try store.openTrial(jobID: jobID),
             case .reconciled(let result) = try store.reconcileTrial(trial.identity, now: now),
@@ -181,6 +151,43 @@ private extension LearningWorkflow {
         }
       }
     }
+  }
+
+  func applyControl(eventID: Int64, jobID: Int64, now: Date) throws {
+    guard let control = try store.workflowControls(jobID: jobID).first(where: { control in
+        control.eventID == eventID
+      })
+    else {
+      return
+    }
+
+    let outcome: AdmissionOutcome
+    switch control.signal {
+    case .candidateApprove:
+      outcome = try store.approveCandidate(
+        CandidateApproval(predecessorDigest: control.candidate, feedbackEventID: control.eventID),
+        redactor: redactor,
+        now: now
+      )
+    case .candidateEdit:
+      guard let payload = control.payload else {
+        return
+      }
+
+      outcome = try store.editCandidate(
+        CandidateEdit(
+          predecessorDigest: control.candidate,
+          feedbackEventID: control.eventID,
+          payload: Data(payload.utf8)
+        ),
+        redactor: redactor,
+        now: now
+      )
+    default:
+      return
+    }
+
+    try notify(outcome, jobID: jobID, now: now)
   }
 
   func notify(_ outcome: AdmissionOutcome, jobID: Int64, now: Date) throws {

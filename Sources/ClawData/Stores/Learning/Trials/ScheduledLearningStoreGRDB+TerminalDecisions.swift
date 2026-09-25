@@ -28,21 +28,7 @@ extension ScheduledLearningStoreGRDB {
       let current = try Self.readState(db, jobID: trial.jobID)
       let stored = try Self.strictTrial(db, row: row, currentState: nil)
       guard let current,
-            let job = try Self.admissionJob(db, jobID: trial.jobID),
-            job.hasRecurrence,
-            job.status != .cancelled,
-            current.epoch == inputs.identity.epoch,
-            stored.identity == inputs.identity,
-            stored.candidateDigest == inputs.candidateDigest,
-            stored.replacementDigest == inputs.replacementDigest,
-            stored.baseDigest == inputs.baseDigest,
-            stored.baseRevision == inputs.baseRevision,
-            current.stableDigest == inputs.baseDigest,
-            current.stableRevision == inputs.baseRevision,
-            current.feedbackRevision == inputs.feedbackRevision,
-            stored.algorithm == inputs.algorithm,
-            inputs.algorithm == .v1,
-            stored.state == .open || stored.state == .draining
+            try Self.trialDecisionIsCurrent(db, inputs: inputs, stored: stored, current: current)
       else {
         return try Self.finishTrial(
           db,
@@ -56,13 +42,7 @@ extension ScheduledLearningStoreGRDB {
           now: now
         )
       }
-      let runIDs = try Self.assignmentRunIDs(db, trialID: stored.trialID)
-      guard runIDs.count == stored.consumedAssignments else {
-        throw StoreError.unexpected("terminal cohort does not match consumed assignments")
-      }
-      let assignments = try runIDs.map { runID in
-        try Self.authoritativeAssignment(db, runID: runID, trial: stored, currentState: current)
-      }
+      let assignments = try Self.terminalAssignments(db, trial: stored, current: current)
       let actual = TrialPolicy.decide(trial: stored, assignments: assignments, now: now)
       let result: LearningDecisionResult
       let reason: String
@@ -71,6 +51,7 @@ extension ScheduledLearningStoreGRDB {
         guard decision == .promote else {
           return nil
         }
+
         guard let candidate = try Self.readCandidateArtifact(db, digest: stored.candidateDigest),
               try Self.sourceBindingsAreCurrent(db, artifact: candidate, state: current)
         else {
@@ -86,6 +67,7 @@ extension ScheduledLearningStoreGRDB {
             now: now
           )
         }
+
         result = .promoted
         reason = LearningDecisionResult.promoted.rawValue
       case .fallback(let fallback):
@@ -108,6 +90,53 @@ extension ScheduledLearningStoreGRDB {
         closesTrial: true,
         now: now
       )
+    }
+  }
+}
+
+// MARK: - Terminal Decision Validation
+
+private extension ScheduledLearningStoreGRDB {
+  static func trialDecisionIsCurrent(
+    _ db: Database,
+    inputs: TrialDecisionInputs,
+    stored: LearningTrial,
+    current: JobLearningState
+  ) throws -> Bool {
+    guard let job = try admissionJob(db, jobID: inputs.identity.jobID),
+          job.hasRecurrence,
+          job.status != .cancelled,
+          current.epoch == inputs.identity.epoch,
+          stored.identity == inputs.identity,
+          stored.candidateDigest == inputs.candidateDigest,
+          stored.replacementDigest == inputs.replacementDigest,
+          stored.baseDigest == inputs.baseDigest,
+          stored.baseRevision == inputs.baseRevision,
+          current.stableDigest == inputs.baseDigest,
+          current.stableRevision == inputs.baseRevision,
+          current.feedbackRevision == inputs.feedbackRevision,
+          stored.algorithm == inputs.algorithm,
+          inputs.algorithm == .v1,
+          stored.state == .open || stored.state == .draining
+    else {
+      return false
+    }
+    return true
+  }
+
+  static func terminalAssignments(
+    _ db: Database,
+    trial: LearningTrial,
+    current: JobLearningState
+  ) throws -> [TrialAssignment] {
+    let runIDs = try assignmentRunIDs(db, trialID: trial.trialID)
+
+    guard runIDs.count == trial.consumedAssignments else {
+      throw StoreError.unexpected("terminal cohort does not match consumed assignments")
+    }
+
+    return try runIDs.map { runID in
+      try authoritativeAssignment(db, runID: runID, trial: trial, currentState: current)
     }
   }
 }
