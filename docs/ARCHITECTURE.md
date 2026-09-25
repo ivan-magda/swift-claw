@@ -1659,7 +1659,7 @@ empty healthy state.
 - **Credential mutation is a stop-the-daemon operator step.** `clawd auth login` / `clawd auth logout` and `clawd mcp set-token` / `clawd mcp clear-token` acquire the same state-root instance lock the daemon holds (§4), so under launchd/systemd the owner stops the supervised service, runs the command, and starts it again — the daemon is the only process permitted to refresh and save a credential while running. `clawd auth status` and `clawd mcp list` / `clawd mcp probe` are read-only and safe against a live daemon. The printed `CLAW_LLM_MODEL=openai-chatgpt/<model>` assignment is applied by the owner: **login never edits `.env`, a launchd plist, a systemd unit, a shell profile, or a future config file.**
 - **CI:** the macOS + Linux **GRDB + FTS5 build+test gate** (`ci.yml`) runs on every PR and
   blocks merge; `lint.yml` checks canonical Swift style on Linux. `release.yml` validates optimized
-  Linux/macOS packages on pushes to `main`, manual runs and pushes of `v*` tags, including bounded
+  Linux/macOS packages on pushes to `main` and pushes of `v*` tags, including bounded
   `--version` startup on macOS 15 and an offline installer fixture. Only pushes of `v*` tags stamp
   versions, attest artifacts and publish **GitHub Releases with SHA256 checksums and provenance**.
 

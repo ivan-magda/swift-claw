@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -41,7 +40,7 @@ jobs:
         run: scripts/check-toolchain.sh
 
       - name: Stamp version
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           printf 'enum ClawdVersion {\n  static let current = "%s"\n}\n' \
             "${GITHUB_REF_NAME#v}" > Sources/clawd/ClawdVersion.swift
@@ -57,7 +56,7 @@ jobs:
           sha256sum clawd-linux-x86_64 > clawd-linux-x86_64.sha256
 
       - name: Attest provenance
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/attest@v4.2.2
         with:
           subject-path: clawd-linux-x86_64
@@ -90,7 +89,7 @@ jobs:
           scripts/check-toolchain.sh
 
       - name: Stamp version
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           printf 'enum ClawdVersion {\n  static let current = "%s"\n}\n' \
             "${GITHUB_REF_NAME#v}" > Sources/clawd/ClawdVersion.swift
@@ -104,7 +103,7 @@ jobs:
           scripts/package-macos.sh "$binary_directory/clawd" .
 
       - name: Attest provenance
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/attest@v4.2.2
         with:
           subject-path: |
@@ -161,7 +160,7 @@ jobs:
             ubuntu:24.04 sh scripts/test-install.sh
 
   publish:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [linux-binary, macos-binary, macos-release-runtime, installer]
     runs-on: ubuntu-latest
     timeout-minutes: 10
