@@ -62,29 +62,13 @@ extension ScheduledLearningStoreGRDB {
       } catch {
         throw StoreError.unexpected("approval successor construction failed")
       }
-      if let existing = try Self.readCandidateArtifact(db, digest: successor.digest) {
-        guard existing == successor,
-              try Self.onlySuccessor(db, predecessor: predecessor.digest, is: successor.digest)
-        else {
-          return .rejected(.invalidOwnerControl)
-        }
-        return try Self.admit(db, artifact: existing, redactor: redactor, now: now)
-      }
-      guard try Self.hasSuccessor(db, predecessor: predecessor.digest) == false else {
-        return .rejected(.invalidOwnerControl)
-      }
-      let plan = try Self.planAdmission(
+      return try Self.admitApprovalSuccessor(
         db,
-        artifact: successor,
-        persisted: false,
+        predecessor: predecessor.digest,
+        successor: successor,
         redactor: redactor,
-        permitsClosedReplacement: true
+        now: now
       )
-      guard case .insert = plan else {
-        return Self.outcome(for: plan, artifact: successor)
-      }
-      try Self.recordCandidateArtifact(db, artifact: successor, now: now)
-      return try Self.executeAdmission(db, artifact: successor, plan: plan, now: now)
     }
   }
 
@@ -148,37 +132,13 @@ extension ScheduledLearningStoreGRDB {
       } catch {
         throw StoreError.unexpected("edit successor construction failed")
       }
-      if let existing = try Self.readCandidateArtifact(db, digest: successor.digest) {
-        guard existing == successor,
-              try Self.onlySuccessor(
-                db,
-                predecessor: context.predecessor.digest,
-                is: successor.digest
-              ),
-              try Self.sourceBindingsAreCurrent(db, artifact: existing, state: context.state),
-              try Self.trialRow(db, candidate: existing.digest) == nil
-        else {
-          return .rejected(.invalidOwnerControl)
-        }
-        return .awaitingApproval(existing)
-      }
-      guard try Self.hasSuccessor(db, predecessor: context.predecessor.digest) == false else {
-        return .rejected(.invalidOwnerControl)
-      }
-      let plan = try Self.planAdmission(
+      return try Self.recordEditSuccessor(
         db,
-        artifact: successor,
-        persisted: false,
+        successor: successor,
+        context: context,
         redactor: redactor,
-        permittedLiveCandidate: context.predecessor.digest,
-        requiresSupport: false
+        now: now
       )
-      guard case .awaitingApproval = plan else {
-        return Self.outcome(for: plan, artifact: successor)
-      }
-      _ = try Self.closeCandidateTrial(db, candidate: context.predecessor, now: now)
-      try Self.recordCandidateArtifact(db, artifact: successor, lessonSource: .ownerEdit, now: now)
-      return Self.outcome(for: plan, artifact: successor)
     }
   }
 }
@@ -209,6 +169,91 @@ private extension ScheduledLearningStoreGRDB {
       return nil
     }
     return EditContext(predecessor: predecessor, state: state, control: control, lessons: lessons)
+  }
+}
+
+// MARK: - Successor Persistence
+
+private extension ScheduledLearningStoreGRDB {
+  static func admitApprovalSuccessor(
+    _ db: Database,
+    predecessor: CandidateDigest,
+    successor: CandidateArtifact,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws -> AdmissionOutcome {
+    if let existing = try readCandidateArtifact(db, digest: successor.digest) {
+      guard existing == successor,
+            try onlySuccessor(db, predecessor: predecessor, is: successor.digest)
+      else {
+        return .rejected(.invalidOwnerControl)
+      }
+
+      return try admit(db, artifact: existing, redactor: redactor, now: now)
+    }
+
+    guard try hasSuccessor(db, predecessor: predecessor) == false else {
+      return .rejected(.invalidOwnerControl)
+    }
+
+    let plan = try planAdmission(
+      db,
+      artifact: successor,
+      persisted: false,
+      redactor: redactor,
+      permitsClosedReplacement: true
+    )
+    guard case .insert = plan else {
+      return outcome(for: plan, artifact: successor)
+    }
+
+    try recordCandidateArtifact(db, artifact: successor, now: now)
+    return try executeAdmission(db, artifact: successor, plan: plan, now: now)
+  }
+
+  static func recordEditSuccessor(
+    _ db: Database,
+    successor: CandidateArtifact,
+    context: EditContext,
+    redactor: SecretRedactor,
+    now: Date
+  ) throws -> AdmissionOutcome {
+    if let existing = try readCandidateArtifact(db, digest: successor.digest) {
+      guard existing == successor,
+            try onlySuccessor(
+              db,
+              predecessor: context.predecessor.digest,
+              is: successor.digest
+            ),
+            try sourceBindingsAreCurrent(db, artifact: existing, state: context.state),
+            try trialRow(db, candidate: existing.digest) == nil
+      else {
+        return .rejected(.invalidOwnerControl)
+      }
+
+      return .awaitingApproval(existing)
+    }
+
+    guard try hasSuccessor(db, predecessor: context.predecessor.digest) == false else {
+      return .rejected(.invalidOwnerControl)
+    }
+
+    let plan = try planAdmission(
+      db,
+      artifact: successor,
+      persisted: false,
+      redactor: redactor,
+      permittedLiveCandidate: context.predecessor.digest,
+      requiresSupport: false
+    )
+    guard case .awaitingApproval = plan else {
+      return outcome(for: plan, artifact: successor)
+    }
+
+    _ = try closeCandidateTrial(db, candidate: context.predecessor, now: now)
+    try recordCandidateArtifact(db, artifact: successor, lessonSource: .ownerEdit, now: now)
+
+    return outcome(for: plan, artifact: successor)
   }
 }
 

@@ -378,22 +378,7 @@ private extension ScheduledLearningStoreGRDB {
       }
       return .candidateAdmission(inputs: inputs, result: result)
     case ReflectionNoCandidateReceipt.kind:
-      let inputs: ReflectionNoCandidateInputs = try decodeCanonicalDecision(record.inputsJSON)
-      let result: ReflectionNoCandidateReceipt = try decodeCanonicalDecision(record.resultJSON)
-      guard isCanonicalDigest(inputs.triggerDigest.rawValue),
-            isCanonicalDigest(inputs.carrierDigest.rawValue),
-            isCanonicalDigest(result.resultDigest.rawValue),
-            let operation = try readOperation(db, id: inputs.operationID),
-            operation.jobID == state.jobID,
-            operation.epoch == state.epoch,
-            operation.phase == .reflector,
-            operation.sourceDigest == inputs.triggerDigest.rawValue,
-            operation.carrierDigest == inputs.carrierDigest,
-            operation.state == .succeeded
-      else {
-        throw ViewCorruption.invalid
-      }
-      return .reflectionNoCandidate(inputs: inputs, result: result)
+      return try reflectionDecisionDetail(db, record: record, state: state)
     case ResetReceipt.kind:
       guard let receipt = try resetReceipt(
         db,
@@ -414,5 +399,30 @@ private extension ScheduledLearningStoreGRDB {
     default:
       throw ViewCorruption.invalid
     }
+  }
+
+  static func reflectionDecisionDetail(
+    _ db: Database,
+    record: ViewDecisionRecord,
+    state: JobLearningState
+  ) throws -> LearningDecisionDetail {
+    let inputs: ReflectionNoCandidateInputs = try decodeCanonicalDecision(record.inputsJSON)
+    let result: ReflectionNoCandidateReceipt = try decodeCanonicalDecision(record.resultJSON)
+
+    guard isCanonicalDigest(inputs.triggerDigest.rawValue),
+          isCanonicalDigest(inputs.carrierDigest.rawValue),
+          isCanonicalDigest(result.resultDigest.rawValue),
+          let operation = try readOperation(db, id: inputs.operationID),
+          operation.jobID == state.jobID,
+          operation.epoch == state.epoch,
+          operation.phase == .reflector,
+          operation.sourceDigest == inputs.triggerDigest.rawValue,
+          operation.carrierDigest == inputs.carrierDigest,
+          operation.state == .succeeded
+    else {
+      throw ViewCorruption.invalid
+    }
+
+    return .reflectionNoCandidate(inputs: inputs, result: result)
   }
 }

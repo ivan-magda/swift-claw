@@ -87,8 +87,12 @@ extension ScheduledLearningStoreGRDB {
     }
     return projected
   }
+}
 
-  private static func cachedAssignment(_ db: Database, runID: Int64) throws -> CachedAssignment? {
+// MARK: - Cached Assignment Decoding
+
+private extension ScheduledLearningStoreGRDB {
+  static func cachedAssignment(_ db: Database, runID: Int64) throws -> CachedAssignment? {
     guard let row = try Row.fetchOne(
       db,
       sql: """
@@ -102,6 +106,10 @@ extension ScheduledLearningStoreGRDB {
     else {
       return nil
     }
+    return try decodeCachedAssignment(row, runID: runID)
+  }
+
+  static func decodeCachedAssignment(_ row: Row, runID: Int64) throws -> CachedAssignment {
     guard let storedRunID = SQLiteStoredValue.int64(in: row, column: "run_id"),
           storedRunID == runID,
           let trialID = SQLiteStoredValue.int64(in: row, column: "trial_id"),
@@ -143,6 +151,7 @@ extension ScheduledLearningStoreGRDB {
     let resolvedAt = resolvedRaw.value.flatMap(EpochSecondCodec.date(fromEpoch:))
     let evaluationRequired = evaluationRequiredRaw == .trueValue
     let isResolved = state == .learningOutcomeResolved
+
     if isResolved {
       guard let outcome,
             let issueCodes,
@@ -164,6 +173,7 @@ extension ScheduledLearningStoreGRDB {
         throw StoreError.unexpected("assignment \(runID) has an invalid unresolved cache shape")
       }
     }
+
     return CachedAssignment(
       identity: TrialAssignmentIdentity(
         trial: LearningTrialIdentity(
@@ -185,7 +195,7 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  private static func validateAssignmentIdentity(
+  static func validateAssignmentIdentity(
     _ db: Database,
     cached: CachedAssignment,
     trial: LearningTrial
@@ -207,7 +217,7 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  private static func cacheMatches(_ cached: CachedAssignment, projected: TrialAssignment) -> Bool {
+  static func cacheMatches(_ cached: CachedAssignment, projected: TrialAssignment) -> Bool {
     guard cached.identity == projected.identity,
           cached.assignedAt == projected.assignedAt,
           cached.state == projected.state
@@ -224,7 +234,7 @@ extension ScheduledLearningStoreGRDB {
       && cached.feedbackRevision == evidence.effectiveFeedbackRevision && cached.resolvedAt != nil
   }
 
-  private static func persistAssignment(
+  static func persistAssignment(
     _ db: Database,
     cached: CachedAssignment,
     assignment: TrialAssignment
@@ -261,7 +271,7 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  private static func withResolvedAt(
+  static func withResolvedAt(
     _ assignment: TrialAssignment,
     _ resolvedAt: Date?
   ) -> TrialAssignment {
@@ -274,7 +284,7 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  private static func issueCodesMatchOutcome(
+  static func issueCodesMatchOutcome(
     _ issueCodes: [String],
     outcome: TrialOutcomeKind
   ) -> Bool {
@@ -289,8 +299,8 @@ extension ScheduledLearningStoreGRDB {
 
 // MARK: - Authoritative Projection
 
-extension ScheduledLearningStoreGRDB {
-  private static func projectAssignment(
+private extension ScheduledLearningStoreGRDB {
+  static func projectAssignment(
     _ db: Database,
     cached: CachedAssignment,
     trial: LearningTrial,
@@ -332,8 +342,7 @@ extension ScheduledLearningStoreGRDB {
     case .failed, .failedNoCall:
       let feedback = try assignmentFeedback(
         db,
-        jobID: trial.jobID,
-        epoch: trial.epoch,
+        trial: trial,
         runIDs: [runID],
         evaluationRuns: [:],
         currentRevision: currentState.feedbackRevision
@@ -361,8 +370,7 @@ extension ScheduledLearningStoreGRDB {
       }
       let feedback = try assignmentFeedback(
         db,
-        jobID: trial.jobID,
-        epoch: trial.epoch,
+        trial: trial,
         runIDs: [runID],
         evaluationRuns: [evaluation.digest.rawValue: runID],
         currentRevision: currentState.feedbackRevision
@@ -382,7 +390,7 @@ extension ScheduledLearningStoreGRDB {
     }
   }
 
-  private static func unresolvedAssignment(
+  static func unresolvedAssignment(
     _ cached: CachedAssignment,
     state: TrialAssignmentState
   ) -> TrialAssignment {
@@ -395,7 +403,7 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  private static func resolvedAssignment(
+  static func resolvedAssignment(
     _ cached: CachedAssignment,
     effective: ResolvedOutcome,
     evaluationDigest: EvaluationDigest?,
@@ -433,18 +441,17 @@ extension ScheduledLearningStoreGRDB {
     )
   }
 
-  private static func assignmentFeedback(
+  static func assignmentFeedback(
     _ db: Database,
-    jobID: Int64,
-    epoch: LearningEpoch,
+    trial: LearningTrial,
     runIDs: Set<Int64>,
     evaluationRuns: [String: Int64],
     currentRevision: FeedbackRevision
   ) throws -> [StoredFeedbackProjection] {
     let feedback = try storedFeedback(
       db,
-      jobID: jobID,
-      epoch: epoch,
+      jobID: trial.jobID,
+      epoch: trial.epoch,
       runIDs: runIDs,
       evaluationRuns: evaluationRuns
     )

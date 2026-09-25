@@ -36,31 +36,12 @@ extension LearningHandlers {
       chatID: message.chatID,
       expiresAt: now().addingTimeInterval(EvidenceWindow.maximumAge)
     )
-    let markup = FeedbackKeyboard.markup(rows: [
-      [
-        FeedbackKeyboard.Button(
-          text: "Roll back promotion",
-          nonce: nonce,
-          action: .promotionRollback
-        ),
-      ],
-    ])
-    let safe = redactor.redact(LearningSurface.render(view, style: .detail))
-    let parts = ReplySplitter.split(
-      text: safe,
-      limit: TelegramMessageLimits.maxPlainMessageCharacters
+    let chunks = promotionReplyChunks(
+      view: view,
+      updateID: rawUpdate.updateID,
+      chatID: message.chatID,
+      nonce: nonce
     )
-    let subject = SHA256Digest.hex("learning-command/\(rawUpdate.updateID)")
-    let chunks = parts.enumerated().map { index, text in
-      LearningNoticeChunk(
-        subjectDigest: subject,
-        ordinal: index,
-        chatID: message.chatID,
-        payload: text,
-        payloadHash: ContentHash.fnv1a(text),
-        replyMarkup: index == parts.count - 1 ? markup : nil
-      )
-    }
     let outcome = try await replies.perform(
       "promotion reply",
       updateID: rawUpdate.updateID,
@@ -81,6 +62,45 @@ extension LearningHandlers {
       return replies.skipDuplicate(updateID: rawUpdate.updateID)
     case .stale:
       return nil
+    }
+  }
+}
+
+// MARK: - Promotion Reply Chunks
+
+private extension LearningHandlers {
+  func promotionReplyChunks(
+    view: [JobLearningView],
+    updateID: Int64,
+    chatID: Int64,
+    nonce: String
+  ) -> [LearningNoticeChunk] {
+    let markup = FeedbackKeyboard.markup(rows: [
+      [
+        FeedbackKeyboard.Button(
+          text: "Roll back promotion",
+          nonce: nonce,
+          action: .promotionRollback
+        ),
+      ],
+    ])
+
+    let safe = redactor.redact(LearningSurface.render(view, style: .detail))
+    let parts = ReplySplitter.split(
+      text: safe,
+      limit: TelegramMessageLimits.maxPlainMessageCharacters
+    )
+    let subject = SHA256Digest.hex("learning-command/\(updateID)")
+
+    return parts.enumerated().map { index, text in
+      LearningNoticeChunk(
+        subjectDigest: subject,
+        ordinal: index,
+        chatID: chatID,
+        payload: text,
+        payloadHash: ContentHash.fnv1a(text),
+        replyMarkup: index == parts.count - 1 ? markup : nil
+      )
     }
   }
 }

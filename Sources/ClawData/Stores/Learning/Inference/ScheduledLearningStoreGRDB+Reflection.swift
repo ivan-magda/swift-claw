@@ -345,31 +345,7 @@ extension ScheduledLearningStoreGRDB {
       else {
         return []
       }
-      let rows = try Row.fetchAll(
-        db,
-        sql: """
-          SELECT evidence_digest, compatibility_digest FROM (
-            SELECT evaluation.evidence_digest, evaluation.compatibility_digest,
-              ROW_NUMBER() OVER (PARTITION BY evaluation.compatibility_digest
-                ORDER BY binding.occurrence_at DESC, binding.run_id DESC) AS position
-            FROM learning_evaluations AS evaluation
-            JOIN run_learning_bindings AS binding ON binding.run_id = evaluation.run_id
-            WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
-              AND binding.stable_digest = ? AND binding.trial_id IS NULL
-              AND binding.occurrence_at >= ? AND binding.occurrence_at <= ?
-              AND evaluation.created_at <= ?
-          ) WHERE position <= ? ORDER BY compatibility_digest, position DESC
-          """,
-        arguments: [
-          jobID,
-          state.epoch.value,
-          state.stableDigest.rawValue,
-          EpochSecondCodec.epoch(now.addingTimeInterval(-EvidenceWindow.maximumAge)),
-          EpochSecondCodec.epoch(now),
-          EpochSecondCodec.epoch(now),
-          EvidenceWindow.maximumCount,
-        ]
-      )
+      let rows = try Self.workflowTriggerRows(db, jobID: jobID, state: state, now: now)
       let grouped = Dictionary(grouping: rows) { row in
         row["compatibility_digest"] as String
       }
@@ -412,6 +388,43 @@ extension ScheduledLearningStoreGRDB {
         return trigger
       }
     }
+  }
+}
+
+// MARK: - Workflow Trigger Sources
+
+private extension ScheduledLearningStoreGRDB {
+  static func workflowTriggerRows(
+    _ db: Database,
+    jobID: Int64,
+    state: JobLearningState,
+    now: Date
+  ) throws -> [Row] {
+    try Row.fetchAll(
+      db,
+      sql: """
+        SELECT evidence_digest, compatibility_digest FROM (
+          SELECT evaluation.evidence_digest, evaluation.compatibility_digest,
+            ROW_NUMBER() OVER (PARTITION BY evaluation.compatibility_digest
+              ORDER BY binding.occurrence_at DESC, binding.run_id DESC) AS position
+          FROM learning_evaluations AS evaluation
+          JOIN run_learning_bindings AS binding ON binding.run_id = evaluation.run_id
+          WHERE evaluation.job_id = ? AND evaluation.learning_epoch = ?
+            AND binding.stable_digest = ? AND binding.trial_id IS NULL
+            AND binding.occurrence_at >= ? AND binding.occurrence_at <= ?
+            AND evaluation.created_at <= ?
+        ) WHERE position <= ? ORDER BY compatibility_digest, position DESC
+        """,
+      arguments: [
+        jobID,
+        state.epoch.value,
+        state.stableDigest.rawValue,
+        EpochSecondCodec.epoch(now.addingTimeInterval(-EvidenceWindow.maximumAge)),
+        EpochSecondCodec.epoch(now),
+        EpochSecondCodec.epoch(now),
+        EvidenceWindow.maximumCount,
+      ]
+    )
   }
 }
 

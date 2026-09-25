@@ -41,23 +41,7 @@ extension LearningRetentionSnapshot {
       }
       retainSubject(target, in: &retained)
     }
-    for operation in operations {
-      let state = LearningOperationState(rawValue: operation["state"])
-      guard state == .pending || state == .claimed || state == .started else {
-        continue
-      }
-      retained.operations.insert(operation["operation_id"])
-      if (operation["phase"] as String) == LearningPhase.reflector.rawValue {
-        // Before its result exists, a reflector has no candidate manifest. Its current job/epoch
-        // evidence and feedback are the only durable superset of that in-flight carrier's sources.
-        for row in evidence where sameJobEpoch(row, operation) {
-          retained.runs.insert(row["run_id"])
-        }
-        for row in feedback where sameJobEpoch(row, operation) {
-          retained.feedback.insert(row["event_id"])
-        }
-      }
-    }
+    retainLiveOperations(&retained)
     return retained
   }
 
@@ -138,6 +122,33 @@ extension LearningRetentionSnapshot {
         retained.lessons.insert(
           LearningRetentionLesson(jobID: jobID, digest: candidate["replacement_digest"])
         )
+      }
+    }
+  }
+}
+
+// MARK: - Live Operation Roots
+
+private extension LearningRetentionSnapshot {
+  func retainLiveOperations(_ retained: inout LearningRetentionReferences) {
+    for operation in operations {
+      let state = LearningOperationState(rawValue: operation["state"])
+
+      guard state == .pending || state == .claimed || state == .started else {
+        continue
+      }
+
+      retained.operations.insert(operation["operation_id"])
+      if (operation["phase"] as String) == LearningPhase.reflector.rawValue {
+        // Before its result exists, a reflector has no candidate manifest. Its current job/epoch
+        // evidence and feedback are the only durable superset of that in-flight carrier's sources.
+        for row in evidence where sameJobEpoch(row, operation) {
+          retained.runs.insert(row["run_id"])
+        }
+
+        for row in feedback where sameJobEpoch(row, operation) {
+          retained.feedback.insert(row["event_id"])
+        }
       }
     }
   }
@@ -253,28 +264,7 @@ private extension LearningRetentionSnapshot {
       if kind == LearningDecisionKind.trial.rawValue
          || kind == LearningDecisionKind.rollback.rawValue
       {
-        let receipt = try ScheduledLearningStoreGRDB.decodeTerminalReceipt(row)
-        if retained.trials.contains(receipt.inputs.identity.trialID) {
-          retained.decisions.insert(id)
-        }
-        guard retained.decisions.contains(id) else {
-          continue
-        }
-        retained.trials.insert(receipt.inputs.identity.trialID)
-        retained.candidates.insert(receipt.inputs.candidateDigest.rawValue)
-        retained.runs.formUnion(receipt.cohort.map(\.runID))
-        switch receipt.record.rollbackTrigger {
-        case .ownerFeedback(let promotionID, let eventID),
-          .supportWithdrawal(let promotionID, let eventID):
-          retained.decisions.insert(promotionID)
-          retained.feedback.insert(eventID)
-        case .safety(let promotionID, _, _):
-          retained.decisions.insert(promotionID)
-        case .adapter(let promotionID, _, _):
-          retained.decisions.insert(promotionID)
-        case nil:
-          break
-        }
+        try retainTerminalDecisionSources(row, id: id, retained: &retained)
       } else if kind == AdmissionReceipt.kind {
         let receipt: AdmissionReceipt = try ScheduledLearningStoreGRDB.decodeCanonicalDecision(
           row["result"]
@@ -297,6 +287,38 @@ private extension LearningRetentionSnapshot {
         retained.operations.formUnion(result.staleNoCallOperationIDs.map(\.rawValue))
         retained.operations.formUnion(result.inFlightOperationIDs.map(\.rawValue))
       }
+    }
+  }
+
+  func retainTerminalDecisionSources(
+    _ row: Row,
+    id: Int64,
+    retained: inout LearningRetentionReferences
+  ) throws {
+    let receipt = try ScheduledLearningStoreGRDB.decodeTerminalReceipt(row)
+    if retained.trials.contains(receipt.inputs.identity.trialID) {
+      retained.decisions.insert(id)
+    }
+
+    guard retained.decisions.contains(id) else {
+      return
+    }
+
+    retained.trials.insert(receipt.inputs.identity.trialID)
+    retained.candidates.insert(receipt.inputs.candidateDigest.rawValue)
+    retained.runs.formUnion(receipt.cohort.map(\.runID))
+
+    switch receipt.record.rollbackTrigger {
+    case .ownerFeedback(let promotionID, let eventID),
+      .supportWithdrawal(let promotionID, let eventID):
+      retained.decisions.insert(promotionID)
+      retained.feedback.insert(eventID)
+    case .safety(let promotionID, _, _):
+      retained.decisions.insert(promotionID)
+    case .adapter(let promotionID, _, _):
+      retained.decisions.insert(promotionID)
+    case nil:
+      break
     }
   }
 

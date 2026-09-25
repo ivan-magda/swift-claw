@@ -129,24 +129,7 @@ struct OpenAICompatibleProvider: LLMProvider {
         }
       }
 
-      // The server answered instead of inferring, so this attempt generated nothing.
-      exposure.noteProvenClean()
-      let message = redactor.redact(errorMessage(from: result.body))
-      guard Self.isRetryableStatus(result.statusCode) else {
-        throw exposure.failure(Self.headRejection(result, message: message))
-      }
-      guard attempt < config.retryBudget else {
-        // Proven clean above, so the failure carries `notStarted` and no phantom usage is debited for
-        // a reply the server rejected before generating.
-        throw exposure.failure(.retryable(status: result.statusCode, message: message))
-      }
-
-      logger.notice(
-        """
-        chat retryable status \(result.statusCode) \
-        (attempt \(attempt)/\(config.retryBudget)); retrying
-        """
-      )
+      try prepareRetry(after: result, redactor: redactor, exposure: exposure, attempt: attempt)
       try await backoff.wait(retryAfter: retryAfterDelay(from: result), attempt: attempt)
     }
   }
@@ -576,6 +559,34 @@ private extension OpenAICompatibleProvider {
 // MARK: - Retry
 
 private extension OpenAICompatibleProvider {
+  func prepareRetry(
+    after result: HTTPResult,
+    redactor: SecretRedactor,
+    exposure: ProviderAttemptExposure,
+    attempt: Int
+  ) throws {
+    // The server answered instead of inferring, so this attempt generated nothing.
+    exposure.noteProvenClean()
+    let message = redactor.redact(errorMessage(from: result.body))
+
+    guard Self.isRetryableStatus(result.statusCode) else {
+      throw exposure.failure(Self.headRejection(result, message: message))
+    }
+
+    guard attempt < config.retryBudget else {
+      // Proven clean above, so the failure carries `notStarted` and no phantom usage is debited for
+      // a reply the server rejected before generating.
+      throw exposure.failure(.retryable(status: result.statusCode, message: message))
+    }
+
+    logger.notice(
+      """
+      chat retryable status \(result.statusCode) \
+      (attempt \(attempt)/\(config.retryBudget)); retrying
+      """
+    )
+  }
+
   /// The server's `Retry-After` hint as a `Duration`, honoring the millisecond form some routes send
   /// before falling back to whole/fractional seconds. The wait itself clamps this hint, so the raw
   /// value is returned here without a ceiling of its own.

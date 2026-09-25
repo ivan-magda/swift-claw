@@ -68,8 +68,12 @@ extension ScheduledLearningStoreGRDB {
       )
     }
   }
+}
 
-  private static func decodeStoredFeedback(
+// MARK: - Feedback Decoding
+
+private extension ScheduledLearningStoreGRDB {
+  static func decodeStoredFeedback(
     _ row: Row,
     jobID: Int64,
     epoch: LearningEpoch,
@@ -96,21 +100,7 @@ extension ScheduledLearningStoreGRDB {
     else {
       throw StoreError.unexpected("assignment source holds an unreadable feedback event")
     }
-    let runID: Int64
-    switch kind {
-    case .run:
-      guard let parsed = Int64(subject), String(parsed) == subject, runIDs.contains(parsed) else {
-        throw StoreError.unexpected("run feedback subject does not match its assignment")
-      }
-      runID = parsed
-    case .evaluation:
-      guard let parsed = evaluationRuns[subject] else {
-        throw StoreError.unexpected("evaluation feedback subject does not match its assignment")
-      }
-      runID = parsed
-    case .candidate, .promotion:
-      throw StoreError.unexpected("assignment feedback has an unsupported subject")
-    }
+    let runID = try feedbackRunID(kind, subject: subject, runs: runIDs, evaluations: evaluationRuns)
     let revision = FeedbackRevision(revisionRaw)
     let event = FeedbackEvent(
       id: eventID,
@@ -148,5 +138,27 @@ extension ScheduledLearningStoreGRDB {
         signal: signal
       )
     )
+  }
+
+  static func feedbackRunID(
+    _ kind: FeedbackSubjectKind,
+    subject: String,
+    runs runIDs: Set<Int64>,
+    evaluations evaluationRuns: [String: Int64]
+  ) throws -> Int64 {
+    switch kind {
+    case .run:
+      guard let parsed = Int64(subject), String(parsed) == subject, runIDs.contains(parsed) else {
+        throw StoreError.unexpected("run feedback subject does not match its assignment")
+      }
+      return parsed
+    case .evaluation:
+      guard let parsed = evaluationRuns[subject] else {
+        throw StoreError.unexpected("evaluation feedback subject does not match its assignment")
+      }
+      return parsed
+    case .candidate, .promotion:
+      throw StoreError.unexpected("assignment feedback has an unsupported subject")
+    }
   }
 }
