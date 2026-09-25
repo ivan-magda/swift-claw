@@ -93,69 +93,25 @@ jobs:
       - name: Build release binary
         run: swift build -c release --product clawd
 
-      - name: Package macOS binary, compatibility runtime and checksums
+      - name: Package macOS binary and checksum
         run: |
           binary_directory=$(swift build -c release --show-bin-path)
-          scripts/package-macos.sh "$binary_directory/clawd" .
+          cp "$binary_directory/clawd" clawd-macos-arm64
+          shasum -a 256 clawd-macos-arm64 > clawd-macos-arm64.sha256
 
       - name: Attest provenance
         uses: actions/attest@v4.2.2
         with:
-          subject-path: |
-            clawd-macos-arm64
-            libswiftCompatibilitySpan.dylib
+          subject-path: clawd-macos-arm64
 
       - name: Upload macOS release artifacts
         uses: actions/upload-artifact@v7
         with:
           name: macos
-          path: |
-            clawd-macos-arm64*
-            libswiftCompatibilitySpan.dylib
-
-  macos-release-runtime:
-    needs: macos-binary
-    runs-on: macos-15
-    timeout-minutes: 5
-
-    steps:
-      - name: Download macOS release package
-        uses: actions/download-artifact@v8
-        with:
-          name: macos
-          path: ${{ runner.temp }}/macos-package
-
-      - name: Verify release startup on macOS 15
-        working-directory: ${{ runner.temp }}/macos-package
-        run: |
-          shasum -a 256 -c clawd-macos-arm64.sha256
-          chmod 755 clawd-macos-arm64 libswiftCompatibilitySpan.dylib
-          python3 - <<'PYTHON'
-          import subprocess
-          subprocess.run(
-              ["./clawd-macos-arm64", "--version"], env={"PATH": "/usr/bin:/bin"},
-              check=True, timeout=30,
-          )
-          PYTHON
-
-  installer:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Verify installer staging without network access
-        run: |
-          docker run --rm --network none --tmpfs /tmp:noexec \
-            -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo \
-            ubuntu:24.04 sh scripts/test-install.sh
+          path: clawd-macos-arm64*
 
   publish:
-    needs: [linux-binary, macos-binary, macos-release-runtime, installer]
+    needs: [linux-binary, macos-binary]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -213,7 +169,6 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" "${flags[@]}" \
             dist/linux/clawd-linux-x86_64 \
             dist/macos/clawd-macos-arm64 \
-            dist/macos/libswiftCompatibilitySpan.dylib \
             dist/SHA256SUMS \
             dist/clawd.env.example \
             dist/run-clawd.sh \

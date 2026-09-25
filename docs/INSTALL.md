@@ -18,14 +18,12 @@ curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/install.
 
 What the script does:
 
-- Checks the platform: macOS 15+ on Apple Silicon, or Linux x86_64 with glibc 2.38+
+- Checks the platform: macOS 26+ on Apple Silicon, or Linux x86_64 with glibc 2.38+
   (anything else gets a build-from-source pointer, and the script installs nothing).
 - Downloads the release binary, `SHA256SUMS`, the config template, `run-clawd.sh`, and
-  the service unit for your platform. On macOS, it also downloads
-  `libswiftCompatibilitySpan.dylib` when the release manifest lists it.
+  the service unit for your platform.
 - Verifies every download against `SHA256SUMS`; when the GitHub CLI is installed and
   logged in, it also verifies the build provenance attestation and aborts on mismatch.
-- Runs the downloaded executable with any bundled library before replacing an installation.
 - Installs under `~/.swift-claw` — no sudo. Re-running upgrades in place and never
   touches `clawd.env`, sealed secrets, or the database.
 - Puts `~/.swift-claw/bin` on your `PATH` by writing `~/.swift-claw/env` and sourcing it
@@ -48,34 +46,24 @@ read it, then run `sh install.sh` — or follow the manual install below.
 
 From the [latest release](https://github.com/ivan-magda/swift-claw/releases/latest),
 download the binary for your platform (`clawd-macos-arm64` or `clawd-linux-x86_64`),
-`SHA256SUMS`, and `clawd.env.example`. On macOS, also download
-`libswiftCompatibilitySpan.dylib` from that release; it must stay beside `clawd`.
-Then verify and install from `~/Downloads`:
-
-macOS:
+`SHA256SUMS`, and `clawd.env.example`. Then verify and install from your download
+directory:
 
 ```bash
 cd ~/Downloads
-sudo mkdir -p /usr/local/bin
-shasum -a 256 --ignore-missing -c SHA256SUMS &&
-  sudo install -m755 libswiftCompatibilitySpan.dylib /usr/local/bin/ &&
-  sudo install -m755 clawd-macos-arm64 /usr/local/bin/clawd
-```
+ASSET=clawd-macos-arm64                             # Linux: clawd-linux-x86_64
 
-Linux:
-
-```bash
-cd ~/Downloads
-sha256sum --ignore-missing -c SHA256SUMS &&
-  sudo install -m755 clawd-linux-x86_64 /usr/local/bin/clawd
+shasum -a 256 --ignore-missing -c SHA256SUMS &&     # Linux: sha256sum --ignore-missing -c SHA256SUMS
+  sudo install -m755 "$ASSET" /usr/local/bin/clawd
 ```
 
 Every downloaded file must print `OK`; the `&&` stops the install if verification fails.
-For older pinned macOS releases whose manifest omits the library, skip its install command.
+On a Mac without Homebrew, create the install directory first:
+`sudo mkdir -p /usr/local/bin`.
 
 - **macOS:** browser downloads carry the quarantine flag (curl downloads do not), so
-  clear it on both installed files:
-  `sudo xattr -d com.apple.quarantine /usr/local/bin/clawd /usr/local/bin/libswiftCompatibilitySpan.dylib`.
+  Gatekeeper blocks the unsigned binary until you clear it:
+  `sudo xattr -d com.apple.quarantine /usr/local/bin/clawd`.
 - **Linux:** the binary links the system SQLite (`sudo apt-get install -y libsqlite3-0`)
   and needs glibc 2.38 or newer (e.g. Ubuntu 24.04+); on older systems build from source.
 
@@ -89,26 +77,20 @@ install -m 600 clawd.env.example ~/.swift-claw/clawd.env
 
 ### Build from source
 
-Install the [pinned toolchain](CODE_STYLE.md#setup), then prepare the checkout:
+Use the [pinned toolchain](CODE_STYLE.md#setup). Linux also needs SQLite headers
+(`sudo apt-get install -y libsqlite3-dev`):
 
 ```bash
 git clone https://github.com/ivan-magda/swift-claw.git && cd swift-claw
 scripts/check-toolchain.sh
-```
-
-On macOS, package the executable with its compatibility library before installing:
-
-```bash
 swift build -c release --product clawd
 binary_directory=$(swift build -c release --show-bin-path)
-scripts/package-macos.sh "$binary_directory/clawd" .build/macos-release &&
-  sudo mkdir -p /usr/local/bin &&
-  sudo install -m755 .build/macos-release/libswiftCompatibilitySpan.dylib /usr/local/bin/ &&
-  sudo install -m755 .build/macos-release/clawd-macos-arm64 /usr/local/bin/clawd
+sudo mkdir -p /usr/local/bin
+sudo install -m755 "$binary_directory/clawd" /usr/local/bin/clawd
 ```
 
-On Linux, install SQLite headers (`sudo apt-get install -y libsqlite3-dev`) and bundle the
-Swift runtime as the release workflow does:
+To bundle the Swift runtime in a Linux source build, as the release workflow does, replace the
+build and install commands with:
 
 ```bash
 swift build --build-system native -c release --static-swift-stdlib --product clawd
@@ -128,7 +110,7 @@ the service files are under `deploy/`.
 files present in your directory, and each one must print `OK`. The install script runs
 this check for you — this section is for manual installs and extra assurance.
 
-Each executable also carries a build provenance attestation. With the
+Every binary also carries a build provenance attestation. With the
 [GitHub CLI](https://cli.github.com) installed and logged in (`gh auth login`):
 
 ```bash
@@ -255,12 +237,12 @@ Exit codes are diagnostic:
 
 ## 5. Updating
 
-**Script layout:** re-run the one-liner from section 1. It upgrades the binary, bundled library and
-service unit, preserves `clawd.env`, sealed secrets, and the database, and
+**Script layout:** re-run the one-liner from section 1. It upgrades the binary and
+service unit in place, preserves `clawd.env`, sealed secrets, and the database, and
 restarts the service if it was running.
 
-**Manual layout:** download the binary, `SHA256SUMS` and, on macOS, the compatibility library from
-the same release. Repeat the verification and installation in section 2, then restart the service
+**Manual layout:** re-download the binary and `SHA256SUMS` from the new release, re-verify
+as in section 2, `sudo install` over the old binary, and restart the service
 (`launchctl kickstart -k gui/$(id -u)/com.ivanmagda.swift-claw` on macOS,
 `systemctl --user restart swift-claw.service` on Linux).
 
@@ -270,7 +252,7 @@ binary, prints that the new install supersedes it, and shows the removal command
 
 ## 6. Uninstall
 
-**Script layout** — remove the binary, bundled library and service; keep config, secrets, and data:
+**Script layout** — remove the binary and service, keep config, secrets, and data:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ivan-magda/swift-claw/main/install.sh | sh -s -- --uninstall
@@ -292,8 +274,7 @@ custom `CLAW_STATE_ROOT` outside `~/.swift-claw` — delete that directory yours
 ```bash
 launchctl bootout gui/$(id -u)/com.ivanmagda.swift-claw
 rm ~/Library/LaunchAgents/com.ivanmagda.swift-claw.plist
-sudo rm -f /usr/local/bin/clawd /usr/local/bin/run-clawd.sh \
-  /usr/local/bin/libswiftCompatibilitySpan.dylib
+sudo rm /usr/local/bin/clawd /usr/local/bin/run-clawd.sh
 rm -rf ~/.swift-claw
 ```
 

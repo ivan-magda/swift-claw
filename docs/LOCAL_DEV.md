@@ -36,9 +36,9 @@ to find its concrete directory. For a release build:
 swift build -c release
 ```
 
-Before installing or distributing a release build, follow the [packaging recipe](INSTALL.md#build-from-source):
-macOS needs its compatibility library beside the executable; Linux bundles the Swift runtime.
-Builds link system SQLite: Linux hosts need `libsqlite3-0`; macOS includes it.
+For a Linux binary with the Swift runtime bundled, use the native-backend build command in
+[INSTALL.md](INSTALL.md#build-from-source). Builds link system SQLite: Linux hosts need
+`libsqlite3-0`; macOS includes it.
 
 ---
 
@@ -69,20 +69,12 @@ source BuildTools/lint-versions.env
 test "$(actionlint --version | sed -n '1p')" = "$CLAW_ACTIONLINT_VERSION" && actionlint
 test "$(zizmor --version)" = "zizmor $CLAW_ZIZMOR_VERSION" && zizmor .
 test "$(shellcheck --version | sed -n 's/^version: //p')" = "$CLAW_SHELLCHECK_VERSION" &&
-  shellcheck -s sh install.sh deploy/run-clawd.sh scripts/test-install.sh &&
-  shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
-    scripts/package-macos.sh
+  shellcheck -s sh install.sh deploy/run-clawd.sh &&
+  shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh
 ```
 
 Each version comparison must succeed. Formatter or toolchain changes also need `scripts/test-lint.sh`,
 a second `scripts/lint.sh --fix` with no diff, and the lint/build/test gate.
-
-Installer changes also need the disposable Docker acceptance test (it uses the container's home):
-
-```bash
-docker run --rm --network none --tmpfs /tmp:noexec \
-  -v "$PWD:/repo:ro" -w /repo ubuntu:24.04 sh scripts/test-install.sh
-```
 
 ---
 
@@ -248,7 +240,7 @@ is treated as able to exfiltrate, so its output taints the session and forces th
 call through the trifecta approval.
 
 **If the tool never appears** (calls are refused as unknown), `clawd doctor` explains why. It is
-absent — by design, fail-closed — on Linux, macOS 15, Intel macOS, with `CLAW_EXEC_ENABLED=false`,
+absent — by design, fail-closed — on Linux, Intel macOS, with `CLAW_EXEC_ENABLED=false`,
 when the `container` CLI is missing or below `1.0.0`, or when any hardening canary assertion failed.
 An unpinned `CLAW_EXEC_IMAGE` override is stricter still: config validation rejects it and the
 process exits 10, so no daemon runs at all. An owner-enabled sandbox that fails a gate prints a loud
@@ -282,7 +274,7 @@ message" reply instead of a garbage transcript. The **first** voice message in a
 its speech model (one-time, needs network, no UI); transcription itself runs offline. File-based
 transcription needs no TCC grant, entitlement, or app bundle.
 
-On Linux or macOS 15 the flag is inert and voice messages get the canned "I can't read voice
+On Linux the flag is inert and voice messages get the canned "I can't read voice
 messages yet." reply — same behavior as before the feature.
 
 The suite's engine test is opt-in (first model download needs network):

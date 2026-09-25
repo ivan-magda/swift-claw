@@ -82,10 +82,10 @@ Everything lands in `~/.swift-claw`, with no sudo. The script verifies every dow
 against the release checksums, stages the service files, and prints the next steps.
 Pin a release with `curl … | CLAWD_VERSION=v0.2.0 sh`, read the
 [script source](install.sh) first, or follow the manual route in
-[docs/INSTALL.md](docs/INSTALL.md) (macOS 15+ arm64; Linux x86_64 with glibc 2.38+).
+[docs/INSTALL.md](docs/INSTALL.md) (macOS 26+ arm64; Linux x86_64 with glibc 2.38+).
 
 Or [build from source](docs/INSTALL.md#build-from-source) with the pinned Swift 6.4 toolchain.
-The guide covers macOS compatibility-library packaging and Linux's SQLite prerequisite.
+Linux source builds also need `libsqlite3-dev`.
 
 ## Quick start
 

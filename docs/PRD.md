@@ -21,7 +21,7 @@ swift-claw is a **persistent, always-on, single-owner personal AI assistant**, c
 
 The author has already built a Claude Code–style coding agent (`swift-claude-code`): a single ReAct loop with tools, sub-agents, compaction, a task DAG, and a skill loader. swift-claw studies and builds a *different* class of system — the **persistent, multi-channel personal assistant** — keeping the proven "one reused agent loop behind thin surfaces" idea but adding the parts a coding agent lacks: a long-running gateway, durable cross-session memory, a messaging channel with an access boundary, a scheduler, and a sandboxed tool/approval layer.
 
-Why Swift: one native executable per platform, with its macOS compatibility library bundled and no separately installed runtime — no Node, Python, or Docker — plus a strong concurrency model (Swift 6 strict concurrency / actors), good performance, and first-class macOS integration, while staying Linux-portable. The executable links platform runtimes, system frameworks, and system `libsqlite3`; the Linux release bundles the Swift runtime.
+Why Swift: one self-contained binary per platform with no runtime to install underneath — no Node, Python, or Docker — plus a strong concurrency model (Swift 6 strict concurrency / actors), good performance, and first-class macOS integration, while staying Linux-portable. Not a *static* binary: it links the platform C++/Objective-C runtimes, the Swift runtime, system frameworks, and the system `libsqlite3` like any Swift binary.
 
 ## 3. Goals & non-goals
 
@@ -40,7 +40,7 @@ Why Swift: one native executable per platform, with its macOS compatibility libr
   separate-state-root deployment exception; it does not create accounts, participant roles, private
   per-user state, or a multi-tenant product.
 - **NG2.** Channels other than Telegram (no Slack/Discord/iMessage/WhatsApp). The channel layer stays abstractable, but only Telegram is implemented.
-- **NG3.** Speech *synthesis* (TTS) and an A2UI canvas or companion device "nodes." Inbound voice notes **are** transcribed, on-device, on macOS 26 (see FR-G6); on Linux and older macOS the feature is inert and they get the canned refusal.
+- **NG3.** Speech *synthesis* (TTS) and an A2UI canvas or companion device "nodes." Inbound voice notes **are** transcribed, on-device, on macOS 26 (see FR-G6); on Linux the feature is inert and they get the canned refusal.
 - **NG4.** A web UI / REST API surface (OpenAI-compatible `/v1` server, ACP server) — possible later, not v1. (Note: `status`/`doctor` and Telegram `/status` are **not** this; they are a CLI subcommand and a chat command, see FR-O2.)
 - **NG5.** Autonomous skill creation / a Curator / RL trajectory export.
 - **NG6.** Webhook mode for Telegram (long-polling only in v1; webhook is a later option).
@@ -330,7 +330,7 @@ Each criterion is backed by an **automated acceptance test** (per-requirement ve
 
 ## 11. Constraints & assumptions
 
-- Pure Swift; Swift 6 strict concurrency; SwiftPM; **platform floor macOS 15** (`Calendar.RecurrenceRule` for the Inc 4 scheduler — Linux re-validation stays inside the Inc 6 gate).
+- Pure Swift; Swift 6 strict concurrency; SwiftPM; **platform floor macOS 26**; Linux portability remains enforced by CI.
 - macOS 26 + Apple Silicon for `apple/container` (P-tools); Linux needs a separate sandbox backend.
 - One owner; Telegram Bot API; long-polling.
 - LLM access via an OpenAI-compatible endpoint the owner configures, with a pinned/allowlisted `base_url` — or, on the subscription route (FR-P5), a ChatGPT account the owner logs into, against a fixed endpoint that is a compile-time constant rather than configuration.
