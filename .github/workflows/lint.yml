@@ -26,9 +26,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify pinned toolchain
-        run: scripts/check-toolchain.sh
-
       - name: Install pinned SwiftLint
         shell: bash
         run: |

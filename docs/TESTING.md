@@ -127,8 +127,8 @@ The `.build` cache key includes the revision so successful builds refresh compil
 prefixes match the toolchain, package manifest, dependency lockfile, and workflow configuration;
 changing one of these starts a new compatible cache. The first such build is cold.
 
-CI runs tests and canonical lint on macOS and Linux with the [pinned toolchain](CODE_STYLE.md#setup).
-Tests use the default build backend; release smoke checks follow the
+CI runs tests on macOS and Linux, and canonical lint on Linux, with the
+[pinned toolchain](CODE_STYLE.md#setup). Tests use the default build backend; release checks follow the
 [deployment build policy](ARCHITECTURE.md#17-deployment--portability).
 
 ## 7. Readability: DAMP and DRY are not opposites

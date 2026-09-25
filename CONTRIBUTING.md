@@ -55,7 +55,7 @@ Day-to-day commands, including how to run the daemon locally, live in
 
 - A linked issue with an agreed approach (except trivial fixes).
 - For Swift changes, `scripts/lint.sh`, then `swift build`, then `swift test` green.
-  CI runs the tests and lint gate on macOS and Linux. For documentation-only
+  CI runs tests on macOS and Linux, and the lint gate on Linux. For documentation-only
   changes, check affected links, examples, and template syntax as applicable.
 - Tests for behavior changes, structured as Given-When-Then
   (`// given` / `// when` / `// then`). [docs/TESTING.md](docs/TESTING.md) is
