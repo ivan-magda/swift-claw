@@ -23,7 +23,7 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
 
 ## Features
 
-- **One daemon. Your machine.** Run your always-on personal assistant as a single Swift
+- **One binary. Your machine.** Run your always-on personal assistant as a single Swift
   daemon, with persistent state stored on hardware you own.
 - **Coding tasks from chat.** Opt in to Coder to delegate an approved task from your DM or a
   configured group topic to your native Codex installation, then receive a structured result card
