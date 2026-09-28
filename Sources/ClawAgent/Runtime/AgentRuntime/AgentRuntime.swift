@@ -250,31 +250,16 @@ extension AgentRuntime {
       )
     }
 
-    // The mid-dispatch wall-clock exit: the round's provider call already returned and its
-    // intermediate row was recorded above under this same `callID`, so the conservative estimate this
-    // books is idempotent on that identity — it degrades the turn without re-debiting the round. The
-    // other two exits are handled elsewhere and account differently: the pre-send exit writes no row
-    // (the call provably never issued), and a deadline that wins during the send surfaces as a thrown
-    // cancellation marker the generic failure path classifies by its accounting disposition.
-    func deadlineDegradation(_ callID: ProviderCallID) -> TurnResult {
-      .degraded(
-        .providerUnavailable,
-        usage: active.accountant.conservativeRow(
-          callID: callID,
-          context: wire,
-          tools: definitions,
-          observedCompletionTokens: 0,
-          runID: runID,
-          sessionID: sessionID
-        )
-      )
-    }
-
     // The wall-clock deadline is left per-segment by construction — it is recomputed at each
     // `runTurn` entry above; only the round count needs to account for rounds already consumed.
     let priorRounds = carryOver?.rounds ?? 0
     for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
-      let callID = providerCallIDGenerator.next()
+      let plan = RoundPlan(
+        index: roundTripIndex,
+        callID: providerCallIDGenerator.next(),
+        wire: wire,
+        turn: turn
+      )
       // Scoped to this round-trip: when a re-issue on the next route also fails, the reported kind is
       // the one the round-trip started with, because "your plan quota is out" is the actionable fact
       // rather than whatever the fallback then said about itself. A later round-trip failing on the
@@ -374,13 +359,8 @@ extension AgentRuntime {
             return outcome(
               .degraded(
                 .providerUnavailable,
-                usage: active.accountant.reconciledRow(
-                  for: response,
-                  callID: callID,
-                  context: wire,
-                  tools: definitions,
-                  runID: runID,
-                  sessionID: sessionID
+                usage: reconciledUsage(
+                  for: AnsweredRound(plan: plan, response: response, accountant: active.accountant)
                 )
               ),
               failureCause: .modelIdentityMismatch
@@ -393,13 +373,8 @@ extension AgentRuntime {
             return outcome(
               .degraded(
                 .providerUnavailable,
-                usage: active.accountant.reconciledRow(
-                  for: response,
-                  callID: callID,
-                  context: wire,
-                  tools: definitions,
-                  runID: runID,
-                  sessionID: sessionID
+                usage: reconciledUsage(
+                  for: AnsweredRound(plan: plan, response: response, accountant: active.accountant)
                 )
               ),
               failureCause: .localOutputLimit
@@ -418,10 +393,7 @@ extension AgentRuntime {
             return outcome(
               failureOutcome(
                 error,
-                callID: callID,
-                context: wire,
-                runID: runID,
-                sessionID: sessionID,
+                plan: plan,
                 accountant: active.accountant,
                 degradationKind: reportedKind
               ),
@@ -467,26 +439,12 @@ extension AgentRuntime {
         routeNotice = await primaryRecoveryNotice(binding: active.binding)
       }
 
+      let round = AnsweredRound(plan: plan, response: response, accountant: active.accountant)
       guard response.toolCalls.isEmpty == false else {
-        let classified = classify(
-          response: response,
-          callID: callID,
-          context: wire,
-          runID: runID,
-          sessionID: sessionID,
-          accountant: active.accountant
-        )
-        return outcome(classified)
+        return outcome(classify(round))
       }
 
-      let intermediate = active.accountant.reconciledRow(
-        for: response,
-        callID: callID,
-        context: wire,
-        tools: definitions,
-        runID: runID,
-        sessionID: sessionID
-      )
+      let intermediate = reconciledUsage(for: round)
       do {
         try usageStore.recordUsage(intermediate)
       } catch StoreError.diskFull {
@@ -514,7 +472,7 @@ extension AgentRuntime {
         }
 
         guard deadline > now() else {
-          return outcome(deadlineDegradation(callID), failureCause: .deadline)
+          return outcome(deadlineDegradation(round), failureCause: .deadline)
         }
 
         let context = ToolDispatchContext(

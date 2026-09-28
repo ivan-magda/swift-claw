@@ -19,40 +19,25 @@ extension AgentRuntime {
   ///
   /// `accountant` is bound to the route that made this call. `degradationKind` is selected before
   /// accounting and may preserve the primary route's actionable failure when its fallback also fails.
-  func failureOutcome(  // swiftlint:disable:this function_parameter_count
+  func failureOutcome(
     _ error: any Error,
-    callID: ProviderCallID,
-    context: [ChatMessage],
-    runID: Int64,
-    sessionID: Int64,
+    plan: RoundPlan,
     accountant: ProviderUsageAccountant,
     degradationKind: DegradationKind
   ) -> TurnResult {
     if let racedSuccess = error as? RacedDeadlineSuccess {
       // A real response landed alongside a won deadline: its usage is authoritative
-      return .degraded(
-        degradationKind,
-        usage: accountant.reconciledRow(
-          for: racedSuccess.response,
-          callID: callID,
-          context: context,
-          tools: toolDefinitions,
-          runID: runID,
-          sessionID: sessionID
-        )
-      )
+      let round = AnsweredRound(plan: plan, response: racedSuccess.response, accountant: accountant)
+      return .degraded(degradationKind, usage: reconciledUsage(for: round))
     }
 
     if let cancellation = error as? ProviderInferenceCancellation {
       return .degraded(
         degradationKind,
-        usage: accountant.conservativeRow(
-          callID: callID,
-          context: context,
-          tools: toolDefinitions,
-          observedCompletionTokens: cancellation.observedCompletionTokens,
-          runID: runID,
-          sessionID: sessionID
+        usage: conservativeUsage(
+          for: plan,
+          accountant: accountant,
+          observedCompletionTokens: cancellation.observedCompletionTokens
         )
       )
     }
@@ -67,39 +52,21 @@ extension AgentRuntime {
     case .mayHaveStarted(let observedCompletionTokens):
       return .degraded(
         degradationKind,
-        usage: accountant.conservativeRow(
-          callID: callID,
-          context: context,
-          tools: toolDefinitions,
-          observedCompletionTokens: observedCompletionTokens,
-          runID: runID,
-          sessionID: sessionID
+        usage: conservativeUsage(
+          for: plan,
+          accountant: accountant,
+          observedCompletionTokens: observedCompletionTokens
         )
       )
     }
   }
 
-  /// Maps a returned response to a result, debiting the reconciled usage (real, or estimated when
+  /// Maps an answered round to a result, debiting its reconciled usage (real, or estimated when
   /// the provider omits it): non-empty content → `.completed`; empty + `finishReason == "length"` →
-  /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`. The row is
-  /// minted through the passed accountant (provider cost wins), the same route an intermediate
-  /// round-trip books through — that accountant belongs to the route that produced this response.
-  func classify(  // swiftlint:disable:this function_parameter_count
-    response: ChatResponse,
-    callID: ProviderCallID,
-    context: [ChatMessage],
-    runID: Int64,
-    sessionID: Int64,
-    accountant: ProviderUsageAccountant
-  ) -> TurnResult {
-    let usage = accountant.reconciledRow(
-      for: response,
-      callID: callID,
-      context: context,
-      tools: toolDefinitions,
-      runID: runID,
-      sessionID: sessionID
-    )
+  /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`.
+  func classify(_ round: AnsweredRound) -> TurnResult {
+    let usage = reconciledUsage(for: round)
+    let response = round.response
 
     if !response.content.isEmpty {
       return .completed(
@@ -114,5 +81,56 @@ extension AgentRuntime {
     }
 
     return .degraded(.providerUnavailable, usage: usage)
+  }
+
+  /// The mid-dispatch wall-clock exit. The round's provider call already returned and its
+  /// intermediate row was recorded under this same call id, so the conservative estimate this books
+  /// is idempotent on that identity: it degrades the turn without re-debiting the round. The other
+  /// two exits account differently: the pre-send exit writes no row (the call provably never
+  /// issued), and a deadline that wins during the send surfaces as a thrown cancellation marker the
+  /// generic failure path classifies by its accounting disposition.
+  func deadlineDegradation(_ round: AnsweredRound) -> TurnResult {
+    .degraded(
+      .providerUnavailable,
+      usage: conservativeUsage(
+        for: round.plan,
+        accountant: round.accountant,
+        observedCompletionTokens: 0
+      )
+    )
+  }
+}
+
+// MARK: - Round Usage
+
+extension AgentRuntime {
+  /// The row an answered round owes: provider counts are truth, a missing count is estimated, and
+  /// provider cost wins.
+  func reconciledUsage(for round: AnsweredRound) -> ProviderUsage {
+    round.accountant.reconciledRow(
+      for: round.response,
+      callID: round.plan.callID,
+      context: round.plan.wire,
+      tools: toolDefinitions,
+      runID: round.plan.turn.scope.runID,
+      sessionID: round.plan.turn.scope.sessionID
+    )
+  }
+
+  /// The row a round owes when no authoritative usage came back: an estimated prompt plus the
+  /// larger of the output reservation and any completion already observed.
+  func conservativeUsage(
+    for plan: RoundPlan,
+    accountant: ProviderUsageAccountant,
+    observedCompletionTokens: Int
+  ) -> ProviderUsage {
+    accountant.conservativeRow(
+      callID: plan.callID,
+      context: plan.wire,
+      tools: toolDefinitions,
+      observedCompletionTokens: observedCompletionTokens,
+      runID: plan.turn.scope.runID,
+      sessionID: plan.turn.scope.sessionID
+    )
   }
 }
