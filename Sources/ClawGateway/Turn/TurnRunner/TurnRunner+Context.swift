@@ -14,27 +14,32 @@ extension TurnRunner {
     let todayUSD: Double
     let proactiveTodayUSD: Double
 
-    /// The agent request for one segment of the run these inputs were loaded for. The session's
-    /// real taint rides along because the gate reads `(session ∪ run)`: a session a prior turn
-    /// tainted keeps the exfiltration gate armed from this run's very first tool call.
-    func turnRequest(
+    /// Who one segment of the run these inputs were loaded for serves, and where its progress goes.
+    func scope(
       runID: Int64,
       sessionID: Int64,
       chatID: Int64,
       origin: RunOrigin,
-      requesterUserID: Int64?,
-      carryOver: ResumeUsage? = nil
-    ) -> TurnRequest {
+      requesterUserID: Int64?
+    ) -> TurnScope {
+      TurnScope(
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
+        threadID: SessionKey.threadID(from: snapshot.sessionKey),
+        mode: SessionKey.mode(from: snapshot.sessionKey),
+        origin: origin,
+        requesterUserID: requesterUserID
+      )
+    }
+
+    /// The agent request for one segment of the run these inputs were loaded for. `carryOver` has
+    /// no default, so a resumed segment cannot drop it and restart the per-run caps from zero. The
+    /// session's real taint rides along because the gate reads `(session ∪ run)`: a session a prior
+    /// turn tainted keeps the exfiltration gate armed from this run's very first tool call.
+    func turnRequest(scope: TurnScope, carryOver: ResumeUsage?) -> TurnRequest {
       TurnRequest(
-        scope: TurnScope(
-          runID: runID,
-          sessionID: sessionID,
-          chatID: chatID,
-          threadID: SessionKey.threadID(from: snapshot.sessionKey),
-          mode: SessionKey.mode(from: snapshot.sessionKey),
-          origin: origin,
-          requesterUserID: requesterUserID
-        ),
+        scope: scope,
         context: buildResult,
         session: SessionTrust(
           isTainted: snapshot.isTainted,

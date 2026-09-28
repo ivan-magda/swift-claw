@@ -175,11 +175,14 @@ public struct TurnRunner: TurnDispatching {
     }
 
     let request = inputs.turnRequest(
-      runID: runID,
-      sessionID: sessionID,
-      chatID: chatID,
-      origin: origin,
-      requesterUserID: execution?.requesterUserID
+      scope: inputs.scope(
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
+        origin: origin,
+        requesterUserID: execution?.requesterUserID
+      ),
+      carryOver: nil
     )
     let outcome = try await agent.runTurn(request)
 
@@ -235,11 +238,13 @@ public struct TurnRunner: TurnDispatching {
     }
 
     let request = inputs.turnRequest(
-      runID: runID,
-      sessionID: sessionID,
-      chatID: chatID,
-      origin: origin,
-      requesterUserID: execution?.requesterUserID,
+      scope: inputs.scope(
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
+        origin: origin,
+        requesterUserID: execution?.requesterUserID
+      ),
       carryOver: carryOver
     )
     let outcome: TurnOutcome
