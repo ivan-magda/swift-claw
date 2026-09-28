@@ -3,7 +3,7 @@ import Foundation
 
 // MARK: - Result Classification
 
-// Internal rather than `private` so the round-trip loop in `AgentRuntime.swift` can reach these.
+// Internal rather than `private` so the round phases in the sibling runtime files can reach these.
 // They take the accountant rather than reading one off the runtime, so each call is charged under
 // the policies of the route that issued it.
 extension AgentRuntime {
@@ -132,5 +132,34 @@ extension AgentRuntime {
       runID: plan.turn.scope.runID,
       sessionID: plan.turn.scope.sessionID
     )
+  }
+}
+
+// MARK: - Intermediate Usage
+
+extension AgentRuntime {
+  /// Records a tool-proposing round's usage as soon as the round returns; a final answer's row rides
+  /// the gateway's commit instead. A full disk throws to the gateway, and any other write failure
+  /// stops the turn before another provider call.
+  func recordIntermediateUsage(
+    _ round: AnsweredRound,
+    ledger: inout RunSpendLedger,
+    attempts: inout AttemptRuntimeState
+  ) throws -> TurnStep<ProviderUsage> {
+    let usage = reconciledUsage(for: round)
+    do {
+      try usageStore.recordUsage(usage)
+    } catch StoreError.diskFull {
+      throw StoreError.diskFull
+    } catch {
+      round.plan.turn.log.warning("mid-run usage write failed; halting provider calls: \(error)")
+      return .exit(TurnExit(.degraded(.accountingFailed, usage: nil)))
+    }
+
+    ledger.record(usage)
+    if round.response.usage == nil {
+      attempts.recordMissingUsage(usage)
+    }
+    return .proceed(usage)
   }
 }

@@ -31,15 +31,15 @@ public struct AgentRuntime: Sendable {
   let budget: RunBudget
   let toolDefinitions: [ToolDefinition]
 
-  private let toolDispatcher: (any ToolDispatching)?
+  let toolDispatcher: (any ToolDispatching)?
 
-  private let usageStore: any UsageStore
+  let usageStore: any UsageStore
   let auditLog: any AuditLog
   /// Mints the identity each round-trip's usage row is recorded under.
   ///
   /// Injected so a test can pin the identities a run records rather than assert against a random
   /// UUID.
-  private let providerCallIDGenerator: any ProviderCallIDGenerating
+  let providerCallIDGenerator: any ProviderCallIDGenerating
   /// Developer-facing diagnostics (swift-log).
   ///
   /// Distinct from `auditLog`, which is the durable business/security trail. Defaults to a no-op so
@@ -47,7 +47,7 @@ public struct AgentRuntime: Sendable {
   let logger: Logger
   /// Injected so tests can script pacing (deadline, backoff) instead of waiting on wall-clock.
   let clock: any Clock<Duration>
-  private let now: @Sendable () -> ContinuousClock.Instant
+  let now: @Sendable () -> ContinuousClock.Instant
 
   public init(
     roster: ProviderRoster,
@@ -136,7 +136,6 @@ public struct AgentRuntime: Sendable {
 }
 
 extension AgentRuntime {
-  // swiftlint:disable function_parameter_count function_body_length cyclomatic_complexity
   /// Runs the bounded provider and tool loop using an assembled context.
   ///
   /// Each round checks budgets and policy before dispatch and records intermediate usage and audit
@@ -162,7 +161,7 @@ extension AgentRuntime {
   /// - Returns: The run-segment result, including approval suspension, plus the tool exchanges,
   ///   accumulated trust flags, and route notice needed by the gateway.
   /// - Throws: `StoreError.diskFull` when a required intermediate write cannot fit on disk.
-  public func runTurn(
+  public func runTurn(  // swiftlint:disable:this function_parameter_count
     runID: Int64,
     sessionID: Int64,
     chatID: Int64,
@@ -180,17 +179,13 @@ extension AgentRuntime {
     requesterUserID: Int64? = nil
   ) async throws -> TurnOutcome {
     let deadline = now() + .seconds(budget.wallClockDeadlineSeconds)
-    var attemptState = AttemptRuntimeState(policy: attemptPolicy)
-    let definitions = toolDefinitions
-    let fenceLabels = ToolFenceLabels(definitions: definitions)
-    var route = await TurnRoute(
+    let route = await TurnRoute(
       roster: roster,
       cooldown: cooldown,
       budget: budget,
       costResolver: costResolver,
       usageResolver: usageResolver
     )
-
     let scope = TurnScope(
       runID: runID,
       sessionID: sessionID,
@@ -212,343 +207,47 @@ extension AgentRuntime {
       origin=\(origin) \
       contextMessages=\(buildResult.messages.count) \
       streaming=\(streamingEnabled) \
-      tools=\(definitions.count)
+      tools=\(toolDefinitions.count)
       """
     )
 
-    var wire = buildResult.messages
-    var exchanges: [ToolExchange] = []
-
-    var trust = TurnTrust(
-      sessionTainted: sessionTainted,
-      sessionHasPrivateData: sessionHasPrivateData,
-      assemblyPrivateData: buildResult.hasPrivateDataAccess,
-      hasPinnedLessons: hasPinnedLessons,
-      toolDefinitions: definitions
+    var state = TurnState(
+      route: route,
+      attempts: AttemptRuntimeState(policy: attemptPolicy),
+      ledger: RunSpendLedger(
+        budget: budget,
+        origin: origin,
+        todayTokens: todayTokens,
+        todayUSD: todayUSD,
+        proactiveTodayUSD: proactiveTodayUSD,
+        carryOver: carryOver
+      ),
+      trust: TurnTrust(
+        sessionTainted: sessionTainted,
+        sessionHasPrivateData: sessionHasPrivateData,
+        assemblyPrivateData: buildResult.hasPrivateDataAccess,
+        hasPinnedLessons: hasPinnedLessons,
+        toolDefinitions: toolDefinitions
+      ),
+      transcript: TurnTranscript(wire: buildResult.messages, toolDefinitions: toolDefinitions)
     )
-
-    var pendingSuspension: PendingToolAction?
-
-    var ledger = RunSpendLedger(
-      budget: budget,
-      origin: origin,
-      todayTokens: todayTokens,
-      todayUSD: todayUSD,
-      proactiveTodayUSD: proactiveTodayUSD,
-      carryOver: carryOver
-    )
-
-    // Terminal choke-point for the RESULT paths: every `return outcome(...)` flows through here, so a
-    // turn that produces a `TurnOutcome` emits exactly one finished line (see `logFinish`). The
-    // `StoreError.diskFull` fast-path throws to the gateway instead, which logs that terminal.
-    func outcome(_ result: TurnResult, failureCause: AttemptFailureCause? = nil) -> TurnOutcome {
-      Self.logFinish(result, on: turn.log, elapsed: now() - turn.startedAt)
-      return TurnOutcome(
-        result: result,
-        exchanges: exchanges,
-        ingestedUntrusted: trust.ingestedUntrusted,
-        hadPrivateData: trust.hadPrivateData,
-        routeNotice: route.notice,
-        attemptDiagnostics: attemptState.diagnostics(failureCause: failureCause)
-      )
-    }
-
-    for roundTripIndex in ledger.roundIndices {
-      let plan = RoundPlan(
-        index: roundTripIndex,
-        callID: providerCallIDGenerator.next(),
-        wire: wire,
-        turn: turn
-      )
-      // Scoped to this round-trip: when a re-issue on the next route also fails, the reported kind is
-      // the one the round-trip started with, because "your plan quota is out" is the actionable fact
-      // rather than whatever the fallback then said about itself. A later round-trip failing on the
-      // route it is already using reports that route's own kind, so a refused credential or a
-      // transient there is never masked by a wall the turn already moved past.
-      var firstFailureKind: DegradationKind?
-
-      let preflight = route.active.accountant.preflightEstimate(context: wire, tools: definitions)
-      if case .deny(let cap) = ledger.preflight(preflight, on: route.active) {
-        return outcome(.budgetStopped(cap: cap))
-      }
-
-      guard Task.isCancelled == false else {
-        return outcome(
-          .degraded(.providerUnavailable, usage: nil),
-          failureCause: .processInterruption
-        )
-      }
-
-      let remaining = deadline - now()
-      guard remaining > .zero else {
-        turn.log.notice("round-trip \(roundTripIndex) wall-clock exhausted before send; degrading")
-        return outcome(.degraded(.providerUnavailable, usage: nil), failureCause: .deadline)
-      }
-
-      turn.log.debug(
-        """
-        round-trip \(roundTripIndex) inputTokens~=\(preflight.inputTokens) \
-        estCostUSD=\(USD.precise(preflight.costUSD))
-        """
-      )
-      if let admission = await attemptState.admission(
-        roundTripIndex: roundTripIndex,
-        priorRecordedTokens: ledger.recordedTokens,
-        priorResponsesSends: roundTripIndex - 1
-      ) {
-        if case .deny(let cap) = admission {
-          return outcome(.budgetStopped(cap: cap))
-        }
-      }
-      guard Task.isCancelled == false else {
-        return outcome(
-          .degraded(.providerUnavailable, usage: nil),
-          failureCause: .processInterruption
-        )
-      }
-      // Re-issuing on the next route is one more attempt at the SAME round-trip, never a new one:
-      // a turn that switches keeps the whole tool-call budget it started with.
-      var response: ChatResponse
-      attempts: while true {
-        let sendBudget = deadline - now()
-        guard sendBudget >= .seconds(1) else {
-          turn.log.notice(
-            "round-trip \(roundTripIndex) wall-clock cannot admit another bounded send; degrading"
-          )
-          return outcome(.degraded(.providerUnavailable, usage: nil), failureCause: .deadline)
-        }
-        let outputScope = attemptState.beginRound(outboundModel: route.active.binding.wireModel)
-        let request = ChatRequest(
-          model: route.active.binding.wireModel,
-          messages: wire,
-          maxOutputTokens: budget.maxOutputTokens,
-          tools: definitions,
-          sessionID: SessionTraceID.format(sessionID: sessionID),
-          outputScope: outputScope,
-          terminalValidationPolicy: attemptState.terminalValidationPolicy
-        )
-        if attemptState.accepts(outboundModel: request.model) == false {
-          return outcome(
-            .degraded(.providerUnavailable, usage: nil),
-            failureCause: .modelIdentityMismatch
-          )
-        }
-        do {
-          response = try await roundTrip(
-            provider: route.active.binding.provider,
-            target: scope.progressTarget,
-            request: request,
-            deadlineSeconds: Int(sendBudget.components.seconds)
-          )
-          if attemptState.observe(response: response, outboundModel: request.model) {
-            return outcome(
-              .degraded(
-                .providerUnavailable,
-                usage: reconciledUsage(
-                  for: AnsweredRound(
-                    plan: plan,
-                    response: response,
-                    accountant: route.active.accountant
-                  )
-                )
-              ),
-              failureCause: .modelIdentityMismatch
-            )
-          }
-
-          do {
-            try attemptState.finalize(response, scope: outputScope)
-          } catch {
-            return outcome(
-              .degraded(
-                .providerUnavailable,
-                usage: reconciledUsage(
-                  for: AnsweredRound(
-                    plan: plan,
-                    response: response,
-                    accountant: route.active.accountant
-                  )
-                )
-              ),
-              failureCause: .localOutputLimit
-            )
-          }
-          break attempts
-        } catch {
-          let failure = AgentFailureClassification(error: error)
-          let reportedKind = firstFailureKind ?? failure.degradationKind
-          firstFailureKind = reportedKind
-
-          guard let transition = await route.switchRoute(after: error) else {
-            turn.log.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
-            return outcome(
-              failureOutcome(
-                error,
-                plan: plan,
-                accountant: route.active.accountant,
-                degradationKind: reportedKind
-              ),
-              failureCause: failure.attemptFailureCause
-            )
-          }
-
-          let reason = failure.degradationKind.auditDecision
-          turn.log.notice(
-            """
-            route switch from=\(transition.previous) to=\(transition.successor) \
-            reason=\(reason) cooldown=\(transition.persistence)
-            """
-          )
-          try recordAudit(
-            AuditEvent(
-              actor: .system,
-              action: .providerFallback,
-              decision: reason,
-              runID: runID,
-              sessionID: sessionID,
-              ts: Date()
-            ),
-            runID: runID,
-            sessionID: sessionID
-          )
-        }
-      }
-
-      await route.recordAnswer()
-
-      let round = AnsweredRound(plan: plan, response: response, accountant: route.active.accountant)
-      guard response.toolCalls.isEmpty == false else {
-        return outcome(classify(round))
-      }
-
-      let intermediate = reconciledUsage(for: round)
-      do {
-        try usageStore.recordUsage(intermediate)
-      } catch StoreError.diskFull {
-        throw StoreError.diskFull
-      } catch {
-        turn.log.warning("mid-run usage write failed; halting provider calls: \(error)")
-        return outcome(.degraded(.accountingFailed, usage: nil))
-      }
-      ledger.record(intermediate)
-      if response.usage == nil {
-        attemptState.recordMissingUsage(intermediate)
-      }
-
-      await typingIndicator.sendTyping(chatID: chatID, messageThreadID: threadID)
-      var observations: [ToolObservation] = []
-      for call in response.toolCalls {
-        guard !Task.isCancelled else {
-          break
-        }
-
-        guard ledger.admitToolCall() else {
-          return outcome(.budgetStopped(cap: BudgetGate.perRunToolCallCap))
-        }
-
-        guard deadline > now() else {
-          return outcome(deadlineDegradation(round), failureCause: .deadline)
-        }
-
-        let context = trust.dispatchContext(
-          for: call,
-          scope: scope,
-          approvalAlreadyPending: pendingSuspension != nil
-        )
-
-        guard let toolDispatcher else {
-          observations.append(
-            ToolObservation(
-              callID: call.id,
-              toolName: call.name,
-              content: "No tools are available.",
-              status: .error,
-              ingestedUntrusted: false
-            )
-          )
-          continue
-        }
-
-        turn.log.debug("tool \(call.name) invoked")
-        let toolStart = now()
-        let dispatched = await toolDispatcher.dispatch(call: call, context: context)
-        turn.log.debug(
-          """
-          tool \(call.name) done decision=\(dispatched.observation.status.rawValue) \
-          bytes=\(dispatched.observation.content.utf8.count) \
-          ms=\(Self.millis(now() - toolStart))
-          """
-        )
-
-        if pendingSuspension == nil, let recordedAction = dispatched.requiresApproval {
-          pendingSuspension = PendingToolAction(toolCallID: call.id, recorded: recordedAction)
-          continue
-        }
-
-        try recordToolAudit(for: call, outcome: dispatched, runID: runID, sessionID: sessionID)
-
-        observations.append(dispatched.observation)
-        trust.absorb(dispatched.observation)
-      }
-
-      let interrupted = Task.isCancelled
-      if interrupted {
-        let observedIDs = Set(observations.map(\.callID))
-        for call in response.toolCalls where !observedIDs.contains(call.id) {
-          observations.append(
-            ToolObservation(
-              callID: call.id,
-              toolName: call.name,
-              content: "Tool call was not executed because the run was cancelled.",
-              status: .error,
-              ingestedUntrusted: false
-            )
-          )
-        }
-      }
-
-      wire.append(
-        ChatMessage(
-          role: .assistant,
-          content: response.content,
-          toolCalls: response.toolCalls,
-          providerState: response.providerState
-        )
-      )
-      for observation in observations {
-        wire.append(
-          ChatMessage(
-            role: .tool,
-            content: LabeledContextFactory.make(
-              label: fenceLabels.label(forToolNamed: observation.toolName),
-              content: observation.content
-            ).render(),
-            toolCallID: observation.callID
-          )
-        )
-      }
-
-      exchanges.append(
-        ToolExchange(
-          assistantContent: response.content,
-          toolCalls: response.toolCalls,
-          observations: observations,
-          providerState: response.providerState
-        )
-      )
-
-      if interrupted {
-        return outcome(
-          .degraded(.providerUnavailable, usage: nil),
-          failureCause: .processInterruption
-        )
-      }
-
-      if let pending = pendingSuspension {
-        return outcome(.suspended(pending: pending, usage: intermediate))
+    for index in state.ledger.roundIndices {
+      if let exit = try await runRound(index, turn: turn, state: &state) {
+        return finish(exit, turn: turn, state: state)
       }
     }
+    return finish(.budgetStopped(cap: BudgetGate.perRunTurnCap), turn: turn, state: state)
+  }
+}
 
-    return outcome(.budgetStopped(cap: BudgetGate.perRunTurnCap))
-  }  // swiftlint:enable function_parameter_count function_body_length cyclomatic_complexity
+// MARK: - Turn Finish
+
+private extension AgentRuntime {
+  /// The single terminal choke point for returned outcomes, so each one logs exactly one finished
+  /// line. The `StoreError.diskFull` fast path throws to the gateway instead, which logs that
+  /// terminal.
+  func finish(_ exit: TurnExit, turn: TurnFrame, state: TurnState) -> TurnOutcome {
+    Self.logFinish(exit.result, on: turn.log, elapsed: now() - turn.startedAt)
+    return state.outcome(for: exit)
+  }
 }
