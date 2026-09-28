@@ -31,7 +31,7 @@ struct AgentRuntimeCarryOverTests {
     )
 
     // then — the per-run spend cap trips on the carried total; the provider is never reached
-    #expect(outcome.result == .budgetStopped(cap: "per-run spend"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunSpendCap))
     #expect(await provider.calls == 0)
   }
 
@@ -53,11 +53,17 @@ struct AgentRuntimeCarryOverTests {
   }
 
   @Test
-  func carriedOverRoundsAtTheTurnCapStillSendOneRound() async throws {
-    // given — the run suspended in its last allowed round, so the carried rounds already equal
-    // the turn cap when the approved continuation resumes
-    let provider = StubProvider(.respond(okResponse(content: "resumed")))
-    let runtime = makeRuntime(provider: provider)
+  func carriedOverRoundsAtTheTurnCapAllowExactlyOneRound() async throws {
+    // given — the carried rounds already equal the turn cap when the approved continuation
+    // resumes, and the model keeps proposing tools
+    let provider = SequenceProvider([
+      toolCallResponse([fetchProposal(id: "c1")]),
+      toolCallResponse([fetchProposal(id: "c2")]),
+    ])
+    let runtime = makeRuntime(
+      provider: provider,
+      toolDispatcher: ScriptedDispatcher(respond: okOutcome())
+    )
     let carryOver = ResumeUsage(
       rounds: RunBudget.default.maxTurns,
       toolCalls: 0,
@@ -76,8 +82,37 @@ struct AgentRuntimeCarryOverTests {
       )
     )
 
-    // then — the segment still sends one round rather than building an empty round range
-    let completed = try requireCompleted(outcome.result)
-    #expect(completed.content == "resumed")
+    // then — one round, rather than an empty round range or a fresh round budget
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunTurnCap))
+    #expect(await provider.requests.count == 1)
+  }
+
+  @Test
+  func carriedOverToolCallsCountTowardTheToolCallCap() async throws {
+    // given — the carried tool calls already reach the cap, and the resumed round proposes another
+    let provider = SequenceProvider([toolCallResponse([fetchProposal(id: "c1")])])
+    let dispatcher = ScriptedDispatcher(respond: okOutcome())
+    let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
+    let carryOver = ResumeUsage(
+      rounds: 1,
+      toolCalls: RunBudget.default.maxToolCalls,
+      tokens: 0,
+      costUSD: 0
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 1,
+        chatID: 7,
+        context: makeBuildResult(),
+        carryOver: carryOver
+      )
+    )
+
+    // then — the proposal is the call past the cap, so it never reaches the dispatcher
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunToolCallCap))
+    #expect(await dispatcher.records.isEmpty)
   }
 }

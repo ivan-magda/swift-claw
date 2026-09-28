@@ -37,7 +37,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime, origin: .scheduled, proactiveTodayUSD: 2.0)
 
     // then — denied offline, before the provider is reached
-    #expect(outcome.result == .budgetStopped(cap: "proactive per-day spend"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.proactivePerDayCap))
     #expect(await provider.requests.isEmpty)
   }
 
@@ -384,7 +384,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime)
 
     // then — round-trip 1 recorded real cost; preflight 2 tripped the accumulated per-run check
-    #expect(outcome.result == .budgetStopped(cap: "per-run spend"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunSpendCap))
     #expect(await provider.requests.count == 1)
   }
 
