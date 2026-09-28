@@ -445,7 +445,7 @@ struct TurnRunnerOutcomeTests {
     // even though the round that tripped the cap produced no answer.
     let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
     let outcome = TurnOutcome(
-      result: .budgetStopped(cap: "per-run tool-call"),
+      result: .budgetStopped(cap: BudgetGate.perRunToolCallCap),
       routeNotice: .switched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4")
     )
 
@@ -454,7 +454,7 @@ struct TurnRunnerOutcomeTests {
 
     // then
     #expect(
-      sent == "\(Degradation.budget(cap: "per-run tool-call"))\n\n"
+      sent == "\(Degradation.budget(cap: BudgetGate.perRunToolCallCap))\n\n"
         + "\(Degradation.routeSwitched(from: "openai-chatgpt/gpt-5.4", to: "gpt-5.4"))"
     )
   }
@@ -463,12 +463,15 @@ struct TurnRunnerOutcomeTests {
   func budgetStoppedWithNoNoticeIsUnchanged() async throws {
     // given
     let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
-    let outcome = TurnOutcome(result: .budgetStopped(cap: "per-run tool-call"), routeNotice: nil)
+    let outcome = TurnOutcome(
+      result: .budgetStopped(cap: BudgetGate.perRunToolCallCap),
+      routeNotice: nil
+    )
 
     // when
     let sent = try await runCommit(fixture, outcome)
 
     // then
-    #expect(sent == Degradation.budget(cap: "per-run tool-call"))
+    #expect(sent == Degradation.budget(cap: BudgetGate.perRunToolCallCap))
   }
 }
