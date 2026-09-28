@@ -24,6 +24,21 @@ extension AgentRuntime {
     return metadata
   }
 
+  /// The runtime's logger stamped with one turn's correlation fields.
+  func turnLogger(for scope: TurnScope) -> Logger {
+    var turnLog = logger
+    let metadata = Self.turnMetadata(
+      runID: scope.runID,
+      sessionID: scope.sessionID,
+      mode: scope.mode,
+      threadID: scope.threadID
+    )
+    for (key, value) in metadata {
+      turnLog[metadataKey: key] = value
+    }
+    return turnLog
+  }
+
   /// Emits the one finished line for a turn; its level reflects severity — completed → info,
   /// budget-stopped → notice (an expected guard), degraded → warning (something went wrong). Only
   /// safe fields (counts, tokens, cost, elapsed) are logged, never the reply text.

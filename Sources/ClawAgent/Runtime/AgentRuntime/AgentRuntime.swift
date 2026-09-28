@@ -193,20 +193,22 @@ extension AgentRuntime {
     )
     var routeNotice: RouteNotice?
 
-    // Turn-scoped logger: every line below inherits run/session metadata, so one `grep run=<id>`
-    // ties the round-trips, tool calls, and outcome of a single turn together.
-    var turnLog = logger
-    let metadata = Self.turnMetadata(
+    let scope = TurnScope(
       runID: runID,
       sessionID: sessionID,
+      chatID: chatID,
+      threadID: threadID,
       mode: mode,
-      threadID: threadID
+      origin: origin,
+      requesterUserID: requesterUserID
     )
-    for (key, value) in metadata {
-      turnLog[metadataKey: key] = value
-    }
-    let turnStart = now()
-    turnLog.info(
+    let turn = TurnFrame(
+      scope: scope,
+      deadline: deadline,
+      startedAt: now(),
+      log: turnLogger(for: scope)
+    )
+    turn.log.info(
       """
       turn started model=\(active.binding.configuredReference) \
       origin=\(origin) \
@@ -237,7 +239,7 @@ extension AgentRuntime {
     // turn that produces a `TurnOutcome` emits exactly one finished line (see `logFinish`). The
     // `StoreError.diskFull` fast-path throws to the gateway instead, which logs that terminal.
     func outcome(_ result: TurnResult, failureCause: AttemptFailureCause? = nil) -> TurnOutcome {
-      Self.logFinish(result, on: turnLog, elapsed: now() - turnStart)
+      Self.logFinish(result, on: turn.log, elapsed: now() - turn.startedAt)
       return TurnOutcome(
         result: result,
         exchanges: exchanges,
@@ -309,11 +311,11 @@ extension AgentRuntime {
 
       let remaining = deadline - now()
       guard remaining > .zero else {
-        turnLog.notice("round-trip \(roundTripIndex) wall-clock exhausted before send; degrading")
+        turn.log.notice("round-trip \(roundTripIndex) wall-clock exhausted before send; degrading")
         return outcome(.degraded(.providerUnavailable, usage: nil), failureCause: .deadline)
       }
 
-      turnLog.debug(
+      turn.log.debug(
         """
         round-trip \(roundTripIndex) inputTokens~=\(preflight.inputTokens) \
         estCostUSD=\(USD.precise(preflight.costUSD))
@@ -340,7 +342,7 @@ extension AgentRuntime {
       attempts: while true {
         let sendBudget = deadline - now()
         guard sendBudget >= .seconds(1) else {
-          turnLog.notice(
+          turn.log.notice(
             "round-trip \(roundTripIndex) wall-clock cannot admit another bounded send; degrading"
           )
           return outcome(.degraded(.providerUnavailable, usage: nil), failureCause: .deadline)
@@ -364,7 +366,7 @@ extension AgentRuntime {
         do {
           response = try await roundTrip(
             provider: active.binding.provider,
-            target: TurnProgressTarget(chatID: chatID, threadID: threadID, draftID: runID),
+            target: scope.progressTarget,
             request: request,
             deadlineSeconds: Int(sendBudget.components.seconds)
           )
@@ -412,7 +414,7 @@ extension AgentRuntime {
           guard let persistence = RouteSwitch.permits(error),
                 let next = roster.failover(from: active.position)
           else {
-            turnLog.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
+            turn.log.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
             return outcome(
               failureOutcome(
                 error,
@@ -440,7 +442,7 @@ extension AgentRuntime {
           )
           let reason = failure.degradationKind.auditDecision
           let successor = active.binding.configuredReference
-          turnLog.notice(
+          turn.log.notice(
             "route switch from=\(previous) to=\(successor) reason=\(reason) cooldown=\(persistence)"
           )
           routeNotice = .switched(from: previous, to: successor)
@@ -490,7 +492,7 @@ extension AgentRuntime {
       } catch StoreError.diskFull {
         throw StoreError.diskFull
       } catch {
-        turnLog.warning("mid-run usage write failed; halting provider calls: \(error)")
+        turn.log.warning("mid-run usage write failed; halting provider calls: \(error)")
         return outcome(.degraded(.accountingFailed, usage: nil))
       }
       recordedRunTokens += intermediate.promptTokens + intermediate.completionTokens
@@ -515,19 +517,6 @@ extension AgentRuntime {
           return outcome(deadlineDegradation(callID), failureCause: .deadline)
         }
 
-        let effectiveRequesterUserID: Int64?
-        if origin == .interactive {
-          if let requesterUserID {
-            effectiveRequesterUserID = requesterUserID
-          } else if mode == .direct {
-            effectiveRequesterUserID = chatID
-          } else {
-            effectiveRequesterUserID = nil
-          }
-        } else {
-          effectiveRequesterUserID = nil
-        }
-
         let context = ToolDispatchContext(
           sessionTainted: sessionTainted,
           runIngestedUntrusted: ingestedUntrusted,
@@ -536,16 +525,7 @@ extension AgentRuntime {
           sessionHasPrivateData: sessionHasPrivateData,
           approvalAlreadyPending: pendingSuspension != nil,
           mode: mode,
-          executionContext: ToolExecutionContext(
-            runID: runID,
-            sessionID: sessionID,
-            chatID: chatID,
-            requesterUserID: effectiveRequesterUserID,
-            origin: origin,
-            mode: mode,
-            toolCallID: call.id,
-            approvalID: nil
-          )
+          executionContext: scope.executionContext(toolCallID: call.id)
         )
 
         guard let toolDispatcher else {
@@ -561,10 +541,10 @@ extension AgentRuntime {
           continue
         }
 
-        turnLog.debug("tool \(call.name) invoked")
+        turn.log.debug("tool \(call.name) invoked")
         let toolStart = now()
         let dispatched = await toolDispatcher.dispatch(call: call, context: context)
-        turnLog.debug(
+        turn.log.debug(
           """
           tool \(call.name) done decision=\(dispatched.observation.status.rawValue) \
           bytes=\(dispatched.observation.content.utf8.count) \
