@@ -183,15 +183,13 @@ extension AgentRuntime {
     var attemptState = AttemptRuntimeState(policy: attemptPolicy)
     let definitions = toolDefinitions
     let fenceLabels = ToolFenceLabels(definitions: definitions)
-    // A cooling primary starts the turn on the fallback, so the round-trip is spent on a route
-    // that can answer instead of re-proving the wall.
-    var active = ActiveRoute(
-      selection: roster.startingRoute(primaryIsCooling: await cooldown?.isCooling() == true),
+    var route = await TurnRoute(
+      roster: roster,
+      cooldown: cooldown,
       budget: budget,
       costResolver: costResolver,
       usageResolver: usageResolver
     )
-    var routeNotice: RouteNotice?
 
     let scope = TurnScope(
       runID: runID,
@@ -210,7 +208,7 @@ extension AgentRuntime {
     )
     turn.log.info(
       """
-      turn started model=\(active.binding.configuredReference) \
+      turn started model=\(route.active.binding.configuredReference) \
       origin=\(origin) \
       contextMessages=\(buildResult.messages.count) \
       streaming=\(streamingEnabled) \
@@ -250,7 +248,7 @@ extension AgentRuntime {
         exchanges: exchanges,
         ingestedUntrusted: trust.ingestedUntrusted,
         hadPrivateData: trust.hadPrivateData,
-        routeNotice: routeNotice,
+        routeNotice: route.notice,
         attemptDiagnostics: attemptState.diagnostics(failureCause: failureCause)
       )
     }
@@ -269,8 +267,8 @@ extension AgentRuntime {
       // transient there is never masked by a wall the turn already moved past.
       var firstFailureKind: DegradationKind?
 
-      let preflight = active.accountant.preflightEstimate(context: wire, tools: definitions)
-      if case .deny(let cap) = ledger.preflight(preflight, on: active) {
+      let preflight = route.active.accountant.preflightEstimate(context: wire, tools: definitions)
+      if case .deny(let cap) = ledger.preflight(preflight, on: route.active) {
         return outcome(.budgetStopped(cap: cap))
       }
 
@@ -319,9 +317,9 @@ extension AgentRuntime {
           )
           return outcome(.degraded(.providerUnavailable, usage: nil), failureCause: .deadline)
         }
-        let outputScope = attemptState.beginRound(outboundModel: active.binding.wireModel)
+        let outputScope = attemptState.beginRound(outboundModel: route.active.binding.wireModel)
         let request = ChatRequest(
-          model: active.binding.wireModel,
+          model: route.active.binding.wireModel,
           messages: wire,
           maxOutputTokens: budget.maxOutputTokens,
           tools: definitions,
@@ -337,7 +335,7 @@ extension AgentRuntime {
         }
         do {
           response = try await roundTrip(
-            provider: active.binding.provider,
+            provider: route.active.binding.provider,
             target: scope.progressTarget,
             request: request,
             deadlineSeconds: Int(sendBudget.components.seconds)
@@ -347,7 +345,11 @@ extension AgentRuntime {
               .degraded(
                 .providerUnavailable,
                 usage: reconciledUsage(
-                  for: AnsweredRound(plan: plan, response: response, accountant: active.accountant)
+                  for: AnsweredRound(
+                    plan: plan,
+                    response: response,
+                    accountant: route.active.accountant
+                  )
                 )
               ),
               failureCause: .modelIdentityMismatch
@@ -361,7 +363,11 @@ extension AgentRuntime {
               .degraded(
                 .providerUnavailable,
                 usage: reconciledUsage(
-                  for: AnsweredRound(plan: plan, response: response, accountant: active.accountant)
+                  for: AnsweredRound(
+                    plan: plan,
+                    response: response,
+                    accountant: route.active.accountant
+                  )
                 )
               ),
               failureCause: .localOutputLimit
@@ -373,38 +379,26 @@ extension AgentRuntime {
           let reportedKind = firstFailureKind ?? failure.degradationKind
           firstFailureKind = reportedKind
 
-          guard let persistence = RouteSwitch.permits(error),
-                let next = roster.failover(from: active.position)
-          else {
+          guard let transition = await route.switchRoute(after: error) else {
             turn.log.warning("round-trip \(roundTripIndex) provider error (degrading): \(error)")
             return outcome(
               failureOutcome(
                 error,
                 plan: plan,
-                accountant: active.accountant,
+                accountant: route.active.accountant,
                 degradationKind: reportedKind
               ),
               failureCause: failure.attemptFailureCause
             )
           }
 
-          let previous = active.binding.configuredReference
-          await cooldown?.arm(
-            persistence: persistence,
-            retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
-          )
-          active = ActiveRoute(
-            selection: next,
-            budget: budget,
-            costResolver: costResolver,
-            usageResolver: usageResolver
-          )
           let reason = failure.degradationKind.auditDecision
-          let successor = active.binding.configuredReference
           turn.log.notice(
-            "route switch from=\(previous) to=\(successor) reason=\(reason) cooldown=\(persistence)"
+            """
+            route switch from=\(transition.previous) to=\(transition.successor) \
+            reason=\(reason) cooldown=\(transition.persistence)
+            """
           )
-          routeNotice = .switched(from: previous, to: successor)
           try recordAudit(
             AuditEvent(
               actor: .system,
@@ -420,13 +414,9 @@ extension AgentRuntime {
         }
       }
 
-      // The route answered, so a primary that had been walled off is healthy again. Only the first
-      // answering round-trip owes the notice; a later one finds the window already cleared.
-      if active.position == .primary, routeNotice == nil {
-        routeNotice = await primaryRecoveryNotice(binding: active.binding)
-      }
+      await route.recordAnswer()
 
-      let round = AnsweredRound(plan: plan, response: response, accountant: active.accountant)
+      let round = AnsweredRound(plan: plan, response: response, accountant: route.active.accountant)
       guard response.toolCalls.isEmpty == false else {
         return outcome(classify(round))
       }
