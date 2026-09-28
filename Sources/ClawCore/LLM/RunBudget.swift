@@ -85,6 +85,8 @@ public struct BudgetGate: Sendable {
   public static let perDayTokenCap = "per-day token"
   public static let perRunSpendCap = "per-run spend"
   public static let perRunInputTokenCap = "per-run input-token"
+  public static let perRunTurnCap = "per-run turn"
+  public static let perRunToolCallCap = "per-run tool-call"
 
   public let budget: RunBudget
   /// How the route is billed. Injected — never inferred from a model name — so a subscription call

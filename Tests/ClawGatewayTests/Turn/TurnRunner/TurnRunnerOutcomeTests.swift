@@ -220,7 +220,7 @@ struct TurnRunnerOutcomeTests {
     let payloads = try outboxPayloads(fixture)
     #expect(
       payloads.contains { payload in
-        payload.contains("per-run tool-call")
+        payload.contains(BudgetGate.perRunToolCallCap)
       }
     )
     let snapshot = try fixture.stores.sessionMessages.loadContextSnapshot(

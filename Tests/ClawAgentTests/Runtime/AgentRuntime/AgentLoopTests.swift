@@ -255,7 +255,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime)
 
     // then — no bonus round-trip: exactly maxTurns provider calls (§6.4)
-    #expect(outcome.result == .budgetStopped(cap: "per-run turn"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunTurnCap))
     #expect(await provider.requests.count == 2)
     #expect(outcome.ingestedUntrusted)  // executed observations still taint
   }
@@ -285,7 +285,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime)
 
     // then — the under-cap prefix (c1, c2) dispatched; c3 ended the run
-    #expect(outcome.result == .budgetStopped(cap: "per-run tool-call"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunToolCallCap))
     #expect(await dispatcher.records.map(\.call.id) == ["c1", "c2"])
   }
 
@@ -326,7 +326,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime)
 
     // then
-    #expect(outcome.result == .budgetStopped(cap: "per-run tool-call"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunToolCallCap))
     #expect(outcome.ingestedUntrusted == false)  // blocked observations do not taint (§10)
   }
 

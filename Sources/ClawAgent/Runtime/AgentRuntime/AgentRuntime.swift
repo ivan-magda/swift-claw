@@ -229,11 +229,14 @@ extension AgentRuntime {
 
     var pendingSuspension: PendingToolAction?
 
-    // Seeded from the carried-over usage (nil = a fresh run; a continuation carries the run's
-    // persisted totals so the tool-call / token / USD caps keep counting across the suspension).
-    var proposedToolCalls = carryOver?.toolCalls ?? 0
-    var recordedRunTokens = carryOver?.tokens ?? 0
-    var recordedRunUSD = carryOver?.costUSD ?? 0.0
+    var ledger = RunSpendLedger(
+      budget: budget,
+      origin: origin,
+      todayTokens: todayTokens,
+      todayUSD: todayUSD,
+      proactiveTodayUSD: proactiveTodayUSD,
+      carryOver: carryOver
+    )
 
     // Terminal choke-point for the RESULT paths: every `return outcome(...)` flows through here, so a
     // turn that produces a `TurnOutcome` emits exactly one finished line (see `logFinish`). The
@@ -250,10 +253,7 @@ extension AgentRuntime {
       )
     }
 
-    // The wall-clock deadline is left per-segment by construction — it is recomputed at each
-    // `runTurn` entry above; only the round count needs to account for rounds already consumed.
-    let priorRounds = carryOver?.rounds ?? 0
-    for roundTripIndex in 1...max(1, budget.maxTurns - priorRounds) {
+    for roundTripIndex in ledger.roundIndices {
       let plan = RoundPlan(
         index: roundTripIndex,
         callID: providerCallIDGenerator.next(),
@@ -268,22 +268,7 @@ extension AgentRuntime {
       var firstFailureKind: DegradationKind?
 
       let preflight = active.accountant.preflightEstimate(context: wire, tools: definitions)
-      if preflight.inputTokens > budget.maxInputTokens {
-        return outcome(.budgetStopped(cap: BudgetGate.perRunInputTokenCap))
-      }
-
-      let metered = active.binding.costPolicy == .metered
-      if metered, recordedRunUSD + preflight.costUSD > budget.perRunUSD {
-        return outcome(.budgetStopped(cap: BudgetGate.perRunSpendCap))
-      }
-      if case .deny(let cap) = active.gate.preflight(
-        todayTokens: todayTokens + recordedRunTokens,
-        todayUSD: todayUSD + recordedRunUSD,
-        estimatedTotalTokens: preflight.totalTokens,
-        estimatedCostUSD: preflight.costUSD,
-        origin: origin,
-        proactiveTodayUSD: proactiveTodayUSD + recordedRunUSD
-      ) {
+      if case .deny(let cap) = ledger.preflight(preflight, on: active) {
         return outcome(.budgetStopped(cap: cap))
       }
 
@@ -308,7 +293,7 @@ extension AgentRuntime {
       )
       if let admission = await attemptState.admission(
         roundTripIndex: roundTripIndex,
-        priorRecordedTokens: recordedRunTokens,
+        priorRecordedTokens: ledger.recordedTokens,
         priorResponsesSends: roundTripIndex - 1
       ) {
         if case .deny(let cap) = admission {
@@ -453,8 +438,7 @@ extension AgentRuntime {
         turn.log.warning("mid-run usage write failed; halting provider calls: \(error)")
         return outcome(.degraded(.accountingFailed, usage: nil))
       }
-      recordedRunTokens += intermediate.promptTokens + intermediate.completionTokens
-      recordedRunUSD += intermediate.costUSD
+      ledger.record(intermediate)
       if response.usage == nil {
         attemptState.recordMissingUsage(intermediate)
       }
@@ -466,9 +450,8 @@ extension AgentRuntime {
           break
         }
 
-        proposedToolCalls += 1
-        guard proposedToolCalls <= budget.maxToolCalls else {
-          return outcome(.budgetStopped(cap: "per-run tool-call"))
+        guard ledger.admitToolCall() else {
+          return outcome(.budgetStopped(cap: BudgetGate.perRunToolCallCap))
         }
 
         guard deadline > now() else {
@@ -584,6 +567,6 @@ extension AgentRuntime {
       }
     }
 
-    return outcome(.budgetStopped(cap: "per-run turn"))
+    return outcome(.budgetStopped(cap: BudgetGate.perRunTurnCap))
   }  // swiftlint:enable function_parameter_count function_body_length cyclomatic_complexity
 }
