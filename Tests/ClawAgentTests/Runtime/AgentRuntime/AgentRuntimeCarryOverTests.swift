@@ -62,4 +62,36 @@ struct AgentRuntimeCarryOverTests {
     let completed = try requireCompleted(outcome.result)
     #expect(completed.content == "hi")
   }
+
+  @Test
+  func carriedOverRoundsAtTheTurnCapStillSendOneRound() async throws {
+    // given — the run suspended in its last allowed round, so the carried rounds already equal
+    // the turn cap when the approved continuation resumes
+    let provider = StubProvider(.respond(okResponse(content: "resumed")))
+    let runtime = makeRuntime(provider: provider)
+    let carryOver = ResumeUsage(
+      rounds: RunBudget.default.maxTurns,
+      toolCalls: 0,
+      tokens: 0,
+      costUSD: 0
+    )
+
+    // when
+    let outcome = try await runtime.runTurn(
+      runID: 1,
+      sessionID: 1,
+      chatID: 7,
+      buildResult: makeBuildResult(),
+      sessionTainted: false,
+      hasPinnedLessons: false,
+      sessionHasPrivateData: false,
+      todayTokens: 0,
+      todayUSD: 0,
+      carryOver: carryOver
+    )
+
+    // then — the segment still sends one round rather than building an empty round range
+    let completed = try requireCompleted(outcome.result)
+    #expect(completed.content == "resumed")
+  }
 }
