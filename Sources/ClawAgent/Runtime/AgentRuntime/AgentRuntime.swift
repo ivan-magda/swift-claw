@@ -221,11 +221,13 @@ extension AgentRuntime {
     var wire = buildResult.messages
     var exchanges: [ToolExchange] = []
 
-    let untrustedToolMetadata = definitions.contains { definition in
-      definition.metadataProvenance == .untrusted
-    }
-    var ingestedUntrusted = untrustedToolMetadata || hasPinnedLessons
-    var runPrivateData = false
+    var trust = TurnTrust(
+      sessionTainted: sessionTainted,
+      sessionHasPrivateData: sessionHasPrivateData,
+      assemblyPrivateData: buildResult.hasPrivateDataAccess,
+      hasPinnedLessons: hasPinnedLessons,
+      toolDefinitions: definitions
+    )
 
     var pendingSuspension: PendingToolAction?
 
@@ -246,8 +248,8 @@ extension AgentRuntime {
       return TurnOutcome(
         result: result,
         exchanges: exchanges,
-        ingestedUntrusted: ingestedUntrusted,
-        hadPrivateData: buildResult.hasPrivateDataAccess || runPrivateData,
+        ingestedUntrusted: trust.ingestedUntrusted,
+        hadPrivateData: trust.hadPrivateData,
         routeNotice: routeNotice,
         attemptDiagnostics: attemptState.diagnostics(failureCause: failureCause)
       )
@@ -458,15 +460,10 @@ extension AgentRuntime {
           return outcome(deadlineDegradation(round), failureCause: .deadline)
         }
 
-        let context = ToolDispatchContext(
-          sessionTainted: sessionTainted,
-          runIngestedUntrusted: ingestedUntrusted,
-          assemblyPrivateData: buildResult.hasPrivateDataAccess,
-          runPrivateData: runPrivateData,
-          sessionHasPrivateData: sessionHasPrivateData,
-          approvalAlreadyPending: pendingSuspension != nil,
-          mode: mode,
-          executionContext: scope.executionContext(toolCallID: call.id)
+        let context = trust.dispatchContext(
+          for: call,
+          scope: scope,
+          approvalAlreadyPending: pendingSuspension != nil
         )
 
         guard let toolDispatcher else {
@@ -501,12 +498,7 @@ extension AgentRuntime {
         try recordToolAudit(for: call, outcome: dispatched, runID: runID, sessionID: sessionID)
 
         observations.append(dispatched.observation)
-        if dispatched.observation.ingestedUntrusted {
-          ingestedUntrusted = true
-        }
-        if dispatched.observation.readPrivateData {
-          runPrivateData = true
-        }
+        trust.absorb(dispatched.observation)
       }
 
       let interrupted = Task.isCancelled
