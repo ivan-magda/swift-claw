@@ -46,8 +46,8 @@ public struct SpendSnapshot: Sendable, Equatable {
   public init(
     todayTokens: Int,
     todayUSD: Double,
-    proactiveTodayUSD: Double = 0,
-    carryOver: ResumeUsage? = nil
+    proactiveTodayUSD: Double,
+    carryOver: ResumeUsage?
   ) {
     self.todayTokens = todayTokens
     self.todayUSD = todayUSD

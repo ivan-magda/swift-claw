@@ -21,10 +21,10 @@ public struct TurnScope: Sendable, Equatable {
     runID: Int64,
     sessionID: Int64,
     chatID: Int64,
-    threadID: Int64? = nil,
-    mode: ChatMode = .direct,
-    origin: RunOrigin = .interactive,
-    requesterUserID: Int64? = nil
+    threadID: Int64?,
+    mode: ChatMode,
+    origin: RunOrigin,
+    requesterUserID: Int64?
   ) {
     self.runID = runID
     self.sessionID = sessionID
