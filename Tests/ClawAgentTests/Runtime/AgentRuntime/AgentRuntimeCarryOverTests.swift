@@ -21,16 +21,13 @@ struct AgentRuntimeCarryOverTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 1,
-      chatID: 7,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0,
-      carryOver: carryOver
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 1,
+        chatID: 7,
+        context: makeBuildResult(),
+        carryOver: carryOver
+      )
     )
 
     // then — the per-run spend cap trips on the carried total; the provider is never reached
@@ -47,15 +44,7 @@ struct AgentRuntimeCarryOverTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 1,
-      chatID: 7,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 1, chatID: 7, context: makeBuildResult())
     )
 
     // then
@@ -78,16 +67,13 @@ struct AgentRuntimeCarryOverTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 1,
-      chatID: 7,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0,
-      carryOver: carryOver
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 1,
+        chatID: 7,
+        context: makeBuildResult(),
+        carryOver: carryOver
+      )
     )
 
     // then — the segment still sends one round rather than building an empty round range

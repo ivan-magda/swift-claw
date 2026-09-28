@@ -288,11 +288,15 @@ func userMessage(_ content: String) -> StoredMessage {
   StoredMessage(role: .user, content: content, provenance: .trusted)
 }
 
-func makeBuildResult(hasPrivateDataAccess: Bool = false) -> BuildResult {
+func makeBuildResult(
+  hasPrivateDataAccess: Bool = false,
+  hasPinnedLessons: Bool = false
+) -> BuildResult {
   BuildResult(
     messages: [ChatMessage(role: .user, content: "go")],
     ownerNotices: [],
-    hasPrivateDataAccess: hasPrivateDataAccess
+    hasPrivateDataAccess: hasPrivateDataAccess,
+    hasPinnedLessons: hasPinnedLessons
   )
 }
 

@@ -13,6 +13,41 @@ extension TurnRunner {
     let todayTokens: Int
     let todayUSD: Double
     let proactiveTodayUSD: Double
+
+    /// The agent request for one segment of the run these inputs were loaded for. The session's
+    /// real taint rides along because the gate reads `(session ∪ run)`: a session a prior turn
+    /// tainted keeps the exfiltration gate armed from this run's very first tool call.
+    func turnRequest(
+      runID: Int64,
+      sessionID: Int64,
+      chatID: Int64,
+      origin: RunOrigin,
+      requesterUserID: Int64?,
+      carryOver: ResumeUsage? = nil
+    ) -> TurnRequest {
+      TurnRequest(
+        scope: TurnScope(
+          runID: runID,
+          sessionID: sessionID,
+          chatID: chatID,
+          threadID: SessionKey.threadID(from: snapshot.sessionKey),
+          mode: SessionKey.mode(from: snapshot.sessionKey),
+          origin: origin,
+          requesterUserID: requesterUserID
+        ),
+        context: buildResult,
+        session: SessionTrust(
+          isTainted: snapshot.isTainted,
+          hasPrivateData: snapshot.hasPrivateData
+        ),
+        spend: SpendSnapshot(
+          todayTokens: todayTokens,
+          todayUSD: todayUSD,
+          proactiveTodayUSD: proactiveTodayUSD,
+          carryOver: carryOver
+        )
+      )
+    }
   }
 
   /// Loads the bounded snapshot, today's budget totals, and the assembled context in one place —

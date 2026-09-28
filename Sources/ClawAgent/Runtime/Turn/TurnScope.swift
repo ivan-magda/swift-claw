@@ -1,14 +1,39 @@
 import ClawCore
 
 /// Who a turn runs for and where its progress goes, fixed for the whole turn segment.
-struct TurnScope: Sendable, Equatable {
-  let runID: Int64
-  let sessionID: Int64
-  let chatID: Int64
-  let threadID: Int64?
-  let mode: ChatMode
-  let origin: RunOrigin
-  let requesterUserID: Int64?
+public struct TurnScope: Sendable, Equatable {
+  /// The durable run to charge and audit.
+  public let runID: Int64
+  /// The conversation that owns the run.
+  public let sessionID: Int64
+  /// The chat receiving progress updates.
+  public let chatID: Int64
+  /// The forum topic receiving progress, or nil for a chat without a topic ID.
+  public let threadID: Int64?
+  /// The conversation's frozen direct or group mode.
+  public let mode: ChatMode
+  /// Selects interactive or proactive budget and privilege restrictions.
+  public let origin: RunOrigin
+  /// The original sender whose identity follows group actions.
+  public let requesterUserID: Int64?
+
+  public init(
+    runID: Int64,
+    sessionID: Int64,
+    chatID: Int64,
+    threadID: Int64? = nil,
+    mode: ChatMode = .direct,
+    origin: RunOrigin = .interactive,
+    requesterUserID: Int64? = nil
+  ) {
+    self.runID = runID
+    self.sessionID = sessionID
+    self.chatID = chatID
+    self.threadID = threadID
+    self.mode = mode
+    self.origin = origin
+    self.requesterUserID = requesterUserID
+  }
 }
 
 extension TurnScope {

@@ -199,16 +199,13 @@ struct CoderApprovalFlowTests {
 
       // when
       let outcome = try await harness.agent.runTurn(
-        runID: fire.runID,
-        sessionID: fire.sessionID,
-        chatID: fire.ownerChatID,
-        buildResult: BuildResult(messages: [], ownerNotices: [], hasPrivateDataAccess: false),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: 0,
-        todayUSD: 0,
-        origin: origin
+        makeTurnRequest(
+          runID: fire.runID,
+          sessionID: fire.sessionID,
+          chatID: fire.ownerChatID,
+          context: BuildResult(messages: [], ownerNotices: [], hasPrivateDataAccess: false),
+          origin: origin
+        )
       )
 
       // then

@@ -11,22 +11,19 @@ struct AgentLoopTests {
     _ runtime: AgentRuntime,
     buildResult: BuildResult = makeBuildResult(),
     sessionTainted: Bool = false,
-    hasPinnedLessons: Bool = false,
     origin: RunOrigin = .interactive,
     proactiveTodayUSD: Double = 0
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
-      runID: 1,
-      sessionID: 1,
-      chatID: 1,
-      buildResult: buildResult,
-      sessionTainted: sessionTainted,
-      hasPinnedLessons: hasPinnedLessons,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0,
-      origin: origin,
-      proactiveTodayUSD: proactiveTodayUSD
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 1,
+        chatID: 1,
+        context: buildResult,
+        sessionTainted: sessionTainted,
+        origin: origin,
+        proactiveTodayUSD: proactiveTodayUSD
+      )
     )
   }
 
@@ -181,7 +178,7 @@ struct AgentLoopTests {
     let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
 
     // when
-    let outcome = try await run(runtime, hasPinnedLessons: true)
+    let outcome = try await run(runtime, buildResult: makeBuildResult(hasPinnedLessons: true))
 
     // then — the gate sees the taint on the run's very first tool policy decision
     #expect(await dispatcher.records.first?.context.runIngestedUntrusted == true)

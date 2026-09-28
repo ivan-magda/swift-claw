@@ -8,27 +8,19 @@ struct TurnTrust {
   private(set) var ingestedUntrusted: Bool
   private var runPrivateData = false
 
-  private let sessionTainted: Bool
-  private let sessionHasPrivateData: Bool
+  private let session: SessionTrust
   private let assemblyPrivateData: Bool
 
   /// Untrusted tool metadata and a pinned lesson set both reach the model before the first
   /// dispatch, so either arms the run's untrusted-ingestion flag from the start.
-  init(
-    sessionTainted: Bool,
-    sessionHasPrivateData: Bool,
-    assemblyPrivateData: Bool,
-    hasPinnedLessons: Bool,
-    toolDefinitions: [ToolDefinition]
-  ) {
+  init(session: SessionTrust, context: BuildResult, toolDefinitions: [ToolDefinition]) {
     let untrustedToolMetadata = toolDefinitions.contains { definition in
       definition.metadataProvenance == .untrusted
     }
-    ingestedUntrusted = untrustedToolMetadata || hasPinnedLessons
+    ingestedUntrusted = untrustedToolMetadata || context.hasPinnedLessons
 
-    self.sessionTainted = sessionTainted
-    self.sessionHasPrivateData = sessionHasPrivateData
-    self.assemblyPrivateData = assemblyPrivateData
+    self.session = session
+    assemblyPrivateData = context.hasPrivateDataAccess
   }
 
   /// Whether assembly or any executed observation accessed private data.
@@ -43,11 +35,11 @@ struct TurnTrust {
     approvalAlreadyPending: Bool
   ) -> ToolDispatchContext {
     ToolDispatchContext(
-      sessionTainted: sessionTainted,
+      sessionTainted: session.isTainted,
       runIngestedUntrusted: ingestedUntrusted,
       assemblyPrivateData: assemblyPrivateData,
       runPrivateData: runPrivateData,
-      sessionHasPrivateData: sessionHasPrivateData,
+      sessionHasPrivateData: session.hasPrivateData,
       approvalAlreadyPending: approvalAlreadyPending,
       mode: scope.mode,
       executionContext: scope.executionContext(toolCallID: call.id)

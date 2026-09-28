@@ -91,15 +91,7 @@ struct AgentSuspendTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 1,
-      chatID: 7,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 1, chatID: 7, context: makeBuildResult())
     )
 
     // then — the run parked on the FIRST ask-tier proposal, carrying its recorded action
@@ -143,15 +135,7 @@ struct AgentSuspendTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 2,
-      sessionID: 2,
-      chatID: 7,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 2, sessionID: 2, chatID: 7, context: makeBuildResult())
     )
 
     // then — exactly ONE park (the first); the second is a blocked observation
@@ -181,15 +165,12 @@ struct AgentSuspendTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 3,
-      sessionID: 3,
-      chatID: 7,
-      buildResult: makeBuildResult(hasPrivateDataAccess: true),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 3,
+        sessionID: 3,
+        chatID: 7,
+        context: makeBuildResult(hasPrivateDataAccess: true)
+      )
     )
 
     // then
@@ -208,15 +189,12 @@ struct AgentSuspendTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 4,
-      sessionID: 4,
-      chatID: 7,
-      buildResult: makeBuildResult(hasPrivateDataAccess: false),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 4,
+        sessionID: 4,
+        chatID: 7,
+        context: makeBuildResult(hasPrivateDataAccess: false)
+      )
     )
 
     // then — the union catches the run-local read even when assembly was clean

@@ -141,43 +141,12 @@ extension AgentRuntime {
   /// Each round checks budgets and policy before dispatch and records intermediate usage and audit
   /// events. Failures other than disk-full resolve in the returned outcome.
   ///
-  /// - Parameters:
-  ///   - runID: The durable run to charge and audit.
-  ///   - sessionID: The conversation that owns the run.
-  ///   - chatID: The chat receiving progress updates.
-  ///   - buildResult: The assembled messages and their privacy and policy metadata.
-  ///   - sessionTainted: The session's persisted untrusted-ingestion state at entry.
-  ///   - hasPinnedLessons: Whether non-empty model-written lessons are present, arming the run's
-  ///     untrusted-ingestion flag before the first dispatch.
-  ///   - sessionHasPrivateData: The session's persisted private-data flag at entry.
-  ///   - todayTokens: The persisted daily token total loaded when this run segment starts.
-  ///   - todayUSD: The persisted daily metered spend loaded when this run segment starts.
-  ///   - origin: Selects interactive or proactive budget and privilege restrictions.
-  ///   - proactiveTodayUSD: The persisted daily proactive spend loaded at segment start.
-  ///   - carryOver: Usage already recorded for a suspended run, or nil for a fresh run.
-  ///   - mode: The conversation's frozen direct or group mode.
-  ///   - threadID: The forum topic receiving progress, or nil for a chat without a topic ID.
-  ///   - requesterUserID: The original sender whose identity follows group actions.
+  /// - Parameter request: The run segment to execute: whom it serves, its assembled context, the
+  ///   session's persisted trust flags, and the spend it starts from.
   /// - Returns: The run-segment result, including approval suspension, plus the tool exchanges,
   ///   accumulated trust flags, and route notice needed by the gateway.
   /// - Throws: `StoreError.diskFull` when a required intermediate write cannot fit on disk.
-  public func runTurn(  // swiftlint:disable:this function_parameter_count
-    runID: Int64,
-    sessionID: Int64,
-    chatID: Int64,
-    buildResult: BuildResult,
-    sessionTainted: Bool,
-    hasPinnedLessons: Bool,
-    sessionHasPrivateData: Bool,
-    todayTokens: Int,
-    todayUSD: Double,
-    origin: RunOrigin = .interactive,
-    proactiveTodayUSD: Double = 0,
-    carryOver: ResumeUsage? = nil,
-    mode: ChatMode = .direct,
-    threadID: Int64? = nil,
-    requesterUserID: Int64? = nil
-  ) async throws -> TurnOutcome {
+  public func runTurn(_ request: TurnRequest) async throws -> TurnOutcome {
     let deadline = now() + .seconds(budget.wallClockDeadlineSeconds)
     let route = await TurnRoute(
       roster: roster,
@@ -186,26 +155,17 @@ extension AgentRuntime {
       costResolver: costResolver,
       usageResolver: usageResolver
     )
-    let scope = TurnScope(
-      runID: runID,
-      sessionID: sessionID,
-      chatID: chatID,
-      threadID: threadID,
-      mode: mode,
-      origin: origin,
-      requesterUserID: requesterUserID
-    )
     let turn = TurnFrame(
-      scope: scope,
+      scope: request.scope,
       deadline: deadline,
       startedAt: now(),
-      log: turnLogger(for: scope)
+      log: turnLogger(for: request.scope)
     )
     turn.log.info(
       """
       turn started model=\(route.active.binding.configuredReference) \
-      origin=\(origin) \
-      contextMessages=\(buildResult.messages.count) \
+      origin=\(request.scope.origin) \
+      contextMessages=\(request.context.messages.count) \
       streaming=\(streamingEnabled) \
       tools=\(toolDefinitions.count)
       """
@@ -214,22 +174,13 @@ extension AgentRuntime {
     var state = TurnState(
       route: route,
       attempts: AttemptRuntimeState(policy: attemptPolicy),
-      ledger: RunSpendLedger(
-        budget: budget,
-        origin: origin,
-        todayTokens: todayTokens,
-        todayUSD: todayUSD,
-        proactiveTodayUSD: proactiveTodayUSD,
-        carryOver: carryOver
-      ),
+      ledger: RunSpendLedger(budget: budget, origin: request.scope.origin, spend: request.spend),
       trust: TurnTrust(
-        sessionTainted: sessionTainted,
-        sessionHasPrivateData: sessionHasPrivateData,
-        assemblyPrivateData: buildResult.hasPrivateDataAccess,
-        hasPinnedLessons: hasPinnedLessons,
+        session: request.session,
+        context: request.context,
         toolDefinitions: toolDefinitions
       ),
-      transcript: TurnTranscript(wire: buildResult.messages, toolDefinitions: toolDefinitions)
+      transcript: TurnTranscript(wire: request.context.messages, toolDefinitions: toolDefinitions)
     )
     for index in state.ledger.roundIndices {
       if let exit = try await runRound(index, turn: turn, state: &state) {

@@ -124,19 +124,16 @@ struct FallbackCompositionAcceptanceTests {
 
     // when — one turn runs
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 1,
-      chatID: 1,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "what time is it?")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 1,
+        chatID: 1,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "what time is it?")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — the turn was answered by the fallback, on the fallback's own wire

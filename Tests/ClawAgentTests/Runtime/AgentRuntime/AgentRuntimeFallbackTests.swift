@@ -12,16 +12,7 @@ struct AgentRuntimeFallbackTests {
     origin: RunOrigin = .interactive
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
-      runID: 1,
-      sessionID: 1,
-      chatID: 1,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0,
-      origin: origin
+      makeTurnRequest(runID: 1, sessionID: 1, chatID: 1, context: makeBuildResult(), origin: origin)
     )
   }
 

@@ -12,28 +12,17 @@ struct RunSpendLedger {
 
   private let budget: RunBudget
   private let origin: RunOrigin
-  private let todayTokens: Int
-  private let todayUSD: Double
-  private let proactiveTodayUSD: Double
+  private let spend: SpendSnapshot
 
-  init(
-    budget: RunBudget,
-    origin: RunOrigin,
-    todayTokens: Int,
-    todayUSD: Double,
-    proactiveTodayUSD: Double,
-    carryOver: ResumeUsage?
-  ) {
-    roundIndices = 1...max(1, budget.maxTurns - (carryOver?.rounds ?? 0))
-    recordedTokens = carryOver?.tokens ?? 0
-    recordedUSD = carryOver?.costUSD ?? 0
-    proposedToolCalls = carryOver?.toolCalls ?? 0
+  init(budget: RunBudget, origin: RunOrigin, spend: SpendSnapshot) {
+    roundIndices = 1...max(1, budget.maxTurns - (spend.carryOver?.rounds ?? 0))
+    recordedTokens = spend.carryOver?.tokens ?? 0
+    recordedUSD = spend.carryOver?.costUSD ?? 0
+    proposedToolCalls = spend.carryOver?.toolCalls ?? 0
 
     self.budget = budget
     self.origin = origin
-    self.todayTokens = todayTokens
-    self.todayUSD = todayUSD
-    self.proactiveTodayUSD = proactiveTodayUSD
+    self.spend = spend
   }
 
   /// The first cap the next call would breach, or `.allow`. The order is the contract: the input
@@ -49,12 +38,12 @@ struct RunSpendLedger {
       return .deny(cap: BudgetGate.perRunSpendCap)
     }
     return route.gate.preflight(
-      todayTokens: todayTokens + recordedTokens,
-      todayUSD: todayUSD + recordedUSD,
+      todayTokens: spend.todayTokens + recordedTokens,
+      todayUSD: spend.todayUSD + recordedUSD,
       estimatedTotalTokens: estimate.totalTokens,
       estimatedCostUSD: estimate.costUSD,
       origin: origin,
-      proactiveTodayUSD: proactiveTodayUSD + recordedUSD
+      proactiveTodayUSD: spend.proactiveTodayUSD + recordedUSD
     )
   }
 

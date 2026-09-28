@@ -31,15 +31,7 @@ func terminalResponseIsReconciledAgainstTheAttemptOutputLimit() async throws {
 
   // when
   let outcome = try await runtime.runTurn(
-    runID: 1,
-    sessionID: 2,
-    chatID: 3,
-    buildResult: makeBuildResult(),
-    sessionTainted: false,
-    hasPinnedLessons: false,
-    sessionHasPrivateData: false,
-    todayTokens: 0,
-    todayUSD: 0
+    makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: makeBuildResult())
   )
 
   // then
@@ -559,15 +551,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 11,
-      sessionID: 22,
-      chatID: 33,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 11, sessionID: 22, chatID: 33, context: singleUserBuildResult("hi"))
     )
 
     // then
@@ -621,15 +605,12 @@ struct AgentRuntimeStreamingTests {
     // when
     let turnResult = startTurn {
       try await runtime.runTurn(
-        runID: 1,
-        sessionID: 2,
-        chatID: 3,
-        buildResult: self.singleUserBuildResult("hi"),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: 0,
-        todayUSD: 0
+        makeTurnRequest(
+          runID: 1,
+          sessionID: 2,
+          chatID: 3,
+          context: self.singleUserBuildResult("hi")
+        )
       )
     }
     let outcome = await waitForTurnResult(turnResult)
@@ -674,15 +655,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 11,
-      sessionID: 22,
-      chatID: 33,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 11, sessionID: 22, chatID: 33, context: singleUserBuildResult("hi"))
     )
 
     // then
@@ -721,15 +694,7 @@ struct AgentRuntimeStreamingTests {
     // when
     let turnTask = Task {
       let outcome = try await runtime.runTurn(
-        runID: 1,
-        sessionID: 2,
-        chatID: 3,
-        buildResult: singleUserBuildResult("hi"),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: 0,
-        todayUSD: 0
+        makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
       )
       await flag.markDone()
       return outcome
@@ -772,15 +737,7 @@ struct AgentRuntimeStreamingTests {
       // when
       let turnTask = Task {
         try await runtime.runTurn(
-          runID: 1,
-          sessionID: 2,
-          chatID: 3,
-          buildResult: singleUserBuildResult("hi"),
-          sessionTainted: false,
-          hasPinnedLessons: false,
-          sessionHasPrivateData: false,
-          todayTokens: 0,
-          todayUSD: 0
+          makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
         )
       }
       await gate.waitUntilStarted()
@@ -814,15 +771,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 11,
-      sessionID: 22,
-      chatID: 33,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 11, sessionID: 22, chatID: 33, context: singleUserBuildResult("hi"))
     )
 
     // then — the streamed round-trip completes with round 2's accumulated answer; the executed
@@ -879,15 +828,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 11,
-      sessionID: 22,
-      chatID: 33,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 11, sessionID: 22, chatID: 33, context: singleUserBuildResult("hi"))
     )
 
     // then — round one charged six visible bytes plus two argument bytes; round two's six bytes
@@ -915,15 +856,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
     )
 
     // then
@@ -944,15 +877,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
     )
 
     // then
@@ -979,15 +904,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
     )
 
     // then — the round reached the provider twice but accounts as one call. Today the identity is
@@ -1011,15 +928,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
     )
 
     // then
@@ -1046,15 +955,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
     )
 
     // then
@@ -1078,15 +979,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
     )
 
     // then
@@ -1130,15 +1023,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
     )
 
     // then — identity is a batch-integrity invariant, so it wins even though terminal output also
@@ -1180,15 +1065,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
     )
 
     // then
@@ -1220,15 +1097,7 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hi"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: singleUserBuildResult("hi"))
     )
 
     // then
@@ -1268,15 +1137,12 @@ struct AgentRuntimeStreamingTests {
     // when
     let turnResult = startTurn {
       try await runtime.runTurn(
-        runID: 11,
-        sessionID: 22,
-        chatID: 33,
-        buildResult: self.singleUserBuildResult("hi"),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: 0,
-        todayUSD: 0
+        makeTurnRequest(
+          runID: 11,
+          sessionID: 22,
+          chatID: 33,
+          context: self.singleUserBuildResult("hi")
+        )
       )
     }
     await drafts.waitUntilFirstSendBlocked()
@@ -1306,15 +1172,12 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hello world"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: singleUserBuildResult("hello world")
+      )
     )
 
     // then
@@ -1337,15 +1200,12 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hello world"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: singleUserBuildResult("hello world")
+      )
     )
 
     // then
@@ -1374,15 +1234,12 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hello world"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: singleUserBuildResult("hello world")
+      )
     )
 
     // then — the disposition, not the cause class, decides: no row is written on either transport
@@ -1410,15 +1267,12 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hello world"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: singleUserBuildResult("hello world")
+      )
     )
 
     // then — the observed count survives the envelope: completion is n, not the capped 0
@@ -1438,15 +1292,12 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hello world"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: singleUserBuildResult("hello world")
+      )
     )
 
     // then — a no-start cancel bills nothing, mirroring the raw-cancellation buffered case
@@ -1467,15 +1318,12 @@ struct AgentRuntimeStreamingTests {
 
       // when
       let outcome = try await runtime.runTurn(
-        runID: 1,
-        sessionID: 2,
-        chatID: 3,
-        buildResult: singleUserBuildResult("hello world"),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: 0,
-        todayUSD: 0
+        makeTurnRequest(
+          runID: 1,
+          sessionID: 2,
+          chatID: 3,
+          context: singleUserBuildResult("hello world")
+        )
       )
 
       // then
@@ -1501,15 +1349,12 @@ struct AgentRuntimeStreamingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: singleUserBuildResult("hello world"),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: singleUserBuildResult("hello world")
+      )
     )
 
     // then
@@ -1535,15 +1380,12 @@ struct AgentRuntimeStreamingTests {
     // when — the deadline wins while the inference is still parked
     let turnTask = Task {
       let outcome = try await runtime.runTurn(
-        runID: 1,
-        sessionID: 2,
-        chatID: 3,
-        buildResult: self.singleUserBuildResult("hello world"),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: 0,
-        todayUSD: 0
+        makeTurnRequest(
+          runID: 1,
+          sessionID: 2,
+          chatID: 3,
+          context: self.singleUserBuildResult("hello world")
+        )
       )
       await flag.markDone()
       return outcome

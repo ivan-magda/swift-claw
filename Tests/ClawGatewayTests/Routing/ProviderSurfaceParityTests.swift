@@ -174,15 +174,7 @@ struct ProviderSurfaceParityTests {
 
     // when
     let turnOutcome = try await agent.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: userBuildResult())
     )
     let parseResult = await parser.parse(ownerText: "x", sessionID: parseSession)
 
@@ -219,15 +211,7 @@ struct ProviderSurfaceParityTests {
 
     // when
     let turnOutcome = try await agent.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: userBuildResult())
     )
     let parseResult = await parser.parse(ownerText: "x", sessionID: parseSession)
 
@@ -338,15 +322,7 @@ struct ProviderSurfaceParityTests {
 
     // when both fail with .quotaLimited(retryAfterSeconds: 42)
     let turnOutcome = try await agent.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: userBuildResult())
     )
     let parseResult = await parser.parse(ownerText: "x", sessionID: parseSession)
 
@@ -396,15 +372,7 @@ struct ProviderSurfaceParityTests {
 
     // when
     let turnOutcome = try await agent.runTurn(
-      runID: 1,
-      sessionID: turnSession,
-      chatID: 3,
-      buildResult: userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: turnSession, chatID: 3, context: userBuildResult())
     )
     let parseResult = await parser.parse(ownerText: "x", sessionID: parseSession)
 
