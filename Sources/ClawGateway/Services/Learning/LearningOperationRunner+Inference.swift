@@ -12,6 +12,7 @@ extension LearningOperationRunner {
     starting: RouteSelection
   ) async -> (result: ProviderCallResult, route: LLMRouteBinding) {
     var active = starting
+    
     while true {
       let request = ChatRequest(
         model: active.binding.wireModel,
@@ -19,11 +20,14 @@ extension LearningOperationRunner {
         maxOutputTokens: outputCap,
         tools: []
       )
+      
       do {
         let response = try await active.binding.provider.complete(request: request)
+        
         if active.position == .primary {
           _ = await cooldown?.recordSuccess()
         }
+        
         return (.response(response), active.binding)
       } catch {
         guard let persistence = RouteSwitch.permits(error),
@@ -31,10 +35,12 @@ extension LearningOperationRunner {
         else {
           return (.failed(error), active.binding)
         }
+        
         await cooldown?.arm(
           persistence: persistence,
           retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
         )
+        
         active = next
       }
     }
