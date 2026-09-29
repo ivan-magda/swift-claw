@@ -15,12 +15,17 @@ extension AgentRuntime {
     mode: ChatMode = .direct,
     threadID: Int64? = nil
   ) -> Logger.Metadata {
-    var metadata: Logger.Metadata = ["run": "\(runID)", "session": "\(sessionID)"]
+    var metadata: Logger.Metadata = [
+      "run": "\(runID)",
+      "session": "\(sessionID)",
+    ]
+
     guard mode == .group else {
       return metadata
     }
     metadata["mode"] = "\(mode.rawValue)"
     metadata["topic"] = "\(threadID.map(String.init) ?? "general")"
+
     return metadata
   }
 
@@ -33,9 +38,11 @@ extension AgentRuntime {
       mode: scope.mode,
       threadID: scope.threadID
     )
+
     for (key, value) in metadata {
       turnLog[metadataKey: key] = value
     }
+
     return turnLog
   }
 
