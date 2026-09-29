@@ -174,20 +174,32 @@ extension AgentRuntime {
     var state = TurnState(
       route: route,
       attempts: AttemptRuntimeState(policy: attemptPolicy),
-      ledger: RunSpendLedger(budget: budget, origin: request.scope.origin, spend: request.spend),
+      ledger: RunSpendLedger(
+        budget: budget,
+        origin: request.scope.origin,
+        spend: request.spend
+      ),
       trust: TurnTrust(
         session: request.session,
         context: request.context,
         toolDefinitions: toolDefinitions
       ),
-      transcript: TurnTranscript(wire: request.context.messages, toolDefinitions: toolDefinitions)
+      transcript: TurnTranscript(
+        wire: request.context.messages,
+        toolDefinitions: toolDefinitions
+      )
     )
     for index in state.ledger.roundIndices {
       if let exit = try await runRound(index, turn: turn, state: &state) {
         return finish(exit, turn: turn, state: state)
       }
     }
-    return finish(.budgetStopped(cap: BudgetGate.perRunTurnCap), turn: turn, state: state)
+
+    return finish(
+      .budgetStopped(cap: BudgetGate.perRunTurnCap),
+      turn: turn,
+      state: state
+    )
   }
 }
 
