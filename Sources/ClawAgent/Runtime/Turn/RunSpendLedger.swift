@@ -34,9 +34,11 @@ struct RunSpendLedger {
     if estimate.inputTokens > budget.maxInputTokens {
       return .deny(cap: BudgetGate.perRunInputTokenCap)
     }
+
     if route.binding.costPolicy == .metered, recordedUSD + estimate.costUSD > budget.perRunUSD {
       return .deny(cap: BudgetGate.perRunSpendCap)
     }
+
     return route.gate.preflight(
       todayTokens: spend.todayTokens + recordedTokens,
       todayUSD: spend.todayUSD + recordedUSD,
