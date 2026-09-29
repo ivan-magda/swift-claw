@@ -13,6 +13,7 @@ extension AgentRuntime {
       wire: state.transcript.wire,
       turn: turn
     )
+
     let refusal = await admitRound(
       plan,
       route: state.route.active,
@@ -59,6 +60,7 @@ extension AgentRuntime {
     if let pending = batch.pending {
       return TurnExit(.suspended(pending: pending, usage: usage))
     }
+
     return nil
   }
 }
@@ -106,6 +108,7 @@ private extension AgentRuntime {
     guard Task.isCancelled == false else {
       return .interrupted
     }
+
     return nil
   }
 }
@@ -174,11 +177,22 @@ private extension AgentRuntime {
           )
           return .exit(TurnExit(result, failureCause: failure.attemptFailureCause))
         }
-        try recordRouteSwitch(transition, reason: failure.degradationKind, turn: plan.turn)
+
+        try recordRouteSwitch(
+          transition,
+          reason: failure.degradationKind,
+          turn: plan.turn
+        )
+
         continue
       }
 
-      let round = AnsweredRound(plan: plan, response: response, accountant: route.active.accountant)
+      let round = AnsweredRound(
+        plan: plan,
+        response: response,
+        accountant: route.active.accountant
+      )
+
       return verify(
         round,
         outboundModel: request.model,
@@ -207,6 +221,7 @@ private extension AgentRuntime {
       let overrun = TurnResult.degraded(.providerUnavailable, usage: reconciledUsage(for: round))
       return .exit(TurnExit(overrun, failureCause: .localOutputLimit))
     }
+
     return .proceed(round)
   }
 
