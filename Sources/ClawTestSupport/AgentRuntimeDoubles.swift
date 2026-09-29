@@ -136,6 +136,47 @@ public struct RacedSuccessProvider: LLMProvider {
   }
 }
 
+// MARK: - Turn requests
+
+/// A turn request whose session flags and spend stay inert unless a test sets them, so a scenario
+/// names only the facts it exercises.
+public func makeTurnRequest(
+  runID: Int64,
+  sessionID: Int64,
+  chatID: Int64,
+  context: BuildResult,
+  sessionTainted: Bool = false,
+  sessionHasPrivateData: Bool = false,
+  todayTokens: Int = 0,
+  todayUSD: Double = 0,
+  origin: RunOrigin = .interactive,
+  proactiveTodayUSD: Double = 0,
+  carryOver: ResumeUsage? = nil,
+  mode: ChatMode = .direct,
+  threadID: Int64? = nil,
+  requesterUserID: Int64? = nil
+) -> TurnRequest {
+  TurnRequest(
+    scope: TurnScope(
+      runID: runID,
+      sessionID: sessionID,
+      chatID: chatID,
+      threadID: threadID,
+      mode: mode,
+      origin: origin,
+      requesterUserID: requesterUserID
+    ),
+    context: context,
+    session: SessionTrust(isTainted: sessionTainted, hasPrivateData: sessionHasPrivateData),
+    spend: SpendSnapshot(
+      todayTokens: todayTokens,
+      todayUSD: todayUSD,
+      proactiveTodayUSD: proactiveTodayUSD,
+      carryOver: carryOver
+    )
+  )
+}
+
 // MARK: - Provider call identity
 
 /// Mints `call-1`, `call-2`, … in call order, so a test can name the identity a given round-trip

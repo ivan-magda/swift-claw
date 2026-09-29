@@ -11,22 +11,19 @@ struct AgentLoopTests {
     _ runtime: AgentRuntime,
     buildResult: BuildResult = makeBuildResult(),
     sessionTainted: Bool = false,
-    hasPinnedLessons: Bool = false,
     origin: RunOrigin = .interactive,
     proactiveTodayUSD: Double = 0
   ) async throws -> TurnOutcome {
     try await runtime.runTurn(
-      runID: 1,
-      sessionID: 1,
-      chatID: 1,
-      buildResult: buildResult,
-      sessionTainted: sessionTainted,
-      hasPinnedLessons: hasPinnedLessons,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0,
-      origin: origin,
-      proactiveTodayUSD: proactiveTodayUSD
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 1,
+        chatID: 1,
+        context: buildResult,
+        sessionTainted: sessionTainted,
+        origin: origin,
+        proactiveTodayUSD: proactiveTodayUSD
+      )
     )
   }
 
@@ -40,7 +37,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime, origin: .scheduled, proactiveTodayUSD: 2.0)
 
     // then — denied offline, before the provider is reached
-    #expect(outcome.result == .budgetStopped(cap: "proactive per-day spend"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.proactivePerDayCap))
     #expect(await provider.requests.isEmpty)
   }
 
@@ -181,7 +178,7 @@ struct AgentLoopTests {
     let runtime = makeRuntime(provider: provider, toolDispatcher: dispatcher)
 
     // when
-    let outcome = try await run(runtime, hasPinnedLessons: true)
+    let outcome = try await run(runtime, buildResult: makeBuildResult(hasPinnedLessons: true))
 
     // then — the gate sees the taint on the run's very first tool policy decision
     #expect(await dispatcher.records.first?.context.runIngestedUntrusted == true)
@@ -255,7 +252,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime)
 
     // then — no bonus round-trip: exactly maxTurns provider calls (§6.4)
-    #expect(outcome.result == .budgetStopped(cap: "per-run turn"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunTurnCap))
     #expect(await provider.requests.count == 2)
     #expect(outcome.ingestedUntrusted)  // executed observations still taint
   }
@@ -285,7 +282,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime)
 
     // then — the under-cap prefix (c1, c2) dispatched; c3 ended the run
-    #expect(outcome.result == .budgetStopped(cap: "per-run tool-call"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunToolCallCap))
     #expect(await dispatcher.records.map(\.call.id) == ["c1", "c2"])
   }
 
@@ -326,7 +323,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime)
 
     // then
-    #expect(outcome.result == .budgetStopped(cap: "per-run tool-call"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunToolCallCap))
     #expect(outcome.ingestedUntrusted == false)  // blocked observations do not taint (§10)
   }
 
@@ -387,7 +384,7 @@ struct AgentLoopTests {
     let outcome = try await run(runtime)
 
     // then — round-trip 1 recorded real cost; preflight 2 tripped the accumulated per-run check
-    #expect(outcome.result == .budgetStopped(cap: "per-run spend"))
+    #expect(outcome.result == .budgetStopped(cap: BudgetGate.perRunSpendCap))
     #expect(await provider.requests.count == 1)
   }
 

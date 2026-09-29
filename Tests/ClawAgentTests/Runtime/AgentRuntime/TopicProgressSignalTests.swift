@@ -54,17 +54,14 @@ struct TopicProgressSignalTests {
 
     // when
     _ = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: -1_001,
-      buildResult: buildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0,
-      mode: .group,
-      threadID: 77
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: -1_001,
+        context: buildResult(),
+        mode: .group,
+        threadID: 77
+      )
     )
 
     // then
@@ -110,17 +107,14 @@ struct TopicProgressSignalTests {
 
     // when
     _ = try await runtime.runTurn(
-      runID: 11,
-      sessionID: 22,
-      chatID: -1_001,
-      buildResult: buildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0,
-      mode: .group,
-      threadID: 77
+      makeTurnRequest(
+        runID: 11,
+        sessionID: 22,
+        chatID: -1_001,
+        context: buildResult(),
+        mode: .group,
+        threadID: 77
+      )
     )
 
     // then
@@ -144,15 +138,7 @@ struct TopicProgressSignalTests {
 
     // when — the DM spelling: no mode, no thread, exactly as before group mode existed
     _ = try await runtime.runTurn(
-      runID: 11,
-      sessionID: 22,
-      chatID: 42,
-      buildResult: buildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 11, sessionID: 22, chatID: 42, context: buildResult())
     )
 
     // then
@@ -208,15 +194,7 @@ struct TopicProgressSignalTests {
 
     // when
     _ = try await runtime.runTurn(
-      runID: 11,
-      sessionID: 22,
-      chatID: 42,
-      buildResult: buildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 11, sessionID: 22, chatID: 42, context: buildResult())
     )
 
     // then

@@ -14,8 +14,9 @@ extension TurnRunner {
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
-    // Invariant: `.suspended` is only returned after `outcome.exchanges.append(...)` upstream, so
-    // `exchanges.last` is never nil on this path — this branch is defensive-only, unreachable today.
+    // Invariant: the runtime returns `.suspended` only after appending the suspending round's
+    // exchange, so `exchanges.last` is never nil on this path — this branch is defensive-only,
+    // unreachable today.
     // AgentRuntime already recorded the intermediate usage mid-loop. The context-unavailable
     // fallback commits no usage, so it cannot debit the same round twice.
     guard let anchor = outcome.exchanges.last else {

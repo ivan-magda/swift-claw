@@ -1,21 +1,6 @@
 import ClawCore
 import Foundation
 
-// MARK: - Route Health
-
-extension AgentRuntime {
-  /// Records that the primary answered: drops its cooldown window and reports the single notice
-  /// owed when that window had lapsed rather than been cleared, so exactly one turn tells the owner
-  /// the primary is carrying traffic again.
-  func primaryRecoveryNotice(binding: LLMRouteBinding) async -> RouteNotice? {
-    guard let cooldown else {
-      return nil
-    }
-    let lapsed = await cooldown.recordSuccess()
-    return lapsed ? .restored(route: binding.configuredReference) : nil
-  }
-}
-
 // MARK: - Provider Round Trip
 
 extension AgentRuntime {

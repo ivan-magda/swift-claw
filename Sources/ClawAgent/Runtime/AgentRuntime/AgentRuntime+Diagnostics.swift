@@ -15,13 +15,35 @@ extension AgentRuntime {
     mode: ChatMode = .direct,
     threadID: Int64? = nil
   ) -> Logger.Metadata {
-    var metadata: Logger.Metadata = ["run": "\(runID)", "session": "\(sessionID)"]
+    var metadata: Logger.Metadata = [
+      "run": "\(runID)",
+      "session": "\(sessionID)",
+    ]
+
     guard mode == .group else {
       return metadata
     }
     metadata["mode"] = "\(mode.rawValue)"
     metadata["topic"] = "\(threadID.map(String.init) ?? "general")"
+
     return metadata
+  }
+
+  /// The runtime's logger stamped with one turn's correlation fields.
+  func turnLogger(for scope: TurnScope) -> Logger {
+    var turnLog = logger
+    let metadata = Self.turnMetadata(
+      runID: scope.runID,
+      sessionID: scope.sessionID,
+      mode: scope.mode,
+      threadID: scope.threadID
+    )
+
+    for (key, value) in metadata {
+      turnLog[metadataKey: key] = value
+    }
+
+    return turnLog
   }
 
   /// Emits the one finished line for a turn; its level reflects severity — completed → info,

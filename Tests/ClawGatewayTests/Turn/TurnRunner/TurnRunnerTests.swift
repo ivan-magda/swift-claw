@@ -855,7 +855,7 @@ struct TurnRunnerTests {
     // then — FAILED with the named cap, the model never ran, one owner DM, one audit trip row
     #expect(try latestRunState(env.queue) == "FAILED")
     let pending = try env.outbox.pendingOutbound()
-    #expect(pending.first?.payload == Degradation.budget(cap: "proactive per-day spend"))
+    #expect(pending.first?.payload == Degradation.budget(cap: BudgetGate.proactivePerDayCap))
     #expect(await env.provider.callCount == 0)
     #expect(await transport.sent.map(\.text) == [Degradation.proactiveCapTripped])
     let tripCount = try await env.queue.read { db in
@@ -1281,7 +1281,7 @@ struct TurnRunnerTests {
     let pending = try env.outbox.pendingOutbound()
     let firstPending = try #require(pending.first)
     #expect(firstPending.payload.contains("`MEMORY.md` is 2201/2200"))
-    #expect(firstPending.payload.contains(Degradation.budget(cap: "per-day token")))
+    #expect(firstPending.payload.contains(Degradation.budget(cap: BudgetGate.perDayTokenCap)))
   }
 
   @Test

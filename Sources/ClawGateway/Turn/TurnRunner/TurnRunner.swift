@@ -174,32 +174,24 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    // Real session taint: the gate reads `(session ∪ run)`, so a session already tainted by a
-    // prior turn keeps the exfil gate armed from this run's very first tool call.
-    let mode = SessionKey.mode(from: inputs.snapshot.sessionKey)
-    let outcome = try await agent.runTurn(
-      runID: runID,
-      sessionID: sessionID,
-      chatID: chatID,
-      buildResult: inputs.buildResult,
-      sessionTainted: inputs.snapshot.isTainted,
-      hasPinnedLessons: inputs.buildResult.hasPinnedLessons,
-      sessionHasPrivateData: inputs.snapshot.hasPrivateData,
-      todayTokens: inputs.todayTokens,
-      todayUSD: inputs.todayUSD,
-      origin: origin,
-      proactiveTodayUSD: inputs.proactiveTodayUSD,
-      mode: mode,
-      threadID: SessionKey.threadID(from: inputs.snapshot.sessionKey),
-      requesterUserID: execution?.requesterUserID
+    let request = inputs.turnRequest(
+      scope: inputs.scope(
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
+        origin: origin,
+        requesterUserID: execution?.requesterUserID
+      ),
+      carryOver: nil
     )
+    let outcome = try await agent.runTurn(request)
 
     try await commit(
       outcome,
       runID: runID,
       sessionID: sessionID,
       chatID: chatID,
-      mode: mode,
+      mode: request.scope.mode,
       ownerNotices: inputs.buildResult.ownerNotices,
       origin: origin
     )
@@ -245,26 +237,19 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let mode = SessionKey.mode(from: inputs.snapshot.sessionKey)
-    let outcome: TurnOutcome
-    do {
-      outcome = try await agent.runTurn(
+    let request = inputs.turnRequest(
+      scope: inputs.scope(
         runID: runID,
         sessionID: sessionID,
         chatID: chatID,
-        buildResult: inputs.buildResult,
-        sessionTainted: inputs.snapshot.isTainted,
-        hasPinnedLessons: inputs.buildResult.hasPinnedLessons,
-        sessionHasPrivateData: inputs.snapshot.hasPrivateData,
-        todayTokens: inputs.todayTokens,
-        todayUSD: inputs.todayUSD,
         origin: origin,
-        proactiveTodayUSD: inputs.proactiveTodayUSD,
-        carryOver: carryOver,
-        mode: mode,
-        threadID: SessionKey.threadID(from: inputs.snapshot.sessionKey),
         requesterUserID: execution?.requesterUserID
-      )
+      ),
+      carryOver: carryOver
+    )
+    let outcome: TurnOutcome
+    do {
+      outcome = try await agent.runTurn(request)
     } catch {
       failResume(runID: runID, stage: .turn, error: error)
       return
@@ -276,7 +261,7 @@ public struct TurnRunner: TurnDispatching {
         runID: runID,
         sessionID: sessionID,
         chatID: chatID,
-        mode: mode,
+        mode: request.scope.mode,
         ownerNotices: inputs.buildResult.ownerNotices,
         origin: origin
       )

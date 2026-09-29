@@ -9,15 +9,7 @@ import Testing
 struct LoopPersistenceContractTests {
   private func run(_ runtime: AgentRuntime) async throws -> TurnOutcome {
     try await runtime.runTurn(
-      runID: 1,
-      sessionID: 1,
-      chatID: 1,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 1, chatID: 1, context: makeBuildResult())
     )
   }
 

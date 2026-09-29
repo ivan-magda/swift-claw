@@ -18,19 +18,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hi")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hi")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — provider cost wins.
@@ -53,19 +50,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hello world")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hello world")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — usage is estimated: prompt from the sent context, completion from the reply. Never a
@@ -89,19 +83,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 42,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hi")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 42,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hi")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — the request carries the OpenRouter-grouping id derived from the session id
@@ -120,19 +111,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hi")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hi")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then
@@ -153,19 +141,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hi")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hi")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then
@@ -187,19 +172,17 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hi")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 999_999,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hi")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        ),
+        todayTokens: 999_999
+      )
     )
 
     // then
@@ -229,19 +212,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hi")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hi")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — denied on the per-run USD cap, before the provider or typing fire.
@@ -269,19 +249,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hi")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hi")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — the gate allowed it through; the provider answered.
@@ -296,19 +273,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hi")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hi")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then
@@ -324,19 +298,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hello world")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hello world")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — unlike a terminal error, a flapping provider is debited the pre-call estimate.
@@ -362,19 +333,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hello world")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hello world")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — an estimated row: input estimate for "hello world" (4) + the reserved output cap.
@@ -404,19 +372,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hello world")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hello world")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — the owner sees the timeout degradation, but nothing is billed
@@ -448,19 +413,16 @@ struct AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: BuildResult(
-        messages: [ChatMessage(role: .user, content: "hello world")],
-        ownerNotices: [],
-        hasPrivateDataAccess: false
-      ),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: "hello world")],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
     )
 
     // then — the owner sees the timeout, but the row is authoritative: real counts and provider cost
@@ -508,15 +470,7 @@ extension AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: makeBuildResult())
     )
 
     // then — the intermediate proposal keeps round one's state, the answer keeps round two's
@@ -555,15 +509,7 @@ extension AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: makeBuildResult())
     )
 
     // then
@@ -616,15 +562,7 @@ extension AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: makeBuildResult())
     )
 
     // then
@@ -660,15 +598,7 @@ extension AgentRuntimeTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: makeBuildResult())
     )
 
     // then
@@ -696,15 +626,7 @@ extension AgentRuntimeTests {
     )
     let turn = Task {
       try await runtime.runTurn(
-        runID: 1,
-        sessionID: 2,
-        chatID: 3,
-        buildResult: makeBuildResult(),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: 0,
-        todayUSD: 0
+        makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: makeBuildResult())
       )
     }
     await admissionStarted.wait()
@@ -740,15 +662,7 @@ extension AgentRuntimeTests {
 
     // when
     _ = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: makeBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: makeBuildResult())
     )
 
     // then — the fenced observation is untrusted input; replay material must never ride it, and the
@@ -793,15 +707,7 @@ struct AgentRuntimePolicyTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: Self.userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: Self.userBuildResult())
     )
 
     // then — cost is a confirmed zero, keyed on the qualified reference, and not an estimate since
@@ -830,15 +736,7 @@ struct AgentRuntimePolicyTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: Self.userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: Self.userBuildResult())
     )
 
     // then — the missing tokens are estimated (so isEstimated is true), but the confirmed zero and
@@ -859,15 +757,13 @@ struct AgentRuntimePolicyTests {
     // when — a metered run is refused before any call
     let meteredProvider = StubProvider(.respond(okResponse()))
     let meteredOutcome = try await makeRuntime(provider: meteredProvider).runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: Self.userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: overUSD
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: Self.userBuildResult(),
+        todayUSD: overUSD
+      )
     )
     // then — the metered USD cap rejects, so the skip below is not vacuous
     guard case .budgetStopped = meteredOutcome.result else {
@@ -880,15 +776,13 @@ struct AgentRuntimePolicyTests {
     let planProvider = StubProvider(.respond(okResponse(content: "answer")))
     let planOutcome = try await makeRuntime(provider: planProvider, costPolicy: .includedPlan)
       .runTurn(
-        runID: 1,
-        sessionID: 2,
-        chatID: 3,
-        buildResult: Self.userBuildResult(),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: 0,
-        todayUSD: overUSD
+        makeTurnRequest(
+          runID: 1,
+          sessionID: 2,
+          chatID: 3,
+          context: Self.userBuildResult(),
+          todayUSD: overUSD
+        )
       )
     // then — a subscription USD figure is not a gate
     _ = try requireCompleted(planOutcome.result)
@@ -898,15 +792,13 @@ struct AgentRuntimePolicyTests {
     let tokenProvider = StubProvider(.respond(okResponse()))
     let tokenOutcome = try await makeRuntime(provider: tokenProvider, costPolicy: .includedPlan)
       .runTurn(
-        runID: 1,
-        sessionID: 2,
-        chatID: 3,
-        buildResult: Self.userBuildResult(),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: RunBudget.default.dayTokenCeiling,
-        todayUSD: 0
+        makeTurnRequest(
+          runID: 1,
+          sessionID: 2,
+          chatID: 3,
+          context: Self.userBuildResult(),
+          todayTokens: RunBudget.default.dayTokenCeiling
+        )
       )
     // then — a token cap is not a USD cap, so it still stops the subscription call
     #expect(tokenOutcome.result == .budgetStopped(cap: BudgetGate.perDayTokenCap))
@@ -921,15 +813,12 @@ struct AgentRuntimePolicyTests {
     // when — under text-only estimation the tiny wire clears the gate
     let textOnlyProvider = StubProvider(.respond(okResponse(content: "answer")))
     let textOnlyOutcome = try await makeRuntime(provider: textOnlyProvider).runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: buildResultCarryingState(bytes: stateBytes),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: buildResultCarryingState(bytes: stateBytes)
+      )
     )
     // then — text-only reserves nothing for the bytes, so the call goes out
     _ = try requireCompleted(textOnlyOutcome.result)
@@ -941,15 +830,12 @@ struct AgentRuntimePolicyTests {
       provider: reservedProvider,
       reservationPolicy: .chatGPTReplayState
     ).runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: buildResultCarryingState(bytes: stateBytes),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: buildResultCarryingState(bytes: stateBytes)
+      )
     )
     // then — replay state cannot bypass the token gate; the provider is never reached
     #expect(reservedOutcome.result == .budgetStopped(cap: BudgetGate.perRunInputTokenCap))
@@ -967,15 +853,12 @@ struct AgentRuntimePolicyTests {
         provider: StubProvider(.respond(okResponse(content: "hi", usage: nil))),
         reservationPolicy: reservation
       ).runTurn(
-        runID: 1,
-        sessionID: 2,
-        chatID: 3,
-        buildResult: buildResultCarryingState(bytes: stateBytes),
-        sessionTainted: false,
-        hasPinnedLessons: false,
-        sessionHasPrivateData: false,
-        todayTokens: 0,
-        todayUSD: 0
+        makeTurnRequest(
+          runID: 1,
+          sessionID: 2,
+          chatID: 3,
+          context: buildResultCarryingState(bytes: stateBytes)
+        )
       )
       return try requireCompleted(outcome.result).usage.promptTokens
     }
@@ -1006,15 +889,7 @@ struct AgentRuntimeFailureAccountingTests {
     store: RecordingUsageStore
   ) async throws -> (kind: DegradationKind, usage: ProviderUsage?) {
     let outcome = try await makeRuntime(provider: StubProvider(outcome), usageStore: store).runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: userBuildResult())
     )
     return try requireDegraded(outcome.result)
   }
@@ -1204,15 +1079,7 @@ struct AgentRuntimeFailureAccountingTests {
 
     // when
     let outcome = try await runtime.runTurn(
-      runID: 1,
-      sessionID: 2,
-      chatID: 3,
-      buildResult: Self.userBuildResult(),
-      sessionTainted: false,
-      hasPinnedLessons: false,
-      sessionHasPrivateData: false,
-      todayTokens: 0,
-      todayUSD: 0
+      makeTurnRequest(runID: 1, sessionID: 2, chatID: 3, context: Self.userBuildResult())
     )
 
     // then — the failed second round adds no row; only the first round's usage stands
