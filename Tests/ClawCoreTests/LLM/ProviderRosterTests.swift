@@ -1,5 +1,4 @@
 import ClawCore
-import ClawTestSupport
 import Testing
 
 @Suite("Provider roster")
@@ -75,26 +74,5 @@ struct ProviderRosterTests {
 
     // then
     #expect(roster.failover(from: .fallback) == nil)
-  }
-}
-
-// MARK: - Route Fixtures
-
-private extension ProviderRosterTests {
-  /// Bindings named after their position, so a selection's identity is readable in the expectation
-  /// rather than inferred from the position it was asked for.
-  func makeBinding(_ reference: String) -> LLMRouteBinding {
-    makeSingleRouteRoster(
-      provider: SequenceProvider([]),
-      wireModel: "\(reference)-wire",
-      configuredReference: reference
-    ).primary
-  }
-
-  func makeRoster(hasFallback: Bool) -> ProviderRoster {
-    ProviderRoster(
-      primary: makeBinding("primary-model"),
-      fallback: hasFallback ? makeBinding("fallback-model") : nil
-    )
   }
 }

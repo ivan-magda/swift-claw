@@ -176,8 +176,12 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
         if firstFailureError == nil {
           firstFailureError = error
         }
-        guard let persistence = RouteSwitch.permits(error),
-              let next = roster.failover(from: active.position)
+        guard let failover = await RouteSwitch.failover(
+          after: error,
+          from: active.position,
+          roster: roster,
+          cooldown: cooldown
+        )
         else {
           // One decision for every natural failure, keyed on the same vendor-neutral disposition a
           // turn reads. `mayHaveStarted` (exhausted retries, transport loss) debits an estimate so a
@@ -196,11 +200,7 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
           return Self.parseFailureResult(for: firstFailureError ?? error)
         }
 
-        await cooldown?.arm(
-          persistence: persistence,
-          retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
-        )
-        active = next
+        active = failover.route
         accountant = makeAccountant(for: active.binding)
         request = ChatRequest(
           model: active.binding.wireModel,

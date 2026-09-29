@@ -30,18 +30,17 @@ extension LearningOperationRunner {
 
         return (.response(response), active.binding)
       } catch {
-        guard let persistence = RouteSwitch.permits(error),
-              let next = roster.failover(from: active.position)
+        guard let failover = await RouteSwitch.failover(
+          after: error,
+          from: active.position,
+          roster: roster,
+          cooldown: cooldown
+        )
         else {
           return (.failed(error), active.binding)
         }
 
-        await cooldown?.arm(
-          persistence: persistence,
-          retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
-        )
-
-        active = next
+        active = failover.route
       }
     }
   }
