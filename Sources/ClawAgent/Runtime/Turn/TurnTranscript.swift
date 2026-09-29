@@ -25,6 +25,7 @@ struct TurnTranscript {
         providerState: response.providerState
       )
     )
+
     for observation in observations {
       wire.append(
         ChatMessage(
