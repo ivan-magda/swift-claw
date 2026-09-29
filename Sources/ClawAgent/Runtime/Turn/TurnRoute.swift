@@ -48,20 +48,19 @@ struct TurnRoute {
   /// Moves to the fallback when `error` permits a switch and one is configured, arming the
   /// primary's cooldown first. Returns nil, changing nothing, when the turn must degrade instead.
   mutating func switchRoute(after error: any Error) async -> Transition? {
-    guard let persistence = RouteSwitch.permits(error),
-          let next = roster.failover(from: active.position)
+    guard let failover = await RouteSwitch.failover(
+      after: error,
+      from: active.position,
+      roster: roster,
+      cooldown: cooldown
+    )
     else {
       return nil
     }
 
     let previous = active.binding.configuredReference
-    await cooldown?.arm(
-      persistence: persistence,
-      retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
-    )
-
     active = ActiveRoute(
-      selection: next,
+      selection: failover.route,
       budget: budget,
       costResolver: costResolver,
       usageResolver: usageResolver
@@ -69,7 +68,7 @@ struct TurnRoute {
     let successor = active.binding.configuredReference
     notice = .switched(from: previous, to: successor)
 
-    return Transition(previous: previous, successor: successor, persistence: persistence)
+    return Transition(previous: previous, successor: successor, persistence: failover.persistence)
   }
 
   /// Records that the active route answered. A primary answer drops its cooldown window and owes

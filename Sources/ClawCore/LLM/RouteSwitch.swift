@@ -60,11 +60,43 @@ public enum RouteSwitch {
 
   /// The provider's own retry hint, so an armed cooldown can honor a bound longer than its tier
   /// default. Only a clean throttle carries one; every other cause leaves the tier to decide.
-  /// Shared by the turn and schedule surfaces so both cooldown windows honor it identically.
   public static func retryAfterSeconds(of error: any Error) -> Int? {
     guard case .quotaLimited(let seconds)? = ProviderError.cause(of: error) else {
       return nil
     }
     return seconds
+  }
+}
+
+// MARK: - Failover
+
+/// A switch the failover step took: the route to re-issue on, and the cooldown tier armed on the
+/// primary it left.
+public struct RouteFailover: Sendable {
+  public let route: RouteSelection
+  public let persistence: RouteFailurePersistence
+}
+
+extension RouteSwitch {
+  /// Takes the switch `error` permits, arming the primary's cooldown, and returns the route to
+  /// re-issue on. Returns `nil`, arming nothing, when the cause or the roster refuses the switch.
+  public static func failover(
+    after error: any Error,
+    from position: RoutePosition,
+    roster: ProviderRoster,
+    cooldown: (any PrimaryRouteCooldownTracking)?
+  ) async -> RouteFailover? {
+    guard let persistence = permits(error),
+          let route = roster.failover(from: position)
+    else {
+      return nil
+    }
+
+    await cooldown?.arm(
+      persistence: persistence,
+      retryAfterSeconds: retryAfterSeconds(of: error)
+    )
+
+    return RouteFailover(route: route, persistence: persistence)
   }
 }
