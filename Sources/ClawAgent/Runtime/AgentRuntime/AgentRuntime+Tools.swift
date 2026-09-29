@@ -23,6 +23,7 @@ extension AgentRuntime {
       guard !Task.isCancelled else {
         break
       }
+
       guard ledger.admitToolCall() else {
         return .exit(.budgetStopped(cap: BudgetGate.perRunToolCallCap))
       }
@@ -68,6 +69,7 @@ extension AgentRuntime {
     if batch.interrupted {
       batch.recordUnexecuted(round.response.toolCalls)
     }
+
     return .proceed(batch)
   }
 }
@@ -82,8 +84,10 @@ private extension AgentRuntime {
     log: Logger
   ) async -> ToolDispatchOutcome {
     log.debug("tool \(call.name) invoked")
+
     let toolStart = now()
     let dispatched = await dispatcher.dispatch(call: call, context: context)
+
     log.debug(
       """
       tool \(call.name) done decision=\(dispatched.observation.status.rawValue) \
@@ -91,6 +95,7 @@ private extension AgentRuntime {
       ms=\(Self.millis(now() - toolStart))
       """
     )
+
     return dispatched
   }
 }
