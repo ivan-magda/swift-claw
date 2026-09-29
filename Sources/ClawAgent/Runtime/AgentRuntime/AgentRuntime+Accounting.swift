@@ -3,9 +3,6 @@ import Foundation
 
 // MARK: - Result Classification
 
-// Internal rather than `private` so the round phases in the sibling runtime files can reach these.
-// They take the accountant rather than reading one off the runtime, so each call is charged under
-// the policies of the route that issued it.
 extension AgentRuntime {
   /// The single accounting decision for every natural failure and cancellation. It reads the
   /// vendor-neutral disposition — `ProviderFailure.accounting` when the provider tagged one — never
@@ -61,9 +58,6 @@ extension AgentRuntime {
     }
   }
 
-  /// Maps an answered round to a result, debiting its reconciled usage (real, or estimated when
-  /// the provider omits it): non-empty content → `.completed`; empty + `finishReason == "length"` →
-  /// `.degraded(.outputTruncated)`; any other empty → `.degraded(.providerUnavailable)`.
   func classify(_ round: AnsweredRound) -> TurnResult {
     let usage = reconciledUsage(for: round)
     let response = round.response
@@ -83,12 +77,9 @@ extension AgentRuntime {
     return .degraded(.providerUnavailable, usage: usage)
   }
 
-  /// The mid-dispatch wall-clock exit. The round's provider call already returned and its
-  /// intermediate row was recorded under this same call id, so the conservative estimate this books
-  /// is idempotent on that identity: it degrades the turn without re-debiting the round. The other
-  /// two exits account differently: the pre-send exit writes no row (the call provably never
-  /// issued), and a deadline that wins during the send surfaces as a thrown cancellation marker the
-  /// generic failure path classifies by its accounting disposition.
+  /// The mid-dispatch wall-clock exit. The round's row is already recorded under this call id, so
+  /// the conservative estimate is idempotent on it: the turn degrades without re-debiting the round.
+  /// (The pre-send exit writes no row; a during-send deadline throws and takes the failure path.)
   func deadlineDegradation(_ round: AnsweredRound) -> TurnResult {
     .degraded(
       .providerUnavailable,
@@ -160,6 +151,7 @@ extension AgentRuntime {
     if round.response.usage == nil {
       attempts.recordMissingUsage(usage)
     }
+
     return .proceed(usage)
   }
 }
