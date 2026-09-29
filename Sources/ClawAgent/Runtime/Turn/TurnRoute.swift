@@ -49,7 +49,7 @@ struct TurnRoute {
   /// primary's cooldown first. Returns nil, changing nothing, when the turn must degrade instead.
   mutating func switchRoute(after error: any Error) async -> Transition? {
     guard let persistence = RouteSwitch.permits(error),
-          let next = roster.failover(from: active.position)
+      let next = roster.failover(from: active.position)
     else {
       return nil
     }
@@ -59,6 +59,7 @@ struct TurnRoute {
       persistence: persistence,
       retryAfterSeconds: RouteSwitch.retryAfterSeconds(of: error)
     )
+
     active = ActiveRoute(
       selection: next,
       budget: budget,
@@ -67,6 +68,7 @@ struct TurnRoute {
     )
     let successor = active.binding.configuredReference
     notice = .switched(from: previous, to: successor)
+
     return Transition(previous: previous, successor: successor, persistence: persistence)
   }
 
@@ -77,6 +79,7 @@ struct TurnRoute {
     guard active.position == .primary, notice == nil, let cooldown else {
       return
     }
+
     if await cooldown.recordSuccess() {
       notice = .restored(route: active.binding.configuredReference)
     }
