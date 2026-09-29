@@ -44,9 +44,11 @@ extension TurnScope {
     guard origin == .interactive else {
       return nil
     }
+
     if let requesterUserID {
       return requesterUserID
     }
+
     return mode == .direct ? chatID : nil
   }
 
