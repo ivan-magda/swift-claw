@@ -78,8 +78,9 @@ public enum TurnResult: Sendable, Equatable {
   case completed(content: String, usage: ProviderUsage, providerState: ProviderExchangeState?)
   /// No usable answer. Usage is present only when the attempt still owes accounting.
   case degraded(DegradationKind, usage: ProviderUsage?)
-  /// The offline budget gate refused before another provider call.
-  case budgetStopped(cap: String)
+  /// The offline budget gate refused before another provider call. `unpricedModel` names the model
+  /// when its reference-rate guess, not real spend, is what tripped the cap.
+  case budgetStopped(cap: String, unpricedModel: String? = nil)
   /// The batch drained after recording an ask-tier action.
   case suspended(pending: PendingToolAction, usage: ProviderUsage)
 }

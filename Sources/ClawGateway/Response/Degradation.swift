@@ -71,8 +71,17 @@ public enum Degradation {
   }
 
   /// The spend-breaker reply; `cap` names the tripped limit (e.g. "per-run spend" / "per-day token").
-  public static func budget(cap: String) -> String {
-    "I stopped because I hit the \(cap) cap."
+  /// `unpricedModel` names a model whose reference-rate guess alone tripped it, so the owner learns
+  /// to price that model rather than raise the cap.
+  public static func budget(cap: String, unpricedModel: String? = nil) -> String {
+    let stop = "I stopped because I hit the \(cap) cap."
+    guard let unpricedModel else {
+      return stop
+    }
+    return """
+      \(stop) I don't have a price for `\(unpricedModel)`, so I estimated this request at the \
+      reference rate. Send /status to see how to set its price.
+      """
   }
 
   /// The once-per-UTC-day owner DM fired by the post-commit kill-switch (`BudgetBreaker`).

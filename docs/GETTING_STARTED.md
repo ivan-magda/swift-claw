@@ -100,7 +100,9 @@ clawd doctor --check-config
 ```
 
 Healthy output shows `OK` on the `config` row and `backend=encrypted` on the `secrets`
-row (`backend=env (WARN: plaintext)` if you skipped sealing).
+row (`backend=env (WARN: plaintext)` if you skipped sealing). A failing `spend.primary_price`
+row means clawd has no price for your model; set one as described in
+[Models without a price](CUSTOMIZATION.md#models-without-a-price).
 
 Use `--check-config` until you have allowlisted yourself in step 5. The full `clawd
 doctor` also checks the database, and with an empty allowlist the `allowlist.owners` row

@@ -5,9 +5,10 @@ import Foundation
 /// The single accounting authority both a turn (`AgentRuntime`) and a command-scoped parse
 /// (`ScheduleDraftParser`) mint their `provider_usage` rows through, so the two account identically
 /// by construction rather than through parallel copies kept in sync by hand. It owns the route's
-/// cost identity, its billing and reservation policies, and the two resolvers, and exposes the three
+/// cost identity, its billing and reservation policies, and the two resolvers, and exposes the
 /// shapes a caller needs: the reconciled row a returned response yields, the conservative estimate a
-/// call with no authoritative usage owes, and the pre-call estimate a budget gate reads.
+/// call with no authoritative usage owes, and the pre-call estimate a budget gate reads, with the
+/// refusal that gate returns attributed to a guessed price when that alone caused it.
 public struct ProviderUsageAccountant: Sendable {
   /// The pre-call estimate a budget gate reads: reserved input for the input cap, the total for the
   /// token cap, and the USD figure for the spend cap.
@@ -15,11 +16,26 @@ public struct ProviderUsageAccountant: Sendable {
     public let inputTokens: Int
     public let totalTokens: Int
     public let costUSD: Double
+    /// Where `costUSD` came from; `.heuristic` means the model has no known price.
+    public let costSource: CostSource
 
-    public init(inputTokens: Int, totalTokens: Int, costUSD: Double) {
+    public init(inputTokens: Int, totalTokens: Int, costUSD: Double, costSource: CostSource) {
       self.inputTokens = inputTokens
       self.totalTokens = totalTokens
       self.costUSD = costUSD
+      self.costSource = costSource
+    }
+  }
+
+  /// A budget check's refusal: the cap it tripped and, when the reference-rate guess for a model
+  /// with no known price is the only reason, that model's reference.
+  public struct PreflightRefusal: Sendable, Equatable {
+    public let cap: String
+    public let unpricedModel: String?
+
+    public init(cap: String, unpricedModel: String?) {
+      self.cap = cap
+      self.unpricedModel = unpricedModel
     }
   }
 
@@ -188,7 +204,7 @@ public struct ProviderUsageAccountant: Sendable {
       reservationPolicy.additionalTokens(for: context)
     )
     let totalTokens = SaturatingArithmetic.sum(inputTokens, outputCap)
-    let costUSD = costResolver.resolve(
+    let cost = costResolver.resolve(
       model: configuredReference,
       usage: ChatUsage(
         promptTokens: inputTokens,
@@ -197,7 +213,39 @@ public struct ProviderUsageAccountant: Sendable {
       ),
       providerCost: nil,
       policy: costPolicy
-    ).costUSD
-    return PreflightEstimate(inputTokens: inputTokens, totalTokens: totalTokens, costUSD: costUSD)
+    )
+    return PreflightEstimate(
+      inputTokens: inputTokens,
+      totalTokens: totalTokens,
+      costUSD: cost.costUSD,
+      costSource: cost.source
+    )
+  }
+
+  /// Runs `check` on `estimate` and returns its refusal, if any. A refused heuristic estimate is
+  /// checked again at zero cost: when that passes, the guessed price alone refused the call, so the
+  /// refusal names this route's model and the owner learns what to price. A refusal that stands at
+  /// zero cost (spend already over a cap, a token bound) names no model.
+  public func refusal(
+    for estimate: PreflightEstimate,
+    check: (PreflightEstimate) -> BudgetDecision
+  ) -> PreflightRefusal? {
+    guard case .deny(let cap) = check(estimate) else {
+      return nil
+    }
+
+    guard estimate.costSource == .heuristic else {
+      return PreflightRefusal(cap: cap, unpricedModel: nil)
+    }
+
+    let unpriced = PreflightEstimate(
+      inputTokens: estimate.inputTokens,
+      totalTokens: estimate.totalTokens,
+      costUSD: 0,
+      costSource: estimate.costSource
+    )
+    let guessOnly = check(unpriced) == .allow
+
+    return PreflightRefusal(cap: cap, unpricedModel: guessOnly ? configuredReference : nil)
   }
 }

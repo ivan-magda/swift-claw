@@ -280,7 +280,8 @@ public struct LLMConfig: Sendable, Equatable {
   public let streamingEnabled: Bool
   public let structuredOutput: StructuredOutputMode
   public let fallbackRoute: ResolvedLLMRoute?
-  /// Seconds a route-switch trip keeps the daemon off the primary before it is retried.
+  public let routePrice: ModelPrice?
+  public let fallbackRoutePrice: ModelPrice?
   public let primaryCooldownSeconds: Int
 
   public init(
@@ -291,6 +292,8 @@ public struct LLMConfig: Sendable, Equatable {
     streamingEnabled: Bool = true,
     structuredOutput: StructuredOutputMode = .off,
     fallbackRoute: ResolvedLLMRoute? = nil,
+    routePrice: ModelPrice? = nil,
+    fallbackRoutePrice: ModelPrice? = nil,
     primaryCooldownSeconds: Int = 900
   ) {
     self.route = route
@@ -300,7 +303,25 @@ public struct LLMConfig: Sendable, Equatable {
     self.streamingEnabled = streamingEnabled
     self.structuredOutput = structuredOutput
     self.fallbackRoute = fallbackRoute
+    self.routePrice = routePrice
+    self.fallbackRoutePrice = fallbackRoutePrice
     self.primaryCooldownSeconds = primaryCooldownSeconds
+  }
+
+  /// The owner-set prices keyed by model reference, the key `CostResolver` looks prices up by.
+  /// Parsing guarantees two routes that share a reference do not disagree on its price.
+  public var configuredPrices: [String: ModelPrice] {
+    var prices: [String: ModelPrice] = [:]
+
+    if let fallbackRoute, let fallbackRoutePrice {
+      prices[fallbackRoute.configuredReference] = fallbackRoutePrice
+    }
+
+    if let routePrice {
+      prices[route.configuredReference] = routePrice
+    }
+
+    return prices
   }
 }
 
@@ -424,21 +445,52 @@ public struct ResolvedCost: Sendable, Equatable {
   }
 }
 
+/// A per-token price clawd knows for a model, and which tier supplied it.
+public struct KnownPrice: Sendable, Equatable {
+  public let price: ModelPrice
+  public let source: CostSource
+
+  public init(price: ModelPrice, source: CostSource) {
+    self.price = price
+    self.source = source
+  }
+}
+
 /// Best-effort USD cost — never a silent $0. Under `metered` the first known source wins:
-/// provider-returned (incl. a confirmed $0) → vendored price-file (incl. a free model's $0) →
-/// reference-rate heuristic. Only the heuristic is `isEstimated`, and only it is floored at
-/// `heuristicFloorUSD`, so a *guessed* cost is never recorded as $0. Under `includedPlan` the plan
-/// already paid, and `CostSource.includedPlan` is the durable proof of that.
+/// provider-returned (incl. a confirmed $0) → owner-configured price → vendored price-file (incl. a
+/// free model's $0) → reference-rate heuristic. Only the heuristic is `isEstimated`, and only it is
+/// floored at `heuristicFloorUSD`, so a *guessed* cost is never recorded as $0. Under
+/// `includedPlan` the plan already paid, and `CostSource.includedPlan` is the durable proof of that.
 public struct CostResolver: Sendable {
   /// The never-silent-$0 floor for a heuristic tier that computes to 0.
   public static let heuristicFloorUSD = 0.000_001
 
   public let priceTable: PriceTable
   public let referenceUSDPerToken: Double
+  public let configuredPrices: [String: ModelPrice]
 
-  public init(priceTable: PriceTable, referenceUSDPerToken: Double) {
+  public init(
+    priceTable: PriceTable,
+    referenceUSDPerToken: Double,
+    configuredPrices: [String: ModelPrice] = [:]
+  ) {
     self.priceTable = priceTable
     self.referenceUSDPerToken = referenceUSDPerToken
+    self.configuredPrices = configuredPrices
+  }
+
+  /// The price a metered call on `model` is charged at before any provider cost exists, or `nil`
+  /// when only the reference-rate heuristic applies.
+  public func knownPrice(for model: String) -> KnownPrice? {
+    if let price = configuredPrices[model] {
+      return KnownPrice(price: price, source: .configuredPrice)
+    }
+
+    if let price = priceTable.price(for: model) {
+      return KnownPrice(price: price, source: .priceFile)
+    }
+
+    return nil
   }
 
   public func resolve(
@@ -458,12 +510,13 @@ public struct CostResolver: Sendable {
       return ResolvedCost(costUSD: providerCost, source: .providerReturned, isEstimated: false)
     }
 
-    if let price = priceTable.price(for: model) {
+    if let known = knownPrice(for: model) {
+      let price = known.price
       let cost =
         Double(usage.promptTokens) / 1_000_000 * price.inputUSDPerMTok + Double(
           usage.completionTokens
         ) / 1_000_000 * price.outputUSDPerMTok
-      return ResolvedCost(costUSD: cost, source: .priceFile, isEstimated: false)
+      return ResolvedCost(costUSD: cost, source: known.source, isEstimated: false)
     }
 
     let raw = Double(usage.totalTokens) * referenceUSDPerToken

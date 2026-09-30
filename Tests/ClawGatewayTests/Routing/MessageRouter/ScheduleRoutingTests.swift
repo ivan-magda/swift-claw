@@ -396,6 +396,24 @@ struct ScheduleRoutingTests {
   }
 
   @Test
+  func aRefusalOnAGuessedPriceNamesTheModelToPrice() async throws {
+    // given — the parse was refused only because its model has no known price
+    let harness = try makeHarness(
+      parseResults: [.budgetDenied(cap: BudgetGate.perRunSpendCap, unpricedModel: "vendor/new")]
+    )
+
+    // when
+    await harness.router.handle(
+      rawUpdate: textUpdate(id: 1, from: 42, text: "/schedule every weekday at 7am")
+    )
+
+    // then — the reply names the model as well as the cap, and nothing is armed
+    let reply = try #require(await harness.transport.sent.last?.text)
+    #expect(reply.contains("vendor/new"))
+    #expect(try jobCount(harness) == 0)
+  }
+
+  @Test
   func unparseableTextGetsTheExampleRephrase() async throws {
     // given
     let harness = try makeHarness(parseResults: [.unparseable])

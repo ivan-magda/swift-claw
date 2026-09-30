@@ -21,6 +21,7 @@ extension AppConfig {
     )
     let route = try routeApplyingWireOutputField(to: resolved, env: env)
     let fallbackRoute = try parseFallbackRoute(from: env)
+    let prices = try parseRoutePrices(route: route, fallbackRoute: fallbackRoute, env: env)
 
     let rawMaxTokens = env[EnvKey.llmMaxTokens]?.trimmingCharacters(in: .whitespaces) ?? ""
     let maxOutputTokens: Int
@@ -51,6 +52,8 @@ extension AppConfig {
       ),
       structuredOutput: structuredOutput,
       fallbackRoute: fallbackRoute,
+      routePrice: prices.route,
+      fallbackRoutePrice: prices.fallback,
       primaryCooldownSeconds: try parsePrimaryCooldown(from: env)
     )
   }
@@ -108,7 +111,7 @@ private extension AppConfig {
   /// before it is retried. Absent/blank falls back to the 900-second default, else must be positive.
   static func parsePrimaryCooldown(from env: [String: String]) throws -> Int {
     try ConfigParse.boundedInt(
-      env[EnvKey.primaryCooldownSeconds],
+      env[EnvKey.llmPrimaryCooldownSeconds],
       default: EnvDefaults.primaryCooldownSeconds,
       range: 1...Int.max,
       onInvalid: ConfigError.invalidPrimaryCooldown

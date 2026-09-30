@@ -45,4 +45,21 @@ enum ConfigParse {
 
     return value
   }
+
+  /// A finite value of zero or more; absent/blank yields `nil`.
+  static func nonNegativeDoubleOrNil(
+    _ raw: String?,
+    onInvalid: (_ value: String) -> ConfigError
+  ) throws(ConfigError) -> Double? {
+    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !trimmed.isEmpty else {
+      return nil
+    }
+
+    guard let value = Double(trimmed), value.isFinite, value >= 0 else {
+      throw onInvalid(trimmed)
+    }
+
+    return value
+  }
 }

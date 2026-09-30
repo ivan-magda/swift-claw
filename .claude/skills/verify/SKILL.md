@@ -30,6 +30,9 @@ with tempfile.TemporaryDirectory(prefix="clawd-verify-") as state_root:
         "CLAW_STATE_ROOT": state_root,
         "CLAW_LLM_BASE_URL": "http://localhost:9/v1",
         "CLAW_LLM_MODEL": "test-model",
+        # A made-up model has no price; without one its price row fails too.
+        "CLAW_LLM_INPUT_USD_PER_MTOK": "0",
+        "CLAW_LLM_OUTPUT_USD_PER_MTOK": "0",
     }
     result = subprocess.run(
         ["./.build/debug/clawd", "doctor", "--check-config", "--json"],

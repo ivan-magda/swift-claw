@@ -24,6 +24,15 @@ struct HealthRowsBuilderTests {
     skillDiagnostics: SkillDiagnostics = SkillDiagnostics(
       scan: SkillScanResult(descriptors: [], warnings: []),
       skillsCap: ContextBudget.default.skillsCap
+    ),
+    primaryPrice: RoutePriceHealth = RoutePriceHealth(
+      reference: "gpt-4o",
+      pricing: .known(
+        KnownPrice(
+          price: ModelPrice(inputUSDPerMTok: 2.5, outputUSDPerMTok: 10),
+          source: .priceFile
+        )
+      )
     )
   ) -> HealthRowsBuilder.Inputs {
     HealthRowsBuilder.Inputs(
@@ -43,6 +52,8 @@ struct HealthRowsBuilderTests {
       streamingEnabled: true,
       todayUsage: .available((tokens: 100, costUSD: todayUSD)),
       costMix: .available([:]),
+      primaryPrice: primaryPrice,
+      fallbackPrice: nil,
       perDayUSD: perDayUSD,
       perRunUSD: 0.5,
       walBytes: 12,
@@ -355,6 +366,27 @@ struct HealthRowsBuilderTests {
         $0.key == "spend.cost_source_mix"
       }?.value == "none"
     )
+  }
+
+  @Test
+  func theHealthTableFailsAnUnpricedPrimaryRoute() throws {
+    // given — a metered primary the price table does not know
+    let unpriced = RoutePriceHealth(
+      reference: "vendor/new-model",
+      pricing: .unknown(referenceUSDPerToken: 0.000_015)
+    )
+
+    // when
+    let checks = HealthRowsBuilder.checks(inputs(primaryPrice: unpriced))
+
+    // then — full doctor and /status both render this table, so the row must be in it and failing
+    let row = try #require(
+      checks.first {
+        $0.key == RoutePriceHealth.Key.primary
+      }
+    )
+    #expect(row.ok == false)
+    #expect(row.group == .spend)
   }
 
   private func routeRows(_ health: LLMRouteHealth) -> [String: String] {

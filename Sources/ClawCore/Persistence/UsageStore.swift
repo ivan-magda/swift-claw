@@ -2,6 +2,9 @@ import Foundation
 
 public enum CostSource: String, Sendable, Equatable {
   case providerReturned = "provider_returned"
+  /// A price the owner set for the route in configuration. It is distinct from `priceFile` so an
+  /// audit row never credits the bundled table with a number it does not contain.
+  case configuredPrice = "configured_price"
   case priceFile = "price_file"
   case heuristic
   /// A subscription route's confirmed zero. It is a distinct source rather than a $0

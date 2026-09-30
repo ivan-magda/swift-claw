@@ -9,8 +9,9 @@ public enum ScheduleDraftParseResult: Sendable, Equatable {
   case draft(ScheduleDraft)
   case unparseable
   case providerUnavailable
-  /// The day-spend gate refused before the call was issued; `cap` names the tripped limit.
-  case budgetDenied(cap: String)
+  /// The day-spend gate refused before the call was issued; `cap` names the tripped limit, and
+  /// `unpricedModel` the model whose reference-rate guess alone tripped it.
+  case budgetDenied(cap: String, unpricedModel: String? = nil)
   /// The credential is missing or refused. The router gives the same actionable guidance a turn
   /// does — stop clawd, `clawd auth login`, restart — and, like a turn, debits nothing.
   case authenticationRequired
@@ -393,13 +394,16 @@ private extension ScheduleDraftParser {
     }
 
     let estimate = accountant.preflightEstimate(context: messages)
-    if case .deny(let cap) = gate.preflight(
-      todayTokens: todayTokens,
-      todayUSD: todayUSD,
-      estimatedTotalTokens: estimate.totalTokens,
-      estimatedCostUSD: estimate.costUSD
-    ) {
-      return .budgetDenied(cap: cap)
+    let refusal = accountant.refusal(for: estimate) { candidate in
+      gate.preflight(
+        todayTokens: todayTokens,
+        todayUSD: todayUSD,
+        estimatedTotalTokens: candidate.totalTokens,
+        estimatedCostUSD: candidate.costUSD
+      )
+    }
+    if let refusal {
+      return .budgetDenied(cap: refusal.cap, unpricedModel: refusal.unpricedModel)
     }
     return nil
   }
