@@ -102,11 +102,8 @@ struct DaemonBuilder: Sendable {
     let coder = await prepareCoder(coordination: coordination)
 
     // Hoisted so the agent and the /schedule parse share one offline-first cost resolver — both
-    // meter spend against the same price snapshot and reference rate.
-    let costResolver = CostResolver(
-      priceTable: PriceFileLoader.load(),
-      referenceUSDPerToken: config.budget.referenceUSDPerToken
-    )
+    // meter spend against the same prices and reference rate.
+    let costResolver = CostResolver.configured(by: config)
 
     // Pinned here, before the agent stack: the remote catalog is part of the tool surface the
     // registry advertises and `policy_version` folds over, so it has to be settled before either

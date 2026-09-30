@@ -266,6 +266,46 @@ struct AgentRuntimeTests {
     #expect(await provider.calls == 1)
   }
 
+  @Test("a refusal that only the reference-rate guess caused names the unpriced model")
+  func aGuessedPriceRefusalNamesTheUnpricedModel() async throws {
+    // given — a model missing from the price table, a 32,768-token output cap, and a prompt of
+    // about 10k tokens. At the reference rate the estimate is ~$0.64, over the $0.50 per-run cap,
+    // although nothing has been spent yet.
+    let budget = RunBudget(
+      maxInputTokens: RunBudget.default.maxInputTokens,
+      maxOutputTokens: 32_768,
+      wallClockDeadlineSeconds: RunBudget.default.wallClockDeadlineSeconds,
+      retryBudget: RunBudget.default.retryBudget,
+      perRunUSD: RunBudget.default.perRunUSD,
+      perDayUSD: RunBudget.default.perDayUSD,
+      proactivePerDayUSD: RunBudget.default.proactivePerDayUSD,
+      referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
+    )
+    let provider = StubProvider(.respond(okResponse()))
+    let runtime = makeRuntime(provider: provider, budget: budget, model: "vendor/new-model")
+
+    // when
+    let outcome = try await runtime.runTurn(
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 2,
+        chatID: 3,
+        context: BuildResult(
+          messages: [ChatMessage(role: .user, content: String(repeating: "a", count: 32_000))],
+          ownerNotices: [],
+          hasPrivateDataAccess: false
+        )
+      )
+    )
+
+    // then — refused before the provider, naming the model whose price is the fix
+    #expect(
+      outcome.result
+        == .budgetStopped(cap: BudgetGate.perRunSpendCap, unpricedModel: "vendor/new-model")
+    )
+    #expect(await provider.calls == 0)
+  }
+
   @Test("a terminal provider error degrades without any debit")
   func terminalErrorDegradesWithoutDebit() async throws {
     // given

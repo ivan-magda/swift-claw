@@ -21,8 +21,8 @@ struct TurnExit {
     Self(.degraded(.providerUnavailable, usage: nil), failureCause: .deadline)
   }
 
-  static func budgetStopped(cap: String) -> Self {
-    Self(.budgetStopped(cap: cap))
+  static func budgetStopped(cap: String, unpricedModel: String? = nil) -> Self {
+    Self(.budgetStopped(cap: cap, unpricedModel: unpricedModel))
   }
 }
 

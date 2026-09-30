@@ -1,0 +1,66 @@
+name: Update prices
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-prices
+  cancel-in-progress: false
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the automation branch
+      pull-requests: write # open or update its pull request
+      actions: write # start CI and Lint on that branch
+    env:
+      BRANCH: automation/update-prices
+      PRICES: Sources/ClawLLM/Pricing/Prices.json
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Regenerate the price table
+        run: scripts/update-prices.sh "$RUNNER_TEMP/pr-body.md"
+
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- "$PRICES"; then
+            echo "Prices.json is already current."
+            exit 0
+          fi
+
+          gh auth setup-git
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --create "$BRANCH"
+          git commit --quiet --message "Update Prices.json" -- "$PRICES"
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+
+          open_prs=$(gh pr list --head "$BRANCH" --state open --json number --jq length)
+          if [ "$open_prs" = "0" ]; then
+            gh pr create \
+              --base "$GITHUB_REF_NAME" \
+              --head "$BRANCH" \
+              --title "Update Prices.json" \
+              --body-file "$RUNNER_TEMP/pr-body.md"
+          else
+            gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/pr-body.md"
+          fi
+
+          # A pull request opened with GITHUB_TOKEN starts no pull_request workflows, so run the
+          # checks on the branch directly; their results attach to the pull request's head commit.
+          gh workflow run ci.yml --ref "$BRANCH"
+          gh workflow run lint.yml --ref "$BRANCH"

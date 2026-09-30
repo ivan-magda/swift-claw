@@ -77,8 +77,18 @@ private extension AgentRuntime {
     attempts: AttemptRuntimeState
   ) async -> TurnExit? {
     let preflight = route.accountant.preflightEstimate(context: plan.wire, tools: toolDefinitions)
-    if case .deny(let cap) = ledger.preflight(preflight, on: route) {
-      return .budgetStopped(cap: cap)
+    let spendRefusal = route.accountant.refusal(for: preflight) { estimate in
+      ledger.preflight(estimate, on: route)
+    }
+
+    if let spendRefusal {
+      plan.turn.log.notice(
+        """
+        round-trip \(plan.index) refused cap=\(spendRefusal.cap) \
+        estCostUSD=\(USD.precise(preflight.costUSD)) costSource=\(preflight.costSource.rawValue)
+        """
+      )
+      return .budgetStopped(cap: spendRefusal.cap, unpricedModel: spendRefusal.unpricedModel)
     }
 
     guard Task.isCancelled == false else {

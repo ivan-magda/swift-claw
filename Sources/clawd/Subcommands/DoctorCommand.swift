@@ -143,6 +143,9 @@ private extension DoctorCommand {
       value: USD.display(config.proactivePerDayUSD) + proactiveNote,
       group: .spend
     )
+    // Offline like the rows above: the price comes from config and the bundled table. A metered
+    // route with no price fails here, so setup catches it before the first turn is refused.
+    report.add(contentsOf: DoctorHealth.priceChecks(config: config))
     report.add(
       key: "approval.expiry_s",
       value: "\(config.approvalExpirySeconds)",

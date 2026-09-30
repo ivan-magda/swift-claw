@@ -50,12 +50,12 @@ struct ScheduleHandlers: Sendable {
         target: .chat(message.chatID),
         text: ScheduleReplies.providerFailure(parseResult)
       )
-    case .budgetDenied(let cap):
+    case .budgetDenied(let cap, let unpricedModel):
       // The day-spend gate refused before the call issued; nothing armed, plain-language stop.
       return await replies.sendCommandAck(
         updateID: rawUpdate.updateID,
         target: .chat(message.chatID),
-        text: Degradation.budget(cap: cap)
+        text: Degradation.budget(cap: cap, unpricedModel: unpricedModel)
       )
     case .unparseable:
       return await replies.sendCommandAck(

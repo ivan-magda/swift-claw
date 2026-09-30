@@ -7,21 +7,27 @@ import Testing
 struct CostAndTokenTests {
   private static let referenceUSDPerToken = 0.000_015
 
-  private func resolver(_ prices: [String: ModelPrice] = [:]) -> CostResolver {
+  private func resolver(
+    _ prices: [String: ModelPrice] = [:],
+    configured: [String: ModelPrice] = [:]
+  ) -> CostResolver {
     CostResolver(
       priceTable: PriceTable(prices: prices),
-      referenceUSDPerToken: Self.referenceUSDPerToken
+      referenceUSDPerToken: Self.referenceUSDPerToken,
+      configuredPrices: configured
     )
   }
 
   @Test
   func providerCostWinsIncludingConfirmedZero() {
-    // given
+    // given — the model is priced in both the table and configuration, and the provider still wins
     let usage = ChatUsage(promptTokens: 10, completionTokens: 5, totalTokens: 15)
+    let price = ModelPrice(inputUSDPerMTok: 2.5, outputUSDPerMTok: 10.0)
+    let resolver = resolver(["gpt-4o": price], configured: ["gpt-4o": price])
 
     // when — a real cost and a *confirmed* zero both come straight from the provider
-    let paid = resolver().resolve(model: "gpt-4o", usage: usage, providerCost: 0.42)
-    let free = resolver().resolve(model: "gpt-4o", usage: usage, providerCost: 0.0)
+    let paid = resolver.resolve(model: "gpt-4o", usage: usage, providerCost: 0.42)
+    let free = resolver.resolve(model: "gpt-4o", usage: usage, providerCost: 0.0)
 
     // then
     #expect(paid == ResolvedCost(costUSD: 0.42, source: .providerReturned, isEstimated: false))
@@ -32,6 +38,7 @@ struct CostAndTokenTests {
     let name: String
     let model: String
     let prices: [String: ModelPrice]
+    var configured: [String: ModelPrice] = [:]
     let usage: ChatUsage
     let expectedCostUSD: Double
     let tolerance: Double
@@ -59,6 +66,21 @@ struct CostAndTokenTests {
       expectedIsEstimated: false
     ),
     ResolveCase(
+      name: "configured price outranks the price file",
+      model: "openai/gpt-6-luna",
+      prices: ["openrouter/openai/gpt-6-luna": ModelPrice(inputUSDPerMTok: 9, outputUSDPerMTok: 9)],
+      configured: ["openai/gpt-6-luna": ModelPrice(inputUSDPerMTok: 0.1, outputUSDPerMTok: 0.5)],
+      usage: ChatUsage(
+        promptTokens: 1_000_000,
+        completionTokens: 1_000_000,
+        totalTokens: 2_000_000
+      ),
+      expectedCostUSD: 0.6,
+      tolerance: 1e-9,
+      expectedSource: .configuredPrice,
+      expectedIsEstimated: false
+    ),
+    ResolveCase(
       name: "heuristic — unknown model",
       model: "mystery-model",
       prices: [:],
@@ -83,7 +105,7 @@ struct CostAndTokenTests {
   @Test(arguments: resolveCases)
   func resolveWithNoProviderCost(_ testCase: ResolveCase) {
     // given
-    let resolver = resolver(testCase.prices)
+    let resolver = resolver(testCase.prices, configured: testCase.configured)
 
     // when
     let resolved = resolver.resolve(model: testCase.model, usage: testCase.usage, providerCost: nil)

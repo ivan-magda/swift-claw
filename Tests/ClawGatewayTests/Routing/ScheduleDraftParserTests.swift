@@ -459,8 +459,11 @@ struct ScheduleDraftParserTests {
     )
     let planResult = await plan.parser.parse(ownerText: "x", sessionID: plan.sessionID)
 
-    // then
-    #expect(meteredResult == .budgetDenied(cap: BudgetGate.perRunSpendCap))
+    // then — the fixture's model has no price, and only its reference-rate guess tripped the cap,
+    // so the refusal names it
+    #expect(
+      meteredResult == .budgetDenied(cap: BudgetGate.perRunSpendCap, unpricedModel: "test-model")
+    )
     #expect(planResult == .draft(Self.expectedDraft))
     try await plan.queue.read { db in
       let row = try #require(

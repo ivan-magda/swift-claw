@@ -194,7 +194,7 @@ private extension ProviderStackFactory {
       provider: provider,
       wireModel: route.wireModel,
       configuredReference: route.configuredReference,
-      costPolicy: .metered,
+      costPolicy: route.descriptor.costPolicy,
       reservationPolicy: .textOnly
     )
     return ProviderStack(binding: binding, credentialSource: credentialSource)
@@ -269,7 +269,7 @@ private extension ProviderStackFactory {
       provider: provider,
       wireModel: route.wireModel,
       configuredReference: route.configuredReference,
-      costPolicy: .includedPlan,
+      costPolicy: route.descriptor.costPolicy,
       reservationPolicy: .chatGPTReplayState
     )
     return ProviderStack(binding: binding, credentialSource: credentialSource)

@@ -164,13 +164,15 @@ Name a second model and clawd finishes the turn there when the first route canno
 the plan quota ran out, the credential was refused or the account denied, or the endpoint
 would not connect. Leave `CLAW_LLM_FALLBACK_MODEL` unset and none of this is in play.
 
-| Variable                             | Controls                                                                                                    |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `CLAW_LLM_FALLBACK_MODEL`            | The second route's model, chosen the same way `CLAW_LLM_MODEL` is. Unset means no fallback.                 |
-| `CLAW_LLM_FALLBACK_BASE_URL`         | Its endpoint. Required when the model resolves to the OpenAI-compatible route, unused on `openai-chatgpt/`. |
-| `CLAW_LLM_FALLBACK_API_KEY`          | Its key, sealed alongside `CLAW_LLM_API_KEY`.                                                               |
-| `CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD` | The fallback's own `CLAW_LLM_MAX_TOKENS_FIELD` (default `max_completion_tokens`).                           |
-| `CLAW_LLM_PRIMARY_COOLDOWN_SECONDS`  | How long a walled-off primary is left alone before clawd tries it again (default 900).                      |
+| Variable                                | Controls                                                                                                               |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `CLAW_LLM_FALLBACK_MODEL`               | The second route's model, chosen the same way `CLAW_LLM_MODEL` is. Unset means no fallback.                            |
+| `CLAW_LLM_FALLBACK_BASE_URL`            | Its endpoint. Required when the model resolves to the OpenAI-compatible route, unused on `openai-chatgpt/`.            |
+| `CLAW_LLM_FALLBACK_API_KEY`             | Its key, sealed alongside `CLAW_LLM_API_KEY`.                                                                          |
+| `CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD`    | The fallback's own `CLAW_LLM_MAX_TOKENS_FIELD` (default `max_completion_tokens`).                                      |
+| `CLAW_LLM_FALLBACK_INPUT_USD_PER_MTOK`  | The fallback's input price, for a model clawd has no price for. See [Models without a price](#models-without-a-price). |
+| `CLAW_LLM_FALLBACK_OUTPUT_USD_PER_MTOK` | The fallback's output price. Set it together with the input price.                                                     |
+| `CLAW_LLM_PRIMARY_COOLDOWN_SECONDS`     | How long a walled-off primary is left alone before clawd tries it again (default 900).                                 |
 
 A ChatGPT subscription in front, a metered API key behind it:
 
@@ -244,6 +246,48 @@ the day's cap is already spent. Turns after it start on the fallback and are che
 normally, which puts the overshoot at roughly one call per cooldown window. The daily
 token ceiling did gate that round-trip, since clawd checks it whether the active route is
 metered or flat-rate; the dollar caps are the ones that let the call through.
+
+### Models without a price
+
+clawd prices metered calls from a model price table built into the binary, taken from
+[LiteLLM](https://github.com/BerriAI/litellm). A model newer than your build has no entry
+there, and a local model or a free OpenRouter variant often has none either. For such a
+model clawd estimates every call at the reference rate, `CLAW_REFERENCE_USD_PER_TOKEN`
+($15 per 1M tokens by default), and checks the dollar caps against that estimate. Before
+each call it also reserves the full `CLAW_LLM_MAX_TOKENS` output at that rate, so a large
+output cap can stop every message: with the defaults, 32768 reserved tokens alone cost
+$0.49 of the $0.50 per-run cap.
+
+`clawd doctor` reports each route's price in the `spend.primary_price` and
+`spend.fallback_price` rows. A metered route with no price fails its row, `/status` lists
+the failure, and `clawd doctor --check-config` exits 10. When the estimate alone stops a
+turn, the reply names the model.
+
+Set the price yourself, in USD per 1M tokens:
+
+| Variable                                                                        | Controls                                   |
+| ------------------------------------------------------------------------------- | ------------------------------------------ |
+| `CLAW_LLM_INPUT_USD_PER_MTOK`, `CLAW_LLM_OUTPUT_USD_PER_MTOK`                   | Input and output price of `CLAW_LLM_MODEL` |
+| `CLAW_LLM_FALLBACK_INPUT_USD_PER_MTOK`, `CLAW_LLM_FALLBACK_OUTPUT_USD_PER_MTOK` | The same for `CLAW_LLM_FALLBACK_MODEL`     |
+
+```bash
+# openai/gpt-6-luna on OpenRouter: $0.10 per 1M input tokens, $0.50 per 1M output tokens
+CLAW_LLM_INPUT_USD_PER_MTOK=0.10
+CLAW_LLM_OUTPUT_USD_PER_MTOK=0.50
+```
+
+Set both variables of a pair or neither. One without the other, a negative number, or text
+fails config validation with exit 10. Use `0` for a free or local model. A price you set
+wins over the built-in table. The ChatGPT subscription route ignores these variables, since
+the plan pays for its calls.
+
+The project refreshes the built-in table every week, so a newer release may already know
+your model. From a source checkout, `scripts/update-prices.sh` regenerates the table before
+you rebuild.
+
+Changing `CLAW_REFERENCE_USD_PER_TOKEN` instead has a side effect: the daily token ceiling
+is `CLAW_PER_DAY_USD` divided by that rate, so lowering the rate raises the ceiling. If you
+change the rate, set `CLAW_DAY_TOKEN_CEILING` as well.
 
 ## Proactive behavior
 

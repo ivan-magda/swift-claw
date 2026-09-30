@@ -60,6 +60,8 @@ public enum HealthRowsBuilder {
     public let streamingEnabled: Bool
     public let todayUsage: HealthValue<(tokens: Int, costUSD: Double)>
     public let costMix: HealthValue<[CostSource: Int]>
+    public let primaryPrice: RoutePriceHealth
+    public let fallbackPrice: RoutePriceHealth?
     public let perDayUSD: Double
     public let perRunUSD: Double
     public let walBytes: Int
@@ -76,6 +78,8 @@ public enum HealthRowsBuilder {
       streamingEnabled: Bool,
       todayUsage: HealthValue<(tokens: Int, costUSD: Double)>,
       costMix: HealthValue<[CostSource: Int]>,
+      primaryPrice: RoutePriceHealth,
+      fallbackPrice: RoutePriceHealth?,
       perDayUSD: Double,
       perRunUSD: Double,
       walBytes: Int,
@@ -91,6 +95,8 @@ public enum HealthRowsBuilder {
       self.streamingEnabled = streamingEnabled
       self.todayUsage = todayUsage
       self.costMix = costMix
+      self.primaryPrice = primaryPrice
+      self.fallbackPrice = fallbackPrice
       self.perDayUSD = perDayUSD
       self.perRunUSD = perRunUSD
       self.walBytes = walBytes
@@ -296,7 +302,7 @@ private extension HealthRowsBuilder {
         )
         return text.isEmpty ? "none" : text
       },
-    ]
+    ] + priceChecks(primary: inputs.primaryPrice, fallback: inputs.fallbackPrice)
   }
 
   static func storageChecks(_ inputs: Inputs) -> [DoctorReport.Check] {

@@ -54,8 +54,13 @@ extension TurnRunner {
       )
     case .degraded(let degradationKind, let usage):
       try await commitDegraded(kind: degradationKind, usage: usage, outcome: outcome, in: context)
-    case .budgetStopped(let cap):
-      try await commitBudgetStopped(cap: cap, outcome: outcome, in: context)
+    case .budgetStopped(let cap, let unpricedModel):
+      try await commitBudgetStopped(
+        cap: cap,
+        unpricedModel: unpricedModel,
+        outcome: outcome,
+        in: context
+      )
     case .suspended(let pending, _):
       try await suspendForApproval(pending: pending, outcome: outcome, in: context)
     }
@@ -243,6 +248,7 @@ private extension TurnRunner {
 
   func commitBudgetStopped(
     cap: String,
+    unpricedModel: String?,
     outcome: TurnOutcome,
     in context: CommitContext
   ) async throws {
@@ -261,7 +267,7 @@ private extension TurnRunner {
       setTainted: outcome.ingestedUntrusted,
       setPrivateData: outcome.hadPrivateData,
       message: ownerVisiblePayload(
-        reply: Degradation.budget(cap: cap),
+        reply: Degradation.budget(cap: cap, unpricedModel: unpricedModel),
         ownerNotices: context.ownerNotices,
         appendedNotices: appendedNotices
       ),

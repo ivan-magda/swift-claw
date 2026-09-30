@@ -70,7 +70,8 @@ test "$(actionlint --version | sed -n '1p')" = "$CLAW_ACTIONLINT_VERSION" && act
 test "$(zizmor --version)" = "zizmor $CLAW_ZIZMOR_VERSION" && zizmor .
 test "$(shellcheck --version | sed -n 's/^version: //p')" = "$CLAW_SHELLCHECK_VERSION" &&
   shellcheck -s sh install.sh deploy/run-clawd.sh &&
-  shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh
+  shellcheck -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
+    scripts/update-prices.sh
 ```
 
 Each version comparison must succeed. Formatter or toolchain changes also need `scripts/test-lint.sh`,

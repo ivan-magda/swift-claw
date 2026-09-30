@@ -601,7 +601,7 @@ struct AppConfigTests {
   func invalidCooldownRejected() {
     // given
     var env = envWithLLM([EnvKey.stateRoot: NSTemporaryDirectory()])
-    env[EnvKey.primaryCooldownSeconds] = "0"
+    env[EnvKey.llmPrimaryCooldownSeconds] = "0"
 
     // then
     #expect(throws: ConfigError.invalidPrimaryCooldown("0")) {

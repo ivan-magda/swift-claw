@@ -474,4 +474,21 @@ struct TurnRunnerOutcomeTests {
     // then
     #expect(sent == Degradation.budget(cap: BudgetGate.perRunToolCallCap))
   }
+
+  @Test("a refusal on a guessed price names the model the owner has to price")
+  func budgetStoppedOnAGuessedPriceNamesTheModel() async throws {
+    // given
+    let fixture = try makeFixture(provider: SequenceProvider([]), dispatcher: nil)
+    let outcome = TurnOutcome(
+      result: .budgetStopped(cap: BudgetGate.perRunSpendCap, unpricedModel: "vendor/new-model"),
+      routeNotice: nil
+    )
+
+    // when
+    let sent = try await runCommit(fixture, outcome)
+
+    // then — the owner learns which model to price, not only which cap tripped
+    #expect(sent.hasPrefix(Degradation.budget(cap: BudgetGate.perRunSpendCap)))
+    #expect(sent.contains("vendor/new-model"))
+  }
 }

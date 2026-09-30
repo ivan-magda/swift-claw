@@ -34,6 +34,7 @@ enum DoctorHealth {
       (try? FileManager.default.attributesOfItem(atPath: dbPath + "-wal")[.size] as? Int) ?? 0
     let fileSystem = try? FileManager.default.attributesOfFileSystem(forPath: config.stateRoot.path)
     let freeBytes = (fileSystem?[.systemFreeSize] as? Int) ?? 0
+    let prices = routePrices(config: config)
 
     return HealthRowsBuilder.Inputs(
       allowlist: AllowlistHealth(
@@ -53,6 +54,8 @@ enum DoctorHealth {
       costMix: read {
         try stores.usage.costSourceMix(now: now)
       },
+      primaryPrice: prices.primary,
+      fallbackPrice: prices.fallback,
       perDayUSD: config.budget.perDayUSD,
       perRunUSD: config.budget.perRunUSD,
       walBytes: walBytes,
@@ -66,6 +69,24 @@ enum DoctorHealth {
 
   static func skillScan(config: AppConfig) -> SkillScanResult {
     FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config)).scanSkills()
+  }
+
+  /// The price rows `doctor --check-config` prints. Full doctor and `/status` render the same rows
+  /// through `inputs`.
+  static func priceChecks(config: AppConfig) -> [DoctorReport.Check] {
+    let prices = routePrices(config: config)
+    return HealthRowsBuilder.priceChecks(primary: prices.primary, fallback: prices.fallback)
+  }
+
+  /// Each configured route's price, read from the resolver the daemon meters with.
+  static func routePrices(
+    config: AppConfig
+  ) -> (primary: RoutePriceHealth, fallback: RoutePriceHealth?) {
+    let resolver = CostResolver.configured(by: config)
+    let fallback = config.llm.fallbackRoute.map { route in
+      RoutePriceHealth(route: route, resolver: resolver)
+    }
+    return (RoutePriceHealth(route: config.llm.route, resolver: resolver), fallback)
   }
 
   static func schedulerChecks(

@@ -71,8 +71,19 @@ public enum Degradation {
   }
 
   /// The spend-breaker reply; `cap` names the tripped limit (e.g. "per-run spend" / "per-day token").
-  public static func budget(cap: String) -> String {
-    "I stopped because I hit the \(cap) cap."
+  /// `unpricedModel` names a model whose reference-rate guess alone tripped it, so the owner learns
+  /// to price that model rather than raise the cap.
+  public static func budget(cap: String, unpricedModel: String? = nil) -> String {
+    let stop = "I stopped because I hit the \(cap) cap."
+
+    guard let unpricedModel else {
+      return stop
+    }
+
+    return """
+      \(stop) I don't have a price for `\(unpricedModel)`, so I estimated this request at the \
+      reference rate. Send /status to see how to set its price.
+      """
   }
 
   /// The once-per-UTC-day owner DM fired by the post-commit kill-switch (`BudgetBreaker`).
@@ -93,23 +104,23 @@ public enum Degradation {
   public static func message(for kind: DegradationKind) -> String {
     switch kind {
     case .providerUnavailable:
-      return providerUnavailable
+      providerUnavailable
     case .outputTruncated:
-      return outputTruncated
+      outputTruncated
     case .contextUnavailable:
-      return contextUnavailable
+      contextUnavailable
     case .accountingFailed:
-      return accountingFailed
+      accountingFailed
     case .authenticationRequired:
-      return authenticationRequired
+      authenticationRequired
     case .accessDenied:
-      return accessDenied
+      accessDenied
     case .quotaLimited(let retryAfterSeconds):
-      return quotaLimited(retryAfterSeconds: retryAfterSeconds)
+      quotaLimited(retryAfterSeconds: retryAfterSeconds)
     case .invalidProviderState:
-      return invalidProviderState
+      invalidProviderState
     case .visionUnsupported:
-      return visionUnsupported
+      visionUnsupported
     }
   }
 
@@ -118,9 +129,9 @@ public enum Degradation {
   public static func message(for notice: RouteNotice) -> String {
     switch notice {
     case .switched(let primary, let fallback):
-      return routeSwitched(from: primary, to: fallback)
+      routeSwitched(from: primary, to: fallback)
     case .restored(let route):
-      return routeRestored(route: route)
+      routeRestored(route: route)
     }
   }
 

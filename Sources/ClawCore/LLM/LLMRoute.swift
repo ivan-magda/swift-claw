@@ -70,6 +70,22 @@ public struct LLMProviderDescriptor: Sendable, Equatable {
   }
 }
 
+// MARK: - Billing
+
+extension LLMProviderDescriptor {
+  /// How calls on this provider are billed: a managed subscription is included in the owner's plan,
+  /// and a static-key or keyless endpoint is metered per token. Composition stamps it on the route
+  /// binding; config parsing and doctor read the same answer.
+  public var costPolicy: LLMCostPolicy {
+    switch credentialMode {
+    case .noneOrStaticBearer:
+      .metered
+    case .managedOAuth:
+      .includedPlan
+    }
+  }
+}
+
 // MARK: - Registered descriptors
 
 extension LLMProviderDescriptor {

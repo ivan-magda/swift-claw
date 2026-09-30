@@ -2,55 +2,84 @@ import Foundation
 
 public struct AppConfig: Sendable, Equatable {
   public enum EnvKey {
+    // MARK: - Telegram
+
     static let allowlist = "CLAW_ALLOWLIST"
     static let groupChats = "CLAW_GROUP_CHATS"
-    /// Public because the auth commands resolve the same state root without loading this config.
-    /// The daemon and `clawd auth` have to read the one variable, or they diverge on where an
-    /// owner's credentials live.
-    public static let stateRoot = "CLAW_STATE_ROOT"
     static let pollTimeout = "CLAW_POLL_TIMEOUT"
 
+    // MARK: - State storage
+
+    public static let stateRoot = "CLAW_STATE_ROOT"
+
+    // MARK: - Primary LLM
+
     static let llmBaseURL = "CLAW_LLM_BASE_URL"
-    /// Public because login prints the assignment an owner must set. The variable it names and the
-    /// variable configuration reads have to be the same word.
     public static let llmModel = "CLAW_LLM_MODEL"
     static let llmMaxTokensField = "CLAW_LLM_MAX_TOKENS_FIELD"
     static let llmMaxTokens = "CLAW_LLM_MAX_TOKENS"
     static let llmStreaming = "CLAW_LLM_STREAMING"
     static let llmStructuredOutput = "CLAW_LLM_STRUCTURED_OUTPUT"
+    public static let llmInputUSDPerMTok = "CLAW_LLM_INPUT_USD_PER_MTOK"
+    public static let llmOutputUSDPerMTok = "CLAW_LLM_OUTPUT_USD_PER_MTOK"
+
+    // MARK: - LLM fallback and recovery
 
     static let llmFallbackModel = "CLAW_LLM_FALLBACK_MODEL"
     static let llmFallbackBaseURL = "CLAW_LLM_FALLBACK_BASE_URL"
     static let llmFallbackMaxTokensField = "CLAW_LLM_FALLBACK_MAX_TOKENS_FIELD"
-    static let primaryCooldownSeconds = "CLAW_LLM_PRIMARY_COOLDOWN_SECONDS"
+    public static let llmFallbackInputUSDPerMTok = "CLAW_LLM_FALLBACK_INPUT_USD_PER_MTOK"
+    public static let llmFallbackOutputUSDPerMTok = "CLAW_LLM_FALLBACK_OUTPUT_USD_PER_MTOK"
+    static let llmPrimaryCooldownSeconds = "CLAW_LLM_PRIMARY_COOLDOWN_SECONDS"
+
+    // MARK: - Budget limits
 
     static let perRunUSD = "CLAW_PER_RUN_USD"
     static let perDayUSD = "CLAW_PER_DAY_USD"
     static let referenceUSDPerToken = "CLAW_REFERENCE_USD_PER_TOKEN"
     static let dayTokenCeiling = "CLAW_DAY_TOKEN_CEILING"
 
+    // MARK: - Agent run limits
+
     static let maxTurns = "CLAW_MAX_TURNS"
     static let maxToolCalls = "CLAW_MAX_TOOL_CALLS"
+
+    // MARK: - Scheduling
 
     static let timezone = "CLAW_TIMEZONE"
     static let schedCatchUpMaxAgeMinutes = "CLAW_SCHED_CATCHUP_MAX_AGE_MINUTES"
     static let schedMinIntervalMinutes = "CLAW_SCHED_MIN_INTERVAL_MINUTES"
     static let proactivePerDayUSD = "CLAW_PROACTIVE_PER_DAY_USD"
 
+    // MARK: - Heartbeat
+
     static let heartbeatEnabled = "CLAW_HEARTBEAT_ENABLED"
     static let heartbeatIntervalMinutes = "CLAW_HEARTBEAT_INTERVAL_MINUTES"
     static let heartbeatQuietHours = "CLAW_HEARTBEAT_QUIET_HOURS"
     static let heartbeatMaxPerDay = "CLAW_HEARTBEAT_MAX_PER_DAY"
+
+    // MARK: - Approvals
+
     static let approvalExpiry = "CLAW_APPROVAL_EXPIRY"
+
+    // MARK: - Learning
 
     public static let learningEnabled = "CLAW_LEARNING_ENABLED"
 
+    // MARK: - Web fetch
+
     public static let webFetchExemptCIDRs = "CLAW_WEBFETCH_EXEMPT_CIDRS"
+
+    // MARK: - Voice input
 
     static let voiceTranscription = "CLAW_VOICE_TRANSCRIPTION"
     static let voiceLocales = "CLAW_VOICE_LOCALES"
 
+    // MARK: - Image input
+
     static let imageInput = "CLAW_IMAGE_INPUT"
+
+    // MARK: - Sandbox execution
 
     static let execEnabled = "CLAW_EXEC_ENABLED"
     static let execImage = "CLAW_EXEC_IMAGE"
@@ -60,6 +89,8 @@ public struct AppConfig: Sendable, Equatable {
     static let execTimeout = "CLAW_EXEC_TIMEOUT"
     static let execAllowEgress = "CLAW_EXEC_ALLOW_EGRESS"
 
+    // MARK: - Native Coder
+
     public static let coderEnabled = "CLAW_CODER_ENABLED"
     public static let coderMaxConcurrentJobs = "CLAW_CODER_MAX_CONCURRENT_JOBS"
     public static let coderJobTimeoutSeconds = "CLAW_CODER_JOB_TIMEOUT_SECONDS"
@@ -68,11 +99,18 @@ public struct AppConfig: Sendable, Equatable {
     public static let coderProfile = "CLAW_CODER_PROFILE"
     public static let coderConfigHome = "CLAW_CODER_CONFIG_HOME"
 
+    // MARK: - MCP
+
     static let mcpConfigPath = "CLAW_MCP_CONFIG"
   }
 
   enum EnvDefaults {
+    // MARK: - Telegram
+
     static let pollTimeoutSeconds = 30
+
+    // MARK: - LLM requests and recovery
+
     static let maxTokensField = MaxTokensField.maxCompletionTokens
     static let structuredOutput = StructuredOutputMode.off
     static let maxOutputTokens = RunDefaults.maxOutputTokens
@@ -80,19 +118,29 @@ public struct AppConfig: Sendable, Equatable {
     static let requestTimeoutSeconds = 180
     static let primaryCooldownSeconds = 900
 
+    // MARK: - Scheduling
+
     static let schedCatchUpMaxAgeMinutes = 30
     static let schedMinIntervalMinutes = 5
     static let proactivePerDayUSD = RunDefaults.proactivePerDayUSD
+
+    // MARK: - Heartbeat
 
     static let heartbeatIntervalMinutes = 60
     static let heartbeatQuietHours = "22:00-09:00"
     static let heartbeatMaxPerDay = 8
 
+    // MARK: - Approvals
+
     static let approvalExpirySeconds = 3600
     static let approvalExpiryFloor = 60
     static let approvalExpiryCeiling = 86_400
 
+    // MARK: - Voice input
+
     public static let voiceLocale = "en-US"
+
+    // MARK: - Sandbox execution
 
     static let execImageRegistries = ["cgr.dev"]
     static let execMemoryMiB = 1024
@@ -100,20 +148,31 @@ public struct AppConfig: Sendable, Equatable {
     static let execTimeoutSeconds = 30
   }
 
+  // MARK: - Telegram
+
   public let allowlist: Set<Int64>
   /// The chat ids group mode serves. Empty means group mode is off and `clawd` answers only the
   /// owner's DM.
   public let groupChats: Set<Int64>
-  public let stateRoot: URL
   public let pollTimeoutSeconds: Int
+
+  // MARK: - State storage
+
+  public let stateRoot: URL
+
+  // MARK: - LLM and budget
 
   public let llm: LLMConfig
   public let budget: RunBudget
+
+  // MARK: - Scheduling
 
   public let timezone: TimeZone
   public let schedCatchUpMaxAgeMinutes: Int
   public let schedMinIntervalMinutes: Int
   public let proactivePerDayUSD: Double
+
+  // MARK: - Heartbeat
 
   public let heartbeatEnabled: Bool
   public let heartbeatIntervalMinutes: Int
@@ -128,12 +187,17 @@ public struct AppConfig: Sendable, Equatable {
     return allowlist.first
   }
 
-  /// Arms the scheduled-task learning loop. Off by default: with it unset no binding is created
-  /// and no learning row is written, so the daemon behaves exactly as it does without the feature.
+  // MARK: - Learning
+
   public let learningEnabled: Bool
+
+  // MARK: - Approvals and web access
 
   public let approvalExpirySeconds: Int
   public let webFetchExemptCIDRs: [CIDR]
+
+  // MARK: - Tool and input configuration
+
   public let coder: CoderConfig
   public let exec: ExecConfig
   public let voice: VoiceConfig
@@ -166,8 +230,9 @@ public struct AppConfig: Sendable, Equatable {
   ) {
     self.allowlist = allowlist
     self.groupChats = groupChats
-    self.stateRoot = stateRoot
     self.pollTimeoutSeconds = pollTimeoutSeconds
+
+    self.stateRoot = stateRoot
 
     self.llm = llm
     self.budget = budget
@@ -186,6 +251,7 @@ public struct AppConfig: Sendable, Equatable {
 
     self.approvalExpirySeconds = approvalExpirySeconds
     self.webFetchExemptCIDRs = webFetchExemptCIDRs
+
     self.coder = coder
     self.exec = exec
     self.voice = voice
@@ -205,9 +271,11 @@ public struct AppConfig: Sendable, Equatable {
       from: env[EnvKey.groupChats],
       invalid: ConfigError.invalidGroupChats
     )
+
     let stateRoot = try StateRootResolver.createStateRoot(for: env[EnvKey.stateRoot])
     let pollTimeoutSeconds =
       env[EnvKey.pollTimeout].flatMap(Int.init) ?? EnvDefaults.pollTimeoutSeconds
+
     let llm = try parseLLMConfig(from: env)
     let proactivePerDayUSD = try positiveBudgetDouble(
       env[EnvKey.proactivePerDayUSD],
@@ -228,10 +296,12 @@ public struct AppConfig: Sendable, Equatable {
       default: EnvDefaults.schedMinIntervalMinutes,
       minimum: 1
     )
+
     let heartbeat = try parseHeartbeat(from: env, allowlist: allowlist)
 
     let approvalExpirySeconds = try parseApprovalExpiry(env[EnvKey.approvalExpiry])
     let webFetchExemptCIDRs = try parseWebFetchExemptCIDRs(from: env[EnvKey.webFetchExemptCIDRs])
+
     let exec = try parseExecConfig(from: env)
     let voice = try parseVoiceConfig(from: env)
     let image = try parseImageConfig(from: env)

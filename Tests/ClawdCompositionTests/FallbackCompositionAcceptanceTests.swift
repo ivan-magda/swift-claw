@@ -30,6 +30,8 @@ struct FallbackCompositionAcceptanceTests {
     #expect(harness.healthRow("llm.fallback_configured") == "yes (gpt-5.4)")
     #expect(harness.healthRow("llm.active_route") == "gpt-4o")
     #expect(harness.healthRow("llm.primary_cooldown_s") == "none")
+    // /status is where an unpriced fallback's refusal sends the owner, so its price row must be here
+    #expect(harness.healthRow(RoutePriceHealth.Key.fallback)?.hasPrefix("gpt-5.4:") == true)
   }
 
   @Test("a daemon with no fallback configured boots on one route and reports it")

@@ -68,7 +68,7 @@ extension AgentRuntime {
       log.warning(
         "turn finished degraded kind=\(kind.auditDecision) tokens=\(tokens) ms=\(elapsedMillis)"
       )
-    case .budgetStopped(let cap):
+    case .budgetStopped(let cap, _):
       log.notice("turn finished budget-stopped cap=\(cap) ms=\(elapsedMillis)")
     case .suspended(let pending, let usage):
       log.info(
