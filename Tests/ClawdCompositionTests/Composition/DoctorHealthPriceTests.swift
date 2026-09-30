@@ -7,14 +7,12 @@ import Testing
 
 @Suite
 struct DoctorHealthPriceTests {
-  private static let baseURLKey = "CLAW_LLM_BASE_URL"
-
   @Test
   func doctorReportsTheConfiguredPriceTheDaemonMetersWith() throws {
     // given — a metered model the bundled table does not list, priced in configuration
     let config = try AppConfig.load(environment: [
       AppConfig.EnvKey.stateRoot: NSTemporaryDirectory(),
-      Self.baseURLKey: "https://openrouter.example/api/v1",
+      AcceptanceEnv.baseURL: "https://openrouter.example/api/v1",
       AppConfig.EnvKey.llmModel: "vendor/unlisted-model",
       AppConfig.EnvKey.llmInputUSDPerMTok: "0.10",
       AppConfig.EnvKey.llmOutputUSDPerMTok: "0.50",

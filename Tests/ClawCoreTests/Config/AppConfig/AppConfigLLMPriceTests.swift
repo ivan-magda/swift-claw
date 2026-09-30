@@ -22,14 +22,15 @@ struct AppConfigLLMPriceTests {
 
   @Test
   func eachRouteReadsItsOwnPricePair() throws {
-    // given — both routes metered, each with its own pair
+    // given — both routes metered, each with its own pair and four distinct values, so a swapped
+    // input and output cannot pass unnoticed
     let env = meteredEnv([
       EnvKey.llmInputUSDPerMTok: "0.10",
       EnvKey.llmOutputUSDPerMTok: "0.50",
-      EnvKey.llmFallbackModel: "google/gemma-4-26b-a4b-it:free",
+      EnvKey.llmFallbackModel: "vendor/fallback-model",
       EnvKey.llmFallbackBaseURL: "https://openrouter.example/api/v1",
-      EnvKey.llmFallbackInputUSDPerMTok: "0",
-      EnvKey.llmFallbackOutputUSDPerMTok: "0",
+      EnvKey.llmFallbackInputUSDPerMTok: "0.20",
+      EnvKey.llmFallbackOutputUSDPerMTok: "0.80",
     ])
 
     // when
@@ -39,7 +40,7 @@ struct AppConfigLLMPriceTests {
     #expect(
       config.llm.configuredPrices == [
         Self.model: ModelPrice(inputUSDPerMTok: 0.10, outputUSDPerMTok: 0.50),
-        "google/gemma-4-26b-a4b-it:free": ModelPrice(inputUSDPerMTok: 0, outputUSDPerMTok: 0),
+        "vendor/fallback-model": ModelPrice(inputUSDPerMTok: 0.20, outputUSDPerMTok: 0.80),
       ]
     )
   }
@@ -104,5 +105,36 @@ struct AppConfigLLMPriceTests {
     #expect(throws: ConfigError.conflictingLLMPrices(reference: Self.model)) {
       try AppConfig.load(environment: env)
     }
+  }
+
+  @Test(arguments: [
+    (input: "0.10", output: "0.50"),
+    (input: "", output: ""),
+  ])
+  func twoRoutesNamingOneModelLoadWhenTheirPricesDoNotConflict(
+    input: String,
+    output: String
+  )
+    throws
+  {
+    // given — the fallback names the primary's model at the same price, or leaves it unpriced
+    let env = meteredEnv([
+      EnvKey.llmInputUSDPerMTok: "0.10",
+      EnvKey.llmOutputUSDPerMTok: "0.50",
+      EnvKey.llmFallbackModel: Self.model,
+      EnvKey.llmFallbackBaseURL: "https://other.example/v1",
+      EnvKey.llmFallbackInputUSDPerMTok: input,
+      EnvKey.llmFallbackOutputUSDPerMTok: output,
+    ])
+
+    // when
+    let config = try AppConfig.load(environment: env)
+
+    // then — one price for the one model both routes are metered under
+    #expect(
+      config.llm.configuredPrices == [
+        Self.model: ModelPrice(inputUSDPerMTok: 0.10, outputUSDPerMTok: 0.50),
+      ]
+    )
   }
 }
