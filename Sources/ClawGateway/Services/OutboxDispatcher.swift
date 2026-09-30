@@ -199,7 +199,7 @@ private extension OutboxDispatcher {
 private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Duration {
   private let clock: ClockType
   private let signal: OutboxSignal
-  private var notBefore: [Int64: ClockType.Instant] = [:]
+  private var deadlines = FloodControlDeadlines<ClockType.Instant>()
   private var wakeups: [UUID: Task<Void, Never>] = [:]
   private var stopping = false
 
@@ -208,19 +208,8 @@ private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Du
     self.signal = signal
   }
 
-  /// Whether `chatID` is still inside a hold; an elapsed hold is dropped on the way out so the map
-  /// stays the size of the currently-throttled chats.
   func isHeld(_ chatID: Int64) -> Bool {
-    guard let deadline = notBefore[chatID] else {
-      return false
-    }
-
-    if clock.now < deadline {
-      return true
-    }
-    notBefore[chatID] = nil
-
-    return false
+    deadlines.isHeld(chatID, at: clock.now)
   }
 
   /// Extends the chat's hold, never shortens it: two 429s in one drain leave the later deadline.
@@ -230,7 +219,7 @@ private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Du
     }
 
     let deadline = clock.now.advanced(by: wait)
-    notBefore[chatID] = max(notBefore[chatID] ?? deadline, deadline)
+    deadlines.hold(chatID, until: deadline)
 
     let id = UUID()
     wakeups[id] = Task {
