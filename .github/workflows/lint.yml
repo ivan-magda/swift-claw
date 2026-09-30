@@ -78,4 +78,5 @@ jobs:
             -s sh install.sh deploy/run-clawd.sh
           docker run --rm -v "$GITHUB_WORKSPACE:/repo" -w /repo \
             "koalaman/shellcheck:v${CLAW_SHELLCHECK_VERSION}" \
-            -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh
+            -x scripts/check-toolchain.sh scripts/lint.sh scripts/test-lint.sh \
+            scripts/update-prices.sh
