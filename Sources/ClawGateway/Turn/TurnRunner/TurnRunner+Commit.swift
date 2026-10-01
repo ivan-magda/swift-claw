@@ -370,7 +370,11 @@ private extension TurnRunner {
     }
 
     if let target = ownerNoticeTarget(for: context) {
+      let lease = await presentations?.beginDelivery(to: .chat(target))
       _ = try? await delivery.sendMessage(chatID: target, text: Degradation.dailyCapTripped)
+      if let lease {
+        await presentations?.endDelivery(lease)
+      }
     }
     try? audit.appendAudit(
       AuditEvent(
@@ -398,7 +402,11 @@ private extension TurnRunner {
     }
 
     if let target = ownerNoticeTarget(for: context) {
+      let lease = await presentations?.beginDelivery(to: .chat(target))
       _ = try? await delivery.sendMessage(chatID: target, text: Degradation.proactiveCapTripped)
+      if let lease {
+        await presentations?.endDelivery(lease)
+      }
     }
     try? audit.appendAudit(
       AuditEvent(

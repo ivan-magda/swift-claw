@@ -60,6 +60,11 @@ struct ToolDispatchProgressTests {
       #expect(await state.latest.steps.first?.state == expected)
       #expect(outcome.observation.status != .ok)
       #expect(started.isOpen == (scenario == .allowed))
+      if scenario != .allowed {
+        let history = await state.history
+        #expect(history.contains(.executing) == false)
+        #expect(history.contains(.succeeded) == false)
+      }
     }
   }
 
@@ -96,6 +101,7 @@ private enum DispatchScenario {
 actor DispatchProgressState {
   nonisolated let identified = AsyncGate()
   nonisolated let releaseIdentification = AsyncGate()
+  private(set) var history: [ToolProgressState] = []
   private var state = TurnProgressState(showsProgress: true, resumed: false, secretValues: [])
   private let id = TurnToolStepID(providerCallID: "round", toolCallID: "step")
 
@@ -124,5 +130,11 @@ private extension DispatchProgressState {
 
   func publish(_ value: ToolProgressState) {
     state.apply(.toolState(id: id, state: value))
+    if let observed = latest.steps.first?.state {
+      history.append(observed)
+      if history.count > 32 {
+        history.removeFirst()
+      }
+    }
   }
 }

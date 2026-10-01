@@ -94,6 +94,66 @@ struct TelegramProgressCompositionTests {
   }
 }
 
+extension TelegramProgressCompositionTests {
+  @Test
+  func composedProgressRedactsTheBootSecretUnion() async throws {
+    // given — the MCP credential exists only in boot inputs, not the provider or ordinary secrets.
+    let signals = ProgressCompositionSignals()
+    let http = Self.makeHTTP(signals: signals)
+    let provider = SecretProgressProvider()
+    let fixture = try Self.makeFixture(
+      scenario: .enabled,
+      http: http,
+      provider: provider,
+      secrets: Secrets(
+        telegramBotToken: "tg-token",
+        llmAPIKey: nil,
+        searchAPIKey: SecretProgressProvider.rootSecret
+      ),
+      mcp: MCPBootInputs(
+        config: try MCPConfig(servers: [
+          try MCPServerConfig(name: "search", url: "https://mcp.test.invalid/mcp"),
+        ]),
+        credentials: ["search": .token(SecretProgressProvider.mcpSecret)],
+        credentialRedactionValues: [SecretProgressProvider.mcpSecret]
+      )
+    )
+    defer {
+      provider.toolRound.open()
+      provider.finish.open()
+      try? FileManager.default.removeItem(at: fixture.builder.config.stateRoot)
+    }
+    let claim = try Self.claim(fixture.builder, scenario: .enabled, chatID: 7)
+    let runID = try #require(claim.runID)
+    let sessionID = try #require(claim.sessionID)
+    let trigger = try #require(claim.triggerMessageID)
+    let turn = Task {
+      try await fixture.runner.run(
+        runID: runID,
+        sessionID: sessionID,
+        chatID: 7,
+        triggerMessageID: trigger
+      )
+    }
+
+    // when — observe each stage before answer replacement can erase the evidence.
+    let explanationSeen = await signals.secretExplanation.waitUntilOpen()
+    provider.toolRound.open()
+    let previewSeen = await signals.secretPreview.waitUntilOpen()
+    provider.finish.open()
+    try await turn.value
+
+    // then
+    #expect(explanationSeen && previewSeen)
+    let frames = await signals.secretFrames
+    let replacement = SecretRedactor.replacement
+    #expect(frames.contains { $0.contains("Root \(replacement); MCP \(replacement)") })
+    #expect(frames.contains { $0.contains("preview: \(replacement)") })
+    #expect(frames.allSatisfy { !$0.contains(SecretProgressProvider.rootSecret) })
+    #expect(frames.allSatisfy { !$0.contains(String(SecretProgressProvider.mcpSecret.prefix(40))) })
+  }
+}
+
 // MARK: - Production Composition
 
 private extension TelegramProgressCompositionTests {
@@ -117,7 +177,9 @@ private extension TelegramProgressCompositionTests {
   static func makeFixture(
     scenario: Scenario,
     http: ScriptedHTTPExecutor,
-    provider: ProgressCompositionProvider
+    provider: any LLMProvider,
+    secrets: Secrets = Secrets(telegramBotToken: "tg-token", llmAPIKey: nil),
+    mcp: MCPBootInputs = .empty
   ) throws -> (
     builder: DaemonBuilder,
     runner: TurnRunner,
@@ -129,7 +191,12 @@ private extension TelegramProgressCompositionTests {
     environment[AppConfig.EnvKey.llmStreaming] = scenario == .streamingOff ? "false" : "true"
     environment[AppConfig.EnvKey.telegramProgress] = scenario == .progressOff ? "false" : "true"
     let config = try AppConfig.load(environment: environment)
-    let builder = try CompositionAcceptance.makeBuilder(http: http, config: config)
+    let builder = try CompositionAcceptance.makeBuilder(
+      http: http,
+      config: config,
+      secrets: secrets,
+      mcp: mcp
+    )
     try builder.stores.allowlist.seedAllowlist(userIDs: Array(config.allowlist))
     let roster = makeSingleRouteRoster(provider: provider, wireModel: config.llm.route.wireModel)
     let cooldown = PrimaryRouteCooldown(longSeconds: 900, clock: ContinuousClock())
@@ -260,6 +327,9 @@ private actor ProgressCompositionSignals {
   nonisolated let progressDrafts = AsyncGate()
   nonisolated let answerDrafts = AsyncGate()
   nonisolated let typing = AsyncGate()
+  nonisolated let secretExplanation = AsyncGate()
+  nonisolated let secretPreview = AsyncGate()
+  private(set) var secretFrames: [String] = []
   private(set) var typingTargets: [DeliveryTarget] = []
 
   func observe(_ request: HTTPRequest) throws {
@@ -274,7 +344,17 @@ private actor ProgressCompositionSignals {
       typing.open()
     }
     if request.url.hasSuffix("/sendRichMessageDraft") {
-      let markdown = String(data: request.body ?? Data(), encoding: .utf8) ?? ""
+      let richMessage = fields["rich_message"] as? [String: Any]
+      let markdown = richMessage?["markdown"] as? String ?? ""
+      if markdown.contains("Root ") || markdown.contains("preview:") {
+        secretFrames.append(markdown.replacingOccurrences(of: "\\", with: ""))
+      }
+      if markdown.contains("Root ") {
+        secretExplanation.open()
+      }
+      if markdown.contains("preview:") {
+        secretPreview.open()
+      }
       if markdown.contains("tg-thinking") {
         progressDrafts.open()
       }
@@ -318,6 +398,64 @@ private extension ProgressCompositionProvider {
       try await sink.sendDelta(Self.answerText)
       await finish.wait()
       return .completed(okResponse(content: Self.answerText))
+    } catch {
+      return .cancelled(.mayHaveStarted(observing: 0))
+    }
+  }
+}
+
+// MARK: - Secret Progress Script
+
+private actor SecretProgressProvider: LLMProvider {
+  static let rootSecret = "ordinary-root-progress-secret"
+  static let mcpSecret = "mcp-only-" + String(repeating: "credential", count: 20)
+  nonisolated let toolRound = AsyncGate()
+  nonisolated let finish = AsyncGate()
+  private var calls = 0
+
+  func complete(request: ChatRequest) async -> ChatResponse {
+    await finish.wait()
+    return okResponse()
+  }
+
+  nonisolated func stream(request: ChatRequest) -> LLMEventStream {
+    LLMEventStream.make { sink in
+      await self.play(sink)
+    }
+  }
+
+}
+
+// MARK: - Secret Progress Rounds
+
+private extension SecretProgressProvider {
+  func play(_ sink: LLMEventSink) async -> LLMStreamTermination {
+    calls += 1
+    if calls > 1 {
+      await finish.wait()
+      return .completed(okResponse())
+    }
+    do {
+      try await sink.sendProgress(
+        LLMProgressEvent(
+          itemID: "secrets",
+          kind: .commentary,
+          text: .replace("Root \(Self.rootSecret); MCP \(Self.mcpSecret)")
+        )
+      )
+      try await sink.sendProgress(
+        LLMProgressEvent(itemID: "secrets", kind: .commentary, text: .complete)
+      )
+      await toolRound.wait()
+      return .completed(
+        toolCallResponse([
+          ToolCall(
+            id: "query",
+            name: "web_search",
+            argumentsJSON: "{\"query\":\"preview: \(Self.mcpSecret)\"}"
+          ),
+        ])
+      )
     } catch {
       return .cancelled(.mayHaveStarted(observing: 0))
     }

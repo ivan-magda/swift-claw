@@ -21,7 +21,9 @@ struct ChatGPTResponsesProgressTests {
       summary("response.reasoning_summary_text.delta", index: 1, text: "Checking "),
       summary("response.reasoning_summary.delta", index: 1, text: "wrong"),
       summary("response.reasoning_summary_text.done", index: 1, text: originalSummaryText),
-      summary("response.reasoning_summary.done", index: 1, text: originalSummaryText),
+      item("added", index: 7, type: "reasoning"),
+      summary("response.reasoning_summary.delta", index: 7, text: "Alias draft"),
+      summary("response.reasoning_summary.done", index: 7, text: "Alias finished"),
       summary("response.reasoning_summary_text.delta", index: 1, text: "LATE SUMMARY"),
       item("done", index: 1, type: "reasoning", text: originalSummaryText),
       item("done", index: 1, type: "reasoning", text: originalSummaryText),
@@ -45,6 +47,8 @@ struct ChatGPTResponsesProgressTests {
     var kinds: [String: LLMProgressKind] = [:]
     var completedIDs: Set<String> = []
     var firstSummaryID: String?
+    var summaryHistory: [String] = []
+    var completedSummaryTexts: [String] = []
     let stream = harness.provider.stream(request: request)
     for try await event in stream {
       switch event {
@@ -63,7 +67,13 @@ struct ChatGPTResponsesProgressTests {
           #expect(completedIDs.contains(progress.itemID) == false)
           latestTextByItemID[progress.itemID] = text
         case .complete:
+          if progress.kind == .summary {
+            completedSummaryTexts.append(latestTextByItemID[progress.itemID, default: ""])
+          }
           #expect(completedIDs.insert(progress.itemID).inserted)
+        }
+        if progress.kind == .summary {
+          summaryHistory.append(latestTextByItemID[progress.itemID, default: ""])
         }
       case .finished:
         break
@@ -108,7 +118,9 @@ struct ChatGPTResponsesProgressTests {
     #expect(response.content == "Final answer")
     #expect(visibleItemIDs == expectedExplanationItemIDs)
     #expect(commentaryIDs.count == 1)
-    #expect(summaryIDs.count == 2)
+    #expect(summaryIDs.count == 3)
+    #expect(summaryHistory.contains("Checking wrong"))
+    #expect(completedSummaryTexts.contains("Alias finished"))
     let summaryID = try #require(firstSummaryID)
     #expect(latestTextByItemID[summaryID] == "Checking dates")
     #expect(displayedText.contains(rawAnalysis) == false)

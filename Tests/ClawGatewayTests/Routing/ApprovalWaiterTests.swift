@@ -3,7 +3,6 @@ import ClawData
 import ClawTestSupport
 import Foundation
 import GRDB
-import Logging
 import Testing
 
 @testable import ClawGateway
@@ -248,7 +247,7 @@ struct ApprovalWaiterTests {
           now: {
             Date()
           },
-          logger: Logger(label: "test")
+          logger: TestLog.silent
         ),
       turns: turns,
       delivery: delivery,
@@ -259,7 +258,7 @@ struct ApprovalWaiterTests {
       now: {
         Date()
       },
-      logger: Logger(label: "test")
+      logger: TestLog.silent
     )
   }
 
