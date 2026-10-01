@@ -419,6 +419,23 @@ TelegramPollerService loop:
 >
 > **Step (3a) is aspirational, not implemented.** No rate limiter exists yet: nothing enforces a per-user or global token bucket on intake, and the only bounds on inbound media are structural — one photo per message, one bounded download, and a hard byte cap that refuses rather than truncates. Treat the step as the contract a limiter must satisfy when it lands, not as a description of today's daemon.
 
+**Temporary turn display state.** `TurnProgressState` reduces presentation events independently
+of durable run state. A provider-round start clears interim answer/explanation state; explanation
+item IDs are scoped to that current round. Append updates keep only safe capped text plus the
+streaming redactor's bounded suffix. Replacement resets both text and carry; item completion
+flushes the suffix without completing the run. Tool starts return an interim answer to working;
+approval waits and actual execution remain distinct. Step identity combines provider-round and
+tool-call IDs. Retain at most 32 steps, evicting the oldest completed entry and aggregating its
+success/failure/denial/cancellation outcome. If none is completed, discard the oldest entry
+without inventing an outcome; the current 20-call run budget fits the retained bound.
+
+`TelegramProgressRenderer` is draft-only. Working previews contain a complete `<tg-thinking>`
+block and at most six recent tool rows outside it, with a count of earlier steps. Answer previews
+replace expanded rows with one neutral elapsed progress summary. Build complete tags and escaped
+text within 2,048 progress characters and the existing total rich-message limit; reduce or drop
+progress before consuming answer space. Answer Markdown remains unchanged except for the existing
+total preview cap. Permanent delivery does not invoke this renderer.
+
 ### 6.2 Tool & approval flow (Inc 5a/5b)
 
 ```
@@ -1013,6 +1030,26 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **`/new`** = fresh conversation window AND **detaint** ("clears anything the bot read from web/files this session"). **Durable memory PERSISTS by design**; forgetting facts is a separate confirm-gated `/memory delete`.
 - **Prompt injection:** assume no reliable model-level fix; mitigate by least-privilege + approvals + blast-radius caps + the taint gate, not a classifier. Delimit/spotlight untrusted content; strip invisible/zero-width/bidi chars; tool output can never change system instructions.
 - **Secrets:** never in replies or logs. **Exact-value redaction** of the loaded secret values (bot token, api keys, decrypted secret material) is the **PRIMARY** mechanism at both the log boundary and the outbound-reply boundary (the values are already in memory — cheap, deterministic); pattern-based scanning is **secondary** defense-in-depth. The gateway owns the destination chat id; outbound controls strip auto-fetching image/link elements.
+- **Temporary progress follows the same secret boundary.** `StreamingSecretRedactor` emits only
+  safe spans and retains a trailing proper prefix of a known secret, bounded by the longest
+  secret's UTF-8 byte length minus one; no secret set means no carry. Redact exact values before
+  whitespace/control normalization, grapheme truncation or markup escaping. Explanation storage
+  is capped at 160 characters, and tool preview/identity storage at 120. Escape explanation text
+  for its HTML thinking context and tool rows for their Markdown context; controls and bidi
+  formatting cannot become display structure. No progress text enters persistence or permanent
+  answers.
+- **Registered identity and selected previews are the display input contract.** The dispatcher
+  supplies `toolStarted` with the registered `ToolDefinition` and one selected field, never full
+  argument JSON or output. `web_search` supplies query, `skill_load` supplies skill name,
+  `file_read`/`file_write` supply a validated workspace-relative path, and `web_fetch` supplies a
+  parsed host or URL from which only the parsed host is retained. Dispatch redacts before any
+  dispatch cap; the reducer applies the composed secret set before its own caps. The reducer
+  permits no absolute/traversing file path, URL userinfo/path/query/fragment, memory contents,
+  code/commands, Coder task/source, or MCP/other-tool arguments. Non-preview families use fixed
+  labels or a sanitized registered name. MCP uses the registered `mcp__server__tool` name,
+  never the policy-only `invocationIdentity` that can contain endpoints and static headers.
+  Missing registration remains a generic failed step even after a later state event. Successful
+  `coder_submit` means a coding job was submitted, not that its background work finished.
 - **Rotating credentials extend exact-value redaction to a dynamic set.** A static key is redactable once at load; an OAuth pair is not. The credential actor therefore keeps a bounded exact-value set covering the current token pair **and the prior pair during rotation** — the window in which a stale value can still surface — and each authorization carries the relevant set to the provider. OAuth and store code redact **before constructing any error**; inference redacts response heads, bounded error bodies, transport errors, and logs before they leave `ClawLLM`. **Never logged, even at debug level:** access/refresh tokens; device-auth IDs, user codes after the prompt, authorization codes, PKCE verifiers; the ChatGPT account ID; request/response bodies; provider replay payloads; owner prompt or model output text. **Safe diagnostics** are provider ID, qualified model, status code, attempt number, bounded retry delay, event/byte counts, credential freshness class, and generation number. Control characters and terminal escape sequences are stripped from remote text before it reaches stderr or Telegram — a remote string is never trusted with a terminal.
 - **Opaque provider state is data with no reader** (§8.5). Replay payloads are never rendered into prompts, FTS-indexed, recall-eligible, or exposed to tools, audit arguments, logs, Telegram, or memory files, and are never sent to any provider but the issuer that produced them. They are the one context-carrying value with **no untrusted-tier wrapper**, and that is sound only because nothing outside the owning adapter ever interprets them: the moment anything else reads one, it needs the wrapper.
 - **Accepted v1 limitation — `file_write` symlink TOCTOU.** `file_write` re-validates the approved path against the live filesystem at execution time (§10.2), but the directory creation, staging, and rename that follow are path-based, so a process racing the daemon on the same host could swap a parent directory for a symlink inside that window and redirect the write outside the workspace. This is **out of the v1 threat model** for the same reason §7 drops in-DB hash-chaining: a same-host attacker running as the daemon's user does not need the race — they can already write anywhere the daemon can. The four layers above defend against a subverted _model_, not a hostile co-resident process. If hardening is added later, bind the containment validation and the write to the same filesystem object (descriptor-relative, no-follow traversal; `openat2` + `RESOLVE_BENEATH` is Linux-only, Darwin needs a manual `O_NOFOLLOW` ancestor walk) — do not claim the race is closed without that.
