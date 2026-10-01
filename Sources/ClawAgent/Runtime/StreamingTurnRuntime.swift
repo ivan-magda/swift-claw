@@ -30,8 +30,11 @@ struct StreamingTurnRuntime: Sendable {
   /// Probe cadence for the draft/typing child. Sends are rate-limited in ticks so the wire
   /// cadence stays near the spec's ~1.2s min-interval while the first frame still goes out on
   /// the next probe after content appears.
-  private static let probeInterval: Duration = .milliseconds(250)
-  private static let minTicksBetweenDrafts = 5
+  static let probeInterval: Duration = .milliseconds(250)
+  static let minTicksBetweenDrafts = 5
+  /// Telegram for macOS shows no draft text until a second update arrives, so the second frame
+  /// goes out on the next probe instead of waiting the full interval.
+  private static let ticksBeforeSecondDraft = 1
   /// Telegram's typing action auto-expires after ~5s; re-issue just under that window,
   /// mirroring `TypingTurnRuntime`.
   private static let ticksBetweenTyping = 16
@@ -164,7 +167,7 @@ private extension StreamingTurnRuntime {
     box: ProviderRaceBox
   ) async {
     var lastSeenVersion = 0
-    var sentAnyDraft = false
+    var deliveredDrafts = 0
     // Start both counters at their thresholds: typing fires on the first tick, and the first
     // draft goes out on the first tick that sees content.
     var ticksSinceDraft = Self.minTicksBetweenDrafts
@@ -174,12 +177,14 @@ private extension StreamingTurnRuntime {
     // has to propagate, so the loop never draws a frame over a turn that has already resolved.
     while box.decided == nil, !Task.isCancelled {
       let latest = await snapshot.newer(than: lastSeenVersion)
-      let mayDraft = !sentAnyDraft || ticksSinceDraft >= Self.minTicksBetweenDrafts
+      let ticksNeeded =
+        deliveredDrafts == 1 ? Self.ticksBeforeSecondDraft : Self.minTicksBetweenDrafts
+      let mayDraft = deliveredDrafts == 0 || ticksSinceDraft >= ticksNeeded
 
       if let latest, mayDraft {
         lastSeenVersion = latest.version
         if await sendDraftBounded(latest.content, target: target) {
-          sentAnyDraft = true
+          deliveredDrafts += 1
           ticksSinceDraft = 0
         }
       }
@@ -188,7 +193,7 @@ private extension StreamingTurnRuntime {
       // only progress signal; once one is out it takes over (~30s TTL). Keyed on delivery rather
       // than on having attempted a send, because a group chat is a sink that accepts no draft at
       // all — assuming the bubble appeared there would leave the topic with no signal whatever.
-      if !sentAnyDraft, ticksSinceTyping >= Self.ticksBetweenTyping {
+      if deliveredDrafts == 0, ticksSinceTyping >= Self.ticksBetweenTyping {
         await typingIndicator.sendTyping(chatID: target.chatID, messageThreadID: target.threadID)
         ticksSinceTyping = 0
       }
