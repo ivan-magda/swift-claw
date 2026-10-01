@@ -131,6 +131,8 @@ private extension StreamingTurnRuntime {
           if !content.isEmpty {
             await snapshot.publish(content)
           }
+        case .progress:
+          continue
         case .finished:
           _ = box.claim(.provider)
           return .completed

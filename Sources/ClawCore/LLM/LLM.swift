@@ -80,6 +80,7 @@ public struct ChatRequest: Sendable, Equatable {
   public let tools: [ToolDefinition]
   public let responseFormat: ResponseFormat?
   public let sessionID: String?
+  public let progressExplanationsEnabled: Bool
   /// Optional, attempt-owned local guard. Providers that can observe streamed tool arguments update
   /// it incrementally; every runtime still reconciles the terminal response. Nil preserves the
   /// production surface and limits.
@@ -94,7 +95,8 @@ public struct ChatRequest: Sendable, Equatable {
     stop: [String]? = nil,
     tools: [ToolDefinition] = [],
     responseFormat: ResponseFormat? = nil,
-    sessionID: String? = nil
+    sessionID: String? = nil,
+    progressExplanationsEnabled: Bool = false
   ) {
     self.init(
       model: model,
@@ -104,6 +106,7 @@ public struct ChatRequest: Sendable, Equatable {
       tools: tools,
       responseFormat: responseFormat,
       sessionID: sessionID,
+      progressExplanationsEnabled: progressExplanationsEnabled,
       outputScope: nil,
       terminalValidationPolicy: .firstTerminal
     )
@@ -118,6 +121,7 @@ public struct ChatRequest: Sendable, Equatable {
     tools: [ToolDefinition] = [],
     responseFormat: ResponseFormat? = nil,
     sessionID: String? = nil,
+    progressExplanationsEnabled: Bool = false,
     outputScope: AttemptOutputScope?,
     terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal
   ) {
@@ -128,6 +132,7 @@ public struct ChatRequest: Sendable, Equatable {
     self.tools = tools
     self.responseFormat = responseFormat
     self.sessionID = sessionID
+    self.progressExplanationsEnabled = progressExplanationsEnabled
     self.outputScope = outputScope
     self.terminalValidationPolicy = terminalValidationPolicy
   }
@@ -206,6 +211,7 @@ public struct ChatResponse: Sendable, Equatable {
 /// accumulation from a whole one, and the reply is the thing an outcome has to be able to state.
 public enum StreamEvent: Sendable, Equatable {
   case delta(String)
+  case progress(LLMProgressEvent)
   case finished(ChatResponse)
 }
 

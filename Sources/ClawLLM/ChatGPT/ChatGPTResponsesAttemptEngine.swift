@@ -486,6 +486,8 @@ private extension ChatGPTResponsesAttemptEngine {
           switch streamEvent {
           case .delta(let text):
             try await emitDelta(text)
+          case .progress:
+            continue
           case .finished(let response):
             terminal = response
           }

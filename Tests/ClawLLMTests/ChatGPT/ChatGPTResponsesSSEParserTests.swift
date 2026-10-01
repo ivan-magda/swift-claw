@@ -781,6 +781,8 @@ extension ChatGPTResponsesSSEParserTests {
         switch event {
         case .delta(let text):
           deltas.append(text)
+        case .progress:
+          continue
         case .finished(let finished):
           response = finished
         }

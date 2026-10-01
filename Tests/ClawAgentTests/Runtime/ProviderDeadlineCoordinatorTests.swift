@@ -61,6 +61,8 @@ private let consumeToTerminal:
           switch event {
           case .delta:
             continue
+          case .progress:
+            continue
           case .finished:
             _ = box.claim(.provider)
             return .completed

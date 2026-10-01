@@ -329,6 +329,8 @@ private extension OpenAICompatibleProvider {
           switch event {
           case .delta(let text):
             try await sink.sendDelta(text)
+          case .progress:
+            continue
           case .finished(let response):
             terminal = response
           }

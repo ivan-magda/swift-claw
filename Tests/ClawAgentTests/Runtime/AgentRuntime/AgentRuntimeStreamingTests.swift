@@ -158,6 +158,8 @@ actor StreamingProvider: LLMProvider {
       } catch {
         return .cancelled(.mayHaveStarted(observing: 0))
       }
+    case .progress:
+      return nil
     case .finished(let response):
       return .completed(response)
     }
@@ -238,6 +240,8 @@ actor RecordingStreamingProvider: LLMProvider {
         switch event {
         case .delta(let text):
           try? await sink.sendDelta(text)
+        case .progress:
+          continue
         case .finished(let response):
           return .completed(response)
         }

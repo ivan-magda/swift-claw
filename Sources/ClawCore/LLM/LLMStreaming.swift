@@ -25,12 +25,12 @@ public struct LLMEventBufferLimits: Sendable, Equatable {
   public let maximumDeltaBytes: Int
   public let reservedTerminalBytes: Int
 
-  /// Defines positive buffering limits for unread deltas and the reserved terminal reply.
+  /// Defines positive buffering limits for unread answer/progress events and the reserved terminal reply.
   ///
   /// - Parameters:
   ///   - maximumDeltaCount: The target unread delta count used to derive a minimum byte charge.
   ///     Custom byte/count ratios round that charge down and may admit more deltas than requested.
-  ///   - maximumDeltaBytes: The maximum combined UTF-8 payload of unread deltas.
+  ///   - maximumDeltaBytes: The maximum combined payload and metadata charge of unread nonterminal events.
   ///   - reservedTerminalBytes: The terminal reply's maximum weight; larger replies are refused.
   public init(maximumDeltaCount: Int, maximumDeltaBytes: Int, reservedTerminalBytes: Int) {
     precondition(maximumDeltaCount > 0, "a stream needs room for a delta, got \(maximumDeltaCount)")
@@ -70,7 +70,7 @@ public struct LLMEventBufferLimits: Sendable, Equatable {
 public struct LLMEventStream: AsyncSequence, Sendable {
   public typealias Element = StreamEvent
 
-  private let channel: BoundedAsyncChannel<String>
+  private let channel: BoundedAsyncChannel<LLMStreamPayload>
   private let owner: LLMStreamOwner
 
   /// Builds a stream around `operation`, which fills the sink and reports how the inference ended.
@@ -81,8 +81,9 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     limits: LLMEventBufferLimits = .providerDefault,
     operation: @escaping @Sendable (_ sink: LLMEventSink) async -> LLMStreamTermination
   ) -> LLMEventStream {
-    let channel = BoundedAsyncChannel<String>(capacity: limits.maximumDeltaBytes) { text in
-      limits.deltaCharge(forTextBytes: text.utf8.count)
+    let channel = BoundedAsyncChannel<LLMStreamPayload>(capacity: limits.maximumDeltaBytes) {
+      payload in
+      limits.deltaCharge(forTextBytes: payload.byteCharge)
     }
 
     let owner = LLMStreamOwner(
@@ -131,7 +132,7 @@ public struct LLMEventStream: AsyncSequence, Sendable {
   }
 
   public struct AsyncIterator: AsyncIteratorProtocol {
-    fileprivate var base: BoundedAsyncChannel<String>.Iterator
+    fileprivate var base: BoundedAsyncChannel<LLMStreamPayload>.Iterator
     fileprivate let owner: LLMStreamOwner
 
     fileprivate let lease: StreamAbandonmentLease
@@ -139,8 +140,13 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     fileprivate var isTerminalDelivered = false
 
     public mutating func next() async throws -> StreamEvent? {
-      if let text = try await base.next() {
-        return .delta(text)
+      if let payload = try await base.next() {
+        switch payload {
+        case .answer(let text):
+          return .delta(text)
+        case .progress(let event):
+          return .progress(event)
+        }
       }
 
       guard !isTerminalDelivered else {
@@ -173,10 +179,10 @@ extension LLMEventStream {
 
 /// The write end of a stream.
 ///
-/// Deltas only: the terminal is not something a producer sends, it is something a producer reports,
+/// Answer and progress events only: the terminal is something a producer reports,
 /// which is what removes any window between the last event and the outcome that explains it.
 public struct LLMEventSink: Sendable {
-  fileprivate let channel: BoundedAsyncChannel<String>
+  fileprivate let channel: BoundedAsyncChannel<LLMStreamPayload>
 
   /// Suspends until the consumer has room for `text`.
   ///
@@ -184,7 +190,12 @@ public struct LLMEventSink: Sendable {
   ///   cancelled or its terminal has landed, or `BoundedAsyncChannelError.elementExceedsCapacity`
   ///   for a delta larger than the whole delta budget, which no amount of draining could admit.
   public func sendDelta(_ text: String) async throws {
-    try await channel.send(text)
+    try await channel.send(.answer(text))
+  }
+
+  /// Uses the same bounded, suspending nonterminal channel as answer deltas.
+  public func sendProgress(_ event: LLMProgressEvent) async throws {
+    try await channel.send(.progress(event))
   }
 }
 
@@ -259,4 +270,32 @@ extension LLMEventBufferLimits {
 
 // MARK: - Stream ownership
 
-private typealias LLMStreamOwner = StreamTerminationOwner<String, LLMStreamTermination>
+private typealias LLMStreamOwner = StreamTerminationOwner<LLMStreamPayload, LLMStreamTermination>
+
+private enum LLMStreamPayload: Sendable {
+  case answer(String)
+  case progress(LLMProgressEvent)
+}
+
+// MARK: - Payload charging
+
+private extension LLMStreamPayload {
+  var byteCharge: Int {
+    switch self {
+    case .answer(let text):
+      return text.utf8.count
+    case .progress(let event):
+      var charge = SaturatingArithmetic.sum(
+        MemoryLayout<LLMProgressEvent>.stride,
+        event.itemID.utf8.count
+      )
+      switch event.text {
+      case .append(let text), .replace(let text):
+        charge = SaturatingArithmetic.sum(charge, text.utf8.count)
+      case .complete:
+        break
+      }
+      return charge
+    }
+  }
+}
