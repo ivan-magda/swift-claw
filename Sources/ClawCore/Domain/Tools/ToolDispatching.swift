@@ -64,4 +64,20 @@ public protocol ToolDispatching: Sendable {
   var definitions: [ToolDefinition] { get }
 
   func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome
+
+  func dispatch(
+    call: ToolCall,
+    context: ToolDispatchContext,
+    progress: ToolProgressReporter?
+  ) async -> ToolDispatchOutcome
+}
+
+extension ToolDispatching {
+  public func dispatch(
+    call: ToolCall,
+    context: ToolDispatchContext,
+    progress: ToolProgressReporter?
+  ) async -> ToolDispatchOutcome {
+    await dispatch(call: call, context: context)
+  }
 }

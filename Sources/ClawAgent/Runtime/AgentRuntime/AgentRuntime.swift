@@ -157,6 +157,7 @@ extension AgentRuntime {
     )
     let turn = TurnFrame(
       scope: request.scope,
+      progress: request.progress,
       deadline: deadline,
       startedAt: now(),
       log: turnLogger(for: request.scope)

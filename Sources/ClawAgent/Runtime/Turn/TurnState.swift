@@ -5,6 +5,7 @@ import Logging
 /// every line of the turn goes through.
 struct TurnFrame {
   let scope: TurnScope
+  let progress: TurnProgressReporter?
   let deadline: ContinuousClock.Instant
   let startedAt: ContinuousClock.Instant
   let log: Logger

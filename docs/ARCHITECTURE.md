@@ -299,6 +299,13 @@ The Agent retains provider deadline arbitration and the legacy proactive/provide
 Its shared sender mode adds neither an empty thinking frame nor unchanged-frame refreshes. Core
 knows no provider, Gateway, or Telegram markup types; Agent has no dependency on Gateway.
 
+`TurnRequest.progress` is an optional transient reporter, carried in the turn frame rather than
+persisted/equatable trust values. With a reporter, Agent starts no provider-scoped draft/typing
+worker, tool-batch typing pulse, or final cosmetic send; the registry's sender spans rounds and
+tool waits. Without a reporter, the legacy provider-round path remains unchanged. Provider deadline
+arbitration, safe buffered fallback, exposure accounting, terminal validation and producer joining
+remain Agent responsibilities on both paths.
+
 ### 5.2.1 Coder task ownership
 
 Coder owns `[UUID: Task<Void, Never>]` independently of dialogue lanes. Submission checks an
@@ -842,6 +849,13 @@ notStarted → mayHaveStarted → completed | failed | cancelled
 
 The two execution methods are **not** interchangeable retry surfaces on a managed route: the ChatGPT adapter drives both from **one shared SSE attempt engine** and therefore does not expose a rejection for `AgentRuntime` to reissue through the other method, because both use the same wire transport and reissuing would reset the retry budget. The Chat Completions route's existing stream-to-buffered fallback is unaffected — it fell back across two genuinely different transports, and that behavior is unchanged.
 
+The Agent enables provider explanations only for an interactive direct-chat turn with streaming
+on and a reporter permitting explanations. Each admitted provider round publishes its already
+minted accounting call ID and resets the provisional answer and explanation item. Only `.delta`
+accumulates answer previews; `.progress` publishes separate explanation events. The authoritative
+joined response reconciles the preview without synthesizing content from explanations. Tool-step
+IDs pair that same provider-call ID with the provider's tool-call ID, including across route fallback.
+
 ### 8.5 Opaque provider replay state
 
 Responses reasoning continuity cannot be expressed as text and tool calls, so `ChatResponse`, the terminal streaming event, `ChatMessage`, `ToolExchange`, and final assistant commits gain an optional `ProviderExchangeState` — an `issuer` plus an opaque `payload`. **The adapter that produced it is the only code that may interpret it.**
@@ -931,6 +945,22 @@ Context fitting uses grapheme counting (`String.count`). The learning artifact s
 UTF-8 byte limits: 512 bytes per lesson and 1536 bytes for the complete set (§14.3).
 
 ## 10. Tool system & policy
+
+`ToolDispatching` accepts an optional per-call progress reporter through a default-forwarding
+overload, preserving existing dispatcher conformers. `GatedToolDispatcher` identifies only the
+registered definition and an allowed scalar preview, then reports pending. Unknown tools and
+malformed JSON fail; gate refusal reports denied, and approval reports awaiting approval without
+execution. Only an allow verdict reports executing. The returned observation reports succeeded
+only for `.ok`, failed for errors, and denied for blocked results; caller cancellation reports
+cancelled. The existing tool timeout race still cancels and abandons a wedged execution, independently
+of the presentation sender's cancellation-and-join contract. Progress grants no execution authority.
+
+The dispatcher receives the composed exact secret values separately from policy. It selects only
+query, skill name, a validated workspace-relative path, or a parsed HTTP(S) host, and applies
+`ProgressText.preview` redaction before its 120-character cap. Other registered tools, including MCP,
+supply no argument preview; their display identity is the registered definition name. Full argument
+JSON and tool payloads never enter progress events. Audit and gate verdicts retain their existing
+paths and contents.
 
 ### 10.1 Read-only tier (v1)
 

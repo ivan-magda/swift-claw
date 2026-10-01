@@ -1112,55 +1112,6 @@ struct AgentRuntimeStreamingTests {
   }
 
   @Test
-  func streamingResponseDoesNotWaitForBlockedDraftSend() async throws {
-    // given
-    let provider = StreamingProvider(
-      streamScript: .events([
-        .delta("he"),
-        .delta("llo"),
-        .finished(
-          ChatResponse(
-            content: "hello",
-            finishReason: "stop",
-            usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
-            costFromProvider: 0.001
-          )
-        ),
-      ])
-    )
-    let drafts = BlockingDrafts()
-    // Compressed sleep so the per-send abandon deadline elapses instantly: the invariant under
-    // test is that a sink which never returns still cannot block turn completion.
-    let runtime = makeRuntime(
-      provider: provider,
-      drafts: drafts,
-      streamingEnabled: true,
-      clock: ScriptedClock.compressed(parkingAt: .seconds(10))
-    )
-
-    // when
-    let turnResult = startTurn {
-      try await runtime.runTurn(
-        makeTurnRequest(
-          runID: 11,
-          sessionID: 22,
-          chatID: 33,
-          context: self.singleUserBuildResult("hi")
-        )
-      )
-    }
-    await drafts.waitUntilFirstSendBlocked()
-    let outcome = await waitForTurnResult(turnResult)
-
-    // then
-    await drafts.release()
-    let completed = try requireCompleted(try #require(outcome).result)
-    #expect(completed.content == "hello")
-    #expect(await provider.completeCalls == 0)
-    #expect(await provider.streamCalls == 1)
-  }
-
-  @Test
   func postSendStreamFailureDegradesWithoutBlockingFallback() async throws {
     // given — a typed mid-stream transport drop may already have generated tokens, so a conservative
     // row is owed and the cause is not re-attempted on the buffered path

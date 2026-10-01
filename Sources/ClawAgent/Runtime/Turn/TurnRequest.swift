@@ -9,12 +9,21 @@ public struct TurnRequest: Sendable {
   public let context: BuildResult
   public let session: SessionTrust
   public let spend: SpendSnapshot
+  /// Transient run presentation; omitted for legacy provider-scoped progress.
+  public let progress: TurnProgressReporter?
 
-  public init(scope: TurnScope, context: BuildResult, session: SessionTrust, spend: SpendSnapshot) {
+  public init(
+    scope: TurnScope,
+    context: BuildResult,
+    session: SessionTrust,
+    spend: SpendSnapshot,
+    progress: TurnProgressReporter? = nil
+  ) {
     self.scope = scope
     self.context = context
     self.session = session
     self.spend = spend
+    self.progress = progress
   }
 }
 

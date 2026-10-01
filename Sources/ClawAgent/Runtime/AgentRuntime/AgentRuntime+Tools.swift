@@ -13,10 +13,12 @@ extension AgentRuntime {
     trust: inout TurnTrust
   ) async throws -> TurnStep<ToolBatch> {
     let turn = round.plan.turn
-    await typingIndicator.sendTyping(
-      chatID: turn.scope.chatID,
-      messageThreadID: turn.scope.threadID
-    )
+    if turn.progress == nil {
+      await typingIndicator.sendTyping(
+        chatID: turn.scope.chatID,
+        messageThreadID: turn.scope.threadID
+      )
+    }
 
     var batch = ToolBatch()
     for call in round.response.toolCalls {
@@ -49,7 +51,13 @@ extension AgentRuntime {
         continue
       }
 
-      let dispatched = await dispatch(call, context: context, to: toolDispatcher, log: turn.log)
+      let dispatched = await dispatch(
+        call,
+        context: context,
+        to: toolDispatcher,
+        log: turn.log,
+        progress: round.plan.toolProgress(for: call)
+      )
       if batch.pending == nil, let recordedAction = dispatched.requiresApproval {
         batch.pending = PendingToolAction(toolCallID: call.id, recorded: recordedAction)
         continue
@@ -81,12 +89,13 @@ private extension AgentRuntime {
     _ call: ToolCall,
     context: ToolDispatchContext,
     to dispatcher: any ToolDispatching,
-    log: Logger
+    log: Logger,
+    progress: ToolProgressReporter?
   ) async -> ToolDispatchOutcome {
     log.debug("tool \(call.name) invoked")
 
     let toolStart = now()
-    let dispatched = await dispatcher.dispatch(call: call, context: context)
+    let dispatched = await dispatcher.dispatch(call: call, context: context, progress: progress)
 
     log.debug(
       """

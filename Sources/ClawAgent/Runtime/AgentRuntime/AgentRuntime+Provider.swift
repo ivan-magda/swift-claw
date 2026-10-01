@@ -12,14 +12,16 @@ extension AgentRuntime {
     provider: any LLMProvider,
     target: TurnProgressTarget,
     request: ChatRequest,
-    deadlineSeconds: Int
+    deadlineSeconds: Int,
+    progress: TurnProgressReporter?
   ) async throws -> ChatResponse {
     guard streamingEnabled else {
       return try await runTypingTurn(
         provider: provider,
         target: target,
         request: request,
-        deadlineSeconds: deadlineSeconds
+        deadlineSeconds: deadlineSeconds,
+        progress: progress
       )
     }
 
@@ -33,7 +35,8 @@ extension AgentRuntime {
         provider: provider,
         target: target,
         request: request,
-        deadlineSeconds: deadlineSeconds
+        deadlineSeconds: deadlineSeconds,
+        progress: progress
       )
     } catch let error where ProviderError.cause(of: error)?.allowsPreInferenceReissue == true {
       guard attemptPolicy.streamingReattemptPolicy == .bufferedWhenSafe else {
@@ -50,7 +53,8 @@ extension AgentRuntime {
         provider: provider,
         target: target,
         request: request,
-        deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart)
+        deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart),
+        progress: progress
       )
     }
   }
@@ -71,7 +75,8 @@ private extension AgentRuntime {
     provider: any LLMProvider,
     target: TurnProgressTarget,
     request: ChatRequest,
-    deadlineSeconds: Int
+    deadlineSeconds: Int,
+    progress: TurnProgressReporter?
   ) async throws -> ChatResponse {
     let runtime = StreamingTurnRuntime(
       provider: provider,
@@ -80,14 +85,15 @@ private extension AgentRuntime {
       wallClockDeadlineSeconds: deadlineSeconds,
       clock: clock
     )
-    return try await runtime.run(target: target, request: request)
+    return try await runtime.run(target: target, request: request, progress: progress)
   }
 
   func runTypingTurn(
     provider: any LLMProvider,
     target: TurnProgressTarget,
     request: ChatRequest,
-    deadlineSeconds: Int
+    deadlineSeconds: Int,
+    progress: TurnProgressReporter?
   ) async throws -> ChatResponse {
     let runtime = TypingTurnRuntime(
       provider: provider,
@@ -95,6 +101,6 @@ private extension AgentRuntime {
       wallClockDeadlineSeconds: deadlineSeconds,
       clock: clock
     )
-    return try await runtime.run(target: target, request: request)
+    return try await runtime.run(target: target, request: request, progress: progress)
   }
 }

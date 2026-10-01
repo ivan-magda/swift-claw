@@ -15,11 +15,9 @@ private actor DraftSnapshot {
   }
 }
 
-/// Races three children through the deadline coordinator: the SSE consumer (accumulates deltas and
-/// publishes drafts), a draft/typing loop ("typing…" re-issued while waiting for the first token),
-/// and the wall-clock deadline. The consumer and the deadline contend for the coordinator's lock; no
-/// loser is discarded, and every child is drained before an outcome is read. The winning response is
-/// finalized with one awaited, deadline-bounded full-content draft.
+/// Owns stream consumption and deadline arbitration, draining every provider child before returning.
+/// With a run reporter, live previews and explanations go to its presentation owner. The legacy path
+/// also owns provider-scoped draft/typing pacing and an awaited, bounded final-content draft.
 struct StreamingTurnRuntime: Sendable {
   private let provider: any LLMProvider
   private let typingIndicator: any TypingIndicator
@@ -45,7 +43,11 @@ struct StreamingTurnRuntime: Sendable {
     self.clock = clock
   }
 
-  func run(target: TurnProgressTarget, request: ChatRequest) async throws -> ChatResponse {
+  func run(
+    target: TurnProgressTarget,
+    request: ChatRequest,
+    progress: TurnProgressReporter? = nil
+  ) async throws -> ChatResponse {
     let snapshot = DraftSnapshot()
     // Built before the race children start, so the runtime holds the cancel-and-join handle before
     // any authorization or network work can race the deadline.
@@ -56,16 +58,18 @@ struct StreamingTurnRuntime: Sendable {
       deadlineSeconds: wallClockDeadlineSeconds,
       clock: clock,
       consume: { stream, box in
-        await consumeStream(stream, snapshot: snapshot, box: box)
+        await consumeStream(stream, snapshot: snapshot, box: box, progress: progress)
       },
       auxiliary: { box in
-        await runDraftAndTypingLoop(target: target, snapshot: snapshot, box: box)
+        if progress == nil {
+          await runDraftAndTypingLoop(target: target, snapshot: snapshot, box: box)
+        }
       }
     )
 
     switch outcome {
     case .response(let response):
-      await sendFinalDraft(response.content, target: target)
+      await publishResponse(response, target: target, progress: progress)
       return response
     case .failed(let error):
       throw error
@@ -77,7 +81,7 @@ struct StreamingTurnRuntime: Sendable {
       throw ProviderInferenceCancellation(observing: observedCompletionTokens)
     case .timedOut(.completed(let response)):
       // A completed stream is surfaced as `.response` above; kept exhaustive for the enum.
-      await sendFinalDraft(response.content, target: target)
+      await publishResponse(response, target: target, progress: progress)
       return response
     }
   }
@@ -95,7 +99,8 @@ private extension StreamingTurnRuntime {
   func consumeStream(
     _ stream: LLMEventStream,
     snapshot: DraftSnapshot,
-    box: ProviderRaceBox
+    box: ProviderRaceBox,
+    progress: TurnProgressReporter?
   ) async -> StreamConsumerOutcome {
     var content = ""
     var contentBytes = 0
@@ -109,10 +114,14 @@ private extension StreamingTurnRuntime {
           // An empty accumulation (providers commonly open with an empty role-only delta) must
           // never surface as a blank draft bubble.
           if !content.isEmpty {
-            await snapshot.publish(content)
+            if let progress {
+              await progress.publish(.answerPreview(content))
+            } else {
+              await snapshot.publish(content)
+            }
           }
-        case .progress:
-          continue
+        case .progress(let event):
+          await progress?.publish(.explanation(event))
         case .finished:
           _ = box.claim(.provider)
           return .completed
@@ -126,6 +135,18 @@ private extension StreamingTurnRuntime {
       // Either way the authoritative outcome is the stream's own termination, read by the coordinator
       // — a cut reply is never surfaced as a whole one.
       return .cut
+    }
+  }
+
+  func publishResponse(
+    _ response: ChatResponse,
+    target: TurnProgressTarget,
+    progress: TurnProgressReporter?
+  ) async {
+    if let progress {
+      await progress.publish(.answerPreview(response.content))
+    } else {
+      await sendFinalDraft(response.content, target: target)
     }
   }
 
