@@ -82,6 +82,7 @@ The repeated-close evidence proves first-close joining, later idempotence and re
 publication. It does not prove deterministic overlapping entry by a second close caller.
 
 The executor inspected Task 8's offline probe script and complete output without rerunning it.
+Those probes used revision `e63402de7cf5f9f4dd81789ca699cb57213dd68a`.
 Each probe used `./.build/debug/clawd doctor --check-config --json`, a fresh disposable state root,
 an explicit clean environment, synthetic model settings and a 30-second subprocess deadline.
 The Task 8 script completed with exit 0 and reported removal of the disposable roots:
@@ -134,7 +135,8 @@ live observations:
    if a test group is available.
 4. Inspect the recordings frame by frame. Measure time to first visible progress, stale gaps,
    stable-text displacement at collapse and final replacement, duplicate bubbles, overlap,
-   scrolling and final history. Compare with the prior study's observed draft-to-final rewrap.
+   scrolling and final history. Verify that permanent final answers and history contain no
+   progress transcript. Compare with the prior study's observed draft-to-final rewrap.
    Any additional disruptive jump requires a layout/pacing change and another recording. A client
    limitation requires evidence and the owner's acceptance; a second mobile client that is
    unavailable remains a stated coverage limit.
