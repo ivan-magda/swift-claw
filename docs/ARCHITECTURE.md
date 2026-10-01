@@ -285,6 +285,18 @@ task for that entry, rejects events after terminal marking, and cancels and join
 every close path before removing registration. Its bounded reducer and renderer never await
 network delivery. Sender frame closures do not keep completed presentations alive.
 
+Gateway begins presentation after pickup and durable target resolution, before context loading.
+Every terminal path closes and joins the sender before the transaction that makes its final outbox
+rows eligible. Thrown context/commit paths perform explicit async cleanup. A successful approval
+suspend publishes waiting state after its durable commit and keeps the owner across parking and
+resume; the registry retains the pending step identity only in memory. Recovery creates a fresh
+resumed step from the stored tool-call identity. Approved execution reports only after its durable
+claim, uses registered tool identity and actual payload status, and reports atomic memory success
+only after the fused commit. A committed error observation is never displayed as tool success.
+`/stop` and `/new` retain durable mutation, approval signalling, and lane-cancellation ordering,
+then join affected presentations before acknowledging. Shutdown stops presentation admission and
+joins its workers before closing Telegram, independently of background Coder completion.
+
 `ClawCore.TurnProgressSender` owns transport-neutral draft/typing pacing and each bounded cosmetic
 send; its caller owns `run()` and must cancel and join it. The interactive mode probes every 250 ms,
 allows only the early second refresh to bypass the normal 1.25-second interval, and refreshes
@@ -574,6 +586,15 @@ report text cannot choose a destination. Completion compares the state used for 
 current job: a concurrent cancellation returns `stateChanged(currentJob)` without writes so the
 service can rerender and retry only the commit. A terminal replay returns `alreadyTerminal` and
 inserts nothing. An outbox failure rolls back the terminal transition and reservation release.
+
+**Presentation delivery exclusion.** Outbox sends acquire a chat-scoped presentation lease that
+pauses and drains drafts before rich delivery, covering the plain fallback under the same lease.
+The lease ends after the `markSent` attempt, or on send failure; existing pending rows continue to
+hold newer drafts even when sending succeeded but recording failed. This includes boot-recovered
+rows. Inference and typing continue during the hold. Approval cards use the same exclusion and
+release the current waiting draft after durable delivery is recorded. Direct approval notices and
+router acknowledgements also lease their active chat. These leases add no retry policy or execution
+queue and preserve the dispatcher's flood-control deadlines.
 
 ### 6.5 Callback (approval) path (Inc 5a)
 
@@ -1167,6 +1188,11 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **A reply goes back into the topic that asked, as a reply.** Migration `v10` adds `runs.trigger_telegram_message_id` (Telegram's own message id, distinct from the `messages` row id `trigger_message_id` already carries) and nullable `outbound_deliveries.message_thread_id` / `reply_to_message_id`. The outbox target is stamped **at enqueue from the run's own session key**, so every path that enqueues — a turn reply, a command reply, a scheduled fire, a boot crash notice — lands in the right topic without a second lookup. The typing indicator carries the topic id. Telegram accepts streaming drafts only in private chats, so a group turn keeps reissuing the topic-scoped typing action until the final reply arrives.
 - **One throttled chat no longer stalls every other one.** The outbox drain is strictly ordered per chat and stops on a send failure, which in a DM meant one stalled conversation. With several topics live, a Telegram 429 is the one failure that says how long to wait, so the dispatcher puts a **per-chat hold** on the retry-after window, skips that chat's rows, and carries on with the others; order inside a run survives because a run answers exactly one chat. Every other failure keeps the existing stall-and-wait behavior.
 - **Membership and migration are observed, never acted on.** A `my_chat_member` update logs who added or removed the bot, in which room, with the chat id and title — that log line is how an operator learns the id to configure. A `migrate_to_chat_id` message logs, at error level, that the chat id an access grant names has been replaced. Neither event edits the allowlist: rewriting it at runtime would re-point a grant at an id nobody approved, so the daemon goes quiet in that room and says exactly what to edit.
+
+Group presentation uses the durable run's chat and topic, including approved-action recovery.
+It keeps one typing owner across provider/tool segments, suppresses typing while awaiting approval,
+and emits no private-chat drafts. Session cancellation closes only that topic's presentations;
+per-chat delivery exclusion still spans topics because Telegram delivery can clear a chat's draft.
 
 **What group mode gives up, and why that is acceptable here.** §12's four layers are not equally intact in a shared room, and pretending otherwise would be worse than saying it:
 

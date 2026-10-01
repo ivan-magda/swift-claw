@@ -8,6 +8,7 @@ public actor TurnPresentationRegistry {
     let scope: TurnScope
     let presentation: TurnPresentation
     let reporter: TurnProgressReporter
+    var pendingStep: TurnToolStepID?
   }
 
   private let streamingEnabled: Bool
@@ -62,8 +63,8 @@ public actor TurnPresentationRegistry {
       secretValues: secretValues,
       clock: clock
     )
-    let reporter = TurnProgressReporter(explanationsEnabled: progressEnabled) { event in
-      await presentation.publish(event)
+    let reporter = TurnProgressReporter(explanationsEnabled: progressEnabled) { [weak self] event in
+      await self?.publish(event, runID: scope.runID)
     }
     let entry = Entry(scope: scope, presentation: presentation, reporter: reporter)
     // No suspension between cancellation/shutdown admission and registration.
@@ -75,6 +76,34 @@ public actor TurnPresentationRegistry {
 
   public func reporter(runID: Int64) -> TurnProgressReporter? {
     entries[runID]?.reporter
+  }
+
+  public func waitingForApproval(runID: Int64) async {
+    guard let entry = entries[runID], let id = entry.pendingStep else {
+      return
+    }
+    await entry.presentation.publish(.waitingForApproval(id: id))
+  }
+
+  public func approvalProgress(runID: Int64, toolCallID: String) -> ToolProgressReporter? {
+    guard let entry = entries[runID] else {
+      return nil
+    }
+    let id =
+      entry.pendingStep
+      ?? TurnToolStepID(
+        providerCallID: UUID().uuidString,
+        toolCallID: toolCallID
+      )
+    entries[runID]?.pendingStep = id
+    return ToolProgressReporter(
+      identify: { tool, preview in
+        await entry.reporter.publish(.toolStarted(id: id, tool: tool, preview: preview))
+      },
+      publish: { state in
+        await entry.reporter.publish(.toolState(id: id, state: state))
+      }
+    )
   }
 
   public func close(runID: Int64) async {
@@ -149,5 +178,21 @@ private extension TurnPresentationRegistry {
     } catch {
       return true
     }
+  }
+}
+
+// MARK: - Event Routing
+
+private extension TurnPresentationRegistry {
+  func publish(_ event: TurnProgressEvent, runID: Int64) async {
+    guard let entry = entries[runID] else {
+      return
+    }
+    if case .toolState(let id, .awaitingApproval) = event {
+      // Waiting is visible only after the durable suspend succeeds.
+      entries[runID]?.pendingStep = id
+      return
+    }
+    await entry.presentation.publish(event)
   }
 }

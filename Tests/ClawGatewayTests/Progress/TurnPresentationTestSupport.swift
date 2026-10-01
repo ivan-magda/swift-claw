@@ -94,15 +94,26 @@ actor ClosingDrafts: RichDraftStreaming {
   nonisolated let cancelled = AsyncGate()
   nonisolated let releaseCleanup = AsyncGate()
   nonisolated let cleaned = AsyncGate()
+  nonisolated let waitingAfterCleanup = AsyncGate()
+  private let blockingText: String?
+  private var hasBlocked = false
   private(set) var calls = 0
   private(set) var markdowns: [String] = []
+
+  init(blockingText: String? = nil) {
+    self.blockingText = blockingText
+  }
 
   func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool {
     calls += 1
     markdowns.append(markdown)
-    if calls > 1 {
+    if cleaned.isOpen, markdown.contains("Waiting for your approval") {
+      waitingAfterCleanup.open()
+    }
+    guard !hasBlocked, blockingText.map({ markdown.contains($0) }) ?? true else {
       return true
     }
+    hasBlocked = true
     started.open()
     await AsyncGate().wait()
     cancelled.open()

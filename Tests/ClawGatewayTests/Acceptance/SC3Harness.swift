@@ -54,9 +54,11 @@ struct SC3Harness {
   let lanes: SessionLaneRegistry
   let agent: AgentRuntime
   let coderService: CoderService?
+  let presentations: TurnPresentationRegistry?
 
   func stop() async throws {
     await lanes.stopAcceptingAndCancel()
+    await presentations?.shutdown()
     let drain = await lanes.drain(timeout: .seconds(30), clock: ContinuousClock())
     #expect(drain == .drained)
     try await coderService?.shutdown()
@@ -196,7 +198,10 @@ func makeSC3Harness(
     allowEgress: false
   ),
   beforeCompletion: TurnScriptedProvider.BeforeCompletion? = nil,
-  dispatcherOverride: (any ToolDispatching)? = nil
+  dispatcherOverride: (any ToolDispatching)? = nil,
+  providerOverride: (any LLMProvider)? = nil,
+  presentationsFactory: ((any OutboxStore) throws -> TurnPresentationRegistry)? = nil,
+  turnsFactory: ((any RunStore, TurnPresentationRegistry?) -> any TurnDispatching)? = nil
 ) throws -> SC3Harness {
   let fileManager = FileManager.default
 
@@ -208,6 +213,7 @@ func makeSC3Harness(
     .path
   let stores = try ClawDatabase.openStores(path: resolvedDatabasePath)
   try stores.allowlist.seedAllowlist(userIDs: [7])
+  let presentations = try presentationsFactory?(stores.outbox)
 
   // 2. Temp workspace dir; write `workspaceFiles` (relative path → content) into it. Reuse
   // `workspaceRoot` (with `databasePath`) to model a restart against the SAME disk (spec §17).
@@ -334,10 +340,10 @@ func makeSC3Harness(
   // 6. AgentRuntime over the per-turn scripted provider and the real gated dispatcher.
   let provider = TurnScriptedProvider(scripts: scripts, beforeCompletion: beforeCompletion)
   let agent = AgentRuntime(
-    roster: makeSingleRouteRoster(provider: provider, wireModel: "test-model"),
+    roster: makeSingleRouteRoster(provider: providerOverride ?? provider, wireModel: "test-model"),
     typingIndicator: NoopTyping(),
     draftStreamer: NoopRichDraftStreaming(),
-    streamingEnabled: false,
+    streamingEnabled: providerOverride != nil,
     costResolver: CostResolver(
       priceTable: .empty,
       referenceUSDPerToken: RunBudget.default.referenceUSDPerToken
@@ -369,6 +375,7 @@ func makeSC3Harness(
     },
     parker: deferredParker,
     approvalExpirySeconds: testApprovalExpirySeconds,
+    presentations: presentations,
     logger: logger
   )
 
@@ -402,6 +409,7 @@ func makeSC3Harness(
     now: {
       Date()
     },
+    presentations: presentations,
     logger: logger
   )
   deferredParker.adopt(waiter)
@@ -436,7 +444,7 @@ func makeSC3Harness(
     botIdentity: botIdentity,
     accessControl: AccessControl(allowlist: stores.allowlist, groupChats: groupChats),
     delivery: transport,
-    turnRunner: runner,
+    turnRunner: turnsFactory?(stores.runs, presentations) ?? runner,
     imageCache: imageCache,
     lanes: lanes,
     schedule: ScheduleSurface(
@@ -448,6 +456,7 @@ func makeSC3Harness(
     ),
     approvalCallbacks: approvalCallbacks,
     coordinator: coordinator,
+    presentations: presentations,
     doctor: StubDoctorReporter(),
     logger: logger
   )
@@ -468,6 +477,7 @@ func makeSC3Harness(
     waiter: waiter,
     lanes: lanes,
     agent: agent,
-    coderService: coderService
+    coderService: coderService,
+    presentations: presentations
   )
 }

@@ -43,6 +43,12 @@ extension TurnRunner {
       committedAt: now()
     )
 
+    if case .suspended = outcome.result {
+      // The same presentation spans approval parking and the resumed segment.
+    } else {
+      await presentations?.close(runID: runID)
+    }
+
     switch outcome.result {
     case .completed(let content, let usage, let providerState):
       try await commitCompleted(
