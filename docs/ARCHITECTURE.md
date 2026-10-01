@@ -278,6 +278,27 @@ The lane mechanism is explicit:
 - **Streaming channels are bounded and suspending — never unbounded, never lossy.** No `AsyncThrowingStream` may carry HTTP body bytes or LLM events: a full channel suspends its producer rather than dropping a chunk or an event, and cancellation wakes a producer blocked on a full buffer so a join cannot deadlock (§8.4).
 - **Deadline races never discard a loser.** Interactive, buffered, and schedule deadline races use nonthrowing child results plus a lock-backed winner state; no throwing task group drops a loser on the floor. A raced-but-successful response still supplies authoritative usage even when the deadline stays the owner-visible outcome, and draft/typing/timer children are drained before the coordinator returns. This prevents both lost accounting and work that outlives its turn.
 
+**Interactive presentation ownership.** `TurnPresentationRegistry` admits only active interactive
+runs, with no suspension between cancellation/shutdown admission and entry registration. An
+in-process approval resume reuses the active run entry. `TurnPresentation` owns one retained sender
+task for that entry, rejects events after terminal marking, and cancels and joins that same task on
+every close path before removing registration. Its bounded reducer and renderer never await
+network delivery. Sender frame closures do not keep completed presentations alive.
+
+`ClawCore.TurnProgressSender` owns transport-neutral draft/typing pacing and each bounded cosmetic
+send; its caller owns `run()` and must cancel and join it. The interactive mode probes every 250 ms,
+allows only the early second refresh to bypass the normal 1.25-second interval, and refreshes
+unchanged frames within 25 seconds. Freshness records successful delivery, never attempts; after
+25 seconds without success, typing resumes at approximately four-second intervals. Approval waiting
+suppresses typing; group/topic and streaming-disabled presentations send no drafts. Draft sends and
+typing use the existing three-second cancellation-aware bounded-send join contract. Pausing drains
+an active draft while state collection and typing continue. Resuming makes the latest frame eligible
+again under normal pacing without resetting run elapsed time or early-second history.
+
+The Agent retains provider deadline arbitration and the legacy proactive/provider-round entry path.
+Its shared sender mode adds neither an empty thinking frame nor unchanged-frame refreshes. Core
+knows no provider, Gateway, or Telegram markup types; Agent has no dependency on Gateway.
+
 ### 5.2.1 Coder task ownership
 
 Coder owns `[UUID: Task<Void, Never>]` independently of dialogue lanes. Submission checks an
@@ -525,6 +546,15 @@ key, so runless messages use the same retry and idempotent completion path.
 - **(b) External side effects** via the transactional outbox — intent committed → effect performed **at-least-once** → completion recorded idempotently.
 
 **Ordering invariant:** the inbound message + the run row **COMMIT before** the outbound reply is sent. So a disk-full/crash stops the turn before an unrecoverable side effect.
+
+**Presentation delivery exclusion:** a registry delivery lease marks the whole chat paused before
+any suspension and drains its active draft sends before permanent delivery begins. New entries
+inherit outstanding leases. Release re-reads the existing synchronous outbox seam: pending rows for
+other runs, runless notices, and the current run's approval cards keep rich drafts held; a read error
+also holds them. Revision-ordered pause updates prevent stale reconciliation from resuming drafts
+across actor reentrancy. Leases are temporary exclusion only, not a second queue or durable state;
+recorded outbox rows remain the delivery authority. Terminal close joins presentation before a final
+row becomes eligible for delivery; approval cards pause presentation without ending its run.
 
 **Retry ownership:** the dispatcher owns its flood-control retry wakeups, cancels and joins them
 before its service returns, and never requests another drain from a cancelled wait.
