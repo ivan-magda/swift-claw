@@ -13,6 +13,104 @@ import Testing
 @Suite
 struct ChatGPTResponsesProviderCancellationTests {
   @Test(.timeLimit(.minutes(1)))
+  func rotatedCredentialsSplitAcrossProgressAreRedacted() async throws {
+    // given — a clean 401 rotates credentials before the only successful inference begins
+    let hold = ScriptedStreamHold()
+    defer { hold.release.open() }
+    let progressSeen = AsyncGate()
+    let joined = AsyncGate()
+    let credentials = RotatingProgressCredentialSource()
+    let frames = [
+      Fixtures.event(
+        #"""
+        {"type":"response.output_item.added","output_index":0,\#
+        "item":{"type":"message","phase":"commentary"}}
+        """#
+      ),
+      Fixtures.event(
+        #"""
+        {"type":"response.output_text.delta","output_index":0,\#
+        "delta":"Using oauth-old-"}
+        """#
+      ),
+      Fixtures.event(
+        #"""
+        {"type":"response.output_text.delta","output_index":0,\#
+        "delta":"synthetic and oauth-new-\u0000"}
+        """#
+      ),
+      Fixtures.event(
+        #"""
+        {"type":"response.output_text.delta","output_index":0,\#
+        "delta":"synthetic safely"}
+        """#
+      ),
+    ]
+    let harness = ProviderHarness(
+      steps: [
+        .stream(Support.head(401), Fixtures.errorBody("expired")),
+        .streamThenBlock(okHead, frames, hold),
+      ],
+      credentials: credentials
+    )
+    let request = ChatRequest(
+      model: "gpt-5",
+      messages: plainRequest.messages,
+      maxOutputTokens: 256,
+      progressExplanationsEnabled: true
+    )
+    let stream = harness.provider.stream(request: request)
+    let reader = Task { () -> String in
+      var displayed = ""
+      do {
+        for try await event in stream {
+          if case .progress(let progress) = event {
+            switch progress.text {
+            case .append(let text):
+              displayed += text
+            case .replace(let text):
+              displayed = text
+            case .complete:
+              break
+            }
+            if displayed.contains("safely") {
+              progressSeen.open()
+            }
+          } else if case .delta = event {
+            Issue.record("progress became answer text")
+          }
+        }
+      } catch {
+        Issue.record("unexpected progress reader failure: \(error)")
+      }
+      return displayed
+    }
+
+    // when — only a real display event signals readiness; the watchdog bounds missing progress
+    let sawProgress = await progressSeen.waitUntilOpen()
+    await hold.started.wait()
+    stream.cancel()
+    let joiner = Task {
+      let terminal = await stream.awaitTermination()
+      joined.open()
+      return terminal
+    }
+    let returnedBeforeRelease = joined.isOpen
+    hold.release.open()
+    let terminal = await joiner.value
+    let displayed = await reader.value
+
+    // then — progress alone retains conservative exposure, while cleanup owns the nested producer
+    #expect(sawProgress)
+    #expect(returnedBeforeRelease == false)
+    #expect(terminal == .cancelled(.mayHaveStarted(observing: 0)))
+    #expect(displayed.contains("oauth-old-synthetic") == false)
+    #expect(displayed.contains("oauth-new-synthetic") == false)
+    #expect(displayed.components(separatedBy: SecretRedactor.replacement).count == 3)
+    #expect(await harness.http.recorded.count == 2)
+  }
+
+  @Test(.timeLimit(.minutes(1)))
   func cancellationBeforeAuthorizationOwesNoDebitAndDispatchesNothing() async {
     // given — authorization parks on a gate, so cancellation lands before any handoff
     let gate = AsyncGate()
@@ -246,6 +344,27 @@ private func readOneDeltaAndAbandon(
 }
 
 // MARK: - Test doubles
+
+private actor RotatingProgressCredentialSource: LLMCredentialSource {
+  private var generation: UInt64 = 0
+
+  func authorization() async throws -> LLMRequestAuthorization {
+    let token = generation == 0 ? "oauth-old-synthetic" : "oauth-new-synthetic"
+    return LLMRequestAuthorization(
+      headers: ["Authorization": "Bearer \(token)"],
+      redactionValues: [token],
+      generation: LLMCredentialGeneration(value: generation)
+    )
+  }
+
+  func reject(generation: LLMCredentialGeneration, disposition: LLMCredentialRejection) async {
+    if generation.value == self.generation, disposition == .refresh {
+      self.generation += 1
+    }
+  }
+
+  func shutdown() async throws {}
+}
 
 /// A credential source whose authorization parks on a gate until cancelled, so a test can land a
 /// cancellation before the handoff without racing a real clock.

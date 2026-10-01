@@ -861,8 +861,10 @@ private struct Harness: Sendable {
   private let stateLog: StateLog
 
   func run() async -> LLMStreamTermination {
-    await engine.run(plan: plan) { text in
-      try await sink.emit(text)
+    await engine.run(plan: plan) { event in
+      if case .delta(let text) = event {
+        try await sink.emit(text)
+      }
     }
   }
 

@@ -23,8 +23,8 @@ struct ChatGPTResponsesBounds: Sendable, Equatable {
   let maximumDataEvents: Int
   let maximumOutputItems: Int
 
-  /// Visible text and tool arguments together — the two accumulations the answer is built from, and
-  /// the only two this side can measure what the owner was charged for from.
+  /// Answer text, tool arguments and optional display explanations share this output ceiling.
+  /// Completion-token estimates still derive only from answer text and tool arguments.
   let maximumAccumulatedOutputBytes: Int
 }
 
@@ -159,6 +159,37 @@ private extension ChatGPTResponsesSSEParser {
       return .outputItemDone(index: try index(of: event), item: try item(of: event))
     case .outputTextDelta:
       return .outputTextDelta(index: try index(of: event), text: try text(of: event))
+    case .outputTextDone:
+      guard let text = event.text else {
+        throw malformedEvent
+      }
+      return .outputTextDone(index: try index(of: event), text: text)
+    case .summaryTextDelta, .summaryDelta:
+      return .summaryTextDelta(
+        index: try index(of: event),
+        part: try summaryIndex(of: event),
+        text: try text(of: event)
+      )
+    case .summaryTextDone, .summaryDone:
+      guard let text = event.text else {
+        throw malformedEvent
+      }
+      return .summaryTextDone(
+        index: try index(of: event),
+        part: try summaryIndex(of: event),
+        text: text
+      )
+    case .summaryPartAdded, .summaryPartDone:
+      guard let part = event.part else {
+        throw malformedEvent
+      }
+      // Only the explicit summary type is display material. Raw reasoning is never promoted.
+      return .summaryPart(
+        index: try index(of: event),
+        part: try summaryIndex(of: event),
+        text: part.type == "summary_text" ? part.text : nil,
+        completed: name == .summaryPartDone
+      )
     case .functionCallArgumentsDelta:
       return .functionCallArgumentsDelta(
         index: try index(of: event),
@@ -184,6 +215,13 @@ private extension ChatGPTResponsesSSEParser {
   static func index(of event: ChatGPTWireEvent) throws -> Int {
     // An item event with no index names nothing the accumulator could place it against.
     guard let index = event.outputIndex, index >= 0 else {
+      throw malformedEvent
+    }
+    return index
+  }
+
+  static func summaryIndex(of event: ChatGPTWireEvent) throws -> Int {
+    guard let index = event.summaryIndex, index >= 0 else {
       throw malformedEvent
     }
     return index
@@ -231,6 +269,10 @@ enum ChatGPTResponsesEvent: Sendable, Equatable {
   case outputItemAdded(index: Int, item: ChatGPTStreamItem)
   case outputItemDone(index: Int, item: ChatGPTStreamItem)
   case outputTextDelta(index: Int, text: String)
+  case outputTextDone(index: Int, text: String)
+  case summaryTextDelta(index: Int, part: Int, text: String)
+  case summaryTextDone(index: Int, part: Int, text: String)
+  case summaryPart(index: Int, part: Int, text: String?, completed: Bool)
   case functionCallArgumentsDelta(index: Int, callID: String?, fragment: String)
   case functionCallArgumentsDone(index: Int, callID: String?, arguments: String)
   case terminal(ChatGPTResponsesTerminal)
@@ -251,6 +293,7 @@ struct ChatGPTStreamItem: Sendable, Equatable {
   let outputText: [String]
   let encryptedContent: String?
   let summary: [String]
+  var summaryTextParts: [Int: String] = [:]
 }
 
 enum ChatGPTStreamItemType: Sendable, Equatable {
@@ -261,7 +304,7 @@ enum ChatGPTStreamItemType: Sendable, Equatable {
 }
 
 /// Which part of the model's turn a message item is. The route publishes only text the backend
-/// stated is the answer; everything else is working material the owner never asked to read.
+/// stated is the answer. Commentary may travel separately as typed progress; analysis stays hidden.
 enum ChatGPTMessagePhase: Sendable, Equatable {
   case unspecified
   case final
@@ -369,6 +412,13 @@ private enum ChatGPTWireEventName: String {
   case outputItemAdded = "response.output_item.added"
   case outputItemDone = "response.output_item.done"
   case outputTextDelta = "response.output_text.delta"
+  case outputTextDone = "response.output_text.done"
+  case summaryTextDelta = "response.reasoning_summary_text.delta"
+  case summaryDelta = "response.reasoning_summary.delta"
+  case summaryTextDone = "response.reasoning_summary_text.done"
+  case summaryDone = "response.reasoning_summary.done"
+  case summaryPartAdded = "response.reasoning_summary_part.added"
+  case summaryPartDone = "response.reasoning_summary_part.done"
   case functionCallArgumentsDelta = "response.function_call_arguments.delta"
   case functionCallArgumentsDone = "response.function_call_arguments.done"
   case completed = "response.completed"
@@ -391,7 +441,9 @@ extension ChatGPTResponsesTerminal.Name {
       self = .incomplete
     case .failed:
       self = .failed
-    case .outputItemAdded, .outputItemDone, .outputTextDelta, .functionCallArgumentsDelta,
+    case .outputItemAdded, .outputItemDone, .outputTextDelta, .outputTextDone,
+      .summaryTextDelta, .summaryDelta, .summaryTextDone, .summaryDone,
+      .summaryPartAdded, .summaryPartDone, .functionCallArgumentsDelta,
       .functionCallArgumentsDone, .error:
       return nil
     }
@@ -408,6 +460,9 @@ private struct ChatGPTWireEvent: Decodable {
   let outputIndex: Int?
   let item: ChatGPTWireItem?
   let delta: String?
+  let text: String?
+  let summaryIndex: Int?
+  let part: ChatGPTWireItemContent?
   let arguments: String?
   let callID: String?
   let response: ChatGPTWireResponse?
@@ -417,6 +472,9 @@ private struct ChatGPTWireEvent: Decodable {
     case outputIndex = "output_index"
     case item
     case delta
+    case text
+    case summaryIndex = "summary_index"
+    case part
     case arguments
     case callID = "call_id"
     case response
@@ -572,6 +630,14 @@ extension ChatGPTStreamItem {
       } ?? []
     self.encryptedContent = item.encryptedContent
     self.summary = Self.summary(item.summary)
+    for (index, part) in (item.summary ?? []).enumerated() {
+      if case .object(let fields) = part,
+         fields["type"] == .string("summary_text"),
+         case .string(let text)? = fields["text"]
+      {
+        self.summaryTextParts[index] = text
+      }
+    }
   }
 
   // swiftlint:disable discouraged_optional_collection

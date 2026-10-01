@@ -18,6 +18,8 @@ struct ChatGPTResponsesAccumulator: Sendable {
   private let bounds: ChatGPTResponsesBounds
   private let outputScope: AttemptOutputScope?
   private let terminalValidationPolicy: StreamingTerminalValidationPolicy
+  private let progressExplanationsEnabled: Bool
+  private var progress: ChatGPTResponsesProgress
 
   private var items: [Int: OutputItem] = [:]
   private var order: [Int] = []
@@ -36,7 +38,8 @@ struct ChatGPTResponsesAccumulator: Sendable {
     redactionValues: [String] = [],
     bounds: ChatGPTResponsesBounds = .standard,
     outputScope: AttemptOutputScope? = nil,
-    terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal
+    terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal,
+    progressExplanationsEnabled: Bool = false
   ) {
     self.codec = codec
     self.identity = identity
@@ -44,6 +47,8 @@ struct ChatGPTResponsesAccumulator: Sendable {
     self.bounds = bounds
     self.outputScope = outputScope
     self.terminalValidationPolicy = terminalValidationPolicy
+    self.progressExplanationsEnabled = progressExplanationsEnabled
+    self.progress = ChatGPTResponsesProgress(bounds: bounds, secretValues: redactionValues)
   }
 
   /// A lower bound on the completion tokens this attempt may already be billed for, derived only
@@ -98,18 +103,19 @@ struct ChatGPTResponsesAccumulator: Sendable {
         let terminal = try reconciledTerminal(with: terminal, after: offset, in: events)
         guard terminalValidationPolicy == .firstTerminal else {
           pendingTerminal = terminal
+          emitted += try progress.finish()
           return emitted
         }
         isDecided = true
-        emitted.append(.finished(try response(for: terminal)))
+        let response = try response(for: terminal)
+        emitted += try progress.finish()
+        emitted.append(.finished(response))
         return emitted
       case .streamError(let failure):
         isDecided = true
         throw self.failure(failure)
       default:
-        if let delta = try apply(event) {
-          emitted.append(.delta(delta))
-        }
+        emitted += try apply(event)
       }
     }
     return emitted
@@ -201,25 +207,53 @@ private struct OutputItem {
 // MARK: - Event Application
 
 private extension ChatGPTResponsesAccumulator {
-  mutating func apply(_ event: ChatGPTResponsesEvent) throws -> String? {
+  mutating func apply(_ event: ChatGPTResponsesEvent) throws -> [StreamEvent] {
     switch event {
     case .outputItemAdded(let index, let item):
       try register(index: index, item: item)
-      return nil
+      return []
     case .outputItemDone(let index, let item):
+      if let existing = items[index], existing.done != nil,
+         existing.type == .reasoning || existing.phase == .commentary
+      {
+        try register(index: index, item: item)
+        return []
+      }
       try complete(index: index, item: item)
-      return nil
+      return try completedProgress(index: index, item: item)
     case .outputTextDelta(let index, let text):
-      return try appendText(index: index, text: text)
+      if let delta = try appendText(index: index, text: text) {
+        return [.delta(delta)]
+      }
+      return try commentary(index: index, text: .append(text))
+    case .outputTextDone(let index, let text):
+      var events = try commentary(index: index, text: .replace(text))
+      events += try commentary(index: index, text: .complete)
+      return events
+    case .summaryTextDelta(let index, let part, let text):
+      return try summary(index: index, part: part, text: .append(text))
+    case .summaryTextDone(let index, let part, let text):
+      var events = try summary(index: index, part: part, text: .replace(text))
+      events += try summary(index: index, part: part, text: .complete)
+      return events
+    case .summaryPart(let index, let part, let text, let completed):
+      guard let text else {
+        return []
+      }
+      var events = try summary(index: index, part: part, text: .replace(text))
+      if completed {
+        events += try summary(index: index, part: part, text: .complete)
+      }
+      return events
     case .functionCallArgumentsDelta(let index, let callID, let fragment):
       try appendArguments(index: index, callID: callID, fragment: fragment)
-      return nil
+      return []
     case .functionCallArgumentsDone(let index, let callID, let arguments):
       try reconcileArguments(index: index, callID: callID, arguments: arguments)
-      return nil
+      return []
     case .terminal, .streamError:
       // Decided by `consume`, which needs the whole batch to judge them.
-      return nil
+      return []
     }
   }
 
@@ -347,7 +381,9 @@ private extension ChatGPTResponsesAccumulator {
     item.tokenEstimate = item.estimatedTokens
 
     let total = SaturatingArithmetic.sum(releasedBytes, item.countedBytes)
-    guard total <= bounds.maximumAccumulatedOutputBytes else {
+    guard SaturatingArithmetic.sum(total, progress.retainedTextBytes)
+          <= bounds.maximumAccumulatedOutputBytes
+    else {
       throw accumulatedOutputTooLarge
     }
     accumulatedOutputBytes = total
@@ -373,6 +409,73 @@ private extension ChatGPTResponsesAccumulator {
       }
       return fields
     }
+  }
+}
+
+// MARK: - Display Explanations
+
+private extension ChatGPTResponsesAccumulator {
+  mutating func commentary(index: Int, text: LLMProgressText) throws -> [StreamEvent] {
+    guard progressExplanationsEnabled,
+          let item = items[index], item.type == .message, item.phase == .commentary,
+          item.done == nil
+    else {
+      return []
+    }
+    return try updateProgress(index: index, part: nil, kind: .commentary, text: text)
+  }
+
+  mutating func summary(index: Int, part: Int, text: LLMProgressText) throws -> [StreamEvent] {
+    guard progressExplanationsEnabled else {
+      return []
+    }
+    guard let item = items[index] else {
+      throw Self.unregisteredItem
+    }
+    guard item.type == .reasoning, item.done == nil else {
+      return []
+    }
+    return try updateProgress(index: index, part: part, kind: .summary, text: text)
+  }
+
+  mutating func completedProgress(index: Int, item: ChatGPTStreamItem) throws -> [StreamEvent] {
+    guard progressExplanationsEnabled, let accumulated = items[index] else {
+      return []
+    }
+    var events: [StreamEvent] = []
+    if accumulated.type == .message, accumulated.phase == .commentary {
+      events += try updateProgress(
+        index: index,
+        part: nil,
+        kind: .commentary,
+        text: .replace(item.outputText.joined())
+      )
+      events += try updateProgress(index: index, part: nil, kind: .commentary, text: .complete)
+    } else if accumulated.type == .reasoning {
+      for part in item.summaryTextParts.keys.sorted() {
+        guard let text = item.summaryTextParts[part] else {
+          continue
+        }
+        events += try updateProgress(index: index, part: part, kind: .summary, text: .replace(text))
+        events += try updateProgress(index: index, part: part, kind: .summary, text: .complete)
+      }
+    }
+    return events
+  }
+
+  mutating func updateProgress(
+    index: Int,
+    part: Int?,
+    kind: LLMProgressKind,
+    text: LLMProgressText
+  ) throws -> [StreamEvent] {
+    let events = try progress.update(index: index, part: part, kind: kind, text: text)
+    guard SaturatingArithmetic.sum(accumulatedOutputBytes, progress.retainedTextBytes)
+          <= bounds.maximumAccumulatedOutputBytes
+    else {
+      throw accumulatedOutputTooLarge
+    }
+    return events
   }
 }
 
