@@ -7,6 +7,7 @@ public struct AppConfig: Sendable, Equatable {
     static let allowlist = "CLAW_ALLOWLIST"
     static let groupChats = "CLAW_GROUP_CHATS"
     static let pollTimeout = "CLAW_POLL_TIMEOUT"
+    static let telegramProgress = "CLAW_TELEGRAM_PROGRESS"
 
     // MARK: - State storage
 
@@ -155,6 +156,7 @@ public struct AppConfig: Sendable, Equatable {
   /// owner's DM.
   public let groupChats: Set<Int64>
   public let pollTimeoutSeconds: Int
+  public let telegramProgressEnabled: Bool
 
   // MARK: - State storage
 
@@ -226,11 +228,13 @@ public struct AppConfig: Sendable, Equatable {
     exec: ExecConfig,
     voice: VoiceConfig,
     image: ImageConfig,
-    mcpConfigSource: MCPConfigSource
+    mcpConfigSource: MCPConfigSource,
+    telegramProgressEnabled: Bool = true
   ) {
     self.allowlist = allowlist
     self.groupChats = groupChats
     self.pollTimeoutSeconds = pollTimeoutSeconds
+    self.telegramProgressEnabled = telegramProgressEnabled
 
     self.stateRoot = stateRoot
 
@@ -329,7 +333,12 @@ public struct AppConfig: Sendable, Equatable {
       exec: exec,
       voice: voice,
       image: image,
-      mcpConfigSource: mcpConfigSource
+      mcpConfigSource: mcpConfigSource,
+      telegramProgressEnabled: try boolValue(
+        env[EnvKey.telegramProgress],
+        key: EnvKey.telegramProgress,
+        default: true
+      )
     )
   }
 }

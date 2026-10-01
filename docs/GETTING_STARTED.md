@@ -142,7 +142,13 @@ CLAW_ALLOWLIST=12345678
 ```
 
 Re-source the env file, start `clawd run` again, and send another message. This time
-the model answers, and clawd streams the reply in as a growing draft.
+the model answers. By default, private chats first show temporary working progress with
+tool steps and available short model explanations, then a growing answer draft. The permanent
+reply contains the answer without that progress. Set `CLAW_TELEGRAM_PROGRESS=false` to keep
+answer streaming with typing while waiting; `CLAW_LLM_STREAMING=false` shows typing and then
+a permanent reply, without drafts or explanation requests. Groups and topics use typing during
+active work and pause it while waiting for a person's approval.
+See [Telegram progress](CUSTOMIZATION.md#telegram-progress) for the settings.
 
 Two commands to know from day one: `/stop` cancels the current turn, `/new` starts a
 fresh session.

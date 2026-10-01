@@ -158,6 +158,32 @@ party you trust with that content.
 Related knobs: `CLAW_LLM_STREAMING` (rich streamed drafts, on by default),
 `CLAW_LLM_MAX_TOKENS`, `CLAW_LLM_MAX_TOKENS_FIELD`, `CLAW_LLM_STRUCTURED_OUTPUT`.
 
+### Telegram progress
+
+`CLAW_TELEGRAM_PROGRESS` is on by default. In interactive private chats, temporary drafts
+show elapsed time, tool steps, and the latest available short model explanation. The steps
+collapse above the answer as it streams; the permanent reply contains no progress history.
+Fixed labels are English; explanations keep the model's language. Providers that supply no
+explanations still show working status and tool steps. Raw reasoning is never displayed.
+
+| `CLAW_LLM_STREAMING` | `CLAW_TELEGRAM_PROGRESS` | Interactive private chat |
+| --- | --- | --- |
+| `true` | `true` (default) | Working progress, then streamed answer |
+| `true` | `false` | Typing while waiting, then streamed answer |
+| `false` | Either | Typing, then permanent answer; no drafts or explanation requests |
+
+Set `CLAW_TELEGRAM_PROGRESS=false` in `clawd.env`, reload it and restart to opt out. It uses
+the strict boolean values `true`/`false`, `yes`/`no`, `on`/`off`, and `1`/`0`; malformed values
+fail configuration. This setting controls the additional display and explanation requests.
+It does not change the selected model, reasoning effort, budgets, or tool approvals.
+
+Groups and topics show continuous typing during active work under every combination, with
+each pulse addressed to its topic. Working typing pauses while a person's approval is pending.
+Scheduled and heartbeat runs keep their existing output behavior without a new thinking
+placeholder. Telegram delivery failures can leave the last accepted draft until it expires.
+The earlier [client latency study](research/telegram-streaming-latency-2026-09-30.md) observed
+rewrapping when answer drafts become permanent messages.
+
 ### A second route to fall back to
 
 Name a second model and clawd finishes the turn there when the first route cannot answer:

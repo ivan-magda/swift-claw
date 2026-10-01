@@ -1677,6 +1677,27 @@ and epoch checks outrank ordinary retention; retained old records cannot reactiv
 
 ## 15. Configuration & secrets
 
+**Temporary Telegram progress** is enabled by `CLAW_TELEGRAM_PROGRESS` (default `true`),
+parsed through the existing strict boolean parser. Its scope is the additional interactive display
+and per-request provider explanation option; it changes no model, reasoning effort, policy, or budget.
+
+| `CLAW_LLM_STREAMING` | `CLAW_TELEGRAM_PROGRESS` | Interactive private-chat contract |
+| --- | --- | --- |
+| `true` | `true` | Working draft, bounded steps/explanations, then streamed answer |
+| `true` | `false` | Answer drafts retained; continuous typing until they are fresh |
+| `false` | Either | No drafts or explanation requests; typing then permanent answer |
+
+Groups/topics use correctly addressed typing during active work in every combination and never
+request invisible explanations. Approval waiting suppresses working typing. Proactive runs acquire
+no new thinking placeholder. Progress is temporary and absent from permanent answer content.
+
+Composition builds one registry and one shared rich draft streamer per agent stack. TurnRunner,
+ApprovalWaiter, MessageRouter, the separately constructed ApprovalCallbackHandler factory,
+OutboxDispatcher, and runtime shutdown receive that same registry. The existing runtime bundle
+carries it to coordinated stop/join before dependent clients close. Display state and dispatcher
+scalar previews both receive the root's full secret-redaction union, including MCP tokens; adapters
+retain their separate attempt-scoped rotating-credential redaction.
+
 **Coder operator settings** are parsed by `CoderConfig.load(environment:)` and carried by
 `AppConfig.coder`. The root resolves its backend/environment once when enabled and registers only
 submission that its readiness facts permit. Disabled Coder has no tools and launches no probes;

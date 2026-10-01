@@ -161,7 +161,8 @@ struct DaemonBuilder: Sendable {
         coder: coder.service,
         learning: learning
       ),
-      coder: coder.service
+      coder: coder.service,
+      presentations: agentStack.presentations
     )
   }
 
@@ -217,7 +218,8 @@ struct DaemonBuilder: Sendable {
         mcpOutcomes: mcpCatalog.outcomes,
         coder: coder
       ),
-      learning: learning
+      learning: learning,
+      presentations: agentStack.presentations
     )
     let approvals = makeApprovalFabric(
       coordination: coordination,
@@ -249,6 +251,7 @@ struct DaemonBuilder: Sendable {
     credentialSources: [any LLMCredentialSource],
     boot: @escaping @Sendable () async -> Void,
     coder: CoderService? = nil,
+    presentations: TurnPresentationRegistry? = nil,
     laneDrainClock: any Clock<Duration> = ContinuousClock(),
     gracefulShutdownSignals: [UnixSignal] = [.sigterm, .sigint]
   ) -> DaemonRuntimeBundle {
@@ -280,7 +283,8 @@ struct DaemonBuilder: Sendable {
       lanes: coordination.lanes,
       credentialSources: credentialSources,
       laneShutdownOutcome: laneShutdownOutcome,
-      coder: coder
+      coder: coder,
+      presentations: presentations
     )
   }
 

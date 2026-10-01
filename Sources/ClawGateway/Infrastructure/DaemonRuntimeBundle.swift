@@ -26,18 +26,21 @@ public struct DaemonRuntimeBundle: Sendable {
   public let credentialSources: [any LLMCredentialSource]
   public let laneShutdownOutcome: LaneShutdownOutcome
   public let coder: CoderService?
+  public let presentations: TurnPresentationRegistry?
 
   public init(
     daemon: Daemon,
     lanes: SessionLaneRegistry,
     credentialSources: [any LLMCredentialSource],
     laneShutdownOutcome: LaneShutdownOutcome,
-    coder: CoderService? = nil
+    coder: CoderService? = nil,
+    presentations: TurnPresentationRegistry? = nil
   ) {
     self.daemon = daemon
     self.lanes = lanes
     self.credentialSources = credentialSources
     self.laneShutdownOutcome = laneShutdownOutcome
     self.coder = coder
+    self.presentations = presentations
   }
 }

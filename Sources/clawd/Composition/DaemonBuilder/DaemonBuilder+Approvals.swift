@@ -58,6 +58,7 @@ extension DaemonBuilder {
       learning: makePinnedLessonStore(),
       parker: coordination.deferredParker,
       approvalExpirySeconds: config.approvalExpirySeconds,
+      presentations: agentStack.presentations,
       logger: logger
     )
   }
@@ -85,6 +86,7 @@ extension DaemonBuilder {
       now: {
         Date()
       },
+      presentations: agentStack.presentations,
       logger: logger
     )
   }
@@ -125,6 +127,7 @@ extension DaemonBuilder {
       now: {
         Date()
       },
+      presentations: agentStack.presentations,
       logger: logger
     )
     coordination.deferredParker.adopt(approvalWaiter)

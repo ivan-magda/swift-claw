@@ -20,7 +20,8 @@ extension DaemonBuilder {
     scheduleSurface: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler,
     doctor: any DoctorReporting,
-    learning: ScheduledLearningService?
+    learning: ScheduledLearningService?,
+    presentations: TurnPresentationRegistry? = nil
   ) -> IntakeStack {
     let router = makeIntakeRouter(
       coordination: coordination,
@@ -29,7 +30,8 @@ extension DaemonBuilder {
       scheduleSurface: scheduleSurface,
       approvalCallbacks: approvalCallbacks,
       doctor: doctor,
-      learning: learning
+      learning: learning,
+      presentations: presentations
     )
     let poller = TelegramPollerService(
       intake: transport,
@@ -42,6 +44,7 @@ extension DaemonBuilder {
       outbox: stores.outbox,
       delivery: transport,
       signal: coordination.outboxSignal,
+      presentations: presentations,
       logger: logger
     )
     return IntakeStack(poller: poller, outbox: dispatcher)
@@ -54,7 +57,8 @@ extension DaemonBuilder {
     scheduleSurface: ScheduleSurface,
     approvalCallbacks: ApprovalCallbackHandler?,
     doctor: any DoctorReporting,
-    learning: ScheduledLearningService?
+    learning: ScheduledLearningService?,
+    presentations: TurnPresentationRegistry? = nil
   ) -> MessageRouter {
     let voiceService = makeVoiceService()
     let imageService = makeImageService()
@@ -91,6 +95,7 @@ extension DaemonBuilder {
       images: imageService,
       typing: TelegramTypingIndicator(transport: transport),
       coordinator: coordination.approvalCoordinator,
+      presentations: presentations,
       doctor: doctor,
       now: now,
       logger: logger
@@ -195,14 +200,7 @@ extension DaemonBuilder {
     tools.append(contentsOf: coderTools)
     tools.append(contentsOf: mcpTools)
 
-    let privateFileLoader: @Sendable () -> [String] = {
-      [WorkspaceFile.memory, WorkspaceFile.user].compactMap { file in
-        try? String(
-          contentsOf: workspace.root.appendingPathComponent(file.relativePath),
-          encoding: .utf8
-        )
-      }
-    }
+    let privateFileLoader = makePrivateFileLoader(workspace: workspace)
 
     return GatedToolDispatcher(
       registry: ToolRegistry(tools: tools),
@@ -212,7 +210,8 @@ extension DaemonBuilder {
         enabledDangerousTools: Set(
           (config.exec.enabled ? [ExecuteCodeTool.name] : []) + coderTools.map(\.definition.name)
         )
-      )
+      ),
+      secretValues: secretValues
     )
   }
 
@@ -230,5 +229,20 @@ extension DaemonBuilder {
         exec: config.exec
       )
     )
+  }
+}
+
+// MARK: - Private Tool Policy Inputs
+
+private extension DaemonBuilder {
+  func makePrivateFileLoader(workspace: FileSystemWorkspace) -> @Sendable () -> [String] {
+    {
+      [WorkspaceFile.memory, WorkspaceFile.user].compactMap { file in
+        try? String(
+          contentsOf: workspace.root.appendingPathComponent(file.relativePath),
+          encoding: .utf8
+        )
+      }
+    }
   }
 }

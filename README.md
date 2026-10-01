@@ -50,8 +50,11 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   the built-ins as the least-trusted tools clawd has. Calls ask by default; you may mark a
   named tool safe, but the exfiltration gate can still require approval. Only you can add a
   server or change what it exposes.
-- **A real Telegram chat.** Answers stream in as live message drafts. `/stop` cancels a
-  turn, `/new` starts a fresh session, clawd transcribes voice notes on-device
+- **A real Telegram chat.** Private chats show temporary working progress, tool steps, and
+  available model explanations above the streamed answer. Progress disappears from the permanent
+  reply; groups and topics show typing. Set `CLAW_TELEGRAM_PROGRESS=false` to keep answer
+  streaming without the extra display, or `CLAW_LLM_STREAMING=false` for typing and a final reply.
+  `/stop` cancels a turn, `/new` starts a fresh session, clawd transcribes voice notes on-device
   (macOS 26), and it looks at photos you send if your model can see them.
 - **Sandboxed code execution.** Untrusted code runs in a fresh disposable VM per request
   (macOS 26 arm64, off by default).
