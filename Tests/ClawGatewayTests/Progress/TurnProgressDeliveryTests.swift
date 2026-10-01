@@ -3,6 +3,7 @@ import ClawCore
 import ClawData
 import ClawTestSupport
 import Foundation
+import GRDB
 import Testing
 
 @testable import ClawGateway
@@ -197,5 +198,82 @@ extension TurnProgressDeliveryTests {
     #expect(waitingResumed)
     #expect(pendingAfterDelivery.isEmpty)
     #expect(await harness.transport.richSends.isEmpty == false)
+  }
+}
+
+extension TurnProgressDeliveryTests {
+  @Test
+  func callbackFactoryDrainsWaitingDraftBeforeStorageFullNotice() async throws {
+    // given
+    let fixture = try makeSeededFixture()
+    try await fixture.writer.write { db in
+      db.add(
+        function: DatabaseFunction("fail_callback_claim", argumentCount: 0) { _ in
+          throw DatabaseError(resultCode: .SQLITE_FULL)
+        }
+      )
+      try db.execute(
+        sql: """
+          CREATE TRIGGER callback_claim_full BEFORE INSERT ON processed_updates
+          WHEN NEW.update_id = 99 BEGIN SELECT fail_callback_claim(); END
+          """
+      )
+    }
+    let drafts = ClosingDrafts(blockingText: "Waiting for your approval")
+    defer { drafts.releaseCleanup.open() }
+    let registry = try makePresentations(
+      clock: ScriptedClock.compressed(parkingAt: .seconds(1)),
+      drafts: drafts,
+      typing: RecordingTyping(),
+      outbox: fixture.outbox
+    )
+    let scope = progressScope()
+    let reporter = await registry.begin(scope: scope)
+    let stepID = TurnToolStepID(providerCallID: "approval-round", toolCallID: "write")
+    await reporter?.publish(
+      .toolStarted(
+        id: stepID,
+        tool: ApprovedProgressTool().definition,
+        preview: nil
+      )
+    )
+    await reporter?.publish(.waitingForApproval(id: stepID))
+    let started = await drafts.started.waitUntilOpen()
+    let transport = RecordingTransport()
+    let handler = ApprovalCallbackHandler.make(
+      processed: ProcessedUpdateStoreGRDB(writer: fixture.writer),
+      delivery: transport,
+      accessControl: AccessControl(
+        allowlist: AllowlistStoreGRDB(writer: fixture.writer),
+        groupChats: []
+      ),
+      approvals: ApprovalStoreGRDB(writer: fixture.writer),
+      runs: fixture.runs,
+      membership: transport,
+      audit: AuditLogGRDB(writer: fixture.writer),
+      coordinator: ApprovalCoordinator(),
+      callbacks: transport,
+      currentPolicyVersion: { "pv" },
+      now: { Date() },
+      presentations: registry,
+      logger: TestLog.silent
+    )
+    let callback = try #require(
+      callbackUpdate(id: 99, from: scope.chatID, data: approveData("pending")).callback
+    )
+
+    // when
+    let handling = Task { await handler.handle(callback, updateID: 99) }
+    let draining = await drafts.cancelled.waitUntilOpen()
+    let premature = await transport.sent
+    drafts.releaseCleanup.open()
+    let outcome = await handling.value
+    await registry.shutdown()
+
+    // then
+    #expect(started && draining)
+    #expect(premature.isEmpty)
+    #expect(outcome == .storageFull)
+    #expect(await transport.sent.contains { $0.text == Degradation.storageFull })
   }
 }

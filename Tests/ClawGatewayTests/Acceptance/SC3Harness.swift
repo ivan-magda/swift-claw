@@ -429,6 +429,7 @@ func makeSC3Harness(
     now: {
       Date()
     },
+    presentations: presentations,
     logger: logger
   )
 
