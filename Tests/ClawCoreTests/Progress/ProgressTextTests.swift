@@ -54,6 +54,36 @@ struct ProgressTextTests {
   }
 
   @Test
+  func normalizationCannotReconstructSecretBeforePreviewCap() {
+    // given
+    let cases = [
+      ("synthetic-\u{202E}token", "synthetic-token"),
+      ("synthetic\t\t token", "synthetic token"),
+    ]
+
+    // when
+    let previews = cases.map { text, secret in
+      ProgressText.preview(
+        text,
+        secretValues: [secret],
+        limit: TurnProgressLimits.previewCharacters
+      )
+    }
+
+    // then
+    for preview in previews {
+      #expect(preview == SecretRedactor.replacement)
+    }
+    #expect(
+      ProgressText.preview(
+        cases[0].0,
+        secretValues: [cases[0].1],
+        limit: 4
+      ) == String(SecretRedactor.replacement.prefix(4))
+    )
+  }
+
+  @Test
   func previewRedactsBeforeNormalizingAndCapsGraphemes() {
     // given
     let secret = "secret\nvalue"

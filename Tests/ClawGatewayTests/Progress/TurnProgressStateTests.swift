@@ -56,6 +56,32 @@ struct TurnProgressStateTests {
   }
 
   @Test
+  func normalizedExplanationWithholdsSecretPrefixesAcrossAppendBoundaries() {
+    // given
+    let cases = [
+      ("synthetic-\u{202E}", "token", "synthetic-token"),
+      ("synthetic\t", "\t token", "synthetic token"),
+    ]
+
+    // when
+    for (first, second, secret) in cases {
+      var state = TurnProgressState(showsProgress: true, resumed: false, secretValues: [secret])
+      state.apply(.modelStarted(providerCallID: "round"))
+      state.apply(.explanation(explanation(.append("checking " + first))))
+      let partial = state.snapshot(elapsedSeconds: 1)
+      state.apply(.explanation(explanation(.append(second))))
+      let completed = state.snapshot(elapsedSeconds: 2)
+      state.apply(.explanation(explanation(.complete)))
+      let flushed = state.snapshot(elapsedSeconds: 3)
+
+      // then
+      #expect(partial.explanation == "checking")
+      #expect(completed.explanation == "checking " + SecretRedactor.replacement)
+      #expect(flushed.explanation == completed.explanation)
+    }
+  }
+
+  @Test
   func toolFamiliesExposeOnlyAllowedRegisteredPreviews() throws {
     // given
     var state = TurnProgressState(showsProgress: true, resumed: false, secretValues: ["secret"])

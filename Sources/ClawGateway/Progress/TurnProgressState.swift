@@ -8,7 +8,7 @@ public struct TurnProgressState: Sendable {
   private var phase: TurnProgressPhase
   private var providerCallID: String?
   private var explanationItemID: String?
-  private var explanationRedactor: StreamingSecretRedactor
+  private var explanationRedactor: StreamingProgressText
   private var explanationText = ""
   private var answerPreview = ""
   private var steps: [TurnToolStep] = []
@@ -20,7 +20,7 @@ public struct TurnProgressState: Sendable {
     self.showsProgress = showsProgress
     self.secretValues = secretValues
     phase = resumed ? .resumed : .preparing
-    explanationRedactor = StreamingSecretRedactor(secretValues: secretValues)
+    explanationRedactor = StreamingProgressText(secretValues: secretValues)
   }
 
   public mutating func apply(_ event: TurnProgressEvent) {
@@ -73,7 +73,7 @@ public struct TurnProgressState: Sendable {
 private extension TurnProgressState {
   mutating func resetExplanation() {
     explanationText = ""
-    explanationRedactor = StreamingSecretRedactor(secretValues: secretValues)
+    explanationRedactor = StreamingProgressText(secretValues: secretValues)
   }
 
   mutating func applyExplanation(_ event: LLMProgressEvent) {
@@ -102,9 +102,7 @@ private extension TurnProgressState {
     }
 
     explanationText = String(
-      ProgressText.normalize(explanationText + safe).prefix(
-        TurnProgressLimits.explanationCharacters
-      )
+      (explanationText + safe).prefix(TurnProgressLimits.explanationCharacters)
     )
   }
 }

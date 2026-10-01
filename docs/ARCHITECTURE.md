@@ -422,7 +422,8 @@ TelegramPollerService loop:
 **Temporary turn display state.** `TurnProgressState` reduces presentation events independently
 of durable run state. A provider-round start clears interim answer/explanation state; explanation
 item IDs are scoped to that current round. Append updates keep only safe capped text plus the
-streaming redactor's bounded suffix. Replacement resets both text and carry; item completion
+original and normalized streaming redactors' bounded suffixes. Replacement resets text and both
+carries; item completion
 flushes the suffix without completing the run. Tool starts return an interim answer to working;
 approval waits and actual execution remain distinct. Step identity combines provider-round and
 tool-call IDs. Retain at most 32 steps, evicting the oldest completed entry and aggregating its
@@ -1033,7 +1034,13 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 - **Temporary progress follows the same secret boundary.** `StreamingSecretRedactor` emits only
   safe spans and retains a trailing proper prefix of a known secret, bounded by the longest
   secret's UTF-8 byte length minus one; no secret set means no carry. Redact exact values before
-  whitespace/control normalization, grapheme truncation or markup escaping. Explanation storage
+  whitespace/control normalization, grapheme truncation or markup escaping. The normalized display
+  is redacted again before its cap/publication. `StreamingProgressText` supplies this reusable
+  two-stage boundary to the gateway and credential-owning provider adapters. Its second carry is
+  only a proper prefix of a normalized secret, bounded by the longest normalized secret's UTF-8
+  byte length minus one; normalization cannot increase that byte length. Either stage retains no
+  carry for an empty secret set. Two booleans preserve whitespace folding across chunks; no safe
+  text accumulates in the helper. Explanation storage
   is capped at 160 characters, and tool preview/identity storage at 120. Escape explanation text
   for its HTML thinking context and tool rows for their Markdown context; controls and bidi
   formatting cannot become display structure. No progress text enters persistence or permanent
