@@ -71,7 +71,7 @@ struct ChatGPTResponsesSSEParserTests {
   func unknownEventsAreIgnoredWithoutFailingTheStream() throws {
     // given
     let stream =
-      Self.event(#"{"type":"response.reasoning_summary_part.added","output_index":0}"#)
+      Self.event(#"{"type":"response.future_summary_part.added","output_index":0}"#)
       + Self.event(#"{"type":"something.we.have.never.seen","payload":{"nested":[1,2]}}"#)
       + Self.addedMessageEvent(index: 0, phase: "final")
       + Self.event(Self.textDelta(index: 0, text: "still here"))

@@ -707,6 +707,25 @@ completion-delivery claim is made when persistence failed.
 - **`LLMProvider` also keeps the seam** for a native adapter later (e.g. Anthropic Messages for prompt caching / extended thinking). The Responses adapter is that seam's first non-Chat-Completions wire format — evidence it holds.
 - **Client:** thin, over AsyncHTTPClient. Composition builds a **dedicated, redirect-disabled LLM client**, distinct from the Telegram and tool clients, so **no bearer — static or subscription — can follow a redirect off its intended host**; default TLS verification stays on. **SSE streaming is v1**: a small SSE parser → throttled `sendRichMessageDraft` rich drafts, finalized via `sendRichMessage` (coalesce; the first draft goes out ASAP and the second on the next probe, because Telegram for macOS shows no draft text until a second update arrives; later drafts keep a min-interval of ~1–2s; a flood-control answer holds that chat's drafts for its `retry_after`). If streaming is unavailable, fall back to blocking + re-issue `sendChatAction` every ~4s for the turn duration. The metric is **perceived latency (time-to-first-token)**, not just first-reply latency. (URLSession can't stream SSE on Linux → AsyncHTTPClient is the portable choice.) On the Chat Completions route, a stream whose response head carries a retryable-class status before any SSE bytes is a clean rejection (`ProviderError.rejected`) and falls back to the blocking path once; mid-stream failures still degrade with no re-issue.
 
+**Compatible-provider display explanations are optional typed summaries.** With
+`ChatRequest.progressExplanationsEnabled`, the Chat Completions parser accepts only
+`reasoning_details` entries with `type: "reasoning.summary"` and a string `summary`.
+`choices[].delta` summary fragments append in wire order, including identical valid fragments;
+`choices[].message` complete details replace and complete the identified item once. Documented
+IDs and indexes reconcile updates when either is omitted on later fragments; an ID-absent item
+uses a stable index-based display identity. Completed items ignore repeated completions and late
+deltas. DONE and natural EOF flush unfinished display items. Raw `reasoning`, `reasoning_content`,
+`reasoning.text`, encrypted details and unknown variants are never display explanations. Malformed
+optional details are dropped while preserving a valid answer and usage. The request body gains no
+provider-specific reasoning option, and ordinary answer text is never inferred as commentary.
+Explanation bytes and retained identity metadata share the existing accumulated-content budget;
+SSE event and buffer bounds retain their typed failures. The adapter applies bounded incremental
+raw-then-normalized redaction with its authorization's exact secret values before publication,
+without a preview cap ahead of broader gateway redaction. Explanations remain nonterminal and
+never enter answer content. A recognized DONE response is retained before optional progress can
+fail, and its HTTP exchange is cancelled and joined before terminal-time publication; preterminal
+failures preserve existing exposure, retry and fallback rules.
+
 ### 8.1 Route selection — the qualified model reference
 
 `CLAW_LLM_MODEL` is parsed **once**, at composition, into a typed `ResolvedLLMRoute`. It keeps four values distinct — two of them carried by its `LLMProviderDescriptor` — and collapsing any pair is a defect:
