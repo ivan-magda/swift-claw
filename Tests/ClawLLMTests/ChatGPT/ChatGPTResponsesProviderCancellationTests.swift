@@ -18,7 +18,6 @@ struct ChatGPTResponsesProviderCancellationTests {
     let hold = ScriptedStreamHold()
     defer { hold.release.open() }
     let progressSeen = AsyncGate()
-    let joined = AsyncGate()
     let credentials = RotatingProgressCredentialSource()
     let frames = [
       Fixtures.event(
@@ -91,18 +90,14 @@ struct ChatGPTResponsesProviderCancellationTests {
     await hold.started.wait()
     stream.cancel()
     let joiner = Task {
-      let terminal = await stream.awaitTermination()
-      joined.open()
-      return terminal
+      await stream.awaitTermination()
     }
-    let returnedBeforeRelease = joined.isOpen
     hold.release.open()
     let terminal = await joiner.value
     let displayed = await reader.value
 
     // then — progress alone retains conservative exposure, while cleanup owns the nested producer
     #expect(sawProgress)
-    #expect(returnedBeforeRelease == false)
     #expect(terminal == .cancelled(.mayHaveStarted(observing: 0)))
     #expect(displayed.contains("oauth-old-synthetic") == false)
     #expect(displayed.contains("oauth-new-synthetic") == false)

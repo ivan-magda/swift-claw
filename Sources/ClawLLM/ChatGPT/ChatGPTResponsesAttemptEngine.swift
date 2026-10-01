@@ -490,12 +490,19 @@ private extension ChatGPTResponsesAttemptEngine {
         // evaluation output cap is crossed). Debit that observation before the error leaves this
         // chunk so cancellation cannot turn known provider work into a zero-token exposure.
         defer { exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens) }
-        for streamEvent in try accumulator.consume(try parser.push(chunk)) {
+        let events = try accumulator.consume(try parser.push(chunk))
+        if case .finished(let response)? = events.last {
+          // The first terminal is authoritative before optional display callbacks can suspend or
+          // throw. Join the producer first so terminal-time progress cannot delay HTTP cleanup.
+          terminal = response
+          _ = await exchange.cancelAndAwait()
+        }
+        for streamEvent in events {
           switch streamEvent {
           case .delta, .progress:
             try await emitEvent(streamEvent)
-          case .finished(let response):
-            terminal = response
+          case .finished:
+            break
           }
         }
         if terminal != nil {
@@ -504,7 +511,6 @@ private extension ChatGPTResponsesAttemptEngine {
       }
 
       if let terminal {
-        _ = await exchange.cancelAndAwait()
         return .completed(terminal)
       }
 
@@ -520,9 +526,15 @@ private extension ChatGPTResponsesAttemptEngine {
       return .failed(exposure.failure(.terminal(status: nil, message: "the ChatGPT reply ended")))
     } catch is CancellationError {
       _ = await exchange.cancelAndAwait()
+      if let terminal {
+        return .completed(terminal)
+      }
       return .cancelled(exposure.accounting)
     } catch {
       _ = await exchange.cancelAndAwait()
+      if let terminal {
+        return .completed(terminal)
+      }
       return .failed(exposure.failure(context.redactedCause(for: error)))
     }
   }
