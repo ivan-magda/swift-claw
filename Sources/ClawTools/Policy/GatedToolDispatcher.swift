@@ -94,7 +94,9 @@ public struct GatedToolDispatcher: ToolDispatching {
         canonicalTarget: action?.target,
         context: context.executionContext
       )
-      await progress?.publish(Task.isCancelled ? .cancelled : progressState(payload.status))
+      await progress?.publish(
+        Task.isCancelled ? .cancelled : ToolProgressState(observationStatus: payload.status)
+      )
       return ToolDispatchOutcome(
         observation: ToolObservation(call: call, payload: payload),
         argsRedacted: argsRedacted
@@ -185,17 +187,6 @@ private extension GatedToolDispatcher {
 // MARK: - Display Inputs
 
 private extension GatedToolDispatcher {
-  func progressState(_ status: ToolObservationStatus) -> ToolProgressState {
-    switch status {
-    case .ok:
-      .succeeded
-    case .error:
-      .failed
-    case .blockedArgs, .blockedSSRF, .blockedPendingApproval:
-      .denied
-    }
-  }
-
   func preview(call: ToolCall, name: String) -> String? {
     guard let arguments = JSONValue.parse(call.argumentsJSON)?.objectValue else {
       return nil

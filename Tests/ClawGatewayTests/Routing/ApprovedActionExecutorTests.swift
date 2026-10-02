@@ -204,7 +204,8 @@ struct ApprovedActionExecutorTests {
     _ env: Fixture,
     tool: String,
     argsJSON: String,
-    target: String = "/w/plan.md"
+    target: String = "/w/plan.md",
+    reason: ApprovalReason = .askTier
   ) -> Approval {
     Approval(
       id: 1,
@@ -220,7 +221,7 @@ struct ApprovedActionExecutorTests {
       nonce: "nonce-a",
       observationMessageID: env.observationMessageID,
       toolCallID: "c1",
-      reason: .askTier,
+      reason: reason,
       promptMessageID: 900,
       createdTs: Date(),
       expiresTs: Date(),

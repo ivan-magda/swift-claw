@@ -463,8 +463,10 @@ TelegramPollerService loop:
 of durable run state. A provider-round start clears interim answer/explanation state; explanation
 item IDs are scoped to that current round. Append updates keep only safe capped text plus the
 original and normalized streaming redactors' bounded suffixes. Replacement resets text and both
-carries; item completion
-flushes the suffix without completing the run. Tool starts return an interim answer to working;
+carries; item completion flushes the suffix without completing the run. A different item ID
+supersedes the displayed item and resets both carries. The superseded item's later updates are
+ignored for the rest of the round, since resuming it without its discarded carry could publish
+the remainder of a withheld secret. Tool starts return an interim answer to working;
 approval waits and actual execution remain distinct. Step identity combines provider-round and
 tool-call IDs. Retain at most 32 steps, evicting the oldest completed entry and aggregating its
 success/failure/denial/cancellation outcome. If none is completed, discard the oldest entry
@@ -858,7 +860,7 @@ A successful terminal caches the authoritative `ChatResponse` **before** closing
 
 `ChatRequest.progressExplanationsEnabled` defaults to false on both initializer paths and survives request copying. It is a provider-neutral request option: each adapter translates it only to a supported wire field; its property name is never inserted literally into an arbitrary provider body.
 
-**Run progress is presentation-only Core state.** `TurnProgressReporter` publishes provider-round starts, answer previews, explanations, tool identities/states and approval waits. `TurnToolStepID` combines provider-call and tool-call IDs; a per-call `ToolProgressReporter` receives only registered tool identity and an allowed preview from dispatch. Missing registration uses a generic failed-step label, never a model-proposed identity presented as registered. Pending, awaiting approval, executing, succeeded, failed, denied and cancelled remain distinct; publishing has no execution or approval authority. The `TurnProgressSnapshot` / `TurnProgressRendering` seam carries phase, elapsed seconds, the latest explanation, retained steps, older outcome counts, answer preview and the display toggle. `TurnProgressLimits` caps explanation text at 160 characters, previews at 120, retained steps at 32, visible steps at six and progress markup at 2,048; the renderer also obeys the existing total rich-message limit.
+**Run progress is presentation-only Core state.** `TurnProgressReporter` publishes provider-round starts, answer previews, explanations, tool identities/states and approval waits. `TurnToolStepID` combines provider-call and tool-call IDs; a per-call `ToolProgressReporter` receives only registered tool identity and an allowed preview from dispatch. Missing registration uses a generic failed-step label, never a model-proposed identity presented as registered. Pending, awaiting approval, executing, succeeded, failed, denied and cancelled remain distinct; publishing has no execution or approval authority. Dispatch and approved execution share one mapping from a returned observation to its outcome, so a policy refusal returned by a tool is denied, never failed. The `TurnProgressSnapshot` / `TurnProgressRendering` seam carries phase, elapsed seconds, the latest explanation, retained steps, older outcome counts, answer preview and the display toggle. `TurnProgressLimits` caps explanation text at 160 characters, previews at 120, retained steps at 32, visible steps at six and progress markup at 2,048; the renderer also obeys the existing total rich-message limit.
 
 **Attempt exposure is one monotonic reducer** — the vendor-neutral answer to "could this attempt have generated tokens?":
 

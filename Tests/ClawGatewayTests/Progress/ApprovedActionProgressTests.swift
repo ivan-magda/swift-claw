@@ -54,4 +54,34 @@ extension TurnProgressLifecycleTests {
     #expect(outcome == (failInsert ? .storeFailed : .committed))
     #expect(success.isOpen == !failInsert)
   }
+
+  @Test
+  func approvedFetchRefusedAtExecutionShowsDenied() async throws {
+    // given
+    let fixtures = ApprovedActionExecutorTests()
+    let env = try fixtures.makeSuspendedFixture()
+    let privateAddress = try #require(ResolvedAddress.parse("10.0.0.5"))
+    let fetch = WebFetchTool(
+      http: RecordingHTTPExecutor(),
+      resolver: ScriptedResolver(table: ["intranet.example": [privateAddress]]),
+      redactor: SecretRedactor(secretValues: [])
+    )
+    let executor = fixtures.makeExecutor(env, tools: [fetch])
+    let approval = fixtures.approval(
+      env,
+      tool: BuiltinToolNames.webFetch,
+      argsJSON: #"{"url":"https://intranet.example/"}"#,
+      target: "https://intranet.example/",
+      reason: .exfilTrifecta
+    )
+    let display = DispatchProgressState()
+    display.releaseIdentification.open()
+
+    // when
+    let outcome = await executor.executeApproved(approval, progress: display.reporter)
+
+    // then
+    #expect(outcome == .committed)
+    #expect(await display.latest.steps.first?.state == .denied)
+  }
 }

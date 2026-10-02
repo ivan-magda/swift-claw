@@ -16,6 +16,18 @@ public enum ToolProgressState: Sendable, Equatable {
   case failed
   case denied
   case cancelled
+
+  /// The finished state for a returned observation; a policy refusal is denied, not failed.
+  public init(observationStatus: ToolObservationStatus) {
+    switch observationStatus {
+    case .ok:
+      self = .succeeded
+    case .error:
+      self = .failed
+    case .blockedArgs, .blockedSSRF, .blockedPendingApproval:
+      self = .denied
+    }
+  }
 }
 
 public enum TurnProgressEvent: Sendable, Equatable {

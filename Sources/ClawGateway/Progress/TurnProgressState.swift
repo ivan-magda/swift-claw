@@ -5,16 +5,20 @@ import Foundation
 public struct TurnProgressState: Sendable {
   private let showsProgress: Bool
   private let secretValues: [String]
+
   private var phase: TurnProgressPhase
   private var providerCallID: String?
+  private var answerPreview = ""
+
   private var explanationItemID: String?
+  private var supersededExplanationItemIDs: Set<String> = []
   private var explanationRedactor: StreamingProgressText
   private var explanationText = ""
-  private var answerPreview = ""
+
   private var steps: [TurnToolStep] = []
+  private var olderSteps = TurnToolCounts(succeeded: 0, failed: 0, denied: 0, cancelled: 0)
   private var unregisteredSteps: Set<TurnToolStepID> = []
   private var coderSubmissions: Set<TurnToolStepID> = []
-  private var olderSteps = TurnToolCounts(succeeded: 0, failed: 0, denied: 0, cancelled: 0)
 
   public init(showsProgress: Bool, resumed: Bool, secretValues: [String]) {
     self.showsProgress = showsProgress
@@ -28,6 +32,7 @@ public struct TurnProgressState: Sendable {
     case .modelStarted(let callID):
       providerCallID = callID
       explanationItemID = nil
+      supersededExplanationItemIDs.removeAll()
       resetExplanation()
       answerPreview = ""
       phase = .model
@@ -78,7 +83,7 @@ private extension TurnProgressState {
   }
 
   mutating func applyExplanation(_ event: LLMProgressEvent) {
-    guard providerCallID != nil else {
+    guard providerCallID != nil, !supersededExplanationItemIDs.contains(event.itemID) else {
       return
     }
 
@@ -87,6 +92,9 @@ private extension TurnProgressState {
     }
 
     if explanationItemID != event.itemID {
+      if let explanationItemID {
+        supersededExplanationItemIDs.insert(explanationItemID)
+      }
       explanationItemID = event.itemID
       resetExplanation()
     }

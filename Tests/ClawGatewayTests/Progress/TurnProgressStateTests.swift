@@ -56,6 +56,27 @@ struct TurnProgressStateTests {
   }
 
   @Test
+  func supersededExplanationNeverResumesWithinItsRound() {
+    // given
+    let secret = "synthetic-token"
+    var state = TurnProgressState(showsProgress: true, resumed: false, secretValues: [secret])
+    state.apply(.modelStarted(providerCallID: "first"))
+    state.apply(.explanation(explanation(.append("checking synthetic-"), itemID: "earlier")))
+    state.apply(.explanation(explanation(.append("next step"), itemID: "later")))
+
+    // when
+    state.apply(.explanation(explanation(.append("token"), itemID: "earlier")))
+    let interleaved = state.snapshot(elapsedSeconds: 1)
+    state.apply(.modelStarted(providerCallID: "second"))
+    state.apply(.explanation(explanation(.append("new round"), itemID: "earlier")))
+    let nextRound = state.snapshot(elapsedSeconds: 2)
+
+    // then
+    #expect(interleaved.explanation == "next step")
+    #expect(nextRound.explanation == "new round")
+  }
+
+  @Test
   func normalizedExplanationWithholdsSecretPrefixesAcrossAppendBoundaries() {
     // given
     let cases = [
@@ -245,7 +266,7 @@ private extension TurnProgressStateTests {
     )
   }
 
-  func explanation(_ text: LLMProgressText) -> LLMProgressEvent {
-    LLMProgressEvent(itemID: "item", kind: .summary, text: text)
+  func explanation(_ text: LLMProgressText, itemID: String = "item") -> LLMProgressEvent {
+    LLMProgressEvent(itemID: itemID, kind: .summary, text: text)
   }
 }

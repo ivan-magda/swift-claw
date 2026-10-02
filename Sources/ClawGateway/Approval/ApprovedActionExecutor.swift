@@ -130,7 +130,7 @@ private extension ApprovedActionExecutor {
     await identify(approval, progress: progress)
     await progress?.publish(.executing)
     let payload = await executedPayload(for: approval)
-    await progress?.publish(payload.status == .ok ? .succeeded : .failed)
+    await progress?.publish(ToolProgressState(observationStatus: payload.status))
 
     do {
       try runs.fillClaimedObservation(
