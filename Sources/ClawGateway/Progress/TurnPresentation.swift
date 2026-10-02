@@ -62,6 +62,7 @@ public actor TurnPresentation {
     guard !terminal, senderTask == nil else {
       return
     }
+
     let sender = TurnProgressSender(
       target: target,
       draftID: draftID,
@@ -73,6 +74,7 @@ public actor TurnPresentation {
       await self?.frame() ?? TurnProgressFrame(markdown: nil, typingAllowed: false)
     }
     self.sender = sender
+
     senderTask = Task {
       await sender.run()
     }
@@ -82,8 +84,10 @@ public actor TurnPresentation {
     guard revision >= pauseRevision else {
       return
     }
+
     pauseRevision = revision
     self.paused = paused
+
     await sender?.setDraftsPaused(paused, revision: revision)
   }
 }
@@ -95,15 +99,20 @@ private extension TurnPresentation {
     guard !terminal else {
       return TurnProgressFrame(markdown: nil, typingAllowed: false)
     }
-    let snapshot = state.snapshot(elapsedSeconds: Int(elapsed().components.seconds))
+
+    let snapshot = state.snapshot(
+      elapsedSeconds: Int(elapsed().components.seconds)
+    )
+
     return TurnProgressFrame(
       markdown: draftsEnabled && !paused ? renderer.render(snapshot) : nil,
       typingAllowed: snapshot.phase != .approval
     )
   }
 
-  static func elapsed<C: Clock>(on clock: C) -> @Sendable () -> Duration
-  where C.Duration == Duration {
+  static func elapsed<C: Clock>(
+    on clock: C
+  ) -> @Sendable () -> Duration where C.Duration == Duration {
     let start = clock.now
     return {
       start.duration(to: clock.now)
