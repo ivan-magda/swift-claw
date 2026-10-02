@@ -8,7 +8,7 @@ public actor TurnPresentationRegistry {
     let scope: TurnScope
     let presentation: TurnPresentation
     let reporter: TurnProgressReporter
-    var pendingStep: TurnToolStepID?
+    var pendingApprovalStepID: TurnToolStepID?
   }
 
   private let streamingEnabled: Bool
@@ -19,10 +19,10 @@ public actor TurnPresentationRegistry {
   private let outbox: any OutboxStore
   private let secretValues: [String]
   private let clock: any Clock<Duration>
-  private var entries: [Int64: Entry] = [:]
-  private var leases: [UUID: Int64] = [:]
-  private var revision = 0
-  private var stopped = false
+  private var entriesByRunID: [Int64: Entry] = [:]
+  private var deliveryLeases: [UUID: Int64] = [:]
+  private var pauseRevision = 0
+  private var isShutDown = false
 
   public init(
     streamingEnabled: Bool,
@@ -44,13 +44,17 @@ public actor TurnPresentationRegistry {
     self.clock = clock
   }
 
+  // MARK: - Presentation Admission
+
   public func begin(scope: TurnScope, resumed: Bool = false) async -> TurnProgressReporter? {
-    guard !Task.isCancelled, !stopped, scope.origin == .interactive else {
+    guard !Task.isCancelled, !isShutDown, scope.origin == .interactive else {
       return nil
     }
-    if let entry = entries[scope.runID] {
+
+    if let entry = entriesByRunID[scope.runID] {
       return entry.reporter
     }
+
     let presentation = TurnPresentation(
       target: DeliveryTarget(chatID: scope.chatID, messageThreadID: scope.threadID),
       draftID: scope.runID,
@@ -63,115 +67,145 @@ public actor TurnPresentationRegistry {
       secretValues: secretValues,
       clock: clock
     )
-    let reporter = TurnProgressReporter(explanationsEnabled: progressEnabled) { [weak self] event in
+    let reporter = TurnProgressReporter(
+      explanationsEnabled: progressEnabled
+    ) { [weak self] event in
       await self?.publish(event, runID: scope.runID)
     }
-    let entry = Entry(scope: scope, presentation: presentation, reporter: reporter)
+    let entry = Entry(
+      scope: scope,
+      presentation: presentation,
+      reporter: reporter
+    )
     // No suspension between cancellation/shutdown admission and registration.
-    entries[scope.runID] = entry
+    entriesByRunID[scope.runID] = entry
     await presentation.start()
-    await reconcile(entry)
+    await updateDraftPause(for: entry)
+
     return reporter
   }
 
+  // MARK: - Approval Progress
+
   public func waitingForApproval(runID: Int64) async {
-    guard let entry = entries[runID], let id = entry.pendingStep else {
+    guard let entry = entriesByRunID[runID],
+          let stepID = entry.pendingApprovalStepID
+    else {
       return
     }
-    await entry.presentation.publish(.waitingForApproval(id: id))
+
+    await entry.presentation.publish(.waitingForApproval(id: stepID))
   }
 
   public func approvalProgress(runID: Int64, toolCallID: String) -> ToolProgressReporter? {
-    guard let entry = entries[runID] else {
+    guard let entry = entriesByRunID[runID] else {
       return nil
     }
-    let id =
-      entry.pendingStep
+
+    let stepID =
+      entry.pendingApprovalStepID
       ?? TurnToolStepID(
         providerCallID: UUID().uuidString,
         toolCallID: toolCallID
       )
-    entries[runID]?.pendingStep = id
+    entriesByRunID[runID]?.pendingApprovalStepID = stepID
+
     return ToolProgressReporter(
       identify: { tool, preview in
-        await entry.reporter.publish(.toolStarted(id: id, tool: tool, preview: preview))
+        await entry.reporter.publish(.toolStarted(id: stepID, tool: tool, preview: preview))
       },
       publish: { state in
-        await entry.reporter.publish(.toolState(id: id, state: state))
+        await entry.reporter.publish(.toolState(id: stepID, state: state))
       }
     )
   }
 
+  // MARK: - Presentation Lifecycle
+
   public func close(runID: Int64) async {
-    guard let entry = entries[runID] else {
+    guard let entry = entriesByRunID[runID] else {
       return
     }
+
     await entry.presentation.closeAndAwait()
-    if entries[runID]?.presentation === entry.presentation {
-      entries.removeValue(forKey: runID)
+
+    if entriesByRunID[runID]?.presentation === entry.presentation {
+      entriesByRunID.removeValue(forKey: runID)
     }
   }
 
   public func close(sessionID: Int64) async {
-    let matches = entries.values.filter {
-      $0.scope.sessionID == sessionID
+    let sessionEntries = entriesByRunID.values.filter { entry in
+      entry.scope.sessionID == sessionID
     }
-    for entry in matches {
+
+    for entry in sessionEntries {
       await close(runID: entry.scope.runID)
     }
   }
 
   public func shutdown() async {
-    stopped = true
-    let runIDs = Array(entries.keys)
+    isShutDown = true
+    let runIDs = Array(entriesByRunID.keys)
     for runID in runIDs {
       await close(runID: runID)
     }
   }
 
+  // MARK: - Delivery Leases
+
   public func beginDelivery(to target: DeliveryTarget) async -> UUID {
-    let lease = UUID()
-    leases[lease] = target.chatID
-    let matches = entries.values.filter {
-      $0.scope.chatID == target.chatID
-    }
-    for entry in matches {
-      await reconcile(entry)
-    }
-    return lease
+    let leaseID = UUID()
+    deliveryLeases[leaseID] = target.chatID
+
+    await updateDraftPauses(inChat: target.chatID)
+
+    return leaseID
   }
 
   public func endDelivery(_ leaseID: UUID) async {
-    guard let chatID = leases.removeValue(forKey: leaseID) else {
+    guard let chatID = deliveryLeases.removeValue(forKey: leaseID) else {
       return
     }
-    let matches = entries.values.filter {
-      $0.scope.chatID == chatID
-    }
-    for entry in matches {
-      await reconcile(entry)
-    }
+
+    await updateDraftPauses(inChat: chatID)
   }
 }
 
 // MARK: - Delivery Holds
 
 private extension TurnPresentationRegistry {
-  func reconcile(_ entry: Entry) async {
-    revision += 1
-    let held = holdsDrafts(for: entry.scope)
-    await entry.presentation.setDraftsPaused(held, revision: revision)
+  func updateDraftPauses(inChat chatID: Int64) async {
+    let chatEntries = entriesByRunID.values.filter { entry in
+      entry.scope.chatID == chatID
+    }
+
+    for entry in chatEntries {
+      await updateDraftPause(for: entry)
+    }
+  }
+
+  func updateDraftPause(for entry: Entry) async {
+    pauseRevision += 1
+    let shouldPauseDrafts = holdsDrafts(for: entry.scope)
+    await entry.presentation.setDraftsPaused(shouldPauseDrafts, revision: pauseRevision)
   }
 
   func holdsDrafts(for scope: TurnScope) -> Bool {
-    if leases.values.contains(scope.chatID) {
+    if deliveryLeases.values.contains(scope.chatID) {
       return true
     }
+
     do {
-      return try outbox.pendingOutbound().contains {
-        $0.chatID == scope.chatID && ($0.runID != scope.runID || $0.approvalID != nil)
+      let pendingMessages = try outbox.pendingOutbound()
+      return pendingMessages.contains { message in
+        let isSameChat = message.chatID == scope.chatID
+        let isOtherRun = message.runID != scope.runID
+        let isApprovalCard = message.approvalID != nil
+        return isSameChat && (isOtherRun || isApprovalCard)
       }
     } catch {
+      // Keep drafts paused when pending permanent deliveries cannot be checked.
       return true
     }
   }
@@ -181,14 +215,16 @@ private extension TurnPresentationRegistry {
 
 private extension TurnPresentationRegistry {
   func publish(_ event: TurnProgressEvent, runID: Int64) async {
-    guard let entry = entries[runID] else {
+    guard let entry = entriesByRunID[runID] else {
       return
     }
-    if case .toolState(let id, .awaitingApproval) = event {
+
+    if case .toolState(let stepID, .awaitingApproval) = event {
       // Waiting is visible only after the durable suspend succeeds.
-      entries[runID]?.pendingStep = id
+      entriesByRunID[runID]?.pendingApprovalStepID = stepID
       return
     }
+
     await entry.presentation.publish(event)
   }
 }
