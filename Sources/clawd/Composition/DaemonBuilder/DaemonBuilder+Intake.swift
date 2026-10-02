@@ -21,7 +21,7 @@ extension DaemonBuilder {
     approvalCallbacks: ApprovalCallbackHandler,
     doctor: any DoctorReporting,
     learning: ScheduledLearningService?,
-    presentations: TurnPresentationRegistry? = nil
+    presentations: TurnPresentationRegistry?
   ) -> IntakeStack {
     let router = makeIntakeRouter(
       coordination: coordination,
@@ -58,7 +58,7 @@ extension DaemonBuilder {
     approvalCallbacks: ApprovalCallbackHandler?,
     doctor: any DoctorReporting,
     learning: ScheduledLearningService?,
-    presentations: TurnPresentationRegistry? = nil
+    presentations: TurnPresentationRegistry?
   ) -> MessageRouter {
     let voiceService = makeVoiceService()
     let imageService = makeImageService()
@@ -75,7 +75,10 @@ extension DaemonBuilder {
       memoryCommands: stores.memoryCommands,
       pendingConfirmations: coordination.pendingConfirmations,
       botIdentity: botIdentity,
-      accessControl: AccessControl(allowlist: stores.allowlist, groupChats: config.groupChats),
+      accessControl: AccessControl(
+        allowlist: stores.allowlist,
+        groupChats: config.groupChats
+      ),
       delivery: transport,
       turnRunner: turnRunner,
       imageCache: imageCache,
@@ -235,7 +238,9 @@ extension DaemonBuilder {
 // MARK: - Private Tool Policy Inputs
 
 private extension DaemonBuilder {
-  func makePrivateFileLoader(workspace: FileSystemWorkspace) -> @Sendable () -> [String] {
+  func makePrivateFileLoader(
+    workspace: FileSystemWorkspace
+  ) -> @Sendable () -> [String] {
     {
       [WorkspaceFile.memory, WorkspaceFile.user].compactMap { file in
         try? String(

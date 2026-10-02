@@ -84,7 +84,8 @@ struct LearningCompositionTests {
       scheduleSurface: LearningComposition.scheduleSurface(builder),
       approvalCallbacks: nil,
       doctor: IdleCompositionDoctor(),
-      learning: nil
+      learning: nil,
+      presentations: nil
     )
 
     // when
@@ -197,7 +198,8 @@ struct LearningCompositionTests {
         scheduleSurface: LearningComposition.scheduleSurface(builder),
         approvalCallbacks: nil,
         doctor: IdleCompositionDoctor(),
-        learning: nil
+        learning: nil,
+        presentations: nil
       )
       let update = RawUpdate(
         updateID: learningEnabled ? 80 : 81,
@@ -281,7 +283,8 @@ struct LearningCompositionTests {
         scheduleSurface: LearningComposition.scheduleSurface(builder),
         approvalCallbacks: nil,
         doctor: IdleCompositionDoctor(),
-        learning: nil
+        learning: nil,
+        presentations: nil
       )
 
       // when — correction tap, then its free-text payload
