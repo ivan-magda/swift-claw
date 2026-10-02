@@ -46,7 +46,7 @@ struct StreamingTurnRuntime: Sendable {
   func run(
     target: TurnProgressTarget,
     request: ChatRequest,
-    progress: TurnProgressReporter? = nil
+    progress: TurnProgressReporter?
   ) async throws -> ChatResponse {
     let snapshot = DraftSnapshot()
     // Built before the race children start, so the runtime holds the cancel-and-join handle before
@@ -58,11 +58,20 @@ struct StreamingTurnRuntime: Sendable {
       deadlineSeconds: wallClockDeadlineSeconds,
       clock: clock,
       consume: { stream, box in
-        await consumeStream(stream, snapshot: snapshot, box: box, progress: progress)
+        await consumeStream(
+          stream,
+          snapshot: snapshot,
+          box: box,
+          progress: progress
+        )
       },
       auxiliary: { box in
         if progress == nil {
-          await runDraftAndTypingLoop(target: target, snapshot: snapshot, box: box)
+          await runDraftAndTypingLoop(
+            target: target,
+            snapshot: snapshot,
+            box: box
+          )
         }
       }
     )
@@ -108,6 +117,7 @@ private extension StreamingTurnRuntime {
     do {
       for try await event in stream {
         try Task.checkCancellation()
+
         switch event {
         case .delta(let delta):
           try append(delta: delta, to: &content, contentBytes: &contentBytes)
@@ -127,6 +137,7 @@ private extension StreamingTurnRuntime {
           return .completed
         }
       }
+
       return .cut
     } catch is AccumulatedStreamContentTooLarge {
       return .overflowed
@@ -182,6 +193,7 @@ private extension StreamingTurnRuntime {
       }
       return TurnProgressFrame(markdown: await snapshot.latest(), typingAllowed: true)
     }
+
     await sender.run()
   }
 
