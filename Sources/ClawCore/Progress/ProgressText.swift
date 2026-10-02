@@ -25,6 +25,7 @@ public struct StreamingSecretRedactor: Sendable {
     let input = carry + text.utf8
     carry.removeAll(keepingCapacity: true)
 
+    let replacementBytes = SecretRedactor.replacement.utf8
     var output: [UInt8] = []
     var offset = 0
 
@@ -38,15 +39,15 @@ public struct StreamingSecretRedactor: Sendable {
         break
       }
 
-      if let secret = secrets.first(where: {
-        remaining.starts(with: $0)
-      }) {
-        output.append(contentsOf: SecretRedactor.replacement.utf8)
-        offset += secret.count
-      } else if preservesRedactionTokens && remaining.starts(with: SecretRedactor.replacement.utf8)
-      {
-        output.append(contentsOf: SecretRedactor.replacement.utf8)
-        offset += SecretRedactor.replacement.utf8.count
+      let matchingSecret = secrets.first { secret in
+        remaining.starts(with: secret)
+      }
+      if let matchingSecret {
+        output.append(contentsOf: replacementBytes)
+        offset += matchingSecret.count
+      } else if preservesRedactionTokens && remaining.starts(with: replacementBytes) {
+        output.append(contentsOf: replacementBytes)
+        offset += replacementBytes.count
       } else {
         output.append(input[offset])
         offset += 1
@@ -75,11 +76,12 @@ public struct StreamingProgressText: Sendable {
   private var hasNormalizedSpace = false
 
   public init(secretValues: [String]) {
-    originalRedactor = StreamingSecretRedactor(secretValues: secretValues)
+    self.originalRedactor = StreamingSecretRedactor(secretValues: secretValues)
+
     let normalizedSecrets = secretValues.map {
       ProgressText.normalize($0).trimmingCharacters(in: .whitespaces)
     }
-    normalizedRedactor = StreamingSecretRedactor(
+    self.normalizedRedactor = StreamingSecretRedactor(
       secretValues: normalizedSecrets,
       preservingRedactionTokens: true
     )
@@ -116,8 +118,12 @@ private extension StreamingProgressText {
 public enum ProgressText {
   /// Identifies a page without credentials, query or fragment. Redaction precedes middle elision
   /// so shortening a long path cannot expose a partial secret from its final segment.
-  public static func webPagePreview(_ url: URLComponents, secretValues: [String]) -> String? {
-    guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+  public static func webPagePreview(
+    _ url: URLComponents,
+    secretValues: [String]
+  ) -> String? {
+    guard let scheme = url.scheme?.lowercased(),
+          scheme == "http" || scheme == "https",
           let host = url.host, !host.isEmpty
     else {
       return nil
@@ -128,8 +134,10 @@ public enum ProgressText {
     guard safe.count > limit else {
       return safe
     }
+
     let segments = safe.split(separator: "/", omittingEmptySubsequences: true)
-    guard let safeHost = segments.first, let leaf = segments.last, segments.count > 1,
+    guard let safeHost = segments.first,
+          let leaf = segments.last, segments.count > 1,
           safeHost.count + 3 < limit
     else {
       return String(safe.prefix(limit - 1)) + "…"
@@ -144,16 +152,19 @@ public enum ProgressText {
       secretValues: secretValues,
       preservingRedactionTokens: true
     )
+
     let safe = originalRedactor.append(text) + originalRedactor.finish()
     let normalized = normalize(safe).trimmingCharacters(in: .whitespaces)
     let normalizedSecrets = secretValues.map {
       normalize($0).trimmingCharacters(in: .whitespaces)
     }
+
     var displayRedactor = StreamingSecretRedactor(
       secretValues: normalizedSecrets,
       preservingRedactionTokens: true
     )
     let displaySafe = displayRedactor.append(normalized) + displayRedactor.finish()
+
     return String(displaySafe.prefix(max(0, limit)))
   }
 
