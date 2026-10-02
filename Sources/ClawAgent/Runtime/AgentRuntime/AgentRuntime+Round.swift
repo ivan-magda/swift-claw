@@ -151,6 +151,11 @@ private extension AgentRuntime {
         return .exit(.deadline)
       }
 
+      let progressExplanationsEnabled =
+        streamingEnabled
+        && plan.turn.scope.origin == .interactive
+        && plan.turn.scope.mode == .direct
+        && plan.turn.progress?.explanationsEnabled == true
       let outputScope = attempts.beginRound(outboundModel: route.active.binding.wireModel)
       let request = ChatRequest(
         model: route.active.binding.wireModel,
@@ -158,12 +163,11 @@ private extension AgentRuntime {
         maxOutputTokens: budget.maxOutputTokens,
         tools: toolDefinitions,
         sessionID: SessionTraceID.format(sessionID: plan.turn.scope.sessionID),
-        progressExplanationsEnabled: streamingEnabled
-          && plan.turn.scope.origin == .interactive && plan.turn.scope.mode == .direct
-          && plan.turn.progress?.explanationsEnabled == true,
+        progressExplanationsEnabled: progressExplanationsEnabled,
         outputScope: outputScope,
         terminalValidationPolicy: attempts.terminalValidationPolicy
       )
+
       if attempts.accepts(outboundModel: request.model) == false {
         let mismatch = TurnResult.degraded(.providerUnavailable, usage: nil)
         return .exit(TurnExit(mismatch, failureCause: .modelIdentityMismatch))
