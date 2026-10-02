@@ -55,7 +55,7 @@ private extension TelegramProgressRenderer {
         secretValues: [],
         limit: TurnProgressLimits.explanationCharacters
       )
-      let escaped = escape(safe, markdown: false, budget: budget - tags - heading.count - 3)
+      let escaped = explanationMarkup(safe, budget: budget - tags - heading.count - 3)
       if !escaped.isEmpty {
         thinking += " — " + escaped
       }
@@ -68,16 +68,15 @@ private extension TelegramProgressRenderer {
 
     let visible = Array(snapshot.steps.suffix(TurnProgressLimits.visibleToolSteps))
     let older = totalOlder(snapshot.olderSteps) + snapshot.steps.count - visible.count
-    let earlier = older > 0 ? "\n\n\(older) earlier steps" : ""
+    let earlier =
+      older > 0
+      ? "\n\n" + Self.thinkingOpen + "\(older) earlier steps" + Self.thinkingClose : ""
     let available = budget - markup.count - earlier.count
 
     if available > 0, !visible.isEmpty {
       let rowBudget = available / visible.count
       for step in visible {
-        let row = toolRow(step, budget: rowBudget)
-        if !row.isEmpty {
-          markup += row
-        }
+        markup += toolRow(step, budget: rowBudget)
       }
     }
 
@@ -90,8 +89,9 @@ private extension TelegramProgressRenderer {
 
   func toolRow(_ step: TurnToolStep, budget: Int) -> String {
     let status = stateLabel(step.state)
-    let suffix = " · " + status
-    let prefix = "\n- "
+    let suffix = " · " + status + Self.thinkingClose
+    // Thinking rows update immediately instead of entering the client's answer-text animation.
+    let prefix = "\n\n" + Self.thinkingOpen + "• "
     let textBudget = budget - prefix.count - suffix.count
 
     guard textBudget > 0 else {
@@ -112,10 +112,30 @@ private extension TelegramProgressRenderer {
         ": " + $0
       } ?? "")
 
-    return prefix + escape(text, markdown: true, budget: textBudget) + suffix
+    return prefix + escapeHTML(text, budget: textBudget) + suffix
   }
 
-  func escape(_ text: String, markdown: Bool, budget: Int) -> String {
+  /// Markdown is literal inside thinking blocks. Convert a provider's outer bold heading to
+  /// owned HTML, including when its closing delimiter has not arrived or was preview-truncated.
+  func explanationMarkup(_ text: String, budget: Int) -> String {
+    guard text.hasPrefix("**") else {
+      return escapeHTML(text, budget: budget)
+    }
+
+    var body = String(text.dropFirst(2))
+    if body.hasSuffix("**") {
+      body = String(body.dropLast(2))
+    }
+    let opening = "<b>"
+    let closing = "</b>"
+    let escaped = escapeHTML(
+      body,
+      budget: budget - opening.count - closing.count
+    )
+    return escaped.isEmpty ? "" : opening + escaped + closing
+  }
+
+  func escapeHTML(_ text: String, budget: Int) -> String {
     var result = ""
 
     for character in text {
@@ -128,10 +148,7 @@ private extension TelegramProgressRenderer {
       case ">":
         token = "&gt;"
       default:
-        let punctuation = "\\`*_{}[]()#+-.!|~"
-        token =
-          markdown && punctuation.contains(character)
-          ? "\\" + String(character) : String(character)
+        token = String(character)
       }
 
       guard result.count + token.count <= budget else {

@@ -92,6 +92,61 @@ struct ToolDispatchProgressTests {
     let preview = await state.latest.steps.first?.preview
     #expect(preview == "prefix " + SecretRedactor.replacement)
   }
+
+  @Test
+  func fetchPreviewIdentifiesThePageWithoutPrivateURLComponents() async {
+    // given
+    let tool = ProgressTestTool(name: "web_fetch")
+    let state = DispatchProgressState()
+    state.releaseIdentification.open()
+    let dispatcher = progressDispatcher(tool: tool)
+
+    // when
+    _ = await dispatcher.dispatch(
+      call: ToolCall(
+        id: "step",
+        name: tool.definition.name,
+        argumentsJSON:
+          #"{"url":"https://user:password@swift.org/getting-started/?token=hidden#part"}"#
+      ),
+      context: progressDispatchContext(),
+      progress: state.reporter
+    )
+
+    // then
+    #expect(await state.latest.steps.first?.preview == "swift.org/getting-started/")
+  }
+
+  @Test(arguments: [false, true])
+  func longFetchPreviewKeepsTheLeafAfterRedaction(longLeaf: Bool) async throws {
+    // given
+    let secret = String(repeating: "s", count: 140)
+    let ancestors = String(repeating: "guides/", count: 25)
+    let pathSecret = longLeaf ? String(repeating: "%73", count: 140) : secret
+    let leaf = (longLeaf ? String(repeating: "v", count: 150) : "") + "installation-" + pathSecret
+    let tool = ProgressTestTool(name: "web_fetch")
+    let state = DispatchProgressState()
+    state.releaseIdentification.open()
+    let dispatcher = progressDispatcher(tool: tool, secrets: [secret])
+
+    // when
+    _ = await dispatcher.dispatch(
+      call: ToolCall(
+        id: "step",
+        name: tool.definition.name,
+        argumentsJSON: "{\"url\":\"https://swift.org/\(ancestors)\(leaf)\"}"
+      ),
+      context: progressDispatchContext(),
+      progress: state.reporter
+    )
+
+    // then
+    let preview = try #require(await state.latest.steps.first?.preview)
+    #expect(preview.hasPrefix("swift.org/…/"))
+    #expect(preview.hasSuffix("installation-" + SecretRedactor.replacement))
+    #expect(preview.count <= TurnProgressLimits.previewCharacters)
+    #expect(preview.contains(String(secret.prefix(20))) == false)
+  }
 }
 
 private enum DispatchScenario {

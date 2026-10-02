@@ -471,11 +471,18 @@ success/failure/denial/cancellation outcome. If none is completed, discard the o
 without inventing an outcome; the current 20-call run budget fits the retained bound.
 
 `TelegramProgressRenderer` is draft-only. Working previews contain a complete `<tg-thinking>`
-block and at most six recent tool rows outside it, with a count of earlier steps. Answer previews
+heading and at most six recent tool rows, each in its own complete thinking block. A separate
+thinking block counts earlier steps. Answer previews
 replace expanded rows with one neutral elapsed progress summary. Build complete tags and escaped
 text within 2,048 progress characters and the existing total rich-message limit; reduce or drop
 progress before consuming answer space. Answer Markdown remains unchanged except for the existing
 total preview cap. Permanent delivery does not invoke this renderer.
+
+Separate thinking blocks with blank lines. Tool rows use the client's gray progress style to avoid
+its slow answer-text reveal animation; keep the same draft ID throughout the run. Markdown is
+literal inside thinking blocks; render a provider's outer `**` heading with owned, balanced `<b>`
+tags, including incomplete streamed headings. Escape explanation and row text as HTML and charge
+all tags to the same budget.
 
 ### 6.2 Tool & approval flow (Inc 5a/5b)
 
@@ -1143,16 +1150,18 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   carry for an empty secret set. Two booleans preserve whitespace folding across chunks; no safe
   text accumulates in the helper. Explanation storage
   is capped at 160 characters, and tool preview/identity storage at 120. Escape explanation text
-  for its HTML thinking context and tool rows for their Markdown context; controls and bidi
+  and tool rows for their HTML thinking context; controls and bidi
   formatting cannot become display structure. No progress text enters persistence or permanent
   answers.
 - **Registered identity and selected previews are the display input contract.** The dispatcher
   supplies `toolStarted` with the registered `ToolDefinition` and one selected field, never full
   argument JSON or output. `web_search` supplies query, `skill_load` supplies skill name,
   `file_read`/`file_write` supply a validated workspace-relative path, and `web_fetch` supplies a
-  parsed host or URL from which only the parsed host is retained. Dispatch redacts before any
-  dispatch cap; the reducer applies the composed secret set before its own caps. The reducer
-  permits no absolute/traversing file path, URL userinfo/path/query/fragment, memory contents,
+  parsed host and page path. Long page previews retain the host and last path segment, eliding
+  ancestors with `/…/` within the 120-character cap; an oversized last segment keeps its suffix.
+  Dispatch and the reducer share this formatter and redact before elision or truncation. The
+  reducer applies the composed secret set before its own caps and permits no absolute/traversing
+  file path, URL userinfo/query/fragment, memory contents,
   code/commands, Coder task/source, or MCP/other-tool arguments. Non-preview families use fixed
   labels or a sanitized registered name. MCP uses the registered `mcp__server__tool` name,
   never the policy-only `invocationIdentity` that can contain endpoints and static headers.

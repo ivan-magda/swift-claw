@@ -114,8 +114,37 @@ private extension StreamingProgressText {
 }
 
 public enum ProgressText {
+  /// Identifies a page without credentials, query or fragment. Redaction precedes middle elision
+  /// so shortening a long path cannot expose a partial secret from its final segment.
+  public static func webPagePreview(_ url: URLComponents, secretValues: [String]) -> String? {
+    guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+          let host = url.host, !host.isEmpty
+    else {
+      return nil
+    }
+
+    let limit = TurnProgressLimits.previewCharacters
+    let safe = preview(host + url.path, secretValues: secretValues, limit: .max)
+    guard safe.count > limit else {
+      return safe
+    }
+    let segments = safe.split(separator: "/", omittingEmptySubsequences: true)
+    guard let safeHost = segments.first, let leaf = segments.last, segments.count > 1,
+          safeHost.count + 3 < limit
+    else {
+      return String(safe.prefix(limit - 1)) + "…"
+    }
+
+    let prefix = String(safeHost) + "/…/"
+    return prefix + leaf.suffix(limit - prefix.count)
+  }
+
   public static func preview(_ text: String, secretValues: [String], limit: Int) -> String {
-    let safe = SecretRedactor(secretValues: secretValues).redact(text)
+    var originalRedactor = StreamingSecretRedactor(
+      secretValues: secretValues,
+      preservingRedactionTokens: true
+    )
+    let safe = originalRedactor.append(text) + originalRedactor.finish()
     let normalized = normalize(safe).trimmingCharacters(in: .whitespaces)
     let normalizedSecrets = secretValues.map {
       normalize($0).trimmingCharacters(in: .whitespaces)

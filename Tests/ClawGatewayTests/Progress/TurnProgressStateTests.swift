@@ -87,7 +87,11 @@ struct TurnProgressStateTests {
     var state = TurnProgressState(showsProgress: true, resumed: false, secretValues: ["secret"])
     let cases: [(String, String, String?)] = [
       ("web_search", "query secret", "query " + SecretRedactor.replacement),
-      ("web_fetch", "https://user:password@example.org/private?q=secret#fragment", "example.org"),
+      (
+        "web_fetch",
+        "https://user:password@example.org/secret?q=secret#fragment",
+        "example.org/" + SecretRedactor.replacement
+      ),
       ("web_fetch", "example.org", "example.org"),
       ("skill_load", "skill secret", "skill " + SecretRedactor.replacement),
       ("file_read", "folder/file.txt", "folder/file.txt"),

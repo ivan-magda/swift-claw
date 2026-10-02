@@ -1,11 +1,11 @@
-# Telegram turn progress: partial automated acceptance
+# Telegram turn progress: automated and partial live acceptance
 
 Date: 2026-10-01. Issue: 239. Reviewed code commit:
 `e108fe5e59d69dfe7db3f2e38b57ce4a2af5dde7` on `feature/239-telegram-turn-progress`.
 
-The final automated gate passed after the final code edit. The owner deferred live provider,
-Telegram, UI, end-to-end and recording acceptance until their return. Feature acceptance remains
-incomplete pending those checks.
+The initial automated gate passed after the reviewed code edit. The owner resumed live acceptance
+on 2026-10-02, inline. The recordings exposed a markup defect and an ambiguous page-label design;
+the follow-up below records those findings. Feature acceptance remains incomplete.
 
 ## Final repository gate
 
@@ -115,10 +115,10 @@ resolving in GitHub.
 
 Both independent reviews accepted these rulings with their stated limits.
 
-## Live acceptance still pending
+## Remaining live acceptance
 
-The owner deferred the following required checks. This run produced no feature recordings or
-live observations:
+The original live checklist follows. Setup and composed-provider evidence now exist, as recorded
+below; the controlled off/on comparison and remaining lifecycle scenarios are still outstanding:
 
 1. Establish the authorized test bot/chat, disposable test configuration and state root, candidate
    binary, Telegram client/version/window size, provider route and safe prompts. Avoid concurrent
@@ -147,3 +147,168 @@ live observations:
 The [2026-09-30 latency study](telegram-streaming-latency-2026-09-30.md) records prior baseline
 behavior. It does not establish this feature's animation, layout, freshness, collapse, replacement
 or composed backend acceptance.
+
+## Live follow-up: 2026-10-02
+
+The owner authorized the existing bot's personal chat and the local artifact directory
+`~/Downloads/telegram-turn-progress-2026-10-01/`. Tests used Telegram for macOS 12.10
+(build 282985), macOS 26.6.2, the debug `clawd` candidate and the configured
+`openai-chatgpt/gpt-6-sol` route. The existing personal service was stopped before testing;
+one foreground candidate held the normal owner state lock. The separate group deployment was
+not used. Recordings are local, cropped to the test chat at 906 × 2048 pixels and 60 fps.
+
+| Scenario | Actual observation | Recording |
+| --- | --- | --- |
+| E2E-01, short answer | Run 291 completed in 5,201 ms. Temporary Working status was visible; the permanent 169-character answer contained no progress. | `2026-10-02-live-on-short.mkv` |
+| E2E-02, tools and long answer | Run 292 made three fetch calls over four provider rounds and completed in 39,530 ms. The 4,863-character permanent answer contained no progress. Tool rows exposed literal Markdown escapes; this was a failure, not accepted rendering. | `2026-10-02-live-on-tools-long.mkv` |
+| E2E-04, markup fix | Run 294 made three fetch calls over four rounds and completed in 43,285 ms. The client displayed a proper bullet list and domains without backslashes. The 5,265-character permanent answer contained no progress. | `2026-10-02-live-markup-fix.mkv` |
+| E2E-05, second request | Submitted through the client while run 294 was active; the client displayed its pending-send clock. Gateway admission occurred after run 294 completed, followed by an 18-character final answer. This does not prove simultaneous gateway admission or the lane race. | Same recording as E2E-04 |
+
+The composed ChatGPT route accepted summary-enabled requests. Read-only inspection of the test
+runs' stored replay metadata found a nonempty summary on run 292's first tool proposal (25
+characters), followed by successful tool continuation. Run 294 likewise retained nonempty
+summaries (27 and 34 characters) and completed later provider rounds. Only counts and lengths
+were recorded; no credentials or replay payloads were exported. Optional summary text was not
+visible in the sampled E2E-04 frames, so that recording alone does not prove the HTML bold display.
+
+The markup defect was a missing blank line after the raw `<tg-thinking>` HTML block. Telegram
+therefore treated the subsequent list and its escapes as literal text. The fix terminates that
+block before the Markdown rows. The owner also selected generated HTML bold for outer `**`
+explanation headings; the renderer escapes the body and closes the tags even for an incomplete
+streamed heading. The [Telegram Rich Markdown rules](https://core.telegram.org/bots/api#rich-markdown-style)
+explain the distinction between Markdown and text inside HTML blocks.
+
+E2E-04 also exposed the approved host-only preview's ambiguity: the actual requests were
+`www.swift.org/documentation/`, `www.swift.org/getting-started/` and
+`swift.org/documentation/`. The owner approved showing host plus path, omitting user information,
+query and fragment, with middle elision for long paths. That updated rule is recorded in the
+architecture and the local accepted design.
+
+The earlier recordings whose names contain `approval-queue` or `approval-resume` are setup
+attempts, not acceptance evidence. Later approval runs are recorded below. Sandbox health reported an existing image-pull failure and `admitting=false`; its
+guards were not bypassed. A tool execution over 30 seconds, approval/resume, denial, stop, provider
+failure, matched off/on short and multi-screen answers, and quantitative transition comparison
+remain to be completed. No authorized group/topic or second mobile client has been exercised.
+
+
+### Continued live checks
+
+- E2E-06-URL (run 296): two fetch calls, 7,251 ms, final `Пути страниц проверены.`
+  without progress. Recording: `2026-10-02-live-url-and-approval.mkv`. The first path was partly
+  visible before completion; this short run did not visually establish both complete labels.
+- E2E-07 (run 297): two fetches followed by a gated write of one disposable fixture. The owner
+  pressed Approve after 98 seconds; the expected fixture content was verified on disk. The
+  continuation completed in 9,771 ms with `Подтверждение проверено.` and no final progress.
+  The continuation also repeated both fetches; this is an observed behavior requiring triage,
+  not evidence of an extra file write. Recording: `2026-10-02-live-approval-07.mkv`.
+- E2E-08 (run 298): intended denial, but the owner confirmed pressing Approve. The durable row
+  is APPROVED and the fixture exists. Count this as a second approval run, not denial coverage.
+  The bot correctly reported that no denial occurred. Recording: `2026-10-02-live-denial-stop.mkv`.
+
+The approval wait exposed another visual problem: between elapsed labels 14s and 79s the first
+unchanged completed tool row was still being revealed a few characters at a time. The second row
+only began appearing around 84s. The contact sheet `live-approval-wait-detail.png` shows this
+sequence. The timer continued updating, so this is not a claim of stopped server activity.
+The cause is still under investigation; visual acceptance remains open.
+
+The full local gate after the markup and URL edits passed: two formatter runs (the second fixed
+zero files), `scripts/lint.sh`, `swift build`, and bounded unfiltered `swift test`. The test logs
+report 3,522 tests across 461 suites and 17 products, with the same 11 existing opt-in skips.
+Evidence is in the local `live-url-lint*`, `live-url-build.log`, and `live-url-tests.log` files.
+
+- E2E-08b (run 299): the owner pressed Deny after 8 seconds. Durable state REJECTED,
+  no fixture file, buttons removed, and permanent notice `Understood — I won't run that action.`
+  with no progress. This is the actual denial coverage in `2026-10-02-live-denial-stop.mkv`.
+- E2E-09 (run 300): `/stop` submitted at 06:23:46.275 UTC during generation stayed visibly
+  pending in the client. The run completed after 61,296 ms (13,907 characters); the command
+  subsequently produced `Nothing to stop.`. This does not pass active cancellation acceptance.
+  Recording: `2026-10-02-live-stop-09.mkv`.
+- E2E-10 (run 301): another intended stop test, but the owner confirmed pressing Deny first.
+  State REJECTED after 22 seconds, fixture absent; the later `/stop` correctly found no work.
+  Recording: `2026-10-02-live-stop-approval-10.mkv`. Do not count this as active cancellation.
+
+
+### Isolated rendering diagnosis
+
+With the candidate daemon stopped, a gated scratch test used the normal sealed-secret loader,
+verified the configured bot identity, and sent only to the single approved personal owner chat.
+No additional poller or provider request ran. The fixture drove the real TurnProgressState and
+TelegramProgressRenderer, then the real TelegramClient. This diagnoses rendering; it is not a
+substitute for the daemon/gateway/outbox acceptance scenarios.
+
+1. Dynamic versus fixed elapsed label: 17 draft sends each, an early second send, then the same
+   approximately 1.25-second spacing. Both variants revealed ordinary tool rows very slowly.
+   The fixed timer did not resolve the symptom. Recording:
+   `2026-10-02-live-timer-diagnostic-swift.mkv`, sheet `live-timer-comparison.png`.
+2. Two candidate presentations, 10 sends each: per-row thinking blocks displayed both complete
+   page paths immediately in the sampled frames. They use Telegram's gray progress style.
+   Changing draft IDs with the original renderer did not yield usable complete rows during
+   this short run. Recording: `2026-10-02-live-rendering-variants.mkv`, screenshot
+   `live-thinking-rows.png`. These isolated experiments preceded the product change described below.
+
+The scratch test passed both live runs (54.223 s and 34.484 s), was archived outside tracked
+sources, and removed from the test target. The earlier Python attempt lacked the sealed bot
+credential and sent no message; `2026-10-02-live-timer-diagnostic.mkv` is unused setup.
+Disposable files created in E2E-07/08 were content-checked and moved to the approved artifact
+folder's `fixtures/` directory. All captures are closed and the personal candidate is stopped.
+The group deployment was left untouched.
+
+The owner requested a visible comparison after reporting that the asynchronous preference prompt
+was not visible. A side-by-side still (`progress-visual-comparison.png`) and 12-second video
+(`progress-animation-comparison.mp4`) show the observed difference. Both variants were repeated
+in Telegram with explicit Russian labels in `2026-10-02-live-visual-repeat.mkv`; the source is
+archived locally and the temporary test removed. The owner selected variant 2, the gray-row
+style. The renderer now emits each tool row and earlier-step count as a separate complete
+thinking block, with HTML escaping. The same draft ID, elapsed timer, cadence and collapse
+behavior are retained. Permanent answers still exclude progress.
+
+The renderer regression tests first failed on the ordinary-row implementation (five tests, nine
+expected issues), then all five passed after the change. The fresh full gate also passed:
+`scripts/lint.sh --fix`, an unchanged second fix, `scripts/lint.sh`, `swift build`, and
+`gtimeout 900 swift test`. The 17 products reported 3,522 tests in 461 suites; 11 existing opt-in
+tests were skipped. No compiler warnings were emitted; lint retains the existing advisories.
+Local evidence: `live-thinking-rows-red.log`, `live-thinking-rows-green.log`, and
+`live-thinking-{lint,build,tests}.log`. This automated gate does not close the remaining visual
+and lifecycle acceptance criteria.
+
+### Gray-row candidate through the real daemon
+
+- E2E-11 (run 303): two fetches, 23,674 ms, 1,728-character final answer, message 948.
+  `2026-10-02-live-thinking-product.mkv` shows both full paths as gray completed rows;
+  they collapse when answer text begins. Stored assistant content contains no thinking tag or
+  progress heading. First Working is visible by video 28.0 s; the submitted prompt first appears
+  at 27.0 s (0.5-second sampling, approximately one second to visible progress). The first complete
+  row is visible at 35 s, both at 40 s. Timer labels at 40/41/42 s are 11/13/14 s, with no movement
+  of the stable rows in those frames. This run resolves the minute-long ordinary-row reveal.
+- Collapse still moves the preceding user-name anchor down: Vision OCR on the original
+  906 × 800 bottom crops measures y=67.7 at video 43 s and y=198.9 at 44 s, a **131.2 px**
+  displacement. This is a measured layout effect, not an accepted no-jump result.
+  `thinking-collapse-detail.png` shows the before/after. The bottom 800 pixels are mostly empty
+  around 51–52 s during final replacement, then final text appears; that crop alone does not prove
+  the entire chat was blank. Final replacement acceptance remains open.
+- E2E-12 (run 304): `/stop` submitted during the real run again remained pending in Telegram.
+  The run finished after 56,738 ms with 9,169 characters; only afterwards did the bot respond
+  `Nothing to stop.`. `2026-10-02-live-thinking-stop.mkv` records this failed active-stop scenario.
+  The row-style fix does not resolve command delivery. Bot API 10.3 exposes a separate
+  [draft stop-button update](https://core.telegram.org/bots/api#sendrichmessagedraft); that API is
+  not wired by this feature, and its effect on this client symptom has not been established.
+- Matched short runs 305/307 (on/off) each produced the same 43-character answer (1,855/1,918 ms).
+  Matched long runs 306/308 each made two fetches and produced byte-identical 4,210-character
+  answers: 18 identical paragraphs (25,570/24,539 ms). Scoped read-only history comparison found
+  no progress text in either pair. Recordings: `2026-10-02-live-matched-on.mkv` and
+  `2026-10-02-live-matched-off.mkv`; comparison clip `matched-short-on-left-off-right.mp4`.
+  The sampled short frames show replacement followed by text reveal in both modes, without
+  duplicate answers. Long-answer contact sheets show auto-scrolling in both modes; a complete
+  quantitative final-transition comparison is still outstanding.
+- E2E-13 (run 309): a separate temporary process selected a deliberately nonexistent model on
+  the same ChatGPT route, with fallback disabled. The provider returned HTTP 400; the run degraded
+  as `providerUnavailable` after 574 ms, durable state FAILED, and the outbox delivered message 962.
+  `2026-10-02-live-provider-failure.mkv` records the permanent error replacing the temporary
+  presentation. No credential or saved configuration was changed.
+
+All captures are closed and temporary personal processes stopped. The saved normal configuration
+is unchanged, and the separate group deployment was untouched. The remaining acceptance includes
+active `/stop`, a tool execution lasting over 30 seconds (approval waits do not count), gateway
+admission of a second request while the first is active, and owner review/resolution of the measured
+collapse and final replacement behavior. The configured sandbox still has its pre-existing image
+pull failure; no guard was bypassed. Group/topic and mobile-client coverage remain unavailable.

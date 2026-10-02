@@ -219,10 +219,10 @@ private extension TurnProgressState {
     case "web_search", "skill_load":
       selected = preview
     case "web_fetch":
-      guard let host = parsedHost(preview) else {
+      guard let page = pagePreview(preview) else {
         return nil
       }
-      selected = host
+      selected = page
     case "file_read", "file_write":
       guard isWorkspaceRelativePath(preview) else {
         return nil
@@ -241,24 +241,21 @@ private extension TurnProgressState {
     return safe.isEmpty ? nil : safe
   }
 
-  func parsedHost(_ preview: String) -> String? {
+  func pagePreview(_ preview: String) -> String? {
     let isURL = preview.contains("://")
     let raw = isURL ? preview : "https://" + preview
 
-    guard let url = URLComponents(string: raw), let host = url.host, !host.isEmpty,
-          ["http", "https"].contains(url.scheme?.lowercased() ?? "")
-    else {
+    guard let url = URLComponents(string: raw) else {
       return nil
     }
 
     if !isURL
-       && (url.user != nil || url.password != nil || !url.path.isEmpty
-        || url.query != nil || url.fragment != nil)
+       && (url.user != nil || url.password != nil || url.query != nil || url.fragment != nil)
     {
       return nil
     }
 
-    return host
+    return ProgressText.webPagePreview(url, secretValues: secretValues)
   }
 
   func isWorkspaceRelativePath(_ path: String) -> Bool {

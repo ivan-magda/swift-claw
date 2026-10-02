@@ -6,6 +6,7 @@ import ClawTestSupport
 import ClawTools
 
 struct ProgressTestTool: Tool {
+  var name = "web_search"
   var risk: RiskLevel = .safe
   var started: AsyncGate?
   var release: AsyncGate?
@@ -13,7 +14,7 @@ struct ProgressTestTool: Tool {
 
   var definition: ToolDefinition {
     ToolDefinition(
-      name: "web_search",
+      name: name,
       description: "Search",
       parameters: .object([:]),
       metadataProvenance: .trusted,

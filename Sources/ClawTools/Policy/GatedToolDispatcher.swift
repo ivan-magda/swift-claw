@@ -204,8 +204,9 @@ private extension GatedToolDispatcher {
     case "skill_load":
       selected = arguments["name"]?.stringValue
     case "web_fetch":
-      let url = arguments["url"]?.stringValue.flatMap(URLComponents.init(string:))
-      selected = ["http", "https"].contains(url?.scheme?.lowercased() ?? "") ? url?.host : nil
+      selected = arguments["url"]?.stringValue.flatMap(URLComponents.init(string:)).flatMap {
+        ProgressText.webPagePreview($0, secretValues: secretValues)
+      }
     case "file_read", "file_write":
       selected = arguments["path"]?.stringValue.flatMap { path in
         guard !path.hasPrefix("/"), !path.hasPrefix("~"), !path.contains("\\"),
