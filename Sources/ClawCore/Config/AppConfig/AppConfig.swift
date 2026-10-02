@@ -209,8 +209,9 @@ public struct AppConfig: Sendable, Equatable {
   public init(
     allowlist: Set<Int64>,
     groupChats: Set<Int64>,
-    stateRoot: URL,
     pollTimeoutSeconds: Int,
+    telegramProgressEnabled: Bool,
+    stateRoot: URL,
     llm: LLMConfig,
     budget: RunBudget,
     timezone: TimeZone,
@@ -228,8 +229,7 @@ public struct AppConfig: Sendable, Equatable {
     exec: ExecConfig,
     voice: VoiceConfig,
     image: ImageConfig,
-    mcpConfigSource: MCPConfigSource,
-    telegramProgressEnabled: Bool = true
+    mcpConfigSource: MCPConfigSource
   ) {
     self.allowlist = allowlist
     self.groupChats = groupChats
@@ -314,8 +314,13 @@ public struct AppConfig: Sendable, Equatable {
     return AppConfig(
       allowlist: allowlist,
       groupChats: groupChats,
-      stateRoot: stateRoot,
       pollTimeoutSeconds: pollTimeoutSeconds,
+      telegramProgressEnabled: try boolValue(
+        env[EnvKey.telegramProgress],
+        key: EnvKey.telegramProgress,
+        default: true
+      ),
+      stateRoot: stateRoot,
       llm: llm,
       budget: budget,
       timezone: timezone,
@@ -333,12 +338,7 @@ public struct AppConfig: Sendable, Equatable {
       exec: exec,
       voice: voice,
       image: image,
-      mcpConfigSource: mcpConfigSource,
-      telegramProgressEnabled: try boolValue(
-        env[EnvKey.telegramProgress],
-        key: EnvKey.telegramProgress,
-        default: true
-      )
+      mcpConfigSource: mcpConfigSource
     )
   }
 }
