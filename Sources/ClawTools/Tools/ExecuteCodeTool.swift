@@ -16,7 +16,7 @@ public struct ExecuteCodeSettings: Sendable, Equatable {
 }
 
 public struct ExecuteCodeTool: Tool {
-  public static let name = "execute_code"
+  public static let name = BuiltinToolNames.executeCode
   public static let maxCodeBytes = ExecStagingLimits.standard.maxCodeBytes
   public static let maxStagedFileBytes = ExecStagingLimits.standard.maxStagedFileBytes
   public static let maxStagedTotalBytes = ExecStagingLimits.standard.maxStagedTotalBytes

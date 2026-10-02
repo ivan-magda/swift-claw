@@ -32,7 +32,10 @@ public struct GatedToolDispatcher: ToolDispatching {
     registry.toolsByName
   }
 
-  public func dispatch(call: ToolCall, context: ToolDispatchContext) async -> ToolDispatchOutcome {
+  public func dispatch(
+    call: ToolCall,
+    context: ToolDispatchContext
+  ) async -> ToolDispatchOutcome {
     await dispatch(call: call, context: context, progress: nil)
   }
 
@@ -185,11 +188,11 @@ private extension GatedToolDispatcher {
   func progressState(_ status: ToolObservationStatus) -> ToolProgressState {
     switch status {
     case .ok:
-      return .succeeded
+      .succeeded
     case .error:
-      return .failed
+      .failed
     case .blockedArgs, .blockedSSRF, .blockedPendingApproval:
-      return .denied
+      .denied
     }
   }
 
@@ -197,17 +200,18 @@ private extension GatedToolDispatcher {
     guard let arguments = JSONValue.parse(call.argumentsJSON)?.objectValue else {
       return nil
     }
+
     let selected: String?
     switch name {
-    case "web_search":
+    case BuiltinToolNames.webSearch:
       selected = arguments["query"]?.stringValue
-    case "skill_load":
+    case BuiltinToolNames.skillLoad:
       selected = arguments["name"]?.stringValue
-    case "web_fetch":
+    case BuiltinToolNames.webFetch:
       selected = arguments["url"]?.stringValue.flatMap(URLComponents.init(string:)).flatMap {
         ProgressText.webPagePreview($0, secretValues: secretValues)
       }
-    case "file_read", "file_write":
+    case BuiltinToolNames.fileRead, BuiltinToolNames.fileWrite:
       selected = arguments["path"]?.stringValue.flatMap { path in
         guard !path.hasPrefix("/"), !path.hasPrefix("~"), !path.contains("\\"),
               !path.contains(":"),
@@ -225,6 +229,7 @@ private extension GatedToolDispatcher {
     default:
       selected = nil
     }
+
     return selected.map {
       ProgressText.preview(
         $0,

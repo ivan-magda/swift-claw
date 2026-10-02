@@ -22,7 +22,7 @@ public struct FileReadTool: Tool {
 
   public var definition: ToolDefinition {
     ToolDefinition(
-      name: "file_read",
+      name: BuiltinToolNames.fileRead,
       description:
         "Read a UTF-8 text file from the workspace. The path is relative to the workspace root.",
       parameters: .object([

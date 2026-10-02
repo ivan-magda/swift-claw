@@ -48,7 +48,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
   /// `memory_write`'s side effect is a DB insert that must FUSE with the observation update for
   /// exactly-once, so it never runs the tool's `execute`; every other write tool claims the
   /// run first, executes its recorded args, then records the result.
-  private static let memoryWriteToolName = "memory_write"
+  private static let memoryWriteToolName = BuiltinToolNames.memoryWrite
 
   /// Synthetic observation for an approval whose run `/stop`//`new` drove terminal before the
   /// claim — written by the claim transaction so history explains the un-run call.

@@ -51,7 +51,7 @@ public struct WebFetchTool: Tool {
 
   public var definition: ToolDefinition {
     ToolDefinition(
-      name: "web_fetch",
+      name: BuiltinToolNames.webFetch,
       description: "Fetch a public http(s) URL and return its readable text.",
       parameters: .object(
         [

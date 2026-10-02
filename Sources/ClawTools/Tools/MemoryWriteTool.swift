@@ -19,7 +19,7 @@ public struct MemoryWriteTool: Tool {
     let importanceLevels = Importance.allCases.map(\.wireLabel)
     let sensitivityLevels = Sensitivity.allCases.map(\.rawValue)
     return ToolDefinition(
-      name: "memory_write",
+      name: BuiltinToolNames.memoryWrite,
       description: """
         Save one durable memory item (owner approval required). kind is one of \
         \(kinds.joined(separator: "|")); importance \(importanceLevels.joined(separator: "|")) \

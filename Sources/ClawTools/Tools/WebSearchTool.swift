@@ -17,7 +17,7 @@ public struct WebSearchTool: Tool {
 
   public var definition: ToolDefinition {
     ToolDefinition(
-      name: "web_search",
+      name: BuiltinToolNames.webSearch,
       description: "Search the public web. Returns titles, URLs, and snippets.",
       parameters: .object([
         "type": .string("object"),

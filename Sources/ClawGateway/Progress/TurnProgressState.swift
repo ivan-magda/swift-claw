@@ -176,19 +176,19 @@ private extension TurnProgressState {
   func toolLabel(_ name: String) -> String {
     let label: String
     switch name {
-    case "web_search":
+    case BuiltinToolNames.webSearch:
       label = "Search the web"
-    case "web_fetch":
+    case BuiltinToolNames.webFetch:
       label = "Read a page"
-    case "skill_load":
+    case BuiltinToolNames.skillLoad:
       label = "Load a skill"
-    case "file_read":
+    case BuiltinToolNames.fileRead:
       label = "Read a file"
-    case "file_write":
+    case BuiltinToolNames.fileWrite:
       label = "Write a file"
-    case "memory_write":
+    case BuiltinToolNames.memoryWrite:
       label = "Write memory"
-    case "execute_code":
+    case BuiltinToolNames.executeCode:
       label = "Run code in sandbox"
     case CoderToolNames.submit:
       label = "Submit coding job"
@@ -215,15 +215,15 @@ private extension TurnProgressState {
 
     let selectedPreview: String
     switch name {
-    case "web_search", "skill_load":
+    case BuiltinToolNames.webSearch, BuiltinToolNames.skillLoad:
       selectedPreview = preview
-    case "web_fetch":
+    case BuiltinToolNames.webFetch:
       guard let page = pagePreview(preview) else {
         return nil
       }
 
       selectedPreview = page
-    case "file_read", "file_write":
+    case BuiltinToolNames.fileRead, BuiltinToolNames.fileWrite:
       guard isWorkspaceRelativePath(preview) else {
         return nil
       }
