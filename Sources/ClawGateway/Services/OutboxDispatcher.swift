@@ -47,6 +47,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
   private let outbox: any OutboxStore
   private let delivery: any MessageDelivery
   private let signal: OutboxSignal
+  private let presentations: TurnPresentationRegistry?
   private let logger: Logger
   private let holds: FloodControlHolds<ClockType>
 
@@ -54,12 +55,14 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
     outbox: any OutboxStore,
     delivery: any MessageDelivery,
     signal: OutboxSignal,
+    presentations: TurnPresentationRegistry? = nil,
     logger: Logger,
     clock: ClockType
   ) {
     self.outbox = outbox
     self.delivery = delivery
     self.signal = signal
+    self.presentations = presentations
     self.logger = logger
     holds = FloodControlHolds(clock: clock, signal: signal)
   }
@@ -101,10 +104,14 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
         continue
       }
 
+      let lease = await presentations?.beginDelivery(to: row.target)
       let messageID: Int64
       do {
         messageID = try await send(row)
       } catch {
+        if let lease {
+          await presentations?.endDelivery(lease)
+        }
         if Task.isCancelled {
           break
         }
@@ -135,6 +142,9 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
           but recording it failed; expect a duplicate: \(error)
           """
         )
+      }
+      if let lease {
+        await presentations?.endDelivery(lease)
       }
     }
   }
@@ -256,12 +266,14 @@ extension OutboxDispatcher where ClockType == ContinuousClock {
     outbox: any OutboxStore,
     delivery: any MessageDelivery,
     signal: OutboxSignal,
+    presentations: TurnPresentationRegistry? = nil,
     logger: Logger
   ) {
     self.init(
       outbox: outbox,
       delivery: delivery,
       signal: signal,
+      presentations: presentations,
       logger: logger,
       clock: ContinuousClock()
     )

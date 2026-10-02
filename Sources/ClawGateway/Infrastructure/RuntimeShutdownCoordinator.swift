@@ -55,11 +55,14 @@ public struct RuntimeShutdownCoordinator: Sendable {
     daemonError: (any Error)?,
     laneDrain: SessionLaneDrainResult,
     coder: CoderService? = nil,
+    presentations: TurnPresentationRegistry? = nil,
     dependent: DependentCleanup
   ) async -> Outcome {
     if case .timedOut(let activeRunIDs) = laneDrain {
       return .fatalLaneTimeout(activeRunIDs: activeRunIDs)
     }
+
+    await presentations?.shutdown()
 
     if let coder {
       do {

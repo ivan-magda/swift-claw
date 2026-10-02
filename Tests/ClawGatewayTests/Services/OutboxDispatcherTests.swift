@@ -11,7 +11,7 @@ import Testing
 
 /// Delegates to a real outbox store but fails every `markSent` — exercises the
 /// send-succeeded-but-record-failed path, where the row must stay PENDING for re-send.
-private struct MarkSentFailingOutbox: OutboxStore {
+struct MarkSentFailingOutbox: OutboxStore {
   let base: OutboxStoreGRDB
 
   func markSent(deliveryKey: String, telegramMessageID: Int64, now: Date) throws(StoreError) {

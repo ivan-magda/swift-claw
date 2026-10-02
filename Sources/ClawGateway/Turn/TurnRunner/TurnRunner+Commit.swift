@@ -43,6 +43,12 @@ extension TurnRunner {
       committedAt: now()
     )
 
+    if case .suspended = outcome.result {
+      // The same presentation spans approval parking and the resumed segment.
+    } else {
+      await presentations?.close(runID: runID)
+    }
+
     switch outcome.result {
     case .completed(let content, let usage, let providerState):
       try await commitCompleted(
@@ -364,7 +370,11 @@ private extension TurnRunner {
     }
 
     if let target = ownerNoticeTarget(for: context) {
+      let lease = await presentations?.beginDelivery(to: .chat(target))
       _ = try? await delivery.sendMessage(chatID: target, text: Degradation.dailyCapTripped)
+      if let lease {
+        await presentations?.endDelivery(lease)
+      }
     }
     try? audit.appendAudit(
       AuditEvent(
@@ -392,7 +402,11 @@ private extension TurnRunner {
     }
 
     if let target = ownerNoticeTarget(for: context) {
+      let lease = await presentations?.beginDelivery(to: .chat(target))
       _ = try? await delivery.sendMessage(chatID: target, text: Degradation.proactiveCapTripped)
+      if let lease {
+        await presentations?.endDelivery(lease)
+      }
     }
     try? audit.appendAudit(
       AuditEvent(

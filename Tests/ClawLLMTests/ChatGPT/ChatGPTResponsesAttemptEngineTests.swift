@@ -31,6 +31,66 @@ struct ChatGPTResponsesAttemptEngineTests {
     #expect(response.providerState?.issuer == harness.normalIdentity.issuer)
   }
 
+  @Test(.timeLimit(.minutes(1)))
+  func terminalProgressCancellationPreservesRecognizedCompletion() async throws {
+    // given — commentary has no done item, so the successful terminal flushes its completion
+    let hold = ScriptedStreamHold()
+    defer { hold.release.open() }
+    let frames = [
+      Fixtures.event(
+        #"""
+        {"type":"response.output_item.added","output_index":0,\#
+        "item":{"type":"message","phase":"commentary"}}
+        """#
+      ),
+      Fixtures.event(
+        #"{"type":"response.output_text.delta","output_index":0,"delta":"Checking dates"}"#
+      ),
+      Fixtures.event(
+        #"""
+        {"type":"response.output_item.added","output_index":1,\#
+        "item":{"type":"message","phase":"final_answer"}}
+        """#
+      ),
+      Fixtures.event(
+        #"{"type":"response.output_text.delta","output_index":1,"delta":"Today"}"#
+      ),
+      Fixtures.event(
+        #"""
+        {"type":"response.output_item.done","output_index":1,\#
+        "item":{"type":"message","phase":"final_answer",\#
+        "content":[{"type":"output_text","text":"Today"}]}}
+        """#
+      ),
+      Fixtures.completedTerminal(),
+    ]
+    let harness = Harness(
+      steps: [.streamThenBlock(okHead, frames, hold)],
+      progressExplanationsEnabled: true
+    )
+    let completedProgress = AsyncGate()
+
+    // when — the optional terminal-time callback refuses delivery after the terminal was decoded
+    let task = Task {
+      await harness.run { event in
+        if case .progress(let progress) = event, case .complete = progress.text {
+          completedProgress.open()
+          throw CancellationError()
+        }
+      }
+    }
+    await hold.started.wait()
+    hold.release.open()
+    await completedProgress.wait()
+    let outcome = await task.value
+
+    // then — response and usage remain authoritative after the transport producer has settled
+    let response = try requireCompleted(outcome)
+    #expect(response.content == "Today")
+    #expect(response.usage == ChatUsage(promptTokens: 5, completionTokens: 2, totalTokens: 7))
+    #expect(await harness.attemptCount == 1)
+  }
+
   // MARK: - 401 sequence
 
   @Test(.timeLimit(.minutes(1)))
@@ -776,6 +836,7 @@ private struct Harness: Sendable {
     requestTimeoutSeconds: Int = 30,
     treatsQuotaAsTerminal: Bool = false,
     terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal,
+    progressExplanationsEnabled: Bool = false,
     cancelDuringSleep: Bool = false,
     failOnFirstDelta: (any Error)? = nil,
     credentialSource: (any LLMCredentialSource)? = nil
@@ -821,7 +882,8 @@ private struct Harness: Sendable {
       profileID: profileID,
       wireModel: wireModel,
       outputScope: nil,
-      terminalValidationPolicy: terminalValidationPolicy
+      terminalValidationPolicy: terminalValidationPolicy,
+      progressExplanationsEnabled: progressExplanationsEnabled
     ) { authorization, includePriorState, beginHandoff in
       stateLog.record(includePriorState)
       return HTTPRequest(
@@ -861,9 +923,17 @@ private struct Harness: Sendable {
   private let stateLog: StateLog
 
   func run() async -> LLMStreamTermination {
-    await engine.run(plan: plan) { text in
-      try await sink.emit(text)
+    await run { event in
+      if case .delta(let text) = event {
+        try await sink.emit(text)
+      }
     }
+  }
+
+  func run(
+    emitEvent: @escaping @Sendable (StreamEvent) async throws -> Void
+  ) async -> LLMStreamTermination {
+    await engine.run(plan: plan, emitEvent: emitEvent)
   }
 
   var attemptCount: Int {

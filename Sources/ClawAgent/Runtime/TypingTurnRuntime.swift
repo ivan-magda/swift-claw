@@ -23,39 +23,61 @@ struct TypingTurnRuntime: Sendable {
   /// coordinator hands back a typed outcome — no loser discarded, both children drained — which maps
   /// to the return/throw contract the runtime's accounting reads: a response returns, a typed failure
   /// rethrows, and a won deadline throws the cancellation marker its disposition names.
-  func run(target: TurnProgressTarget, request: ChatRequest) async throws -> ChatResponse {
+  func run(
+    target: TurnProgressTarget,
+    request: ChatRequest,
+    progress: TurnProgressReporter? = nil
+  ) async throws -> ChatResponse {
+    if progress != nil {
+      return try await complete(request: request)
+    }
+    return try await runLegacyTyping(target: target, request: request)
+  }
+}
+
+// MARK: - Provider Completion
+
+private extension TypingTurnRuntime {
+  func runLegacyTyping(
+    target: TurnProgressTarget,
+    request: ChatRequest
+  ) async throws -> ChatResponse {
     try await withTypingPulse(
       chatID: target.chatID,
       messageThreadID: target.threadID,
       indicator: typingIndicator,
       clock: clock
     ) {
-      let outcome = await ProviderDeadlineCoordinator.raceBuffered(
-        deadlineSeconds: wallClockDeadlineSeconds,
-        clock: clock
-      ) {
-        do {
-          return .response(try await provider.complete(request: request))
-        } catch {
-          return .failed(error)
-        }
-      }
+      try await complete(request: request)
+    }
+  }
 
-      switch outcome {
-      case .response(let response):
-        return response
-      case .failed(let error):
-        throw error
-      case .timedOut(.notStarted):
-        throw ProviderNoStartDeadline()
-      case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
-        throw ProviderInferenceCancellation(observing: observedCompletionTokens)
-      case .timedOut(.completed(let response)):
-        // A response landed under the won deadline: still an owner-visible timeout, but the whole
-        // response rides along so the runtime books its authoritative usage — real counts, provider
-        // cost — instead of an estimate keyed only on the observed lower bound.
-        throw RacedDeadlineSuccess(response: response)
+  func complete(request: ChatRequest) async throws -> ChatResponse {
+    let outcome = await ProviderDeadlineCoordinator.raceBuffered(
+      deadlineSeconds: wallClockDeadlineSeconds,
+      clock: clock
+    ) {
+      do {
+        return .response(try await provider.complete(request: request))
+      } catch {
+        return .failed(error)
       }
+    }
+
+    switch outcome {
+    case .response(let response):
+      return response
+    case .failed(let error):
+      throw error
+    case .timedOut(.notStarted):
+      throw ProviderNoStartDeadline()
+    case .timedOut(.mayHaveStarted(let observedCompletionTokens)):
+      throw ProviderInferenceCancellation(observing: observedCompletionTokens)
+    case .timedOut(.completed(let response)):
+      // A response landed under the won deadline: still an owner-visible timeout, but the whole
+      // response rides along so the runtime books its authoritative usage — real counts, provider
+      // cost — instead of an estimate keyed only on the observed lower bound.
+      throw RacedDeadlineSuccess(response: response)
     }
   }
 }

@@ -556,6 +556,7 @@ func makeEnv(
   runs: (any RunStore)? = nil,
   runsFactory: ((_ queue: DatabaseQueue, _ sessionKey: String) -> any RunStore)? = nil,
   contextBuilder: ContextBuilder? = nil,
+  contextBudget: ContextBudget = .default,
   sessionMessagesForRunner: (any SessionMessageStore)? = nil,
   budget: RunBudget = .default,
   breaker: BudgetBreaker? = nil,
@@ -564,6 +565,8 @@ func makeEnv(
   sessionKey: String? = nil,
   typing: any TypingIndicator = NoopTyping(),
   ownerChatID: Int64? = nil,
+  presentations: TurnPresentationRegistry? = nil,
+  presentationsFactory: ((any OutboxStore) throws -> TurnPresentationRegistry)? = nil,
   now: @escaping @Sendable () -> Date = {
     Date()
   },
@@ -600,7 +603,7 @@ func makeEnv(
   if let contextBuilder {
     builder = contextBuilder
   } else {
-    builder = try makeContextBuilder()
+    builder = try makeContextBuilder(budget: contextBudget)
   }
 
   let provider = StubLLMProvider(agentOutcome)
@@ -637,6 +640,7 @@ func makeEnv(
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     approvalExpirySeconds: testApprovalExpirySeconds,
+    presentations: try presentationsFactory?(outbox) ?? presentations,
     logger: TestLog.silent
   )
 

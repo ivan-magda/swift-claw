@@ -18,6 +18,7 @@ struct CommandHandlers: Sendable {
   let now: @Sendable () -> Date
 
   let coordinator: ApprovalCoordinator
+  var presentations: TurnPresentationRegistry?
 
   func stop(
     rawUpdate: RawUpdate,
@@ -54,6 +55,10 @@ struct CommandHandlers: Sendable {
 
     for runID in result.cancelledRunIDs {
       await lanes.cancel(runID: runID)
+    }
+
+    for runID in result.cancelledRunIDs {
+      await presentations?.close(runID: runID)
     }
 
     let reply =
@@ -97,6 +102,7 @@ struct CommandHandlers: Sendable {
 
     if let sessionID = result.sessionID {
       await lanes.cancelAll(sessionID: sessionID)
+      await presentations?.close(sessionID: sessionID)
       await pendingConfirmations.clear(sessionID: sessionID)
     }
 

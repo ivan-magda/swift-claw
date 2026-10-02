@@ -19,6 +19,9 @@ enum LLMEventStreamTests {
       // given a producer that streams two deltas and reports a whole reply
       let stream = LLMEventStream.make { sink in
         try? await sink.sendDelta("he")
+        for progress in explanationEvents {
+          try? await sink.sendProgress(progress)
+        }
         try? await sink.sendDelta("llo")
         return .completed(wholeReply)
       }
@@ -28,7 +31,10 @@ enum LLMEventStreamTests {
       let terminal = await stream.awaitTermination()
 
       // then the terminal event trails the deltas, and the join carries the authoritative reply
-      #expect(events == [.delta("he"), .delta("llo"), wholeReplyEvent])
+      #expect(
+        events == [.delta("he")] + explanationEvents.map(StreamEvent.progress)
+          + [.delta("llo"), wholeReplyEvent]
+      )
       #expect(terminal == .completed(wholeReply))
     }
 
@@ -332,6 +338,116 @@ enum LLMEventStreamTests {
 
   @Suite
   struct BufferBounds {
+    @Test(arguments: [false, true])
+    func progressSharesTheBoundedChannelAndTerminalReservation(cancel: Bool) async throws {
+      // given progress filling the two nonterminal slots and a producer offering one extra event
+      let limits = LLMEventBufferLimits(
+        maximumDeltaCount: 2,
+        maximumDeltaBytes: 256,
+        reservedTerminalBytes: tinyLimits.reservedTerminalBytes
+      )
+      let extraSendFinished = CompletionFlag()
+      let producerCleanupFinished = CompletionFlag()
+      let expectedResponse = ChatResponse(
+        content: String(repeating: "z", count: limits.reservedTerminalBytes),
+        finishReason: "stop",
+        usage: nil,
+        costFromProvider: nil
+      )
+      let expectedTermination: LLMStreamTermination =
+        cancel ? .cancelled(.notStarted) : .completed(expectedResponse)
+      let progress = LLMProgressEvent(itemID: "item", kind: .summary, text: .append("working"))
+      let stream = LLMEventStream.make(limits: limits) { sink in
+        try? await sink.sendProgress(progress)
+        try? await sink.sendProgress(progress)
+        if cancel {
+          try? await sink.sendProgress(progress)
+        } else {
+          try? await sink.sendDelta("extra")
+        }
+        await extraSendFinished.markDone()
+        await producerCleanupFinished.markDone()
+        return expectedTermination
+      }
+      await waitUntil("the extra nonterminal send parks on the full channel") {
+        stream.suspendedDeltaSenderCount == 1
+      }
+
+      // when the holder observes the parked send, then either cancels or drains and joins
+      #expect(await extraSendFinished.done == false)
+      var events: [StreamEvent] = []
+      let termination: LLMStreamTermination
+      if cancel {
+        termination = await stream.cancelAndAwait()
+      } else {
+        var iterator = stream.makeAsyncIterator()
+        let first = try #require(await iterator.next())
+        events.append(first)
+        // The extra send refills the freed slot. Join before draining the remaining full queue.
+        termination = await stream.awaitTermination()
+        while let event = try await iterator.next() {
+          events.append(event)
+        }
+      }
+
+      // then the joined producer cleaned up and progress never consumed the terminal reservation
+      #expect(await producerCleanupFinished.done)
+      #expect(termination == expectedTermination)
+      if !cancel {
+        #expect(
+          Array(events.dropLast()) == [.progress(progress), .progress(progress), .delta("extra")]
+        )
+        #expect(events.last == .finished(expectedResponse))
+      }
+    }
+
+    @Test(arguments: [
+      LLMProgressEvent(itemID: String(repeating: "i", count: 65), kind: .summary, text: .complete),
+      LLMProgressEvent(
+        itemID: "i",
+        kind: .commentary,
+        text: .append(String(repeating: "é", count: 33))
+      ),
+      LLMProgressEvent(
+        itemID: "i",
+        kind: .summary,
+        text: .replace(String(repeating: "é", count: 33))
+      ),
+      LLMProgressEvent(
+        itemID: String(repeating: "i", count: 20),
+        kind: .summary,
+        text: .append(String(repeating: "t", count: 20))
+      ),
+    ])
+    func rejectsProgressWhosePayloadExceedsTheBudget(progress: LLMProgressEvent) async {
+      // given a progress item whose carried strings or typed metadata exceed the nonterminal byte budget
+      let sendFailure = Mutex<BoundedAsyncChannelError?>(nil)
+      let stream = LLMEventStream.make(limits: tinyLimits) { sink in
+        do {
+          try await sink.sendProgress(progress)
+        } catch {
+          sendFailure.withLock { current in
+            current = error as? BoundedAsyncChannelError
+          }
+        }
+        return .cancelled(.notStarted)
+      }
+
+      // when the holder joins without draining
+      _ = await stream.awaitTermination()
+
+      // then the impossible event is rejected rather than admitted or left parked forever
+      let failure = sendFailure.withLock { current in
+        current
+      }
+      guard case .elementExceedsCapacity(let weight, let capacity) = failure else {
+        Issue.record("expected oversized progress rejection, got \(String(describing: failure))")
+        return
+      }
+      #expect(weight > tinyLimits.maximumDeltaBytes)
+      #expect(capacity == tinyLimits.maximumDeltaBytes)
+    }
+
     @Test
     func boundsTheDeltaQueueByCountWhenDeltasAreTiny() async throws {
       // given a queue budgeted for three deltas across three hundred bytes
@@ -544,3 +660,9 @@ private func readOneEventAndWalkAway(from stream: LLMEventStream) async throws {
   var iterator = stream.makeAsyncIterator()
   _ = try await iterator.next()
 }
+
+private let explanationEvents: [LLMProgressEvent] = [
+  LLMProgressEvent(itemID: "comment", kind: .commentary, text: .append("checking")),
+  LLMProgressEvent(itemID: "summary", kind: .summary, text: .replace("verified")),
+  LLMProgressEvent(itemID: "summary", kind: .summary, text: .complete),
+]

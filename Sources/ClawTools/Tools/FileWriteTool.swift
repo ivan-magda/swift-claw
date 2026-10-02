@@ -29,7 +29,7 @@ public struct FileWriteTool: Tool {
 
   public var definition: ToolDefinition {
     ToolDefinition(
-      name: "file_write",
+      name: BuiltinToolNames.fileWrite,
       description: """
         Write a UTF-8 text file inside the workspace (owner approval required). The path is \
         relative to the workspace root; set overwrite to true to replace an existing file.

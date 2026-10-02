@@ -23,6 +23,7 @@ struct ChatGPTResponsesAttemptPlan: Sendable {
   let wireModel: String
   let outputScope: AttemptOutputScope?
   let terminalValidationPolicy: StreamingTerminalValidationPolicy
+  var progressExplanationsEnabled = false
 
   /// Encodes one wire request. `includePriorState` is false only on the single state-free recovery
   /// attempt, where the poisoned replay state must be dropped. The engine supplies the handoff that
@@ -84,11 +85,11 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
 
   /// Runs the whole call — authorize, dispatch, classify, and retry within the budget — reporting how
   /// it ended rather than throwing, so a stream session can cache the value and `complete` can map
-  /// its two cancellation states to raw or typed errors. `emitDelta` receives each owner-visible text
-  /// delta; `complete` passes a sink that discards them.
+  /// its two cancellation states to raw or typed errors. `emitEvent` receives nonterminal answer
+  /// and progress events; `complete` passes a sink that discards them.
   func run(
     plan: ChatGPTResponsesAttemptPlan,
-    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
+    emitEvent: @escaping @Sendable (_ event: StreamEvent) async throws -> Void
   ) async -> LLMStreamTermination {
     if Task.isCancelled {
       return .cancelled(.notStarted)
@@ -96,7 +97,7 @@ struct ChatGPTResponsesAttemptEngine: Sendable {
 
     var state = CallState(replayMode: .normal(plan.identity))
     while true {
-      switch await runAttempt(plan: plan, state: &state, emitDelta: emitDelta) {
+      switch await runAttempt(plan: plan, state: &state, emitEvent: emitEvent) {
       case .stop(let termination):
         return termination
       case .retryImmediately:
@@ -130,6 +131,7 @@ private extension ChatGPTResponsesAttemptEngine {
     var refreshRequested = false
     var recoveryUsed = false
     var replayMode: ReplayMode
+    var previousRedactionValues: [String] = []
   }
 
   /// Runs one wire attempt: check cancellation, authorize, encode, dispatch, and classify. The budget
@@ -138,7 +140,7 @@ private extension ChatGPTResponsesAttemptEngine {
   func runAttempt(
     plan: ChatGPTResponsesAttemptPlan,
     state: inout CallState,
-    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
+    emitEvent: @escaping @Sendable (_ event: StreamEvent) async throws -> Void
   ) async -> LoopControl {
     state.attempt += 1
     if Task.isCancelled {
@@ -169,10 +171,12 @@ private extension ChatGPTResponsesAttemptEngine {
     let context = ResponseContext(
       codec: plan.codec,
       identity: state.replayMode.identity,
-      redactionValues: authorization.redactionValues,
+      redactionValues: authorization.redactionValues + state.previousRedactionValues,
+      progressExplanationsEnabled: plan.progressExplanationsEnabled,
       outputScope: plan.outputScope,
       terminalValidationPolicy: plan.terminalValidationPolicy
     )
+    state.previousRedactionValues = authorization.redactionValues
     let request: HTTPRequest
     do {
       request = try plan.encodeRequest(authorization, state.replayMode.includesPriorState) {
@@ -184,7 +188,7 @@ private extension ChatGPTResponsesAttemptEngine {
     }
 
     let canRetry = state.attempt < retryBudget
-    switch await dispatch(request, exposure: exposure, context: context, emitDelta: emitDelta) {
+    switch await dispatch(request, exposure: exposure, context: context, emitEvent: emitEvent) {
     case .terminal(let termination):
       return .stop(termination)
     case .transportRetryable(let cause):
@@ -319,6 +323,7 @@ private extension ChatGPTResponsesAttemptEngine {
     let identity: ChatGPTReplayIdentity
     let redactionValues: [String]
     let redactor: SecretRedactor
+    let progressExplanationsEnabled: Bool
     let outputScope: AttemptOutputScope?
     let terminalValidationPolicy: StreamingTerminalValidationPolicy
 
@@ -326,12 +331,14 @@ private extension ChatGPTResponsesAttemptEngine {
       codec: ChatGPTProviderStateCodec,
       identity: ChatGPTReplayIdentity,
       redactionValues: [String],
+      progressExplanationsEnabled: Bool,
       outputScope: AttemptOutputScope?,
       terminalValidationPolicy: StreamingTerminalValidationPolicy
     ) {
       self.codec = codec
       self.identity = identity
       self.redactionValues = redactionValues
+      self.progressExplanationsEnabled = progressExplanationsEnabled
       self.redactor = SecretRedactor(secretValues: redactionValues)
       self.outputScope = outputScope
       self.terminalValidationPolicy = terminalValidationPolicy
@@ -394,7 +401,7 @@ private extension ChatGPTResponsesAttemptEngine {
     _ request: HTTPRequest,
     exposure: ProviderAttemptExposure,
     context: ResponseContext,
-    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
+    emitEvent: @escaping @Sendable (_ event: StreamEvent) async throws -> Void
   ) async -> Dispatch {
     let exchange: HTTPStreamExchange
     do {
@@ -416,7 +423,7 @@ private extension ChatGPTResponsesAttemptEngine {
     }
 
     return .terminal(
-      await consume(exchange, exposure: exposure, context: context, emitDelta: emitDelta)
+      await consume(exchange, exposure: exposure, context: context, emitEvent: emitEvent)
     )
   }
 
@@ -464,7 +471,7 @@ private extension ChatGPTResponsesAttemptEngine {
     _ exchange: HTTPStreamExchange,
     exposure: ProviderAttemptExposure,
     context: ResponseContext,
-    emitDelta: @escaping @Sendable (_ delta: String) async throws -> Void
+    emitEvent: @escaping @Sendable (_ event: StreamEvent) async throws -> Void
   ) async -> LLMStreamTermination {
     var parser = ChatGPTResponsesSSEParser()
     var accumulator = ChatGPTResponsesAccumulator(
@@ -472,7 +479,8 @@ private extension ChatGPTResponsesAttemptEngine {
       identity: context.identity,
       redactionValues: context.redactionValues,
       outputScope: context.outputScope,
-      terminalValidationPolicy: context.terminalValidationPolicy
+      terminalValidationPolicy: context.terminalValidationPolicy,
+      progressExplanationsEnabled: context.progressExplanationsEnabled
     )
     var terminal: ChatResponse?
 
@@ -482,12 +490,19 @@ private extension ChatGPTResponsesAttemptEngine {
         // evaluation output cap is crossed). Debit that observation before the error leaves this
         // chunk so cancellation cannot turn known provider work into a zero-token exposure.
         defer { exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens) }
-        for streamEvent in try accumulator.consume(try parser.push(chunk)) {
+        let events = try accumulator.consume(try parser.push(chunk))
+        if case .finished(let response)? = events.last {
+          // The first terminal is authoritative before optional display callbacks can suspend or
+          // throw. Join the producer first so terminal-time progress cannot delay HTTP cleanup.
+          terminal = response
+          _ = await exchange.cancelAndAwait()
+        }
+        for streamEvent in events {
           switch streamEvent {
-          case .delta(let text):
-            try await emitDelta(text)
-          case .finished(let response):
-            terminal = response
+          case .delta, .progress:
+            try await emitEvent(streamEvent)
+          case .finished:
+            break
           }
         }
         if terminal != nil {
@@ -496,7 +511,6 @@ private extension ChatGPTResponsesAttemptEngine {
       }
 
       if let terminal {
-        _ = await exchange.cancelAndAwait()
         return .completed(terminal)
       }
 
@@ -512,9 +526,15 @@ private extension ChatGPTResponsesAttemptEngine {
       return .failed(exposure.failure(.terminal(status: nil, message: "the ChatGPT reply ended")))
     } catch is CancellationError {
       _ = await exchange.cancelAndAwait()
+      if let terminal {
+        return .completed(terminal)
+      }
       return .cancelled(exposure.accounting)
     } catch {
       _ = await exchange.cancelAndAwait()
+      if let terminal {
+        return .completed(terminal)
+      }
       return .failed(exposure.failure(context.redactedCause(for: error)))
     }
   }

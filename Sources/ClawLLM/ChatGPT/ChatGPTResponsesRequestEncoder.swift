@@ -54,6 +54,7 @@ struct ChatGPTResponsesRequestEncoder: Sendable {
       store: false,
       stream: true,
       include: [Self.encryptedReasoningInclude],
+      summaryEnabled: request.progressExplanationsEnabled,
       promptCacheKey: cacheKey,
       tools: tools
     )
@@ -228,6 +229,7 @@ struct ChatGPTWireRequest: Encodable {
   let store: Bool
   let stream: Bool
   let include: [String]
+  let summaryEnabled: Bool
   let promptCacheKey: String
   let tools: [ChatGPTWireTool]
 
@@ -238,6 +240,7 @@ struct ChatGPTWireRequest: Encodable {
     case store
     case stream
     case include
+    case reasoning
     case promptCacheKey = "prompt_cache_key"
     case tools
     case toolChoice = "tool_choice"
@@ -254,6 +257,9 @@ struct ChatGPTWireRequest: Encodable {
     try container.encode(store, forKey: .store)
     try container.encode(stream, forKey: .stream)
     try container.encode(include, forKey: .include)
+    if summaryEnabled {
+      try container.encode(["summary": "auto"], forKey: .reasoning)
+    }
     try container.encode(promptCacheKey, forKey: .promptCacheKey)
 
     guard tools.isEmpty == false else {
@@ -301,7 +307,7 @@ enum ChatGPTWireInputItem: Encodable {
   case functionCall(callID: String, name: String, arguments: String)
   case functionCallOutput(callID: String, output: String)
   /// Replayed reasoning continuity: the opaque `encrypted_content` the backend minted and its
-  /// normalized summary, passed back so a `store: false` turn stays coherent with the one before it.
+  /// original summary, passed back so a `store: false` turn stays coherent with the one before it.
   case reasoning(encryptedContent: String, summary: [String])
   /// A replayed assistant message, carrying the status and every output-text part the backend
   /// stated rather than a single reconstructed string.
@@ -347,7 +353,12 @@ enum ChatGPTWireInputItem: Encodable {
     case .reasoning(let encryptedContent, let summary):
       try container.encode("reasoning", forKey: .type)
       try container.encode(encryptedContent, forKey: .encryptedContent)
-      try container.encode(summary, forKey: .summary)
+      try container.encode(
+        summary.map { text in
+          ["type": "summary_text", "text": text]
+        },
+        forKey: .summary
+      )
     case .assistantMessage(let role, let status, let outputText):
       try container.encode("message", forKey: .type)
       try container.encode(role, forKey: .role)

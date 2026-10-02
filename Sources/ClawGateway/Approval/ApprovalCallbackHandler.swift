@@ -76,10 +76,16 @@ public struct ApprovalCallbackHandler: Sendable {
     callbacks: any CallbackResponding,
     currentPolicyVersion: @escaping @Sendable () throws -> String,
     now: @escaping @Sendable () -> Date,
+    presentations: TurnPresentationRegistry? = nil,
     logger: Logger
   ) -> ApprovalCallbackHandler {
     ApprovalCallbackHandler(
-      replies: ReplySender(processed: processed, delivery: delivery, logger: logger),
+      replies: ReplySender(
+        processed: processed,
+        delivery: delivery,
+        logger: logger,
+        presentations: presentations
+      ),
       accessControl: accessControl,
       approvals: approvals,
       runs: runs,

@@ -21,6 +21,7 @@ extension TurnRunner {
     // fallback commits no usage, so it cannot debit the same round twice.
     guard let anchor = outcome.exchanges.last else {
       logger.error("suspended turn for run \(context.runID) carried no exchange; failing in-band")
+      await presentations?.close(runID: context.runID)
       try commitContextUnavailable(
         runID: context.runID,
         sessionID: context.sessionID,
@@ -67,12 +68,15 @@ extension TurnRunner {
         now: context.committedAt
       )
     } catch StoreError.diskFull {
+      await presentations?.close(runID: context.runID)
       throw StoreError.diskFull
     } catch {
+      await presentations?.close(runID: context.runID)
       logger.debug("suspend commit did not apply for run \(context.runID): \(error)")
       return
     }
 
+    await presentations?.waitingForApproval(runID: context.runID)
     notifyOutbox()
     // Holds THIS lane Task until the approval resolves; the waiter performs the resume/deny.
     await parker.park(
@@ -82,6 +86,7 @@ extension TurnRunner {
       chatID: context.chatID,
       revalidatePolicyOnApprove: false
     )
+    await presentations?.close(runID: context.runID)
   }
 }
 

@@ -2,45 +2,23 @@ import ClawCore
 import Foundation
 
 /// Latest-value slot between the SSE consumer and the draft/typing child. Overwrites coalesce —
-/// a slow sender only ever sees the newest accumulation — and the version lets it skip ticks
-/// with nothing new.
+/// a slow sender only ever sees the newest accumulation.
 private actor DraftSnapshot {
   private var content = ""
-  private var version = 0
 
   func publish(_ markdown: String) {
     content = markdown
-    version += 1
   }
 
-  func newer(than seenVersion: Int) -> (content: String, version: Int)? {
-    guard version > seenVersion else {
-      return nil
-    }
-    return (content, version)
+  func latest() -> String? {
+    content.isEmpty ? nil : content
   }
 }
 
-/// Races three children through the deadline coordinator: the SSE consumer (accumulates deltas and
-/// publishes drafts), a draft/typing loop ("typing…" re-issued while waiting for the first token),
-/// and the wall-clock deadline. The consumer and the deadline contend for the coordinator's lock; no
-/// loser is discarded, and every child is drained before an outcome is read. The winning response is
-/// finalized with one awaited, deadline-bounded full-content draft.
+/// Owns stream consumption and deadline arbitration, draining every provider child before returning.
+/// With a run reporter, live previews and explanations go to its presentation owner. The legacy path
+/// also owns provider-scoped draft/typing pacing and an awaited, bounded final-content draft.
 struct StreamingTurnRuntime: Sendable {
-  /// Probe cadence for the draft/typing child. Sends are rate-limited in ticks so the wire
-  /// cadence stays near the spec's ~1.2s min-interval while the first frame still goes out on
-  /// the next probe after content appears.
-  static let probeInterval: Duration = .milliseconds(250)
-  static let minTicksBetweenDrafts = 5
-  /// Telegram for macOS shows no draft text until a second update arrives, so the second frame
-  /// goes out on the next probe instead of waiting the full interval.
-  private static let ticksBeforeSecondDraft = 1
-  /// Telegram's typing action auto-expires after ~5s; re-issue just under that window,
-  /// mirroring `TypingTurnRuntime`.
-  private static let ticksBetweenTyping = 16
-  /// Hard bound on any one draft send: a hung sink is abandoned, never blocking the lane.
-  private static let draftSendDeadline: Duration = .seconds(3)
-
   private let provider: any LLMProvider
   private let typingIndicator: any TypingIndicator
   private let draftStreamer: any RichDraftStreaming
@@ -65,7 +43,11 @@ struct StreamingTurnRuntime: Sendable {
     self.clock = clock
   }
 
-  func run(target: TurnProgressTarget, request: ChatRequest) async throws -> ChatResponse {
+  func run(
+    target: TurnProgressTarget,
+    request: ChatRequest,
+    progress: TurnProgressReporter?
+  ) async throws -> ChatResponse {
     let snapshot = DraftSnapshot()
     // Built before the race children start, so the runtime holds the cancel-and-join handle before
     // any authorization or network work can race the deadline.
@@ -76,16 +58,27 @@ struct StreamingTurnRuntime: Sendable {
       deadlineSeconds: wallClockDeadlineSeconds,
       clock: clock,
       consume: { stream, box in
-        await consumeStream(stream, snapshot: snapshot, box: box)
+        await consumeStream(
+          stream,
+          snapshot: snapshot,
+          box: box,
+          progress: progress
+        )
       },
       auxiliary: { box in
-        await runDraftAndTypingLoop(target: target, snapshot: snapshot, box: box)
+        if progress == nil {
+          await runDraftAndTypingLoop(
+            target: target,
+            snapshot: snapshot,
+            box: box
+          )
+        }
       }
     )
 
     switch outcome {
     case .response(let response):
-      await sendFinalDraft(response.content, target: target)
+      await publishResponse(response, target: target, progress: progress)
       return response
     case .failed(let error):
       throw error
@@ -97,7 +90,7 @@ struct StreamingTurnRuntime: Sendable {
       throw ProviderInferenceCancellation(observing: observedCompletionTokens)
     case .timedOut(.completed(let response)):
       // A completed stream is surfaced as `.response` above; kept exhaustive for the enum.
-      await sendFinalDraft(response.content, target: target)
+      await publishResponse(response, target: target, progress: progress)
       return response
     }
   }
@@ -115,7 +108,8 @@ private extension StreamingTurnRuntime {
   func consumeStream(
     _ stream: LLMEventStream,
     snapshot: DraftSnapshot,
-    box: ProviderRaceBox
+    box: ProviderRaceBox,
+    progress: TurnProgressReporter?
   ) async -> StreamConsumerOutcome {
     var content = ""
     var contentBytes = 0
@@ -123,19 +117,27 @@ private extension StreamingTurnRuntime {
     do {
       for try await event in stream {
         try Task.checkCancellation()
+
         switch event {
         case .delta(let delta):
           try append(delta: delta, to: &content, contentBytes: &contentBytes)
           // An empty accumulation (providers commonly open with an empty role-only delta) must
           // never surface as a blank draft bubble.
           if !content.isEmpty {
-            await snapshot.publish(content)
+            if let progress {
+              await progress.publish(.answerPreview(content))
+            } else {
+              await snapshot.publish(content)
+            }
           }
+        case .progress(let event):
+          await progress?.publish(.explanation(event))
         case .finished:
           _ = box.claim(.provider)
           return .completed
         }
       }
+
       return .cut
     } catch is AccumulatedStreamContentTooLarge {
       return .overflowed
@@ -144,6 +146,18 @@ private extension StreamingTurnRuntime {
       // Either way the authoritative outcome is the stream's own termination, read by the coordinator
       // — a cut reply is never surfaced as a whole one.
       return .cut
+    }
+  }
+
+  func publishResponse(
+    _ response: ChatResponse,
+    target: TurnProgressTarget,
+    progress: TurnProgressReporter?
+  ) async {
+    if let progress {
+      await progress.publish(.answerPreview(response.content))
+    } else {
+      await sendFinalDraft(response.content, target: target)
     }
   }
 
@@ -166,46 +180,21 @@ private extension StreamingTurnRuntime {
     snapshot: DraftSnapshot,
     box: ProviderRaceBox
   ) async {
-    var lastSeenVersion = 0
-    var deliveredDrafts = 0
-    // Start both counters at their thresholds: typing fires on the first tick, and the first
-    // draft goes out on the first tick that sees content.
-    var ticksSinceDraft = Self.minTicksBetweenDrafts
-    var ticksSinceTyping = Self.ticksBetweenTyping
-
-    // Stops the moment the race is decided — a won provider or a won deadline — before cancellation
-    // has to propagate, so the loop never draws a frame over a turn that has already resolved.
-    while box.decided == nil, !Task.isCancelled {
-      let latest = await snapshot.newer(than: lastSeenVersion)
-      let ticksNeeded =
-        deliveredDrafts == 1 ? Self.ticksBeforeSecondDraft : Self.minTicksBetweenDrafts
-      let mayDraft = deliveredDrafts == 0 || ticksSinceDraft >= ticksNeeded
-
-      if let latest, mayDraft {
-        lastSeenVersion = latest.version
-        if await sendDraftBounded(latest.content, target: target) {
-          deliveredDrafts += 1
-          ticksSinceDraft = 0
-        }
+    let sender = TurnProgressSender(
+      target: DeliveryTarget(chatID: target.chatID, messageThreadID: target.threadID),
+      draftID: target.draftID,
+      mode: .legacyProviderRound,
+      drafts: draftStreamer,
+      typing: typingIndicator,
+      clock: clock
+    ) {
+      guard box.decided == nil else {
+        return TurnProgressFrame(markdown: nil, typingAllowed: false)
       }
-
-      // Until a draft has actually landed the bubble doesn't exist, so the typing action is the
-      // only progress signal; once one is out it takes over (~30s TTL). Keyed on delivery rather
-      // than on having attempted a send, because a group chat is a sink that accepts no draft at
-      // all — assuming the bubble appeared there would leave the topic with no signal whatever.
-      if deliveredDrafts == 0, ticksSinceTyping >= Self.ticksBetweenTyping {
-        await typingIndicator.sendTyping(chatID: target.chatID, messageThreadID: target.threadID)
-        ticksSinceTyping = 0
-      }
-
-      do {
-        try await clock.sleep(for: Self.probeInterval)
-      } catch {
-        return
-      }
-      ticksSinceDraft += 1
-      ticksSinceTyping += 1
+      return TurnProgressFrame(markdown: await snapshot.latest(), typingAllowed: true)
     }
+
+    await sender.run()
   }
 
   func sendFinalDraft(_ content: String, target: TurnProgressTarget) async {
@@ -215,13 +204,10 @@ private extension StreamingTurnRuntime {
     _ = await sendDraftBounded(content, target: target)
   }
 
-  /// Awaits the sink but abandons it at `draftSendDeadline`: turn completion must never wedge on a
-  /// stalled draft POST. The coordinator owns both children, so the abandoned send is cancelled and
-  /// drained rather than left to outlive the turn — a structured replacement for the old detached
-  /// send/deadline race. An abandoned send reports no delivery, which is the honest answer.
+  /// The shared bounded sender cancels and drains a stalled draft before this turn returns.
   func sendDraftBounded(_ markdown: String, target: TurnProgressTarget) async -> Bool {
-    let delivered = await ProviderDeadlineCoordinator.sendBounded(
-      timeout: Self.draftSendDeadline,
+    let delivered = await TurnProgressSender.sendBounded(
+      timeout: TurnProgressSender.sendDeadline,
       clock: clock
     ) {
       await draftStreamer.sendDraft(

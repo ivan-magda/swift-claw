@@ -8,6 +8,72 @@ private typealias Support = ChatGPTProviderTestSupport
 
 @Suite
 struct ChatGPTResponsesRequestEncoderTests {
+  @Test
+  func summaryOptionAndPopulatedReplayUseTheResponsesWireShape() throws {
+    // given — replay belongs to a completed tool proposal, followed by its tool result
+    let codec = ChatGPTProviderStateCodec()
+    let profileID = Support.fixedProfileID
+    let state = try codec.encodeResponseState(
+      items: ChatGPTReplayItems(reasoning: [
+        ChatGPTReasoningItem(encryptedContent: "OPAQUE", summary: ["Checking dates"]),
+      ]),
+      identity: ChatGPTReplayIdentity(profileID: profileID, wireModel: "gpt-5", epoch: UUID())
+    )
+    let messages = [
+      ChatMessage(
+        role: .assistant,
+        content: "",
+        toolCalls: [
+          ToolCall(id: "call-clock", name: "clock", argumentsJSON: "{}"),
+        ],
+        providerState: state
+      ),
+      ChatMessage(role: .tool, content: "noon", toolCallID: "call-clock"),
+    ]
+    let selection = codec.decodeCompatibleHistory(
+      messages: messages,
+      profileID: profileID,
+      wireModel: "gpt-5"
+    )
+
+    // when
+    for enabled in [false, true] {
+      let request = ChatRequest(
+        model: "gpt-5",
+        messages: messages,
+        maxOutputTokens: 256,
+        tools: [Support.clockTool],
+        progressExplanationsEnabled: enabled
+      )
+      let body = try decodeBody(
+        encoder.encode(request: request, replaying: selection, includePriorState: true)
+      )
+
+      // then
+      let reasoning = body["reasoning"] as? [String: String]
+      #expect(reasoning?["summary"] == (enabled ? "auto" : nil))
+      #expect(body["include"] as? [String] == ["reasoning.encrypted_content"])
+      let input = try #require(body["input"] as? [[String: Any]])
+      let replayed = try #require(
+        input.first { entry in
+          entry["type"] as? String == "reasoning"
+        }
+      )
+      let summary = try #require(replayed["summary"] as? [[String: String]])
+      #expect(summary == [["type": "summary_text", "text": "Checking dates"]])
+      #expect(
+        input.contains { entry in
+          entry["type"] as? String == "function_call"
+        }
+      )
+      #expect(
+        input.contains { entry in
+          entry["type"] as? String == "function_call_output"
+        }
+      )
+    }
+  }
+
   /// The whole body, byte for byte, for a request that advertises no tools. Every value here is a
   /// literal rather than a reference to the constant that produced it: an assertion that re-derives
   /// its expectation from the code under test moves with it and pins nothing.

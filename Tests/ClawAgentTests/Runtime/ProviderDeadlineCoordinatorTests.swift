@@ -61,6 +61,8 @@ private let consumeToTerminal:
           switch event {
           case .delta:
             continue
+          case .progress:
+            continue
           case .finished:
             _ = box.claim(.provider)
             return .completed
@@ -556,41 +558,6 @@ struct ProviderDeadlineCoordinatorTests {
     await gate.release()
     let accounting = try requireTimedOut(await box.value())
     #expect(accounting == .mayHaveStarted(observedCompletionTokens: distinctiveObservedCount))
-  }
-
-  // MARK: - Bounded ephemeral send
-
-  @Test
-  func aBoundedSendReturnsWhenTheSendCompletes() async throws {
-    // given
-    let sent = CompletionFlag()
-
-    // when — the deadline parks until cancelled, so the send wins
-    await ProviderDeadlineCoordinator.sendBounded(
-      timeout: .seconds(3),
-      clock: deadlineParkedUntilCancelledClock
-    ) {
-      await sent.markDone()
-    }
-
-    // then
-    #expect(await sent.done == true)
-  }
-
-  @Test(.timeLimit(.minutes(1)))
-  func aBoundedSendAbandonsAndCancelsAHungSendAtTheTimeout() async throws {
-    // given — a send that blocks until cancelled; the deadline fires instantly
-    let send = GatedSend()
-
-    // when
-    await ProviderDeadlineCoordinator.sendBounded(timeout: .seconds(3), clock: instantDeadlineClock)
-    {
-      await send.run()
-    }
-
-    // then — the send did not wedge the turn; it was cancelled and drained, never orphaned
-    #expect(await send.started == true)
-    #expect(await send.observedCancellation == true)
   }
 
   @Test(.timeLimit(.minutes(1)))

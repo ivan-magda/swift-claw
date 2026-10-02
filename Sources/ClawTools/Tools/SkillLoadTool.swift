@@ -26,7 +26,7 @@ public struct SkillLoadTool: Tool {
 
   public var definition: ToolDefinition {
     ToolDefinition(
-      name: "skill_load",
+      name: BuiltinToolNames.skillLoad,
       description: """
         Load one skill the owner installed, by the name the skills index spells. Returns the \
         skill's instructions to follow for the current task; an unknown name returns the \

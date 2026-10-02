@@ -67,6 +67,7 @@ public struct MessageRouter: Sendable {
     images: (any ImageMessageHandling)? = nil,
     typing: (any TypingIndicator)? = nil,
     coordinator: ApprovalCoordinator,
+    presentations: TurnPresentationRegistry? = nil,
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = {
       Date()
@@ -87,7 +88,12 @@ public struct MessageRouter: Sendable {
     self.doctor = doctor
     self.logger = logger
 
-    let replies = ReplySender(processed: processed, delivery: delivery, logger: logger)
+    let replies = ReplySender(
+      processed: processed,
+      delivery: delivery,
+      logger: logger,
+      presentations: presentations
+    )
     let enqueuer = TurnEnqueuer(
       lanes: lanes,
       turns: turnRunner,
@@ -114,7 +120,8 @@ public struct MessageRouter: Sendable {
       lanes: lanes,
       replies: replies,
       now: now,
-      coordinator: coordinator
+      coordinator: coordinator,
+      presentations: presentations
     )
     self.scheduleHandlers = ScheduleHandlers(
       schedule: schedule,

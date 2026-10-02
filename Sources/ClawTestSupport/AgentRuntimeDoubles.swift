@@ -173,7 +173,8 @@ public func makeTurnRequest(
       todayUSD: todayUSD,
       proactiveTodayUSD: proactiveTodayUSD,
       carryOver: carryOver
-    )
+    ),
+    progress: nil
   )
 }
 

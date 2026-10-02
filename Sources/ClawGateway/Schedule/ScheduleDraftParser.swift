@@ -208,7 +208,8 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
           messages: messages,
           maxOutputTokens: Self.maxParseOutputTokens,
           responseFormat: responseFormat,
-          sessionID: sessionTraceID
+          sessionID: sessionTraceID,
+          progressExplanationsEnabled: request.progressExplanationsEnabled
         )
       }
     }

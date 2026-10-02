@@ -41,3 +41,24 @@ struct ToolBatch {
     }
   }
 }
+
+// MARK: - Progress Identity
+
+extension RoundPlan {
+  func toolProgress(for call: ToolCall) -> ToolProgressReporter? {
+    guard let progress = turn.progress else {
+      return nil
+    }
+
+    let id = TurnToolStepID(
+      providerCallID: callID.rawValue,
+      toolCallID: call.id
+    )
+
+    return ToolProgressReporter { tool, preview in
+      await progress.publish(.toolStarted(id: id, tool: tool, preview: preview))
+    } publish: { state in
+      await progress.publish(.toolState(id: id, state: state))
+    }
+  }
+}

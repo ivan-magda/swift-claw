@@ -277,7 +277,13 @@ private extension OpenAICompatibleProvider {
       let exchange = try await http.openStream(
         streamRequest(headers: headers, body: body, exposure: exposure)
       )
-      return await consume(exchange: exchange, into: sink, exposure: exposure, redactor: redactor)
+      return await consume(
+        exchange: exchange,
+        into: sink,
+        exposure: exposure,
+        progressExplanationsEnabled: request.progressExplanationsEnabled,
+        authorization: authorization
+      )
     } catch {
       return Self.termination(for: error, exposure: exposure, redactor: redactor)
     }
@@ -310,8 +316,11 @@ private extension OpenAICompatibleProvider {
     exchange: HTTPStreamExchange,
     into sink: LLMEventSink,
     exposure: ProviderAttemptExposure,
-    redactor: SecretRedactor
+    progressExplanationsEnabled: Bool,
+    authorization: LLMRequestAuthorization
   ) async -> LLMStreamTermination {
+    let redactor = SecretRedactor(secretValues: authorization.redactionValues)
+    var terminal: ChatResponse?
     do {
       guard HTTPResponseBodyPolicy.isSuccess(exchange.head.statusCode) else {
         // A recognized non-success head proves the server answered instead of inferring, so the
@@ -322,18 +331,25 @@ private extension OpenAICompatibleProvider {
         return .failed(ProviderFailure(cause: cause, accounting: exposure.accounting))
       }
 
-      var parser = SSEParser(fallbackProviderCost: providerCost(from: exchange.head))
-      var terminal: ChatResponse?
+      var parser = SSEParser(
+        fallbackProviderCost: providerCost(from: exchange.head),
+        progressExplanationsEnabled: progressExplanationsEnabled,
+        redactionValues: authorization.redactionValues
+      )
       for try await chunk in exchange.body {
-        for event in try parser.push(chunk) {
-          switch event {
-          case .delta(let text):
-            try await sink.sendDelta(text)
-          case .finished(let response):
-            terminal = response
-          }
+        defer {
+          exposure.noteObserved(completionTokens: parser.observedCompletionTokens)
         }
-        exposure.noteObserved(completionTokens: parser.observedCompletionTokens)
+        let events = try parser.push(chunk)
+        if case .finished(let response)? = events.last {
+          // Retain the authoritative reply and join transport before optional progress can throw.
+          terminal = response
+          _ = await exchange.cancelAndAwait()
+        }
+        try await publish(events, into: sink)
+        if let terminal {
+          return .completed(terminal)
+        }
       }
       try Self.check(termination: await exchange.awaitTermination())
 
@@ -341,11 +357,29 @@ private extension OpenAICompatibleProvider {
         terminal = response
       }
       // A server that closed without a `[DONE]` still delivered a reply; the parser's accumulation
-      // is it.
+      // is it. Cache it before the optional EOF progress flush can refuse delivery.
+      terminal = terminal ?? parser.assembledResponse
+      try await publish(parser.finishProgress(), into: sink)
       return .completed(terminal ?? parser.assembledResponse)
     } catch {
       _ = await exchange.cancelAndAwait()
+      if let terminal {
+        return .completed(terminal)
+      }
       return Self.termination(for: error, exposure: exposure, redactor: redactor)
+    }
+  }
+
+  func publish(_ events: [StreamEvent], into sink: LLMEventSink) async throws {
+    for event in events {
+      switch event {
+      case .delta(let text):
+        try await sink.sendDelta(text)
+      case .progress(let progress):
+        try await sink.sendProgress(progress)
+      case .finished:
+        break
+      }
     }
   }
 

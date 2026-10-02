@@ -8,6 +8,20 @@ import Logging
 /// `ClawTools`; the composition root injects the same instances the dispatcher uses.
 public protocol ApprovedActionExecuting: Sendable {
   func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome
+
+  func executeApproved(
+    _ approval: Approval,
+    progress: ToolProgressReporter?
+  ) async -> ApprovedCommitOutcome
+}
+
+extension ApprovedActionExecuting {
+  public func executeApproved(
+    _ approval: Approval,
+    progress: ToolProgressReporter?
+  ) async -> ApprovedCommitOutcome {
+    await executeApproved(approval)
+  }
 }
 
 /// How the executor's durable commit landed. Distinct from the store seam's vocabulary because a
@@ -34,7 +48,7 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
   /// `memory_write`'s side effect is a DB insert that must FUSE with the observation update for
   /// exactly-once, so it never runs the tool's `execute`; every other write tool claims the
   /// run first, executes its recorded args, then records the result.
-  private static let memoryWriteToolName = "memory_write"
+  private static let memoryWriteToolName = BuiltinToolNames.memoryWrite
 
   /// Synthetic observation for an approval whose run `/stop`//`new` drove terminal before the
   /// claim — written by the claim transaction so history explains the un-run call.
@@ -68,17 +82,27 @@ public struct ApprovedActionExecutor: ApprovedActionExecuting {
   }
 
   public func executeApproved(_ approval: Approval) async -> ApprovedCommitOutcome {
+    await executeApproved(approval, progress: nil)
+  }
+
+  public func executeApproved(
+    _ approval: Approval,
+    progress: ToolProgressReporter?
+  ) async -> ApprovedCommitOutcome {
     if approval.tool == Self.memoryWriteToolName {
-      return applyMemoryWrite(approval)
+      return await applyMemoryWrite(approval, progress: progress)
     }
-    return await executeGenericWrite(approval)
+    return await executeGenericWrite(approval, progress: progress)
   }
 }
 
 // MARK: - Generic Write Execution
 
 private extension ApprovedActionExecutor {
-  func executeGenericWrite(_ approval: Approval) async -> ApprovedCommitOutcome {
+  func executeGenericWrite(
+    _ approval: Approval,
+    progress: ToolProgressReporter?
+  ) async -> ApprovedCommitOutcome {
     // Claim BEFORE the external effect: the AWAITING→RUNNING flip and a `/stop`//`new`
     // cancellation contend on the same run row, so exactly one side wins — an approved write can
     // never land after the owner cancelled the run.
@@ -103,7 +127,10 @@ private extension ApprovedActionExecutor {
       break
     }
 
+    await identify(approval, progress: progress)
+    await progress?.publish(.executing)
     let payload = await executedPayload(for: approval)
+    await progress?.publish(ToolProgressState(observationStatus: payload.status))
 
     do {
       try runs.fillClaimedObservation(
@@ -209,7 +236,10 @@ private extension ApprovedActionExecutor {
 // MARK: - Memory Write (Fused, Exactly-Once)
 
 private extension ApprovedActionExecutor {
-  func applyMemoryWrite(_ approval: Approval) -> ApprovedCommitOutcome {
+  func applyMemoryWrite(
+    _ approval: Approval,
+    progress: ToolProgressReporter?
+  ) async -> ApprovedCommitOutcome {
     guard let arguments = JSONValue.parse(approval.canonicalArgsJSON),
           case .parsed(let request) = MemoryWriteArguments.parse(
             arguments,
@@ -217,10 +247,15 @@ private extension ApprovedActionExecutor {
           )
     else {
       logger.error("memory_write approval \(approval.id) has unreadable recorded args")
-      return resumeWithSyntheticObservation(
+      let outcome = resumeWithSyntheticObservation(
         approval,
         content: "That memory could not be saved because its details were unreadable."
       )
+      if outcome == .committed {
+        await identify(approval, progress: progress)
+        await progress?.publish(.failed)
+      }
+      return outcome
     }
 
     // Exactly-once: the item rebuilt with the SAME decoder the gate used, then insert +
@@ -242,6 +277,8 @@ private extension ApprovedActionExecutor {
       )
       switch claim {
       case .committed:
+        await identify(approval, progress: progress)
+        await progress?.publish(.succeeded)
         return .committed
       case .alreadyResumed:
         return .ignored
@@ -292,5 +329,13 @@ private extension ApprovedActionExecutor {
       logger.error("synthetic observation resume failed for run \(approval.runID): \(error)")
       return .storeFailed
     }
+  }
+}
+
+// MARK: - Approved Progress
+
+private extension ApprovedActionExecutor {
+  func identify(_ approval: Approval, progress: ToolProgressReporter?) async {
+    await progress?.identify(tool: tools[approval.tool]?.definition, preview: nil)
   }
 }

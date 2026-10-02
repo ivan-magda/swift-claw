@@ -25,6 +25,7 @@ struct ReplySender: Sendable {
   let delivery: any MessageDelivery
 
   let logger: Logger
+  var presentations: TurnPresentationRegistry?
 
   /// Runs one store operation, mapping the failure classes every handler shares.
   func perform<Value: Sendable>(
@@ -82,7 +83,7 @@ struct ReplySender: Sendable {
     }
 
     do {
-      _ = try await delivery.sendMessage(to: target, text: text)
+      _ = try await sendMessage(to: target, text: text)
     } catch {
       logger.error("send failed for update \(updateID): \(error)")
       return .transientFailure
@@ -109,7 +110,7 @@ struct ReplySender: Sendable {
 
     do {
       for text in texts {
-        _ = try await delivery.sendMessage(to: target, text: text)
+        _ = try await sendMessage(to: target, text: text)
       }
     } catch {
       logger.error("chunked send failed for update \(updateID): \(error)")
@@ -126,7 +127,7 @@ struct ReplySender: Sendable {
     text: String
   ) async -> HandleOutcome {
     do {
-      _ = try await delivery.sendMessage(to: target, text: text)
+      _ = try await sendMessage(to: target, text: text)
     } catch {
       logger.error("command ack send failed for update \(updateID): \(error)")
     }
@@ -141,10 +142,30 @@ struct ReplySender: Sendable {
   /// the network) and the signal for the poller to back off without advancing the offset.
   func storageFull(target: DeliveryTarget) async -> HandleOutcome {
     do {
-      _ = try await delivery.sendMessage(to: target, text: Degradation.storageFull)
+      _ = try await sendMessage(to: target, text: Degradation.storageFull)
     } catch {
       logger.error("failed to send storage-full notice: \(error)")
     }
     return .storageFull
+  }
+}
+
+// MARK: - Presentation Coordination
+
+private extension ReplySender {
+  func sendMessage(to target: DeliveryTarget, text: String) async throws -> Int64 {
+    let lease = await presentations?.beginDelivery(to: target)
+    do {
+      let messageID = try await delivery.sendMessage(to: target, text: text)
+      if let lease {
+        await presentations?.endDelivery(lease)
+      }
+      return messageID
+    } catch {
+      if let lease {
+        await presentations?.endDelivery(lease)
+      }
+      throw error
+    }
   }
 }

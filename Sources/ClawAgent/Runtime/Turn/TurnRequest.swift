@@ -4,17 +4,23 @@ import ClawCore
 /// persisted trust flags, and the spend it starts from.
 public struct TurnRequest: Sendable {
   public let scope: TurnScope
-  /// The assembled messages and their privacy and policy metadata, including whether a bound run's
-  /// pinned lessons are present.
   public let context: BuildResult
   public let session: SessionTrust
   public let spend: SpendSnapshot
+  public let progress: TurnProgressReporter?
 
-  public init(scope: TurnScope, context: BuildResult, session: SessionTrust, spend: SpendSnapshot) {
+  public init(
+    scope: TurnScope,
+    context: BuildResult,
+    session: SessionTrust,
+    spend: SpendSnapshot,
+    progress: TurnProgressReporter?
+  ) {
     self.scope = scope
     self.context = context
     self.session = session
     self.spend = spend
+    self.progress = progress
   }
 }
 

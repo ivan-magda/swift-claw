@@ -37,7 +37,11 @@ extension TurnRunner {
     /// no default, so a resumed segment cannot drop it and restart the per-run caps from zero. The
     /// session's real taint rides along because the gate reads `(session ∪ run)`: a session a prior
     /// turn tainted keeps the exfiltration gate armed from this run's very first tool call.
-    func turnRequest(scope: TurnScope, carryOver: ResumeUsage?) -> TurnRequest {
+    func turnRequest(
+      scope: TurnScope,
+      carryOver: ResumeUsage?,
+      progress: TurnProgressReporter? = nil
+    ) -> TurnRequest {
       TurnRequest(
         scope: scope,
         context: buildResult,
@@ -50,7 +54,8 @@ extension TurnRunner {
           todayUSD: todayUSD,
           proactiveTodayUSD: proactiveTodayUSD,
           carryOver: carryOver
-        )
+        ),
+        progress: progress
       )
     }
   }

@@ -2,15 +2,10 @@ import ClawAuth
 import ClawCore
 import Foundation
 
-/// Rebuilds one authoritative reply from a Responses stream's item events.
+/// Reconstructs response content and tool calls from streamed output items.
 ///
-/// The terminal event is asked only what the response *ended as* — its status, ID, usage, and error.
-/// The answer itself is rebuilt from the items, because the studied backend can send
-/// `response.completed.response.output = null` for a stream that produced a perfectly good reply;
-/// a reconstruction that trusted the terminal's own output would hand the owner a blank turn.
-///
-/// It is pure: no transport, no credential, no clock. What it owns is the judgment of which text the
-/// owner may see, which terminal is final, and what the turn cost.
+/// The backend can return a completed response with `output = null`. Item events supply the answer;
+/// terminal events supply status, usage, and response identity. This reducer performs no I/O.
 struct ChatGPTResponsesAccumulator: Sendable {
   private let codec: ChatGPTProviderStateCodec
   private let identity: ChatGPTReplayIdentity
@@ -18,13 +13,17 @@ struct ChatGPTResponsesAccumulator: Sendable {
   private let bounds: ChatGPTResponsesBounds
   private let outputScope: AttemptOutputScope?
   private let terminalValidationPolicy: StreamingTerminalValidationPolicy
+  private let progressExplanationsEnabled: Bool
+  private var progress: ChatGPTResponsesProgress
 
   private var items: [Int: OutputItem] = [:]
   private var order: [Int] = []
   private var accumulatedOutputBytes = 0
   private var observedTokens = 0
+
   private var replayBytes = 0
   private var replayOverflowed = false
+
   private var isDecided = false
   private var pendingTerminal: ChatGPTResponsesTerminal?
 
@@ -36,7 +35,8 @@ struct ChatGPTResponsesAccumulator: Sendable {
     redactionValues: [String] = [],
     bounds: ChatGPTResponsesBounds = .standard,
     outputScope: AttemptOutputScope? = nil,
-    terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal
+    terminalValidationPolicy: StreamingTerminalValidationPolicy = .firstTerminal,
+    progressExplanationsEnabled: Bool = false
   ) {
     self.codec = codec
     self.identity = identity
@@ -44,43 +44,37 @@ struct ChatGPTResponsesAccumulator: Sendable {
     self.bounds = bounds
     self.outputScope = outputScope
     self.terminalValidationPolicy = terminalValidationPolicy
+    self.progressExplanationsEnabled = progressExplanationsEnabled
+    self.progress = ChatGPTResponsesProgress(bounds: bounds, secretValues: redactionValues)
   }
 
-  /// A lower bound on the completion tokens this attempt may already be billed for, derived only
-  /// from text that has already passed the accumulated-output cap, through the estimator the rest of
-  /// the daemon accounts with. Per item, so each item's rounding adds headroom rather than shaving
-  /// it — the same way input estimation sums per message.
-  ///
-  /// Maintained incrementally in `update(_:mutate:)` rather than recomputed here: the caller reads it
-  /// once per delivered chunk, and re-walking every item's whole text on each read would turn a long
-  /// reply's stream consumption quadratic.
+  /// Provides a lower-bound completion-token estimate from bounded answer text and tool arguments.
+  /// Per-item rounding matches input estimation. `update(_:mutate:)` maintains the total so reads
+  /// remain O(1) as the caller consumes chunks.
   var observedCompletionTokens: Int {
     observedTokens
   }
 
-  /// The bytes held in the raw per-item delta buffers, whether or not any of them can reach the
-  /// owner. Distinct from the accumulated-output budget, which charges only text the owner may see:
-  /// this weighs the buffers themselves, so a memory-bound test can prove deltas for an item no path
-  /// will ever read are dropped as they arrive rather than retained under the byte caps.
+  /// Counts raw delta-buffer bytes, separate from the visible-output budget.
+  /// Memory-bound tests use this to verify that the reducer discards irrelevant deltas.
   var retainedDeltaBytes: Int {
-    order.reduce(0) { running, index in
+    order.reduce(0) { totalBytes, index in
       guard let item = items[index] else {
-        return running
+        return totalBytes
       }
-      return SaturatingArithmetic.sum(
-        running,
-        SaturatingArithmetic.sum(item.deltaText.utf8.count, item.argumentDeltas.utf8.count)
+
+      let itemDeltaBytes = SaturatingArithmetic.sum(
+        item.deltaText.utf8.count,
+        item.argumentDeltas.utf8.count
       )
+
+      return SaturatingArithmetic.sum(totalBytes, itemDeltaBytes)
     }
   }
 
-  /// Consumes one delivered batch, emitting the deltas the owner may see and, once the stream states
-  /// its outcome, the whole reply.
-  ///
-  /// The first recognized terminal is final. Every event already decoded in this same batch is
-  /// checked against it, so a stream that contradicts itself in one delivery is refused rather than
-  /// answered from whichever terminal happened to be first. Nothing waits for a later event or for
-  /// EOF: the batch in hand is all the evidence there will ever be.
+  /// Emits answer deltas, optional progress, and the completed response for one decoded batch.
+  /// The default policy resolves the first terminal after checking the rest of that batch for
+  /// contradictions. Evaluation-only strict validation defers the response until EOF.
   mutating func consume(_ events: [ChatGPTResponsesEvent]) throws -> [StreamEvent] {
     guard isDecided == false else {
       return []
@@ -91,50 +85,53 @@ struct ChatGPTResponsesAccumulator: Sendable {
       return []
     }
 
-    var emitted: [StreamEvent] = []
+    var emittedEvents: [StreamEvent] = []
     for (offset, event) in events.enumerated() {
       switch event {
       case .terminal(let terminal):
-        let terminal = try reconciledTerminal(with: terminal, after: offset, in: events)
-        guard terminalValidationPolicy == .firstTerminal else {
-          pendingTerminal = terminal
-          return emitted
+        let reconciled = try reconciledTerminal(with: terminal, after: offset, in: events)
+        if terminalValidationPolicy == .throughStreamEnd {
+          pendingTerminal = reconciled
+          emittedEvents += try progress.finish()
+          return emittedEvents
         }
+
         isDecided = true
-        emitted.append(.finished(try response(for: terminal)))
-        return emitted
-      case .streamError(let failure):
+        let completedResponse = try response(for: reconciled)
+        emittedEvents += try progress.finish()
+        emittedEvents.append(.finished(completedResponse))
+
+        return emittedEvents
+      case .streamError(let remoteFailure):
         isDecided = true
-        throw self.failure(failure)
+        throw failure(remoteFailure)
       default:
-        if let delta = try apply(event) {
-          emitted.append(.delta(delta))
-        }
+        emittedEvents += try apply(event)
       }
     }
-    return emitted
+    return emittedEvents
   }
 
-  /// The end of the body. A stream that never stated an outcome is ambiguous — the model may well
-  /// have generated the answer that never arrived — so this is a failure rather than an empty
-  /// success, and the caller accounts for it with `observedCompletionTokens`.
+  /// Resolves a pending strict-mode terminal at EOF, or rejects a stream with no terminal.
+  /// The caller uses `observedCompletionTokens` to account for a potentially billed partial reply.
   mutating func finish() throws -> StreamEvent? {
     guard isDecided == false else {
       return nil
     }
     isDecided = true
+
     if let pendingTerminal {
       return .finished(try response(for: pendingTerminal))
     }
+
     throw Self.ambiguousEnd
   }
 }
 
 // MARK: - Accumulated Item
 
-/// One output item as it is being assembled. It carries what it currently contributes to the
-/// accumulated-output budget so a done item that supersedes a delta assembly can hand those bytes
-/// back rather than being charged for the same text twice.
+/// Tracks one output item's text, arguments, and contribution to byte/token budgets.
+/// Completed values replace delta assemblies without charging both versions.
 private struct OutputItem {
   let type: ChatGPTStreamItemType
   /// Registered once, at first sighting, and never re-read from a later event. One phase governs
@@ -201,28 +198,77 @@ private struct OutputItem {
 // MARK: - Event Application
 
 private extension ChatGPTResponsesAccumulator {
-  mutating func apply(_ event: ChatGPTResponsesEvent) throws -> String? {
+  mutating func apply(_ event: ChatGPTResponsesEvent) throws -> [StreamEvent] {
     switch event {
     case .outputItemAdded(let index, let item):
       try register(index: index, item: item)
-      return nil
+      return []
     case .outputItemDone(let index, let item):
-      try complete(index: index, item: item)
-      return nil
+      return try applyCompletedItem(index: index, item: item)
     case .outputTextDelta(let index, let text):
-      return try appendText(index: index, text: text)
+      if let delta = try appendText(index: index, text: text) {
+        return [.delta(delta)]
+      }
+      return try commentary(index: index, text: .append(text))
+    case .outputTextDone(let index, let text):
+      var events = try commentary(index: index, text: .replace(text))
+      events += try commentary(index: index, text: .complete)
+      return events
+    case .summaryTextDelta(let index, let part, let text):
+      return try summary(index: index, part: part, text: .append(text))
+    case .summaryTextDone(let index, let part, let text):
+      var events = try summary(index: index, part: part, text: .replace(text))
+      events += try summary(index: index, part: part, text: .complete)
+      return events
+    case .summaryPart(let index, let part, let text, let completed):
+      return try applySummaryPart(index: index, part: part, text: text, completed: completed)
     case .functionCallArgumentsDelta(let index, let callID, let fragment):
       try appendArguments(index: index, callID: callID, fragment: fragment)
-      return nil
+      return []
     case .functionCallArgumentsDone(let index, let callID, let arguments):
       try reconcileArguments(index: index, callID: callID, arguments: arguments)
-      return nil
+      return []
     case .terminal, .streamError:
-      // Decided by `consume`, which needs the whole batch to judge them.
-      return nil
+      // `consume` checks terminal events against the rest of the decoded batch.
+      return []
     }
   }
 
+  mutating func applyCompletedItem(index: Int, item: ChatGPTStreamItem) throws -> [StreamEvent] {
+    if let existing = items[index] {
+      let isExplanation = existing.type == .reasoning || existing.phase == .commentary
+      if existing.done != nil && isExplanation {
+        try register(index: index, item: item)
+        return []
+      }
+    }
+
+    try complete(index: index, item: item)
+    return try completedProgress(index: index, item: item)
+  }
+
+  mutating func applySummaryPart(
+    index: Int,
+    part: Int,
+    text: String?,
+    completed: Bool
+  ) throws -> [StreamEvent] {
+    guard let text else {
+      return []
+    }
+
+    var events = try summary(index: index, part: part, text: .replace(text))
+    if completed {
+      events += try summary(index: index, part: part, text: .complete)
+    }
+
+    return events
+  }
+}
+
+// MARK: - Output Item Updates
+
+private extension ChatGPTResponsesAccumulator {
   /// Registers an item, or reconciles a later sighting of one. A done item may register too: it
   /// carries everything an `added` would have, so a stream that skipped the announcement is
   /// answerable rather than damaged.
@@ -231,42 +277,48 @@ private extension ChatGPTResponsesAccumulator {
       guard order.count < bounds.maximumOutputItems else {
         throw tooManyOutputItems
       }
+
       items[index] = OutputItem(type: item.type, phase: item.phase, callID: item.callID)
       order.append(index)
+
       return
     }
+
     try Self.reconcile(&existing.callID, with: item.callID)
     items[index] = existing
   }
 
   mutating func complete(index: Int, item: ChatGPTStreamItem) throws {
     try register(index: index, item: item)
+
     try update(index) { accumulated in
       accumulated.done = item
+
       if item.type == .message {
         // The whole done text supersedes the delta assembly rather than extending it: the stream is
         // restating the message, not continuing it.
         accumulated.doneText = item.outputText.joined()
         accumulated.deltaText = ""
       }
+
       if let arguments = item.arguments {
         accumulated.arguments = arguments
         accumulated.argumentDeltas = ""
       }
     }
+
     try retainForReplay(item)
   }
 
-  /// Publishes and retains visible text. Text for an item that can never surface is dropped as it
-  /// arrives rather than buffered, so a stream of non-visible deltas cannot exhaust memory under the
-  /// per-event and buffer caps. An empty delta is never published: republishing a draft with no new
-  /// text would repaint it for nothing.
+  /// Retains answer deltas for visible, unfinished items. Suppresses empty deltas and discards
+  /// text for hidden or completed items so unused delta buffers cannot grow.
   mutating func appendText(index: Int, text: String) throws -> String? {
     // Text whose item was never announced has no filter to pass, and publishing it would mean
     // guessing that unannounced text is the answer.
     guard let existing = items[index] else {
       throw Self.unregisteredItem
     }
+
     guard existing.retainsText else {
       return nil
     }
@@ -276,12 +328,15 @@ private extension ChatGPTResponsesAccumulator {
     guard existing.done == nil else {
       return nil
     }
+
     try update(index) { accumulated in
       accumulated.deltaText += text
     }
+
     guard text.isEmpty == false else {
       return nil
     }
+
     return text
   }
 
@@ -289,12 +344,14 @@ private extension ChatGPTResponsesAccumulator {
     guard let existing = items[index] else {
       throw Self.unregisteredItem
     }
+
     try reconcileCallID(index: index, callID: callID)
     // Arguments for an item that proposes no call are dispatched nowhere, so they are dropped rather
     // than buffered — a stream of them cannot exhaust memory under the per-event and buffer caps.
     guard existing.retainsArguments else {
       return
     }
+
     try update(index) { accumulated in
       accumulated.argumentDeltas += fragment
     }
@@ -304,6 +361,7 @@ private extension ChatGPTResponsesAccumulator {
     guard items[index] != nil else {
       throw Self.unregisteredItem
     }
+
     try reconcileCallID(index: index, callID: callID)
     try update(index) { accumulated in
       accumulated.arguments = arguments
@@ -315,6 +373,7 @@ private extension ChatGPTResponsesAccumulator {
     guard var existing = items[index] else {
       return
     }
+
     try Self.reconcile(&existing.callID, with: callID)
     items[index] = existing
   }
@@ -325,35 +384,47 @@ private extension ChatGPTResponsesAccumulator {
     guard let incoming, incoming.isEmpty == false else {
       return
     }
+
     guard let known else {
       known = incoming
       return
     }
+
     guard known == incoming else {
       throw conflictingCallID
     }
   }
+}
 
-  /// Mutates one item and re-charges the accumulated-output budget with what it now holds, so the
-  /// running total is always the bytes actually retained rather than the bytes ever seen.
+// MARK: - Output Accounting
+
+private extension ChatGPTResponsesAccumulator {
+  /// Replaces an item's budget contribution after mutation, rather than counting both versions.
   mutating func update(_ index: Int, mutate: (_ item: inout OutputItem) -> Void) throws {
     guard var item = items[index] else {
       throw Self.unregisteredItem
     }
-    let releasedBytes = accumulatedOutputBytes - item.countedBytes
-    let releasedTokens = observedTokens - item.tokenEstimate
+
+    let otherItemBytes = accumulatedOutputBytes - item.countedBytes
+    let otherItemTokens = observedTokens - item.tokenEstimate
     mutate(&item)
     item.countedBytes = item.budgetBytes
     item.tokenEstimate = item.estimatedTokens
 
-    let total = SaturatingArithmetic.sum(releasedBytes, item.countedBytes)
-    guard total <= bounds.maximumAccumulatedOutputBytes else {
-      throw accumulatedOutputTooLarge
-    }
-    accumulatedOutputBytes = total
-    observedTokens = SaturatingArithmetic.sum(releasedTokens, item.tokenEstimate)
+    let updatedOutputBytes = SaturatingArithmetic.sum(otherItemBytes, item.countedBytes)
+    try validateOutputBudget(outputBytes: updatedOutputBytes)
+
+    accumulatedOutputBytes = updatedOutputBytes
+    observedTokens = SaturatingArithmetic.sum(otherItemTokens, item.tokenEstimate)
     items[index] = item
     try outputScope?.observe(fields: currentOutputFields)
+  }
+
+  func validateOutputBudget(outputBytes: Int) throws {
+    let totalRetainedBytes = SaturatingArithmetic.sum(outputBytes, progress.retainedTextBytes)
+    guard totalRetainedBytes <= bounds.maximumAccumulatedOutputBytes else {
+      throw accumulatedOutputTooLarge
+    }
   }
 
   var currentOutputFields: [AttemptOutputField] {
@@ -361,49 +432,121 @@ private extension ChatGPTResponsesAccumulator {
       guard let item = items[index] else {
         return []
       }
+
       var fields: [AttemptOutputField] = []
-      let visible = item.visibleText
-      if visible.isEmpty == false {
-        fields.append(AttemptOutputField(key: "responses-visible:\(index)", value: visible))
+
+      let answerText = item.visibleText
+      if !answerText.isEmpty {
+        fields.append(AttemptOutputField(key: "responses-visible:\(index)", value: answerText))
       }
+
       if item.retainsArguments {
         fields.append(
           AttemptOutputField(key: "responses-tool-arguments:\(index)", value: item.argumentText)
         )
       }
+
       return fields
     }
+  }
+}
+
+// MARK: - Display Explanations
+
+private extension ChatGPTResponsesAccumulator {
+  mutating func commentary(index: Int, text: LLMProgressText) throws -> [StreamEvent] {
+    guard progressExplanationsEnabled,
+          let item = items[index], item.type == .message, item.phase == .commentary,
+          item.done == nil
+    else {
+      return []
+    }
+    return try updateProgress(index: index, part: nil, kind: .commentary, text: text)
+  }
+
+  mutating func summary(index: Int, part: Int, text: LLMProgressText) throws -> [StreamEvent] {
+    guard progressExplanationsEnabled else {
+      return []
+    }
+
+    guard let item = items[index] else {
+      throw Self.unregisteredItem
+    }
+
+    guard item.type == .reasoning, item.done == nil else {
+      return []
+    }
+
+    return try updateProgress(index: index, part: part, kind: .summary, text: text)
+  }
+
+  mutating func completedProgress(index: Int, item: ChatGPTStreamItem) throws -> [StreamEvent] {
+    guard progressExplanationsEnabled, let accumulated = items[index] else {
+      return []
+    }
+
+    var events: [StreamEvent] = []
+    if accumulated.type == .message, accumulated.phase == .commentary {
+      events += try updateProgress(
+        index: index,
+        part: nil,
+        kind: .commentary,
+        text: .replace(item.outputText.joined())
+      )
+      events += try updateProgress(index: index, part: nil, kind: .commentary, text: .complete)
+    } else if accumulated.type == .reasoning {
+      for part in item.summaryTextParts.keys.sorted() {
+        guard let text = item.summaryTextParts[part] else {
+          continue
+        }
+
+        events += try updateProgress(index: index, part: part, kind: .summary, text: .replace(text))
+        events += try updateProgress(index: index, part: part, kind: .summary, text: .complete)
+      }
+    }
+
+    return events
+  }
+
+  mutating func updateProgress(
+    index: Int,
+    part: Int?,
+    kind: LLMProgressKind,
+    text: LLMProgressText
+  ) throws -> [StreamEvent] {
+    let events = try progress.update(index: index, part: part, kind: kind, text: text)
+    try validateOutputBudget(outputBytes: accumulatedOutputBytes)
+    return events
   }
 }
 
 // MARK: - Replay Retention
 
 private extension ChatGPTResponsesAccumulator {
-  /// Keeps a done item's replay material, under the same byte bound the codec would refuse it at.
-  ///
-  /// Applying that bound here rather than only at encoding time is what keeps a stream of very large
-  /// commentary from being materialized whole on the way to being discarded. Crossing it drops every
-  /// retained item rather than keeping a prefix: a partial replay is worse than none, and state loss
-  /// degrades continuity, never the turn.
+  /// Tracks completed replay bytes and disables replay serialization above the codec's cap.
+  /// Completed items remain in the accumulator for response assembly; overflow emits empty replay
+  /// state rather than a partial prefix and does not fail the response.
   mutating func retainForReplay(_ item: ChatGPTStreamItem) throws {
     guard replayOverflowed == false else {
       return
     }
-    let weight = SaturatingArithmetic.sum(
-      item.encryptedContent?.utf8.count ?? 0,
-      SaturatingArithmetic.sum(
-        item.outputText.reduce(0) { running, text in
-          SaturatingArithmetic.sum(running, text.utf8.count)
-        },
-        item.summary.reduce(0) { running, text in
-          SaturatingArithmetic.sum(running, text.utf8.count)
-        }
-      )
-    )
-    replayBytes = SaturatingArithmetic.sum(replayBytes, weight)
+
+    let encryptedBytes = item.encryptedContent?.utf8.count ?? 0
+    let outputTextBytes = item.outputText.reduce(0) { totalBytes, text in
+      SaturatingArithmetic.sum(totalBytes, text.utf8.count)
+    }
+    let summaryBytes = item.summary.reduce(0) { totalBytes, text in
+      SaturatingArithmetic.sum(totalBytes, text.utf8.count)
+    }
+
+    let textBytes = SaturatingArithmetic.sum(outputTextBytes, summaryBytes)
+    let itemReplayBytes = SaturatingArithmetic.sum(encryptedBytes, textBytes)
+    replayBytes = SaturatingArithmetic.sum(replayBytes, itemReplayBytes)
+
     guard replayBytes > ChatGPTProviderStateCodec.maximumStateBytes else {
       return
     }
+
     replayOverflowed = true
   }
 
@@ -413,6 +556,7 @@ private extension ChatGPTResponsesAccumulator {
     guard replayOverflowed == false else {
       return ChatGPTReplayItems()
     }
+
     var reasoning: [ChatGPTReasoningItem] = []
     var messages: [ChatGPTAssistantMessageItem] = []
 
@@ -420,12 +564,14 @@ private extension ChatGPTResponsesAccumulator {
       guard let accumulated = items[index], let done = accumulated.done else {
         continue
       }
+
       switch accumulated.type {
       case .reasoning:
         // Reasoning with nothing encrypted to replay is a handle to nothing.
         guard let encrypted = done.encryptedContent else {
           continue
         }
+
         reasoning.append(ChatGPTReasoningItem(encryptedContent: encrypted, summary: done.summary))
       case .message:
         messages.append(
@@ -442,6 +588,7 @@ private extension ChatGPTResponsesAccumulator {
         continue
       }
     }
+
     return ChatGPTReplayItems(reasoning: reasoning, assistantMessages: messages)
   }
 }
@@ -465,30 +612,33 @@ private extension ChatGPTResponsesAccumulator {
     in events: ArraySlice<ChatGPTResponsesEvent>
   ) throws -> ChatGPTResponsesTerminal {
     var reconciled = terminal
-    for later in events {
-      switch later {
-      case .terminal(let other):
-        let modelsConflict: Bool
-        if let expected = reconciled.reportedModel, let observed = other.reportedModel {
-          modelsConflict = expected != observed
-        } else {
-          modelsConflict = false
-        }
-        if terminalValidationPolicy == .throughStreamEnd && modelsConflict {
+
+    for event in events {
+      switch event {
+      case .terminal(let laterTerminal):
+        if terminalValidationPolicy == .throughStreamEnd,
+           let expectedModel = reconciled.reportedModel,
+           let reportedModel = laterTerminal.reportedModel,
+           expectedModel != reportedModel
+        {
           throw ProviderError.modelIdentityMismatch
         }
-        guard other.restates(reconciled) else {
+
+        guard laterTerminal.restates(reconciled) else {
           throw Self.conflictingTerminals
         }
+
         if terminalValidationPolicy == .throughStreamEnd {
-          reconciled = reconciled.withReportedModel(reconciled.reportedModel ?? other.reportedModel)
+          let reportedModel = reconciled.reportedModel ?? laterTerminal.reportedModel
+          reconciled = reconciled.withReportedModel(reportedModel)
         }
       case .streamError:
         throw Self.conflictingTerminals
       default:
-        continue
+        break
       }
     }
+
     return reconciled
   }
 
@@ -503,6 +653,7 @@ private extension ChatGPTResponsesAccumulator {
       guard terminal.isOutputTokenLimited else {
         throw failure(terminal.failure, fallback: "the ChatGPT reply did not complete")
       }
+
       return try assembled(terminal, finishReason: Self.lengthFinishReason)
     case .failed, .cancelled:
       throw failure(terminal.failure, fallback: "the ChatGPT reply failed")
@@ -514,21 +665,23 @@ private extension ChatGPTResponsesAccumulator {
     finishReason: String?
   ) throws -> ChatResponse {
     let calls = try toolCalls()
+    let defaultFinishReason = calls.isEmpty ? Self.stopFinishReason : Self.toolFinishReason
+    let providerState = try codec.encodeResponseState(items: replayItems, identity: identity)
+
     return ChatResponse(
       content: content,
-      finishReason: finishReason ?? (calls.isEmpty ? Self.stopFinishReason : Self.toolFinishReason),
+      finishReason: finishReason ?? defaultFinishReason,
       usage: terminal.usage,
       // A dollar cost the route reports would be about an API plan this one is not billed under.
       costFromProvider: nil,
       toolCalls: calls,
-      providerState: try codec.encodeResponseState(items: replayItems, identity: identity),
+      providerState: providerState,
       reportedModel: terminal.reportedModel
     )
   }
 
-  /// The answer, in the stream's own order. Per item, a done item's text wins outright and the
-  /// visible deltas stand in only where the backend never sent one — which is what lets a truncated
-  /// turn still say what it managed to say.
+  /// Assembles answer text in output-index order, preferring completed text over deltas.
+  /// Delta-only items still contribute to a token-limited response.
   var content: String {
     order.sorted().compactMap { index in
       items[index]?.visibleText
@@ -537,7 +690,7 @@ private extension ChatGPTResponsesAccumulator {
 
   func toolCalls() throws -> [ToolCall] {
     var calls: [ToolCall] = []
-    var claimed: Set<String> = []
+    var claimedCallIDs: Set<String> = []
 
     for index in order.sorted() {
       guard let accumulated = items[index], accumulated.type == .functionCall else {
@@ -548,6 +701,7 @@ private extension ChatGPTResponsesAccumulator {
       guard let done = accumulated.done else {
         throw Self.unresolvedFunctionCall
       }
+
       guard let callID = accumulated.callID,
             callID.isEmpty == false,
             let name = done.name,
@@ -557,19 +711,15 @@ private extension ChatGPTResponsesAccumulator {
       }
       // Two items claiming one ID would give the dispatcher two calls it cannot tell apart, and a
       // tool result names only the ID.
-      guard claimed.insert(callID).inserted else {
+      guard claimedCallIDs.insert(callID).inserted else {
         throw Self.conflictingCallID
       }
-      // The argument JSON stays a raw string: validating it against the tool's schema is the
-      // dispatcher's job, and this side would only be guessing at it.
-      calls.append(
-        ToolCall(
-          id: callID,
-          name: name,
-          argumentsJSON: accumulated.argumentText.isEmpty ? "{}" : accumulated.argumentText
-        )
-      )
+      // The dispatcher validates raw argument JSON against the tool's schema.
+      let argumentText = accumulated.argumentText
+      let argumentsJSON = argumentText.isEmpty ? "{}" : argumentText
+      calls.append(ToolCall(id: callID, name: name, argumentsJSON: argumentsJSON))
     }
+
     return calls
   }
 }
@@ -619,10 +769,8 @@ private extension ChatGPTResponsesAccumulator {
     )
   }
 
-  /// A remote diagnostic on its way to an owner. It is stripped of the escape sequences that would
-  /// repaint a terminal, collapsed onto one line, redacted against the credential the request
-  /// carried, and bounded — in that order, so a value that only becomes a secret once its escapes
-  /// are gone is still matched, and the truncation can only ever cut a placeholder.
+  /// Builds a terminal error with a normalized, redacted, bounded remote diagnostic.
+  /// Diagnostic normalization precedes redaction, and redaction precedes truncation.
   func failure(
     _ remote: ChatGPTRemoteFailure?,
     fallback: String = "the ChatGPT reply failed"
@@ -632,10 +780,12 @@ private extension ChatGPTResponsesAccumulator {
     if remote?.isInvalidProviderState == true {
       return .invalidProviderState
     }
+
     guard let message = remote?.message, message.isEmpty == false else {
       return Self.terminal(fallback)
     }
-    let safe = ChatGPTProviderMetadata.safeDiagnostic(message, redacting: redactionValues)
-    return Self.terminal("\(fallback) — \(safe)")
+
+    let safeDiagnostic = ChatGPTProviderMetadata.safeDiagnostic(message, redacting: redactionValues)
+    return Self.terminal("\(fallback) — \(safeDiagnostic)")
   }
 }

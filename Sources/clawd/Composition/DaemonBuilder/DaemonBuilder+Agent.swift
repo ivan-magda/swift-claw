@@ -1,5 +1,6 @@
 import ClawAgent
 import ClawCore
+import ClawGateway
 import ClawTelegram
 import ClawTools
 import ClawWorkspace
@@ -14,6 +15,7 @@ extension DaemonBuilder {
     let toolDispatcher: GatedToolDispatcher
     let agent: AgentRuntime
     let contextBuilder: ContextBuilder
+    let presentations: TurnPresentationRegistry
   }
 
   func makeAgentStack(  // swiftlint:disable:this function_parameter_count
@@ -23,7 +25,8 @@ extension DaemonBuilder {
     costResolver: CostResolver,
     sandbox: SandboxStack,
     mcpTools: [any Tool],
-    coderTools: [any Tool] = []
+    coderTools: [any Tool] = [],
+    presentationClock: any Clock<Duration> = ContinuousClock()
   ) -> AgentStack {
     let toolDispatcher = makeToolDispatcher(
       workspace: workspace,
@@ -32,11 +35,23 @@ extension DaemonBuilder {
       coderTools: coderTools
     )
     let staticSubhash = policyStaticSubhash(toolDispatcher: toolDispatcher, workspace: workspace)
+    let draftStreamer = makeDraftStreamer(clock: presentationClock)
+    let presentations = TurnPresentationRegistry(
+      streamingEnabled: config.llm.streamingEnabled,
+      progressEnabled: config.telegramProgressEnabled,
+      renderer: TelegramProgressRenderer(),
+      drafts: draftStreamer,
+      typing: TelegramTypingIndicator(transport: transport),
+      outbox: stores.outbox,
+      secretValues: redactionValues,
+      clock: presentationClock
+    )
     let agent = makeAgent(
       roster: roster,
       cooldown: cooldown,
       toolDispatcher: toolDispatcher,
-      costResolver: costResolver
+      costResolver: costResolver,
+      draftStreamer: draftStreamer
     )
     let contextBuilder = makeContextBuilder(
       workspace: workspace,
@@ -44,7 +59,12 @@ extension DaemonBuilder {
       policyStaticSubhash: staticSubhash,
       toolDefinitions: toolDispatcher.definitions
     )
-    return AgentStack(toolDispatcher: toolDispatcher, agent: agent, contextBuilder: contextBuilder)
+    return AgentStack(
+      toolDispatcher: toolDispatcher,
+      agent: agent,
+      contextBuilder: contextBuilder,
+      presentations: presentations
+    )
   }
 
   /// Builds the grapheme-budgeted context assembler, injected with the composition root's static
@@ -95,13 +115,14 @@ extension DaemonBuilder {
     roster: ProviderRoster,
     cooldown: any PrimaryRouteCooldownTracking,
     toolDispatcher: GatedToolDispatcher,
-    costResolver: CostResolver
+    costResolver: CostResolver,
+    draftStreamer: (any RichDraftStreaming)? = nil
   ) -> AgentRuntime {
     AgentRuntime(
       roster: roster,
       cooldown: cooldown,
       typingIndicator: TelegramTypingIndicator(transport: transport),
-      draftStreamer: TelegramRichDraftStreamer(transport: transport),
+      draftStreamer: draftStreamer ?? TelegramRichDraftStreamer(transport: transport),
       streamingEnabled: config.llm.streamingEnabled,
       costResolver: costResolver,
       budget: config.budget,
@@ -111,5 +132,14 @@ extension DaemonBuilder {
       logger: logger,
       clock: ContinuousClock()
     )
+  }
+}
+
+// MARK: - Shared Presentation Transport
+
+private extension DaemonBuilder {
+  func makeDraftStreamer<C: Clock>(clock: C) -> any RichDraftStreaming
+  where C.Duration == Duration {
+    TelegramRichDraftStreamer(transport: transport, clock: clock)
   }
 }

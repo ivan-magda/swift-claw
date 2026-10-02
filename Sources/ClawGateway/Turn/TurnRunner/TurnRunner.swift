@@ -29,6 +29,7 @@ public struct TurnRunner: TurnDispatching {
   let usageStore: any UsageStore
 
   let audit: any AuditLog
+  let presentations: TurnPresentationRegistry?
   private let agent: AgentRuntime
   let contextBuilder: ContextBuilder
   package let imageCache: ImageCache
@@ -95,6 +96,7 @@ public struct TurnRunner: TurnDispatching {
     // would hold that lane forever. Every caller chooses its parker explicitly.
     parker: any ApprovalParking,
     approvalExpirySeconds: Int,
+    presentations: TurnPresentationRegistry? = nil,
     logger: Logger
   ) {
     self.sessionMessages = sessionMessages
@@ -102,6 +104,7 @@ public struct TurnRunner: TurnDispatching {
     self.usageStore = usageStore
 
     self.audit = audit
+    self.presentations = presentations
     self.agent = agent
     self.contextBuilder = contextBuilder
     self.imageCache = imageCache
@@ -150,8 +153,10 @@ public struct TurnRunner: TurnDispatching {
 
     let inputs: TurnInputs
     let execution: RunExecutionContext?
+    var progress: TurnProgressReporter?
     do {
       execution = try runs.executionContext(runID: runID, fallbackChatID: chatID)
+      progress = await beginPresentation(runID: runID, execution: execution)
       inputs = try loadTurnInputs(
         runID: runID,
         sessionID: sessionID,
@@ -161,8 +166,10 @@ public struct TurnRunner: TurnDispatching {
         images: await cachedImages(sessionID: sessionID)
       )
     } catch StoreError.diskFull {
+      await presentations?.close(runID: runID)
       throw StoreError.diskFull
     } catch {
+      await presentations?.close(runID: runID)
       logger.error("context build failed for run \(runID): \(error)")
       try commitContextUnavailable(
         runID: runID,
@@ -182,19 +189,25 @@ public struct TurnRunner: TurnDispatching {
         origin: origin,
         requesterUserID: execution?.requesterUserID
       ),
-      carryOver: nil
+      carryOver: nil,
+      progress: progress
     )
-    let outcome = try await agent.runTurn(request)
+    do {
+      let outcome = try await agent.runTurn(request)
 
-    try await commit(
-      outcome,
-      runID: runID,
-      sessionID: sessionID,
-      chatID: chatID,
-      mode: request.scope.mode,
-      ownerNotices: inputs.buildResult.ownerNotices,
-      origin: origin
-    )
+      try await commit(
+        outcome,
+        runID: runID,
+        sessionID: sessionID,
+        chatID: chatID,
+        mode: request.scope.mode,
+        ownerNotices: inputs.buildResult.ownerNotices,
+        origin: origin
+      )
+    } catch {
+      await presentations?.close(runID: runID)
+      throw error
+    }
   }
 
   /// The post-approval continuation, identical to `run` except: no `pickUp` (the waiter already
@@ -215,14 +228,17 @@ public struct TurnRunner: TurnDispatching {
     }
 
     guard let origin = resumeOrigin(runID: runID) else {
+      await presentations?.close(runID: runID)
       return
     }
 
     let inputs: TurnInputs
     let carryOver: ResumeUsage
     let execution: RunExecutionContext?
+    var progress: TurnProgressReporter?
     do {
       execution = try runs.executionContext(runID: runID, fallbackChatID: chatID)
+      progress = await beginPresentation(runID: runID, execution: execution)
       carryOver = try runs.resumeUsage(runID: runID)
       inputs = try loadTurnInputs(
         runID: runID,
@@ -233,7 +249,7 @@ public struct TurnRunner: TurnDispatching {
         images: await cachedImages(sessionID: sessionID)
       )
     } catch {
-      failResume(runID: runID, stage: .contextBuild, error: error)
+      await failResume(runID: runID, stage: .contextBuild, error: error)
       return
     }
 
@@ -245,13 +261,14 @@ public struct TurnRunner: TurnDispatching {
         origin: origin,
         requesterUserID: execution?.requesterUserID
       ),
-      carryOver: carryOver
+      carryOver: carryOver,
+      progress: progress
     )
     let outcome: TurnOutcome
     do {
       outcome = try await agent.runTurn(request)
     } catch {
-      failResume(runID: runID, stage: .turn, error: error)
+      await failResume(runID: runID, stage: .turn, error: error)
       return
     }
 
@@ -266,6 +283,7 @@ public struct TurnRunner: TurnDispatching {
         origin: origin
       )
     } catch {
+      await presentations?.close(runID: runID)
       logger.error("resume commit failed for run \(runID): \(error)")
     }
   }
@@ -321,8 +339,33 @@ private extension TurnRunner {
 
   /// `resume`'s shared failure tail: every pre-commit failure fails the run in-band (best-effort)
   /// so the lane frees — `resume` is non-throwing by contract.
-  func failResume(runID: Int64, stage: ResumeStage, error: any Error) {
+  func failResume(runID: Int64, stage: ResumeStage, error: any Error) async {
+    await presentations?.close(runID: runID)
     logger.error("resume \(stage.rawValue) failed for run \(runID): \(error)")
     try? runs.failRun(runID: runID, cause: stage.terminalCause(for: error), now: now())
+  }
+}
+
+// MARK: - Presentation Admission
+
+private extension TurnRunner {
+  func beginPresentation(
+    runID: Int64,
+    execution: RunExecutionContext?
+  ) async -> TurnProgressReporter? {
+    guard let execution else {
+      return nil
+    }
+    return await presentations?.begin(
+      scope: TurnScope(
+        runID: runID,
+        sessionID: execution.sessionID,
+        chatID: execution.deliveryTarget.chatID,
+        threadID: execution.deliveryTarget.messageThreadID,
+        mode: execution.mode,
+        origin: execution.origin,
+        requesterUserID: execution.requesterUserID
+      )
+    )
   }
 }

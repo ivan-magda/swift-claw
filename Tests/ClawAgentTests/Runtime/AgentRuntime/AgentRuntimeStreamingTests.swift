@@ -158,6 +158,8 @@ actor StreamingProvider: LLMProvider {
       } catch {
         return .cancelled(.mayHaveStarted(observing: 0))
       }
+    case .progress:
+      return nil
     case .finished(let response):
       return .completed(response)
     }
@@ -238,6 +240,8 @@ actor RecordingStreamingProvider: LLMProvider {
         switch event {
         case .delta(let text):
           try? await sink.sendDelta(text)
+        case .progress:
+          continue
         case .finished(let response):
           return .completed(response)
         }
@@ -1105,55 +1109,6 @@ struct AgentRuntimeStreamingTests {
     #expect(content == "blocking fallback")
     #expect(await provider.streamCalls == 1)
     #expect(await provider.completeCalls == 1)
-  }
-
-  @Test
-  func streamingResponseDoesNotWaitForBlockedDraftSend() async throws {
-    // given
-    let provider = StreamingProvider(
-      streamScript: .events([
-        .delta("he"),
-        .delta("llo"),
-        .finished(
-          ChatResponse(
-            content: "hello",
-            finishReason: "stop",
-            usage: ChatUsage(promptTokens: 3, completionTokens: 2, totalTokens: 5),
-            costFromProvider: 0.001
-          )
-        ),
-      ])
-    )
-    let drafts = BlockingDrafts()
-    // Compressed sleep so the per-send abandon deadline elapses instantly: the invariant under
-    // test is that a sink which never returns still cannot block turn completion.
-    let runtime = makeRuntime(
-      provider: provider,
-      drafts: drafts,
-      streamingEnabled: true,
-      clock: ScriptedClock.compressed(parkingAt: .seconds(10))
-    )
-
-    // when
-    let turnResult = startTurn {
-      try await runtime.runTurn(
-        makeTurnRequest(
-          runID: 11,
-          sessionID: 22,
-          chatID: 33,
-          context: self.singleUserBuildResult("hi")
-        )
-      )
-    }
-    await drafts.waitUntilFirstSendBlocked()
-    let outcome = await waitForTurnResult(turnResult)
-
-    // then
-    await drafts.release()
-    let completed = try requireCompleted(try #require(outcome).result)
-    #expect(completed.content == "hello")
-    #expect(await provider.completeCalls == 0)
-    #expect(await provider.streamCalls == 1)
   }
 
   @Test

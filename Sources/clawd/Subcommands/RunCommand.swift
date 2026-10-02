@@ -95,6 +95,7 @@ extension RunCommand {
       daemonError: runFailure,
       laneDrain: laneDrain,
       coder: bundle.coder,
+      presentations: bundle.presentations,
       dependent: RuntimeShutdownCoordinator.DependentCleanup(
         commitCredentials: {
           try await Self.commitCredentials(bundle.credentialSources)

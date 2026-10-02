@@ -144,7 +144,7 @@ struct ApprovedActionExecutorTests {
     }
   }
 
-  private struct Fixture {
+  struct Fixture {
     let queue: DatabaseQueue
     let runs: RunStoreGRDB
     let sessionKey: String
@@ -153,7 +153,7 @@ struct ApprovedActionExecutorTests {
     let observationMessageID: Int64
   }
 
-  private func makeSuspendedFixture() throws -> Fixture {
+  func makeSuspendedFixture() throws -> Fixture {
     let queue = try TestDatabase.make()
     let sessions = SessionMessageStoreGRDB(writer: queue)
     let sessionKey = SessionKey.telegramDM(chatID: 7)
@@ -200,11 +200,12 @@ struct ApprovedActionExecutorTests {
     )
   }
 
-  private func approval(
+  func approval(
     _ env: Fixture,
     tool: String,
     argsJSON: String,
-    target: String = "/w/plan.md"
+    target: String = "/w/plan.md",
+    reason: ApprovalReason = .askTier
   ) -> Approval {
     Approval(
       id: 1,
@@ -220,7 +221,7 @@ struct ApprovedActionExecutorTests {
       nonce: "nonce-a",
       observationMessageID: env.observationMessageID,
       toolCallID: "c1",
-      reason: .askTier,
+      reason: reason,
       promptMessageID: 900,
       createdTs: Date(),
       expiresTs: Date(),
@@ -228,7 +229,7 @@ struct ApprovedActionExecutorTests {
     )
   }
 
-  private func makeExecutor(
+  func makeExecutor(
     _ env: Fixture,
     tools: [any Tool],
     runs: (any RunStore)? = nil,

@@ -107,7 +107,7 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
       // than dropped, so the runtime does not estimate-debit a call that never left.
       throw ProviderFailure(cause: cause, accounting: .notStarted)
     case .success(let plan):
-      switch await engine.run(plan: plan, emitDelta: Self.discardDelta) {
+      switch await engine.run(plan: plan, emitEvent: Self.discardEvent) {
       case .completed(let response):
         return response
       case .failed(let failure):
@@ -129,8 +129,15 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
       case .failure(let cause):
         return .failed(ProviderFailure(cause: cause, accounting: .notStarted))
       case .success(let plan):
-        return await engine.run(plan: plan) { text in
-          try await sink.sendDelta(text)
+        return await engine.run(plan: plan) { event in
+          switch event {
+          case .delta(let text):
+            try await sink.sendDelta(text)
+          case .progress(let progress):
+            try await sink.sendProgress(progress)
+          case .finished:
+            break
+          }
         }
       }
     }
@@ -148,10 +155,10 @@ private extension ChatGPTResponsesProvider {
     UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
   }
 
-  /// The delta sink `complete` runs the engine with — it consumes the same SSE as `stream` and simply
-  /// drops the visible deltas rather than publishing them.
+  /// The event sink `complete` runs the engine with: it consumes the same SSE as `stream` while
+  /// discarding nonterminal answer and explanation events.
   @Sendable
-  static func discardDelta(_ text: String) async throws {}
+  static func discardEvent(_ event: StreamEvent) async throws {}
 
   /// Builds a credential-independent inference plan or a route-validation failure.
   ///
@@ -201,7 +208,8 @@ private extension ChatGPTResponsesProvider {
       profileID: profileID,
       wireModel: wireModel,
       outputScope: request.outputScope,
-      terminalValidationPolicy: request.terminalValidationPolicy
+      terminalValidationPolicy: request.terminalValidationPolicy,
+      progressExplanationsEnabled: request.progressExplanationsEnabled
     ) { authorization, includePriorState, beginHandoff in
       let headers = try Self.headers(
         for: authorization,

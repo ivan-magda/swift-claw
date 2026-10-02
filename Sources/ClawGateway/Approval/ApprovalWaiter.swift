@@ -1,3 +1,4 @@
+import ClawAgent
 import ClawCore
 import Foundation
 import Logging
@@ -13,6 +14,7 @@ import Logging
 public final class ApprovalWaiter: ApprovalParking {
   private let approvals: any ApprovalStore
   private let runs: any RunStore
+  private let presentations: TurnPresentationRegistry?
 
   private let coordinator: ApprovalCoordinator
   private let executor: any ApprovedActionExecuting
@@ -40,10 +42,12 @@ public final class ApprovalWaiter: ApprovalParking {
     clock: any Clock<Duration>,
     currentPolicyVersion: @escaping @Sendable () throws -> String,
     now: @escaping @Sendable () -> Date,
+    presentations: TurnPresentationRegistry? = nil,
     logger: Logger
   ) {
     self.approvals = approvals
     self.runs = runs
+    self.presentations = presentations
 
     self.coordinator = coordinator
     self.executor = executor
@@ -72,6 +76,7 @@ public final class ApprovalWaiter: ApprovalParking {
     guard let signal = await coordinator.awaitResolution(approvalID: approvalID) else {
       // Cancelled while parked (graceful shutdown / lane cancel) with no resolution: exit cleanly.
       // The durable approval row is untouched; the boot re-park rebuilds the hold on restart.
+      await presentations?.close(runID: runID)
       logger.debug("approval \(approvalID) park cancelled before resolution; exiting cleanly")
       return
     }
@@ -87,11 +92,13 @@ public final class ApprovalWaiter: ApprovalParking {
       guard let approval = loadApproval(approvalID) else {
         // The nonce is never consumed, so a nil row means a resolver already drove the run
         // terminal; the durable state is settled and the lane is free.
+        await presentations?.close(runID: runID)
         logger.debug("approval \(approvalID) absent at deny resume; nothing to finalize")
         return
       }
       await resolveDenied(approval: approval, decision: decision)
     }
+    await presentations?.close(runID: runID)
   }
 }
 
@@ -122,14 +129,7 @@ private extension ApprovalWaiter {
       return
     }
 
-    let commit = await withTypingPulse(
-      chatID: target.chatID,
-      messageThreadID: target.messageThreadID,
-      indicator: typing,
-      clock: clock
-    ) {
-      await executor.executeApproved(approval)
-    }
+    let commit = await execute(approval, target: target)
     switch commit {
     case .ignored:
       // A duplicate signal already resumed the run; do not run the continuation twice.
@@ -150,6 +150,7 @@ private extension ApprovalWaiter {
         run left AWAITING_APPROVAL for boot recovery
         """
       )
+      await presentations?.close(runID: runID)
       await notifyParticipant(target: target, text: Self.storeFailureNotice)
       return
     case .recordFailed:
@@ -161,6 +162,7 @@ private extension ApprovalWaiter {
         run left RUNNING for the boot orphan sweep
         """
       )
+      await presentations?.close(runID: runID)
       await notifyParticipant(target: target, text: Self.recordFailureNotice)
       return
     case .committed:
@@ -175,6 +177,20 @@ private extension ApprovalWaiter {
     )
   }
 
+  func execute(_ approval: Approval, target: DeliveryTarget) async -> ApprovedCommitOutcome {
+    if let progress = await approvalProgress(approval) {
+      return await executor.executeApproved(approval, progress: progress)
+    }
+    return await withTypingPulse(
+      chatID: target.chatID,
+      messageThreadID: target.messageThreadID,
+      indicator: typing,
+      clock: clock
+    ) {
+      await executor.executeApproved(approval)
+    }
+  }
+
   func policyStillMatches(_ approval: Approval) -> Bool {
     do {
       return try currentPolicyVersion() == approval.policyVersion
@@ -185,6 +201,7 @@ private extension ApprovalWaiter {
   }
 
   func failOnStalePolicy(_ approval: Approval, target: DeliveryTarget) async {
+    await presentations?.close(runID: approval.runID)
     do {
       _ = try runs.failRunStalePolicy(
         runID: approval.runID,
@@ -211,6 +228,7 @@ extension ApprovalWaiter {
   /// `new` command already acked the owner), and (4) disarms the buttons. Steps 3–4 are best-effort
   /// transport over already-committed durable state — a transport failure must not strand the lane.
   func resolveDenied(approval: Approval, decision: ApprovalDecision) async {
+    await presentations?.close(runID: approval.runID)
     let cancel: CancelReason? =
       switch decision {
       case .cancelled:
@@ -318,7 +336,11 @@ private extension ApprovalWaiter {
   }
 
   func notifyParticipant(target: DeliveryTarget, text: String) async {
+    let lease = await presentations?.beginDelivery(to: target)
     _ = try? await delivery.sendMessage(to: target, text: text)
+    if let lease {
+      await presentations?.endDelivery(lease)
+    }
   }
 
   func disarm(_ approval: Approval) async {
@@ -329,6 +351,39 @@ private extension ApprovalWaiter {
       chatID: approval.ownerUserID,
       messageID: promptMessageID,
       replyMarkup: nil
+    )
+  }
+}
+
+// MARK: - Approval Presentation
+
+private extension ApprovalWaiter {
+  func approvalProgress(_ approval: Approval) async -> ToolProgressReporter? {
+    guard let presentations,
+          let execution = try? runs.executionContext(
+            runID: approval.runID,
+            fallbackChatID: approval.ownerUserID
+          )
+    else {
+      return nil
+    }
+
+    _ = await presentations.begin(
+      scope: TurnScope(
+        runID: approval.runID,
+        sessionID: execution.sessionID,
+        chatID: execution.deliveryTarget.chatID,
+        threadID: execution.deliveryTarget.messageThreadID,
+        mode: execution.mode,
+        origin: execution.origin,
+        requesterUserID: execution.requesterUserID
+      ),
+      resumed: true
+    )
+
+    return await presentations.approvalProgress(
+      runID: approval.runID,
+      toolCallID: approval.toolCallID
     )
   }
 }
