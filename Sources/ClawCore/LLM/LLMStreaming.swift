@@ -81,8 +81,9 @@ public struct LLMEventStream: AsyncSequence, Sendable {
     limits: LLMEventBufferLimits = .providerDefault,
     operation: @escaping @Sendable (_ sink: LLMEventSink) async -> LLMStreamTermination
   ) -> LLMEventStream {
-    let channel = BoundedAsyncChannel<LLMStreamPayload>(capacity: limits.maximumDeltaBytes) {
-      payload in
+    let channel = BoundedAsyncChannel<LLMStreamPayload>(
+      capacity: limits.maximumDeltaBytes
+    ) { payload in
       limits.deltaCharge(forTextBytes: payload.byteCharge)
     }
 
@@ -289,12 +290,14 @@ private extension LLMStreamPayload {
         MemoryLayout<LLMProgressEvent>.stride,
         event.itemID.utf8.count
       )
+
       switch event.text {
       case .append(let text), .replace(let text):
         charge = SaturatingArithmetic.sum(charge, text.utf8.count)
       case .complete:
         break
       }
+
       return charge
     }
   }
