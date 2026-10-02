@@ -67,10 +67,12 @@ package actor TurnProgressSender {
       return
     }
     pauseRevision = revision
+
     if self.paused && !paused {
       draftEpoch += 1
     }
     self.paused = paused
+
     if paused, let activeDraft {
       activeDraft.cancel()
       _ = await activeDraft.value
@@ -88,40 +90,52 @@ private extension TurnProgressSender {
     var lastMarkdown: String?
     var deliveredDrafts = 0
     var earlySecondAttempted = false
-    var seenEpoch = draftEpoch
+    var seenDraftEpoch = draftEpoch
 
     while !Task.isCancelled {
       let latest = await frame()
       guard !Task.isCancelled else {
         return
       }
-      if seenEpoch != draftEpoch {
-        seenEpoch = draftEpoch
+
+      if seenDraftEpoch != draftEpoch {
+        seenDraftEpoch = draftEpoch
         lastMarkdown = nil
         lastDelivery = nil
       }
-      let now = clock.now
-      let earlySecond = deliveredDrafts == 1 && !earlySecondAttempted
-      let minimum = Self.probeInterval * (earlySecond ? 1 : Self.minTicksBetweenDrafts)
-      let due =
-        lastAttempt.map {
-          $0.duration(to: now) >= minimum
-        } ?? true
-      let refresh =
-        mode == .interactive
-        && (earlySecond
-          || (lastDelivery.map {
-            $0.duration(to: now) >= Self.freshnessInterval
-          } ?? true))
 
-      if !paused, due, let markdown = latest.markdown, !markdown.isEmpty,
-         markdown != lastMarkdown || refresh
+      let now = clock.now
+      let isEarlySecondAttempt = deliveredDrafts == 1 && !earlySecondAttempted
+      let ticksBetweenAttempts = isEarlySecondAttempt ? 1 : Self.minTicksBetweenDrafts
+      let minimumDraftInterval = Self.probeInterval * ticksBetweenAttempts
+
+      let draftDue =
+        if let lastAttempt {
+          lastAttempt.duration(to: now) >= minimumDraftInterval
+        } else {
+          true
+        }
+
+      let deliveryNeedsRefresh =
+        if let lastDelivery {
+          lastDelivery.duration(to: now) >= Self.freshnessInterval
+        } else {
+          true
+        }
+
+      let shouldRefresh = mode == .interactive && (isEarlySecondAttempt || deliveryNeedsRefresh)
+
+      if !paused, draftDue,
+         let markdown = latest.markdown, !markdown.isEmpty,
+         markdown != lastMarkdown || shouldRefresh
       {
         lastAttempt = now
         lastMarkdown = markdown
-        if earlySecond {
+
+        if isEarlySecondAttempt {
           earlySecondAttempted = true
         }
+
         if await sendDraft(markdown) {
           deliveredDrafts += 1
           lastDelivery = clock.now
@@ -131,18 +145,27 @@ private extension TurnProgressSender {
       guard !Task.isCancelled else {
         return
       }
-      let stale =
-        lastDelivery.map {
-          mode == .interactive && $0.duration(to: clock.now) >= Self.freshnessInterval
-        } ?? true
+
+      let draftIsStale =
+        if let lastDelivery {
+          mode == .interactive && lastDelivery.duration(to: clock.now) >= Self.freshnessInterval
+        } else {
+          true
+        }
       let typingDue =
-        lastTyping.map {
-          $0.duration(to: clock.now) >= Self.typingInterval
-        } ?? true
+        if let lastTyping {
+          lastTyping.duration(to: clock.now) >= Self.typingInterval
+        } else {
+          true
+        }
+
       // Collect again: approval can arrive while a draft request is in flight.
       let current = await frame()
-      if current.typingAllowed, paused || stale, typingDue, !Task.isCancelled {
-        await Self.sendBounded(timeout: Self.sendDeadline, clock: clock) { [typing, target] in
+      if current.typingAllowed, paused || draftIsStale, typingDue, !Task.isCancelled {
+        await Self.sendBounded(
+          timeout: Self.sendDeadline,
+          clock: clock
+        ) { [typing, target] in
           await typing.sendTyping(
             chatID: target.chatID,
             messageThreadID: target.messageThreadID
@@ -150,6 +173,7 @@ private extension TurnProgressSender {
         }
         lastTyping = clock.now
       }
+
       do {
         try await clock.sleep(for: Self.probeInterval)
       } catch {
@@ -165,12 +189,14 @@ private extension TurnProgressSender {
       } ?? false
     }
     activeDraft = task
+
     let delivered = await withTaskCancellationHandler {
       await task.value
     } onCancel: {
       task.cancel()
     }
     activeDraft = nil
+
     return delivered
   }
 }
