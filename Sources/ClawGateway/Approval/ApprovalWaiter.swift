@@ -367,6 +367,7 @@ private extension ApprovalWaiter {
     else {
       return nil
     }
+
     _ = await presentations.begin(
       scope: TurnScope(
         runID: approval.runID,
@@ -379,6 +380,7 @@ private extension ApprovalWaiter {
       ),
       resumed: true
     )
+
     return await presentations.approvalProgress(
       runID: approval.runID,
       toolCallID: approval.toolCallID
