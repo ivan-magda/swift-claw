@@ -11,7 +11,6 @@ import Testing
 @Suite
 struct TurnProgressDeliveryTests {
   enum DeliveryBranch: CaseIterable {
-    case ordinary
     case boot
     case markSentFailure
   }

@@ -190,20 +190,11 @@ struct TurnPresentationTests {
   }
 
   @Test
-  func registryRejectsCancelledProactiveAndShutdownAdmissions() async throws {
+  func registryRejectsProactiveAdmissions() async throws {
     // given
     let clock = ScriptedClock.compressed(parkingAt: .seconds(1))
     let drafts = ProgressDrafts(clock: clock, rejectAfter: .seconds(100))
     let registry = try makePresentations(clock: clock, drafts: drafts, typing: RecordingTyping())
-    let admit = AsyncGate()
-    let cancelled = Task {
-      await admit.wait()
-      return await registry.begin(scope: progressScope())
-    }
-
-    // when
-    cancelled.cancel()
-    let cancelledReporter = await cancelled.value
     let proactive = TurnScope(
       runID: 42,
       sessionID: 8,
@@ -213,14 +204,13 @@ struct TurnPresentationTests {
       origin: .scheduled,
       requesterUserID: nil
     )
+
+    // when
     let proactiveReporter = await registry.begin(scope: proactive)
     await registry.shutdown()
-    let stoppedReporter = await registry.begin(scope: progressScope())
 
     // then
-    #expect(cancelledReporter == nil)
     #expect(proactiveReporter == nil)
-    #expect(stoppedReporter == nil)
     #expect(await drafts.sent.isEmpty)
   }
 

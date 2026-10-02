@@ -58,14 +58,6 @@ public actor TurnPresentation {
     await senderTask?.value
   }
 
-  public func pauseDraftsAndAwait() async {
-    await setDraftsPaused(true, revision: pauseRevision + 1)
-  }
-
-  public func resumeDrafts() async {
-    await setDraftsPaused(false, revision: pauseRevision + 1)
-  }
-
   func start() {
     guard !terminal, senderTask == nil else {
       return

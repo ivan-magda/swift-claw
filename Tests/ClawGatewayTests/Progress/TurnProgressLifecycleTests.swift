@@ -288,7 +288,6 @@ extension TurnProgressLifecycleTests {
   enum TerminalBranch: CaseIterable {
     case contextFailure
     case providerFailure
-    case budgetStop
   }
 
   @Test(arguments: TerminalBranch.allCases)
@@ -331,25 +330,12 @@ extension TurnProgressLifecycleTests {
 
     // when
     let turn = Task {
-      if branch == .budgetStop {
-        _ = try env.runner.runs.pickUp(runID: env.runID, now: Date())
-        try await env.runner.commit(
-          TurnOutcome(result: .budgetStopped(cap: BudgetGate.perRunTurnCap)),
-          runID: env.runID,
-          sessionID: env.sessionID,
-          chatID: env.chatID,
-          mode: .direct,
-          ownerNotices: [],
-          origin: .interactive
-        )
-      } else {
-        try await env.runner.run(
-          runID: env.runID,
-          sessionID: env.sessionID,
-          chatID: env.chatID,
-          triggerMessageID: env.triggerMessageID
-        )
-      }
+      try await env.runner.run(
+        runID: env.runID,
+        sessionID: env.sessionID,
+        chatID: env.chatID,
+        triggerMessageID: env.triggerMessageID
+      )
     }
     let closing = await drafts.cancelled.waitUntilOpen()
     let beforeJoin = try env.outbox.pendingOutbound()

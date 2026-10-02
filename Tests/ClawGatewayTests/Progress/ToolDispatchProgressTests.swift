@@ -187,9 +187,6 @@ private extension DispatchProgressState {
     state.apply(.toolState(id: id, state: value))
     if let observed = latest.steps.first?.state {
       history.append(observed)
-      if history.count > 32 {
-        history.removeFirst()
-      }
     }
   }
 }

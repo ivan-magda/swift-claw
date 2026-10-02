@@ -575,12 +575,20 @@ key, so runless messages use the same retry and idempotent completion path.
 
 **Presentation delivery exclusion:** a registry delivery lease marks the whole chat paused before
 any suspension and drains its active draft sends before permanent delivery begins. New entries
-inherit outstanding leases. Release re-reads the existing synchronous outbox seam: pending rows for
-other runs, runless notices, and the current run's approval cards keep rich drafts held; a read error
-also holds them. Revision-ordered pause updates prevent stale reconciliation from resuming drafts
-across actor reentrancy. Leases are temporary exclusion only, not a second queue or durable state;
-recorded outbox rows remain the delivery authority. Terminal close joins presentation before a final
-row becomes eligible for delivery; approval cards pause presentation without ending its run.
+inherit outstanding leases. Revision-ordered pause updates prevent stale reconciliation from
+resuming drafts across actor reentrancy. Outbox rich delivery and its plain fallback share the same
+lease, which ends after the `markSent` attempt or on send failure. Release re-reads the existing
+synchronous outbox seam: pending rows for other runs, runless notices, and the current run's approval
+cards keep rich drafts held; a read error also holds them. This includes boot-recovered rows and
+sends that succeeded but whose completion could not be recorded. Inference and typing continue
+during the hold.
+
+Terminal close joins presentation before a final row becomes eligible for delivery. Approval cards
+pause presentation without ending its run and release the current waiting draft after durable
+delivery is recorded. Direct approval notices and router acknowledgements also lease their active
+chat. Leases are temporary exclusion only, not a second queue or durable state; recorded outbox rows
+remain the delivery authority. These leases add no retry policy or execution queue and preserve the
+dispatcher's flood-control deadlines.
 
 **Retry ownership:** the dispatcher owns its flood-control retry wakeups, cancels and joins them
 before its service returns, and never requests another drain from a cancelled wait.
@@ -593,15 +601,6 @@ report text cannot choose a destination. Completion compares the state used for 
 current job: a concurrent cancellation returns `stateChanged(currentJob)` without writes so the
 service can rerender and retry only the commit. A terminal replay returns `alreadyTerminal` and
 inserts nothing. An outbox failure rolls back the terminal transition and reservation release.
-
-**Presentation delivery exclusion.** Outbox sends acquire a chat-scoped presentation lease that
-pauses and drains drafts before rich delivery, covering the plain fallback under the same lease.
-The lease ends after the `markSent` attempt, or on send failure; existing pending rows continue to
-hold newer drafts even when sending succeeded but recording failed. This includes boot-recovered
-rows. Inference and typing continue during the hold. Approval cards use the same exclusion and
-release the current waiting draft after durable delivery is recorded. Direct approval notices and
-router acknowledgements also lease their active chat. These leases add no retry policy or execution
-queue and preserve the dispatcher's flood-control deadlines.
 
 ### 6.5 Callback (approval) path (Inc 5a)
 

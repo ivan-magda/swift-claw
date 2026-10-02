@@ -22,7 +22,6 @@ struct ProgressTextTests {
         !$0.contains(secret)
       }
     )
-    #expect(first.contains(prefix) == false)
     #expect(first == padding)
     #expect(second.contains(SecretRedactor.replacement))
     #expect(

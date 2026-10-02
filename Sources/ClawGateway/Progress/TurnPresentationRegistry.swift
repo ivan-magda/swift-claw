@@ -74,10 +74,6 @@ public actor TurnPresentationRegistry {
     return reporter
   }
 
-  public func reporter(runID: Int64) -> TurnProgressReporter? {
-    entries[runID]?.reporter
-  }
-
   public func waitingForApproval(runID: Int64) async {
     guard let entry = entries[runID], let id = entry.pendingStep else {
       return

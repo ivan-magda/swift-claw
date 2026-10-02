@@ -61,19 +61,6 @@ package actor TurnProgressSender {
     await run(clock: clock)
   }
 
-  package func pauseDraftsAndAwait() async {
-    pauseRevision += 1
-    await setDraftsPaused(true, revision: pauseRevision)
-  }
-
-  package func resumeDrafts() {
-    pauseRevision += 1
-    if paused {
-      draftEpoch += 1
-    }
-    paused = false
-  }
-
   /// Revision order survives reentrant registry lease reconciliation.
   package func setDraftsPaused(_ paused: Bool, revision: Int) async {
     guard revision >= pauseRevision else {

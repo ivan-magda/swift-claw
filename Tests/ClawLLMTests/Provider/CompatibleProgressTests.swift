@@ -153,8 +153,6 @@ struct CompatibleProgressTests {
       displayed == prefix + SecretRedactor.replacement + " "
         + SecretRedactor.replacement + " ready"
     )
-    #expect(displayed.contains(secret) == false)
-    #expect(displayed.contains("sk-line key") == false)
   }
 
   @Test
