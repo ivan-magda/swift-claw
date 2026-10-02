@@ -25,17 +25,18 @@ public struct TurnProgressState: Sendable {
 
   public mutating func apply(_ event: TurnProgressEvent) {
     switch event {
-    case .modelStarted(let id):
-      providerCallID = id
+    case .modelStarted(let callID):
+      providerCallID = callID
       explanationItemID = nil
       resetExplanation()
       answerPreview = ""
       phase = .model
     case .answerPreview(let text):
+      let redactedText = SecretRedactor(secretValues: secretValues).redact(text)
       answerPreview = String(
-        SecretRedactor(secretValues: secretValues).redact(text)
-          .prefix(TelegramMessageLimits.maxRichMessageCharacters)
+        redactedText.prefix(TelegramMessageLimits.maxRichMessageCharacters)
       )
+
       if !answerPreview.isEmpty {
         phase = .answer
       }
@@ -90,20 +91,19 @@ private extension TurnProgressState {
       resetExplanation()
     }
 
-    let safe: String
+    let redactedText: String
     switch event.text {
     case .append(let text):
-      safe = explanationRedactor.append(text)
+      redactedText = explanationRedactor.append(text)
     case .replace(let text):
       resetExplanation()
-      safe = explanationRedactor.append(text)
+      redactedText = explanationRedactor.append(text)
     case .complete:
-      safe = explanationRedactor.finish()
+      redactedText = explanationRedactor.finish()
     }
 
-    explanationText = String(
-      (explanationText + safe).prefix(TurnProgressLimits.explanationCharacters)
-    )
+    let combinedText = explanationText + redactedText
+    explanationText = String(combinedText.prefix(TurnProgressLimits.explanationCharacters))
   }
 }
 
@@ -115,36 +115,28 @@ private extension TurnProgressState {
   mutating func startTool(id: TurnToolStepID, tool: ToolDefinition?, preview: String?) {
     answerPreview = ""
     phase = .tool
-    let step = TurnToolStep(
-      id: id,
-      label: tool.map {
-        toolLabel($0.name)
-      } ?? Self.unknownToolLabel,
-      preview: tool.flatMap {
-        allowedPreview(name: $0.name, preview: preview)
-      },
-      state: tool == nil ? .failed : .pending
-    )
 
-    if let index = steps.firstIndex(where: {
-      $0.id == id
-    }) {
-      steps[index] = step
+    let step: TurnToolStep
+    if let tool {
+      step = TurnToolStep(
+        id: id,
+        label: toolLabel(tool.name),
+        preview: allowedPreview(name: tool.name, preview: preview),
+        state: .pending
+      )
     } else {
-      if steps.count == TurnProgressLimits.retainedToolSteps {
-        let index =
-          steps.firstIndex {
-            isCompleted($0.state)
-          } ?? 0
-        let removed = steps.remove(at: index)
-        countOlder(removed.state)
-        unregisteredSteps.remove(removed.id)
-        coderSubmissions.remove(removed.id)
-      }
-      steps.append(step)
+      step = TurnToolStep(
+        id: id,
+        label: Self.unknownToolLabel,
+        preview: nil,
+        state: .failed
+      )
     }
+
+    storeToolStep(step)
     unregisteredSteps.remove(id)
     coderSubmissions.remove(id)
+
     if tool == nil {
       unregisteredSteps.insert(id)
     } else if tool?.name == CoderToolNames.submit {
@@ -153,27 +145,34 @@ private extension TurnProgressState {
   }
 
   mutating func updateTool(id: TurnToolStepID, state: ToolProgressState) {
-    guard let index = steps.firstIndex(where: {
-        $0.id == id
-      }),
-          !unregisteredSteps.contains(id)
-    else {
+    let stepIndex = steps.firstIndex { step in
+      step.id == id
+    }
+    guard let stepIndex, !unregisteredSteps.contains(id) else {
       return
     }
 
-    let step = steps[index]
-    let label =
-      coderSubmissions.contains(id) && state == .succeeded
-      ? "Coding job submitted" : step.label
-    steps[index] = TurnToolStep(id: id, label: label, preview: step.preview, state: state)
+    let step = steps[stepIndex]
+    let isSubmittedCodingJob = coderSubmissions.contains(id) && state == .succeeded
+    let label = isSubmittedCodingJob ? "Coding job submitted" : step.label
+    steps[stepIndex] = TurnToolStep(
+      id: id,
+      label: label,
+      preview: step.preview,
+      state: state
+    )
 
     answerPreview = ""
-    phase =
-      steps.contains {
-        $0.state == .awaitingApproval
-      } ? .approval : .tool
+    let hasPendingApproval = steps.contains { step in
+      step.state == .awaitingApproval
+    }
+    phase = hasPendingApproval ? .approval : .tool
   }
+}
 
+// MARK: - Tool Labels and Previews
+
+private extension TurnProgressState {
   func toolLabel(_ name: String) -> String {
     let label: String
     switch name {
@@ -214,44 +213,46 @@ private extension TurnProgressState {
       return nil
     }
 
-    let selected: String
+    let selectedPreview: String
     switch name {
     case "web_search", "skill_load":
-      selected = preview
+      selectedPreview = preview
     case "web_fetch":
       guard let page = pagePreview(preview) else {
         return nil
       }
-      selected = page
+
+      selectedPreview = page
     case "file_read", "file_write":
       guard isWorkspaceRelativePath(preview) else {
         return nil
       }
-      selected = preview
+
+      selectedPreview = preview
     default:
       return nil
     }
 
-    let safe = ProgressText.preview(
-      selected,
+    let redactedPreview = ProgressText.preview(
+      selectedPreview,
       secretValues: secretValues,
       limit: TurnProgressLimits.previewCharacters
     )
 
-    return safe.isEmpty ? nil : safe
+    return redactedPreview.isEmpty ? nil : redactedPreview
   }
 
   func pagePreview(_ preview: String) -> String? {
-    let isURL = preview.contains("://")
-    let raw = isURL ? preview : "https://" + preview
+    let hasExplicitScheme = preview.contains("://")
+    let urlText = hasExplicitScheme ? preview : "https://" + preview
 
-    guard let url = URLComponents(string: raw) else {
+    guard let url = URLComponents(string: urlText) else {
       return nil
     }
 
-    if !isURL
-       && (url.user != nil || url.password != nil || url.query != nil || url.fragment != nil)
-    {
+    let hasCredentials = url.user != nil || url.password != nil
+    let hasQueryOrFragment = url.query != nil || url.fragment != nil
+    if !hasExplicitScheme && (hasCredentials || hasQueryOrFragment) {
       return nil
     }
 
@@ -260,19 +261,54 @@ private extension TurnProgressState {
 
   func isWorkspaceRelativePath(_ path: String) -> Bool {
     guard !path.isEmpty, !path.hasPrefix("/"), !path.hasPrefix("~"),
-          !path.contains("\\"), !path.contains(":"),
-          !path.unicodeScalars.contains(where: {
-        CharacterSet.controlCharacters.contains($0)
-      })
+          !path.contains("\\"), !path.contains(":")
     else {
       return false
     }
 
-    let parts = path.split(separator: "/", omittingEmptySubsequences: false)
-
-    return parts.allSatisfy {
-      !$0.isEmpty && $0 != "." && $0 != ".."
+    let hasControlCharacters = path.unicodeScalars.contains { scalar in
+      CharacterSet.controlCharacters.contains(scalar)
     }
+    guard !hasControlCharacters else {
+      return false
+    }
+
+    let components = path.split(separator: "/", omittingEmptySubsequences: false)
+    return components.allSatisfy { component in
+      !component.isEmpty && component != "." && component != ".."
+    }
+  }
+}
+
+// MARK: - Tool Step Retention
+
+private extension TurnProgressState {
+  mutating func storeToolStep(_ step: TurnToolStep) {
+    let existingIndex = steps.firstIndex { existingStep in
+      existingStep.id == step.id
+    }
+
+    if let existingIndex {
+      steps[existingIndex] = step
+    } else {
+      makeRoomForToolStep()
+      steps.append(step)
+    }
+  }
+
+  mutating func makeRoomForToolStep() {
+    guard steps.count == TurnProgressLimits.retainedToolSteps else {
+      return
+    }
+
+    let oldestCompletedIndex = steps.firstIndex { step in
+      isCompleted(step.state)
+    }
+    let evictionIndex = oldestCompletedIndex ?? 0
+    let evictedStep = steps.remove(at: evictionIndex)
+    countOlder(evictedStep.state)
+    unregisteredSteps.remove(evictedStep.id)
+    coderSubmissions.remove(evictedStep.id)
   }
 
   func isCompleted(_ state: ToolProgressState) -> Bool {
