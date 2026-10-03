@@ -21,11 +21,13 @@ public struct TelegramPollerService: Service {
   /// callback branch in `MessageRouter` handles them ahead of `normalize`. `my_chat_member` is
   /// asked for by name because Telegram never sends it otherwise, and being added to a room is the
   /// only moment that room's chat id is announced to an operator who has to configure it.
+  /// Native draft controls arrive as `stopped_message_generation`, independently of messages.
   private static let allowedUpdates = [
     "message",
     "edited_message",
     "callback_query",
     "my_chat_member",
+    "stopped_message_generation",
   ]
 
   /// Back-off windows that stop a persistent fault from becoming a tight re-poll loop.

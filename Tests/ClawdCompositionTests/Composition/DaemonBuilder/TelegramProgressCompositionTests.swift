@@ -66,7 +66,7 @@ struct TelegramProgressCompositionTests {
       #expect(await signals.progressDrafts.waitUntilOpen())
     }
     provider.answer.open()
-    if scenario.expectsAnswer {
+    if scenario.expectsAnswer || scenario == .proactive {
       #expect(await signals.answerDrafts.waitUntilOpen())
     }
     provider.finish.open()
@@ -77,6 +77,9 @@ struct TelegramProgressCompositionTests {
     let draftBodies = requests.filter { $0.url.hasSuffix("/sendRichMessageDraft") }
       .map(\.body).compactMap { String(data: $0, encoding: .utf8) }
     #expect(draftBodies.contains { $0.contains("tg-thinking") } == scenario.expectsProgress)
+    if scenario == .proactive {
+      #expect(draftBodies.allSatisfy { !$0.contains("can_stop") && !$0.contains("keep_on_stop") })
+    }
     if scenario != .proactive {
       #expect(
         draftBodies.contains { $0.contains(ProgressCompositionProvider.answerText) }

@@ -13,6 +13,7 @@ struct TurnProgressSenderTests {
       target: .chat(3),
       draftID: 1,
       mode: .legacyProviderRound,
+      stopControl: .unavailable,
       drafts: drafts,
       typing: RecordingTyping(),
       clock: clock
@@ -46,6 +47,7 @@ struct TurnProgressSenderTests {
       target: .chat(3),
       draftID: 1,
       mode: .interactive,
+      stopControl: .dismissesDraft,
       drafts: drafts,
       typing: RecordingTyping(),
       clock: clock

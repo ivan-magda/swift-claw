@@ -254,8 +254,8 @@ struct TelegramClientTests {
     #expect(commands[2]["command"] as? String == "stop")
   }
 
-  @Test
-  func sendsRichMessageDraftWithDraftIDAndMarkdown() async throws {
+  @Test(arguments: [DraftStopControl.unavailable, .dismissesDraft])
+  func sendsRichMessageDraftWithDraftIDAndMarkdown(stopControl: DraftStopControl) async throws {
     // given
     let recorder = RecordingHTTPExecutor.Recorder()
     let http = RecordingHTTPExecutor(
@@ -269,7 +269,12 @@ struct TelegramClientTests {
     let telegram = TelegramClient(token: "T", http: http, baseURL: "https://example.test")
 
     // when
-    let sent = try await telegram.sendRichMessageDraft(chatID: 42, draftID: 99, markdown: "**hi**")
+    let sent = try await telegram.sendRichMessageDraft(
+      chatID: 42,
+      draftID: 99,
+      markdown: "**hi**",
+      stopControl: stopControl
+    )
 
     // then
     #expect(sent)
@@ -280,6 +285,8 @@ struct TelegramClientTests {
     #expect(call.timeout == .seconds(15))
     #expect(body["chat_id"] as? Int == 42)
     #expect(body["draft_id"] as? Int == 99)
+    #expect(body["can_stop"] as? Bool == (stopControl == .dismissesDraft ? true : nil))
+    #expect(body["keep_on_stop"] as? Bool == (stopControl == .dismissesDraft ? false : nil))
     #expect(richMessage["markdown"] as? String == "**hi**")
     let linkPreviewOptions = try #require(body["link_preview_options"] as? [String: Any])
     #expect(linkPreviewOptions["is_disabled"] as? Bool == true)

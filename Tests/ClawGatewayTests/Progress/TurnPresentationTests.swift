@@ -61,6 +61,8 @@ struct TurnPresentationTests {
     #expect(plainMarkdown.contains("<tg-emoji") == false)
     #expect(plainMarkdown.hasPrefix("<tg-thinking>"))
     #expect(bodies.allSatisfy { ($0["draft_id"] as? Int64) == scope.runID })
+    #expect(bodies.allSatisfy { ($0["can_stop"] as? Bool) == true })
+    #expect(bodies.allSatisfy { ($0["keep_on_stop"] as? Bool) == false })
   }
 
   @Test

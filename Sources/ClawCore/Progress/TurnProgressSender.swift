@@ -29,6 +29,7 @@ package actor TurnProgressSender {
 
   private let target: DeliveryTarget
   private let draftID: Int64
+  private let stopControl: DraftStopControl
   private let mode: TurnProgressPacingMode
   private let drafts: any RichDraftStreaming
   private let typing: any TypingIndicator
@@ -44,6 +45,7 @@ package actor TurnProgressSender {
     target: DeliveryTarget,
     draftID: Int64,
     mode: TurnProgressPacingMode,
+    stopControl: DraftStopControl,
     drafts: any RichDraftStreaming,
     typing: any TypingIndicator,
     clock: any Clock<Duration>,
@@ -52,6 +54,7 @@ package actor TurnProgressSender {
     self.target = target
     self.draftID = draftID
     self.mode = mode
+    self.stopControl = stopControl
     self.drafts = drafts
     self.typing = typing
     self.clock = clock
@@ -187,7 +190,7 @@ private extension TurnProgressSender {
   }
 
   func sendDraft(_ draft: RichDraft) async -> Bool {
-    let task = Task { [drafts, target, draftID, clock] in
+    let task = Task { [drafts, target, draftID, clock, stopControl] in
       let deliveryResult = await Self.sendBounded(
         timeout: Self.sendDeadline,
         clock: clock
@@ -195,7 +198,8 @@ private extension TurnProgressSender {
         await drafts.sendDraft(
           chatID: target.chatID,
           draftID: draftID,
-          draft: draft
+          draft: draft,
+          stopControl: stopControl
         )
       }
       return deliveryResult ?? false

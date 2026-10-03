@@ -180,7 +180,12 @@ actor RecordingTransport: TelegramTransport {
     return Int64(sendAttempts)
   }
 
-  func sendRichMessageDraft(chatID: Int64, draftID: Int64, markdown: String) async throws -> Bool {
+  func sendRichMessageDraft(
+    chatID: Int64,
+    draftID: Int64,
+    markdown: String,
+    stopControl: DraftStopControl
+  ) async throws -> Bool {
     drafts.append(DraftRecord(chatID: chatID, draftID: draftID, markdown: markdown))
     resumeWaiters(.draft, reached: drafts.count)
     return true

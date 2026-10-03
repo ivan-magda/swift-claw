@@ -302,7 +302,8 @@ send; its caller owns `run()` and must cancel and join it. The interactive mode 
 allows only the early second refresh to bypass the normal 1.25-second interval, and refreshes
 unchanged frames within 25 seconds. Freshness records successful delivery, never attempts; after
 25 seconds without success, typing resumes at approximately four-second intervals. Approval waiting
-suppresses typing; group/topic and streaming-disabled presentations send no drafts. Draft sends and
+suppresses typing; group/topic and streaming-disabled presentations send no drafts. Interactive
+private drafts carry `can_stop: true` and `keep_on_stop: false`; legacy proactive drafts omit both. Draft sends and
 typing use the existing three-second cancellation-aware bounded-send join contract. Pausing drains
 an active draft while state collection and typing continue. Resuming makes the latest frame eligible
 again under normal pacing without resetting run elapsed time or early-second history.
@@ -643,6 +644,12 @@ inserts nothing. An outbox failure rolls back the terminal transition and reserv
 - get the same audit + rate-limit treatment as messages;
 - re-validate the stored canonical-args hash **and** `policy_version` at execution (an approval granted under an old policy cannot execute under a changed one);
 - on expiry → DENY, enforced by the approval-expiry ticker (default 1h window, configurable via `approval_expiry`) (`PENDING → EXPIRED → DENY`).
+
+### 6.6 Draft Stop path
+
+Telegram delivers native draft cancellation as `stopped_message_generation`, subscribed on every
+poll. `TMessageGenerationStopped` maps chat, optional topic and draft id into `RawDraftStop` at the
+Core boundary. Missing chat or draft id leaves an unactionable update without failing the batch.
 
 ## 7. Persistence & data model
 

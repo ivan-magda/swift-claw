@@ -184,6 +184,7 @@ private extension StreamingTurnRuntime {
       target: DeliveryTarget(chatID: target.chatID, messageThreadID: target.threadID),
       draftID: target.draftID,
       mode: .legacyProviderRound,
+      stopControl: .unavailable,
       drafts: draftStreamer,
       typing: typingIndicator,
       clock: clock

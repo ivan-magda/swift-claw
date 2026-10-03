@@ -1,3 +1,9 @@
+/// Whether a transient draft offers a native cancellation control.
+public enum DraftStopControl: Sendable, Equatable {
+  case unavailable
+  case dismissesDraft
+}
+
 /// A transient frame and an optional renderer-owned compatibility alternative.
 /// Both representations preserve the same answer; only owned progress decoration may differ.
 public struct RichDraft: Sendable, Equatable {

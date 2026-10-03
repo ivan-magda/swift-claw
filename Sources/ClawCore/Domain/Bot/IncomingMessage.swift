@@ -4,6 +4,7 @@ public struct RawUpdate: Sendable, Equatable {
   public let message: RawMessage?
   public let editedMessage: RawMessage?
   public let callback: RawCallback?
+  public let draftStop: RawDraftStop?
   /// The bot's own membership changing in a chat. Carries no message and is only ever logged.
   public let myChatMember: RawChatMemberUpdate?
 
@@ -12,13 +13,30 @@ public struct RawUpdate: Sendable, Equatable {
     message: RawMessage?,
     editedMessage: RawMessage?,
     callback: RawCallback? = nil,
-    myChatMember: RawChatMemberUpdate? = nil
+    myChatMember: RawChatMemberUpdate? = nil,
+    draftStop: RawDraftStop? = nil
   ) {
     self.updateID = updateID
     self.message = message
     self.editedMessage = editedMessage
     self.callback = callback
+    self.draftStop = draftStop
     self.myChatMember = myChatMember
+  }
+}
+
+/// A native draft cancellation event. Private chat identity supplies its authorization principal.
+public struct RawDraftStop: Sendable, Equatable {
+  public let chatID: Int64
+  public let chatKind: ChatKind
+  public let messageThreadID: Int64?
+  public let draftID: Int64
+
+  public init(chatID: Int64, chatKind: ChatKind, messageThreadID: Int64?, draftID: Int64) {
+    self.chatID = chatID
+    self.chatKind = chatKind
+    self.messageThreadID = messageThreadID
+    self.draftID = draftID
   }
 }
 

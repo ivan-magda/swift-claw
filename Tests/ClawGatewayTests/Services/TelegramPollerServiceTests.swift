@@ -153,6 +153,7 @@ struct TelegramPollerServiceTests {
         "edited_message",
         "callback_query",
         "my_chat_member",
+        "stopped_message_generation",
       ]
     )
   }

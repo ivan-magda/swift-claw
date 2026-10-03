@@ -67,6 +67,7 @@ public actor TurnPresentation {
       target: target,
       draftID: draftID,
       mode: .interactive,
+      stopControl: .dismissesDraft,
       drafts: drafts,
       typing: typing,
       clock: clock
