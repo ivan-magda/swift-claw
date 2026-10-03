@@ -3,7 +3,7 @@ import Foundation
 public struct StopCommandResult: Sendable, Equatable {
   public let newlyClaimed: Bool
   public let sessionID: Int64?
-  /// Every run `/stop` terminated — the RUNNING turn, any queued PENDING turns, and any run parked
+  /// Every run the control terminated — the RUNNING turn, any queued PENDING turns, and any run parked
   /// in AWAITING_APPROVAL (FSM: PENDING + /stop → CANCELLED). Empty when there was nothing to stop.
   public let cancelledRunIDs: [Int64]
   /// PENDING approvals of the terminated runs, CAS'd to REJECTED (decision `cancelled`) in the same
@@ -47,6 +47,13 @@ public struct NewCommandResult: Sendable, Equatable {
 }
 
 public protocol CommandStore: Sendable {
+  /// Claims the update and cancels only the named live run, resolving its pending approvals.
+  func applyDraftStop(
+    updateID: Int64,
+    runID: Int64,
+    now: Date
+  ) throws(StoreError) -> StopCommandResult
+
   /// Atomic `/stop`: claim update + resolve session + every PENDING/RUNNING/AWAITING_APPROVAL →
   /// CANCELLED + one audit row per cancelled run, in one write.
   func applyStop(

@@ -650,6 +650,9 @@ inserts nothing. An outbox failure rolls back the terminal transition and reserv
 Telegram delivers native draft cancellation as `stopped_message_generation`, subscribed on every
 poll. `TMessageGenerationStopped` maps chat, optional topic and draft id into `RawDraftStop` at the
 Core boundary. Missing chat or draft id leaves an unactionable update without failing the batch.
+`CommandStore.applyDraftStop` fuses the update claim, single-run FSM cancellation, pending approval
+resolution (`cancelled`), and one owner `turnCancelled` audit in one transaction. Terminal or missing
+runs remain unchanged and create no cancellation audit; queued runs retain FIFO order.
 
 ## 7. Persistence & data model
 

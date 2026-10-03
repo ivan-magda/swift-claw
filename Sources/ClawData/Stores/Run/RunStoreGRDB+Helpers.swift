@@ -68,6 +68,25 @@ extension RunStoreGRDB {
     try terminateActiveRuns(db, sessionID: sessionID, reason: .cancelled, now: now)
   }
 
+  static func cancelRun(_ db: Database, runID: Int64, now: Date) throws -> Bool {
+    try terminateRun(db, runID: runID, reason: .cancelled, now: now)
+  }
+
+  private static func terminateRun(
+    _ db: Database,
+    runID: Int64,
+    reason: CancelReason,
+    now: Date
+  ) throws -> Bool {
+    try transitionRun(
+      db,
+      runID: runID,
+      event: reason.runEvent,
+      now: now,
+      terminal: .deferred(reason.terminalCause)
+    ) != nil
+  }
+
   /// Terminates live runs while leaving learning settlement to the lane tail.
   ///
   /// A provider call still in flight may record usage after the run becomes terminal. Deferring
@@ -94,14 +113,7 @@ extension RunStoreGRDB {
     var affected: [Int64] = []
     for row in rows {
       let runID: Int64 = row["id"]
-      let transitioned = try transitionRun(
-        db,
-        runID: runID,
-        event: reason.runEvent,
-        now: now,
-        terminal: .deferred(reason.terminalCause)
-      )
-      if transitioned != nil {
+      if try terminateRun(db, runID: runID, reason: reason, now: now) {
         affected.append(runID)
       }
     }

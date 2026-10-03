@@ -89,6 +89,54 @@ struct CommandApprovalResolutionTests {
   }
 
   @Test
+  func draftStopCancelsOnlyTheNamedLiveRun() throws {
+    // given
+    let env = try makeParkedFixture()
+    let queued = try SessionMessageStoreGRDB(writer: env.queue).claimAndPersistInbound(
+      InboundMessage(
+        updateID: 2,
+        sessionKey: SessionKey.telegramDM(chatID: 7),
+        chatID: 7,
+        userID: 7,
+        text: "queued",
+        isEdited: false,
+        ts: Date()
+      )
+    )
+    let queuedID = try #require(queued.runID)
+
+    // when
+    let result = try env.commands.applyDraftStop(updateID: 3, runID: env.runID, now: Date())
+    let duplicate = try env.commands.applyDraftStop(updateID: 3, runID: queuedID, now: Date())
+    let late = try env.commands.applyDraftStop(updateID: 4, runID: env.runID, now: Date())
+
+    // then
+    #expect(result.newlyClaimed)
+    #expect(result.sessionID == queued.sessionID)
+    #expect(result.cancelledRunIDs == [env.runID])
+    #expect(result.resolvedApprovalIDs == [env.approvalID])
+    #expect(!duplicate.newlyClaimed)
+    #expect(late.newlyClaimed && late.cancelledRunIDs.isEmpty)
+    #expect(try env.approvals.approval(id: env.approvalID)?.state == .rejected)
+    try env.queue.read { db in
+      #expect(try RunStoreGRDB.currentRunState(db, runID: env.runID) == .cancelled)
+      #expect(try RunStoreGRDB.currentRunState(db, runID: queuedID) == .pending)
+      let rows = try Row.fetchAll(
+        db,
+        sql: "SELECT * FROM audit_events WHERE action = ?",
+        arguments: [AuditAction.turnCancelled.rawValue]
+      )
+      let audit = try #require(rows.first)
+      #expect(rows.count == 1)
+      #expect(audit["actor"] as String == AuditActor.owner.rawValue)
+      #expect(audit["decision"] as String == ApprovalDecision.cancelled.rawValue)
+      #expect(audit["run_id"] as Int64 == env.runID)
+      #expect(audit["session_id"] as Int64? == result.sessionID)
+      #expect(audit["args_redacted"] as String == CommandStoreGRDB.draftStopAuditSource)
+    }
+  }
+
+  @Test
   func stopResolvesTheParkedApprovalToRejectedCancelled() throws {
     // given
     let env = try makeParkedFixture()

@@ -3,7 +3,7 @@ import Foundation
 import GRDB
 
 public struct CommandStoreGRDB: CommandStore {
-  private let database: MappedDatabase
+  let database: MappedDatabase
   private let afterClaimForTesting: @Sendable () throws -> Void
   private let afterSupersedeAndDetaintForTesting: @Sendable () throws -> Void
 
