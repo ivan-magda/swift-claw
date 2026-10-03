@@ -56,7 +56,12 @@ public protocol TelegramTransport:
 {
   func getMe() async throws -> BotIdentity
 
-  func sendRichMessageDraft(chatID: Int64, draftID: Int64, markdown: String) async throws -> Bool
+  func sendRichMessageDraft(
+    chatID: Int64,
+    draftID: Int64,
+    markdown: String,
+    stopControl: DraftStopControl
+  ) async throws -> Bool
 
   /// Emits a Telegram chat action (e.g. `"typing"`). Fire-and-forget: the action auto-expires (~5s),
   /// so callers re-issue it on an interval and ignore failures — a missing indicator is never fatal.
@@ -74,7 +79,8 @@ extension TelegramTransport {
   public func sendRichMessageDraft(
     chatID: Int64,
     draftID: Int64,
-    markdown: String
+    markdown: String,
+    stopControl: DraftStopControl
   ) async throws -> Bool {
     throw TelegramError.transport("sendRichMessageDraft not implemented")
   }
@@ -126,11 +132,21 @@ public protocol RichDraftStreaming: Sendable {
   /// (Telegram accepts one only in a private chat) must not silence the typing pulse behind it.
   func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool
 
-  func sendDraft(chatID: Int64, draftID: Int64, draft: RichDraft) async -> Bool
+  func sendDraft(
+    chatID: Int64,
+    draftID: Int64,
+    draft: RichDraft,
+    stopControl: DraftStopControl
+  ) async -> Bool
 }
 
 extension RichDraftStreaming {
-  public func sendDraft(chatID: Int64, draftID: Int64, draft: RichDraft) async -> Bool {
+  public func sendDraft(
+    chatID: Int64,
+    draftID: Int64,
+    draft: RichDraft,
+    stopControl: DraftStopControl
+  ) async -> Bool {
     await sendDraft(chatID: chatID, draftID: draftID, markdown: draft.markdown)
   }
 }

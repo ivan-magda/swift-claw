@@ -88,6 +88,7 @@ actor RecordingTransport: TelegramTransport {
   private(set) var pollCount = 0
   private(set) var lastAllowedUpdates: [String] = []
 
+  private let onSend: @Sendable (String) -> Void
   private var batches: [[RawUpdate]]
   private let onExhausted: TelegramError?
   private let sendError: TelegramError?
@@ -110,8 +111,10 @@ actor RecordingTransport: TelegramTransport {
     throwAfterExhaustion onExhausted: TelegramError? = nil,
     sendError: TelegramError? = nil,
     richError: TelegramError? = nil,
-    failSendAtAttempt: Int? = nil
+    failSendAtAttempt: Int? = nil,
+    onSend: @escaping @Sendable (String) -> Void = { _ in }
   ) {
+    self.onSend = onSend
     self.batches = batches
     self.onExhausted = onExhausted
     self.sendError = sendError
@@ -156,6 +159,7 @@ actor RecordingTransport: TelegramTransport {
       failPlainFallbackNext = false
       throw TelegramError.transport("plain fallback down")  // this row is undeliverable mid-batch
     }
+    onSend(text)
     sent.append((target, text))
     resumeWaiters(.sent, reached: sent.count + richSends.count)
     return Int64(sendAttempts)
@@ -180,7 +184,12 @@ actor RecordingTransport: TelegramTransport {
     return Int64(sendAttempts)
   }
 
-  func sendRichMessageDraft(chatID: Int64, draftID: Int64, markdown: String) async throws -> Bool {
+  func sendRichMessageDraft(
+    chatID: Int64,
+    draftID: Int64,
+    markdown: String,
+    stopControl: DraftStopControl
+  ) async throws -> Bool {
     drafts.append(DraftRecord(chatID: chatID, draftID: draftID, markdown: markdown))
     resumeWaiters(.draft, reached: drafts.count)
     return true
@@ -242,6 +251,20 @@ actor RecordingTransport: TelegramTransport {
       waiter.continuation.resume()
     }
   }
+}
+
+func draftStopUpdate(id: Int64, chat: Int64, draftID: Int64) -> RawUpdate {
+  RawUpdate(
+    updateID: id,
+    message: nil,
+    editedMessage: nil,
+    draftStop: RawDraftStop(
+      chatID: chat,
+      chatKind: .private,
+      messageThreadID: nil,
+      draftID: draftID
+    )
+  )
 }
 
 func textUpdate(

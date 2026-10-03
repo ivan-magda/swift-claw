@@ -145,11 +145,14 @@ public struct TelegramClient: TelegramTransport {
   public func sendRichMessageDraft(
     chatID: Int64,
     draftID: Int64,
-    markdown: String
+    markdown: String,
+    stopControl: DraftStopControl
   ) async throws -> Bool {
     let request = SendRichMessageDraftRequest(
       chatID: chatID,
       draftID: draftID,
+      canStop: stopControl == .dismissesDraft ? true : nil,
+      keepOnStop: stopControl == .dismissesDraft ? false : nil,
       richMessage: InputRichMessage(markdown: markdown),
       linkPreviewOptions: LinkPreviewOptions(isDisabled: true)
     )

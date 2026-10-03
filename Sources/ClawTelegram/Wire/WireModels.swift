@@ -200,12 +200,16 @@ struct SendRichMessageDraftRequest: Encodable {
   private enum CodingKeys: String, CodingKey {
     case chatID = "chatId"
     case draftID = "draftId"
+    case canStop
+    case keepOnStop
     case richMessage
     case linkPreviewOptions
   }
 
   let chatID: Int64
   let draftID: Int64
+  let canStop: Bool?
+  let keepOnStop: Bool?
   let richMessage: InputRichMessage
   let linkPreviewOptions: LinkPreviewOptions
 }
@@ -260,12 +264,50 @@ struct TChatMemberUpdated: Decodable {
   }
 }
 
+/// Missing stop fields or an unparseable draft ID leave the update unactionable.
+struct TMessageGenerationStopped: Decodable {
+  private enum CodingKeys: String, CodingKey {
+    case chat, message_thread_id, draft_id
+  }
+
+  let chat: TChat?
+  let message_thread_id: Int64?
+  let draft_id: Int64?
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    chat = try container.decodeIfPresent(TChat.self, forKey: .chat)
+    message_thread_id = try container.decodeIfPresent(Int64.self, forKey: .message_thread_id)
+    // Telegram also sends decimal strings despite documenting draft_id as Integer.
+    if let id = try? container.decode(Int64.self, forKey: .draft_id) {
+      draft_id = id
+    } else if let text = try? container.decode(String.self, forKey: .draft_id) {
+      draft_id = Int64(text)
+    } else {
+      draft_id = nil
+    }
+  }
+
+  var draftStop: RawDraftStop? {
+    guard let chat, let draft_id else {
+      return nil
+    }
+    return RawDraftStop(
+      chatID: chat.id,
+      chatKind: chat.kind,
+      messageThreadID: message_thread_id,
+      draftID: draft_id
+    )
+  }
+}
+
 struct TUpdate: Decodable {
   let update_id: Int64
   let message: TMessage?
   let edited_message: TMessage?
   let callback_query: TCallbackQuery?
   let my_chat_member: TChatMemberUpdated?
+  let stopped_message_generation: TMessageGenerationStopped?
 
   // The button tap decodes here and maps into the wire-agnostic RawUpdate.callback; chat/message
   // ids come from the prompt message (callback_query.message), which Telegram always includes for
@@ -284,7 +326,8 @@ struct TUpdate: Decodable {
           data: query.data
         )
       },
-      myChatMember: my_chat_member?.toRawChatMemberUpdate()
+      myChatMember: my_chat_member?.toRawChatMemberUpdate(),
+      draftStop: stopped_message_generation?.draftStop
     )
   }
 }  // swiftlint:enable identifier_name discouraged_optional_boolean discouraged_optional_collection

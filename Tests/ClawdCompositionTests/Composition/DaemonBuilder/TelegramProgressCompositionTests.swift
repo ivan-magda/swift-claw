@@ -66,7 +66,7 @@ struct TelegramProgressCompositionTests {
       #expect(await signals.progressDrafts.waitUntilOpen())
     }
     provider.answer.open()
-    if scenario.expectsAnswer {
+    if scenario.expectsAnswer || scenario == .proactive {
       #expect(await signals.answerDrafts.waitUntilOpen())
     }
     provider.finish.open()
@@ -77,6 +77,29 @@ struct TelegramProgressCompositionTests {
     let draftBodies = requests.filter { $0.url.hasSuffix("/sendRichMessageDraft") }
       .map(\.body).compactMap { String(data: $0, encoding: .utf8) }
     #expect(draftBodies.contains { $0.contains("tg-thinking") } == scenario.expectsProgress)
+    if scenario == .proactive {
+      #expect(
+        draftBodies.allSatisfy {
+          !$0.contains("can_stop") && !$0.contains("keep_on_stop")
+        }
+      )
+    }
+    let draftIDs = await signals.draftIDs
+    if scenario.expectsAnswer {
+      // Proactive runs can stream into the same chat from another session lane.
+      #expect(draftIDs.isEmpty == false)
+      #expect(
+        draftIDs.allSatisfy {
+          $0 < 0
+        }
+      )
+    } else if scenario == .proactive {
+      #expect(
+        draftIDs.allSatisfy {
+          $0 == runID && $0 > 0
+        }
+      )
+    }
     if scenario != .proactive {
       #expect(
         draftBodies.contains { $0.contains(ProgressCompositionProvider.answerText) }
@@ -331,6 +354,7 @@ private actor ProgressCompositionSignals {
   nonisolated let secretPreview = AsyncGate()
   private(set) var secretFrames: [String] = []
   private(set) var typingTargets: [DeliveryTarget] = []
+  private(set) var draftIDs: [Int64] = []
 
   func observe(_ request: HTTPRequest) throws {
     let body = try JSONSerialization.jsonObject(with: request.body ?? Data())
@@ -344,6 +368,7 @@ private actor ProgressCompositionSignals {
       typing.open()
     }
     if request.url.hasSuffix("/sendRichMessageDraft") {
+      draftIDs.append(try #require(fields["draft_id"] as? Int64))
       let richMessage = fields["rich_message"] as? [String: Any]
       let markdown = richMessage?["markdown"] as? String ?? ""
       if markdown.contains("Root ") || markdown.contains("preview:") {

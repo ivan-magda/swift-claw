@@ -150,8 +150,9 @@ a permanent reply, without drafts or explanation requests. Groups and topics use
 active work and pause it while waiting for a person's approval.
 See [Telegram progress](CUSTOMIZATION.md#telegram-progress) for the settings.
 
-Two commands to know from day one: `/stop` cancels the current turn, `/new` starts a
-fresh session.
+Tap **Stop** on a private-chat draft to dismiss it and cancel that turn. Queued messages still run.
+clawd sends "Stopped." after cleanup; an ordinary tool that ignores cancellation is abandoned at its deadline.
+`/stop` cancels current and queued turns, and `/new` starts a fresh session.
 
 ## 6. Make it yours
 
@@ -237,6 +238,10 @@ This completes a device-code login, discovers eligible models, and prints the ex
 `CLAW_LLM_MODEL=openai-chatgpt/<model>` value to paste into `clawd.env`. On that route
 `CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY` are unused; the credential lives encrypted in
 the state root.
+
+Subscription usage records at zero USD. Its local daily token cap is off by default; leave
+`CLAW_DAY_TOKEN_CEILING` unset or blank, or set a positive integer to enable it. Per-run
+limits still apply. See [Spending limits](CUSTOMIZATION.md#spending-limits).
 
 If clawd cannot read the model list, `clawd auth login` still succeeds and stores the
 credential, but prints the assignment with `<model>` left as a literal placeholder. Paste that

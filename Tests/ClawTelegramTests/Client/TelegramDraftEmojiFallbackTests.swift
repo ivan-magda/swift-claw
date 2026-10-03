@@ -16,8 +16,18 @@ struct TelegramDraftEmojiFallbackTests {
     let draft = RichDraft(markdown: decorated + answer, fallbackMarkdown: ordinary + answer)
 
     // when
-    let delivered = await streamer.sendDraft(chatID: 42, draftID: 9, draft: draft)
-    let next = await streamer.sendDraft(chatID: 42, draftID: 10, draft: draft)
+    let delivered = await streamer.sendDraft(
+      chatID: 42,
+      draftID: 9,
+      draft: draft,
+      stopControl: .unavailable
+    )
+    let next = await streamer.sendDraft(
+      chatID: 42,
+      draftID: 10,
+      draft: draft,
+      stopControl: .unavailable
+    )
     let answerOnly = await streamer.sendDraft(chatID: 42, draftID: 11, markdown: decorated)
 
     // then
@@ -44,8 +54,18 @@ struct TelegramDraftEmojiFallbackTests {
     let streamer = TelegramRichDraftStreamer(transport: transport)
 
     // when
-    let first = await streamer.sendDraft(chatID: 42, draftID: 9, draft: frame)
-    let next = await streamer.sendDraft(chatID: 42, draftID: 9, draft: frame)
+    let first = await streamer.sendDraft(
+      chatID: 42,
+      draftID: 9,
+      draft: frame,
+      stopControl: .unavailable
+    )
+    let next = await streamer.sendDraft(
+      chatID: 42,
+      draftID: 9,
+      draft: frame,
+      stopControl: .unavailable
+    )
 
     // then
     #expect(first == false)
@@ -67,10 +87,25 @@ struct TelegramDraftEmojiFallbackTests {
     let streamer = TelegramRichDraftStreamer(transport: transport, clock: clock)
 
     // when
-    let first = await streamer.sendDraft(chatID: 42, draftID: 9, draft: frame)
-    let held = await streamer.sendDraft(chatID: 42, draftID: 9, draft: frame)
+    let first = await streamer.sendDraft(
+      chatID: 42,
+      draftID: 9,
+      draft: frame,
+      stopControl: .unavailable
+    )
+    let held = await streamer.sendDraft(
+      chatID: 42,
+      draftID: 9,
+      draft: frame,
+      stopControl: .unavailable
+    )
     try await clock.sleep(for: .seconds(5))
-    let resumed = await streamer.sendDraft(chatID: 42, draftID: 9, draft: frame)
+    let resumed = await streamer.sendDraft(
+      chatID: 42,
+      draftID: 9,
+      draft: frame,
+      stopControl: .unavailable
+    )
 
     // then
     #expect(first == false)
@@ -94,7 +129,12 @@ struct TelegramDraftEmojiFallbackTests {
     let streamer = TelegramRichDraftStreamer(transport: transport)
 
     // when
-    let delivered = await streamer.sendDraft(chatID: 42, draftID: 9, draft: draft)
+    let delivered = await streamer.sendDraft(
+      chatID: 42,
+      draftID: 9,
+      draft: draft,
+      stopControl: .unavailable
+    )
 
     // then
     #expect(delivered == false)
@@ -113,7 +153,7 @@ struct TelegramDraftEmojiFallbackTests {
 
     // when
     let send = Task {
-      await streamer.sendDraft(chatID: 42, draftID: 9, draft: frame)
+      await streamer.sendDraft(chatID: 42, draftID: 9, draft: frame, stopControl: .unavailable)
     }
     let delivered = await send.value
 

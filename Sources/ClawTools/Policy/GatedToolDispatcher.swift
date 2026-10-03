@@ -109,11 +109,8 @@ public struct GatedToolDispatcher: ToolDispatching {
 // MARK: - Execution
 
 private extension GatedToolDispatcher {
-  /// Bounded by the shared `DeadlineRace`, whose loser is cancelled and ABANDONED, never
-  /// awaited: a task group always awaits its children (the pitfall `sendDraftBounded`
-  /// documents), so a wedged tool — a blocking syscall, hung I/O — would otherwise hold the
-  /// strict-FIFO session lane hostage far past its declared timeout, beyond `/stop`'s reach.
-  /// The abandoned execute task keeps running detached until its I/O returns.
+  /// Caller cancellation cancels execution and joins cleanup within the original deadline.
+  /// Deadline expiry abandons a tool that ignores cancellation so it cannot hold the lane forever.
   ///
   /// A group turn dispatches write tools here, so the abandonment is no longer free — and it is
   /// still the right trade. `file_write` commits through a staged temp file and a single
@@ -144,24 +141,38 @@ private extension GatedToolDispatcher {
       executedArguments = arguments
     }
 
-    let outcome = await DeadlineRace.race(
-      allowance: tool.timeout,
-      sleep: { [clock] duration in
-        try await clock.sleep(for: duration)
-      },
-      operation: {
-        await tool.execute(
-          arguments: executedArguments,
-          canonicalTarget: canonicalTarget,
-          context: context
-        )
-      }
-    )
+    let execution = Task {
+      await tool.execute(
+        arguments: executedArguments,
+        canonicalTarget: canonicalTarget,
+        context: context
+      )
+    }
+    // This owned task does not inherit caller cancellation: the original deadline must keep
+    // running while execution responds to cancellation and finishes its cleanup.
+    let deadline = Task {
+      await DeadlineRace.race(
+        allowance: tool.timeout,
+        sleep: { [clock] duration in
+          try await clock.sleep(for: duration)
+        },
+        operation: {
+          await execution.value
+        }
+      )
+    }
+
+    let outcome = await withTaskCancellationHandler {
+      await deadline.value
+    } onCancel: {
+      execution.cancel()
+    }
+    execution.cancel()
 
     switch outcome {
-    case .operationReturned(let payload):
+    case .operationReturned(let payload) where !Task.isCancelled:
       return payload
-    case .deadlineExpired, .callerCancelled:
+    case .operationReturned, .deadlineExpired, .callerCancelled:
       return ToolPayload(
         content: "The \(tool.definition.name) call timed out.",
         status: .error,

@@ -788,9 +788,9 @@ struct AgentRuntimePolicyTests {
   }
 
   @Test(
-    "an included-plan call is not rejected by the USD cap, yet the token ceiling still stops it"
+    "an included-plan call completes after daily USD and derived token caps are exceeded"
   )
-  func includedPlanSkipsUSDButTokenCeilingStillStops() async throws {
+  func includedPlanSkipsDefaultDailyCaps() async throws {
     // given — a day already far over the USD cap
     let overUSD = RunBudget.default.perDayUSD * 5
 
@@ -821,28 +821,13 @@ struct AgentRuntimePolicyTests {
           sessionID: 2,
           chatID: 3,
           context: Self.userBuildResult(),
+          todayTokens: RunBudget.default.dayTokenCeiling,
           todayUSD: overUSD
         )
       )
-    // then — a subscription USD figure is not a gate
+    // then — neither default daily cap prevents a subscription call
     _ = try requireCompleted(planOutcome.result)
     #expect(await planProvider.calls == 1)
-
-    // when — but the hard daily token ceiling still binds under the subscription policy
-    let tokenProvider = StubProvider(.respond(okResponse()))
-    let tokenOutcome = try await makeRuntime(provider: tokenProvider, costPolicy: .includedPlan)
-      .runTurn(
-        makeTurnRequest(
-          runID: 1,
-          sessionID: 2,
-          chatID: 3,
-          context: Self.userBuildResult(),
-          todayTokens: RunBudget.default.dayTokenCeiling
-        )
-      )
-    // then — a token cap is not a USD cap, so it still stops the subscription call
-    #expect(tokenOutcome.result == .budgetStopped(cap: BudgetGate.perDayTokenCap))
-    #expect(await tokenProvider.calls == 0)
   }
 
   @Test("the replay-state reservation participates in the per-call input gate")

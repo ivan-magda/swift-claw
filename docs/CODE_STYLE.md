@@ -27,6 +27,87 @@ The adopted revision, explicit local exceptions, and tool ownership are normativ
 - The pinned Subprocess SDK's `Environment.Key(stringLiteral:)` is a narrow dynamic-key
   exception until that API exposes a suitable public nonfailable alternative.
 
+## Readability and control flow
+
+These review recommendations apply the existing naming, early-exit, and formatting rules.
+Use them where they clarify intent; they are not blanket rewrites or new formatter exceptions.
+
+### Separate operations from checks
+
+Prefer a named result when a condition contains a multiline call, a closure, or an operation
+whose effects are hard to distinguish from the check. Keep the result and its guard together:
+
+```swift
+let scope = await presentations?.stoppableRun(
+  chatID: stop.chatID,
+  threadID: stop.messageThreadID,
+  draftID: stop.draftID
+)
+guard let scope else {
+  return .skipped
+}
+```
+
+Keep simple lookups such as `guard let entry = entriesByRunID[runID] else` compact.
+Separate checks when they represent distinct failure cases, such as a missing run and a run
+that cannot be cancelled. Preserve short-circuit evaluation: do not move an operation ahead of
+an earlier condition that previously prevented it from running.
+
+### Name values by their role
+
+Prefer names that explain what a result represents: `feedbackOutcome`, `confirmationOutcome`,
+and `resolvedApprovalIDs` rather than `consumed` or `resolved`. `result` remains appropriate
+when the surrounding code makes its role clear; longer names are not inherently better.
+
+Distinguish time instants from durations. Names such as `startedAt` and `acceptedAt` identify
+instants; `acceptanceMilliseconds` identifies a duration and its unit.
+
+### Separate logical steps
+
+Use a blank line between phases such as lookup, state mutation, result handling, and delivery.
+Keep closely related statements together, including a value's initialization and its guard.
+Avoid adding a blank line after every statement or a comment that only labels an obvious step.
+
+### Lay out multiline method chains by stage
+
+For a chain that already spans multiple lines, prefer one chained call per continuation line.
+Keep nonempty closure bodies multiline:
+
+```swift
+let predecessors = operations.values
+  .filter { $0.runID == runID }
+  .map(\.task)
+```
+
+Introduce intermediate variables when their names explain a domain concept or separate a
+meaningful operation. Do not split a clear chain into locals solely to avoid chaining. Use
+named closure parameters when their roles need explanation; `$0` is suitable for a simple,
+unambiguous transformation or predicate.
+
+### Choose a readable conditional value
+
+A ternary expression works well for a short choice between values. Prefer a multiline `if`
+expression when a branch performs an operation whose execution or failure behavior deserves
+attention, such as allocating a draft identity:
+
+```swift
+let draftID: Int64? =
+  if draftsEnabled(for: scope) {
+    try? draftIDs.nextID()
+  } else {
+    nil
+  }
+```
+
+Keep the optional fallback visible. Do not add helpers solely to hide a small conditional.
+
+### Review behavior while changing style
+
+Check evaluation order as well as the returned value. Preserve `await` placement, database
+transaction boundaries, approval signalling, cancellation, task registration, and weak captures.
+For actor code, moving an operation across an `await` can change behavior even if the final
+statements look equivalent. Preserve runtime string contents, including log messages.
+
 ## Setup
 
 Use the compiler and formatter bundled with the pinned distribution:
@@ -141,6 +222,8 @@ The existing tools cover mechanical layout. The following details remain manual 
 - Keep function signature tokens from `)` through `async`, `throws`, and `->` together.
   Wrap parameters vertically when needed; review existing breaks around effects manually.
 - Naming, declaration responsibility, and accurate documentation contracts.
+- [Readability and control flow](#readability-and-control-flow): meaningful result names,
+  logical step boundaries, clear checks, and unchanged evaluation order.
 
 Reviewers apply all seven sections in context:
 

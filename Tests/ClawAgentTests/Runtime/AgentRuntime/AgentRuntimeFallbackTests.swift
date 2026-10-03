@@ -149,8 +149,11 @@ struct AgentRuntimeFallbackTests {
     #expect(await fallback.requests.count == 2)
   }
 
-  @Test("a cooling primary is skipped and the turn starts on the fallback")
-  func coolingPrimaryIsSkipped() async throws {
+  @Test(
+    "a cooling primary uses the fallback and its metered daily token ceiling",
+    arguments: [false, true]
+  )
+  func coolingPrimaryIsSkipped(overDailyTokens: Bool) async throws {
     // given
     let cooldown = PrimaryRouteCooldown(longSeconds: 900, clock: ScriptedClock { _ in })
     await cooldown.arm(persistence: .long, retryAfterSeconds: nil)
@@ -159,11 +162,24 @@ struct AgentRuntimeFallbackTests {
     let runtime = makeRuntime(primary: primary, fallback: fallback, cooldown: cooldown)
 
     // when
-    let outcome = try await run(runtime)
+    let outcome = try await runtime.runTurn(
+      makeTurnRequest(
+        runID: 1,
+        sessionID: 1,
+        chatID: 1,
+        context: makeBuildResult(),
+        todayTokens: overDailyTokens ? RunBudget.default.dayTokenCeiling : 0
+      )
+    )
 
     // then
-    let (content, _, _) = try requireCompleted(outcome.result)
-    #expect(content == "from fallback")
+    if overDailyTokens {
+      #expect(outcome.result == .budgetStopped(cap: BudgetGate.perDayTokenCap))
+      #expect(await fallback.calls == 0)
+    } else {
+      let (content, _, _) = try requireCompleted(outcome.result)
+      #expect(content == "from fallback")
+    }
     #expect(await primary.calls == 0)
   }
 

@@ -10,6 +10,7 @@ public struct ClawStores: Sendable {
 
   public let sessionMessages: any SessionMessageStore
   public let runs: any RunStore
+  public let draftIDs: any DraftIDStore
   public let usage: any UsageStore
   public let outbox: any OutboxStore
   public let audit: any AuditLog
@@ -32,6 +33,7 @@ public struct ClawStores: Sendable {
     cursor: any UpdateCursorStore,
     sessionMessages: any SessionMessageStore,
     runs: any RunStore,
+    draftIDs: any DraftIDStore,
     usage: any UsageStore,
     outbox: any OutboxStore,
     audit: any AuditLog,
@@ -51,6 +53,7 @@ public struct ClawStores: Sendable {
 
     self.sessionMessages = sessionMessages
     self.runs = runs
+    self.draftIDs = draftIDs
     self.usage = usage
     self.outbox = outbox
     self.audit = audit
@@ -81,6 +84,7 @@ extension ClawDatabase {
       cursor: UpdateCursorStoreGRDB(writer: pool),
       sessionMessages: SessionMessageStoreGRDB(writer: pool),
       runs: RunStoreGRDB(writer: pool),
+      draftIDs: DraftIDStoreGRDB(writer: pool),
       usage: UsageStoreGRDB(writer: pool),
       outbox: OutboxStoreGRDB(writer: pool),
       audit: AuditLogGRDB(writer: pool),

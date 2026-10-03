@@ -172,6 +172,13 @@ explanations still show working status and tool steps. Raw reasoning is never di
 | `true` | `false` | Typing while waiting, then streamed answer |
 | `false` | Either | Typing, then permanent answer; no drafts or explanation requests |
 
+Interactive private-chat drafts offer **Stop**, including answer-only drafts and drafts waiting for
+approval. Tapping it dismisses the preview and cancels that run; queued messages still run.
+clawd sends "Stopped." after the run finishes cleanup. An ordinary tool that ignores cancellation
+is abandoned at its original deadline and can still run after that acknowledgement.
+Streaming off removes the button. Scheduled and heartbeat drafts have no Stop control.
+`/stop` remains available and cancels current and queued turns.
+
 Set `CLAW_TELEGRAM_PROGRESS=false` in `clawd.env`, reload it and restart to opt out. It uses
 the strict boolean values `true`/`false`, `yes`/`no`, `on`/`off`, and `1`/`0`; malformed values
 fail configuration. This setting controls the additional display and explanation requests.
@@ -254,14 +261,18 @@ All optional; unset means the built-in defaults.
 | `CLAW_PER_RUN_USD`                       | Cap per single run                                                                |
 | `CLAW_PER_DAY_USD`                       | Daily spend kill-switch                                                           |
 | `CLAW_PROACTIVE_PER_DAY_USD`             | Nested daily cap for scheduled + heartbeat runs and learning calls (default 2.00) |
+| `CLAW_DAY_TOKEN_CEILING`                 | Positive daily token cap; unset or blank disables it for subscriptions and derives it from the USD/reference-rate settings for metered routes |
 | `CLAW_MAX_TURNS` / `CLAW_MAX_TOOL_CALLS` | Bounds on the agentic loop per run                                                |
 
 **On the ChatGPT subscription route these dollar caps do not gate.** A plan-included call
-has no metered cost to compare against, so `CLAW_PER_RUN_USD` and
+has no metered cost to compare against, so `CLAW_PER_RUN_USD`, `CLAW_PER_DAY_USD` and
 `CLAW_PROACTIVE_PER_DAY_USD` are inert there, and clawd records the usage at zero USD.
-`CLAW_PER_DAY_USD` still binds indirectly, because the daily token ceiling derives from it;
-set `CLAW_DAY_TOKEN_CEILING` to control that directly. Token, turn, tool-call, and
-wall-clock bounds apply the same on both routes.
+The local daily token cap is **off by default for subscriptions**. Leave
+`CLAW_DAY_TOKEN_CEILING` unset or blank to keep it off; a positive integer enables that
+cap on both subscription and metered routes. On metered routes, an unset or blank value
+keeps the derived default: `CLAW_PER_DAY_USD / CLAW_REFERENCE_USD_PER_TOKEN`, rounded
+down (666,666 tokens with the defaults). Per-run input/context, turn, tool-call and
+wall-clock bounds still apply on both routes, and token usage still records.
 
 **With a [fallback route](#a-second-route-to-fall-back-to) configured, one call can go
 over the dollar caps.** clawd checks the budget once per round-trip, before it calls the
@@ -269,9 +280,11 @@ model, against whichever route is active at that moment. The switch happens insi
 same round-trip, and the fallback's call on it is not checked again. Under a flat-rate
 primary clawd skips the dollar checks outright, so that first metered call runs even when
 the day's cap is already spent. Turns after it start on the fallback and are checked
-normally, which puts the overshoot at roughly one call per cooldown window. The daily
-token ceiling did gate that round-trip, since clawd checks it whether the active route is
-metered or flat-rate; the dollar caps are the ones that let the call through.
+normally, which puts the overshoot at roughly one call per cooldown window. With no
+explicit `CLAW_DAY_TOKEN_CEILING`, that first switch also bypasses the metered route's
+derived daily token check. A positive explicit ceiling applies to both routes and still
+gates the switching round-trip. Daily token checks use the daemon's combined usage,
+including earlier subscription calls.
 
 ### Models without a price
 
@@ -311,9 +324,10 @@ The project refreshes the built-in table every week, so a newer release may alre
 your model. From a source checkout, `scripts/update-prices.sh` regenerates the table before
 you rebuild.
 
-Changing `CLAW_REFERENCE_USD_PER_TOKEN` instead has a side effect: the daily token ceiling
-is `CLAW_PER_DAY_USD` divided by that rate, so lowering the rate raises the ceiling. If you
-change the rate, set `CLAW_DAY_TOKEN_CEILING` as well.
+Changing `CLAW_REFERENCE_USD_PER_TOKEN` instead has a side effect on metered routes: their
+default daily token ceiling is `CLAW_PER_DAY_USD` divided by that rate, so lowering the rate
+raises the ceiling. Set `CLAW_DAY_TOKEN_CEILING` to keep a fixed ceiling; that explicit value
+also enables the daily token cap for subscription calls.
 
 ## Proactive behavior
 

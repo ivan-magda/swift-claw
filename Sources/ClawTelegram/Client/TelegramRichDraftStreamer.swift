@@ -22,10 +22,20 @@ where ClockType.Duration == Duration {
   /// progress signal rather than falling silent behind a bubble that never appears. A held chat is
   /// reported as undelivered the same way, without a request.
   public func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool {
-    await sendDraft(chatID: chatID, draftID: draftID, draft: RichDraft(markdown: markdown))
+    await sendDraft(
+      chatID: chatID,
+      draftID: draftID,
+      draft: RichDraft(markdown: markdown),
+      stopControl: .unavailable
+    )
   }
 
-  public func sendDraft(chatID: Int64, draftID: Int64, draft: RichDraft) async -> Bool {
+  public func sendDraft(
+    chatID: Int64,
+    draftID: Int64,
+    draft: RichDraft,
+    stopControl: DraftStopControl
+  ) async -> Bool {
     guard chatID > 0, await !deliveryState.isHeld(chatID) else {
       return false
     }
@@ -41,7 +51,8 @@ where ClockType.Duration == Duration {
         return try await transport.sendRichMessageDraft(
           chatID: chatID,
           draftID: draftID,
-          markdown: candidate
+          markdown: candidate,
+          stopControl: stopControl
         )
       } catch TelegramError.apiError(let code, let description) where code == 400 {
         guard let fallback, candidate != fallback else {
@@ -53,7 +64,8 @@ where ClockType.Duration == Duration {
         let delivered = try await transport.sendRichMessageDraft(
           chatID: chatID,
           draftID: draftID,
-          markdown: fallback
+          markdown: fallback,
+          stopControl: stopControl
         )
         if delivered {
           await deliveryState.preferFallbackEmoji()

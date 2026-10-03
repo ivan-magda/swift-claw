@@ -3,7 +3,7 @@ import ClawCore
 import Foundation
 import Logging
 
-/// The session and memory command family: /stop, /new, /remember, /memory. Every effect claims
+/// The session and memory controls: draft Stop, /stop, /new, /remember, /memory. Every effect claims
 /// its update through a fused store seam or parks a confirmation; nothing here dispatches turns.
 struct CommandHandlers: Sendable {
   let commands: any CommandStore
@@ -14,6 +14,7 @@ struct CommandHandlers: Sendable {
   let lanes: SessionLaneRegistry
 
   let replies: ReplySender
+  let logger: Logger
 
   let now: @Sendable () -> Date
 
@@ -41,6 +42,18 @@ struct CommandHandlers: Sendable {
       return replies.skipDuplicate(updateID: rawUpdate.updateID)
     }
 
+    await applyStopEffects(result)
+
+    let reply =
+      result.cancelledRunIDs.isEmpty ? CommandReplies.nothingToStop : CommandReplies.stopped
+    return await replies.sendCommandAck(
+      updateID: rawUpdate.updateID,
+      target: .reply(to: message, mode: mode),
+      text: reply
+    )
+  }
+
+  func applyStopEffects(_ result: StopCommandResult) async {
     // Signal the coordinator BEFORE cancelling the lane. Cancelling first would race the parked
     // waiter: `lane.cancel` cancels the very Task suspended in `ApprovalWaiter.park`, whose
     // `awaitResolution` cancellation path resumes the waiter with `nil` — if that wins the race
@@ -60,14 +73,6 @@ struct CommandHandlers: Sendable {
     for runID in result.cancelledRunIDs {
       await presentations?.close(runID: runID)
     }
-
-    let reply =
-      result.cancelledRunIDs.isEmpty ? CommandReplies.nothingToStop : CommandReplies.stopped
-    return await replies.sendCommandAck(
-      updateID: rawUpdate.updateID,
-      target: .reply(to: message, mode: mode),
-      text: reply
-    )
   }
 
   func new(

@@ -60,7 +60,23 @@ struct TurnPresentationTests {
     #expect(richMarkdown.contains("<tg-emoji emoji-id="))
     #expect(plainMarkdown.contains("<tg-emoji") == false)
     #expect(plainMarkdown.hasPrefix("<tg-thinking>"))
-    #expect(bodies.allSatisfy { ($0["draft_id"] as? Int64) == scope.runID })
+    let draftID = try #require(bodies[0]["draft_id"] as? Int64)
+    #expect(draftID != 0)
+    #expect(
+      bodies.allSatisfy {
+        ($0["draft_id"] as? Int64) == draftID
+      }
+    )
+    #expect(
+      bodies.allSatisfy {
+        ($0["can_stop"] as? Bool) == true
+      }
+    )
+    #expect(
+      bodies.allSatisfy {
+        ($0["keep_on_stop"] as? Bool) == false
+      }
+    )
   }
 
   @Test
@@ -83,7 +99,7 @@ struct TurnPresentationTests {
     let sent = await drafts.sent
     let firstDraft = try #require(sent.first)
     let secondDraft = try #require(sent.dropFirst().first)
-    #expect(firstDraft.draftID == scope.runID)
+    #expect(firstDraft.draftID != 0)
     #expect(secondDraft.time - firstDraft.time == .milliseconds(250))
     let successes = sent.filter(\.accepted)
     let successfulRefreshGaps = zip(successes, successes.dropFirst()).map {
@@ -98,7 +114,7 @@ struct TurnPresentationTests {
     #expect(lastSuccess.time >= .seconds(25))
     #expect(
       sent.allSatisfy {
-        $0.draftID == scope.runID
+        $0.draftID == firstDraft.draftID
       }
     )
     #expect(

@@ -59,7 +59,7 @@ extension TurnProgressLifecycleTests {
     case approvedExecution
   }
 
-  @Test(arguments: ["/stop", "/new"], CancellationPhase.allCases)
+  @Test(arguments: ["/stop", "/new", "draft stop"], CancellationPhase.allCases)
   func cancelAcknowledgementCannotBeFollowedByAnOldDraft(
     command: String,
     phase: CancellationPhase
@@ -69,6 +69,7 @@ extension TurnProgressLifecycleTests {
     defer { drafts.releaseCleanup.open() }
     let tool = ApprovedProgressTool()
     let suspended = AsyncGate()
+    let stopped = AsyncGate()
     let providerStarted = AsyncGate()
     let providerRelease = AsyncGate()
     let harness = try makeSC3Harness(
@@ -90,14 +91,16 @@ extension TurnProgressLifecycleTests {
         }
         try Task.checkCancellation()
       },
-      presentationsFactory: { outbox in
+      presentationsFactory: { outbox, draftIDs in
         try makePresentations(
           clock: ScriptedClock.compressed(parkingAt: .seconds(1)),
           drafts: drafts,
           typing: RecordingTyping(),
-          outbox: outbox
+          outbox: outbox,
+          draftIDs: draftIDs
         )
-      }
+      },
+      transport: stoppedTransport(signal: stopped)
     )
     defer { harness.removeFiles() }
     _ = await harness.router.handle(rawUpdate: textUpdate(id: 1, from: 7, text: "hello"))
@@ -119,9 +122,17 @@ extension TurnProgressLifecycleTests {
     let started = await drafts.started.waitUntilOpen()
     let modelStarted = await providerStarted.waitUntilOpen()
 
+    let draftID = try #require(await drafts.draftIDs.first)
+
     // when
     let commandTask = Task {
-      await harness.router.handle(rawUpdate: textUpdate(id: 2, from: 7, text: command))
+      let update: RawUpdate
+      if command == "draft stop" {
+        update = draftStopUpdate(id: 2, chat: 7, draftID: draftID)
+      } else {
+        update = textUpdate(id: 2, from: 7, text: command)
+      }
+      return await harness.router.handle(rawUpdate: update)
     }
     let closing = await drafts.cancelled.waitUntilOpen()
     let sendsBeforeJoin = await harness.transport.sent
@@ -131,6 +142,9 @@ extension TurnProgressLifecycleTests {
     let draftsAtAcknowledgement = await drafts.calls
     tool.release.open()
     providerRelease.open()
+    if command == "draft stop" {
+      #expect(await stopped.waitUntilOpen())
+    }
     try await harness.stop()
 
     // then
@@ -145,7 +159,7 @@ extension TurnProgressLifecycleTests {
     #expect(await drafts.calls == draftsAtAcknowledgement)
     #expect(
       await harness.transport.sent.contains {
-        $0.text == (command == "/stop" ? CommandReplies.stopped : CommandReplies.freshConversation)
+        $0.text == (command == "/new" ? CommandReplies.freshConversation : CommandReplies.stopped)
       }
     )
   }
@@ -165,12 +179,13 @@ extension TurnProgressLifecycleTests {
       httpResponses: [:],
       extraTools: [tool],
       providerOverride: provider,
-      presentationsFactory: { outbox in
+      presentationsFactory: { outbox, draftIDs in
         try makePresentations(
           clock: ScriptedClock.compressed(parkingAt: .seconds(1)),
           drafts: drafts,
           typing: RecordingTyping(),
-          outbox: outbox
+          outbox: outbox,
+          draftIDs: draftIDs
         )
       }
     )
@@ -370,12 +385,13 @@ extension TurnProgressLifecycleTests {
       httpResponses: [:],
       extraTools: [ApprovedProgressTool()],
       notifyOutbox: { suspended.open() },
-      presentationsFactory: { outbox in
+      presentationsFactory: { outbox, draftIDs in
         try makePresentations(
           clock: ScriptedClock.compressed(parkingAt: .seconds(1)),
           drafts: drafts,
           typing: RecordingTyping(),
-          outbox: outbox
+          outbox: outbox,
+          draftIDs: draftIDs
         )
       }
     )
@@ -426,12 +442,13 @@ extension TurnProgressLifecycleTests {
     let harness = try makeSC3Harness(
       scripts: [],
       httpResponses: [:],
-      presentationsFactory: { outbox in
+      presentationsFactory: { outbox, draftIDs in
         try makePresentations(
           clock: ScriptedClock.compressed(parkingAt: .seconds(1)),
           drafts: drafts,
           typing: RecordingTyping(),
-          outbox: outbox
+          outbox: outbox,
+          draftIDs: draftIDs
         )
       },
       turnsFactory: { runs, presentations in

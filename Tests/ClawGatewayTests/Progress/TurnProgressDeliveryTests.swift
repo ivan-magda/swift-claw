@@ -95,7 +95,7 @@ struct TurnProgressDeliveryTests {
     if branch == .markSentFailure {
       #expect(await drafts.sent.isEmpty)
     } else {
-      #expect(await drafts.sent.contains { $0.draftID == nextRunID })
+      #expect(await drafts.sent.isEmpty == false)
     }
   }
 }
@@ -160,12 +160,13 @@ extension TurnProgressDeliveryTests {
       httpResponses: [:],
       extraTools: [ApprovedProgressTool()],
       notifyOutbox: { suspended.open() },
-      presentationsFactory: { outbox in
+      presentationsFactory: { outbox, draftIDs in
         try makePresentations(
           clock: ScriptedClock.compressed(parkingAt: .seconds(1)),
           drafts: drafts,
           typing: RecordingTyping(),
-          outbox: outbox
+          outbox: outbox,
+          draftIDs: draftIDs
         )
       }
     )

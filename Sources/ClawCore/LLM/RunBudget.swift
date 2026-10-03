@@ -1,8 +1,6 @@
 import Foundation
 
-/// The pinned spend bounds for one run and one day. All fields are config-overridable; the
-/// hard offline failsafe is `dayTokenCeiling`, derived so the three pricing numbers can
-/// never drift out of sync. USD caps are the user-facing limits, enforced when a price is known.
+/// Spend bounds for one run and one day, with policy-specific daily token defaults.
 public struct RunBudget: Sendable, Equatable {
   public let maxInputTokens: Int
   public let maxOutputTokens: Int
@@ -44,13 +42,22 @@ public struct RunBudget: Sendable, Equatable {
     self.dayTokenCeilingOverride = dayTokenCeilingOverride
   }
 
-  /// Hard offline per-day failsafe. With the defaults this is 666_666 — two orders of magnitude
-  /// above one run's bound (`maxInputTokens + maxOutputTokens`), so the two never contradict.
+  /// The explicit ceiling or derived metered default; use `dayTokenCeiling(for:)` for enforcement.
   public var dayTokenCeiling: Int {
     if let dayTokenCeilingOverride {
       return dayTokenCeilingOverride
     }
     return Int((perDayUSD / referenceUSDPerToken).rounded(.down))
+  }
+
+  /// Subscriptions have no daily token cap unless the owner explicitly sets one.
+  public func dayTokenCeiling(for costPolicy: LLMCostPolicy) -> Int? {
+    switch costPolicy {
+    case .metered:
+      dayTokenCeiling
+    case .includedPlan:
+      dayTokenCeilingOverride
+    }
   }
 
   public static let `default` = RunBudget(
@@ -90,9 +97,9 @@ public struct BudgetGate: Sendable {
 
   public let budget: RunBudget
   /// How the route is billed. Injected — never inferred from a model name — so a subscription call
-  /// skips the USD comparisons while every token, turn, and tool bound still binds. A metered
-  /// caller keeps the full set, which is why the default is `.metered`: a gate that had not been
-  /// taught about a subscription must not silently stop enforcing dollars.
+  /// skips USD comparisons and the derived daily token ceiling. An explicit token ceiling and
+  /// per-run bounds still apply. Defaults to `.metered` so callers without a billing policy
+  /// retain spend protection.
   public let costPolicy: LLMCostPolicy
 
   public init(budget: RunBudget, costPolicy: LLMCostPolicy = .metered) {
@@ -107,8 +114,7 @@ public struct BudgetGate: Sendable {
   /// proactive pool is consulted.
   ///
   /// Under `includedPlan` every USD comparison is skipped — a subscription dollar figure is not a
-  /// gate — but the daily token ceiling still binds, so a subscription call cannot outrun the hard
-  /// offline failsafe.
+  /// gate — and the daily token ceiling applies only when explicitly configured.
   public func preflight(
     todayTokens: Int,
     todayUSD: Double,
@@ -120,7 +126,9 @@ public struct BudgetGate: Sendable {
     if enforcesUSD, todayUSD >= budget.perDayUSD {
       return .deny(cap: Self.perDaySpendCap)
     }
-    if todayTokens + estimatedTotalTokens > budget.dayTokenCeiling {
+    if let ceiling = budget.dayTokenCeiling(for: costPolicy),
+       todayTokens + estimatedTotalTokens > ceiling
+    {
       return .deny(cap: Self.perDayTokenCap)
     }
     if enforcesUSD, estimatedCostUSD > budget.perRunUSD {

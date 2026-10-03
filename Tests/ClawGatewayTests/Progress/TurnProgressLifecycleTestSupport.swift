@@ -1,8 +1,9 @@
 import ClawAgent
 import ClawCore
-import ClawGateway
-import Foundation
 import ClawTestSupport
+import Foundation
+
+@testable import ClawGateway
 
 actor LifecycleDrafts: RichDraftStreaming {
   struct Draft: Sendable {
@@ -164,4 +165,14 @@ struct RegistrationTurn: TurnDispatching {
     }
     attempted.open()
   }
+}
+
+// MARK: - Stop Acknowledgement
+
+func stoppedTransport(signal: AsyncGate) -> RecordingTransport {
+  RecordingTransport(onSend: { text in
+    if text == CommandReplies.stopped {
+      signal.open()
+    }
+  })
 }

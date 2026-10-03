@@ -47,7 +47,12 @@ actor DraftTransport: TelegramTransport {
     1
   }
 
-  func sendRichMessageDraft(chatID: Int64, draftID: Int64, markdown: String) async throws -> Bool {
+  func sendRichMessageDraft(
+    chatID: Int64,
+    draftID: Int64,
+    markdown: String,
+    stopControl: DraftStopControl
+  ) async throws -> Bool {
     let record = DraftRecord(chatID: chatID, draftID: draftID, markdown: markdown)
     draftAttempts.append(record)
     if !draftErrors.isEmpty {
