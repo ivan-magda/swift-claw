@@ -2,19 +2,19 @@ import ClawCore
 import Foundation
 
 /// Best-effort ephemeral draft sink: caps markdown at the rich-message limit and swallows every
-/// transport error (the draft is cosmetic UX, like the typing action). Flood control is the
-/// exception: it holds that chat's drafts for the `retry_after` Telegram named, because the caller
+/// transport error (the draft is cosmetic UX, like the typing action). A rejected action emoji
+/// gets one ordinary-emoji retry. Flood control holds that chat's drafts for `retry_after`, because the caller
 /// offers a fresh frame on every probe and would otherwise keep hitting a throttled chat. Per-send
 /// time bounding lives in the caller — `StreamingTurnRuntime` abandons a send at its deadline — so
 /// a stalled POST needs no escape hatch here.
 public struct TelegramRichDraftStreamer<ClockType: Clock>: RichDraftStreaming
 where ClockType.Duration == Duration {
   private let transport: any TelegramTransport
-  private let holds: DraftFloodControlHolds<ClockType>
+  private let deliveryState: DraftDeliveryState<ClockType>
 
   public init(transport: any TelegramTransport, clock: ClockType) {
     self.transport = transport
-    self.holds = DraftFloodControlHolds(clock: clock)
+    self.deliveryState = DraftDeliveryState(clock: clock)
   }
 
   /// Telegram accepts a draft only in a private chat, so the negative chat id of every group is
@@ -22,19 +22,47 @@ where ClockType.Duration == Duration {
   /// progress signal rather than falling silent behind a bubble that never appears. A held chat is
   /// reported as undelivered the same way, without a request.
   public func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool {
-    guard chatID > 0, await !holds.isHeld(chatID) else {
+    await sendDraft(chatID: chatID, draftID: draftID, draft: RichDraft(markdown: markdown))
+  }
+
+  public func sendDraft(chatID: Int64, draftID: Int64, draft: RichDraft) async -> Bool {
+    guard chatID > 0, await !deliveryState.isHeld(chatID) else {
       return false
     }
 
-    let capped = String(markdown.prefix(TelegramMessageLimits.maxRichMessageCharacters))
+    let capped = String(draft.markdown.prefix(TelegramMessageLimits.maxRichMessageCharacters))
+    let fallback = draft.fallbackMarkdown.map {
+      String($0.prefix(TelegramMessageLimits.maxRichMessageCharacters))
+    }
+    let candidate = await deliveryState.usesFallbackEmoji ? fallback ?? capped : capped
+
     do {
-      return try await transport.sendRichMessageDraft(
-        chatID: chatID,
-        draftID: draftID,
-        markdown: capped
-      )
+      do {
+        return try await transport.sendRichMessageDraft(
+          chatID: chatID,
+          draftID: draftID,
+          markdown: candidate
+        )
+      } catch TelegramError.apiError(let code, let description) where code == 400 {
+        guard let fallback, candidate != fallback else {
+          throw TelegramError.apiError(code: code, description: description)
+        }
+
+        try Task.checkCancellation()
+
+        let delivered = try await transport.sendRichMessageDraft(
+          chatID: chatID,
+          draftID: draftID,
+          markdown: fallback
+        )
+        if delivered {
+          await deliveryState.preferFallbackEmoji()
+        }
+
+        return delivered
+      }
     } catch TelegramError.floodControl(let retryAfter) {
-      await holds.hold(chatID, for: .seconds(retryAfter))
+      await deliveryState.hold(chatID, for: .seconds(retryAfter))
       return false
     } catch {
       return false
@@ -48,13 +76,14 @@ extension TelegramRichDraftStreamer where ClockType == ContinuousClock {
   }
 }
 
-// MARK: - Flood Control
+// MARK: - Delivery Compatibility and Flood Control
 
 /// Keeps each chat's draft hold for as long as the streamer lives, so a chat throttled in one turn
 /// stays held into the next.
-private actor DraftFloodControlHolds<ClockType: Clock> where ClockType.Duration == Duration {
+private actor DraftDeliveryState<ClockType: Clock> where ClockType.Duration == Duration {
   private let clock: ClockType
   private var deadlines = FloodControlDeadlines<ClockType.Instant>()
+  private(set) var usesFallbackEmoji = false
 
   init(clock: ClockType) {
     self.clock = clock
@@ -66,5 +95,10 @@ private actor DraftFloodControlHolds<ClockType: Clock> where ClockType.Duration 
 
   func hold(_ chatID: Int64, for wait: Duration) {
     deadlines.hold(chatID, until: clock.now.advanced(by: wait))
+  }
+
+  /// Retain a working representation after an ordinary-emoji retry succeeds.
+  func preferFallbackEmoji() {
+    usesFallbackEmoji = true
   }
 }

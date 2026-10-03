@@ -125,6 +125,14 @@ public protocol RichDraftStreaming: Sendable {
   /// the draft bubble has taken over as the turn's progress signal — a sink that drops the draft
   /// (Telegram accepts one only in a private chat) must not silence the typing pulse behind it.
   func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool
+
+  func sendDraft(chatID: Int64, draftID: Int64, draft: RichDraft) async -> Bool
+}
+
+extension RichDraftStreaming {
+  public func sendDraft(chatID: Int64, draftID: Int64, draft: RichDraft) async -> Bool {
+    await sendDraft(chatID: chatID, draftID: draftID, markdown: draft.markdown)
+  }
 }
 
 public struct NoopRichDraftStreaming: RichDraftStreaming {

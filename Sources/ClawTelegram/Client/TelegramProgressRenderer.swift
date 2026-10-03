@@ -5,13 +5,18 @@ public struct TelegramProgressRenderer: TurnProgressRendering {
   public init() {}
 
   public func render(_ snapshot: TurnProgressSnapshot) -> String? {
+    renderDraft(snapshot)?.markdown
+  }
+
+  public func renderDraft(_ snapshot: TurnProgressSnapshot) -> RichDraft? {
     let answer = String(
       snapshot.answerPreview.prefix(TelegramMessageLimits.maxRichMessageCharacters)
     )
 
     guard snapshot.showsProgress else {
-      return answer.isEmpty ? nil : answer
+      return answer.isEmpty ? nil : RichDraft(markdown: answer)
     }
+
     let separator = answer.isEmpty ? "" : "\n\n"
     let budget = min(
       TurnProgressLimits.markupCharacters,
@@ -20,10 +25,15 @@ public struct TelegramProgressRenderer: TurnProgressRendering {
 
     let progress = progressMarkup(snapshot, budget: budget)
     if progress.isEmpty {
-      return answer.isEmpty ? nil : answer
+      return answer.isEmpty ? nil : RichDraft(markdown: answer)
     }
 
-    return progress + separator + answer
+    let markdown = "\(progress)\(separator)\(answer)"
+    let fallbackProgress = TelegramActionEmoji.replacingHeading(in: progress)
+    let fallbackMarkdown =
+      fallbackProgress == progress ? nil : "\(fallbackProgress)\(separator)\(answer)"
+
+    return RichDraft(markdown: markdown, fallbackMarkdown: fallbackMarkdown)
   }
 }
 
@@ -35,7 +45,8 @@ private extension TelegramProgressRenderer {
 
   func progressMarkup(_ snapshot: TurnProgressSnapshot, budget: Int) -> String {
     let collapsed = !snapshot.answerPreview.isEmpty
-    let status = collapsed ? "Progress" : phaseLabel(snapshot.phase)
+    let emoji = TelegramActionEmoji(snapshot: snapshot)
+    let status = collapsed ? emoji.statusLabel : phaseLabel(snapshot.phase, action: emoji)
     let count = totalOlder(snapshot.olderSteps) + snapshot.steps.count
     var heading = "\(status) · \(max(0, snapshot.elapsedSeconds))s"
 
@@ -48,6 +59,16 @@ private extension TelegramProgressRenderer {
       return ""
     }
 
+    let headingBudget = budget - tags
+    let customEmojiHeading = "\(emoji.markup) \(heading)"
+    let fallbackEmojiHeading = "\(emoji.fallback) \(heading)"
+
+    if customEmojiHeading.count <= headingBudget {
+      heading = customEmojiHeading
+    } else if fallbackEmojiHeading.count <= headingBudget {
+      heading = fallbackEmojiHeading
+    }
+
     var thinking = heading
     if !collapsed, let explanation = snapshot.explanation {
       let safe = ProgressText.preview(
@@ -55,7 +76,11 @@ private extension TelegramProgressRenderer {
         secretValues: [],
         limit: TurnProgressLimits.explanationCharacters
       )
-      let escaped = explanationMarkup(safe, budget: budget - tags - heading.count - 3)
+
+      let escaped = explanationMarkup(
+        safe,
+        budget: budget - tags - heading.count - 3
+      )
       if !escaped.isEmpty {
         thinking += " — " + escaped
       }
@@ -70,7 +95,8 @@ private extension TelegramProgressRenderer {
     let older = totalOlder(snapshot.olderSteps) + snapshot.steps.count - visible.count
     let earlier =
       older > 0
-      ? "\n\n" + Self.thinkingOpen + "\(older) earlier steps" + Self.thinkingClose : ""
+      ? "\n\n\(Self.thinkingOpen)\(older) earlier steps\(Self.thinkingClose)"
+      : ""
     let available = budget - markup.count - earlier.count
 
     if available > 0, !visible.isEmpty {
@@ -107,10 +133,11 @@ private extension TelegramProgressRenderer {
       ProgressText.preview($0, secretValues: [], limit: TurnProgressLimits.previewCharacters)
     }
     let text =
-      label
-      + (preview.map {
-        ": " + $0
-      } ?? "")
+      if let preview {
+        "\(label): \(preview)"
+      } else {
+        label
+      }
 
     return prefix + escapeHTML(text, budget: textBudget) + suffix
   }
@@ -161,37 +188,33 @@ private extension TelegramProgressRenderer {
     return result
   }
 
-  func phaseLabel(_ phase: TurnProgressPhase) -> String {
+  func phaseLabel(_ phase: TurnProgressPhase, action: TelegramActionEmoji) -> String {
     switch phase {
     case .preparing:
-      return "Preparing"
-    case .model, .tool:
-      return "Working"
-    case .approval:
-      return "Waiting for your approval"
-    case .answer:
-      return "Progress"
+      "Preparing"
     case .resumed:
-      return "Resuming work"
+      "Resuming work"
+    case .model, .tool, .approval, .answer:
+      action.statusLabel
     }
   }
 
   func stateLabel(_ state: ToolProgressState) -> String {
     switch state {
     case .pending:
-      return "Pending"
+      "Pending"
     case .awaitingApproval:
-      return "Waiting for approval"
+      "Waiting for approval"
     case .executing:
-      return "Executing"
+      "Executing"
     case .succeeded:
-      return "Succeeded"
+      "Succeeded"
     case .failed:
-      return "Failed"
+      "Failed"
     case .denied:
-      return "Denied"
+      "Denied"
     case .cancelled:
-      return "Cancelled"
+      "Cancelled"
     }
   }
 

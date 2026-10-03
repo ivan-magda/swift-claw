@@ -12,6 +12,58 @@ import Testing
 @Suite
 struct TurnPresentationTests {
   @Test
+  func rendererFallbackReachesTelegramThroughPresentationSender() async throws {
+    // given
+    let delivered = AsyncGate()
+    let http = ScriptedHTTPExecutor([
+      .ok(
+        HTTPResult(
+          statusCode: 400,
+          headers: [:],
+          body: Data(#"{"ok":false,"error_code":400,"description":"Unsupported emoji"}"#.utf8)
+        )
+      ),
+      .responding { _ in
+        delivered.open()
+        return HTTPResult(
+          statusCode: 200,
+          headers: [:],
+          body: Data(#"{"ok":true,"result":true}"#.utf8)
+        )
+      },
+    ])
+    let clock = ScriptedClock.compressed(parkingAt: .seconds(1))
+    let transport = TelegramClient(token: "test", http: http, baseURL: "https://telegram.test")
+    let registry = try makePresentations(
+      clock: clock,
+      drafts: TelegramRichDraftStreamer(transport: transport, clock: clock),
+      typing: RecordingTyping()
+    )
+    let scope = progressScope()
+
+    // when
+    _ = await registry.begin(scope: scope)
+    let observed = await delivered.waitUntilOpen()
+    await registry.close(runID: scope.runID)
+
+    // then
+    try #require(observed)
+    let requests = await http.recorded
+    let bodies = try requests.prefix(2).map { request in
+      try #require(JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+    }
+    try #require(bodies.count == 2)
+    let rich = try #require(bodies[0]["rich_message"] as? [String: Any])
+    let plain = try #require(bodies[1]["rich_message"] as? [String: Any])
+    let richMarkdown = try #require(rich["markdown"] as? String)
+    let plainMarkdown = try #require(plain["markdown"] as? String)
+    #expect(richMarkdown.contains("<tg-emoji emoji-id="))
+    #expect(plainMarkdown.contains("<tg-emoji") == false)
+    #expect(plainMarkdown.hasPrefix("<tg-thinking>"))
+    #expect(bodies.allSatisfy { ($0["draft_id"] as? Int64) == scope.runID })
+  }
+
+  @Test
   func longWorkRefreshesDraftAndRecoversTypingWhenDeliveryIsStale() async throws {
     // given
     let clock = ScriptedClock.compressed(parkingAt: .seconds(1))

@@ -16,6 +16,8 @@ actor DraftTransport: TelegramTransport {
   var throwDraft = false
   /// One-shot: the next attempt is answered with flood control carrying this `retry_after`.
   var floodControlRetryAfter: Int?
+  private var draftErrors: [TelegramError] = []
+  private var cancelBeforeError = false
 
   func getMe() async throws -> BotIdentity {
     BotIdentity(id: 1, username: "claw_bot")
@@ -48,6 +50,14 @@ actor DraftTransport: TelegramTransport {
   func sendRichMessageDraft(chatID: Int64, draftID: Int64, markdown: String) async throws -> Bool {
     let record = DraftRecord(chatID: chatID, draftID: draftID, markdown: markdown)
     draftAttempts.append(record)
+    if !draftErrors.isEmpty {
+      if cancelBeforeError {
+        withUnsafeCurrentTask { task in
+          task?.cancel()
+        }
+      }
+      throw draftErrors.removeFirst()
+    }
     if let retryAfter = floodControlRetryAfter {
       floodControlRetryAfter = nil
       throw TelegramError.floodControl(retryAfter: retryAfter)
@@ -143,6 +153,11 @@ struct TelegramRichDraftStreamerTests {
 }
 
 extension DraftTransport {
+  func rejectDrafts(_ errors: [TelegramError], cancelling: Bool = false) {
+    draftErrors = errors
+    cancelBeforeError = cancelling
+  }
+
   func setThrowDraft(_ value: Bool) {
     throwDraft = value
   }

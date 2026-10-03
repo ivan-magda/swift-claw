@@ -130,14 +130,16 @@ private extension TurnProgressState {
         id: id,
         label: toolLabel(tool.name),
         preview: allowedPreview(name: tool.name, preview: preview),
-        state: .pending
+        state: .pending,
+        action: TurnToolAction(registeredName: tool.name)
       )
     } else {
       step = TurnToolStep(
         id: id,
         label: Self.unknownToolLabel,
         preview: nil,
-        state: .failed
+        state: .failed,
+        action: .tool
       )
     }
 
@@ -167,7 +169,8 @@ private extension TurnProgressState {
       id: id,
       label: label,
       preview: step.preview,
-      state: state
+      state: state,
+      action: step.action
     )
 
     answerPreview = ""

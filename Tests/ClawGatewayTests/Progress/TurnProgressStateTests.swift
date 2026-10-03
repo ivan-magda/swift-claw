@@ -4,6 +4,38 @@ import Testing
 
 @Suite
 struct TurnProgressStateTests {
+  @Test(arguments: [
+    (BuiltinToolNames.webSearch, TurnToolAction.search),
+    (BuiltinToolNames.webFetch, .readPage),
+    (BuiltinToolNames.fileRead, .readFile),
+    (BuiltinToolNames.fileWrite, .writeFile),
+    (BuiltinToolNames.memoryWrite, .memory),
+    (BuiltinToolNames.skillLoad, .loadSkill),
+    (BuiltinToolNames.executeCode, .executeCode),
+    (CoderToolNames.submit, .coding),
+    (CoderToolNames.status, .tool),
+    (CoderToolNames.cancel, .tool),
+    ("mcp__server__web_search", .tool),
+  ])
+  func registeredActionsSurviveToolStateUpdates(name: String, action: TurnToolAction) throws {
+    // given
+    var state = TurnProgressState(showsProgress: true, resumed: false, secretValues: [name])
+    let id = TurnToolStepID(providerCallID: "round", toolCallID: "step")
+
+    // when
+    state.apply(.toolStarted(id: id, tool: tool(name), preview: "file_write"))
+    let pending = try #require(state.snapshot(elapsedSeconds: 0).steps.first)
+    state.apply(.toolState(id: id, state: .executing))
+    let executing = try #require(state.snapshot(elapsedSeconds: 1).steps.first)
+    state.apply(.toolState(id: id, state: .succeeded))
+    let completed = try #require(state.snapshot(elapsedSeconds: 2).steps.first)
+
+    // then
+    #expect(pending.action == action)
+    #expect(executing.action == action)
+    #expect(completed.action == action)
+  }
+
   @Test
   func workingStepsCollapseAndStayWithinBounds() {
     // given
@@ -187,6 +219,7 @@ struct TurnProgressStateTests {
       }?.state == .succeeded
     )
     #expect(failed.state == .failed)
+    #expect(failed.action == .tool)
     #expect(failed.preview == nil)
     #expect(failed.label.contains("model identity") == false)
     #expect(submitted.label.lowercased().contains("submitted"))
