@@ -22,7 +22,7 @@ struct V15MigrationTests {
     let sql = try #require(indexes["idx_learning_trials_live_job"])
     #expect(sql.contains("UNIQUE INDEX"))
     #expect(sql.contains("state IN ('open', 'draining')"))
-    #expect(try migrations(queue).last == "v15")
+    #expect(try migrations(queue).contains("v15"))
   }
 
   @Test
@@ -119,7 +119,7 @@ struct V15MigrationTests {
     indexes = try indexSQL(queue)
     #expect(indexes["idx_learning_trials_open_job"] == nil)
     #expect(indexes["idx_learning_trials_live_job"] != nil)
-    #expect(try migrations(queue).last == "v15")
+    #expect(try migrations(queue).contains("v15"))
   }
 }
 

@@ -172,6 +172,13 @@ explanations still show working status and tool steps. Raw reasoning is never di
 | `true` | `false` | Typing while waiting, then streamed answer |
 | `false` | Either | Typing, then permanent answer; no drafts or explanation requests |
 
+Interactive private-chat drafts offer **Stop**, including answer-only drafts and drafts waiting for
+approval. Tapping it dismisses the preview and cancels that run; queued messages still run.
+clawd sends "Stopped." after the run finishes cleanup. An ordinary tool that ignores cancellation
+is abandoned at its original deadline and can still run after that acknowledgement.
+Streaming off removes the button. Scheduled and heartbeat drafts have no Stop control.
+`/stop` remains available and cancels current and queued turns.
+
 Set `CLAW_TELEGRAM_PROGRESS=false` in `clawd.env`, reload it and restart to opt out. It uses
 the strict boolean values `true`/`false`, `yes`/`no`, `on`/`off`, and `1`/`0`; malformed values
 fail configuration. This setting controls the additional display and explanation requests.

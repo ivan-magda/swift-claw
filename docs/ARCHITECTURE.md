@@ -154,6 +154,7 @@ form `ARCHITECTURE.md §N` is used, sparingly.
 | §6.1 Voice intake               | `VoiceAttachment`, `VoiceTranscribing`, `MediaFetching`, `VoiceConfig`, `VoiceTranscriptArbiter` (ClawCore); `TVoice`, `TelegramClient.downloadFile` (ClawTelegram); `VoiceMessageService`, `MessageRouter.routeVoice` (ClawGateway); `AppleSpeechTranscriber`, `SystemVoiceTranscriber` (ClawAppleSpeech); `ContextBuilder.untrustedUserLabel` fencing (ClawAgent)                                                                                                                                                                                                                                                                                                                                   |
 | §6.1 Image intake               | `PhotoAttachment`, `PhotoSize`, `ImagePart`, `ImageMediaType`, `ImageBounds`, `ImageMarkers`, `ImageReplaySelection`, `ImageConfig` (ClawCore); `TPhotoSize`, `TMessage.photoAttachment` (ClawTelegram); `ImageMessageService`, `ImageCache`, `MessageRouter.routeImage`, `TurnDispatch.imageCache`, `TurnRunner.attach` (ClawGateway); `ContextBuilder.userMessage` (ClawAgent)                                                                                                                                                                                                                                                                                                                      |
 | §6.2/§6.5 Tool & approval flow  | `ToolPolicyGate`, `GatedToolDispatcher` (ClawTools); `ApprovalWaiter`, `ApprovedActionExecutor`, `ApprovalCallbackHandler`, `ApprovalCoordinator`, `DeferredApprovalParker`, `ApprovalBootReconciler`, `ApprovalExpiryService` (ClawGateway)                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| §6.6 Draft Stop | `DraftStopControl`, `RawDraftStop`, `DraftIDStore`, `CommandStore.applyDraftStop` (ClawCore); `TMessageGenerationStopped` (ClawTelegram); `DraftIDStoreGRDB`, `CommandStoreGRDB.applyDraftStop` (ClawData); `MessageRouter.routeDraftStop`, `CommandHandlers.stopDraft`, `TurnPresentationRegistry.stoppableRun` (ClawGateway); `SessionLaneRegistry.afterRun` (ClawAgent) |
 | §6.3/§14 Scheduler              | `SchedulerService`, `HeartbeatSettings`, `ScheduleSurface`, `ScheduleDraftParser` (ClawGateway); `OccurrenceCalculator`, `OccurrencePolicy`, `ScheduleDraft` (ClawCore)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | §6.4 Transactional outbox       | `OutboxDispatcher`, `OutboxSignal`, `ReplySender` (ClawGateway); `OutboxStore` (ClawCore); `OutboxStoreGRDB`, `OutboxDedupKey` (ClawData); `ReplySplitter`, `ContentHash` (ClawCore)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | §7 Persistence                  | store protocols under `ClawCore/Persistence/`; `ClawDatabase` (migrator + `classifyError`), `MappedDatabase`, `…GRDB` stores (ClawData)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -251,8 +252,12 @@ The lane mechanism is explicit:
   begins; cancelling a queued task does not skip waiting for its predecessor.
 
 - **Default = strict FIFO queue per session.** A plain inbound message **QUEUES** behind the current turn. Cross-session work runs concurrently; within a session, strictly ordered and non-interleaved. User-facing contract: two quick messages produce two in-order, non-interleaved replies.
-- **Only `/stop` and `/new` SUPERSEDE.** `/stop` cancels the current turn cooperatively (`RunState → CANCELLED`). `/new` resets the session window, detaints it, and cancels the current turn (`RunState → SUPERSEDED`). A plain message never supersedes. `/new` resolves any pending durable approval as `superseded` (audited, §11) and still clears the session's pending command confirmation entry. `/new` also clears `sessions.has_private_data` in the same detaint transaction (Inc 5a, §12).
+- **Cancellation controls.** The native draft Stop button cancels only its associated interactive
+  run and preserves queued FIFO work (§6.6). `/stop` cancels the current turn cooperatively (`RunState → CANCELLED`). `/new` resets the session window, detaints it, and cancels the current turn (`RunState → SUPERSEDED`). A plain message never supersedes. `/new` resolves any pending durable approval as `superseded` (audited, §11) and still clears the session's pending command confirmation entry. `/new` also clears `sessions.has_private_data` in the same detaint transaction (Inc 5a, §12).
 - **Cancellation semantics.** Cancellation threads through the run loop and (Inc 2+) streaming + tool execution via structured concurrency (`withThrowingTaskGroup`, cancellation handlers). On cancel: stop further LLM/tool work; any already-sent Telegram chunks remain (they are committed side effects, recorded in the outbox); no orphan `AWAITING_APPROVAL` row is left (the reconciliation sweep / FSM resolves it — §7).
+  Ordinary tool cancellation joins execution and cleanup within the original tool deadline;
+  deadline expiry cancels and abandons a tool that still has not returned. A following turn waits
+  for that join before starting. `/stop` and `/new` keep their acknowledgement timing.
   The tool loop checks cancellation before each proposed call, including after an earlier tool
   returns from cancelled work; a cancelled batch never admits its remaining proposals.
   Its interrupted exchange retains completed observations and supplies error observations for
@@ -260,6 +265,10 @@ The lane mechanism is explicit:
   proposal therefore has a result for history replay; cancellation takes precedence over parking
   a new approval after the last dispatch returns.
 - **The registry owns the turn lifecycle, not just a map of actors.** `enqueue(sessionID:runID:work:)` checks the synchronous admission gate and registers the new task in the same actor turn, closing the lookup-then-enqueue race. Shutdown closes the gate without waiting for the actor; later admission checks return `.shuttingDown`. It cancels every queued or running lane task and awaits all registered tasks; completion unregisters through a `defer`, including cancellation while still waiting on a preceding lane task. **A turn does not unregister until its `LLMEventStream`, if any, has joined** (§8.4) — so "the lane drained" means the provider producer and its nested HTTP exchange actually finished, not merely that they were signaled. Enqueues that win before admission closes are registered and drained. Provider children outside a lane (schedule drafting) use the same loser-draining deadline coordinator below, so their service cannot return while provider work remains.
+
+`SessionLaneRegistry.afterRun` registers a task that joins the named run's existing operations,
+including its lane tail work, then performs a completion action. It never becomes the session tail,
+so queued turns do not wait for that action. Shutdown drains it; shutdown and `/new` cancel it.
 
 ### 5.2 Dependencies and state
 
@@ -293,7 +302,7 @@ resume; the registry retains the pending step identity only in memory. Recovery 
 resumed step from the stored tool-call identity. Approved execution reports only after its durable
 claim, uses registered tool identity and actual payload status, and reports atomic memory success
 only after the fused commit. A committed error observation is never displayed as tool success.
-`/stop` and `/new` retain durable mutation, approval signalling, and lane-cancellation ordering,
+`/stop`, `/new`, and the draft Stop button retain durable mutation, approval signalling, and lane-cancellation ordering,
 then join affected presentations before acknowledging. Shutdown stops presentation admission and
 joins its workers before closing Telegram, independently of background Coder completion.
 
@@ -303,8 +312,8 @@ allows only the early second refresh to bypass the normal 1.25-second interval, 
 unchanged frames within 25 seconds. Freshness records successful delivery, never attempts; after
 25 seconds without success, typing resumes at approximately four-second intervals. Approval waiting
 suppresses typing; group/topic and streaming-disabled presentations send no drafts. Interactive
-private drafts carry `can_stop: true` and `keep_on_stop: false`; legacy proactive drafts omit both. Draft sends and
-typing use the existing three-second cancellation-aware bounded-send join contract. Pausing drains
+private drafts carry `can_stop: true` and `keep_on_stop: false`; legacy proactive drafts omit both.
+Draft sends and typing use the existing three-second cancellation-aware bounded-send join contract. Pausing drains
 an active draft while state collection and typing continue. Resuming makes the latest frame eligible
 again under normal pacing without resetting run elapsed time or early-second history.
 
@@ -482,7 +491,7 @@ progress before consuming answer space. Answer Markdown remains unchanged except
 total preview cap. Permanent delivery does not invoke this renderer.
 
 Separate thinking blocks with blank lines. Tool rows use the client's gray progress style to avoid
-its slow answer-text reveal animation; keep the same draft ID throughout the run. Markdown is
+its slow answer-text reveal animation; keep the same draft ID throughout the presentation. Markdown is
 literal inside thinking blocks; render a provider's outer `**` heading with owned, balanced `<b>`
 tags, including incomplete streamed headings. Escape explanation and row text as HTML and charge
 all tags to the same budget.
@@ -650,9 +659,40 @@ inserts nothing. An outbox failure rolls back the terminal transition and reserv
 Telegram delivers native draft cancellation as `stopped_message_generation`, subscribed on every
 poll. `TMessageGenerationStopped` maps chat, optional topic and draft id into `RawDraftStop` at the
 Core boundary. Missing chat or draft id leaves an unactionable update without failing the batch.
+The update carries no sender. Authorization requires
+`AccessControl.decide(chatKind:chatID:userID: chatID) == .allowed(.direct)`, using private-chat
+identity. Refusals receive no reply and claim no update. The presentation registry must own an
+active, draft-enabled interactive run with the same chat, topic and draft id. Each new interactive
+presentation allocates a negative id through `DraftIDStore`, independently of its run id. It negates
+the `draft_ids` AUTOINCREMENT value, which is never reused in that state database. Proactive drafts
+retain positive run ids, so concurrent session lanes cannot share an identity. Telegram requires
+a nonzero draft id ([API contract](https://core.telegram.org/bots/api#sendrichmessagedraft)). Resuming an
+approved run after restart creates a new draft id, so a queued Stop from its old presentation
+cannot cancel the recovered execution. An in-process approval resume keeps its presentation and
+draft id. Allocation failure disables drafts for that presentation and retains typing.
+Missing associations, including pre-restart, late and repeated presses, do nothing; durable state
+alone cannot authorize cancellation.
 `CommandStore.applyDraftStop` fuses the update claim, single-run FSM cancellation, pending approval
 resolution (`cancelled`), and one owner `turnCancelled` audit in one transaction. Terminal or missing
 runs remain unchanged and create no cancellation audit; queued runs retain FIFO order.
+A completion transaction that wins first keeps its answer and sends no stop acknowledgement.
+The handler signals resolved approvals before cancelling the run's lane tasks, closes and joins its
+presentation sender, then returns to intake. A registry-owned `afterRun` task waits for the run's
+work, including tool cleanup, approval resolution, commits and the lane tail, before sending
+`CommandReplies.stopped` ("Stopped."). It skips the acknowledgement when cancelled or when shutdown
+rejects admission. Intake never waits for that cleanup. Ordinary tools that ignore cancellation
+are abandoned at their original deadline; the acknowledgement can then arrive while such a tool
+still runs. Approved execution retains its direct-await contract.
+
+`keep_on_stop: false` dismisses the transient preview without preserving partial answers or thinking
+markup. Interactive answer drafts still offer Stop with progress off; streaming off produces no
+button. Scheduled and heartbeat drafts do not offer it. Stopping an approval-waiting draft resolves
+the approval as `cancelled`; later approval callbacks cannot restart the run.
+
+Diagnostics use `info` and contain update id, run id (draft id when unmatched) and outcome, without
+message content. A no-op
+logs one outcome. An accepted cancellation logs handler-entry-to-acceptance milliseconds after the
+store commit and draft join, then acceptance-to-cleanup milliseconds just before the acknowledgement.
 
 ## 7. Persistence & data model
 
@@ -670,6 +710,7 @@ Connection invariants (every connection): `PRAGMA foreign_keys = ON`; `busy_time
 | `sessions`                                                                           | 1        | session key, created/updated, rolling-summary ref, `tainted`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | —                                                                                          |
 | `messages`                                                                           | 1        | role, content (un-redacted by design), session, ts, token counts; provenance marker (trusted/untrusted); **FTS5 external-content index added Inc 3a (not Inc 1)**; **`tool_calls` TEXT (JSON `[ToolCall]`, assistant proposals) and `tool_call_id` TEXT (set iff `role='tool'`), migration `v5`; `role` gains `tool`; tool rows persist with `provenance='untrusted'`**; **P-auth: nullable `provider_state_issuer` TEXT + `provider_state` BLOB under a CHECK that they are both null or both non-null, migration `v9` — opaque replay state (§8.5), never FTS-indexed, never prompt content; existing rows stay valid** | `messages.run_id → runs.id`, `messages.session_id → sessions.id`                           |
 | `runs`                                                                               | 1        | RunState FSM, budgets used, `updated_ts` lease; **Inc 4: `origin` `'interactive' \| 'scheduled' \| 'heartbeat'` (default `'interactive'` — drives reduced privilege, the proactive budget, and doctor metrics) + nullable `job_id`; migration `v12`: nullable `requester_user_id` records the sender of an interactive run so group approval cannot change job ownership**                                                                                                                                                                                                                                                | `runs.session_id → sessions.id`, `runs.job_id → scheduled_jobs.id`                         |
+| `draft_ids` | P-progress | Migration `v16`: AUTOINCREMENT allocation for interactive draft identities (§6.6). Rows are deleted in the allocating transaction; `sqlite_sequence` retains the high-water mark across restarts. | No run FK: one run may own successive presentations after recovery. |
 | `provider_usage`                                                                     | 1        | model (the **qualified `configuredReference`**, §8.1), tokens (incl. cached/uncached where reported), computed USD, `cost_source`, `is_estimated`; **P-auth: non-null `provider_call_id` TEXT + a UNIQUE index, migration `v9` (existing rows get deterministic `legacy:<rowid>` values); `cost_source` admits `included_plan`**                                                                                                                                                                                                                                                                                          | `run_id → runs.id`, `session_id → sessions.id`                                             |
 | `outbound_deliveries`                                                                | 1        | transactional outbox (§6.4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `run_id → runs.id`                                                                         |
 | `audit_events`                                                                       | 1        | **ordinary append-only** audit (actor, action, tool, args-redacted, result-size, decision, ts); migration `v12` adds nullable `actor_user_id`, populated with the winning approver's Telegram user ID for callback decisions                                                                                                                                                                                                                                                                                                                                                                                              | carries `run_id`, `session_id`                                                             |
@@ -804,7 +845,7 @@ completion-delivery claim is made when persistence failed.
 - **Internal model is OpenAI-shaped** (`role`/`content`/`tool_calls`), doubling as the Chat Completions wire format — minimal translation; the Responses adapter owns its own translation and never leaks it upward. **Content is ordered parts** (text and image), modeled for every role rather than just `.user`, so the type does not need re-cutting the first time a tool hands back an image.
 - **Image input ships on both wire routes.** Chat Completions emits an `image_url` content part; the Responses route emits an `input_image` part. Both carry a `data:` URL and **never a remote one**: the Telegram file URL carries the bot token, and a provider will fetch whatever it is handed. **`detail` is never sent** on either route, because each route infers the fidelity it reads an image at and pinning that would substitute our guess for the provider's own. A message carrying no image still emits exactly the shape its route has always emitted — a bare `content` string on Chat Completions, a one-element `input_text` array on Responses — so no text-only turn changes shape on either. A high visual-token estimate budgets the image instead of a grapheme count, so a run is refused rather than overspent. A route that rejects the request **because the configured model cannot see** narrows to a distinct `visionUnsupported` error, matched only on an invalid-request rejection naming an image content part: telling the owner to change models over an unrelated outage is worse than showing them the generic failure. **This detection is route-dependent by nature.** A gateway that ignores an unsupported field (an Anthropic-compatible one does) never rejects, so there the miss cannot be detected and the owner gets an answer that ignored the image.
 - **`LLMProvider` also keeps the seam** for a native adapter later (e.g. Anthropic Messages for prompt caching / extended thinking). The Responses adapter is that seam's first non-Chat-Completions wire format — evidence it holds.
-- **Client:** thin, over AsyncHTTPClient. Composition builds a **dedicated, redirect-disabled LLM client**, distinct from the Telegram and tool clients, so **no bearer — static or subscription — can follow a redirect off its intended host**; default TLS verification stays on. **SSE streaming is v1**: a small SSE parser → throttled `sendRichMessageDraft` rich drafts, finalized via `sendRichMessage` (coalesce; the first draft goes out ASAP and the second on the next probe, because Telegram for macOS shows no draft text until a second update arrives; later drafts keep a min-interval of ~1–2s; a flood-control answer holds that chat's drafts for its `retry_after`). If streaming is unavailable, fall back to blocking + re-issue `sendChatAction` every ~4s for the turn duration. The metric is **perceived latency (time-to-first-token)**, not just first-reply latency. (URLSession can't stream SSE on Linux → AsyncHTTPClient is the portable choice.) On the Chat Completions route, a stream whose response head carries a retryable-class status before any SSE bytes is a clean rejection (`ProviderError.rejected`) and falls back to the blocking path once; mid-stream failures still degrade with no re-issue.
+- **Client:** thin, over AsyncHTTPClient. Composition builds a **dedicated, redirect-disabled LLM client**, distinct from the Telegram and tool clients, so **no bearer — static or subscription — can follow a redirect off its intended host**; default TLS verification stays on. **SSE streaming is v1**: a small SSE parser → throttled `sendRichMessageDraft` rich drafts, finalized via `sendRichMessage` (coalesce; the first draft goes out ASAP and the second on the next probe, because Telegram for macOS shows no draft text until a second update arrives; later drafts keep a min-interval of ~1–2s; a flood-control answer holds that chat's drafts for its `retry_after`). Interactive drafts send `can_stop: true, keep_on_stop: false` (§6.6). If streaming is unavailable, fall back to blocking + re-issue `sendChatAction` every ~4s for the turn duration. The metric is **perceived latency (time-to-first-token)**, not just first-reply latency. (URLSession can't stream SSE on Linux → AsyncHTTPClient is the portable choice.) On the Chat Completions route, a stream whose response head carries a retryable-class status before any SSE bytes is a clean rejection (`ProviderError.rejected`) and falls back to the blocking path once; mid-stream failures still degrade with no re-issue.
 
 **Compatible-provider display explanations are optional typed summaries.** With
 `ChatRequest.progressExplanationsEnabled`, the Chat Completions parser accepts only
@@ -1014,8 +1055,8 @@ registered definition and an allowed scalar preview, then reports pending. Unkno
 malformed JSON fail; gate refusal reports denied, and approval reports awaiting approval without
 execution. Only an allow verdict reports executing. The returned observation reports succeeded
 only for `.ok`, failed for errors, and denied for blocked results; caller cancellation reports
-cancelled. The existing tool timeout race still cancels and abandons a wedged execution, independently
-of the presentation sender's cancellation-and-join contract. Progress grants no execution authority.
+cancelled. Caller cancellation cancels the execution and joins it within its original deadline.
+Deadline expiry cancels and abandons an execution that has not returned. Progress grants no execution authority.
 
 The dispatcher receives the composed exact secret values separately from policy. It selects only
 query, skill name, a validated workspace-relative path, or a parsed HTTP(S) host, and applies
@@ -1129,7 +1170,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   forever, with DENY as the fail-closed default direction. It is not the authority check; DM ownership
   and the group Coder prompt/membership checks are. Default window **1h**, configurable via
   `approval_expiry`; enforced by a periodic expiry ticker and the boot reconciliation sweep (§19.1).
-- **Escaping a pending approval:** a plain message **queues** behind it (strict FIFO — it never supersedes, §5.1); to abandon the parked action before expiry the owner uses `/stop` (cancel) or `/new` (reset + detaint), both of which resolve `AWAITING_APPROVAL` (§19.1). Otherwise silence rides out to `EXPIRED → DENY`.
+- **Escaping a pending approval:** a plain message **queues** behind it (strict FIFO — it never supersedes, §5.1); to abandon the parked action before expiry the owner uses the draft Stop button (one run), `/stop` (cancel) or `/new` (reset + detaint), both of which resolve `AWAITING_APPROVAL` (§19.1). Otherwise silence rides out to `EXPIRED → DENY`.
 - **Queue-behind survives restart:** boot reconciliation **re-parks a waiter on the lane** of every unexpired `AWAITING_APPROVAL` run, preserving the FIFO queue-behind contract across restart and giving **exactly one execution locus** — the callback handler, expiry ticker, and `/stop`//`new` command paths only CAS the row and signal the coordinator; the waiter task performs the resume/deny (observation update, run transition, owner notice, button disarm).
 - **Approval destination and requester resolution:** `Approval.ownerUserID` retains its historical
   name but stores the run's **delivery chat id** — the DM chat id for interactive direct runs, the
@@ -1157,6 +1198,8 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
 
 **The ordinary agent tool boundary uses four independent defenses:** (1) the **numeric-ID default-deny boundary** — untrusted senders never reach the model; (2) **untrusted-data labeling + the in-code instruction hierarchy** — inbound/tool/retrieved content, remote tool metadata, and durable memory are treated as data and cannot claim authority; (3) the **in-code policy gate + risk tiers** — every side effect is authorized by deterministic code at the dispatch site, never by the prompt; (4) the **enforced lethal-trifecta gate + approvals + blast-radius caps**, with the **VM sandbox for `execute_code`**. These defenses gate the ordinary tool surface even when the model is subverted. Opt-in Coder instead grants a concrete native delegation (§13.2): swift-claw authorizes admission and task scope, while the trusted Codex installation and its integrations determine child authority. Its automatic approval review is not deterministic authorization of every child action, and a working directory is not a security sandbox.
 
+- **Draft Stop boundary:** a senderless event requires private-chat authorization and an active
+  chat/topic/draft association before durable cancellation (§6.6).
 - **Boundary:** numeric Telegram user ID, default-deny, enforced before any LLM/tool/expensive work; fail-closed on internal error. No username path anywhere (identity-rebinding CVE class).
 - **Instruction hierarchy (in code):** system/security policy > developer config > identity files (SOUL/AGENTS/TOOLS) > user task > tool observations > retrieved/inbound content > durable memory (MEMORY.md/USER.md — untrusted tier). Durable memory never sits at the system tier.
 - **The `skills` label is a carve-out in what fenced content is FOR, never in what it can DO.** A `SKILL.md` body is untrusted content **the owner has permitted**: it renders inside the ordinary `<claw-untrusted>` fence under the `skills` label, and the system prompt licenses the model to follow it as guidance for how to carry out a task. The absolute rule is unchanged — fenced content can never alter instructions, tools, or permissions, and the permission itself lives in **trusted policy text, never in the skill**. The carve-out names the label, not the tool: widening it to `skill_load` would let any future tool inherit follow-this authority by choosing a name. **A label is only trustworthy if content cannot mint one:** the renderer defuses every `claw-untrusted` tag (case-insensitively) it finds inside the content it fences, so a fetched page or file cannot open a nested fence claiming `skills` and have its text read as owner-authored procedure. The nonce guards only the _close_ — it cannot guard an open, whose nonce the forger picks.
@@ -1730,6 +1773,9 @@ and per-request provider explanation option; it changes no model, reasoning effo
 | `true` | `false` | Answer drafts retained; continuous typing until they are fresh |
 | `false` | Either | No drafts or explanation requests; typing then permanent answer |
 
+Interactive drafts offer the native Stop control with either progress setting; disabling streaming
+also removes the button. See §6.6 for cancellation and acknowledgement timing.
+
 Groups/topics use correctly addressed typing during active work in every combination and never
 request invisible explanations. Approval waiting suppresses working typing. Proactive runs acquire
 no new thinking placeholder. Progress is temporary and absent from permanent answer content.
@@ -1924,7 +1970,7 @@ empty healthy state.
 - **Error handling:** tool/run failures captured as observations, not crashes; the loop stays alive; typed errors at boundaries.
 - **Retries/backoff:** one layer, retryable-only classifier, capped exponential + full jitter, retry budget (~3/req), honor `retry_after`. **An attempt that may have been sent is never retried automatically** (§8.4), and one budget counts every wire attempt of a call — refresh, replay recovery, throttle, and server retries alike. Retries count against budgets (§5.3).
 - **Idempotency:** synchronous `claimUpdate` dedup for inbound; deterministic outbox keys for outbound; at-least-once delivery (§6.4).
-- **Cancellation:** cooperative throughout; `/stop` (→ CANCELLED) and `/new` (→ SUPERSEDED) via `SessionLaneRegistry`; a plain message queues.
+- **Cancellation:** cooperative throughout; draft Stop (one run → CANCELLED), `/stop` (session runs → CANCELLED) and `/new` (→ SUPERSEDED) via `SessionLaneRegistry`; a plain message queues.
 - **Degradation UX (user-visible contract):** on provider failure/timeout after retries → "I couldn't reach the model, try again" (no secrets/stack); on budget exhaustion → "I stopped because <cap> was hit"; the typing indicator is cleared. On `SQLITE_FULL`/disk-full → refuse new turns + reply "storage full" once + do **not** crash-loop; doctor free-disk preflight. 409 → loud doctor surfacing + startup lock prevents a second poller.
 - **A turn's route switch is audited and announced on transitions only** (§8.6). The switch appends a `provider_fallback` audit row whose `decision` is the failure kind that caused it, and the turn's reply carries one notice naming both routes; the turn where the primary answers again carries the matching restored notice. **No notice on the steady state in between**, because an owner who is told every turn stops reading it. A turn that switched and then failed anyway reports the primary's cause with one added sentence that the backup was tried, so the reply neither hides the switch nor buries the actionable failure.
 - **Authentication, access, and quota are three distinct messages, and only one of them mentions login.** A missing, expired-without-refresh, or invalid credential — and a latched second clean 401 — yields _"ChatGPT authentication is required. Stop clawd, run `clawd auth login`, then start clawd again."_, naming the process lock because login cannot run under a live daemon (§4). **Access denial** says the subscription or account cannot use the requested route or model. **Quota** says to retry after the reported delay or plan reset and leaves credentials valid. **Neither claims that logging in will fix it** — sending an owner through a pointless login is its own failure. `ScheduleDraftParseResult` carries the same vendor-neutral authentication-required / access-denied / quota-limited outcomes with the same guidance and no-debit rule, instead of collapsing every subscription failure into `providerUnavailable`.
@@ -1945,12 +1991,12 @@ empty healthy state.
 | PENDING                                  | `/stop` / `/new`                             | CANCELLED / SUPERSEDED                          |
 | RUNNING                                  | turn completes + reply enqueued              | DONE                                            |
 | RUNNING                                  | retryable failure exhausted / terminal error | FAILED                                          |
-| RUNNING                                  | `/stop`                                      | CANCELLED                                       |
+| RUNNING                                  | `/stop` or draft Stop                                      | CANCELLED                                       |
 | RUNNING                                  | `/new`                                       | SUPERSEDED                                      |
 | RUNNING                                  | tool needs approval                          | AWAITING_APPROVAL                               |
 | AWAITING_APPROVAL                        | approval APPROVED                            | RUNNING                                         |
 | AWAITING_APPROVAL                        | REJECTED / EXPIRED→DENY                      | FAILED                                          |
-| AWAITING_APPROVAL                        | `/stop` / `/new`                             | CANCELLED / SUPERSEDED                          |
+| AWAITING_APPROVAL                        | `/stop` or draft Stop / `/new`                             | CANCELLED / SUPERSEDED                          |
 | **RUNNING (at boot)**                    | reconciliation sweep                         | FAILED (or re-enqueue if idempotent via outbox) |
 | **AWAITING_APPROVAL (expired, at boot)** | reconciliation sweep                         | DENY → FAILED                                   |
 

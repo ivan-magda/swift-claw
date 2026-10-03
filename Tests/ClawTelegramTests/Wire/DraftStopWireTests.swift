@@ -11,7 +11,7 @@ struct DraftStopWireTests {
     // given
     let json = """
       {"update_id":77,"stopped_message_generation":{
-      "chat":{"id":42,"type":"private"},"message_thread_id":9,"draft_id":123}}
+      "chat":{"id":42,"type":"private"},"message_thread_id":9,"draft_id":-123}}
       """
 
     // when
@@ -25,7 +25,7 @@ struct DraftStopWireTests {
           chatID: 42,
           chatKind: .private,
           messageThreadID: 9,
-          draftID: 123
+          draftID: -123
         )
     )
     #expect(raw.message == nil)

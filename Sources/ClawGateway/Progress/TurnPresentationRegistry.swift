@@ -6,6 +6,7 @@ import Foundation
 public actor TurnPresentationRegistry {
   struct Entry {
     let scope: TurnScope
+    let draftID: Int64?
     let presentation: TurnPresentation
     let reporter: TurnProgressReporter
     var pendingApprovalStepID: TurnToolStepID?
@@ -17,6 +18,7 @@ public actor TurnPresentationRegistry {
   private let drafts: any RichDraftStreaming
   private let typing: any TypingIndicator
   private let outbox: any OutboxStore
+  private let draftIDs: any DraftIDStore
   private let secretValues: [String]
   private let clock: any Clock<Duration>
   private var entriesByRunID: [Int64: Entry] = [:]
@@ -31,6 +33,7 @@ public actor TurnPresentationRegistry {
     drafts: any RichDraftStreaming,
     typing: any TypingIndicator,
     outbox: any OutboxStore,
+    draftIDs: any DraftIDStore,
     secretValues: [String],
     clock: any Clock<Duration>
   ) {
@@ -40,6 +43,7 @@ public actor TurnPresentationRegistry {
     self.drafts = drafts
     self.typing = typing
     self.outbox = outbox
+    self.draftIDs = draftIDs
     self.secretValues = secretValues
     self.clock = clock
   }
@@ -55,10 +59,13 @@ public actor TurnPresentationRegistry {
       return entry.reporter
     }
 
+    // Allocation is synchronous: admission and registration remain one actor turn.
+    // If persistence fails, retain typing but never emit a draft with a reused identity.
+    let draftID = draftsEnabled(for: scope) ? try? draftIDs.nextID() : nil
     let presentation = TurnPresentation(
       target: DeliveryTarget(chatID: scope.chatID, messageThreadID: scope.threadID),
-      draftID: scope.runID,
-      draftsEnabled: streamingEnabled && scope.mode == .direct,
+      draftID: draftID ?? scope.runID,
+      draftsEnabled: draftID != nil,
       progressEnabled: progressEnabled,
       resumed: resumed,
       renderer: renderer,
@@ -74,6 +81,7 @@ public actor TurnPresentationRegistry {
     }
     let entry = Entry(
       scope: scope,
+      draftID: draftID,
       presentation: presentation,
       reporter: reporter
     )
@@ -83,6 +91,18 @@ public actor TurnPresentationRegistry {
     await updateDraftPause(for: entry)
 
     return reporter
+  }
+
+  public func stoppableRun(chatID: Int64, threadID: Int64?, draftID: Int64) -> TurnScope? {
+    guard let entry = entriesByRunID.values.first(where: { entry in
+        entry.draftID == draftID
+      }),
+          entry.scope.chatID == chatID,
+          entry.scope.threadID == threadID
+    else {
+      return nil
+    }
+    return entry.scope
   }
 
   // MARK: - Approval Progress
@@ -175,6 +195,10 @@ public actor TurnPresentationRegistry {
 // MARK: - Delivery Holds
 
 private extension TurnPresentationRegistry {
+  func draftsEnabled(for scope: TurnScope) -> Bool {
+    streamingEnabled && scope.mode == .direct
+  }
+
   func updateDraftPauses(inChat chatID: Int64) async {
     let chatEntries = entriesByRunID.values.filter { entry in
       entry.scope.chatID == chatID

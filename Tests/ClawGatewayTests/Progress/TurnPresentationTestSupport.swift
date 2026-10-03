@@ -26,7 +26,8 @@ func makePresentations(
   typing: any TypingIndicator,
   streamingEnabled: Bool = true,
   progressEnabled: Bool = true,
-  outbox: (any OutboxStore)? = nil
+  outbox: (any OutboxStore)? = nil,
+  draftIDs: (any DraftIDStore)? = nil
 ) throws -> TurnPresentationRegistry {
   TurnPresentationRegistry(
     streamingEnabled: streamingEnabled,
@@ -35,6 +36,7 @@ func makePresentations(
     drafts: drafts,
     typing: typing,
     outbox: try outbox ?? OutboxStoreGRDB(writer: TestDatabase.make()),
+    draftIDs: try draftIDs ?? DraftIDStoreGRDB(writer: TestDatabase.make()),
     secretValues: [],
     clock: clock
   )
@@ -100,6 +102,7 @@ actor ClosingDrafts: RichDraftStreaming {
   private var hasBlocked = false
   private(set) var calls = 0
   private(set) var markdowns: [String] = []
+  private(set) var draftIDs: [Int64] = []
 
   init(blockingText: String? = nil, blockingCall: Int = 1) {
     self.blockingText = blockingText
@@ -109,6 +112,7 @@ actor ClosingDrafts: RichDraftStreaming {
   func sendDraft(chatID: Int64, draftID: Int64, markdown: String) async -> Bool {
     calls += 1
     markdowns.append(markdown)
+    draftIDs.append(draftID)
     if cleaned.isOpen, markdown.contains("Waiting for your approval") {
       waitingAfterCleanup.open()
     }

@@ -200,8 +200,10 @@ func makeSC3Harness(
   beforeCompletion: TurnScriptedProvider.BeforeCompletion? = nil,
   dispatcherOverride: (any ToolDispatching)? = nil,
   providerOverride: (any LLMProvider)? = nil,
-  presentationsFactory: ((any OutboxStore) throws -> TurnPresentationRegistry)? = nil,
-  turnsFactory: ((any RunStore, TurnPresentationRegistry?) -> any TurnDispatching)? = nil
+  presentationsFactory: ((any OutboxStore, any DraftIDStore) throws -> TurnPresentationRegistry)? =
+    nil,
+  turnsFactory: ((any RunStore, TurnPresentationRegistry?) -> any TurnDispatching)? = nil,
+  transport: RecordingTransport = RecordingTransport()
 ) throws -> SC3Harness {
   let fileManager = FileManager.default
 
@@ -213,7 +215,7 @@ func makeSC3Harness(
     .path
   let stores = try ClawDatabase.openStores(path: resolvedDatabasePath)
   try stores.allowlist.seedAllowlist(userIDs: [7])
-  let presentations = try presentationsFactory?(stores.outbox)
+  let presentations = try presentationsFactory?(stores.outbox, stores.draftIDs)
 
   // 2. Temp workspace dir; write `workspaceFiles` (relative path → content) into it. Reuse
   // `workspaceRoot` (with `databasePath`) to model a restart against the SAME disk (spec §17).
@@ -356,7 +358,6 @@ func makeSC3Harness(
   )
 
   // 7. TurnRunner sharing the router's registry instance.
-  let transport = RecordingTransport()
   let logger = TestLog.silent
   let deferredParker = DeferredApprovalParker()
   let imageCache = ImageCache()

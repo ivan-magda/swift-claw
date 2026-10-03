@@ -97,6 +97,48 @@ public actor SessionLaneRegistry {
     return .accepted
   }
 
+  /// Owns work after the named run finishes without extending the session's FIFO tail.
+  /// Shutdown drains this task; session cancellation cancels it alongside ordinary lane work.
+  public func afterRun(
+    runID: Int64,
+    sessionID: Int64,
+    work: @escaping @Sendable () async -> Void
+  ) -> LaneEnqueueResult {
+    let admitted = admissionOpen.withLock { open in
+      open
+    }
+    guard admitted else {
+      return .shuttingDown
+    }
+
+    let predecessors = operations.values.filter { operation in
+      operation.runID == runID
+    }.map(\.task)
+    let operationID = nextOperationID
+    nextOperationID &+= 1
+
+    let task = Task {
+      // Inherit actor isolation so registration precedes this synchronous finalizer.
+      defer {
+        self.finalize(operationID: operationID)
+      }
+
+      for predecessor in predecessors {
+        await predecessor.value
+      }
+
+      await work()
+    }
+
+    operations[operationID] = ActiveOperation(
+      runID: runID,
+      sessionID: sessionID,
+      task: task
+    )
+
+    return .accepted
+  }
+
   /// Cancels every in-flight turn carrying `runID` (a durable run id is unique, so this is normally
   /// one turn). The turn still runs its body to observe the cancellation.
   public func cancel(runID: Int64) {

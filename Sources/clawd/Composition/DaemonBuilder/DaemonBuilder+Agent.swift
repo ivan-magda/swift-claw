@@ -43,6 +43,7 @@ extension DaemonBuilder {
       drafts: draftStreamer,
       typing: TelegramTypingIndicator(transport: transport),
       outbox: stores.outbox,
+      draftIDs: stores.draftIDs,
       secretValues: redactionValues,
       clock: presentationClock
     )

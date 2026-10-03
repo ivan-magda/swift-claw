@@ -150,8 +150,9 @@ a permanent reply, without drafts or explanation requests. Groups and topics use
 active work and pause it while waiting for a person's approval.
 See [Telegram progress](CUSTOMIZATION.md#telegram-progress) for the settings.
 
-Two commands to know from day one: `/stop` cancels the current turn, `/new` starts a
-fresh session.
+Tap **Stop** on a private-chat draft to dismiss it and cancel that turn. Queued messages still run.
+clawd sends "Stopped." after cleanup; an ordinary tool that ignores cancellation is abandoned at its deadline.
+`/stop` cancels current and queued turns, and `/new` starts a fresh session.
 
 ## 6. Make it yours
 

@@ -3,6 +3,24 @@ import ClawCore
 // MARK: - Control Routing
 
 extension MessageRouter {
+  func routeDraftStop(_ stop: RawDraftStop, updateID: Int64) async -> HandleOutcome {
+    guard accessControl.decide(
+      chatKind: stop.chatKind,
+      chatID: stop.chatID,
+      userID: stop.chatID
+    ) == .allowed(.direct)
+    else {
+      logger.info("draft stop update \(updateID) draft \(stop.draftID): refused")
+      return .skipped
+    }
+
+    do {
+      return try await commandHandlers.stopDraft(stop, updateID: updateID)
+    } catch {
+      return error.outcome
+    }
+  }
+
   func routeText(
     _ text: String,
     rawUpdate: RawUpdate,

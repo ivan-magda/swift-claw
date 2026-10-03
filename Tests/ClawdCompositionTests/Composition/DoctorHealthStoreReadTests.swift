@@ -110,6 +110,7 @@ private extension DoctorHealthStoreReadTests {
       cursor: UpdateCursorStoreGRDB(writer: writer),
       sessionMessages: SessionMessageStoreGRDB(writer: writer),
       runs: RunStoreGRDB(writer: writer),
+      draftIDs: DraftIDStoreGRDB(writer: writer),
       usage: UsageStoreGRDB(writer: writer),
       outbox: OutboxStoreGRDB(writer: writer),
       audit: AuditLogGRDB(writer: writer),

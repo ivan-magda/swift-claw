@@ -22,7 +22,7 @@ public struct MessageRouter: Sendable {
   let botUsername: String?
   private let addressing: AddressingResolver
 
-  private let accessControl: AccessControl
+  let accessControl: AccessControl
   let replies: ReplySender
 
   let commandHandlers: CommandHandlers
@@ -119,6 +119,7 @@ public struct MessageRouter: Sendable {
       pendingConfirmations: pendingConfirmations,
       lanes: lanes,
       replies: replies,
+      logger: logger,
       now: now,
       coordinator: coordinator,
       presentations: presentations
@@ -205,6 +206,10 @@ private extension MessageRouter {
     // HandleOutcome, so cursor semantics are unchanged.
     if let callback = rawUpdate.callback {
       return await routeCallback(callback, updateID: rawUpdate.updateID)
+    }
+
+    if let stop = rawUpdate.draftStop {
+      return await routeDraftStop(stop, updateID: rawUpdate.updateID)
     }
 
     if let observed = noteObservedEvent(in: rawUpdate) {
