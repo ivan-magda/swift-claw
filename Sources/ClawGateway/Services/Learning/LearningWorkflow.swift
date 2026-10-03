@@ -43,9 +43,11 @@ public struct LearningWorkflow: Sendable {
 
   public func advance(runID: Int64, now: Date) async {
     do {
-      guard let binding = try store.binding(runID: runID) else {
+      let binding = try store.binding(runID: runID)
+      guard let binding else {
         return
       }
+
       try store.sealEvidence(runID: runID, now: now)
       await runner.runEvaluation(runID: runID, now: now)
       guard !Task.isCancelled else {
@@ -64,7 +66,8 @@ public struct LearningWorkflow: Sendable {
 
   func advance(jobID: Int64, now: Date, transitionLimit: Int) async {
     do {
-      guard try store.learningState(jobID: jobID) != nil else {
+      let learningState = try store.learningState(jobID: jobID)
+      guard learningState != nil else {
         return
       }
       var visited: Set<WorkflowStep> = []
@@ -108,17 +111,22 @@ private extension LearningWorkflow {
     steps += try store.workflowTriggers(jobID: jobID, now: now).map { trigger in
       .reflection(trigger.digest)
     }
-    return steps.first { step in
-      !visited.contains(step)
-    }.map(WorkflowClaim.init(step:))
+    return
+      steps
+      .first { step in
+        !visited.contains(step)
+      }
+      .map(WorkflowClaim.init(step:))
   }
 
   func apply(_ claim: WorkflowClaim, jobID: Int64, now: Date) async throws {
     switch claim.step {
     case .reflection(let digest):
-      if let trigger = try store.workflowTriggers(jobID: jobID, now: now).first(where: { trigger in
-        trigger.digest == digest
-      }) {
+      let trigger = try store.workflowTriggers(jobID: jobID, now: now)
+        .first { trigger in
+          trigger.digest == digest
+        }
+      if let trigger {
         await runner.runReflection(trigger: trigger, now: now)
       }
     case .candidate(let digest):
@@ -127,16 +135,26 @@ private extension LearningWorkflow {
     case .control(let eventID):
       try applyControl(eventID: eventID, jobID: jobID, now: now)
     case .trial:
-      guard let trial = try store.openTrial(jobID: jobID),
-            case .reconciled(let result) = try store.reconcileTrial(trial.identity, now: now),
-            let current = try store.openTrial(jobID: jobID),
-            let state = try store.learningState(jobID: jobID)
-      else {
+      let trial = try store.openTrial(jobID: jobID)
+      guard let trial else {
         return
       }
+      let reconciliationOutcome = try store.reconcileTrial(trial.identity, now: now)
+      guard case .reconciled(let reconciliation) = reconciliationOutcome else {
+        return
+      }
+      let currentTrial = try store.openTrial(jobID: jobID)
+      guard let currentTrial else {
+        return
+      }
+      let state = try store.learningState(jobID: jobID)
+      guard let state else {
+        return
+      }
+
       _ = try store.applyTrialDecision(
-        result.decision,
-        trial: current,
+        reconciliation.decision,
+        trial: currentTrial,
         feedbackRevision: state.feedbackRevision,
         now: now
       )
@@ -154,10 +172,11 @@ private extension LearningWorkflow {
   }
 
   func applyControl(eventID: Int64, jobID: Int64, now: Date) throws {
-    guard let control = try store.workflowControls(jobID: jobID).first(where: { control in
+    let control = try store.workflowControls(jobID: jobID)
+      .first { control in
         control.eventID == eventID
-      })
-    else {
+      }
+    guard let control else {
       return
     }
 

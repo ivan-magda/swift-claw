@@ -100,16 +100,18 @@ enum ScheduleReplies {
 
   /// One `/schedule list` row: `id · label · status · recurrence-in-words · tz · next fire`.
   static func listLines(_ rows: [(job: ScheduledJob, nextFire: Date?)]) -> String {
-    rows.map { row in
-      let fire =
-        row.nextFire.map { date in
-          fireTime(date, timezoneID: row.job.timezone)
-        } ?? "—"
-      return """
-        \(row.job.id) · \(row.job.label) · \(row.job.status.rawValue) · \
-        \(RecurrenceWords.describe(row.job.recurrence)) · \(row.job.timezone) · next \(fire)
-        """
-    }.joined(separator: "\n")
+    rows
+      .map { row in
+        let fire =
+          row.nextFire.map { date in
+            fireTime(date, timezoneID: row.job.timezone)
+          } ?? "—"
+        return """
+          \(row.job.id) · \(row.job.label) · \(row.job.status.rawValue) · \
+          \(RecurrenceWords.describe(row.job.recurrence)) · \(row.job.timezone) · next \(fire)
+          """
+      }
+      .joined(separator: "\n")
   }
 
   static func notFound(id: Int64) -> String {

@@ -12,12 +12,15 @@ public enum OutboxFixture {
     now: Date = Date(timeIntervalSince1970: 1_700_000_000)
   ) throws {
     let runs = RunStoreGRDB(writer: writer)
-    guard let chunk = chunks.first,
-          let context = try runs.executionContext(runID: runID, fallbackChatID: chunk.chatID)
-    else {
+    guard let chunk = chunks.first else {
       throw StoreError.unexpected("Outbox fixture needs a run and reply chunks")
     }
-    let outcome = try runs.commitAssistantTurn(
+    let context = try runs.executionContext(runID: runID, fallbackChatID: chunk.chatID)
+    guard let context else {
+      throw StoreError.unexpected("Outbox fixture needs a run and reply chunks")
+    }
+
+    let commitOutcome = try runs.commitAssistantTurn(
       AssistantTurn(
         runID: runID,
         sessionID: context.sessionID,
@@ -28,7 +31,7 @@ public enum OutboxFixture {
       ),
       now: now
     )
-    guard outcome == .committed else {
+    guard commitOutcome == .committed else {
       throw StoreError.unexpected("Outbox fixture reply did not commit")
     }
   }

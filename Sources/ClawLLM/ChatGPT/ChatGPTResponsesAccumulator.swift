@@ -206,8 +206,9 @@ private extension ChatGPTResponsesAccumulator {
     case .outputItemDone(let index, let item):
       return try applyCompletedItem(index: index, item: item)
     case .outputTextDelta(let index, let text):
-      if let delta = try appendText(index: index, text: text) {
-        return [.delta(delta)]
+      let answerDelta = try appendText(index: index, text: text)
+      if let answerDelta {
+        return [.delta(answerDelta)]
       }
       return try commentary(index: index, text: .append(text))
     case .outputTextDone(let index, let text):
@@ -428,26 +429,28 @@ private extension ChatGPTResponsesAccumulator {
   }
 
   var currentOutputFields: [AttemptOutputField] {
-    order.sorted().flatMap { index -> [AttemptOutputField] in
-      guard let item = items[index] else {
-        return []
+    order
+      .sorted()
+      .flatMap { index -> [AttemptOutputField] in
+        guard let item = items[index] else {
+          return []
+        }
+
+        var fields: [AttemptOutputField] = []
+
+        let answerText = item.visibleText
+        if !answerText.isEmpty {
+          fields.append(AttemptOutputField(key: "responses-visible:\(index)", value: answerText))
+        }
+
+        if item.retainsArguments {
+          fields.append(
+            AttemptOutputField(key: "responses-tool-arguments:\(index)", value: item.argumentText)
+          )
+        }
+
+        return fields
       }
-
-      var fields: [AttemptOutputField] = []
-
-      let answerText = item.visibleText
-      if !answerText.isEmpty {
-        fields.append(AttemptOutputField(key: "responses-visible:\(index)", value: answerText))
-      }
-
-      if item.retainsArguments {
-        fields.append(
-          AttemptOutputField(key: "responses-tool-arguments:\(index)", value: item.argumentText)
-        )
-      }
-
-      return fields
-    }
   }
 }
 
@@ -683,9 +686,12 @@ private extension ChatGPTResponsesAccumulator {
   /// Assembles answer text in output-index order, preferring completed text over deltas.
   /// Delta-only items still contribute to a token-limited response.
   var content: String {
-    order.sorted().compactMap { index in
-      items[index]?.visibleText
-    }.joined()
+    order
+      .sorted()
+      .compactMap { index in
+        items[index]?.visibleText
+      }
+      .joined()
   }
 
   func toolCalls() throws -> [ToolCall] {
@@ -711,7 +717,8 @@ private extension ChatGPTResponsesAccumulator {
       }
       // Two items claiming one ID would give the dispatcher two calls it cannot tell apart, and a
       // tool result names only the ID.
-      guard claimedCallIDs.insert(callID).inserted else {
+      let isNewCallID = claimedCallIDs.insert(callID).inserted
+      guard isNewCallID else {
         throw Self.conflictingCallID
       }
       // The dispatcher validates raw argument JSON against the tool's schema.

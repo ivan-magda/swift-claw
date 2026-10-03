@@ -109,7 +109,11 @@ enum AuthCommandResultMapper {
   static func runtimeSecretResult(for error: any Error) -> AuthCommandResult {
     let named = error as? SecretStoreError
     let cause =
-      if let named { describe(named) } else { "the runtime secrets could not be prepared" }
+      if let named {
+        describe(named)
+      } else {
+        "the runtime secrets could not be prepared"
+      }
 
     return AuthCommandResult(
       exit: .secretLoadFailure,

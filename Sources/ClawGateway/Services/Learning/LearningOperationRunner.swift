@@ -71,15 +71,19 @@ public struct LearningOperationRunner: Sendable {
 
 private extension LearningOperationRunner {
   func evaluate(runID: Int64, now: Date) async throws {
-    guard let evidence = try learning.evidence(runID: runID),
+    let evidence = try learning.evidence(runID: runID)
+    guard let evidence,
           evidence.eligibility.reachesEvaluator,
-          let payload = evidence.payload,
-          let job = try jobs.job(id: evidence.jobID),
-          // A job that has never fired has no session for the result commit to charge against. It
-          // cannot own a settled bound run either, so this refuses before the claim rather than
-          // leaving a `started` row for boot to charge conservatively.
-          job.sessionID != nil
+          let payload = evidence.payload
     else {
+      return
+    }
+
+    let job = try jobs.job(id: evidence.jobID)
+    // A job that has never fired has no session for the result commit to charge against. It
+    // cannot own a settled bound run either, so this refuses before the claim rather than
+    // leaving a `started` row for boot to charge conservatively.
+    guard let job, job.sessionID != nil else {
       return
     }
     let key = LearningOperationKey.evaluation(
@@ -87,7 +91,8 @@ private extension LearningOperationRunner {
       epoch: evidence.epoch,
       evidenceDigest: evidence.digest
     )
-    guard let claim = try learning.claimOperation(key, now: now) else {
+    let claim = try learning.claimOperation(key, now: now)
+    guard let claim else {
       return
     }
 
@@ -125,6 +130,7 @@ private extension LearningOperationRunner {
     guard authorized else {
       return
     }
+
     await dispatch(call, starting: route, now: now)
   }
 
@@ -147,7 +153,8 @@ private extension LearningOperationRunner {
       providerCallID: call.callID,
       budget: BudgetGate(budget: budget, costPolicy: route.binding.costPolicy)
     )
-    switch try learning.authorizeAndStartOperation(authorization, now: now) {
+    let authorizationOutcome = try learning.authorizeAndStartOperation(authorization, now: now)
+    switch authorizationOutcome {
     case .started:
       return true
     case .deniedNoCall(let failure):

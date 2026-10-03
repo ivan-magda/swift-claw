@@ -15,14 +15,14 @@ extension RunStoreGRDB {
     now: Date
   ) throws(StoreError) -> SuspendedCommitReceipt {
     try database.writeMapping { db in
-      guard try Self.transitionRun(
+      let nextState = try Self.transitionRun(
         db,
         runID: runID,
         event: .suspendForApproval,
         now: now,
         terminal: nil
-      ) != nil
-      else {
+      )
+      guard nextState != nil else {
         throw StoreError.unexpected("run \(runID) was not RUNNING at suspend commit")
       }
 
@@ -92,12 +92,23 @@ extension RunStoreGRDB {
     notResumableObservationContent: String,
     now: Date
   ) throws -> ApprovedExecutionClaim {
-    guard try observationIsPlaceholder(db, runID: runID, messageID: observationMessageID) else {
+    let hasPlaceholderObservation = try observationIsPlaceholder(
+      db,
+      runID: runID,
+      messageID: observationMessageID
+    )
+    guard hasPlaceholderObservation else {
       return .alreadyResumed
     }
-    guard try transitionRun(db, runID: runID, event: .resumeApproved, now: now, terminal: nil) !=
-          nil
-    else {
+
+    let nextState = try transitionRun(
+      db,
+      runID: runID,
+      event: .resumeApproved,
+      now: now,
+      terminal: nil
+    )
+    guard nextState != nil else {
       try fillApprovedObservation(
         db,
         runID: runID,
@@ -150,13 +161,12 @@ extension RunStoreGRDB {
     observationMessageID: Int64,
     fill: ClaimedObservationFill
   ) throws {
-    guard let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql: "SELECT session_id, state FROM runs WHERE id = ?",
       arguments: [runID]
-    ),
-          let state = RunState(rawValue: row["state"])
-    else {
+    )
+    guard let row, let state = RunState(rawValue: row["state"]) else {
       throw StoreError.unexpected("run \(runID) is missing or has an unrecognized state")
     }
     let sessionID: Int64 = row["session_id"]
@@ -310,14 +320,14 @@ extension RunStoreGRDB {
     now: Date
   ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
-      guard try Self.transitionRun(
+      let nextState = try Self.transitionRun(
         db,
         runID: runID,
         event: .fail,
         now: now,
         terminal: .settled(.policyBlocked)
-      ) != nil
-      else {
+      )
+      guard nextState != nil else {
         return false
       }
       try Self.fillApprovedObservation(
@@ -457,7 +467,7 @@ private extension RunStoreGRDB {
   ) throws {
     let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runID: runID)
     for chunk in chunks {
-      let linked = OutboxChunk(
+      let approvalLinkedChunk = OutboxChunk(
         stepIndex: chunk.stepIndex,
         chatID: chunk.chatID,
         payload: chunk.payload,
@@ -468,7 +478,7 @@ private extension RunStoreGRDB {
       _ = try OutboxInsertion.insertOutbox(
         db,
         runID: runID,
-        chunk: OutboxInsertion.shiftedChunk(linked, by: stepBase),
+        chunk: OutboxInsertion.shiftedChunk(approvalLinkedChunk, by: stepBase),
         now: now
       )
     }

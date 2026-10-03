@@ -61,10 +61,14 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
 
     if pieces.count == 2 {
       let rawPort = pieces[1]
-      guard rawPort.isEmpty == false,
-            rawPort.allSatisfy({
-          "0123456789".contains($0)
-        }),
+      guard rawPort.isEmpty == false else {
+        return false
+      }
+
+      let hasOnlyASCIIDigits = rawPort.allSatisfy { character in
+        "0123456789".contains(character)
+      }
+      guard hasOnlyASCIIDigits,
             let port = Int(rawPort),
             (1...65_535).contains(port)
       else {
@@ -81,10 +85,10 @@ public struct PinnedImageReference: Sendable, Equatable, CustomStringConvertible
     guard labels.allSatisfy(isValidDNSLabel) else {
       return false
     }
-    guard labels.allSatisfy({
-        Int($0) != nil
-      }) == false
-    else {
+    let hasOnlyNumericLabels = labels.allSatisfy { label in
+      Int(label) != nil
+    }
+    guard !hasOnlyNumericLabels else {
       return false
     }
 
@@ -207,8 +211,12 @@ extension AppConfig {
       allowEgress: allowEgress
     )
   }
+}
 
-  private static func parseExecRegistryAllowlist(_ rawValue: String?) throws -> [String] {
+// MARK: - Execution Registry Validation
+
+private extension AppConfig {
+  static func parseExecRegistryAllowlist(_ rawValue: String?) throws -> [String] {
     guard let rawValue else {
       return EnvDefaults.execImageRegistries
     }
@@ -217,9 +225,12 @@ extension AppConfig {
       throw ConfigError.invalidExecImageRegistry(rawValue)
     }
 
-    let hosts = trimmed.split(separator: ",", omittingEmptySubsequences: false).map { part in
-      part.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
+    let hosts =
+      trimmed
+      .split(separator: ",", omittingEmptySubsequences: false)
+      .map { part in
+        part.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      }
     guard hosts.isEmpty == false, hosts.allSatisfy(PinnedImageReference.isValidRegistryHost) else {
       throw ConfigError.invalidExecImageRegistry(rawValue)
     }

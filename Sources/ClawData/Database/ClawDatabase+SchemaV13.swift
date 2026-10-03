@@ -72,12 +72,16 @@ extension ClawDatabase {
 
     try createSettlementTables(db)
   }
+}
 
+// MARK: - Learning Settlement Tables
+
+private extension ClawDatabase {
   /// The terminal receipt and the settlement marker share one row: `settled_at` is the correctness
   /// boundary every primary-fact writer refuses to write past. It reaches its job through
   /// `run_learning_bindings` because `RunStore` writes it on the primary run path, which holds no
   /// learning state of its own.
-  private static func createSettlementTables(_ db: Database) throws {
+  static func createSettlementTables(_ db: Database) throws {
     try db.create(table: "run_settlements") { table in
       table.column("run_id", .integer).primaryKey().references("runs", onDelete: .cascade)
       table.column("winning_state", .text).notNull()
@@ -193,8 +197,12 @@ extension ClawDatabase {
 
     try createFeedbackChallengeTables(db)
   }
+}
 
-  private static func createFeedbackChallengeTables(_ db: Database) throws {
+// MARK: - Feedback Challenge Tables
+
+private extension ClawDatabase {
+  static func createFeedbackChallengeTables(_ db: Database) throws {
     try db.create(table: "feedback_challenges") { table in
       table.autoIncrementedPrimaryKey("challenge_id")
       table.column("owner_user_id", .integer).notNull()

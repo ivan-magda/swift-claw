@@ -160,9 +160,11 @@ private extension LearningSurface {
       lines.append("decision base: \(receipt.inputs.baseDigest.rawValue)")
       lines.append("decision replacement: \(receipt.inputs.replacementDigest.rawValue)")
       lines.append("decision reviewed feedback: \(receipt.inputs.feedbackRevision.value)")
-      let runIDs = receipt.cohort.map { support in
-        String(support.runID)
-      }.joined(separator: ", ")
+      let runIDs = receipt.cohort
+        .map { support in
+          String(support.runID)
+        }
+        .joined(separator: ", ")
       lines.append("decision cohort runs: \(runIDs)")
       let confirmed = receipt.cohort.count { support in
         support.outcome == .positive && support.ownerConfirmed

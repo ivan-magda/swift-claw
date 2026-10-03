@@ -74,7 +74,8 @@ struct SealedCredentialFile<Map: SealedCredentialMap>: Sendable {
     guard SecureFilePublisher.entryExists(at: url) else {
       return nil
     }
-    return try loadMap(key: try openKey())
+    let key = try openKey()
+    return try loadMap(key: key)
   }
 
   /// One serialized cycle: open the key, read the whole map, let `body` change it, publish the whole
@@ -85,7 +86,9 @@ struct SealedCredentialFile<Map: SealedCredentialMap>: Sendable {
   /// synchronous syscall, so there is no suspension point at which a second mutation could interleave.
   func mutate(_ body: (_ map: inout Map) -> Bool) throws(CredentialStoreError) {
     mutation.lock()
-    defer { mutation.unlock() }
+    defer {
+      mutation.unlock()
+    }
 
     let key = try openKey()
     // A map that cannot be read is not overwritten. Preserving unrelated records is an invariant,
@@ -127,7 +130,8 @@ extension SealedCredentialFile {
 
     // Absent, stale, or unreadable — none of them are the intended map, so publish it once more and
     // demand both the file's and the parent's durability this time.
-    guard try publishEnvelope(intended, key: key).isCommitUncertain == false else {
+    let publicationOutcome = try publishEnvelope(intended, key: key)
+    guard !publicationOutcome.isCommitUncertain else {
       throw .commitUncertain
     }
     guard readableMap(key: key) == intended else {
@@ -139,7 +143,8 @@ extension SealedCredentialFile {
     _ map: Map,
     key: SymmetricKey
   ) throws(CredentialStoreError) -> SecureFilePublisher.PublicationOutcome {
-    let envelope = try codec.sealCredential(try Self.encode(map), key: key)
+    let plaintext = try Self.encode(map)
+    let envelope = try codec.sealCredential(plaintext, key: key)
     do {
       return try publisher.publish(envelope, to: url, mode: .replace)
     } catch {
@@ -191,7 +196,8 @@ private extension SealedCredentialFile {
     } catch {
       throw Self.mapEnvelopeError(error)
     }
-    return try Self.decode(try codec.openCredential(envelope, key: key))
+    let plaintext = try codec.openCredential(envelope, key: key)
+    return try Self.decode(plaintext)
   }
 
   static func mapEnvelopeError(_ error: SecureFileError) -> CredentialStoreError {

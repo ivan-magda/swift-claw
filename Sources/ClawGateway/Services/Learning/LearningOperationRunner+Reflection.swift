@@ -20,15 +20,18 @@ extension LearningOperationRunner {
 
 private extension LearningOperationRunner {
   func reflect(trigger: TriggerIdentity, now: Date) async throws {
-    guard let preparation = try learning.prepareReflection(trigger: trigger) else {
+    let preparation = try learning.prepareReflection(trigger: trigger)
+    guard let preparation else {
       return
     }
+
     let key = LearningOperationKey.reflection(
       jobID: trigger.jobID,
       epoch: trigger.epoch,
       triggerDigest: trigger.digest
     )
-    guard let claim = try learning.claimOperation(key, now: now) else {
+    let claim = try learning.claimOperation(key, now: now)
+    guard let claim else {
       return
     }
 
@@ -52,9 +55,11 @@ private extension LearningOperationRunner {
       authorization: ReflectionAuthorization(preparation: preparation),
       messages: messages
     )
-    guard try authorizeReflection(call, route: route, serialized: serialized, now: now) else {
+    let authorized = try authorizeReflection(call, route: route, serialized: serialized, now: now)
+    guard authorized else {
       return
     }
+
     await dispatchReflection(call, preparation: preparation, starting: route, now: now)
   }
 
@@ -80,7 +85,8 @@ private extension LearningOperationRunner {
       budget: BudgetGate(budget: budget, costPolicy: route.binding.costPolicy),
       context: .reflection(call.authorization)
     )
-    switch try learning.authorizeAndStartOperation(authorization, now: now) {
+    let authorizationOutcome = try learning.authorizeAndStartOperation(authorization, now: now)
+    switch authorizationOutcome {
     case .started:
       return true
     case .deniedNoCall(let failure):

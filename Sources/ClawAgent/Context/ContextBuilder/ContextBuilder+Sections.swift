@@ -84,10 +84,12 @@ private extension ContextBuilder {
   /// The row is uncapped and non-truncatable by its spec, so it is measured into the residual with
   /// the system rows: whatever the lessons cost, the truncatable rows share what is left.
   func lessonsSection(_ lessons: LessonSet) -> FittableSection {
-    let body = lessons.lessons.enumerated().map { index, lesson in
-      "\(index + 1). \(lesson)"
-    }
-    .joined(separator: "\n")
+    let body = lessons.lessons
+      .enumerated()
+      .map { index, lesson in
+        "\(index + 1). \(lesson)"
+      }
+      .joined(separator: "\n")
     return section(
       id: .lessons,
       units: [SectionUnit(id: ContextRowID.lessons.rawValue, content: body, canTruncate: false)]
@@ -105,14 +107,15 @@ private extension ContextBuilder {
 
       switch loaded.outcome {
       case .present:
-        if !loaded.text.isEmpty {
-          return SectionUnit(
-            id: file.relativePath,
-            content: "## \(file.relativePath)\n\(loaded.text)",
-            canTruncate: false
-          )
+        guard loaded.text.isEmpty == false else {
+          return nil
         }
-        return nil
+
+        return SectionUnit(
+          id: file.relativePath,
+          content: "## \(file.relativePath)\n\(loaded.text)",
+          canTruncate: false
+        )
       case .overCap:
         if let cap {
           let notice = """
@@ -177,10 +180,10 @@ extension ContextBuilder {
 
 private extension ContextBuilder {
   func spec(for id: ContextRowID) -> RowSpec {
-    guard let spec = ContextRowPolicy.specs.first(where: {
-        $0.id == id
-      })
-    else {
+    let spec = ContextRowPolicy.specs.first { spec in
+      spec.id == id
+    }
+    guard let spec else {
       preconditionFailure("missing context row spec for \(id)")
     }
     return spec

@@ -62,7 +62,8 @@ private extension ScheduledLearningStoreGRDB {
         FROM scheduled_jobs WHERE id = ?
         """,
       arguments: [jobID]
-    ).map { row in
+    )
+    .map { row in
       viewJob(row: row, requestedJobID: jobID)
     }
   }
@@ -293,18 +294,18 @@ private extension ScheduledLearningStoreGRDB {
     _ db: Database,
     state: JobLearningState
   ) throws -> LearningDecisionView? {
-    guard let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql: """
-          SELECT decision_id, kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
-          FROM learning_decisions
-          WHERE job_id = ? AND learning_epoch = ?
-          ORDER BY decided_at DESC, decision_id DESC
-          LIMIT 1
-          """,
+        SELECT decision_id, kind, job_id, learning_epoch, inputs, result, algorithm, decided_at
+        FROM learning_decisions
+        WHERE job_id = ? AND learning_epoch = ?
+        ORDER BY decided_at DESC, decision_id DESC
+        LIMIT 1
+        """,
       arguments: [state.jobID, state.epoch.value]
     )
-    else {
+    guard let row else {
       return nil
     }
     guard let decisionID = SQLiteStoredValue.int64(in: row, column: "decision_id"),
@@ -380,7 +381,7 @@ private extension ScheduledLearningStoreGRDB {
     case ReflectionNoCandidateReceipt.kind:
       return try reflectionDecisionDetail(db, record: record, state: state)
     case ResetReceipt.kind:
-      guard let receipt = try resetReceipt(
+      let receipt = try resetReceipt(
         db,
         record: ResetDecisionRecord(
           decisionID: record.decisionID,
@@ -392,7 +393,7 @@ private extension ScheduledLearningStoreGRDB {
           decidedAt: record.decidedAt
         )
       )
-      else {
+      guard let receipt else {
         throw ViewCorruption.invalid
       }
       return .learningReset(inputs: receipt.inputs, result: receipt.result)

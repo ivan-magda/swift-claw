@@ -318,7 +318,8 @@ private extension DoctorCommand {
       http: AsyncHTTPExecutor(client: httpClient)
     )
 
-    if let identity = try? await transport.getMe() {
+    let botIdentity = try? await transport.getMe()
+    if let identity = botIdentity {
       report.add(
         key: "telegram.bot",
         value: identity.username ?? "id:\(identity.id)",
@@ -363,13 +364,16 @@ private extension DoctorCommand {
         let availability = await backend.versionAvailability()
         return SandboxHealthRows.rows(for: .daemonManaged(availability: availability))
       }
-      defer { lock.release() }
+      defer {
+        lock.release()
+      }
 
       let bootstrap = await SandboxBootstrapper(
         enabled: true,
         backend: backend,
         maintenance: backend
-      ).prepare()
+      )
+      .prepare()
       await backend.shutdown()
 
       if let health = bootstrap.health {
@@ -426,9 +430,11 @@ private extension DoctorCommand {
       daemonRunning = true
     }
 
-    let failingKeys = report.checks.filter { check in
-      !check.ok
-    }.map(\.key)
+    let failingKeys = report.checks
+      .filter { check in
+        !check.ok
+      }
+      .map(\.key)
 
     #if os(Linux)
       let unitPath = NSHomeDirectory() + "/.config/systemd/user/swift-claw.service"

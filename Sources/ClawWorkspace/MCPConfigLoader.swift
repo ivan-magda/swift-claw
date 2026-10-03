@@ -89,9 +89,12 @@ public enum MCPConfigLoader {
       throw MCPConfigError.invalidValue(key: TopLevelKey.servers, value: "expected a list")
     }
 
-    let servers = try entries.enumerated().map { index, entry in
-      try parseServer(entry, context: "\(TopLevelKey.servers)[\(index)]")
-    }
+    let servers =
+      try entries
+      .enumerated()
+      .map { index, entry in
+        try parseServer(entry, context: "\(TopLevelKey.servers)[\(index)]")
+      }
     return try MCPConfig(servers: servers)
   }
 }
@@ -108,31 +111,41 @@ private extension MCPConfigLoader {
     let name = try requiredString(mapping[ServerKey.name], key: "\(context).\(ServerKey.name)")
     let url = try requiredString(mapping[ServerKey.url], key: "\(context).\(ServerKey.url)")
 
+    let enabled = try boolValue(
+      mapping[ServerKey.enabled],
+      key: "\(context).\(ServerKey.enabled)",
+      default: true
+    )
+    let headers = try optionalStringMap(
+      mapping[ServerKey.headers],
+      key: "\(context).\(ServerKey.headers)"
+    )
+    let authHeader =
+      try optionalString(
+        mapping[ServerKey.authHeader],
+        key: "\(context).\(ServerKey.authHeader)"
+      ) ?? MCPLimits.defaultAuthHeader
+    let connectTimeoutSeconds =
+      try optionalInt(
+        mapping[ServerKey.connectTimeoutSeconds],
+        key: "\(context).\(ServerKey.connectTimeoutSeconds)"
+      ) ?? MCPLimits.defaultConnectTimeoutSeconds
+    let requestTimeoutSeconds =
+      try optionalInt(
+        mapping[ServerKey.requestTimeoutSeconds],
+        key: "\(context).\(ServerKey.requestTimeoutSeconds)"
+      ) ?? MCPLimits.defaultRequestTimeoutSeconds
+    let tools = try parseTools(mapping[ServerKey.tools], context: "\(context).\(ServerKey.tools)")
+
     return try MCPServerConfig(
       name: name,
       url: url,
-      enabled: try boolValue(
-        mapping[ServerKey.enabled],
-        key: "\(context).\(ServerKey.enabled)",
-        default: true
-      ),
-      headers: try optionalStringMap(
-        mapping[ServerKey.headers],
-        key: "\(context).\(ServerKey.headers)"
-      ),
-      authHeader: try optionalString(
-        mapping[ServerKey.authHeader],
-        key: "\(context).\(ServerKey.authHeader)"
-      ) ?? MCPLimits.defaultAuthHeader,
-      connectTimeoutSeconds: try optionalInt(
-        mapping[ServerKey.connectTimeoutSeconds],
-        key: "\(context).\(ServerKey.connectTimeoutSeconds)"
-      ) ?? MCPLimits.defaultConnectTimeoutSeconds,
-      requestTimeoutSeconds: try optionalInt(
-        mapping[ServerKey.requestTimeoutSeconds],
-        key: "\(context).\(ServerKey.requestTimeoutSeconds)"
-      ) ?? MCPLimits.defaultRequestTimeoutSeconds,
-      tools: try parseTools(mapping[ServerKey.tools], context: "\(context).\(ServerKey.tools)")
+      enabled: enabled,
+      headers: headers,
+      authHeader: authHeader,
+      connectTimeoutSeconds: connectTimeoutSeconds,
+      requestTimeoutSeconds: requestTimeoutSeconds,
+      tools: tools
     )
   }
 

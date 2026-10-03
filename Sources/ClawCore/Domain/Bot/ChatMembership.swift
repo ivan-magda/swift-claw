@@ -115,10 +115,14 @@ public struct RawChatMemberUpdate: Sendable, Equatable {
       oldStatus == newStatus ? .unchanged : sameSideChange
     }
   }
+}
 
+// MARK: - Membership Change Classification
+
+private extension RawChatMemberUpdate {
   /// Two statuses on the same side of the door: a rights change while in the chat, and nothing
   /// worth a distinct word while out of it (left → kicked is still gone).
-  private var sameSideChange: ChatMembershipChange {
+  var sameSideChange: ChatMembershipChange {
     newStatus.isPresent ? .updated : .unchanged
   }
 }

@@ -133,17 +133,19 @@ private extension MCPTool {
       "headers": .array(headerIdentity),
       "remoteTool": .string(resolved.coordinate.remoteName),
     ])
-    return CanonicalJSON.encode(identity)
-      ?? PolicyFingerprint.hash(
-        parts: [
-          config.url.absoluteString,
-          resolved.coordinate.remoteName,
-          config.authHeader.lowercased(),
-        ]
-          + headers.flatMap {
-            [$0.name, $0.value]
-          }
-      )
+    if let encodedIdentity = CanonicalJSON.encode(identity) {
+      return encodedIdentity
+    }
+    return PolicyFingerprint.hash(
+      parts: [
+        config.url.absoluteString,
+        resolved.coordinate.remoteName,
+        config.authHeader.lowercased(),
+      ]
+        + headers.flatMap {
+          [$0.name, $0.value]
+        }
+    )
   }
 
   func preview(of arguments: JSONValue) -> String? {

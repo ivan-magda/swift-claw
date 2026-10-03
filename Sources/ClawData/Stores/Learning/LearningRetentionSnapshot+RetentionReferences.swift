@@ -82,10 +82,11 @@ extension LearningRetentionSnapshot {
     for row in decisions where (row["kind"] as String) == ResetReceipt.kind {
       let result: LearningResetDecisionResult =
         try ScheduledLearningStoreGRDB.decodeCanonicalDecision(row["result"])
-      if states.contains(where: { state in
+      let retainsResetBarrier = states.contains { state in
         sameJobEpoch(state, row)
           && (state["stable_revision"] as Int64) == result.newStableRevision.value
-      }) {
+      }
+      if retainsResetBarrier {
         retained.decisions.insert(row["decision_id"])
       }
     }
@@ -109,10 +110,10 @@ extension LearningRetentionSnapshot {
         else {
           continue
         }
-        guard let candidate = candidates.first(where: { candidate in
-            (candidate["candidate_digest"] as String) == (trial["candidate_digest"] as String)
-          })
-        else {
+        let matchingCandidate = candidates.first { candidate in
+          (candidate["candidate_digest"] as String) == (trial["candidate_digest"] as String)
+        }
+        guard let candidate = matchingCandidate else {
           continue
         }
         // Admission's no-retry predicate also applies if the current promotion rolls back.

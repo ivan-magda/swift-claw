@@ -40,8 +40,12 @@ extension ContextRowID {
       )
     }
   }
+}
 
-  private func scaledTruncatableCap(
+// MARK: - Truncatable Row Caps
+
+private extension ContextRowID {
+  func scaledTruncatableCap(
     absolute: Int,
     budget: ContextBudget,
     residualGraphemes: Int?
@@ -50,13 +54,16 @@ extension ContextRowID {
       return absolute
     }
 
-    let total = budget.itemsCap + budget.historyCap + budget.recallCap + budget.skillsCap
-    guard total > 0, residualGraphemes > 0 else {
+    let totalTruncatableCap =
+      budget.itemsCap + budget.historyCap + budget.recallCap + budget.skillsCap
+    guard totalTruncatableCap > 0, residualGraphemes > 0 else {
       return 0
     }
 
-    let scaled = Int((Double(absolute) / Double(total) * Double(residualGraphemes)).rounded(.down))
-    return min(absolute, scaled)
+    let scaledCap = Int(
+      (Double(absolute) / Double(totalTruncatableCap) * Double(residualGraphemes)).rounded(.down)
+    )
+    return min(absolute, scaledCap)
   }
 }
 

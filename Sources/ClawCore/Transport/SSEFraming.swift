@@ -39,15 +39,6 @@ public enum SSEFraming {
     return nil
   }
 
-  /// The end of a `\r\n\r\n` beginning at `index`, or nil when that is not what is there.
-  private static func crlfBlankLineEnd(in data: Data, from index: Data.Index) -> Data.Index? {
-    guard let end = data.index(index, offsetBy: 4, limitedBy: data.endIndex) else {
-      return nil
-    }
-    let blankLine = [carriageReturn, lineFeed, carriageReturn, lineFeed]
-    return data[index..<end].elementsEqual(blankLine) ? end : nil
-  }
-
   /// The `data:` field values of one SSE event: comments (`:`) and non-`data` fields are dropped,
   /// and a single leading space after the colon is stripped, per the SSE field-parsing rules.
   public static func dataPayloadLines(in text: String) -> [String] {
@@ -55,29 +46,49 @@ public enum SSEFraming {
     // at a time but many thousands of them, so an LF-only event — the overwhelmingly common form —
     // skips the fold on a cheap byte scan instead of paying it every single event.
     let normalized =
-      text.utf8.contains(carriageReturn) ? text.replacingOccurrences(of: "\r\n", with: "\n") : text
-    return normalized.split(separator: "\n", omittingEmptySubsequences: false).compactMap {
-      (rawLine) -> String? in
-      var line = rawLine
-
-      if line.last == "\r" {
-        line.removeLast()
+      if text.utf8.contains(carriageReturn) {
+        text.replacingOccurrences(of: "\r\n", with: "\n")
+      } else {
+        text
       }
 
-      if line.hasPrefix(":") {
-        return nil
-      }
+    return
+      normalized
+      .split(separator: "\n", omittingEmptySubsequences: false)
+      .compactMap { (rawLine) -> String? in
+        var line = rawLine
 
-      guard line.hasPrefix("data:") else {
-        return nil
-      }
-      var value = line.dropFirst(5)
+        if line.last == "\r" {
+          line.removeLast()
+        }
 
-      if value.first == " " {
-        value = value.dropFirst()
-      }
+        if line.hasPrefix(":") {
+          return nil
+        }
 
-      return String(value)
+        guard line.hasPrefix("data:") else {
+          return nil
+        }
+        var value = line.dropFirst(5)
+
+        if value.first == " " {
+          value = value.dropFirst()
+        }
+
+        return String(value)
+      }
+  }
+}
+
+// MARK: - CRLF Delimiter Parsing
+
+private extension SSEFraming {
+  /// The end of a `\r\n\r\n` beginning at `index`, or nil when that is not what is there.
+  static func crlfBlankLineEnd(in data: Data, from index: Data.Index) -> Data.Index? {
+    guard let end = data.index(index, offsetBy: 4, limitedBy: data.endIndex) else {
+      return nil
     }
+    let blankLine = [carriageReturn, lineFeed, carriageReturn, lineFeed]
+    return data[index..<end].elementsEqual(blankLine) ? end : nil
   }
 }

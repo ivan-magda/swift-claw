@@ -110,9 +110,9 @@ public actor CoderService: CoderServing, Service {
       }
       task.cancel()
     }
-    let owned = Array(tasks.values)
+    let ownedTasks = Array(tasks.values)
     _ = await startup?.result
-    for task in owned {
+    for task in ownedTasks {
       await task.value
     }
     lifecycle = .stopped
@@ -135,9 +135,9 @@ public actor CoderService: CoderServing, Service {
     guard prepared.executionPolicyID == executionPolicyID else {
       throw CoderError.staleApproval
     }
-    let current: CoderPreparedRequest
+    let refreshedPrepared: CoderPreparedRequest
     do {
-      current = try await preparer.prepare(prepared.request)
+      refreshedPrepared = try await preparer.prepare(prepared.request)
     } catch is CancellationError {
       throw CancellationError()
     } catch {
@@ -145,7 +145,7 @@ public actor CoderService: CoderServing, Service {
     }
     try Task.checkCancellation()
     let backend = try requireAdmission()
-    guard current == prepared else {
+    guard refreshedPrepared == prepared else {
       throw CoderError.staleApproval
     }
     do {

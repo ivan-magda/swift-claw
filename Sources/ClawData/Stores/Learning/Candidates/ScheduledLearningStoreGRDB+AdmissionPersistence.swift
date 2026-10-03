@@ -24,13 +24,13 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func admissionJob(_ db: Database, jobID: Int64) throws -> AdmissionJob? {
-    guard let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql:
-          "SELECT status, recurrence, session_id, owner_chat_id FROM scheduled_jobs WHERE id = ?",
+        "SELECT status, recurrence, session_id, owner_chat_id FROM scheduled_jobs WHERE id = ?",
       arguments: [jobID]
-    ),
-          let status = ScheduledJobStatus(rawValue: row["status"])
+    )
+    guard let row, let status = ScheduledJobStatus(rawValue: row["status"])
     else {
       return nil
     }

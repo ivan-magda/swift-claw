@@ -20,9 +20,11 @@ public struct CoderProcessInspector: CoderProcessInspecting {
       else {
         return .unresolved
       }
-      guard let leader = try CoderProcessIdentity.read(pid) else {
+      let leader = try CoderProcessIdentity.read(pid)
+      guard let leader else {
         // A missing leader does not establish that its descendants have stopped.
-        return try CoderProcessIdentity.members(of: pgid).isEmpty ? .stopped : .unresolved
+        let members = try CoderProcessIdentity.members(of: pgid)
+        return members.isEmpty ? .stopped : .unresolved
       }
       guard leader.pgid == pgid, leader.birth == birth else {
         return .unresolved

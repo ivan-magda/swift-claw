@@ -77,11 +77,14 @@ public struct CoderSubmitTool: Tool {
       return CoderToolOutput.missingContext
     }
 
-    guard let canonical = CanonicalJSON.encode(arguments),
-          let prepared = try? JSONDecoder().decode(
-            CoderPreparedRequest.self,
-            from: Data(canonical.utf8)
-          ),
+    guard let canonical = CanonicalJSON.encode(arguments) else {
+      return CoderToolOutput.failure(CoderError.staleApproval, redactor: redactor)
+    }
+    let decodedRequest = try? JSONDecoder().decode(
+      CoderPreparedRequest.self,
+      from: Data(canonical.utf8)
+    )
+    guard let prepared = decodedRequest,
           prepared.canonicalSource == canonicalTarget,
           prepared.executionPolicyID == executionPolicyID
     else {
@@ -165,15 +168,19 @@ extension CoderSubmitTool {
       ("Include existing changes", request.publishExistingChanges ? "Yes" : "No"),
     ]
 
-    let scope = fields.map { label, value in
-      CoderCardMarkdown.field(label: label, value: redactor.redact(value))
-    }.joined(separator: "\n\n")
+    let scope =
+      fields
+      .map { label, value in
+        CoderCardMarkdown.field(label: label, value: redactor.redact(value))
+      }
+      .joined(separator: "\n\n")
 
     let task =
-      request.task.map { value in
-        CoderCardMarkdown.literal(redactor.redact(value))
+      if let taskText = request.task {
+        CoderCardMarkdown.literal(redactor.redact(taskText))
+      } else {
+        "Use the selected GitHub issue as the task; no additional task text supplied."
       }
-      ?? "Use the selected GitHub issue as the task; no additional task text supplied."
 
     var preview = "### Task\n\n\(task)"
     let instructions = request.instructions ?? ""

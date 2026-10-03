@@ -56,7 +56,8 @@ public struct OccurrencePolicy: Sendable {
       anchor: validated.firstOccurrence,
       after: nowDate,
       limit: 1
-    ).first
+    )
+    .first
   }
 
   /// Resume's next fire: recurring ⇒ the calculator's next occurrence after now; one-shot ⇒ its
@@ -77,7 +78,8 @@ public struct OccurrencePolicy: Sendable {
       anchor: job.nextOccurrence ?? job.createdTs,
       after: nowDate,
       limit: 1
-    ).first
+    )
+    .first
   }
 
   /// The advanced next_occurrence after a fire or skip: strictly after `after`; nil for a
@@ -97,7 +99,8 @@ public struct OccurrencePolicy: Sendable {
         anchor: anchor,
         after: after,
         limit: 1
-      ).first
+      )
+      .first
     }
   }
 
@@ -141,9 +144,11 @@ public struct OccurrencePolicy: Sendable {
         anchor: due,
         after: due.addingTimeInterval(-1),
         limit: limit
-      ).filter { occurrence in
+      )
+      .filter { occurrence in
         occurrence <= atOrBefore
-      }.count
+      }
+      .count
     } ?? 1
   }
 }

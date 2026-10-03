@@ -28,12 +28,12 @@ extension ScheduledLearningStoreGRDB {
         return outcome
       }
 
-      guard let revision = try Self.advanceFeedbackRevision(
+      let revision = try Self.advanceFeedbackRevision(
         db,
         jobID: target.jobID,
         epoch: target.epoch
       )
-      else {
+      guard let revision else {
         throw StoreError.unexpected("feedback revision CAS lost after target consumption")
       }
       let event = try Self.insertEvent(
@@ -70,11 +70,12 @@ extension ScheduledLearningStoreGRDB {
 
 extension ScheduledLearningStoreGRDB {
   static func insertTarget(_ db: Database, _ target: NewFeedbackTarget) throws {
-    guard target.allowedActions.isEmpty == false,
-          target.allowedActions.allSatisfy({ signal in
+    let actionsMatchSubject =
+      target.allowedActions.isEmpty == false
+      && target.allowedActions.allSatisfy { signal in
         signal.feedbackSubjectKind == target.subjectKind
-      })
-    else {
+      }
+    guard actionsMatchSubject else {
       throw StoreError.unexpected("feedback target actions do not match its subject kind")
     }
     let actions = try JSONEncoder().encode(target.allowedActions.map(\.rawValue))
@@ -102,12 +103,12 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func readTarget(_ db: Database, nonce: String) throws -> FeedbackTarget? {
-    guard let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql: "SELECT * FROM feedback_targets WHERE nonce = ?",
       arguments: [nonce]
     )
-    else {
+    guard let row else {
       return nil
     }
     return try decodeTarget(row)
@@ -203,12 +204,12 @@ extension ScheduledLearningStoreGRDB {
     {
       return .actionMismatch
     }
-    guard let currentEpoch = try Int.fetchOne(
+    let currentEpoch = try Int.fetchOne(
       db,
       sql: "SELECT learning_epoch FROM job_learning_state WHERE job_id = ?",
       arguments: [target.jobID]
     )
-    else {
+    guard let currentEpoch else {
       return .staleEpoch
     }
     if currentEpoch != target.epoch.value {
@@ -307,11 +308,14 @@ private extension ScheduledLearningStoreGRDB {
             candidate.manifest.jobID == (row["job_id"] as Int64),
             candidate.manifest.epoch.value == (row["learning_epoch"] as Int64),
             candidate.manifest.baseDigest.rawValue == (row["base_digest"] as String),
-            candidate.manifest.algorithm.rawValue == (row["algorithm"] as String),
-            candidate.manifest.evidence.contains(where: { source in
-          source.evaluationRequired && source.evaluationDigest.rawValue == target.subjectDigest
-        })
+            candidate.manifest.algorithm.rawValue == (row["algorithm"] as String)
       else {
+        continue
+      }
+      let requiresDisputedEvaluation = candidate.manifest.evidence.contains { source in
+        source.evaluationRequired && source.evaluationDigest.rawValue == target.subjectDigest
+      }
+      guard requiresDisputedEvaluation else {
         continue
       }
       return row["trial_id"] as Int64

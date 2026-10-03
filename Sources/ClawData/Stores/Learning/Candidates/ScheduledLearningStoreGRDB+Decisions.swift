@@ -24,13 +24,14 @@ extension ScheduledLearningStoreGRDB {
       guard try Self.sourceBindingsAreCurrent(db, artifact: predecessor, state: state) else {
         return .rejected(.sourceBindingsChanged)
       }
-      guard let control = try Self.candidateControl(
+      let control = try Self.candidateControl(
         db,
         eventID: approval.feedbackEventID,
         candidate: predecessor,
         signal: .candidateApprove,
         expectedPayload: nil
-      ),
+      )
+      guard let control,
             control.revision <= state.feedbackRevision,
             let preparation = try Self.currentPreparation(db, artifact: predecessor, state: state)
       else {
@@ -108,14 +109,20 @@ extension ScheduledLearningStoreGRDB {
         }
         return .awaitingApproval(existing)
       }
-      guard try Self
-            .sourceBindingsAreCurrent(db, artifact: context.predecessor, state: context.state),
-            let preparation = try Self.currentPreparation(
-              db,
-              artifact: context.predecessor,
-              state: context.state
-            )
-      else {
+      let sourcesAreCurrent = try Self.sourceBindingsAreCurrent(
+        db,
+        artifact: context.predecessor,
+        state: context.state
+      )
+      guard sourcesAreCurrent else {
+        return .rejected(.sourceBindingsChanged)
+      }
+      let preparation = try Self.currentPreparation(
+        db,
+        artifact: context.predecessor,
+        state: context.state
+      )
+      guard let preparation else {
         return .rejected(.sourceBindingsChanged)
       }
       let successor: CandidateArtifact
@@ -155,14 +162,18 @@ private extension ScheduledLearningStoreGRDB {
 
   static func editContext(_ db: Database, edit: CandidateEdit) throws -> EditContext? {
     guard let predecessor = try readCandidateArtifact(db, digest: edit.predecessorDigest),
-          let state = try readState(db, jobID: predecessor.manifest.jobID),
-          let control = try candidateControl(
-            db,
-            eventID: edit.feedbackEventID,
-            candidate: predecessor,
-            signal: .candidateEdit,
-            expectedPayload: edit.payload
-          ),
+          let state = try readState(db, jobID: predecessor.manifest.jobID)
+    else {
+      return nil
+    }
+    let control = try candidateControl(
+      db,
+      eventID: edit.feedbackEventID,
+      candidate: predecessor,
+      signal: .candidateEdit,
+      expectedPayload: edit.payload
+    )
+    guard let control,
           control.revision <= state.feedbackRevision,
           let lessons = CandidateEditPayload.decode(edit.payload)
     else {

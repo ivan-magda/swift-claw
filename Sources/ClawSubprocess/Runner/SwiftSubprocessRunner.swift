@@ -41,7 +41,9 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
       bufferingPolicy: .bufferingNewest(1)
     )
     let processTask = Task {
-      defer { spawnedContinuation.finish() }
+      defer {
+        spawnedContinuation.finish()
+      }
       return await self.spawnAndCapture(
         command,
         spawnedProcessIdentifier: spawnedProcessIdentifier
@@ -89,8 +91,12 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
       )
     }
   }
+}
 
-  private func spawnAndCapture(
+// MARK: - Process Capture
+
+private extension SwiftSubprocessRunner {
+  func spawnAndCapture(
     _ command: SubprocessCommand,
     spawnedProcessIdentifier: SpawnedProcessIdentifierBox,
     didSpawn: @escaping @Sendable () -> Void
@@ -116,9 +122,9 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
 
         async let stdout = Self.capture(execution.standardOutput, limit: command.captureLimit)
         async let stderr = Self.capture(execution.standardError, limit: command.captureLimit)
-        let streams = try await (stdout, stderr)
+        let (capturedStdout, capturedStderr) = try await (stdout, stderr)
 
-        return CommandClosureResult(stdout: streams.0, stderr: streams.1)
+        return CommandClosureResult(stdout: capturedStdout, stderr: capturedStderr)
       }
 
       return SubprocessResult(
@@ -129,8 +135,11 @@ package struct SwiftSubprocessRunner: SubprocessRunning {
       )
     } catch {
       let termination: SubprocessTermination =
-        Task.isCancelled || error is CancellationError
-        ? .cancelled : .startFailed(String(describing: error))
+        if Task.isCancelled || error is CancellationError {
+          .cancelled
+        } else {
+          .startFailed(String(describing: error))
+        }
 
       return SubprocessResult(
         termination: termination,
@@ -197,32 +206,32 @@ private extension SwiftSubprocessRunner {
     _ sequence: SubprocessOutputSequence,
     limit: Int
   ) async throws -> CapturedCommandStream {
-    var prefix = Data()
-    prefix.reserveCapacity(min(limit, 64 * 1024))
+    var capturedPrefix = Data()
+    capturedPrefix.reserveCapacity(min(limit, 64 * 1024))
 
     var totalBytes = 0
     var overflowedCounter = false
 
     for try await buffer in sequence {
-      let addition = totalBytes.addingReportingOverflow(buffer.count)
+      let byteCountAddition = totalBytes.addingReportingOverflow(buffer.count)
 
-      totalBytes = addition.overflow ? Int.max : addition.partialValue
-      overflowedCounter = overflowedCounter || addition.overflow
+      totalBytes = byteCountAddition.overflow ? Int.max : byteCountAddition.partialValue
+      overflowedCounter = overflowedCounter || byteCountAddition.overflow
 
-      let remaining = max(0, limit - prefix.count)
-      guard remaining > 0 else {
+      let remainingCapacity = max(0, limit - capturedPrefix.count)
+      guard remainingCapacity > 0 else {
         continue
       }
 
       buffer.withUnsafeBytes { bytes in
-        prefix.append(contentsOf: bytes.prefix(remaining))
+        capturedPrefix.append(contentsOf: bytes.prefix(remainingCapacity))
       }
     }
 
     return CapturedCommandStream(
-      bytes: prefix,
+      bytes: capturedPrefix,
       totalBytes: totalBytes,
-      truncated: overflowedCounter || totalBytes > prefix.count
+      truncated: overflowedCounter || totalBytes > capturedPrefix.count
     )
   }
 }

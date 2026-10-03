@@ -63,8 +63,12 @@ public enum MCPHTTPHeader {
       return codePoint >= 0x20 && codePoint != 0x7F && (0x80...0x9F).contains(codePoint) == false
     }
   }
+}
 
-  private static func isTokenByte(_ byte: UInt8) -> Bool {
+// MARK: - HTTP Token Validation
+
+private extension MCPHTTPHeader {
+  static func isTokenByte(_ byte: UInt8) -> Bool {
     switch byte {
     case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"),
       UInt8(ascii: "0")...UInt8(ascii: "9"):

@@ -22,6 +22,7 @@ public enum CoderApprovedOriginFixture {
       staticSubhash: prepared.executionPolicyID,
       promptMaterials: ["Coder store fixture"]
     )
+
     let claim = try sessions.claimAndPersistInbound(
       inbound(
         prepared: prepared,
@@ -35,14 +36,16 @@ public enum CoderApprovedOriginFixture {
     let runID = try required(claim.runID)
     let sessionID = try required(claim.sessionID)
     try pickUpInteractiveRun(runs, runID: runID, policyVersion: policyVersion, now: now)
-    let receipt = try runs.commitSuspendedTurn(
+
+    let suspendedTurnReceipt = try runs.commitSuspendedTurn(
       runID: runID,
       sessionID: sessionID,
       commit: approvalCommit(prepared: prepared, chatID: chatID, toolCallID: toolCallID, now: now),
       now: now
     )
+
     let resolution = try approvals.approve(
-      id: receipt.approvalID,
+      id: suspendedTurnReceipt.approvalID,
       currentPolicyVersion: policyVersion,
       actor: ApprovalResolutionActor(
         actor: groupChatID == nil ? .owner : .groupMember,
@@ -53,6 +56,7 @@ public enum CoderApprovedOriginFixture {
     guard case .approved(let approval) = resolution else {
       throw StoreError.unexpected("Coder fixture approval was not granted")
     }
+
     let executionClaim = try runs.claimApprovedExecution(
       runID: approval.runID,
       observationMessageID: approval.observationMessageID,
@@ -62,6 +66,7 @@ public enum CoderApprovedOriginFixture {
     guard executionClaim == .committed else {
       throw StoreError.unexpected("Coder fixture could not claim its approved execution")
     }
+
     return CoderOrigin(
       runID: approval.runID,
       sessionID: approval.sessionID,
@@ -126,7 +131,7 @@ private extension CoderApprovedOriginFixture {
     let task = prepared.request.task ?? "Resolve the issue"
     let blastRadius =
       "\(prepared.request.workspace.rawValue); local changes; " + "native Codex with network access"
-    let recorded = RecordedToolAction(
+    let recordedAction = RecordedToolAction(
       tool: CoderToolNames.submit,
       canonicalArgsJSON: canonicalArgsJSON,
       argsHash: ApprovalArgsHash.sha256Hex(canonicalArgsJSON),
@@ -143,7 +148,7 @@ private extension CoderApprovedOriginFixture {
       assistantContent: "I can delegate this repository task to Coder.",
       toolCallsJSON: try proposedToolCalls(prepared: prepared, toolCallID: toolCallID),
       completedObservations: [],
-      pending: PendingToolAction(toolCallID: toolCallID, recorded: recorded),
+      pending: PendingToolAction(toolCallID: toolCallID, recorded: recordedAction),
       ownerUserID: chatID,
       nonce: ApprovalNonce.generate(),
       promptChunks: [

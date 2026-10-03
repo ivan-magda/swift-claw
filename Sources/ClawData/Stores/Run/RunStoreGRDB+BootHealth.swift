@@ -16,7 +16,7 @@ extension RunStoreGRDB {
       // (ApprovalBootReconciler) owns those runs — re-parking the unexpired ones and running the
       // per-row expiry check on the rest. Only true PENDING/RUNNING orphans fail here.
       let orphanFailStates = [RunState.pending.rawValue, RunState.running.rawValue]
-      let stale = try Row.fetchAll(
+      let orphanRows = try Row.fetchAll(
         db,
         sql: """
           SELECT r.id AS run_id, r.job_id AS job_id, s.session_key AS session_key FROM runs r
@@ -28,13 +28,17 @@ extension RunStoreGRDB {
       )
 
       var replies: [DegradationReply] = []
-      for row in stale {
+      for row in orphanRows {
         let runID: Int64 = row["run_id"]
         let disposition = try Self.orphanDisposition(db, runID: runID)
-        guard try Self
-              .transitionRun(db, runID: runID, event: .fail, now: now, terminal: disposition)
-              != nil
-        else {
+        let nextState = try Self.transitionRun(
+          db,
+          runID: runID,
+          event: .fail,
+          now: now,
+          terminal: disposition
+        )
+        guard nextState != nil else {
           continue
         }
 
@@ -122,7 +126,13 @@ extension RunStoreGRDB {
       payload: degradationText,
       payloadHash: ContentHash.fnv1a(degradationText)
     )
-    guard try OutboxInsertion.insertOutbox(db, runID: runID, chunk: chunk, now: now) else {
+    let noticeInserted = try OutboxInsertion.insertOutbox(
+      db,
+      runID: runID,
+      chunk: chunk,
+      now: now
+    )
+    guard noticeInserted else {
       return nil
     }
     return DegradationReply(chatID: chatID, runID: runID, text: degradationText)
@@ -134,12 +144,12 @@ extension RunStoreGRDB {
   /// observation, so its evidence must not freeze here. The predicate is shared with the backstop
   /// sweep below, which must exclude exactly the same runs.
   static func orphanDisposition(_ db: Database, runID: Int64) throws -> TerminalDisposition {
-    let owed = try ScheduledLearningStoreGRDB.owesUnresolvedFact(
+    let owesUnresolvedFact = try ScheduledLearningStoreGRDB.owesUnresolvedFact(
       db,
       runID: runID,
       unresolvedObservationContent: Self.placeholderObservationContent
     )
-    return owed ? .deferred(.approvalUnresolved) : .settled(.incomplete)
+    return owesUnresolvedFact ? .deferred(.approvalUnresolved) : .settled(.incomplete)
   }
 
   public func settleClaimedApprovalAtBoot(  // swiftlint:disable:this function_parameter_count
@@ -151,8 +161,12 @@ extension RunStoreGRDB {
     now: Date
   ) throws(StoreError) -> ClaimedApprovalBootOutcome {
     try database.writeMapping { db in
-      guard try Self.observationIsPlaceholder(db, runID: runID, messageID: observationMessageID)
-      else {
+      let observationIsPlaceholder = try Self.observationIsPlaceholder(
+        db,
+        runID: runID,
+        messageID: observationMessageID
+      )
+      guard observationIsPlaceholder else {
         return .alreadyResolved
       }
       let state = try String.fetchOne(
@@ -167,14 +181,14 @@ extension RunStoreGRDB {
       // Claimed, outcome unknown — settle in place. The run is normally already FAILED (the
       // orphan sweep runs first); the transition covers a sweep that missed it and no-ops on any
       // terminal state.
-      let transitioned = try Self.transitionRun(
+      let nextState = try Self.transitionRun(
         db,
         runID: runID,
         event: .fail,
         now: now,
         terminal: .deferred(.approvalUnresolved)
       )
-      if transitioned != nil {
+      if nextState != nil {
         try Self.appendJobFailedIfJobRun(db, runID: runID, now: now)
       }
       try Self.fillApprovedObservation(
@@ -213,12 +227,13 @@ extension RunStoreGRDB {
           arguments: StatementArguments(liveStates)
         ) ?? 0
 
-      let oldestRunAgeSeconds: Double? = try Date.fetchOne(
+      let oldestRunCreatedAt = try Date.fetchOne(
         db,
         sql: "SELECT MIN(created_ts) FROM runs WHERE state IN (\(placeholders))",
         arguments: StatementArguments(liveStates)
-      ).map {
-        now.timeIntervalSince($0)
+      )
+      let oldestRunAgeSeconds = oldestRunCreatedAt.map { createdAt in
+        now.timeIntervalSince(createdAt)
       }
 
       let lastFailedAt = try Date.fetchOne(

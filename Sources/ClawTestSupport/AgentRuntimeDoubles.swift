@@ -41,9 +41,7 @@ public actor SequenceProvider: LLMProvider {
     LLMEventStream.make { _ in
       do {
         return .completed(try await self.complete(request: request))
-      } catch let cause
-        as ProviderError
-      {
+      } catch let cause as ProviderError {
         return .failed(ProviderFailure(cause: cause, accounting: .notStarted))
       } catch {
         return .failed(
@@ -195,7 +193,9 @@ public final class SequentialCallIDGenerator: ProviderCallIDGenerating, @uncheck
 
   public func next() -> ProviderCallID {
     lock.lock()
-    defer { lock.unlock() }
+    defer {
+      lock.unlock()
+    }
     issued += 1
     return ProviderCallID(rawValue: "\(prefix)-\(issued)")
   }
@@ -247,7 +247,9 @@ public final class RecordingAuditLog: AuditLog, @unchecked Sendable {
 
   public var events: [AuditEvent] {
     lock.lock()
-    defer { lock.unlock() }
+    defer {
+      lock.unlock()
+    }
     return storedEvents
   }
 
@@ -257,7 +259,9 @@ public final class RecordingAuditLog: AuditLog, @unchecked Sendable {
 
   public func appendAudit(_ event: AuditEvent) throws(StoreError) {
     lock.lock()
-    defer { lock.unlock() }
+    defer {
+      lock.unlock()
+    }
     if let thrown {
       throw thrown
     }

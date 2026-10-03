@@ -58,10 +58,12 @@ extension ScheduledJobStoreGRDB {
         EpochSecondCodec.epoch(now),
       ]
     )
-    guard let created = try fetchJob(db, id: db.lastInsertedRowID) else {
+
+    let createdJob = try fetchJob(db, id: db.lastInsertedRowID)
+    guard let createdJob else {
       throw StoreError.unexpected("scheduled job insert returned no row")
     }
-    return created
+    return createdJob
   }
 
   public func job(id: Int64) throws(StoreError) -> ScheduledJob? {
@@ -101,12 +103,12 @@ extension ScheduledJobStoreGRDB {
 
 extension ScheduledJobStoreGRDB {
   static func fetchJob(_ db: Database, id: Int64) throws -> ScheduledJob? {
-    guard let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql: "SELECT * FROM scheduled_jobs WHERE id = ?",
       arguments: [id]
     )
-    else {
+    guard let row else {
       return nil
     }
     return try jobFromRow(row)

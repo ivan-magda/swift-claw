@@ -26,15 +26,16 @@ struct CoderCompletionReport: Sendable {
     blocks += ["### Details", field("Job ID", job.id.uuidString)]
     blocks += executionEvidence(result)
 
-    return CoderCardMarkdown.split(text: blocks.joined(separator: "\n\n")).enumerated().map {
-      (index, payload) in
-      OutboxChunk(
-        stepIndex: index,
-        chatID: job.origin.chatID,
-        payload: payload,
-        payloadHash: ContentHash.fnv1a(payload)
-      )
-    }
+    return CoderCardMarkdown.split(text: blocks.joined(separator: "\n\n"))
+      .enumerated()
+      .map { index, payload in
+        OutboxChunk(
+          stepIndex: index,
+          chatID: job.origin.chatID,
+          payload: payload,
+          payloadHash: ContentHash.fnv1a(payload)
+        )
+      }
   }
 }
 
@@ -101,11 +102,14 @@ private extension CoderCompletionReport {
       blocks.append(field("GitHub actor (confirmed PR)", actor))
     }
     if let usage = result.reportedUsage {
-      let values = usage.sorted {
-        $0.key < $1.key
-      }.map {
-        "\($0.key)=\($0.value)"
-      }
+      let values =
+        usage
+        .sorted {
+          $0.key < $1.key
+        }
+        .map {
+          "\($0.key)=\($0.value)"
+        }
       blocks.append(field("Usage (worker-reported)", values.joined(separator: "; ")))
     } else {
       blocks.append(field("Usage (worker-reported)", "unavailable"))

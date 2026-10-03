@@ -22,10 +22,10 @@ public enum VoiceTranscriptArbiter {
       $0.confidence != nil
     }
 
-    guard let best = scored.max(by: {
-        ($0.confidence ?? 0) < ($1.confidence ?? 0)
-      })
-    else {
+    let best = scored.max { candidate, otherCandidate in
+      (candidate.confidence ?? 0) < (otherCandidate.confidence ?? 0)
+    }
+    guard let best else {
       return candidates.first
     }
 

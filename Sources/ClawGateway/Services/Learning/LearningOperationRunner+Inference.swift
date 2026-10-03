@@ -30,13 +30,13 @@ extension LearningOperationRunner {
 
         return (.response(response), active.binding)
       } catch {
-        guard let failover = await RouteSwitch.failover(
+        let failover = await RouteSwitch.failover(
           after: error,
           from: active.position,
           roster: roster,
           cooldown: cooldown
         )
-        else {
+        guard let failover else {
           return (.failed(error), active.binding)
         }
 

@@ -9,12 +9,12 @@ public func makeTempDatabasePath(prefix: String) -> String {
 /// A fresh, unique temp directory keyed by `prefix`, created on disk and returned as a URL — the
 /// per-test state root that keeps the secrets suites parallel-safe. Callers own the cleanup `defer`.
 public func makeTemporaryRoot(prefix: String) throws -> URL {
-  let dir = FileManager.default.temporaryDirectory.appendingPathComponent(
+  let rootDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(
     "\(prefix)-\(UUID().uuidString)",
     isDirectory: true
   )
-  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-  return dir
+  try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+  return rootDirectory
 }
 
 /// The names of a directory's immediate entries, sorted — so a test can assert exactly which

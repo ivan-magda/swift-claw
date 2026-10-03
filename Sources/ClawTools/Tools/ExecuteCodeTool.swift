@@ -194,7 +194,8 @@ public struct ExecuteCodeTool: Tool {
       timeout: settings.timeout
     )
 
-    return map(result: await backend.run(request), readsPrivateData: recorded.readsPrivateData)
+    let executionResult = await backend.run(request)
+    return map(result: executionResult, readsPrivateData: recorded.readsPrivateData)
   }
 }
 
@@ -353,15 +354,15 @@ private extension ExecuteCodeTool {
     for stage in authorized {
       let data: Data
       do {
-        if let bounded = try Self.readBoundedFile(
+        let boundedData = try Self.readBoundedFile(
           atPath: stage.realpath,
           maxBytes: Self.maxStagedFileBytes
-        ) {
-          data = bounded
-        } else {
+        )
+        guard let boundedData else {
           let perFileMiB = Self.maxStagedFileBytes / (1024 * 1024)
           return .failure("A staged file grew past the \(perFileMiB) MiB cap while it was read.")
         }
+        data = boundedData
       } catch {
         return .failure("A staged file became unreadable before it could be prepared.")
       }
@@ -395,7 +396,9 @@ private extension ExecuteCodeTool {
 extension ExecuteCodeTool {
   static func readBoundedFile(atPath path: String, maxBytes: Int) throws -> Data? {
     let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
-    defer { try? handle.close() }
+    defer {
+      try? handle.close()
+    }
 
     var data = Data()
     while data.count <= maxBytes {
@@ -450,9 +453,9 @@ private extension ExecuteCodeTool {
   }
 
   static func normalizedBasename(_ basename: String) -> String {
-    basename.precomposedStringWithCanonicalMapping.lowercased(
-      with: Locale(identifier: "en_US_POSIX")
-    ).precomposedStringWithCanonicalMapping
+    basename.precomposedStringWithCanonicalMapping
+      .lowercased(with: Locale(identifier: "en_US_POSIX"))
+      .precomposedStringWithCanonicalMapping
   }
 
   func readsPrivateData(in stages: [LoadedStage]) -> Bool {
@@ -615,14 +618,14 @@ private extension ExecuteCodeTool {
 
     let data: Data
     do {
-      if let bounded = try Self.readBoundedFile(
+      let boundedData = try Self.readBoundedFile(
         atPath: liveRealpath,
         maxBytes: Self.maxStagedFileBytes
-      ) {
-        data = bounded
-      } else {
+      )
+      guard let boundedData else {
         return .failure("A staged file grew past its approved cap; nothing ran.")
       }
+      data = boundedData
     } catch {
       return .failure("A staged file became unreadable after approval; nothing ran.")
     }

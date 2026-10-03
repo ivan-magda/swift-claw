@@ -158,9 +158,11 @@ where ClockType.Duration == Duration {
       // A record whose tokens cannot be spent is not a record a refresh can rescue: the refresh
       // token is one of the two values that just failed. Only a new login repairs it.
       state =
-        ChatGPTValidatedCredential(stored).map { credential in
+        if let credential = ChatGPTValidatedCredential(stored) {
           .ready(credential: credential, generation: Self.initialGeneration)
-        } ?? .authenticationRequired
+        } else {
+          .authenticationRequired
+        }
     }
   }
 
@@ -527,7 +529,8 @@ private extension ChatGPTCredentialSource {
 
 private extension ChatGPTCredentialSource {
   func accept(_ pair: ChatGPTTokenPair, from flight: Flight) {
-    guard let rotated = ChatGPTValidatedCredential(rotating: flight.credential, with: pair) else {
+    let rotatedCredential = ChatGPTValidatedCredential(rotating: flight.credential, with: pair)
+    guard let rotated = rotatedCredential else {
       // The old refresh token may already be spent, so there is nothing left to retry with. A source
       // on its way down says so instead: there is no next caller here to tell.
       guard isStopping == false else {

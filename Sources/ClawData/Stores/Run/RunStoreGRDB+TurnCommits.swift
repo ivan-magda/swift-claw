@@ -32,14 +32,14 @@ extension RunStoreGRDB {
 
       // Settled with the terminal row: every primary fact of a DONE turn — the assistant message,
       // its usage and its outbox chunks — commits inside this same transaction.
-      guard try Self.transitionRun(
+      let nextState = try Self.transitionRun(
         db,
         runID: turn.runID,
         event: .complete,
         now: now,
         terminal: .settled(.taskCompleted)
-      ) != nil
-      else {
+      )
+      guard nextState != nil else {
         return .ignored
       }
 
@@ -83,14 +83,14 @@ extension RunStoreGRDB {
         return .ignored
       }
 
-      guard try Self.transitionRun(
+      let nextState = try Self.transitionRun(
         db,
         runID: turn.runID,
         event: .fail,
         now: now,
         terminal: .settled(turn.cause)
-      ) != nil
-      else {
+      )
+      guard nextState != nil else {
         return .ignored
       }
       try Self.appendJobFailedIfJobRun(db, runID: turn.runID, now: now)
@@ -192,8 +192,11 @@ private extension RunStoreGRDB {
     let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runID: turn.runID)
     for chunk in turn.chunks {
       let committedChunk =
-        turn.feedbackTarget != nil && feedbackTargetCommitted == false
-        ? strippingReplyMarkup(from: chunk) : chunk
+        if turn.feedbackTarget != nil && feedbackTargetCommitted == false {
+          strippingReplyMarkup(from: chunk)
+        } else {
+          chunk
+        }
       _ = try OutboxInsertion.insertOutbox(
         db,
         runID: turn.runID,
@@ -290,7 +293,8 @@ private extension RunStoreGRDB {
     // Usage is a primary fact, and no primary fact may land once the run's evidence is frozen.
     // Deferring settlement on the cancel/supersede paths is what leaves this window open at all;
     // once the lane tail (or the boot backstop) has closed it, the spend has nowhere truthful to go.
-    guard try !ScheduledLearningStoreGRDB.isSettled(db, runID: runID) else {
+    let evidenceIsSettled = try ScheduledLearningStoreGRDB.isSettled(db, runID: runID)
+    guard evidenceIsSettled == false else {
       return .ignored
     }
 
@@ -299,7 +303,8 @@ private extension RunStoreGRDB {
     // terminal round's spend for every run whose loop got past its first round — while still
     // double-debiting the one case it meant to guard, a commit retried before its first row
     // landed. The call identity answers the question the guard was actually asking.
-    guard try insertUsage(db, usage) else {
+    let usageInserted = try insertUsage(db, usage)
+    guard usageInserted else {
       return .ignored
     }
 
@@ -394,6 +399,7 @@ extension RunStoreGRDB {
       ],
       providerState: providerState
     )
+
     for observation in observations {
       try MessageRowInsert.execute(
         db,

@@ -68,10 +68,10 @@ private extension ChatGPTTokenMetadata {
       return nil
     }
 
-    var standard = segment.replacingOccurrences(of: "-", with: "+").replacingOccurrences(
-      of: "_",
-      with: "/"
-    )
+    var standard =
+      segment
+      .replacingOccurrences(of: "-", with: "+")
+      .replacingOccurrences(of: "_", with: "/")
     standard.append(String(repeating: "=", count: (4 - standard.count % 4) % 4))
 
     return Data(base64Encoded: standard)

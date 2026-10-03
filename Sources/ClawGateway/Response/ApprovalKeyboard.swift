@@ -29,9 +29,10 @@ enum ApprovalKeyboard {
   }
 
   static func parse(_ callbackData: String) -> (nonce: String, approve: Bool)? {
-    let parts = callbackData.split(separator: ":", omittingEmptySubsequences: false).map(
-      String.init
-    )
+    let parts =
+      callbackData
+      .split(separator: ":", omittingEmptySubsequences: false)
+      .map(String.init)
 
     guard parts.count == 3, parts[0] == prefix else {
       return nil

@@ -187,7 +187,8 @@ private extension AgentRuntime {
         let reportedKind = firstFailureKind ?? failure.degradationKind
         firstFailureKind = reportedKind
 
-        guard let transition = await route.switchRoute(after: error) else {
+        let transition = await route.switchRoute(after: error)
+        guard let transition else {
           plan.turn.log.warning("round-trip \(plan.index) provider error (degrading): \(error)")
           let result = failureOutcome(
             error,
@@ -230,7 +231,8 @@ private extension AgentRuntime {
     outputScope: AttemptOutputScope?,
     attempts: inout AttemptRuntimeState
   ) -> TurnStep<AnsweredRound> {
-    if attempts.observe(response: round.response, outboundModel: outboundModel) {
+    let modelMismatch = attempts.observe(response: round.response, outboundModel: outboundModel)
+    if modelMismatch {
       let mismatch = TurnResult.degraded(.providerUnavailable, usage: reconciledUsage(for: round))
       return .exit(TurnExit(mismatch, failureCause: .modelIdentityMismatch))
     }

@@ -190,8 +190,10 @@ extension AgentRuntime {
         toolDefinitions: toolDefinitions
       )
     )
+
     for index in state.ledger.roundIndices {
-      if let exit = try await runRound(index, turn: turn, state: &state) {
+      let exit = try await runRound(index, turn: turn, state: &state)
+      if let exit {
         return finish(exit, turn: turn, state: state)
       }
     }

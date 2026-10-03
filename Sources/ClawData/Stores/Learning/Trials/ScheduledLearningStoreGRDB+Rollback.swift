@@ -61,18 +61,19 @@ extension ScheduledLearningStoreGRDB {
       }
       let state = try Self.readState(db, jobID: inputs.identity.jobID)
       let current =
-        state.map { value in
-          value.epoch == inputs.identity.epoch && value.stableDigest == inputs.replacementDigest
-            && value.stableRevision == promotion.record.stableRevision
+        state.map { currentState in
+          currentState.epoch == inputs.identity.epoch
+            && currentState.stableDigest == inputs.replacementDigest
+            && currentState.stableRevision == promotion.record.stableRevision
         } ?? false
-      let valid =
+      let rollbackIsValid =
         try current && Self.rollbackTriggerIsValid(db, trigger: trigger, promotion: promotion)
       let revision =
-        valid
+        rollbackIsValid
         ? StableRevision(promotion.record.stableRevision.value + 1)
         : state?.stableRevision ?? promotion.record.stableRevision
-      let result: LearningDecisionResult = valid ? .rolledBack : .stale
-      if valid, let state {
+      let result: LearningDecisionResult = rollbackIsValid ? .rolledBack : .stale
+      if rollbackIsValid, let state {
         try Self.closeDependentTrialForRollback(db, state: state, now: now)
       }
       let record = LearningDecisionRecord(
@@ -83,7 +84,7 @@ extension ScheduledLearningStoreGRDB {
         rollbackTrigger: trigger
       )
       let receipt = try Self.persistTerminalDecision(db, inputs: inputs, record: record, now: now)
-      if valid {
+      if rollbackIsValid {
         try Self.restorePromotionBase(db, promotion: promotion, revision: revision)
       }
       return receipt
@@ -158,9 +159,10 @@ private extension ScheduledLearningStoreGRDB {
     guard let trial = try liveTrial(db, jobID: state.jobID) else {
       return
     }
-    let assignments = try assignmentRunIDs(db, trialID: trial.trialID).map { runID in
-      try authoritativeAssignment(db, runID: runID, trial: trial, currentState: state)
-    }
+    let assignments = try assignmentRunIDs(db, trialID: trial.trialID)
+      .map { runID in
+        try authoritativeAssignment(db, runID: runID, trial: trial, currentState: state)
+      }
     _ = try finishTrial(
       db,
       trial: trial,
@@ -231,10 +233,10 @@ private extension ScheduledLearningStoreGRDB {
           trial: trial,
           currentState: state
         )
-        let valid =
+        let supportRemainsValid =
           projected.resolvedEvidence?.outcome == .positive
           && projected.resolvedEvidence?.hardVetoes.isEmpty == true
-        if valid {
+        if supportRemainsValid {
           remaining += 1
         } else if affected.contains(support) {
           affectedWithdrawn = true

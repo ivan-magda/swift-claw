@@ -26,12 +26,14 @@ package final class InstanceLock: @unchecked Sendable {
       throw errno == ELOOP ? LockError.insecureLockFile : LockError.openFailed(errno: errno)
     }
 
-    guard Self.secure(descriptor) else {
+    let isSecure = Self.secure(descriptor)
+    guard isSecure else {
       close(descriptor)
       throw LockError.insecureLockFile
     }
 
-    guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+    let lockStatus = flock(descriptor, LOCK_EX | LOCK_NB)
+    guard lockStatus == 0 else {
       let lockErrno = errno
       close(descriptor)
       throw lockErrno == EWOULDBLOCK
@@ -56,17 +58,27 @@ package final class InstanceLock: @unchecked Sendable {
     flock(fileDescriptor, LOCK_UN)
     close(fileDescriptor)
   }
+}
 
-  private static func secure(_ descriptor: Int32) -> Bool {
+// MARK: - Lock File Security
+
+private extension InstanceLock {
+  static func secure(_ descriptor: Int32) -> Bool {
     var status = stat()
 
     guard fstat(descriptor, &status) == 0,
           (status.st_mode & S_IFMT) == S_IFREG,
           status.st_nlink == 1,
-          status.st_uid == geteuid(),
-          fchmod(descriptor, lockFileMode) == 0,
-          fstat(descriptor, &status) == 0
+          status.st_uid == geteuid()
     else {
+      return false
+    }
+
+    guard fchmod(descriptor, lockFileMode) == 0 else {
+      return false
+    }
+
+    guard fstat(descriptor, &status) == 0 else {
       return false
     }
 

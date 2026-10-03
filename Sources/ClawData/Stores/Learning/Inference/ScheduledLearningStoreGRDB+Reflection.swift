@@ -38,7 +38,11 @@ extension ScheduledLearningStoreGRDB {
     requiresNoLiveTrial: Bool
   ) throws -> ReflectionPreparation? {
     let trialRequirementIsMet =
-      requiresNoLiveTrial == false ? true : try liveTrial(db, jobID: trigger.jobID) == nil
+      if requiresNoLiveTrial == false {
+        true
+      } else {
+        try liveTrial(db, jobID: trigger.jobID) == nil
+      }
     guard trigger.algorithm == .v1 else {
       return nil
     }
@@ -68,8 +72,11 @@ extension ScheduledLearningStoreGRDB {
     guard reduced.vetoed == false else {
       return nil
     }
-    guard LearningTrigger.detect(window: reduced.effective, corrections: reduced.events) == trigger
-    else {
+    let detectedTrigger = LearningTrigger.detect(
+      window: reduced.effective,
+      corrections: reduced.events
+    )
+    guard detectedTrigger == trigger else {
       return nil
     }
     return ReflectionPreparation(
@@ -167,8 +174,11 @@ private extension ScheduledLearningStoreGRDB {
   ) throws -> [StoredFeedbackProjection] {
     var evaluationRuns: [String: Int64] = [:]
     for row in rows {
-      guard evaluationRuns.updateValue(row.runID, forKey: row.evaluationDigest.rawValue) == nil
-      else {
+      let previousRunID = evaluationRuns.updateValue(
+        row.runID,
+        forKey: row.evaluationDigest.rawValue
+      )
+      guard previousRunID == nil else {
         throw StoreError.unexpected("reflection source has a duplicate evaluation digest")
       }
     }
@@ -240,9 +250,10 @@ private extension ScheduledLearningStoreGRDB {
     )
     let effectiveEvents = FeedbackEvent.unsuperseded(events)
     let feedbackSources = feedback.compactMap { source in
-      effectiveEvents.contains { event in
+      let isEffective = effectiveEvents.contains { event in
         event.id == source.event.id
-      } ? source.source : nil
+      }
+      return isEffective ? source.source : nil
     }
     let correction = FeedbackEvent.latestUnsupersededResult(in: events)
     let payload = ownerPayload(
@@ -291,14 +302,20 @@ private extension ScheduledLearningStoreGRDB {
   ) -> PreparedOwnerPayload? {
     guard let correction,
           correction.signal == .resultCorrection,
-          let body = correction.payload,
-          let stored = feedback.first(where: { source in
-        source.event.id == correction.id
-      }),
-          effectiveEvents.contains(where: { event in
-        event.id == correction.id
-      })
+          let body = correction.payload
     else {
+      return nil
+    }
+    let stored = feedback.first { source in
+      source.event.id == correction.id
+    }
+    guard let stored else {
+      return nil
+    }
+    let correctionIsEffective = effectiveEvents.contains { event in
+      event.id == correction.id
+    }
+    guard correctionIsEffective else {
       return nil
     }
     return PreparedOwnerPayload(source: stored.source, payload: body)
@@ -349,44 +366,50 @@ extension ScheduledLearningStoreGRDB {
       let grouped = Dictionary(grouping: rows) { row in
         row["compatibility_digest"] as String
       }
-      return try grouped.keys.sorted().compactMap { compatibility in
-        let digests = (grouped[compatibility] ?? []).map { row in
-          EvidenceDigest(rawValue: row["evidence_digest"])
+      return try grouped.keys
+        .sorted()
+        .compactMap { compatibility in
+          let digests = (grouped[compatibility] ?? []).map { row in
+            EvidenceDigest(rawValue: row["evidence_digest"])
+          }
+          let snapshot = TriggerIdentity(
+            jobID: jobID,
+            epoch: state.epoch,
+            algorithm: .v1,
+            stableDigest: state.stableDigest,
+            evidenceDigests: digests,
+            feedbackRevision: state.feedbackRevision,
+            issueCodes: [],
+            reason: .recurringIssue
+          )
+          let sources = try Self.reflectionRows(db, trigger: snapshot)
+          let feedback = try Self.reflectionFeedback(
+            db,
+            trigger: snapshot,
+            rows: sources,
+            cutoff: state.feedbackRevision
+          )
+          let reduced = try Self.reduceReflectionRows(
+            sources,
+            feedback: feedback,
+            trigger: snapshot
+          )
+          guard reduced.vetoed == false else {
+            return nil
+          }
+          let window = EvidenceWindow.select(
+            from: reduced.effective,
+            compatibility: CompatibilityDigest(rawValue: compatibility),
+            cutoff: now
+          )
+          guard let trigger = LearningTrigger.detect(window: window, corrections: reduced.events),
+                try Self.workflowReflectionIsClaimable(db, trigger: trigger),
+                try Self.onlyControlsChangedSinceAttempt(db, trigger: trigger) == false
+          else {
+            return nil
+          }
+          return trigger
         }
-        let snapshot = TriggerIdentity(
-          jobID: jobID,
-          epoch: state.epoch,
-          algorithm: .v1,
-          stableDigest: state.stableDigest,
-          evidenceDigests: digests,
-          feedbackRevision: state.feedbackRevision,
-          issueCodes: [],
-          reason: .recurringIssue
-        )
-        let sources = try Self.reflectionRows(db, trigger: snapshot)
-        let feedback = try Self.reflectionFeedback(
-          db,
-          trigger: snapshot,
-          rows: sources,
-          cutoff: state.feedbackRevision
-        )
-        let reduced = try Self.reduceReflectionRows(sources, feedback: feedback, trigger: snapshot)
-        guard reduced.vetoed == false else {
-          return nil
-        }
-        let window = EvidenceWindow.select(
-          from: reduced.effective,
-          compatibility: CompatibilityDigest(rawValue: compatibility),
-          cutoff: now
-        )
-        guard let trigger = LearningTrigger.detect(window: window, corrections: reduced.events),
-              try Self.workflowReflectionIsClaimable(db, trigger: trigger),
-              try Self.onlyControlsChangedSinceAttempt(db, trigger: trigger) == false
-        else {
-          return nil
-        }
-        return trigger
-      }
     }
   }
 }
@@ -493,11 +516,12 @@ private extension ScheduledLearningStoreGRDB {
         epoch: prior.epoch,
         triggerDigest: prior.digest
       )
-      if try Bool.fetchOne(
+      let priorAttemptExists = try Bool.fetchOne(
         db,
         sql: "SELECT EXISTS(SELECT 1 FROM learning_operations WHERE key_digest = ?)",
         arguments: [key.digest.rawValue]
-      ) == true {
+      )
+      if priorAttemptExists == true {
         return true
       }
     }

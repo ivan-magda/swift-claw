@@ -43,6 +43,7 @@ extension DaemonBuilder {
     return {
       await registerMenu()
       await reconcileRuns()
+
       // Approval replay can launch a Coder job before the service graph starts, so a Coder that
       // could not reconcile keeps replay closed. Learning owns no native process and is reconciled
       // either way rather than inheriting a guard that was never about it.
@@ -55,9 +56,11 @@ extension DaemonBuilder {
           coderReconciled = false
         }
       }
+
       if coderReconciled {
         await reconcileApprovals()
       }
+
       // Prior-process accounting is attempted before serving; network recovery starts with the
       // learning service so a stalled inference cannot hold the poller or primary outbox.
       await learning?.reconcileAtBoot(now: now())

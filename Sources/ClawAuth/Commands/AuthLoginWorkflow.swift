@@ -60,7 +60,9 @@ public struct AuthLoginWorkflow: Sendable {
     case .failure(let failure):
       return await transcript.finish(AuthCommandResultMapper.result(for: failure))
     case .success(let lease):
-      defer { lease.release() }
+      defer {
+        lease.release()
+      }
       return await transcript.finish(await runLogin(transcript))
     }
   }
@@ -142,7 +144,8 @@ private extension AuthLoginWorkflow {
       return
     }
 
-    guard let choice = await chooseModel(from: models, transcript: transcript) else {
+    let selectedChoice = await chooseModel(from: models, transcript: transcript)
+    guard let choice = selectedChoice else {
       await transcript.emit(
         Self.manualFormEvents(because: "the provider offered no eligible models")
       )
@@ -161,13 +164,13 @@ private extension AuthLoginWorkflow {
     // The default is computed by the same pure selector the prompt uses, with the terminal denied.
     // That is what makes the choice an unattended run takes provably the one a terminal would have
     // offered rather than a second rule that happens to agree today.
-    guard case .chose(let fallback) = ChatGPTModelPicker.select(
+    let defaultOutcome = ChatGPTModelPicker.select(
       catalog: models,
       configuredSuffix: configuredSuffix,
       isInteractive: false,
       chosenIndex: nil
     )
-    else {
+    guard case .chose(let fallback) = defaultOutcome else {
       return nil
     }
 
@@ -190,12 +193,13 @@ private extension AuthLoginWorkflow {
         continue
       }
 
-      switch ChatGPTModelPicker.select(
+      let selectionOutcome = ChatGPTModelPicker.select(
         catalog: models,
         configuredSuffix: configuredSuffix,
         isInteractive: true,
         chosenIndex: index
-      ) {
+      )
+      switch selectionOutcome {
       case .chose(let choice):
         return choice
       case .indexOutOfRange:
@@ -213,7 +217,8 @@ private extension AuthLoginWorkflow {
   /// A failed read is end of input. The credential is already stored by the time anyone is prompted,
   /// so an owner who closes the pipe gets the default rather than a failed login.
   func readAnswer() async -> String? {
-    guard let line = try? await terminal.readLine() else {
+    let answer = try? await terminal.readLine()
+    guard let line = answer else {
       return nil
     }
     return line.trimmingCharacters(in: .whitespaces)

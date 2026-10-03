@@ -196,16 +196,16 @@ private extension CoderCommandOperation {
   ) async -> CoderScopedCapture {
     let pid = Int32(execution.processIdentifier.value)
     await control.markSpawned()
-    let initial = await control.receipt
-    guard let initial else {
+    let launchIntent = await control.receipt
+    guard let launchIntent else {
       try? execution.send(signal: .kill, toProcessGroup: false)
       return await control.capture(resolved: false)
     }
     let identity = try? CoderProcessIdentity.read(pid)
     let receipt = CoderProcessReceipt(
-      launchID: initial.launchID,
-      phase: initial.phase,
-      hostBootID: initial.hostBootID,
+      launchID: launchIntent.launchID,
+      phase: launchIntent.phase,
+      hostBootID: launchIntent.hostBootID,
       pid: pid,
       pgid: identity?.pgid,
       birthIdentity: identity?.birth
@@ -257,8 +257,10 @@ private extension CoderCommandOperation {
         return await group.terminate()
       }
       do {
-        if try CoderProcessIdentity.childExited(pid) {
-          if try group.liveMembers().isEmpty {
+        let childExited = try CoderProcessIdentity.childExited(pid)
+        if childExited {
+          let liveMembers = try group.liveMembers()
+          if liveMembers.isEmpty {
             return true
           }
           return await group.terminate()

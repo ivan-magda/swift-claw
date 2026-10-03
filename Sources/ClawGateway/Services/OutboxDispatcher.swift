@@ -233,7 +233,9 @@ private actor FloodControlHolds<ClockType: Clock> where ClockType.Duration == Du
 
     let id = UUID()
     wakeups[id] = Task {
-      defer { wakeups[id] = nil }
+      defer {
+        wakeups[id] = nil
+      }
 
       do {
         try await clock.sleep(until: deadline, tolerance: nil)

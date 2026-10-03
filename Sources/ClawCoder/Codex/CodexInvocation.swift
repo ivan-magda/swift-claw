@@ -57,12 +57,12 @@ struct CodexInvocation: Sendable {
     let schemaPath = directory.appendingPathComponent("schema.json").path
     reportPath = directory.appendingPathComponent("result.json").path
     let schema = Data(PackageResources.CodexResult_schema_json)
-    guard FileManager.default.createFile(
+    let schemaCreated = FileManager.default.createFile(
       atPath: schemaPath,
       contents: schema,
       attributes: [.posixPermissions: 0o600]
     )
-    else {
+    guard schemaCreated else {
       throw CoderError.unavailable("Cannot create private Codex schema.")
     }
     var arguments = [
@@ -100,12 +100,14 @@ struct CodexInvocation: Sendable {
         throw CoderError.unavailable("Coder executable must be a program name or absolute path.")
       }
 
-      candidates = (environment["PATH"] ?? "").split(separator: ":").filter {
-        $0.hasPrefix("/")
-      }
-      .map {
-        URL(fileURLWithPath: String($0)).appendingPathComponent(executable).path
-      }
+      candidates = (environment["PATH"] ?? "")
+        .split(separator: ":")
+        .filter {
+          $0.hasPrefix("/")
+        }
+        .map {
+          URL(fileURLWithPath: String($0)).appendingPathComponent(executable).path
+        }
     }
 
     for path in candidates {

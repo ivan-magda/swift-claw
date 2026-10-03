@@ -10,9 +10,9 @@ extension ContextBuilder {
       return nil
     }
 
-    let fetched: [MemoryItem]
+    let fetchedItems: [MemoryItem]
     do {
-      fetched = try memoryStore.fetchRanked(
+      fetchedItems = try memoryStore.fetchRanked(
         excludeSensitive: excludeSensitive,
         limit: Self.memoryFetchLimit
       )
@@ -21,8 +21,12 @@ extension ContextBuilder {
       return nil
     }
 
-    let ranked = MemoryRanker.rank(items: fetched, excludeSensitive: excludeSensitive, cap: cap)
-    let units = ranked.map { item in
+    let rankedItems = MemoryRanker.rank(
+      items: fetchedItems,
+      excludeSensitive: excludeSensitive,
+      cap: cap
+    )
+    let units = rankedItems.map { item in
       SectionUnit(id: "memory-\(item.id)", content: item.text, canTruncate: false)
     }
 
@@ -39,7 +43,12 @@ extension ContextBuilder {
     residual: Int
   ) -> FittableSection? {
     let cap = cap(for: .recall, residual: residual)
-    guard cap > 0, let query = latestUserMessage(in: snapshot.history) else {
+    guard cap > 0 else {
+      return nil
+    }
+
+    let query = latestUserMessage(in: snapshot.history)
+    guard let query else {
       return nil
     }
 
@@ -58,8 +67,8 @@ extension ContextBuilder {
       return nil
     }
 
-    let selected = CandidateCapRecallCutoff.select(hits: hits, limit: Self.recallInjectionLimit)
-    let units = selected.compactMap { hit -> SectionUnit? in
+    let selectedHits = CandidateCapRecallCutoff.select(hits: hits, limit: Self.recallInjectionLimit)
+    let units = selectedHits.compactMap { hit -> SectionUnit? in
       let content = cappedRecallContent(hit.content)
       return content.isEmpty
         ? nil : SectionUnit(id: "recall-\(hit.id)", content: content, canTruncate: true)

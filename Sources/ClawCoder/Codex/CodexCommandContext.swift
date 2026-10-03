@@ -52,9 +52,11 @@ struct CodexCommandContext: Sendable {
       throw CoderError.unavailable("Codex CLI probe returned invalid UTF-8.")
     }
     let flags = Set(
-      helpText.split {
-        $0.isWhitespace || ",=[]".contains($0)
-      }.map(String.init)
+      helpText
+        .split {
+          $0.isWhitespace || ",=[]".contains($0)
+        }
+        .map(String.init)
     )
     let missing = CodexInvocation.requiredFlags.filter {
       !flags.contains($0)
@@ -64,11 +66,11 @@ struct CodexCommandContext: Sendable {
         "Codex CLI lacks required flags: \(missing.joined(separator: ", "))."
       )
     }
-    let text = versionText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else {
+    let trimmedVersion = versionText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedVersion.isEmpty else {
       throw CoderError.unavailable("Codex CLI returned no version.")
     }
-    return text
+    return trimmedVersion
   }
 }
 

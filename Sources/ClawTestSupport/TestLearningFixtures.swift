@@ -16,7 +16,7 @@ public struct TestLearningFixtures {
   public func seedArmedJob(jobID: Int64, now: Date) throws(StoreError) -> JobLearningState {
     do {
       return try writer.write { db in
-        let empty = LessonSet.empty(jobID: jobID)
+        let emptyLessonSet = LessonSet.empty(jobID: jobID)
         try db.execute(
           sql: """
             INSERT OR IGNORE INTO lesson_sets(
@@ -25,9 +25,9 @@ public struct TestLearningFixtures {
             """,
           arguments: [
             jobID,
-            empty.digest.rawValue,
-            empty.schemaVersion,
-            empty.canonicalBytes,
+            emptyLessonSet.digest.rawValue,
+            emptyLessonSet.schemaVersion,
+            emptyLessonSet.canonicalBytes,
             LessonSetSource.canonicalEmpty.rawValue,
             Int64(now.timeIntervalSince1970),
           ]
@@ -39,14 +39,15 @@ public struct TestLearningFixtures {
               open_trial_id, feedback_revision, armed_at)
             VALUES (?, 1, ?, 0, NULL, 0, ?)
             """,
-          arguments: [jobID, empty.digest.rawValue, Int64(now.timeIntervalSince1970)]
+          arguments: [jobID, emptyLessonSet.digest.rawValue, Int64(now.timeIntervalSince1970)]
         )
-        guard let row = try Row.fetchOne(
+
+        let row = try Row.fetchOne(
           db,
           sql: "SELECT * FROM job_learning_state WHERE job_id = ?",
           arguments: [jobID]
         )
-        else {
+        guard let row else {
           throw StoreError.unexpected("learning fixture state is missing")
         }
         return JobLearningState(
@@ -67,7 +68,7 @@ public struct TestLearningFixtures {
     do {
       try writer.write { db in
         for target in targets {
-          let actions = try JSONEncoder().encode(target.allowedActions.map(\.rawValue))
+          let allowedActionsJSON = try JSONEncoder().encode(target.allowedActions.map(\.rawValue))
           try db.execute(
             sql: """
               INSERT INTO feedback_targets(
@@ -81,7 +82,7 @@ public struct TestLearningFixtures {
               target.epoch.value,
               target.subjectKind.rawValue,
               target.subjectDigest,
-              String(bytes: actions, encoding: .utf8),
+              String(bytes: allowedActionsJSON, encoding: .utf8),
               target.ownerUserID,
               target.chatID,
               Int64(target.expiresAt.timeIntervalSince1970),
@@ -98,12 +99,12 @@ public struct TestLearningFixtures {
   public func settlement(runID: Int64) throws(StoreError) -> RunSettlement? {
     do {
       return try writer.read { db -> RunSettlement? in
-        guard let row = try Row.fetchOne(
+        let row = try Row.fetchOne(
           db,
           sql: "SELECT * FROM run_settlements WHERE run_id = ?",
           arguments: [runID]
         )
-        else {
+        guard let row else {
           return nil
         }
         guard let state = RunState(rawValue: row["winning_state"]),

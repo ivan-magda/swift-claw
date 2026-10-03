@@ -107,7 +107,8 @@ struct ChatGPTResponsesProvider: LLMProvider, Sendable {
       // than dropped, so the runtime does not estimate-debit a call that never left.
       throw ProviderFailure(cause: cause, accounting: .notStarted)
     case .success(let plan):
-      switch await engine.run(plan: plan, emitEvent: Self.discardEvent) {
+      let termination = await engine.run(plan: plan, emitEvent: Self.discardEvent)
+      switch termination {
       case .completed(let response):
         return response
       case .failed(let failure):

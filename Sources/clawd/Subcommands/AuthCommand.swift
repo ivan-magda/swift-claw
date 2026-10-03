@@ -40,16 +40,17 @@ struct AuthCommand: AsyncParsableCommand {
         eventLoopGroupProvider: .singleton,
         configuration: HTTPClientProfile.protectedEgress.configuration
       )
-      let result = await AuthCommand.loginWorkflow(
+      let loginResult = await AuthCommand.loginWorkflow(
         bootstrap: bootstrap,
         environment: environment,
         executor: AsyncHTTPExecutor(client: httpClient)
-      ).login()
+      )
+      .login()
       // Swallowed on purpose: the owner's login either happened or it did not, and a socket that
       // would not close politely afterwards changes neither the outcome nor what they should do.
       try? await httpClient.shutdown()
 
-      try AuthCommand.finish(result)
+      try AuthCommand.finish(loginResult)
     }
   }
 
@@ -61,7 +62,8 @@ struct AuthCommand: AsyncParsableCommand {
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
       let bootstrap = try AuthCommand.resolveBootstrapOrExit(environment: environment)
-      try AuthCommand.finish(AuthCommand.statusWorkflow(bootstrap: bootstrap).status())
+      let statusResult = AuthCommand.statusWorkflow(bootstrap: bootstrap).status()
+      try AuthCommand.finish(statusResult)
     }
   }
 
@@ -73,7 +75,8 @@ struct AuthCommand: AsyncParsableCommand {
     func run() async throws {
       let environment = ProcessInfo.processInfo.environment
       let bootstrap = try AuthCommand.resolveBootstrapOrExit(environment: environment)
-      try AuthCommand.finish(AuthCommand.logoutWorkflow(bootstrap: bootstrap).logout())
+      let logoutResult = AuthCommand.logoutWorkflow(bootstrap: bootstrap).logout()
+      try AuthCommand.finish(logoutResult)
     }
   }
 }

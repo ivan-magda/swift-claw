@@ -27,9 +27,13 @@ enum CoderToolOutput {
 
   static func job(_ job: CoderJob, redactor: SecretRedactor) -> ToolPayload {
     let result =
-      job.result.flatMap(CanonicalJSON.encode).flatMap(JSONValue.parse).map { value in
+      job.result
+      .flatMap(CanonicalJSON.encode)
+      .flatMap(JSONValue.parse)
+      .map { value in
         redact(value, using: redactor)
-      }.flatMap(CanonicalJSON.encode) ?? "Result pending."
+      }
+      .flatMap(CanonicalJSON.encode) ?? "Result pending."
     let header = redactor.redact("Coder job \(job.id.uuidString)\nState: \(job.state.rawValue)")
     let text = "\(header)\n\(result)"
     return ToolPayload(
@@ -80,8 +84,8 @@ private extension CoderToolOutput {
       )
     case .object(let fields):
       return .object(
-        fields.reduce(into: [:]) { result, field in
-          result[redactor.redact(field.key)] = redact(field.value, using: redactor)
+        fields.reduce(into: [:]) { redactedFields, field in
+          redactedFields[redactor.redact(field.key)] = redact(field.value, using: redactor)
         }
       )
     default:

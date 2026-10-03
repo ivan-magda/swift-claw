@@ -46,7 +46,8 @@ public struct ApprovalStoreGRDB: ApprovalStore {
       let policyMatches = approval.policyVersion == currentPolicyVersion
       guard hashMatches, policyMatches else {
         // The recorded action no longer matches its fingerprint — reject.
-        guard try Self.transitionApproval(db, id: id, on: .reject, now: now) != nil else {
+        let rejectedState = try Self.transitionApproval(db, id: id, on: .reject, now: now)
+        guard rejectedState != nil else {
           return .notPending
         }
 
@@ -67,7 +68,8 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         return .stalePolicy(rejected)
       }
 
-      guard try Self.transitionApproval(db, id: id, on: .approve, now: now) != nil else {
+      let approvedState = try Self.transitionApproval(db, id: id, on: .approve, now: now)
+      guard approvedState != nil else {
         return .notPending
       }
 
@@ -102,7 +104,8 @@ public struct ApprovalStoreGRDB: ApprovalStore {
       // Only expiry lands in EXPIRED; every other decision (owner reject, cancel, supersede,
       // stale policy) resolves to REJECTED — the four-state rule.
       let event: ApprovalEvent = decision == .expired ? .expire : .reject
-      guard try Self.transitionApproval(db, id: id, on: event, now: now) != nil else {
+      let resolvedState = try Self.transitionApproval(db, id: id, on: event, now: now)
+      guard resolvedState != nil else {
         return false
       }
       // Attribute by who initiated the resolution. `.rejected` is the only
@@ -135,7 +138,8 @@ public struct ApprovalStoreGRDB: ApprovalStore {
 
       var swept: [Approval] = []
       for approval in expired {
-        guard try Self.transitionApproval(db, id: approval.id, on: .expire, now: now) != nil else {
+        let expiredState = try Self.transitionApproval(db, id: approval.id, on: .expire, now: now)
+        guard expiredState != nil else {
           continue
         }
 
@@ -217,7 +221,8 @@ public struct ApprovalStoreGRDB: ApprovalStore {
 
       var cleaned = 0
       for approval in orphans {
-        guard try Self.transitionApproval(db, id: approval.id, on: .reject, now: now) != nil else {
+        let rejectedState = try Self.transitionApproval(db, id: approval.id, on: .reject, now: now)
+        guard rejectedState != nil else {
           continue
         }
 
@@ -250,7 +255,8 @@ public struct ApprovalStoreGRDB: ApprovalStore {
         db,
         sql: "SELECT MIN(created_ts) FROM approvals WHERE state = ?",
         arguments: [ApprovalState.pending.rawValue]
-      ).map { oldestEpoch in
+      )
+      .map { oldestEpoch in
         Int(EpochSecondCodec.epoch(now) - oldestEpoch)
       }
 
@@ -342,9 +348,10 @@ extension ApprovalStoreGRDB {
       arguments: StatementArguments(arguments)
     )
 
-    var resolved: [Int64] = []
+    var resolvedApprovalIDs: [Int64] = []
     for approval in pending {
-      guard try transitionApproval(db, id: approval.id, on: .reject, now: now) != nil else {
+      let rejectedState = try transitionApproval(db, id: approval.id, on: .reject, now: now)
+      guard rejectedState != nil else {
         continue
       }
       try insertApprovalAudit(
@@ -355,9 +362,9 @@ extension ApprovalStoreGRDB {
         decision: decision,
         now: now
       )
-      resolved.append(approval.id)
+      resolvedApprovalIDs.append(approval.id)
     }
-    return resolved
+    return resolvedApprovalIDs
   }
 }
 
@@ -371,14 +378,15 @@ private extension ApprovalStoreGRDB {
     """
 
   static func currentApprovalState(_ db: Database, id: Int64) throws -> ApprovalState? {
-    if let rawState = try String.fetchOne(
+    let rawState = try String.fetchOne(
       db,
       sql: "SELECT state FROM approvals WHERE id = ?",
       arguments: [id]
-    ) {
-      return ApprovalState(rawValue: rawState)
+    )
+    guard let rawState else {
+      return nil
     }
-    return nil
+    return ApprovalState(rawValue: rawState)
   }
 
   static func fetchApproval(_ db: Database, id: Int64) throws -> Approval? {
@@ -390,14 +398,15 @@ private extension ApprovalStoreGRDB {
     whereClause: String,
     arguments: StatementArguments
   ) throws -> Approval? {
-    if let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause)",
       arguments: arguments
-    ) {
-      return try mapApproval(row)
+    )
+    guard let row else {
+      return nil
     }
-    return nil
+    return try mapApproval(row)
   }
 
   static func fetchApprovals(
@@ -409,7 +418,8 @@ private extension ApprovalStoreGRDB {
       db,
       sql: "SELECT \(selectColumns) FROM approvals WHERE \(whereClause) ORDER BY id ASC",
       arguments: arguments
-    ).map(mapApproval)
+    )
+    .map(mapApproval)
   }
 
   /// Fail closed on a corrupted enum column or missing epoch (same rule as `decodeItem`): a

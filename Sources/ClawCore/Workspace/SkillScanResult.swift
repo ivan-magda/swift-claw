@@ -46,9 +46,12 @@ public enum WorkspaceWarning: Sendable, Equatable {
     case .skillNameDirectoryMismatch(let directory, let name):
       return "Skill `\(directory)`: manifest name `\(name)` must match the directory name; skipped."
     case .duplicateSkillName(let name, let directories):
-      let claimants = directories.map { directory in
-        "`\(directory)`"
-      }.joined(separator: ", ")
+      let claimants =
+        directories
+        .map { directory in
+          "`\(directory)`"
+        }
+        .joined(separator: ", ")
       return "Skill name `\(name)` is claimed by \(claimants); all of them skipped, rename one."
     case .escapingSkillDirectory(let directory):
       return """

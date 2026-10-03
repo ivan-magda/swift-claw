@@ -175,7 +175,11 @@ struct OpenAICompatibleProvider: LLMProvider {
       // An empty-content assistant proposal omits `content` (some providers reject "" + tool_calls).
       let omitContent = message.role == .assistant && text.isEmpty && !wireCalls.isEmpty
       let content: WireContent? =
-        omitContent ? nil : Self.wireContent(for: message.content, joinedText: text)
+        if omitContent {
+          nil
+        } else {
+          Self.wireContent(for: message.content, joinedText: text)
+        }
       return WireMessage(
         role: message.role.rawValue,
         content: content,
@@ -228,11 +232,15 @@ struct OpenAICompatibleProvider: LLMProvider {
     // OpenRouter reports cost in usage.cost; LiteLLM in a response header.
     let providerCost = decoded.usage?.cost ?? providerCost(from: result)
 
-    let toolCalls = (choice?.message.toolCalls ?? []).compactMap { decoded -> ToolCall? in
-      guard let callID = decoded.id, let name = decoded.function?.name else {
+    let toolCalls = (choice?.message.toolCalls ?? []).compactMap { decodedCall -> ToolCall? in
+      guard let callID = decodedCall.id, let name = decodedCall.function?.name else {
         return nil
       }
-      return ToolCall(id: callID, name: name, argumentsJSON: decoded.function?.arguments ?? "{}")
+      return ToolCall(
+        id: callID,
+        name: name,
+        argumentsJSON: decodedCall.function?.arguments ?? "{}"
+      )
     }
 
     return ChatResponse(
@@ -573,9 +581,8 @@ private extension OpenAICompatibleProvider {
   static let liteLLMResponseCostHeader = "x-litellm-response-cost"
 
   func errorMessage(from body: Data) -> String {
-    guard let decoded = try? JSONDecoder().decode(ErrorBody.self, from: body),
-          let message = decoded.error?.message
-    else {
+    let decoded = try? JSONDecoder().decode(ErrorBody.self, from: body)
+    guard let message = decoded?.error?.message else {
       return String(data: body, encoding: .utf8) ?? "unknown error"
     }
     return message
@@ -628,9 +635,11 @@ private extension OpenAICompatibleProvider {
     if let milliseconds = result.header(for: "retry-after-ms").flatMap(Double.init) {
       return .milliseconds(milliseconds)
     }
-    return result.header(for: "retry-after").flatMap(Double.init).map {
-      .seconds($0)
-    }
+    return result.header(for: "retry-after")
+      .flatMap(Double.init)
+      .map {
+        .seconds($0)
+      }
   }
 }
 

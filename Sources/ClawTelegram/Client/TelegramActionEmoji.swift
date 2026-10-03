@@ -86,10 +86,10 @@ enum TelegramActionEmoji: String, CaseIterable {
     case .preparing, .resumed:
       self = .working
     case .tool:
-      let active = snapshot.steps.last { step in
+      let activeStep = snapshot.steps.last { step in
         step.state == .executing || step.state == .pending
       }
-      self.init(action: active?.action ?? .tool)
+      self.init(action: activeStep?.action ?? .tool)
     }
   }
 

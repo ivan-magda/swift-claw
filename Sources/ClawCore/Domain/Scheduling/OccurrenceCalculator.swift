@@ -72,19 +72,23 @@ public struct OccurrenceCalculator: Sendable {
 
     return latest
   }
+}
 
+// MARK: - Recurrence Normalization
+
+private extension OccurrenceCalculator {
   /// `RecurrenceRule` propagates the seed's fractional seconds into every occurrence
   /// (verified on this toolchain), and parse/arm-time anchors come from `Date()`. Flooring
   /// the seed keeps every emitted occurrence a whole second — the store persists integer
   /// epochs and the fused claim compares exact integers.
-  private static func wholeSecond(_ instant: Date) -> Date {
+  static func wholeSecond(_ instant: Date) -> Date {
     Date(timeIntervalSince1970: instant.timeIntervalSince1970.rounded(.down))
   }
 
   /// The job's IANA zone lives in its own column; installing it on the rule's
   /// calendar here is what makes the rule's wall-clock components mean "local time in the
   /// job's zone", wherever the rule was built.
-  private static func installing(
+  static func installing(
     _ timezone: TimeZone,
     on rule: Calendar.RecurrenceRule
   ) -> Calendar.RecurrenceRule {

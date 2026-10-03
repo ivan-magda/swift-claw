@@ -22,11 +22,14 @@ extension AppConfig {
     )
 
     var seen = Set<String>()
-    let localeIdentifiers = (env[EnvKey.voiceLocales] ?? "").split(separator: ",").map {
-      $0.trimmingCharacters(in: .whitespaces)
-    }.filter {
-      !$0.isEmpty && seen.insert($0).inserted
-    }
+    let localeIdentifiers = (env[EnvKey.voiceLocales] ?? "")
+      .split(separator: ",")
+      .map { locale in
+        locale.trimmingCharacters(in: .whitespaces)
+      }
+      .filter { locale in
+        !locale.isEmpty && seen.insert(locale).inserted
+      }
 
     return VoiceConfig(
       enabled: enabled,

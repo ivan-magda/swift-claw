@@ -66,8 +66,8 @@ extension ContainerBackend {
       return unavailableResult("sandbox is not prepared")
     }
 
-    let started = now()
-    let deadline = started.advanced(by: request.timeout + Self.teardownAllowance)
+    let startedAt = now()
+    let deadline = startedAt.advanced(by: request.timeout + Self.teardownAllowance)
     let identity = ExecutionIdentity()
     let workspace: ScratchWorkspace
 

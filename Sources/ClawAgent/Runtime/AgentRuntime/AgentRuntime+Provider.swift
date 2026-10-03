@@ -29,7 +29,7 @@ extension AgentRuntime {
     // so the buffered reattempt is bounded by what is LEFT, not the round's original window — else one
     // round could run up to roughly twice the turn's remaining wall clock before the outer loop
     // re-checks the deadline.
-    let streamStart = ContinuousClock.now
+    let streamStartedAt = ContinuousClock.now
     do {
       return try await runStreamingTurn(
         provider: provider,
@@ -53,7 +53,10 @@ extension AgentRuntime {
         provider: provider,
         target: target,
         request: request,
-        deadlineSeconds: Self.remainingDeadlineSeconds(total: deadlineSeconds, since: streamStart),
+        deadlineSeconds: Self.remainingDeadlineSeconds(
+          total: deadlineSeconds,
+          since: streamStartedAt
+        ),
         progress: progress
       )
     }

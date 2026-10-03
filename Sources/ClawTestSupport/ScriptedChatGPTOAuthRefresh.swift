@@ -45,8 +45,12 @@ public actor ScriptedChatGPTOAuthRefresh: ChatGPTOAuthRefreshing {
   }
 
   private static let backstop = Duration.seconds(5)
+}
 
-  private static func waitWithBackstop(on gate: AsyncGate) async {
+// MARK: - Refresh Wait
+
+private extension ScriptedChatGPTOAuthRefresh {
+  static func waitWithBackstop(on gate: AsyncGate) async {
     await withTaskGroup(of: Void.self) { group in
       group.addTask {
         await gate.wait()

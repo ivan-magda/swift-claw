@@ -412,7 +412,9 @@ private extension ToolPolicyGate {
     guard let arguments = JSONValue.parse(call.argumentsJSON) else {
       return dangerousBlock(reason: "Malformed arguments for \(call.name).", call: call)
     }
-    guard let resolution = await tool.prepareAction(arguments: arguments) else {
+
+    let actionResolution = await tool.prepareAction(arguments: arguments)
+    guard let actionResolution else {
       return dangerousBlock(
         reason: "\(call.name) is dangerous-tier but prepared no action.",
         call: call
@@ -420,7 +422,7 @@ private extension ToolPolicyGate {
     }
 
     let prepared: PreparedToolAction
-    switch resolution {
+    switch actionResolution {
     case .prepared(let action):
       prepared = action
     case .refused(let reason):

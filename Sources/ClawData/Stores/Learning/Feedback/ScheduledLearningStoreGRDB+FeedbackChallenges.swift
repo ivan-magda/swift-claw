@@ -29,10 +29,10 @@ extension ScheduledLearningStoreGRDB {
       guard prompt.isEmpty == false else {
         throw StoreError.unexpected("feedback challenge prompt has no chunks")
       }
-      guard prompt.allSatisfy({ chunk in
-          chunk.subjectDigest == insertion.promptDigest && chunk.chatID == insertion.chatID
-        })
-      else {
+      let promptMatchesChallenge = prompt.allSatisfy { chunk in
+        chunk.subjectDigest == insertion.promptDigest && chunk.chatID == insertion.chatID
+      }
+      guard promptMatchesChallenge else {
         throw StoreError.unexpected("feedback challenge prompt identity does not match its target")
       }
 
@@ -41,7 +41,8 @@ extension ScheduledLearningStoreGRDB {
       try Self.finishChallengeSupersession(db, priorID: priorID, replacementID: challenge.id)
 
       for chunk in prompt {
-        guard try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now) else {
+        let noticeInserted = try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now)
+        guard noticeInserted else {
           throw StoreError.unexpected("feedback challenge prompt delivery already exists")
         }
       }
@@ -71,12 +72,12 @@ extension ScheduledLearningStoreGRDB {
         return outcome
       }
 
-      guard let revision = try Self.advanceFeedbackRevision(
+      let revision = try Self.advanceFeedbackRevision(
         db,
         jobID: challenge.jobID,
         epoch: challenge.epoch
       )
-      else {
+      guard let revision else {
         throw StoreError.unexpected("feedback revision CAS lost after challenge consumption")
       }
       let event = try Self.insertEvent(
@@ -118,16 +119,16 @@ extension ScheduledLearningStoreGRDB {
     chatID: Int64
   ) throws(StoreError) -> FeedbackChallenge? {
     try database.readMapping { db in
-      guard let row = try Row.fetchOne(
+      let row = try Row.fetchOne(
         db,
         sql: """
-            SELECT * FROM feedback_challenges
-            WHERE owner_user_id = ? AND chat_id = ?
-              AND superseded_by IS NULL AND consumed_at IS NULL
-            """,
+          SELECT * FROM feedback_challenges
+          WHERE owner_user_id = ? AND chat_id = ?
+            AND superseded_by IS NULL AND consumed_at IS NULL
+          """,
         arguments: [ownerUserID, chatID]
       )
-      else {
+      guard let row else {
         return nil
       }
       return try Self.decodeChallenge(row)

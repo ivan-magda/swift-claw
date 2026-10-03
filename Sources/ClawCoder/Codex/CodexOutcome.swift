@@ -38,9 +38,9 @@ struct CodexOutcome {
     guard workspace == nil, invocation.prepared.request.workspace == .separate else {
       return
     }
-    let destination = URL(fileURLWithPath: invocation.jobDirectory).appendingPathComponent(
-      "repository"
-    ).path
+    let destination = URL(fileURLWithPath: invocation.jobDirectory)
+      .appendingPathComponent("repository")
+      .path
     var directory: ObjCBool = false
     guard FileManager.default.fileExists(atPath: destination, isDirectory: &directory),
           directory.boolValue
@@ -69,12 +69,12 @@ struct CodexOutcome {
     case .unknown(let url):
       publication = .unknown(reportedURL: url.map(clean))
     }
-    let starting = localStartObserved ? workspace?.startingCommit : report?.startingCommit
+    let startingCommit = localStartObserved ? workspace?.startingCommit : report?.startingCommit
     return CoderResult(
       state: state,
       summary: clean(report?.summary ?? failure?.message ?? "Coder task stopped."),
       workspacePath: workspace?.directory,
-      startingCommit: starting.map(clean),
+      startingCommit: startingCommit.map(clean),
       baselineObserved: localStartObserved,
       changedFiles: changedFiles?.map(clean),
       branch: branch.map(clean),

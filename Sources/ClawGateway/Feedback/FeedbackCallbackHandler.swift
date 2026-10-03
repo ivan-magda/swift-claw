@@ -79,7 +79,8 @@ private extension FeedbackCallbackHandler {
     guard accessControl.isAllowed(userID: callback.fromUserID) else {
       return await deny(callback, target: nil, signal: nil, decision: Self.forbiddenDecision)
     }
-    guard let parsed = callback.data.flatMap(FeedbackKeyboard.parse) else {
+    let parsed = callback.data.flatMap(FeedbackKeyboard.parse)
+    guard let parsed else {
       return await deny(callback, target: nil, signal: nil, decision: Self.malformedDecision)
     }
 
@@ -163,13 +164,13 @@ private extension FeedbackCallbackHandler {
       chatID: target.chatID,
       transportUpdateID: updateID
     )
-    let outcome: FeedbackOutcome
+    let feedbackOutcome: FeedbackOutcome
     do {
-      outcome = try learning.consumeAndAppendEvent(tap, now: now())
+      feedbackOutcome = try learning.consumeAndAppendEvent(tap, now: now())
     } catch {
       return await storeFailure(callback, signal: signal, error: error)
     }
-    switch outcome {
+    switch feedbackOutcome {
     case .recorded:
       await workflow?.notifyChanged(jobID: target.jobID)
       return await finish(callback, toast: Self.recordedToast)
@@ -221,13 +222,13 @@ private extension FeedbackCallbackHandler {
       chatID: target.chatID,
       transportUpdateID: updateID
     )
-    let outcome: FeedbackOutcome
+    let challengeOutcome: FeedbackOutcome
     do {
-      outcome = try challenges.open(tap)
+      challengeOutcome = try challenges.open(tap)
     } catch {
       return await storeFailure(callback, signal: signal, error: error)
     }
-    switch outcome {
+    switch challengeOutcome {
     case .challengeOpened:
       return await finish(callback, toast: Self.challengeOpenedToast)
     case .recorded, .targetMissing, .ownerMismatch, .chatMismatch, .expired, .actionMismatch,
@@ -302,12 +303,10 @@ private extension FeedbackCallbackHandler {
   }
 
   static func runID(_ target: FeedbackTarget?) -> Int64? {
-    guard target?.subjectKind == .run else {
+    guard let target, target.subjectKind == .run else {
       return nil
     }
-    return target.flatMap { value in
-      Int64(value.subjectDigest)
-    }
+    return Int64(target.subjectDigest)
   }
 }
 

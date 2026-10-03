@@ -14,12 +14,18 @@ extension ClawDatabase {
       .interrupted,
     ]
     let ownerships: [CoderProcessOwnership] = [.none, .launching, .owned, .stopped, .unresolved]
-    let stateCheck = states.map {
-      "'\($0.rawValue)'"
-    }.joined(separator: ", ")
-    let ownershipCheck = ownerships.map {
-      "'\($0.rawValue)'"
-    }.joined(separator: ", ")
+    let stateCheck =
+      states
+      .map {
+        "'\($0.rawValue)'"
+      }
+      .joined(separator: ", ")
+    let ownershipCheck =
+      ownerships
+      .map {
+        "'\($0.rawValue)'"
+      }
+      .joined(separator: ", ")
     try db.execute(
       sql: """
         CREATE TABLE coder_jobs (

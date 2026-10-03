@@ -126,22 +126,27 @@ extension ScheduledLearningStoreGRDB {
           let resultJSON = SQLiteStoredValue.string(in: row, column: "result"),
           let algorithmRaw = SQLiteStoredValue.string(in: row, column: "algorithm"),
           let decidedEpoch = SQLiteStoredValue.int64(in: row, column: "decided_at"),
-          let decidedAt = EpochSecondCodec.date(fromEpoch: decidedEpoch),
-          let receipt = try resetReceipt(
-            db,
-            record: ResetDecisionRecord(
-              decisionID: decisionID,
-              jobID: state.jobID,
-              epoch: LearningEpoch(epochValue),
-              inputsJSON: inputsJSON,
-              resultJSON: resultJSON,
-              algorithm: LearningAlgorithm(rawValue: algorithmRaw),
-              decidedAt: decidedAt
-            )
-          ),
-          resetStateMatches(state, receipt: receipt),
-          try resetEffectsAreClean(db, state: state, receipt: receipt)
+          let decidedAt = EpochSecondCodec.date(fromEpoch: decidedEpoch)
     else {
+      return nil
+    }
+
+    let resetRecord = ResetDecisionRecord(
+      decisionID: decisionID,
+      jobID: state.jobID,
+      epoch: LearningEpoch(epochValue),
+      inputsJSON: inputsJSON,
+      resultJSON: resultJSON,
+      algorithm: LearningAlgorithm(rawValue: algorithmRaw),
+      decidedAt: decidedAt
+    )
+    let receipt = try resetReceipt(db, record: resetRecord)
+    guard let receipt, resetStateMatches(state, receipt: receipt) else {
+      return nil
+    }
+
+    let effectsAreClean = try resetEffectsAreClean(db, state: state, receipt: receipt)
+    guard effectsAreClean else {
       return nil
     }
     return receipt
@@ -163,60 +168,82 @@ private extension ScheduledLearningStoreGRDB {
     receipt: ResetReceipt
   ) throws -> Bool {
     let empty = LessonSet.empty(jobID: state.jobID)
-    guard let emptyRow = try Row.fetchOne(
+    let emptyRow = try Row.fetchOne(
       db,
       sql: """
-          SELECT job_id, digest, schema_version, canonical_bytes, source
-          FROM lesson_sets WHERE job_id = ? AND digest = ?
-          """,
+        SELECT job_id, digest, schema_version, canonical_bytes, source
+        FROM lesson_sets WHERE job_id = ? AND digest = ?
+        """,
       arguments: [state.jobID, empty.digest.rawValue]
-    ),
-          canonicalEmptySetMatches(emptyRow, set: empty),
-          try rowExists(
-            db,
-            sql: """
-          SELECT EXISTS(SELECT 1 FROM learning_trials
-            WHERE job_id = ? AND state IN (?, ?))
-          """,
-            arguments: [
-              state.jobID,
-              LearningTrialState.open.rawValue,
-              LearningTrialState.draining.rawValue,
-            ]
-          ) == false,
-          try rowExists(
-            db,
-            sql:
-          "SELECT EXISTS(SELECT 1 FROM feedback_targets WHERE job_id = ? AND consumed_at IS NULL)",
-            arguments: [state.jobID]
-          ) == false,
-          try rowExists(
-            db,
-            sql: """
-          SELECT EXISTS(SELECT 1 FROM feedback_challenges
-            WHERE job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL)
-          """,
-            arguments: [state.jobID]
-          ) == false,
-          try rowExists(
-            db,
-            sql: """
-          SELECT EXISTS(SELECT 1 FROM learning_operations
-            WHERE job_id = ? AND learning_epoch < ? AND state IN (?, ?))
-          """,
-            arguments: [
-              state.jobID,
-              state.epoch.value,
-              LearningOperationState.pending.rawValue,
-              LearningOperationState.claimed.rawValue,
-            ]
-          ) == false,
-          try startedOperationsAreCovered(db, state: state, receipt: receipt),
-          try currentEpochHasNoPostResetActivity(db, state: state)
-    else {
+    )
+    guard let emptyRow, canonicalEmptySetMatches(emptyRow, set: empty) else {
       return false
     }
-    return true
+
+    let hasLiveTrials = try rowExists(
+      db,
+      sql: """
+        SELECT EXISTS(SELECT 1 FROM learning_trials
+          WHERE job_id = ? AND state IN (?, ?))
+        """,
+      arguments: [
+        state.jobID,
+        LearningTrialState.open.rawValue,
+        LearningTrialState.draining.rawValue,
+      ]
+    )
+    guard !hasLiveTrials else {
+      return false
+    }
+
+    let hasUnconsumedTargets = try rowExists(
+      db,
+      sql:
+        "SELECT EXISTS(SELECT 1 FROM feedback_targets WHERE job_id = ? AND consumed_at IS NULL)",
+      arguments: [state.jobID]
+    )
+    guard !hasUnconsumedTargets else {
+      return false
+    }
+
+    let hasLiveChallenges = try rowExists(
+      db,
+      sql: """
+        SELECT EXISTS(SELECT 1 FROM feedback_challenges
+          WHERE job_id = ? AND superseded_by IS NULL AND consumed_at IS NULL)
+        """,
+      arguments: [state.jobID]
+    )
+    guard !hasLiveChallenges else {
+      return false
+    }
+
+    let hasNotStartedOperations = try rowExists(
+      db,
+      sql: """
+        SELECT EXISTS(SELECT 1 FROM learning_operations
+          WHERE job_id = ? AND learning_epoch < ? AND state IN (?, ?))
+        """,
+      arguments: [
+        state.jobID,
+        state.epoch.value,
+        LearningOperationState.pending.rawValue,
+        LearningOperationState.claimed.rawValue,
+      ]
+    )
+    guard !hasNotStartedOperations else {
+      return false
+    }
+
+    let startedOperationsCovered = try startedOperationsAreCovered(
+      db,
+      state: state,
+      receipt: receipt
+    )
+    guard startedOperationsCovered else {
+      return false
+    }
+    return try currentEpochHasNoPostResetActivity(db, state: state)
   }
 
   static func startedOperationsAreCovered(
@@ -311,26 +338,26 @@ private extension ScheduledLearningStoreGRDB {
     before newEpoch: LearningEpoch
   ) throws -> Bool {
     for id in staleNoCall {
-      guard try resetOperationMatches(
+      let operationMatches = try resetOperationMatches(
         db,
         id: id,
         jobID: jobID,
         before: newEpoch,
         expectation: .staleNoCall
       )
-      else {
+      guard operationMatches else {
         return false
       }
     }
     for id in inFlight {
-      guard try resetOperationMatches(
+      let operationMatches = try resetOperationMatches(
         db,
         id: id,
         jobID: jobID,
         before: newEpoch,
         expectation: .inFlight
       )
-      else {
+      guard operationMatches else {
         return false
       }
     }

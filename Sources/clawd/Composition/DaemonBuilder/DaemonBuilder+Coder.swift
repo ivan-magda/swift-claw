@@ -52,14 +52,16 @@ extension DaemonBuilder {
   func prepareCoder(coordination: TurnCoordination) async -> CoderComposition {
     guard config.coder.enabled else {
       let reservedJobs = try? stores.coderJobs.reservedJobs()
-      let service =
-        reservedJobs?.isEmpty == true
-        ? nil
-        : makeCoderService(
-          backend: nil,
-          policyID: Self.unavailableCoderPolicyID,
-          coordination: coordination
-        )
+      let service: CoderService? =
+        if reservedJobs?.isEmpty == true {
+          nil
+        } else {
+          makeCoderService(
+            backend: nil,
+            policyID: Self.unavailableCoderPolicyID,
+            coordination: coordination
+          )
+        }
       return CoderComposition(service: service, tools: [], checks: CoderHealthRows.disabled)
     }
 

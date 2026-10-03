@@ -102,9 +102,11 @@ public struct DoctorReport: Sendable {
   }
 
   public func renderText() -> String {
-    nonEmptyGroups().map {
-      renderSection(group: $0.group, rows: $0.rows)
-    }.joined(separator: "\n\n")
+    nonEmptyGroups()
+      .map { section in
+        renderSection(group: section.group, rows: section.rows)
+      }
+      .joined(separator: "\n\n")
   }
 
   public func renderTelegramSummary() -> String {
@@ -198,11 +200,14 @@ private extension DoctorReport {
   func summarySection(group: DoctorGroup, rows: [Check]) -> String {
     let groupOK = rows.allSatisfy(\.ok)
 
-    let headlines = rows.filter { row in
-      row.isHeadline && row.ok
-    }.map { row in
-      "\(Self.shortKey(row.key)) \(row.value)"
-    }
+    let headlines =
+      rows
+      .filter { row in
+        row.isHeadline && row.ok
+      }
+      .map { row in
+        "\(Self.shortKey(row.key)) \(row.value)"
+      }
     let header = (["\(group.title): \(groupOK ? "ok" : "FAIL")"] + headlines).joined(
       separator: " · "
     )

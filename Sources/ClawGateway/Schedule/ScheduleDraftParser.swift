@@ -125,11 +125,12 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
     var accountant = makeAccountant(for: active.binding)
 
     // Day-cap preflight before issuing: a denial or an accounting failure refuses without a call.
-    if let refusal = preflightRefusal(
+    let preflightOutcome = preflightRefusal(
       for: messages,
       gate: makeGate(for: active.binding),
       accountant: accountant
-    ) {
+    )
+    if let refusal = preflightOutcome {
       return refusal
     }
 
@@ -177,13 +178,13 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
         if firstFailureError == nil {
           firstFailureError = error
         }
-        guard let failover = await RouteSwitch.failover(
+        let failover = await RouteSwitch.failover(
           after: error,
           from: active.position,
           roster: roster,
           cooldown: cooldown
         )
-        else {
+        guard let failover else {
           // One decision for every natural failure, keyed on the same vendor-neutral disposition a
           // turn reads. `mayHaveStarted` (exhausted retries, transport loss) debits an estimate so a
           // brownout still moves the day cap rather than letting repeated `/schedule` attempts
@@ -231,12 +232,12 @@ public struct ScheduleDraftParser: ScheduleDraftParsing {
       accountant: accountant
     )
 
-    let result = Self.decode(response.content)
-    if result == .unparseable {
+    let parseResult = Self.decode(response.content)
+    if parseResult == .unparseable {
       logUnparseableReply(response)
     }
 
-    return result
+    return parseResult
   }
 
   /// Strict decode: exactly one JSON object (a stray ``` fence is stripped first). Under JSON mode

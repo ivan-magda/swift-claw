@@ -32,10 +32,10 @@ enum RuntimeInitImageReference {
     }
 
     let components = repository.split(separator: "/", omittingEmptySubsequences: false)
-    guard components.allSatisfy({
-        PinnedImageReference.isValidRepositoryComponent(String($0))
-      })
-    else {
+    let hasValidRepositoryComponents = components.allSatisfy { component in
+      PinnedImageReference.isValidRepositoryComponent(String(component))
+    }
+    guard hasValidRepositoryComponents else {
       return false
     }
 

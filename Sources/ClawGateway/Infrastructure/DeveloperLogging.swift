@@ -17,7 +17,10 @@ public enum DeveloperLogging {
   /// Parses a `CLAW_LOG_LEVEL` value into a level, defaulting to `.info` for absent, blank, or
   /// unrecognized input (a typo must never silence logging).
   public static func level(from raw: String?) -> Logger.Level {
-    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+    let trimmed =
+      raw?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased() ?? ""
 
     guard !trimmed.isEmpty else {
       return .info
@@ -85,20 +88,30 @@ struct RedactingLogHandler: LogHandler {
   }
 
   var logLevel: Logger.Level {
-    get { base.logLevel }
-    set { base.logLevel = newValue }
+    get {
+      base.logLevel
+    }
+    set {
+      base.logLevel = newValue
+    }
   }
 
   // Persistent metadata and the provider are merged by the base handler AFTER `log(event:)` runs, so
   // they are redacted here at ingress instead — otherwise a secret stamped via `logger[metadataKey:]`
   // or surfaced by a `metadataProvider` would reach stdout unscrubbed.
   var metadata: Logger.Metadata {
-    get { base.metadata }
-    set { base.metadata = Self.redacted(newValue, using: redact) }
+    get {
+      base.metadata
+    }
+    set {
+      base.metadata = Self.redacted(newValue, using: redact)
+    }
   }
 
   var metadataProvider: Logger.MetadataProvider? {
-    get { base.metadataProvider }
+    get {
+      base.metadataProvider
+    }
     set {
       let redact = self.redact
       base.metadataProvider = newValue.map { provider in
@@ -110,7 +123,9 @@ struct RedactingLogHandler: LogHandler {
   }
 
   subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-    get { base[metadataKey: key] }
+    get {
+      base[metadataKey: key]
+    }
     set {
       base[metadataKey: key] = newValue.map {
         Self.redacted($0, using: redact)

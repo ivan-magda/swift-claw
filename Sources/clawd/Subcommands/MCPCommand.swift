@@ -37,7 +37,8 @@ struct MCPCommand: ParsableCommand {
     func run() throws {
       let environment = ProcessInfo.processInfo.environment
       let context = try MCPCommand.resolveContext(environment: environment)
-      MCPCommand.emit(try MCPCommand.listReport(context: context))
+      let report = try MCPCommand.listReport(context: context)
+      MCPCommand.emit(report)
     }
   }
 
@@ -93,7 +94,8 @@ struct MCPCommand: ParsableCommand {
       let environment = ProcessInfo.processInfo.environment
       let context = try MCPCommand.resolveContext(environment: environment)
       let token = try MCPCommand.readToken(for: server)
-      MCPCommand.report(try MCPCommand.setToken(token, server: server, context: context))
+      let tokenOutcome = try MCPCommand.setToken(token, server: server, context: context)
+      MCPCommand.report(tokenOutcome)
     }
   }
 
@@ -113,7 +115,8 @@ struct MCPCommand: ParsableCommand {
     func run() throws {
       let environment = ProcessInfo.processInfo.environment
       let stateRoot = try MCPCommand.resolveStateRoot(environment: environment)
-      MCPCommand.report(try MCPCommand.clearToken(server: server, stateRoot: stateRoot))
+      let tokenOutcome = try MCPCommand.clearToken(server: server, stateRoot: stateRoot)
+      MCPCommand.report(tokenOutcome)
     }
   }
 }
@@ -163,10 +166,10 @@ extension MCPCommand {
     server name: String,
     context: MCPCommandContext
   ) throws -> MCPTokenOutcome {
-    guard let server = context.config.servers.first(where: {
-        $0.name == name
-      })
-    else {
+    let configuredServer = context.config.servers.first { server in
+      server.name == name
+    }
+    guard let server = configuredServer else {
       throw fail(
         MCPConfigError.unknownServer(name: name, known: context.config.servers.map(\.name))
       )
@@ -202,10 +205,11 @@ extension MCPCommand {
     guard let name else {
       return config.enabledServers
     }
-    guard let server = config.servers.first(where: {
-        $0.name == name
-      })
-    else {
+
+    let configuredServer = config.servers.first { server in
+      server.name == name
+    }
+    guard let server = configuredServer else {
       throw fail(MCPConfigError.unknownServer(name: name, known: config.servers.map(\.name)))
     }
     return [server]
@@ -275,7 +279,9 @@ private extension MCPCommand {
     } catch {
       throw fail("cannot take the state-root lock: \(error)", code: .alreadyRunning)
     }
-    defer { lease.release() }
+    defer {
+      lease.release()
+    }
 
     return try openingTokenStore(body)
   }

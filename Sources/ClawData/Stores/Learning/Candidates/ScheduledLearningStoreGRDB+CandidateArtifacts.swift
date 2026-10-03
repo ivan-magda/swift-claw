@@ -19,9 +19,9 @@ extension ScheduledLearningStoreGRDB {
     lessonSource: LessonSetSource = .reflectorCandidate,
     now: Date
   ) throws {
-    let bytes = try CanonicalJSON.data(encoding: artifact.manifest)
+    let manifestBytes = try CanonicalJSON.data(encoding: artifact.manifest)
     // swiftlint:disable:next optional_data_string_conversion
-    let manifestJSON = String(decoding: bytes, as: UTF8.self)
+    let manifestJSON = String(decoding: manifestBytes, as: UTF8.self)
     try db.execute(
       sql: """
         INSERT OR IGNORE INTO lesson_sets(
@@ -38,13 +38,12 @@ extension ScheduledLearningStoreGRDB {
         EpochSecondCodec.epoch(now),
       ]
     )
-    guard let stored = try readLessonSet(
+    let storedReplacement = try readLessonSet(
       db,
       jobID: artifact.replacement.jobID,
       digest: artifact.replacement.digest
-    ),
-          stored == artifact.replacement
-    else {
+    )
+    guard let storedReplacement, storedReplacement == artifact.replacement else {
       throw StoreError.unexpected("replacement digest resolved to different lesson bytes")
     }
     try db.execute(
@@ -75,30 +74,32 @@ extension ScheduledLearningStoreGRDB {
     _ db: Database,
     digest: CandidateDigest
   ) throws -> CandidateArtifact? {
-    guard let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql: """
-          SELECT candidate_digest, job_id, learning_epoch, replacement_digest, base_digest,
-            base_revision, frozen_feedback_revision, origin, source_manifest, predecessor_digest,
-            algorithm
-          FROM learning_candidates WHERE candidate_digest = ?
-          """,
+        SELECT candidate_digest, job_id, learning_epoch, replacement_digest, base_digest,
+          base_revision, frozen_feedback_revision, origin, source_manifest, predecessor_digest,
+          algorithm
+        FROM learning_candidates WHERE candidate_digest = ?
+        """,
       arguments: [digest.rawValue]
     )
-    else {
+    guard let row else {
       return nil
     }
     guard let stored = StoredCandidateProjection(row: row) else {
       throw StoreError.unexpected("candidate \(digest.rawValue) has an unreadable artifact")
     }
     let manifestBytes = Data(stored.manifestJSON.utf8)
-    guard let manifest = CandidateSourceManifest.decodedCanonical(from: manifestBytes),
-          let replacement = try readLessonSet(
-            db,
-            jobID: stored.jobID,
-            digest: LessonSetDigest(rawValue: stored.replacementDigest)
-          )
-    else {
+    guard let manifest = CandidateSourceManifest.decodedCanonical(from: manifestBytes) else {
+      throw StoreError.unexpected("candidate \(digest.rawValue) has an unreadable artifact")
+    }
+    let replacement = try readLessonSet(
+      db,
+      jobID: stored.jobID,
+      digest: LessonSetDigest(rawValue: stored.replacementDigest)
+    )
+    guard let replacement else {
       throw StoreError.unexpected("candidate \(digest.rawValue) has an unreadable artifact")
     }
     let artifact = try CandidateArtifact(replacement: replacement, manifest: manifest)
@@ -156,11 +157,15 @@ private struct StoredCandidateProjection {
   func matches(artifact: CandidateArtifact, requestedDigest: CandidateDigest) -> Bool {
     let manifest = artifact.manifest
     return candidateDigest == requestedDigest.rawValue
-      && candidateDigest == artifact.digest.rawValue && jobID == artifact.replacement.jobID
-      && jobID == manifest.jobID && epoch == manifest.epoch.value
+      && candidateDigest == artifact.digest.rawValue
+      && jobID == artifact.replacement.jobID
+      && jobID == manifest.jobID
+      && epoch == manifest.epoch.value
       && replacementDigest == artifact.replacement.digest.rawValue
-      && baseDigest == manifest.baseDigest.rawValue && baseRevision == manifest.baseRevision.value
-      && feedbackRevision == manifest.feedbackRevision.value && origin == manifest.origin.rawValue
+      && baseDigest == manifest.baseDigest.rawValue
+      && baseRevision == manifest.baseRevision.value
+      && feedbackRevision == manifest.feedbackRevision.value
+      && origin == manifest.origin.rawValue
       && predecessorDigest == manifest.predecessorCandidate?.rawValue
       && algorithm == manifest.algorithm.rawValue
   }

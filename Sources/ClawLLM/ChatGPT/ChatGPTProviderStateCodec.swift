@@ -279,14 +279,14 @@ struct ChatGPTProviderStateCodec: Sendable {
       )
     }
 
-    let live = candidates.filter { candidate in
+    let liveCandidates = candidates.filter { candidate in
       candidate.epoch == newest.epoch
     }
-    drops.staleEpoch += candidates.count - live.count
+    drops.staleEpoch += candidates.count - liveCandidates.count
 
-    let selected = Self.affordable(live, drops: &drops)
+    let selectedCandidates = Self.affordable(liveCandidates, drops: &drops)
     var turns: [Int: ChatGPTReplayTurn] = [:]
-    for candidate in selected {
+    for candidate in selectedCandidates {
       turns[candidate.index] = ChatGPTReplayTurn(
         reasoning: candidate.items.reasoning,
         assistantMessages: candidate.items.assistantMessages,
@@ -410,17 +410,17 @@ private extension ChatGPTProviderStateCodec {
     drops: inout ChatGPTReplayDrops
   ) -> [Candidate] {
     var selected: [Candidate] = []
-    var total = 0
+    var totalBytes = 0
     for (offset, candidate) in candidates.reversed().enumerated() {
       // Saturating rather than trapping: each state is already under the per-state cap, so a total
       // that could overflow has certainly passed the aggregate one — clamping refuses the state,
       // which is the safe direction.
-      let running = SaturatingArithmetic.sum(total, candidate.bytes)
-      guard running <= maximumAggregateStateBytes else {
+      let updatedTotalBytes = SaturatingArithmetic.sum(totalBytes, candidate.bytes)
+      guard updatedTotalBytes <= maximumAggregateStateBytes else {
         drops.budgetEvicted += candidates.count - offset
         break
       }
-      total = running
+      totalBytes = updatedTotalBytes
       selected.append(candidate)
     }
     return selected.reversed()

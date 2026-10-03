@@ -27,6 +27,7 @@ extension CoderJobStoreGRDB {
       if releaseReservation {
         try Self.requireResolvedOwnership(job)
       }
+
       try db.execute(
         sql: """
           UPDATE coder_jobs SET state = ?, result_json = ?, slot_reserved = ?, updated_ts = ?
@@ -74,9 +75,9 @@ private extension CoderJobStoreGRDB {
     chunks: [OutboxChunk],
     now: Date
   ) throws {
-    let base = try OutboxInsertion.nextOutboxStepBase(db, runID: job.origin.runID)
+    let stepBase = try OutboxInsertion.nextOutboxStepBase(db, runID: job.origin.runID)
     for chunk in chunks {
-      let addressed = OutboxChunk(
+      let addressedChunk = OutboxChunk(
         stepIndex: chunk.stepIndex,
         chatID: job.origin.chatID,
         payload: chunk.payload,
@@ -87,7 +88,7 @@ private extension CoderJobStoreGRDB {
       let inserted = try OutboxInsertion.insertOutbox(
         db,
         runID: job.origin.runID,
-        chunk: OutboxInsertion.shiftedChunk(addressed, by: base),
+        chunk: OutboxInsertion.shiftedChunk(addressedChunk, by: stepBase),
         now: now
       )
       guard inserted else {

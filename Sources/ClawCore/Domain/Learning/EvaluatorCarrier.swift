@@ -207,14 +207,13 @@ private extension EvaluatorOutput {
   /// asked for is a reply from a contract we did not freeze, whatever else it got right.
   static func rejectUnknownKeys(in decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: AnyKey.self)
-    let known = Set(container.allKeys.map(\.stringValue)).subtracting(
-      CodingKeys.allCases.map(\.rawValue)
-    )
-    guard known.isEmpty else {
+    let unknownKeys = Set(container.allKeys.map(\.stringValue))
+      .subtracting(CodingKeys.allCases.map(\.rawValue))
+    guard unknownKeys.isEmpty else {
       throw DecodingError.dataCorrupted(
         DecodingError.Context(
           codingPath: container.codingPath,
-          debugDescription: "reply carries unknown keys \(known.sorted())"
+          debugDescription: "reply carries unknown keys \(unknownKeys.sorted())"
         )
       )
     }

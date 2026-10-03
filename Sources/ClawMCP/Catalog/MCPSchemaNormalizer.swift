@@ -103,10 +103,11 @@ private extension MCPSchemaNormalizer {
       return object
     }
 
-    let nonNull = branches.filter {
+    let nonNullBranches = branches.filter {
       isNullType($0) == false
     }
-    guard nonNull.count == 1, nonNull.count < branches.count, case .object(let branch) = nonNull[0]
+    guard nonNullBranches.count == 1, nonNullBranches.count < branches.count,
+          case .object(let branch) = nonNullBranches[0]
     else {
       return object
     }
@@ -253,21 +254,22 @@ private extension MCPSchemaNormalizer {
 
   static func referencePath(_ components: [String]) -> String {
     "#/"
-      + components.map { component in
-        component.replacingOccurrences(of: "~", with: "~0").replacingOccurrences(
-          of: "/",
-          with: "~1"
-        )
-      }.joined(separator: "/")
+      + components
+      .map { component in
+        component
+          .replacingOccurrences(of: "~", with: "~0")
+          .replacingOccurrences(of: "/", with: "~1")
+      }
+      .joined(separator: "/")
   }
 
   static func coerceObjectType(_ object: [String: JSONValue]) -> [String: JSONValue] {
-    let declared = object[Keyword.type]
-    let stated = declared != nil && declared != .null
-    let shaped = Keyword.objectShaped.contains {
+    let declaredType = object[Keyword.type]
+    let hasDeclaredType = declaredType != nil && declaredType != .null
+    let isObjectShaped = Keyword.objectShaped.contains {
       object[$0] != nil
     }
-    guard stated == false, shaped else {
+    guard hasDeclaredType == false, isObjectShaped else {
       return object
     }
 

@@ -136,8 +136,10 @@ public enum OpaqueNonce {
       }
     }
 
-    return bytes.base64EncodedString().replacingOccurrences(of: "+", with: "-")
-      .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+    return bytes.base64EncodedString()
+      .replacingOccurrences(of: "+", with: "-")
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "=", with: "")
   }
 }
 

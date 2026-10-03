@@ -49,7 +49,8 @@ public struct OutboxStoreGRDB: OutboxStore {
           WHERE status = 'PENDING'
           ORDER BY run_id IS NULL, run_id, step_index, dedup_key
           """
-      ).map { row in
+      )
+      .map { row in
         OutboxRow(
           deliveryKey: row["dedup_key"],
           runID: row["run_id"],

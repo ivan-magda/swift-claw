@@ -95,10 +95,10 @@ package final class AttemptOutputLimiter: @unchecked Sendable {
     var terminalSnapshotHighWater = Counts()
 
     var counts: Counts {
-      let streamed = AttemptOutputLimiter.totals(Array(fieldHighWater.values))
+      let streamedCounts = AttemptOutputLimiter.totals(Array(fieldHighWater.values))
       return Counts(
-        utf8Bytes: max(streamed.utf8Bytes, terminalSnapshotHighWater.utf8Bytes),
-        graphemes: max(streamed.graphemes, terminalSnapshotHighWater.graphemes)
+        utf8Bytes: max(streamedCounts.utf8Bytes, terminalSnapshotHighWater.utf8Bytes),
+        graphemes: max(streamedCounts.graphemes, terminalSnapshotHighWater.graphemes)
       )
     }
   }
@@ -208,19 +208,19 @@ private extension AttemptOutputLimiter {
 
   private static func counts(for fields: [String]) -> Counts {
     Counts(
-      utf8Bytes: fields.reduce(0) {
-        SaturatingArithmetic.sum($0, $1.utf8.count)
+      utf8Bytes: fields.reduce(0) { totalBytes, field in
+        SaturatingArithmetic.sum(totalBytes, field.utf8.count)
       },
-      graphemes: fields.reduce(0) {
-        SaturatingArithmetic.sum($0, $1.count)
+      graphemes: fields.reduce(0) { totalGraphemes, field in
+        SaturatingArithmetic.sum(totalGraphemes, field.count)
       }
     )
   }
 
   private static func totals(_ rounds: [Counts]) -> Counts {
-    rounds.reduce(into: Counts()) { result, round in
-      result.utf8Bytes = SaturatingArithmetic.sum(result.utf8Bytes, round.utf8Bytes)
-      result.graphemes = SaturatingArithmetic.sum(result.graphemes, round.graphemes)
+    rounds.reduce(into: Counts()) { totals, roundCounts in
+      totals.utf8Bytes = SaturatingArithmetic.sum(totals.utf8Bytes, roundCounts.utf8Bytes)
+      totals.graphemes = SaturatingArithmetic.sum(totals.graphemes, roundCounts.graphemes)
     }
   }
 }

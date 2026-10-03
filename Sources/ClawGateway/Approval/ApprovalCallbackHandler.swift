@@ -135,7 +135,8 @@ private extension ApprovalCallbackHandler {
       return await denyAuth(callback, approval: nil)
     }
 
-    guard let actor = await authorizedActor(callback, approval: approval) else {
+    let actor = await authorizedActor(callback, approval: approval)
+    guard let actor else {
       return await denyAuth(callback, approval: approval)
     }
 
@@ -181,11 +182,11 @@ private extension ApprovalCallbackHandler {
       }
 
       do {
-        guard try await membership.isCurrentMember(
+        let isCurrentMember = try await membership.isCurrentMember(
           chatID: context.deliveryTarget.chatID,
           userID: callback.fromUserID
         )
-        else {
+        guard isCurrentMember else {
           return nil
         }
       } catch {

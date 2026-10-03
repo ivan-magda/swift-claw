@@ -80,11 +80,15 @@ private extension ChatGPTModelPicker {
     first: ChatGPTCatalogModel
   ) -> ChatGPTModelChoice {
     guard let configured = configuredSuffix,
-          LLMProviderRegistry.isValidQualifiedModelSuffix(configured),
-          catalog.contains(where: {
-        $0.slug == configured
-      })
+          LLMProviderRegistry.isValidQualifiedModelSuffix(configured)
     else {
+      return ChatGPTModelChoice(slug: first.slug, origin: .firstReturnedDefault)
+    }
+
+    let isConfiguredModelOffered = catalog.contains { model in
+      model.slug == configured
+    }
+    guard isConfiguredModelOffered else {
       return ChatGPTModelChoice(slug: first.slug, origin: .firstReturnedDefault)
     }
     return ChatGPTModelChoice(slug: configured, origin: .configuredDefault)

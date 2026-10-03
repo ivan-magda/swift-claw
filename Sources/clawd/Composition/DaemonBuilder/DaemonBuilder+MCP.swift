@@ -35,19 +35,23 @@ extension DaemonBuilder {
     // SAME session that discovered the tool — that is what reuses the connection the handshake
     // already paid for — and starting from the session is what makes handing it the wrong one, or
     // dropping a tool whose session went missing, unrepresentable. Config order survives both hops.
-    let byServer = Dictionary(grouping: catalog.tools) { resolved in
+    let toolsByServer = Dictionary(grouping: catalog.tools) { resolved in
       resolved.coordinate.server
     }
     let tools: [any Tool] = sessions.flatMap { session in
-      (byServer[session.config.name] ?? []).map { resolved in
+      (toolsByServer[session.config.name] ?? []).map { resolved in
         MCPTool(resolved: resolved, session: session, redactor: redactor, logger: logger)
       }
     }
 
     return MCPStack(tools: tools, catalog: catalog, sessions: sessions)
   }
+}
 
-  private func makeSession(for server: MCPServerConfig) -> MCPServerSession {
+// MARK: - MCP Session Construction
+
+private extension DaemonBuilder {
+  func makeSession(for server: MCPServerConfig) -> MCPServerSession {
     MCPSessionFactory.make(
       server: server,
       token: mcp.token(for: server.name),

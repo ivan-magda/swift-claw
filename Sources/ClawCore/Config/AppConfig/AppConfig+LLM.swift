@@ -33,12 +33,10 @@ extension AppConfig {
       throw ConfigError.invalidMaxTokens(rawMaxTokens)
     }
 
-    let structuredOutput = try parseStructuredOutput(
-      from: env,
-      routes: [route, fallbackRoute].compactMap { configuredRoute in
-        configuredRoute
-      }
-    )
+    let configuredRoutes = [route, fallbackRoute].compactMap { configuredRoute in
+      configuredRoute
+    }
+    let structuredOutput = try parseStructuredOutput(from: env, routes: configuredRoutes)
 
     return LLMConfig(
       route: route,

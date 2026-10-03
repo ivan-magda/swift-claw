@@ -15,6 +15,7 @@ public enum CoderCardMarkdown {
   public static func split(text: String) -> [String] {
     var chunks: [String] = []
     var current = ""
+
     for block in text.components(separatedBy: "\n\n") where !block.isEmpty {
       for part in ReplySplitter.split(text: block) {
         let joined = current.isEmpty ? part : current + "\n\n" + part
@@ -26,6 +27,7 @@ public enum CoderCardMarkdown {
         }
       }
     }
+
     if !current.isEmpty {
       chunks.append(current)
     }
@@ -42,23 +44,25 @@ private extension CoderCardMarkdown {
     closing: String,
     preformatted: Bool
   ) -> String {
-    let bodyLimit = ReplySplitter.limit - opening.utf8.count - closing.utf8.count
-    var result: [String] = []
+    let bodyByteLimit = ReplySplitter.limit - opening.utf8.count - closing.utf8.count
+    var encodedBlocks: [String] = []
     var body = ""
-    var count = 0
+    var bodyBytes = 0
+
     func append(_ encoded: String) {
-      let size = encoded.utf8.count
-      if count + size > bodyLimit {
-        result.append(opening + body + closing)
+      let encodedBytes = encoded.utf8.count
+      if bodyBytes + encodedBytes > bodyByteLimit {
+        encodedBlocks.append(opening + body + closing)
         body = ""
-        count = 0
+        bodyBytes = 0
       }
       body += encoded
-      count += size
+      bodyBytes += encodedBytes
     }
+
     for character in value {
       let encoded = encode(String(character), preformatted: preformatted)
-      if encoded.utf8.count <= bodyLimit {
+      if encoded.utf8.count <= bodyByteLimit {
         append(encoded)
       } else {
         for scalar in character.unicodeScalars {
@@ -66,8 +70,8 @@ private extension CoderCardMarkdown {
         }
       }
     }
-    result.append(opening + body + closing)
-    return result.joined(separator: "\n\n")
+    encodedBlocks.append(opening + body + closing)
+    return encodedBlocks.joined(separator: "\n\n")
   }
 
   static func encode(_ text: String, preformatted: Bool) -> String {
@@ -79,7 +83,8 @@ private extension CoderCardMarkdown {
     case "\r\n":
       preformatted ? "&#13;&#10;" : "<br>"
     default:
-      text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
+      text.replacingOccurrences(of: "&", with: "&amp;")
+        .replacingOccurrences(of: "<", with: "&lt;")
         .replacingOccurrences(of: ">", with: "&gt;")
     }
   }

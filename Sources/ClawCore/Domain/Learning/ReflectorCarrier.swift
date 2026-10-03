@@ -89,16 +89,20 @@ public struct ReflectorCarrier: Sendable, Equatable, Encodable {
     }
   }
 
-  private static func fence(label: String, body: String) -> String {
-    LabeledContext(label: label, content: body, nonce: OpaqueNonce.generate()).render()
-  }
-
   enum CodingKeys: String, CodingKey {
     case schemaVersion = "schema_version"
     case stableLessons = "stable_lessons"
     case evaluations
     case issueCodes = "issue_codes"
     case ownerPayloads = "owner_payloads"
+  }
+}
+
+// MARK: - Untrusted Field Fencing
+
+private extension ReflectorCarrier {
+  static func fence(label: String, body: String) -> String {
+    LabeledContext(label: label, content: body, nonce: OpaqueNonce.generate()).render()
   }
 }
 
@@ -134,33 +138,17 @@ public struct ReflectorOutput: Sendable, Equatable, Decodable {
     candidate = try container.decodeIfPresent(Candidate.self, forKey: .candidate)
   }
 
-  private static func rejectUnknownKeys(in decoder: any Decoder) throws {
-    let container = try decoder.container(keyedBy: AnyKey.self)
-    let unknown = Set(container.allKeys.map(\.stringValue)).subtracting(
-      CodingKeys.allCases.map(\.rawValue)
-    )
-    guard unknown.isEmpty else {
-      throw DecodingError.dataCorrupted(
-        DecodingError.Context(
-          codingPath: container.codingPath,
-          debugDescription: "reply carries unknown keys \(unknown.sorted())"
-        )
-      )
-    }
-  }
-
   public struct Candidate: Sendable, Equatable, Decodable {
     public let lessons: [String]
 
     public init(from decoder: any Decoder) throws {
-      let all = try decoder.container(keyedBy: AnyKey.self)
-      let unknown = Set(all.allKeys.map(\.stringValue)).subtracting(
-        CodingKeys.allCases.map(\.rawValue)
-      )
+      let allKeysContainer = try decoder.container(keyedBy: AnyKey.self)
+      let unknown = Set(allKeysContainer.allKeys.map(\.stringValue))
+        .subtracting(CodingKeys.allCases.map(\.rawValue))
       guard unknown.isEmpty else {
         throw DecodingError.dataCorrupted(
           DecodingError.Context(
-            codingPath: all.codingPath,
+            codingPath: allKeysContainer.codingPath,
             debugDescription: "candidate carries unknown keys \(unknown.sorted())"
           )
         )
@@ -192,6 +180,24 @@ public struct ReflectorOutput: Sendable, Equatable, Decodable {
 
     init?(intValue: Int) {
       nil
+    }
+  }
+}
+
+// MARK: - Frozen Schema Admission
+
+private extension ReflectorOutput {
+  static func rejectUnknownKeys(in decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: AnyKey.self)
+    let unknown = Set(container.allKeys.map(\.stringValue))
+      .subtracting(CodingKeys.allCases.map(\.rawValue))
+    guard unknown.isEmpty else {
+      throw DecodingError.dataCorrupted(
+        DecodingError.Context(
+          codingPath: container.codingPath,
+          debugDescription: "reply carries unknown keys \(unknown.sorted())"
+        )
+      )
     }
   }
 }

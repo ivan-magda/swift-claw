@@ -71,9 +71,10 @@ public enum PolicyFingerprint {
     encoder.outputFormatting = [.sortedKeys]
 
     var parts: [String] = []
-    for tool in inputs.tools.sorted(by: {
-      $0.name < $1.name
-    }) {
+    let sortedTools = inputs.tools.sorted { lhs, rhs in
+      lhs.name < rhs.name
+    }
+    for tool in sortedTools {
       let canonicalParameters: String
       if let data = try? encoder.encode(tool.parameters) {
         canonicalParameters = String(data: data, encoding: .utf8) ?? ""

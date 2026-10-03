@@ -441,13 +441,16 @@ private extension AppConfig {
       return []
     }
 
-    return try trimmed.split(separator: ",").map { part in
-      let entry = part.trimmingCharacters(in: .whitespaces)
-      guard let cidr = CIDR.parse(entry) else {
-        throw ConfigError.invalidWebFetchExemptCIDR(entry)
+    return
+      try trimmed
+      .split(separator: ",")
+      .map { part in
+        let entry = part.trimmingCharacters(in: .whitespaces)
+        guard let cidr = CIDR.parse(entry) else {
+          throw ConfigError.invalidWebFetchExemptCIDR(entry)
+        }
+        return cidr
       }
-      return cidr
-    }
   }
 }
 

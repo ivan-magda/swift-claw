@@ -56,7 +56,9 @@ struct ChatGPTResponsesSSEParser: Sendable {
     // it is framed would re-copy the whole remaining buffer every time, which turns one large
     // delivery of small events into quadratic work.
     var consumed = buffer.startIndex
-    defer { buffer.removeSubrange(..<consumed) }
+    defer {
+      buffer.removeSubrange(..<consumed)
+    }
 
     while let delimiter = SSEFraming.delimiterRange(in: buffer[consumed...]) {
       let eventData = buffer[consumed..<delimiter.lowerBound]

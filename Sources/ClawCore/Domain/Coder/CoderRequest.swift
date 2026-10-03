@@ -153,11 +153,12 @@ private extension CoderRequest {
       throw .invalidRequest("Use github.com/{owner}/{repo} or its /issues/{number} URL.")
     }
     if issue {
-      guard parts[3] == "issues",
-            !parts[4].isEmpty,
-            parts[4].utf8.allSatisfy({ byte in
+      let hasNumericIssuePath =
+        parts[3] == "issues" && !parts[4].isEmpty
+        && parts[4].utf8.allSatisfy { byte in
           (48...57).contains(byte)
-        }),
+        }
+      guard hasNumericIssuePath,
             let number = Int(parts[4]),
             number > 0
       else {

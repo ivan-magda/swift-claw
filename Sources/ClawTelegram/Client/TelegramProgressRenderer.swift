@@ -47,19 +47,19 @@ private extension TelegramProgressRenderer {
     let collapsed = !snapshot.answerPreview.isEmpty
     let emoji = TelegramActionEmoji(snapshot: snapshot)
     let status = collapsed ? emoji.statusLabel : phaseLabel(snapshot.phase, action: emoji)
-    let count = totalOlder(snapshot.olderSteps) + snapshot.steps.count
+    let stepCount = totalOlder(snapshot.olderSteps) + snapshot.steps.count
     var heading = "\(status) · \(max(0, snapshot.elapsedSeconds))s"
 
-    if collapsed && count > 0 {
-      heading += " · \(count) steps"
+    if collapsed && stepCount > 0 {
+      heading += " · \(stepCount) steps"
     }
 
-    let tags = Self.thinkingOpen.count + Self.thinkingClose.count
-    guard budget >= tags + heading.count else {
+    let thinkingTagCharacters = Self.thinkingOpen.count + Self.thinkingClose.count
+    guard budget >= thinkingTagCharacters + heading.count else {
       return ""
     }
 
-    let headingBudget = budget - tags
+    let headingBudget = budget - thinkingTagCharacters
     let customEmojiHeading = "\(emoji.markup) \(heading)"
     let fallbackEmojiHeading = "\(emoji.fallback) \(heading)"
 
@@ -71,18 +71,18 @@ private extension TelegramProgressRenderer {
 
     var thinking = heading
     if !collapsed, let explanation = snapshot.explanation {
-      let safe = ProgressText.preview(
+      let explanationPreview = ProgressText.preview(
         explanation,
         secretValues: [],
         limit: TurnProgressLimits.explanationCharacters
       )
 
-      let escaped = explanationMarkup(
-        safe,
-        budget: budget - tags - heading.count - 3
+      let escapedExplanation = explanationMarkup(
+        explanationPreview,
+        budget: budget - thinkingTagCharacters - heading.count - 3
       )
-      if !escaped.isEmpty {
-        thinking += " — " + escaped
+      if !escapedExplanation.isEmpty {
+        thinking += " — " + escapedExplanation
       }
     }
 
@@ -91,23 +91,23 @@ private extension TelegramProgressRenderer {
       return markup
     }
 
-    let visible = Array(snapshot.steps.suffix(TurnProgressLimits.visibleToolSteps))
-    let older = totalOlder(snapshot.olderSteps) + snapshot.steps.count - visible.count
-    let earlier =
-      older > 0
-      ? "\n\n\(Self.thinkingOpen)\(older) earlier steps\(Self.thinkingClose)"
+    let visibleSteps = Array(snapshot.steps.suffix(TurnProgressLimits.visibleToolSteps))
+    let olderStepCount = totalOlder(snapshot.olderSteps) + snapshot.steps.count - visibleSteps.count
+    let earlierStepsMarkup =
+      olderStepCount > 0
+      ? "\n\n\(Self.thinkingOpen)\(olderStepCount) earlier steps\(Self.thinkingClose)"
       : ""
-    let available = budget - markup.count - earlier.count
+    let rowCharacters = budget - markup.count - earlierStepsMarkup.count
 
-    if available > 0, !visible.isEmpty {
-      let rowBudget = available / visible.count
-      for step in visible {
+    if rowCharacters > 0, !visibleSteps.isEmpty {
+      let rowBudget = rowCharacters / visibleSteps.count
+      for step in visibleSteps {
         markup += toolRow(step, budget: rowBudget)
       }
     }
 
-    if markup.count + earlier.count <= budget {
-      markup += earlier
+    if markup.count + earlierStepsMarkup.count <= budget {
+      markup += earlierStepsMarkup
     }
 
     return markup

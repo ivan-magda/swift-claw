@@ -64,12 +64,12 @@ private struct CleanupOperation: Sendable {
   // Cleanup deliberately keeps the full per-command timeout (not the run's outer deadline,
   // which may already be exhausted) so a wedged execution still gets its teardown attempts.
   private func finalAbsence() async -> Bool {
-    guard let containers = await ContainerBackend.fetchContainerList(
+    let containers = await ContainerBackend.fetchContainerList(
       timeout: ContainerBackend.lifecycleCommandTimeout,
       commands: commands,
       watchdogSleep: watchdogSleep
     )
-    else {
+    guard let containers else {
       return false
     }
     return !containers.contains {

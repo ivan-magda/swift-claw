@@ -78,11 +78,13 @@ struct CoderGit: Sendable {
       ["rev-parse", "--verify", "--end-of-options", "\(ref)^{commit}"],
       at: directory
     )
-    guard [40, 64].contains(sha.utf8.count),
-          sha.utf8.allSatisfy({ byte in
-        (48...57).contains(byte) || (97...102).contains(byte)
-      })
-    else {
+    guard [40, 64].contains(sha.utf8.count) else {
+      throw CoderGitFailure.output
+    }
+    let isHexadecimal = sha.utf8.allSatisfy { byte in
+      (48...57).contains(byte) || (97...102).contains(byte)
+    }
+    guard isHexadecimal else {
       throw CoderGitFailure.output
     }
     return sha

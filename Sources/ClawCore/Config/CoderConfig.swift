@@ -52,10 +52,13 @@ public struct CoderConfig: Sendable, Equatable {
 
     let searchPath = values[AppConfig.EnvKey.coderPath]
     if let searchPath {
-      let absolute = searchPath.split(separator: ":", omittingEmptySubsequences: false).allSatisfy {
-        $0.hasPrefix("/")
-      }
-      guard absolute else {
+      let hasOnlyAbsoluteDirectories =
+        searchPath
+        .split(separator: ":", omittingEmptySubsequences: false)
+        .allSatisfy { directory in
+          directory.hasPrefix("/")
+        }
+      guard hasOnlyAbsoluteDirectories else {
         throw .invalidCoderSetting(key: AppConfig.EnvKey.coderPath)
       }
     }

@@ -48,13 +48,13 @@ struct TurnRoute {
   /// Moves to the fallback when `error` permits a switch and one is configured, arming the
   /// primary's cooldown first. Returns nil, changing nothing, when the turn must degrade instead.
   mutating func switchRoute(after error: any Error) async -> Transition? {
-    guard let failover = await RouteSwitch.failover(
+    let failover = await RouteSwitch.failover(
       after: error,
       from: active.position,
       roster: roster,
       cooldown: cooldown
     )
-    else {
+    guard let failover else {
       return nil
     }
 
@@ -79,7 +79,8 @@ struct TurnRoute {
       return
     }
 
-    if await cooldown.recordSuccess() {
+    let primaryRecovered = await cooldown.recordSuccess()
+    if primaryRecovered {
       notice = .restored(route: active.binding.configuredReference)
     }
   }

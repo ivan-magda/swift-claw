@@ -51,7 +51,8 @@ public enum CanonicalJSON {
     }
 
     var raw: Int64 = 0
-    guard CFNumberGetValue(cfNumber, .sInt64Type, &raw),
+    let hasInt64Value = CFNumberGetValue(cfNumber, .sInt64Type, &raw)
+    guard hasInt64Value,
           number.compare(NSNumber(value: raw)) == .orderedSame
     else {
       return nil

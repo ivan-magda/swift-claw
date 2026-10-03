@@ -49,8 +49,8 @@ extension ScheduledLearningStoreGRDB {
     permitsClosedReplacement: Bool = false
   ) throws -> AdmissionPlan {
     if persisted {
-      guard let exact = try readCandidateArtifact(db, digest: artifact.digest), exact == artifact
-      else {
+      let persistedArtifact = try readCandidateArtifact(db, digest: artifact.digest)
+      guard let persistedArtifact, persistedArtifact == artifact else {
         throw StoreError.unexpected("candidate changed during admission reload")
       }
     }
@@ -65,11 +65,13 @@ extension ScheduledLearningStoreGRDB {
     else {
       return .rejected(.jobNotRepeatable)
     }
-    let live = try liveTrial(db, jobID: artifact.manifest.jobID)
+    let currentTrial = try liveTrial(db, jobID: artifact.manifest.jobID)
     let hasCompetingLiveTrial =
-      live.map { trial in
-        trial.candidateDigest != permittedLiveCandidate
-      } ?? false
+      if let currentTrial {
+        currentTrial.candidateDigest != permittedLiveCandidate
+      } else {
+        false
+      }
     let sourcesCurrent = try sourceBindingsAreCurrent(db, artifact: artifact, state: state)
     let vetoes = try hardVetoes(db, artifact: artifact)
     let context = AdmissionValidationContext(
@@ -204,7 +206,7 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func nextGeneration(_ db: Database, artifact: CandidateArtifact) throws -> Int {
-    let latest =
+    let latestGeneration =
       try Int.fetchOne(
         db,
         sql: """
@@ -213,7 +215,7 @@ private extension ScheduledLearningStoreGRDB {
           """,
         arguments: [artifact.manifest.jobID, artifact.manifest.epoch.value]
       ) ?? 0
-    return latest + 1
+    return latestGeneration + 1
   }
 
   static func replacementWasClosed(_ db: Database, artifact: CandidateArtifact) throws -> Bool {

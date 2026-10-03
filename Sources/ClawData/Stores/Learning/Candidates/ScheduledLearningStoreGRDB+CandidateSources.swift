@@ -12,16 +12,22 @@ extension ScheduledLearningStoreGRDB {
     artifact: CandidateArtifact,
     state: JobLearningState
   ) throws -> Bool {
-    guard let ancestry = try candidateAncestry(db, artifact: artifact),
-          try candidateProvenanceIsValid(db, ancestry: ancestry, state: state),
-          let current = try preparation(
-            db,
-            artifact: artifact,
-            feedbackCutoff: state.feedbackRevision,
-            state: state,
-            triggerFeedbackRevision: ancestry.triggerFeedbackRevision
-          )
-    else {
+    guard let ancestry = try candidateAncestry(db, artifact: artifact) else {
+      return false
+    }
+    let provenanceIsValid = try candidateProvenanceIsValid(db, ancestry: ancestry, state: state)
+    guard provenanceIsValid else {
+      return false
+    }
+
+    let current = try preparation(
+      db,
+      artifact: artifact,
+      feedbackCutoff: state.feedbackRevision,
+      state: state,
+      triggerFeedbackRevision: ancestry.triggerFeedbackRevision
+    )
+    guard let current else {
       return false
     }
     return artifact.manifest.evidence == current.evidenceSources
@@ -64,18 +70,16 @@ extension ScheduledLearningStoreGRDB {
       issueCodes: manifest.qualifyingIssueCodes,
       reason: manifest.triggerReason
     )
-    guard trigger.digest == manifest.triggerDigest,
-          let current = try prepareReflection(
-            db,
-            trigger: trigger,
-            feedbackCutoff: feedbackCutoff,
-            requiredStateFeedbackRevision: state.feedbackRevision,
-            requiresNoLiveTrial: false
-          )
-    else {
+    guard trigger.digest == manifest.triggerDigest else {
       return nil
     }
-    return current
+    return try prepareReflection(
+      db,
+      trigger: trigger,
+      feedbackCutoff: feedbackCutoff,
+      requiredStateFeedbackRevision: state.feedbackRevision,
+      requiresNoLiveTrial: false
+    )
   }
 
   struct CandidateAncestry {
@@ -99,11 +103,11 @@ extension ScheduledLearningStoreGRDB {
         break
       }
       guard let predecessor = current.manifest.predecessorCandidate,
-            let loaded = try readCandidateArtifact(db, digest: predecessor)
+            let predecessorArtifact = try readCandidateArtifact(db, digest: predecessor)
       else {
         return nil
       }
-      current = loaded
+      current = predecessorArtifact
     }
     return CandidateAncestry(
       rootToTip: tipToRoot.reversed(),
@@ -127,14 +131,14 @@ extension ScheduledLearningStoreGRDB {
       return false
     }
     for index in ancestry.rootToTip.indices.dropFirst() {
-      guard try successorProvenanceIsValid(
+      let successorHasValidProvenance = try successorProvenanceIsValid(
         db,
         artifact: ancestry.rootToTip[index],
         predecessor: ancestry.rootToTip[ancestry.rootToTip.index(before: index)],
         state: state,
         triggerFeedbackRevision: ancestry.triggerFeedbackRevision
       )
-      else {
+      guard successorHasValidProvenance else {
         return false
       }
     }
@@ -342,14 +346,13 @@ extension ScheduledLearningStoreGRDB {
     signal: OwnerSignal,
     expectedPayload: Data?
   ) throws -> CandidateFeedbackSource? {
-    guard let stored = try storedCandidateControl(
+    let stored = try storedCandidateControl(
       db,
       eventID: eventID,
       candidate: candidate,
       signal: signal
-    ),
-          payloadMatches(stored.payload, expected: expectedPayload)
-    else {
+    )
+    guard let stored, payloadMatches(stored.payload, expected: expectedPayload) else {
       return nil
     }
     return stored.source
@@ -436,8 +439,8 @@ extension ScheduledLearningStoreGRDB {
         """,
       arguments: [predecessor.rawValue, origin.rawValue]
     )
-    for raw in digests {
-      let digest = CandidateDigest(rawValue: raw)
+    for rawDigest in digests {
+      let digest = CandidateDigest(rawValue: rawDigest)
       guard let candidate = try readCandidateArtifact(db, digest: digest) else {
         continue
       }

@@ -107,12 +107,14 @@ public enum OwnerPrecedence {
     }
 
     let outcome =
-      resultSignal.map { event in
+      if let resultSignal {
         Self.ownerOutcome(
-          signal: event.signal,
+          signal: resultSignal.signal,
           evaluatorIssueCodes: usesEvaluatorCodes ? issueCodes : []
         )
-      } ?? Self.evaluatorOutcome(evaluator, issueCodes: issueCodes, isDisputed: evaluationDisputed)
+      } else {
+        Self.evaluatorOutcome(evaluator, issueCodes: issueCodes, isDisputed: evaluationDisputed)
+      }
     let ownerConfirmed =
       resultSignal == nil && evaluationDisputed == false
       && effectiveSignals.contains { event in
@@ -169,9 +171,11 @@ private extension OwnerPrecedence {
 
 extension FeedbackEvent {
   package static func latestUnsupersededResult(in events: [FeedbackEvent]) -> FeedbackEvent? {
-    unsuperseded(events).filter { event in
-      event.signal.isResultSignal
-    }.max(by: precedes)
+    unsuperseded(events)
+      .filter { event in
+        event.signal.isResultSignal
+      }
+      .max(by: precedes)
   }
 
   package static func unsuperseded(_ events: [FeedbackEvent]) -> [FeedbackEvent] {
@@ -180,8 +184,12 @@ extension FeedbackEvent {
       superseded.contains(event.id) == false
     }
   }
+}
 
-  private static func precedes(_ lhs: FeedbackEvent, _ rhs: FeedbackEvent) -> Bool {
+// MARK: - Feedback Ordering
+
+private extension FeedbackEvent {
+  static func precedes(_ lhs: FeedbackEvent, _ rhs: FeedbackEvent) -> Bool {
     if lhs.revision != rhs.revision {
       return lhs.revision < rhs.revision
     }

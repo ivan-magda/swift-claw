@@ -22,15 +22,19 @@ public struct TranscriptAuthor: Sendable, Equatable {
   public func prefixing(_ text: String) -> String {
     label + Self.separator + text
   }
+}
 
+// MARK: - Author Label Sanitization
+
+private extension TranscriptAuthor {
   /// Folds the separator and every line break into spaces, then collapses the runs — a name is one
   /// plain line or it is not usable as a label.
-  private static func sanitize(_ displayName: String?) -> String {
+  static func sanitize(_ displayName: String?) -> String {
     guard let displayName else {
       return ""
     }
-    let flattened = displayName.map { char in
-      char == ":" || char.isNewline ? " " : char
+    let flattened = displayName.map { character in
+      character == ":" || character.isNewline ? " " : character
     }
     return String(flattened).split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }

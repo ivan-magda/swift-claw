@@ -17,26 +17,30 @@ public struct CoderJobStoreGRDB: CoderJobStore {
     now: Date
   ) throws(StoreError) -> CoderAdmission {
     try database.writeMapping { db in
-      if let row = try Row.fetchOne(
+      let existingRow = try Row.fetchOne(
         db,
         sql: "SELECT * FROM coder_jobs WHERE origin_run_id = ? AND tool_call_id = ?",
         arguments: [origin.runID, origin.toolCallID]
-      ) {
-        return .existing(try CoderJobRecord.decode(row))
+      )
+      if let existingRow {
+        return .existing(try CoderJobRecord.decode(existingRow))
       }
-      let unresolved =
+
+      let hasUnresolvedOwnership =
         try Bool.fetchOne(
           db,
           sql: "SELECT EXISTS(SELECT 1 FROM coder_jobs WHERE process_ownership = ?)",
           arguments: [CoderProcessOwnership.unresolved.rawValue]
         ) ?? false
-      guard !unresolved else {
+      guard !hasUnresolvedOwnership else {
         return .recoveryRequired
       }
+
       let reserved = try Self.reservedJobs(db)
       guard reserved.count < maxConcurrentJobs else {
         return .busy
       }
+
       let workspaceConflict = reserved.contains { job in
         Self.conflicts(job.prepared, with: prepared)
       }
@@ -68,7 +72,8 @@ public struct CoderJobStoreGRDB: CoderJobStore {
           CoderJobState.timedOut.rawValue,
           CoderJobState.interrupted.rawValue,
         ]
-      ).map(CoderJobRecord.decode)
+      )
+      .map(CoderJobRecord.decode)
     }
   }
 
@@ -114,9 +119,8 @@ public struct CoderJobStoreGRDB: CoderJobStore {
 
 private extension CoderJobStoreGRDB {
   static func reservedJobs(_ db: Database) throws -> [CoderJob] {
-    try Row.fetchAll(db, sql: "SELECT * FROM coder_jobs WHERE slot_reserved = 1 ORDER BY id").map(
-      CoderJobRecord.decode
-    )
+    try Row.fetchAll(db, sql: "SELECT * FROM coder_jobs WHERE slot_reserved = 1 ORDER BY id")
+      .map(CoderJobRecord.decode)
   }
 
   static func conflicts(

@@ -196,8 +196,12 @@ private extension HealthRowsBuilder {
       },
       check("llm.retry_budget", "\(inputs.retryBudget)", .llmRuns),
       check("llm.streaming", inputs.streamingEnabled ? "on" : "off", .llmRuns),
-      .storeRead(inputs.runsHealth, key: "runs.in_flight", group: .llmRuns, isHeadline: true) {
-        (health) in
+      .storeRead(
+        inputs.runsHealth,
+        key: "runs.in_flight",
+        group: .llmRuns,
+        isHeadline: true
+      ) { health in
         "\(health.inFlight)"
       },
       .storeRead(inputs.runsHealth, key: "runs.oldest_age_s", group: .llmRuns) { health in
@@ -282,8 +286,12 @@ private extension HealthRowsBuilder {
 
   static func spendChecks(_ inputs: Inputs) -> [DoctorReport.Check] {
     [
-      .storeRead(inputs.todayUsage, key: "spend.today_usd", group: .spend, isHeadline: true) {
-        (usage) in
+      .storeRead(
+        inputs.todayUsage,
+        key: "spend.today_usd",
+        group: .spend,
+        isHeadline: true
+      ) { usage in
         USD.precise(usage.costUSD)
       },
       .storeRead(inputs.todayUsage, key: "spend.today_tokens", group: .spend) { usage in
@@ -295,11 +303,13 @@ private extension HealthRowsBuilder {
       },
       check("spend.per_run_cap_usd", USD.display(inputs.perRunUSD), .spend),
       .storeRead(inputs.costMix, key: "spend.cost_source_mix", group: .spend) { costMix in
-        let text = costMix.map { entry in
-          "\(entry.key.rawValue)=\(entry.value)"
-        }.sorted().joined(
-          separator: " "
-        )
+        let text =
+          costMix
+          .map { entry in
+            "\(entry.key.rawValue)=\(entry.value)"
+          }
+          .sorted()
+          .joined(separator: " ")
         return text.isEmpty ? "none" : text
       },
     ] + priceChecks(primary: inputs.primaryPrice, fallback: inputs.fallbackPrice)

@@ -36,42 +36,50 @@ where ClockType.Duration == Duration {
     draft: RichDraft,
     stopControl: DraftStopControl
   ) async -> Bool {
-    guard chatID > 0, await !deliveryState.isHeld(chatID) else {
+    guard chatID > 0 else {
       return false
     }
 
-    let capped = String(draft.markdown.prefix(TelegramMessageLimits.maxRichMessageCharacters))
-    let fallback = draft.fallbackMarkdown.map {
+    let isHeld = await deliveryState.isHeld(chatID)
+    guard !isHeld else {
+      return false
+    }
+
+    let cappedMarkdown = String(
+      draft.markdown.prefix(TelegramMessageLimits.maxRichMessageCharacters)
+    )
+    let fallbackMarkdown = draft.fallbackMarkdown.map {
       String($0.prefix(TelegramMessageLimits.maxRichMessageCharacters))
     }
-    let candidate = await deliveryState.usesFallbackEmoji ? fallback ?? capped : capped
+    let usesFallbackEmoji = await deliveryState.usesFallbackEmoji
+    let candidateMarkdown = usesFallbackEmoji ? fallbackMarkdown ?? cappedMarkdown : cappedMarkdown
 
     do {
       do {
         return try await transport.sendRichMessageDraft(
           chatID: chatID,
           draftID: draftID,
-          markdown: candidate,
+          markdown: candidateMarkdown,
           stopControl: stopControl
         )
       } catch TelegramError.apiError(let code, let description) where code == 400 {
-        guard let fallback, candidate != fallback else {
+        guard let fallbackMarkdown, candidateMarkdown != fallbackMarkdown else {
           throw TelegramError.apiError(code: code, description: description)
         }
 
         try Task.checkCancellation()
 
-        let delivered = try await transport.sendRichMessageDraft(
+        let fallbackDelivered = try await transport.sendRichMessageDraft(
           chatID: chatID,
           draftID: draftID,
-          markdown: fallback,
+          markdown: fallbackMarkdown,
           stopControl: stopControl
         )
-        if delivered {
+        if fallbackDelivered {
           await deliveryState.preferFallbackEmoji()
         }
 
-        return delivered
+        return fallbackDelivered
       }
     } catch TelegramError.floodControl(let retryAfter) {
       await deliveryState.hold(chatID, for: .seconds(retryAfter))

@@ -59,13 +59,17 @@ extension ScheduledLearningStoreGRDB {
 
     return RunTranscript(
       finalOutput: finalOutput,
-      facts: proposed.prefix(EvidenceLimits.maxToolFacts).enumerated().map { ordinal, call in
-        EvidenceToolFact(
-          ordinal: ordinal,
-          name: call.name,
-          observed: observedCallIDs.contains(call.id)
-        )
-      },
+      facts:
+        proposed
+        .prefix(EvidenceLimits.maxToolFacts)
+        .enumerated()
+        .map { ordinal, call in
+          EvidenceToolFact(
+            ordinal: ordinal,
+            name: call.name,
+            observed: observedCallIDs.contains(call.id)
+          )
+        },
       proposedCalls: proposed.count,
       observedCalls: observedCalls
     )

@@ -89,7 +89,8 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
           LearningTrialState.open.rawValue,
           LearningTrialState.draining.rawValue,
         ]
-      ).map(CandidateDigest.init(rawValue:))
+      )
+      .map(CandidateDigest.init(rawValue:))
     }
   }
 
@@ -115,7 +116,8 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
           OwnerSignal.candidateApprove.rawValue,
           OwnerSignal.candidateEdit.rawValue,
         ]
-      ).compactMap { row in
+      )
+      .compactMap { row in
         guard let signal = OwnerSignal(rawValue: row["signal"]) else {
           return nil
         }
@@ -162,7 +164,8 @@ extension ScheduledLearningStoreGRDB: LearningWorkflowStore {
           WHERE job_id = ? AND kind = ?
           """,
         arguments: [jobID, LearningDecisionKind.rollback.rawValue]
-      ).map(Self.decodeTerminalReceipt)
+      )
+      .map(Self.decodeTerminalReceipt)
       return rows.compactMap { row in
         Self.rollbackTrigger(row, promotion: promotion, receipts: receipts)
       }
@@ -192,21 +195,21 @@ private extension ScheduledLearningStoreGRDB {
 
       trigger = .ownerFeedback(promotionID: promotion.decisionID, eventID: row["event_id"])
     } else {
-      guard promotion.cohort.contains(where: { support in
-          support.outcome == .positive
-            && ((kind == .run && subject == String(support.runID))
-              || (kind == .evaluation && subject == support.evaluationDigest?.rawValue))
-        })
-      else {
+      let affectsPositiveSupport = promotion.cohort.contains { support in
+        support.outcome == .positive
+          && ((kind == .run && subject == String(support.runID))
+            || (kind == .evaluation && subject == support.evaluationDigest?.rawValue))
+      }
+      guard affectsPositiveSupport else {
         return nil
       }
 
       trigger = .supportWithdrawal(promotionID: promotion.decisionID, eventID: row["event_id"])
     }
 
-    return receipts.contains { receipt in
+    let alreadyRecorded = receipts.contains { receipt in
       receipt.record.rollbackTrigger == trigger
     }
-      ? nil : trigger
+    return alreadyRecorded ? nil : trigger
   }
 }

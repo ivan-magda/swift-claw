@@ -252,7 +252,9 @@ package struct SecureFilePublisher: Sendable {
     guard descriptor >= 0 else {
       return false
     }
-    defer { close(descriptor) }
+    defer {
+      close(descriptor)
+    }
     return fsync(descriptor) == 0
   }
 
@@ -284,7 +286,9 @@ package struct SecureFilePublisher: Sendable {
     guard descriptor >= 0 else {
       throw .unreadable("open \(name)")
     }
-    defer { close(descriptor) }
+    defer {
+      close(descriptor)
+    }
 
     let entry = try facts(ofDescriptor: descriptor, name: name)
     try validate(entry, name: name, policy: policy, expectedUID: getuid())
@@ -421,19 +425,23 @@ private extension SecureFilePublisher {
   /// A short `write` is not an error and `EINTR` is not a failure — both mean "call it again".
   static func writeAll(_ bytes: Data, to descriptor: Int32) -> Bool {
     bytes.withUnsafeBytes { buffer in
-      guard let base = buffer.baseAddress else {
+      guard let baseAddress = buffer.baseAddress else {
         return true
       }
       var offset = 0
       while offset < buffer.count {
-        let written = write(descriptor, base.advanced(by: offset), buffer.count - offset)
-        if written < 0 {
+        let bytesWritten = write(
+          descriptor,
+          baseAddress.advanced(by: offset),
+          buffer.count - offset
+        )
+        if bytesWritten < 0 {
           guard errno == EINTR else {
             return false
           }
           continue
         }
-        offset += written
+        offset += bytesWritten
       }
       return true
     }
@@ -448,26 +456,26 @@ private extension SecureFilePublisher {
 private func readAllBytes(_ descriptor: Int32, expecting expected: Int) -> Data? {
   var buffer = [UInt8](repeating: 0, count: expected)
   var offset = 0
-  let succeeded = buffer.withUnsafeMutableBytes { raw -> Bool in
-    guard let base = raw.baseAddress else {
+  let readSucceeded = buffer.withUnsafeMutableBytes { rawBuffer -> Bool in
+    guard let baseAddress = rawBuffer.baseAddress else {
       return true
     }
     while offset < expected {
-      let count = read(descriptor, base.advanced(by: offset), expected - offset)
-      if count < 0 {
+      let bytesRead = read(descriptor, baseAddress.advanced(by: offset), expected - offset)
+      if bytesRead < 0 {
         guard errno == EINTR else {
           return false
         }
         continue
       }
-      if count == 0 {
+      if bytesRead == 0 {
         break
       }
-      offset += count
+      offset += bytesRead
     }
     return true
   }
-  guard succeeded else {
+  guard readSucceeded else {
     return nil
   }
   return Data(buffer[0..<offset])

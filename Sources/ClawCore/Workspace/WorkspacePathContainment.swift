@@ -53,10 +53,10 @@ public enum WorkspacePathContainment {
     guard components.isEmpty == false else {
       return .refused(reason: "The path is empty.")
     }
-    guard components.contains(where: {
-        $0 == ".." || $0 == "."
-      }) == false
-    else {
+    let hasDotComponents = components.contains { component in
+      component == ".." || component == "."
+    }
+    guard !hasDotComponents else {
       return .refused(
         reason: "Paths with \".\" or \"..\" components can't be written; name the target directly."
       )
@@ -98,7 +98,9 @@ public enum WorkspacePathContainment {
     guard let resolved = realpath(path, nil) else {
       return nil
     }
-    defer { free(resolved) }
+    defer {
+      free(resolved)
+    }
     return String(cString: resolved)
   }
 

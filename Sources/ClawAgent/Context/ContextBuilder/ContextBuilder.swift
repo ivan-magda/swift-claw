@@ -75,12 +75,12 @@ public struct ContextBuilder: Sendable {
 
     // An empty set is not a row: it says only that the job has learned nothing yet, so rendering
     // it would spend budget and raise taint for no content.
-    let pinned = lessons.flatMap { set in
+    let pinnedLessons = lessons.flatMap { set in
       set.isEmpty ? nil : set
     }
     let fixedSections = buildFixedSections(
       origin: origin,
-      lessons: pinned,
+      lessons: pinnedLessons,
       ownerNotices: &ownerNotices
     )
     let residual = BudgetFitter.residual(for: fixedSections, budget: budget)
@@ -89,7 +89,7 @@ public struct ContextBuilder: Sendable {
       sessionID: sessionID,
       origin: origin,
       residual: residual,
-      excludeSensitiveMemory: snapshot.isTainted || pinned != nil,
+      excludeSensitiveMemory: snapshot.isTainted || pinnedLessons != nil,
       ownerNotices: &ownerNotices
     )
 
@@ -97,13 +97,14 @@ public struct ContextBuilder: Sendable {
     if let notice = droppedSkillsNotice(fitted: fitted, requested: truncatableSections) {
       ownerNotices.append(notice)
     }
+
     let messages = renderMessages(fitted: fitted, snapshot: snapshot)
 
     return BuildResult(
       messages: messages,
       ownerNotices: ownerNotices,
       hasPrivateDataAccess: hasPrivateDataAccess(fitted),
-      hasPinnedLessons: pinned != nil,
+      hasPinnedLessons: pinnedLessons != nil,
       policyVersion: currentPolicyVersion()
     )
   }

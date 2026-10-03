@@ -86,10 +86,10 @@ public enum MCPCatalogResolver {
       case .skipped(let reason):
         outcomes.append(MCPServerOutcome(server: config.name, status: .skipped(reason: reason)))
       case .listed(let remoteTools):
-        let kept = remoteTools.filter { remote in
+        let allowedTools = remoteTools.filter { remote in
           config.tools.allows(remote.name)
         }
-        let serverCandidates = kept.map { remote in
+        let serverCandidates = allowedTools.map { remote in
           Candidate(config: config, remote: remote, sanitizer: sanitizer)
         }
         let proposedCandidates = admittedCandidates + serverCandidates
@@ -109,7 +109,9 @@ public enum MCPCatalogResolver {
 
         admittedCandidates = proposedCandidates
         admittedTools = proposedTools
-        outcomes.append(MCPServerOutcome(server: config.name, status: .ok(toolCount: kept.count)))
+        outcomes.append(
+          MCPServerOutcome(server: config.name, status: .ok(toolCount: allowedTools.count))
+        )
       }
     }
 
@@ -174,9 +176,12 @@ private extension MCPCatalogResolver {
         scheduled += 1
       }
 
-      return collected.sorted { left, right in
-        left.offset < right.offset
-      }.map(\.discovery)
+      return
+        collected
+        .sorted { left, right in
+          left.offset < right.offset
+        }
+        .map(\.discovery)
     }
   }
 

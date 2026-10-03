@@ -7,13 +7,17 @@ public struct StreamingSecretRedactor: Sendable {
   private var preservesRedactionTokens = false
 
   public init(secretValues: [String]) {
-    secrets = secretValues.filter {
-      !$0.isEmpty
-    }.map {
-      Array($0.utf8)
-    }.sorted {
-      $0.count > $1.count
-    }
+    secrets =
+      secretValues
+      .filter {
+        !$0.isEmpty
+      }
+      .map {
+        Array($0.utf8)
+      }
+      .sorted {
+        $0.count > $1.count
+      }
   }
 
   package init(secretValues: [String], preservingRedactionTokens: Bool) {
@@ -32,9 +36,10 @@ public struct StreamingSecretRedactor: Sendable {
     while offset < input.count {
       let remaining = input[offset...]
 
-      if secrets.contains(where: { secret in
+      let isPartialSecret = secrets.contains { secret in
         remaining.count < secret.count && secret.starts(with: remaining)
-      }) {
+      }
+      if isPartialSecret {
         carry = Array(remaining)
         break
       }

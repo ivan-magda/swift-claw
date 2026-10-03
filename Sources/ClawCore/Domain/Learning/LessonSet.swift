@@ -81,7 +81,7 @@ private extension LessonSet {
 
     var seen: Set<String> = []
     var normalized: [String] = []
-    var total = 0
+    var totalBytes = 0
 
     for (index, lesson) in raw.enumerated() {
       let canonical = canonicalText(lesson)
@@ -91,19 +91,19 @@ private extension LessonSet {
       if let offending = disallowedScalar(in: canonical) {
         throw .disallowedCharacter(index: index, scalar: offending)
       }
-      let bytes = canonical.utf8.count
-      guard bytes <= LessonSetLimits.maxLessonBytes else {
-        throw .lessonTooLarge(index: index, bytes: bytes)
+      let lessonBytes = canonical.utf8.count
+      guard lessonBytes <= LessonSetLimits.maxLessonBytes else {
+        throw .lessonTooLarge(index: index, bytes: lessonBytes)
       }
       guard seen.insert(canonical).inserted else {
         throw .duplicateLesson(index: index)
       }
-      total += bytes
+      totalBytes += lessonBytes
       normalized.append(canonical)
     }
 
-    guard total <= LessonSetLimits.maxSetBytes else {
-      throw .setTooLarge(bytes: total)
+    guard totalBytes <= LessonSetLimits.maxSetBytes else {
+      throw .setTooLarge(bytes: totalBytes)
     }
     return normalized
   }
@@ -111,13 +111,12 @@ private extension LessonSet {
   /// Unicode normalization, line-ending normalization, surrounding-whitespace removal — the exact
   /// order the accepted algorithm fixes, applied before any digest or cap decision.
   static func canonicalText(_ lesson: String) -> String {
-    let unixLineEndings = lesson.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(
-      of: "\r",
-      with: "\n"
-    )
-    return unixLineEndings.precomposedStringWithCanonicalMapping.trimmingCharacters(
-      in: .whitespacesAndNewlines
-    )
+    let unixLineEndings =
+      lesson
+      .replacingOccurrences(of: "\r\n", with: "\n")
+      .replacingOccurrences(of: "\r", with: "\n")
+    return unixLineEndings.precomposedStringWithCanonicalMapping
+      .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   /// Every Unicode general category `Cc` or `Cf` scalar except newline. This is the exact rule the

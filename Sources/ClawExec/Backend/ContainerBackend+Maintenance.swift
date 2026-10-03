@@ -103,7 +103,8 @@ private extension ContainerBackend {
       throw PrepareAbort(health: failedHealth(lastError: reason))
     }
 
-    guard await reapOwnedContainers(deadline: deadline), sweepScratchRoots() else {
+    let containersReaped = await reapOwnedContainers(deadline: deadline)
+    guard containersReaped, sweepScratchRoots() else {
       throw PrepareAbort(
         health: failedHealth(
           engineVersion: engineVersion,
@@ -120,11 +121,12 @@ private extension ContainerBackend {
     engineVersion: String,
     deadline: ContinuousClock.Instant
   ) async throws(PrepareAbort) -> String {
-    guard let propertyData = await boundedCommandData(
+    let propertyData = await boundedCommandData(
       ContainerInvocation.systemPropertyList(),
       limit: Self.ordinaryCommandTimeout,
       deadline: deadline
-    ),
+    )
+    guard let propertyData,
           let properties = try? JSONDecoder()
           .decode(SystemPropertiesDocument.self, from: propertyData)
     else {
@@ -170,11 +172,12 @@ private extension ContainerBackend {
       )
     }
 
-    guard await boundedCommandSucceeded(
+    let workloadImagePulled = await boundedCommandSucceeded(
       ContainerInvocation.pull(settings.workloadImage.description),
       limit: Self.pullTimeout,
       deadline: deadline
-    ),
+    )
+    guard workloadImagePulled,
           await boundedCommandSucceeded(
             ContainerInvocation.pull(initImage),
             limit: Self.pullTimeout,
@@ -215,7 +218,8 @@ private extension ContainerBackend {
       )
     }
 
-    guard let canary = await canaryOutcome(initImage: initImage, deadline: deadline) else {
+    let canary = await canaryOutcome(initImage: initImage, deadline: deadline)
+    guard let canary else {
       return failedHealth(
         engineVersion: engineVersion,
         versionOK: true,

@@ -30,7 +30,8 @@ extension ScheduledLearningStoreGRDB {
     // are ordinary inbound turns that carry no binding, and taking a write lock per owner message
     // only to discover that is the hot path made expensive. `seal` re-reads the binding inside the
     // transaction, so this is a filter and never the decision.
-    guard try binding(runID: runID) != nil else {
+    let runBinding = try binding(runID: runID)
+    guard runBinding != nil else {
       return .excluded(.legacyUnbound)
     }
     return try database.writeMapping { db in
@@ -52,14 +53,16 @@ private extension ScheduledLearningStoreGRDB {
   /// unsettled run is left alone rather than frozen early, and every remaining refusal writes a
   /// content-free tombstone so the run is closed exactly once.
   static func seal(_ db: Database, runID: Int64, now: Date) throws -> SealOutcome {
-    guard try readEvidence(db, runID: runID) == nil else {
+    let existingEvidence = try readEvidence(db, runID: runID)
+    guard existingEvidence == nil else {
       _ = try recomputeAndReconcile(db, runID: runID, now: now)
       return .alreadySealed
     }
     guard let binding = try readBinding(db, runID: runID) else {
       return .excluded(.legacyUnbound)
     }
-    guard let settlement = try readSettlement(db, runID: runID), settlement.settledAt != nil else {
+    let settlement = try readSettlement(db, runID: runID)
+    guard let settlement, settlement.settledAt != nil else {
       return .notSettled
     }
 
@@ -74,7 +77,8 @@ private extension ScheduledLearningStoreGRDB {
     guard let compatibility = try readCompatibility(db, runID: runID) else {
       return try tombstone(db, binding: binding, reason: .compatibilityUnavailable, now: now)
     }
-    guard try lessonSetExists(db, binding: binding) else {
+    let effectiveSetExists = try lessonSetExists(db, binding: binding)
+    guard effectiveSetExists else {
       return try tombstone(db, binding: binding, reason: .sourceDigestUnresolved, now: now)
     }
 
@@ -82,15 +86,18 @@ private extension ScheduledLearningStoreGRDB {
     let eligibility = EligibilityClassifier.classify(settlement, transcript: transcript.summary)
     // Only task evidence carries a payload. Nothing reads the answer of a run the evaluator will
     // never see, and an over-cap answer is refused whole rather than clipped into one.
-    let payload =
-      eligibility.reachesEvaluator
-      ? try buildPayload(
-        db,
-        runID: runID,
-        binding: binding,
-        compatibility: compatibility,
-        transcript: transcript
-      ) : nil
+    let payload: EvidencePayload? =
+      if eligibility.reachesEvaluator {
+        try buildPayload(
+          db,
+          runID: runID,
+          binding: binding,
+          compatibility: compatibility,
+          transcript: transcript
+        )
+      } else {
+        nil
+      }
 
     try insertReceipt(
       db,

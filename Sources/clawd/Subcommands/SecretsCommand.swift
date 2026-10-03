@@ -58,12 +58,14 @@ struct SecretsCommand: AsyncParsableCommand {
       let envelopePath = paths.runtimeEnvelope.path
       let keyPath = paths.key.path
       let scrubOutcome: SealScrubOutcome? =
-        noScrub
-        ? nil
-        : Self.scrubEnvFile(
-          at: EnvironmentLoader.envFilePath(explicit: envFile, environment: environment),
-          keys: EnvSecretStore.EnvKey.sealed
-        )
+        if noScrub {
+          nil
+        } else {
+          Self.scrubEnvFile(
+            at: EnvironmentLoader.envFilePath(explicit: envFile, environment: environment),
+            keys: EnvSecretStore.EnvKey.sealed
+          )
+        }
       // swiftlint:disable:next no_print_in_production
       print(
         Self.sealSummary(envelopePath: envelopePath, keyPath: keyPath, scrubOutcome: scrubOutcome)
@@ -82,7 +84,9 @@ extension SecretsCommand.Seal {
   /// is released the moment the seal returns.
   static func sealUnderInstanceLock(_ secrets: Secrets, stateRoot: URL) throws {
     let lock = try acquireInstanceLockOrExit(stateRoot: stateRoot)
-    defer { lock.release() }
+    defer {
+      lock.release()
+    }
 
     // The same hardened operation the login transition runs: it publishes crash-safely, proves the
     // result decrypts, and unwinds anything it created if it cannot.
@@ -168,14 +172,14 @@ extension SecretsCommand.Seal {
       return .failed(path: resolvedPath, reason: "unreadable or not UTF-8")
     }
 
-    let result = EnvFileSecretScrubber.scrub(contents: contents, keys: keys)
-    guard !result.scrubbedKeys.isEmpty else {
+    let scrubResult = EnvFileSecretScrubber.scrub(contents: contents, keys: keys)
+    guard !scrubResult.scrubbedKeys.isEmpty else {
       return .alreadyClean(path: resolvedPath)
     }
 
     do {
       _ = try SecureFilePublisher().publish(
-        Data(result.contents.utf8),
+        Data(scrubResult.contents.utf8),
         to: URL(fileURLWithPath: resolvedPath),
         mode: .replace
       )
@@ -183,7 +187,7 @@ extension SecretsCommand.Seal {
       return .failed(path: resolvedPath, reason: "\(error)")
     }
 
-    return .scrubbed(keys: result.scrubbedKeys, path: resolvedPath)
+    return .scrubbed(keys: scrubResult.scrubbedKeys, path: resolvedPath)
   }
 
   static func sealSummary(

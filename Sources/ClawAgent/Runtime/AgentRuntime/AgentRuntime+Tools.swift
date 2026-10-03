@@ -26,7 +26,8 @@ extension AgentRuntime {
         break
       }
 
-      guard ledger.admitToolCall() else {
+      let toolCallAdmitted = ledger.admitToolCall()
+      guard toolCallAdmitted else {
         return .exit(.budgetStopped(cap: BudgetGate.perRunToolCallCap))
       }
       guard turn.deadline > now() else {

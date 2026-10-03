@@ -5,12 +5,15 @@ public func withTestWatchdog<Result: Sendable>(
 ) async -> Result {
   let completed = AsyncGate()
   let task = Task {
-    defer { completed.open() }
+    defer {
+      completed.open()
+    }
     return await operation()
   }
   return await withTaskCancellationHandler(
     operation: {
-      if !(await completed.waitUntilOpen()) {
+      let didComplete = await completed.waitUntilOpen()
+      if !didComplete {
         task.cancel()
         if !Task.isCancelled {
           onTimeout()

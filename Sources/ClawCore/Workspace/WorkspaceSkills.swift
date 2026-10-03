@@ -20,9 +20,11 @@ public enum WorkspaceSkills {
 
   /// The complete index before any turn-specific budget fitting.
   public static func completeIndex(for descriptors: [SkillDescriptor]) -> String {
-    descriptors.map { descriptor in
-      indexLine(for: descriptor)
-    }.joined(separator: "\n")
+    descriptors
+      .map { descriptor in
+        indexLine(for: descriptor)
+      }
+      .joined(separator: "\n")
   }
 
   /// Counts the complete canonical index in the grapheme domain used by context caps.

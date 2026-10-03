@@ -116,22 +116,26 @@ private extension TurnRunner {
     // Ack suppression: a heartbeat ack commits with ZERO outbox chunks — the "no
     // delivery" decision is durable in the SAME store transaction as the run's DONE flip.
     let suppressHeartbeatAck = context.origin == .heartbeat && HeartbeatAck.isAck(content)
-    let feedbackTarget =
-      suppressHeartbeatAck
-      ? nil
-      : resultFeedbackTarget(runID: context.runID, chatID: context.chatID, origin: context.origin)
-    let chunks =
-      suppressHeartbeatAck
-      ? []
-      : outboxChunks(
-        for: ownerVisiblePayload(
-          reply: content,
-          ownerNotices: context.ownerNotices,
-          appendedNotices: appendedNotices
-        ),
-        chatID: context.chatID,
-        finalReplyMarkup: feedbackTarget.map(LearningNotices.resultKeyboard)
-      )
+    let feedbackTarget: NewFeedbackTarget? =
+      if suppressHeartbeatAck {
+        nil
+      } else {
+        resultFeedbackTarget(runID: context.runID, chatID: context.chatID, origin: context.origin)
+      }
+    let chunks: [OutboxChunk] =
+      if suppressHeartbeatAck {
+        []
+      } else {
+        outboxChunks(
+          for: ownerVisiblePayload(
+            reply: content,
+            ownerNotices: context.ownerNotices,
+            appendedNotices: appendedNotices
+          ),
+          chatID: context.chatID,
+          finalReplyMarkup: feedbackTarget.map(LearningNotices.resultKeyboard)
+        )
+      }
     let turn = AssistantTurn(
       runID: context.runID,
       sessionID: context.sessionID,
@@ -146,7 +150,8 @@ private extension TurnRunner {
       feedbackTarget: feedbackTarget
     )
 
-    switch try runs.commitAssistantTurn(turn, now: context.committedAt) {
+    let commitResult = try runs.commitAssistantTurn(turn, now: context.committedAt)
+    switch commitResult {
     case .committed:
       try auditCompleted(content: content, suppressedAck: suppressHeartbeatAck, in: context)
       notifyOutbox()
@@ -170,8 +175,8 @@ private extension TurnRunner {
     guard (try? runs.jobID(runID: runID)) == binding.jobID else {
       return nil
     }
-    guard (try? learning.lessonSet(jobID: binding.jobID, digest: binding.effectiveDigest)) != nil
-    else {
+    let lessons = try? learning.lessonSet(jobID: binding.jobID, digest: binding.effectiveDigest)
+    guard lessons != nil else {
       return nil
     }
     return NewFeedbackTarget(
