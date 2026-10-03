@@ -239,6 +239,10 @@ This completes a device-code login, discovers eligible models, and prints the ex
 `CLAW_LLM_BASE_URL` and `CLAW_LLM_API_KEY` are unused; the credential lives encrypted in
 the state root.
 
+Subscription usage records at zero USD. Its local daily token cap is off by default; leave
+`CLAW_DAY_TOKEN_CEILING` unset or blank, or set a positive integer to enable it. Per-run
+limits still apply. See [Spending limits](CUSTOMIZATION.md#spending-limits).
+
 If clawd cannot read the model list, `clawd auth login` still succeeds and stores the
 credential, but prints the assignment with `<model>` left as a literal placeholder. Paste that
 verbatim and config validation rejects it. Substitute a real model slug, for example

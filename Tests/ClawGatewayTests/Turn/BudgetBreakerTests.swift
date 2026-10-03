@@ -81,20 +81,41 @@ struct BudgetBreakerTests {
     #expect(tomorrow)
   }
 
-  @Test("an included-plan breaker never DMs on the USD cap but still trips on the token ceiling")
-  func includedPlanBreakerSkipsUSDButNotTheTokenCeiling() async {
-    // given — a subscription daemon whose day already rang up API-billed dollars over the cap
+  @Test("an included-plan breaker does not notify on default daily caps")
+  func includedPlanBreakerSkipsDefaultCaps() async {
+    // given
     let breaker = BudgetBreaker(budget: .default, costPolicy: .includedPlan)
 
-    // when — the USD figure alone would DM under `metered`
-    let usdOnly = await breaker.shouldNotifyTrip(todayTokens: 0, todayUSD: 10.0, now: now)
-    // then — a subscription cap DM must not fire off dollars that are not a gate
-    #expect(!usdOnly)
+    // when
+    let shouldNotify = await breaker.shouldNotifyTrip(
+      todayTokens: RunBudget.default.dayTokenCeiling,
+      todayUSD: RunBudget.default.perDayUSD,
+      now: now
+    )
 
-    // when — the hard token ceiling is met
-    let tokenTrip = await breaker.shouldNotifyTrip(todayTokens: 666_666, todayUSD: 0, now: now)
-    // then — the global token breaker still DMs
-    #expect(tokenTrip)
+    // then
+    #expect(!shouldNotify)
+  }
+
+  @Test("an explicitly configured subscription token ceiling still notifies once")
+  func includedPlanBreakerHonorsExplicitTokenCeiling() async throws {
+    // given
+    let config = try AppConfig.load(environment: [
+      "CLAW_STATE_ROOT": NSTemporaryDirectory(),
+      "CLAW_LLM_MODEL": "openai-chatgpt/test-model",
+      "CLAW_DAY_TOKEN_CEILING": "100",
+    ])
+    let breaker = BudgetBreaker(budget: config.budget, costPolicy: .includedPlan)
+
+    // when
+    let below = await breaker.shouldNotifyTrip(todayTokens: 99, todayUSD: 0, now: now)
+    let first = await breaker.shouldNotifyTrip(todayTokens: 100, todayUSD: 0, now: now)
+    let second = await breaker.shouldNotifyTrip(todayTokens: 100, todayUSD: 0, now: now)
+
+    // then
+    #expect(!below)
+    #expect(first)
+    #expect(!second)
   }
 
   @Test("the proactive latch is independent of the global daily latch")

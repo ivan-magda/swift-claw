@@ -264,11 +264,29 @@ struct TChatMemberUpdated: Decodable {
   }
 }
 
-/// Missing stop fields leave the update unactionable without rejecting the intake batch.
+/// Missing stop fields or an unparseable draft ID leave the update unactionable.
 struct TMessageGenerationStopped: Decodable {
+  private enum CodingKeys: String, CodingKey {
+    case chat, message_thread_id, draft_id
+  }
+
   let chat: TChat?
   let message_thread_id: Int64?
   let draft_id: Int64?
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    chat = try container.decodeIfPresent(TChat.self, forKey: .chat)
+    message_thread_id = try container.decodeIfPresent(Int64.self, forKey: .message_thread_id)
+    // Telegram also sends decimal strings despite documenting draft_id as Integer.
+    if let id = try? container.decode(Int64.self, forKey: .draft_id) {
+      draft_id = id
+    } else if let text = try? container.decode(String.self, forKey: .draft_id) {
+      draft_id = Int64(text)
+    } else {
+      draft_id = nil
+    }
+  }
 
   var draftStop: RawDraftStop? {
     guard let chat, let draft_id else {

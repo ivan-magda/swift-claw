@@ -51,7 +51,7 @@ private extension AppConfig {
     )
   }
 
-  /// An optional positive `Int` ceiling override; `nil` when absent so the budget derives it.
+  /// An optional positive ceiling; `nil` preserves the active billing policy's default.
   static func positiveBudgetIntOrNil(_ raw: String?) throws -> Int? {
     try ConfigParse.boundedIntOrNil(raw, range: 1...Int.max, onInvalid: ConfigError.invalidBudget)
   }
