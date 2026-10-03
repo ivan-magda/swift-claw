@@ -61,9 +61,16 @@ public actor TurnPresentationRegistry {
 
     // Allocation is synchronous: admission and registration remain one actor turn.
     // If persistence fails, retain typing but never emit a draft with a reused identity.
-    let draftID = draftsEnabled(for: scope) ? try? draftIDs.nextID() : nil
+    let draftID: Int64? =
+      if draftsEnabled(for: scope) {
+        try? draftIDs.nextID()
+      } else {
+        nil
+      }
+
+    let target = DeliveryTarget(chatID: scope.chatID, messageThreadID: scope.threadID)
     let presentation = TurnPresentation(
-      target: DeliveryTarget(chatID: scope.chatID, messageThreadID: scope.threadID),
+      target: target,
       draftID: draftID ?? scope.runID,
       draftsEnabled: draftID != nil,
       progressEnabled: progressEnabled,
@@ -74,19 +81,21 @@ public actor TurnPresentationRegistry {
       secretValues: secretValues,
       clock: clock
     )
-    let reporter = TurnProgressReporter(
-      explanationsEnabled: progressEnabled
-    ) { [weak self] event in
+
+    let reporter = TurnProgressReporter(explanationsEnabled: progressEnabled) { [weak self] event in
       await self?.publish(event, runID: scope.runID)
     }
+
     let entry = Entry(
       scope: scope,
       draftID: draftID,
       presentation: presentation,
       reporter: reporter
     )
+
     // No suspension between cancellation/shutdown admission and registration.
     entriesByRunID[scope.runID] = entry
+
     await presentation.start()
     await updateDraftPause(for: entry)
 
@@ -94,15 +103,19 @@ public actor TurnPresentationRegistry {
   }
 
   public func stoppableRun(chatID: Int64, threadID: Int64?, draftID: Int64) -> TurnScope? {
-    guard let entry = entriesByRunID.values.first(where: { entry in
-        entry.draftID == draftID
-      }),
-          entry.scope.chatID == chatID,
-          entry.scope.threadID == threadID
-    else {
+    let entry = entriesByRunID.values.first { entry in
+      entry.draftID == draftID
+    }
+    guard let entry else {
       return nil
     }
-    return entry.scope
+
+    let scope = entry.scope
+    guard scope.chatID == chatID, scope.threadID == threadID else {
+      return nil
+    }
+
+    return scope
   }
 
   // MARK: - Approval Progress
