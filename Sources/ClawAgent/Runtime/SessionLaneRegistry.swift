@@ -111,14 +111,13 @@ public actor SessionLaneRegistry {
       return .shuttingDown
     }
 
-    let predecessors = operations.values.filter { operation in
-      operation.runID == runID
-    }.map(\.task)
+    let predecessors = operations.values
+      .filter { $0.runID == runID }
+      .map(\.task)
     let operationID = nextOperationID
     nextOperationID &+= 1
 
     let task = Task {
-      // Inherit actor isolation so registration precedes this synchronous finalizer.
       defer {
         self.finalize(operationID: operationID)
       }
