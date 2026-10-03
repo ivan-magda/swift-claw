@@ -31,22 +31,29 @@ extension ContextBuilder {
     let historyMessages = fittedHistoryMessages(fitted: fitted, snapshot: snapshot)
     // Compare GROUPS, not raw rows: one unit per group by construction, so a kept-unit-count
     // shortfall against the full group count means an exchange (or plain row) was dropped.
-    let keptHistoryGroupCount = Set(
-      fitted.first { section in
-        section.id == .history
-      }?.units.map(\.id) ?? []
-    ).count
+    let historySection = fitted.first { section in
+      section.id == .history
+    }
+    let keptHistoryGroupCount =
+      if let historySection {
+        Set(historySection.units.map(\.id)).count
+      } else {
+        0
+      }
     let historyWasTruncated =
       keptHistoryGroupCount < HistoryHygiene.groups(from: snapshot.history).count
 
-    let systemContent =
+    var systemContent =
       fitted
       .filter { section in
         section.tier == .system
       }
       .map(\.content)
       .joined(separator: "\n\n")
-      + (historyWasTruncated ? Self.historyTruncatedMarker : "")
+    if historyWasTruncated {
+      systemContent += Self.historyTruncatedMarker
+    }
+
     var messages = [ChatMessage(role: .system, content: systemContent)]
 
     let untrusted =
