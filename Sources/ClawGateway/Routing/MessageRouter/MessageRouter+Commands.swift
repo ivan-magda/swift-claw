@@ -4,12 +4,13 @@ import ClawCore
 
 extension MessageRouter {
   func routeDraftStop(_ stop: RawDraftStop, updateID: Int64) async -> HandleOutcome {
-    guard accessControl.decide(
+    // Draft-stop events have no sender, so authorize using the private-chat identity.
+    let accessDecision = accessControl.decide(
       chatKind: stop.chatKind,
       chatID: stop.chatID,
       userID: stop.chatID
-    ) == .allowed(.direct)
-    else {
+    )
+    guard accessDecision == .allowed(.direct) else {
       logger.info("draft stop update \(updateID) draft \(stop.draftID): refused")
       return .skipped
     }
@@ -28,14 +29,16 @@ extension MessageRouter {
     mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
     if mode == .direct, let feedbackChallenges {
-      let consumed = try await feedbackChallenges.consumeIfOpen(
+      let feedbackOutcome = try await feedbackChallenges.consumeIfOpen(
         rawUpdate: rawUpdate,
         message: message
       )
-      if let consumed {
-        return consumed
+
+      if let feedbackOutcome {
+        return feedbackOutcome
       }
     }
+
     let command = Command.parse(text, botUsername: botUsername)
     return try await routeAllowed(command, rawUpdate: rawUpdate, message: message, mode: mode)
   }
@@ -48,10 +51,12 @@ extension MessageRouter {
       }
       return await feedbackCallbacks.handle(callback, updateID: updateID)
     }
+
     guard let approvalCallbacks else {
       logger.debug("callback update \(updateID) with no approval handler, skipping")
       return .skipped
     }
+
     return await approvalCallbacks.handle(callback, updateID: updateID)
   }
 }
@@ -210,15 +215,17 @@ private extension MessageRouter {
     mode: ChatMode
   ) async throws(RoutingHalt) -> HandleOutcome {
     if mode == .direct {
-      let resolved = try await confirmations.resolve(
+      let confirmationOutcome = try await confirmations.resolve(
         rawUpdate: rawUpdate,
         message: message,
         text: text
       )
-      if let resolved {
-        return resolved
+
+      if let confirmationOutcome {
+        return confirmationOutcome
       }
     }
+
     return try await turnDispatch.dispatch(
       rawUpdate: rawUpdate,
       message: message,
