@@ -486,6 +486,29 @@ literal inside thinking blocks; render a provider's outer `**` heading with owne
 tags, including incomplete streamed headings. Escape explanation and row text as HTML and charge
 all tags to the same budget.
 
+The heading includes one action emoji from Telegram's
+[AIActions](https://t.me/addemoji/AIActions) set, selected from the phase and a typed
+`TurnToolAction` derived only from registered tool identity. Model work, search, page/file reading,
+file writing, memory writing, skill loading, sandbox execution, coding submission and approval
+waiting have distinct icons. Other registered tools, including MCP and coding status/cancellation,
+use a generic working icon. In the tool phase, select the latest pending/executing step; completed
+steps cannot keep advertising an active action. Approval and answer phases override tool icons.
+The heading text follows the same selected action as the icon: `Thinking`, `Searching`, `Reading`
+(page or file), `Writing`, `Updating memory`, `Loading skill`, `Running code`, or
+`Submitting coding job`. Unknown tools and intervals without an active step use `Working`.
+Keep `Preparing`, `Resuming work`, `Waiting for your approval`, and the collapsed answer's neutral
+`Progress` summary for their respective phases. Tool-row labels and outcome markers remain intact.
+Emoji IDs and HTML belong to the Telegram
+renderer, never to provider text or tool metadata. Use complete `<tg-emoji>` tags with ordinary emoji
+alternatives; under a tight budget, drop custom markup before the ordinary emoji and heading text.
+The renderer passes a `RichDraft` through the presentation sender with an explicit ordinary-emoji
+alternative derived from its own progress prefix, preserving the answer in both variants. Raw
+answer drafts carry no alternative, even if they resemble a generated progress heading.
+If Telegram rejects a decorated draft with API error 400, retry once with that alternative.
+After a successful retry, the shared draft streamer
+uses ordinary action emoji until restart. Failed retries do not latch that preference; flood-control
+holds and cancellation still apply. This compatibility retry does not rewrite answer content.
+
 ### 6.2 Tool & approval flow (Inc 5a/5b)
 
 ```

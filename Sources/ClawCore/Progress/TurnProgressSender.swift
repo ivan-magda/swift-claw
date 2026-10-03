@@ -1,10 +1,15 @@
 /// A transport-neutral frame collected without waiting for cosmetic network delivery.
 package struct TurnProgressFrame: Sendable {
-  package let markdown: String?
+  package let draft: RichDraft?
   package let typingAllowed: Bool
 
   package init(markdown: String?, typingAllowed: Bool) {
-    self.markdown = markdown
+    self.draft = markdown.map(RichDraft.init(markdown:))
+    self.typingAllowed = typingAllowed
+  }
+
+  package init(draft: RichDraft?, typingAllowed: Bool) {
+    self.draft = draft
     self.typingAllowed = typingAllowed
   }
 }
@@ -124,19 +129,18 @@ private extension TurnProgressSender {
         }
 
       let shouldRefresh = mode == .interactive && (isEarlySecondAttempt || deliveryNeedsRefresh)
+      let canSendDraft = !paused && draftDue && latest.draft?.markdown.isEmpty == false
+      let hasDraftUpdate = latest.draft?.markdown != lastMarkdown || shouldRefresh
 
-      if !paused, draftDue,
-         let markdown = latest.markdown, !markdown.isEmpty,
-         markdown != lastMarkdown || shouldRefresh
-      {
+      if canSendDraft, hasDraftUpdate, let draft = latest.draft {
         lastAttempt = now
-        lastMarkdown = markdown
+        lastMarkdown = draft.markdown
 
         if isEarlySecondAttempt {
           earlySecondAttempted = true
         }
 
-        if await sendDraft(markdown) {
+        if await sendDraft(draft) {
           deliveredDrafts += 1
           lastDelivery = clock.now
         }
@@ -182,19 +186,30 @@ private extension TurnProgressSender {
     }
   }
 
-  func sendDraft(_ markdown: String) async -> Bool {
+  func sendDraft(_ draft: RichDraft) async -> Bool {
     let task = Task { [drafts, target, draftID, clock] in
-      await Self.sendBounded(timeout: Self.sendDeadline, clock: clock) {
-        await drafts.sendDraft(chatID: target.chatID, draftID: draftID, markdown: markdown)
-      } ?? false
+      let deliveryResult = await Self.sendBounded(
+        timeout: Self.sendDeadline,
+        clock: clock
+      ) {
+        await drafts.sendDraft(
+          chatID: target.chatID,
+          draftID: draftID,
+          draft: draft
+        )
+      }
+      return deliveryResult ?? false
     }
     activeDraft = task
 
-    let delivered = await withTaskCancellationHandler {
-      await task.value
-    } onCancel: {
-      task.cancel()
-    }
+    let delivered = await withTaskCancellationHandler(
+      operation: {
+        await task.value
+      },
+      onCancel: {
+        task.cancel()
+      }
+    )
     activeDraft = nil
 
     return delivered

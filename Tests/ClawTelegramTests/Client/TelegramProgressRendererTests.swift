@@ -14,7 +14,8 @@ struct TelegramProgressRendererTests {
         id: TurnToolStepID(providerCallID: "round", toolCallID: "\(index)"),
         label: "Search \(index)",
         preview: "query",
-        state: .succeeded
+        state: .succeeded,
+        action: .search
       )
     }
 
@@ -49,7 +50,8 @@ struct TelegramProgressRendererTests {
       id: TurnToolStepID(providerCallID: "r", toolCallID: "t"),
       label: "Read",
       preview: text,
-      state: .executing
+      state: .executing,
+      action: .readFile
     )
 
     // when
@@ -91,7 +93,8 @@ struct TelegramProgressRendererTests {
         id: TurnToolStepID(providerCallID: "r", toolCallID: "\(index)"),
         label: hostile,
         preview: hostile,
-        state: .awaitingApproval
+        state: .awaitingApproval,
+        action: .tool
       )
     }
 
@@ -135,6 +138,27 @@ struct TelegramProgressRendererTests {
     #expect(full == answer)
     #expect(disabled == "answer")
     #expect(waiting == nil)
+  }
+
+  @Test
+  func fallbackBelongsOnlyToRenderedProgressEvenWhenAnswerLooksLikeAHeading() throws {
+    // given
+    let renderer = TelegramProgressRenderer()
+    let heading = try #require(renderer.render(snapshot()))
+
+    // when
+    let decorated = try #require(renderer.renderDraft(snapshot(answer: heading)))
+    let answerOnly = try #require(
+      renderer.renderDraft(snapshot(answer: heading, showsProgress: false))
+    )
+
+    // then
+    let fallback = try #require(decorated.fallbackMarkdown)
+    #expect(fallback.hasSuffix("\n\n" + heading))
+    #expect(decorated.markdown.hasSuffix("\n\n" + heading))
+    #expect(fallback != decorated.markdown)
+    #expect(answerOnly.markdown == heading)
+    #expect(answerOnly.fallbackMarkdown == nil)
   }
 }
 

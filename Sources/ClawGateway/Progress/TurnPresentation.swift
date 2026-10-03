@@ -105,7 +105,7 @@ private extension TurnPresentation {
     )
 
     return TurnProgressFrame(
-      markdown: draftsEnabled && !paused ? renderer.render(snapshot) : nil,
+      draft: draftsEnabled && !paused ? renderer.renderDraft(snapshot) : nil,
       typingAllowed: snapshot.phase != .approval
     )
   }

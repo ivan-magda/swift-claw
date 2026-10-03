@@ -12,12 +12,20 @@ public struct TurnToolStep: Sendable, Equatable {
   public let label: String
   public let preview: String?
   public let state: ToolProgressState
+  public let action: TurnToolAction
 
-  public init(id: TurnToolStepID, label: String, preview: String?, state: ToolProgressState) {
+  public init(
+    id: TurnToolStepID,
+    label: String,
+    preview: String?,
+    state: ToolProgressState,
+    action: TurnToolAction
+  ) {
     self.id = id
     self.label = label
     self.preview = preview
     self.state = state
+    self.action = action
   }
 }
 
@@ -65,6 +73,14 @@ public struct TurnProgressSnapshot: Sendable, Equatable {
 
 public protocol TurnProgressRendering: Sendable {
   func render(_ snapshot: TurnProgressSnapshot) -> String?
+
+  func renderDraft(_ snapshot: TurnProgressSnapshot) -> RichDraft?
+}
+
+extension TurnProgressRendering {
+  public func renderDraft(_ snapshot: TurnProgressSnapshot) -> RichDraft? {
+    render(snapshot).map(RichDraft.init(markdown:))
+  }
 }
 
 public enum TurnProgressLimits {
