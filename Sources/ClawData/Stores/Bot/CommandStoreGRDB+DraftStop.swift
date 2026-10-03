@@ -11,41 +11,52 @@ extension CommandStoreGRDB {
     now: Date
   ) throws(StoreError) -> StopCommandResult {
     try database.writeMapping { db in
-      guard try ProcessedUpdateStoreGRDB.claimUpdate(db: db, updateID: updateID, claimedAt: now)
-      else {
+      let newlyClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
+        db: db,
+        updateID: updateID,
+        claimedAt: now
+      )
+      guard newlyClaimed else {
         return StopCommandResult(newlyClaimed: false, sessionID: nil, cancelledRunIDs: [])
       }
+
       let sessionID = try Int64.fetchOne(
         db,
         sql: "SELECT session_id FROM runs WHERE id = ?",
         arguments: [runID]
       )
-      guard let sessionID, try RunStoreGRDB.cancelRun(db, runID: runID, now: now) else {
+      guard let sessionID else {
+        return StopCommandResult(newlyClaimed: true, sessionID: nil, cancelledRunIDs: [])
+      }
+
+      let didCancelRun = try RunStoreGRDB.cancelRun(db, runID: runID, now: now)
+      guard didCancelRun else {
         return StopCommandResult(newlyClaimed: true, sessionID: sessionID, cancelledRunIDs: [])
       }
-      let resolved = try ApprovalStoreGRDB.resolvePendingApprovals(
+
+      let resolvedApprovalIDs = try ApprovalStoreGRDB.resolvePendingApprovals(
         db,
         runIDs: [runID],
         decision: .cancelled,
         now: now
       )
-      try AuditLogGRDB.insertAudit(
-        db,
-        AuditEvent(
-          actor: .owner,
-          action: .turnCancelled,
-          argsRedacted: Self.draftStopAuditSource,
-          decision: ApprovalDecision.cancelled.rawValue,
-          runID: runID,
-          sessionID: sessionID,
-          ts: now
-        )
+
+      let auditEvent = AuditEvent(
+        actor: .owner,
+        action: .turnCancelled,
+        argsRedacted: Self.draftStopAuditSource,
+        decision: ApprovalDecision.cancelled.rawValue,
+        runID: runID,
+        sessionID: sessionID,
+        ts: now
       )
+      try AuditLogGRDB.insertAudit(db, auditEvent)
+
       return StopCommandResult(
         newlyClaimed: true,
         sessionID: sessionID,
         cancelledRunIDs: [runID],
-        resolvedApprovalIDs: resolved
+        resolvedApprovalIDs: resolvedApprovalIDs
       )
     }
   }
