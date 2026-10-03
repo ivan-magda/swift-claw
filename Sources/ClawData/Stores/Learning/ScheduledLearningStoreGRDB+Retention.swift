@@ -10,14 +10,27 @@ extension ScheduledLearningStoreGRDB {
       let receiptCutoff = EpochSecondCodec.epoch(now.addingTimeInterval(-Self.receiptRetention))
       var live = try snapshot.liveReferences(db, now: now)
       try snapshot.expand(&live)
+
       var compact = live
       snapshot.retainRecent(&compact, cutoff: receiptCutoff)
       try snapshot.retainResetBarrier(&compact)
       try snapshot.expand(&compact)
       try snapshot.retainClosedReplacements(db, &compact)
-      let payloads = try snapshot.clearPayloads(db, excluding: live, cutoff: payloadCutoff)
-      let receipts = try snapshot.collectReceipts(db, excluding: compact, cutoff: receiptCutoff)
-      return RetentionSweepResult(deletedPayloads: payloads, deletedReceipts: receipts)
+
+      let clearedPayloadCount = try snapshot.clearPayloads(
+        db,
+        excluding: live,
+        cutoff: payloadCutoff
+      )
+      let deletedReceiptCount = try snapshot.collectReceipts(
+        db,
+        excluding: compact,
+        cutoff: receiptCutoff
+      )
+      return RetentionSweepResult(
+        deletedPayloads: clearedPayloadCount,
+        deletedReceipts: deletedReceiptCount
+      )
     }
   }
 

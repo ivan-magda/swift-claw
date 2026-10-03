@@ -36,12 +36,12 @@ public struct MemoryStoreGRDB: MemoryStore {
 
   public func get(id: Int64) throws(StoreError) -> MemoryItem? {
     try database.readMapping { db in
-      guard let row = try Row.fetchOne(
+      let row = try Row.fetchOne(
         db,
         sql: "SELECT * FROM memory_items WHERE id = ?",
         arguments: [id]
       )
-      else {
+      guard let row else {
         return nil
       }
       return try Self.decodeItem(row)

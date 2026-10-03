@@ -32,12 +32,12 @@ package actor ImageCache {
   }
 
   package func store(_ image: ImagePart, sessionID: Int64, messageID: Int64) {
-    let existing = entries.firstIndex { entry in
+    let existingIndex = entries.firstIndex { entry in
       entry.sessionID == sessionID && entry.messageID == messageID
     }
-    if let existing {
-      bytesHeld -= entries[existing].image.data.count
-      entries.remove(at: existing)
+    if let existingIndex {
+      bytesHeld -= entries[existingIndex].image.data.count
+      entries.remove(at: existingIndex)
     }
 
     entries.append(Entry(sessionID: sessionID, messageID: messageID, image: image))

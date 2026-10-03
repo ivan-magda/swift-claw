@@ -114,9 +114,9 @@ private extension TurnPresentation {
   static func elapsed<C: Clock>(
     on clock: C
   ) -> @Sendable () -> Duration where C.Duration == Duration {
-    let start = clock.now
+    let startedAt = clock.now
     return {
-      start.duration(to: clock.now)
+      startedAt.duration(to: clock.now)
     }
   }
 }

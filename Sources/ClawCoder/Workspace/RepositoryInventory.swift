@@ -49,7 +49,9 @@ struct RepositoryInventory: Sendable, Equatable {
     guard root >= 0 else {
       throw Failure.unavailable
     }
-    defer { close(root) }
+    defer {
+      close(root)
+    }
     var entries: [String: Entry] = [:]
     var remaining = byteLimit
     for raw in Set(rawPaths) {
@@ -69,9 +71,12 @@ struct RepositoryInventory: Sendable, Equatable {
 
   // swiftlint:disable:next discouraged_optional_collection
   func changedPaths(comparedWith baseline: RepositoryInventory) -> [String]? {
-    Set(entries.keys).union(baseline.entries.keys).filter { path in
-      entries[path] != baseline.entries[path]
-    }.sorted()
+    Set(entries.keys)
+      .union(baseline.entries.keys)
+      .filter { path in
+        entries[path] != baseline.entries[path]
+      }
+      .sorted()
   }
 }
 
@@ -80,17 +85,19 @@ struct RepositoryInventory: Sendable, Equatable {
 private extension RepositoryInventory {
   static func readEntry(_ path: String, root: Int32, remaining: inout Int) throws -> Entry? {
     let parts = path.split(separator: "/", omittingEmptySubsequences: false)
-    guard parts.allSatisfy({ part in
-        !part.isEmpty && part != "." && part != ".." && part != ".git"
-      })
-    else {
+    let hasValidComponents = parts.allSatisfy { part in
+      !part.isEmpty && part != "." && part != ".." && part != ".git"
+    }
+    guard hasValidComponents else {
       throw Failure.unavailable
     }
     var directory = dup(root)
     guard directory >= 0 else {
       throw Failure.unavailable
     }
-    defer { close(directory) }
+    defer {
+      close(directory)
+    }
     for part in parts.dropLast() {
       let child = openat(directory, String(part), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
       guard child >= 0 else {
@@ -133,7 +140,9 @@ private extension RepositoryInventory {
     guard file >= 0 else {
       throw Failure.unavailable
     }
-    defer { close(file) }
+    defer {
+      close(file)
+    }
     guard fstat(file, &metadata) == 0,
           metadata.st_mode & S_IFMT == S_IFREG,
           metadata.st_size >= 0,

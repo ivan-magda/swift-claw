@@ -48,10 +48,10 @@ struct ScratchWorkspace: Sendable {
     try ensurePrivateDirectory(scratchRoot)
     try ensurePrivateDirectory(controlRoot)
 
-    guard directory.path.withCString({
-        mkdir($0, 0o700)
-      }) == 0
-    else {
+    let directoryCreationResult = directory.path.withCString { path in
+      mkdir(path, 0o700)
+    }
+    guard directoryCreationResult == 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot create execution scratch")
     }
 
@@ -118,8 +118,9 @@ private extension ScratchWorkspace {
         throw ScratchWorkspaceError.invalidRequest("invalid staged input name")
       }
 
-      let normalized = input.name.precomposedStringWithCanonicalMapping.lowercased()
-      guard normalizedNames.insert(normalized).inserted else {
+      let normalizedName = input.name.precomposedStringWithCanonicalMapping.lowercased()
+      let nameInsertion = normalizedNames.insert(normalizedName)
+      guard nameInsertion.inserted else {
         throw ScratchWorkspaceError.invalidRequest("duplicate staged input name")
       }
 
@@ -142,7 +143,9 @@ private extension ScratchWorkspace {
   }
 
   static func isReserved(_ name: String) -> Bool {
-    name.precomposedStringWithCanonicalMapping.lowercased().hasPrefix(ExecEntrypoint.reservedPrefix)
+    name.precomposedStringWithCanonicalMapping
+      .lowercased()
+      .hasPrefix(ExecEntrypoint.reservedPrefix)
   }
 }
 
@@ -166,7 +169,9 @@ private extension ScratchWorkspace {
     guard descriptor >= 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot create staged copy")
     }
-    defer { _ = close(descriptor) }
+    defer {
+      _ = close(descriptor)
+    }
 
     guard fchmod(descriptor, mode_t(file.mode.rawValue)) == 0 else {
       throw ScratchWorkspaceError.fileSystem("cannot set staged copy mode")

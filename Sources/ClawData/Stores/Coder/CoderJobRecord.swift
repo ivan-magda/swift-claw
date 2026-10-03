@@ -16,9 +16,11 @@ enum CoderJobRecord {
     else {
       throw StoreError.unexpected("Invalid Coder job record")
     }
+
     let prepared: CoderPreparedRequest = try decodeJSON(row["prepared_json"])
     let receipt: CoderProcessReceipt? = try (row["process_receipt_json"] as String?).map(decodeJSON)
     let result: CoderResult? = try (row["result_json"] as String?).map(decodeJSON)
+
     return CoderJob(
       id: id,
       origin: CoderOrigin(

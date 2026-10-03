@@ -105,48 +105,6 @@ extension DaemonBuilder {
     )
   }
 
-  /// Nil when the owner opted out, which is what makes the photo path fail closed: the router's only
-  /// other branch is the canned "can't read photos yet" reply.
-  private func makeImageService() -> ImageMessageService? {
-    guard config.image.enabled else {
-      return nil
-    }
-    return ImageMessageService(media: transport, logger: logger)
-  }
-
-  private func makeVoiceService() -> VoiceMessageService? {
-    VoiceMessageService.sweepStaging(under: config.stateRoot)
-
-    guard config.voice.enabled else {
-      return nil
-    }
-
-    guard let transcriber = SystemVoiceTranscriber.make(
-      localeIdentifiers: config.voice.localeIdentifiers,
-      maxAudioDurationSeconds: VoiceMessageService.defaultMaxDurationSeconds
-    )
-    else {
-      logger.warning(
-        """
-        voice transcription is enabled but no on-device speech engine is available; \
-        voice messages will get the canned unsupported reply
-        """
-      )
-      return nil
-    }
-
-    return VoiceMessageService(
-      fetcher: transport,
-      transcriber: transcriber,
-      stagingDirectory: config.stateRoot.appending(
-        path: VoiceMessageService.stagingDirectoryName,
-        directoryHint: .isDirectory
-      ),
-      redactor: SecretRedactor(secretValues: redactionValues),
-      logger: logger
-    )
-  }
-
   /// The tool catalog the registry advertises: the built-ins, then whatever the pinned MCP catalog
   /// resolved. Remote tools go last so adding a server cannot reorder the built-ins, and the
   /// `mcp__` prefix is what makes a name collision between the two structurally impossible.
@@ -231,6 +189,52 @@ extension DaemonBuilder {
         webFetchExemptCIDRs: config.webFetchExemptCIDRs,
         exec: config.exec
       )
+    )
+  }
+}
+
+// MARK: - Intake Media Services
+
+private extension DaemonBuilder {
+  /// Nil when the owner opted out, which is what makes the photo path fail closed: the router's only
+  /// other branch is the canned "can't read photos yet" reply.
+  func makeImageService() -> ImageMessageService? {
+    guard config.image.enabled else {
+      return nil
+    }
+    return ImageMessageService(media: transport, logger: logger)
+  }
+
+  func makeVoiceService() -> VoiceMessageService? {
+    VoiceMessageService.sweepStaging(under: config.stateRoot)
+
+    guard config.voice.enabled else {
+      return nil
+    }
+
+    let transcriber = SystemVoiceTranscriber.make(
+      localeIdentifiers: config.voice.localeIdentifiers,
+      maxAudioDurationSeconds: VoiceMessageService.defaultMaxDurationSeconds
+    )
+    guard let transcriber else {
+      logger.warning(
+        """
+        voice transcription is enabled but no on-device speech engine is available; \
+        voice messages will get the canned unsupported reply
+        """
+      )
+      return nil
+    }
+
+    return VoiceMessageService(
+      fetcher: transport,
+      transcriber: transcriber,
+      stagingDirectory: config.stateRoot.appending(
+        path: VoiceMessageService.stagingDirectoryName,
+        directoryHint: .isDirectory
+      ),
+      redactor: SecretRedactor(secretValues: redactionValues),
+      logger: logger
     )
   }
 }

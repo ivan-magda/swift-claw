@@ -22,6 +22,7 @@ public enum SHA256Digest {
   public static func hex(digest: some Sequence<UInt8>) -> String {
     digest.map { byte in
       String(format: "%02x", byte)
-    }.joined()
+    }
+    .joined()
   }
 }

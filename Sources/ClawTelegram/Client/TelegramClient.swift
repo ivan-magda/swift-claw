@@ -261,9 +261,11 @@ extension TelegramClient {
     let payload: Data
     do {
       payload =
-        try body.map {
-          try Self.encoder.encode($0)
-        } ?? Data("{}".utf8)
+        if let body {
+          try Self.encoder.encode(body)
+        } else {
+          Data("{}".utf8)
+        }
     } catch {
       throw TelegramError.transport(sanitize("encode \(methodName): \(error)"))
     }

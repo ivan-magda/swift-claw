@@ -181,8 +181,12 @@ public struct LabeledContext: Sendable, Equatable {
     </\(Self.fenceTag) nonce="\(nonce)">
     """
   }
+}
 
-  private static func defusingFenceTags(in content: String) -> String {
+// MARK: - Fence Tag Sanitization
+
+private extension LabeledContext {
+  static func defusingFenceTags(in content: String) -> String {
     content.replacingOccurrences(of: fenceTag, with: defusedFenceTag, options: [.caseInsensitive])
   }
 }

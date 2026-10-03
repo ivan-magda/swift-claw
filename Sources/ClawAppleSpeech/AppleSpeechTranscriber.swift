@@ -138,26 +138,35 @@ import Foundation
     }
 
     static func resolveLanes(for identifiers: [String]) async -> [Lane] {
-      let speechLocales =
-        SpeechTranscriber.isAvailable ? await SpeechTranscriber.supportedLocales : []
+      let speechLocales: [Locale] =
+        if SpeechTranscriber.isAvailable {
+          await SpeechTranscriber.supportedLocales
+        } else {
+          []
+        }
       let dictationLocales = await DictationTranscriber.supportedLocales
 
       var lanes: [Lane] = []
       for identifier in identifiers {
         let requestedLocale = Locale(identifier: identifier)
 
-        if let locale = await resolve(
+        let speechLocale = await resolve(
           requestedLocale,
           in: speechLocales,
           via: SpeechTranscriber.supportedLocale(equivalentTo:)
-        ) {
-          lanes.append(.speech(locale))
-        } else if let locale = await resolve(
+        )
+        if let speechLocale {
+          lanes.append(.speech(speechLocale))
+          continue
+        }
+
+        let dictationLocale = await resolve(
           requestedLocale,
           in: dictationLocales,
           via: DictationTranscriber.supportedLocale(equivalentTo:)
-        ) {
-          lanes.append(.dictation(locale))
+        )
+        if let dictationLocale {
+          lanes.append(.dictation(dictationLocale))
         }
       }
 
@@ -170,13 +179,15 @@ import Foundation
       via equivalent: (_ locale: Locale) async -> Locale?
     ) async -> Locale? {
       let requestedTag = requestedLocale.bcp47Tag
-      if let exactMatch = supportedLocales.first(where: {
+      let exactMatch = supportedLocales.first {
         $0.bcp47Tag == requestedTag
-      }) {
+      }
+      if let exactMatch {
         return exactMatch
       }
 
-      guard let normalized = await equivalent(requestedLocale) else {
+      let normalized = await equivalent(requestedLocale)
+      guard let normalized else {
         return nil
       }
 
@@ -245,8 +256,8 @@ import Foundation
           transcript += String(text.characters)
 
           for textRun in text.runs {
-            if let value = textRun[AttributeScopes.SpeechAttributes.ConfidenceAttribute.self] {
-              confidences.append(value)
+            if let confidence = textRun[AttributeScopes.SpeechAttributes.ConfidenceAttribute.self] {
+              confidences.append(confidence)
             }
           }
         }
@@ -263,12 +274,12 @@ import Foundation
     }
 
     static func finalText(of result: some SpeechModuleResult) -> AttributedString? {
-      if let speech = result as? SpeechTranscriber.Result {
-        return speech.isFinal ? speech.text : nil
+      if let speechResult = result as? SpeechTranscriber.Result {
+        return speechResult.isFinal ? speechResult.text : nil
       }
 
-      if let dictation = result as? DictationTranscriber.Result {
-        return dictation.isFinal ? dictation.text : nil
+      if let dictationResult = result as? DictationTranscriber.Result {
+        return dictationResult.isFinal ? dictationResult.text : nil
       }
 
       return nil
@@ -285,37 +296,40 @@ import Foundation
       configuredTags: Set<String>
     ) async throws(VoiceTranscriptionError) {
       do {
-        let reserved = await AssetInventory.reservedLocales
-        if !reserved.contains(where: {
+        let reservedLocales = await AssetInventory.reservedLocales
+        let isLocaleReserved = reservedLocales.contains {
           $0.bcp47Tag == locale.bcp47Tag
-        }) {
-          for stale in reserved where !configuredTags.contains(stale.bcp47Tag) {
-            await AssetInventory.release(reservedLocale: stale)
+        }
+        if !isLocaleReserved {
+          for staleLocale in reservedLocales where !configuredTags.contains(staleLocale.bcp47Tag) {
+            await AssetInventory.release(reservedLocale: staleLocale)
           }
 
           do {
             try await AssetInventory.reserve(locale: locale)
           } catch {
-            let occupied = await AssetInventory.reservedLocales
-
-            guard let evictable = occupied.first(where: {
-                $0.bcp47Tag != locale.bcp47Tag
-              })
-            else {
+            let occupiedLocales = await AssetInventory.reservedLocales
+            let evictableLocale = occupiedLocales.first {
+              $0.bcp47Tag != locale.bcp47Tag
+            }
+            guard let evictableLocale else {
               throw error
             }
-            await AssetInventory.release(reservedLocale: evictable)
+
+            await AssetInventory.release(reservedLocale: evictableLocale)
 
             try await AssetInventory.reserve(locale: locale)
           }
         }
 
-        let request = try await AssetInventory.assetInstallationRequest(supporting: [module])
-        guard let request else {
+        let installationRequest = try await AssetInventory.assetInstallationRequest(
+          supporting: [module]
+        )
+        guard let installationRequest else {
           return
         }
 
-        try await request.downloadAndInstall()
+        try await installationRequest.downloadAndInstall()
       } catch is CancellationError {
         throw VoiceTranscriptionError.cancelled
       } catch {
@@ -337,9 +351,7 @@ public enum SystemVoiceTranscriber {
   public static func make(
     localeIdentifiers: [String],
     maxAudioDurationSeconds: Int? = nil
-  ) -> (
-    any VoiceTranscribing
-  )? {
+  ) -> (any VoiceTranscribing)? {
     #if canImport(Speech) && canImport(AVFAudio)
       guard #available(macOS 26.0, *) else {
         return nil

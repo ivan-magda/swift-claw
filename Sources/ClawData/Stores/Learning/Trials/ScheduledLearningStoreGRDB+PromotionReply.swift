@@ -47,13 +47,18 @@ extension ScheduledLearningStoreGRDB {
           throw StoreError.unexpected("promotion keyboard must be on the final reply chunk")
         }
       }
-      guard try ProcessedUpdateStoreGRDB.claimUpdate(db: db, updateID: updateID, claimedAt: now)
-      else {
+      let updateClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
+        db: db,
+        updateID: updateID,
+        claimedAt: now
+      )
+      guard updateClaimed else {
         return .duplicate
       }
       try Self.insertTarget(db, target)
       for chunk in chunks {
-        guard try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now) else {
+        let noticeInserted = try OutboxStoreGRDB.insertNotice(db, chunk: chunk, now: now)
+        guard noticeInserted else {
           throw StoreError.unexpected("promotion reply outbox identity already exists")
         }
       }

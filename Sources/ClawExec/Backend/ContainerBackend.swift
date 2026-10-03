@@ -92,9 +92,11 @@ public actor ContainerBackend {
       stateRoot.appending(path: ScratchWorkspace.scratchRootName).path,
       FileManager.default.homeDirectoryForCurrentUser.path,
       Self.cliPath,
-    ].filter {
+    ]
+    .filter {
       !$0.isEmpty
-    }.sorted {
+    }
+    .sorted {
       $0.count > $1.count
     }
   }
@@ -105,22 +107,20 @@ public actor ContainerBackend {
     }
 
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
-    guard let data = await boundedCommandData(
+    let versionData = await boundedCommandData(
       ContainerInvocation.systemVersion(),
       limit: Self.ordinaryCommandTimeout,
       deadline: deadline
     )
-    else {
+    guard let versionData else {
       return .unavailable(reason: ownerSafe("container version command failed"))
     }
 
-    guard let documents = try? JSONDecoder().decode([SystemVersionDocument].self, from: data),
-          let cli = documents.first(
-        where: {
-          $0.appName == "container"
-        }
-          )
-    else {
+    let documents = try? JSONDecoder().decode([SystemVersionDocument].self, from: versionData)
+    let cliDocument = documents?.first { document in
+      document.appName == "container"
+    }
+    guard let cli = cliDocument else {
       return .unavailable(reason: ownerSafe("container version response was invalid"))
     }
 
@@ -143,11 +143,11 @@ public actor ContainerBackend {
     }
 
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
-    guard await engineRunning(
+    let isEngineRunning = await engineRunning(
       limit: Self.ordinaryCommandTimeout,
       deadline: deadline
     )
-    else {
+    guard isEngineRunning else {
       return .unavailable(reason: ownerSafe("container engine is not running"))
     }
 

@@ -151,10 +151,18 @@ private extension MessageRouter {
     section: DoctorGroup?
   ) async -> HandleOutcome {
     let report = await doctor.report()
+    let target = DeliveryTarget.reply(to: message, mode: mode)
+    let text =
+      if let section {
+        report.renderTelegramGroup(section)
+      } else {
+        report.renderTelegramSummary()
+      }
+
     return await replies.sendCanned(
       updateID: rawUpdate.updateID,
-      target: .reply(to: message, mode: mode),
-      text: section.map(report.renderTelegramGroup) ?? report.renderTelegramSummary()
+      target: target,
+      text: text
     )
   }
 

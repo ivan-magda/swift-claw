@@ -153,18 +153,20 @@ struct SSEParser: Sendable {
   /// accumulator that never received an id/name (malformed stream) and defaults empty
   /// arguments to `"{}"`, mirroring the blocking path's `parse(result:)` (same rule, two seams).
   private var assembledToolCalls: [ToolCall] {
-    toolCallAccumulators.sorted {
-      $0.key < $1.key
-    }.compactMap { _, accumulator in
-      guard !accumulator.id.isEmpty, !accumulator.name.isEmpty else {
-        return nil
+    toolCallAccumulators
+      .sorted {
+        $0.key < $1.key
       }
-      return ToolCall(
-        id: accumulator.id,
-        name: accumulator.name,
-        argumentsJSON: accumulator.arguments.isEmpty ? "{}" : accumulator.arguments
-      )
-    }
+      .compactMap { _, accumulator in
+        guard !accumulator.id.isEmpty, !accumulator.name.isEmpty else {
+          return nil
+        }
+        return ToolCall(
+          id: accumulator.id,
+          name: accumulator.name,
+          argumentsJSON: accumulator.arguments.isEmpty ? "{}" : accumulator.arguments
+        )
+      }
   }
 
   private mutating func accumulate(_ fragments: [DeltaToolCall]) throws {
@@ -249,6 +251,8 @@ extension SSEParser {
   }
 }
 
+// MARK: - Summary Assembly
+
 private extension SSEParser {
   mutating func progress(
     for details: [ReasoningDetail],
@@ -262,7 +266,8 @@ private extension SSEParser {
         continue
       }
 
-      guard let identity = try summaryIdentity(for: detail) else {
+      let identity = try summaryIdentity(for: detail)
+      guard let identity else {
         continue
       }
 
@@ -312,9 +317,11 @@ private extension SSEParser {
       value
     }
     let key =
-      identityKeys.compactMap { identityKey in
+      identityKeys
+      .compactMap { identityKey in
         summaryKeys[identityKey]
-      }.first
+      }
+      .first
       ?? identityKeys.first ?? "index:0"
 
     let itemID = id ?? "reasoning-summary-\(detail.index ?? 0)"

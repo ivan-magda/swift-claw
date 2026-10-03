@@ -130,6 +130,7 @@ private extension ApprovalBootReconciler {
       logger.error("boot approvals: claimed-window triage failed for \(approval.id): \(error)")
       return false
     }
+
     switch settlement {
     case .settled:
       logger.warning(
@@ -163,7 +164,12 @@ private extension ApprovalBootReconciler {
       do {
         // Nothing races the boot sweep, so a lost CAS should be impossible; still signal so the
         // parked waiter frees the lane, but leave a trace instead of silently dropping the miss.
-        if try approvals.deny(id: approval.id, decision: .expired, now: instant) == false {
+        let didExpireApproval = try approvals.deny(
+          id: approval.id,
+          decision: .expired,
+          now: instant
+        )
+        if didExpireApproval == false {
           logger.warning("boot approvals: expiry CAS found approval \(approval.id) not PENDING")
         }
       } catch {
@@ -198,7 +204,7 @@ private extension ApprovalBootReconciler {
     let sessionID = approval.sessionID
     let chatID = approval.ownerUserID
 
-    let result = await lanes.enqueue(sessionID: sessionID, runID: runID) {
+    let enqueueOutcome = await lanes.enqueue(sessionID: sessionID, runID: runID) {
       await park.park(
         approvalID: approvalID,
         runID: runID,
@@ -212,7 +218,7 @@ private extension ApprovalBootReconciler {
       await settle.settle(runID: runID)
     }
 
-    if result == .shuttingDown {
+    if enqueueOutcome == .shuttingDown {
       // The daemon began draining mid-reconcile: leave the durable approval untouched so the next
       // boot re-parks it, rather than resolving it against a lane that will never run the waiter.
       logger.notice(

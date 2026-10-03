@@ -25,7 +25,10 @@ struct CoderWorkspace: Sendable {
     guard let source = prepared.checkoutPath else {
       let destination = jobDirectory.appendingPathComponent("repository")
       try PrivateDirectory.ensure(at: destination)
-      guard try FileManager.default.contentsOfDirectory(atPath: destination.path).isEmpty else {
+      let destinationContents = try FileManager.default.contentsOfDirectory(
+        atPath: destination.path
+      )
+      guard destinationContents.isEmpty else {
         throw CoderError.unavailable("Remote Coder destination must be empty.")
       }
       return CoderWorkspaceState(directory: destination.path, baseline: nil, startingCommit: nil)
@@ -46,13 +49,13 @@ struct CoderWorkspace: Sendable {
       startingCommit = try await git.headCommit(at: source)
       directory = source
     } else {
-      let resolved = try await git.commit(prepared.request.startRef ?? "HEAD", at: source)
-      startingCommit = resolved
+      let resolvedCommit = try await git.commit(prepared.request.startRef ?? "HEAD", at: source)
+      startingCommit = resolvedCommit
       directory = jobDirectory.appendingPathComponent("repository").path
       try await prepareCopy(
         from: source,
         at: directory,
-        commit: resolved,
+        commit: resolvedCommit,
         publication: prepared.publicationRepository,
         git: git
       )
@@ -78,7 +81,8 @@ private extension CoderWorkspace {
   ) async throws {
     let destination = URL(fileURLWithPath: directory)
     try PrivateDirectory.ensure(at: destination)
-    guard try FileManager.default.contentsOfDirectory(atPath: directory).isEmpty else {
+    let destinationContents = try FileManager.default.contentsOfDirectory(atPath: directory)
+    guard destinationContents.isEmpty else {
       throw CoderError.unavailable("Separate Coder destination must be empty.")
     }
     try await git.run(
@@ -94,7 +98,8 @@ private extension CoderWorkspace {
       )
     }
     try await git.run(["checkout", "--detach", commit, "--"], at: directory)
-    guard try await git.commit("HEAD", at: directory) == commit else {
+    let checkedOutCommit = try await git.commit("HEAD", at: directory)
+    guard checkedOutCommit == commit else {
       throw CoderError.unavailable("Separate Coder checkout does not match its resolved commit.")
     }
   }

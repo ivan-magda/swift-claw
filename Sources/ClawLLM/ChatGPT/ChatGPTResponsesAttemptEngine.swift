@@ -188,7 +188,13 @@ private extension ChatGPTResponsesAttemptEngine {
     }
 
     let canRetry = state.attempt < retryBudget
-    switch await dispatch(request, exposure: exposure, context: context, emitEvent: emitEvent) {
+    let dispatchOutcome = await dispatch(
+      request,
+      exposure: exposure,
+      context: context,
+      emitEvent: emitEvent
+    )
+    switch dispatchOutcome {
     case .terminal(let termination):
       return .stop(termination)
     case .transportRetryable(let cause):
@@ -218,12 +224,13 @@ private extension ChatGPTResponsesAttemptEngine {
     state: inout CallState,
     plan: ChatGPTResponsesAttemptPlan
   ) async -> LoopControl {
-    switch decide(
+    let headDecision = decide(
       diagnosis,
       canRetry: state.attempt < retryBudget,
       refreshRequested: state.refreshRequested,
       recoveryUsed: state.recoveryUsed
-    ) {
+    )
+    switch headDecision {
     case .fail(let cause):
       return .stop(.failed(exposure.failure(cause)))
 
@@ -489,15 +496,18 @@ private extension ChatGPTResponsesAttemptEngine {
         // `accumulator.consume` may first observe tokens and then throw (for example when the
         // evaluation output cap is crossed). Debit that observation before the error leaves this
         // chunk so cancellation cannot turn known provider work into a zero-token exposure.
-        defer { exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens) }
-        let events = try accumulator.consume(try parser.push(chunk))
-        if case .finished(let response)? = events.last {
+        defer {
+          exposure.noteObserved(completionTokens: accumulator.observedCompletionTokens)
+        }
+        let responseEvents = try parser.push(chunk)
+        let streamEvents = try accumulator.consume(responseEvents)
+        if case .finished(let response)? = streamEvents.last {
           // The first terminal is authoritative before optional display callbacks can suspend or
           // throw. Join the producer first so terminal-time progress cannot delay HTTP cleanup.
           terminal = response
           _ = await exchange.cancelAndAwait()
         }
-        for streamEvent in events {
+        for streamEvent in streamEvents {
           switch streamEvent {
           case .delta, .progress:
             try await emitEvent(streamEvent)
@@ -517,10 +527,12 @@ private extension ChatGPTResponsesAttemptEngine {
       // The body ended without an in-band terminal. Confirm the transfer actually finished before
       // asking the accumulator, so a truncated transfer surfaces as its transport cause rather than
       // as an ambiguous end.
-      if let transferError = Self.transferError(await exchange.awaitTermination()) {
+      let exchangeTermination = await exchange.awaitTermination()
+      if let transferError = Self.transferError(exchangeTermination) {
         throw transferError
       }
-      if let finalEvent = try accumulator.finish(), case .finished(let response) = finalEvent {
+      let finalEvent = try accumulator.finish()
+      if let finalEvent, case .finished(let response) = finalEvent {
         return .completed(response)
       }
       return .failed(exposure.failure(.terminal(status: nil, message: "the ChatGPT reply ended")))
@@ -633,14 +645,14 @@ private extension ChatGPTResponsesAttemptEngine {
       return .fail(.accessDenied)
 
     case 429:
-      let clamped = backoff.clampedRetryAfterSeconds(diagnosis.retryAfterSeconds)
+      let retryAfterSeconds = backoff.clampedRetryAfterSeconds(diagnosis.retryAfterSeconds)
       // A subscription wall clears on the plan's own clock, not inside the retry budget. When
       // another route can finish the turn, spending the deadline re-proving the wall costs the
       // owner an answer they could already have had.
       guard canRetry, treatsQuotaAsTerminal == false else {
-        return .fail(.quotaLimited(retryAfterSeconds: clamped))
+        return .fail(.quotaLimited(retryAfterSeconds: retryAfterSeconds))
       }
-      return .backoffThenRetry(clamped.map(Duration.seconds))
+      return .backoffThenRetry(retryAfterSeconds.map(Duration.seconds))
 
     case 408, 500..<600:
       guard canRetry else {

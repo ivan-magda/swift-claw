@@ -80,8 +80,12 @@ public enum SessionKey {
     }
     return Int64(body[body.index(after: separator)...])
   }
+}
 
-  private static func topicBody(of key: String) -> Substring? {
+// MARK: - Topic Key Parsing
+
+private extension SessionKey {
+  static func topicBody(of key: String) -> Substring? {
     key.hasPrefix(topicPrefix) ? key.dropFirst(topicPrefix.count) : nil
   }
 }

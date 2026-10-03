@@ -167,38 +167,37 @@ private extension ApprovedActionExecutor {
     }
     let context: ToolExecutionContext?
     do {
-      if let restored = try runs.executionContext(
+      let restored = try runs.executionContext(
         runID: approval.runID,
         fallbackChatID: approval.ownerUserID
-      ) {
-        guard restored.sessionID == approval.sessionID,
-              restored.deliveryTarget.chatID == approval.ownerUserID
+      )
+      guard let restored,
+            restored.sessionID == approval.sessionID,
+            restored.deliveryTarget.chatID == approval.ownerUserID
+      else {
+        return missingExecutionContext()
+      }
+
+      if restored.mode == .group {
+        guard restored.origin == .interactive,
+              restored.requesterUserID != nil,
+              approval.reason == .coderSubmit,
+              approval.tool == CoderToolNames.submit
         else {
           return missingExecutionContext()
         }
-
-        if restored.mode == .group {
-          guard restored.origin == .interactive,
-                restored.requesterUserID != nil,
-                approval.reason == .coderSubmit,
-                approval.tool == CoderToolNames.submit
-          else {
-            return missingExecutionContext()
-          }
-        }
-        context = ToolExecutionContext(
-          runID: approval.runID,
-          sessionID: restored.sessionID,
-          chatID: restored.deliveryTarget.chatID,
-          requesterUserID: restored.requesterUserID,
-          origin: restored.origin,
-          mode: restored.mode,
-          toolCallID: approval.toolCallID,
-          approvalID: approval.id
-        )
-      } else {
-        return missingExecutionContext()
       }
+
+      context = ToolExecutionContext(
+        runID: approval.runID,
+        sessionID: restored.sessionID,
+        chatID: restored.deliveryTarget.chatID,
+        requesterUserID: restored.requesterUserID,
+        origin: restored.origin,
+        mode: restored.mode,
+        toolCallID: approval.toolCallID,
+        approvalID: approval.id
+      )
     } catch {
       return missingExecutionContext()
     }

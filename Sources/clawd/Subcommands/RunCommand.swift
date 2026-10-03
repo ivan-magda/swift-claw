@@ -15,7 +15,9 @@ struct RunCommand: AsyncParsableCommand {
 
     // Single-instance guard — acquired before any credential snapshot and held until process exit.
     let lock = try Self.acquireInstanceLockOrExit(config: config)
-    defer { lock.release() }
+    defer {
+      lock.release()
+    }
 
     let secrets = try Self.loadSecretsOrExit(config: config)
     // Before the logger on purpose: the MCP tokens are part of the redaction set the log backend is
@@ -39,7 +41,8 @@ struct RunCommand: AsyncParsableCommand {
         stores: stores,
         logger: logger,
         mcp: mcp
-      ).compose()
+      )
+      .compose()
     } catch let error as LLMCredentialStoreError {
       FileHandle.standardError.write(Data("credential store error: \(error)\n".utf8))
       throw ExitCode(ClawExitCode.secretLoadFailed.rawValue)
@@ -208,9 +211,7 @@ private extension RunCommand {
   static func loadSecretsOrExit(config: AppConfig) throws -> Secrets {
     do {
       return try EnvironmentLoader.loadSecrets(config: config)
-    } catch let error
-      as SecretStoreError
-    {
+    } catch let error as SecretStoreError {
       FileHandle.standardError.write(Data("secret error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
     }
@@ -276,9 +277,7 @@ extension RunCommand {
     let catalog: MCPConfig
     do {
       catalog = try EnvironmentLoader.loadMCPConfig(config: config)
-    } catch let error
-      as MCPConfigError
-    {
+    } catch let error as MCPConfigError {
       FileHandle.standardError.write(Data("mcp config error: \(error)\n".utf8))
       throw ExitCode(error.exitCode)
     } catch {

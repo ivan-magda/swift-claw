@@ -190,20 +190,31 @@ extension ScheduledLearningStoreGRDB {
   static func decodeCanonicalIssueCodes(_ json: String) throws -> [String] {
     guard let data = json.data(using: .utf8),
           let codes = try? JSONDecoder().decode([String].self, from: data),
-          codes.count <= EvaluatorOutput.maxIssueCodes,
-          codes.allSatisfy({ code in
-        code.isEmpty == false && code.count <= EvaluatorOutput.maxIssueCodeCharacters
-      }),
-          Set(codes).count == codes.count,
-          codes == codes.sorted(),
-          try issueCodesJSON(codes) == json
+          codes.count <= EvaluatorOutput.maxIssueCodes
     else {
+      throw StoreError.unexpected("assignment source has noncanonical issue codes")
+    }
+    let codesHaveValidShape = codes.allSatisfy { code in
+      code.isEmpty == false && code.count <= EvaluatorOutput.maxIssueCodeCharacters
+    }
+    guard codesHaveValidShape,
+          Set(codes).count == codes.count,
+          codes == codes.sorted()
+    else {
+      throw StoreError.unexpected("assignment source has noncanonical issue codes")
+    }
+    let canonicalJSON = try issueCodesJSON(codes)
+    guard canonicalJSON == json else {
       throw StoreError.unexpected("assignment source has noncanonical issue codes")
     }
     return codes
   }
+}
 
-  private static func decodeStoredEvaluation(
+// MARK: - Stored Evaluation Decoding
+
+private extension ScheduledLearningStoreGRDB {
+  static func decodeStoredEvaluation(
     _ row: Row,
     expectedRunID: Int64
   ) throws -> StoredEvaluationProjection {

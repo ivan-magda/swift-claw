@@ -41,12 +41,12 @@ public struct FileSystemWorkspace: WorkspaceReading {
       return SkillScanResult(descriptors: [], warnings: [.skillsDirectoryOutsideWorkspace])
     }
 
-    guard let entries = try? fileManager.contentsOfDirectory(
+    let directoryEntries = try? fileManager.contentsOfDirectory(
       at: containmentRoot,
       includingPropertiesForKeys: nil,
       options: [.skipsHiddenFiles]
     )
-    else {
+    guard let directoryEntries else {
       // skills/ exists but cannot be listed: a context-read failure, not a missing directory.
       return SkillScanResult(descriptors: [], warnings: [.unreadableSkillsDirectory])
     }
@@ -54,7 +54,7 @@ public struct FileSystemWorkspace: WorkspaceReading {
     var descriptors: [SkillDescriptor] = []
     var warnings: [WorkspaceWarning] = []
 
-    for subdir in entries.sorted(by: {
+    for subdir in directoryEntries.sorted(by: {
       $0.lastPathComponent < $1.lastPathComponent
     }) {
       switch Self.entry(at: subdir, under: containmentRoot) {
@@ -155,17 +155,22 @@ public struct FileSystemWorkspace: WorkspaceReading {
     }
 
     let collidingNames = Set(
-      directoriesByName.filter {
-        $0.value.count > 1
-      }.keys
+      directoriesByName
+        .filter { entry in
+          entry.value.count > 1
+        }
+        .keys
     )
     guard collidingNames.isEmpty == false else {
       return (descriptors, [])
     }
 
-    let warnings = collidingNames.sorted().map { name in
-      WorkspaceWarning.duplicateSkillName(name: name, directories: directoriesByName[name] ?? [])
-    }
+    let warnings =
+      collidingNames
+      .sorted()
+      .map { name in
+        WorkspaceWarning.duplicateSkillName(name: name, directories: directoriesByName[name] ?? [])
+      }
 
     return (
       descriptors.filter {

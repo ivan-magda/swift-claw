@@ -40,9 +40,8 @@ public enum MemoryWriteBuilder {
     sensitivity: Sensitivity = .normal
   ) throws -> MemoryWriteRequest {
     let normalizedText = (rawText as NSString).precomposedStringWithCanonicalMapping
-    let storedText = stripBlockedControls(from: normalizedText).trimmingCharacters(
-      in: .whitespacesAndNewlines
-    )
+    let storedText = stripBlockedControls(from: normalizedText)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
 
     guard storedText.isEmpty == false else {
       throw MemoryWriteBuildError.emptyAfterNormalization
@@ -58,9 +57,8 @@ public enum MemoryWriteBuilder {
       sessionID: sessionID
     )
 
-    let visibleText = renderVisibleControls(in: normalizedText).trimmingCharacters(
-      in: .whitespacesAndNewlines
-    )
+    let visibleText = renderVisibleControls(in: normalizedText)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
     var lines = ["Remember as \(kind.rawValue):", visibleText]
 
     if warnings.isEmpty == false {
@@ -86,16 +84,18 @@ private extension MemoryWriteBuilder {
     var warnings: [MemoryWriteWarning] = []
 
     let secretWarningPatterns: Set<String> = ["sk-", "api_key", "token"]
-    if secretWarningPatterns.contains(where: {
-      loweredText.contains($0)
-    }) {
+    let containsSecretPattern = secretWarningPatterns.contains { pattern in
+      loweredText.contains(pattern)
+    }
+    if containsSecretPattern {
       warnings.append(.possibleSecret)
     }
 
     let instructionWarningPatterns: Set<String> = ["ignore previous", "system prompt"]
-    if instructionWarningPatterns.contains(where: {
-      loweredText.contains($0)
-    }) {
+    let containsInstructionPattern = instructionWarningPatterns.contains { pattern in
+      loweredText.contains(pattern)
+    }
+    if containsInstructionPattern {
       warnings.append(.possibleInstruction)
     }
 

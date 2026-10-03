@@ -37,9 +37,10 @@ struct RetryBackoff: Sendable {
       try await clock.sleep(for: clamped(retryAfter))
       return
     }
+
     let exponentialSeconds = Self.baseBackoffSeconds * pow(2, Double(attempt - 1))
-    let capped = Duration.seconds(min(exponentialSeconds, Self.maxBackoffSeconds))
-    try await clock.sleep(for: jitter(capped))
+    let cappedDelay = Duration.seconds(min(exponentialSeconds, Self.maxBackoffSeconds))
+    try await clock.sleep(for: jitter(cappedDelay))
   }
 
   /// The bounded seconds a clean throttle surfaces to the owner, clamped the same way `wait` clamps a

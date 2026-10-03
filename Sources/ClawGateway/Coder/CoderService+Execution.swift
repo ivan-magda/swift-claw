@@ -3,14 +3,18 @@ import Foundation
 
 extension CoderService {
   func execute(_ admitted: CoderJob, backend: any CoderBackend) async {
-    defer { tasks[admitted.id] = nil }
+    defer {
+      tasks[admitted.id] = nil
+    }
     do {
       let result: CoderResult
-      if try store.markRunning(id: admitted.id, now: Date()) {
+      let markedRunning = try store.markRunning(id: admitted.id, now: Date())
+      if markedRunning {
         let invocation = CoderInvocation(
           jobID: admitted.id,
           prepared: admitted.prepared,
-          jobDirectory: URL(fileURLWithPath: jobRoot).appendingPathComponent(admitted.id.uuidString)
+          jobDirectory: URL(fileURLWithPath: jobRoot)
+            .appendingPathComponent(admitted.id.uuidString)
             .path,
           timeout: .seconds(config.jobTimeoutSeconds)
         )
@@ -36,15 +40,15 @@ extension CoderService {
       throw StoreError.unexpected("Coder completion has no job")
     }
     while !job.state.isTerminal {
-      let selected = Self.selectedResult(result, persistedState: job.state)
-      let chunks = report.chunks(job: job, result: selected)
-      let resolved = job.ownership == .none || job.ownership == .stopped
+      let selectedResult = Self.selectedResult(result, persistedState: job.state)
+      let chunks = report.chunks(job: job, result: selectedResult)
+      let ownershipResolved = job.ownership == .none || job.ownership == .stopped
       let outcome = try store.complete(
         id: id,
         expectedState: job.state,
-        result: selected,
+        result: selectedResult,
         chunks: chunks,
-        releaseReservation: resolved,
+        releaseReservation: ownershipResolved,
         now: Date()
       )
       switch outcome {
@@ -53,7 +57,7 @@ extension CoderService {
       case .alreadyTerminal:
         return
       case .committed:
-        if !resolved {
+        if !ownershipResolved {
           recoveryRequiredJobIDs.insert(id)
           if !recovering {
             fail(.cleanup(jobID: id))

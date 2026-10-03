@@ -32,7 +32,7 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
 
       try afterClaimForTesting()
 
-      let stored = try MemoryStoreGRDB.insertItem(db, item: item, now: now)
+      let storedItem = try MemoryStoreGRDB.insertItem(db, item: item, now: now)
 
       try AuditLogGRDB.insertAudit(
         db,
@@ -46,7 +46,7 @@ public struct MemoryCommandStoreGRDB: MemoryCommandStore {
         )
       )
 
-      return MemoryCommandResult(newlyClaimed: true, item: stored)
+      return MemoryCommandResult(newlyClaimed: true, item: storedItem)
     }
   }
 

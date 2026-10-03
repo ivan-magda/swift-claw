@@ -33,18 +33,17 @@ struct CoderCommand: ParsableCommand {
       let file = try CoderSetupFile(path: filePath)
       let path = try Self.capturePath(environment["PATH"])
 
-      var selected = environment.merging(file.values) { _, configured in
+      var selectedEnvironment = environment.merging(file.values) { _, configured in
         configured
       }
-      selected[AppConfig.EnvKey.coderPath] = path
-      selected[AppConfig.EnvKey.coderEnabled] = "true"
+      selectedEnvironment[AppConfig.EnvKey.coderPath] = path
+      selectedEnvironment[AppConfig.EnvKey.coderEnabled] = "true"
 
-      let config = try CoderConfig.load(environment: selected)
+      let config = try CoderConfig.load(environment: selectedEnvironment)
       do {
-        let setup = try await CoderBackendSetup.inspect(config, environment: selected)
-        Self.emit(
-          DoctorReport(checks: CoderHealthRows.rows(config: config, setup: setup)).renderText()
-        )
+        let setup = try await CoderBackendSetup.inspect(config, environment: selectedEnvironment)
+        let report = DoctorReport(checks: CoderHealthRows.rows(config: config, setup: setup))
+        Self.emit(report.renderText())
 
         guard setup.permitsSubmission else {
           throw ValidationError(
@@ -97,9 +96,12 @@ private extension CoderCommand.Setup {
   static func capturePath(_ path: String?) throws -> String {
     var seen: Set<String> = []
 
-    let entries = (path ?? "").split(separator: ":").map(String.init).filter { entry in
-      entry.hasPrefix("/") && seen.insert(entry).inserted
-    }
+    let entries = (path ?? "")
+      .split(separator: ":")
+      .map(String.init)
+      .filter { entry in
+        entry.hasPrefix("/") && seen.insert(entry).inserted
+      }
 
     guard !entries.isEmpty else {
       throw ValidationError(

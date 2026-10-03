@@ -516,19 +516,18 @@ public struct CostResolver: Sendable {
       return ResolvedCost(costUSD: providerCost, source: .providerReturned, isEstimated: false)
     }
 
-    if let known = knownPrice(for: model) {
-      let price = known.price
-      let cost =
-        Double(usage.promptTokens) / 1_000_000 * price.inputUSDPerMTok + Double(
-          usage.completionTokens
-        ) / 1_000_000 * price.outputUSDPerMTok
-      return ResolvedCost(costUSD: cost, source: known.source, isEstimated: false)
+    if let knownPrice = knownPrice(for: model) {
+      let price = knownPrice.price
+      let costUSD =
+        Double(usage.promptTokens) / 1_000_000 * price.inputUSDPerMTok
+        + Double(usage.completionTokens) / 1_000_000 * price.outputUSDPerMTok
+      return ResolvedCost(costUSD: costUSD, source: knownPrice.source, isEstimated: false)
     }
 
-    let raw = Double(usage.totalTokens) * referenceUSDPerToken
-    let cost = raw == 0 ? Self.heuristicFloorUSD : raw
+    let heuristicCostUSD = Double(usage.totalTokens) * referenceUSDPerToken
+    let costUSD = heuristicCostUSD == 0 ? Self.heuristicFloorUSD : heuristicCostUSD
 
-    return ResolvedCost(costUSD: cost, source: .heuristic, isEstimated: true)
+    return ResolvedCost(costUSD: costUSD, source: .heuristic, isEstimated: true)
   }
 }
 
@@ -554,6 +553,7 @@ public struct ResolvedUsage: Sendable, Equatable {
     guard isEstimated, reservation > 0 else {
       return self
     }
+
     let promptTokens = SaturatingArithmetic.sum(usage.promptTokens, reservation)
     return ResolvedUsage(
       usage: ChatUsage(
@@ -582,6 +582,7 @@ public struct UsageResolver: Sendable {
     if let reported = response.usage {
       return ResolvedUsage(usage: reported, isEstimated: false)
     }
+
     return estimated(
       promptTokens: TokenEstimator.estimateInputTokens(context, tools: tools),
       completionTokens: TokenEstimator.estimateTokens(forText: response.content)

@@ -68,9 +68,7 @@ public struct WebSearchTool: Tool {
     let results: [SearchResult]
     do {
       results = try await search.search(query: query, count: count)
-    } catch let searchError
-      as SearchError
-    {
+    } catch let searchError as SearchError {
       let reason =
         switch searchError {
         case .terminal(_, let message), .retryable(_, let message):
@@ -95,9 +93,12 @@ public struct WebSearchTool: Tool {
       return ToolPayload(content: "No results.", status: .ok, ingestedUntrusted: true)
     }
 
-    let rendered = results.map { result in
-      "- \(result.title) — \(result.url)\n  \(result.snippet)"
-    }.joined(separator: "\n")
+    let rendered =
+      results
+      .map { result in
+        "- \(result.title) — \(result.url)\n  \(result.snippet)"
+      }
+      .joined(separator: "\n")
 
     return ToolPayload(
       content: ToolOutputCap.cap(rendered, maxGraphemes: outputCapGraphemes),

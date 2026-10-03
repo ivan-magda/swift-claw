@@ -135,8 +135,12 @@ enum SQLiteStoredValue {
       return nil
     }
   }
+}
 
-  private static func databaseValue(in row: Row, column: String) -> DatabaseValue? {
+// MARK: - Row Value Access
+
+private extension SQLiteStoredValue {
+  static func databaseValue(in row: Row, column: String) -> DatabaseValue? {
     row[column] as DatabaseValue?
   }
 }

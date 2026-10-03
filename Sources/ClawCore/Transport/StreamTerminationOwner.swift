@@ -17,7 +17,9 @@ final class StreamAbandonmentLease: Sendable {
     self.onAbandon = onAbandon
   }
 
-  deinit { onAbandon() }
+  deinit {
+    onAbandon()
+  }
 }
 
 // MARK: - Termination owner
@@ -104,15 +106,17 @@ final class StreamTerminationOwner<Element: Sendable, Termination: Sendable>: Se
   /// Runs once, as the producer's last act, so a resumed joiner knows the transfer has stopped and
   /// every transfer nested inside it with it.
   func finish(reporting termination: Termination) {
-    guard let commit = commit(termination) else {
+    let terminalCommit = commit(termination)
+    guard let terminalCommit else {
       return
     }
+
     // Caching before closing is what resolves the terminal-versus-cancellation race: a consumer that
     // sees the channel end can always read whatever a completed commit reserved before the close, so
     // the outcome — never the timing of the last element — decides what it saw.
-    close(for: commit.terminal)
-    for joiner in commit.joiners {
-      joiner.resume(returning: commit.terminal)
+    close(for: terminalCommit.terminal)
+    for joiner in terminalCommit.joiners {
+      joiner.resume(returning: terminalCommit.terminal)
     }
   }
 
@@ -139,11 +143,12 @@ private extension StreamTerminationOwner {
       guard current.terminal == nil else {
         return nil
       }
-      let decided = resolve(termination, current.isCancelRequested)
-      current.terminal = decided
-      let parked = current.joiners
+      let decidedTermination = resolve(termination, current.isCancelRequested)
+      current.terminal = decidedTermination
+
+      let parkedJoiners = current.joiners
       current.joiners.removeAll()
-      return Commit(terminal: decided, joiners: parked)
+      return Commit(terminal: decidedTermination, joiners: parkedJoiners)
     }
   }
 
@@ -158,15 +163,15 @@ private extension StreamTerminationOwner {
   /// Resumes outside the lock: resuming under it would run the woken task's next step on this thread
   /// while the lock is still held.
   func park(_ continuation: CheckedContinuation<Termination, Never>) {
-    let cached = state.withLock { current -> Termination? in
+    let cachedTermination = state.withLock { current -> Termination? in
       if let terminal = current.terminal {
         return terminal
       }
       current.joiners.append(continuation)
       return nil
     }
-    if let cached {
-      continuation.resume(returning: cached)
+    if let cachedTermination {
+      continuation.resume(returning: cachedTermination)
     }
   }
 }

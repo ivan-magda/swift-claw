@@ -21,11 +21,14 @@ struct CoderProcessIdentity: Sendable {
       guard sysctlbyname("kern.bootsessionuuid", &bytes, &size, nil, 0) == 0 else {
         throw IdentityError.unreadable
       }
-      let content = bytes.prefix { byte in
-        byte != 0
-      }.map { byte in
-        UInt8(bitPattern: byte)
-      }
+      let content =
+        bytes
+        .prefix { byte in
+          byte != 0
+        }
+        .map { byte in
+          UInt8(bitPattern: byte)
+        }
       guard let bootID = String(bytes: content, encoding: .utf8), !bootID.isEmpty else {
         throw IdentityError.unreadable
       }
@@ -47,10 +50,10 @@ struct CoderProcessIdentity: Sendable {
       guard size > 0 else {
         return nil
       }
-      let start = info.kp_proc.p_un.__p_starttime
+      let startedAt = info.kp_proc.p_un.__p_starttime
       return Self(
         pgid: info.kp_eproc.e_pgid,
-        birth: "\(start.tv_sec):\(start.tv_usec)",
+        birth: "\(startedAt.tv_sec):\(startedAt.tv_usec)",
         isZombie: info.kp_proc.p_stat == SZOMB
       )
     #else
@@ -93,20 +96,27 @@ struct CoderProcessIdentity: Sendable {
           capacity *= 2
           continue
         }
-        return try pids.prefix(Int(filled) / MemoryLayout<Int32>.size).compactMap { pid in
-          try read(pid)
-        }.filter { member in
-          member.pgid == pgid
-        }
+        return
+          try pids
+          .prefix(Int(filled) / MemoryLayout<Int32>.size)
+          .compactMap { pid in
+            try read(pid)
+          }
+          .filter { member in
+            member.pgid == pgid
+          }
       }
     #else
-      return try FileManager.default.contentsOfDirectory(atPath: "/proc").compactMap { entry in
-        Int32(entry)
-      }.compactMap { pid in
-        try read(pid)
-      }.filter { member in
-        member.pgid == pgid
-      }
+      return try FileManager.default.contentsOfDirectory(atPath: "/proc")
+        .compactMap { entry in
+          Int32(entry)
+        }
+        .compactMap { pid in
+          try read(pid)
+        }
+        .filter { member in
+          member.pgid == pgid
+        }
     #endif
   }
 

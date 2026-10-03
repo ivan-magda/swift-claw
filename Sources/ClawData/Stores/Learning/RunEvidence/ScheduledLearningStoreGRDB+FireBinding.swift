@@ -215,7 +215,7 @@ private extension ScheduledLearningStoreGRDB {
     trial: LearningTrial,
     now: Date
   ) throws {
-    let consumed = try Int.fetchOne(
+    let consumedAssignmentCount = try Int.fetchOne(
       db,
       sql: """
         UPDATE learning_trials
@@ -255,7 +255,7 @@ private extension ScheduledLearningStoreGRDB {
         trial.replacementDigest.rawValue,
       ]
     )
-    guard consumed != nil else {
+    guard consumedAssignmentCount != nil else {
       throw StoreError.unexpected("trial \(trial.trialID) could not consume exact assignment")
     }
     try db.execute(

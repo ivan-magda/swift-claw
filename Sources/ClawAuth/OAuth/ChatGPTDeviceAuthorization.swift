@@ -32,13 +32,14 @@ where ClockType.Duration == Duration {
   ) async throws -> ChatGPTAuthorizationGrant {
     let deadline = clock.now.advanced(by: ChatGPTProviderMetadata.maximumLoginWait)
 
-    let opening = try requestTimeout(until: deadline)
-    let device = try await client.requestDeviceCode(timeout: opening)
+    let openingTimeout = try requestTimeout(until: deadline)
+    let device = try await client.requestDeviceCode(timeout: openingTimeout)
     await onDeviceCode(device)
 
     while true {
       let timeout = try requestTimeout(until: deadline)
-      switch try await client.pollOnce(device: device, timeout: timeout) {
+      let pollResult = try await client.pollOnce(device: device, timeout: timeout)
+      switch pollResult {
       case .granted(let grant):
         return grant
       case .pending:
@@ -60,27 +61,27 @@ extension ChatGPTDeviceAuthorization: ChatGPTDeviceAuthorizing {}
 private extension ChatGPTDeviceAuthorization {
   /// What is left of the window — and the end of the login the moment nothing is.
   func remaining(until deadline: ClockType.Instant) throws -> Duration {
-    let left = clock.now.duration(to: deadline)
-    guard left > .zero else {
+    let remainingDuration = clock.now.duration(to: deadline)
+    guard remainingDuration > .zero else {
       throw ChatGPTOAuthFailure.deadlineExceeded
     }
-    return left
+    return remainingDuration
   }
 
   /// A ceiling on the call, cut down to whatever is left of the window. Without the second cut, one
   /// stalled request could run past the deadline the owner was quoted and leave the flow reporting a
   /// failure minutes after it promised an answer.
   func requestTimeout(until deadline: ClockType.Instant) throws -> Duration {
-    let left = try remaining(until: deadline)
-    return min(ChatGPTProviderMetadata.requestTimeout, left)
+    let remainingDuration = try remaining(until: deadline)
+    return min(ChatGPTProviderMetadata.requestTimeout, remainingDuration)
   }
 
   /// Waits what was asked for — never less than the provider's floor, and never past the window.
   /// Sleeping out the remainder rather than giving up early is what keeps the promise exact: the
   /// window is what the owner was told they had, and the next deadline check ends the login.
   func wait(_ requested: Duration, until deadline: ClockType.Instant) async throws {
-    let left = try remaining(until: deadline)
-    let delay = min(ChatGPTProviderMetadata.honoredPollDelay(requested), left)
+    let remainingDuration = try remaining(until: deadline)
+    let delay = min(ChatGPTProviderMetadata.honoredPollDelay(requested), remainingDuration)
     try await clock.sleep(for: delay)
   }
 }

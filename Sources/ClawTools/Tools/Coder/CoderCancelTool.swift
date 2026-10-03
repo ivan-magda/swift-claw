@@ -48,11 +48,10 @@ public struct CoderCancelTool: Tool {
         redactor: redactor
       )
     }
+
     do {
-      return CoderToolOutput.job(
-        try await service.cancel(id: id, context: context),
-        redactor: redactor
-      )
+      let job = try await service.cancel(id: id, context: context)
+      return CoderToolOutput.job(job, redactor: redactor)
     } catch {
       return CoderToolOutput.failure(error, redactor: redactor)
     }

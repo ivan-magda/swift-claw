@@ -118,21 +118,21 @@ public actor MCPServerSession {
   /// The server's whole tool list, paged under the discovery caps.
   public func listAllTools() async throws -> [MCP.Tool] {
     let client = try await connected()
-    let budget = config.requestTimeoutSeconds
+    let budgetSeconds = config.requestTimeoutSeconds
 
     var discovered: [MCP.Tool] = []
-    var replayed: Set<String> = []
-    var bytes = 0
+    var seenCursors: Set<String> = []
+    var catalogBytes = 0
     var cursor: String?
-    var page = 0
+    var pageCount = 0
 
     while true {
-      guard page < MCPDiscoveryLimits.maxPages else {
+      guard pageCount < MCPDiscoveryLimits.maxPages else {
         throw MCPSessionError.tooManyPages(limit: MCPDiscoveryLimits.maxPages)
       }
-      let requested = cursor
+      let requestedCursor = cursor
       let request =
-        requested.map { cursor in
+        requestedCursor.map { cursor in
           ListTools.request(ListTools.Parameters(cursor: cursor))
         }
         ?? ListTools.request(ListTools.Parameters())
@@ -141,24 +141,24 @@ public actor MCPServerSession {
       let listing = try await response(
         to: context,
         from: client,
-        timingOutWith: .discoveryTimedOut(seconds: budget),
+        timingOutWith: .discoveryTimedOut(seconds: budgetSeconds),
         cancellation: cancellation
       )
-      page += 1
+      pageCount += 1
 
       discovered.append(contentsOf: listing.tools)
       guard discovered.count <= MCPDiscoveryLimits.maxTools else {
         throw MCPSessionError.tooManyTools(limit: MCPDiscoveryLimits.maxTools)
       }
-      bytes += try encoder.encode(listing.tools).count
-      guard bytes <= MCPDiscoveryLimits.maxCatalogBytes else {
+      catalogBytes += try encoder.encode(listing.tools).count
+      guard catalogBytes <= MCPDiscoveryLimits.maxCatalogBytes else {
         throw MCPSessionError.catalogTooLarge(limitBytes: MCPDiscoveryLimits.maxCatalogBytes)
       }
 
       guard let next = listing.nextCursor, next.isEmpty == false else {
         return discovered
       }
-      guard replayed.insert(next).inserted else {
+      guard seenCursors.insert(next).inserted else {
         throw MCPSessionError.pagingStalled
       }
       cursor = next
@@ -170,12 +170,12 @@ public actor MCPServerSession {
     arguments: [String: JSONValue]
   ) async throws -> MCPToolCallResult {
     let payload = arguments.mapValues(MCPValueBridge.value)
-    let budget = config.worstCaseCallSeconds
+    let budgetSeconds = config.worstCaseCallSeconds
 
     let cancellation = MCPRequestCancellation()
     return try await bounded(
       allowance: callAllowance,
-      timingOutWith: .callTimedOut(seconds: budget),
+      timingOutWith: .callTimedOut(seconds: budgetSeconds),
       cancellation: cancellation
     ) {
       try await self.attempt(name: name, arguments: payload, cancellation: cancellation)
@@ -314,7 +314,9 @@ private extension MCPServerSession {
       return closing
     }
     let task = Task {
-      defer { closing = nil }
+      defer {
+        closing = nil
+      }
       await teardown()
     }
     closing = task
@@ -334,7 +336,9 @@ private extension MCPServerSession {
     }
 
     let attempt = Task {
-      defer { opening = nil }
+      defer {
+        opening = nil
+      }
       let opened = try await open()
       client = opened
       return opened
@@ -350,22 +354,25 @@ private extension MCPServerSession {
       throw CancellationError()
     }
     let client = Client(name: MCPProtocol.clientName, version: clientVersion)
-    let budget = config.connectTimeoutSeconds
+    let budgetSeconds = config.connectTimeoutSeconds
     let handshake = Task {
       try Task.checkCancellation()
       return try await client.connect(transport: transport)
     }
 
     do {
-      let result = try await bounded(
+      let handshakeResult = try await bounded(
         allowance: connectAllowance,
-        timingOutWith: .discoveryTimedOut(seconds: budget)
+        timingOutWith: .discoveryTimedOut(seconds: budgetSeconds)
       ) {
         try await handshake.value
       }
       logger.debug(
         "MCP session established",
-        metadata: ["server": .string(config.name), "protocol": .string(result.protocolVersion)]
+        metadata: [
+          "server": .string(config.name),
+          "protocol": .string(handshakeResult.protocolVersion),
+        ]
       )
       return client
     } catch {

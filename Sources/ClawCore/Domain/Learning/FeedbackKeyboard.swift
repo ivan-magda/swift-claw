@@ -102,9 +102,10 @@ public enum FeedbackKeyboard {
     guard callbackData.utf8.count <= maximumCallbackDataBytes else {
       return nil
     }
-    let parts = callbackData.split(separator: ":", omittingEmptySubsequences: false).map(
-      String.init
-    )
+    let parts =
+      callbackData
+      .split(separator: ":", omittingEmptySubsequences: false)
+      .map(String.init)
     guard parts.count == 3, parts[0] == prefix else {
       return nil
     }
@@ -116,13 +117,16 @@ public enum FeedbackKeyboard {
   }
 
   public static func markup(rows: [[Button]]) -> String? {
-    guard rows.isEmpty == false,
-          rows.allSatisfy({
-        $0.isEmpty == false
-      })
-    else {
+    guard rows.isEmpty == false else {
       return nil
     }
+    let allRowsHaveButtons = rows.allSatisfy { row in
+      row.isEmpty == false
+    }
+    guard allRowsHaveButtons else {
+      return nil
+    }
+
     var wireRows: [[WireButton]] = []
     for row in rows {
       var wireButtons: [WireButton] = []
@@ -138,21 +142,29 @@ public enum FeedbackKeyboard {
       }
       wireRows.append(wireButtons)
     }
+
     let wire = WireMarkup(inlineKeyboard: wireRows)
     return CanonicalJSON.encode(wire)
   }
 
   public static func parseMarkup(_ markup: String) throws(FeedbackKeyboardError) -> [[Button]] {
-    guard let data = markup.data(using: .utf8),
-          let wire = try? JSONDecoder().decode(WireMarkup.self, from: data),
-          CanonicalJSON.encode(wire) == markup,
-          wire.inlineKeyboard.isEmpty == false,
-          wire.inlineKeyboard.allSatisfy({
-        $0.isEmpty == false
-      })
-    else {
+    guard let data = markup.data(using: .utf8) else {
       throw .invalidMarkup
     }
+    let decodedMarkup = try? JSONDecoder().decode(WireMarkup.self, from: data)
+    guard let wire = decodedMarkup else {
+      throw .invalidMarkup
+    }
+    guard CanonicalJSON.encode(wire) == markup, wire.inlineKeyboard.isEmpty == false else {
+      throw .invalidMarkup
+    }
+    let allRowsHaveButtons = wire.inlineKeyboard.allSatisfy { row in
+      row.isEmpty == false
+    }
+    guard allRowsHaveButtons else {
+      throw .invalidMarkup
+    }
+
     var rows: [[Button]] = []
     for row in wire.inlineKeyboard {
       var buttons: [Button] = []
@@ -186,8 +198,12 @@ public enum FeedbackKeyboard {
     }
     return markup(rows: rows)
   }
+}
 
-  private static func reviewLabel(_ signal: OwnerSignal, evaluationRunID: Int64?) -> String {
+// MARK: - Review Labels
+
+private extension FeedbackKeyboard {
+  static func reviewLabel(_ signal: OwnerSignal, evaluationRunID: Int64?) -> String {
     switch signal {
     case .candidateApprove:
       "Approve"

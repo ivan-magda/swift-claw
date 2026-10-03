@@ -77,9 +77,9 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
       )
     }
 
-    let scripted = responses[request.url] ?? cannedResult
-    let isSuccess = HTTPResponseBodyPolicy.isSuccess(scripted?.statusCode ?? 0)
-    let cap = isSuccess ? successBytes : errorBytes
+    let scriptedResult = responses[request.url] ?? cannedResult
+    let isSuccess = HTTPResponseBodyPolicy.isSuccess(scriptedResult?.statusCode ?? 0)
+    let selectedBodyCap = isSuccess ? successBytes : errorBytes
 
     // The linearization point runs before the call is recorded, the order the real executor takes: a
     // refused handoff throws here and leaves no trace of a dispatch that never happened.
@@ -92,7 +92,7 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
         body: request.body,
         timeout: request.timeout,
         responseBodyPolicy: request.responseBodyPolicy,
-        selectedBodyCap: cap,
+        selectedBodyCap: selectedBodyCap,
         carriedHandoff: request.beginHandoff != nil
       )
     )
@@ -100,16 +100,16 @@ public actor RecordingHTTPExecutor: HTTPExecuting {
     if let scriptedError = errors[request.url] {
       throw scriptedError
     }
-    guard let scripted else {
+    guard let scriptedResult else {
       throw UnscriptedRequest(url: request.url)
     }
-    guard !isSuccess || scripted.body.count <= cap else {
-      throw HTTPTransportFailure.oversizedBody(cap: cap)
+    guard !isSuccess || scriptedResult.body.count <= selectedBodyCap else {
+      throw HTTPTransportFailure.oversizedBody(cap: selectedBodyCap)
     }
     return HTTPResult(
-      statusCode: scripted.statusCode,
-      headers: scripted.headers,
-      body: scripted.body.prefix(cap)
+      statusCode: scriptedResult.statusCode,
+      headers: scriptedResult.headers,
+      body: scriptedResult.body.prefix(selectedBodyCap)
     )
   }
 }

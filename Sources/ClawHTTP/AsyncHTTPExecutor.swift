@@ -35,17 +35,16 @@ public struct AsyncHTTPExecutor: HTTPExecuting, HTTPStreaming {
     let isSuccess = HTTPResponseBodyPolicy.isSuccess(statusCode)
 
     do {
-      return HTTPResult(
-        statusCode: statusCode,
-        headers: Self.responseHeaders(response),
-        body: try await Self.collect(
-          response.body,
-          upTo: isSuccess ? successBytes : errorBytes,
-          whenOversized: isSuccess ? .fails : .truncates
-        )
+      let headers = Self.responseHeaders(response)
+      let body = try await Self.collect(
+        response.body,
+        upTo: isSuccess ? successBytes : errorBytes,
+        whenOversized: isSuccess ? .fails : .truncates
       )
-    } catch let oversized as HTTPTransportFailure {
-      throw oversized
+
+      return HTTPResult(statusCode: statusCode, headers: headers, body: body)
+    } catch let failure as HTTPTransportFailure {
+      throw failure
     } catch {
       throw Self.classifyPostHead(error)
     }
@@ -141,20 +140,20 @@ private extension AsyncHTTPExecutor {
     var collected = Data()
 
     for try await buffer in body {
-      let view = buffer.readableBytesView
-      let remaining = cap - collected.count
+      let readableBytes = buffer.readableBytesView
+      let remainingBytes = cap - collected.count
 
-      guard view.count <= remaining else {
+      guard readableBytes.count <= remainingBytes else {
         switch handling {
         case .fails:
           throw HTTPTransportFailure.oversizedBody(cap: cap)
         case .truncates:
-          collected.append(contentsOf: view.prefix(remaining))
+          collected.append(contentsOf: readableBytes.prefix(remainingBytes))
           return collected
         }
       }
 
-      collected.append(contentsOf: view)
+      collected.append(contentsOf: readableBytes)
     }
 
     return collected
@@ -172,35 +171,39 @@ private extension AsyncHTTPExecutor {
     into sink: HTTPBodySink,
     totalBytes: Int?
   ) async -> HTTPStreamTermination {
-    var forwarded = 0
+    var forwardedBytes = 0
 
     do {
       for try await buffer in body {
-        let view = buffer.readableBytesView
+        let readableBytes = buffer.readableBytesView
         let chunk: Data
 
         if let totalBytes {
-          let remaining = totalBytes - forwarded
+          let remainingBytes = totalBytes - forwardedBytes
 
-          guard remaining > 0 else {
+          guard remainingBytes > 0 else {
             break
           }
 
-          chunk = view.count > remaining ? Data(view.prefix(remaining)) : Data(view)
+          chunk =
+            if readableBytes.count > remainingBytes {
+              Data(readableBytes.prefix(remainingBytes))
+            } else {
+              Data(readableBytes)
+            }
         } else {
-          chunk = Data(view)
+          chunk = Data(readableBytes)
         }
 
-        forwarded += chunk.count
+        forwardedBytes += chunk.count
 
         try await sink.send(chunk)
       }
+
       return .completed
     } catch is CancellationError {
       return .cancelled(.mayHaveBeenSent)
-    } catch let error
-      as BoundedAsyncChannelError
-    {
+    } catch let error as BoundedAsyncChannelError {
       return terminationForSink(error)
     } catch {
       return .failed(classifyPostHead(error))

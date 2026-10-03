@@ -60,15 +60,15 @@ private extension ScheduledLearningStoreGRDB {
     guard try sourceIsClaimable(db, key: key) else {
       return nil
     }
-    let claimed: ClaimedOperation?
+    let claimedOperation: ClaimedOperation?
     if let latest = try latestAttempt(db, key: key.digest) {
       switch latest.state {
       case .pending:
         // A claim the last process took but never authorized. No call was ever made under this row,
         // so the attempt is resumed where it stopped rather than replaced by a new generation.
-        claimed = try reclaim(db, latest, key: key)
+        claimedOperation = try reclaim(db, latest, key: key)
       case .interruptedUnknown:
-        claimed = try insertClaim(
+        claimedOperation = try insertClaim(
           db,
           key: key,
           generation: latest.attemptGeneration + 1,
@@ -76,12 +76,12 @@ private extension ScheduledLearningStoreGRDB {
           now: now
         )
       case .claimed, .started, .succeeded, .failed, .failedNoCall:
-        claimed = nil
+        claimedOperation = nil
       }
     } else {
-      claimed = try insertClaim(db, key: key, generation: 1, supersedes: nil, now: now)
+      claimedOperation = try insertClaim(db, key: key, generation: 1, supersedes: nil, now: now)
     }
-    if claimed != nil, key.phase == .evaluator {
+    if claimedOperation != nil, key.phase == .evaluator {
       try recomputeEvaluatorSource(
         db,
         jobID: key.jobID,
@@ -90,7 +90,7 @@ private extension ScheduledLearningStoreGRDB {
         now: now
       )
     }
-    return claimed
+    return claimedOperation
   }
 
   /// What the key's source has to be for the question to still be worth asking.
@@ -120,7 +120,7 @@ private extension ScheduledLearningStoreGRDB {
   /// Only a sealed receipt classified as task evidence may be evaluated, and only under the job and
   /// epoch it was sealed for: a digest alone would let one job's evidence be claimed under another.
   static func evidenceReachesEvaluator(_ db: Database, key: LearningOperationKey) throws -> Bool {
-    let raw = try String.fetchOne(
+    let eligibilityRaw = try String.fetchOne(
       db,
       sql: """
         SELECT eligibility FROM learning_evidence
@@ -128,7 +128,7 @@ private extension ScheduledLearningStoreGRDB {
         """,
       arguments: [key.jobID, key.epoch.value, key.sourceDigest]
     )
-    guard let eligibility = raw.flatMap(LearningEligibility.init(rawValue:)) else {
+    guard let eligibility = eligibilityRaw.flatMap(LearningEligibility.init(rawValue:)) else {
       return false
     }
     return eligibility.reachesEvaluator

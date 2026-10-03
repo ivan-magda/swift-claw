@@ -45,7 +45,7 @@ extension RunStoreGRDB {
     let placeholders = databaseQuestionMarks(count: RunState.liveStates.count)
     var values: [DatabaseValueConvertible] = [sessionID]
     values.append(contentsOf: RunState.liveStates.map(\.rawValue))
-    let found = try Int.fetchOne(
+    let liveRunMatch = try Int.fetchOne(
       db,
       sql: """
         SELECT 1 FROM runs
@@ -54,7 +54,7 @@ extension RunStoreGRDB {
         """,
       arguments: StatementArguments(values)
     )
-    return found != nil
+    return liveRunMatch != nil
   }
 
   static func supersedeRuns(_ db: Database, sessionID: Int64, now: Date) throws -> [Int64] {
@@ -71,8 +71,12 @@ extension RunStoreGRDB {
   static func cancelRun(_ db: Database, runID: Int64, now: Date) throws -> Bool {
     try terminateRun(db, runID: runID, reason: .cancelled, now: now)
   }
+}
 
-  private static func terminateRun(
+// MARK: - Run Termination Helpers
+
+private extension RunStoreGRDB {
+  static func terminateRun(
     _ db: Database,
     runID: Int64,
     reason: CancelReason,
@@ -91,7 +95,7 @@ extension RunStoreGRDB {
   ///
   /// A provider call still in flight may record usage after the run becomes terminal. Deferring
   /// settlement preserves that usage before the evidence is frozen.
-  private static func terminateActiveRuns(
+  static func terminateActiveRuns(
     _ db: Database,
     sessionID: Int64,
     reason: CancelReason,
@@ -110,17 +114,21 @@ extension RunStoreGRDB {
       arguments: StatementArguments(values)
     )
 
-    var affected: [Int64] = []
+    var terminatedRunIDs: [Int64] = []
     for row in rows {
       let runID: Int64 = row["id"]
       if try terminateRun(db, runID: runID, reason: reason, now: now) {
-        affected.append(runID)
+        terminatedRunIDs.append(runID)
       }
     }
 
-    return affected
+    return terminatedRunIDs
   }
+}
 
+// MARK: - Run State and Persistence Helpers
+
+extension RunStoreGRDB {
   // `public`: test fixtures outside this module (ClawGatewayTests, via plain `import ClawData`)
   // drive suspended-run fixtures through the real reducer instead of hand-rolling state.
   /// The one state-change seam, and therefore the one place a bound run's terminal receipt is
@@ -137,9 +145,8 @@ extension RunStoreGRDB {
     policyVersion: String? = nil,
     terminal: TerminalDisposition?
   ) throws -> RunState? {
-    guard let state = try currentRunState(db, runID: runID),
-          let nextState = RunFSM.reduce(state: state, on: event)
-    else {
+    let currentState = try currentRunState(db, runID: runID)
+    guard let currentState, let nextState = RunFSM.reduce(state: currentState, on: event) else {
       return nil
     }
 

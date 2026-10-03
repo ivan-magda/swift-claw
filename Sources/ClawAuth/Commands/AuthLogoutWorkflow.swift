@@ -18,7 +18,9 @@ public struct AuthLogoutWorkflow: Sendable {
     case .failure(let failure):
       return AuthCommandResultMapper.result(for: failure)
     case .success(let lease):
-      defer { lease.release() }
+      defer {
+        lease.release()
+      }
       return runLogout()
     }
   }

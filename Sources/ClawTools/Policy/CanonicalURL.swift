@@ -91,12 +91,16 @@ enum CanonicalURL {
 
     return String(output)
   }
+}
 
-  private static func isHexDigit(_ scalar: Unicode.Scalar) -> Bool {
+// MARK: - Percent Escape Helpers
+
+private extension CanonicalURL {
+  static func isHexDigit(_ scalar: Unicode.Scalar) -> Bool {
     ("0"..."9").contains(scalar) || ("a"..."f").contains(scalar) || ("A"..."F").contains(scalar)
   }
 
-  private static func uppercased(_ scalar: Unicode.Scalar) -> Unicode.Scalar {
+  static func uppercased(_ scalar: Unicode.Scalar) -> Unicode.Scalar {
     guard ("a"..."f").contains(scalar) else {
       return scalar
     }

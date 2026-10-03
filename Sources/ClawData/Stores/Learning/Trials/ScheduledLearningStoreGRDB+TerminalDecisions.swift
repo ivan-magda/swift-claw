@@ -43,10 +43,14 @@ extension ScheduledLearningStoreGRDB {
         )
       }
       let assignments = try Self.terminalAssignments(db, trial: stored, current: current)
-      let actual = TrialPolicy.decide(trial: stored, assignments: assignments, now: now)
+      let authoritativeDecision = TrialPolicy.decide(
+        trial: stored,
+        assignments: assignments,
+        now: now
+      )
       let result: LearningDecisionResult
       let reason: String
-      switch actual {
+      switch authoritativeDecision {
       case .promote:
         guard decision == .promote else {
           return nil
@@ -224,9 +228,10 @@ extension ScheduledLearningStoreGRDB {
     else {
       return
     }
-    let assignments = try assignmentRunIDs(db, trialID: trialID).map { runID in
-      try authoritativeAssignment(db, runID: runID, trial: trial, currentState: state)
-    }
+    let assignments = try assignmentRunIDs(db, trialID: trialID)
+      .map { runID in
+        try authoritativeAssignment(db, runID: runID, trial: trial, currentState: state)
+      }
     _ = try finishTrial(
       db,
       trial: trial,
@@ -247,7 +252,7 @@ extension ScheduledLearningStoreGRDB {
     now: Date
   ) throws -> DecisionReceipt {
     let kind: LearningDecisionKind = record.rollbackTrigger == nil ? .trial : .rollback
-    let id = try insertDecision(
+    let decisionID = try insertDecision(
       db,
       kind: kind.rawValue,
       jobID: inputs.identity.jobID,
@@ -257,20 +262,20 @@ extension ScheduledLearningStoreGRDB {
       algorithm: inputs.algorithm,
       now: now
     )
-    return DecisionReceipt(decisionID: id, inputs: inputs, record: record)
+    return DecisionReceipt(decisionID: decisionID, inputs: inputs, record: record)
   }
 
   static func terminalReceipt(
     _ db: Database,
     inputs: TrialDecisionInputs
   ) throws -> DecisionReceipt? {
-    guard let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql: """
-          SELECT decision_id, inputs, result FROM learning_decisions
-          WHERE kind = ? AND job_id = ? AND learning_epoch = ? AND inputs = ?
-          ORDER BY decision_id LIMIT 1
-          """,
+        SELECT decision_id, inputs, result FROM learning_decisions
+        WHERE kind = ? AND job_id = ? AND learning_epoch = ? AND inputs = ?
+        ORDER BY decision_id LIMIT 1
+        """,
       arguments: [
         LearningDecisionKind.trial.rawValue,
         inputs.identity.jobID,
@@ -278,7 +283,7 @@ extension ScheduledLearningStoreGRDB {
         try canonicalDecisionJSON(inputs),
       ]
     )
-    else {
+    guard let row else {
       return nil
     }
     return try decodeTerminalReceipt(row)

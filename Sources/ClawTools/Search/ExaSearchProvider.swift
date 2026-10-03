@@ -65,21 +65,26 @@ public struct ExaSearchProvider: SearchProviding {
     }
 
     return decoded.results.map { entry in
-      SearchResult(
-        title: entry.title ?? entry.url,
-        url: entry.url,
-        snippet: entry.highlights?.first ?? entry.summary ?? entry.text.map { text in
+      let snippet =
+        entry.highlights?.first ?? entry.summary
+        ?? entry.text.map { text in
           String(text.prefix(Self.snippetTextPrefixGraphemes))
         } ?? ""
+      return SearchResult(
+        title: entry.title ?? entry.url,
+        url: entry.url,
+        snippet: snippet
       )
     }
   }
+}
 
-  // MARK: - Load-bearing
+// MARK: - Response Handling
 
+private extension ExaSearchProvider {
   /// Terminal = 400/401/402/403/404/409/422; retryable-class = 429/500/502/503 (and any other
   /// 5xx, conservatively). Verified against the live Exa error doc 2026-07-03.
-  private func classify(status: Int, body: Data) -> SearchError {
+  func classify(status: Int, body: Data) -> SearchError {
     let raw = String(data: body, encoding: .utf8) ?? ""
     let message = redact(raw.isEmpty ? "HTTP \(status)" : raw)
 
@@ -94,11 +99,11 @@ public struct ExaSearchProvider: SearchProviding {
   }
 
   /// The search key joins the exact-value redaction set of its own client.
-  private func redact(_ message: String) -> String {
+  func redact(_ message: String) -> String {
     SecretRedactor(secretValues: [apiKey]).redact(message)
   }
 
-  private struct ResponseBody: Decodable {
+  struct ResponseBody: Decodable {
     struct Entry: Decodable {
       let title: String?
       let url: String

@@ -29,9 +29,12 @@ struct TUser: Decodable {
     let parts = [first_name, last_name].compactMap { part in
       part?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    let name = parts.filter {
-      !$0.isEmpty
-    }.joined(separator: " ")
+    let name =
+      parts
+      .filter {
+        !$0.isEmpty
+      }
+      .joined(separator: " ")
     return name.isEmpty ? username : name
   }
 }

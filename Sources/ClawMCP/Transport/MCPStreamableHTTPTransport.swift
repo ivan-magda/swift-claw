@@ -106,12 +106,12 @@ actor MCPStreamableHTTPTransport: Transport {
       lifecycle = .disconnected
     }
 
-    let pending = Array(sends.values)
-    for send in pending {
+    let pendingSends = Array(sends.values)
+    for send in pendingSends {
       send.cancel()
     }
     let teardown = Task {
-      for send in pending {
+      for send in pendingSends {
         _ = await send.result
       }
       guard let session = self.sessionID else {
@@ -129,16 +129,18 @@ actor MCPStreamableHTTPTransport: Transport {
       throw MCPTransportError.notConnected
     }
 
-    let id = UUID()
-    let task = Task {
+    let sendID = UUID()
+    let sendTask = Task {
       try await self.exchange(data)
     }
-    sends[id] = task
-    defer { sends[id] = nil }
+    sends[sendID] = sendTask
+    defer {
+      sends[sendID] = nil
+    }
     try await withTaskCancellationHandler {
-      try await task.value
+      try await sendTask.value
     } onCancel: {
-      task.cancel()
+      sendTask.cancel()
     }
   }
 
@@ -238,9 +240,8 @@ private extension MCPStreamableHTTPTransport {
     guard handshakeCompleted else {
       return connectTimeout
     }
-    guard let envelope = try? JSONDecoder().decode(OutboundMethodEnvelope.self, from: body),
-          envelope.method == CancelledNotification.name
-    else {
+    let envelope = try? JSONDecoder().decode(OutboundMethodEnvelope.self, from: body)
+    guard let envelope, envelope.method == CancelledNotification.name else {
       return requestTimeout
     }
     return min(requestTimeout, MCPTransportLimits.cancellationTimeout)
@@ -310,8 +311,11 @@ private extension MCPStreamableHTTPTransport {
 
     let rawContentType = exchange.head.header(for: MCPHTTPHeader.contentType) ?? ""
     let contentType =
-      rawContentType.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false).first?
-      .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+      rawContentType
+      .split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
+      .first?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased() ?? ""
     if contentType == ContentType.eventStream {
       try await deliverEvents(exchange)
     } else if contentType == ContentType.json {
@@ -330,7 +334,8 @@ private extension MCPStreamableHTTPTransport {
         throw MCPTransportError.oversizedMessage(limitBytes: MCPTransportLimits.maxMessageBytes)
       }
     }
-    try check(await exchange.awaitTermination())
+    let termination = await exchange.awaitTermination()
+    try check(termination)
 
     try yield(message: body)
   }
@@ -351,7 +356,8 @@ private extension MCPStreamableHTTPTransport {
         throw MCPTransportError.oversizedMessage(limitBytes: MCPTransportLimits.maxMessageBytes)
       }
     }
-    try check(await exchange.awaitTermination())
+    let termination = await exchange.awaitTermination()
+    try check(termination)
 
     // A server that closes right after its last `data:` line, without the blank line that would end
     // the event, still sent us a whole message. Reading it is what keeps such a server usable; a
@@ -395,9 +401,11 @@ private extension MCPStreamableHTTPTransport {
   /// revision therefore has to reach the header here, before the initialize response is yielded to
   /// the SDK and unblocks that notification.
   func adoptVersionFromHandshake(_ message: Data) {
-    guard handshakeCompleted == false,
-          let envelope = try? JSONDecoder().decode(InitializeEnvelope.self, from: message),
-          let version = envelope.result?.protocolVersion,
+    guard handshakeCompleted == false else {
+      return
+    }
+    let envelope = try? JSONDecoder().decode(InitializeEnvelope.self, from: message)
+    guard let envelope, let version = envelope.result?.protocolVersion,
           Version.supported.contains(version)
     else {
       return

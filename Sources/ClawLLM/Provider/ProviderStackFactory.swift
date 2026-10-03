@@ -239,10 +239,10 @@ private extension ProviderStackFactory {
     buildVersion: String,
     treatsQuotaAsTerminal: Bool = false
   ) throws -> ProviderStack {
-    let initial = try store.load(providerID: ChatGPTProviderMetadata.providerID)
+    let initialCredential = try store.load(providerID: ChatGPTProviderMetadata.providerID)
 
     let credentialSource = ChatGPTCredentialSource(
-      initialCredential: initial,
+      initialCredential: initialCredential,
       store: store,
       oauth: ChatGPTOAuthClient(http: http) {
         Date()
@@ -254,7 +254,7 @@ private extension ProviderStackFactory {
     let provider = ChatGPTResponsesProvider(
       http: http,
       credentials: credentialSource,
-      credentialProfileID: initial?.profileID,
+      credentialProfileID: initialCredential?.profileID,
       buildVersion: buildVersion,
       retryBudget: settings.retryBudget,
       requestTimeoutSeconds: settings.requestTimeoutSeconds,

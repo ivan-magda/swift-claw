@@ -33,16 +33,18 @@ extension TurnRunner {
     }
 
     let nonce = ApprovalNonce.generate()
-    let completed = anchor.observations.filter {
-      $0.callID != pending.toolCallID
-    }.map {
-      ToolObservationRow(toolCallID: $0.callID, content: $0.content)
-    }
+    let completedObservations = anchor.observations
+      .filter {
+        $0.callID != pending.toolCallID
+      }
+      .map {
+        ToolObservationRow(toolCallID: $0.callID, content: $0.content)
+      }
 
     let commit = SuspendedTurnCommit(
       assistantContent: anchor.assistantContent,
       toolCallsJSON: ToolCallCoding.encode(anchor.toolCalls) ?? "[]",
-      completedObservations: completed,
+      completedObservations: completedObservations,
       pending: pending,
       ownerUserID: context.chatID,
       nonce: nonce,

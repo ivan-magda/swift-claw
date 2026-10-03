@@ -130,7 +130,8 @@ enum BudgetFitter {
         let current = fittedRows[index]
         let targetCount = max(0, current.content.count - excess)
 
-        if let shrunk = fittedRow(for: current.source, maxCount: targetCount) {
+        let shrunk = fittedRow(for: current.source, maxCount: targetCount)
+        if let shrunk {
           excess -= current.content.count - shrunk.content.count
           fittedRows[index] = shrunk
         } else {
@@ -155,7 +156,18 @@ enum BudgetFitter {
     }
   }
 
-  private static func fittedRow(for section: FittableSection, maxCount: Int) -> FittedRow? {
+  /// What the truncatable rows have left to share: the input cap less whatever the fixed rows
+  /// render to. The assembler pre-scales each truncatable cap against this before handing the
+  /// sections over, so both sides have to read one formula or the caps stop matching the squeeze.
+  static func residual(for sections: [FittableSection], budget: ContextBudget) -> Int {
+    residual(required: requiredGraphemes(sections), budget: budget)
+  }
+}
+
+// MARK: - Row Fitting
+
+private extension BudgetFitter {
+  static func fittedRow(for section: FittableSection, maxCount: Int) -> FittedRow? {
     // The newest history unit is the current turn; it is non-droppable even when it alone
     // exceeds the budget, so the model always sees the message it is answering. Flooring the
     // budget at its size means it is admitted whole on the first iteration; later units still
@@ -204,14 +216,14 @@ enum BudgetFitter {
 
   /// Rows whose units mean something in order: history must stay a contiguous newest-first window,
   /// and the skills index drops as a prefix so its "N of M" marker describes a real slice.
-  private static func keepsContiguousPrefix(_ id: ContextRowID) -> Bool {
+  static func keepsContiguousPrefix(_ id: ContextRowID) -> Bool {
     id == .history || id == .skills
   }
 
   /// Appends the row's drop marker when the budget left units out. The marker shares the cap with
   /// the content it describes, so a cap too tight for both ships the kept units unmarked — giving
   /// content back to make room would let an annotation about missing skills empty the whole row.
-  private static func markedRow(
+  static func markedRow(
     for section: FittableSection,
     kept: [SectionUnit],
     maxCount: Int
@@ -221,10 +233,12 @@ enum BudgetFitter {
     }
 
     let droppedIDs = droppedUnitIDs(in: section, kept: kept)
-    guard droppedIDs.isEmpty == false,
-          let marker = section.dropMarker.line(kept: kept.count, total: section.units.count),
-          renderUnits(kept).count + 1 + marker.count <= maxCount
-    else {
+    guard droppedIDs.isEmpty == false else {
+      return FittedRow(source: section, units: kept, droppedUnitIDs: droppedIDs)
+    }
+
+    let marker = section.dropMarker.line(kept: kept.count, total: section.units.count)
+    guard let marker, renderUnits(kept).count + 1 + marker.count <= maxCount else {
       return FittedRow(source: section, units: kept, droppedUnitIDs: droppedIDs)
     }
 
@@ -235,34 +249,36 @@ enum BudgetFitter {
     )
   }
 
-  private static func droppedUnitIDs(in section: FittableSection, kept: [SectionUnit]) -> [String] {
+  static func droppedUnitIDs(in section: FittableSection, kept: [SectionUnit]) -> [String] {
     let keptIDs = Set(kept.map(\.id))
-    return section.units.map(\.id).filter { id in
-      keptIDs.contains(id) == false
-    }
+    return section.units
+      .map(\.id)
+      .filter { id in
+        keptIDs.contains(id) == false
+      }
   }
+}
 
-  /// What the truncatable rows have left to share: the input cap less whatever the fixed rows
-  /// render to. The assembler pre-scales each truncatable cap against this before handing the
-  /// sections over, so both sides have to read one formula or the caps stop matching the squeeze.
-  static func residual(for sections: [FittableSection], budget: ContextBudget) -> Int {
-    residual(required: requiredGraphemes(sections), budget: budget)
-  }
+// MARK: - Budget Measurement
 
+private extension BudgetFitter {
   /// Split out so a fit that already measured the fixed rows does not render them a second time.
-  private static func residual(required: Int, budget: ContextBudget) -> Int {
+  static func residual(required: Int, budget: ContextBudget) -> Int {
     max(0, budget.inputCapGraphemes - required)
   }
 
   /// The graphemes the non-truncatable rows consume once rendered — the same rendering the fit
   /// itself measures, separator included.
-  private static func requiredGraphemes(_ sections: [FittableSection]) -> Int {
-    sections.filter {
-      !$0.truncatable
-    }.map(renderedCount).reduce(0, +)
+  static func requiredGraphemes(_ sections: [FittableSection]) -> Int {
+    sections
+      .filter {
+        !$0.truncatable
+      }
+      .map(renderedCount)
+      .reduce(0, +)
   }
 
-  private static func renderedCount(_ section: FittableSection) -> Int {
+  static func renderedCount(_ section: FittableSection) -> Int {
     renderUnits(section.units).count
   }
 }

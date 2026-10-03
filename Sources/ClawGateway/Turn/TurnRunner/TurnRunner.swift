@@ -133,12 +133,13 @@ public struct TurnRunner: TurnDispatching {
       return
     }
 
-    let now = now()
+    let pickedUpAt = now()
     // The fingerprint is computed from the same builder inputs `assemble` will use and
     // stamped in the same UPDATE that flips PENDING→RUNNING, so an approval this run creates binds
     // to the exact prompt/tool/config surface in force at run start.
     let policyVersion = contextBuilder.currentPolicyVersion()
-    guard let origin = try runs.pickUp(runID: runID, policyVersion: policyVersion, now: now) else {
+    let origin = try runs.pickUp(runID: runID, policyVersion: policyVersion, now: pickedUpAt)
+    guard let origin else {
       logger.debug("run \(runID) was not pending at pickup; skipping turn")
       return
     }
@@ -162,7 +163,7 @@ public struct TurnRunner: TurnDispatching {
         sessionID: sessionID,
         boundMessageID: triggerMessageID,
         origin: origin,
-        at: now,
+        at: pickedUpAt,
         images: await cachedImages(sessionID: sessionID)
       )
     } catch StoreError.diskFull {

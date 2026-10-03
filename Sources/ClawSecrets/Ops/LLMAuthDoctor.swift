@@ -37,7 +37,11 @@ public enum LLMAuthDoctor {
     makeManagedStore: () -> any LLMCredentialStore
   ) -> DoctorRowResult {
     let store: (any LLMCredentialStore)? =
-      route.descriptor.credentialMode == .managedOAuth ? makeManagedStore() : nil
+      if route.descriptor.credentialMode == .managedOAuth {
+        makeManagedStore()
+      } else {
+        nil
+      }
     return inspect(route: route, staticAPIKey: staticAPIKey, credentialStore: store, now: now)
   }
 }

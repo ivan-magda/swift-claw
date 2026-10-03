@@ -252,7 +252,8 @@ extension LLMEventBufferLimits {
       return .cancelled(.mayHaveStarted(observing: observedTokens))
     }
 
-    guard terminalCharge(for: response) <= reservedTerminalBytes else {
+    let terminalBytes = terminalCharge(for: response)
+    guard terminalBytes <= reservedTerminalBytes else {
       return .failed(
         ProviderFailure(
           cause: .terminal(

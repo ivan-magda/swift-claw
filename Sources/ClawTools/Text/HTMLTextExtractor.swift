@@ -230,9 +230,10 @@ private extension HTMLTextExtractor {
         continue
       }
 
-      if let entity = entities.first(where: {
-        matchesExact($0.token, in: scalars, at: index)
-      }) {
+      let matchingEntity = entities.first { entity in
+        matchesExact(entity.token, in: scalars, at: index)
+      }
+      if let entity = matchingEntity {
         output.append(entity.replacement)
         index += entity.token.count
       } else {

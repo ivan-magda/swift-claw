@@ -14,19 +14,21 @@ struct ManagedCoderProcessGroup: Sendable {
   let receipt: CoderProcessReceipt
 
   func liveMembers() throws -> [CoderProcessIdentity] {
-    guard let pid = receipt.pid,
-          let pgid = receipt.pgid,
-          pid == pgid,
-          receipt.hostBootID == (try CoderProcessIdentity.bootID()),
-          let leader = try CoderProcessIdentity.read(pid),
-          leader.pgid == pgid,
-          leader.birth == receipt.birthIdentity
-    else {
+    guard let pid = receipt.pid, let pgid = receipt.pgid, pid == pgid else {
       throw IdentityError.unreadable
     }
-    return try CoderProcessIdentity.members(of: pgid).filter { member in
-      !member.isZombie
+    let bootID = try CoderProcessIdentity.bootID()
+    guard receipt.hostBootID == bootID else {
+      throw IdentityError.unreadable
     }
+    let leader = try CoderProcessIdentity.read(pid)
+    guard let leader, leader.pgid == pgid, leader.birth == receipt.birthIdentity else {
+      throw IdentityError.unreadable
+    }
+    return try CoderProcessIdentity.members(of: pgid)
+      .filter { member in
+        !member.isZombie
+      }
   }
 
   func terminate() async -> Bool {

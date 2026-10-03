@@ -114,7 +114,9 @@ public struct VoiceMessageService: VoiceMessageTranscribing {
       logger.error("voice staging failed: \(error)")
       return .failure(Self.classifyStagingError(error))
     }
-    defer { try? FileManager.default.removeItem(at: stagedFileURL) }
+    defer {
+      try? FileManager.default.removeItem(at: stagedFileURL)
+    }
 
     let transcript: String
     switch await transcribeWithDeadline(audioFileAt: stagedFileURL) {

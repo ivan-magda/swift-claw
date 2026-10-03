@@ -44,7 +44,9 @@ struct CodexReport: Sendable, Decodable {
     guard descriptor >= 0 else {
       throw CodexProtocolFailure.invalidReport
     }
-    defer { close(descriptor) }
+    defer {
+      close(descriptor)
+    }
     var metadata = stat()
     guard fstat(descriptor, &metadata) == 0,
           metadata.st_mode & S_IFMT == S_IFREG,
@@ -68,8 +70,9 @@ struct CodexReport: Sendable, Decodable {
       }
       data.append(contentsOf: buffer.prefix(count))
     }
-    guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-          Set(object.keys) == Set(CodingKeys.allCases.map(\.rawValue))
+    let reportObject = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    guard let reportObject,
+          Set(reportObject.keys) == Set(CodingKeys.allCases.map(\.rawValue))
     else {
       throw CodexProtocolFailure.invalidReport
     }

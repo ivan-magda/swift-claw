@@ -50,11 +50,15 @@ public enum RuntimeSecretPreparer {
       )
     }
   }
+}
 
+// MARK: - Runtime Secret Loading
+
+private extension RuntimeSecretPreparer {
   /// `SecretStore.loadSecrets` cannot declare its error type, but every implementation in this
   /// module throws only `SecretStoreError` — this is where that contract is enforced rather than
   /// assumed.
-  private static func load(_ store: any SecretStore) throws(SecretStoreError) -> Secrets {
+  static func load(_ store: any SecretStore) throws(SecretStoreError) -> Secrets {
     do {
       return try store.loadSecrets()
     } catch let error as SecretStoreError {

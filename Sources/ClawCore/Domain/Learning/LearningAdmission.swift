@@ -217,11 +217,16 @@ public enum AdmissionValidator {
     }
     return .success(replacement)
   }
+}
 
-  private static func containsSecret(_ replacement: LessonSet, redactor: SecretRedactor) -> Bool {
-    if replacement.lessons.contains(where: { lesson in
+// MARK: - Replacement Secret Checks
+
+private extension AdmissionValidator {
+  static func containsSecret(_ replacement: LessonSet, redactor: SecretRedactor) -> Bool {
+    let lessonContainsSecret = replacement.lessons.contains { lesson in
       redactor.redact(lesson) != lesson
-    }) {
+    }
+    if lessonContainsSecret {
       return true
     }
     // swiftlint:disable:next optional_data_string_conversion

@@ -157,7 +157,9 @@ public struct ProviderUsageAccountant: Sendable {
     context: [ChatMessage],
     tools: [ToolDefinition] = []
   ) -> Resolved {
-    let resolvedUsage = usageResolver.resolve(response: response, context: context, tools: tools)
+    let resolvedUsage =
+      usageResolver
+      .resolve(response: response, context: context, tools: tools)
       .addingReservation(reservationPolicy.additionalTokens(for: context))
     return Resolved(
       usage: resolvedUsage,
@@ -176,11 +178,14 @@ public struct ProviderUsageAccountant: Sendable {
     tools: [ToolDefinition] = [],
     observedCompletionTokens: Int
   ) -> Resolved {
-    let resolvedUsage = usageResolver.estimate(
-      context: context,
-      tools: tools,
-      maxOutputTokens: max(outputCap, observedCompletionTokens)
-    ).addingReservation(reservationPolicy.additionalTokens(for: context))
+    let resolvedUsage =
+      usageResolver
+      .estimate(
+        context: context,
+        tools: tools,
+        maxOutputTokens: max(outputCap, observedCompletionTokens)
+      )
+      .addingReservation(reservationPolicy.additionalTokens(for: context))
     return Resolved(
       usage: resolvedUsage,
       cost: costResolver.resolve(
@@ -230,7 +235,8 @@ public struct ProviderUsageAccountant: Sendable {
     for estimate: PreflightEstimate,
     check: (PreflightEstimate) -> BudgetDecision
   ) -> PreflightRefusal? {
-    guard case .deny(let cap) = check(estimate) else {
+    let budgetDecision = check(estimate)
+    guard case .deny(let cap) = budgetDecision else {
       return nil
     }
 
@@ -238,14 +244,17 @@ public struct ProviderUsageAccountant: Sendable {
       return PreflightRefusal(cap: cap, unpricedModel: nil)
     }
 
-    let unpriced = PreflightEstimate(
+    let zeroCostEstimate = PreflightEstimate(
       inputTokens: estimate.inputTokens,
       totalTokens: estimate.totalTokens,
       costUSD: 0,
       costSource: estimate.costSource
     )
-    let guessOnly = check(unpriced) == .allow
+    let deniedByHeuristicCostOnly = check(zeroCostEstimate) == .allow
 
-    return PreflightRefusal(cap: cap, unpricedModel: guessOnly ? configuredReference : nil)
+    return PreflightRefusal(
+      cap: cap,
+      unpricedModel: deniedByHeuristicCostOnly ? configuredReference : nil
+    )
   }
 }

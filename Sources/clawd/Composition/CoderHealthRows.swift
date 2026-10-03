@@ -133,17 +133,20 @@ enum CoderHealthRows {
       let unresolved = jobs.filter {
         $0.ownership == .unresolved || $0.ownership == .launching
       }
+      let ownershipValue =
+        if unresolved.isEmpty {
+          "none"
+        } else {
+          unresolved
+            .map {
+              $0.id.uuidString
+            }
+            .joined(separator: ", ")
+        }
+
       rows += [
         row(Key.reserved, "\(jobs.count) (persisted reservations)"),
-        row(
-          Key.ownership,
-          unresolved.isEmpty
-            ? "none"
-            : unresolved.map {
-              $0.id.uuidString
-            }.joined(separator: ", "),
-          ok: unresolved.isEmpty
-        ),
+        row(Key.ownership, ownershipValue, ok: unresolved.isEmpty),
       ]
     } catch {
       rows += [unreadable(Key.reserved), unreadable(Key.ownership)]

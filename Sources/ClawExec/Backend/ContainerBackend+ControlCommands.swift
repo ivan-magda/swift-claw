@@ -6,26 +6,26 @@ import Foundation
 
 extension ContainerBackend {
   func engineRunning(limit: Duration, deadline: ContinuousClock.Instant) async -> Bool {
-    guard let data = await boundedCommandData(
+    let statusData = await boundedCommandData(
       ContainerInvocation.systemStatus(),
       limit: limit,
       deadline: deadline
     )
-    else {
+    guard let statusData else {
       return false
     }
 
-    let document = try? JSONDecoder().decode(SystemStatusDocument.self, from: data)
+    let document = try? JSONDecoder().decode(SystemStatusDocument.self, from: statusData)
     return document?.status == "running"
   }
 
   // swiftlint:disable discouraged_optional_boolean
   func containerPresent(_ identity: String, deadline: ContinuousClock.Instant) async -> Bool? {
-    guard let containers = await listedContainers(
+    let containers = await listedContainers(
       limit: Self.lifecycleCommandTimeout,
       deadline: deadline
     )
-    else {
+    guard let containers else {
       return nil
     }
     return containers.contains {
@@ -148,13 +148,15 @@ extension ContainerBackend {
 
     let allowance = command.timeout + command.teardownGracePeriod + hostWatchdogSlack
 
-    switch await DeadlineRace.race(
+    let commandOutcome = await DeadlineRace.race(
       allowance: allowance,
       sleep: watchdogSleep,
       operation: {
         await commands.run(command)
       }
-    ) {
+    )
+
+    switch commandOutcome {
     case .operationReturned(let result):
       return result
     case .deadlineExpired:

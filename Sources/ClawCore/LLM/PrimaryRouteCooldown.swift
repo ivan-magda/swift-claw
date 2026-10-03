@@ -32,12 +32,16 @@ public actor PrimaryRouteCooldown<ClockType: Clock> where ClockType.Duration == 
 
   public func arm(persistence: RouteFailurePersistence, retryAfterSeconds: Int?) {
     let tierSeconds = persistence == .long ? longSeconds : shortSeconds
-    let base =
-      window.map {
-        min(capSeconds, $0.armedSeconds * 2)
+    let baseSeconds =
+      window.map { previousWindow in
+        min(capSeconds, previousWindow.armedSeconds * 2)
       } ?? tierSeconds
-    let bounded = min(capSeconds, max(base, retryAfterSeconds ?? 0))
-    window = Window(expiresAt: clock.now.advanced(by: .seconds(bounded)), armedSeconds: bounded)
+    let boundedSeconds = min(capSeconds, max(baseSeconds, retryAfterSeconds ?? 0))
+
+    window = Window(
+      expiresAt: clock.now.advanced(by: .seconds(boundedSeconds)),
+      armedSeconds: boundedSeconds
+    )
   }
 
   public func isCooling() -> Bool {

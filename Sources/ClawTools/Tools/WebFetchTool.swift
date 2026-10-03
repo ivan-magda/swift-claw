@@ -183,12 +183,10 @@ private extension WebFetchTool {
     // Literals stay on the pure blocklist — including the legacy numeric spellings getaddrinfo
     // resolves without DNS (http://3323068500/), which strict IP-literal parsing would miss.
     if ResolvedAddress.denotesIPLiteral(host: host) {
-      guard addresses.allSatisfy(
-          {
-            SSRFGuard.isPublic($0)
-          }
-      )
-      else {
+      let allAddressesPublic = addresses.allSatisfy { address in
+        SSRFGuard.isPublic(address)
+      }
+      guard allAddressesPublic else {
         return refusalPayload("Refused: \(host) is a private or reserved address.")
       }
       return nil
@@ -280,7 +278,11 @@ private extension WebFetchTool {
     }
 
     let extracted =
-      mediaType.contains("html") ? HTMLTextExtractor.extractText(fromHTML: bodyText) : bodyText
+      if mediaType.contains("html") {
+        HTMLTextExtractor.extractText(fromHTML: bodyText)
+      } else {
+        bodyText
+      }
     let redacted = redactor.redact(extracted)  // same pass as file_read
 
     return ToolPayload(

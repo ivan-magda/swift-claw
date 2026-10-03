@@ -20,8 +20,12 @@ enum ProviderErrorClassifier {
     }
     return false
   }
+}
 
-  private static func isVisionRefusal(status: Int, body: String) -> Bool {
+// MARK: - Vision Refusal Matching
+
+private extension ProviderErrorClassifier {
+  static func isVisionRefusal(status: Int, body: String) -> Bool {
     guard status == refusalStatus else {
       return false
     }

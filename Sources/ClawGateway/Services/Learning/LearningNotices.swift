@@ -41,10 +41,11 @@ public struct LearningNotices: Sendable {
     chatID: Int64,
     now: Date
   ) throws -> CandidateReviewNotice {
-    guard candidate.manifest.evaluations.count <= EvidenceWindow.maximumCount,
-          Set(candidate.manifest.evaluations.map(\.digest)).count
-          == candidate.manifest.evaluations.count
-    else {
+    guard candidate.manifest.evaluations.count <= EvidenceWindow.maximumCount else {
+      throw LearningReviewError.invalidCandidate
+    }
+    let evaluationDigests = Set(candidate.manifest.evaluations.map(\.digest))
+    guard evaluationDigests.count == candidate.manifest.evaluations.count else {
       throw LearningReviewError.invalidCandidate
     }
     let targets = try reviewTargets(
@@ -59,11 +60,11 @@ public struct LearningNotices: Sendable {
     guard parts.isEmpty == false else {
       throw LearningReviewError.invalidCandidate
     }
-    guard let markup = FeedbackKeyboard.candidateReviewMarkup(
+    let markup = FeedbackKeyboard.candidateReviewMarkup(
       targets: targets,
       evaluations: candidate.manifest.evaluations
     )
-    else {
+    guard let markup else {
       throw LearningReviewError.invalidCandidate
     }
     let chunks = parts.enumerated().map { ordinal, payload in
@@ -216,13 +217,15 @@ private extension LearningNotices {
   func reviewText(_ candidate: CandidateArtifact) -> String {
     let lessons = candidate.replacement.lessons
     let body =
-      lessons.isEmpty
-      ? "- Remove all learned lessons."
-      : lessons.enumerated().map { index, lesson in
-        "\(index + 1). \(lesson)"
-      }.joined(
-        separator: "\n"
-      )
+      if lessons.isEmpty {
+        "- Remove all learned lessons."
+      } else {
+        lessons.enumerated()
+          .map { index, lesson in
+            "\(index + 1). \(lesson)"
+          }
+          .joined(separator: "\n")
+      }
     return "Candidate lessons for review:\n\(body)"
   }
 }

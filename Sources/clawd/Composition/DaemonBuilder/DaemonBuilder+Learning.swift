@@ -84,22 +84,28 @@ extension DaemonBuilder {
   /// folds in prompts and egress config: two runs may share a tool catalog while their prompts
   /// differ, and the evidence window needs to tell those axes apart.
   static func toolCatalogDigest(_ tools: [ToolDefinition]) -> String {
-    let parts = tools.sorted { lhs, rhs in
-      lhs.name < rhs.name
-    }.flatMap { tool in
-      [tool.name, tool.riskLevel.rawValue]
-    }
+    let parts =
+      tools
+      .sorted { lhs, rhs in
+        lhs.name < rhs.name
+      }
+      .flatMap { tool in
+        [tool.name, tool.riskLevel.rawValue]
+      }
     return String(PolicyFingerprint.hash(parts: parts).prefix(16))
   }
 
   /// Name and description of every accepted skill — the index the context actually injects. A skill
   /// body changes what a run can do only once its index row invites the model to load it.
   static func skillSetDigest(_ skills: [SkillDescriptor]) -> String {
-    let parts = skills.sorted { lhs, rhs in
-      lhs.name < rhs.name
-    }.flatMap { skill in
-      [skill.name, skill.description]
-    }
+    let parts =
+      skills
+      .sorted { lhs, rhs in
+        lhs.name < rhs.name
+      }
+      .flatMap { skill in
+        [skill.name, skill.description]
+      }
     return String(PolicyFingerprint.hash(parts: parts).prefix(16))
   }
 

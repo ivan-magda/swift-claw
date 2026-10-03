@@ -85,7 +85,8 @@ public struct EncryptedMCPCredentialStore: Sendable {
   // MARK: - Reading
 
   public func load(server: MCPServerConfig) throws(CredentialStoreError) -> MCPCredentialLoad {
-    Self.outcome(for: try file.load()?.servers[server.name], server: server)
+    let record = try file.load()?.servers[server.name]
+    return Self.outcome(for: record, server: server)
   }
 
   /// Every configured server's outcome in one read, so the boot path opens the envelope once rather
@@ -106,9 +107,12 @@ public struct EncryptedMCPCredentialStore: Sendable {
     for server in servers {
       outcomes[server.name] = Self.outcome(for: stored[server.name], server: server)
     }
-    let redactionValues = stored.keys.sorted().compactMap { name in
-      stored[name]?.token
-    }
+
+    let redactionValues = stored.keys
+      .sorted()
+      .compactMap { name in
+        stored[name]?.token
+      }
     return MCPCredentialSnapshot(outcomes: outcomes, redactionValues: redactionValues)
   }
 
@@ -220,8 +224,10 @@ extension EncryptedMCPCredentialStore {
     try envelopeCodec.sealCredential(plaintext, key: key)
   }
 
-  static func openEnvelope(_ envelope: Data, key: SymmetricKey) throws(CredentialStoreError) -> Data
-  {
+  static func openEnvelope(
+    _ envelope: Data,
+    key: SymmetricKey
+  ) throws(CredentialStoreError) -> Data {
     try envelopeCodec.openCredential(envelope, key: key)
   }
 }

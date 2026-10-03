@@ -122,7 +122,8 @@ enum CoderSubmitArguments {
       baseBranch: optionalText(object, field: "base_branch"),
       instructions: optionalText(object, field: "instructions"),
       publishExistingChanges: publish
-    ).validated()
+    )
+    .validated()
   }
 }
 

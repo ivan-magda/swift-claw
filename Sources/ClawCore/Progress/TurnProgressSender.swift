@@ -143,7 +143,8 @@ private extension TurnProgressSender {
           earlySecondAttempted = true
         }
 
-        if await sendDraft(draft) {
+        let draftDelivered = await sendDraft(draft)
+        if draftDelivered {
           deliveredDrafts += 1
           lastDelivery = clock.now
         }
@@ -240,9 +241,9 @@ extension TurnProgressSender {
         return nil
       }
       // swiftlint:disable:next redundant_nil_coalescing
-      let first = await group.next() ?? nil
+      let firstResult = await group.next() ?? nil
       group.cancelAll()
-      return first
+      return firstResult
     }
   }
 }

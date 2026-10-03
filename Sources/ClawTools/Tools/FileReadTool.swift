@@ -84,8 +84,12 @@ public struct FileReadTool: Tool {
       readPrivateData: readPrivateData
     )
   }
+}
 
-  private func errorPayload(_ reason: String) -> ToolPayload {
+// MARK: - Error Payload
+
+private extension FileReadTool {
+  func errorPayload(_ reason: String) -> ToolPayload {
     ToolPayload(content: reason, status: .error, ingestedUntrusted: false)
   }
 }

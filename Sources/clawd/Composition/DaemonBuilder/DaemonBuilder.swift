@@ -264,14 +264,19 @@ struct DaemonBuilder: Sendable {
       logger: logger
     )
 
+    let coderServices: [any Service] =
+      if let coder {
+        [coder]
+      } else {
+        []
+      }
+    let lifecycleServices = Self.servicesWithLaneAdmissionLast(
+      base: services + coderServices,
+      laneAdmission: laneAdmission
+    )
+
     let daemon = Daemon(
-      services: Self.servicesWithLaneAdmissionLast(
-        base: services
-          + (coder.map {
-            [$0 as any Service]
-          } ?? []),
-        laneAdmission: laneAdmission
-      ),
+      services: lifecycleServices,
       boot: boot,
       logger: logger,
       gracefulShutdownSignals: gracefulShutdownSignals,

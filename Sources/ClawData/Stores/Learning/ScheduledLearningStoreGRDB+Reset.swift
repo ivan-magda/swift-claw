@@ -11,8 +11,12 @@ extension ScheduledLearningStoreGRDB {
     now: Date
   ) throws(StoreError) -> ConfirmedLearningResetResult {
     try database.writeMapping { db in
-      guard try ProcessedUpdateStoreGRDB.claimUpdate(db: db, updateID: updateID, claimedAt: now)
-      else {
+      let updateClaimed = try ProcessedUpdateStoreGRDB.claimUpdate(
+        db: db,
+        updateID: updateID,
+        claimedAt: now
+      )
+      guard updateClaimed else {
         return .duplicate
       }
       guard let job = try Self.resetJob(db, jobID: jobID) else {
@@ -64,12 +68,12 @@ private extension ScheduledLearningStoreGRDB {
   }
 
   static func resetJob(_ db: Database, jobID: Int64) throws -> ResetJob? {
-    guard let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql: "SELECT id, session_id FROM scheduled_jobs WHERE id = ?",
       arguments: [jobID]
     )
-    else {
+    guard let row else {
       return nil
     }
     guard SQLiteStoredValue.int64(in: row, column: "id") == jobID,

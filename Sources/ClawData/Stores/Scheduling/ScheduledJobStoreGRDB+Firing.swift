@@ -71,16 +71,17 @@ extension ScheduledJobStoreGRDB {
       // misfire skip. insertFireRows stamps it with `fireAt` after the overlap guard passes.
       //
       // Step 2: no winner ⇒ claimed elsewhere or the job mutated — abort silently, no fire.
-      guard try Self.advanceOccurrence(
+      let occurrenceAdvanced = try Self.advanceOccurrence(
         db,
         jobID: jobID,
         due: due,
         nextOccurrence: nextOccurrence,
         now: now
       )
-      else {
+      guard occurrenceAdvanced else {
         return nil
       }
+
       return try insertFireRows(
         db,
         jobID: jobID,
@@ -103,12 +104,12 @@ extension ScheduledJobStoreGRDB {
     fireKind: ScheduledFireKind,
     now: Date
   ) throws -> ClaimedFire? {
-    guard let jobRow = try Row.fetchOne(
+    let jobRow = try Row.fetchOne(
       db,
       sql: "SELECT owner_chat_id, prompt, session_id FROM scheduled_jobs WHERE id = ?",
       arguments: [jobID]
     )
-    else {
+    guard let jobRow else {
       throw StoreError.unexpected("claimed scheduled job \(jobID) has no row")
     }
     let ownerChatID: Int64 = jobRow["owner_chat_id"]
@@ -123,13 +124,14 @@ extension ScheduledJobStoreGRDB {
 
     // Skip this occurrence when the prior run on this job's session is still live; the schedule
     // already advanced, so it drops like a misfire rather than resetting the shared window.
-    if try Self.shouldSkipOverlappingFire(
+    let shouldSkipFire = try Self.shouldSkipOverlappingFire(
       db,
       sessionID: sessionID,
       action: .jobOverlapSkipped,
       argsRedacted: "{\"job_id\":\(jobID)}",
       now: now
-    ) {
+    )
+    if shouldSkipFire {
       return nil
     }
 
@@ -243,14 +245,14 @@ extension ScheduledJobStoreGRDB {
   ) throws(StoreError) -> Bool {
     try database.writeMapping { db in
       // A concurrently-mutated job means no skip.
-      guard try Self.advanceOccurrence(
+      let occurrenceAdvanced = try Self.advanceOccurrence(
         db,
         jobID: jobID,
         due: due,
         nextOccurrence: nextOccurrence,
         now: now
       )
-      else {
+      guard occurrenceAdvanced else {
         return false
       }
 

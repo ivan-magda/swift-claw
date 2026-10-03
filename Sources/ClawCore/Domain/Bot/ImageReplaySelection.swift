@@ -16,16 +16,16 @@ public enum ImageReplaySelection {
     }
 
     var kept: [Int64: ImagePart] = [:]
-    var spent = 0
+    var replayBytes = 0
 
     for (messageID, image) in newestFirst {
-      let cost = image.data.count
-      guard spent + cost <= aggregateCap else {
+      let imageBytes = image.data.count
+      guard replayBytes + imageBytes <= aggregateCap else {
         break
       }
 
       kept[messageID] = image
-      spent += cost
+      replayBytes += imageBytes
     }
 
     return kept

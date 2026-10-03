@@ -78,14 +78,14 @@ private extension ChatGPTWireValues {
       return text
     }
     var truncated = String.UnicodeScalarView()
-    var used = 0
+    var usedBytes = 0
     for scalar in text.unicodeScalars {
-      let width = String(scalar).utf8.count
-      guard used + width <= maxBytes else {
+      let scalarBytes = String(scalar).utf8.count
+      guard usedBytes + scalarBytes <= maxBytes else {
         break
       }
       truncated.append(scalar)
-      used += width
+      usedBytes += scalarBytes
     }
     return String(truncated)
   }

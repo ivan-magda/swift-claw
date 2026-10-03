@@ -77,12 +77,12 @@ extension ScheduledLearningStoreGRDB {
   }
 
   static func readChallenge(_ db: Database, id: Int64) throws -> FeedbackChallenge? {
-    guard let row = try Row.fetchOne(
+    let row = try Row.fetchOne(
       db,
       sql: "SELECT * FROM feedback_challenges WHERE challenge_id = ?",
       arguments: [id]
     )
-    else {
+    guard let row else {
       return nil
     }
     return try decodeChallenge(row)
@@ -150,12 +150,12 @@ extension ScheduledLearningStoreGRDB {
     if challenge.expiresAt <= now {
       return .expired
     }
-    guard let currentEpoch = try Int.fetchOne(
+    let currentEpoch = try Int.fetchOne(
       db,
       sql: "SELECT learning_epoch FROM job_learning_state WHERE job_id = ?",
       arguments: [challenge.jobID]
     )
-    else {
+    guard let currentEpoch else {
       return .staleEpoch
     }
     if currentEpoch != challenge.epoch.value {

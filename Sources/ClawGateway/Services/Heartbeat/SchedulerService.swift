@@ -150,7 +150,7 @@ private extension SchedulerService {
         )
       }
 
-      guard let fire = try jobs.claimAndFire(
+      let fire = try jobs.claimAndFire(
         jobID: job.id,
         due: due,
         fireAt: fireAt,
@@ -162,7 +162,7 @@ private extension SchedulerService {
         ),
         now: tickTime
       )
-      else {
+      guard let fire else {
         // No run to enqueue: the CAS matched no row (claimed elsewhere / job mutated) OR the
         // job's session already has a live run and the overlap guard skipped this fire.
         return
@@ -247,18 +247,19 @@ private extension SchedulerService {
     }
 
     do {
-      guard let fire = try jobs.fireHeartbeat(
+      let fire = try jobs.fireHeartbeat(
         prompt: HeartbeatTemplate.prompt(checklist: checklist.text),
         ownerChatID: heartbeat.ownerChatID,
         now: tickTime,
         day: day
       )
-      else {
+      guard let fire else {
         // A prior beat is still live: the store skipped this one to protect its window. Record
         // the canonical heartbeat_skipped audit (reason in `decision`) like every other beat skip.
         await auditHeartbeatSkip(reason: .overlap, at: tickTime)
         return
       }
+
       await skipEpisode.end()
       await enqueuer.enqueue(fire: fire)
     } catch {
@@ -271,7 +272,8 @@ private extension SchedulerService {
   /// audits once, not once per 60 s tick — an 11-hour quiet window must not write ~660
   /// identical rows.
   func auditHeartbeatSkip(reason: HeartbeatSkipReason, at tickTime: Date) async {
-    guard await skipEpisode.begin(reason) else {
+    let beganSkipEpisode = await skipEpisode.begin(reason)
+    guard beganSkipEpisode else {
       return  // same episode as the previous tick — already audited
     }
     do {
@@ -309,7 +311,9 @@ actor HeartbeatSkipEpisode {
 
   /// True exactly when `reason` starts a new episode.
   func begin(_ reason: HeartbeatSkipReason) -> Bool {
-    defer { lastReason = reason }
+    defer {
+      lastReason = reason
+    }
     return reason != lastReason
   }
 

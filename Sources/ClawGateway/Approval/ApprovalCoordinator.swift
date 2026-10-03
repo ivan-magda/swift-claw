@@ -53,11 +53,15 @@ public actor ApprovalCoordinator {
       buffered[approvalID] = signal
     }
   }
+}
 
+// MARK: - Waiter Cancellation
+
+private extension ApprovalCoordinator {
   /// Resumes a still-parked waiter with `nil` on cancellation. A no-op if a `signal` already removed
   /// it (the resolver won the race), so a resolution is never dropped. Actor isolation guarantees
   /// the `waiters[id] = continuation` registration completes before this can observe the slot.
-  private func cancelWaiter(_ approvalID: Int64) {
+  func cancelWaiter(_ approvalID: Int64) {
     if let continuation = waiters.removeValue(forKey: approvalID) {
       continuation.resume(returning: nil)
     }

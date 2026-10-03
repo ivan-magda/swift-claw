@@ -51,20 +51,29 @@ public struct QuietHours: Sendable, Equatable {
       endMinuteOfDay % 60
     )
   }
+}
 
-  private static func minuteOfDay(_ text: String) -> Int? {
+// MARK: - Time Parsing
+
+private extension QuietHours {
+  static func minuteOfDay(_ text: String) -> Int? {
     // Fail-closed HH:MM grammar: exactly two ASCII digits per field. "9:00",
     // "09:0", and "+09:00" are config ERRORS — `Int(_:)` alone would accept all three.
     let pieces = text.split(separator: ":", omittingEmptySubsequences: false)
 
     guard pieces.count == 2,
           pieces[0].count == 2,
-          pieces[1].count == 2,
-          pieces.allSatisfy({ piece in
-        piece.allSatisfy { char in
-          char.isASCII && char.isNumber
-        }
-      }),
+          pieces[1].count == 2
+    else {
+      return nil
+    }
+
+    let hasOnlyASCIIDigits = pieces.allSatisfy { piece in
+      piece.allSatisfy { character in
+        character.isASCII && character.isNumber
+      }
+    }
+    guard hasOnlyASCIIDigits,
           let hour = Int(pieces[0]),
           let minute = Int(pieces[1]),
           (0...23).contains(hour),

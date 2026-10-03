@@ -240,8 +240,8 @@ private extension ScheduledLearningStoreGRDB {
     assignment: TrialAssignment
   ) throws {
     let evidence = assignment.resolvedEvidence
-    let issueJSON = try evidence.map { value in
-      try issueCodesJSON(value.issueCodes)
+    let issueJSON = try evidence.map { resolvedEvidence in
+      try issueCodesJSON(resolvedEvidence.issueCodes)
     }
     try db.execute(
       sql: """
@@ -455,10 +455,10 @@ private extension ScheduledLearningStoreGRDB {
       runIDs: runIDs,
       evaluationRuns: evaluationRuns
     )
-    guard feedback.allSatisfy({ stored in
-        stored.event.revision <= currentRevision
-      })
-    else {
+    let feedbackRevisionsAreCurrent = feedback.allSatisfy { stored in
+      stored.event.revision <= currentRevision
+    }
+    guard feedbackRevisionsAreCurrent else {
       throw StoreError.unexpected("assignment source names a future feedback revision")
     }
     return feedback

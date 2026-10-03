@@ -67,44 +67,6 @@ public struct CommandStoreGRDB: CommandStore {
     }
   }
 
-  private static func insertStopAudits(
-    _ db: Database,
-    actor: AuditActor,
-    sessionID: Int64,
-    runIDs: [Int64],
-    now: Date
-  ) throws {
-    guard !runIDs.isEmpty else {
-      try AuditLogGRDB.insertAudit(
-        db,
-        AuditEvent(
-          actor: actor,
-          action: .turnCancelled,
-          argsRedacted: "/stop",
-          decision: "nothing_to_stop",
-          sessionID: sessionID,
-          ts: now
-        )
-      )
-      return
-    }
-
-    for runID in runIDs {
-      try AuditLogGRDB.insertAudit(
-        db,
-        AuditEvent(
-          actor: actor,
-          action: .turnCancelled,
-          argsRedacted: "/stop",
-          decision: "cancelled",
-          runID: runID,
-          sessionID: sessionID,
-          ts: now
-        )
-      )
-    }
-  }
-
   public func applyNew(
     updateID: Int64,
     sessionKey: String,
@@ -155,8 +117,50 @@ public struct CommandStoreGRDB: CommandStore {
       )
     }
   }
+}
 
-  private static func insertNewAudits(
+// MARK: - Command Audits
+
+private extension CommandStoreGRDB {
+  static func insertStopAudits(
+    _ db: Database,
+    actor: AuditActor,
+    sessionID: Int64,
+    runIDs: [Int64],
+    now: Date
+  ) throws {
+    guard !runIDs.isEmpty else {
+      try AuditLogGRDB.insertAudit(
+        db,
+        AuditEvent(
+          actor: actor,
+          action: .turnCancelled,
+          argsRedacted: "/stop",
+          decision: "nothing_to_stop",
+          sessionID: sessionID,
+          ts: now
+        )
+      )
+      return
+    }
+
+    for runID in runIDs {
+      try AuditLogGRDB.insertAudit(
+        db,
+        AuditEvent(
+          actor: actor,
+          action: .turnCancelled,
+          argsRedacted: "/stop",
+          decision: "cancelled",
+          runID: runID,
+          sessionID: sessionID,
+          ts: now
+        )
+      )
+    }
+  }
+
+  static func insertNewAudits(
     _ db: Database,
     actor: AuditActor,
     sessionID: Int64,
@@ -194,7 +198,7 @@ public struct CommandStoreGRDB: CommandStore {
     }
   }
 
-  private static func commandActor(for sessionKey: String) -> AuditActor {
+  static func commandActor(for sessionKey: String) -> AuditActor {
     SessionKey.mode(from: sessionKey) == .group ? .groupMember : .owner
   }
 }

@@ -27,8 +27,11 @@ public struct CoderRequestPreparer: CoderRequestPreparing {
         checkout = identity.checkout
         common = identity.common
         publication =
-          request.deliverable == .pullRequest
-          ? try await Self.publicationOrigin(at: identity.checkout, git: git) : nil
+          if request.deliverable == .pullRequest {
+            try await Self.publicationOrigin(at: identity.checkout, git: git)
+          } else {
+            nil
+          }
       } catch is CancellationError {
         throw CancellationError()
       } catch {
@@ -100,7 +103,8 @@ extension CoderRequestPreparer {
       at: directory
     )
     let repository = try githubRepository(effective)
-    guard try githubRepository(push) == repository else {
+    let pushRepository = try githubRepository(push)
+    guard pushRepository == repository else {
       throw CoderError.invalidRequest("Publication origin has a conflicting push destination.")
     }
     return repository

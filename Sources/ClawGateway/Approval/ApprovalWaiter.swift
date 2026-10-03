@@ -73,13 +73,15 @@ public final class ApprovalWaiter: ApprovalParking {
     chatID _: Int64,
     revalidatePolicyOnApprove: Bool
   ) async {
-    guard let signal = await coordinator.awaitResolution(approvalID: approvalID) else {
+    let signal = await coordinator.awaitResolution(approvalID: approvalID)
+    guard let signal else {
       // Cancelled while parked (graceful shutdown / lane cancel) with no resolution: exit cleanly.
       // The durable approval row is untouched; the boot re-park rebuilds the hold on restart.
       await presentations?.close(runID: runID)
       logger.debug("approval \(approvalID) park cancelled before resolution; exiting cleanly")
       return
     }
+
     switch signal {
     case .approved:
       await resolveApproved(
@@ -318,10 +320,11 @@ private extension ApprovalWaiter {
 
   func deliveryTarget(for approval: Approval) -> DeliveryTarget? {
     do {
-      guard let context = try runs.executionContext(
+      let context = try runs.executionContext(
         runID: approval.runID,
         fallbackChatID: approval.ownerUserID
-      ),
+      )
+      guard let context,
             context.sessionID == approval.sessionID,
             context.deliveryTarget.chatID == approval.ownerUserID
       else {
@@ -359,12 +362,15 @@ private extension ApprovalWaiter {
 
 private extension ApprovalWaiter {
   func approvalProgress(_ approval: Approval) async -> ToolProgressReporter? {
-    guard let presentations,
-          let execution = try? runs.executionContext(
-            runID: approval.runID,
-            fallbackChatID: approval.ownerUserID
-          )
-    else {
+    guard let presentations else {
+      return nil
+    }
+
+    let execution = try? runs.executionContext(
+      runID: approval.runID,
+      fallbackChatID: approval.ownerUserID
+    )
+    guard let execution else {
       return nil
     }
 

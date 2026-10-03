@@ -60,12 +60,12 @@ public struct ExfilArgGuard: Sendable {
         let candidate = characters[start..<(start + width)]
         // The fingerprint only narrows the set; confirm grapheme-for-grapheme so a hash
         // collision can never false-block.
-        let matched = windows.contains { window in
+        let hasMatchingWindow = windows.contains { window in
           let source = sources[window.source]
           return candidate.elementsEqual(source[window.start..<(window.start + width)])
         }
 
-        if matched {
+        if hasMatchingWindow {
           return String(candidate)
         }
       }
@@ -137,9 +137,10 @@ public struct ExfilArgGuard: Sendable {
           continue
         }
 
-        let matches = Self.regexMatches(shape.pattern, in: candidate).filter { match in
-          shape.rule != "high-entropy" || Self.looksHighEntropy(match)
-        }
+        let matches = Self.regexMatches(shape.pattern, in: candidate)
+          .filter { match in
+            shape.rule != "high-entropy" || Self.looksHighEntropy(match)
+          }
 
         if matches.isEmpty == false {
           return blockedVerdict(rule: shape.rule, raw: text, spans: matches)

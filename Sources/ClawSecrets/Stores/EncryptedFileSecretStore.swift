@@ -77,7 +77,8 @@ public struct EncryptedFileSecretStore: SecretStore {
   func load() throws(SecretStoreError) -> Secrets {
     let key = try Self.openKey(at: paths.key)
     let envelope = try Self.readEnvelope(at: paths.runtimeEnvelope)
-    return try Self.decode(Self.openEnvelope(envelope, key: key))
+    let plaintext = try Self.openEnvelope(envelope, key: key)
+    return try Self.decode(plaintext)
   }
 
   // MARK: - Sealing (used by `clawd secrets seal` and by the login transition)
@@ -120,8 +121,9 @@ public struct EncryptedFileSecretStore: SecretStore {
     let expected = try decode(plaintext)
 
     let key = try ensureKey(at: paths.key, publisher: publisher, created: &created)
+    let envelope = try sealEnvelope(plaintext, key: key)
     try publishEnvelope(
-      sealEnvelope(plaintext, key: key),
+      envelope,
       paths: paths,
       publisher: publisher,
       created: &created
@@ -155,9 +157,7 @@ extension EncryptedFileSecretStore {
   static func openEnvelope(_ envelope: Data, key: SymmetricKey) throws(SecretStoreError) -> Data {
     do {
       return try envelopeCodec.open(envelope, key: key)
-    } catch AESGCMEnvelopeError
-      .missingVersion, AESGCMEnvelopeError.unsupportedVersion
-    {
+    } catch AESGCMEnvelopeError.missingVersion, AESGCMEnvelopeError.unsupportedVersion {
       throw .malformedEnvelope
     } catch {
       throw .decryptionFailed

@@ -12,14 +12,12 @@ extension ContextBuilder {
     let groups = HistoryHygiene.groups(from: snapshot.history)
 
     let units = groups.reversed().map { group in
-      SectionUnit(
-        id: group.id,
-        content: group.messages.map { message in
+      let content = group.messages
+        .map { message in
           message.content + (message.toolCallsJSON ?? "")
         }
-        .joined(separator: "\n"),
-        canTruncate: false
-      )
+        .joined(separator: "\n")
+      return SectionUnit(id: group.id, content: content, canTruncate: false)
     }
 
     guard units.isEmpty == false else {
@@ -42,17 +40,24 @@ extension ContextBuilder {
       keptHistoryGroupCount < HistoryHygiene.groups(from: snapshot.history).count
 
     let systemContent =
-      fitted.filter { section in
+      fitted
+      .filter { section in
         section.tier == .system
-      }.map(\.content).joined(separator: "\n\n")
+      }
+      .map(\.content)
+      .joined(separator: "\n\n")
       + (historyWasTruncated ? Self.historyTruncatedMarker : "")
     var messages = [ChatMessage(role: .system, content: systemContent)]
 
-    let untrusted = fitted.filter { section in
-      section.tier == .untrustedLabeled
-    }.map { section in
-      LabeledContextFactory.make(label: label(for: section.id), content: section.content).render()
-    }.joined(separator: "\n\n")
+    let untrusted =
+      fitted
+      .filter { section in
+        section.tier == .untrustedLabeled
+      }
+      .map { section in
+        LabeledContextFactory.make(label: label(for: section.id), content: section.content).render()
+      }
+      .joined(separator: "\n\n")
     if untrusted.isEmpty == false {
       messages.append(ChatMessage(role: .user, content: untrusted))
     }
@@ -75,10 +80,10 @@ private extension ContextBuilder {
     fitted: [FittedSection],
     snapshot: SessionContextSnapshot
   ) -> [ChatMessage] {
-    guard let historySection = fitted.first(where: { section in
-        section.id == .history
-      })
-    else {
+    let historySection = fitted.first { section in
+      section.id == .history
+    }
+    guard let historySection else {
       return []
     }
 
@@ -96,22 +101,28 @@ private extension ContextBuilder {
         counts[call.id, default: 0] += 1
       }
       let namesByCallID = Dictionary(
-        uniqueKeysWithValues: anchorCalls.filter { call in
-          callsPerID[call.id] == 1
-        }.map { call in
-          (call.id, call.name)
-        }
+        uniqueKeysWithValues:
+          anchorCalls
+          .filter { call in
+            callsPerID[call.id] == 1
+          }
+          .map { call in
+            (call.id, call.name)
+          }
       )
 
       for message in group.messages {
         switch message.role {
         case .tool:
+          let toolName = message.toolCallID.flatMap { callID in
+            namesByCallID[callID]
+          }
           let label =
-            message.toolCallID.flatMap { callID in
-              namesByCallID[callID]
-            }.map(
-              fenceLabels.label(forToolNamed:)
-            ) ?? ToolFenceLabels.unattributed
+            if let toolName {
+              fenceLabels.label(forToolNamed: toolName)
+            } else {
+              ToolFenceLabels.unattributed
+            }
           rendered.append(
             ChatMessage(
               role: .tool,

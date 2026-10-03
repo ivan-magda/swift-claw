@@ -25,7 +25,8 @@ extension ScheduledLearningStoreGRDB {
     }
     let failure = result.product.failure
     let terminal: LearningOperationState = failure == nil ? .succeeded : .failed
-    guard try closeStarted(db, operation, terminal: terminal, failure: failure) else {
+    let didCloseOperation = try closeStarted(db, operation, terminal: terminal, failure: failure)
+    guard didCloseOperation else {
       return false
     }
     // The reserved call id, never a fresh one: the estimate never became a row, so this is the
@@ -106,10 +107,7 @@ private extension ScheduledLearningStoreGRDB {
     }
     // A no-candidate carries no durable source bytes. Its authorization is revalidated before the
     // call, and finish still fences the state whose identity is stored on the operation itself.
-    guard try reflectionAuthorizationIsCurrent(db, authorization: result.authorization) else {
-      return false
-    }
-    return true
+    return try reflectionAuthorizationIsCurrent(db, authorization: result.authorization)
   }
 }
 
@@ -346,6 +344,7 @@ private extension ScheduledLearningStoreGRDB {
       db,
       sql: "SELECT operation_id FROM learning_operations WHERE state = ? ORDER BY operation_id",
       arguments: [state.rawValue]
-    ).map(LearningOperationID.init(rawValue:))
+    )
+    .map(LearningOperationID.init(rawValue:))
   }
 }

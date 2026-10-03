@@ -94,11 +94,14 @@ struct AttemptRuntimeState {
       outboundModel: outboundModel,
       terminalModel: response.reportedModel
     )
-    return policy.expectedWireModel.flatMap { expected in
-      response.reportedModel.map {
-        $0 != expected
-      }
-    } ?? false
+
+    guard let expectedModel = policy.expectedWireModel,
+          let reportedModel = response.reportedModel
+    else {
+      return false
+    }
+
+    return reportedModel != expectedModel
   }
 
   func finalize(_ response: ChatResponse, scope: AttemptOutputScope?) throws {

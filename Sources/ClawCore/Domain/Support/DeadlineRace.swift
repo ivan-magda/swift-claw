@@ -19,7 +19,8 @@ public enum DeadlineRace {
     }
 
     let deadlineTask = Task {
-      guard (try? await sleep(allowance)) != nil else {
+      let sleepCompleted = (try? await sleep(allowance)) != nil
+      guard sleepCompleted else {
         return
       }
       continuation.yield(.deadlineExpired)

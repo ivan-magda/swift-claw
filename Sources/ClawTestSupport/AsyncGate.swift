@@ -34,7 +34,9 @@ public final class AsyncGate: Sendable {
   /// that no one will open.
   public func wait() async {
     let ticket = makeTicket()
-    defer { discardCancellationMarker(ticket: ticket) }
+    defer {
+      discardCancellationMarker(ticket: ticket)
+    }
     await withTaskCancellationHandler(
       operation: {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -95,8 +97,8 @@ public final class AsyncGate: Sendable {
 
 // MARK: - Waiter bookkeeping
 
-extension AsyncGate {
-  private func makeTicket() -> Int {
+private extension AsyncGate {
+  func makeTicket() -> Int {
     state.withLock { current in
       current.nextTicket += 1
       return current.nextTicket
@@ -106,7 +108,7 @@ extension AsyncGate {
   /// Registers `continuation` unless the gate is already open, or unless cancellation arrived first
   /// and this waiter honors it. Resumes outside the lock: resuming under it can re-enter this gate
   /// on the resumed task's thread.
-  private func park(
+  func park(
     ticket: Int,
     continuation: CheckedContinuation<Void, Never>,
     honorsCancellation: Bool
@@ -129,7 +131,7 @@ extension AsyncGate {
 
   /// Resumes a parked waiter on cancellation, or leaves a marker for a `wait` that has not reached
   /// its registration yet. Exactly one of the two paths runs, so the waiter resumes exactly once.
-  private func releaseCancelled(ticket: Int) {
+  func releaseCancelled(ticket: Int) {
     let parked = state.withLock { current -> CheckedContinuation<Void, Never>? in
       guard let waiter = current.waiters.removeValue(forKey: ticket) else {
         current.cancelledTickets.insert(ticket)
@@ -142,7 +144,7 @@ extension AsyncGate {
 
   /// Drops a marker left by a cancellation that raced a `wait` already on its way out, so a long
   /// lived gate cannot accumulate one per cancelled waiter.
-  private func discardCancellationMarker(ticket: Int) {
+  func discardCancellationMarker(ticket: Int) {
     state.withLock { current in
       _ = current.cancelledTickets.remove(ticket)
     }

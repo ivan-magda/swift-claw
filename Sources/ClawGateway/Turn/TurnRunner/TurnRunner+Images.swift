@@ -23,26 +23,26 @@ extension TurnRunner {
       return snapshot
     }
 
-    let paired = min(snapshot.history.count, snapshot.historyMessageIDs.count)
+    let pairedMessageCount = min(snapshot.history.count, snapshot.historyMessageIDs.count)
     var inWindow: [Int64: ImagePart] = [:]
-    for messageID in snapshot.historyMessageIDs.prefix(paired) {
+    for messageID in snapshot.historyMessageIDs.prefix(pairedMessageCount) {
       guard let image = images[messageID] else {
         continue
       }
       inWindow[messageID] = image
     }
 
-    let kept = ImageReplaySelection.affordable(
+    let replayImages = ImageReplaySelection.affordable(
       inWindow,
       aggregateCap: ImageBounds.maximumAggregateReplayBytes
     )
-    guard kept.isEmpty == false else {
+    guard replayImages.isEmpty == false else {
       return snapshot
     }
 
     let history = snapshot.history.enumerated().map { offset, message in
       guard offset < snapshot.historyMessageIDs.count,
-            let image = kept[snapshot.historyMessageIDs[offset]]
+            let image = replayImages[snapshot.historyMessageIDs[offset]]
       else {
         return message
       }

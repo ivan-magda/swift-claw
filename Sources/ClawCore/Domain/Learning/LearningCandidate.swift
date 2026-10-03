@@ -238,10 +238,12 @@ public struct CandidateSourceManifest: Sendable, Equatable, Codable {
   /// The one persisted-manifest trust boundary. Decoding closes every typed object; canonical
   /// re-encoding also catches unknown keys inside scalar wrapper values and alternate JSON forms.
   package static func decodedCanonical(from bytes: Data) -> CandidateSourceManifest? {
-    guard let manifest = try? JSONDecoder().decode(Self.self, from: bytes),
-          let canonical = try? CanonicalJSON.data(encoding: manifest),
-          canonical == bytes
-    else {
+    let decodedManifest = try? JSONDecoder().decode(Self.self, from: bytes)
+    guard let manifest = decodedManifest else {
+      return nil
+    }
+    let canonicalBytes = try? CanonicalJSON.data(encoding: manifest)
+    guard let canonicalBytes, canonicalBytes == bytes else {
       return nil
     }
     return manifest

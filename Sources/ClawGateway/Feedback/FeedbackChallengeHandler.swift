@@ -43,15 +43,15 @@ public struct FeedbackChallengeHandler: Sendable {
   }
 
   func open(_ tap: FeedbackTap) throws(StoreError) -> FeedbackOutcome {
-    let outcome = try learning.consumeAndOpenChallenge(
+    let challengeOutcome = try learning.consumeAndOpenChallenge(
       tap,
       prompt: LearningNotices.challengePrompt(for: tap),
       now: now()
     )
-    if case .challengeOpened = outcome {
+    if case .challengeOpened = challengeOutcome {
       notifyOutbox()
     }
-    return outcome
+    return challengeOutcome
   }
 
   func consumeIfOpen(
@@ -78,7 +78,7 @@ public struct FeedbackChallengeHandler: Sendable {
     }
 
     try await replies.claimUpdate(updateID: rawUpdate.updateID, target: target)
-    let outcome = try await replies.perform(
+    let feedbackOutcome = try await replies.perform(
       "feedback challenge consumption",
       updateID: rawUpdate.updateID,
       target: target,
@@ -88,7 +88,7 @@ public struct FeedbackChallengeHandler: Sendable {
     }
 
     let acknowledgement: String
-    switch outcome {
+    switch feedbackOutcome {
     case .recorded:
       await workflow?.notifyChanged(jobID: challenge.jobID)
       acknowledgement = Self.recordedText

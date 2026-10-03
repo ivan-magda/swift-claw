@@ -37,17 +37,22 @@ struct MCPMetadataSanitizer: Sendable {
   /// A remote name is untrusted text inside a fixed approval row. Controls and Unicode formatting
   /// marks are removed so it cannot create a second row, reverse the display, or hide its suffix.
   func displayName(_ raw: String) -> String {
-    let visible = text(raw).unicodeScalars.map { scalar -> String in
-      switch scalar.properties.generalCategory {
-      case .control, .format, .lineSeparator, .paragraphSeparator:
-        return " "
-      default:
-        return String(scalar)
+    let visible = text(raw).unicodeScalars
+      .map { scalar -> String in
+        switch scalar.properties.generalCategory {
+        case .control, .format, .lineSeparator, .paragraphSeparator:
+          return " "
+        default:
+          return String(scalar)
+        }
       }
-    }.joined()
-    let singleLine = visible.split {
-      $0.isWhitespace
-    }.joined(separator: " ")
+      .joined()
+    let singleLine =
+      visible
+      .split {
+        $0.isWhitespace
+      }
+      .joined(separator: " ")
     let usable = singleLine.isEmpty ? "remote tool" : singleLine
     return TextTruncation.cap(usable, maxGraphemes: MCPToolNamer.nameLimit)
   }

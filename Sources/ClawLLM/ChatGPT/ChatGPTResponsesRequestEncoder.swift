@@ -104,12 +104,14 @@ private extension ChatGPTResponsesRequestEncoder {
   /// System text leaves the conversation and becomes the route's `instructions`, joined in the order
   /// it was written wherever it appears in the history.
   static func instructions(from messages: [ChatMessage]) -> String {
-    messages.filter { message in
-      message.role == .system
-    }.map { message in
-      message.content.text
-    }
-    .joined(separator: "\n\n")
+    messages
+      .filter { message in
+        message.role == .system
+      }
+      .map { message in
+        message.content.text
+      }
+      .joined(separator: "\n\n")
   }
 
   /// Walks the history in its own order, emitting each turn's replayed reasoning material where the
@@ -120,12 +122,14 @@ private extension ChatGPTResponsesRequestEncoder {
     replaying selection: ChatGPTReplaySelection?,
     includePriorState: Bool
   ) -> [ChatGPTWireInputItem] {
-    messages.enumerated().flatMap { index, message -> [ChatGPTWireInputItem] in
-      guard includePriorState, let turn = selection?.turns[index] else {
-        return inputItems(for: message)
+    messages
+      .enumerated()
+      .flatMap { index, message -> [ChatGPTWireInputItem] in
+        guard includePriorState, let turn = selection?.turns[index] else {
+          return inputItems(for: message)
+        }
+        return replayItems(for: turn, message: message)
       }
-      return replayItems(for: turn, message: message)
-    }
   }
 
   static func inputItems(for message: ChatMessage) -> [ChatGPTWireInputItem] {

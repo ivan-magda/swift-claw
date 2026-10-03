@@ -141,12 +141,11 @@ public struct FileWriteTool: Tool {
 
     // Re-resolve NOW: if a component was retargeted since approval (symlink swap, replaced
     // directory), the resolution drifts from the approved target — fail closed, write nothing.
-    guard case .resolved(let target) = WorkspacePathContainment.resolveForCreation(
+    let liveTargetResolution = WorkspacePathContainment.resolveForCreation(
       path: path,
       root: workspaceRoot.path
-    ),
-          target == approvedTarget
-    else {
+    )
+    guard case .resolved(let target) = liveTargetResolution, target == approvedTarget else {
       return errorPayload(
         "The approved path no longer resolves to the approved target; nothing was written."
       )

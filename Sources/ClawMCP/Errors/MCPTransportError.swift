@@ -71,9 +71,12 @@ extension MCPTransportError: CustomStringConvertible {
   /// when it is shaped like a media type; anything else is named rather than quoted, and a server
   /// gets no channel for arbitrary text through a diagnostic.
   private static func mediaTypeDescription(_ raw: String) -> String {
-    let mediaType = raw.prefix {
-      $0 != ";"
-    }.trimmingCharacters(in: .whitespaces)
+    let mediaType =
+      raw
+      .prefix {
+        $0 != ";"
+      }
+      .trimmingCharacters(in: .whitespaces)
     let parts = mediaType.split(separator: "/", omittingEmptySubsequences: false)
     let wellFormed =
       parts.count == 2 && mediaType.count <= 64

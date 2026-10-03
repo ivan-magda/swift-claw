@@ -31,7 +31,8 @@ public struct ChatGPTOAuthClient: Sendable, ChatGPTOAuthRefreshing, ChatGPTOAuth
       timeout: timeout,
       redacting: []
     )
-    return try Self.deviceCode(from: Self.successFields(of: response, redacting: []))
+    let fields = try Self.successFields(of: response, redacting: [])
+    return try Self.deviceCode(from: fields)
   }
 
   /// Asks once whether the owner has approved the device yet.
@@ -180,8 +181,11 @@ private extension ChatGPTOAuthClient {
       )
     )
 
-    return try await ChatGPTProviderMetadata.execute(request, on: http, redacting: secrets) {
-      (detail) in
+    return try await ChatGPTProviderMetadata.execute(
+      request,
+      on: http,
+      redacting: secrets
+    ) { detail in
       ChatGPTOAuthFailure.transport(detail: detail)
     }
   }
@@ -204,9 +208,12 @@ private extension ChatGPTOAuthClient {
   /// sets describe what a *URL component* may hold rather than what a form field must escape: it
   /// leaves `+` alone, and a `+` inside a token would arrive at the server as a space.
   static func formBody(_ fields: [(name: String, value: String)]) -> Data {
-    let encoded = fields.map { field in
-      "\(percentEncoded(field.name))=\(percentEncoded(field.value))"
-    }.joined(separator: "&")
+    let encoded =
+      fields
+      .map { field in
+        "\(percentEncoded(field.name))=\(percentEncoded(field.value))"
+      }
+      .joined(separator: "&")
     return Data(encoded.utf8)
   }
 
@@ -374,7 +381,8 @@ private extension ChatGPTOAuthClient {
       timeout: timeout,
       redacting: secrets
     )
-    return try validatedPair(from: Self.successFields(of: response, redacting: secrets))
+    let fields = try Self.successFields(of: response, redacting: secrets)
+    return try validatedPair(from: fields)
   }
 
   /// The gate. An access token becomes a header verbatim and is never inspected again, so one that

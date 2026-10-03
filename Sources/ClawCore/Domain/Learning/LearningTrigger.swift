@@ -74,11 +74,14 @@ public enum EvidenceWindow {
     cutoff: Date
   ) -> [EffectiveEvaluation] {
     let oldestOccurrence = cutoff.addingTimeInterval(-maximumAge)
-    let ordered = evaluations.filter { evaluation in
-      evaluation.compatibility == compatibility && evaluation.trialID == nil
-        && evaluation.occurrenceAt >= oldestOccurrence && evaluation.occurrenceAt <= cutoff
-        && evaluation.evaluatorCompletedAt <= cutoff
-    }.sorted(by: occursBefore)
+    let ordered =
+      evaluations
+      .filter { evaluation in
+        evaluation.compatibility == compatibility && evaluation.trialID == nil
+          && evaluation.occurrenceAt >= oldestOccurrence && evaluation.occurrenceAt <= cutoff
+          && evaluation.evaluatorCompletedAt <= cutoff
+      }
+      .sorted(by: occursBefore)
     return Array(ordered.suffix(maximumCount))
   }
 }
@@ -148,8 +151,12 @@ public struct TriggerIdentity: Sendable, Equatable {
   }
 
   private static let canonicalPrefix = "learning-trigger/v1"
+}
 
-  private static func lengthPrefixed(_ field: String) -> String {
+// MARK: - Trigger Digest Framing
+
+private extension TriggerIdentity {
+  static func lengthPrefixed(_ field: String) -> String {
     "\(field.utf8.count):\(field)"
   }
 }
@@ -219,8 +226,12 @@ private extension LearningTrigger {
         runsByCode[issueCode, default: []].insert(evaluation.runID)
       }
     }
-    return runsByCode.compactMap { issueCode, runIDs in
-      runIDs.count >= recurringRunThreshold ? issueCode : nil
-    }.sorted().map(\.value)
+    return
+      runsByCode
+      .compactMap { issueCode, runIDs in
+        runIDs.count >= recurringRunThreshold ? issueCode : nil
+      }
+      .sorted()
+      .map(\.value)
   }
 }

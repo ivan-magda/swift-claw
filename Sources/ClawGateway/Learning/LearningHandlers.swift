@@ -32,8 +32,12 @@ struct LearningHandlers: Sendable {
       return try await requestReset(jobID: jobID, rawUpdate: rawUpdate, message: message)
     }
   }
+}
 
-  private func requestReset(
+// MARK: - Reset Confirmation
+
+private extension LearningHandlers {
+  func requestReset(
     jobID: Int64,
     rawUpdate: RawUpdate,
     message: IncomingMessage
@@ -72,7 +76,7 @@ struct LearningHandlers: Sendable {
     }
   }
 
-  private func parkReset(
+  func parkReset(
     jobID: Int64,
     label: String?,
     rawUpdate: RawUpdate,
@@ -100,8 +104,12 @@ struct LearningHandlers: Sendable {
       text: redactor.redact(prompt)
     )
   }
+}
 
-  private func read(
+// MARK: - Learning Reads and Replies
+
+private extension LearningHandlers {
+  func read(
     jobID: Int64?,
     style: LearningSurface.Style,
     rawUpdate: RawUpdate,
@@ -114,22 +122,22 @@ struct LearningHandlers: Sendable {
     ) {
       try learning.learningView(jobID: jobID)
     }
-    if let jobID,
-       let outboxSignal,
-       let outcome = try await promotionReply(
-         jobID: jobID,
-         view: view,
-         rawUpdate: rawUpdate,
-         message: message,
-         signal: outboxSignal
-       )
-    {
-      return outcome
+    if let jobID, let outboxSignal {
+      let promotionOutcome = try await promotionReply(
+        jobID: jobID,
+        view: view,
+        rawUpdate: rawUpdate,
+        message: message,
+        signal: outboxSignal
+      )
+      if let promotionOutcome {
+        return promotionOutcome
+      }
     }
     return await send(view: view, style: style, rawUpdate: rawUpdate, message: message)
   }
 
-  private func send(
+  func send(
     view: [JobLearningView],
     style: LearningSurface.Style,
     rawUpdate: RawUpdate,

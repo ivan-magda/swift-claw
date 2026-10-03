@@ -82,7 +82,9 @@ public actor SessionLaneRegistry {
     let task = Task {
       // `defer` so any future early-return or added throw still unregisters. This task inherits the
       // registry's isolation, so the finalize hop is a synchronous same-actor call.
-      defer { self.finalize(operationID: operationID) }
+      defer {
+        self.finalize(operationID: operationID)
+      }
       if let predecessor {
         // A cancelled queued turn still waits out its predecessor, then still runs its body — a turn
         // observes cancellation and self-aborts its durable row rather than being silently dropped.
@@ -112,7 +114,9 @@ public actor SessionLaneRegistry {
     }
 
     let predecessors = operations.values
-      .filter { $0.runID == runID }
+      .filter {
+        $0.runID == runID
+      }
       .map(\.task)
     let operationID = nextOperationID
     nextOperationID &+= 1

@@ -34,7 +34,9 @@ public actor ScriptedCoderBackend: CoderBackend {
       allowCleanup.open()
     }
 
-    deinit { release() }
+    deinit {
+      release()
+    }
   }
 
   nonisolated public let invocations: [Invocation]
@@ -73,8 +75,9 @@ public actor ScriptedCoderBackend: CoderBackend {
     let script = invocations[min(index, invocations.count - 1)]
     script.entered.open()
     await script.allowLaunch.waitIgnoringCancellation()
+
     let launchID = UUID()
-    let pending = CoderProcessReceipt(
+    let pendingReceipt = CoderProcessReceipt(
       launchID: launchID,
       phase: .codex,
       hostBootID: "scripted-boot",
@@ -82,24 +85,26 @@ public actor ScriptedCoderBackend: CoderBackend {
       pgid: nil,
       birthIdentity: nil
     )
-    let receipt = CoderProcessReceipt(
+    let launchedReceipt = CoderProcessReceipt(
       launchID: launchID,
       phase: .codex,
-      hostBootID: pending.hostBootID,
+      hostBootID: pendingReceipt.hostBootID,
       pid: 123,
       pgid: 123,
       birthIdentity: "scripted-birth"
     )
+
     do {
-      try await recordProcess(.willLaunch(pending))
-      try await recordProcess(.didLaunch(receipt))
+      try await recordProcess(.willLaunch(pendingReceipt))
+      try await recordProcess(.didLaunch(launchedReceipt))
       script.started.open()
       await script.allowCompletion.wait()
+
       script.cleanupEntered.open()
       await script.allowCleanup.waitIgnoringCancellation()
-      let event: CoderProcessEvent =
+      let cleanupEvent: CoderProcessEvent =
         script.unresolvedCleanup ? .unresolved(launchID: launchID) : .stopped(launchID: launchID)
-      try await recordProcess(event)
+      try await recordProcess(cleanupEvent)
     } catch {
       script.started.open()
     }

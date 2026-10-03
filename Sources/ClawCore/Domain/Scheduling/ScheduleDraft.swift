@@ -201,7 +201,8 @@ private extension RecurrenceWords {
 
     let names = days.map {
       fullName($0)
-    }.joined(separator: ", ")
+    }
+    .joined(separator: ", ")
     return "every \(names) at \(clock(rule))"
   }
 
@@ -319,14 +320,15 @@ private extension ScheduleDraftValidator {
       // anchor = now: pre-arm there is no createdTs. The parked firstOccurrence is what arms
       // (it becomes the stored next_occurrence), so the preview's first fire and the armed
       // first fire are the same value by construction.
-      guard let first = calculator.occurrences(
+      let firstOccurrence = calculator.occurrences(
         rule: rule,
         timezone: timezone,
         anchor: now,
         after: now,
         limit: 1
-      ).first
-      else {
+      )
+      .first
+      guard let firstOccurrence else {
         return .failure(.noUpcomingOccurrence)
       }
 
@@ -338,7 +340,7 @@ private extension ScheduleDraftValidator {
           prompt: prompt,
           recurrence: envelope,
           timezone: timezone.identifier,
-          firstOccurrence: first
+          firstOccurrence: firstOccurrence
         )
       )
     }
@@ -456,7 +458,7 @@ private extension ScheduleDraftValidator {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = timezone
 
-    let resolved: Date
+    let firstOccurrence: Date
     if let rawDate = schedule.date {
       guard let dayParts = Self.parseDay(rawDate) else {
         return .failure(.invalidDate(rawDate))
@@ -477,7 +479,7 @@ private extension ScheduleDraftValidator {
         return .failure(.invalidDate(rawDate))
       }
 
-      resolved = instant
+      firstOccurrence = instant
     } else {
       // Omitted date ⇒ the next instant matching HH:MM in the zone.
       var match = DateComponents()
@@ -490,10 +492,10 @@ private extension ScheduleDraftValidator {
         return .failure(.noUpcomingOccurrence)
       }
 
-      resolved = instant
+      firstOccurrence = instant
     }
 
-    guard resolved > now else {
+    guard firstOccurrence > now else {
       return .failure(.onceInThePast)
     }
 
@@ -503,16 +505,16 @@ private extension ScheduleDraftValidator {
         prompt: prompt,
         recurrence: nil,
         timezone: timezone.identifier,
-        firstOccurrence: resolved
+        firstOccurrence: firstOccurrence
       )
     )
   }
 }
 
-// MARK: - Field Parsing
+// MARK: - Field Validation
 
-extension ScheduleDraftValidator {
-  private func clockComponents(
+private extension ScheduleDraftValidator {
+  func clockComponents(
     _ schedule: DraftSchedule,
     kind: DraftScheduleKind
   ) -> Result<
@@ -530,6 +532,20 @@ extension ScheduleDraftValidator {
     return .success(clock)
   }
 
+  static func dayRoundTrips(
+    _ parts: DateComponents,
+    instant: Date,
+    calendar: Calendar
+  ) -> Bool {
+    let roundTrippedDay = calendar.dateComponents([.year, .month, .day], from: instant)
+    return roundTrippedDay.year == parts.year && roundTrippedDay.month == parts.month
+      && roundTrippedDay.day == parts.day
+  }
+}
+
+// MARK: - Field Parsing
+
+extension ScheduleDraftValidator {
   static func parseClock(_ text: String) -> (hour: Int, minute: Int)? {
     let pieces = text.split(separator: ":", omittingEmptySubsequences: false)
     guard pieces.count == 2,
@@ -562,15 +578,6 @@ extension ScheduleDraftValidator {
       return nil
     }
     return DayParts(year: year, month: month, day: day)
-  }
-
-  private static func dayRoundTrips(
-    _ parts: DateComponents,
-    instant: Date,
-    calendar: Calendar
-  ) -> Bool {
-    let back = calendar.dateComponents([.year, .month, .day], from: instant)
-    return back.year == parts.year && back.month == parts.month && back.day == parts.day
   }
 
   static func weekday(named raw: String) -> Locale.Weekday? {

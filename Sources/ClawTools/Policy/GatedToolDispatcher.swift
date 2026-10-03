@@ -47,7 +47,9 @@ public struct GatedToolDispatcher: ToolDispatching {
     let tool = registry.tool(named: call.name)
     await progress?.identify(
       tool: tool?.definition,
-      preview: tool.flatMap { preview(call: call, name: $0.definition.name) }
+      preview: tool.flatMap { registeredTool in
+        preview(call: call, name: registeredTool.definition.name)
+      }
     )
     await progress?.publish(.pending)
     // (0) unknown tool → error observation, never a crash
@@ -103,7 +105,6 @@ public struct GatedToolDispatcher: ToolDispatching {
       )
     }
   }
-
 }
 
 // MARK: - Execution
@@ -210,22 +211,36 @@ private extension GatedToolDispatcher {
     case BuiltinToolNames.skillLoad:
       selected = arguments["name"]?.stringValue
     case BuiltinToolNames.webFetch:
-      selected = arguments["url"]?.stringValue.flatMap(URLComponents.init(string:)).flatMap {
-        ProgressText.webPagePreview($0, secretValues: secretValues)
-      }
+      selected = arguments["url"]?.stringValue
+        .flatMap(URLComponents.init(string:))
+        .flatMap { components in
+          ProgressText.webPagePreview(components, secretValues: secretValues)
+        }
     case BuiltinToolNames.fileRead, BuiltinToolNames.fileWrite:
       selected = arguments["path"]?.stringValue.flatMap { path in
         guard !path.hasPrefix("/"), !path.hasPrefix("~"), !path.contains("\\"),
-              !path.contains(":"),
-              !path.unicodeScalars.contains(where: {
-            CharacterSet.controlCharacters.contains($0)
-          }),
-              path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy({
-            !$0.isEmpty && $0 != "." && $0 != ".."
-          })
+              !path.contains(":")
         else {
           return nil
         }
+
+        let containsControlCharacters = path.unicodeScalars.contains { scalar in
+          CharacterSet.controlCharacters.contains(scalar)
+        }
+        guard !containsControlCharacters else {
+          return nil
+        }
+
+        let validPathComponents =
+          path
+          .split(separator: "/", omittingEmptySubsequences: false)
+          .allSatisfy { component in
+            !component.isEmpty && component != "." && component != ".."
+          }
+        guard validPathComponents else {
+          return nil
+        }
+
         return path
       }
     default:

@@ -44,8 +44,12 @@ private struct RecordingLogHandler: LogHandler {
   var metadata: Logger.Metadata = [:]
 
   subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-    get { metadata[key] }
-    set { metadata[key] = newValue }
+    get {
+      metadata[key]
+    }
+    set {
+      metadata[key] = newValue
+    }
   }
 
   func log(event: LogEvent) {

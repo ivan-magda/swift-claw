@@ -12,9 +12,9 @@ public struct CoderExecutionPolicy: Sendable, Equatable {
   ) {
     var parts = [executable]
 
-    for optional in [profile, configHome] {
-      if let optional {
-        parts += ["present", optional]
+    for optionalSetting in [profile, configHome] {
+      if let optionalSetting {
+        parts += ["present", optionalSetting]
       } else {
         parts.append("absent")
       }

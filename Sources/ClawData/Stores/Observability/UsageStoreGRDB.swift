@@ -129,14 +129,14 @@ extension UsageStoreGRDB {
           """,
         arguments: [dayStart]
       )
-      var result: [CostSource: Int] = [:]
+      var countsBySource: [CostSource: Int] = [:]
       for row in rows {
-        let raw: String = row["cost_source"]
-        if let source = CostSource(rawValue: raw) {
-          result[source] = row["n"]
+        let rawSource: String = row["cost_source"]
+        if let source = CostSource(rawValue: rawSource) {
+          countsBySource[source] = row["n"]
         }
       }
-      return result
+      return countsBySource
     }
   }
 }

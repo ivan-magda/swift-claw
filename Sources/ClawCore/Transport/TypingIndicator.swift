@@ -34,7 +34,9 @@ public func withTypingPulse<Result>(
       }
     }
 
-    defer { group.cancelAll() }
+    defer {
+      group.cancelAll()
+    }
 
     return try await operation()
   }

@@ -74,7 +74,8 @@ struct CoderSetupFile {
       contents += Self.assignments(remaining) + "\n"
     }
 
-    guard FileManager.default.contents(atPath: url.path) == original else {
+    let currentContents = FileManager.default.contents(atPath: url.path)
+    guard currentContents == original else {
       throw ValidationError(
         "The env file changed during setup. Rerun setup to preserve those edits."
       )
@@ -90,9 +91,12 @@ struct CoderSetupFile {
   }
 
   static func assignments(_ values: [String: String]) -> String {
-    values.keys.sorted().map { key in
-      assignment(key, values[key] ?? "")
-    }.joined(separator: "\n")
+    values.keys
+      .sorted()
+      .map { key in
+        assignment(key, values[key] ?? "")
+      }
+      .joined(separator: "\n")
   }
 }
 
@@ -124,27 +128,37 @@ private extension CoderSetupFile {
       text = String(text.dropFirst("export ".count)).trimmingCharacters(in: .whitespaces)
     }
 
-    guard let equal = text.firstIndex(of: "=") else {
+    guard let assignmentSeparator = text.firstIndex(of: "=") else {
       throw ParseError.unsupported
     }
 
-    let key = String(text[..<equal])
-    guard let first = key.first,
-          first.isASCII,
-          first.isLetter || first == "_",
-          key.allSatisfy({
-        $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_")
-      })
+    let key = String(text[..<assignmentSeparator])
+    guard let firstCharacter = key.first,
+          firstCharacter.isASCII,
+          firstCharacter.isLetter || firstCharacter == "_"
     else {
       throw ParseError.unsupported
     }
 
-    return (key, try literal(String(text[text.index(after: equal)...])))
+    let hasValidKeyCharacters = key.allSatisfy { character in
+      character.isASCII && (character.isLetter || character.isNumber || character == "_")
+    }
+    guard hasValidKeyCharacters else {
+      throw ParseError.unsupported
+    }
+
+    let rawValue = String(text[text.index(after: assignmentSeparator)...])
+    return (key, try literal(rawValue))
   }
 
   static func literal(_ raw: String) throws -> String {
     var input = raw[...]
-    let quote = input.first == "'" || input.first == "\"" ? input.removeFirst() : nil
+    let quote: Character? =
+      if input.first == "'" || input.first == "\"" {
+        input.removeFirst()
+      } else {
+        nil
+      }
     var value = ""
 
     while let character = input.first {

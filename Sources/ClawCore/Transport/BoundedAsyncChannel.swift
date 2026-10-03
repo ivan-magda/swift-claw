@@ -237,7 +237,9 @@ extension BoundedAsyncChannel.Storage {
     }
 
     let ticket = makeTicket()
-    defer { discardCancellationMarker(senderTicket: ticket) }
+    defer {
+      discardCancellationMarker(senderTicket: ticket)
+    }
 
     try await withTaskCancellationHandler(
       operation: {
@@ -255,10 +257,14 @@ extension BoundedAsyncChannel.Storage {
       }
     )
   }
+}
 
+// MARK: - Send Admission and Cancellation
+
+private extension BoundedAsyncChannel.Storage {
   /// Decides this send's fate under the lock and settles it outside: a continuation resumed while
   /// the lock is held runs the woken task's next step on this thread, still holding it.
-  private func beginSend(
+  func beginSend(
     ticket: Int,
     element: Element,
     weight elementWeight: Int,
@@ -313,8 +319,8 @@ extension BoundedAsyncChannel.Storage {
   /// landed yet.
   ///
   /// Exactly one of the two runs, so the send settles exactly once.
-  private func cancelSend(ticket: Int) {
-    let parked = state.withLock { current -> CheckedContinuation<Void, any Error>? in
+  func cancelSend(ticket: Int) {
+    let parkedSender = state.withLock { current -> CheckedContinuation<Void, any Error>? in
       let index = current.senders.firstIndex { sender in
         sender.ticket == ticket
       }
@@ -326,7 +332,7 @@ extension BoundedAsyncChannel.Storage {
 
       return current.senders.remove(at: index).continuation
     }
-    parked?.resume(throwing: CancellationError())
+    parkedSender?.resume(throwing: CancellationError())
   }
 }
 
@@ -335,7 +341,9 @@ extension BoundedAsyncChannel.Storage {
 extension BoundedAsyncChannel.Storage {
   func receive() async throws -> Element? {
     let ticket = makeTicket()
-    defer { discardCancellationMarker(receiverTicket: ticket) }
+    defer {
+      discardCancellationMarker(receiverTicket: ticket)
+    }
 
     return try await withTaskCancellationHandler(
       operation: {
@@ -348,8 +356,12 @@ extension BoundedAsyncChannel.Storage {
       }
     )
   }
+}
 
-  private func beginReceive(ticket: Int, continuation: CheckedContinuation<Element?, any Error>) {
+// MARK: - Receive Delivery and Cancellation
+
+private extension BoundedAsyncChannel.Storage {
+  func beginReceive(ticket: Int, continuation: CheckedContinuation<Element?, any Error>) {
     var admitted: [CheckedContinuation<Void, any Error>] = []
     let delivery = state.withLock { current -> Delivery in
       if current.cancelledReceiverTickets.remove(ticket) != nil {
@@ -389,8 +401,8 @@ extension BoundedAsyncChannel.Storage {
     }
   }
 
-  private func cancelReceive(ticket: Int) {
-    let parked = state.withLock { current -> CheckedContinuation<Element?, any Error>? in
+  func cancelReceive(ticket: Int) {
+    let parkedReceiver = state.withLock { current -> CheckedContinuation<Element?, any Error>? in
       let index = current.receivers.firstIndex { receiver in
         receiver.ticket == ticket
       }
@@ -402,7 +414,7 @@ extension BoundedAsyncChannel.Storage {
 
       return current.receivers.remove(at: index).continuation
     }
-    parked?.resume(throwing: CancellationError())
+    parkedReceiver?.resume(throwing: CancellationError())
   }
 }
 
@@ -464,8 +476,8 @@ extension BoundedAsyncChannel.Storage {
 
 // MARK: - Ticketing
 
-extension BoundedAsyncChannel.Storage {
-  private func makeTicket() -> Int {
+private extension BoundedAsyncChannel.Storage {
+  func makeTicket() -> Int {
     state.withLock { current in
       current.nextTicket += 1
       return current.nextTicket
@@ -474,13 +486,13 @@ extension BoundedAsyncChannel.Storage {
 
   /// Drops a marker left by a cancellation that raced a send already on its way out, so a long
   /// stream cannot accumulate one per cancelled producer.
-  private func discardCancellationMarker(senderTicket: Int) {
+  func discardCancellationMarker(senderTicket: Int) {
     state.withLock { current in
       _ = current.cancelledSenderTickets.remove(senderTicket)
     }
   }
 
-  private func discardCancellationMarker(receiverTicket: Int) {
+  func discardCancellationMarker(receiverTicket: Int) {
     state.withLock { current in
       _ = current.cancelledReceiverTickets.remove(receiverTicket)
     }
