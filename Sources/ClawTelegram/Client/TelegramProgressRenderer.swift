@@ -2,7 +2,11 @@ import ClawCore
 
 /// Draft-only markup. Permanent answers use the existing delivery path directly.
 public struct TelegramProgressRenderer: TurnProgressRendering {
-  public init() {}
+  private let actionEmojisEnabled: Bool
+
+  public init(actionEmojisEnabled: Bool) {
+    self.actionEmojisEnabled = actionEmojisEnabled
+  }
 
   public func render(_ snapshot: TurnProgressSnapshot) -> String? {
     renderDraft(snapshot)?.markdown
@@ -59,14 +63,16 @@ private extension TelegramProgressRenderer {
       return ""
     }
 
-    let headingBudget = budget - thinkingTagCharacters
-    let customEmojiHeading = "\(emoji.markup) \(heading)"
-    let fallbackEmojiHeading = "\(emoji.fallback) \(heading)"
+    if actionEmojisEnabled {
+      let headingBudget = budget - thinkingTagCharacters
+      let customEmojiHeading = "\(emoji.markup) \(heading)"
+      let fallbackEmojiHeading = "\(emoji.fallback) \(heading)"
 
-    if customEmojiHeading.count <= headingBudget {
-      heading = customEmojiHeading
-    } else if fallbackEmojiHeading.count <= headingBudget {
-      heading = fallbackEmojiHeading
+      if customEmojiHeading.count <= headingBudget {
+        heading = customEmojiHeading
+      } else if fallbackEmojiHeading.count <= headingBudget {
+        heading = fallbackEmojiHeading
+      }
     }
 
     var thinking = heading

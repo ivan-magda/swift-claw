@@ -8,6 +8,7 @@ public struct AppConfig: Sendable, Equatable {
     static let groupChats = "CLAW_GROUP_CHATS"
     static let pollTimeout = "CLAW_POLL_TIMEOUT"
     static let telegramProgress = "CLAW_TELEGRAM_PROGRESS"
+    static let telegramActionEmojis = "CLAW_TELEGRAM_ACTION_EMOJIS"
 
     // MARK: - State storage
 
@@ -157,6 +158,7 @@ public struct AppConfig: Sendable, Equatable {
   public let groupChats: Set<Int64>
   public let pollTimeoutSeconds: Int
   public let telegramProgressEnabled: Bool
+  public let telegramActionEmojisEnabled: Bool
 
   // MARK: - State storage
 
@@ -211,6 +213,7 @@ public struct AppConfig: Sendable, Equatable {
     groupChats: Set<Int64>,
     pollTimeoutSeconds: Int,
     telegramProgressEnabled: Bool,
+    telegramActionEmojisEnabled: Bool,
     stateRoot: URL,
     llm: LLMConfig,
     budget: RunBudget,
@@ -235,6 +238,7 @@ public struct AppConfig: Sendable, Equatable {
     self.groupChats = groupChats
     self.pollTimeoutSeconds = pollTimeoutSeconds
     self.telegramProgressEnabled = telegramProgressEnabled
+    self.telegramActionEmojisEnabled = telegramActionEmojisEnabled
 
     self.stateRoot = stateRoot
 
@@ -319,6 +323,11 @@ public struct AppConfig: Sendable, Equatable {
         env[EnvKey.telegramProgress],
         key: EnvKey.telegramProgress,
         default: true
+      ),
+      telegramActionEmojisEnabled: try boolValue(
+        env[EnvKey.telegramActionEmojis],
+        key: EnvKey.telegramActionEmojis,
+        default: false
       ),
       stateRoot: stateRoot,
       llm: llm,

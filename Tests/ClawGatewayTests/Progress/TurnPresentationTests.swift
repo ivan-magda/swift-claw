@@ -37,7 +37,8 @@ struct TurnPresentationTests {
     let registry = try makePresentations(
       clock: clock,
       drafts: TelegramRichDraftStreamer(transport: transport, clock: clock),
-      typing: RecordingTyping()
+      typing: RecordingTyping(),
+      actionEmojisEnabled: true
     )
     let scope = progressScope()
 

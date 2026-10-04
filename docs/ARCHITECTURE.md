@@ -496,25 +496,26 @@ literal inside thinking blocks; render a provider's outer `**` heading with owne
 tags, including incomplete streamed headings. Escape explanation and row text as HTML and charge
 all tags to the same budget.
 
-The heading includes one action emoji from Telegram's
+When `CLAW_TELEGRAM_ACTION_EMOJIS` is enabled (default `false`), the heading includes one
+action emoji from Telegram's
 [AIActions](https://t.me/addemoji/AIActions) set, selected from the phase and a typed
 `TurnToolAction` derived only from registered tool identity. Model work, search, page/file reading,
 file writing, memory writing, skill loading, sandbox execution, coding submission and approval
 waiting have distinct icons. Other registered tools, including MCP and coding status/cancellation,
 use a generic working icon. In the tool phase, select the latest pending/executing step; completed
 steps cannot keep advertising an active action. Approval and answer phases override tool icons.
-The heading text follows the same selected action as the icon: `Thinking`, `Searching`, `Reading`
+With or without emoji, the heading text follows the selected action: `Thinking`, `Searching`, `Reading`
 (page or file), `Writing`, `Updating memory`, `Loading skill`, `Running code`, or
 `Submitting coding job`. Unknown tools and intervals without an active step use `Working`.
 Keep `Preparing`, `Resuming work`, `Waiting for your approval`, and the collapsed answer's neutral
 `Progress` summary for their respective phases. Tool-row labels and outcome markers remain intact.
-Emoji IDs and HTML belong to the Telegram
+When action emoji are enabled, emoji IDs and HTML belong to the Telegram
 renderer, never to provider text or tool metadata. Use complete `<tg-emoji>` tags with ordinary emoji
 alternatives; under a tight budget, drop custom markup before the ordinary emoji and heading text.
-The renderer passes a `RichDraft` through the presentation sender with an explicit ordinary-emoji
+For custom-emoji headings, the renderer passes a `RichDraft` with an explicit ordinary-emoji
 alternative derived from its own progress prefix, preserving the answer in both variants. Raw
 answer drafts carry no alternative, even if they resemble a generated progress heading.
-If Telegram rejects a decorated draft with API error 400, retry once with that alternative.
+If Telegram rejects an emoji-decorated draft with API error 400, retry once with that alternative.
 After a successful retry, the shared draft streamer
 uses ordinary action emoji until restart. Failed retries do not latch that preference; flood-control
 holds and cancellation still apply. This compatibility retry does not rewrite answer content.
@@ -1769,6 +1770,11 @@ and epoch checks outrank ordinary retention; retained old records cannot reactiv
 **Temporary Telegram progress** is enabled by `CLAW_TELEGRAM_PROGRESS` (default `true`),
 parsed through the existing strict boolean parser. Its scope is the additional interactive display
 and per-request provider explanation option; it changes no model, reasoning effort, policy, or budget.
+
+`CLAW_TELEGRAM_ACTION_EMOJIS` (default `false`) uses the same strict boolean parser and is
+carried by `AppConfig.telegramActionEmojisEnabled`. It controls only action emoji in progress headings:
+when disabled, both custom emoji and Unicode action fallbacks are omitted. Existing status labels
+and model-written text are unchanged. Enabling it does not enable progress or streaming.
 
 | `CLAW_LLM_STREAMING` | `CLAW_TELEGRAM_PROGRESS` | Interactive private-chat contract |
 | --- | --- | --- |

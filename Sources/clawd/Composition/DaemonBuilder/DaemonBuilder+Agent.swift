@@ -39,7 +39,7 @@ extension DaemonBuilder {
     let presentations = TurnPresentationRegistry(
       streamingEnabled: config.llm.streamingEnabled,
       progressEnabled: config.telegramProgressEnabled,
-      renderer: TelegramProgressRenderer(),
+      renderer: TelegramProgressRenderer(actionEmojisEnabled: config.telegramActionEmojisEnabled),
       drafts: draftStreamer,
       typing: TelegramTypingIndicator(transport: transport),
       outbox: stores.outbox,
