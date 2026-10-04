@@ -5,6 +5,31 @@ import Testing
 
 @Suite
 struct TelegramActionEmojiTests {
+  @Test
+  func disabledEmojisKeepStatusWithoutDecoratingProgress() throws {
+    // given
+    let emoji = TelegramActionEmoji.answer
+    let answer = "Answer \(emoji.fallback)"
+    let snapshot = TurnProgressSnapshot(
+      phase: .answer,
+      elapsedSeconds: 12,
+      explanation: nil,
+      steps: [],
+      olderSteps: TurnToolCounts(succeeded: 0, failed: 0, denied: 0, cancelled: 0),
+      answerPreview: answer,
+      showsProgress: true
+    )
+
+    // when
+    let renderer = TelegramProgressRenderer(actionEmojisEnabled: false)
+    let draft = try #require(renderer.renderDraft(snapshot))
+
+    // then
+    #expect(draft.markdown.hasPrefix("<tg-thinking>\(emoji.statusLabel) · "))
+    #expect(draft.markdown.hasSuffix("\n\n" + answer))
+    #expect(draft.fallbackMarkdown == nil)
+  }
+
   @Test(arguments: [
     (TurnToolAction.tool, TelegramActionEmoji.working),
     (.search, .search),
@@ -126,7 +151,7 @@ private extension TelegramActionEmojiTests {
     answer: String = ""
   ) throws -> String {
     try #require(
-      TelegramProgressRenderer().render(
+      TelegramProgressRenderer(actionEmojisEnabled: true).render(
         TurnProgressSnapshot(
           phase: phase,
           elapsedSeconds: 12,

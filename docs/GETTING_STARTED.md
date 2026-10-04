@@ -150,6 +150,9 @@ a permanent reply, without drafts or explanation requests. Groups and topics use
 active work and pause it while waiting for a person's approval.
 See [Telegram progress](CUSTOMIZATION.md#telegram-progress) for the settings.
 
+Action emoji in progress headings are off by default. Set `CLAW_TELEGRAM_ACTION_EMOJIS=true`
+and restart to enable them; this does not change status labels or emoji in model-written text.
+
 Tap **Stop** on a private-chat draft to dismiss it and cancel that turn. Queued messages still run.
 clawd sends "Stopped." after cleanup; an ordinary tool that ignores cancellation is abandoned at its deadline.
 `/stop` cancels current and queued turns, and `/new` starts a fresh session.

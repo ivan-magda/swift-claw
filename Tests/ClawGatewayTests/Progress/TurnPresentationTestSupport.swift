@@ -26,13 +26,14 @@ func makePresentations(
   typing: any TypingIndicator,
   streamingEnabled: Bool = true,
   progressEnabled: Bool = true,
+  actionEmojisEnabled: Bool = false,
   outbox: (any OutboxStore)? = nil,
   draftIDs: (any DraftIDStore)? = nil
 ) throws -> TurnPresentationRegistry {
   TurnPresentationRegistry(
     streamingEnabled: streamingEnabled,
     progressEnabled: progressEnabled,
-    renderer: TelegramProgressRenderer(),
+    renderer: TelegramProgressRenderer(actionEmojisEnabled: actionEmojisEnabled),
     drafts: drafts,
     typing: typing,
     outbox: try outbox ?? OutboxStoreGRDB(writer: TestDatabase.make()),

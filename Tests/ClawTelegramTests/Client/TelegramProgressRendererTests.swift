@@ -8,7 +8,7 @@ struct TelegramProgressRendererTests {
   @Test
   func expandedRowsCollapseWhenAnswerArrives() throws {
     // given
-    let renderer = TelegramProgressRenderer()
+    let renderer = TelegramProgressRenderer(actionEmojisEnabled: false)
     let steps = (0..<TurnProgressLimits.visibleToolSteps + 2).map { index in
       TurnToolStep(
         id: TurnToolStepID(providerCallID: "round", toolCallID: "\(index)"),
@@ -44,7 +44,7 @@ struct TelegramProgressRendererTests {
   @Test
   func explanationConvertsOuterBoldToHTMLWhileRowsEscapeHTMLAndControls() throws {
     // given
-    let renderer = TelegramProgressRenderer()
+    let renderer = TelegramProgressRenderer(actionEmojisEnabled: false)
     let text = "< & [link](https://example.org)\u{001B} 👩🏽‍💻"
     let step = TurnToolStep(
       id: TurnToolStepID(providerCallID: "r", toolCallID: "t"),
@@ -73,7 +73,7 @@ struct TelegramProgressRendererTests {
   @Test
   func incompleteExplanationHeadingClosesItsHTMLBold() throws {
     // given
-    let renderer = TelegramProgressRenderer()
+    let renderer = TelegramProgressRenderer(actionEmojisEnabled: false)
 
     // when
     let markup = try #require(renderer.render(snapshot(explanation: "**Fetching sequentially")))
@@ -86,7 +86,7 @@ struct TelegramProgressRendererTests {
   @Test
   func escapedExpansionStaysBoundedAndTagsRemainComplete() throws {
     // given
-    let renderer = TelegramProgressRenderer()
+    let renderer = TelegramProgressRenderer(actionEmojisEnabled: false)
     let hostile = String(repeating: "&", count: TurnProgressLimits.previewCharacters)
     let steps = (0..<TurnProgressLimits.visibleToolSteps).map { index in
       TurnToolStep(
@@ -126,7 +126,7 @@ struct TelegramProgressRendererTests {
   @Test
   func answerKeepsItsBudgetAndDisabledProgressIsAbsent() throws {
     // given
-    let renderer = TelegramProgressRenderer()
+    let renderer = TelegramProgressRenderer(actionEmojisEnabled: false)
     let answer = String(repeating: "界", count: TelegramMessageLimits.maxRichMessageCharacters)
 
     // when
@@ -143,7 +143,7 @@ struct TelegramProgressRendererTests {
   @Test
   func fallbackBelongsOnlyToRenderedProgressEvenWhenAnswerLooksLikeAHeading() throws {
     // given
-    let renderer = TelegramProgressRenderer()
+    let renderer = TelegramProgressRenderer(actionEmojisEnabled: true)
     let heading = try #require(renderer.render(snapshot()))
 
     // when

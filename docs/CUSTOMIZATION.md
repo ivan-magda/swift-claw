@@ -184,6 +184,11 @@ the strict boolean values `true`/`false`, `yes`/`no`, `on`/`off`, and `1`/`0`; m
 fail configuration. This setting controls the additional display and explanation requests.
 It does not change the selected model, reasoning effort, budgets, or tool approvals.
 
+Action emoji in progress headings are off by default. Set `CLAW_TELEGRAM_ACTION_EMOJIS=true`
+in `clawd.env`, reload it and restart to enable them. This setting uses the same strict boolean
+values as `CLAW_TELEGRAM_PROGRESS`. When off, neither custom action emoji nor their Unicode
+fallbacks appear; status labels and emoji in model-written text are unchanged.
+
 Groups and topics show continuous typing during active work under every combination, with
 each pulse addressed to its topic. Working typing pauses while a person's approval is pending.
 Scheduled and heartbeat runs keep their existing output behavior without a new thinking
