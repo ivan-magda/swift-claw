@@ -65,6 +65,9 @@ logs/
 # ─────────────────── Claude Code (personal, local) ───────────────────
 .claude/settings.local.json
 
+# Machine-specific agent notes; shared .agents/memory/*.md stays versioned.
+/.agents/memory/local/
+
 # ───────────────── Project-private (not for the repo) ─────────────────
 docs/superpowers/
 docs/plans/

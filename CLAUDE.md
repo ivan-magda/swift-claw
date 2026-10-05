@@ -8,6 +8,12 @@ opt-in deployment with no personal state.
 Paths below are conditional reading instructions, not automatic imports. These repository
 instructions/skills are separate from clawd's runtime workspace files (`docs/CUSTOMIZATION.md`).
 
+## Shared project memory
+
+Read [`.agents/memory/MEMORY.md`](.agents/memory/MEMORY.md) at session start; follow its topic routes
+and maintenance rules. Keep project notes in `.agents/memory/`, updating the relevant topic and index.
+Do not read or write agent-private project memory (e.g. `~/.claude/projects/.../memory/`).
+
 ## Project map
 
 - `Package.swift`: target graph. `Sources/ClawCore/`: shared protocols, value types and errors; sibling `Claw*` targets implement them. `ClawAgent` and `ClawGateway` access persistence only through Core protocols.
