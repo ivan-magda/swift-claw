@@ -55,6 +55,7 @@ jobs:
               --base "$GITHUB_REF_NAME" \
               --head "$BRANCH" \
               --title "Update Prices.json" \
+              --assignee ivan-magda \
               --body-file "$RUNNER_TEMP/pr-body.md"
           else
             gh pr edit "$BRANCH" --body-file "$RUNNER_TEMP/pr-body.md"
