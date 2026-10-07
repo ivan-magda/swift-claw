@@ -179,6 +179,10 @@ is abandoned at its original deadline and can still run after that acknowledgeme
 Streaming off removes the button. Scheduled and heartbeat drafts have no Stop control.
 `/stop` remains available and cancels current and queued turns.
 
+Some Telegram clients hold back your messages while a draft is active. On Telegram for macOS
+12.10, a `/stop` sent mid-turn reached clawd only after the answer finished. Some Android
+versions show a loading state in place of the Send button. Use **Stop** to cancel an active draft.
+
 Set `CLAW_TELEGRAM_PROGRESS=false` in `clawd.env`, reload it and restart to opt out. It uses
 the strict boolean values `true`/`false`, `yes`/`no`, `on`/`off`, and `1`/`0`; malformed values
 fail configuration. This setting controls the additional display and explanation requests.
