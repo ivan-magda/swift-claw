@@ -95,6 +95,11 @@ public struct TelegramPollerService: Service {
         } catch is CancellationError {
           break
         } catch let error as TelegramError {
+          // Shutdown cancels the in-flight long poll, which the HTTP stack reports as a transport
+          // failure rather than a Telegram fault.
+          if Task.isCancelled {
+            break
+          }
           try await react(to: error)
         } catch {
           logger.error("poll loop error: \(error)")

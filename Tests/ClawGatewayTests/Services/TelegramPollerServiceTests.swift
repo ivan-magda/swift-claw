@@ -1,6 +1,7 @@
 import ClawAgent
 import ClawCore
 import ClawData
+import ClawTelegram
 import ClawTestSupport
 import Foundation
 import Logging
@@ -52,6 +53,7 @@ struct TelegramPollerServiceTests {
     allowed: [Int64],
     throwOnGetUpdates: TelegramError? = nil,
     sendError: TelegramError? = nil,
+    intake: (any ChannelIntake)? = nil,
     logger: Logger = TestLog.silent,
     clock: any Clock<Duration> = ContinuousClock()
   ) throws -> Stack {
@@ -87,7 +89,7 @@ struct TelegramPollerServiceTests {
     let cursor = UpdateCursorStoreGRDB(writer: queue)
 
     let poller = TelegramPollerService(
-      intake: transport,
+      intake: intake ?? transport,
       router: router,
       cursor: cursor,
       pollTimeout: 0,
@@ -130,6 +132,46 @@ struct TelegramPollerServiceTests {
 
     // then
     try await task.value  // returns promptly, no throw
+  }
+
+  @Test(.timeLimit(.minutes(1)))
+  func shutdownDuringALongPollStopsWithoutLoggingAnError() async throws {
+    // given — the real client over a long poll held until the poller is cancelled; the production
+    // executor reports that cancellation as a transport failure, as `AsyncHTTPExecutor.classify` does
+    let pollStarted = AsyncGate()
+    let pollHeld = AsyncGate()
+    defer { pollHeld.open() }
+    let http = ScriptedHTTPExecutor([
+      .responding { _ in
+        pollStarted.open()
+        await pollHeld.wait()
+        throw HTTPTransportFailure(
+          disposition: .mayHaveBeenSent,
+          safeMessage: "\(CancellationError())"
+        )
+      },
+    ])
+    let logs = RecordingLogCapture()
+    let stack = try makeStack(
+      batches: [],
+      allowed: [42],
+      intake: TelegramClient(token: "test", http: http, baseURL: "https://telegram.test"),
+      logger: logs.logger()
+    )
+
+    // when
+    let task = Task {
+      try await stack.poller.run()
+    }
+    await pollStarted.wait()
+    task.cancel()
+    try await task.value
+
+    // then — a graceful shutdown is not a Telegram fault
+    let errors = logs.entries
+      .filter { $0.level >= .error }
+      .map(\.message)
+    #expect(errors.isEmpty)
   }
 
   @Test
