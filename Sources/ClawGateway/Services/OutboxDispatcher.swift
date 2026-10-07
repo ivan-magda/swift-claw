@@ -121,6 +121,11 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
           continue
         }
 
+        if Self.isRefusedForGood(error) {
+          retire(row, refusedWith: error)
+          continue
+        }
+
         logger.warning(
           """
           outbox send failed for \(row.originLabel) step \(row.stepIndex); \
@@ -157,7 +162,7 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
   /// a second call against the very limit that just fired.
   /// `replyMarkup` (the inline keyboard) rides both the rich send and the plain fallback, so a
   /// degraded delivery never drops the approval keyboard. A failure of the plain fallback itself
-  /// propagates — the row stays PENDING for the next drain.
+  /// propagates to the drain.
   private func send(_ row: OutboxRow) async throws -> Int64 {
     do {
       return try await delivery.sendRichMessage(
@@ -177,10 +182,69 @@ public struct OutboxDispatcher<ClockType: Clock>: Service where ClockType.Durati
         """
       )
 
-      return try await delivery.sendMessage(
-        to: row.target,
-        text: row.payload,
-        replyMarkup: row.replyMarkup
+      return try await sendPlain(row)
+    }
+  }
+}
+
+// MARK: - Plain Fallback
+
+private extension OutboxDispatcher {
+  /// A chunk sized for a rich message can exceed the plain-message limit, so the fallback sends it
+  /// as consecutive parts. The keyboard rides the last part, whose id the row records for a later
+  /// disarm.
+  func sendPlain(_ row: OutboxRow) async throws -> Int64 {
+    let parts = ReplySplitter.split(
+      text: row.payload,
+      limit: TelegramMessageLimits.maxPlainMessageCharacters
+    )
+
+    for part in parts.dropLast() {
+      _ = try await delivery.sendMessage(to: row.target, text: part, replyMarkup: nil)
+    }
+
+    let finalPart = parts.last ?? row.payload
+    return try await delivery.sendMessage(
+      to: row.target,
+      text: finalPart,
+      replyMarkup: row.replyMarkup
+    )
+  }
+}
+
+// MARK: - Refused Rows
+
+private extension OutboxDispatcher {
+  /// Telegram's 400 and 403 refuse the request itself (its content, or access to the chat), so a
+  /// retry would be refused again and, left PENDING, the row would stop every later drain.
+  static func isRefusedForGood(_ error: any Error) -> Bool {
+    guard let telegramError = error as? TelegramError else {
+      return false
+    }
+    guard case .apiError(let code, _) = telegramError else {
+      return false
+    }
+
+    return code == 400 || code == 403
+  }
+
+  /// Marks the row FAILED so the drain moves on. If that write fails, the row stays PENDING and
+  /// the next drain meets the same refusal.
+  func retire(_ row: OutboxRow, refusedWith error: any Error) {
+    do {
+      try outbox.markFailed(deliveryKey: row.deliveryKey)
+      logger.error(
+        """
+        outbox send refused for \(row.originLabel) step \(row.stepIndex); \
+        marked FAILED: \(error)
+        """
+      )
+    } catch let storeError {
+      logger.error(
+        """
+        outbox send refused for \(row.originLabel) step \(row.stepIndex) \
+        but marking it FAILED failed: \(storeError)
+        """
       )
     }
   }

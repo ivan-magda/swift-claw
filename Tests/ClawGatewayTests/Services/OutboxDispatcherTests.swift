@@ -18,6 +18,10 @@ struct MarkSentFailingOutbox: OutboxStore {
     throw StoreError.diskFull
   }
 
+  func markFailed(deliveryKey: String) throws(StoreError) {
+    try base.markFailed(deliveryKey: deliveryKey)
+  }
+
   func pendingOutbound() throws(StoreError) -> [OutboxRow] {
     try base.pendingOutbound()
   }
@@ -34,6 +38,8 @@ private actor DeliverySpy: MessageDelivery {
     case floodControl(retryAfter: Int, times: Int)
     /// Fails the rich send and the plain fallback alike — a genuinely undeliverable chat.
     case unreachable
+    /// Telegram answers both sends with this API error code.
+    case rejected(code: Int)
   }
 
   private(set) var richMarkups: [String?] = []
@@ -42,6 +48,7 @@ private actor DeliverySpy: MessageDelivery {
   private(set) var deliveredPayloads: [String] = []
   private(set) var richAttempts: [Int64] = []
   private(set) var plainAttempts: [Int64] = []
+  private var lastMessageID: Int64 = 0
   private let failRich: Bool
   private var outcomes: [Int64: Outcome]
 
@@ -60,7 +67,7 @@ private actor DeliverySpy: MessageDelivery {
     plainMarkups.append(replyMarkup)
     targets.append(target)
     deliveredPayloads.append(text)
-    return 1
+    return nextMessageID()
   }
 
   func sendRichMessage(
@@ -76,7 +83,12 @@ private actor DeliverySpy: MessageDelivery {
     richMarkups.append(replyMarkup)
     targets.append(target)
     deliveredPayloads.append(markdown)
-    return 1
+    return nextMessageID()
+  }
+
+  private func nextMessageID() -> Int64 {
+    lastMessageID += 1
+    return lastMessageID
   }
 
   private func answer(for chatID: Int64) throws {
@@ -85,6 +97,8 @@ private actor DeliverySpy: MessageDelivery {
       return
     case .some(.unreachable):
       throw TelegramError.transport("chat \(chatID) down")
+    case .some(.rejected(let code)):
+      throw TelegramError.apiError(code: code, description: "refused")
     case .some(.floodControl(let retryAfter, let times)):
       guard times > 0 else {
         return
@@ -196,6 +210,7 @@ struct OutboxDispatcherTests {
   /// One PENDING row for each of two chats, the first chat's run seeded first so the drain reaches
   /// its row first — the shape a per-chat failure has to be judged on.
   private struct TwoChatFixture {
+    let writer: any DatabaseWriter
     let outbox: OutboxStoreGRDB
     let firstChatID: Int64
     let secondChatID: Int64
@@ -222,6 +237,7 @@ struct OutboxDispatcherTests {
       payloads: [secondPayload]
     )
     return TwoChatFixture(
+      writer: seeded.writer,
       outbox: seeded.outbox,
       firstChatID: firstChatID,
       secondChatID: secondChatID
@@ -391,6 +407,39 @@ struct OutboxDispatcherTests {
 
     // then — the same keyboard rode the plain fallback
     #expect(await spy.plainMarkups == [markup])
+  }
+
+  @Test
+  func aChunkOverThePlainLimitFallsBackAsPlainPartsWithTheKeyboardLast() async throws {
+    // given — a rich-sized chunk of 5,000 characters whose rich send fails
+    let fixture = try makeFixture()
+    let markup = "{\"inline_keyboard\":[[{\"text\":\"Approve\",\"callback_data\":\"apr:x:y\"}]]}"
+    let payload = String(repeating: "a", count: 4_096) + String(repeating: "b", count: 904)
+    try seedPending(fixture, payloads: [payload], replyMarkup: markup)
+    let spy = DeliverySpy(failRich: true)
+    let dispatcher = OutboxDispatcher(
+      outbox: fixture.outbox,
+      delivery: spy,
+      signal: OutboxSignal(),
+      logger: TestLog.silent
+    )
+
+    // when
+    await dispatcher.drainOnce()
+
+    // then — plain parts within Telegram's 4,096-character limit carry the whole text in order;
+    // the keyboard rides the last part, whose message id the row records for a later disarm
+    #expect(
+      await spy.deliveredPayloads == [
+        String(repeating: "a", count: 4_096),
+        String(repeating: "b", count: 904),
+      ]
+    )
+    #expect(await spy.plainMarkups == [nil, markup])
+    let recordedMessageID = try await fixture.writer.read { db in
+      try Int64.fetchOne(db, sql: "SELECT telegram_message_id FROM outbound_deliveries")
+    }
+    #expect(recordedMessageID == 2)
   }
 
   @Test
@@ -621,5 +670,48 @@ struct OutboxDispatcherTests {
     // then — unchanged stall-and-wait: the drain stops and every later row stays PENDING
     #expect(await spy.deliveredPayloads.isEmpty)
     #expect(try fixture.outbox.pendingOutbound().map(\.payload) == ["stuck", "behind it"])
+  }
+
+  @Test(arguments: [
+    (code: 400, refusedForGood: true),
+    (code: 403, refusedForGood: true),
+    (code: 502, refusedForGood: false),
+  ])
+  func onlyARefusedRequestFailsItsRowAndLetsTheDrainContinue(
+    code: Int,
+    refusedForGood: Bool
+  ) async throws {
+    // given — Telegram answers the first chat's rich send and plain fallback with this code
+    let fixture = try makeTwoChatFixture(firstPayload: "refused", secondPayload: "behind it")
+    let spy = DeliverySpy(outcomes: [fixture.firstChatID: .rejected(code: code)])
+    let dispatcher = OutboxDispatcher(
+      outbox: fixture.outbox,
+      delivery: spy,
+      signal: OutboxSignal(),
+      logger: TestLog.silent,
+      clock: ScriptedClock { _ in }
+    )
+
+    // when
+    await dispatcher.drainOnce()
+
+    // then — a refusal a retry cannot change parks its row as FAILED and the next chat still gets
+    // its answer; a server error keeps both rows PENDING in order for the next drain
+    let refusedStatus = try await fixture.writer.read { db in
+      try String.fetchOne(
+        db,
+        sql: "SELECT status FROM outbound_deliveries WHERE payload = ?",
+        arguments: ["refused"]
+      )
+    }
+    if refusedForGood {
+      #expect(refusedStatus == "FAILED")
+      #expect(await spy.deliveredPayloads == ["behind it"])
+      #expect(try fixture.outbox.pendingOutbound().isEmpty)
+    } else {
+      #expect(refusedStatus == "PENDING")
+      #expect(await spy.deliveredPayloads.isEmpty)
+      #expect(try fixture.outbox.pendingOutbound().map(\.payload) == ["refused", "behind it"])
+    }
   }
 }

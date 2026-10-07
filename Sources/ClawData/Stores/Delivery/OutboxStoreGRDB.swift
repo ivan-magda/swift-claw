@@ -35,6 +35,15 @@ public struct OutboxStoreGRDB: OutboxStore {
     }
   }
 
+  public func markFailed(deliveryKey: String) throws(StoreError) {
+    try database.writeMapping { db in
+      try db.execute(
+        sql: "UPDATE outbound_deliveries SET status = 'FAILED' WHERE dedup_key = ?",
+        arguments: [deliveryKey]
+      )
+    }
+  }
+
   /// Runless rows sort last (`run_id IS NULL` orders false before true), so a stuck learning notice
   /// can never stall the answers an owner is actually waiting for; `dedup_key` breaks the remaining
   /// tie so a drain order is reproducible.

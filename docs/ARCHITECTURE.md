@@ -589,12 +589,21 @@ Producer commit → OutboxDispatcher:
   (1) The producer's transaction inserts each ReplySplitter chunk with INSERT OR IGNORE
       and its own step_index
       (each chunk = its own step_index, so a partial multipart send recovers).
-  (2) Send via sendRichMessage (falling back to plain sendMessage).
-  (3) On HTTP 200 → UPDATE status=SENT, telegram_message_id=<id>, sent_ts.
-  (4) On crash/replay: rows still PENDING are re-sent; INSERT OR IGNORE +
+  (2) Send via sendRichMessage. On a rich-send error other than 429, fall back to plain
+      sendMessage in parts of at most 4,096 characters; the keyboard rides the last part.
+  (3) On HTTP 200 → UPDATE status=SENT, telegram_message_id=<id of the last part>, sent_ts.
+  (4) On HTTP 400 or 403 from the plain fallback → UPDATE status=FAILED and continue with
+      later rows: Telegram refused the content or the chat, so a retry cannot succeed.
+      A 429 holds only that chat; any other failure leaves the row PENDING and stops the
+      drain, keeping chunk order.
+  (5) On crash/replay: rows still PENDING are re-sent; INSERT OR IGNORE +
       deterministic dedup_key prevent duplicate rows; a true network double-send
-      is the irreducible at-least-once tail.
+      is the irreducible at-least-once tail. A plain fallback interrupted between parts
+      re-sends its earlier parts.
 ```
+
+A FAILED chunk leaves a gap in a multi-chunk reply instead of stalling every later delivery. The
+dispatcher logs it at `error`.
 
 Runless learning notices set `delivery_source = learning`; the schema permits a null
 `run_id` only for a non-run source. Candidate reviews and challenge prompts commit their feedback

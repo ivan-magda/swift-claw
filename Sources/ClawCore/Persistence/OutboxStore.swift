@@ -117,5 +117,8 @@ public struct OutboxRow: Sendable, Equatable {
 public protocol OutboxStore: Sendable {
   func markSent(deliveryKey: String, telegramMessageID: Int64, now: Date) throws(StoreError)
 
+  /// Retires a row Telegram refused outright, so later drains no longer retry it.
+  func markFailed(deliveryKey: String) throws(StoreError)
+
   func pendingOutbound() throws(StoreError) -> [OutboxRow]
 }
