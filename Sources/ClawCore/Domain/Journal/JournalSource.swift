@@ -8,6 +8,7 @@ public struct JournalProposal: Codable, Sendable, Equatable {
   public init(sourceID: String, text: String) throws {
     try JournalSource.validateID(sourceID)
     try JournalSource.validateText(text, field: "proposal", limit: JournalLimits.proposalGraphemes)
+
     self.sourceID = sourceID
     self.text = text
   }
@@ -41,6 +42,7 @@ public struct JournalEvidence: Codable, Sendable, Equatable {
       field: "evidence.name",
       limit: JournalLimits.evidenceFieldGraphemes
     )
+
     if let detail {
       try JournalSource.validateText(
         detail,
@@ -48,8 +50,9 @@ public struct JournalEvidence: Codable, Sendable, Equatable {
         limit: JournalLimits.evidenceFieldGraphemes
       )
     }
+
     if case .publication(let publication) = outcome {
-      let url: String? =
+      let publicationURL: String? =
         switch publication {
         case .absent:
           nil
@@ -58,14 +61,16 @@ public struct JournalEvidence: Codable, Sendable, Equatable {
         case .unknown(let reportedURL):
           reportedURL
         }
-      if let url {
+
+      if let publicationURL {
         try JournalSource.validateText(
-          url,
+          publicationURL,
           field: "evidence.publicationURL",
           limit: JournalLimits.evidenceFieldGraphemes
         )
       }
     }
+
     self.outcome = outcome
     self.jobID = jobID
     self.name = name
@@ -115,9 +120,11 @@ public struct JournalSource: Codable, Sendable, Equatable {
       field: "assistantText",
       limit: JournalLimits.assistantTextGraphemes
     )
+
     guard evidence.count <= JournalLimits.evidenceEntries else {
       throw JournalValueError.tooManyEvidenceEntries
     }
+
     self.id = id
     self.scope = scope
     self.sessionID = sessionID
@@ -129,7 +136,8 @@ public struct JournalSource: Codable, Sendable, Equatable {
     self.coderJobID = coderJobID
     self.evidence = evidence
 
-    guard try JSONEncoder().encode(self).count <= JournalLimits.storedSourceBytes else {
+    let encodedSource = try JSONEncoder().encode(self)
+    guard encodedSource.count <= JournalLimits.storedSourceBytes else {
       throw JournalValueError.sourceTooLarge
     }
   }
@@ -156,20 +164,32 @@ public struct JournalSource: Codable, Sendable, Equatable {
 
 // MARK: - Durable Payload Validation
 
-fileprivate extension JournalSource {
-  static func validateID(_ id: String) throws {
-    if id.hasPrefix("message:"), let messageID = Int64(id.dropFirst("message:".count)),
-       messageID > 0
-    {
+extension JournalSource {
+  fileprivate static func validateID(_ id: String) throws {
+    let messagePrefix = "message:"
+    if id.hasPrefix(messagePrefix) {
+      let messageIDText = id.dropFirst(messagePrefix.count)
+      guard let messageID = Int64(messageIDText), messageID > 0 else {
+        throw JournalValueError.invalidSourceID
+      }
+
       return
     }
-    if id.hasPrefix("coder:"), UUID(uuidString: String(id.dropFirst("coder:".count))) != nil {
+
+    let coderPrefix = "coder:"
+    if id.hasPrefix(coderPrefix) {
+      let jobIDText = String(id.dropFirst(coderPrefix.count))
+      guard UUID(uuidString: jobIDText) != nil else {
+        throw JournalValueError.invalidSourceID
+      }
+
       return
     }
+
     throw JournalValueError.invalidSourceID
   }
 
-  static func validateText(_ text: String, field: String, limit: Int) throws {
+  fileprivate static func validateText(_ text: String, field: String, limit: Int) throws {
     guard text.count <= limit else {
       throw JournalValueError.textTooLong(field: field)
     }
