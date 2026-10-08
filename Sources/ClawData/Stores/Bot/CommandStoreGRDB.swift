@@ -70,6 +70,7 @@ public struct CommandStoreGRDB: CommandStore {
   public func applyNew(
     updateID: Int64,
     sessionKey: String,
+    journalScope: JournalScope?,
     now: Date
   ) throws(StoreError) -> NewCommandResult {
     try database.writeMapping { db in
@@ -98,6 +99,17 @@ public struct CommandStoreGRDB: CommandStore {
       )
 
       try SessionMessageStoreGRDB.resetWindowAndDetaint(db, sessionID: sessionID, now: now)
+
+      if let journalScope,
+         sessionKey == SessionKey.telegramDM(chatID: journalScope.ownerUserID)
+      {
+        JournalStoreGRDB.markPendingSourcesDueBestEffort(
+          db,
+          ownerUserID: journalScope.ownerUserID,
+          sessionID: sessionID,
+          now: now
+        )
+      }
 
       try afterSupersedeAndDetaintForTesting()
 

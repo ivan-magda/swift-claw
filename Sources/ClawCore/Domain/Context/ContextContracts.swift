@@ -26,6 +26,7 @@ public enum ContextRowID: String, Sendable, Equatable, CaseIterable {
   case memoryFile
   case memoryItems
   case history
+  case journal
   case recall
   case skills
 }

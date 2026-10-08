@@ -97,6 +97,9 @@ struct VoiceRoutingTests {
       schedule: makeIdleScheduleSurface(writer: queue),
       voice: voice,
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )

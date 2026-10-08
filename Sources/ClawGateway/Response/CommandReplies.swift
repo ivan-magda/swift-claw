@@ -8,7 +8,11 @@ enum CommandReplies {
   /// Refusal for the owner-scoped command families in a shared room. It names the private state so
   /// the attendee learns the rule, not just this one rejection.
   static let directOnly =
-    "Not here — memory, schedules, and learning state live in my owner's direct chat."
+    "Not here — memory, journals, schedules, and learning state live in my owner's direct chat."
+
+  static let journalUnavailable = "Journal status is unavailable. Try again."
+  static let journalUsage =
+    "Usage: /journal · /journal show YYYY-MM-DD · /journal delete YYYY-MM-DD"
 
   static let learningUsage = "Usage: /learning reset <id>. See /learning"
   static let learningUnavailable = "Learning status is unavailable. Try again."
@@ -24,6 +28,7 @@ enum CommandReplies {
     /pause <id> · /resume <id> · /runnow <id> · /cancel <id>: manage schedules
     /learning · /learning <id>: inspect scheduled-job learning
     /learning reset <id>: reset a job's learning after confirmation
+    /journal: journal status · /journal show YYYY-MM-DD · /journal delete YYYY-MM-DD
     /remember, /memory: durable memory
     /new: fresh conversation · /stop: stop the current run
     /status: daemon health (also /doctor) · /mcp: MCP server status
@@ -47,7 +52,7 @@ enum CommandReplies {
     /skills: accepted and rejected workspace skills
 
     Mention me or reply to me to ask something; I read the topic either way.
-    Memory, schedules, and learning state live in my owner's direct chat, not here.
+    Memory, journals, schedules, and learning state live in my owner's direct chat, not here.
     """
 
   /// The manual this conversation can act on.

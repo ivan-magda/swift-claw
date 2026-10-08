@@ -7,6 +7,7 @@ public enum CommandConfirmation: Sendable, Equatable {
   case deleteItem(id: Int64)
   case scheduleArm(ValidatedSchedule)
   case learningReset(jobID: Int64)
+  case journalDelete(day: JournalDay)
 }
 
 public actor PendingConfirmationRegistry {

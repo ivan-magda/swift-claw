@@ -160,6 +160,7 @@ private extension DoctorCommand {
       group: .connectivity
     )
     addSchedulerConfigRows(to: &report, config: config)
+    report.add(contentsOf: DoctorHealth.journalConfigChecks(config: config))
   }
 
   func addSchedulerConfigRows(to report: inout DoctorReport, config: AppConfig) {

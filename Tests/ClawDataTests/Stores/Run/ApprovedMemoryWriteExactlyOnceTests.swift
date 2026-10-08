@@ -31,6 +31,7 @@ struct ApprovedMemoryWriteExactlyOnceTests {
         userID: 7,
         text: "remember this",
         isEdited: false,
+        journalAdmission: nil,
         ts: now
       )
     )

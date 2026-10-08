@@ -102,6 +102,7 @@ public struct InboundMessage: Sendable, Equatable {
   /// origin (a scheduled job). It is the reply target an answer addresses, and the fused claim is
   /// the only write that touches the run row it belongs on.
   public let telegramMessageID: Int64?
+  public let journalAdmission: JournalExchangeAdmission?
   public let ts: Date
 
   public init(
@@ -113,6 +114,7 @@ public struct InboundMessage: Sendable, Equatable {
     isEdited: Bool,
     provenance: Provenance = .trusted,
     telegramMessageID: Int64? = nil,
+    journalAdmission: JournalExchangeAdmission?,
     ts: Date
   ) {
     self.updateID = updateID
@@ -123,6 +125,7 @@ public struct InboundMessage: Sendable, Equatable {
     self.isEdited = isEdited
     self.provenance = provenance
     self.telegramMessageID = telegramMessageID
+    self.journalAdmission = journalAdmission
     self.ts = ts
   }
 }

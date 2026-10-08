@@ -300,7 +300,8 @@ private extension CoderApprovalFlowTests {
         privateFileLoader: {
           []
         },
-        enabledDangerousTools: []
+        enabledDangerousTools: [],
+        journalEnabled: false
       )
     )
   }

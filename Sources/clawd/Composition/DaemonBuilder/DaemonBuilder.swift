@@ -99,19 +99,22 @@ struct DaemonBuilder: Sendable {
   ) async throws -> DaemonRuntimeBundle {
     let sandbox = await prepareSandbox()
     let coordination = TurnCoordination()
-    let coder = await prepareCoder(coordination: coordination)
-
-    // Hoisted so the agent and the /schedule parse share one offline-first cost resolver — both
-    // meter spend against the same prices and reference rate.
+    let workspace = FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config))
+    let roster = rosterStack.roster
     let costResolver = CostResolver.configured(by: config)
+    let journal = makeJournalComposition(
+      roster: roster,
+      cooldown: cooldown,
+      costResolver: costResolver,
+      workspaceRoot: workspace.root
+    )
+    let coder = await prepareCoder(coordination: coordination, journal: journal)
 
     // Pinned here, before the agent stack: the remote catalog is part of the tool surface the
     // registry advertises and `policy_version` folds over, so it has to be settled before either
     // exists. Nothing in it can fail the boot.
     let mcpStack = await resolveMCPStack()
 
-    let workspace = FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config))
-    let roster = rosterStack.roster
     let agentStack = makeAgentStack(
       roster: roster,
       cooldown: cooldown,
@@ -119,7 +122,8 @@ struct DaemonBuilder: Sendable {
       costResolver: costResolver,
       sandbox: sandbox,
       mcpTools: mcpStack.tools,
-      coderTools: coder.tools
+      coderTools: coder.tools,
+      journal: journal
     )
 
     let learning = makeLearningService(
@@ -138,7 +142,8 @@ struct DaemonBuilder: Sendable {
       sandbox: sandbox,
       mcpCatalog: mcpStack.catalog,
       coder: coder,
-      learning: learning
+      learning: learning,
+      journal: journal
     )
 
     let services = makeRuntimeServices(
@@ -162,7 +167,8 @@ struct DaemonBuilder: Sendable {
         learning: learning
       ),
       coder: coder.service,
-      presentations: agentStack.presentations
+      presentations: agentStack.presentations,
+      journal: journal.worker
     )
   }
 
@@ -188,7 +194,8 @@ struct DaemonBuilder: Sendable {
     sandbox: SandboxStack,
     mcpCatalog: ResolvedMCPCatalog,
     coder: CoderComposition,
-    learning: ScheduledLearningService?
+    learning: ScheduledLearningService?,
+    journal: JournalComposition?
   ) -> RunnerConsumers {
     let turnRunner = makeTurnRunner(
       coordination: coordination,
@@ -198,7 +205,8 @@ struct DaemonBuilder: Sendable {
       freezeLearningSurface: makeLearningSurfaceFreeze(
         toolDefinitions: agentStack.toolDispatcher.definitions,
         workspace: workspace
-      )
+      ),
+      journal: journal
     )
     let intake = makeIntakeServices(
       coordination: coordination,
@@ -219,7 +227,8 @@ struct DaemonBuilder: Sendable {
         coder: coder
       ),
       learning: learning,
-      presentations: agentStack.presentations
+      presentations: agentStack.presentations,
+      journal: journal
     )
     let approvals = makeApprovalFabric(
       coordination: coordination,
@@ -252,6 +261,7 @@ struct DaemonBuilder: Sendable {
     boot: @escaping @Sendable () async -> Void,
     coder: CoderService? = nil,
     presentations: TurnPresentationRegistry? = nil,
+    journal: JournalWorker?,
     laneDrainClock: any Clock<Duration> = ContinuousClock(),
     gracefulShutdownSignals: [UnixSignal] = [.sigterm, .sigint]
   ) -> DaemonRuntimeBundle {
@@ -272,6 +282,7 @@ struct DaemonBuilder: Sendable {
       }
     let lifecycleServices = Self.servicesWithLaneAdmissionLast(
       base: services + coderServices,
+      journal: journal,
       laneAdmission: laneAdmission
     )
 
@@ -289,7 +300,8 @@ struct DaemonBuilder: Sendable {
       credentialSources: credentialSources,
       laneShutdownOutcome: laneShutdownOutcome,
       coder: coder,
-      presentations: presentations
+      presentations: presentations,
+      journal: journal
     )
   }
 
@@ -300,9 +312,17 @@ struct DaemonBuilder: Sendable {
   /// service they depend on tears down.
   static func servicesWithLaneAdmissionLast(
     base: [any Service],
+    journal: JournalWorker?,
     laneAdmission: LaneAdmissionShutdownService
   ) -> [any Service] {
-    base + [laneAdmission]
+    var services: [any Service] = []
+    if let journal {
+      services.append(journal)
+    }
+
+    services.append(contentsOf: base)
+    services.append(laneAdmission)
+    return services
   }
 }
 

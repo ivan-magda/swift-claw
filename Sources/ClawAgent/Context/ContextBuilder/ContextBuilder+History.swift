@@ -207,7 +207,7 @@ private extension ContextBuilder {
       WorkspaceSkills.fenceLabel
     case .lessons:
       Self.lessonsLabel
-    case .policy, .systemWorkspace, .tools, .metadata, .history, .recall:
+    case .policy, .systemWorkspace, .tools, .metadata, .history, .journal, .recall:
       id.rawValue
     }
   }

@@ -17,6 +17,7 @@ public protocol CoderJobStore: Sendable {
     prepared: CoderPreparedRequest,
     origin: CoderOrigin,
     maxConcurrentJobs: Int,
+    journalScope: JournalScope?,
     now: Date
   ) throws(StoreError) -> CoderAdmission
 
@@ -41,6 +42,7 @@ public protocol CoderJobStore: Sendable {
     result: CoderResult,
     chunks: [OutboxChunk],
     releaseReservation: Bool,
+    journalCapture: JournalCaptureOutcome?,
     now: Date
   ) throws(StoreError) -> CoderCompletionOutcome
 

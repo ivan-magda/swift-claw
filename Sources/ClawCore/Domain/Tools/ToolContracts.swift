@@ -239,7 +239,7 @@ public struct ToolDefinition: Sendable, Equatable {
   }
 }
 
-public enum ToolObservationStatus: String, Sendable, Equatable {
+public enum ToolObservationStatus: String, Sendable, Equatable, Codable {
   case ok
   case error  // tool failed; content = plain-language reason
   case blockedArgs = "blocked_args"  // ExfilArgGuard refusal

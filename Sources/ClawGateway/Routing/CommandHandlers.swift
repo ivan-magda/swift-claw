@@ -19,6 +19,8 @@ struct CommandHandlers: Sendable {
   let now: @Sendable () -> Date
 
   let coordinator: ApprovalCoordinator
+  let journalCapture: JournalSourceCapture?
+  let notifyJournal: @Sendable () -> Void
   var presentations: TurnPresentationRegistry?
 
   func stop(
@@ -88,6 +90,11 @@ struct CommandHandlers: Sendable {
       try commands.applyNew(
         updateID: rawUpdate.updateID,
         sessionKey: SessionKey.telegram(for: message, mode: mode),
+        journalScope: journalCapture?.scope(
+          userID: message.userID,
+          chatID: message.chatID,
+          mode: mode
+        ),
         now: now()
       )
     }
@@ -95,6 +102,8 @@ struct CommandHandlers: Sendable {
     guard result.newlyClaimed else {
       return replies.skipDuplicate(updateID: rawUpdate.updateID)
     }
+
+    notifyJournal()
 
     // Signal the coordinator BEFORE cancelling the lane — same race as `/stop` (see `stop`):
     // cancelling first can let the parked waiter's `nil`-resume win over this signal, so `park`

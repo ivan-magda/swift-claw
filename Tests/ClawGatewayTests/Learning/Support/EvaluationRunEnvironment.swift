@@ -239,7 +239,8 @@ private extension EvaluationRunEnvironment {
           payload: finalOutput,
           payloadHash: ContentHash.fnv1a(finalOutput)
         ),
-      ]
+      ],
+      journalCapture: nil
     )
   }
 

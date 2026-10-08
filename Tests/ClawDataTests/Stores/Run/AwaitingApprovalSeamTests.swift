@@ -28,6 +28,7 @@ struct AwaitingApprovalSeamTests {
         userID: 7,
         text: "write the plan",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -87,7 +88,8 @@ struct AwaitingApprovalSeamTests {
         isEstimated: true,
         ts: Date()
       ),
-      chunks: []
+      chunks: [],
+      journalCapture: nil
     )
 
     // when

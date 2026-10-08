@@ -158,6 +158,7 @@ struct ApprovalWaiterTests {
         userID: 7,
         text: "write",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

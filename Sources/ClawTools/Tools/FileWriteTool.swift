@@ -21,10 +21,16 @@ public struct FileWriteTool: Tool {
   public static let maxContentBytes = 256 * 1024
   private let workspaceRoot: URL
   private let redactor: SecretRedactor
+  private let mutationGate: WorkspaceMutationGate
 
-  public init(workspaceRoot: URL, redactor: SecretRedactor) {
+  public init(
+    workspaceRoot: URL,
+    redactor: SecretRedactor,
+    mutationGate: WorkspaceMutationGate = WorkspaceMutationGate()
+  ) {
     self.workspaceRoot = workspaceRoot
     self.redactor = redactor
+    self.mutationGate = mutationGate
   }
 
   public var definition: ToolDefinition {
@@ -114,13 +120,17 @@ public struct FileWriteTool: Tool {
   ) -> ToolApprovalPresentation {
     let content = arguments.objectValue?["content"]?.stringValue ?? ""
     let exists = FileManager.default.fileExists(atPath: canonicalTarget)
+    let journalWarning =
+      WorkspacePathContainment.canonicalPath(workspaceRoot.path).map { root in
+        WorkspaceFile.isJournal(canonicalPath: canonicalTarget, canonicalRoot: root)
+      } ?? false
     return ToolApprovalPresentation(
       blastRadius: "\(exists ? "overwrite" : "create"), \(ByteCount.text(content.utf8.count))",
       contentPreview: ToolOutputCap.cap(
         redactor.redact(content),
         maxGraphemes: ToolOutputCap.approvalPreviewGraphemes
       ),
-      warnings: []
+      warnings: journalWarning ? [WorkspaceFile.journalWriteWarning] : []
     )
   }
 
@@ -139,6 +149,26 @@ public struct FileWriteTool: Tool {
       return errorPayload("file_write needs \"path\" and \"content\" arguments.")
     }
 
+    return await mutationGate.perform {
+      executeApprovedWrite(
+        path: path,
+        content: content,
+        arguments: arguments,
+        approvedTarget: approvedTarget
+      )
+    }
+  }
+}
+
+// MARK: - Approved Mutation
+
+private extension FileWriteTool {
+  func executeApprovedWrite(
+    path: String,
+    content: String,
+    arguments: JSONValue,
+    approvedTarget: String
+  ) -> ToolPayload {
     // Re-resolve NOW: if a component was retargeted since approval (symlink swap, replaced
     // directory), the resolution drifts from the approved target — fail closed, write nothing.
     let liveTargetResolution = WorkspacePathContainment.resolveForCreation(

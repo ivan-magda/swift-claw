@@ -232,6 +232,26 @@ form `ARCHITECTURE.md §N` is used, sparingly.
   A root-local unavailable policy marker is never advertised as resolved execution authority or used
   to prepare an approval. Enabled status/cancel retain owner scope and access to persisted jobs;
   disabled Coder contributes no tools.
+- **Journal lifecycle:** one `JournalWorker` owns a coalesced durable queue drain. Producer hints
+  are synchronous buffered signals; before `run()` they only mark pending work. The service's
+  structured ticker and signal consumer admit work into one stored task. Shutdown closes admission,
+  cancels and joins that drain, including the provider deadline loser and terminal usage write,
+  before shared providers or credentials close. Unstarted current-day partial sources remain pending;
+  stopping does not flush them. Boot reconciliation is a local `JournalStore.reconcileAtBoot` pass
+  even when automatic generation is disabled. It closes and accounts abandoned started receipts
+  without sending or appending them again.
+  `DaemonBuilder.makeJournalComposition` constructs one policy/store/files/mutation gate and optional
+  capture/worker before assembling Coder and the agent. Journal policy, services, capture metadata,
+  payload fields and notification callbacks have no default arguments: every caller supplies its
+  journal choices explicitly, including `nil`, empty collections or a no-op callback when absent.
+  The environment's journal opt-in default remains disabled. The same policy drives context, argument
+  scanning and the static fingerprint; the same gate serializes publication, deletion and approved
+  file writes. The router creates command handlers against its shared reply/confirmation surface.
+  Register the worker before producers, Coder before lane admission: reverse shutdown joins
+  producers before the worker. `DaemonRuntimeBundle` retains the worker for fallback cleanup after
+  Coder joins and before credential or client teardown, including cancellation during boot.
+  Configuration-only doctor emits enabled/timezone fields before its early return without creating
+  journal state or files. Full diagnostics read aggregate status and do not enumerate dated files.
 - **Logging:** `swift-log` to stdout/stderr; journald/newsyslog handle rotation.
 - **Approval graph ownership:** the daemon root retains the approval waiter for its full lifetime.
   The turn runner's deferred parker holds a weak back-reference to that waiter, so releasing the
@@ -349,6 +369,12 @@ reserved until backend cleanup has joined and the terminal report transaction co
 that wins a terminal-state compare-and-swap replaces non-stop results and rerenders the notice, while
 an already-selected backend `cancelled` or `timedOut` outcome remains selected. Interrupted recovery
 is always reported as interruption. Persistence retries never rerun the backend.
+
+Personal journal eligibility is copied into the job at admission, only for the configured owner's
+interactive DM while journaling is enabled. A job admitted while disabled cannot become eligible
+later. `/new` resets dialogue lanes without changing Coder eligibility. Completion requires the
+feature to remain enabled; it captures the cancellation-selected terminal result, not the original
+backend return. One `completedAt` instant is frozen across the completion compare-and-swap loop.
 
 ### 5.3 RunBudget defaults
 
@@ -848,6 +874,67 @@ process-event storage failures latch typed unhealthy service state and leave res
 backend error handling cannot turn a failed receipt write into a successful terminal commit. No
 completion-delivery claim is made when persistence failed.
 
+#### Daily journal persistence
+
+Schema v17 adds nullable `runs.journal_admission` and `coder_jobs.journal_scope` metadata,
+plus the immutable Coder terminal-commit timestamp `journal_terminal_ts`. Legacy rows keep
+nil admission metadata and never enter the queue through archive backfill.
+`journal_sources` stores unique source IDs and bounded, self-contained JSON payloads with
+frozen owner/day/timezone, activity timestamp, pending/due state and batch identity. Producers
+insert through a Data-owned transaction-local helper; the queue does not scan the archive.
+Terminal transitions discard payload text while retaining source-ID tombstones for deduplication.
+
+The fused inbound claim stores optional `JournalExchangeAdmission` on its run, preserving Telegram's
+source timestamp/day/timezone separately from the lifecycle processing timestamp. Gateway admission
+requires the configured owner's interactive DM and a source timestamp; a missing timestamp logs an
+ID-only skip and never prevents the ordinary answer. `RunStore.journalExchangeInput` binds the owner
+text to `runs.trigger_message_id` and reads just the preceding completed assistant proposal by row
+ordering, including across `/new`. Its nested `Proposal` is archive input, not a persistable
+`JournalProposal`: Gateway removes known secrets from the complete text before head/tail shortening
+and construction of the bounded durable value. Support-only proposals create no additional activity.
+
+Only a successful ordinary `DONE` commit inserts an exchange source. Suspended, failed, cancelled
+and superseded runs insert none; approval resume can complete that exchange once. Exchange and
+Coder queue writes use a savepoint within the required terminal transaction. A journal SQL failure
+records a fixed redacted diagnostic best effort without rolling back the reply/result/outbox;
+required transaction failures keep their existing rollback behavior. Gateway preparation returns
+`JournalCaptureOutcome?`: nil is ineligible, `.source` is a bounded payload, and `.skipped(scope:)`
+is an eligible preparation rejection. The successful terminal transaction validates the persisted
+admission scope and records a fixed skipped outcome for rejection, including the UTF-8 byte ceiling.
+Preparation rejection never changes the primary terminal result or exposes rejected text. Typed tool
+statuses may be included, but persisted observation prose is never reconstructed as observed-operation
+evidence.
+The deduplicated `/new` transaction marks only already captured pending sources for its owner/session
+due. A replayed update cannot mark future arrivals. Reset marking uses its own savepoint: a journal
+failure preserves window reset, supersession and detaint, with a fixed diagnostic recorded best effort.
+Post-commit notifications are optional latency hints and perform no inference inline.
+
+`JournalStore` is a synchronous Core persistence port. `pendingSources` examines at most
+100 pending candidates in activity order, closes sources older than 48 hours, and returns
+sources for owner/day groups made due by ten pending sources, a persisted reset mark or
+day end in a source's frozen timezone. A due mark survives partial batches and budget refusal.
+Status and deletion counts include started, unpublished sources.
+
+`startBatch` checks the current selection, global UTC-day usage and unaccounted journal
+reservations, then applies the existing interactive global budget policy and the 24-starts
+per-UTC-day journal quota inside the same write that inserts the batch receipt and binds
+its sources. Journal spend does not charge the proactive learning pool. `journal_batches`
+links its usage scope through a unique `provider_call_id` and saves a small Data-owned
+conservative accounting snapshot. Started receipts survive source completion/deletion and
+retain their UTC quota count; completion success is not the quota criterion.
+
+Finishing a batch inserts supplied run-less usage through the existing per-call idempotent
+helper. A proven no-start failure finishes the receipt with no usage; boot does not later charge
+that finished receipt. Callers supply conservative usage for ambiguous failures or cancellation.
+Cancellation closes its sources and prevents publication, but still permits late usage.
+Boot reconciliation closes abandoned started batches as interrupted, records the saved
+estimate only when the call has no usage, and never requeues or republishes those sources.
+Cancelled calls without usage are also accounted at boot without reviving publication.
+Unstarted sources stay pending; a restart alone does not mark today's partial work due.
+A repeated finish or boot cannot debit the same call again. The per-owner `journal_status`
+row persists last outcome/time, skipped/interrupted counts and the caller-redacted last error
+before terminal payloads are removed. No journal billing pool or file reconstruction is added.
+
 ### 7.6 sqlite-vec — deferral honesty
 
 `sqlite-vec` is **not** "add later via a protocol and a migration." It **requires a custom SQLite amalgamation** (`SQLITE_ENABLE_FTS5` **+** sqlite-vec, statically linked, **initialized before the connection opens**) and a **separate Linux-CI re-validation** (GRDB does not test it upstream; the vec binding ships its own connection). A stock `DatabaseMigrator` **cannot** create a `vec0` table. It stays strictly behind a protocol and deferred; risk = High (§18).
@@ -1000,6 +1087,41 @@ Responses reasoning continuity cannot be expressed as text and tool calls, so `C
 - **Input reservation is a policy too.** Preflight and missing-usage estimates charge the message context and the complete advertised tool array. Composition injects an `LLMInputReservationPolicy`: text estimation only for the current route; for ChatGPT, an additional checked, byte-derived reservation over selected replay state (deliberately over-estimating re-encoding **without decoding the opaque payload**), participating in per-call, per-run, enabled daily-token, and missing-usage estimates. Foreign state may over-reserve until the adapter drops it — the right direction to err, because **replay state must never bypass a token gate**. Provider-returned usage remains authoritative after the call.
 - **Usage identity:** every logical round-trip carries a locally generated `ProviderCallID` — stable across clean wire retries and the stream-to-buffered fallback, fresh for each tool-loop round and each schedule parse — and usage rows are idempotent on it (§7.4). The stored model is the **qualified `configuredReference`** (§8.1), so included-plan usage can never collide with API-billed usage for the same wire model.
 
+### 8.7 Background journal summaries
+
+The codec and summarizer have package-scoped types and construction initializers for composition
+at `clawd`. Their operational methods, prepared/result values, preparation/validation errors and
+`JournalNote` are internal to `ClawGateway/Journal`; persistence outcomes remain public
+`JournalOutcome` in Core.
+
+`JournalSummaryCodec.prepare` fits up to ten bounded sources against both the complete
+provider-neutral JSON request representation (512 KiB cap, including 4 KiB of headroom for
+adapter envelope differences) and `TokenEstimator` over the exact sent messages, including prompt and
+schema. Input is at most `min(24_000, budget.maxInputTokens)`; output reservation is
+`min(3_072, budget.maxOutputTokens)`. Support-only proposals are deduplicated and shortened
+before optional evidence and main text. Main text keeps grapheme-safe beginning/end excerpts,
+favoring the answer's conclusion; 2,000/4,000 owner/answer graphemes are preferred when reduction
+is required. Smaller useful excerpts may fit a tighter cap. Whole sources that remain outside
+the request are pending. A source that cannot fit alone is named for a recorded skip; no empty
+substitute source is sent. Redaction precedes shortening.
+
+The worker chooses `ProviderRoster.startingRoute` once, respecting an already cooling primary,
+and passes that same binding to preparation and inference. `JournalSummarizer` makes one tool-free
+`ProviderDeadlineCoordinator.raceBuffered` call with a 30-second deadline. Provider-owned clean
+retries remain available; this surface adds no repair, retry or route-switch loop. The caller
+starts the durable receipt and enforces global spend plus 24 started calls per UTC day before
+inference. Summary inference neither persists usage nor writes files.
+
+Every returned summary, including empty or invalid JSON, produces a reconciled run-less usage
+row under the served route's configured reference, source session and unique call ID. A joined
+late response retains authoritative usage even though its deadline outcome fails. Ambiguous
+failure, timeout or typed inference cancellation returns conservative usage, including observed
+completion tokens above the reservation. Proven no-start returns no usage row while preserving
+the already started receipt. The worker persists the returned usage with the terminal outcome.
+A failed summary on a cancelled drain finishes as `cancelled`, retaining usage without adding a
+new deadline/provider error. Successful, empty and invalid response outcomes remain selected;
+uncancelled failures and prior genuine error history retain their existing behavior.
+
 ## 9. Memory & context architecture — SINGLE NORMATIVE SOURCE
 
 > §9 is the **single normative source** for context assembly. The PRD references this section; any divergent ordered list elsewhere is superseded by this one.
@@ -1007,6 +1129,52 @@ Responses reasoning continuity cannot be expressed as text and tool calls, so `C
 ### 9.1 Workspace files
 
 `~/.swift-claw/workspace/`: `SOUL.md` (persona/tone/boundaries), `AGENTS.md` (operating rules), `USER.md` (owner profile/timezone), `TOOLS.md` (tool notes), `MEMORY.md` (curated long-term), `HEARTBEAT.md` (proactive tasks), `skills/<name>/SKILL.md` (agentskills.io standard; Yams for frontmatter). **Missing files never crash** — each loads to a `LoadedFile` whose outcome is `present`, `overCap`, `missing`, or `unreadable`.
+
+**Daily journal files** use generated `memory/YYYY-MM-DD.md` paths through shared workspace
+containment. `JournalFiles` exposes bounded snapshots (`present`, `missing`, `unreadable`,
+`overCap`), append, deletion and newest-first valid dated-file listing; `FileSystemJournalFiles`
+implements the IO. Automatic reads check the 512 KiB byte cap before opening the file and stay
+bounded if it grows. Appends preserve the existing UTF-8 bytes and refuse a damaged file or a
+result above that cap. A nonempty append inserts a newline if existing nonempty bytes end without
+a CR or LF; that separator counts toward the resulting byte cap. Missing files can receive new
+notes, but no history is reconstructed.
+Empty text performs no IO. Publication creates an owner-only temporary file in the same directory
+and atomically replaces the target. Reads need no mutation gate. The shared `WorkspaceMutationGate`
+executes synchronous closures for publication, day deletion and approved `file_write` revalidation
+plus atomic IO; callers never await database or file operations inside that closure. The owner may
+stop the daemon, edit a journal and restart; concurrent external edits have no preservation guarantee.
+
+**Owner journal commands** are direct-only and provider-free. `/journal` shows enabled state,
+timezone, aggregate pending sources, last outcome and recent valid file dates. `/journal show
+YYYY-MM-DD` bounds the complete reply to 4,096 Unicode scalars, including heading and shortening
+notice, and keeps whole graphemes in its leading excerpt. `/journal delete YYYY-MM-DD` parks
+one ordinary command confirmation with the selected-day pending count, including started
+unpublished sources. Every inspection and confirmed deletion checks both sender and private-chat
+ID against the current sole positive configured owner, even when automatic journaling is disabled;
+SQLite allowlist history is not authority for these commands.
+
+`ConfirmationResolver` handles journal deletion in an explicitly awaited branch outside its
+synchronous SQL effect helper. It checks the current owner and uses `ReplySender.claimUpdate`
+before effects; a duplicate leaves a newer confirmation untouched. Inside the shared synchronous
+mutation gate it cancels that owner's selected-day queued sources/batches, then removes the file.
+SQL cancellation and filesystem removal are serialized operations, not one atomic transaction.
+A file failure remains a failure and leaves cancellation committed. It clears the confirmation and
+sends the result through the existing command ack. An interrupted command may require another
+delete request. An in-flight call still accounts usage but cannot append after cancellation.
+Other days, source conversations and running Coder jobs remain; later completed activity may
+recreate the date. External editor deletion has no queue effect. `JournalHealth` consumes only
+aggregate status; group-visible diagnostics contain no journal text or date lists.
+
+**Journal summaries** use the approved historical-data prompt and a separately supplied schema.
+Notes preserve the owner's language, decisions/reasons, useful outcomes, corrections and open
+work. Supporting proposals can resolve a current confirmation but cannot create activity by
+themselves. Strict decoding checks field types, allowed kinds/attributions, current source IDs,
+20 notes, 400 graphemes per note and 4,096 total, before and after final secret redaction.
+`observed_operation` requires code-produced typed evidence on every cited source;
+`workerReportedChecks` alone does not qualify. Since the schema cites sources rather than
+individual evidence entries, validation establishes available evidence, not semantic truth of
+a paraphrase. Rendering retains source-local time, compact message/job references and explicit
+attribution, including worker reports. Invalid output is rejected without another model call.
 
 **Skill identity is settled at scan time**, so nothing downstream has to re-decide it: the frontmatter `name` must match `^[a-z0-9]+(-[a-z0-9]+)*$` at 1–64 characters **and** equal its own directory name, `description` is collapsed to a single line and then capped at 300 graphemes (the spec allows 1024; the index has to scale with skill count, not with one author's prose, and a block scalar must not let one skill occupy several of the index's one-line-per-skill rows), and a name claimed by two directories drops **every** claimant — silently shadowing one is the bug class the loader exists to avoid. Each rejection reaches the owner as a notice (§9.2), not only the log. The scan feeds the index row; the body is loaded on demand by `skill_load` (§10.1), never injected wholesale.
 
@@ -1033,6 +1201,7 @@ One canonical ordered assembly. Each section carries a **priority** and a **trun
 | 6a  | Durable memory file (MEMORY.md)                                       | **untrusted/labeled wrapper**   | med      | no — hard cap 2200; overflow → omit + owner error                         |
 | 6b  | Durable memory items (`memory_items`)                                 | **untrusted/labeled wrapper**   | med      | yes (budget cap; recency + importance — relevance deferred, Inc 3a)       |
 | 7   | Session history / rolling summary                                     | mixed; **provenance preserved** | med      | yes                                                                       |
+| 7b  | Recent owner journal (`memory/YYYY-MM-DD.md`) | **untrusted/labeled wrapper** | 75 | yes — date labels + newest suffixes, 4,000 graphemes combined |
 | 8   | Retrieved (FTS5 recall) + tool observations                           | **untrusted/labeled wrapper**   | low      | yes                                                                       |
 | 9   | Skills                                                                | untrusted/labeled               | low      | yes — whole units only (prefix drop + count marker)                       |
 
@@ -1042,11 +1211,25 @@ One canonical ordered assembly. Each section carries a **priority** and a **trun
 
 **Row 4b (pinned lessons) exists only for a run whose fire froze a lesson set** — a scheduled fire under `CLAW_LEARNING_ENABLED`, never an inbound turn or a heartbeat. It renders the job's whole frozen set inside the untrusted fence under the label `job lessons`, and it is measured with the non-truncatable rows, so the truncatable rows share only what is left after it. A set that cannot fit **fails the run before provider dispatch** rather than truncating, and a bound run never falls back to the job's current, empty or shortened set: either substitution would evaluate a hypothesis the binding never froze. Because a model wrote those lessons, a non-empty set also arms the run's untrusted-ingestion flag before the first dispatch and excludes high-sensitivity memory from row 6b, exactly as untrusted tool metadata and a tainted session do — it augments those inputs and never replaces them.
 
-**Proactive-run assembly (`origin ∈ {scheduled, heartbeat}`):** row 1 renders the dedicated proactive prompt (`SystemPrompt.proactive` — autonomous-execution framing, no /schedule pointer) instead of the interactive policy prompt, and row 8's message recall is omitted entirely — the retriever's dedup excludes only the current session's in-window rows, so recall would resurface the prior fires that the per-fire window reset (§14) fences off. All other rows assemble identically. The policy fingerprint folds BOTH prompt variants, keeping `policy_version` origin-independent so the approval recompute seams need no run in scope.
+**Row 7b (daily journal) is opt-in and owner-interactive only.** `ContextBuilder` checks the exact
+configured owner's `SessionKey.telegramDM` and `origin == interactive` before any journal IO.
+It reads today and yesterday using calendar-day arithmetic in `CLAW_TIMEZONE`; missing files
+are ordinary, while unreadable or over-cap snapshots yield owner notices. Priority 75 puts it
+after curated memory/history and before recall. Today fits before yesterday, retaining date
+labels and recent suffixes with the ordinary omission marker under the combined 4,000-grapheme
+cap and any later overall-budget cut. The journal does not enter the denominator that scales
+memory-items/history/recall/skills caps. A surviving row counts as private data.
+
+**Proactive-run assembly (`origin ∈ {scheduled, heartbeat}`):** row 1 renders the dedicated proactive prompt (`SystemPrompt.proactive` — autonomous-execution framing, no /schedule pointer) instead of the interactive policy prompt, and row 8's message recall is omitted entirely — the retriever's dedup excludes only the current session's in-window rows, so recall would resurface the prior fires that the per-fire window reset (§14) fences off. Row 7b is also omitted before journal IO. All other rows assemble identically. The policy fingerprint folds BOTH prompt variants, keeping `policy_version` origin-independent so the approval recompute seams need no run in scope.
 
 ### 9.3 Memory tier, caps, and trust
 
 - **Untrusted tier.** `MEMORY.md`/`USER.md` are injected inside the **SAME untrusted/labeled wrapper** as other data — **never the system tier** — so poisoned memory cannot claim system authority.
+- **Opt-in journal exception.** Recent journal notes are private labeled data without journal-induced
+  taint, high-sensitivity-memory exclusion or recall filtering. They may retain sensitive and
+  externally derived conclusions, including voice/photo-derived content, even from tainted turns.
+  Loading notes neither grants authority nor clears ordinary web/file/tool taint. Raw-message
+  provenance and FTS rules remain unchanged; no sensitivity classifier or ancestry graph is added.
 - **Caps (grapheme `String.count`):** `MEMORY.md` = **2200**, `USER.md` = **1375**. **On overflow → ERROR, never silent truncation.** For these **hand-curated** files, "force consolidation" means the runtime **omits the over-cap file for the turn and delivers an owner-facing consolidation notice** — it never auto-rewrites the file (Inc 3a). **This is the v1 contract** (it resolves the former §21 open question; it is not also listed as open).
 - **Flush-before-compact:** durable facts are written to disk _before_ any history summarization.
 - **Compaction preserves provenance:** never fold an UNTRUSTED `tool_result` into the trusted rolling summary; retain an `untrusted` marker (§12).
@@ -1098,6 +1281,13 @@ The **read-only tier** contains `web_search`, `web_fetch`, workspace **file READ
 | Remote / MCP                       | every `mcp__<server>__<tool>`                | `ask` by default; named `safe` override allowed | default per-action approval; egress is `arbitraryDestination`, the trifecta can still force approval, and the result is untrusted (§10.3) |
 
 (Inc 5a) **Registry** of < 20 narrow, typed tools (not a generic shell), each with input/output schemas, declared `RiskLevel`, timeout, sandbox requirement, audit behavior. The **`ToolPolicyGate`** evaluates every proposed call before dispatch, independent of the model, and re-validates the approved action against the originally-approved canonical action + `policy_version` at execution. File tools are workspace-scoped: every path is resolved to its **canonical real path** (`realpath`, after `..` and symlink resolution) and **asserted to lie within the workspace root** — a tested invariant covering both the link and its final target — with size-capped output and secret redaction. Tool annotations are non-authoritative UX hints; the code gate is authoritative. (Batch approval + a time-boxed auto-approve toggle are deferred to the P-tools phase.)
+
+Dated Markdown files directly under the canonical workspace `memory/` directory are private
+workspace data, alongside root `MEMORY.md` and `USER.md`. The shared full-path classifier requires
+a valid calendar date; unrelated dated filenames and nested paths do not qualify. `file_read`
+sets its private-data flag, and `file_write` records a root-aware privileged-file warning for the
+approval prompt. Group privileged-write refusals retain their existing fixed-basename rule.
+The manual `file_write` content cap remains 256 KiB.
 
 **Native Coder tools (§13.2).** `coder_submit` is dangerous; `coder_status` and `coder_cancel` are
 safe/no-egress. All three declare `requiresInteractiveRequester = true`; submit additionally declares
@@ -1170,7 +1360,7 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   `APPROVED`); the at-execution recheck survives only as the boot crash-window belt (§6.5), whose
   granted-then-denied audit pair is documented — a mismatch there fails the **run** while the row
   stays `APPROVED`.
-- **`policy_version`** (Inc 5a) is the first 16 hex chars of a **length-prefixed SHA-256** over the policy-relevant inputs at run start: **system-tier prompt materials** (the system/security prompt text + the loaded contents of `SOUL.md`/`AGENTS.md`/`TOOLS.md`, a missing/unreadable file hashing as empty), the **tool registry surface** (sorted tool names, each with its canonical parameter JSON, declared `RiskLevel`, metadata provenance, optional credential-free invocation identity, `requiresInteractiveRequester`, `requiresGroupApproval`, declared **fence label** — a trust declaration on par with risk, since it selects the prompt carve-out the tool's output renders under, so changing it voids an outstanding approval as `stale_policy` — and `ToolEgressClass`), and the **pinned egress + policy config** (the resolved **LLM egress identity** — the canonical configured endpoint on the current route, or the provider ID plus fixed endpoint on a managed one, so the sink is fingerprinted even when no base URL is configured (§8.1); **that identity is the configured primary's, resolved once at composition, so a runtime failover to the fallback route does not move it and the sink an approval binds to is not guaranteed to be the sink that serves the resumed run** — search-endpoint presence, canonical workspace root). **Secret values are never hashed, and an egress identity never contains a credential.** It is computed in two parts — a static sub-hash over the tool/config inputs at the composition root, folded into `ContextBuilder`'s prompt-material hash — persisted to `runs.policy_version` at pick-up and copied onto every approval; a **strict-inequality** mismatch at resolution denies with `stale_policy`.
+- **`policy_version`** (Inc 5a) is the first 16 hex chars of a **length-prefixed SHA-256** over the policy-relevant inputs at run start: **system-tier prompt materials** (the system/security prompt text + the loaded contents of `SOUL.md`/`AGENTS.md`/`TOOLS.md`, a missing/unreadable file hashing as empty), the **tool registry surface** (sorted tool names, each with its canonical parameter JSON, declared `RiskLevel`, metadata provenance, optional credential-free invocation identity, `requiresInteractiveRequester`, `requiresGroupApproval`, declared **fence label** — a trust declaration on par with risk, since it selects the prompt carve-out the tool's output renders under, so changing it voids an outstanding approval as `stale_policy` — and `ToolEgressClass`), and the **pinned egress + policy config** (the resolved **LLM egress identity** — the canonical configured endpoint on the current route, or the provider ID plus fixed endpoint on a managed one, so the sink is fingerprinted even when no base URL is configured (§8.1); **that identity is the configured primary's, resolved once at composition, so a runtime failover to the fallback route does not move it and the sink an approval binds to is not guaranteed to be the sink that serves the resumed run** — search-endpoint presence, canonical workspace root, configured journal-scanning flag). **Secret values are never hashed, and an egress identity never contains a credential.** It is computed in two parts — a static sub-hash over the tool/config inputs at the composition root, folded into `ContextBuilder`'s prompt-material hash — persisted to `runs.policy_version` at pick-up and copied onto every approval; a **strict-inequality** mismatch at resolution denies with `stale_policy`.
 - **Coder execution identity** is `CoderExecutionPolicy.id`: deterministic length-prefixed hashing
   of the resolved executable and effective child PATH, explicitly present/absent profile and
   effective config home, fixed approval policy, and sorted non-secret credential-source key/value
@@ -1224,8 +1414,16 @@ A **state machine** persisted in `approvals` so it survives restart. See §7.1 c
   callback that fails **auth** (wrong DM owner, unknown nonce, wrong group prompt/chat, nonmember, or
   failed membership lookup) is **not** an approval decision — it audits as an access event
   (`message_in` / `forbidden`), leaving the approval row untouched.
-- **Lethal trifecta = ENFORCED GATE, not a flag.** Taint is a **sticky, persisted session property**: `session.tainted = true` once ANY untrusted content is ingested — meaning **external/tool/retrieved content** (web/file/tool output, Inc 3b+) **or machine-derived inbound text** (a voice transcript — transcription is machine-derived regardless of whether Telegram marks the audio as forwarded; every transcript persists `.untrusted` at the message row, taints in the same fused write, and renders fenced). Untrusted message rows are **excluded from FTS recall**: resurfacing one into a later or detainted session would re-ingest attacker-influenceable content without re-arming the taint flag. **Durable memory (MEMORY/USER/`memory_items`) is untrusted-_labeled_ data that sets `hasPrivateDataAccess` but does NOT itself taint the session** (Inc 3a). **`skill_load` is the second such exception**: a `SKILL.md` has the same owner-authored-workspace provenance as `SOUL.md`/`AGENTS.md`, which assembly already injects untainted, so the tool sets `ingestedUntrusted: false` — tainting there would charge the owner the suppression of high-sensitivity memory for the whole session as the price of following their own procedure. `file_read` taints unconditionally even for the same file, which is why the dedicated tool exists. **A bound scheduled run's pinned lesson row (§9.2 row 4b) is neither exception — it taints**: a model wrote those lessons, so a non-empty set arms the flag before that run's first dispatch instead of waiting for a tool observation to do it. When `tainted` **and** a privileged/egress action is proposed → the runtime **FORCES the approval path** (or requires `/new`), **in code**, independent of the tool's own risk tier. Compaction/rolling-summary **preserves the untrusted provenance marker**. Taint persists on every commit path of a run that ingested untrusted content, including degraded and failed turns; a `/new`-superseded run does not re-taint the fresh window.
+- **Lethal trifecta = ENFORCED GATE, not a flag.** Taint is a **sticky, persisted session property**: `session.tainted = true` once ANY untrusted content is ingested — meaning **external/tool/retrieved content** (web/file/tool output, Inc 3b+) **or machine-derived inbound text** (a voice transcript — transcription is machine-derived regardless of whether Telegram marks the audio as forwarded; every transcript persists `.untrusted` at the message row, taints in the same fused write, and renders fenced). Untrusted message rows are **excluded from FTS recall**: resurfacing one into a later or detainted session would re-ingest attacker-influenceable content without re-arming the taint flag. **Durable memory (MEMORY/USER/`memory_items`) is untrusted-_labeled_ data that sets `hasPrivateDataAccess` but does NOT itself taint the session** (Inc 3a). **`skill_load` is the second such exception**: a `SKILL.md` has the same owner-authored-workspace provenance as `SOUL.md`/`AGENTS.md`, which assembly already injects untainted, so the tool sets `ingestedUntrusted: false` — tainting there would charge the owner the suppression of high-sensitivity memory for the whole session as the price of following their own procedure. `file_read` taints unconditionally even for the same file, which is why the dedicated tool exists. **A bound scheduled run's pinned lesson row (§9.2 row 4b) taints**: a model wrote those lessons, so a non-empty set arms the flag before that run's first dispatch instead of waiting for a tool observation to do it. When `tainted` **and** a privileged/egress action is proposed → the runtime **FORCES the approval path** (or requires `/new`), **in code**, independent of the tool's own risk tier. Compaction/rolling-summary **preserves the untrusted provenance marker**. Taint persists on every commit path of a run that ingested untrusted content, including degraded and failed turns; a `/new`-superseded run does not re-taint the fresh window.
 - **Exfiltration.** `canExfiltrate` covers **every** outbound network sink — the **LLM provider endpoint** AND `web_fetch` — not just "a different chat." Once `hasIngestedUntrusted && hasPrivateDataAccess`: a subsequent `web_fetch` **requires approval** showing the full resolved URL (incl. query/body); fetch args containing substrings of `MEMORY.md`/`USER.md` or secret-shaped tokens are **blocked by `redact()` before dispatch**; **the LLM egress sink is pinned on both routes** — an allowlisted configured `base_url`, or a compile-time-constant endpoint that by construction cannot be aimed at an owner-supplied URL (§8.3) — and stays a documented trust dependency either way; high-sensitivity memory is **not auto-injected** into a turn that already ingested untrusted content. There is **no** "reply to owner DM ⇒ exfil-free" exemption. **"Gated by approval" is the durable approval fabric** (Inc 5a, §11): the would-egress action suspends the run onto a durable `approvals` row bound to the exact recorded action (tool + canonical args/target; for `web_fetch`, the canonical URL), resolved only by an authenticated inline-button callback under the nonce/CAS contract. A restart **re-parks** the pending approval (boot reconciliation, §6.5) — the buttons still resolve; a plain "yes" text is **inert** for tool approvals; silence rides out to `EXPIRED → DENY`. The exfiltration trifecta's private-data leg is evaluated per turn (context assembly plus in-run reads); private content that entered persisted history via an earlier run's tool observation is not counted by later turns, so if the memory file is over-cap (omitted from assembly) and the turn performs no private read, a remembered private substring can egress without approval — accepted for v1, the session-persisted private-data flag belongs to Inc 5a's durable approval work. Inc 5a lands it: `sessions.has_private_data` is **set on every commit path** where the per-turn private-data leg was true (including degraded and failed turns), **read** into the trifecta gate's private-data leg (`session.has_private_data ∪ assemblyPrivateData ∪ runPrivateData`), **cleared** by `/new` alongside detaint, and **re-arms** on the next private ingestion. **Outbound sinks are classified:** pinned trusted egress (the LLM endpoint — an owner-configured/pinned `base_url` or a compile-time constant — and the search endpoint; their providers see model-authored content under their ToS) is protected by the arg guard and endpoint pinning, not approval; arbitrary-destination egress (`web_fetch`, and every `mcp__*` call — a third-party endpoint the owner pinned but whose behavior we do not control) additionally requires the trifecta approval. The owner explicitly accepts the search provider seeing model-authored queries.
+- **Personal journal scan and trust exception.** While personal journaling is configured enabled,
+  `ToolPolicyGate` runs the existing MEMORY/USER substring argument scan on outbound tools even in
+  clean turns. This scan remains separate from the original taint/private-data approval predicate,
+  so scanning alone adds no approvals. It uses the existing matcher, not a disclosure classifier.
+  `PolicyFingerprint.StaticInputs.journalEnabled` participates in the static hash so changing the
+  configured scan flag invalidates pending approvals. Journal loading follows the explicit opt-in
+  exception in §9.3: private labeled notes do not taint, suppress sensitive memory, or filter recall,
+  including sensitive/external and voice/photo-derived conclusions. Ordinary ingestion still taints.
 - **`/new`** = fresh conversation window AND **detaint** ("clears anything the bot read from web/files this session"). **Durable memory PERSISTS by design**; forgetting facts is a separate confirm-gated `/memory delete`.
 - **Prompt injection:** assume no reliable model-level fix; mitigate by least-privilege + approvals + blast-radius caps + the taint gate, not a classifier. Delimit/spotlight untrusted content; strip invisible/zero-width/bidi chars; tool output can never change system instructions.
 - **Secrets:** never in replies or logs. **Exact-value redaction** of the loaded secret values (bot token, api keys, decrypted secret material) is the **PRIMARY** mechanism at both the log boundary and the outbound-reply boundary (the values are already in memory — cheap, deterministic); pattern-based scanning is **secondary** defense-in-depth. The gateway owns the destination chat id; outbound controls strip auto-fetching image/link elements.
@@ -1344,7 +1542,8 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
   file resolved through canonical realpath containment. The approval binds source path, realpath,
   byte count, and SHA-256; execution re-resolves and re-hashes before copying. Code and every
   staged file always pass exact-secret and secret-shape scanning; networked runs additionally pass
-  the MEMORY/USER substring tier.
+  the MEMORY/USER substring tier. Staging dated journal files uses the same root-aware
+  private-data classifier as `file_read`, and binds that classification in the prepared action.
 - **Backend state lives in an actor, but actor isolation is not a run limiter.** A stored `Task`
   chain serializes the whole spawn → execution → cleanup operation across suspension points, so at
   most one VM contributes its peak memory footprint.
@@ -1388,6 +1587,13 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   the approval fingerprint; revalidate before launch. The controlled automatic approval mode is
   explicit and included in that identity. Inherited integrations remain trusted dependencies, not a
   frozen profile snapshot.
+- **Personal journal completion:** when a job was admitted and completes with journaling enabled
+  for the configured owner's DM, its selected terminal result enters the same queue transaction as
+  the saved result and completion notice. The admitted timezone determines the terminal source day.
+  `journal_terminal_ts` records the frozen completion instant; later reservation release may change
+  `updated_ts` without changing that instant or adding another source. Stable job IDs link the
+  accepted task and final result. State/publication evidence is typed; `reportedChecks` remain
+  worker reports. Status reads and delivery retries add no journal sources.
 - **Request shape:** local absolute repository path, GitHub HTTPS repository URL
   (`github.com/{owner}/{repo}`), or issue URL (`/issues/{positive integer}`). Refuse credentials,
   ports, query/fragment, encoded or option-like components, and unrelated paths. Local/repository
@@ -1774,7 +1980,51 @@ without keeping obsolete source payloads alive. It does not introduce another to
 The current reset receipt and its compact dependencies retain the reset replay barrier. Owner reset
 and epoch checks outrank ordinary retention; retained old records cannot reactivate old-epoch work.
 
+### 14.5 Background daily journal drain
+
+The public `JournalWorker` has a package-scoped initializer accepting the store/files ports,
+shared mutation gate, roster/cooldown, budget, codec and summarizer. `DaemonBuilder` constructs
+one codec from the cost resolver and redactor, passes that codec to the summarizer, and injects
+both into the worker. The worker sweep clock and summarizer provider-deadline clock remain
+independent, alongside the wall-time and call-ID seams. Production callers use the service
+lifecycle and producer notifications; awaited `sweep` is internal for deterministic tests.
+
+`JournalWorker` checks the persistent owner queue at startup and with a maximum 60-second ticker.
+The ticker keeps running while inference is held; notifications and overlapping sweeps coalesce into
+one owned drain. Each sweep reads at most 100 candidates, groups by owner/day across frozen timezones,
+and fits at most ten sources per request. Threshold, reset and ended-source-day triggers share this
+queue. Fitted leftovers retain durable due state. Unrepresentable sources receive fixed skip reasons;
+a budget refusal ends the pass and leaves work for a later sweep.
+
+One selected roster binding supplies both fitting and inference. The worker saves its conservative
+interruption usage and atomically starts only fitted source IDs before requesting the provider.
+After inference, a synchronous shared `WorkspaceMutationGate` closure checks `canPublish`, appends
+valid nonempty notes and finishes the batch with returned usage. Deletion and ordinary approved
+workspace writes use that same gate. Cancelled batches still record usage; a proven no-start result
+remains nil usage. File failures become terminal safe outcomes and never disrupt a conversation or
+Coder completion. No started batch is replayed at boot.
+
 ## 15. Configuration & secrets
+
+**Daily journals** use `CLAW_JOURNAL_ENABLED` (default `false`) through the existing strict
+boolean parser. Enabling requires personal mode: exactly one positive user ID in the current
+`CLAW_ALLOWLIST` configuration and no `CLAW_GROUP_CHATS`. Invalid enablement fails config load;
+previously seeded SQLite access grants do not establish journal ownership. `AppConfig.journalPolicy`
+retains that configured owner for inspection and deletion while automatic journaling is disabled.
+
+`CLAW_TIMEZONE` supplies journal calendar-day boundaries; configuration changes require a daemon
+restart. The Core journal values freeze the admitted owner, timezone, source timestamp and validated
+`YYYY-MM-DD` day. Telegram normalization preserves `date` for an ordinary message and `edit_date`
+for an edited message separately from processing timestamps. A missing edit time remains missing;
+source capture must report and skip missing timestamps rather than invent a day. Existing caption,
+transcript and raw-message provenance rules remain in force.
+
+`JournalLimits` centralizes source, evidence, request, summary, worker, retention, file and context
+limits. Durable sources validate their IDs, grapheme bounds and 128 KiB serialized UTF-8 ceiling on
+construction and decoding. Capture redacts and shortens before construction. Evidence carries typed
+tool status, Coder state or publication; worker-reported checks remain distinct from app-observed
+outcomes. Note validation belongs to the summary boundary, including allowed current source IDs
+and supporting evidence for observed-operation attribution.
 
 **Temporary Telegram progress** is enabled by `CLAW_TELEGRAM_PROGRESS` (default `true`),
 parsed through the existing strict boolean parser. Its scope is the additional interactive display
@@ -1877,6 +2127,10 @@ fallback is performed by composition. Codex owns its selected configuration and 
 
 ## 16. Observability
 
+- **Journal diagnostics:** per-owner status retains terminal outcomes, pending/skipped/interrupted
+  counts and fixed safe reasons. A damaged, refused or over-cap day file is not rebuilt. File errors
+  are recorded after the paid call's usage; queue-store failures log a fixed reason and leave durable
+  recovery state. Provider output, filesystem errors and SQL arguments are never diagnostic text.
 - **Structured logs** (`swift-log`) — metadata only by default (model, tokens, finish reason, tool, latency, status); prompt/completion content capture is opt-in. Exact-value secret redaction at the boundary (§12).
 - **`doctor` is a clawd CLI subcommand AND a Telegram command** (`/doctor`, its alias `/status`, and `/cost`) — **distinct** from the NG4 REST non-goal. `doctor --check-config` validates without starting the daemon. There is a **machine-readable JSON-to-stdout** form pollable by launchd/systemd watchdog.
 - **`doctor --check-config` carries a network-free `llm.auth` row.** It **never refreshes, fetches models, or contacts the provider** — a diagnostic that mutates credentials or spends a login is not a diagnostic. Current route with a static key reports `provider=openai-compatible mode=static`, without one `mode=none`; a decryptable, refreshable ChatGPT credential reports `provider=openai-chatgpt mode=oauth status=<fresh|expiring|expired-refresh-on-use>` and passes; no usable credential **fails** the row with `clawd auth login` guidance; a malformed key or envelope fails as a decrypt row. The existing `secrets` row still validates `secrets.enc` independently. `llm.auth` inspects the **primary** route only, so a fallback's credential is first exercised when the fallback carries a turn.
@@ -2120,6 +2374,11 @@ preferences (such as early exits or related-type nesting) require contextual jud
 blanket rewrite. New exceptions require a concrete reason in this section.
 
 ## 20. Roadmap (technical increments)
+
+**Personal daily journals (issue #209): delivered.** The owner controls automatic summaries through
+`CLAW_JOURNAL_ENABLED` and `/journal`; sections 7–9, 12 and 14.5 define queue/accounting, context and
+the explicit trust exception. Production composition acceptance, independent test-value review and
+lint/build/test gates passed on 2026-10-08.
 
 Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**: conversational + durable memory + read-only tools + streaming. Each increment lands a working, supervised slice, and each **"Done when" is an automated acceptance test** (per-requirement verified-by-test), not a manual check.
 

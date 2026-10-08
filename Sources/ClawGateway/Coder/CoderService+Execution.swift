@@ -8,7 +8,7 @@ extension CoderService {
     }
     do {
       let result: CoderResult
-      let markedRunning = try store.markRunning(id: admitted.id, now: Date())
+      let markedRunning = try store.markRunning(id: admitted.id, now: now())
       if markedRunning {
         let invocation = CoderInvocation(
           jobID: admitted.id,
@@ -39,9 +39,15 @@ extension CoderService {
     guard var job = try store.job(id: id) else {
       throw StoreError.unexpected("Coder completion has no job")
     }
+    let completedAt = now()
     while !job.state.isTerminal {
       let selectedResult = Self.selectedResult(result, persistedState: job.state)
       let chunks = report.chunks(job: job, result: selectedResult)
+      let captureOutcome = journalCapture?.coder(
+        job: job,
+        result: selectedResult,
+        completedAt: completedAt
+      )
       let ownershipResolved = job.ownership == .none || job.ownership == .stopped
       let outcome = try store.complete(
         id: id,
@@ -49,7 +55,8 @@ extension CoderService {
         result: selectedResult,
         chunks: chunks,
         releaseReservation: ownershipResolved,
-        now: Date()
+        journalCapture: captureOutcome,
+        now: completedAt
       )
       switch outcome {
       case .stateChanged(let current):
@@ -62,6 +69,9 @@ extension CoderService {
           if !recovering {
             fail(.cleanup(jobID: id))
           }
+        }
+        if captureOutcome != nil {
+          notifyJournal()
         }
         await notifyOutbox()
         return
@@ -104,7 +114,7 @@ private extension CoderService {
       if case .willLaunch = event, try store.job(id: id)?.state == .stopping {
         throw CancellationError()
       }
-      try store.recordProcess(id: id, event: event, now: Date())
+      try store.recordProcess(id: id, event: event, now: now())
     } catch let error as StoreError {
       fail(.persistence(error))
       throw error

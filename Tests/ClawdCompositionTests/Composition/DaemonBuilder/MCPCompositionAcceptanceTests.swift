@@ -414,7 +414,8 @@ private extension MCPCompositionAcceptanceTests {
         health: nil,
         unavailableReason: nil
       ),
-      mcpTools: mcpTools
+      mcpTools: mcpTools,
+      journal: nil
     )
   }
 
@@ -480,6 +481,7 @@ private extension MCPCompositionAcceptanceTests {
         userID: 7,
         text: "list the open issues",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

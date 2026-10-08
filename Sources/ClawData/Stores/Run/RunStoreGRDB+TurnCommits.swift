@@ -51,6 +51,7 @@ extension RunStoreGRDB {
         now: now
       )
 
+      Self.commitJournalCapture(db, turn: turn, now: now)
       return .committed
     }
   }

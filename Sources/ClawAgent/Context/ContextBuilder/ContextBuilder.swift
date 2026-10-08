@@ -20,6 +20,8 @@ public struct ContextBuilder: Sendable {
   let memoryStore: any MemoryStore
   let retriever: any Retriever
   let budget: ContextBudget
+  let journalFiles: (any JournalFiles)?
+  let journalPolicy: JournalPolicy
   let fenceLabels: ToolFenceLabels
 
   private let policyStaticSubhash: String
@@ -34,6 +36,8 @@ public struct ContextBuilder: Sendable {
     memoryStore: any MemoryStore,
     retriever: any Retriever,
     budget: ContextBudget,
+    journalFiles: (any JournalFiles)?,
+    journalPolicy: JournalPolicy,
     fenceLabels: ToolFenceLabels = .undeclared,
     policyStaticSubhash: String = "",
     now: @escaping @Sendable () -> Date = Date.init,
@@ -46,6 +50,8 @@ public struct ContextBuilder: Sendable {
     self.memoryStore = memoryStore
     self.retriever = retriever
     self.budget = budget
+    self.journalFiles = journalFiles
+    self.journalPolicy = journalPolicy
     self.fenceLabels = fenceLabels
 
     self.policyStaticSubhash = policyStaticSubhash
@@ -159,7 +165,12 @@ private extension ContextBuilder {
 private extension ContextBuilder {
   func hasPrivateDataAccess(_ fitted: [FittedSection]) -> Bool {
     fitted.contains { section in
-      section.id == .userFile || section.id == .memoryFile || section.id == .memoryItems
+      switch section.id {
+      case .userFile, .memoryFile, .memoryItems, .journal:
+        return true
+      default:
+        return false
+      }
     }
   }
 }

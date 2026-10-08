@@ -116,6 +116,8 @@ struct TFile: Decodable {
 }
 
 struct TMessage: Decodable {
+  let date: Int64?
+  let edit_date: Int64?
   let message_id: Int64
   let from: TUser?
   let chat: TChat
@@ -181,7 +183,13 @@ struct TMessage: Decodable {
       senderDisplayName: from?.displayName,
       hasSenderChat: sender_chat != nil,
       isForwarded: forward_origin != nil,
-      migratedToChatID: migrate_to_chat_id
+      migratedToChatID: migrate_to_chat_id,
+      date: date.map {
+        Date(timeIntervalSince1970: TimeInterval($0))
+      },
+      editDate: edit_date.map {
+        Date(timeIntervalSince1970: TimeInterval($0))
+      }
     )
   }
 }

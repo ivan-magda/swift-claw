@@ -157,6 +157,7 @@ struct JobRunFailureTests {
         userID: 42,
         text: "hi",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

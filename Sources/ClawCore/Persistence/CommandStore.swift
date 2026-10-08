@@ -67,6 +67,7 @@ public protocol CommandStore: Sendable {
   func applyNew(
     updateID: Int64,
     sessionKey: String,
+    journalScope: JournalScope?,
     now: Date
   ) throws(StoreError) -> NewCommandResult
 }

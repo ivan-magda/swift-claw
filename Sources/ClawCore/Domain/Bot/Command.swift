@@ -10,6 +10,7 @@ public enum Command: Sendable, Equatable {
   case memory(MemoryCommand)
   case schedule(ScheduleCommand)
   case learning(LearningCommand)
+  case journal(JournalCommand)
   case pause(jobID: Int64?)
   case resume(jobID: Int64?)
   case runNow(jobID: Int64?)
@@ -24,6 +25,7 @@ public enum Command: Sendable, Equatable {
     guard let token = slashToken(in: text, botUsername: botUsername) else {
       return .plain(text)
     }
+
     return command(named: token.name, arguments: token.arguments, originalText: text)
   }
 }
@@ -44,22 +46,29 @@ private extension Command {
       return nil
     }
 
-    let tokenEnd =
-      text.firstIndex {
-        $0.isWhitespace
-      } ?? text.endIndex
+    let firstWhitespace = text.firstIndex { character in
+      character.isWhitespace
+    }
+    let tokenEnd = firstWhitespace ?? text.endIndex
     let commandBody = text[..<tokenEnd].dropFirst()
     guard commandBody.isEmpty == false else {
       return nil
     }
 
-    let pieces = commandBody.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false)
-    guard let rawName = pieces.first, rawName.isEmpty == false else {
+    let commandParts = commandBody.split(
+      separator: "@",
+      maxSplits: 1,
+      omittingEmptySubsequences: false
+    )
+    guard let rawName = commandParts.first, !rawName.isEmpty else {
       return nil
     }
 
-    if pieces.count == 2 {
-      guard let botUsername, pieces[1].caseInsensitiveCompare(botUsername) == .orderedSame else {
+    if commandParts.count == 2 {
+      let addressedUsername = commandParts[1]
+      guard let botUsername,
+            addressedUsername.caseInsensitiveCompare(botUsername) == .orderedSame
+      else {
         return nil
       }
     }
@@ -72,6 +81,7 @@ private extension Command {
     if let jobCommand = jobCommand(named: name, arguments: arguments) {
       return jobCommand
     }
+
     if let familyCommand = familyCommand(named: name, arguments: arguments) {
       return familyCommand
     }
@@ -104,6 +114,8 @@ private extension Command {
       .memory(MemoryCommand.parse(arguments: arguments))
     case "schedule":
       .schedule(ScheduleCommand.parse(arguments: arguments))
+    case "journal":
+      .journal(JournalCommand.parse(arguments: arguments))
     case "learning":
       .learning(LearningCommand.parse(arguments: arguments))
     default:
@@ -143,6 +155,7 @@ public enum ScheduleCommand: Sendable, Equatable {
     if trimmed.isEmpty || trimmed.lowercased() == "list" {
       return .list
     }
+
     return .create(text: trimmed)
   }
 }
@@ -158,16 +171,21 @@ public enum LearningCommand: Sendable, Equatable {
     if trimmed.isEmpty || trimmed.caseInsensitiveCompare("list") == .orderedSame {
       return .list
     }
-    let pieces = trimmed.split(whereSeparator: \.isWhitespace)
-    if pieces.first?.caseInsensitiveCompare("reset") == .orderedSame {
-      guard pieces.count == 2 else {
+
+    let argumentWords = trimmed.split(whereSeparator: \.isWhitespace)
+    if argumentWords.first?.caseInsensitiveCompare("reset") == .orderedSame {
+      guard argumentWords.count == 2 else {
         return .reset(jobID: nil)
       }
-      return .reset(jobID: PositiveInt64.parse(String(pieces[1])))
+
+      let jobID = PositiveInt64.parse(String(argumentWords[1]))
+      return .reset(jobID: jobID)
     }
+
     if let jobID = PositiveInt64.parse(trimmed) {
       return .detail(jobID: jobID)
     }
+
     return .list
   }
 }
@@ -182,10 +200,44 @@ extension Command {
   /// that message belongs to whoever typed fastest, so one attendee could commit another's draft.
   public var isDirectOnly: Bool {
     switch self {
-    case .remember, .memory, .schedule, .learning, .pause, .resume, .runNow, .cancelJob:
+    case .remember, .memory, .schedule, .learning, .journal, .pause, .resume, .runNow, .cancelJob:
       true
     case .start, .stop, .new, .help, .doctor, .mcp, .skills, .plain:
       false
+    }
+  }
+}
+
+/// Owner-only dated journal commands; invalid arguments never become paths.
+public enum JournalCommand: Sendable, Equatable {
+  case status
+  case show(JournalDay)
+  case delete(JournalDay)
+  case invalid
+
+  public static func parse(arguments: Substring) -> JournalCommand {
+    let argumentWords = arguments.split(whereSeparator: \.isWhitespace)
+    guard !argumentWords.isEmpty else {
+      return .status
+    }
+
+    guard argumentWords.count == 2 else {
+      return .invalid
+    }
+
+    let action = argumentWords[0].lowercased()
+    let dateArgument = String(argumentWords[1])
+    guard let day = JournalDay(isoDate: dateArgument) else {
+      return .invalid
+    }
+
+    switch action {
+    case "show":
+      return .show(day)
+    case "delete":
+      return .delete(day)
+    default:
+      return .invalid
     }
   }
 }

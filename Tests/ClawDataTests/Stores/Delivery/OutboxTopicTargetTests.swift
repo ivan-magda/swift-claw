@@ -36,6 +36,7 @@ struct OutboxTopicTargetTests {
         text: "what is the schedule",
         isEdited: false,
         telegramMessageID: telegramMessageID,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -69,7 +70,8 @@ struct OutboxTopicTargetTests {
             payload: "the talk starts at 10",
             payloadHash: "r1"
           ),
-        ]
+        ],
+        journalCapture: nil
       ),
       now: Date()
     )

@@ -66,6 +66,7 @@ extension ContextBuilder {
     [
       memoryItemsSection(excludeSensitive: excludeSensitiveMemory, residual: residual),
       historySection(snapshot: snapshot, residual: residual),
+      journalSection(snapshot: snapshot, origin: origin, ownerNotices: &ownerNotices),
       // Proactive runs never recall: the retriever's dedup excludes only the CURRENT window,
       // so after a per-fire window reset a recall search would resurface exactly the prior-fire
       // turns (and the owner's DM chat about arming the job) that the reset fenced off.

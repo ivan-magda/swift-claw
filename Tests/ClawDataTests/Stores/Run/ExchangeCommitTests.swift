@@ -27,6 +27,7 @@ struct ExchangeCommitTests {
         userID: 7,
         text: "read a page",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -82,7 +83,8 @@ struct ExchangeCommitTests {
         OutboxChunk(stepIndex: 0, chatID: 7, payload: "summary of the page", payloadHash: "h"),
       ],
       exchanges: [makeExchange()],
-      setTainted: true
+      setTainted: true,
+      journalCapture: nil
     )
 
     // when
@@ -154,7 +156,8 @@ struct ExchangeCommitTests {
       chatID: 7,
       content: "plain",
       usage: makeUsage(fixture),
-      chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "plain", payloadHash: "h")]
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "plain", payloadHash: "h")],
+      journalCapture: nil
     )
 
     // when
@@ -243,7 +246,8 @@ struct ExchangeCommitTests {
       usage: makeUsage(fixture),
       chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "late", payloadHash: "h")],
       exchanges: [makeExchange()],
-      setTainted: true
+      setTainted: true,
+      journalCapture: nil
     )
 
     // when
@@ -265,6 +269,7 @@ struct ExchangeCommitTests {
     _ = try CommandStoreGRDB(writer: fixture.queue).applyNew(
       updateID: 100,
       sessionKey: SessionKey.telegramDM(chatID: 7),
+      journalScope: nil,
       now: Date()
     )
     let turn = AssistantTurn(
@@ -274,7 +279,8 @@ struct ExchangeCommitTests {
       content: "late",
       usage: makeUsage(fixture),
       chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "late", payloadHash: "h")],
-      setTainted: true
+      setTainted: true,
+      journalCapture: nil
     )
 
     // when
@@ -398,7 +404,8 @@ extension ExchangeCommitTests {
         OutboxChunk(stepIndex: 0, chatID: 7, payload: "summary of the page", payloadHash: "h"),
       ],
       exchanges: [statefulExchange()],
-      providerState: Self.finalState
+      providerState: Self.finalState,
+      journalCapture: nil
     )
 
     // when
@@ -448,7 +455,8 @@ extension ExchangeCommitTests {
       content: "plain",
       usage: makeUsage(fixture),
       chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "plain", payloadHash: "h")],
-      exchanges: [makeExchange()]
+      exchanges: [makeExchange()],
+      journalCapture: nil
     )
 
     // when
@@ -486,7 +494,8 @@ extension ExchangeCommitTests {
         OutboxChunk(stepIndex: 0, chatID: 7, payload: "summary of the page", payloadHash: "h"),
       ],
       exchanges: [statefulExchange()],
-      providerState: Self.finalState
+      providerState: Self.finalState,
+      journalCapture: nil
     )
 
     // when
@@ -517,7 +526,8 @@ extension ExchangeCommitTests {
       usage: makeUsage(fixture),
       chunks: [OutboxChunk(stepIndex: 0, chatID: 7, payload: "done", payloadHash: "h")],
       exchanges: [statefulExchange(), statefulExchange()],
-      providerState: Self.finalState
+      providerState: Self.finalState,
+      journalCapture: nil
     )
 
     // when

@@ -49,7 +49,10 @@ struct CoderBackendSetup: Sendable {
 }
 
 extension DaemonBuilder {
-  func prepareCoder(coordination: TurnCoordination) async -> CoderComposition {
+  func prepareCoder(
+    coordination: TurnCoordination,
+    journal: JournalComposition?
+  ) async -> CoderComposition {
     guard config.coder.enabled else {
       let reservedJobs = try? stores.coderJobs.reservedJobs()
       let service: CoderService? =
@@ -59,7 +62,8 @@ extension DaemonBuilder {
           makeCoderService(
             backend: nil,
             policyID: Self.unavailableCoderPolicyID,
-            coordination: coordination
+            coordination: coordination,
+            journal: journal
           )
         }
       return CoderComposition(service: service, tools: [], checks: CoderHealthRows.disabled)
@@ -80,7 +84,8 @@ extension DaemonBuilder {
       let service = makeCoderService(
         backend: setup.permitsSubmission ? setup.backend : nil,
         policyID: policy.id,
-        coordination: coordination
+        coordination: coordination,
+        journal: journal
       )
 
       let redactor = SecretRedactor(secretValues: redactionValues)
@@ -101,7 +106,8 @@ extension DaemonBuilder {
       let service = makeCoderService(
         backend: nil,
         policyID: Self.unavailableCoderPolicyID,
-        coordination: coordination
+        coordination: coordination,
+        journal: journal
       )
       let redactor = SecretRedactor(secretValues: redactionValues)
 
@@ -125,7 +131,8 @@ private extension DaemonBuilder {
   func makeCoderService(
     backend: (any CoderBackend)?,
     policyID: String,
-    coordination: TurnCoordination
+    coordination: TurnCoordination,
+    journal: JournalComposition?
   ) -> CoderService {
     let redactor = SecretRedactor(secretValues: redactionValues)
     return CoderService(
@@ -138,6 +145,11 @@ private extension DaemonBuilder {
       executionPolicyID: policyID,
       redact: {
         redactor.redact($0)
+      },
+      journalCapture: journal?.capture,
+      now: now,
+      notifyJournal: {
+        journal?.worker?.notifyPending()
       },
       notifyOutbox: {
         coordination.outboxSignal.poke()

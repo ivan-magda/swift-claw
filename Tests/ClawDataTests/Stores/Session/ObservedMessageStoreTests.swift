@@ -35,6 +35,7 @@ struct ObservedMessageStoreTests {
       isEdited: false,
       provenance: provenance,
       telegramMessageID: updateID,
+      journalAdmission: nil,
       ts: Date(timeIntervalSince1970: 100)
     )
   }

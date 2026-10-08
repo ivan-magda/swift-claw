@@ -25,6 +25,7 @@ public struct ClawStores: Sendable {
   public let approvals: any ApprovalStore
   public let coderJobs: any CoderJobStore
   public let learning: any LearningWorkflowStore
+  public let journal: any JournalStore
 
   public init(
     allowlist: any AllowlistStore,
@@ -44,7 +45,8 @@ public struct ClawStores: Sendable {
     scheduleCommands: any ScheduleCommandStore,
     approvals: any ApprovalStore,
     coderJobs: any CoderJobStore,
-    learning: any LearningWorkflowStore
+    learning: any LearningWorkflowStore,
+    journal: any JournalStore
   ) {
     self.allowlist = allowlist
     self.processed = processed
@@ -68,6 +70,7 @@ public struct ClawStores: Sendable {
     self.approvals = approvals
     self.coderJobs = coderJobs
     self.learning = learning
+    self.journal = journal
   }
 }
 
@@ -95,7 +98,8 @@ extension ClawDatabase {
       scheduleCommands: ScheduleCommandStoreGRDB(writer: pool),
       approvals: ApprovalStoreGRDB(writer: pool),
       coderJobs: CoderJobStoreGRDB(writer: pool),
-      learning: ScheduledLearningStoreGRDB(writer: pool)
+      learning: ScheduledLearningStoreGRDB(writer: pool),
+      journal: JournalStoreGRDB(writer: pool)
     )
   }
 }

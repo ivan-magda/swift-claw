@@ -311,6 +311,8 @@ private struct PinnedLessonEnvironment {
         memoryStore: EmptyMemoryStore(),
         retriever: EmptyRetriever(),
         budget: .default,
+        journalFiles: nil,
+        journalPolicy: .disabled,
         now: {
           now
         }
@@ -324,6 +326,8 @@ private struct PinnedLessonEnvironment {
       makeFeedbackNonce: makeFeedbackNonce,
       parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
       approvalExpirySeconds: testApprovalExpirySeconds,
+      journalCapture: nil,
+      notifyJournal: {},
       logger: TestLog.silent
     )
 
@@ -400,6 +404,7 @@ private struct PinnedLessonEnvironment {
         userID: chatID,
         text: "hi",
         isEdited: false,
+        journalAdmission: nil,
         ts: now
       )
     )

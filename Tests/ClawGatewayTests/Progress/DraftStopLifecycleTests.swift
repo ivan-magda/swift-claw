@@ -268,6 +268,7 @@ struct DraftStopLifecycleTests {
         userID: 7,
         text: "hello",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

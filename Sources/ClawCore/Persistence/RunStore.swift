@@ -97,6 +97,7 @@ public struct AssistantTurn: Sendable, Equatable {
   public let providerState: ProviderExchangeState?
   /// Optional result feedback address. The run-store validates and inserts it with final delivery.
   public let feedbackTarget: NewFeedbackTarget?
+  public let journalCapture: JournalCaptureOutcome?
 
   public init(
     runID: Int64,
@@ -109,7 +110,8 @@ public struct AssistantTurn: Sendable, Equatable {
     setTainted: Bool = false,
     setPrivateData: Bool = false,
     providerState: ProviderExchangeState? = nil,
-    feedbackTarget: NewFeedbackTarget? = nil
+    feedbackTarget: NewFeedbackTarget? = nil,
+    journalCapture: JournalCaptureOutcome?
   ) {
     self.runID = runID
     self.sessionID = sessionID
@@ -122,6 +124,7 @@ public struct AssistantTurn: Sendable, Equatable {
     self.setPrivateData = setPrivateData
     self.providerState = providerState
     self.feedbackTarget = feedbackTarget
+    self.journalCapture = journalCapture
   }
 }
 
@@ -331,6 +334,9 @@ public struct ClaimedObservationFill: Sendable, Equatable {
 }
 
 public protocol RunStore: Sendable {
+  /// Reads trigger-bound archive input for an admitted interactive exchange.
+  func journalExchangeInput(runID: Int64) throws(StoreError) -> JournalExchangeInput?
+
   /// Restores the original requester and conversation target without treating a group chat as a user.
   func executionContext(
     runID: Int64,

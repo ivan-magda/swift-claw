@@ -238,7 +238,8 @@ private extension TelegramProgressCompositionTests {
       costResolver: costs,
       sandbox: sandbox,
       mcpTools: [],
-      presentationClock: ScriptedClock.compressed(parkingAt: .seconds(1))
+      presentationClock: ScriptedClock.compressed(parkingAt: .seconds(1)),
+      journal: nil
     )
     let coordination = DaemonBuilder.TurnCoordination()
     let consumers = builder.makeRunnerConsumers(
@@ -251,14 +252,16 @@ private extension TelegramProgressCompositionTests {
       sandbox: sandbox,
       mcpCatalog: .empty,
       coder: CoderComposition(service: nil, tools: [], checks: []),
-      learning: nil
+      learning: nil,
+      journal: nil
     )
     let runner = builder.makeTurnRunner(
       coordination: coordination,
       agentStack: stack,
       costPolicy: roster.primary.costPolicy,
       imageCache: ImageCache(),
-      freezeLearningSurface: { _, _ in }
+      freezeLearningSurface: { _, _ in },
+      journal: nil
     )
     return (builder, runner, consumers)
   }
@@ -309,6 +312,7 @@ private extension TelegramProgressCompositionTests {
         userID: 7,
         text: "hello",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -323,6 +327,7 @@ private extension TelegramProgressCompositionTests {
         userID: chatID,
         text: "earlier",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

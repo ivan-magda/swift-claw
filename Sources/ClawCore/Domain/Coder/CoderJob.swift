@@ -101,6 +101,7 @@ public struct CoderJob: Sendable, Equatable, Codable {
   public let ownership: CoderProcessOwnership
   public let processReceipt: CoderProcessReceipt?
   public let result: CoderResult?
+  public let journalScope: JournalScope?
 
   public init(
     id: UUID,
@@ -111,7 +112,8 @@ public struct CoderJob: Sendable, Equatable, Codable {
     slotReserved: Bool,
     ownership: CoderProcessOwnership,
     processReceipt: CoderProcessReceipt?,
-    result: CoderResult?
+    result: CoderResult?,
+    journalScope: JournalScope?
   ) {
     self.id = id
     self.origin = origin
@@ -122,5 +124,6 @@ public struct CoderJob: Sendable, Equatable, Codable {
     self.ownership = ownership
     self.processReceipt = processReceipt
     self.result = result
+    self.journalScope = journalScope
   }
 }

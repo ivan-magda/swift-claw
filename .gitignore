@@ -73,3 +73,6 @@ docs/superpowers/
 docs/plans/
 docs/alt-solutions/
 docs/teleclaw-prompt.md
+
+# Isolated development checkouts.
+/.worktrees/

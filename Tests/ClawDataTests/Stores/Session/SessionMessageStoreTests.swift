@@ -27,6 +27,7 @@ struct SessionMessageStoreTests {
       text: text,
       isEdited: false,
       provenance: provenance,
+      journalAdmission: nil,
       ts: Date()
     )
   }
@@ -228,6 +229,7 @@ struct SessionMessageStoreTests {
     _ = try CommandStoreGRDB(writer: queue).applyNew(
       updateID: 100,
       sessionKey: SessionKey.telegramDM(chatID: 42),
+      journalScope: nil,
       now: Date()
     )
     let second = try store.claimAndPersistInbound(inbound(updateID: 2, text: "after"))
@@ -407,6 +409,7 @@ struct SessionMessageStoreTests {
         userID: 7,
         text: "hi",
         isEdited: false,
+        journalAdmission: nil,
         ts: now
       )
     )

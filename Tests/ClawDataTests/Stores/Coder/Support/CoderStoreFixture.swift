@@ -40,7 +40,14 @@ struct CoderStoreFixture: Sendable {
   }
 
   func admit(id: UUID, limit: Int) throws -> CoderAdmission {
-    try store.admit(id: id, prepared: prepared, origin: origin, maxConcurrentJobs: limit, now: now)
+    try store.admit(
+      id: id,
+      prepared: prepared,
+      origin: origin,
+      maxConcurrentJobs: limit,
+      journalScope: nil,
+      now: now
+    )
   }
 }
 
@@ -134,6 +141,7 @@ extension CoderStoreFixture {
         ),
       ],
       releaseReservation: release,
+      journalCapture: nil,
       now: now
     )
   }

@@ -11,11 +11,43 @@ enum DoctorHealth {
     now: Date,
     routeHealth: LLMRouteHealth
   ) -> [DoctorReport.Check] {
-    HealthRowsBuilder.checks(
-      inputs(stores: stores, config: config, now: now, routeHealth: routeHealth)
-    )
-      + schedulerChecks(stores: stores, config: config, now: now)
-      + approvalChecks(stores: stores, config: config, now: now)
+    let healthInputs = inputs(stores: stores, config: config, now: now, routeHealth: routeHealth)
+    var checks = HealthRowsBuilder.checks(healthInputs)
+    checks.append(contentsOf: schedulerChecks(stores: stores, config: config, now: now))
+    checks.append(contentsOf: approvalChecks(stores: stores, config: config, now: now))
+    checks.append(contentsOf: journalChecks(stores: stores, config: config, now: now))
+    return checks
+  }
+
+  static func journalConfigChecks(config: AppConfig) -> [DoctorReport.Check] {
+    JournalHealth.configRows(policy: config.journalPolicy)
+  }
+
+  static func journalChecks(
+    stores: ClawStores,
+    config: AppConfig,
+    now: Date
+  ) -> [DoctorReport.Check] {
+    let policy = config.journalPolicy
+    let status: HealthValue<JournalStatus>
+
+    if let ownerUserID = policy.ownerUserID {
+      status = read {
+        try stores.journal.status(ownerUserID: ownerUserID, now: now)
+      }
+    } else {
+      let emptyStatus = JournalStatus(
+        pendingCount: 0,
+        lastOutcome: nil,
+        lastOutcomeAt: nil,
+        skippedCount: 0,
+        interruptedCount: 0,
+        lastRedactedError: nil
+      )
+      status = .available(emptyStatus)
+    }
+
+    return JournalHealth.rows(policy: policy, status: status)
   }
 
   static func inputs(
@@ -29,11 +61,14 @@ enum DoctorHealth {
       skillsCap: ContextBudget.default.skillsCap
     )
 
-    let dbPath = EnvironmentLoader.databasePath(config: config)
-    let walBytes =
-      (try? FileManager.default.attributesOfItem(atPath: dbPath + "-wal")[.size] as? Int) ?? 0
-    let fileSystem = try? FileManager.default.attributesOfFileSystem(forPath: config.stateRoot.path)
-    let freeBytes = (fileSystem?[.systemFreeSize] as? Int) ?? 0
+    let databasePath = EnvironmentLoader.databasePath(config: config)
+    let walAttributes = try? FileManager.default.attributesOfItem(atPath: databasePath + "-wal")
+    let walBytes = (walAttributes?[.size] as? Int) ?? 0
+
+    let fileSystemAttributes = try? FileManager.default.attributesOfFileSystem(
+      forPath: config.stateRoot.path
+    )
+    let freeBytes = (fileSystemAttributes?[.systemFreeSize] as? Int) ?? 0
     let prices = routePrices(config: config)
 
     return HealthRowsBuilder.Inputs(
@@ -68,7 +103,9 @@ enum DoctorHealth {
   }
 
   static func skillScan(config: AppConfig) -> SkillScanResult {
-    FileSystemWorkspace(root: EnvironmentLoader.workspaceRoot(config: config)).scanSkills()
+    let workspaceRoot = EnvironmentLoader.workspaceRoot(config: config)
+    let workspace = FileSystemWorkspace(root: workspaceRoot)
+    return workspace.scanSkills()
   }
 
   /// The price rows `doctor --check-config` prints. Full doctor and `/status` render the same rows
@@ -86,7 +123,8 @@ enum DoctorHealth {
     let fallback = config.llm.fallbackRoute.map { route in
       RoutePriceHealth(route: route, resolver: resolver)
     }
-    return (RoutePriceHealth(route: config.llm.route, resolver: resolver), fallback)
+    let primary = RoutePriceHealth(route: config.llm.route, resolver: resolver)
+    return (primary: primary, fallback: fallback)
   }
 
   static func schedulerChecks(
@@ -119,10 +157,11 @@ enum DoctorHealth {
     config: AppConfig,
     now: Date
   ) -> [DoctorReport.Check] {
+    let health = read {
+      try stores.approvals.approvalsHealth(now: now)
+    }
     return ApprovalsHealthRows.rows(
-      health: read {
-        try stores.approvals.approvalsHealth(now: now)
-      },
+      health: health,
       approvalExpirySeconds: config.approvalExpirySeconds
     )
   }

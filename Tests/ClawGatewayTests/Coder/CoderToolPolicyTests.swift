@@ -275,7 +275,8 @@ private extension CoderToolPolicyTests {
       privateFileLoader: {
         [privateText]
       },
-      enabledDangerousTools: [CoderToolNames.submit]
+      enabledDangerousTools: [CoderToolNames.submit],
+      journalEnabled: false
     )
   }
 

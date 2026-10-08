@@ -37,6 +37,71 @@ Durable facts also live in the database: confirm something in chat ("remember th
 and it persists in SQLite across restarts, recalled by importance and recency. Full-text
 search covers conversation history, not these facts. `/memory` shows what is stored.
 
+## Daily journal files
+
+Set `CLAW_JOURNAL_ENABLED=true` in your env file and restart the daemon. The strict boolean defaults
+to `false`. Enabling requires exactly one positive configured owner ID in `CLAW_ALLOWLIST` and
+no `CLAW_GROUP_CHATS`. Automatic capture and loading serve only that owner's interactive DM;
+scheduled, heartbeat and group runs stay outside this feature. Disabling stops automatic capture,
+summary calls and loading while preserving files. No old archive history or disabled-period activity
+is imported.
+
+A completed exchange or an admitted Coder job's terminal result is one source. clawd batches up to
+ten sources per summary after ten are ready for a day, `/new`, or that source day's end. The owned
+worker checks pending work at least once a minute. Telegram activity time and the timezone frozen
+at admission determine an exchange's day; Coder uses its terminal commit time in the admitted zone.
+`CLAW_TIMEZONE` controls day boundaries; changing it or the feature flag requires restart.
+
+`/new` starts a fresh conversation window and replies promptly while notes are generated in the
+background. The next turn sees notes already published, and `/journal` shows remaining work.
+A restart resumes unstarted due sources but does not flush a partial batch from today just because
+you restarted. The agent reads today and yesterday with a combined 4,000-character limit, favoring
+recent notes. Journals supplement curated `MEMORY.md`, `USER.md` and confirmed database facts.
+
+Summary generation makes extra tool-free calls on your configured model route and global budget,
+with one request at a time, a 30-second deadline and at most 24 started calls per UTC day. Sources
+older than 48 hours can be skipped. Empty or invalid output still consumes model usage; invalid
+output gets no repair call. Known secrets are redacted before shortening and publication.
+
+After a crash, clawd accounts abandoned started calls and does not resend them or rebuild files
+from history. This can miss a note that had not reached its file. Unstarted sources can resume.
+`/journal` and aggregate health report skipped, interrupted and failed work. Configuration-only
+`clawd doctor --check-config` constructs no journal store or file reader and makes no model call.
+
+Journal text is private labeled data. Loading it does not set taint, suppress high-sensitivity
+memory or remove owner recall. Current web/file/tool activity can still taint the turn. This
+explicit opt-in exception can retain sensitive and externally derived conclusions. While enabled,
+the existing MEMORY/USER substring check runs on outbound tool arguments independently of taint;
+it adds no approval buttons and does not guarantee prevention of every disclosure.
+
+Dated journal files live at `memory/YYYY-MM-DD.md` under the workspace. To edit one by hand,
+stop the daemon, edit the file, then restart it. The next append preserves your existing bytes.
+Concurrent editing while the daemon runs has no preservation guarantee. Automatic reads and
+appends refuse files above 512 KiB, and damaged UTF-8 files are left for you to repair.
+An empty summary creates no file; missing files can receive fresh notes without rebuilding history.
+File reads and code staging classify these exact dated paths as private data, and approved writes
+show a privileged-file warning. Unrelated dated files, such as `reports/YYYY-MM-DD.md`, keep their
+ordinary classification.
+
+Inspection and deletion use no model calls and stay available when automatic journaling is
+disabled. They require the current sole positive configured owner in that owner's private chat;
+retained SQLite allowlist grants do not establish journal ownership.
+
+| Command | Effect |
+| --- | --- |
+| `/journal` | Enabled state, timezone, pending sources, last outcome and recent dates |
+| `/journal show YYYY-MM-DD` | That day's bounded text, with a notice if the reply is shortened |
+| `/journal delete YYYY-MM-DD` | Ask to remove that file, including your edits, showing its pending source count |
+
+Confirm deletion with `yes`. The daemon cancels already queued work for the selected date before
+removing the file, under the same gate used for publication and approved writes. An in-flight
+summary retains its usage but cannot recreate that file. If file removal fails, cancelled work
+stays cancelled and the reply reports failure; issue the delete command again to retry.
+Other days, source conversations and running Coder jobs remain. Later completed activity may
+create this date again. This is not archive-wide forgetting. Deleting through an external editor
+has no queue semantics. `/status` diagnostics expose only aggregate journal state, without dated
+file lists or file contents.
+
 ## Skills
 
 A skill is a procedure you write once and the agent pulls up when a task calls for it —

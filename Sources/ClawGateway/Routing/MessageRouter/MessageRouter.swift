@@ -28,6 +28,7 @@ public struct MessageRouter: Sendable {
   let commandHandlers: CommandHandlers
   let scheduleHandlers: ScheduleHandlers
   let learningHandlers: LearningHandlers?
+  let journalHandlers: JournalHandlers?
   let confirmations: ConfirmationResolver
   let turnDispatch: TurnDispatch
   let approvalCallbacks: ApprovalCallbackHandler?
@@ -68,6 +69,9 @@ public struct MessageRouter: Sendable {
     typing: (any TypingIndicator)? = nil,
     coordinator: ApprovalCoordinator,
     presentations: TurnPresentationRegistry? = nil,
+    journalCapture: JournalSourceCapture?,
+    notifyJournal: @escaping @Sendable () -> Void,
+    journal: JournalCommandSurface?,
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = {
       Date()
@@ -107,7 +111,8 @@ public struct MessageRouter: Sendable {
       replies: replies,
       imageCache: imageCache,
       now: now,
-      logger: logger
+      logger: logger,
+      journalCapture: journalCapture
     )
 
     self.replies = replies
@@ -122,6 +127,8 @@ public struct MessageRouter: Sendable {
       logger: logger,
       now: now,
       coordinator: coordinator,
+      journalCapture: journalCapture,
+      notifyJournal: notifyJournal,
       presentations: presentations
     )
     self.scheduleHandlers = ScheduleHandlers(
@@ -141,11 +148,22 @@ public struct MessageRouter: Sendable {
       replies: replies,
       now: now
     )
+    let journalHandlers = journal.map {
+      JournalHandlers(
+        surface: $0,
+        sessionMessages: sessionMessages,
+        pendingConfirmations: pendingConfirmations,
+        replies: replies,
+        now: now
+      )
+    }
+    self.journalHandlers = journalHandlers
     self.confirmations = ConfirmationResolver(
       sessionMessages: sessionMessages,
       pendingConfirmations: pendingConfirmations,
       memoryCommands: memoryCommands,
       learningReset: learningStore,
+      journalHandlers: journalHandlers,
       schedule: schedule,
       replies: replies,
       now: now,

@@ -125,7 +125,9 @@ struct SuspendLaneHoldTests {
       workspace: FileSystemWorkspace(root: harness.workspaceRoot),
       memoryStore: harness.stores.memory,
       retriever: harness.stores.retriever,
-      budget: .default
+      budget: .default,
+      journalFiles: nil,
+      journalPolicy: .disabled
     )
     let lastMessageID = try await ClawDatabase.makePool(path: harness.databasePath).read { db in
       try Int64.fetchOne(

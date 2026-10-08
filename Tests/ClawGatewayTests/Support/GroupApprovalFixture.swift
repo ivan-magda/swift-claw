@@ -34,6 +34,7 @@ struct GroupApprovalFixture {
         text: "Ask Coder to inspect this repository.",
         isEdited: false,
         telegramMessageID: 88,
+        journalAdmission: nil,
         ts: Self.now
       )
     )

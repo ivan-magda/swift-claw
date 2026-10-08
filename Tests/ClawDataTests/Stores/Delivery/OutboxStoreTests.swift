@@ -174,6 +174,7 @@ private extension OutboxStoreTests {
       userID: chatID,
       text: "seed",
       isEdited: false,
+      journalAdmission: nil,
       ts: Date()
     )
   }

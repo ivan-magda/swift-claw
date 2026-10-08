@@ -19,6 +19,9 @@ public actor CoderService: CoderServing, Service {
   let config: CoderConfig
   let jobRoot: String
   let executionPolicyID: String
+  let notifyJournal: @Sendable () -> Void
+  let journalCapture: JournalSourceCapture?
+  let now: @Sendable () -> Date
   let report: CoderCompletionReport
   let notifyOutbox: @Sendable () async -> Void
   let failures: AsyncStream<Void>
@@ -38,6 +41,11 @@ public actor CoderService: CoderServing, Service {
     jobRoot: String,
     executionPolicyID: String,
     redact: @escaping @Sendable (_ text: String) -> String,
+    journalCapture: JournalSourceCapture?,
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    },
+    notifyJournal: @escaping @Sendable () -> Void,
     notifyOutbox: @escaping @Sendable () async -> Void
   ) {
     self.store = store
@@ -47,6 +55,9 @@ public actor CoderService: CoderServing, Service {
     self.config = config
     self.jobRoot = jobRoot
     self.executionPolicyID = executionPolicyID
+    self.notifyJournal = notifyJournal
+    self.journalCapture = journalCapture
+    self.now = now
     report = CoderCompletionReport(redact: redact)
     self.notifyOutbox = notifyOutbox
     (failures, failureSignal) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
@@ -104,7 +115,7 @@ public actor CoderService: CoderServing, Service {
     lifecycle = .stopping
     for (id, task) in tasks {
       do {
-        _ = try store.requestCancellation(id: id, now: Date())
+        _ = try store.requestCancellation(id: id, now: now())
       } catch {
         fail(.persistence(error))
       }
@@ -148,13 +159,19 @@ public actor CoderService: CoderServing, Service {
     guard refreshedPrepared == prepared else {
       throw CoderError.staleApproval
     }
+    let journalScope = journalCapture?.scope(
+      userID: origin.requesterUserID,
+      chatID: origin.chatID,
+      mode: context.mode
+    )
     do {
       let admission = try store.admit(
         id: UUID(),
         prepared: prepared,
         origin: origin,
         maxConcurrentJobs: config.maxConcurrentJobs,
-        now: Date()
+        journalScope: journalScope,
+        now: now()
       )
       switch admission {
       case .admitted(let job):
@@ -184,7 +201,7 @@ public actor CoderService: CoderServing, Service {
   public func cancel(id: UUID, context: ToolExecutionContext) async throws -> CoderJob {
     _ = try scopedJob(id: id, context: context)
     do {
-      guard let job = try store.requestCancellation(id: id, now: Date()) else {
+      guard let job = try store.requestCancellation(id: id, now: now()) else {
         throw CoderError.invalidRequest("Coder job was not found.")
       }
       tasks[id]?.cancel()

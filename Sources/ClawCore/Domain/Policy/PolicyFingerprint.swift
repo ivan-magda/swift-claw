@@ -27,7 +27,8 @@ public enum PolicyFingerprint {
   /// The credential-free configuration surface used by the static policy subhash.
   ///
   /// Includes the tool registry, LLM egress identity, search-endpoint presence, canonical workspace
-  /// root, web-fetch SSRF exemptions, and execution configuration. Secret values are never
+  /// root, web-fetch SSRF exemptions, journal argument scanning, and execution configuration.
+  /// Secret values are never
   /// included.
   public struct StaticInputs: Sendable {
     public let tools: [ToolDefinition]
@@ -41,6 +42,7 @@ public enum PolicyFingerprint {
     public let workspaceRoot: String
     public let webFetchExemptCIDRs: [CIDR]
     public let exec: ExecConfig
+    public let journalEnabled: Bool
 
     public init(
       tools: [ToolDefinition],
@@ -48,7 +50,8 @@ public enum PolicyFingerprint {
       searchEndpointPresent: Bool,
       workspaceRoot: String,
       webFetchExemptCIDRs: [CIDR],
-      exec: ExecConfig
+      exec: ExecConfig,
+      journalEnabled: Bool
     ) {
       self.tools = tools
       self.llmEgress = llmEgress
@@ -56,6 +59,7 @@ public enum PolicyFingerprint {
       self.workspaceRoot = workspaceRoot
       self.webFetchExemptCIDRs = webFetchExemptCIDRs
       self.exec = exec
+      self.journalEnabled = journalEnabled
     }
   }
 
@@ -96,6 +100,7 @@ public enum PolicyFingerprint {
     parts.append(egressIdentityLabel(inputs.llmEgress))
     parts.append(inputs.searchEndpointPresent ? "search:present" : "search:absent")
     parts.append(inputs.workspaceRoot)
+    parts.append("journal.enabled:\(inputs.journalEnabled)")
 
     let exemptLabel = inputs.webFetchExemptCIDRs.map(\.description).sorted().joined(separator: ",")
     parts.append("webfetch_exempt:" + exemptLabel)

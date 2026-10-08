@@ -30,6 +30,7 @@ struct PrivateDataLifecycleTests {
         userID: 7,
         text: "hi",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date(timeIntervalSince1970: 1_750_000_000)
       )
     )
@@ -78,7 +79,8 @@ struct PrivateDataLifecycleTests {
         usage: usage(runID: fixture.runID, sessionID: fixture.sessionID),
         chunks: [],
         setTainted: false,
-        setPrivateData: true
+        setPrivateData: true,
+        journalCapture: nil
       ),
       now: now
     )
@@ -104,7 +106,8 @@ struct PrivateDataLifecycleTests {
         content: "done",
         usage: usage(runID: fixture.runID, sessionID: fixture.sessionID),
         chunks: [],
-        setPrivateData: false
+        setPrivateData: false,
+        journalCapture: nil
       ),
       now: now
     )
@@ -162,7 +165,8 @@ struct PrivateDataLifecycleTests {
         content: "late",
         usage: usage(runID: fixture.runID, sessionID: fixture.sessionID),
         chunks: [],
-        setPrivateData: true
+        setPrivateData: true,
+        journalCapture: nil
       ),
       now: now
     )

@@ -157,7 +157,7 @@ struct RuntimeShutdownAcceptanceTests {
     let fixture = try CoderCompositionFixture(holdCleanup: true)
     defer { fixture.cleanup() }
     let coordination = DaemonBuilder.TurnCoordination()
-    let coder = await fixture.builder.prepareCoder(coordination: coordination)
+    let coder = await fixture.builder.prepareCoder(coordination: coordination, journal: nil)
     let service = try #require(coder.service)
     let bootEntered = AsyncGate()
     let releaseBoot = AsyncGate()
@@ -202,6 +202,7 @@ struct RuntimeShutdownAcceptanceTests {
         await releaseBoot.waitIgnoringCancellation()
       },
       coder: service,
+      journal: nil,
       gracefulShutdownSignals: []
     )
     let composed = RunComposition.Composed(
@@ -250,7 +251,7 @@ struct RuntimeShutdownAcceptanceTests {
     let fixture = try CoderCompositionFixture(unresolvedCleanup: true)
     defer { fixture.cleanup() }
     let coordination = DaemonBuilder.TurnCoordination()
-    let coder = await fixture.builder.prepareCoder(coordination: coordination)
+    let coder = await fixture.builder.prepareCoder(coordination: coordination, journal: nil)
     let service = try #require(coder.service)
     try await service.start()
     let prepared = try await service.prepare(CoderCompositionFixture.request)
@@ -263,6 +264,7 @@ struct RuntimeShutdownAcceptanceTests {
       credentialSources: [],
       boot: {},
       coder: service,
+      journal: nil,
       gracefulShutdownSignals: []
     )
     let composed = RunComposition.Composed(
@@ -326,6 +328,7 @@ struct RuntimeShutdownAcceptanceTests {
         RecordingCredentialSource(base: lane.credentialSource, recorder: recorder),
       ],
       boot: boot,
+      journal: nil,
       laneDrainClock: clock,
       gracefulShutdownSignals: []
     )
@@ -368,6 +371,7 @@ struct RuntimeShutdownAcceptanceTests {
         userID: chatID,
         text: "hi",
         isEdited: false,
+        journalAdmission: nil,
         ts: now
       )
     )

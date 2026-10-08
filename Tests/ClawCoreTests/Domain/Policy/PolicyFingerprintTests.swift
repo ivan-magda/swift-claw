@@ -74,7 +74,8 @@ struct PolicyFingerprintTests {
     search: Bool = false,
     root: String = "/workspace",
     exempt: [CIDR] = [],
-    exec: ExecConfig = .disabledDefault
+    exec: ExecConfig = .disabledDefault,
+    journalEnabled: Bool
   ) -> String {
     PolicyFingerprint.staticSubhash(
       inputs: PolicyFingerprint.StaticInputs(
@@ -83,7 +84,8 @@ struct PolicyFingerprintTests {
         searchEndpointPresent: search,
         workspaceRoot: root,
         webFetchExemptCIDRs: exempt,
-        exec: exec
+        exec: exec,
+        journalEnabled: journalEnabled
       )
     )
   }
@@ -95,8 +97,8 @@ struct PolicyFingerprintTests {
     let second = tool(name: "b")
 
     // when — sorted-by-name, so array order cannot move the hash
-    let forward = subhash(tools: [first, second])
-    let reversed = subhash(tools: [second, first])
+    let forward = subhash(tools: [first, second], journalEnabled: false)
+    let reversed = subhash(tools: [second, first], journalEnabled: false)
 
     // then
     #expect(forward == reversed)
@@ -113,23 +115,32 @@ struct PolicyFingerprintTests {
 
     // when / then
     #expect(
-      subhash(tools: [tool(name: "t", params: schema)])
-        == subhash(tools: [tool(name: "t", params: schema)])
+      subhash(tools: [tool(name: "t", params: schema)], journalEnabled: false)
+        == subhash(tools: [tool(name: "t", params: schema)], journalEnabled: false)
     )
   }
 
   @Test
   func toolNameIsAnInputClass() {
     // given / when / then — the sorted tool name is a hashed surface class (§3.2)
-    #expect(subhash(tools: [tool(name: "a")]) != subhash(tools: [tool(name: "b")]))
+    #expect(
+      subhash(tools: [tool(name: "a")], journalEnabled: false)
+        != subhash(tools: [tool(name: "b")], journalEnabled: false)
+    )
   }
 
   @Test
   func toolParametersAreAnInputClass() {
     // given / when / then — the canonical parameter JSON is a hashed surface class (§3.2)
     #expect(
-      subhash(tools: [tool(name: "t", params: .object(["type": .string("object")]))])
-        != subhash(tools: [tool(name: "t", params: .object(["type": .string("string")]))])
+      subhash(
+        tools: [tool(name: "t", params: .object(["type": .string("object")]))],
+        journalEnabled: false
+      )
+        != subhash(
+          tools: [tool(name: "t", params: .object(["type": .string("string")]))],
+          journalEnabled: false
+        )
     )
   }
 
@@ -137,8 +148,8 @@ struct PolicyFingerprintTests {
   func riskLevelIsAnInputClass() {
     // given / when / then — the declared riskLevel is a hashed surface class (§3.2)
     #expect(
-      subhash(tools: [tool(name: "t", risk: .safe)])
-        != subhash(tools: [tool(name: "t", risk: .ask)])
+      subhash(tools: [tool(name: "t", risk: .safe)], journalEnabled: false)
+        != subhash(tools: [tool(name: "t", risk: .ask)], journalEnabled: false)
     )
   }
 
@@ -146,8 +157,8 @@ struct PolicyFingerprintTests {
   func metadataProvenanceIsAnInputClass() {
     // given / when / then
     #expect(
-      subhash(tools: [tool(name: "t", provenance: .trusted)])
-        != subhash(tools: [tool(name: "t", provenance: .untrusted)])
+      subhash(tools: [tool(name: "t", provenance: .trusted)], journalEnabled: false)
+        != subhash(tools: [tool(name: "t", provenance: .untrusted)], journalEnabled: false)
     )
   }
 
@@ -156,8 +167,8 @@ struct PolicyFingerprintTests {
     // given / when / then — the declared fence label selects the prompt carve-out a tool's output
     // renders under, so changing it must void an outstanding approval the way a risk change does
     #expect(
-      subhash(tools: [tool(name: "t", fenceLabel: nil)])
-        != subhash(tools: [tool(name: "t", fenceLabel: "skills")])
+      subhash(tools: [tool(name: "t", fenceLabel: nil)], journalEnabled: false)
+        != subhash(tools: [tool(name: "t", fenceLabel: "skills")], journalEnabled: false)
     )
   }
 
@@ -165,8 +176,11 @@ struct PolicyFingerprintTests {
   func egressClassIsAnInputClass() {
     // given / when / then — the egress label is a hashed surface class (§3.2)
     #expect(
-      subhash(tools: [tool(name: "t", egress: .none)])
-        != subhash(tools: [tool(name: "t", egress: .arbitraryDestination)])
+      subhash(tools: [tool(name: "t", egress: .none)], journalEnabled: false)
+        != subhash(
+          tools: [tool(name: "t", egress: .arbitraryDestination)],
+          journalEnabled: false
+        )
     )
   }
 
@@ -177,7 +191,10 @@ struct PolicyFingerprintTests {
     let interactive = tool(name: "t", requiresInteractiveRequester: true)
 
     // when / then
-    #expect(subhash(tools: [ordinary]) != subhash(tools: [interactive]))
+    #expect(
+      subhash(tools: [ordinary], journalEnabled: false)
+        != subhash(tools: [interactive], journalEnabled: false)
+    )
   }
 
   @Test
@@ -187,8 +204,8 @@ struct PolicyFingerprintTests {
     let confirmed = tool(name: "t", requiresGroupApproval: true)
 
     // when
-    let automaticHash = subhash(tools: [automatic])
-    let confirmedHash = subhash(tools: [confirmed])
+    let automaticHash = subhash(tools: [automatic], journalEnabled: false)
+    let confirmedHash = subhash(tools: [confirmed], journalEnabled: false)
 
     // then
     #expect(automaticHash != confirmedHash)
@@ -199,8 +216,14 @@ struct PolicyFingerprintTests {
     // given / when / then — two identically advertised MCP tools at different endpoints are
     // different actions, so an outstanding approval may not survive the endpoint change.
     #expect(
-      subhash(tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://a/mcp")])
-        != subhash(tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://b/mcp")])
+      subhash(
+        tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://a/mcp")],
+        journalEnabled: false
+      )
+        != subhash(
+          tools: [tool(name: "mcp__docs__search", invocationIdentity: "https://b/mcp")],
+          journalEnabled: false
+        )
     )
   }
 
@@ -208,8 +231,8 @@ struct PolicyFingerprintTests {
   func llmEgressEndpointIsAnInputClass() {
     // given / when / then — the configured egress endpoint is a hashed config class
     #expect(
-      subhash(egress: .configuredEndpoint("https://a"))
-        != subhash(egress: .configuredEndpoint("https://b"))
+      subhash(egress: .configuredEndpoint("https://a"), journalEnabled: false)
+        != subhash(egress: .configuredEndpoint("https://b"), journalEnabled: false)
     )
   }
 
@@ -221,8 +244,11 @@ struct PolicyFingerprintTests {
 
     // when / then — the current and managed cases never collide, even on an identical endpoint
     #expect(
-      subhash(egress: .configuredEndpoint(sharedEndpoint))
-        != subhash(egress: .managed(providerID: .openAIChatGPT, endpoint: sharedEndpoint))
+      subhash(egress: .configuredEndpoint(sharedEndpoint), journalEnabled: false)
+        != subhash(
+          egress: .managed(providerID: .openAIChatGPT, endpoint: sharedEndpoint),
+          journalEnabled: false
+        )
     )
   }
 
@@ -230,21 +256,37 @@ struct PolicyFingerprintTests {
   func llmEgressManagedProviderIDIsAnInputClass() {
     // given / when / then — two managed sinks on the same endpoint but different providers hash apart
     #expect(
-      subhash(egress: .managed(providerID: .openAIChatGPT, endpoint: "https://x"))
-        != subhash(egress: .managed(providerID: .openAICompatible, endpoint: "https://x"))
+      subhash(
+        egress: .managed(providerID: .openAIChatGPT, endpoint: "https://x"),
+        journalEnabled: false
+      )
+        != subhash(
+          egress: .managed(providerID: .openAICompatible, endpoint: "https://x"),
+          journalEnabled: false
+        )
     )
   }
 
   @Test
   func searchEndpointPresenceIsAnInputClass() {
     // given / when / then — the search-endpoint presence sentinel is a hashed config class (§3.2)
-    #expect(subhash(search: true) != subhash(search: false))
+    #expect(
+      subhash(search: true, journalEnabled: false) != subhash(search: false, journalEnabled: false)
+    )
   }
 
   @Test
   func workspaceRootIsAnInputClass() {
     // given / when / then — the canonical workspace root is a hashed config class (§3.2)
-    #expect(subhash(root: "/a") != subhash(root: "/b"))
+    #expect(
+      subhash(root: "/a", journalEnabled: false) != subhash(root: "/b", journalEnabled: false)
+    )
+  }
+
+  @Test
+  func journalScanningIsAPolicyInput() {
+    // given / when / then — scan configuration must invalidate parked approvals.
+    #expect(subhash(journalEnabled: true) != subhash(journalEnabled: false))
   }
 
   @Test
@@ -254,7 +296,9 @@ struct PolicyFingerprintTests {
     let pool = try #require(CIDR.parse("198.18.0.0/15"))
 
     // when / then — presence changes the hash; absence is the strict default
-    #expect(subhash(exempt: []) != subhash(exempt: [pool]))
+    #expect(
+      subhash(exempt: [], journalEnabled: false) != subhash(exempt: [pool], journalEnabled: false)
+    )
   }
 
   @Test
@@ -264,7 +308,10 @@ struct PolicyFingerprintTests {
     let poolV6 = try #require(CIDR.parse("fc00::/18"))
 
     // when / then
-    #expect(subhash(exempt: [poolV4, poolV6]) == subhash(exempt: [poolV6, poolV4]))
+    #expect(
+      subhash(exempt: [poolV4, poolV6], journalEnabled: false)
+        == subhash(exempt: [poolV6, poolV4], journalEnabled: false)
+    )
   }
 
   private func execConfig(
@@ -309,9 +356,9 @@ struct PolicyFingerprintTests {
     ]
 
     // when
-    let baselineHash = subhash(exec: baseline)
+    let baselineHash = subhash(exec: baseline, journalEnabled: false)
     let mutationHashes = mutations.map { config in
-      subhash(exec: config)
+      subhash(exec: config, journalEnabled: false)
     }
 
     // then: each field change produces a different policy fingerprint
@@ -330,7 +377,9 @@ struct PolicyFingerprintTests {
     let reverse = try execConfig(registries: ["images.example.com", "cgr.dev"])
 
     // when / then: sorting makes equivalent registry sets produce the same fingerprint
-    #expect(subhash(exec: forward) == subhash(exec: reverse))
+    #expect(
+      subhash(exec: forward, journalEnabled: false) == subhash(exec: reverse, journalEnabled: false)
+    )
   }
 
   // MARK: - combined

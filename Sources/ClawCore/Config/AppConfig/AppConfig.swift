@@ -68,6 +68,10 @@ public struct AppConfig: Sendable, Equatable {
 
     public static let learningEnabled = "CLAW_LEARNING_ENABLED"
 
+    // MARK: - Daily journal
+
+    public static let journalEnabled = "CLAW_JOURNAL_ENABLED"
+
     // MARK: - Web fetch
 
     public static let webFetchExemptCIDRs = "CLAW_WEBFETCH_EXEMPT_CIDRS"
@@ -195,6 +199,22 @@ public struct AppConfig: Sendable, Equatable {
 
   public let learningEnabled: Bool
 
+  // MARK: - Daily journal
+
+  public let journalEnabled: Bool
+
+  /// Inspection uses the current configured owner, never previously seeded access grants.
+  public var journalPolicy: JournalPolicy {
+    JournalPolicy(
+      enabled: journalEnabled,
+      ownerUserID: Self.journalOwnerUserID(
+        allowlist: allowlist,
+        groupChats: groupChats
+      ),
+      timeZoneID: timezone.identifier
+    )
+  }
+
   // MARK: - Approvals and web access
 
   public let approvalExpirySeconds: Int
@@ -232,7 +252,8 @@ public struct AppConfig: Sendable, Equatable {
     exec: ExecConfig,
     voice: VoiceConfig,
     image: ImageConfig,
-    mcpConfigSource: MCPConfigSource
+    mcpConfigSource: MCPConfigSource,
+    journalEnabled: Bool
   ) {
     self.allowlist = allowlist
     self.groupChats = groupChats
@@ -256,6 +277,7 @@ public struct AppConfig: Sendable, Equatable {
     self.heartbeatMaxPerDay = heartbeatMaxPerDay
 
     self.learningEnabled = learningEnabled
+    self.journalEnabled = journalEnabled
 
     self.approvalExpirySeconds = approvalExpirySeconds
     self.webFetchExemptCIDRs = webFetchExemptCIDRs
@@ -306,6 +328,15 @@ public struct AppConfig: Sendable, Equatable {
     )
 
     let heartbeat = try parseHeartbeat(from: env, allowlist: allowlist)
+    let journalEnabled = try boolValue(
+      env[EnvKey.journalEnabled],
+      key: EnvKey.journalEnabled,
+      default: false
+    )
+    let journalOwnerUserID = Self.journalOwnerUserID(allowlist: allowlist, groupChats: groupChats)
+    if journalEnabled && journalOwnerUserID == nil {
+      throw ConfigError.journalRequiresPersonalOwner
+    }
 
     let approvalExpirySeconds = try parseApprovalExpiry(env[EnvKey.approvalExpiry])
     let webFetchExemptCIDRs = try parseWebFetchExemptCIDRs(from: env[EnvKey.webFetchExemptCIDRs])
@@ -347,7 +378,8 @@ public struct AppConfig: Sendable, Equatable {
       exec: exec,
       voice: voice,
       image: image,
-      mcpConfigSource: mcpConfigSource
+      mcpConfigSource: mcpConfigSource,
+      journalEnabled: journalEnabled
     )
   }
 }
@@ -371,6 +403,25 @@ extension AppConfig {
       return .probed(stateRoot.appendingPathComponent(MCPLimits.configFileName))
     }
     return .explicit(URL(fileURLWithPath: raw))
+  }
+}
+
+// MARK: - Journal Ownership
+
+private extension AppConfig {
+  static func journalOwnerUserID(
+    allowlist: Set<Int64>,
+    groupChats: Set<Int64>
+  ) -> Int64? {
+    guard groupChats.isEmpty, allowlist.count == 1 else {
+      return nil
+    }
+
+    guard let ownerUserID = allowlist.first, ownerUserID > 0 else {
+      return nil
+    }
+
+    return ownerUserID
   }
 }
 

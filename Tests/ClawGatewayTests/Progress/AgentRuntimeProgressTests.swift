@@ -21,6 +21,7 @@ struct AgentRuntimeProgressTests {
         userID: 99,
         text: "weather",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

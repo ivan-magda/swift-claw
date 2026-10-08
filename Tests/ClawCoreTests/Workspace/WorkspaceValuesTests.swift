@@ -33,6 +33,7 @@ struct WorkspaceValuesTests {
     }
     #expect(WorkspaceFile.isPromptPrivileged(basename: "SKILL.md"))
     #expect(WorkspaceFile.isPromptPrivileged(basename: "notes.md") == false)
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "2026-10-08.md") == false)
     // A case-insensitive filesystem indexes `skill.md` as a skill, and a creating write carries the
     // caller's own spelling, so a lowercase manifest must not slip past the banner.
     #expect(WorkspaceFile.isPromptPrivileged(basename: "skill.md"))
@@ -49,4 +50,22 @@ struct WorkspaceValuesTests {
     #expect(missing.text.isEmpty)
     #expect(missing.graphemeCount == 0)
   }
+
+  @Test(arguments: [
+    ("memory/2026-10-08.md", true),
+    ("reports/2026-10-08.md", false),
+    ("memory/nested/2026-10-08.md", false),
+    ("memory/2026-02-30.md", false),
+    ("memory/2026-10-08.txt", false),
+  ])
+  func datedJournalUsesSharedPrivateClassification(path: String, expected: Bool) {
+    // given / when / then
+    #expect(
+      WorkspaceFile.isPrivateData(
+        canonicalPath: "/workspace/" + path,
+        canonicalRoot: "/workspace"
+      ) == expected
+    )
+  }
+
 }

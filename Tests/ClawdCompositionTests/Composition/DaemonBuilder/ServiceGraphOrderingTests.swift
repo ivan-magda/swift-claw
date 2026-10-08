@@ -1,44 +1,28 @@
-import ClawAgent
-import ClawGateway
-import Logging
-import ServiceLifecycle
+import ClawTestSupport
 import Testing
 
+@testable import ClawGateway
 @testable import clawd
 
 @Suite
 struct ServiceGraphOrderingTests {
   @Test
-  func laneAdmissionServiceIsRegisteredLast() {
-    // given — the production ordering helper the composition root uses to build its service array.
-    let laneAdmission = LaneAdmissionShutdownService(
-      lanes: SessionLaneRegistry(),
-      outcome: LaneShutdownOutcome(),
-      drainTimeout: .seconds(30),
-      logger: Logger(label: "test") { _ in
-        SwiftLogNoOpLogHandler()
-      }
-    )
-    let base: [any Service] = [InertService(), InertService()]
-
-    // when
-    let ordered = DaemonBuilder.servicesWithLaneAdmissionLast(
-      base: base,
-      laneAdmission: laneAdmission
-    )
+  func laneAdmissionServiceIsRegisteredLast() async throws {
+    // given — the production bundle owns journal shutdown alongside producer services.
+    let fixture = try JournalCompositionFixture(enabled: true)
+    defer {
+      fixture.removeFiles()
+    }
+    // when — build performs the worker registration and retains fallback ownership.
+    let bundle = try await fixture.bundle(provider: SequenceProvider([]))
+    let journal = try #require(bundle.journal)
+    let ordered = bundle.daemon.services
 
     // then — the lane service tails the array (so ServiceLifecycle shuts it down first), and the
-    // base services keep their positions ahead of it.
-    #expect(ordered.count == 3)
+    // worker precedes producers, so shutdown joins them before stopping journal inference.
+    #expect((ordered.first as? JournalWorker) === journal)
     #expect(ordered.last is LaneAdmissionShutdownService)
-    #expect(
-      ordered.prefix(2).allSatisfy {
-        $0 is InertService
-      }
-    )
+    await journal.shutdown()
+    try await bundle.coder?.shutdown()
   }
-}
-
-private struct InertService: Service {
-  func run() async throws {}
 }

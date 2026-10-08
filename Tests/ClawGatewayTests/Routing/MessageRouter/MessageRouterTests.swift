@@ -74,6 +74,9 @@ struct MessageRouterTests {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: doctor,
       logger: logger
     )
@@ -407,6 +410,9 @@ struct MessageRouterTests {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
@@ -633,6 +639,7 @@ struct MessageRouterTests {
         userID: 42,
         text: "working",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date(timeIntervalSince1970: 50)
       )
     )
@@ -655,6 +662,9 @@ struct MessageRouterTests {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
@@ -685,6 +695,7 @@ struct MessageRouterTests {
         userID: 42,
         text: "running",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date(timeIntervalSince1970: 60)
       )
     )
@@ -698,6 +709,7 @@ struct MessageRouterTests {
         userID: 42,
         text: "queued",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date(timeIntervalSince1970: 61)
       )
     )
@@ -719,6 +731,9 @@ struct MessageRouterTests {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
@@ -923,6 +938,9 @@ struct MessageRouterTests {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )
@@ -953,6 +971,7 @@ struct MessageRouterTests {
         userID: 42,
         text: text,
         isEdited: false,
+        journalAdmission: nil,
         ts: Date(timeIntervalSince1970: Double(updateID))
       )
     )

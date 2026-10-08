@@ -132,6 +132,7 @@ struct ProviderSurfaceParityTests {
         userID: 7,
         text: "/schedule",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

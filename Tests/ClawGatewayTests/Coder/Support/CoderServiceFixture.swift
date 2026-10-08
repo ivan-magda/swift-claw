@@ -56,7 +56,8 @@ struct CoderServiceFixture: Sendable {
       root: root,
       limit: limit,
       finished: jobFinished,
-      redactor: redactor
+      redactor: redactor,
+      journalCapture: nil
     )
   }
 
@@ -101,7 +102,8 @@ struct CoderServiceFixture: Sendable {
       root: root,
       limit: 4,
       finished: jobFinished,
-      redactor: redactor
+      redactor: redactor,
+      journalCapture: nil
     )
   }
 
@@ -113,7 +115,11 @@ struct CoderServiceFixture: Sendable {
     root: URL,
     limit: Int,
     finished: AsyncGate,
-    redactor: @escaping @Sendable (_ text: String) -> String
+    redactor: @escaping @Sendable (_ text: String) -> String,
+    journalCapture: JournalSourceCapture?,
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    }
   ) -> CoderService {
     CoderService(
       store: store,
@@ -131,6 +137,9 @@ struct CoderServiceFixture: Sendable {
       jobRoot: root.path,
       executionPolicyID: CoderServiceFixture.executionPolicyID,
       redact: redactor,
+      journalCapture: journalCapture,
+      now: now,
+      notifyJournal: {},
       notifyOutbox: {
         finished.open()
       }
@@ -200,11 +209,12 @@ struct CoderServiceFixture: Sendable {
 
   static func result(
     state: CoderJobState = .succeeded,
-    failure: CoderFailure? = nil
+    failure: CoderFailure? = nil,
+    summary: String = "Updated retry handling"
   ) -> CoderResult {
     CoderResult(
       state: state,
-      summary: "Updated retry handling",
+      summary: summary,
       workspacePath: "/fixture/output",
       startingCommit: "abc123",
       baselineObserved: true,

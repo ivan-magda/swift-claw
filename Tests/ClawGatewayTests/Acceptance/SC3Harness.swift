@@ -286,6 +286,8 @@ func makeSC3Harness(
       redact: { text in
         redactor.redact(text)
       },
+      journalCapture: nil,
+      notifyJournal: {},
       notifyOutbox: notifyOutbox
     )
   }
@@ -314,7 +316,8 @@ func makeSC3Harness(
           (execEnabled && tool.definition.name == ExecuteCodeTool.name)
             || (coderService != nil && tool.definition.name == CoderToolNames.submit)
         }.map(\.definition.name)
-      )
+      ),
+      journalEnabled: false
     )
   )
 
@@ -326,6 +329,8 @@ func makeSC3Harness(
     memoryStore: stores.memory,
     retriever: stores.retriever,
     budget: .default,
+    journalFiles: nil,
+    journalPolicy: .disabled,
     fenceLabels: ToolFenceLabels(definitions: dispatcher.definitions),
     policyStaticSubhash: PolicyFingerprint.staticSubhash(
       inputs: PolicyFingerprint.StaticInputs(
@@ -334,7 +339,8 @@ func makeSC3Harness(
         searchEndpointPresent: true,
         workspaceRoot: workspaceRoot.path,
         webFetchExemptCIDRs: [],
-        exec: .disabledDefault
+        exec: .disabledDefault,
+        journalEnabled: false
       )
     )
   )
@@ -377,6 +383,8 @@ func makeSC3Harness(
     parker: deferredParker,
     approvalExpirySeconds: testApprovalExpirySeconds,
     presentations: presentations,
+    journalCapture: nil,
+    notifyJournal: {},
     logger: logger
   )
 
@@ -459,6 +467,9 @@ func makeSC3Harness(
     approvalCallbacks: approvalCallbacks,
     coordinator: coordinator,
     presentations: presentations,
+    journalCapture: nil,
+    notifyJournal: {},
+    journal: nil,
     doctor: StubDoctorReporter(),
     logger: logger
   )

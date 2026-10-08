@@ -26,13 +26,15 @@ extension DaemonBuilder {
     sandbox: SandboxStack,
     mcpTools: [any Tool],
     coderTools: [any Tool] = [],
-    presentationClock: any Clock<Duration> = ContinuousClock()
+    presentationClock: any Clock<Duration> = ContinuousClock(),
+    journal: JournalComposition?
   ) -> AgentStack {
     let toolDispatcher = makeToolDispatcher(
       workspace: workspace,
       sandbox: sandbox,
       mcpTools: mcpTools,
-      coderTools: coderTools
+      coderTools: coderTools,
+      journal: journal
     )
     let staticSubhash = policyStaticSubhash(toolDispatcher: toolDispatcher, workspace: workspace)
     let draftStreamer = makeDraftStreamer(clock: presentationClock)
@@ -58,7 +60,8 @@ extension DaemonBuilder {
       workspace: workspace,
       fenceLabels: ToolFenceLabels(definitions: toolDispatcher.definitions),
       policyStaticSubhash: staticSubhash,
-      toolDefinitions: toolDispatcher.definitions
+      toolDefinitions: toolDispatcher.definitions,
+      journal: journal
     )
     return AgentStack(
       toolDispatcher: toolDispatcher,
@@ -75,7 +78,8 @@ extension DaemonBuilder {
     workspace: FileSystemWorkspace,
     fenceLabels: ToolFenceLabels,
     policyStaticSubhash: String,
-    toolDefinitions: [ToolDefinition]
+    toolDefinitions: [ToolDefinition],
+    journal: JournalComposition?
   ) -> ContextBuilder {
     let messageInputTokens = TokenEstimator.messageInputBudget(
       maxInputTokens: config.budget.maxInputTokens,
@@ -98,8 +102,11 @@ extension DaemonBuilder {
       memoryStore: stores.memory,
       retriever: stores.retriever,
       budget: contextBudget,
+      journalFiles: journal?.files,
+      journalPolicy: journal?.policy ?? config.journalPolicy,
       fenceLabels: fenceLabels,
       policyStaticSubhash: policyStaticSubhash,
+      now: now,
       warn: { warning in
         logger.warning("\(warning)")
       }

@@ -14,6 +14,8 @@ func makeEmptyContextBuilder() -> ContextBuilder {
     memoryStore: EmptyMemoryStore(),
     retriever: EmptyRetriever(),
     budget: .default,
+    journalFiles: nil,
+    journalPolicy: .disabled,
     now: {
       Date(timeIntervalSince1970: 0)
     }

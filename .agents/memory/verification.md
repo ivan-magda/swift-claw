@@ -15,6 +15,10 @@ These notes retain investigation lessons from earlier sessions, reviewed on 2026
 - A single successful timing-sensitive run does not establish a safe timeout or remove a race.
 - Name what was not tested. Reading code, a skipped acceptance test, and a timed-out process
   are not evidence that the corresponding gate passed.
+- For optional composition dependencies, exercise the top-level builder before claiming deployment
+  wiring coverage. In the 2026-10-08 daily-journal review, removing root worker forwarding compiled
+  because of a nil default; a direct runtime-bundle fixture missed it. The actual-builder ordering
+  test then failed on missing retained ownership. Component fixtures do not prove root forwarding.
 
 ## Hangs and test timings
 

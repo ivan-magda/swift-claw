@@ -122,6 +122,15 @@ private extension MessageRouter {
       )
     case .schedule(let scheduleCommand):
       return try await routeSchedule(scheduleCommand, rawUpdate: rawUpdate, message: message)
+    case .journal(let command):
+      guard let journalHandlers else {
+        return await replies.sendCanned(
+          updateID: rawUpdate.updateID,
+          target: .chat(message.chatID),
+          text: CommandReplies.journalUnavailable
+        )
+      }
+      return await journalHandlers.handle(command: command, message: message)
     case .learning(let learningCommand):
       return try await routeLearning(learningCommand, rawUpdate: rawUpdate, message: message)
     case .pause(let jobID):

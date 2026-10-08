@@ -160,6 +160,8 @@ private func makeLessonBuilder(
     memoryStore: memoryStore,
     retriever: EmptyRetriever(),
     budget: budget,
+    journalFiles: nil,
+    journalPolicy: .disabled,
     now: {
       Date(timeIntervalSince1970: 0)
     }

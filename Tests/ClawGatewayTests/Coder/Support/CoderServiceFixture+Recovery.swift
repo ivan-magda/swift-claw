@@ -30,6 +30,7 @@ extension CoderServiceFixture {
       prepared: prepared,
       origin: origin,
       maxConcurrentJobs: 4,
+      journalScope: nil,
       now: Date()
     )
     guard case .admitted = admission else {

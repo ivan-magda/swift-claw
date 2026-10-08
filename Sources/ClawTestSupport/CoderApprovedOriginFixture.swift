@@ -117,6 +117,7 @@ private extension CoderApprovedOriginFixture {
       text: "Use Coder for \(prepared.canonicalSource).",
       isEdited: false,
       telegramMessageID: 11,
+      journalAdmission: nil,
       ts: now
     )
   }

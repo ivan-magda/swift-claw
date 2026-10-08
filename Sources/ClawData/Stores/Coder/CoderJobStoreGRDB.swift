@@ -14,6 +14,7 @@ public struct CoderJobStoreGRDB: CoderJobStore {
     prepared: CoderPreparedRequest,
     origin: CoderOrigin,
     maxConcurrentJobs: Int,
+    journalScope: JournalScope?,
     now: Date
   ) throws(StoreError) -> CoderAdmission {
     try database.writeMapping { db in
@@ -48,7 +49,14 @@ public struct CoderJobStoreGRDB: CoderJobStore {
         return .workspaceBusy
       }
       return .admitted(
-        try CoderJobRecord.insert(db, id: id, prepared: prepared, origin: origin, now: now)
+        try CoderJobRecord.insert(
+          db,
+          id: id,
+          prepared: prepared,
+          origin: origin,
+          journalScope: journalScope,
+          now: now
+        )
       )
     }
   }

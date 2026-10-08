@@ -24,6 +24,7 @@ public enum ConfigError: Error, Sendable, Equatable {
   case invalidApprovalExpiry(String)
   case invalidWebFetchExemptCIDR(String)
   case heartbeatOwnerUnresolved(allowlistCount: Int)
+  case journalRequiresPersonalOwner
   case groupModeRequiresBotUsername
   case invalidExecImage(String)
   case invalidExecImageRegistry(String)

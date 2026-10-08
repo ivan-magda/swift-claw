@@ -31,6 +31,7 @@ struct CommandApprovalResolutionTests {
         userID: 7,
         text: "write the plan",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -100,6 +101,7 @@ struct CommandApprovalResolutionTests {
         userID: 7,
         text: "queued",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -174,6 +176,7 @@ struct CommandApprovalResolutionTests {
     let result = try env.commands.applyNew(
       updateID: 2,
       sessionKey: SessionKey.telegramDM(chatID: 7),
+      journalScope: nil,
       now: Date()
     )
 

@@ -17,6 +17,9 @@ public enum WorkspaceFile: String, Sendable, Equatable, CaseIterable {
 }
 
 extension WorkspaceFile {
+  public static let journalWriteWarning =
+    "PRIVILEGED FILE: this dated journal feeds my private-data context."
+
   /// The prompt files that hold the owner's private data. A tool that reads one flags the turn as
   /// having touched private data, which is one leg of the exfiltration trifecta.
   public static let privateDataFiles: [WorkspaceFile] = [.user, .memory]
@@ -29,20 +32,42 @@ extension WorkspaceFile {
   /// case-insensitive filesystem loads `skill.md` as a skill while the path a creating write
   /// carries keeps the caller's spelling verbatim; over-flagging where case does matter is free.
   public static func isPromptPrivileged(basename: String) -> Bool {
-    let matchesManifest =
-      basename.caseInsensitiveCompare(WorkspaceSkills.manifestName) == .orderedSame
-    return matchesManifest
-      || allCases.contains { file in
-        file.relativePath.caseInsensitiveCompare(basename) == .orderedSame
-      }
+    if basename.caseInsensitiveCompare(WorkspaceSkills.manifestName) == .orderedSame {
+      return true
+    }
+
+    return allCases.contains { file in
+      file.relativePath.caseInsensitiveCompare(basename) == .orderedSame
+    }
   }
 
-  /// True when `canonicalPath` is a private-data prompt file sitting directly at the canonical
-  /// workspace root. Both inputs must already be canonical (symlinks and `..` resolved); the match
-  /// is exact full-path equality against the root-anchored name, never a prefix test.
+  /// Root private prompt files or dated journals directly under `memory/`. Both inputs must
+  /// already be canonical (symlinks and `..` resolved); names are matched against that root.
   public static func isPrivateData(canonicalPath: String, canonicalRoot: String) -> Bool {
-    privateDataFiles.contains { file in
-      canonicalPath == canonicalRoot + "/" + file.relativePath
+    if isJournal(canonicalPath: canonicalPath, canonicalRoot: canonicalRoot) {
+      return true
     }
+
+    return privateDataFiles.contains { file in
+      let privateFilePath = canonicalRoot + "/" + file.relativePath
+      return canonicalPath == privateFilePath
+    }
+  }
+
+  /// Exact dated Markdown child of the canonical workspace memory directory.
+  public static func isJournal(canonicalPath: String, canonicalRoot: String) -> Bool {
+    let journalDirectory = canonicalRoot + "/memory/"
+    guard canonicalPath.hasPrefix(journalDirectory) else {
+      return false
+    }
+
+    let filename = canonicalPath.dropFirst(journalDirectory.count)
+    let markdownExtension = ".md"
+    guard filename.hasSuffix(markdownExtension) else {
+      return false
+    }
+
+    let dateText = String(filename.dropLast(markdownExtension.count))
+    return JournalDay(isoDate: dateText) != nil
   }
 }

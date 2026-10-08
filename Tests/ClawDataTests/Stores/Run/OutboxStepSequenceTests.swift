@@ -39,6 +39,7 @@ struct OutboxStepSequenceTests {
         userID: 7,
         text: "write the plan",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -201,7 +202,8 @@ struct OutboxStepSequenceTests {
         chunks: [
           OutboxChunk(stepIndex: 0, chatID: 7, payload: "reply one", payloadHash: "r1"),
           OutboxChunk(stepIndex: 1, chatID: 7, payload: "reply two", payloadHash: "r2"),
-        ]
+        ],
+        journalCapture: nil
       ),
       now: Date()
     )

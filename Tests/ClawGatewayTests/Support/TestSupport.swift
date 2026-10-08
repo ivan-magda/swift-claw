@@ -347,6 +347,7 @@ func seedRun(
       text: "hi",
       isEdited: false,
       telegramMessageID: telegramMessageID,
+      journalAdmission: nil,
       ts: Date()
     )
   )
@@ -384,6 +385,7 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
       userID: doneChatID,
       text: "first",
       isEdited: false,
+      journalAdmission: nil,
       ts: seededAt
     )
   )
@@ -408,7 +410,8 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
         isEstimated: false,
         ts: seededAt
       ),
-      chunks: []
+      chunks: [],
+      journalCapture: nil
     ),
     now: seededAt
   )
@@ -425,6 +428,7 @@ func makeHealthyRunsFixture() throws -> HealthyRunsFixture {
       userID: deliveredChatID,
       text: "second",
       isEdited: false,
+      journalAdmission: nil,
       ts: seededAt
     )
   )

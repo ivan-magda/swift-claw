@@ -289,6 +289,9 @@ public enum ClawDatabase {
     migrator.registerMigration("v16") { db in
       try db.execute(sql: "CREATE TABLE draft_ids (id INTEGER PRIMARY KEY AUTOINCREMENT)")
     }
+    migrator.registerMigration("v17") { db in
+      try createJournalTables(db)
+    }
     return migrator
   }
 

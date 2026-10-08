@@ -155,6 +155,7 @@ private extension CommandApprovalCancelSignalRaceTests {
         userID: chatID,
         text: "write the plan",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -190,6 +191,9 @@ private extension CommandApprovalCancelSignalRaceTests {
       lanes: lanes,
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: coordinator,
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )

@@ -187,7 +187,8 @@ private extension LearningStartupTests {
             payload: answer,
             payloadHash: ContentHash.fnv1a(answer)
           ),
-        ]
+        ],
+        journalCapture: nil
       ),
       now: now
     )

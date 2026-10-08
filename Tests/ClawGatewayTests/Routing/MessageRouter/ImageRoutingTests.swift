@@ -93,6 +93,9 @@ struct ImageRoutingTests {
       images: images,
       typing: typing,
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )

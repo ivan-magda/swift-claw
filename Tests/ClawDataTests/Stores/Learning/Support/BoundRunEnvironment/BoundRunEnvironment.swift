@@ -132,7 +132,8 @@ struct BoundRunEnvironment {
       chatID: 777,
       content: content,
       usage: makeProviderUsage(runID: runID, sessionID: sessionID, model: model),
-      chunks: [chunk(payload: content)]
+      chunks: [chunk(payload: content)],
+      journalCapture: nil
     )
   }
 

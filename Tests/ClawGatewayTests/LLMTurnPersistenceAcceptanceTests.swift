@@ -314,7 +314,9 @@ func makeAcceptanceContextBuilder(
     workspace: workspace,
     memoryStore: MemoryStoreGRDB(writer: writer),
     retriever: RetrieverGRDB(writer: writer),
-    budget: .default
+    budget: .default,
+    journalFiles: nil,
+    journalPolicy: .disabled
   )
 }
 
@@ -383,6 +385,8 @@ func makeStack(
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     approvalExpirySeconds: testApprovalExpirySeconds,
+    journalCapture: nil,
+    notifyJournal: {},
     logger: logger
   )
 
@@ -402,6 +406,9 @@ func makeStack(
     schedule: makeIdleScheduleSurface(writer: writer),
     images: images,
     coordinator: ApprovalCoordinator(),
+    journalCapture: nil,
+    notifyJournal: {},
+    journal: nil,
     doctor: StubDoctorReporter(),
     logger: logger
   )
@@ -483,6 +490,8 @@ func makeStreamingStack(
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     approvalExpirySeconds: testApprovalExpirySeconds,
+    journalCapture: nil,
+    notifyJournal: {},
     logger: logger
   )
   let router = MessageRouter(
@@ -500,6 +509,9 @@ func makeStreamingStack(
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
     coordinator: ApprovalCoordinator(),
+    journalCapture: nil,
+    notifyJournal: {},
+    journal: nil,
     doctor: StubDoctorReporter(),
     logger: logger
   )
@@ -570,6 +582,8 @@ func makeStopNewStack(writer: any DatabaseWriter, allow chatID: Int64 = 42) thro
     // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     approvalExpirySeconds: testApprovalExpirySeconds,
+    journalCapture: nil,
+    notifyJournal: {},
     logger: logger
   )
 
@@ -588,6 +602,9 @@ func makeStopNewStack(writer: any DatabaseWriter, allow chatID: Int64 = 42) thro
     lanes: lanes,
     schedule: makeIdleScheduleSurface(writer: writer),
     coordinator: ApprovalCoordinator(),
+    journalCapture: nil,
+    notifyJournal: {},
+    journal: nil,
     doctor: StubDoctorReporter(),
     logger: logger
   )
@@ -827,6 +844,7 @@ struct LLMTurnPersistenceAcceptanceTests {
         userID: 999,
         text: "seed",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -849,6 +867,7 @@ struct LLMTurnPersistenceAcceptanceTests {
     _ = try CommandStoreGRDB(writer: queue).applyNew(
       updateID: 901,
       sessionKey: SessionKey.telegramDM(chatID: 999),
+      journalScope: nil,
       now: Date()
     )
 

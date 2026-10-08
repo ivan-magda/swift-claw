@@ -162,7 +162,9 @@ struct TurnRunnerImageAttachTests {
       workspace: EmptyWorkspace(),
       memoryStore: EmptyMemoryStore(),
       retriever: EmptyRetriever(),
-      budget: .default
+      budget: .default,
+      journalFiles: nil,
+      journalPolicy: .disabled
     )
   }
 }

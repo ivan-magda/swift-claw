@@ -15,7 +15,8 @@ extension CoderCompositionTests {
     let fixture = try CoderCompositionFixture(limit: 2)
     defer { fixture.cleanup() }
     let original = await fixture.builder.prepareCoder(
-      coordination: DaemonBuilder.TurnCoordination()
+      coordination: DaemonBuilder.TurnCoordination(),
+      journal: nil
     )
     let originalService = try #require(original.service)
     try await originalService.start()
@@ -57,7 +58,10 @@ extension CoderCompositionTests {
 
     for _ in 0..<2 {
       // when
-      let coder = await restarted.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
+      let coder = await restarted.prepareCoder(
+        coordination: DaemonBuilder.TurnCoordination(),
+        journal: nil
+      )
       let service = try #require(coder.service)
       do {
         try await service.start()
@@ -146,6 +150,7 @@ private extension CoderCompositionTests {
       prepared: prepared,
       origin: origin,
       maxConcurrentJobs: fixture.builder.config.coder.maxConcurrentJobs,
+      journalScope: nil,
       now: Date()
     )
     return try #require(try fixture.builder.stores.coderJobs.job(id: id))

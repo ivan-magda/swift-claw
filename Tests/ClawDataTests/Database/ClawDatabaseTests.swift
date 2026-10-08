@@ -1,3 +1,4 @@
+import ClawCore
 import Foundation
 import GRDB
 import Testing
@@ -55,18 +56,19 @@ struct ClawDatabaseTests {
   @Test
   func releasedCoderDatabaseUpgradesIntoLearningWithItsJobsIntact() throws {
     // given
-    let fixture = try CoderStoreFixture(schemaVersion: "v12")
+    let queue = try ClawDatabase.makeInMemoryQueue()
+    try ClawDatabase.migrator.migrate(queue, upTo: "v12")
     let jobID = UUID()
-    _ = try fixture.admit(id: jobID, limit: 1)
-    #expect(try Self.tables(fixture.queue).contains("job_learning_state") == false)
+    try Self.seedReleasedCoderJob(queue, id: jobID)
+    #expect(try Self.tables(queue).contains("job_learning_state") == false)
 
     // when
-    try ClawDatabase.migrate(fixture.queue)
+    try ClawDatabase.migrate(queue)
 
     // then
-    #expect(try fixture.store.job(id: jobID) != nil)
+    #expect(try CoderJobStoreGRDB(writer: queue).job(id: jobID) != nil)
     #expect(
-      try Self.tables(fixture.queue).isSuperset(of: [
+      try Self.tables(queue).isSuperset(of: [
         "coder_jobs",
         "job_learning_state",
         "learning_trials",
@@ -112,6 +114,53 @@ struct ClawDatabaseTests {
 // MARK: - Schema Introspection
 
 private extension ClawDatabaseTests {
+  /// Released-schema fixtures must not depend on today's store column lists.
+  static func seedReleasedCoderJob(_ queue: DatabaseQueue, id: UUID) throws {
+    let prepared = CoderStoreFixture.localRequest(
+      checkout: "/fixture/repository",
+      common: "/fixture/repository/.git"
+    )
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO sessions(id, session_key, created_ts, updated_ts)
+          VALUES (1, 'tg:dm:7', ?, ?)
+          """,
+        arguments: [Date(), Date()]
+      )
+      try db.execute(
+        sql: """
+          INSERT INTO runs(id, session_id, state, created_ts, updated_ts)
+          VALUES (1, 1, ?, ?, ?)
+          """,
+        arguments: [RunState.running.rawValue, Date(), Date()]
+      )
+      try db.execute(
+        sql: """
+          INSERT INTO approvals(id, run_id, session_id, state, tool, canonical_args,
+            canonical_target, args_hash, policy_version, owner_user_id, nonce,
+            observation_message_id, tool_call_id, reason, created_ts, expires_ts)
+          VALUES (1, 1, 1, ?, 'coder', '{}', '', '', '', 7, 'legacy', 1, 't', '', ?, ?)
+          """,
+        arguments: [ApprovalState.approved.rawValue, Date(), Date()]
+      )
+      try db.execute(
+        sql: """
+          INSERT INTO coder_jobs(id, origin_run_id, origin_session_id, requester_user_id,
+            chat_id, tool_call_id, approval_id, prepared_json, state, slot_reserved,
+            process_ownership, created_ts, updated_ts)
+          VALUES (?, 1, 1, 7, 7, 't', 1, ?, ?, 1, ?, 1, 1)
+          """,
+        arguments: [
+          id.uuidString,
+          try CoderJobRecord.encodeJSON(prepared),
+          CoderJobState.admitted.rawValue,
+          CoderProcessOwnership.none.rawValue,
+        ]
+      )
+    }
+  }
+
   static func tables(_ queue: DatabaseQueue) throws -> Set<String> {
     try queue.read { db in
       Set(
