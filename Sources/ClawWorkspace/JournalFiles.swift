@@ -18,12 +18,15 @@ public struct FileSystemJournalFiles: JournalFiles {
   public func load(day: JournalDay) -> JournalFileSnapshot {
     do {
       let target = try containedTarget(day: day)
-      guard let bytes = try readBytes(target: target) else {
+      let fileBytes = try readBytes(target: target)
+      guard let fileBytes else {
         return JournalFileSnapshot(day: day, text: "", outcome: .missing)
       }
-      guard let text = String(data: bytes, encoding: .utf8) else {
+
+      guard let text = String(bytes: fileBytes, encoding: .utf8) else {
         return JournalFileSnapshot(day: day, text: "", outcome: .unreadable)
       }
+
       return JournalFileSnapshot(day: day, text: text, outcome: .present)
     } catch JournalFileError.overCap {
       return JournalFileSnapshot(day: day, text: "", outcome: .overCap)
@@ -36,19 +39,29 @@ public struct FileSystemJournalFiles: JournalFiles {
     guard !text.isEmpty else {
       return
     }
+
     let target = try containedTarget(day: day)
-    var bytes = try readBytes(target: target) ?? Data()
-    guard String(data: bytes, encoding: .utf8) != nil else {
+    var fileBytes = try readBytes(target: target) ?? Data()
+    guard String(bytes: fileBytes, encoding: .utf8) != nil else {
       throw JournalFileError.unreadable
     }
-    let needsSeparator = !bytes.isEmpty && bytes.last != 0x0A && bytes.last != 0x0D
-    let addition = Data((needsSeparator ? "\n" + text : text).utf8)
-    guard addition.count <= JournalLimits.dayFileBytes - bytes.count else {
+
+    let lineFeed = UInt8(ascii: "\n")
+    let carriageReturn = UInt8(ascii: "\r")
+    let needsSeparator =
+      !fileBytes.isEmpty
+      && fileBytes.last != lineFeed
+      && fileBytes.last != carriageReturn
+    let appendedText = needsSeparator ? "\n" + text : text
+    let appendedBytes = Data(appendedText.utf8)
+    let remainingBytes = JournalLimits.dayFileBytes - fileBytes.count
+    guard appendedBytes.count <= remainingBytes else {
       throw JournalFileError.overCap
     }
+
     // Preserve the owner's original bytes, including Unicode normalization and line endings.
-    bytes.append(addition)
-    try replace(bytes: bytes, target: target)
+    fileBytes.append(appendedBytes)
+    try replace(bytes: fileBytes, target: target)
   }
 
   public func delete(day: JournalDay) throws {
@@ -56,11 +69,13 @@ public struct FileSystemJournalFiles: JournalFiles {
     guard FileManager.default.fileExists(atPath: target) else {
       return
     }
+
     do {
       let attributes = try FileManager.default.attributesOfItem(atPath: target)
       guard attributes[.type] as? FileAttributeType == .typeRegular else {
         throw JournalFileError.deleteFailed
       }
+
       try FileManager.default.removeItem(atPath: target)
     } catch {
       throw JournalFileError.deleteFailed
@@ -71,6 +86,7 @@ public struct FileSystemJournalFiles: JournalFiles {
     guard limit > 0 else {
       return []
     }
+
     let resolution = WorkspacePathContainment.resolveForCreation(path: "memory", root: root.path)
     guard case .resolved(let directory) = resolution else {
       throw JournalFileError.pathRefused
@@ -78,27 +94,41 @@ public struct FileSystemJournalFiles: JournalFiles {
     guard FileManager.default.fileExists(atPath: directory) else {
       return []
     }
-    let names: [String]
+
+    let filenames: [String]
     do {
-      names = try FileManager.default.contentsOfDirectory(atPath: directory)
+      filenames = try FileManager.default.contentsOfDirectory(atPath: directory)
     } catch {
       throw JournalFileError.listingFailed
     }
-    let days = names.compactMap { name -> JournalDay? in
-      guard name.hasSuffix(".md"), let day = JournalDay(isoDate: String(name.dropLast(3))),
-            let target = try? containedTarget(day: day),
-            let attributes = try? FileManager.default.attributesOfItem(atPath: target),
-            attributes[.type] as? FileAttributeType == .typeRegular
-      else {
+
+    let markdownExtension = ".md"
+    let journalDays = filenames.compactMap { filename -> JournalDay? in
+      guard filename.hasSuffix(markdownExtension) else {
         return nil
       }
+
+      let dateText = String(filename.dropLast(markdownExtension.count))
+      guard let day = JournalDay(isoDate: dateText) else {
+        return nil
+      }
+
+      guard let target = try? containedTarget(day: day) else {
+        return nil
+      }
+
+      let attributes = try? FileManager.default.attributesOfItem(atPath: target)
+      guard attributes?[.type] as? FileAttributeType == .typeRegular else {
+        return nil
+      }
+
       return day
     }
-    return Array(
-      days.sorted {
-        $0.isoDate > $1.isoDate
-      }.prefix(limit)
-    )
+
+    let newestDays = journalDays.sorted { first, second in
+      first.isoDate > second.isoDate
+    }
+    return Array(newestDays.prefix(limit))
   }
 }
 
@@ -111,6 +141,7 @@ private extension FileSystemJournalFiles {
     guard case .resolved(let target) = resolution else {
       throw JournalFileError.pathRefused
     }
+
     return target
   }
 
@@ -118,25 +149,30 @@ private extension FileSystemJournalFiles {
     guard FileManager.default.fileExists(atPath: target) else {
       return nil
     }
+
     do {
       let attributes = try FileManager.default.attributesOfItem(atPath: target)
       guard attributes[.type] as? FileAttributeType == .typeRegular,
-            let size = attributes[.size] as? NSNumber
+            let fileSize = attributes[.size] as? NSNumber
       else {
         throw JournalFileError.unreadable
       }
-      guard size.int64Value <= Int64(JournalLimits.dayFileBytes) else {
+
+      guard fileSize.int64Value <= Int64(JournalLimits.dayFileBytes) else {
         throw JournalFileError.overCap
       }
-      let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: target))
+
+      let fileHandle = try FileHandle(forReadingFrom: URL(fileURLWithPath: target))
       defer {
-        try? handle.close()
+        try? fileHandle.close()
       }
+
       // The bounded read also catches a file that grew after its metadata check.
-      let bytes = try handle.read(upToCount: JournalLimits.dayFileBytes + 1) ?? Data()
+      let bytes = try fileHandle.read(upToCount: JournalLimits.dayFileBytes + 1) ?? Data()
       guard bytes.count <= JournalLimits.dayFileBytes else {
         throw JournalFileError.overCap
       }
+
       return bytes
     } catch let error as JournalFileError {
       throw error
@@ -162,23 +198,26 @@ private extension FileSystemJournalFiles {
         attributes: [.posixPermissions: 0o700]
       )
       // Set owner-only permissions when the temporary file is created, before writing private bytes.
-      guard FileManager.default.createFile(
+      let temporaryFileCreated = FileManager.default.createFile(
         atPath: temporary.path,
         contents: nil,
         attributes: [.posixPermissions: 0o600]
       )
-      else {
+      guard temporaryFileCreated else {
         throw JournalFileError.writeFailed
       }
-      let handle = try FileHandle(forWritingTo: temporary)
+
+      let fileHandle = try FileHandle(forWritingTo: temporary)
       do {
-        try handle.write(contentsOf: bytes)
-        try handle.close()
+        try fileHandle.write(contentsOf: bytes)
+        try fileHandle.close()
       } catch {
-        try? handle.close()
+        try? fileHandle.close()
         throw error
       }
-      guard rename(temporary.path, target) == 0 else {
+
+      let renameResult = rename(temporary.path, target)
+      guard renameResult == 0 else {
         throw JournalFileError.writeFailed
       }
     } catch {
