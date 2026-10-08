@@ -10,7 +10,9 @@ struct ServiceGraphOrderingTests {
   func laneAdmissionServiceIsRegisteredLast() async throws {
     // given — the production bundle owns journal shutdown alongside producer services.
     let fixture = try JournalCompositionFixture(enabled: true)
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     // when — build performs the worker registration and retains fallback ownership.
     let bundle = try await fixture.bundle(provider: SequenceProvider([]))
     let journal = try #require(bundle.journal)

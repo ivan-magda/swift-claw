@@ -61,7 +61,9 @@ extension DaemonBuilder {
       approvalExpirySeconds: config.approvalExpirySeconds,
       presentations: agentStack.presentations,
       journalCapture: journal?.capture,
-      notifyJournal: { journal?.worker?.notifyPending() },
+      notifyJournal: {
+        journal?.worker?.notifyPending()
+      },
       logger: logger
     )
   }

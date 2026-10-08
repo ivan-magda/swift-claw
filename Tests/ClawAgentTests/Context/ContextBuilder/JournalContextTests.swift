@@ -12,7 +12,9 @@ struct JournalContextTests {
   func recentDaysKeepNewestNotesAfterHigherPriorityRows() throws {
     // given — midnight after Berlin's 23-hour spring transition.
     let root = try makeTemporaryRoot(prefix: "journal-context")
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let files = FileSystemJournalFiles(root: root)
     let today = try #require(JournalDay(isoDate: "2026-03-30"))
     let yesterday = try #require(JournalDay(isoDate: "2026-03-29"))
@@ -73,7 +75,9 @@ struct JournalContextTests {
   func journalPreservesCleanTurnAndSensitiveMemory() throws {
     // given
     let root = try makeTemporaryRoot(prefix: "journal-context")
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let files = FileSystemJournalFiles(root: root)
     try files.append(day: JournalDay.containing(.distantPast, timeZone: .gmt), text: "journal note")
     let memory = MemoryItem(
@@ -117,7 +121,9 @@ struct JournalContextTests {
   func failedDayReadsNotifyOwnerWhileMissingDaysStayQuiet() throws {
     // given
     let root = try makeTemporaryRoot(prefix: "journal-context")
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let directory = root.appendingPathComponent("memory")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let instant = try #require(ISO8601DateFormatter().date(from: "2026-03-29T22:15:00Z"))
@@ -135,8 +141,16 @@ struct JournalContextTests {
     // then
     #expect(missing.ownerNotices.isEmpty)
     #expect(failed.ownerNotices.count == 2)
-    #expect(failed.ownerNotices.contains { $0.contains("2026-03-30") })
-    #expect(failed.ownerNotices.contains { $0.contains("2026-03-29") })
+    #expect(
+      failed.ownerNotices.contains {
+        $0.contains("2026-03-30")
+      }
+    )
+    #expect(
+      failed.ownerNotices.contains {
+        $0.contains("2026-03-29")
+      }
+    )
     #expect(failed.hasPrivateDataAccess == false)
   }
 
@@ -191,7 +205,9 @@ private extension JournalContextTests {
       ),
       journalFiles: files,
       journalPolicy: policy,
-      now: { instant }
+      now: {
+        instant
+      }
     )
   }
 

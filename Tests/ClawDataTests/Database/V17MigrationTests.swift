@@ -12,7 +12,9 @@ struct V17MigrationTests {
   func legacyRowsStayIneligible() throws {
     // given
     let root = try makeTemporaryRoot(prefix: "journal-v16")
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let pool = try ClawDatabase.makePool(path: root.appendingPathComponent("claw.sqlite").path)
     try ClawDatabase.migrator.migrate(pool, upTo: "v16")
     try pool.write { db in

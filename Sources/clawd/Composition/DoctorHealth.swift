@@ -30,7 +30,9 @@ enum DoctorHealth {
   ) -> [DoctorReport.Check] {
     let status: HealthValue<JournalStatus>
     if let ownerUserID = config.journalPolicy.ownerUserID {
-      status = read { try stores.journal.status(ownerUserID: ownerUserID, now: now) }
+      status = read {
+        try stores.journal.status(ownerUserID: ownerUserID, now: now)
+      }
     } else {
       status = .available(
         JournalStatus(

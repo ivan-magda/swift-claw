@@ -90,7 +90,9 @@ public struct JournalSourceCapture: Sendable {
         jobID: job.id,
         name: "Coder publication"
       ),
-    ].compactMap { $0 }
+    ].compactMap {
+      $0
+    }
     for check in result.reportedChecks.prefix(JournalLimits.evidenceEntries - evidence.count) {
       if let entry = try? JournalEvidence(
         outcome: .workerReportedChecks,
@@ -104,7 +106,9 @@ public struct JournalSourceCapture: Sendable {
     let task = [
       job.prepared.request.task ?? job.prepared.canonicalSource,
       job.prepared.request.instructions,
-    ].compactMap { $0 }.joined(separator: "\n")
+    ].compactMap {
+      $0
+    }.joined(separator: "\n")
     do {
       let source = try JournalSource(
         id: "coder:\(job.id.uuidString)",

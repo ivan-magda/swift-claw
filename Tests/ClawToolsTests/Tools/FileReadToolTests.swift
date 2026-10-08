@@ -161,7 +161,9 @@ struct FileReadToolTests {
   func datedJournalReadSetsPrivateDataFlag() async throws {
     // given
     let fixture = try makeFixture()
-    defer { try? FileManager.default.removeItem(at: fixture.root.deletingLastPathComponent()) }
+    defer {
+      try? FileManager.default.removeItem(at: fixture.root.deletingLastPathComponent())
+    }
     try write("Journal", to: fixture.root.appendingPathComponent("memory/2026-10-08.md"))
 
     // when

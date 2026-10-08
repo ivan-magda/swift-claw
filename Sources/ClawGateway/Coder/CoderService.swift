@@ -42,7 +42,9 @@ public actor CoderService: CoderServing, Service {
     executionPolicyID: String,
     redact: @escaping @Sendable (_ text: String) -> String,
     journalCapture: JournalSourceCapture? = nil,
-    now: @escaping @Sendable () -> Date = { Date() },
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    },
     notifyJournal: @escaping @Sendable () -> Void = {},
     notifyOutbox: @escaping @Sendable () async -> Void
   ) {

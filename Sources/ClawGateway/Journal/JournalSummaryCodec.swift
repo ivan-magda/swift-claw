@@ -45,7 +45,9 @@ package struct JournalSummaryCodec: Sendable {
       for reduction in Reduction.allCases {
         let fitted: [JournalSource]
         do {
-          fitted = try candidates.map { try fit($0, reduction: reduction) }
+          fitted = try candidates.map {
+            try fit($0, reduction: reduction)
+          }
         } catch JournalValueError.sourceTooLarge {
           // Redaction can enlarge a bounded source; a tighter excerpt may still be representable.
           continue
@@ -78,7 +80,8 @@ package struct JournalSummaryCodec: Sendable {
     guard response.utf8.count <= JournalLimits.requestBytes else {
       throw JournalSummaryValidationError.invalidOutput
     }
-    let output = try JSONDecoder().decode(Output.self, from: Data(response.utf8))
+    let content = FencedJSONReply.unfenced(response)
+    let output = try JSONDecoder().decode(Output.self, from: Data(content.utf8))
     guard output.notes.count <= JournalLimits.notes else {
       throw JournalSummaryValidationError.invalidOutput
     }
@@ -86,7 +89,9 @@ package struct JournalSummaryCodec: Sendable {
     var total = 0
     var originalTotal = 0
     for note in output.notes {
-      let cited = sources.filter { note.sourceIDs.contains($0.id) }
+      let cited = sources.filter {
+        note.sourceIDs.contains($0.id)
+      }
       guard !note.sourceIDs.isEmpty, Set(note.sourceIDs).count == note.sourceIDs.count,
             cited.count == note.sourceIDs.count,
             !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -122,7 +127,9 @@ package struct JournalSummaryCodec: Sendable {
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "HH:mm"
     let lines = notes.map { note in
-      let cited = sources.filter { note.sourceIDs.contains($0.id) }
+      let cited = sources.filter {
+        note.sourceIDs.contains($0.id)
+      }
       let earliest = cited.min {
         $0.occurredAt < $1.occurredAt
       }
@@ -135,7 +142,9 @@ package struct JournalSummaryCodec: Sendable {
           formatter.string(from: $0.occurredAt)
         } ?? ""
       let references = cited.map { source in
-        source.coderJobID.map { "coder:" + $0.uuidString } ?? source.id
+        source.coderJobID.map {
+          "coder:" + $0.uuidString
+        } ?? source.id
       }.joined(separator: ", ")
       let text = redact(note.text).split(whereSeparator: \.isWhitespace).joined(separator: " ")
       return "- [\(time)] \(text) (\(note.attribution.rawValue); \(references))"
@@ -258,7 +267,9 @@ private extension JournalSummaryCodec {
         ChatMessage(role: .user, content: String(decoding: data, as: UTF8.self)),
       ],
       maxOutputTokens: outputCap,
-      sessionID: sources.first.map { SessionTraceID.format(sessionID: $0.sessionID) }
+      sessionID: sources.first.map {
+        SessionTraceID.format(sessionID: $0.sessionID)
+      }
     )
   }
 

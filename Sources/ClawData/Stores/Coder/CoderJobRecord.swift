@@ -74,7 +74,9 @@ enum CoderJobRecord {
         CoderProcessOwnership.none.rawValue,
         EpochSecondCodec.epoch(now),
         EpochSecondCodec.epoch(now),
-        try journalScope.map { try JSONEncoder().encode($0) },
+        try journalScope.map {
+          try JSONEncoder().encode($0)
+        },
       ]
     )
     guard let job = try fetch(db, id: id) else {

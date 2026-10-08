@@ -94,7 +94,11 @@ public struct FileSystemJournalFiles: JournalFiles {
       }
       return day
     }
-    return Array(days.sorted { $0.isoDate > $1.isoDate }.prefix(limit))
+    return Array(
+      days.sorted {
+        $0.isoDate > $1.isoDate
+      }.prefix(limit)
+    )
   }
 }
 
@@ -125,7 +129,9 @@ private extension FileSystemJournalFiles {
         throw JournalFileError.overCap
       }
       let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: target))
-      defer { try? handle.close() }
+      defer {
+        try? handle.close()
+      }
       // The bounded read also catches a file that grew after its metadata check.
       let bytes = try handle.read(upToCount: JournalLimits.dayFileBytes + 1) ?? Data()
       guard bytes.count <= JournalLimits.dayFileBytes else {
@@ -146,7 +152,9 @@ private extension FileSystemJournalFiles {
   func replace(bytes: Data, target: String) throws {
     let parent = URL(fileURLWithPath: target).deletingLastPathComponent()
     let temporary = parent.appendingPathComponent(".journal-tmp-\(UUID().uuidString)")
-    defer { try? FileManager.default.removeItem(at: temporary) }
+    defer {
+      try? FileManager.default.removeItem(at: temporary)
+    }
     do {
       try FileManager.default.createDirectory(
         at: parent,

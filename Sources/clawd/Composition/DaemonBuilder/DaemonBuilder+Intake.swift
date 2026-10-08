@@ -103,7 +103,9 @@ extension DaemonBuilder {
       coordinator: coordination.approvalCoordinator,
       presentations: presentations,
       journalCapture: journal?.capture,
-      notifyJournal: { journal?.worker?.notifyPending() },
+      notifyJournal: {
+        journal?.worker?.notifyPending()
+      },
       journal: journal.map { graph in
         JournalCommandSurface(
           policy: graph.policy,

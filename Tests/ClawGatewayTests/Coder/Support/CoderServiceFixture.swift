@@ -115,7 +115,9 @@ struct CoderServiceFixture: Sendable {
     finished: AsyncGate,
     redactor: @escaping @Sendable (_ text: String) -> String,
     journalCapture: JournalSourceCapture? = nil,
-    now: @escaping @Sendable () -> Date = { Date() }
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    }
   ) -> CoderService {
     CoderService(
       store: store,

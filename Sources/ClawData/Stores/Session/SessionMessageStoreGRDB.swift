@@ -66,7 +66,9 @@ public struct SessionMessageStoreGRDB: SessionMessageStore {
           messageID,
           inbound.telegramMessageID,
           inbound.userID,
-          try inbound.journalAdmission.map { try JSONEncoder().encode($0) },
+          try inbound.journalAdmission.map {
+            try JSONEncoder().encode($0)
+          },
         ]
       )
       let runID = db.lastInsertedRowID

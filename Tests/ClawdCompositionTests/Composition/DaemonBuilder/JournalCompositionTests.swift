@@ -17,7 +17,9 @@ struct JournalCompositionTests {
   func journalSurvivesResetAndRestartInComposedGraph() async throws {
     // given — run the production build, poller and worker over real SQLite and files.
     let fixture = try JournalCompositionFixture(enabled: true)
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let firstScript = JournalPollerScript(
       updates: [
         fixture.updateJSON(id: 1, text: "Choose SQLite"),
@@ -103,13 +105,17 @@ struct JournalCompositionTests {
     #expect(text.contains("Coder completed the retry fix."))
   }
 
-  enum ExcludedRoute: CaseIterable { case disabled, scheduled }
+  enum ExcludedRoute: CaseIterable {
+    case disabled, scheduled
+  }
 
   @Test(arguments: ExcludedRoute.allCases)
   func excludedRoutesOmitJournalContext(route: ExcludedRoute) async throws {
     // given — dated files exist, so a missing reader gate would reach the provider request.
     let fixture = try JournalCompositionFixture(enabled: route != .disabled)
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let provider = SequenceProvider([fixture.response("Ordinary reply")])
     let graph = fixture.graph(provider: provider)
     let day = JournalDay.containing(fixture.now, timeZone: fixture.builder.config.timezone)
@@ -184,7 +190,9 @@ struct JournalCompositionTests {
   func enabledCompositionScansBothPrivateArgumentFiles(file: WorkspaceFile) async throws {
     // given — the real loader must read each distinct workspace input on a clean turn.
     let fixture = try JournalCompositionFixture(enabled: true)
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let privateText = "OwnerPrivateDetail123456789"
     try privateText.write(
       to: fixture.workspace.root.appendingPathComponent(file.relativePath),
@@ -221,7 +229,9 @@ struct JournalCompositionTests {
   func disabledBootAccountsStartedJournalWithoutModelOrFileIO() async throws {
     // given — a summary receipt was durably started before the prior process disappeared.
     let fixture = try JournalCompositionFixture(enabled: true)
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let provider = SequenceProvider([fixture.response("Choose SQLite")])
     let graph = fixture.graph(provider: provider)
     let runner = await fixture.runner(graph: graph, provider: provider)
@@ -238,7 +248,9 @@ struct JournalCompositionTests {
     let sources = try graph.store.pendingSources(ownerUserID: 777, now: fixture.now)
     let codec = JournalSummaryCodec(
       costResolver: CostResolver.configured(by: fixture.builder.config),
-      redact: { $0 }
+      redact: {
+        $0
+      }
     )
     let binding = fixture.roster(provider).primary
     let prepared = try codec.prepare(sources: sources, binding: binding, budget: .default)
@@ -314,7 +326,9 @@ struct JournalCompositionTests {
   func configurationDoctorDoesNotTouchJournalState() async throws {
     // given — invoke the real command in a minimal environment, with no secret or network endpoint.
     let root = try makeTemporaryRoot(prefix: "journal-config-doctor")
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let executable = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
       .appendingPathComponent(".build/debug/clawd")
     let command = SubprocessCommand(
@@ -344,7 +358,9 @@ struct JournalCompositionTests {
       JSONSerialization.jsonObject(with: result.stdout.bytes) as? [String: Any]
     )
     let checks = try #require(report["checks"] as? [[String: Any]])
-    let row = checks.first { $0["key"] as? String == "journal.enabled" }
+    let row = checks.first {
+      $0["key"] as? String == "journal.enabled"
+    }
 
     // then — config rows need no store construction, file enumeration or summary request.
     #expect(result.termination == .exited(ClawExitCode.secretLoadFailed.rawValue))
@@ -405,7 +421,9 @@ struct JournalCompositionFixture {
       )
     }
     let date = now
-    builder.now = { date }
+    builder.now = {
+      date
+    }
     try FileManager.default.createDirectory(
       at: EnvironmentLoader.workspaceRoot(config: builder.config),
       withIntermediateDirectories: true
@@ -438,7 +456,9 @@ struct JournalCompositionFixture {
       config: config
     )
     let date = now
-    reopened.now = { date }
+    reopened.now = {
+      date
+    }
     reopened.resolveCoder = builder.resolveCoder
     return Self(builder: reopened)
   }
@@ -485,7 +505,9 @@ struct JournalCompositionFixture {
       )
     )
     let bundle = try await bundle(provider: provider, http: http)
-    let daemon = Task { try await bundle.daemon.run() }
+    let daemon = Task {
+      try await bundle.daemon.run()
+    }
     do {
       let value = try await operation(bundle)
       daemon.cancel()
@@ -640,7 +662,9 @@ private struct JournalCompositionTurns: TurnDispatching {
   let completed: AsyncGate
 
   func run(runID: Int64, sessionID: Int64, chatID: Int64, triggerMessageID: Int64) async throws {
-    defer { completed.open() }
+    defer {
+      completed.open()
+    }
     try await runner.run(
       runID: runID,
       sessionID: sessionID,

@@ -315,7 +315,9 @@ struct DaemonBuilder: Sendable {
     journal: JournalWorker? = nil,
     laneAdmission: LaneAdmissionShutdownService
   ) -> [any Service] {
-    (journal.map { [$0 as any Service] } ?? []) + base + [laneAdmission]
+    (journal.map {
+      [$0 as any Service]
+    } ?? []) + base + [laneAdmission]
   }
 }
 

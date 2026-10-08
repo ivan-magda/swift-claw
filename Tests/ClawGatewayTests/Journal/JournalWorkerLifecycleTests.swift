@@ -12,11 +12,15 @@ struct JournalWorkerLifecycleTests {
   func runningServiceConsumesSynchronousHintsWithoutWaitingForTheTicker() async throws {
     // given
     let fixture = try JournalWorkerFixture()
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let ticking = AsyncGate()
     let entered = AsyncGate()
     let release = AsyncGate()
-    defer { release.open() }
+    defer {
+      release.open()
+    }
     let tickerClock = ScriptedClock { delay in
       #expect(delay == .seconds(60))
       ticking.open()
@@ -31,8 +35,12 @@ struct JournalWorkerLifecycleTests {
       }
     )
     let worker = fixture.worker(provider: provider, sweepClock: tickerClock)
-    let service = Task { try await worker.run() }
-    defer { service.cancel() }
+    let service = Task {
+      try await worker.run()
+    }
+    defer {
+      service.cancel()
+    }
     guard await ticking.waitUntilOpen() else {
       Issue.record("Service did not start its ticker")
       return
@@ -60,13 +68,17 @@ struct JournalWorkerLifecycleTests {
   func shutdownJoinsStartedInference() async throws {
     // given
     let fixture = try JournalWorkerFixture()
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     _ = try fixture.seed(count: 11, at: fixture.now.addingTimeInterval(-86_400))
     let entered = AsyncGate()
     let cancelled = AsyncGate()
     let release = AsyncGate()
     let returned = AsyncGate()
-    defer { release.open() }
+    defer {
+      release.open()
+    }
     let provider = SequenceProvider(
       [fixture.response],
       beforeResponse: {
@@ -89,8 +101,12 @@ struct JournalWorkerLifecycleTests {
     let worker = fixture.worker(provider: provider, sweepClock: tickerClock)
     worker.notifyPending()
     #expect(await provider.requests.isEmpty)
-    let drain = Task { try await worker.run() }
-    defer { drain.cancel() }
+    let drain = Task {
+      try await worker.run()
+    }
+    defer {
+      drain.cancel()
+    }
     guard await entered.waitUntilOpen() else {
       Issue.record("Provider did not start")
       return
@@ -103,7 +119,9 @@ struct JournalWorkerLifecycleTests {
       await worker.shutdown()
       return (providerReturned: returned.isOpen, usageCallIDs: try fixture.usageCallIDs())
     }
-    defer { shutdown.cancel() }
+    defer {
+      shutdown.cancel()
+    }
     guard await cancelled.waitUntilOpen() else {
       Issue.record("Shutdown did not cancel inference")
       return

@@ -115,7 +115,9 @@ extension ExecuteCodeToolTests {
   func datedJournalStageIsRecordedAsPrivateData() async throws {
     // given
     let workspace = try makeWorkspace()
-    defer { try? FileManager.default.removeItem(at: workspace.root.deletingLastPathComponent()) }
+    defer {
+      try? FileManager.default.removeItem(at: workspace.root.deletingLastPathComponent())
+    }
     try write(Data("Journal".utf8), relativePath: "memory/2026-10-08.md", workspace: workspace)
     let tool = makeTool(workspace: workspace)
 

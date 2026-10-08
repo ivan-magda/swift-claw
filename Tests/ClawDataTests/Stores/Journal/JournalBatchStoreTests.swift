@@ -226,7 +226,9 @@ struct JournalBatchStoreTests {
   func bootClosesStartedWithoutReplay() throws {
     // given
     let root = try makeTemporaryRoot(prefix: "journal-boot")
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let path = root.appendingPathComponent("claw.sqlite").path
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let receipt = try abandonedBatch(path: path, now: now)
@@ -253,7 +255,9 @@ struct JournalBatchStoreTests {
   func provenNoStartFinishesWithoutUsageAndRetainsTheQuotaReceiptAcrossBoot() throws {
     // given
     let root = try makeTemporaryRoot(prefix: "journal-no-start")
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let path = root.appendingPathComponent("claw.sqlite").path
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let batch = try finishedWithoutProviderStart(path: path, now: now)

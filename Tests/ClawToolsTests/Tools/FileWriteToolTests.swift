@@ -32,7 +32,9 @@ struct FileWriteToolTests {
   func datedJournalWriteWarningIsRootAware() throws {
     // given
     let root = try makeWorkspace()
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let tool = makeTool(root: root)
     let canonicalRoot = try #require(WorkspacePathContainment.canonicalPath(root.path))
 

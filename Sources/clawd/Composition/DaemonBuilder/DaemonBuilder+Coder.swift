@@ -148,7 +148,9 @@ private extension DaemonBuilder {
       },
       journalCapture: journal?.capture,
       now: now,
-      notifyJournal: { journal?.worker?.notifyPending() },
+      notifyJournal: {
+        journal?.worker?.notifyPending()
+      },
       notifyOutbox: {
         coordination.outboxSignal.poke()
       }

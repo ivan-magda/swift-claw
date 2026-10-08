@@ -13,7 +13,9 @@ struct JournalCommandRoutingTests {
   func disabledInspectionStillRequiresConfiguredOwner() async throws {
     // given
     let fixture = try JournalWorkerFixture()
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let day = JournalDay.containing(fixture.now, timeZone: .gmt)
     let privateText = "Owner journal contents"
     try fixture.files.append(day: day, text: privateText)
@@ -50,7 +52,11 @@ struct JournalCommandRoutingTests {
     #expect(staleOwnerReply?.contains(privateText) == false)
     #expect(mismatchedChatReply?.contains(privateText) == false)
     let texts = await harness.transport.sent.map(\.text)
-    #expect(texts.contains { $0.contains(privateText) })
+    #expect(
+      texts.contains {
+        $0.contains(privateText)
+      }
+    )
     #expect(texts.last?.contains("disabled") == true)
     #expect(texts.last?.contains(day.isoDate) == true)
     #expect(await harness.dispatcher.calls.isEmpty)
@@ -65,7 +71,9 @@ struct JournalCommandRoutingTests {
   func removalOutcomeKeepsSelectedWorkCancelled(_ removal: Removal) async throws {
     // given
     let fixture = try JournalWorkerFixture()
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let sources = try fixture.seed(count: 1, at: fixture.now)
     let day = sources[0].day
     let path = fixture.root.appendingPathComponent("memory/\(day.isoDate).md")
@@ -97,7 +105,9 @@ struct JournalCommandRoutingTests {
   func longShowMarksShorteningWithinTelegramLimit() async throws {
     // given
     let fixture = try JournalWorkerFixture()
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let day = JournalDay.containing(fixture.now, timeZone: .gmt)
     try fixture.files.append(day: day, text: String(repeating: "Русский текст. ", count: 1000))
     let harness = try makeRouter(fixture: fixture, enabled: false)
@@ -122,7 +132,9 @@ struct JournalCommandRoutingTests {
   func confirmedDeleteCancelsOnlyThatDayBeforePublication() async throws {
     // given
     let fixture = try JournalWorkerFixture()
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let sources = try fixture.seed(count: 12, at: fixture.now.addingTimeInterval(-86_400))
     let day = sources[0].day
     let otherSources = try fixture.seed(count: 1, at: fixture.now, firstID: 200)
@@ -133,7 +145,9 @@ struct JournalCommandRoutingTests {
     let gate = WorkspaceMutationGate()
     let entered = AsyncGate()
     let release = AsyncGate()
-    defer { release.open() }
+    defer {
+      release.open()
+    }
     let response = ChatResponse(
       content: """
         {"notes":[{"kind":"decision","attribution":"owner","text":"Use SQLite.",
@@ -158,8 +172,12 @@ struct JournalCommandRoutingTests {
     )
     let worker = fixture.worker(provider: provider, gate: gate)
     let harness = try makeRouter(fixture: fixture, enabled: true, gate: gate)
-    let drain = Task { await worker.sweep(now: fixture.now) }
-    defer { drain.cancel() }
+    let drain = Task {
+      await worker.sweep(now: fixture.now)
+    }
+    defer {
+      drain.cancel()
+    }
     guard await entered.waitUntilOpen() else {
       release.open()
       await drain.value
@@ -258,7 +276,9 @@ private extension JournalCommandRoutingTests {
         mutationGate: gate
       ),
       doctor: StubDoctorReporter(),
-      now: { fixture.now },
+      now: {
+        fixture.now
+      },
       logger: TestLog.silent
     )
     return Harness(router: router, transport: transport, dispatcher: dispatcher, pending: pending)

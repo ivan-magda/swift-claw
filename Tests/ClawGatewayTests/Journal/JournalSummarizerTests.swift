@@ -62,7 +62,12 @@ struct JournalSummarizerTests {
     // given
     let provider = SequenceProvider([response(content)])
     let binding = binding(provider)
-    let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
+    let codec = JournalSummaryCodec(
+      costResolver: resolver,
+      redact: {
+        $0
+      }
+    )
     let prepared = try codec.prepare(sources: [source()], binding: binding, budget: .default)
     let callID = UUIDProviderCallIDGenerator().next()
 
@@ -89,7 +94,12 @@ struct JournalSummarizerTests {
   @Test
   func deadlineAccountingKeepsAuthoritativeLateUsageAndConservativeExposure() async throws {
     // given
-    let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
+    let codec = JournalSummaryCodec(
+      costResolver: resolver,
+      redact: {
+        $0
+      }
+    )
     let providers: [any LLMProvider] = [
       RacedSuccessProvider(response: response("{\"notes\":[]}")),
       HangingInferenceProvider(observing: 900),
@@ -127,7 +137,11 @@ struct JournalSummarizerTests {
     }
 
     // then
-    #expect(results.allSatisfy { $0.outcome == .failed })
+    #expect(
+      results.allSatisfy {
+        $0.outcome == .failed
+      }
+    )
     #expect(results[0].usage?.completionTokens == Self.authoritativeUsage.completionTokens)
     #expect(results[0].usage?.isEstimated == false)
     #expect(results[1].usage?.completionTokens == 900)
@@ -207,7 +221,12 @@ struct JournalSummarizerTests {
   @Test
   func renderedTimeUsesCitedSourcesFrozenZone() throws {
     // given
-    let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
+    let codec = JournalSummaryCodec(
+      costResolver: resolver,
+      redact: {
+        $0
+      }
+    )
     let first = try source()
     let later = try source(
       id: 2,
@@ -252,7 +271,12 @@ struct JournalSummarizerTests {
     )
     let provider = SequenceProvider([response(try encodedNotes([note]))])
     let binding = binding(provider)
-    let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
+    let codec = JournalSummaryCodec(
+      costResolver: resolver,
+      redact: {
+        $0
+      }
+    )
 
     // when
     let prepared = try codec.prepare(
@@ -272,7 +296,11 @@ struct JournalSummarizerTests {
     #expect(result.notes == [note])
     #expect(support.count == 1)
     #expect((support.first?["text"] as? String)?.contains(proposalTail) == true)
-    #expect(prepared.sources.contains { $0.id == proposal.sourceID } == false)
+    #expect(
+      prepared.sources.contains {
+        $0.id == proposal.sourceID
+      } == false
+    )
     let unsupported = JournalNote(
       kind: .decision,
       attribution: .owner,
@@ -295,7 +323,12 @@ struct JournalSummarizerTests {
         answer: String(repeating: grapheme, count: 8_000)
       )
     }
-    let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
+    let codec = JournalSummaryCodec(
+      costResolver: resolver,
+      redact: {
+        $0
+      }
+    )
 
     // when
     let prepared = try codec.prepare(
@@ -308,7 +341,11 @@ struct JournalSummarizerTests {
     #expect(prepared.serializedRequestBytes <= JournalLimits.requestBytes)
     #expect(prepared.estimate.inputTokens <= JournalLimits.inputTokens)
     #expect(prepared.sources.count == JournalLimits.batchSources)
-    #expect(prepared.sources.allSatisfy { $0.assistantText.hasSuffix(grapheme) })
+    #expect(
+      prepared.sources.allSatisfy {
+        $0.assistantText.hasSuffix(grapheme)
+      }
+    )
   }
 
   @Test
@@ -342,7 +379,12 @@ struct JournalSummarizerTests {
   @Test
   func usefulWholeSourcesAreDeferredAndImpossibleSourceIsNamed() throws {
     // given
-    let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
+    let codec = JournalSummaryCodec(
+      costResolver: resolver,
+      redact: {
+        $0
+      }
+    )
     let binding = binding(SequenceProvider([]))
     let sources = try (1...10).map { index in
       try source(
@@ -358,7 +400,11 @@ struct JournalSummarizerTests {
     // then
     #expect(prepared.sources.isEmpty == false)
     #expect(prepared.sources.count < sources.count)
-    #expect(prepared.sources.allSatisfy { !$0.ownerText.isEmpty && !$0.assistantText.isEmpty })
+    #expect(
+      prepared.sources.allSatisfy {
+        !$0.ownerText.isEmpty && !$0.assistantText.isEmpty
+      }
+    )
     #expect(throws: JournalSummaryPreparationError.unrepresentableSource(id: sources[0].id)) {
       try codec.prepare(sources: sources, binding: binding, budget: budget(input: 1))
     }

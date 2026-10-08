@@ -37,7 +37,9 @@ public actor JournalWorker: Service {
     cooldown: (any PrimaryRouteCooldownTracking)? = nil,
     budget: RunBudget,
     clock: any Clock<Duration> = ContinuousClock(),
-    now: @escaping @Sendable () -> Date = { Date() },
+    now: @escaping @Sendable () -> Date = {
+      Date()
+    },
     callIDs: any ProviderCallIDGenerating = UUIDProviderCallIDGenerator(),
     logger: Logger
   ) {
@@ -152,7 +154,9 @@ private extension JournalWorker {
   func drainCandidates(now: Date) async throws {
     var candidates = try store.pendingSources(ownerUserID: ownerUserID, now: now)
     while !stopping, !Task.isCancelled, let first = candidates.first {
-      let daySources = candidates.filter { $0.day == first.day }
+      let daySources = candidates.filter {
+        $0.day == first.day
+      }
       let binding = roster.startingRoute(
         primaryIsCooling: await cooldown?.isCooling() == true
       ).binding
@@ -164,7 +168,9 @@ private extension JournalWorker {
         prepared = try codec.prepare(sources: daySources, binding: binding, budget: budget)
       } catch JournalSummaryPreparationError.unrepresentableSource(let id) {
         try store.skipSources(ids: [id], reason: "Journal source cannot fit request", now: now)
-        candidates.removeAll { $0.id == id }
+        candidates.removeAll {
+          $0.id == id
+        }
         continue
       }
       let callID = callIDs.next()
@@ -194,7 +200,9 @@ private extension JournalWorker {
         return
       case .obsolete:
         let selected = Set(request.sourceIDs)
-        candidates.removeAll { selected.contains($0.id) }
+        candidates.removeAll {
+          selected.contains($0.id)
+        }
         continue
       case .started(let started):
         batch = started
@@ -202,7 +210,9 @@ private extension JournalWorker {
       let result = await summarizer.summarize(prepared, binding: binding, callID: callID)
       try await publish(result, prepared: prepared, batch: batch)
       let selected = Set(batch.sourceIDs)
-      candidates.removeAll { selected.contains($0.id) }
+      candidates.removeAll {
+        selected.contains($0.id)
+      }
     }
   }
 }

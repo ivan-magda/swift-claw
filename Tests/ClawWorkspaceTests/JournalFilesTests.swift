@@ -9,7 +9,9 @@ struct JournalFilesTests {
   func appendPreservesEditsAndChecksResultingSize() throws {
     // given
     let root = try makeTemporaryRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let day = try #require(JournalDay(isoDate: "2026-10-08"))
     let files = FileSystemJournalFiles(root: root)
     let target = root.appendingPathComponent("memory/2026-10-08.md")
@@ -62,7 +64,9 @@ struct JournalFilesTests {
   func missingEmptyAndDamagedFilesDoNotRebuildHistory() throws {
     // given
     let root = try makeTemporaryRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let day = try #require(JournalDay(isoDate: "2026-10-08"))
     let files = FileSystemJournalFiles(root: root)
     let target = root.appendingPathComponent("memory/2026-10-08.md")
@@ -94,7 +98,9 @@ struct JournalFilesTests {
   func listingAcceptsOnlyContainedValidDayFilesAndDeleteKeepsOtherDays() throws {
     // given
     let root = try makeTemporaryRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let files = FileSystemJournalFiles(root: root)
     let today = try #require(JournalDay(isoDate: "2026-10-08"))
     let yesterday = try #require(JournalDay(isoDate: "2026-10-07"))
@@ -107,7 +113,9 @@ struct JournalFilesTests {
       withIntermediateDirectories: false
     )
     let outside = root.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
-    defer { try? FileManager.default.removeItem(at: outside) }
+    defer {
+      try? FileManager.default.removeItem(at: outside)
+    }
     try Data("outside".utf8).write(to: outside)
     try FileManager.default.createSymbolicLink(
       at: memory.appendingPathComponent("2026-10-10.md"),
@@ -135,7 +143,9 @@ struct JournalFilesTests {
   func sharedMutationGatePreservesConcurrentJournalAppends() async throws {
     // given
     let root = try makeTemporaryRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
+    defer {
+      try? FileManager.default.removeItem(at: root)
+    }
     let files = FileSystemJournalFiles(root: root)
     let day = try #require(JournalDay(isoDate: "2026-10-08"))
     let gate = WorkspaceMutationGate()

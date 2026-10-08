@@ -16,11 +16,15 @@ struct JournalWorkerTests {
   func overlappingTriggersDrainOnceAndKeepLeftoversDue() async throws {
     // given
     let fixture = try JournalWorkerFixture()
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let due = try fixture.seed(count: 23, at: fixture.now.addingTimeInterval(-86_400))
     let entered = AsyncGate()
     let release = AsyncGate()
-    defer { release.open() }
+    defer {
+      release.open()
+    }
     let calls = Mutex((active: 0, maximum: 0))
     let provider = SequenceProvider(
       Array(repeating: fixture.response, count: 24),
@@ -41,8 +45,12 @@ struct JournalWorkerTests {
     #expect(await provider.requests.isEmpty)
 
     // when
-    let first = Task { await worker.sweep(now: fixture.now) }
-    defer { first.cancel() }
+    let first = Task {
+      await worker.sweep(now: fixture.now)
+    }
+    defer {
+      first.cancel()
+    }
     guard await entered.waitUntilOpen() else {
       Issue.record("Provider did not start")
       return
@@ -52,8 +60,12 @@ struct JournalWorkerTests {
     }
     let today = try fixture.seed(count: 2, at: fixture.now, firstID: 100)
     worker.notifyPending()
-    let second = Task { await worker.sweep(now: fixture.now) }
-    defer { second.cancel() }
+    let second = Task {
+      await worker.sweep(now: fixture.now)
+    }
+    defer {
+      second.cancel()
+    }
     release.open()
     await first.value
     await second.value
@@ -65,31 +77,47 @@ struct JournalWorkerTests {
 
     // then
     let batches = try fixture.batches()
-    #expect(calls.withLock { $0.maximum } == 1)
+    #expect(
+      calls.withLock {
+        $0.maximum
+      } == 1
+    )
     #expect(Set(batches.flatMap(\.sourceIDs)) == Set(due.map(\.id)))
-    #expect(batches.contains { $0.sourceIDs.count < JournalLimits.batchSources })
+    #expect(
+      batches.contains {
+        $0.sourceIDs.count < JournalLimits.batchSources
+      }
+    )
     #expect(try fixture.store.status(ownerUserID: 42, now: fixture.now).pendingCount == today.count)
     #expect(try fixture.store.pendingCount(day: today[0].day, ownerUserID: 42) == today.count)
     #expect(await provider.requests.count == batches.count)
   }
 
-  enum Publication: CaseIterable { case written, damagedFile, cancelled, noStart }
+  enum Publication: CaseIterable {
+    case written, damagedFile, cancelled, noStart
+  }
 
   @Test(arguments: Publication.allCases)
   func publicationRechecksCancellationAndAlwaysFinishesUsage(branch: Publication) async throws {
     // given
     let fixture = try JournalWorkerFixture()
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let sources = try fixture.seed(count: 1, at: fixture.now.addingTimeInterval(-86_400))
     let day = sources[0].day
     let gate = WorkspaceMutationGate()
     let entered = AsyncGate()
     let release = AsyncGate()
-    defer { release.open() }
+    defer {
+      release.open()
+    }
     let response = ChatResponse(
       content: """
+        ```json
         {"notes":[{"kind":"decision","attribution":"owner",
         "text":"Choose SQLite","source_ids":["message:1"]}]}
+        ```
         """,
       finishReason: "stop",
       usage: ChatUsage(promptTokens: 123, completionTokens: 17, totalTokens: 140),
@@ -111,8 +139,12 @@ struct JournalWorkerTests {
       try Data([0xFF]).write(to: fixture.root.appendingPathComponent("memory/\(day.isoDate).md"))
     }
     let worker = fixture.worker(provider: provider, gate: gate)
-    let drain = Task { await worker.sweep(now: fixture.now) }
-    defer { drain.cancel() }
+    let drain = Task {
+      await worker.sweep(now: fixture.now)
+    }
+    defer {
+      drain.cancel()
+    }
     guard await entered.waitUntilOpen() else {
       Issue.record("Provider did not start")
       return
@@ -157,7 +189,9 @@ struct JournalWorkerTests {
   func deferredBudgetAndUnrepresentableSourcesDoNotSpin() async throws {
     // given
     let fixture = try JournalWorkerFixture()
-    defer { fixture.removeFiles() }
+    defer {
+      fixture.removeFiles()
+    }
     let sources = try fixture.seed(count: 2, at: fixture.now.addingTimeInterval(-86_400))
     let provider = SequenceProvider([])
     let deferred = fixture.worker(provider: provider, perRunUSD: 0)
@@ -238,7 +272,9 @@ struct JournalWorkerFixture {
     )
     let codec = JournalSummaryCodec(
       costResolver: CostResolver(priceTable: .empty, referenceUSDPerToken: 0.000_015),
-      redact: { $0 }
+      redact: {
+        $0
+      }
     )
     let clock = ScriptedClock { _ in
       await AsyncGate().wait()
@@ -263,7 +299,9 @@ struct JournalWorkerFixture {
         referenceUSDPerToken: 0.000_015
       ),
       clock: sweepClock ?? clock,
-      now: { now },
+      now: {
+        now
+      },
       logger: TestLog.silent
     )
   }
@@ -297,7 +335,9 @@ struct JournalWorkerFixture {
   func batches() throws -> [JournalBatch] {
     try queue.read { db in
       try Data.fetchAll(db, sql: "SELECT batch FROM journal_batches ORDER BY started_ts, id")
-        .map { try JSONDecoder().decode(JournalBatch.self, from: $0) }
+        .map {
+          try JSONDecoder().decode(JournalBatch.self, from: $0)
+        }
     }
   }
 }
