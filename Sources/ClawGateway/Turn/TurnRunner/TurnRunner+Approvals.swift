@@ -118,10 +118,15 @@ private extension TurnRunner {
 
   /// Journal recognition was resolved against the workspace root by the write tool at gate time.
   static func isPrivilegedFile(_ recorded: RecordedToolAction) -> Bool {
-    WorkspaceFile.isPromptPrivileged(
-      basename: (recorded.canonicalTarget as NSString).lastPathComponent
-    )
-      || (recorded.tool == BuiltinToolNames.fileWrite
-        && recorded.presentation.warnings.contains(WorkspaceFile.journalWriteWarning))
+    let basename = (recorded.canonicalTarget as NSString).lastPathComponent
+    if WorkspaceFile.isPromptPrivileged(basename: basename) {
+      return true
+    }
+
+    guard recorded.tool == BuiltinToolNames.fileWrite else {
+      return false
+    }
+
+    return recorded.presentation.warnings.contains(WorkspaceFile.journalWriteWarning)
   }
 }
