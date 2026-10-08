@@ -1067,6 +1067,33 @@ Responses reasoning continuity cannot be expressed as text and tool calls, so `C
 - **Input reservation is a policy too.** Preflight and missing-usage estimates charge the message context and the complete advertised tool array. Composition injects an `LLMInputReservationPolicy`: text estimation only for the current route; for ChatGPT, an additional checked, byte-derived reservation over selected replay state (deliberately over-estimating re-encoding **without decoding the opaque payload**), participating in per-call, per-run, enabled daily-token, and missing-usage estimates. Foreign state may over-reserve until the adapter drops it — the right direction to err, because **replay state must never bypass a token gate**. Provider-returned usage remains authoritative after the call.
 - **Usage identity:** every logical round-trip carries a locally generated `ProviderCallID` — stable across clean wire retries and the stream-to-buffered fallback, fresh for each tool-loop round and each schedule parse — and usage rows are idempotent on it (§7.4). The stored model is the **qualified `configuredReference`** (§8.1), so included-plan usage can never collide with API-billed usage for the same wire model.
 
+### 8.7 Background journal summaries
+
+`JournalSummaryCodec.prepare` fits up to ten bounded sources against both the complete
+provider-neutral JSON request representation (512 KiB cap, including 4 KiB of headroom for
+adapter envelope differences) and `TokenEstimator` over the exact sent messages, including prompt and
+schema. Input is at most `min(24_000, budget.maxInputTokens)`; output reservation is
+`min(3_072, budget.maxOutputTokens)`. Support-only proposals are deduplicated and shortened
+before optional evidence and main text. Main text keeps grapheme-safe beginning/end excerpts,
+favoring the answer's conclusion; 2,000/4,000 owner/answer graphemes are preferred when reduction
+is required. Smaller useful excerpts may fit a tighter cap. Whole sources that remain outside
+the request are pending. A source that cannot fit alone is named for a recorded skip; no empty
+substitute source is sent. Redaction precedes shortening.
+
+The worker chooses `ProviderRoster.startingRoute` once, respecting an already cooling primary,
+and passes that same binding to preparation and inference. `JournalSummarizer` makes one tool-free
+`ProviderDeadlineCoordinator.raceBuffered` call with a 30-second deadline. Provider-owned clean
+retries remain available; this surface adds no repair, retry or route-switch loop. The caller
+starts the durable receipt and enforces global spend plus 24 started calls per UTC day before
+inference. Summary inference neither persists usage nor writes files.
+
+Every returned summary, including empty or invalid JSON, produces a reconciled run-less usage
+row under the served route's configured reference, source session and unique call ID. A joined
+late response retains authoritative usage even though its deadline outcome fails. Ambiguous
+failure, timeout or typed inference cancellation returns conservative usage, including observed
+completion tokens above the reservation. Proven no-start returns no usage row while preserving
+the already started receipt. The worker persists the returned usage with the terminal outcome.
+
 ## 9. Memory & context architecture — SINGLE NORMATIVE SOURCE
 
 > §9 is the **single normative source** for context assembly. The PRD references this section; any divergent ordered list elsewhere is superseded by this one.
@@ -1086,6 +1113,17 @@ and atomically replaces the target. Reads need no mutation gate. The shared `Wor
 executes synchronous closures for publication, day deletion and approved `file_write` revalidation
 plus atomic IO; callers never await database or file operations inside that closure. The owner may
 stop the daemon, edit a journal and restart; concurrent external edits have no preservation guarantee.
+
+**Journal summaries** use the approved historical-data prompt and a separately supplied schema.
+Notes preserve the owner's language, decisions/reasons, useful outcomes, corrections and open
+work. Supporting proposals can resolve a current confirmation but cannot create activity by
+themselves. Strict decoding checks field types, allowed kinds/attributions, current source IDs,
+20 notes, 400 graphemes per note and 4,096 total, before and after final secret redaction.
+`observed_operation` requires code-produced typed evidence on every cited source;
+`workerReportedChecks` alone does not qualify. Since the schema cites sources rather than
+individual evidence entries, validation establishes available evidence, not semantic truth of
+a paraphrase. Rendering retains source-local time, compact message/job references and explicit
+attribution, including worker reports. Invalid output is rejected without another model call.
 
 **Skill identity is settled at scan time**, so nothing downstream has to re-decide it: the frontmatter `name` must match `^[a-z0-9]+(-[a-z0-9]+)*$` at 1–64 characters **and** equal its own directory name, `description` is collapsed to a single line and then capped at 300 graphemes (the spec allows 1024; the index has to scale with skill count, not with one author's prose, and a block scalar must not let one skill occupy several of the index's one-line-per-skill rows), and a name claimed by two directories drops **every** claimant — silently shadowing one is the bug class the loader exists to avoid. Each rejection reaches the owner as a notice (§9.2), not only the log. The scan feeds the index row; the body is loaded on demand by `skill_load` (§10.1), never injected wholesale.
 
