@@ -160,6 +160,10 @@ struct CancellingBeforeAssistantCommitRuns: RunStore {
     try base.resumeUsage(runID: runID)
   }
 
+  func journalExchangeInput(runID: Int64) throws(StoreError) -> JournalExchangeInput? {
+    nil
+  }
+
   func executionContext(
     runID: Int64,
     fallbackChatID: Int64
@@ -325,6 +329,10 @@ struct CancellingBeforeDegradedCommitRuns: RunStore {
     try base.resumeUsage(runID: runID)
   }
 
+  func journalExchangeInput(runID: Int64) throws(StoreError) -> JournalExchangeInput? {
+    nil
+  }
+
   func executionContext(
     runID: Int64,
     fallbackChatID: Int64
@@ -458,6 +466,10 @@ struct DiskFullRuns: RunStore {
 
   func resumeUsage(runID: Int64) throws(StoreError) -> ResumeUsage {
     throw StoreError.diskFull
+  }
+
+  func journalExchangeInput(runID: Int64) throws(StoreError) -> JournalExchangeInput? {
+    nil
   }
 
   func executionContext(

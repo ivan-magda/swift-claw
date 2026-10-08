@@ -350,6 +350,12 @@ that wins a terminal-state compare-and-swap replaces non-stop results and rerend
 an already-selected backend `cancelled` or `timedOut` outcome remains selected. Interrupted recovery
 is always reported as interruption. Persistence retries never rerun the backend.
 
+Personal journal eligibility is copied into the job at admission, only for the configured owner's
+interactive DM while journaling is enabled. A job admitted while disabled cannot become eligible
+later. `/new` resets dialogue lanes without changing Coder eligibility. Completion requires the
+feature to remain enabled; it captures the cancellation-selected terminal result, not the original
+backend return. One `completedAt` instant is frozen across the completion compare-and-swap loop.
+
 ### 5.3 RunBudget defaults
 
 Concrete, config-overridable defaults for a single-owner daily-driver. These are the pinned numbers the PRD (FR-R3, NFR-Cost) refers to.
@@ -857,6 +863,25 @@ nil admission metadata and never enter the queue through archive backfill.
 frozen owner/day/timezone, activity timestamp, pending/due state and batch identity. Producers
 insert through a Data-owned transaction-local helper; the queue does not scan the archive.
 Terminal transitions discard payload text while retaining source-ID tombstones for deduplication.
+
+The fused inbound claim stores optional `JournalExchangeAdmission` on its run, preserving Telegram's
+source timestamp/day/timezone separately from the lifecycle processing timestamp. Gateway admission
+requires the configured owner's interactive DM and a source timestamp; a missing timestamp logs an
+ID-only skip and never prevents the ordinary answer. `RunStore.journalExchangeInput` binds the owner
+text to `runs.trigger_message_id` and reads just the preceding completed assistant proposal by row
+ordering, including across `/new`. Its nested `Proposal` is archive input, not a persistable
+`JournalProposal`: Gateway removes known secrets from the complete text before head/tail shortening
+and construction of the bounded durable value. Support-only proposals create no additional activity.
+
+Only a successful ordinary `DONE` commit inserts an exchange source. Suspended, failed, cancelled
+and superseded runs insert none; approval resume can complete that exchange once. Exchange and
+Coder queue writes use a savepoint within the required terminal transaction. A journal SQL failure
+records a fixed redacted diagnostic best effort without rolling back the reply/result/outbox;
+required transaction failures keep their existing rollback behavior. Typed tool statuses may be
+included, but persisted observation prose is never reconstructed as observed-operation evidence.
+The deduplicated `/new` transaction marks only already captured pending sources for its owner/session
+due. A replayed update cannot mark future arrivals; post-commit notifications are optional latency
+hints and perform no inference inline.
 
 `JournalStore` is a synchronous Core persistence port. `pendingSources` examines at most
 100 pending candidates in activity order, closes sources older than 48 hours, and returns
@@ -1424,6 +1449,13 @@ MCP/hook/plugin path. Child permissions and credentials determine effective auth
   the approval fingerprint; revalidate before launch. The controlled automatic approval mode is
   explicit and included in that identity. Inherited integrations remain trusted dependencies, not a
   frozen profile snapshot.
+- **Personal journal completion:** when a job was admitted and completes with journaling enabled
+  for the configured owner's DM, its selected terminal result enters the same queue transaction as
+  the saved result and completion notice. The admitted timezone determines the terminal source day.
+  `journal_terminal_ts` records the frozen completion instant; later reservation release may change
+  `updated_ts` without changing that instant or adding another source. Stable job IDs link the
+  accepted task and final result. State/publication evidence is typed; `reportedChecks` remain
+  worker reports. Status reads and delivery retries add no journal sources.
 - **Request shape:** local absolute repository path, GitHub HTTPS repository URL
   (`github.com/{owner}/{repo}`), or issue URL (`/issues/{positive integer}`). Refuse credentials,
   ports, query/fragment, encoded or option-like components, and unrelated paths. Local/repository

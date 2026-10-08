@@ -68,6 +68,8 @@ public struct MessageRouter: Sendable {
     typing: (any TypingIndicator)? = nil,
     coordinator: ApprovalCoordinator,
     presentations: TurnPresentationRegistry? = nil,
+    journalCapture: JournalSourceCapture? = nil,
+    notifyJournal: @escaping @Sendable () -> Void = {},
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = {
       Date()
@@ -107,7 +109,8 @@ public struct MessageRouter: Sendable {
       replies: replies,
       imageCache: imageCache,
       now: now,
-      logger: logger
+      logger: logger,
+      journalCapture: journalCapture
     )
 
     self.replies = replies
@@ -122,6 +125,8 @@ public struct MessageRouter: Sendable {
       logger: logger,
       now: now,
       coordinator: coordinator,
+      journalCapture: journalCapture,
+      notifyJournal: notifyJournal,
       presentations: presentations
     )
     self.scheduleHandlers = ScheduleHandlers(

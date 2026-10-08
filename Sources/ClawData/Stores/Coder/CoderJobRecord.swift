@@ -37,7 +37,10 @@ enum CoderJobRecord {
       slotReserved: row["slot_reserved"],
       ownership: ownership,
       processReceipt: receipt,
-      result: result
+      result: result,
+      journalScope: try (row["journal_scope"] as Data?).map {
+        try JSONDecoder().decode(JournalScope.self, from: $0)
+      }
     )
   }
 
@@ -46,14 +49,15 @@ enum CoderJobRecord {
     id: UUID,
     prepared: CoderPreparedRequest,
     origin: CoderOrigin,
+    journalScope: JournalScope?,
     now: Date
   ) throws -> CoderJob {
     try db.execute(
       sql: """
         INSERT INTO coder_jobs(id, origin_run_id, origin_session_id, requester_user_id, chat_id,
           tool_call_id, approval_id, prepared_json, state, slot_reserved, checkout_path,
-          common_git_directory, process_ownership, created_ts, updated_ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+          common_git_directory, process_ownership, created_ts, updated_ts, journal_scope)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [
         id.uuidString,
@@ -70,6 +74,7 @@ enum CoderJobRecord {
         CoderProcessOwnership.none.rawValue,
         EpochSecondCodec.epoch(now),
         EpochSecondCodec.epoch(now),
+        try journalScope.map { try JSONEncoder().encode($0) },
       ]
     )
     guard let job = try fetch(db, id: id) else {

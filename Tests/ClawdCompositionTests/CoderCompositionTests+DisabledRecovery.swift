@@ -146,6 +146,7 @@ private extension CoderCompositionTests {
       prepared: prepared,
       origin: origin,
       maxConcurrentJobs: fixture.builder.config.coder.maxConcurrentJobs,
+      journalScope: nil,
       now: Date()
     )
     return try #require(try fixture.builder.stores.coderJobs.job(id: id))

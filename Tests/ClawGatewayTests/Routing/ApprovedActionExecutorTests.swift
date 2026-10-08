@@ -738,6 +738,10 @@ struct ApprovedActionExecutorTests {
       throw StoreError.unexpected("unused in this fixture")
     }
 
+    func journalExchangeInput(runID: Int64) throws(StoreError) -> JournalExchangeInput? {
+      nil
+    }
+
     func executionContext(
       runID: Int64,
       fallbackChatID: Int64

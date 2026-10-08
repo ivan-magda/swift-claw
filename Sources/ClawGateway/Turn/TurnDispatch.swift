@@ -20,6 +20,7 @@ struct TurnDispatch: Sendable {
 
   let now: @Sendable () -> Date
   let logger: Logger
+  var journalCapture: JournalSourceCapture?
 
   func dispatch(
     rawUpdate: RawUpdate,
@@ -29,6 +30,14 @@ struct TurnDispatch: Sendable {
     source: Provenance = .trusted,
     image: ImagePart? = nil
   ) async throws(RoutingHalt) -> HandleOutcome {
+    if journalCapture?.scope(userID: message.userID, chatID: message.chatID, mode: mode) != nil,
+       message.sourceTimestamp == nil
+    {
+      logger.warning(
+        "journal admission skipped: Telegram timestamp missing",
+        metadata: ["update": "\(rawUpdate.updateID)"]
+      )
+    }
     let inbound = InboundMessage(
       updateID: rawUpdate.updateID,
       sessionKey: SessionKey.telegram(for: message, mode: mode),
@@ -38,6 +47,7 @@ struct TurnDispatch: Sendable {
       isEdited: message.isEdited,
       provenance: mode.storedProvenance(of: source),
       telegramMessageID: message.messageID,
+      journalAdmission: journalCapture?.admission(message: message, mode: mode),
       ts: now()
     )
 

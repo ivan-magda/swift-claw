@@ -62,6 +62,36 @@ extension JournalStoreGRDB {
 // MARK: - Transaction-Local Capture
 
 extension JournalStoreGRDB {
+  /// Optional capture cannot roll back required reply, result or outbox facts.
+  static func captureBestEffort(
+    _ db: Database,
+    source: JournalSource,
+    now: Date,
+    eligible: () throws -> Bool
+  ) {
+    do {
+      try db.inSavepoint {
+        guard try eligible() else {
+          return .commit
+        }
+        try insertSource(db, source: source)
+        return .commit
+      }
+    } catch {
+      // SQL diagnostics can contain payload text. Persist a fixed reason rather than the error.
+      try? db.inSavepoint {
+        try recordStatus(
+          db,
+          ownerUserID: source.scope.ownerUserID,
+          outcome: .skipped(redactedReason: "Journal source capture failed"),
+          now: now,
+          skipped: 1
+        )
+        return .commit
+      }
+    }
+  }
+
   /// Called inside the producer's transaction or savepoint; duplicate IDs leave the receipt intact.
   @discardableResult
   static func insertSource(_ db: Database, source: JournalSource) throws -> Bool {

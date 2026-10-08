@@ -229,6 +229,7 @@ struct CoderCompositionTests {
       prepared: prepared,
       origin: origin,
       maxConcurrentJobs: 1,
+      journalScope: nil,
       now: Date()
     )
     try await first.shutdown()
@@ -312,6 +313,7 @@ struct CoderCompositionTests {
       prepared: prepared,
       origin: origin,
       maxConcurrentJobs: 1,
+      journalScope: nil,
       now: Date()
     )
     let failed = CoderResult(
@@ -336,6 +338,7 @@ struct CoderCompositionTests {
       result: failed,
       chunks: [],
       releaseReservation: true,
+      journalSource: nil,
       now: Date()
     )
     try await service.shutdown()

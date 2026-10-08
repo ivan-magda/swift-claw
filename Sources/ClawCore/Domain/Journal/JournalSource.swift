@@ -175,3 +175,36 @@ fileprivate extension JournalSource {
     }
   }
 }
+
+/// Archive input is redacted before capture constructs the bounded durable proposal.
+public struct JournalExchangeInput: Sendable, Equatable {
+  public struct Proposal: Sendable, Equatable {
+    public let sourceID: String
+    public let text: String
+
+    public init(sourceID: String, text: String) {
+      self.sourceID = sourceID
+      self.text = text
+    }
+  }
+
+  public let admission: JournalExchangeAdmission
+  public let sessionID: Int64
+  public let triggerMessageID: Int64
+  public let ownerText: String
+  public let supportingProposal: Proposal?
+
+  public init(
+    admission: JournalExchangeAdmission,
+    sessionID: Int64,
+    triggerMessageID: Int64,
+    ownerText: String,
+    supportingProposal: Proposal?
+  ) {
+    self.admission = admission
+    self.sessionID = sessionID
+    self.triggerMessageID = triggerMessageID
+    self.ownerText = ownerText
+    self.supportingProposal = supportingProposal
+  }
+}

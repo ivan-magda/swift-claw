@@ -9,6 +9,7 @@ extension CoderJobStoreGRDB {
     result: CoderResult,
     chunks: [OutboxChunk],
     releaseReservation: Bool,
+    journalSource: JournalSource? = nil,
     now: Date
   ) throws(StoreError) -> CoderCompletionOutcome {
     try database.writeMapping { db in
@@ -30,7 +31,8 @@ extension CoderJobStoreGRDB {
 
       try db.execute(
         sql: """
-          UPDATE coder_jobs SET state = ?, result_json = ?, slot_reserved = ?, updated_ts = ?
+          UPDATE coder_jobs SET state = ?, result_json = ?, slot_reserved = ?, updated_ts = ?,
+            journal_terminal_ts = ?
           WHERE id = ?
           """,
         arguments: [
@@ -38,10 +40,18 @@ extension CoderJobStoreGRDB {
           try CoderJobRecord.encodeJSON(result),
           releaseReservation ? false : job.slotReserved,
           EpochSecondCodec.epoch(now),
+          now,
           id.uuidString,
         ]
       )
       try Self.insertCompletion(db, job: job, chunks: chunks, now: now)
+      if let source = journalSource {
+        JournalStoreGRDB.captureBestEffort(db, source: source, now: now) {
+          source.coderJobID == job.id && source.id == "coder:\(job.id.uuidString)"
+            && source.sessionID == job.origin.sessionID && source.scope == job.journalScope
+            && source.occurredAt == now
+        }
+      }
       return .committed
     }
   }

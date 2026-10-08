@@ -45,6 +45,8 @@ public struct TurnRunner: TurnDispatching {
   /// same seam ContextBuilder/MessageRouter/SchedulerService already use.
   let now: @Sendable () -> Date
 
+  let journalCapture: JournalSourceCapture?
+  let notifyJournal: @Sendable () -> Void
   let logger: Logger
 
   /// Freezes the learning compatibility surface of a bound run, at pickup, while every value in it
@@ -97,6 +99,8 @@ public struct TurnRunner: TurnDispatching {
     parker: any ApprovalParking,
     approvalExpirySeconds: Int,
     presentations: TurnPresentationRegistry? = nil,
+    journalCapture: JournalSourceCapture? = nil,
+    notifyJournal: @escaping @Sendable () -> Void = {},
     logger: Logger
   ) {
     self.sessionMessages = sessionMessages
@@ -120,6 +124,8 @@ public struct TurnRunner: TurnDispatching {
     self.makeFeedbackNonce = makeFeedbackNonce
     self.parker = parker
     self.approvalExpirySeconds = approvalExpirySeconds
+    self.journalCapture = journalCapture
+    self.notifyJournal = notifyJournal
     self.logger = logger
   }
 

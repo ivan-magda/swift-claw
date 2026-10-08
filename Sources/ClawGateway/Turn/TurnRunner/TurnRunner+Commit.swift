@@ -136,6 +136,7 @@ private extension TurnRunner {
           finalReplyMarkup: feedbackTarget.map(LearningNotices.resultKeyboard)
         )
       }
+    let journalSource = completedJournalSource(content: content, outcome: outcome, in: context)
     let turn = AssistantTurn(
       runID: context.runID,
       sessionID: context.sessionID,
@@ -147,7 +148,8 @@ private extension TurnRunner {
       setTainted: outcome.ingestedUntrusted,
       setPrivateData: outcome.hadPrivateData,
       providerState: providerState,
-      feedbackTarget: feedbackTarget
+      feedbackTarget: feedbackTarget,
+      journalSource: journalSource
     )
 
     let commitResult = try runs.commitAssistantTurn(turn, now: context.committedAt)
@@ -155,11 +157,41 @@ private extension TurnRunner {
     case .committed:
       try auditCompleted(content: content, suppressedAck: suppressHeartbeatAck, in: context)
       notifyOutbox()
+      if journalSource != nil {
+        notifyJournal()
+      }
       await notifyDailyCapIfTripped(in: context)
     case .usageRecordedAfterTerminal:
       await notifyDailyCapIfTripped(in: context)
     case .ignored:
       return
+    }
+  }
+
+  func completedJournalSource(
+    content: String,
+    outcome: TurnOutcome,
+    in context: CommitContext
+  ) -> JournalSource? {
+    guard context.origin == .interactive, context.mode == .direct, let journalCapture else {
+      return nil
+    }
+    do {
+      guard let input = try runs.journalExchangeInput(runID: context.runID) else {
+        return nil
+      }
+      let source = journalCapture.exchange(
+        input: input,
+        reply: content,
+        evidence: journalCapture.toolEvidence(exchanges: outcome.exchanges)
+      )
+      if source == nil, journalCapture.policy.scope != nil {
+        logger.warning("journal source preparation skipped", metadata: ["run": "\(context.runID)"])
+      }
+      return source
+    } catch {
+      logger.warning("journal input unavailable", metadata: ["run": "\(context.runID)"])
+      return nil
     }
   }
 

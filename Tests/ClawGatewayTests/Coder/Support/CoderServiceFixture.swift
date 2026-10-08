@@ -113,7 +113,9 @@ struct CoderServiceFixture: Sendable {
     root: URL,
     limit: Int,
     finished: AsyncGate,
-    redactor: @escaping @Sendable (_ text: String) -> String
+    redactor: @escaping @Sendable (_ text: String) -> String,
+    journalCapture: JournalSourceCapture? = nil,
+    now: @escaping @Sendable () -> Date = { Date() }
   ) -> CoderService {
     CoderService(
       store: store,
@@ -131,6 +133,8 @@ struct CoderServiceFixture: Sendable {
       jobRoot: root.path,
       executionPolicyID: CoderServiceFixture.executionPolicyID,
       redact: redactor,
+      journalCapture: journalCapture,
+      now: now,
       notifyOutbox: {
         finished.open()
       }
