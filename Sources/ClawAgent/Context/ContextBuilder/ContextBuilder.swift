@@ -37,11 +37,7 @@ public struct ContextBuilder: Sendable {
     retriever: any Retriever,
     budget: ContextBudget,
     journalFiles: (any JournalFiles)? = nil,
-    journalPolicy: JournalPolicy = JournalPolicy(
-      enabled: false,
-      ownerUserID: nil,
-      timeZoneID: "UTC"
-    ),
+    journalPolicy: JournalPolicy = .disabled,
     fenceLabels: ToolFenceLabels = .undeclared,
     policyStaticSubhash: String = "",
     now: @escaping @Sendable () -> Date = Date.init,
@@ -169,8 +165,12 @@ private extension ContextBuilder {
 private extension ContextBuilder {
   func hasPrivateDataAccess(_ fitted: [FittedSection]) -> Bool {
     fitted.contains { section in
-      section.id == .userFile || section.id == .memoryFile || section.id == .memoryItems
-        || section.id == .journal
+      switch section.id {
+      case .userFile, .memoryFile, .memoryItems, .journal:
+        return true
+      default:
+        return false
+      }
     }
   }
 }

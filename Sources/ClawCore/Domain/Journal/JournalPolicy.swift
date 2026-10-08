@@ -36,6 +36,12 @@ public struct JournalScope: Codable, Sendable, Equatable, Hashable {
 }
 
 public struct JournalPolicy: Sendable, Equatable {
+  public static let disabled = JournalPolicy(
+    enabled: false,
+    ownerUserID: nil,
+    timeZoneID: "UTC"
+  )
+
   public let enabled: Bool
   public let ownerUserID: Int64?
   public let timeZoneID: String
