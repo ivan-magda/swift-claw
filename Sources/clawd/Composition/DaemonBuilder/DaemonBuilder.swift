@@ -315,9 +315,14 @@ struct DaemonBuilder: Sendable {
     journal: JournalWorker? = nil,
     laneAdmission: LaneAdmissionShutdownService
   ) -> [any Service] {
-    (journal.map {
-      [$0 as any Service]
-    } ?? []) + base + [laneAdmission]
+    var services: [any Service] = []
+    if let journal {
+      services.append(journal)
+    }
+
+    services.append(contentsOf: base)
+    services.append(laneAdmission)
+    return services
   }
 }
 
