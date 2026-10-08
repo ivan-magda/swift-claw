@@ -25,6 +25,7 @@ public enum Command: Sendable, Equatable {
     guard let token = slashToken(in: text, botUsername: botUsername) else {
       return .plain(text)
     }
+
     return command(named: token.name, arguments: token.arguments, originalText: text)
   }
 }
@@ -45,22 +46,29 @@ private extension Command {
       return nil
     }
 
-    let tokenEnd =
-      text.firstIndex {
-        $0.isWhitespace
-      } ?? text.endIndex
+    let firstWhitespace = text.firstIndex { character in
+      character.isWhitespace
+    }
+    let tokenEnd = firstWhitespace ?? text.endIndex
     let commandBody = text[..<tokenEnd].dropFirst()
     guard commandBody.isEmpty == false else {
       return nil
     }
 
-    let pieces = commandBody.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false)
-    guard let rawName = pieces.first, rawName.isEmpty == false else {
+    let commandParts = commandBody.split(
+      separator: "@",
+      maxSplits: 1,
+      omittingEmptySubsequences: false
+    )
+    guard let rawName = commandParts.first, !rawName.isEmpty else {
       return nil
     }
 
-    if pieces.count == 2 {
-      guard let botUsername, pieces[1].caseInsensitiveCompare(botUsername) == .orderedSame else {
+    if commandParts.count == 2 {
+      let addressedUsername = commandParts[1]
+      guard let botUsername,
+            addressedUsername.caseInsensitiveCompare(botUsername) == .orderedSame
+      else {
         return nil
       }
     }
@@ -73,6 +81,7 @@ private extension Command {
     if let jobCommand = jobCommand(named: name, arguments: arguments) {
       return jobCommand
     }
+
     if let familyCommand = familyCommand(named: name, arguments: arguments) {
       return familyCommand
     }
@@ -146,6 +155,7 @@ public enum ScheduleCommand: Sendable, Equatable {
     if trimmed.isEmpty || trimmed.lowercased() == "list" {
       return .list
     }
+
     return .create(text: trimmed)
   }
 }
@@ -161,16 +171,21 @@ public enum LearningCommand: Sendable, Equatable {
     if trimmed.isEmpty || trimmed.caseInsensitiveCompare("list") == .orderedSame {
       return .list
     }
-    let pieces = trimmed.split(whereSeparator: \.isWhitespace)
-    if pieces.first?.caseInsensitiveCompare("reset") == .orderedSame {
-      guard pieces.count == 2 else {
+
+    let argumentWords = trimmed.split(whereSeparator: \.isWhitespace)
+    if argumentWords.first?.caseInsensitiveCompare("reset") == .orderedSame {
+      guard argumentWords.count == 2 else {
         return .reset(jobID: nil)
       }
-      return .reset(jobID: PositiveInt64.parse(String(pieces[1])))
+
+      let jobID = PositiveInt64.parse(String(argumentWords[1]))
+      return .reset(jobID: jobID)
     }
+
     if let jobID = PositiveInt64.parse(trimmed) {
       return .detail(jobID: jobID)
     }
+
     return .list
   }
 }
@@ -201,14 +216,22 @@ public enum JournalCommand: Sendable, Equatable {
   case invalid
 
   public static func parse(arguments: Substring) -> JournalCommand {
-    let pieces = arguments.split(whereSeparator: \.isWhitespace)
-    guard !pieces.isEmpty else {
+    let argumentWords = arguments.split(whereSeparator: \.isWhitespace)
+    guard !argumentWords.isEmpty else {
       return .status
     }
-    guard pieces.count == 2, let day = JournalDay(isoDate: String(pieces[1])) else {
+
+    guard argumentWords.count == 2 else {
       return .invalid
     }
-    switch pieces[0].lowercased() {
+
+    let action = argumentWords[0].lowercased()
+    let dateArgument = String(argumentWords[1])
+    guard let day = JournalDay(isoDate: dateArgument) else {
+      return .invalid
+    }
+
+    switch action {
     case "show":
       return .show(day)
     case "delete":
