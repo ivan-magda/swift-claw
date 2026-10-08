@@ -1,5 +1,6 @@
 import ClawCore
 import ClawTestSupport
+import ClawWorkspace
 import Foundation
 import Testing
 
@@ -209,6 +210,74 @@ struct JournalSummarizerTests {
   }
 
   @Test
+  func renderedBatchesStartNewLinesAfterOwnerEdits() throws {
+    // given
+    let root = try makeTemporaryRoot(prefix: "journal-render")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let files = FileSystemJournalFiles(root: root)
+    let source = try source()
+    let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
+    let target = root.appendingPathComponent("memory/\(source.day.isoDate).md")
+    let ownerText = "Owner edit: e\u{0301}"
+    try FileManager.default.createDirectory(
+      at: target.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    try Data(ownerText.utf8).write(to: target)
+
+    // when
+    for text in ["First decision", "Later result"] {
+      let note = JournalNote(
+        kind: .result,
+        attribution: .owner,
+        text: text,
+        sourceIDs: [source.id]
+      )
+      try files.append(day: source.day, text: codec.render(notes: [note], sources: [source]))
+    }
+
+    // then
+    let bytes = try Data(contentsOf: target)
+    #expect(bytes.starts(with: Data(ownerText.utf8)))
+    let lines = files.load(day: source.day).text.split(separator: "\n")
+    #expect(lines.count == 3)
+    #expect(
+      lines.contains {
+        $0.hasPrefix("- [") && $0.contains("First decision")
+      }
+    )
+    #expect(
+      lines.contains {
+        $0.hasPrefix("- [") && $0.contains("Later result")
+      }
+    )
+  }
+
+  @Test
+  func renderedTimeUsesEarliestCitedSourcesFrozenZone() throws {
+    // given
+    let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
+    let first = try source()
+    let later = try source(
+      id: 2,
+      timeZoneID: "America/New_York",
+      occurredAt: first.occurredAt.addingTimeInterval(25_200)
+    )
+    let note = JournalNote(
+      kind: .result,
+      attribution: .owner,
+      text: "Later result",
+      sourceIDs: [later.id]
+    )
+
+    // when
+    let rendered = codec.render(notes: [note], sources: [first, later])
+
+    // then
+    #expect(rendered.hasPrefix("- [05:00]"))
+  }
+
+  @Test
   func sharedSupportSurvivesFittingWithoutBecomingActivity() async throws {
     // given
     let proposalTail = "Выбираем PostgreSQL ради транзакций?"
@@ -401,6 +470,8 @@ private extension JournalSummarizerTests {
 
   func source(
     id: Int = 1,
+    timeZoneID: String = "Europe/Istanbul",
+    occurredAt: Date = Date(timeIntervalSince1970: 1_791_424_800),
     owner: String = "Выбираем PostgreSQL.",
     answer: String = "Выбрали PostgreSQL ради транзакций.",
     proposal: JournalProposal? = nil,
@@ -409,9 +480,9 @@ private extension JournalSummarizerTests {
     let day = try #require(JournalDay(isoDate: "2026-10-08"))
     return try JournalSource(
       id: "message:\(id)",
-      scope: JournalScope(ownerUserID: 7, timeZoneID: "Europe/Istanbul"),
+      scope: JournalScope(ownerUserID: 7, timeZoneID: timeZoneID),
       sessionID: 42,
-      occurredAt: Date(timeIntervalSince1970: 1_791_424_800),
+      occurredAt: occurredAt,
       day: day,
       ownerText: owner,
       assistantText: answer,

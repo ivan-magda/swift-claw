@@ -120,11 +120,20 @@ public struct JournalSummaryCodec: Sendable {
   public func render(notes: [JournalNote], sources: [JournalSource]) -> String {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.timeZone = sources.first.flatMap { TimeZone(identifier: $0.scope.timeZoneID) } ?? .gmt
     formatter.dateFormat = "HH:mm"
     let lines = notes.map { note in
       let cited = sources.filter { note.sourceIDs.contains($0.id) }
-      let time = cited.map(\.occurredAt).min().map(formatter.string(from:)) ?? ""
+      let earliest = cited.min {
+        $0.occurredAt < $1.occurredAt
+      }
+      formatter.timeZone =
+        earliest.flatMap {
+          TimeZone(identifier: $0.scope.timeZoneID)
+        } ?? .gmt
+      let time =
+        earliest.map {
+          formatter.string(from: $0.occurredAt)
+        } ?? ""
       let references = cited.map { source in
         source.coderJobID.map { "coder:" + $0.uuidString } ?? source.id
       }.joined(separator: ", ")

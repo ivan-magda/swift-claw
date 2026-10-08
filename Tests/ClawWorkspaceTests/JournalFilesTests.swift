@@ -17,14 +17,18 @@ struct JournalFilesTests {
       at: target.deletingLastPathComponent(),
       withIntermediateDirectories: true
     )
-    let ownerEditedText = "Owner edit: e\u{0301}\r\n"
+    let ownerEditedText = "Owner edit: e\u{0301}"
     try Data(ownerEditedText.utf8).write(to: target)
     let addition = String(
       repeating: "x",
-      count: JournalLimits.dayFileBytes - ownerEditedText.utf8.count
+      count: JournalLimits.dayFileBytes - ownerEditedText.utf8.count - 1
     )
 
     // when
+    #expect(throws: JournalFileError.overCap) {
+      try files.append(day: day, text: addition + "x")
+    }
+    #expect(try Data(contentsOf: target) == Data(ownerEditedText.utf8))
     try files.append(day: day, text: addition)
     let afterAppend = try Data(contentsOf: target)
     let beforeRefusedAppend = afterAppend

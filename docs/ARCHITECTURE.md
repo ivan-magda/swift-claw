@@ -1124,7 +1124,9 @@ containment. `JournalFiles` exposes bounded snapshots (`present`, `missing`, `un
 `overCap`), append, deletion and newest-first valid dated-file listing; `FileSystemJournalFiles`
 implements the IO. Automatic reads check the 512 KiB byte cap before opening the file and stay
 bounded if it grows. Appends preserve the existing UTF-8 bytes and refuse a damaged file or a
-result above that cap. Missing files can receive new notes, but no history is reconstructed.
+result above that cap. A nonempty append inserts a newline if existing nonempty bytes end without
+a CR or LF; that separator counts toward the resulting byte cap. Missing files can receive new
+notes, but no history is reconstructed.
 Empty text performs no IO. Publication creates an owner-only temporary file in the same directory
 and atomically replaces the target. Reads need no mutation gate. The shared `WorkspaceMutationGate`
 executes synchronous closures for publication, day deletion and approved `file_write` revalidation

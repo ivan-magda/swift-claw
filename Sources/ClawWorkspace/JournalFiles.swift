@@ -41,7 +41,8 @@ public struct FileSystemJournalFiles: JournalFiles {
     guard String(data: bytes, encoding: .utf8) != nil else {
       throw JournalFileError.unreadable
     }
-    let addition = Data(text.utf8)
+    let needsSeparator = !bytes.isEmpty && bytes.last != 0x0A && bytes.last != 0x0D
+    let addition = Data((needsSeparator ? "\n" + text : text).utf8)
     guard addition.count <= JournalLimits.dayFileBytes - bytes.count else {
       throw JournalFileError.overCap
     }
