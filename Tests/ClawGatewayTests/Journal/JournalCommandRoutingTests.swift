@@ -101,15 +101,41 @@ struct JournalCommandRoutingTests {
     #expect(await harness.pending.pending(sessionID: fixture.sessionID) == nil)
   }
 
-  @Test
-  func longShowMarksShorteningWithinTelegramLimit() async throws {
+  enum PreviewBoundary: CaseIterable {
+    case fullFit
+    case graphemeCutoff
+  }
+
+  @Test(arguments: PreviewBoundary.allCases)
+  func longShowMarksShorteningWithinTelegramLimit(boundary: PreviewBoundary) async throws {
     // given
     let fixture = try JournalWorkerFixture()
     defer {
       fixture.removeFiles()
     }
     let day = JournalDay.containing(fixture.now, timeZone: .gmt)
-    try fixture.files.append(day: day, text: String(repeating: "Русский текст. ", count: 1000))
+    let heading = "Journal \(day.isoDate)\n"
+    let notice = "\n[Shortened; read the workspace file for the full text.]"
+    let limit = TelegramMessageLimits.maxPlainMessageCharacters
+    let emoji = "👍🏽"
+    let introduction = "Русский текст. "
+    let prefix: String
+    let contents: String
+    switch boundary {
+    case .fullFit:
+      prefix = introduction + emoji
+      contents = prefix + String(repeating: "я", count: limit - heading.count - prefix.count)
+    case .graphemeCutoff:
+      let excerptBudget = limit - heading.unicodeScalars.count - notice.unicodeScalars.count
+      prefix =
+        introduction
+        + String(
+          repeating: "я",
+          count: excerptBudget - introduction.unicodeScalars.count - 1
+        )
+      contents = prefix + emoji + String(repeating: " конец", count: 100)
+    }
+    try fixture.files.append(day: day, text: contents)
     let harness = try makeRouter(fixture: fixture, enabled: false)
 
     // when
@@ -124,8 +150,14 @@ struct JournalCommandRoutingTests {
     // then
     let text = try #require(await harness.transport.sent.last?.text)
     #expect(text.contains("Shortened"))
-    #expect(text.count <= TelegramMessageLimits.maxPlainMessageCharacters)
+    #expect(text.unicodeScalars.count <= limit)
     #expect(text.contains("Русский текст."))
+    switch boundary {
+    case .fullFit:
+      #expect(text.contains(emoji))
+    case .graphemeCutoff:
+      #expect(text.hasPrefix(heading + prefix + "\n"))
+    }
   }
 
   @Test

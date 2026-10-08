@@ -1118,6 +1118,9 @@ late response retains authoritative usage even though its deadline outcome fails
 failure, timeout or typed inference cancellation returns conservative usage, including observed
 completion tokens above the reservation. Proven no-start returns no usage row while preserving
 the already started receipt. The worker persists the returned usage with the terminal outcome.
+A failed summary on a cancelled drain finishes as `cancelled`, retaining usage without adding a
+new deadline/provider error. Successful, empty and invalid response outcomes remain selected;
+uncancelled failures and prior genuine error history retain their existing behavior.
 
 ## 9. Memory & context architecture — SINGLE NORMATIVE SOURCE
 
@@ -1143,7 +1146,8 @@ stop the daemon, edit a journal and restart; concurrent external edits have no p
 
 **Owner journal commands** are direct-only and provider-free. `/journal` shows enabled state,
 timezone, aggregate pending sources, last outcome and recent valid file dates. `/journal show
-YYYY-MM-DD` shows bounded text and marks a shortened reply. `/journal delete YYYY-MM-DD` parks
+YYYY-MM-DD` bounds the complete reply to 4,096 Unicode scalars, including heading and shortening
+notice, and keeps whole graphemes in its leading excerpt. `/journal delete YYYY-MM-DD` parks
 one ordinary command confirmation with the selected-day pending count, including started
 unpublished sources. Every inspection and confirmed deletion checks both sender and private-chat
 ID against the current sole positive configured owner, even when automatic journaling is disabled;

@@ -243,7 +243,10 @@ private extension JournalWorker {
     let store = store
     let files = files
     let codec = codec
+
     let finishedAt = now()
+    let wasCancelled = Task.isCancelled
+
     try await mutationGate.perform {
       var outcome: JournalOutcome
       switch result.outcome {
@@ -254,7 +257,11 @@ private extension JournalWorker {
       case .invalidSummary:
         outcome = .invalidSummary(redactedReason: "Invalid journal summary")
       case .failed:
-        outcome = .failed(redactedReason: result.redactedReason ?? "Journal summary failed")
+        if wasCancelled {
+          outcome = .cancelled
+        } else {
+          outcome = .failed(redactedReason: result.redactedReason ?? "Journal summary failed")
+        }
       }
 
       let canPublish = try store.canPublish(batchID: batch.id)

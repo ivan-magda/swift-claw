@@ -158,10 +158,24 @@ private extension JournalHandlers {
       let notice = "\n[Shortened; read the workspace file for the full text.]"
       let limit = TelegramMessageLimits.maxPlainMessageCharacters
 
-      if heading.count + snapshot.text.count <= limit {
+      let headingScalars = heading.unicodeScalars.count
+      if headingScalars + snapshot.text.unicodeScalars.count <= limit {
         return heading + snapshot.text
       }
-      return heading + snapshot.text.prefix(limit - heading.count - notice.count) + notice
+
+      var remainingScalars = limit - headingScalars - notice.unicodeScalars.count
+      let excerpt = snapshot.text.prefix { character in
+        let scalarCount = character.unicodeScalars.count
+        guard scalarCount <= remainingScalars else {
+          return false
+        }
+
+        remainingScalars -= scalarCount
+
+        return true
+      }
+
+      return heading + excerpt + notice
     }
   }
 

@@ -64,8 +64,8 @@ struct JournalWorkerLifecycleTests {
     #expect(try fixture.store.status(ownerUserID: 42, now: fixture.now).pendingCount == 0)
   }
 
-  @Test
-  func shutdownJoinsStartedInference() async throws {
+  @Test(arguments: [false, true])
+  func shutdownJoinsStartedInference(failsAfterCancellation: Bool) async throws {
     // given
     let fixture = try JournalWorkerFixture()
     defer {
@@ -80,7 +80,7 @@ struct JournalWorkerLifecycleTests {
       release.open()
     }
     let provider = SequenceProvider(
-      [fixture.response],
+      failsAfterCancellation ? [] : [fixture.response],
       beforeResponse: {
         entered.open()
         await withTaskCancellationHandler {
@@ -89,7 +89,8 @@ struct JournalWorkerLifecycleTests {
         } onCancel: {
           cancelled.open()
         }
-      }
+      },
+      then: ProviderInferenceCancellation(observing: 900)
     )
     let ticking = AsyncGate()
     let tickerClock = ScriptedClock { delay in
@@ -135,7 +136,16 @@ struct JournalWorkerLifecycleTests {
     #expect(joined.providerReturned)
     #expect(joined.usageCallIDs == [startedCallID.rawValue])
     #expect(await provider.requests.count == 1)
-    #expect(try fixture.store.status(ownerUserID: 42, now: fixture.now).pendingCount == 1)
+    let status = try fixture.store.status(ownerUserID: 42, now: fixture.now)
+    #expect(status.pendingCount == 1)
+    if failsAfterCancellation {
+      #expect(status.lastOutcome == .cancelled)
+      #expect(status.lastRedactedError == nil)
+      let completionTokens = try await fixture.queue.read { db in
+        try Int.fetchOne(db, sql: "SELECT completion_tokens FROM provider_usage")
+      }
+      #expect(completionTokens == 900)
+    }
     #expect(try fixture.store.canPublish(batchID: #require(fixture.batches().first?.id)) == false)
   }
 }
