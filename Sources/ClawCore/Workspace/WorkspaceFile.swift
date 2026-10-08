@@ -32,34 +32,42 @@ extension WorkspaceFile {
   /// case-insensitive filesystem loads `skill.md` as a skill while the path a creating write
   /// carries keeps the caller's spelling verbatim; over-flagging where case does matter is free.
   public static func isPromptPrivileged(basename: String) -> Bool {
-    let matchesManifest =
-      basename.caseInsensitiveCompare(WorkspaceSkills.manifestName) == .orderedSame
-    return matchesManifest
-      || allCases.contains { file in
-        file.relativePath.caseInsensitiveCompare(basename) == .orderedSame
-      }
+    if basename.caseInsensitiveCompare(WorkspaceSkills.manifestName) == .orderedSame {
+      return true
+    }
+
+    return allCases.contains { file in
+      file.relativePath.caseInsensitiveCompare(basename) == .orderedSame
+    }
   }
 
   /// Root private prompt files or dated journals directly under `memory/`. Both inputs must
   /// already be canonical (symlinks and `..` resolved); names are matched against that root.
   public static func isPrivateData(canonicalPath: String, canonicalRoot: String) -> Bool {
-    isJournal(canonicalPath: canonicalPath, canonicalRoot: canonicalRoot)
-      || privateDataFiles.contains { file in
-        canonicalPath == canonicalRoot + "/" + file.relativePath
-      }
+    if isJournal(canonicalPath: canonicalPath, canonicalRoot: canonicalRoot) {
+      return true
+    }
+
+    return privateDataFiles.contains { file in
+      let privateFilePath = canonicalRoot + "/" + file.relativePath
+      return canonicalPath == privateFilePath
+    }
   }
 
   /// Exact dated Markdown child of the canonical workspace memory directory.
   public static func isJournal(canonicalPath: String, canonicalRoot: String) -> Bool {
-    let directory = canonicalRoot + "/memory/"
-    guard canonicalPath.hasPrefix(directory) else {
+    let journalDirectory = canonicalRoot + "/memory/"
+    guard canonicalPath.hasPrefix(journalDirectory) else {
       return false
     }
-    let name = String(canonicalPath.dropFirst(directory.count))
-    guard name.hasSuffix(".md") else {
-      return false
-    }
-    return JournalDay(isoDate: String(name.dropLast(3))) != nil
-  }
 
+    let filename = canonicalPath.dropFirst(journalDirectory.count)
+    let markdownExtension = ".md"
+    guard filename.hasSuffix(markdownExtension) else {
+      return false
+    }
+
+    let dateText = String(filename.dropLast(markdownExtension.count))
+    return JournalDay(isoDate: dateText) != nil
+  }
 }
