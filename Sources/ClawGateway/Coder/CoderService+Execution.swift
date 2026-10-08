@@ -43,7 +43,7 @@ extension CoderService {
     while !job.state.isTerminal {
       let selectedResult = Self.selectedResult(result, persistedState: job.state)
       let chunks = report.chunks(job: job, result: selectedResult)
-      let journalSource = journalCapture?.coder(
+      let captureOutcome = journalCapture?.coder(
         job: job,
         result: selectedResult,
         completedAt: completedAt
@@ -55,7 +55,7 @@ extension CoderService {
         result: selectedResult,
         chunks: chunks,
         releaseReservation: ownershipResolved,
-        journalSource: journalSource,
+        journalCapture: captureOutcome,
         now: completedAt
       )
       switch outcome {
@@ -70,7 +70,7 @@ extension CoderService {
             fail(.cleanup(jobID: id))
           }
         }
-        if journalSource != nil {
+        if captureOutcome != nil {
           notifyJournal()
         }
         await notifyOutbox()

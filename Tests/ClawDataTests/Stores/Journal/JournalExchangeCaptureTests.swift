@@ -164,7 +164,7 @@ struct JournalExchangeFixture {
           payloadHash: source.id
         ),
       ],
-      journalSource: source
+      journalCapture: .source(source)
     )
   }
 

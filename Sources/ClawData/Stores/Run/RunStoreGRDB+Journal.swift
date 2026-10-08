@@ -65,11 +65,11 @@ extension RunStoreGRDB {
 // MARK: - Journal Terminal Capture
 
 extension RunStoreGRDB {
-  static func captureJournalSource(_ db: Database, turn: AssistantTurn, now: Date) {
-    guard let source = turn.journalSource else {
+  static func commitJournalCapture(_ db: Database, turn: AssistantTurn, now: Date) {
+    guard let capture = turn.journalCapture else {
       return
     }
-    JournalStoreGRDB.captureBestEffort(db, source: source, now: now) {
+    JournalStoreGRDB.captureBestEffort(db, capture: capture, now: now) {
       let row = try Row.fetchOne(
         db,
         sql: "SELECT trigger_message_id, journal_admission FROM runs WHERE id = ?",
@@ -79,6 +79,12 @@ extension RunStoreGRDB {
         return false
       }
       let admission = try JSONDecoder().decode(JournalExchangeAdmission.self, from: encoded)
+      guard capture.scope == admission.scope else {
+        return false
+      }
+      guard case .source(let source) = capture else {
+        return true
+      }
       let triggerID: Int64 = row["trigger_message_id"]
       return source.id == "message:\(triggerID)" && source.sessionID == turn.sessionID
         && source.scope == admission.scope && source.occurredAt == admission.sourceTimestamp

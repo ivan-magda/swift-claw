@@ -57,7 +57,7 @@ struct JournalCoderCaptureTests {
       result: CoderStoreFixture.result(),
       chunks: [],
       releaseReservation: false,
-      journalSource: source,
+      journalCapture: .source(source),
       now: completedAt
     )
     guard case .stateChanged = stale else {
@@ -70,7 +70,7 @@ struct JournalCoderCaptureTests {
       result: selected,
       chunks: [],
       releaseReservation: false,
-      journalSource: source,
+      journalCapture: .source(source),
       now: completedAt
     )
     try fixture.store.releaseResolvedReservation(id: id, now: completedAt.addingTimeInterval(900))
@@ -80,7 +80,7 @@ struct JournalCoderCaptureTests {
       result: selected,
       chunks: [],
       releaseReservation: true,
-      journalSource: source,
+      journalCapture: .source(source),
       now: completedAt.addingTimeInterval(900)
     )
 

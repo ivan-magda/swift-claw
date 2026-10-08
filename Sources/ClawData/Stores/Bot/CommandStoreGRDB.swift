@@ -103,10 +103,11 @@ public struct CommandStoreGRDB: CommandStore {
       if let journalScope,
          sessionKey == SessionKey.telegramDM(chatID: journalScope.ownerUserID)
       {
-        try JournalStoreGRDB.markPendingSourcesDue(
+        JournalStoreGRDB.markPendingSourcesDueBestEffort(
           db,
           ownerUserID: journalScope.ownerUserID,
-          sessionID: sessionID
+          sessionID: sessionID,
+          now: now
         )
       }
 

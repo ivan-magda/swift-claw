@@ -65,7 +65,7 @@ extension JournalStoreGRDB {
   /// Optional capture cannot roll back required reply, result or outbox facts.
   static func captureBestEffort(
     _ db: Database,
-    source: JournalSource,
+    capture: JournalCaptureOutcome,
     now: Date,
     eligible: () throws -> Bool
   ) {
@@ -74,7 +74,18 @@ extension JournalStoreGRDB {
         guard try eligible() else {
           return .commit
         }
-        try insertSource(db, source: source)
+        switch capture {
+        case .source(let source):
+          try insertSource(db, source: source)
+        case .skipped(let scope):
+          try recordStatus(
+            db,
+            ownerUserID: scope.ownerUserID,
+            outcome: .skipped(redactedReason: "Journal source preparation failed"),
+            now: now,
+            skipped: 1
+          )
+        }
         return .commit
       }
     } catch {
@@ -82,7 +93,7 @@ extension JournalStoreGRDB {
       try? db.inSavepoint {
         try recordStatus(
           db,
-          ownerUserID: source.scope.ownerUserID,
+          ownerUserID: capture.scope.ownerUserID,
           outcome: .skipped(redactedReason: "Journal source capture failed"),
           now: now,
           skipped: 1
@@ -117,6 +128,32 @@ extension JournalStoreGRDB {
       ]
     )
     return db.changesCount > 0
+  }
+
+  /// Reset marking is optional; a failed journal write must not undo the conversation reset.
+  static func markPendingSourcesDueBestEffort(
+    _ db: Database,
+    ownerUserID: Int64,
+    sessionID: Int64,
+    now: Date
+  ) {
+    do {
+      try db.inSavepoint {
+        try markPendingSourcesDue(db, ownerUserID: ownerUserID, sessionID: sessionID)
+        return .commit
+      }
+    } catch {
+      // Failed marking leaves sources pending for another trigger, so it is not a source skip.
+      try? db.inSavepoint {
+        try recordStatus(
+          db,
+          ownerUserID: ownerUserID,
+          outcome: .failed(redactedReason: "Journal reset marking failed"),
+          now: now
+        )
+        return .commit
+      }
+    }
   }
 
   /// A reset marks only sources that already exist in this session, never future arrivals.

@@ -338,7 +338,7 @@ struct CoderCompositionTests {
       result: failed,
       chunks: [],
       releaseReservation: true,
-      journalSource: nil,
+      journalCapture: nil,
       now: Date()
     )
     try await service.shutdown()

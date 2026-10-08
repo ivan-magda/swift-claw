@@ -208,3 +208,18 @@ public struct JournalExchangeInput: Sendable, Equatable {
     self.supportingProposal = supportingProposal
   }
 }
+
+/// Nil capture means ineligible; an eligible preparation failure must reach durable status.
+public enum JournalCaptureOutcome: Sendable, Equatable {
+  case source(JournalSource)
+  case skipped(scope: JournalScope)
+
+  public var scope: JournalScope {
+    switch self {
+    case .source(let source):
+      source.scope
+    case .skipped(let scope):
+      scope
+    }
+  }
+}

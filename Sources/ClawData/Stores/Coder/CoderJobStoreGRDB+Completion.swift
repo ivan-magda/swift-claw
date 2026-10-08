@@ -9,7 +9,7 @@ extension CoderJobStoreGRDB {
     result: CoderResult,
     chunks: [OutboxChunk],
     releaseReservation: Bool,
-    journalSource: JournalSource? = nil,
+    journalCapture: JournalCaptureOutcome? = nil,
     now: Date
   ) throws(StoreError) -> CoderCompletionOutcome {
     try database.writeMapping { db in
@@ -45,9 +45,15 @@ extension CoderJobStoreGRDB {
         ]
       )
       try Self.insertCompletion(db, job: job, chunks: chunks, now: now)
-      if let source = journalSource {
-        JournalStoreGRDB.captureBestEffort(db, source: source, now: now) {
-          source.coderJobID == job.id && source.id == "coder:\(job.id.uuidString)"
+      if let capture = journalCapture {
+        JournalStoreGRDB.captureBestEffort(db, capture: capture, now: now) {
+          guard capture.scope == job.journalScope else {
+            return false
+          }
+          guard case .source(let source) = capture else {
+            return true
+          }
+          return source.coderJobID == job.id && source.id == "coder:\(job.id.uuidString)"
             && source.sessionID == job.origin.sessionID && source.scope == job.journalScope
             && source.occurredAt == now
         }

@@ -877,11 +877,17 @@ Only a successful ordinary `DONE` commit inserts an exchange source. Suspended, 
 and superseded runs insert none; approval resume can complete that exchange once. Exchange and
 Coder queue writes use a savepoint within the required terminal transaction. A journal SQL failure
 records a fixed redacted diagnostic best effort without rolling back the reply/result/outbox;
-required transaction failures keep their existing rollback behavior. Typed tool statuses may be
-included, but persisted observation prose is never reconstructed as observed-operation evidence.
+required transaction failures keep their existing rollback behavior. Gateway preparation returns
+`JournalCaptureOutcome?`: nil is ineligible, `.source` is a bounded payload, and `.skipped(scope:)`
+is an eligible preparation rejection. The successful terminal transaction validates the persisted
+admission scope and records a fixed skipped outcome for rejection, including the UTF-8 byte ceiling.
+Preparation rejection never changes the primary terminal result or exposes rejected text. Typed tool
+statuses may be included, but persisted observation prose is never reconstructed as observed-operation
+evidence.
 The deduplicated `/new` transaction marks only already captured pending sources for its owner/session
-due. A replayed update cannot mark future arrivals; post-commit notifications are optional latency
-hints and perform no inference inline.
+due. A replayed update cannot mark future arrivals. Reset marking uses its own savepoint: a journal
+failure preserves window reset, supersession and detaint, with a fixed diagnostic recorded best effort.
+Post-commit notifications are optional latency hints and perform no inference inline.
 
 `JournalStore` is a synchronous Core persistence port. `pendingSources` examines at most
 100 pending candidates in activity order, closes sources older than 48 hours, and returns

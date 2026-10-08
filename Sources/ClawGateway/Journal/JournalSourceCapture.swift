@@ -38,7 +38,7 @@ public struct JournalSourceCapture: Sendable {
     input: JournalExchangeInput,
     reply: String,
     evidence: [JournalEvidence]
-  ) -> JournalSource? {
+  ) -> JournalCaptureOutcome? {
     guard policy.scope?.ownerUserID == input.admission.scope.ownerUserID else {
       return nil
     }
@@ -48,20 +48,29 @@ public struct JournalSourceCapture: Sendable {
         text: bounded(proposal.text, limit: JournalLimits.proposalGraphemes)
       )
     }
-    return try? JournalSource(
-      id: "message:\(input.triggerMessageID)",
-      scope: input.admission.scope,
-      sessionID: input.sessionID,
-      occurredAt: input.admission.sourceTimestamp,
-      day: input.admission.sourceDay,
-      ownerText: bounded(input.ownerText, limit: JournalLimits.ownerTextGraphemes),
-      assistantText: bounded(reply, limit: JournalLimits.assistantTextGraphemes),
-      supportingProposal: proposal,
-      evidence: evidence.prefix(JournalLimits.evidenceEntries).compactMap(redactedEvidence)
-    )
+    do {
+      let source = try JournalSource(
+        id: "message:\(input.triggerMessageID)",
+        scope: input.admission.scope,
+        sessionID: input.sessionID,
+        occurredAt: input.admission.sourceTimestamp,
+        day: input.admission.sourceDay,
+        ownerText: bounded(input.ownerText, limit: JournalLimits.ownerTextGraphemes),
+        assistantText: bounded(reply, limit: JournalLimits.assistantTextGraphemes),
+        supportingProposal: proposal,
+        evidence: evidence.prefix(JournalLimits.evidenceEntries).compactMap(redactedEvidence)
+      )
+      return .source(source)
+    } catch {
+      return .skipped(scope: input.admission.scope)
+    }
   }
 
-  public func coder(job: CoderJob, result: CoderResult, completedAt: Date) -> JournalSource? {
+  public func coder(
+    job: CoderJob,
+    result: CoderResult,
+    completedAt: Date
+  ) -> JournalCaptureOutcome? {
     guard let scope = job.journalScope, policy.scope?.ownerUserID == scope.ownerUserID,
           job.origin.requesterUserID == scope.ownerUserID, job.origin.chatID == scope.ownerUserID,
           result.state.isTerminal, let timeZone = TimeZone(identifier: scope.timeZoneID)
@@ -94,17 +103,22 @@ public struct JournalSourceCapture: Sendable {
       job.prepared.request.task ?? job.prepared.canonicalSource,
       job.prepared.request.instructions,
     ].compactMap { $0 }.joined(separator: "\n")
-    return try? JournalSource(
-      id: "coder:\(job.id.uuidString)",
-      scope: scope,
-      sessionID: job.origin.sessionID,
-      occurredAt: completedAt,
-      day: JournalDay.containing(completedAt, timeZone: timeZone),
-      ownerText: bounded(task, limit: JournalLimits.ownerTextGraphemes),
-      assistantText: bounded(result.summary, limit: JournalLimits.assistantTextGraphemes),
-      coderJobID: job.id,
-      evidence: evidence
-    )
+    do {
+      let source = try JournalSource(
+        id: "coder:\(job.id.uuidString)",
+        scope: scope,
+        sessionID: job.origin.sessionID,
+        occurredAt: completedAt,
+        day: JournalDay.containing(completedAt, timeZone: timeZone),
+        ownerText: bounded(task, limit: JournalLimits.ownerTextGraphemes),
+        assistantText: bounded(result.summary, limit: JournalLimits.assistantTextGraphemes),
+        coderJobID: job.id,
+        evidence: evidence
+      )
+      return .source(source)
+    } catch {
+      return .skipped(scope: scope)
+    }
   }
 
   func toolEvidence(exchanges: [ToolExchange]) -> [JournalEvidence] {

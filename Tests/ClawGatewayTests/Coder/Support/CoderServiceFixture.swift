@@ -204,11 +204,12 @@ struct CoderServiceFixture: Sendable {
 
   static func result(
     state: CoderJobState = .succeeded,
-    failure: CoderFailure? = nil
+    failure: CoderFailure? = nil,
+    summary: String = "Updated retry handling"
   ) -> CoderResult {
     CoderResult(
       state: state,
-      summary: "Updated retry handling",
+      summary: summary,
       workspacePath: "/fixture/output",
       startingCommit: "abc123",
       baselineObserved: true,

@@ -42,7 +42,7 @@ public protocol CoderJobStore: Sendable {
     result: CoderResult,
     chunks: [OutboxChunk],
     releaseReservation: Bool,
-    journalSource: JournalSource?,
+    journalCapture: JournalCaptureOutcome?,
     now: Date
   ) throws(StoreError) -> CoderCompletionOutcome
 
