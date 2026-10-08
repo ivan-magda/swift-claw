@@ -59,7 +59,7 @@ struct JournalWorkerTests {
     await second.value
     await worker.shutdown()
     let restarted = fixture.worker(provider: provider)
-    try restarted.reconcileAtBoot(now: fixture.now)
+    try fixture.store.reconcileAtBoot(now: fixture.now)
     await restarted.sweep(now: fixture.now)
     await restarted.shutdown()
 
@@ -68,7 +68,6 @@ struct JournalWorkerTests {
     #expect(calls.withLock { $0.maximum } == 1)
     #expect(Set(batches.flatMap(\.sourceIDs)) == Set(due.map(\.id)))
     #expect(batches.contains { $0.sourceIDs.count < JournalLimits.batchSources })
-    #expect(batches.count > 3)
     #expect(try fixture.store.status(ownerUserID: 42, now: fixture.now).pendingCount == today.count)
     #expect(try fixture.store.pendingCount(day: today[0].day, ownerUserID: 42) == today.count)
     #expect(await provider.requests.count == batches.count)

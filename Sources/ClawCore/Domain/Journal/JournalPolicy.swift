@@ -13,7 +13,6 @@ public enum JournalLimits {
   public static let notes = 20
   public static let noteGraphemes = 400
   public static let totalNoteGraphemes = 4_096
-  public static let inferenceConcurrency = 1
   public static let inferenceDeadlineSeconds = 30
   public static let startedCallsPerUTCDay = 24
   public static let pendingAgeSeconds = 48 * 60 * 60

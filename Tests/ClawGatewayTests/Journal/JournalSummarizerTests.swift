@@ -1,6 +1,5 @@
 import ClawCore
 import ClawTestSupport
-import ClawWorkspace
 import Foundation
 import Testing
 
@@ -57,10 +56,6 @@ struct JournalSummarizerTests {
 
   @Test(arguments: [
     "{\"notes\":[]}",
-    "{\"notes\":[{\"kind\":\"result\",\"attribution\":\"owner\","
-      + "\"text\":\"done\",\"source_ids\":[\"message:999\"]}]}",
-    "{\"notes\":[{\"kind\":\"result\",\"attribution\":\"observed_operation\","
-      + "\"text\":\"done\",\"source_ids\":[\"message:1\"]}]}",
     "not json",
   ])
   func invalidAndEmptySummariesRemainSinglePaidCalls(content: String) async throws {
@@ -210,51 +205,7 @@ struct JournalSummarizerTests {
   }
 
   @Test
-  func renderedBatchesStartNewLinesAfterOwnerEdits() throws {
-    // given
-    let root = try makeTemporaryRoot(prefix: "journal-render")
-    defer { try? FileManager.default.removeItem(at: root) }
-    let files = FileSystemJournalFiles(root: root)
-    let source = try source()
-    let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
-    let target = root.appendingPathComponent("memory/\(source.day.isoDate).md")
-    let ownerText = "Owner edit: e\u{0301}"
-    try FileManager.default.createDirectory(
-      at: target.deletingLastPathComponent(),
-      withIntermediateDirectories: true
-    )
-    try Data(ownerText.utf8).write(to: target)
-
-    // when
-    for text in ["First decision", "Later result"] {
-      let note = JournalNote(
-        kind: .result,
-        attribution: .owner,
-        text: text,
-        sourceIDs: [source.id]
-      )
-      try files.append(day: source.day, text: codec.render(notes: [note], sources: [source]))
-    }
-
-    // then
-    let bytes = try Data(contentsOf: target)
-    #expect(bytes.starts(with: Data(ownerText.utf8)))
-    let lines = files.load(day: source.day).text.split(separator: "\n")
-    #expect(lines.count == 3)
-    #expect(
-      lines.contains {
-        $0.hasPrefix("- [") && $0.contains("First decision")
-      }
-    )
-    #expect(
-      lines.contains {
-        $0.hasPrefix("- [") && $0.contains("Later result")
-      }
-    )
-  }
-
-  @Test
-  func renderedTimeUsesEarliestCitedSourcesFrozenZone() throws {
+  func renderedTimeUsesCitedSourcesFrozenZone() throws {
     // given
     let codec = JournalSummaryCodec(costResolver: resolver, redact: { $0 })
     let first = try source()

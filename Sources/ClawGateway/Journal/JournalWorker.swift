@@ -4,7 +4,7 @@ import Logging
 import ServiceLifecycle
 
 public actor JournalWorker: Service {
-  public static let sweepInterval: Duration = .seconds(60)
+  public static let sweepInterval: Duration = .seconds(JournalLimits.sweepIntervalSeconds)
   private let ownerUserID: Int64
   private let store: any JournalStore
   private let files: any JournalFiles
@@ -62,10 +62,6 @@ public actor JournalWorker: Service {
   /// Producer hints coalesce without launching work before the service starts.
   nonisolated public func notifyPending() {
     notification.yield(())
-  }
-
-  nonisolated public func reconcileAtBoot(now: Date) throws(StoreError) {
-    try store.reconcileAtBoot(now: now)
   }
 
   public func sweep(now: Date) async {

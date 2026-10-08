@@ -58,7 +58,9 @@ public struct JournalSourceCapture: Sendable {
         ownerText: bounded(input.ownerText, limit: JournalLimits.ownerTextGraphemes),
         assistantText: bounded(reply, limit: JournalLimits.assistantTextGraphemes),
         supportingProposal: proposal,
-        evidence: evidence.prefix(JournalLimits.evidenceEntries).compactMap(redactedEvidence)
+        evidence: evidence.prefix(JournalLimits.evidenceEntries).compactMap {
+          try? JournalSanitizer.evidence($0, redact: redact)
+        }
       )
       return .source(source)
     } catch {
@@ -84,7 +86,7 @@ public struct JournalSourceCapture: Sendable {
         name: "Coder terminal state"
       ),
       try? JournalEvidence(
-        outcome: .publication(redactedPublication(result.publication)),
+        outcome: .publication(JournalSanitizer.publication(result.publication, redact: redact)),
         jobID: job.id,
         name: "Coder publication"
       ),
@@ -137,43 +139,6 @@ public struct JournalSourceCapture: Sendable {
 
 private extension JournalSourceCapture {
   func bounded(_ text: String, limit: Int) -> String {
-    let redacted = redact(text)
-    guard redacted.count > limit else {
-      return redacted
-    }
-    let marker = "\n[…]\n"
-    let available = limit - marker.count
-    let head = available / 3
-    return String(redacted.prefix(head)) + marker + String(redacted.suffix(available - head))
-  }
-
-  func redactedPublication(_ publication: CoderPublication) -> CoderPublication {
-    switch publication {
-    case .absent:
-      .absent
-    case .confirmed(let url):
-      .confirmed(url: bounded(url, limit: JournalLimits.evidenceFieldGraphemes))
-    case .unknown(let reportedURL):
-      .unknown(
-        reportedURL: reportedURL.map {
-          bounded($0, limit: JournalLimits.evidenceFieldGraphemes)
-        }
-      )
-    }
-  }
-
-  func redactedEvidence(_ evidence: JournalEvidence) -> JournalEvidence? {
-    let outcome: JournalEvidence.Outcome =
-      if case .publication(let publication) = evidence.outcome {
-        .publication(redactedPublication(publication))
-      } else {
-        evidence.outcome
-      }
-    return try? JournalEvidence(
-      outcome: outcome,
-      jobID: evidence.jobID,
-      name: bounded(evidence.name, limit: JournalLimits.evidenceFieldGraphemes),
-      detail: evidence.detail.map { bounded($0, limit: JournalLimits.evidenceFieldGraphemes) }
-    )
+    JournalSanitizer.shortened(redact(text), limit: limit)
   }
 }

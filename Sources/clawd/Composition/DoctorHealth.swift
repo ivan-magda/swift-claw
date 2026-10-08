@@ -20,20 +20,7 @@ enum DoctorHealth {
   }
 
   static func journalConfigChecks(config: AppConfig) -> [DoctorReport.Check] {
-    [
-      DoctorReport.Check(
-        key: "journal.enabled",
-        value: config.journalPolicy.enabled ? "on" : "off",
-        ok: true,
-        group: .context
-      ),
-      DoctorReport.Check(
-        key: "journal.timezone",
-        value: config.journalPolicy.timeZoneID,
-        ok: true,
-        group: .context
-      ),
-    ]
+    JournalHealth.configRows(policy: config.journalPolicy)
   }
 
   static func journalChecks(
@@ -56,8 +43,7 @@ enum DoctorHealth {
         )
       )
     }
-    return journalConfigChecks(config: config)
-      + JournalHealth.rows(policy: config.journalPolicy, status: status).dropFirst()
+    return JournalHealth.rows(policy: config.journalPolicy, status: status)
   }
 
   static func inputs(

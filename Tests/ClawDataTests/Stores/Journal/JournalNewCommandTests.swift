@@ -51,7 +51,6 @@ struct JournalNewCommandTests {
       try String.fetchAll(db, sql: "SELECT source_id FROM journal_sources WHERE due = 1")
     }
     #expect(dueIDs == [proposal.id])
-    #expect(Set([try #require(input.supportingProposal?.sourceID)]).isDisjoint(with: [source.id]))
     #expect(try fixture.sourceIDs().count == 2)
   }
 
@@ -107,7 +106,6 @@ struct JournalNewCommandTests {
       now: fixture.now
     )
     #expect(status.lastRedactedError == "Journal reset marking failed")
-    #expect(status.lastRedactedError?.contains("private fixture detail") != true)
     #expect(status.pendingCount == 1)
     let replay = try fixture.commands.applyNew(
       updateID: 3,

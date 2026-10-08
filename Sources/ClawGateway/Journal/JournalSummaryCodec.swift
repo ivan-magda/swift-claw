@@ -15,7 +15,7 @@ public enum JournalSummaryPreparationError: Error, Sendable, Equatable {
 }
 
 public struct JournalSummaryCodec: Sendable {
-  public static let omissionMarker = "\n[…]\n"
+  public static let omissionMarker = JournalSanitizer.omissionMarker
   private let costResolver: CostResolver
   private let redact: @Sendable (String) -> String
 
@@ -289,13 +289,15 @@ private extension JournalSummaryCodec {
     let proposal = try source.supportingProposal.map { proposal in
       try JournalProposal(
         sourceID: proposal.sourceID,
-        text: shortened(
+        text: JournalSanitizer.shortened(
           redact(proposal.text),
           limit: reduction == .full ? JournalLimits.proposalGraphemes : 200
         )
       )
     }
-    var evidence = try source.evidence.map(redactedEvidence)
+    var evidence = try source.evidence.map {
+      try JournalSanitizer.evidence($0, redact: redact)
+    }
     if reduction.rawValue >= Reduction.compactEvidence.rawValue {
       evidence = try evidence.compactMap { entry in
         if case .tool = entry.outcome {
@@ -323,8 +325,8 @@ private extension JournalSummaryCodec {
       sessionID: source.sessionID,
       occurredAt: source.occurredAt,
       day: source.day,
-      ownerText: shortened(redact(source.ownerText), limit: ownerLimit),
-      assistantText: shortened(redact(source.assistantText), limit: answerLimit),
+      ownerText: JournalSanitizer.shortened(redact(source.ownerText), limit: ownerLimit),
+      assistantText: JournalSanitizer.shortened(redact(source.assistantText), limit: answerLimit),
       supportingProposal: proposal,
       coderJobID: source.coderJobID,
       evidence: evidence
@@ -343,48 +345,6 @@ private extension JournalSummaryCodec {
       supportingProposal: proposal,
       coderJobID: source.coderJobID,
       evidence: source.evidence
-    )
-  }
-
-  func shortened(_ text: String, limit: Int) -> String {
-    guard text.count > limit else {
-      return text
-    }
-    let available = limit - Self.omissionMarker.count
-    let head = available / 3
-    return String(text.prefix(head)) + Self.omissionMarker + String(text.suffix(available - head))
-  }
-
-  func redactedEvidence(_ evidence: JournalEvidence) throws -> JournalEvidence {
-    let outcome: JournalEvidence.Outcome
-    switch evidence.outcome {
-    case .publication(.confirmed(let url)):
-      outcome = .publication(
-        .confirmed(
-          url: shortened(
-            redact(url),
-            limit: JournalLimits.evidenceFieldGraphemes
-          )
-        )
-      )
-    case .publication(.unknown(let url)):
-      outcome = .publication(
-        .unknown(
-          reportedURL: url.map {
-            shortened(redact($0), limit: JournalLimits.evidenceFieldGraphemes)
-          }
-        )
-      )
-    default:
-      outcome = evidence.outcome
-    }
-    return try JournalEvidence(
-      outcome: outcome,
-      jobID: evidence.jobID,
-      name: shortened(redact(evidence.name), limit: JournalLimits.evidenceFieldGraphemes),
-      detail: evidence.detail.map {
-        shortened(redact($0), limit: JournalLimits.evidenceFieldGraphemes)
-      }
     )
   }
 }

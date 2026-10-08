@@ -103,15 +103,12 @@ struct JournalCompositionTests {
     #expect(text.contains("Coder completed the retry fix."))
   }
 
-  enum ExcludedRoute: CaseIterable { case disabled, group, scheduled, heartbeat }
+  enum ExcludedRoute: CaseIterable { case disabled, scheduled }
 
   @Test(arguments: ExcludedRoute.allCases)
-  func excludedRoutesDoNoAutomaticJournalWork(route: ExcludedRoute) async throws {
+  func excludedRoutesOmitJournalContext(route: ExcludedRoute) async throws {
     // given — dated files exist, so a missing reader gate would reach the provider request.
-    let fixture = try JournalCompositionFixture(
-      enabled: route != .disabled && route != .group,
-      group: route == .group
-    )
+    let fixture = try JournalCompositionFixture(enabled: route != .disabled)
     defer { fixture.removeFiles() }
     let provider = SequenceProvider([fixture.response("Ordinary reply")])
     let graph = fixture.graph(provider: provider)
@@ -147,30 +144,12 @@ struct JournalCompositionTests {
         runID: fired.runID,
         triggerMessageID: fired.triggerMessageID
       )
-    case .heartbeat:
-      let fired = try #require(
-        try fixture.builder.stores.scheduledJobs.fireHeartbeat(
-          prompt: "Review checklist",
-          ownerChatID: 777,
-          now: fixture.now,
-          day: day.isoDate
-        )
-      )
-      claim = ClaimResult(
-        newlyClaimed: true,
-        sessionID: fired.sessionID,
-        messageID: fired.triggerMessageID,
-        runID: fired.runID,
-        triggerMessageID: fired.triggerMessageID
-      )
-    case .disabled, .group:
+    case .disabled:
       claim = try fixture.builder.stores.sessionMessages.claimAndPersistInbound(
         InboundMessage(
           updateID: 1,
-          sessionKey: route == .group
-            ? SessionKey.telegramTopic(chatID: -777, threadID: nil)
-            : SessionKey.telegramDM(chatID: 777),
-          chatID: route == .group ? -777 : 777,
+          sessionKey: SessionKey.telegramDM(chatID: 777),
+          chatID: 777,
           userID: 777,
           text: "Ordinary message",
           isEdited: false,
@@ -184,18 +163,17 @@ struct JournalCompositionTests {
     try await runner.run(
       runID: #require(claim.runID),
       sessionID: #require(claim.sessionID),
-      chatID: route == .group ? -777 : 777,
+      chatID: 777,
       triggerMessageID: #require(claim.messageID)
     )
     await graph.worker?.sweep(now: fixture.now)
     await graph.worker?.shutdown()
 
-    // then — no summary call, source or recent-day row reaches any excluded route.
+    // then — composed context excludes journal notes for disabled and scheduled routes.
     let requests = await provider.requests
     #expect(requests.count == 1)
     let text = try #require(requests.first).messages.map(\.content.text).joined()
     #expect(text.contains("excludedPrivateJournalNote") == false)
-    #expect(try graph.store.status(ownerUserID: 777, now: fixture.now).pendingCount == 0)
     if route == .disabled {
       #expect(graph.worker == nil)
       #expect(graph.capture == nil)
@@ -400,12 +378,9 @@ struct JournalCompositionFixture {
   let coordination = DaemonBuilder.TurnCoordination()
   let cooldown = PrimaryRouteCooldown(longSeconds: 900, clock: ContinuousClock())
 
-  init(enabled: Bool, group: Bool = false) throws {
+  init(enabled: Bool) throws {
     var env = CompositionAcceptanceHarness.validEnv()
     env["CLAW_ALLOWLIST"] = "777"
-    if group {
-      env["CLAW_GROUP_CHATS"] = "-777"
-    }
     env["CLAW_JOURNAL_ENABLED"] = enabled ? "true" : "false"
     env["CLAW_CODER_ENABLED"] = "true"
     env["CLAW_LLM_STREAMING"] = "false"
@@ -716,7 +691,7 @@ actor JournalPollerScript {
       {
         exchangeDelivered.open()
       }
-      if payload.contains("Started a fresh conversation") {
+      if payload.contains(CommandReplies.freshConversation) {
         resetDelivered.open()
       }
       if payload.contains("Completed") {

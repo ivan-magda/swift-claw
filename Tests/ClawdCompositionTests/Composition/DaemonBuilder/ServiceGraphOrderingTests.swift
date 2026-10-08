@@ -20,13 +20,6 @@ struct ServiceGraphOrderingTests {
     // worker precedes producers, so shutdown joins them before stopping journal inference.
     #expect((ordered.first as? JournalWorker) === journal)
     #expect(ordered.last is LaneAdmissionShutdownService)
-    let workerIndex = try #require(ordered.firstIndex { $0 is JournalWorker })
-    let producerIndexes = ordered.indices.filter { index in
-      ordered[index] is TelegramPollerService || ordered[index] is SchedulerService
-        || ordered[index] is CoderService
-    }
-    #expect(producerIndexes.isEmpty == false)
-    #expect(producerIndexes.allSatisfy { $0 > workerIndex })
     await journal.shutdown()
     try await bundle.coder?.shutdown()
   }

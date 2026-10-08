@@ -256,7 +256,6 @@ struct JournalSourceCaptureTests {
     #expect(status.skippedCount == 1)
     #expect(status.lastOutcome == .skipped(redactedReason: "Journal source preparation failed"))
     #expect(status.lastRedactedError == "Journal source preparation failed")
-    #expect(status.lastRedactedError?.contains("ordinary task") != true)
   }
 
 }

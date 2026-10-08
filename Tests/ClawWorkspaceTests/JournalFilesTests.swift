@@ -19,16 +19,28 @@ struct JournalFilesTests {
     )
     let ownerEditedText = "Owner edit: e\u{0301}"
     try Data(ownerEditedText.utf8).write(to: target)
+    // when
+    try files.append(day: day, text: "First decision")
+    let afterFirstAppend = try Data(contentsOf: target)
+    try files.append(day: day, text: "Later result")
+    let successiveAppends = try Data(contentsOf: target)
+    // then
+    #expect(afterFirstAppend[ownerEditedText.utf8.count] == 0x0A)
+    #expect(successiveAppends[afterFirstAppend.count] == 0x0A)
+    #expect(
+      files.load(day: day).text.split(separator: "\n")
+        == [Substring(ownerEditedText), "First decision", "Later result"]
+    )
     let addition = String(
       repeating: "x",
-      count: JournalLimits.dayFileBytes - ownerEditedText.utf8.count - 1
+      count: JournalLimits.dayFileBytes - successiveAppends.count - 1
     )
 
     // when
     #expect(throws: JournalFileError.overCap) {
       try files.append(day: day, text: addition + "x")
     }
-    #expect(try Data(contentsOf: target) == Data(ownerEditedText.utf8))
+    #expect(try Data(contentsOf: target) == successiveAppends)
     try files.append(day: day, text: addition)
     let afterAppend = try Data(contentsOf: target)
     let beforeRefusedAppend = afterAppend
@@ -37,7 +49,8 @@ struct JournalFilesTests {
     }
 
     // then
-    #expect(afterAppend.starts(with: Data(ownerEditedText.utf8)))
+    #expect(afterAppend.starts(with: successiveAppends))
+    #expect(afterAppend[successiveAppends.count] == 0x0A)
     #expect(afterAppend.count == JournalLimits.dayFileBytes)
     #expect(try Data(contentsOf: target) == beforeRefusedAppend)
     #expect(files.load(day: day).outcome == .present)

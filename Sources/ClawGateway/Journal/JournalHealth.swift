@@ -13,10 +13,7 @@ public enum JournalHealth {
     """
   }
 
-  public static func rows(
-    policy: JournalPolicy,
-    status: HealthValue<JournalStatus>
-  ) -> [DoctorReport.Check] {
+  public static func configRows(policy: JournalPolicy) -> [DoctorReport.Check] {
     [
       DoctorReport.Check(
         key: "journal.enabled",
@@ -24,6 +21,20 @@ public enum JournalHealth {
         ok: true,
         group: .context
       ),
+      DoctorReport.Check(
+        key: "journal.timezone",
+        value: policy.timeZoneID,
+        ok: true,
+        group: .context
+      ),
+    ]
+  }
+
+  public static func rows(
+    policy: JournalPolicy,
+    status: HealthValue<JournalStatus>
+  ) -> [DoctorReport.Check] {
+    configRows(policy: policy) + [
       .storeRead(status, key: "journal.status", group: .context) { status in
         render(policy: policy, status: status)
       },
