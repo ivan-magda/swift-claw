@@ -10,6 +10,7 @@ public enum Command: Sendable, Equatable {
   case memory(MemoryCommand)
   case schedule(ScheduleCommand)
   case learning(LearningCommand)
+  case journal(JournalCommand)
   case pause(jobID: Int64?)
   case resume(jobID: Int64?)
   case runNow(jobID: Int64?)
@@ -104,6 +105,8 @@ private extension Command {
       .memory(MemoryCommand.parse(arguments: arguments))
     case "schedule":
       .schedule(ScheduleCommand.parse(arguments: arguments))
+    case "journal":
+      .journal(JournalCommand.parse(arguments: arguments))
     case "learning":
       .learning(LearningCommand.parse(arguments: arguments))
     default:
@@ -182,10 +185,36 @@ extension Command {
   /// that message belongs to whoever typed fastest, so one attendee could commit another's draft.
   public var isDirectOnly: Bool {
     switch self {
-    case .remember, .memory, .schedule, .learning, .pause, .resume, .runNow, .cancelJob:
+    case .remember, .memory, .schedule, .learning, .journal, .pause, .resume, .runNow, .cancelJob:
       true
     case .start, .stop, .new, .help, .doctor, .mcp, .skills, .plain:
       false
+    }
+  }
+}
+
+/// Owner-only dated journal commands; invalid arguments never become paths.
+public enum JournalCommand: Sendable, Equatable {
+  case status
+  case show(JournalDay)
+  case delete(JournalDay)
+  case invalid
+
+  public static func parse(arguments: Substring) -> JournalCommand {
+    let pieces = arguments.split(whereSeparator: \.isWhitespace)
+    guard !pieces.isEmpty else {
+      return .status
+    }
+    guard pieces.count == 2, let day = JournalDay(isoDate: String(pieces[1])) else {
+      return .invalid
+    }
+    switch pieces[0].lowercased() {
+    case "show":
+      return .show(day)
+    case "delete":
+      return .delete(day)
+    default:
+      return .invalid
     }
   }
 }

@@ -28,6 +28,7 @@ public struct MessageRouter: Sendable {
   let commandHandlers: CommandHandlers
   let scheduleHandlers: ScheduleHandlers
   let learningHandlers: LearningHandlers?
+  let journalHandlers: JournalHandlers?
   let confirmations: ConfirmationResolver
   let turnDispatch: TurnDispatch
   let approvalCallbacks: ApprovalCallbackHandler?
@@ -70,6 +71,7 @@ public struct MessageRouter: Sendable {
     presentations: TurnPresentationRegistry? = nil,
     journalCapture: JournalSourceCapture? = nil,
     notifyJournal: @escaping @Sendable () -> Void = {},
+    journal: JournalCommandSurface? = nil,
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = {
       Date()
@@ -146,11 +148,22 @@ public struct MessageRouter: Sendable {
       replies: replies,
       now: now
     )
+    let journalHandlers = journal.map {
+      JournalHandlers(
+        surface: $0,
+        sessionMessages: sessionMessages,
+        pendingConfirmations: pendingConfirmations,
+        replies: replies,
+        now: now
+      )
+    }
+    self.journalHandlers = journalHandlers
     self.confirmations = ConfirmationResolver(
       sessionMessages: sessionMessages,
       pendingConfirmations: pendingConfirmations,
       memoryCommands: memoryCommands,
       learningReset: learningStore,
+      journalHandlers: journalHandlers,
       schedule: schedule,
       replies: replies,
       now: now,

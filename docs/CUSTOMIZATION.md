@@ -48,6 +48,25 @@ File reads and code staging classify these exact dated paths as private data, an
 show a privileged-file warning. Unrelated dated files, such as `reports/YYYY-MM-DD.md`, keep their
 ordinary classification.
 
+Inspection and deletion use no model calls and stay available when automatic journaling is
+disabled. They require the current sole positive configured owner in that owner's private chat;
+retained SQLite allowlist grants do not establish journal ownership.
+
+| Command | Effect |
+| --- | --- |
+| `/journal` | Enabled state, timezone, pending sources, last outcome and recent dates |
+| `/journal show YYYY-MM-DD` | That day's bounded text, with a notice if the reply is shortened |
+| `/journal delete YYYY-MM-DD` | Ask to remove that file, including your edits, showing its pending source count |
+
+Confirm deletion with `yes`. The daemon cancels already queued work for the selected date before
+removing the file, under the same gate used for publication and approved writes. An in-flight
+summary retains its usage but cannot recreate that file. If file removal fails, cancelled work
+stays cancelled and the reply reports failure; issue the delete command again to retry.
+Other days, source conversations and running Coder jobs remain. Later completed activity may
+create this date again. This is not archive-wide forgetting. Deleting through an external editor
+has no queue semantics. `/status` diagnostics expose only aggregate journal state, without dated
+file lists or file contents.
+
 ## Skills
 
 A skill is a procedure you write once and the agent pulls up when a task calls for it —

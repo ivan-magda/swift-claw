@@ -1122,6 +1122,26 @@ executes synchronous closures for publication, day deletion and approved `file_w
 plus atomic IO; callers never await database or file operations inside that closure. The owner may
 stop the daemon, edit a journal and restart; concurrent external edits have no preservation guarantee.
 
+**Owner journal commands** are direct-only and provider-free. `/journal` shows enabled state,
+timezone, aggregate pending sources, last outcome and recent valid file dates. `/journal show
+YYYY-MM-DD` shows bounded text and marks a shortened reply. `/journal delete YYYY-MM-DD` parks
+one ordinary command confirmation with the selected-day pending count, including started
+unpublished sources. Every inspection and confirmed deletion checks both sender and private-chat
+ID against the current sole positive configured owner, even when automatic journaling is disabled;
+SQLite allowlist history is not authority for these commands.
+
+`ConfirmationResolver` handles journal deletion in an explicitly awaited branch outside its
+synchronous SQL effect helper. It checks the current owner and uses `ReplySender.claimUpdate`
+before effects; a duplicate leaves a newer confirmation untouched. Inside the shared synchronous
+mutation gate it cancels that owner's selected-day queued sources/batches, then removes the file.
+SQL cancellation and filesystem removal are serialized operations, not one atomic transaction.
+A file failure remains a failure and leaves cancellation committed. It clears the confirmation and
+sends the result through the existing command ack. An interrupted command may require another
+delete request. An in-flight call still accounts usage but cannot append after cancellation.
+Other days, source conversations and running Coder jobs remain; later completed activity may
+recreate the date. External editor deletion has no queue effect. `JournalHealth` consumes only
+aggregate status; group-visible diagnostics contain no journal text or date lists.
+
 **Journal summaries** use the approved historical-data prompt and a separately supplied schema.
 Notes preserve the owner's language, decisions/reasons, useful outcomes, corrections and open
 work. Supporting proposals can resolve a current confirmation but cannot create activity by

@@ -10,6 +10,7 @@ struct ConfirmationResolver: Sendable {
   let pendingConfirmations: PendingConfirmationRegistry
   let memoryCommands: any MemoryCommandStore
   let learningReset: (any LearningResetApplying)?
+  let journalHandlers: JournalHandlers?
 
   let schedule: ScheduleSurface
   let replies: ReplySender
@@ -69,6 +70,10 @@ private extension ConfirmationResolver {
     rawUpdate: RawUpdate,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
+    if case .journalDelete(let day) = confirmation {
+      return try await commitJournalDelete(day: day, sessionID: sessionID, message: message)
+    }
+
     // A parked schedule can be confirmed long after its preview; recompute the fire time from
     // the parked rule against the arm-time clock (details in OccurrencePolicy.armOccurrence).
     // A one-shot whose instant has passed cannot be salvaged — reject it so the owner
@@ -121,6 +126,38 @@ private extension ConfirmationResolver {
     )
   }
 
+  func commitJournalDelete(
+    day: JournalDay,
+    sessionID: Int64,
+    message: IncomingMessage
+  ) async throws(RoutingHalt) -> HandleOutcome {
+    guard let journalHandlers, journalHandlers.isOwner(message) else {
+      return await replies.sendPrivateBot(updateID: message.updateID, target: .chat(message.chatID))
+    }
+    try await replies.claimUpdate(updateID: message.updateID, target: .chat(message.chatID))
+
+    let result = await journalHandlers.deleteConfirmed(
+      day: day,
+      ownerUserID: message.userID,
+      now: now()
+    )
+    await pendingConfirmations.clear(sessionID: sessionID)
+    let outcome: String =
+      switch result.outcome {
+      case .deleted:
+        "Deleted journal \(day.isoDate)."
+      case .missing:
+        "No journal file for \(day.isoDate)."
+      case .failed:
+        "Journal deletion failed. Issue the delete command again to retry."
+      }
+    return await replies.sendCommandAck(
+      updateID: message.updateID,
+      target: .chat(message.chatID),
+      text: outcome + " Cancelled \(result.cancelledPendingCount) pending sources."
+    )
+  }
+
   /// Applies the parked effect through its atomic claim+effect+audit store seam and returns the
   /// claim verdict plus the per-effect ack text. Store failures propagate to `commitPending`.
   func applyConfirmedEffect(
@@ -130,6 +167,8 @@ private extension ConfirmationResolver {
     scheduleArmNext: Date?
   ) throws -> (newlyClaimed: Bool, ackText: String) {
     switch confirmation {
+    case .journalDelete:
+      throw StoreError.unexpected("journal deletion requires the awaited path")
     case .rememberWrite(let request):
       let result = try memoryCommands.applyRemember(
         updateID: updateID,
@@ -206,6 +245,8 @@ private extension ConfirmationResolver {
         MemoryReplies.deleteFailed
       case .scheduleArm:
         ScheduleReplies.armFailed
+      case .journalDelete:
+        CommandReplies.journalUnavailable
       case .learningReset:
         LearningReplies.resetFailed
       }
