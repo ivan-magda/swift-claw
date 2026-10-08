@@ -184,8 +184,12 @@ struct TMessage: Decodable {
       hasSenderChat: sender_chat != nil,
       isForwarded: forward_origin != nil,
       migratedToChatID: migrate_to_chat_id,
-      date: date.map { Date(timeIntervalSince1970: TimeInterval($0)) },
-      editDate: edit_date.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+      date: date.map {
+        Date(timeIntervalSince1970: TimeInterval($0))
+      },
+      editDate: edit_date.map {
+        Date(timeIntervalSince1970: TimeInterval($0))
+      }
     )
   }
 }

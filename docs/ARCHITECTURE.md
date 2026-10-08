@@ -240,6 +240,15 @@ form `ARCHITECTURE.md §N` is used, sparingly.
   stopping does not flush them. Boot reconciliation is a local `JournalStore.reconcileAtBoot` pass
   even when automatic generation is disabled. It closes and accounts abandoned started receipts
   without sending or appending them again.
+  `DaemonBuilder.makeJournalComposition` constructs one policy/store/files/mutation gate and optional
+  capture/worker before assembling Coder and the agent. The same policy drives context, argument
+  scanning and the static fingerprint; the same gate serializes publication, deletion and approved
+  file writes. The router creates command handlers against its shared reply/confirmation surface.
+  Register the worker before producers, Coder before lane admission: reverse shutdown joins
+  producers before the worker. `DaemonRuntimeBundle` retains the worker for fallback cleanup after
+  Coder joins and before credential or client teardown, including cancellation during boot.
+  Configuration-only doctor emits enabled/timezone fields before its early return without creating
+  journal state or files. Full diagnostics read aggregate status and do not enumerate dated files.
 - **Logging:** `swift-log` to stdout/stderr; journald/newsyslog handle rotation.
 - **Approval graph ownership:** the daemon root retains the approval waiter for its full lifetime.
   The turn runner's deferred parker holds a weak back-reference to that waiter, so releasing the
@@ -2344,6 +2353,11 @@ preferences (such as early exits or related-type nesting) require contextual jud
 blanket rewrite. New exceptions require a concrete reason in this section.
 
 ## 20. Roadmap (technical increments)
+
+**Personal daily journals (issue #209): delivered.** The owner controls automatic summaries through
+`CLAW_JOURNAL_ENABLED` and `/journal`; sections 7–9, 12 and 14.5 define queue/accounting, context and
+the explicit trust exception. Production composition acceptance, independent test-value review and
+lint/build/test gates passed on 2026-10-08.
 
 Re-cut for the approved v1 scope. **Inc 0–3 = the v1 daily-driver milestone**: conversational + durable memory + read-only tools + streaming. Each increment lands a working, supervised slice, and each **"Done when" is an automated acceptance test** (per-requirement verified-by-test), not a manual check.
 

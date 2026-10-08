@@ -101,6 +101,7 @@ extension RunCommand {
       presentations: bundle.presentations,
       dependent: RuntimeShutdownCoordinator.DependentCleanup(
         commitCredentials: {
+          await bundle.journal?.shutdown()
           try await Self.commitCredentials(bundle.credentialSources)
         },
         // The dedicated redirect-disabled LLM client, now its own resource rather than the Telegram

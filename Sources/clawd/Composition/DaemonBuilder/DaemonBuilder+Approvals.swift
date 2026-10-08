@@ -34,7 +34,8 @@ extension DaemonBuilder {
     agentStack: AgentStack,
     costPolicy: LLMCostPolicy,
     imageCache: ImageCache,
-    freezeLearningSurface: @escaping @Sendable (_ runID: Int64, _ policyVersion: String) -> Void
+    freezeLearningSurface: @escaping @Sendable (_ runID: Int64, _ policyVersion: String) -> Void,
+    journal: JournalComposition? = nil
   ) -> TurnRunner {
     let outboxSignal = coordination.outboxSignal
     return TurnRunner(
@@ -59,6 +60,8 @@ extension DaemonBuilder {
       parker: coordination.deferredParker,
       approvalExpirySeconds: config.approvalExpirySeconds,
       presentations: agentStack.presentations,
+      journalCapture: journal?.capture,
+      notifyJournal: { journal?.worker?.notifyPending() },
       logger: logger
     )
   }

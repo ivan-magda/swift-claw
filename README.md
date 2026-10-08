@@ -34,6 +34,10 @@ database, encrypted secret envelopes, and Markdown files you edit by hand.
   Inspect lessons and roll back a promotion with `/learning`.
 - **Proactive, on your clock.** "Every weekday at 07:00" schedules fire once per
   occurrence across restarts and DST changes, and an opt-in heartbeat respects quiet hours.
+- **Daily notes across sessions.** Set `CLAW_JOURNAL_ENABLED=true` for your personal deployment.
+  clawd batches decisions, results and unfinished work into dated Markdown files and loads today's
+  and yesterday's notes after `/new` or a restart. Inspect or delete them with `/journal`.
+  [Daily journals](docs/CUSTOMIZATION.md#daily-journal-files) explains delays and extra model usage.
 - **Durable memory.** Facts you confirm persist in SQLite, and clawd recalls them by
   importance and recency. Workspace Markdown files hold your profile and curated memory,
   and conversation history is full-text searchable.
@@ -108,7 +112,9 @@ in [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 In Telegram, `/schedule` creates or lists jobs; `/runnow <jobId>` runs one now;
 `/pause`, `/resume`, and `/cancel` control a job. `/learning <jobId>` shows its lessons and
 trial, and `/learning reset <jobId>` asks you to confirm an empty lesson set. `/help` lists
-commands and confirmation rules.
+commands and confirmation rules. `/journal`, `/journal show YYYY-MM-DD`, and
+`/journal delete YYYY-MM-DD` inspect and manage personal daily notes, including while automatic
+journaling is disabled.
 
 ## Security model
 
@@ -135,6 +141,10 @@ and understand that their ordinary tool approvals are relaxed; see
   and pulled your private files into context, fetching an arbitrary URL also needs your
   approval. clawd pins your LLM and search providers in config, and the model cannot
   redirect them.
+
+Opt-in daily journals are private labeled data that preserve useful conclusions without setting
+session taint. While enabled, clawd checks outbound tool arguments for MEMORY/USER substrings
+independently of taint. This check adds no approvals and does not prevent every possible disclosure.
 
 The full model is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (§12). To report a
 vulnerability, see [SECURITY.md](SECURITY.md).

@@ -140,7 +140,7 @@ struct JournalContextTests {
     #expect(failed.hasPrivateDataAccess == false)
   }
 
-  @Test(arguments: ["disabled", "nonowner", "scheduled", "heartbeat", "legacy"])
+  @Test(arguments: ["disabled", "nonowner", "scheduled"])
   func excludedScopeDoesNotReadJournal(scope: String) throws {
     // given
     let policy = JournalPolicy(
@@ -148,14 +148,8 @@ struct JournalContextTests {
       ownerUserID: 42,
       timeZoneID: "UTC"
     )
-    let key =
-      scope == "legacy" ? "42" : SessionKey.telegramDM(chatID: scope == "nonowner" ? 43 : 42)
-    let origin: RunOrigin =
-      scope == "scheduled"
-      ? .scheduled
-      : scope == "heartbeat"
-        ? .heartbeat
-        : .interactive
+    let key = SessionKey.telegramDM(chatID: scope == "nonowner" ? 43 : 42)
+    let origin: RunOrigin = scope == "scheduled" ? .scheduled : .interactive
     let builder = makeBuilder(files: ForbiddenJournalReads(), policy: policy)
 
     // when

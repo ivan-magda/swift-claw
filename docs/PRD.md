@@ -92,6 +92,11 @@ All capability areas are in scope over time; the v1 cut and later phasing are in
 - The owner can **review** remembered facts (with provenance) and **delete** them.
 - Durable facts are written **only on explicit confirmation** (configurable), shown verbatim before saving, and **flushed before compaction**.
 - Cross-session recall via full-text search over the conversation archive.
+- Opt-in personal daily notes supplement curated files and confirmed facts. Only the configured
+  owner's interactive DM contributes completed exchanges and admitted Coder terminal results.
+  Notes persist at `memory/YYYY-MM-DD.md` and reach later turns after `/new` or restart.
+  Issue #209 automatic journal requirement delivered; composition acceptance, independent test-value
+  review and lint/build/test gates passed on 2026-10-08.
 
 ### 5.3 Tools: read-only web & file *(v1)*
 - *"Read my notes/project.md and draft a status update"* / *"fetch this URL and summarize."*
@@ -208,6 +213,17 @@ Requirements tagged *(v1)* are part of the daily-driver milestone (§9); others 
 - **FR-M4.** Cross-session recall via SQLite **FTS5** search over the archive (external-content mode over `messages`, single delete source of truth — detail in [`ARCHITECTURE.md` §7]).
 - **FR-M5.** Memory and tool output are **untrusted context**: MEMORY/USER files are injected inside the **same untrusted/labeled wrapper** as other data — **never the system tier** — so poisoned memory cannot claim system authority. They may never override system/security policy. Pattern scanning of memory writes is **defense-in-depth only**, not an acceptance gate. High-sensitivity memory is **not auto-injected** into a turn that has already ingested untrusted content. Workspace skills are labeled the same way and are read under the same rule (FR-T9). Opt-in personal daily journal notes are private labeled data; loading them does not taint, suppress high-sensitivity memory or filter owner recall. Notes may retain sensitive or externally derived conclusions, including voice/photo-derived content, even from tainted turns; raw-message provenance stays unchanged (architecture §9).
 - **FR-M6.** **`/memory review` + `/memory delete`** let the owner inspect remembered facts with provenance and forget them (confirm-gated). Durable memory **persists** across `/new` by design; forgetting is a separate, explicit path (see FR-O3).
+
+- **FR-M7. Personal daily journals.** `CLAW_JOURNAL_ENABLED` defaults off and requires one positive
+  configured owner with no groups. Batch up to ten sources at threshold, `/new` or source-day end,
+  using `CLAW_TIMEZONE`; no automatic history import. `/new` replies before background summaries
+  finish. Load today and yesterday, at most 4,000 graphemes combined. Summary calls use the global
+  budget and at most 24 starts per UTC day. `/journal`, `/journal show YYYY-MM-DD` and confirmed
+  `/journal delete YYYY-MM-DD` remain owner-only when disabled. Delete the selected file and already
+  queued work for its day; preserve other days, conversations and running Coder jobs. Stop-edit-restart
+  preserves owner edits. After a crash, resume unstarted sources but account and close started batches
+  without replay or file reconstruction; a missed note is an accepted limit. Configuration-only doctor
+  performs no journal state/file IO. Architecture sections 7–9, 12 and 14.5 govern trust and limits.
 
 ### 6.7 Tools, policy & approvals
 - **FR-T1.** *(v1 registry; full policy gate in the tools phase)* A fixed tool registry with explicit input/output schemas. Each tool declares a **risk tier**: `safe` | `ask` | `dangerous` | `disabled`, plus timeout, sandbox requirement, and audit behavior. A **per-tool output cap** (default ~25k tokens) is enforced and counts toward the next turn's input budget.

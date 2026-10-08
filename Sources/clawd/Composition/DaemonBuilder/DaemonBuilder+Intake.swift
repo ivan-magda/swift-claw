@@ -21,7 +21,8 @@ extension DaemonBuilder {
     approvalCallbacks: ApprovalCallbackHandler,
     doctor: any DoctorReporting,
     learning: ScheduledLearningService?,
-    presentations: TurnPresentationRegistry?
+    presentations: TurnPresentationRegistry?,
+    journal: JournalComposition? = nil
   ) -> IntakeStack {
     let router = makeIntakeRouter(
       coordination: coordination,
@@ -31,7 +32,8 @@ extension DaemonBuilder {
       approvalCallbacks: approvalCallbacks,
       doctor: doctor,
       learning: learning,
-      presentations: presentations
+      presentations: presentations,
+      journal: journal
     )
     let poller = TelegramPollerService(
       intake: transport,
@@ -58,7 +60,8 @@ extension DaemonBuilder {
     approvalCallbacks: ApprovalCallbackHandler?,
     doctor: any DoctorReporting,
     learning: ScheduledLearningService?,
-    presentations: TurnPresentationRegistry?
+    presentations: TurnPresentationRegistry?,
+    journal: JournalComposition? = nil
   ) -> MessageRouter {
     let voiceService = makeVoiceService()
     let imageService = makeImageService()
@@ -99,6 +102,16 @@ extension DaemonBuilder {
       typing: TelegramTypingIndicator(transport: transport),
       coordinator: coordination.approvalCoordinator,
       presentations: presentations,
+      journalCapture: journal?.capture,
+      notifyJournal: { journal?.worker?.notifyPending() },
+      journal: journal.map { graph in
+        JournalCommandSurface(
+          policy: graph.policy,
+          store: graph.store,
+          files: graph.files,
+          mutationGate: graph.mutationGate
+        )
+      },
       doctor: doctor,
       now: now,
       logger: logger
@@ -112,14 +125,19 @@ extension DaemonBuilder {
     workspace: FileSystemWorkspace,
     sandbox: SandboxStack,
     mcpTools: [any Tool],
-    coderTools: [any Tool] = []
+    coderTools: [any Tool] = [],
+    journal: JournalComposition? = nil
   ) -> GatedToolDispatcher {
     let secretValues = redactionValues
     let redactor = SecretRedactor(secretValues: secretValues)
 
     var tools: [any Tool] = [
       FileReadTool(workspaceRoot: workspace.root, redactor: redactor),
-      FileWriteTool(workspaceRoot: workspace.root, redactor: redactor),
+      FileWriteTool(
+        workspaceRoot: workspace.root,
+        redactor: redactor,
+        mutationGate: journal?.mutationGate ?? WorkspaceMutationGate()
+      ),
       MemoryWriteTool(redactor: redactor),
       SkillLoadTool(
         workspaceRoot: workspace.root,
@@ -170,7 +188,8 @@ extension DaemonBuilder {
         privateFileLoader: privateFileLoader,
         enabledDangerousTools: Set(
           (config.exec.enabled ? [ExecuteCodeTool.name] : []) + coderTools.map(\.definition.name)
-        )
+        ),
+        journalEnabled: config.journalPolicy.enabled
       ),
       secretValues: secretValues
     )
@@ -187,7 +206,8 @@ extension DaemonBuilder {
         searchEndpointPresent: secrets.searchAPIKey != nil,
         workspaceRoot: workspace.root.path,
         webFetchExemptCIDRs: config.webFetchExemptCIDRs,
-        exec: config.exec
+        exec: config.exec,
+        journalEnabled: config.journalPolicy.enabled
       )
     )
   }

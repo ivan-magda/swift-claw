@@ -29,6 +29,9 @@ struct JournalValueTests {
 
     // then
     #expect(day.isoDate == "2025-03-10")
+    let beforeLocalMidnight = instant.addingTimeInterval(-1)
+    #expect(JournalDay.containing(beforeLocalMidnight, timeZone: zone).isoDate == "2025-03-09")
+    #expect(JournalDay.containing(beforeLocalMidnight, timeZone: .gmt).isoDate == "2025-03-10")
     #expect(yesterday.isoDate == "2025-03-09")
     let leapDay = try JSONDecoder().decode(JournalDay.self, from: Data("\"2024-02-29\"".utf8))
     #expect(leapDay.isoDate == "2024-02-29")

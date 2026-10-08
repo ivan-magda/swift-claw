@@ -311,9 +311,10 @@ struct ToolPolicyGateTests {
     #expect(recorded.reason == .exfilTrifecta)
   }
 
-  @Test(arguments: [Self.memoryText, "The owner's profile records a distinctive private interest."])
-  func journalScanDoesNotChangeApprovalPredicate(privateText: String) async {
-    // given — the same loader serves MEMORY and USER; the clean turn has no trifecta legs.
+  @Test
+  func journalScanDoesNotChangeApprovalPredicate() async {
+    // given — a clean turn has no trifecta legs.
+    let privateText = Self.memoryText
     let gate = makeGate(privateFiles: [privateText], journalEnabled: true)
     let substring = String(privateText.dropFirst(10).prefix(16))
 

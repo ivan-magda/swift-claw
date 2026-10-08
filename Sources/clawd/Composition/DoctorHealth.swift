@@ -16,6 +16,48 @@ enum DoctorHealth {
     )
       + schedulerChecks(stores: stores, config: config, now: now)
       + approvalChecks(stores: stores, config: config, now: now)
+      + journalChecks(stores: stores, config: config, now: now)
+  }
+
+  static func journalConfigChecks(config: AppConfig) -> [DoctorReport.Check] {
+    [
+      DoctorReport.Check(
+        key: "journal.enabled",
+        value: config.journalPolicy.enabled ? "on" : "off",
+        ok: true,
+        group: .context
+      ),
+      DoctorReport.Check(
+        key: "journal.timezone",
+        value: config.journalPolicy.timeZoneID,
+        ok: true,
+        group: .context
+      ),
+    ]
+  }
+
+  static func journalChecks(
+    stores: ClawStores,
+    config: AppConfig,
+    now: Date
+  ) -> [DoctorReport.Check] {
+    let status: HealthValue<JournalStatus>
+    if let ownerUserID = config.journalPolicy.ownerUserID {
+      status = read { try stores.journal.status(ownerUserID: ownerUserID, now: now) }
+    } else {
+      status = .available(
+        JournalStatus(
+          pendingCount: 0,
+          lastOutcome: nil,
+          lastOutcomeAt: nil,
+          skippedCount: 0,
+          interruptedCount: 0,
+          lastRedactedError: nil
+        )
+      )
+    }
+    return journalConfigChecks(config: config)
+      + JournalHealth.rows(policy: config.journalPolicy, status: status).dropFirst()
   }
 
   static func inputs(

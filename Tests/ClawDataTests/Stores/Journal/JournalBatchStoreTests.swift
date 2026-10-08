@@ -8,7 +8,9 @@ import Testing
 
 @Suite
 struct JournalBatchStoreTests {
-  enum Branch: CaseIterable { case threshold, endedDay, expired, budget, quota }
+  enum Branch: CaseIterable {
+    case threshold, endedDay, expired, budget, persistedBudget, reservedBudget, quota
+  }
 
   @Test(arguments: Branch.allCases)
   func startDefersAndUsesUTCStartedCount(branch: Branch) throws {
@@ -23,10 +25,30 @@ struct JournalBatchStoreTests {
       : (branch == .endedDay ? now.addingTimeInterval(-86_400) : now)
     let count = branch == .threshold ? JournalLimits.batchSources : 1
     let sources = try seed(queue, sessionID: sessionID, count: count, at: activity)
-    if branch == .budget || branch == .quota {
+    if [.budget, .persistedBudget, .reservedBudget, .quota].contains(branch) {
       try queue.write { db in
         try JournalStoreGRDB.markPendingSourcesDue(db, ownerUserID: 42, sessionID: sessionID)
       }
+    }
+    if branch == .persistedBudget {
+      let usage = row(
+        callID: ProviderCallID(rawValue: "prior-interactive-call"),
+        sessionID: sessionID,
+        now: now,
+        cost: RunBudget.default.perDayUSD
+      )
+      try queue.write { db in
+        _ = try RunStoreGRDB.insertUsage(db, usage)
+      }
+    }
+    if branch == .reservedBudget {
+      let extra = try seed(queue, sessionID: sessionID, count: 1, at: now, firstID: 100)
+      try queue.write { db in
+        try JournalStoreGRDB.markPendingSourcesDue(db, ownerUserID: 42, sessionID: sessionID)
+      }
+      _ = try started(
+        store.startBatch(request(extra, reservedCost: RunBudget.default.perDayUSD), now: now)
+      )
     }
     if branch == .quota {
       for index in 0..<JournalLimits.startedCallsPerUTCDay {
@@ -64,7 +86,7 @@ struct JournalBatchStoreTests {
       #expect(pending.isEmpty)
       #expect(outcome == .obsolete)
       #expect(try store.status(ownerUserID: 42, now: now).skippedCount == 1)
-    case .budget, .quota:
+    case .budget, .persistedBudget, .reservedBudget, .quota:
       guard case .deferred = outcome else {
         Issue.record("Expected deferral")
         return
@@ -73,6 +95,13 @@ struct JournalBatchStoreTests {
       #expect(deferredStatus.pendingCount == originalPendingCount)
       #expect(try store.pendingSources(ownerUserID: 42, now: now).map(\.id) == sources.map(\.id))
       if branch == .quota {
+        let localMidnight = now.startOfUTCDay.addingTimeInterval(21 * 60 * 60)
+        // Istanbul's next day starts while the durable UTC quota remains full.
+        let stillSameUTC = try store.startBatch(request(sources), now: localMidnight)
+        guard case .deferred = stillSameUTC else {
+          Issue.record("Local midnight must not reset the UTC quota")
+          return
+        }
         let startedCallsInUTCWindow = try queue.read { db in
           try Int.fetchOne(
             db,
@@ -335,7 +364,11 @@ private extension JournalBatchStoreTests {
     )
   }
 
-  func request(_ sources: [JournalSource], denied: Bool = false) -> JournalStartRequest {
+  func request(
+    _ sources: [JournalSource],
+    denied: Bool = false,
+    reservedCost: Double = 0.1
+  ) -> JournalStartRequest {
     let callID = ProviderCallID(rawValue: UUID().uuidString)
     return JournalStartRequest(
       sourceIDs: sources.map(\.id),
@@ -352,7 +385,8 @@ private extension JournalBatchStoreTests {
       conservativeUsage: row(
         callID: callID,
         sessionID: sources[0].sessionID,
-        now: sources[0].occurredAt
+        now: sources[0].occurredAt,
+        cost: reservedCost
       ),
       budget: .default,
       costPolicy: .metered

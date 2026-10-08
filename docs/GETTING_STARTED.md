@@ -200,6 +200,24 @@ authoring rules, the environment knobs for budgets, schedules, voice locales, an
 code sandbox, and how to [connect MCP servers](CUSTOMIZATION.md#mcp-servers) so their
 tools show up in chat.
 
+### Keep daily notes across sessions
+
+Set `CLAW_JOURNAL_ENABLED=true` in `clawd.env`, re-source it and restart the daemon. Journaling
+is off by default and requires one positive configured owner ID in `CLAW_ALLOWLIST`, with no
+`CLAW_GROUP_CHATS`. Only your interactive private chat contributes or loads notes.
+
+clawd writes `workspace/memory/YYYY-MM-DD.md` after ten completed sources, `/new`, or the end of
+the source day in `CLAW_TIMEZONE`. A background sweep checks at least once a minute. `/new` replies
+promptly; the next turn sees notes the worker has finished writing, so some notes may still be pending.
+No old history is imported. Later conversations read today and yesterday, up to 4,000 characters.
+
+Send `/journal` for state and recent dates, `/journal show YYYY-MM-DD` to read a day, or
+`/journal delete YYYY-MM-DD` to confirm deleting it and its already queued work. Inspecting and
+deleting remain available while the flag is off. Summary calls count toward your global budget,
+with at most 24 started calls per UTC day. A crash can lose an already started note.
+[Daily journal files](CUSTOMIZATION.md#daily-journal-files) covers editing, deletion and the opt-in
+trust exception.
+
 ### Let scheduled jobs learn from feedback
 
 Set `CLAW_LEARNING_ENABLED=true` in `clawd.env`, reload the file and restart the daemon.

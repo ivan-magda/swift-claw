@@ -98,19 +98,32 @@ struct JournalSummarizerTests {
       RacedSuccessProvider(response: response("{\"notes\":[]}")),
       HangingInferenceProvider(observing: 900),
       CancellingProvider(),
+      SequenceProvider([], then: ProviderError.partialStreamWithoutCompletedTerminal),
+      SequenceProvider(
+        [],
+        then: ProviderFailure(
+          cause: .terminal(status: nil, message: "rejected before inference"),
+          accounting: .notStarted
+        )
+      ),
     ]
 
     // when
     var results: [JournalSummaryResult] = []
-    for provider in providers {
+    for (index, provider) in providers.enumerated() {
       let binding = binding(provider)
       let prepared = try codec.prepare(
         sources: [source()],
         binding: binding,
         budget: budget(input: 2_000)
       )
+      let parkedDeadline = AsyncGate()
       let clock = ScriptedClock { delay in
         #expect(delay == .seconds(JournalLimits.inferenceDeadlineSeconds))
+        if index >= 3 {
+          await parkedDeadline.wait()
+          try Task.checkCancellation()
+        }
       }
       let result = await JournalSummarizer(codec: codec, clock: clock)
         .summarize(prepared, binding: binding, callID: UUIDProviderCallIDGenerator().next())
@@ -124,6 +137,14 @@ struct JournalSummarizerTests {
     #expect(results[1].usage?.completionTokens == 900)
     #expect(results[1].usage?.isEstimated == true)
     #expect(results[2].usage == nil)
+    #expect(results[3].usage?.isEstimated == true)
+    #expect(
+      results[3].usage?.completionTokens
+        == min(JournalLimits.outputTokens, budget(input: 2_000).maxOutputTokens)
+    )
+    #expect(results[4].usage == nil)
+    #expect(results[3].redactedReason == "Journal summary provider failed")
+    #expect(results[4].redactedReason == "Journal summary provider failed")
   }
 
   @Test

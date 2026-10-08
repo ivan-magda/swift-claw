@@ -12,6 +12,7 @@ extension DaemonBuilder {
     BotMenuCommand(command: "remember", description: "Save a memory."),
     BotMenuCommand(command: "memory", description: "Review saved memories."),
     BotMenuCommand(command: "schedule", description: "Create or list schedules."),
+    BotMenuCommand(command: "journal", description: "Inspect daily notes."),
     BotMenuCommand(command: "learning", description: "Inspect scheduled-job learning."),
     BotMenuCommand(command: "pause", description: "Pause a schedule."),
     BotMenuCommand(command: "resume", description: "Resume a paused schedule."),
@@ -43,6 +44,7 @@ extension DaemonBuilder {
     return {
       await registerMenu()
       await reconcileRuns()
+      reconcileJournalAtBoot()
 
       // Approval replay can launch a Coder job before the service graph starts, so a Coder that
       // could not reconcile keeps replay closed. Learning owns no native process and is reconciled
