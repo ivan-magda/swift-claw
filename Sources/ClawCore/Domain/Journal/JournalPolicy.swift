@@ -56,6 +56,7 @@ public struct JournalPolicy: Sendable, Equatable {
     guard enabled, let ownerUserID, ownerUserID > 0 else {
       return nil
     }
+
     return JournalScope(ownerUserID: ownerUserID, timeZoneID: timeZoneID)
   }
 }
@@ -64,38 +65,42 @@ public struct JournalDay: Sendable, Equatable, Hashable, Codable {
   public let isoDate: String
 
   public init?(isoDate: String) {
-    let bytes = Array(isoDate.utf8)
-    guard bytes.count == 10, bytes[4] == 45, bytes[7] == 45 else {
+    let dateBytes = Array(isoDate.utf8)
+    let hyphen = UInt8(ascii: "-")
+    guard dateBytes.count == 10, dateBytes[4] == hyphen, dateBytes[7] == hyphen else {
       return nil
     }
-    for index in bytes.indices where index != 4 && index != 7 {
-      guard (48...57).contains(bytes[index]) else {
+
+    let asciiDigits = UInt8(ascii: "0")...UInt8(ascii: "9")
+    for index in dateBytes.indices where index != 4 && index != 7 {
+      guard asciiDigits.contains(dateBytes[index]) else {
         return nil
       }
     }
 
-    let parts = isoDate.split(separator: "-").compactMap {
-      Int($0)
-    }
-    guard parts[0] > 0 else {
+    let components = Self.dateComponents(from: isoDate)
+    guard let year = components.year, year > 0 else {
       return nil
     }
+
     let calendar = Self.calendar(in: .gmt)
-    let components = DateComponents(year: parts[0], month: parts[1], day: parts[2])
     guard let instant = calendar.date(from: components),
           calendar.dateComponents([.year, .month, .day], from: instant) == components
     else {
       return nil
     }
+
     self.isoDate = isoDate
   }
 
   public init(from decoder: any Decoder) throws {
     let container = try decoder.singleValueContainer()
     let text = try container.decode(String.self)
+
     guard let day = Self(isoDate: text) else {
       throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid journal day")
     }
+
     self = day
   }
 
@@ -108,22 +113,23 @@ public struct JournalDay: Sendable, Equatable, Hashable, Codable {
     guard let journalDay = JournalDay(isoDate: instant.wallClockDay(in: timeZone)) else {
       preconditionFailure("The instant cannot be represented as a journal day")
     }
+
     return journalDay
   }
 
   public func previous(in timeZone: TimeZone) -> JournalDay {
     let calendar = Self.calendar(in: timeZone)
-    let parts = isoDate.split(separator: "-").compactMap {
-      Int($0)
-    }
+    var components = Self.dateComponents(from: isoDate)
     // Noon avoids midnight transitions; calendar arithmetic also handles 23/25-hour days.
-    let components = DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12)
-    guard let instant = calendar.date(from: components),
-          let previous = calendar.date(byAdding: .day, value: -1, to: instant)
+    components.hour = 12
+
+    guard let noon = calendar.date(from: components),
+          let previousDayNoon = calendar.date(byAdding: .day, value: -1, to: noon)
     else {
       preconditionFailure("The validated journal day must support calendar arithmetic")
     }
-    return Self.containing(previous, timeZone: timeZone)
+
+    return Self.containing(previousDayNoon, timeZone: timeZone)
   }
 }
 
@@ -139,9 +145,17 @@ public struct JournalExchangeAdmission: Codable, Sendable, Equatable {
   }
 }
 
-// MARK: - Calendar
+// MARK: - Calendar and Date Components
 
 private extension JournalDay {
+  // Both callers establish the YYYY-MM-DD shape before converting its fields.
+  static func dateComponents(from isoDate: String) -> DateComponents {
+    let dateFields = isoDate.split(separator: "-").compactMap { field in
+      Int(field)
+    }
+    return DateComponents(year: dateFields[0], month: dateFields[1], day: dateFields[2])
+  }
+
   static func calendar(in timeZone: TimeZone) -> Calendar {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = timeZone
