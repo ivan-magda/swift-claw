@@ -4,8 +4,12 @@ import GRDB
 
 enum CoderJobRecord {
   static func fetch(_ db: Database, id: UUID) throws -> CoderJob? {
-    try Row.fetchOne(db, sql: "SELECT * FROM coder_jobs WHERE id = ?", arguments: [id.uuidString])
-      .map(decode)
+    let row = try Row.fetchOne(
+      db,
+      sql: "SELECT * FROM coder_jobs WHERE id = ?",
+      arguments: [id.uuidString]
+    )
+    return try row.map(decode)
   }
 
   static func decode(_ row: Row) throws -> CoderJob {
@@ -18,8 +22,13 @@ enum CoderJobRecord {
     }
 
     let prepared: CoderPreparedRequest = try decodeJSON(row["prepared_json"])
-    let receipt: CoderProcessReceipt? = try (row["process_receipt_json"] as String?).map(decodeJSON)
+    let processReceipt: CoderProcessReceipt? = try (row["process_receipt_json"] as String?)
+      .map(decodeJSON)
     let result: CoderResult? = try (row["result_json"] as String?).map(decodeJSON)
+    let journalScopeData: Data? = row["journal_scope"]
+    let journalScope = try journalScopeData.map { data in
+      try JSONDecoder().decode(JournalScope.self, from: data)
+    }
 
     return CoderJob(
       id: id,
@@ -36,11 +45,9 @@ enum CoderJobRecord {
       createdAt: createdAt,
       slotReserved: row["slot_reserved"],
       ownership: ownership,
-      processReceipt: receipt,
+      processReceipt: processReceipt,
       result: result,
-      journalScope: try (row["journal_scope"] as Data?).map {
-        try JSONDecoder().decode(JournalScope.self, from: $0)
-      }
+      journalScope: journalScope
     )
   }
 
@@ -52,6 +59,11 @@ enum CoderJobRecord {
     journalScope: JournalScope?,
     now: Date
   ) throws -> CoderJob {
+    let preparedJSON = try encodeJSON(prepared)
+    let journalScopeData = try journalScope.map { scope in
+      try JSONEncoder().encode(scope)
+    }
+
     try db.execute(
       sql: """
         INSERT INTO coder_jobs(id, origin_run_id, origin_session_id, requester_user_id, chat_id,
@@ -67,28 +79,30 @@ enum CoderJobRecord {
         origin.chatID,
         origin.toolCallID,
         origin.approvalID,
-        try encodeJSON(prepared),
+        preparedJSON,
         CoderJobState.admitted.rawValue,
         prepared.checkoutPath,
         prepared.commonGitDirectory,
         CoderProcessOwnership.none.rawValue,
         EpochSecondCodec.epoch(now),
         EpochSecondCodec.epoch(now),
-        try journalScope.map {
-          try JSONEncoder().encode($0)
-        },
+        journalScopeData,
       ]
     )
-    guard let job = try fetch(db, id: id) else {
+
+    let insertedJob = try fetch(db, id: id)
+    guard let insertedJob else {
       throw StoreError.unexpected("Coder admission returned no row")
     }
-    return job
+
+    return insertedJob
   }
 
   static func encodeJSON(_ value: some Encodable) throws -> String {
     guard let json = CanonicalJSON.encode(value) else {
       throw StoreError.unexpected("Unencodable Coder record")
     }
+
     return json
   }
 }
