@@ -1776,6 +1776,26 @@ and epoch checks outrank ordinary retention; retained old records cannot reactiv
 
 ## 15. Configuration & secrets
 
+**Daily journals** use `CLAW_JOURNAL_ENABLED` (default `false`) through the existing strict
+boolean parser. Enabling requires personal mode: exactly one positive user ID in the current
+`CLAW_ALLOWLIST` configuration and no `CLAW_GROUP_CHATS`. Invalid enablement fails config load;
+previously seeded SQLite access grants do not establish journal ownership. `AppConfig.journalPolicy`
+retains that configured owner for inspection and deletion while automatic journaling is disabled.
+
+`CLAW_TIMEZONE` supplies journal calendar-day boundaries; configuration changes require a daemon
+restart. The Core journal values freeze the admitted owner, timezone, source timestamp and validated
+`YYYY-MM-DD` day. Telegram normalization preserves `date` for an ordinary message and `edit_date`
+for an edited message separately from processing timestamps. A missing edit time remains missing;
+source capture must report and skip missing timestamps rather than invent a day. Existing caption,
+transcript and raw-message provenance rules remain in force.
+
+`JournalLimits` centralizes source, evidence, request, summary, worker, retention, file and context
+limits. Durable sources validate their IDs, grapheme bounds and 128 KiB serialized UTF-8 ceiling on
+construction and decoding. Capture redacts and shortens before construction. Evidence carries typed
+tool status, Coder state or publication; worker-reported checks remain distinct from app-observed
+outcomes. Note validation belongs to the summary boundary, including allowed current source IDs
+and supporting evidence for observed-operation attribution.
+
 **Temporary Telegram progress** is enabled by `CLAW_TELEGRAM_PROGRESS` (default `true`),
 parsed through the existing strict boolean parser. Its scope is the additional interactive display
 and per-request provider explanation option; it changes no model, reasoning effort, policy, or budget.

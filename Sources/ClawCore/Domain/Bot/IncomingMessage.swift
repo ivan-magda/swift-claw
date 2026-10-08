@@ -1,3 +1,5 @@
+import Foundation
+
 /// Wire-agnostic update: `ClawCore` never imports the Telegram JSON model (it lives in `ClawTelegram`).
 public struct RawUpdate: Sendable, Equatable {
   public let updateID: Int64
@@ -86,6 +88,8 @@ public struct VoiceAttachment: Sendable, Equatable {
 
 public struct RawMessage: Sendable, Equatable {
   public let messageID: Int64
+  public let date: Date?
+  public let editDate: Date?
   public let fromUserID: Int64?
   public let chatID: Int64
   public let text: String?
@@ -128,9 +132,13 @@ public struct RawMessage: Sendable, Equatable {
     senderDisplayName: String? = nil,
     hasSenderChat: Bool = false,
     isForwarded: Bool = false,
-    migratedToChatID: Int64? = nil
+    migratedToChatID: Int64? = nil,
+    date: Date? = nil,
+    editDate: Date? = nil
   ) {
     self.messageID = messageID
+    self.date = date
+    self.editDate = editDate
     self.fromUserID = fromUserID
     self.chatID = chatID
     self.text = text
@@ -164,6 +172,8 @@ public struct IncomingMessage: Sendable, Equatable {
   public let chatID: Int64
   public let content: Content
   public let isEdited: Bool
+  /// Telegram activity time, distinct from local processing and run lifecycle timestamps.
+  public let sourceTimestamp: Date?
   public let chatKind: ChatKind
   /// The room's name, absent in a DM.
   public let chatTitle: String?
@@ -187,9 +197,11 @@ public struct IncomingMessage: Sendable, Equatable {
     replyToMessageID: Int64? = nil,
     replyToUserID: Int64? = nil,
     senderDisplayName: String? = nil,
-    migratedToChatID: Int64? = nil
+    migratedToChatID: Int64? = nil,
+    sourceTimestamp: Date? = nil
   ) {
     self.updateID = updateID
+    self.sourceTimestamp = sourceTimestamp
     self.messageID = messageID
     self.userID = userID
     self.chatID = chatID
@@ -235,20 +247,22 @@ public struct IncomingMessage: Sendable, Equatable {
       return nil
     }
 
+    let isEdited = raw.message == nil && raw.editedMessage != nil
     return IncomingMessage(
       updateID: raw.updateID,
       messageID: message.messageID,
       userID: fromUserID,
       chatID: message.chatID,
       content: content,
-      isEdited: raw.message == nil && raw.editedMessage != nil,
+      isEdited: isEdited,
       chatKind: message.chatKind,
       chatTitle: message.chatTitle,
       messageThreadID: message.messageThreadID,
       replyToMessageID: message.replyToMessageID,
       replyToUserID: message.replyToUserID,
       senderDisplayName: message.senderDisplayName,
-      migratedToChatID: message.migratedToChatID
+      migratedToChatID: message.migratedToChatID,
+      sourceTimestamp: isEdited ? message.editDate : message.date
     )
   }
 }
