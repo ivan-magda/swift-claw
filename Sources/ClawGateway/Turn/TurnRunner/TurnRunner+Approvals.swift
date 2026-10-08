@@ -108,7 +108,7 @@ private extension TurnRunner {
       for: ToolApprovalPrompt.Input(
         recorded: pending.recorded,
         taintBanner: outcome.ingestedUntrusted,
-        privilegedFileBanner: Self.isPrivilegedFile(pending.recorded.canonicalTarget),
+        privilegedFileBanner: Self.isPrivilegedFile(pending.recorded),
         isGroup: mode == .group
       ),
       chatID: chatID,
@@ -116,9 +116,12 @@ private extension TurnRunner {
     )
   }
 
-  /// Privileged-file banner: every owner-editable file that steers a later turn. Basename match on
-  /// the resolved canonical target.
-  static func isPrivilegedFile(_ canonicalTarget: String) -> Bool {
-    WorkspaceFile.isPromptPrivileged(basename: (canonicalTarget as NSString).lastPathComponent)
+  /// Journal recognition was resolved against the workspace root by the write tool at gate time.
+  static func isPrivilegedFile(_ recorded: RecordedToolAction) -> Bool {
+    WorkspaceFile.isPromptPrivileged(
+      basename: (recorded.canonicalTarget as NSString).lastPathComponent
+    )
+      || (recorded.tool == BuiltinToolNames.fileWrite
+        && recorded.presentation.warnings.contains(WorkspaceFile.journalWriteWarning))
   }
 }

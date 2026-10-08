@@ -17,6 +17,9 @@ public enum WorkspaceFile: String, Sendable, Equatable, CaseIterable {
 }
 
 extension WorkspaceFile {
+  public static let journalWriteWarning =
+    "PRIVILEGED FILE: this dated journal feeds my private-data context."
+
   /// The prompt files that hold the owner's private data. A tool that reads one flags the turn as
   /// having touched private data, which is one leg of the exfiltration trifecta.
   public static let privateDataFiles: [WorkspaceFile] = [.user, .memory]
@@ -37,12 +40,26 @@ extension WorkspaceFile {
       }
   }
 
-  /// True when `canonicalPath` is a private-data prompt file sitting directly at the canonical
-  /// workspace root. Both inputs must already be canonical (symlinks and `..` resolved); the match
-  /// is exact full-path equality against the root-anchored name, never a prefix test.
+  /// Root private prompt files or dated journals directly under `memory/`. Both inputs must
+  /// already be canonical (symlinks and `..` resolved); names are matched against that root.
   public static func isPrivateData(canonicalPath: String, canonicalRoot: String) -> Bool {
-    privateDataFiles.contains { file in
-      canonicalPath == canonicalRoot + "/" + file.relativePath
-    }
+    isJournal(canonicalPath: canonicalPath, canonicalRoot: canonicalRoot)
+      || privateDataFiles.contains { file in
+        canonicalPath == canonicalRoot + "/" + file.relativePath
+      }
   }
+
+  /// Exact dated Markdown child of the canonical workspace memory directory.
+  public static func isJournal(canonicalPath: String, canonicalRoot: String) -> Bool {
+    let directory = canonicalRoot + "/memory/"
+    guard canonicalPath.hasPrefix(directory) else {
+      return false
+    }
+    let name = String(canonicalPath.dropFirst(directory.count))
+    guard name.hasSuffix(".md") else {
+      return false
+    }
+    return JournalDay(isoDate: String(name.dropLast(3))) != nil
+  }
+
 }

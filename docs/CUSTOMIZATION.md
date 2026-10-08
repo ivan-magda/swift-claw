@@ -37,6 +37,17 @@ Durable facts also live in the database: confirm something in chat ("remember th
 and it persists in SQLite across restarts, recalled by importance and recency. Full-text
 search covers conversation history, not these facts. `/memory` shows what is stored.
 
+## Daily journal files
+
+Dated journal files live at `memory/YYYY-MM-DD.md` under the workspace. To edit one by hand,
+stop the daemon, edit the file, then restart it. The next append preserves your existing bytes.
+Concurrent editing while the daemon runs has no preservation guarantee. Automatic reads and
+appends refuse files above 512 KiB, and damaged UTF-8 files are left for you to repair.
+An empty summary creates no file; missing files can receive fresh notes without rebuilding history.
+File reads and code staging classify these exact dated paths as private data, and approved writes
+show a privileged-file warning. Unrelated dated files, such as `reports/YYYY-MM-DD.md`, keep their
+ordinary classification.
+
 ## Skills
 
 A skill is a procedure you write once and the agent pulls up when a task calls for it —

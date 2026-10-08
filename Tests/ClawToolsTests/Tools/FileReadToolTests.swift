@@ -156,4 +156,20 @@ struct FileReadToolTests {
     #expect((await execute(fixture.tool, path: "notes/../MEMORY.md")).readPrivateData)
     #expect((await execute(fixture.tool, path: "OTHER.md")).readPrivateData == false)
   }
+
+  @Test
+  func datedJournalReadSetsPrivateDataFlag() async throws {
+    // given
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root.deletingLastPathComponent()) }
+    try write("Journal", to: fixture.root.appendingPathComponent("memory/2026-10-08.md"))
+
+    // when
+    let payload = await execute(fixture.tool, path: "memory/2026-10-08.md")
+
+    // then
+    #expect(payload.status == .ok)
+    #expect(payload.readPrivateData)
+  }
+
 }

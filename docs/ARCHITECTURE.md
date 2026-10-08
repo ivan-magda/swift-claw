@@ -1075,6 +1075,18 @@ Responses reasoning continuity cannot be expressed as text and tool calls, so `C
 
 `~/.swift-claw/workspace/`: `SOUL.md` (persona/tone/boundaries), `AGENTS.md` (operating rules), `USER.md` (owner profile/timezone), `TOOLS.md` (tool notes), `MEMORY.md` (curated long-term), `HEARTBEAT.md` (proactive tasks), `skills/<name>/SKILL.md` (agentskills.io standard; Yams for frontmatter). **Missing files never crash** — each loads to a `LoadedFile` whose outcome is `present`, `overCap`, `missing`, or `unreadable`.
 
+**Daily journal files** use generated `memory/YYYY-MM-DD.md` paths through shared workspace
+containment. `JournalFiles` exposes bounded snapshots (`present`, `missing`, `unreadable`,
+`overCap`), append, deletion and newest-first valid dated-file listing; `FileSystemJournalFiles`
+implements the IO. Automatic reads check the 512 KiB byte cap before opening the file and stay
+bounded if it grows. Appends preserve the existing UTF-8 bytes and refuse a damaged file or a
+result above that cap. Missing files can receive new notes, but no history is reconstructed.
+Empty text performs no IO. Publication creates an owner-only temporary file in the same directory
+and atomically replaces the target. Reads need no mutation gate. The shared `WorkspaceMutationGate`
+executes synchronous closures for publication, day deletion and approved `file_write` revalidation
+plus atomic IO; callers never await database or file operations inside that closure. The owner may
+stop the daemon, edit a journal and restart; concurrent external edits have no preservation guarantee.
+
 **Skill identity is settled at scan time**, so nothing downstream has to re-decide it: the frontmatter `name` must match `^[a-z0-9]+(-[a-z0-9]+)*$` at 1–64 characters **and** equal its own directory name, `description` is collapsed to a single line and then capped at 300 graphemes (the spec allows 1024; the index has to scale with skill count, not with one author's prose, and a block scalar must not let one skill occupy several of the index's one-line-per-skill rows), and a name claimed by two directories drops **every** claimant — silently shadowing one is the bug class the loader exists to avoid. Each rejection reaches the owner as a notice (§9.2), not only the log. The scan feeds the index row; the body is loaded on demand by `skill_load` (§10.1), never injected wholesale.
 
 **`/skills` is the complete owner diagnostic.** An allowlisted request starts a fresh workspace scan
@@ -1165,6 +1177,13 @@ The **read-only tier** contains `web_search`, `web_fetch`, workspace **file READ
 | Remote / MCP                       | every `mcp__<server>__<tool>`                | `ask` by default; named `safe` override allowed | default per-action approval; egress is `arbitraryDestination`, the trifecta can still force approval, and the result is untrusted (§10.3) |
 
 (Inc 5a) **Registry** of < 20 narrow, typed tools (not a generic shell), each with input/output schemas, declared `RiskLevel`, timeout, sandbox requirement, audit behavior. The **`ToolPolicyGate`** evaluates every proposed call before dispatch, independent of the model, and re-validates the approved action against the originally-approved canonical action + `policy_version` at execution. File tools are workspace-scoped: every path is resolved to its **canonical real path** (`realpath`, after `..` and symlink resolution) and **asserted to lie within the workspace root** — a tested invariant covering both the link and its final target — with size-capped output and secret redaction. Tool annotations are non-authoritative UX hints; the code gate is authoritative. (Batch approval + a time-boxed auto-approve toggle are deferred to the P-tools phase.)
+
+Dated Markdown files directly under the canonical workspace `memory/` directory are private
+workspace data, alongside root `MEMORY.md` and `USER.md`. The shared full-path classifier requires
+a valid calendar date; unrelated dated filenames and nested paths do not qualify. `file_read`
+sets its private-data flag, and `file_write` records a root-aware privileged-file warning for the
+approval prompt. Group privileged-write refusals retain their existing fixed-basename rule.
+The manual `file_write` content cap remains 256 KiB.
 
 **Native Coder tools (§13.2).** `coder_submit` is dangerous; `coder_status` and `coder_cancel` are
 safe/no-egress. All three declare `requiresInteractiveRequester = true`; submit additionally declares
@@ -1411,7 +1430,8 @@ The accepted reasoning is the deployment, not a mitigation: a **supervised, one-
   file resolved through canonical realpath containment. The approval binds source path, realpath,
   byte count, and SHA-256; execution re-resolves and re-hashes before copying. Code and every
   staged file always pass exact-secret and secret-shape scanning; networked runs additionally pass
-  the MEMORY/USER substring tier.
+  the MEMORY/USER substring tier. Staging dated journal files uses the same root-aware
+  private-data classifier as `file_read`, and binds that classification in the prepared action.
 - **Backend state lives in an actor, but actor isolation is not a run limiter.** A stored `Task`
   chain serializes the whole spawn → execution → cleanup operation across suspension points, so at
   most one VM contributes its peak memory footprint.

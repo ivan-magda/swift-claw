@@ -49,4 +49,23 @@ struct WorkspaceValuesTests {
     #expect(missing.text.isEmpty)
     #expect(missing.graphemeCount == 0)
   }
+
+  @Test(arguments: [
+    ("memory/2026-10-08.md", true),
+    ("reports/2026-10-08.md", false),
+    ("memory/nested/2026-10-08.md", false),
+    ("memory/2026-02-30.md", false),
+    ("memory/2026-10-08.txt", false),
+  ])
+  func datedJournalUsesSharedPrivateClassification(path: String, expected: Bool) {
+    // given / when / then
+    #expect(
+      WorkspaceFile.isPrivateData(
+        canonicalPath: "/workspace/" + path,
+        canonicalRoot: "/workspace"
+      ) == expected
+    )
+    #expect(WorkspaceFile.isPromptPrivileged(basename: "2026-10-08.md") == false)
+  }
+
 }

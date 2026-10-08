@@ -29,6 +29,29 @@ struct FileWriteToolTests {
   }
 
   @Test
+  func datedJournalWriteWarningIsRootAware() throws {
+    // given
+    let root = try makeWorkspace()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let tool = makeTool(root: root)
+    let canonicalRoot = try #require(WorkspacePathContainment.canonicalPath(root.path))
+
+    // when
+    let journal = tool.approvalPresentation(
+      arguments: args(path: "memory/2026-10-08.md", content: "Note"),
+      canonicalTarget: canonicalRoot + "/memory/2026-10-08.md"
+    )
+    let report = tool.approvalPresentation(
+      arguments: args(path: "reports/2026-10-08.md", content: "Report"),
+      canonicalTarget: canonicalRoot + "/reports/2026-10-08.md"
+    )
+
+    // then
+    #expect(journal.warnings == [WorkspaceFile.journalWriteWarning])
+    #expect(report.warnings.isEmpty)
+  }
+
+  @Test
   func declaresAskTierWithNoEgress() throws {
     // given / when
     let definition = makeTool(root: try makeWorkspace()).definition

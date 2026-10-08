@@ -112,6 +112,24 @@ struct ExecuteCodeToolTests {
 
 extension ExecuteCodeToolTests {
   @Test
+  func datedJournalStageIsRecordedAsPrivateData() async throws {
+    // given
+    let workspace = try makeWorkspace()
+    defer { try? FileManager.default.removeItem(at: workspace.root.deletingLastPathComponent()) }
+    try write(Data("Journal".utf8), relativePath: "memory/2026-10-08.md", workspace: workspace)
+    let tool = makeTool(workspace: workspace)
+
+    // when
+    let action = try await prepared(
+      tool.prepareAction(arguments: arguments(stage: ["memory/2026-10-08.md"]))
+    )
+    let recorded = try #require(JSONValue.parse(action.canonicalArgsJSON)?.objectValue)
+
+    // then
+    #expect(recorded["readsPrivateData"] == .bool(true))
+  }
+
+  @Test
   func definitionDeclaresTheClosedDangerousSurface() throws {
     // given
     let workspace = try makeWorkspace()
