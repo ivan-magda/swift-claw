@@ -23,18 +23,25 @@ extension DaemonBuilder {
     let files = FileSystemJournalFiles(root: workspaceRoot)
     let mutationGate = WorkspaceMutationGate()
     let redactor = SecretRedactor(secretValues: redactionValues)
-    let capture =
-      policy.enabled ? JournalSourceCapture(policy: policy, redact: redactor.redact) : nil
+
+    let capture: JournalSourceCapture? =
+      if policy.enabled {
+        JournalSourceCapture(policy: policy, redact: redactor.redact)
+      } else {
+        nil
+      }
+
     let worker: JournalWorker?
-    if let ownerUserID = policy.scope?.ownerUserID {
+    if let scope = policy.scope {
       let codec = JournalSummaryCodec(costResolver: costResolver, redact: redactor.redact)
+      let summarizer = JournalSummarizer(codec: codec, clock: ContinuousClock())
       worker = JournalWorker(
-        ownerUserID: ownerUserID,
+        ownerUserID: scope.ownerUserID,
         store: stores.journal,
         files: files,
         mutationGate: mutationGate,
         codec: codec,
-        summarizer: JournalSummarizer(codec: codec, clock: ContinuousClock()),
+        summarizer: summarizer,
         roster: roster,
         cooldown: cooldown,
         budget: config.budget,
@@ -44,6 +51,7 @@ extension DaemonBuilder {
     } else {
       worker = nil
     }
+
     return JournalComposition(
       policy: policy,
       store: stores.journal,
