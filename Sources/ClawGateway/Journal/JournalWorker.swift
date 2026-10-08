@@ -26,7 +26,7 @@ public actor JournalWorker: Service {
   // Actor isolation does not serialize inference across suspension; this task owns the drain.
   private var drain: Task<Void, Never>?
 
-  public init(
+  package init(
     ownerUserID: Int64,
     store: any JournalStore,
     files: any JournalFiles,
@@ -64,7 +64,7 @@ public actor JournalWorker: Service {
     notification.yield(())
   }
 
-  public func sweep(now: Date) async {
+  func sweep(now: Date) async {
     guard let task = enqueueSweep(now: now) else {
       return
     }

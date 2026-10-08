@@ -1086,6 +1086,11 @@ Responses reasoning continuity cannot be expressed as text and tool calls, so `C
 
 ### 8.7 Background journal summaries
 
+The codec and summarizer have package-scoped types and construction initializers for composition
+at `clawd`. Their operational methods, prepared/result values, preparation/validation errors and
+`JournalNote` are internal to `ClawGateway/Journal`; persistence outcomes remain public
+`JournalOutcome` in Core.
+
 `JournalSummaryCodec.prepare` fits up to ten bounded sources against both the complete
 provider-neutral JSON request representation (512 KiB cap, including 4 KiB of headroom for
 adapter envelope differences) and `TokenEstimator` over the exact sent messages, including prompt and
@@ -1969,6 +1974,13 @@ The current reset receipt and its compact dependencies retain the reset replay b
 and epoch checks outrank ordinary retention; retained old records cannot reactivate old-epoch work.
 
 ### 14.5 Background daily journal drain
+
+The public `JournalWorker` has a package-scoped initializer accepting the store/files ports,
+shared mutation gate, roster/cooldown, budget, codec and summarizer. `DaemonBuilder` constructs
+one codec from the cost resolver and redactor, passes that codec to the summarizer, and injects
+both into the worker. The worker sweep clock and summarizer provider-deadline clock remain
+independent, alongside the wall-time and call-ID seams. Production callers use the service
+lifecycle and producer notifications; awaited `sweep` is internal for deterministic tests.
 
 `JournalWorker` checks the persistent owner queue at startup and with a maximum 60-second ticker.
 The ticker keeps running while inference is held; notifications and overlapping sweeps coalesce into

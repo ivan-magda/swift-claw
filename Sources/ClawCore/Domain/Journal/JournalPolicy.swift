@@ -99,11 +99,7 @@ public struct JournalDay: Sendable, Equatable, Hashable, Codable {
   }
 
   public static func containing(_ instant: Date, timeZone: TimeZone) -> JournalDay {
-    let calendar = Self.calendar(in: timeZone)
-    let components = calendar.dateComponents([.year, .month, .day], from: instant)
-    guard let year = components.year, let month = components.month, let day = components.day,
-          let journalDay = JournalDay(isoDate: String(format: "%04d-%02d-%02d", year, month, day))
-    else {
+    guard let journalDay = JournalDay(isoDate: instant.wallClockDay(in: timeZone)) else {
       preconditionFailure("The instant cannot be represented as a journal day")
     }
     return journalDay

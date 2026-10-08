@@ -1,30 +1,30 @@
 import ClawCore
 import Foundation
 
-public struct JournalPreparedSummary: Sendable {
-  public let sources: [JournalSource]
-  public let request: ChatRequest
-  public let accountant: ProviderUsageAccountant
-  public let estimate: ProviderUsageAccountant.PreflightEstimate
-  public let serializedRequestBytes: Int
+struct JournalPreparedSummary: Sendable {
+  let sources: [JournalSource]
+  let request: ChatRequest
+  let accountant: ProviderUsageAccountant
+  let estimate: ProviderUsageAccountant.PreflightEstimate
+  let serializedRequestBytes: Int
 }
 
-public enum JournalSummaryPreparationError: Error, Sendable, Equatable {
+enum JournalSummaryPreparationError: Error, Sendable, Equatable {
   case noSources
   case unrepresentableSource(id: String)
 }
 
-public struct JournalSummaryCodec: Sendable {
-  public static let omissionMarker = JournalSanitizer.omissionMarker
+package struct JournalSummaryCodec: Sendable {
+  static let omissionMarker = JournalSanitizer.omissionMarker
   private let costResolver: CostResolver
   private let redact: @Sendable (String) -> String
 
-  public init(costResolver: CostResolver, redact: @escaping @Sendable (String) -> String) {
+  package init(costResolver: CostResolver, redact: @escaping @Sendable (String) -> String) {
     self.costResolver = costResolver
     self.redact = redact
   }
 
-  public func prepare(
+  func prepare(
     sources: [JournalSource],
     binding: LLMRouteBinding,
     budget: RunBudget
@@ -74,7 +74,7 @@ public struct JournalSummaryCodec: Sendable {
     throw JournalSummaryPreparationError.noSources
   }
 
-  public func decode(response: String, sources: [JournalSource]) throws -> [JournalNote] {
+  func decode(response: String, sources: [JournalSource]) throws -> [JournalNote] {
     guard response.utf8.count <= JournalLimits.requestBytes else {
       throw JournalSummaryValidationError.invalidOutput
     }
@@ -117,7 +117,7 @@ public struct JournalSummaryCodec: Sendable {
     return notes
   }
 
-  public func render(notes: [JournalNote], sources: [JournalSource]) -> String {
+  func render(notes: [JournalNote], sources: [JournalSource]) -> String {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "HH:mm"
@@ -159,7 +159,7 @@ public struct JournalSummaryCodec: Sendable {
   }
 }
 
-public enum JournalSummaryValidationError: Error, Sendable {
+enum JournalSummaryValidationError: Error, Sendable {
   case invalidOutput
   case unsupportedObservation
 }

@@ -2,30 +2,30 @@ import ClawAgent
 import ClawCore
 import Foundation
 
-public struct JournalSummaryResult: Sendable {
-  public enum Outcome: Sendable, Equatable {
+struct JournalSummaryResult: Sendable {
+  enum Outcome: Sendable, Equatable {
     case notes
     case empty
     case invalidSummary
     case failed
   }
 
-  public let outcome: Outcome
-  public let notes: [JournalNote]
-  public let usage: ProviderUsage?
-  public let redactedReason: String?
+  let outcome: Outcome
+  let notes: [JournalNote]
+  let usage: ProviderUsage?
+  let redactedReason: String?
 }
 
-public struct JournalSummarizer: Sendable {
+package struct JournalSummarizer: Sendable {
   private let codec: JournalSummaryCodec
   private let clock: any Clock<Duration>
 
-  public init(codec: JournalSummaryCodec, clock: any Clock<Duration>) {
+  package init(codec: JournalSummaryCodec, clock: any Clock<Duration>) {
     self.codec = codec
     self.clock = clock
   }
 
-  public func summarize(
+  func summarize(
     _ prepared: JournalPreparedSummary,
     binding: LLMRouteBinding,
     callID: ProviderCallID
