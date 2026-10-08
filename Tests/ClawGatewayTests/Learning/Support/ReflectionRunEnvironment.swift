@@ -483,7 +483,8 @@ private extension ReflectionRunEnvironment {
           payload: output,
           payloadHash: ContentHash.fnv1a(output)
         ),
-      ]
+      ],
+      journalCapture: nil
     )
   }
 

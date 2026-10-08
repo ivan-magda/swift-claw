@@ -269,6 +269,8 @@ private extension JournalCommandRoutingTests {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
       journal: JournalCommandSurface(
         policy: JournalPolicy(enabled: enabled, ownerUserID: 42, timeZoneID: "UTC"),
         store: fixture.store,

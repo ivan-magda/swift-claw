@@ -14,7 +14,7 @@ public struct CoderJobStoreGRDB: CoderJobStore {
     prepared: CoderPreparedRequest,
     origin: CoderOrigin,
     maxConcurrentJobs: Int,
-    journalScope: JournalScope? = nil,
+    journalScope: JournalScope?,
     now: Date
   ) throws(StoreError) -> CoderAdmission {
     try database.writeMapping { db in

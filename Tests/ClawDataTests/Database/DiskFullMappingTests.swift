@@ -125,6 +125,7 @@ extension DiskFullMappingTests {
         result: result,
         chunks: [],
         releaseReservation: true,
+        journalCapture: nil,
         now: fixture.now
       )
     }

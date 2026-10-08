@@ -56,7 +56,8 @@ struct CoderServiceFixture: Sendable {
       root: root,
       limit: limit,
       finished: jobFinished,
-      redactor: redactor
+      redactor: redactor,
+      journalCapture: nil
     )
   }
 
@@ -101,7 +102,8 @@ struct CoderServiceFixture: Sendable {
       root: root,
       limit: 4,
       finished: jobFinished,
-      redactor: redactor
+      redactor: redactor,
+      journalCapture: nil
     )
   }
 
@@ -114,7 +116,7 @@ struct CoderServiceFixture: Sendable {
     limit: Int,
     finished: AsyncGate,
     redactor: @escaping @Sendable (_ text: String) -> String,
-    journalCapture: JournalSourceCapture? = nil,
+    journalCapture: JournalSourceCapture?,
     now: @escaping @Sendable () -> Date = {
       Date()
     }
@@ -137,6 +139,7 @@ struct CoderServiceFixture: Sendable {
       redact: redactor,
       journalCapture: journalCapture,
       now: now,
+      notifyJournal: {},
       notifyOutbox: {
         finished.open()
       }

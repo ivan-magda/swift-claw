@@ -19,7 +19,8 @@ struct GroupModeToolPolicyTests {
       privateFileLoader: {
         [Self.memoryText]
       },
-      enabledDangerousTools: [ExecuteCodeTool.name]
+      enabledDangerousTools: [ExecuteCodeTool.name],
+      journalEnabled: false
     )
   }
 

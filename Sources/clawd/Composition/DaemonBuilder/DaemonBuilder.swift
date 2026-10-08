@@ -195,7 +195,7 @@ struct DaemonBuilder: Sendable {
     mcpCatalog: ResolvedMCPCatalog,
     coder: CoderComposition,
     learning: ScheduledLearningService?,
-    journal: JournalComposition? = nil
+    journal: JournalComposition?
   ) -> RunnerConsumers {
     let turnRunner = makeTurnRunner(
       coordination: coordination,
@@ -261,7 +261,7 @@ struct DaemonBuilder: Sendable {
     boot: @escaping @Sendable () async -> Void,
     coder: CoderService? = nil,
     presentations: TurnPresentationRegistry? = nil,
-    journal: JournalWorker? = nil,
+    journal: JournalWorker?,
     laneDrainClock: any Clock<Duration> = ContinuousClock(),
     gracefulShutdownSignals: [UnixSignal] = [.sigterm, .sigint]
   ) -> DaemonRuntimeBundle {
@@ -312,7 +312,7 @@ struct DaemonBuilder: Sendable {
   /// service they depend on tears down.
   static func servicesWithLaneAdmissionLast(
     base: [any Service],
-    journal: JournalWorker? = nil,
+    journal: JournalWorker?,
     laneAdmission: LaneAdmissionShutdownService
   ) -> [any Service] {
     var services: [any Service] = []

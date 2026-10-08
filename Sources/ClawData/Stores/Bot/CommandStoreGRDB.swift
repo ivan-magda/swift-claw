@@ -70,7 +70,7 @@ public struct CommandStoreGRDB: CommandStore {
   public func applyNew(
     updateID: Int64,
     sessionKey: String,
-    journalScope: JournalScope? = nil,
+    journalScope: JournalScope?,
     now: Date
   ) throws(StoreError) -> NewCommandResult {
     try database.writeMapping { db in

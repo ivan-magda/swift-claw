@@ -69,9 +69,9 @@ public struct MessageRouter: Sendable {
     typing: (any TypingIndicator)? = nil,
     coordinator: ApprovalCoordinator,
     presentations: TurnPresentationRegistry? = nil,
-    journalCapture: JournalSourceCapture? = nil,
-    notifyJournal: @escaping @Sendable () -> Void = {},
-    journal: JournalCommandSurface? = nil,
+    journalCapture: JournalSourceCapture?,
+    notifyJournal: @escaping @Sendable () -> Void,
+    journal: JournalCommandSurface?,
     doctor: any DoctorReporting,
     now: @escaping @Sendable () -> Date = {
       Date()

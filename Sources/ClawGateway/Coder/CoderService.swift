@@ -41,11 +41,11 @@ public actor CoderService: CoderServing, Service {
     jobRoot: String,
     executionPolicyID: String,
     redact: @escaping @Sendable (_ text: String) -> String,
-    journalCapture: JournalSourceCapture? = nil,
+    journalCapture: JournalSourceCapture?,
     now: @escaping @Sendable () -> Date = {
       Date()
     },
-    notifyJournal: @escaping @Sendable () -> Void = {},
+    notifyJournal: @escaping @Sendable () -> Void,
     notifyOutbox: @escaping @Sendable () async -> Void
   ) {
     self.store = store

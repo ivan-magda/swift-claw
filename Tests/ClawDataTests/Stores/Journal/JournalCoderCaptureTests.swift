@@ -44,9 +44,15 @@ struct JournalCoderCaptureTests {
       day: JournalDay.containing(completedAt, timeZone: .gmt),
       ownerText: fixture.prepared.request.task ?? "",
       assistantText: selected.summary,
+      supportingProposal: nil,
       coderJobID: id,
       evidence: [
-        JournalEvidence(outcome: .coder(selected.state), jobID: id, name: "Coder terminal state"),
+        JournalEvidence(
+          outcome: .coder(selected.state),
+          jobID: id,
+          name: "Coder terminal state",
+          detail: nil
+        ),
       ]
     )
 

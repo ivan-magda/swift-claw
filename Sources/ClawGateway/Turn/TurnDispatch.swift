@@ -20,7 +20,7 @@ struct TurnDispatch: Sendable {
 
   let now: @Sendable () -> Date
   let logger: Logger
-  var journalCapture: JournalSourceCapture?
+  let journalCapture: JournalSourceCapture?
 
   func dispatch(
     rawUpdate: RawUpdate,
@@ -116,6 +116,7 @@ struct TurnDispatch: Sendable {
       isEdited: message.isEdited,
       provenance: mode.storedProvenance(of: .trusted),
       telegramMessageID: message.messageID,
+      journalAdmission: nil,
       ts: now()
     )
 

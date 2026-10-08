@@ -56,7 +56,8 @@ struct TurnDispatchModeTests {
       now: {
         Date(timeIntervalSince1970: 100)
       },
-      logger: logger
+      logger: logger,
+      journalCapture: nil
     )
 
     return Harness(dispatch: dispatch, sessionMessages: sessionMessages, runner: runner)

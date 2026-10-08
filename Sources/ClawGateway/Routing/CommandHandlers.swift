@@ -19,8 +19,8 @@ struct CommandHandlers: Sendable {
   let now: @Sendable () -> Date
 
   let coordinator: ApprovalCoordinator
-  var journalCapture: JournalSourceCapture?
-  var notifyJournal: @Sendable () -> Void = {}
+  let journalCapture: JournalSourceCapture?
+  let notifyJournal: @Sendable () -> Void
   var presentations: TurnPresentationRegistry?
 
   func stop(

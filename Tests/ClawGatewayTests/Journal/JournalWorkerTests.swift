@@ -315,7 +315,10 @@ struct JournalWorkerFixture {
         occurredAt: activity.addingTimeInterval(Double(id - firstID) / 1000),
         day: .containing(activity, timeZone: .gmt),
         ownerText: String(repeating: "Выбираем базу данных. ", count: 100),
-        assistantText: String(repeating: "Нужны транзакции. ", count: 200)
+        assistantText: String(repeating: "Нужны транзакции. ", count: 200),
+        supportingProposal: nil,
+        coderJobID: nil,
+        evidence: []
       )
     }
     try queue.write { db in

@@ -22,7 +22,7 @@ extension DaemonBuilder {
     doctor: any DoctorReporting,
     learning: ScheduledLearningService?,
     presentations: TurnPresentationRegistry?,
-    journal: JournalComposition? = nil
+    journal: JournalComposition?
   ) -> IntakeStack {
     let router = makeIntakeRouter(
       coordination: coordination,
@@ -61,7 +61,7 @@ extension DaemonBuilder {
     doctor: any DoctorReporting,
     learning: ScheduledLearningService?,
     presentations: TurnPresentationRegistry?,
-    journal: JournalComposition? = nil
+    journal: JournalComposition?
   ) -> MessageRouter {
     let voiceService = makeVoiceService()
     let imageService = makeImageService()
@@ -128,7 +128,7 @@ extension DaemonBuilder {
     sandbox: SandboxStack,
     mcpTools: [any Tool],
     coderTools: [any Tool] = [],
-    journal: JournalComposition? = nil
+    journal: JournalComposition?
   ) -> GatedToolDispatcher {
     let secretValues = redactionValues
     let redactor = SecretRedactor(secretValues: secretValues)

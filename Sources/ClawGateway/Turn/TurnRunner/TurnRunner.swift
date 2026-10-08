@@ -99,8 +99,8 @@ public struct TurnRunner: TurnDispatching {
     parker: any ApprovalParking,
     approvalExpirySeconds: Int,
     presentations: TurnPresentationRegistry? = nil,
-    journalCapture: JournalSourceCapture? = nil,
-    notifyJournal: @escaping @Sendable () -> Void = {},
+    journalCapture: JournalSourceCapture?,
+    notifyJournal: @escaping @Sendable () -> Void,
     logger: Logger
   ) {
     self.sessionMessages = sessionMessages

@@ -55,6 +55,7 @@ struct V9PersistenceAcceptanceTests {
         userID: 9,
         text: "save the plan",
         isEdited: false,
+        journalAdmission: nil,
         ts: Self.seededAt
       )
     )
@@ -500,7 +501,8 @@ private extension V9PersistenceAcceptanceTests {
         OutboxChunk(stepIndex: 0, chatID: 9, payload: "saved and confirmed", payloadHash: "hash2"),
       ],
       exchanges: [statefulExchange],
-      providerState: terminalState
+      providerState: terminalState,
+      journalCapture: nil
     )
   }
 

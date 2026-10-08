@@ -360,6 +360,9 @@ extension LearningRoutingTests {
         learningRedactor: SecretRedactor(secretValues: secretValues),
         learningOutboxSignal: outboxSignal,
         coordinator: ApprovalCoordinator(),
+        journalCapture: nil,
+        notifyJournal: {},
+        journal: nil,
         doctor: StubDoctorReporter(),
         logger: TestLog.silent
       )

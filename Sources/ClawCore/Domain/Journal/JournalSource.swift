@@ -36,7 +36,7 @@ public struct JournalEvidence: Codable, Sendable, Equatable {
   public let name: String
   public let detail: String?
 
-  public init(outcome: Outcome, jobID: UUID? = nil, name: String, detail: String? = nil) throws {
+  public init(outcome: Outcome, jobID: UUID?, name: String, detail: String?) throws {
     try JournalSource.validateText(
       name,
       field: "evidence.name",
@@ -109,9 +109,9 @@ public struct JournalSource: Codable, Sendable, Equatable {
     day: JournalDay,
     ownerText: String,
     assistantText: String,
-    supportingProposal: JournalProposal? = nil,
-    coderJobID: UUID? = nil,
-    evidence: [JournalEvidence] = []
+    supportingProposal: JournalProposal?,
+    coderJobID: UUID?,
+    evidence: [JournalEvidence]
   ) throws {
     try Self.validateID(id)
     try Self.validateText(ownerText, field: "ownerText", limit: JournalLimits.ownerTextGraphemes)

@@ -24,7 +24,7 @@ struct JournalBatchStoreTests {
       ? now.addingTimeInterval(-Double(JournalLimits.pendingAgeSeconds) - 1)
       : (branch == .endedDay ? now.addingTimeInterval(-86_400) : now)
     let count = branch == .threshold ? JournalLimits.batchSources : 1
-    let sources = try seed(queue, sessionID: sessionID, count: count, at: activity)
+    let sources = try seed(queue, sessionID: sessionID, count: count, at: activity, firstID: 1)
     if [.budget, .persistedBudget, .reservedBudget, .quota].contains(branch) {
       try queue.write { db in
         try JournalStoreGRDB.markPendingSourcesDue(db, ownerUserID: 42, sessionID: sessionID)
@@ -47,7 +47,10 @@ struct JournalBatchStoreTests {
         try JournalStoreGRDB.markPendingSourcesDue(db, ownerUserID: 42, sessionID: sessionID)
       }
       _ = try started(
-        store.startBatch(request(extra, reservedCost: RunBudget.default.perDayUSD), now: now)
+        store.startBatch(
+          request(extra, denied: false, reservedCost: RunBudget.default.perDayUSD),
+          now: now
+        )
       )
     }
     if branch == .quota {
@@ -56,12 +59,14 @@ struct JournalBatchStoreTests {
         try queue.write { db in
           try JournalStoreGRDB.markPendingSourcesDue(db, ownerUserID: 42, sessionID: sessionID)
         }
-        let batch = try started(store.startBatch(request(extra), now: now))
+        let batch = try started(
+          store.startBatch(request(extra, denied: false, reservedCost: 0.1), now: now)
+        )
         if index.isMultiple(of: 2) {
           try store.finishBatch(
             id: batch.id,
             outcome: .empty,
-            usage: row(callID: batch.providerCallID, sessionID: sessionID, now: now),
+            usage: row(callID: batch.providerCallID, sessionID: sessionID, now: now, cost: 0.1),
             now: now
           )
         }
@@ -73,7 +78,7 @@ struct JournalBatchStoreTests {
     // when
     let pending = try store.pendingSources(ownerUserID: 42, now: now)
     let outcome = try store.startBatch(
-      request(sources, denied: branch == .budget),
+      request(sources, denied: branch == .budget, reservedCost: 0.1),
       now: now
     )
 
@@ -97,7 +102,10 @@ struct JournalBatchStoreTests {
       if branch == .quota {
         let localMidnight = now.startOfUTCDay.addingTimeInterval(21 * 60 * 60)
         // Istanbul's next day starts while the durable UTC quota remains full.
-        let stillSameUTC = try store.startBatch(request(sources), now: localMidnight)
+        let stillSameUTC = try store.startBatch(
+          request(sources, denied: false, reservedCost: 0.1),
+          now: localMidnight
+        )
         guard case .deferred = stillSameUTC else {
           Issue.record("Local midnight must not reset the UTC quota")
           return
@@ -112,7 +120,7 @@ struct JournalBatchStoreTests {
         #expect(startedCallsInUTCWindow == JournalLimits.startedCallsPerUTCDay)
         _ = try started(
           store.startBatch(
-            request(sources),
+            request(sources, denied: false, reservedCost: 0.1),
             now: now.startOfUTCDay
               .addingTimeInterval(86_400)
           )
@@ -128,16 +136,30 @@ struct JournalBatchStoreTests {
     let store = JournalStoreGRDB(writer: queue)
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let sessionID = try makeSession(queue, now: now)
-    let sources = try seed(queue, sessionID: sessionID, count: JournalLimits.batchSources, at: now)
+    let sources = try seed(
+      queue,
+      sessionID: sessionID,
+      count: JournalLimits.batchSources,
+      at: now,
+      firstID: 1
+    )
     _ = try store.pendingSources(ownerUserID: 42, now: now)
 
     // when
-    let batch = try started(store.startBatch(request(Array(sources.prefix(3))), now: now))
-    let duplicate = try store.startBatch(request(Array(sources.prefix(3))), now: now)
+    let batch = try started(
+      store.startBatch(
+        request(Array(sources.prefix(3)), denied: false, reservedCost: 0.1),
+        now: now
+      )
+    )
+    let duplicate = try store.startBatch(
+      request(Array(sources.prefix(3)), denied: false, reservedCost: 0.1),
+      now: now
+    )
     try store.finishBatch(
       id: batch.id,
       outcome: .written,
-      usage: row(callID: batch.providerCallID, sessionID: sessionID, now: now),
+      usage: row(callID: batch.providerCallID, sessionID: sessionID, now: now, cost: 0.1),
       now: now
     )
 
@@ -173,7 +195,10 @@ struct JournalBatchStoreTests {
         occurredAt: activity.addingTimeInterval(Double(index)),
         day: day,
         ownerText: "Choose SQLite",
-        assistantText: "SQLite selected"
+        assistantText: "SQLite selected",
+        supportingProposal: nil,
+        coderJobID: nil,
+        evidence: []
       )
     }
     try queue.write { db in
@@ -200,10 +225,13 @@ struct JournalBatchStoreTests {
       queue,
       sessionID: sessionID,
       count: 1,
-      at: now.addingTimeInterval(-86_400)
+      at: now.addingTimeInterval(-86_400),
+      firstID: 1
     )
     let other = try seed(queue, sessionID: sessionID, count: 1, at: now, firstID: 50)
-    let batch = try started(store.startBatch(request(sources), now: now))
+    let batch = try started(
+      store.startBatch(request(sources, denied: false, reservedCost: 0.1), now: now)
+    )
     #expect(try store.canPublish(batchID: batch.id))
     #expect(try store.pendingCount(day: sources[0].day, ownerUserID: 42) == 1)
 
@@ -293,7 +321,8 @@ struct JournalBatchStoreTests {
       queue,
       sessionID: sessionID,
       count: JournalLimits.sweepCandidates + 1,
-      at: now.addingTimeInterval(-86_400)
+      at: now.addingTimeInterval(-86_400),
+      firstID: 1
     )
 
     // when
@@ -328,7 +357,7 @@ private extension JournalBatchStoreTests {
     sessionID: Int64,
     count: Int,
     at activityTime: Date,
-    firstID: Int = 1
+    firstID: Int
   ) throws -> [JournalSource] {
     let sources = try (firstID..<(firstID + count)).map { id in
       try JournalSource(
@@ -341,7 +370,10 @@ private extension JournalBatchStoreTests {
           timeZone: try #require(TimeZone(identifier: "Europe/Istanbul"))
         ),
         ownerText: "Choose SQLite",
-        assistantText: "SQLite selected"
+        assistantText: "SQLite selected",
+        supportingProposal: nil,
+        coderJobID: nil,
+        evidence: []
       )
     }
     try writer.write { db in
@@ -352,8 +384,7 @@ private extension JournalBatchStoreTests {
     return sources
   }
 
-  func row(callID: ProviderCallID, sessionID: Int64, now: Date, cost: Double = 0.1) -> ProviderUsage
-  {
+  func row(callID: ProviderCallID, sessionID: Int64, now: Date, cost: Double) -> ProviderUsage {
     ProviderUsage(
       providerCallID: callID,
       runID: nil,
@@ -370,8 +401,8 @@ private extension JournalBatchStoreTests {
 
   func request(
     _ sources: [JournalSource],
-    denied: Bool = false,
-    reservedCost: Double = 0.1
+    denied: Bool,
+    reservedCost: Double
   ) -> JournalStartRequest {
     let callID = ProviderCallID(rawValue: UUID().uuidString)
     return JournalStartRequest(
@@ -422,10 +453,13 @@ private extension JournalBatchStoreTests {
       pool,
       sessionID: sessionID,
       count: 1,
-      at: now.addingTimeInterval(-86_400)
+      at: now.addingTimeInterval(-86_400),
+      firstID: 1
     )
     let store = JournalStoreGRDB(writer: pool)
-    let batch = try started(store.startBatch(request(sources), now: now))
+    let batch = try started(
+      store.startBatch(request(sources, denied: false, reservedCost: 0.1), now: now)
+    )
     try store.finishBatch(
       id: batch.id,
       outcome: .failed(redactedReason: "request did not start"),
@@ -444,10 +478,13 @@ private extension JournalBatchStoreTests {
       pool,
       sessionID: sessionID,
       count: 2,
-      at: now.addingTimeInterval(-86_400)
+      at: now.addingTimeInterval(-86_400),
+      firstID: 1
     )
     let store = JournalStoreGRDB(writer: pool)
-    let batch = try started(store.startBatch(request([sources[0]]), now: now))
+    let batch = try started(
+      store.startBatch(request([sources[0]], denied: false, reservedCost: 0.1), now: now)
+    )
     _ = try seed(pool, sessionID: sessionID, count: 1, at: now, firstID: 50)
     return (batch, [sources[1].id])
   }

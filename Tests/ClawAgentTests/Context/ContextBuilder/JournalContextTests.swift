@@ -38,6 +38,7 @@ struct JournalContextTests {
     )
     let builder = makeBuilder(
       files: files,
+      policy: Self.berlinPolicy,
       instant: instant,
       inputCap: 800,
       memoryStore: FakeMemoryStore(items: [item])
@@ -46,7 +47,11 @@ struct JournalContextTests {
     // when
     let result = try builder.assemble(snapshot: snapshot(), sessionID: 42, origin: .interactive)
     let text = result.messages.map(\.content.text).joined()
-    let generous = try makeBuilder(files: files, instant: instant).assemble(
+    let generous = try makeBuilder(
+      files: files,
+      policy: Self.berlinPolicy,
+      instant: instant
+    ).assemble(
       snapshot: snapshot(),
       sessionID: 42,
       origin: .interactive
@@ -90,12 +95,16 @@ struct JournalContextTests {
       sessionID: nil,
       createdAt: .distantPast
     )
-    let builder = makeBuilder(files: files, memoryStore: FakeMemoryStore(items: [memory]))
+    let builder = makeBuilder(
+      files: files,
+      policy: Self.berlinPolicy,
+      memoryStore: FakeMemoryStore(items: [memory])
+    )
 
     // when
     let result = try builder.assemble(snapshot: snapshot(), sessionID: 42, origin: .interactive)
     let text = result.messages.map(\.content.text).joined()
-    let journalOnly = try makeBuilder(files: files).assemble(
+    let journalOnly = try makeBuilder(files: files, policy: Self.berlinPolicy).assemble(
       snapshot: snapshot(history: []),
       sessionID: 42,
       origin: .interactive
@@ -128,7 +137,7 @@ struct JournalContextTests {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let instant = try #require(ISO8601DateFormatter().date(from: "2026-03-29T22:15:00Z"))
     let files = FileSystemJournalFiles(root: root)
-    let builder = makeBuilder(files: files, instant: instant)
+    let builder = makeBuilder(files: files, policy: Self.berlinPolicy, instant: instant)
     let missing = try builder.assemble(snapshot: snapshot(), sessionID: 42, origin: .interactive)
     try Data(repeating: 65, count: JournalLimits.dayFileBytes + 1).write(
       to: directory.appendingPathComponent("2026-03-30.md")
@@ -177,13 +186,15 @@ struct JournalContextTests {
 // MARK: - Fixtures
 
 private extension JournalContextTests {
+  static let berlinPolicy = JournalPolicy(
+    enabled: true,
+    ownerUserID: 42,
+    timeZoneID: "Europe/Berlin"
+  )
+
   func makeBuilder(
     files: any JournalFiles,
-    policy: JournalPolicy = JournalPolicy(
-      enabled: true,
-      ownerUserID: 42,
-      timeZoneID: "Europe/Berlin"
-    ),
+    policy: JournalPolicy,
     instant: Date = .distantPast,
     inputCap: Int = 20_000,
     memoryStore: FakeMemoryStore = FakeMemoryStore()

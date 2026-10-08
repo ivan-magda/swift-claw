@@ -51,7 +51,7 @@ struct CoderBackendSetup: Sendable {
 extension DaemonBuilder {
   func prepareCoder(
     coordination: TurnCoordination,
-    journal: JournalComposition? = nil
+    journal: JournalComposition?
   ) async -> CoderComposition {
     guard config.coder.enabled else {
       let reservedJobs = try? stores.coderJobs.reservedJobs()

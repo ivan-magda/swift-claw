@@ -50,6 +50,7 @@ struct CommandStoreTests {
       userID: 42,
       text: text,
       isEdited: false,
+      journalAdmission: nil,
       ts: Date(timeIntervalSince1970: Double(updateID))
     )
   }
@@ -130,7 +131,12 @@ struct CommandStoreTests {
     let now = Date(timeIntervalSince1970: 200)
 
     // when
-    let result = try env.commands.applyNew(updateID: 200, sessionKey: env.sessionKey, now: now)
+    let result = try env.commands.applyNew(
+      updateID: 200,
+      sessionKey: env.sessionKey,
+      journalScope: nil,
+      now: now
+    )
 
     // then
     #expect(
@@ -205,7 +211,12 @@ struct CommandStoreTests {
     let now = Date(timeIntervalSince1970: 200)
 
     // when
-    let result = try env.commands.applyNew(updateID: 200, sessionKey: env.sessionKey, now: now)
+    let result = try env.commands.applyNew(
+      updateID: 200,
+      sessionKey: env.sessionKey,
+      journalScope: nil,
+      now: now
+    )
 
     // then — supersede AND both-flag detaint are observed jointly after the single /new commit
     #expect(result.supersededRunIDs == [env.firstRunID, queuedRunID])
@@ -246,7 +257,12 @@ struct CommandStoreTests {
 
     // when — the post-detaint throw surfaces classified at the seam, never as its raw type
     #expect(throws: StoreError.self) {
-      try crashingStore.applyNew(updateID: 500, sessionKey: env.sessionKey, now: now)
+      try crashingStore.applyNew(
+        updateID: 500,
+        sessionKey: env.sessionKey,
+        journalScope: nil,
+        now: now
+      )
     }
 
     // then — the whole transaction rolls back: supersede and detaint commit together or not at all,
@@ -294,7 +310,12 @@ struct CommandStoreTests {
 
     // when
     _ = try commands.applyStop(updateID: 1, sessionKey: sessionKey, now: Date())
-    _ = try commands.applyNew(updateID: 2, sessionKey: sessionKey, now: Date())
+    _ = try commands.applyNew(
+      updateID: 2,
+      sessionKey: sessionKey,
+      journalScope: nil,
+      now: Date()
+    )
 
     // then
     let actors = try auditRows(queue).map { row in

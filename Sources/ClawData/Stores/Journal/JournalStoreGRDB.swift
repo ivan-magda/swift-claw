@@ -61,7 +61,14 @@ public struct JournalStoreGRDB: JournalStore {
         ]
       )
       if count > 0 {
-        try Self.recordStatus(db, ownerUserID: ownerUserID, outcome: .cancelled, now: now)
+        try Self.recordStatus(
+          db,
+          ownerUserID: ownerUserID,
+          outcome: .cancelled,
+          now: now,
+          skipped: 0,
+          interrupted: 0
+        )
       }
       return count
     }
@@ -76,7 +83,7 @@ public struct JournalStoreGRDB: JournalStore {
       )
       let outcomeData: Data? = row?["last_outcome"]
       return JournalStatus(
-        pendingCount: try Self.unpublishedCount(db, ownerUserID: ownerUserID),
+        pendingCount: try Self.unpublishedCount(db, ownerUserID: ownerUserID, day: nil),
         lastOutcome: try outcomeData.map {
           try JSONDecoder().decode(JournalOutcome.self, from: $0)
         },
@@ -103,7 +110,7 @@ extension JournalStoreGRDB {
   static func unpublishedCount(
     _ db: Database,
     ownerUserID: Int64,
-    day: JournalDay? = nil
+    day: JournalDay?
   ) throws -> Int {
     let dayClause = day == nil ? "" : " AND day = ?"
     var arguments: StatementArguments = [
@@ -129,8 +136,8 @@ extension JournalStoreGRDB {
     ownerUserID: Int64,
     outcome: JournalOutcome,
     now: Date,
-    skipped: Int = 0,
-    interrupted: Int = 0
+    skipped: Int,
+    interrupted: Int
   ) throws {
     let reason: String? =
       switch outcome {

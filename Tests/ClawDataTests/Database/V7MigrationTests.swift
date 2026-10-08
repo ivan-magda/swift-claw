@@ -17,6 +17,7 @@ struct V7MigrationTests {
         userID: 7,
         text: "schedule something",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

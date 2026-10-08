@@ -21,6 +21,7 @@ struct RunExecutionContextTests {
         text: "inspect the repository",
         isEdited: false,
         telegramMessageID: 53,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -105,6 +106,7 @@ struct RunExecutionContextTests {
         userID: 42,
         text: "inspect the repository",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

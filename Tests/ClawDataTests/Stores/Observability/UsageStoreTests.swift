@@ -21,6 +21,7 @@ struct UsageStoreTests {
         userID: 42,
         text: "seed",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -64,6 +65,7 @@ struct UsageStoreTests {
         userID: 42,
         text: "seed",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -75,6 +77,7 @@ struct UsageStoreTests {
         userID: 43,
         text: "seed",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -169,6 +172,7 @@ struct UsageStoreTests {
         userID: 42,
         text: "seed",
         isEdited: false,
+        journalAdmission: nil,
         ts: now
       )
     )
@@ -400,6 +404,7 @@ private extension UsageStoreTests {
         userID: 42,
         text: "seed",
         isEdited: false,
+        journalAdmission: nil,
         ts: fixedNow
       )
     )

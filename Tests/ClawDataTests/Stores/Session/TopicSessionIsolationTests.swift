@@ -27,6 +27,7 @@ struct TopicSessionIsolationTests {
       userID: 500,
       text: text,
       isEdited: false,
+      journalAdmission: nil,
       ts: Date(timeIntervalSince1970: 100)
     )
   }

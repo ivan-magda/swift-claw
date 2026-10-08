@@ -27,7 +27,8 @@ public enum OutboxFixture {
         chatID: chunk.chatID,
         content: chunks.map(\.payload).joined(),
         usage: usageFixture(sessionID: context.sessionID, runID: runID),
-        chunks: chunks
+        chunks: chunks,
+        journalCapture: nil
       ),
       now: now
     )

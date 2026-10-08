@@ -60,6 +60,9 @@ extension EvaluationRunEnvironment {
       feedbackCallbacks: callbacks,
       feedbackChallenges: challenges,
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       now: {
         now

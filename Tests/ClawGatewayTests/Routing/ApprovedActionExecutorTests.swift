@@ -165,6 +165,7 @@ struct ApprovedActionExecutorTests {
         userID: 7,
         text: "write",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -479,6 +480,7 @@ struct ApprovedActionExecutorTests {
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
       updateID: 2,
       sessionKey: env.sessionKey,
+      journalScope: nil,
       now: Date()
     )
     await gate.release()

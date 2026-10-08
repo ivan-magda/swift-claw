@@ -111,7 +111,7 @@ public struct AssistantTurn: Sendable, Equatable {
     setPrivateData: Bool = false,
     providerState: ProviderExchangeState? = nil,
     feedbackTarget: NewFeedbackTarget? = nil,
-    journalCapture: JournalCaptureOutcome? = nil
+    journalCapture: JournalCaptureOutcome?
   ) {
     self.runID = runID
     self.sessionID = sessionID

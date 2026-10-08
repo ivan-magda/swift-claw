@@ -89,6 +89,9 @@ struct ScheduleRoutingTests {
         commands: ScheduleCommandStoreGRDB(writer: queue)
       ),
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       now: {
         Self.fixedNow

@@ -33,6 +33,7 @@ struct ApprovedResumeStoreTests {
         userID: 7,
         text: "remember the plan",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -726,6 +727,7 @@ struct ApprovedResumeStoreTests {
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
       updateID: 100,
       sessionKey: SessionKey.telegramDM(chatID: 7),
+      journalScope: nil,
       now: Date()
     )
 

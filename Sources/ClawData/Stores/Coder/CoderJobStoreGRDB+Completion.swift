@@ -9,7 +9,7 @@ extension CoderJobStoreGRDB {
     result: CoderResult,
     chunks: [OutboxChunk],
     releaseReservation: Bool,
-    journalCapture: JournalCaptureOutcome? = nil,
+    journalCapture: JournalCaptureOutcome?,
     now: Date
   ) throws(StoreError) -> CoderCompletionOutcome {
     try database.writeMapping { db in

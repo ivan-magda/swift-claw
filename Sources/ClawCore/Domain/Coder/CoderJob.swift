@@ -113,7 +113,7 @@ public struct CoderJob: Sendable, Equatable, Codable {
     ownership: CoderProcessOwnership,
     processReceipt: CoderProcessReceipt?,
     result: CoderResult?,
-    journalScope: JournalScope? = nil
+    journalScope: JournalScope?
   ) {
     self.id = id
     self.origin = origin

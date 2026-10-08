@@ -187,7 +187,9 @@ func makeSC7Harness(
     workspace: workspace,
     memoryStore: stores.memory,
     retriever: stores.retriever,
-    budget: .default
+    budget: .default,
+    journalFiles: nil,
+    journalPolicy: .disabled
   )
 
   // 4. Real tools over the scripted HTTP + DNS seams and an exact-value redactor.
@@ -211,7 +213,8 @@ func makeSC7Harness(
     gate: ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: secretValues),
       privateFileLoader: privateFileLoader,
-      enabledDangerousTools: []
+      enabledDangerousTools: [],
+      journalEnabled: false
     )
   )
 
@@ -256,6 +259,8 @@ func makeSC7Harness(
     // Inert on purpose: the SC7 assertions never resolve approvals, so no turn may reach a park.
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     approvalExpirySeconds: testApprovalExpirySeconds,
+    journalCapture: nil,
+    notifyJournal: {},
     logger: logger
   )
 
@@ -288,6 +293,9 @@ func makeSC7Harness(
       commands: stores.scheduleCommands
     ),
     coordinator: ApprovalCoordinator(),
+    journalCapture: nil,
+    notifyJournal: {},
+    journal: nil,
     doctor: StubDoctorReporter(),
     now: {
       clock.now

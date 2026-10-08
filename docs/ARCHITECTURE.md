@@ -241,7 +241,10 @@ form `ARCHITECTURE.md §N` is used, sparingly.
   even when automatic generation is disabled. It closes and accounts abandoned started receipts
   without sending or appending them again.
   `DaemonBuilder.makeJournalComposition` constructs one policy/store/files/mutation gate and optional
-  capture/worker before assembling Coder and the agent. The same policy drives context, argument
+  capture/worker before assembling Coder and the agent. Journal policy, services, capture metadata,
+  payload fields and notification callbacks have no default arguments: every caller supplies its
+  journal choices explicitly, including `nil`, empty collections or a no-op callback when absent.
+  The environment's journal opt-in default remains disabled. The same policy drives context, argument
   scanning and the static fingerprint; the same gate serializes publication, deletion and approved
   file writes. The router creates command handlers against its shared reply/confirmation surface.
   Register the worker before producers, Coder before lane admission: reverse shutdown joins

@@ -353,6 +353,9 @@ private struct ChallengeEnvironment {
       feedbackCallbacks: callbacks,
       feedbackChallenges: challenges,
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       now: {
         clock.now

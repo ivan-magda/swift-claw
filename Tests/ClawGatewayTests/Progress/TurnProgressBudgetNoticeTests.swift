@@ -120,6 +120,7 @@ private extension TurnProgressBudgetNoticeTests {
           userID: env.chatID,
           text: "group work",
           isEdited: false,
+          journalAdmission: nil,
           ts: Date()
         )
       )

@@ -145,7 +145,9 @@ struct JournalExchangeFixture {
       assistantText: reply,
       supportingProposal: try input.supportingProposal.map {
         try JournalProposal(sourceID: $0.sourceID, text: $0.text)
-      }
+      },
+      coderJobID: nil,
+      evidence: []
     )
   }
 

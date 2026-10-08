@@ -43,6 +43,7 @@ struct RunsHealthTests {
         userID: chatID,
         text: "seed",
         isEdited: false,
+        journalAdmission: nil,
         ts: ts
       )
     )
@@ -89,7 +90,8 @@ struct RunsHealthTests {
         chatID: chatID,
         content: "hi",
         usage: usage,
-        chunks: []
+        chunks: [],
+        journalCapture: nil
       ),
       now: now.addingTimeInterval(1)
     )

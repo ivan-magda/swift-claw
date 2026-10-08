@@ -840,6 +840,8 @@ private func makeBuilder(
     memoryStore: memoryStore,
     retriever: retriever,
     budget: budget,
+    journalFiles: nil,
+    journalPolicy: .disabled,
     policyStaticSubhash: policyStaticSubhash,
     now: {
       Date(timeIntervalSince1970: 0)

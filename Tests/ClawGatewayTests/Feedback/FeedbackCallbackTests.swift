@@ -475,6 +475,9 @@ private struct FeedbackCallbackEnvironment {
       approvalCallbacks: wireApprovalRouter ? approvalHandler : nil,
       feedbackCallbacks: wireFeedbackRouter ? handler : nil,
       coordinator: coordinator,
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )

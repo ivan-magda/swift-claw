@@ -45,6 +45,9 @@ struct ScheduleVerbRoutingTests {
       lanes: SessionLaneRegistry(),
       schedule: makeIdleScheduleSurface(writer: queue),
       coordinator: ApprovalCoordinator(),
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       now: {
         Self.fixedNow

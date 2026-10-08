@@ -36,7 +36,7 @@ public struct DaemonRuntimeBundle: Sendable {
     laneShutdownOutcome: LaneShutdownOutcome,
     coder: CoderService? = nil,
     presentations: TurnPresentationRegistry? = nil,
-    journal: JournalWorker? = nil
+    journal: JournalWorker?
   ) {
     self.daemon = daemon
     self.lanes = lanes

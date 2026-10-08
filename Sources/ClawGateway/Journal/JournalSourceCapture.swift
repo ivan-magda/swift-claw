@@ -58,6 +58,7 @@ public struct JournalSourceCapture: Sendable {
         ownerText: bounded(input.ownerText, limit: JournalLimits.ownerTextGraphemes),
         assistantText: bounded(reply, limit: JournalLimits.assistantTextGraphemes),
         supportingProposal: proposal,
+        coderJobID: nil,
         evidence: evidence.prefix(JournalLimits.evidenceEntries).compactMap {
           try? JournalSanitizer.evidence($0, redact: redact)
         }
@@ -83,12 +84,14 @@ public struct JournalSourceCapture: Sendable {
       try? JournalEvidence(
         outcome: .coder(result.state),
         jobID: job.id,
-        name: "Coder terminal state"
+        name: "Coder terminal state",
+        detail: nil
       ),
       try? JournalEvidence(
         outcome: .publication(JournalSanitizer.publication(result.publication, redact: redact)),
         jobID: job.id,
-        name: "Coder publication"
+        name: "Coder publication",
+        detail: nil
       ),
     ].compactMap {
       $0
@@ -118,6 +121,7 @@ public struct JournalSourceCapture: Sendable {
         day: JournalDay.containing(completedAt, timeZone: timeZone),
         ownerText: bounded(task, limit: JournalLimits.ownerTextGraphemes),
         assistantText: bounded(result.summary, limit: JournalLimits.assistantTextGraphemes),
+        supportingProposal: nil,
         coderJobID: job.id,
         evidence: evidence
       )
@@ -133,7 +137,9 @@ public struct JournalSourceCapture: Sendable {
       // Persisted prose is not proof of an operation. Only the dispatcher-owned status is evidence.
       try? JournalEvidence(
         outcome: .tool(observation.status),
-        name: bounded(observation.toolName, limit: JournalLimits.evidenceFieldGraphemes)
+        jobID: nil,
+        name: bounded(observation.toolName, limit: JournalLimits.evidenceFieldGraphemes),
+        detail: nil
       )
     }
   }

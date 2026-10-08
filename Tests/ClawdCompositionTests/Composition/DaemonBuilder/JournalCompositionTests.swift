@@ -74,7 +74,7 @@ struct JournalCompositionTests {
       #expect(try fixture.builder.stores.coderJobs.job(id: job.id)?.state == .succeeded)
       return job.id
     }
-    let reopened = try fixture.reopen()
+    let reopened = try fixture.reopen(disablingJournal: false)
     let secondScript = JournalPollerScript(
       updates: [
         fixture.updateJSON(id: 4, text: "/new"),
@@ -160,6 +160,7 @@ struct JournalCompositionTests {
           text: "Ordinary message",
           isEdited: false,
           provenance: .trusted,
+          journalAdmission: nil,
           ts: fixture.now
         )
       )
@@ -439,7 +440,7 @@ struct JournalCompositionFixture {
     ])
   }
 
-  func reopen(disablingJournal: Bool = false) throws -> Self {
+  func reopen(disablingJournal: Bool) throws -> Self {
     let config: AppConfig
     if disablingJournal {
       var env = CompositionAcceptanceHarness.validEnv()

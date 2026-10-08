@@ -79,6 +79,7 @@ struct JournalValueTests {
               url: String(repeating: "u", count: JournalLimits.evidenceFieldGraphemes + 1)
             )
           ) : .workerReportedChecks,
+        jobID: nil,
         name: String(
           repeating: "n",
           count: field == "evidenceName"
@@ -103,6 +104,7 @@ struct JournalValueTests {
             field == "assistant" ? JournalLimits.assistantTextGraphemes + 1 : 1
         ),
         supportingProposal: proposal,
+        coderJobID: nil,
         evidence: Array(
           repeating: evidence,
           count: field == "evidenceCount"
@@ -124,7 +126,15 @@ struct JournalValueTests {
       ownerText: "Owner",
       assistantText: "Answer",
       supportingProposal: JournalProposal(sourceID: "message:41", text: "Proposal"),
-      evidence: [JournalEvidence(outcome: .workerReportedChecks, name: "Checks", detail: "Passed")]
+      coderJobID: nil,
+      evidence: [
+        JournalEvidence(
+          outcome: .workerReportedChecks,
+          jobID: nil,
+          name: "Checks",
+          detail: "Passed"
+        ),
+      ]
     )
     let encoded = try JSONEncoder().encode(source)
     var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
@@ -166,7 +176,10 @@ struct JournalValueTests {
         occurredAt: Date(timeIntervalSince1970: 0),
         day: day,
         ownerText: "Owner",
-        assistantText: "Answer"
+        assistantText: "Answer",
+        supportingProposal: nil,
+        coderJobID: nil,
+        evidence: []
       )
     }
   }
@@ -197,6 +210,7 @@ struct JournalValueTests {
       evidence: Array(
         repeating: JournalEvidence(
           outcome: .workerReportedChecks,
+          jobID: nil,
           name: String(repeating: "n", count: JournalLimits.evidenceFieldGraphemes),
           detail: String(repeating: "d", count: JournalLimits.evidenceFieldGraphemes)
         ),
@@ -216,7 +230,10 @@ struct JournalValueTests {
           occurredAt: Date(timeIntervalSince1970: 0),
           day: day,
           ownerText: text,
-          assistantText: "Answer"
+          assistantText: "Answer",
+          supportingProposal: nil,
+          coderJobID: nil,
+          evidence: []
         )
       }
     }

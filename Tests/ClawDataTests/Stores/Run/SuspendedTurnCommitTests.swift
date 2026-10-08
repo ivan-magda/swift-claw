@@ -25,6 +25,7 @@ struct SuspendedTurnCommitTests {
         userID: 7,
         text: "write the plan",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )

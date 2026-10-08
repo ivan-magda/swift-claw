@@ -31,6 +31,7 @@ struct RunStoreTests {
         userID: 42,
         text: "hi",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -87,6 +88,7 @@ struct RunStoreTests {
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
       updateID: 100,
       sessionKey: SessionKey.telegramDM(chatID: 42),
+      journalScope: nil,
       now: Date()
     )
     let turn = AssistantTurn(
@@ -95,7 +97,8 @@ struct RunStoreTests {
       chatID: 42,
       content: "answer",
       usage: usage(runID: env.seedRunID, sessionID: env.sessionID),
-      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")]
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")],
+      journalCapture: nil
     )
 
     // when
@@ -141,7 +144,8 @@ struct RunStoreTests {
       chatID: 42,
       content: "answer",
       usage: usage(runID: runID, sessionID: env.sessionID),
-      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")]
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")],
+      journalCapture: nil
     )
 
     // when
@@ -183,6 +187,7 @@ struct RunStoreTests {
         userID: 42,
         text: "running",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -260,7 +265,8 @@ struct RunStoreTests {
       chatID: 42,
       content: "answer",
       usage: usage(runID: runID, sessionID: env.sessionID),
-      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")]
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")],
+      journalCapture: nil
     )
 
     // when / then — the commit throws and writes NOTHING: no assistant message, run still RUNNING,
@@ -527,6 +533,7 @@ struct RunStoreTests {
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
       updateID: 100,
       sessionKey: SessionKey.telegramDM(chatID: 42),
+      journalScope: nil,
       now: Date()
     )
 
@@ -558,6 +565,7 @@ struct RunStoreTests {
         userID: 42,
         text: "hello",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date(timeIntervalSince1970: 1)
       )
     )
@@ -601,7 +609,8 @@ private extension RunStoreTests {
         completionTokens: completionTokens,
         costUSD: costUSD
       ),
-      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")]
+      chunks: [OutboxChunk(stepIndex: 0, chatID: 42, payload: "answer", payloadHash: "h")],
+      journalCapture: nil
     )
   }
 

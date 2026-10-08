@@ -35,7 +35,7 @@ extension DaemonBuilder {
     costPolicy: LLMCostPolicy,
     imageCache: ImageCache,
     freezeLearningSurface: @escaping @Sendable (_ runID: Int64, _ policyVersion: String) -> Void,
-    journal: JournalComposition? = nil
+    journal: JournalComposition?
   ) -> TurnRunner {
     let outboxSignal = coordination.outboxSignal
     return TurnRunner(

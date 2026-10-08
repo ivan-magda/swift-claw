@@ -20,7 +20,7 @@ struct CoderCompositionTests {
     let fixture = try CoderCompositionFixture()
     defer { fixture.cleanup() }
     let coordination = DaemonBuilder.TurnCoordination()
-    let coder = await fixture.builder.prepareCoder(coordination: coordination)
+    let coder = await fixture.builder.prepareCoder(coordination: coordination, journal: nil)
     let service = try #require(coder.service)
     let sandbox = await fixture.builder.prepareSandbox()
     let stack = try fixture.builder.makeRosterStack(http: fixture.http)
@@ -33,7 +33,8 @@ struct CoderCompositionTests {
       costResolver: CostResolver(priceTable: PriceFileLoader.load(), referenceUSDPerToken: 0.00001),
       sandbox: sandbox,
       mcpTools: [],
-      coderTools: coder.tools
+      coderTools: coder.tools,
+      journal: nil
     )
     // A prepared request was approved before the previous process claimed execution.
     try await service.start()
@@ -87,7 +88,7 @@ struct CoderCompositionTests {
       )
     }
     try await service.shutdown()
-    let restarted = await fixture.builder.prepareCoder(coordination: coordination)
+    let restarted = await fixture.builder.prepareCoder(coordination: coordination, journal: nil)
     let restartedService = try #require(restarted.service)
     let restartedAgent = fixture.builder.makeAgentStack(
       roster: stack.roster,
@@ -96,7 +97,8 @@ struct CoderCompositionTests {
       costResolver: CostResolver(priceTable: PriceFileLoader.load(), referenceUSDPerToken: 0.00001),
       sandbox: sandbox,
       mcpTools: [],
-      coderTools: restarted.tools
+      coderTools: restarted.tools,
+      journal: nil
     )
     let restartedRunner = fixture.builder.makeTurnRunner(
       coordination: coordination,
@@ -106,7 +108,8 @@ struct CoderCompositionTests {
       freezeLearningSurface: fixture.builder.makeLearningSurfaceFreeze(
         toolDefinitions: restartedAgent.toolDispatcher.definitions,
         workspace: workspace
-      )
+      ),
+      journal: nil
     )
     let restartedFabric = fixture.builder.makeApprovalFabric(
       coordination: coordination,
@@ -151,7 +154,10 @@ struct CoderCompositionTests {
     defer { fixture.cleanup() }
 
     // when
-    let coder = await fixture.builder.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
+    let coder = await fixture.builder.prepareCoder(
+      coordination: DaemonBuilder.TurnCoordination(),
+      journal: nil
+    )
     let service = try #require(coder.service)
     try await service.start()
     let preparation: Result<CoderPreparedRequest, any Error>
@@ -196,7 +202,10 @@ struct CoderCompositionTests {
     }
 
     // when
-    let coder = await builder.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
+    let coder = await builder.prepareCoder(
+      coordination: DaemonBuilder.TurnCoordination(),
+      journal: nil
+    )
 
     // then
     #expect(coder.service == nil)
@@ -209,7 +218,8 @@ struct CoderCompositionTests {
     let fixture = try CoderCompositionFixture()
     defer { fixture.cleanup() }
     let original = await fixture.builder.prepareCoder(
-      coordination: DaemonBuilder.TurnCoordination()
+      coordination: DaemonBuilder.TurnCoordination(),
+      journal: nil
     )
     let first = try #require(original.service)
     try await first.start()
@@ -239,7 +249,10 @@ struct CoderCompositionTests {
     }
 
     // when
-    let coder = await restarted.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
+    let coder = await restarted.prepareCoder(
+      coordination: DaemonBuilder.TurnCoordination(),
+      journal: nil
+    )
     let service = try #require(coder.service)
     try await service.start()
     try await service.shutdown()
@@ -293,7 +306,10 @@ struct CoderCompositionTests {
     // given
     let fixture = try CoderCompositionFixture()
     defer { fixture.cleanup() }
-    let coder = await fixture.builder.prepareCoder(coordination: DaemonBuilder.TurnCoordination())
+    let coder = await fixture.builder.prepareCoder(
+      coordination: DaemonBuilder.TurnCoordination(),
+      journal: nil
+    )
     let service = try #require(coder.service)
     try await service.start()
     let prepared = try await service.prepare(CoderCompositionFixture.request)

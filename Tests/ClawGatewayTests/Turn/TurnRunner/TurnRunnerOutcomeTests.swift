@@ -38,6 +38,7 @@ struct TurnRunnerOutcomeTests {
         userID: 7,
         text: "read https://example.com/a and summarize",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -65,6 +66,8 @@ struct TurnRunnerOutcomeTests {
       // Inert on purpose: these fixtures never resolve approvals, so no turn may reach a park.
       parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
       approvalExpirySeconds: testApprovalExpirySeconds,
+      journalCapture: nil,
+      notifyJournal: {},
       logger: TestLog.silent
     )
     return Fixture(

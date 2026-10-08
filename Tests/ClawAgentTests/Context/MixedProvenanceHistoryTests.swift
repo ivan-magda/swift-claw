@@ -105,6 +105,8 @@ struct MixedProvenanceRenderingTests {
       memoryStore: EmptyMemoryStore(),
       retriever: EmptyRetriever(),
       budget: .default,
+      journalFiles: nil,
+      journalPolicy: .disabled,
       fenceLabels: fenceLabels
     )
   }
@@ -356,7 +358,9 @@ struct MixedProvenanceRenderingTests {
       workspace: EmptyWorkspace(),
       memoryStore: EmptyMemoryStore(),
       retriever: EmptyRetriever(),
-      budget: tightBudget
+      budget: tightBudget,
+      journalFiles: nil,
+      journalPolicy: .disabled
     )
 
     // when

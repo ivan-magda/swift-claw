@@ -52,7 +52,8 @@ extension JournalStoreGRDB {
           ownerUserID: row["owner_user_id"],
           outcome: .skipped(redactedReason: reason),
           now: now,
-          skipped: 1
+          skipped: 1,
+          interrupted: 0
         )
       }
     }
@@ -83,7 +84,8 @@ extension JournalStoreGRDB {
             ownerUserID: scope.ownerUserID,
             outcome: .skipped(redactedReason: "Journal source preparation failed"),
             now: now,
-            skipped: 1
+            skipped: 1,
+            interrupted: 0
           )
         }
         return .commit
@@ -96,7 +98,8 @@ extension JournalStoreGRDB {
           ownerUserID: capture.scope.ownerUserID,
           outcome: .skipped(redactedReason: "Journal source capture failed"),
           now: now,
-          skipped: 1
+          skipped: 1,
+          interrupted: 0
         )
         return .commit
       }
@@ -149,7 +152,9 @@ extension JournalStoreGRDB {
           db,
           ownerUserID: ownerUserID,
           outcome: .failed(redactedReason: "Journal reset marking failed"),
-          now: now
+          now: now,
+          skipped: 0,
+          interrupted: 0
         )
         return .commit
       }
@@ -187,7 +192,8 @@ extension JournalStoreGRDB {
       ownerUserID: source.scope.ownerUserID,
       outcome: .skipped(redactedReason: expiredSourceReason),
       now: now,
-      skipped: 1
+      skipped: 1,
+      interrupted: 0
     )
     return false
   }

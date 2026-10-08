@@ -85,7 +85,8 @@ struct LearningCompositionTests {
       approvalCallbacks: nil,
       doctor: IdleCompositionDoctor(),
       learning: nil,
-      presentations: nil
+      presentations: nil,
+      journal: nil
     )
 
     // when
@@ -199,7 +200,8 @@ struct LearningCompositionTests {
         approvalCallbacks: nil,
         doctor: IdleCompositionDoctor(),
         learning: nil,
-        presentations: nil
+        presentations: nil,
+        journal: nil
       )
       let update = RawUpdate(
         updateID: learningEnabled ? 80 : 81,
@@ -284,7 +286,8 @@ struct LearningCompositionTests {
         approvalCallbacks: nil,
         doctor: IdleCompositionDoctor(),
         learning: nil,
-        presentations: nil
+        presentations: nil,
+        journal: nil
       )
 
       // when — correction tap, then its free-text payload

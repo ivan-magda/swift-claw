@@ -245,6 +245,9 @@ struct ApprovalCallbackHandlerTests {
       schedule: makeIdleScheduleSurface(writer: queue),
       approvalCallbacks: wireHandler ? handler : nil,
       coordinator: coordinator,
+      journalCapture: nil,
+      notifyJournal: {},
+      journal: nil,
       doctor: StubDoctorReporter(),
       logger: TestLog.silent
     )

@@ -95,7 +95,7 @@ extension JournalStoreGRDB {
       }
       let terminalOutcome: JournalOutcome =
         state == BatchState.cancelled.rawValue ? .cancelled : outcome
-      try Self.closeBatch(db, batch: batch, outcome: terminalOutcome, now: now)
+      try Self.closeBatch(db, batch: batch, outcome: terminalOutcome, now: now, interrupted: 0)
     }
   }
 
@@ -180,13 +180,14 @@ private extension JournalStoreGRDB {
     batch: JournalBatch,
     outcome: JournalOutcome,
     now: Date,
-    interrupted: Int = 0
+    interrupted: Int
   ) throws {
     try recordStatus(
       db,
       ownerUserID: batch.scope.ownerUserID,
       outcome: outcome,
       now: now,
+      skipped: 0,
       interrupted: interrupted
     )
     try db.execute(

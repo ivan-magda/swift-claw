@@ -30,7 +30,7 @@ public struct ToolPolicyGate: Sendable {
     argGuard: ExfilArgGuard,
     privateFileLoader: @escaping @Sendable () -> [String],
     enabledDangerousTools: Set<String>,
-    journalEnabled: Bool = false
+    journalEnabled: Bool
   ) {
     self.argGuard = argGuard
     self.privateFileLoader = privateFileLoader

@@ -556,6 +556,8 @@ private func makeContextBuilder(
     memoryStore: memory,
     retriever: retriever,
     budget: budget,
+    journalFiles: nil,
+    journalPolicy: .disabled,
     now: {
       Date(timeIntervalSince1970: 0)
     }
@@ -604,6 +606,7 @@ func makeEnv(
       userID: chatID,
       text: "hi",
       isEdited: false,
+      journalAdmission: nil,
       ts: Date()
     )
   )
@@ -653,6 +656,8 @@ func makeEnv(
     parker: InertApprovalParker(coordinator: ApprovalCoordinator()),
     approvalExpirySeconds: testApprovalExpirySeconds,
     presentations: try presentationsFactory?(outbox) ?? presentations,
+    journalCapture: nil,
+    notifyJournal: {},
     logger: TestLog.silent
   )
 
@@ -898,6 +903,7 @@ struct TurnRunnerTests {
         userID: 77,
         text: "seed",
         isEdited: false,
+        journalAdmission: nil,
         ts: Date()
       )
     )
@@ -1039,6 +1045,7 @@ struct TurnRunnerTests {
     _ = try CommandStoreGRDB(writer: env.queue).applyNew(
       updateID: 2,
       sessionKey: SessionKey.telegramDM(chatID: env.chatID),
+      journalScope: nil,
       now: Date()
     )
 

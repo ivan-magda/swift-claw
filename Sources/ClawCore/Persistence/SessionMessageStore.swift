@@ -114,7 +114,7 @@ public struct InboundMessage: Sendable, Equatable {
     isEdited: Bool,
     provenance: Provenance = .trusted,
     telegramMessageID: Int64? = nil,
-    journalAdmission: JournalExchangeAdmission? = nil,
+    journalAdmission: JournalExchangeAdmission?,
     ts: Date
   ) {
     self.updateID = updateID

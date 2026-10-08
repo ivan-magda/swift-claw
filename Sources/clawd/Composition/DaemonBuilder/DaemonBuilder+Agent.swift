@@ -27,7 +27,7 @@ extension DaemonBuilder {
     mcpTools: [any Tool],
     coderTools: [any Tool] = [],
     presentationClock: any Clock<Duration> = ContinuousClock(),
-    journal: JournalComposition? = nil
+    journal: JournalComposition?
   ) -> AgentStack {
     let toolDispatcher = makeToolDispatcher(
       workspace: workspace,
@@ -79,7 +79,7 @@ extension DaemonBuilder {
     fenceLabels: ToolFenceLabels,
     policyStaticSubhash: String,
     toolDefinitions: [ToolDefinition],
-    journal: JournalComposition? = nil
+    journal: JournalComposition?
   ) -> ContextBuilder {
     let messageInputTokens = TokenEstimator.messageInputBudget(
       maxInputTokens: config.budget.maxInputTokens,

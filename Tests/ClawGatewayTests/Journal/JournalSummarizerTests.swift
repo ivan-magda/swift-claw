@@ -18,7 +18,9 @@ struct JournalSummarizerTests {
         owner: index == 10 ? "Да, выбираем его." : String(repeating: "вопрос ", count: 560),
         answer: String(repeating: "обсуждение ", count: 710) + secret + conclusion,
         proposal: try JournalProposal(sourceID: "message:1", text: "Выбираем PostgreSQL?"),
-        evidence: [try JournalEvidence(outcome: .tool(.ok), name: "file_write")]
+        evidence: [
+          try JournalEvidence(outcome: .tool(.ok), jobID: nil, name: "file_write", detail: nil),
+        ]
       )
     }
     let provider = SequenceProvider([response("{\"notes\":[]}")])
@@ -68,7 +70,11 @@ struct JournalSummarizerTests {
         $0
       }
     )
-    let prepared = try codec.prepare(sources: [source()], binding: binding, budget: .default)
+    let prepared = try codec.prepare(
+      sources: [source(proposal: nil, evidence: [])],
+      binding: binding,
+      budget: .default
+    )
     let callID = UUIDProviderCallIDGenerator().next()
 
     // when
@@ -119,7 +125,7 @@ struct JournalSummarizerTests {
     for (index, provider) in providers.enumerated() {
       let binding = binding(provider)
       let prepared = try codec.prepare(
-        sources: [source()],
+        sources: [source(proposal: nil, evidence: [])],
         binding: binding,
         budget: budget(input: 2_000)
       )
@@ -165,12 +171,18 @@ struct JournalSummarizerTests {
       costResolver: resolver,
       redact: SecretRedactor(secretValues: [secret]).redact
     )
-    let observed = try source(evidence: [
-      JournalEvidence(outcome: .tool(.ok), name: "file_write"),
-    ])
-    let workerOnly = try source(evidence: [
-      JournalEvidence(outcome: .workerReportedChecks, name: "checks"),
-    ])
+    let observed = try source(
+      proposal: nil,
+      evidence: [
+        JournalEvidence(outcome: .tool(.ok), jobID: nil, name: "file_write", detail: nil),
+      ]
+    )
+    let workerOnly = try source(
+      proposal: nil,
+      evidence: [
+        JournalEvidence(outcome: .workerReportedChecks, jobID: nil, name: "checks", detail: nil),
+      ]
+    )
     let note = JournalNote(
       kind: .result,
       attribution: .observedOperation,
@@ -227,11 +239,13 @@ struct JournalSummarizerTests {
         $0
       }
     )
-    let first = try source()
+    let first = try source(proposal: nil, evidence: [])
     let later = try source(
       id: 2,
       timeZoneID: "America/New_York",
-      occurredAt: first.occurredAt.addingTimeInterval(25_200)
+      occurredAt: first.occurredAt.addingTimeInterval(25_200),
+      proposal: nil,
+      evidence: []
     )
     let note = JournalNote(
       kind: .result,
@@ -260,7 +274,8 @@ struct JournalSummarizerTests {
         id: id,
         owner: "Да, выбираем его.",
         answer: String(repeating: "результат ", count: 790),
-        proposal: proposal
+        proposal: proposal,
+        evidence: []
       )
     }
     let note = JournalNote(
@@ -320,7 +335,9 @@ struct JournalSummarizerTests {
       try source(
         id: id,
         owner: String(repeating: grapheme, count: 4_000),
-        answer: String(repeating: grapheme, count: 8_000)
+        answer: String(repeating: grapheme, count: 8_000),
+        proposal: nil,
+        evidence: []
       )
     }
     let codec = JournalSummaryCodec(
@@ -355,7 +372,9 @@ struct JournalSummarizerTests {
     let grapheme = "я" + String(repeating: "\u{0301}", count: 64)
     let source = try source(
       owner: String(repeating: grapheme, count: 990),
-      answer: String(repeating: secret, count: 100)
+      answer: String(repeating: secret, count: 100),
+      proposal: nil,
+      evidence: []
     )
     let codec = JournalSummaryCodec(
       costResolver: resolver,
@@ -390,7 +409,9 @@ struct JournalSummarizerTests {
       try source(
         id: index,
         owner: String(repeating: "я", count: 4_000),
-        answer: String(repeating: "ю", count: 8_000)
+        answer: String(repeating: "ю", count: 8_000),
+        proposal: nil,
+        evidence: []
       )
     }
 
@@ -471,8 +492,8 @@ private extension JournalSummarizerTests {
     occurredAt: Date = Date(timeIntervalSince1970: 1_791_424_800),
     owner: String = "Выбираем PostgreSQL.",
     answer: String = "Выбрали PostgreSQL ради транзакций.",
-    proposal: JournalProposal? = nil,
-    evidence: [JournalEvidence] = []
+    proposal: JournalProposal?,
+    evidence: [JournalEvidence]
   ) throws -> JournalSource {
     let day = try #require(JournalDay(isoDate: "2026-10-08"))
     return try JournalSource(
@@ -484,6 +505,7 @@ private extension JournalSummarizerTests {
       ownerText: owner,
       assistantText: answer,
       supportingProposal: proposal,
+      coderJobID: nil,
       evidence: evidence
     )
   }

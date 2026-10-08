@@ -314,7 +314,12 @@ private extension JournalSummaryCodec {
         if case .tool = entry.outcome {
           return nil
         }
-        return try JournalEvidence(outcome: entry.outcome, jobID: entry.jobID, name: entry.name)
+        return try JournalEvidence(
+          outcome: entry.outcome,
+          jobID: entry.jobID,
+          name: entry.name,
+          detail: nil
+        )
       }
     }
     let ownerLimit: Int

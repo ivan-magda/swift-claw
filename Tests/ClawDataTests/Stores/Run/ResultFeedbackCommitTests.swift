@@ -168,7 +168,8 @@ private extension ResultFeedbackCommitTests {
           replyMarkup: Self.keyboard
         ),
       ],
-      feedbackTarget: target
+      feedbackTarget: target,
+      journalCapture: nil
     )
   }
 

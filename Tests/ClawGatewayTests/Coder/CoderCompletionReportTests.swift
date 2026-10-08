@@ -117,7 +117,8 @@ private extension CoderCompletionReportTests {
       slotReserved: false,
       ownership: .stopped,
       processReceipt: nil,
-      result: result
+      result: result,
+      journalScope: nil
     )
   }
 }

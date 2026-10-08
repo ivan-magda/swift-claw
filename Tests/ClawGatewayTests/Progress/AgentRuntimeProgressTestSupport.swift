@@ -42,7 +42,8 @@ func progressDispatcher(tool: any Tool, secrets: [String] = []) -> GatedToolDisp
     gate: ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: secrets),
       privateFileLoader: { [] },
-      enabledDangerousTools: []
+      enabledDangerousTools: [],
+      journalEnabled: false
     ),
     secretValues: secrets
   )
