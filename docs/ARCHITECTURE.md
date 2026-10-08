@@ -232,6 +232,14 @@ form `ARCHITECTURE.md §N` is used, sparingly.
   A root-local unavailable policy marker is never advertised as resolved execution authority or used
   to prepare an approval. Enabled status/cancel retain owner scope and access to persisted jobs;
   disabled Coder contributes no tools.
+- **Journal lifecycle:** one `JournalWorker` owns a coalesced durable queue drain. Producer hints
+  are synchronous buffered signals; before `run()` they only mark pending work. The service's
+  structured ticker and signal consumer admit work into one stored task. Shutdown closes admission,
+  cancels and joins that drain, including the provider deadline loser and terminal usage write,
+  before shared providers or credentials close. Unstarted current-day partial sources remain pending;
+  stopping does not flush them. Boot reconciliation is a local `JournalStore.reconcileAtBoot` pass
+  even when automatic generation is disabled. It closes and accounts abandoned started receipts
+  without sending or appending them again.
 - **Logging:** `swift-log` to stdout/stderr; journald/newsyslog handle rotation.
 - **Approval graph ownership:** the daemon root retains the approval waiter for its full lifetime.
   The turn runner's deferred parker holds a weak back-reference to that waiter, so releasing the
@@ -1906,6 +1914,23 @@ without keeping obsolete source payloads alive. It does not introduce another to
 The current reset receipt and its compact dependencies retain the reset replay barrier. Owner reset
 and epoch checks outrank ordinary retention; retained old records cannot reactivate old-epoch work.
 
+### 14.5 Background daily journal drain
+
+`JournalWorker` checks the persistent owner queue at startup and with a maximum 60-second ticker.
+The ticker keeps running while inference is held; notifications and overlapping sweeps coalesce into
+one owned drain. Each sweep reads at most 100 candidates, groups by owner/day across frozen timezones,
+and fits at most ten sources per request. Threshold, reset and ended-source-day triggers share this
+queue. Fitted leftovers retain durable due state. Unrepresentable sources receive fixed skip reasons;
+a budget refusal ends the pass and leaves work for a later sweep.
+
+One selected roster binding supplies both fitting and inference. The worker saves its conservative
+interruption usage and atomically starts only fitted source IDs before requesting the provider.
+After inference, a synchronous shared `WorkspaceMutationGate` closure checks `canPublish`, appends
+valid nonempty notes and finishes the batch with returned usage. Deletion and ordinary approved
+workspace writes use that same gate. Cancelled batches still record usage; a proven no-start result
+remains nil usage. File failures become terminal safe outcomes and never disrupt a conversation or
+Coder completion. No started batch is replayed at boot.
+
 ## 15. Configuration & secrets
 
 **Daily journals** use `CLAW_JOURNAL_ENABLED` (default `false`) through the existing strict
@@ -2029,6 +2054,10 @@ fallback is performed by composition. Codex owns its selected configuration and 
 
 ## 16. Observability
 
+- **Journal diagnostics:** per-owner status retains terminal outcomes, pending/skipped/interrupted
+  counts and fixed safe reasons. A damaged, refused or over-cap day file is not rebuilt. File errors
+  are recorded after the paid call's usage; queue-store failures log a fixed reason and leave durable
+  recovery state. Provider output, filesystem errors and SQL arguments are never diagnostic text.
 - **Structured logs** (`swift-log`) — metadata only by default (model, tokens, finish reason, tool, latency, status); prompt/completion content capture is opt-in. Exact-value secret redaction at the boundary (§12).
 - **`doctor` is a clawd CLI subcommand AND a Telegram command** (`/doctor`, its alias `/status`, and `/cost`) — **distinct** from the NG4 REST non-goal. `doctor --check-config` validates without starting the daemon. There is a **machine-readable JSON-to-stdout** form pollable by launchd/systemd watchdog.
 - **`doctor --check-config` carries a network-free `llm.auth` row.** It **never refreshes, fetches models, or contacts the provider** — a diagnostic that mutates credentials or spends a login is not a diagnostic. Current route with a static key reports `provider=openai-compatible mode=static`, without one `mode=none`; a decryptable, refreshable ChatGPT credential reports `provider=openai-chatgpt mode=oauth status=<fresh|expiring|expired-refresh-on-use>` and passes; no usable credential **fails** the row with `clawd auth login` guidance; a malformed key or envelope fails as a decrypt row. The existing `secrets` row still validates `secrets.enc` independently. `llm.auth` inspects the **primary** route only, so a fallback's credential is first exercised when the fallback carries a turn.
