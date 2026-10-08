@@ -112,10 +112,10 @@ enum BudgetFitter {
     let residual = residual(required: required, budget: budget)
     // The newest history unit is kept even when it alone exceeds the residual (see `fittedRow`),
     // so the squeezed total can legitimately overshoot the residual by this floor.
-    let historyFloorCount =
-      ordered.first {
-        $0.id == .history
-      }?.units.first?.content.count ?? 0
+    let historySection = ordered.first { section in
+      section.id == .history
+    }
+    let historyFloorCount = historySection?.units.first?.content.count ?? 0
     let cappedRows = truncatable.compactMap { section -> FittedRow? in
       let maxCount = min(section.cap ?? Int.max, renderedCount(section))
       return fittedRow(for: section, maxCount: maxCount)
@@ -172,22 +172,23 @@ private extension BudgetFitter {
     // exceeds the budget, so the model always sees the message it is answering. Flooring the
     // budget at its size means it is admitted whole on the first iteration; later units still
     // obey the contiguous newest-first stop rule.
-    let historyFloor = section.id == .history ? (section.units.first?.content.count ?? 0) : 0
-    let effectiveMax = max(maxCount, historyFloor)
-    guard effectiveMax > 0 else {
+    let newestUnitCount = section.units.first?.content.count ?? 0
+    let historyFloor = section.id == .history ? newestUnitCount : 0
+    let effectiveMaxCount = max(maxCount, historyFloor)
+    guard effectiveMaxCount > 0 else {
       return nil
     }
 
-    var kept: [SectionUnit] = []
-    var used = 0
+    var keptUnits: [SectionUnit] = []
+    var usedCount = 0
 
     for unit in section.units {
-      let separatorCount = kept.isEmpty ? 0 : 1
-      let wholeCount = separatorCount + unit.content.count
+      let separatorCount = keptUnits.isEmpty ? 0 : 1
+      let wholeUnitCount = separatorCount + unit.content.count
 
-      if used + wholeCount <= effectiveMax {
-        kept.append(unit)
-        used += wholeCount
+      if usedCount + wholeUnitCount <= effectiveMaxCount {
+        keptUnits.append(unit)
+        usedCount += wholeUnitCount
         continue
       }
 
@@ -198,49 +199,60 @@ private extension BudgetFitter {
         continue
       }
 
-      let available = effectiveMax - used - separatorCount
-      guard available >= truncationMarker.count + 1 else {
+      let availableCount = effectiveMaxCount - usedCount - separatorCount
+      guard availableCount >= truncationMarker.count + 1 else {
         continue
       }
 
-      let content: String
+      let truncatedContent: String
       if section.id == .journal {
-        guard let fitted = journalTail(unit.content, maxCount: available) else {
+        let journalContent = truncatedJournalContent(unit.content, maxCount: availableCount)
+        guard let journalContent else {
           break
         }
-        content = fitted
+        truncatedContent = journalContent
       } else {
-        let prefixCount = available - truncationMarker.count
-        content = String(unit.content.prefix(prefixCount)) + truncationMarker
+        let prefixCount = availableCount - truncationMarker.count
+        truncatedContent = String(unit.content.prefix(prefixCount)) + truncationMarker
       }
-      kept.append(
-        SectionUnit(id: unit.id, content: content, canTruncate: unit.canTruncate)
+
+      keptUnits.append(
+        SectionUnit(id: unit.id, content: truncatedContent, canTruncate: unit.canTruncate)
       )
       break
     }
 
-    return markedRow(for: section, kept: kept, maxCount: effectiveMax)
+    return markedRow(for: section, kept: keptUnits, maxCount: effectiveMaxCount)
   }
 
   /// A journal unit starts with its date label; shortening only its body preserves both the
   /// calendar identity and the newest notes when the overall budget squeezes it a second time.
-  static func journalTail(_ content: String, maxCount: Int) -> String? {
-    guard let newline = content.firstIndex(of: "\n") else {
+  static func truncatedJournalContent(_ content: String, maxCount: Int) -> String? {
+    guard let labelEnd = content.firstIndex(of: "\n") else {
       return nil
     }
-    let bodyStart = content.index(after: newline)
-    let label = String(content[..<bodyStart])
-    let suffixCount = maxCount - label.count - truncationMarker.count
+
+    let bodyStart = content.index(after: labelEnd)
+    let dateLabel = String(content[..<bodyStart])
+    let body = content[bodyStart...]
+
+    let suffixCount = maxCount - dateLabel.count - truncationMarker.count
     guard suffixCount > 0 else {
       return nil
     }
-    return label + truncationMarker + content[bodyStart...].suffix(suffixCount)
+
+    return dateLabel + truncationMarker + body.suffix(suffixCount)
   }
 
   /// Rows whose units mean something in order: history must stay a contiguous newest-first window,
   /// the journal favors today over yesterday, and the skills count marker describes a real slice.
   static func keepsContiguousPrefix(_ id: ContextRowID) -> Bool {
-    id == .history || id == .skills || id == .journal
+    switch id {
+    case .history, .skills, .journal:
+      return true
+    default:
+      return false
+    }
   }
 
   /// Appends the row's drop marker when the budget left units out. The marker shares the cap with
