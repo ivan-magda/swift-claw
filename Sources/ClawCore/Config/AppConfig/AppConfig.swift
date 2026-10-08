@@ -205,12 +205,12 @@ public struct AppConfig: Sendable, Equatable {
 
   /// Inspection uses the current configured owner, never previously seeded access grants.
   public var journalPolicy: JournalPolicy {
-    let owner = groupChats.isEmpty && allowlist.count == 1 ? allowlist.first : nil
-    return JournalPolicy(
+    JournalPolicy(
       enabled: journalEnabled,
-      ownerUserID: owner.flatMap {
-        $0 > 0 ? $0 : nil
-      },
+      ownerUserID: Self.journalOwnerUserID(
+        allowlist: allowlist,
+        groupChats: groupChats
+      ),
       timeZoneID: timezone.identifier
     )
   }
@@ -253,7 +253,7 @@ public struct AppConfig: Sendable, Equatable {
     voice: VoiceConfig,
     image: ImageConfig,
     mcpConfigSource: MCPConfigSource,
-    journalEnabled: Bool = false
+    journalEnabled: Bool
   ) {
     self.allowlist = allowlist
     self.groupChats = groupChats
@@ -333,12 +333,9 @@ public struct AppConfig: Sendable, Equatable {
       key: EnvKey.journalEnabled,
       default: false
     )
-    if journalEnabled {
-      guard groupChats.isEmpty, allowlist.count == 1,
-            let ownerUserID = allowlist.first, ownerUserID > 0
-      else {
-        throw ConfigError.journalRequiresPersonalOwner
-      }
+    let journalOwnerUserID = Self.journalOwnerUserID(allowlist: allowlist, groupChats: groupChats)
+    if journalEnabled && journalOwnerUserID == nil {
+      throw ConfigError.journalRequiresPersonalOwner
     }
 
     let approvalExpirySeconds = try parseApprovalExpiry(env[EnvKey.approvalExpiry])
@@ -406,6 +403,25 @@ extension AppConfig {
       return .probed(stateRoot.appendingPathComponent(MCPLimits.configFileName))
     }
     return .explicit(URL(fileURLWithPath: raw))
+  }
+}
+
+// MARK: - Journal Ownership
+
+private extension AppConfig {
+  static func journalOwnerUserID(
+    allowlist: Set<Int64>,
+    groupChats: Set<Int64>
+  ) -> Int64? {
+    guard groupChats.isEmpty, allowlist.count == 1 else {
+      return nil
+    }
+
+    guard let ownerUserID = allowlist.first, ownerUserID > 0 else {
+      return nil
+    }
+
+    return ownerUserID
   }
 }
 
