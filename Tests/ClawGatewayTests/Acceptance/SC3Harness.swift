@@ -334,7 +334,8 @@ func makeSC3Harness(
         searchEndpointPresent: true,
         workspaceRoot: workspaceRoot.path,
         webFetchExemptCIDRs: [],
-        exec: .disabledDefault
+        exec: .disabledDefault,
+        journalEnabled: false
       )
     )
   )

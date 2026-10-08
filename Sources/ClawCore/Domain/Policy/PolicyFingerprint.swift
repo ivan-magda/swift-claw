@@ -51,7 +51,7 @@ public enum PolicyFingerprint {
       workspaceRoot: String,
       webFetchExemptCIDRs: [CIDR],
       exec: ExecConfig,
-      journalEnabled: Bool = false
+      journalEnabled: Bool
     ) {
       self.tools = tools
       self.llmEgress = llmEgress
