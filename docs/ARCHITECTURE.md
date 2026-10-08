@@ -848,6 +848,42 @@ process-event storage failures latch typed unhealthy service state and leave res
 backend error handling cannot turn a failed receipt write into a successful terminal commit. No
 completion-delivery claim is made when persistence failed.
 
+#### Daily journal persistence
+
+Schema v17 adds nullable `runs.journal_admission` and `coder_jobs.journal_scope` metadata,
+plus the immutable Coder terminal-commit timestamp `journal_terminal_ts`. Legacy rows keep
+nil admission metadata and never enter the queue through archive backfill.
+`journal_sources` stores unique source IDs and bounded, self-contained JSON payloads with
+frozen owner/day/timezone, activity timestamp, pending/due state and batch identity. Producers
+insert through a Data-owned transaction-local helper; the queue does not scan the archive.
+Terminal transitions discard payload text while retaining source-ID tombstones for deduplication.
+
+`JournalStore` is a synchronous Core persistence port. `pendingSources` examines at most
+100 pending candidates in activity order, closes sources older than 48 hours, and returns
+sources for owner/day groups made due by ten pending sources, a persisted reset mark or
+day end in a source's frozen timezone. A due mark survives partial batches and budget refusal.
+Status and deletion counts include started, unpublished sources.
+
+`startBatch` checks the current selection, global UTC-day usage and unaccounted journal
+reservations, then applies the existing interactive global budget policy and the 24-starts
+per-UTC-day journal quota inside the same write that inserts the batch receipt and binds
+its sources. Journal spend does not charge the proactive learning pool. `journal_batches`
+links its usage scope through a unique `provider_call_id` and saves a small Data-owned
+conservative accounting snapshot. Started receipts survive source completion/deletion and
+retain their UTC quota count; completion success is not the quota criterion.
+
+Finishing a batch inserts supplied run-less usage through the existing per-call idempotent
+helper. A proven no-start failure finishes the receipt with no usage; boot does not later charge
+that finished receipt. Callers supply conservative usage for ambiguous failures or cancellation.
+Cancellation closes its sources and prevents publication, but still permits late usage.
+Boot reconciliation closes abandoned started batches as interrupted, records the saved
+estimate only when the call has no usage, and never requeues or republishes those sources.
+Cancelled calls without usage are also accounted at boot without reviving publication.
+Unstarted sources stay pending; a restart alone does not mark today's partial work due.
+A repeated finish or boot cannot debit the same call again. The per-owner `journal_status`
+row persists last outcome/time, skipped/interrupted counts and the caller-redacted last error
+before terminal payloads are removed. No journal billing pool or file reconstruction is added.
+
 ### 7.6 sqlite-vec — deferral honesty
 
 `sqlite-vec` is **not** "add later via a protocol and a migration." It **requires a custom SQLite amalgamation** (`SQLITE_ENABLE_FTS5` **+** sqlite-vec, statically linked, **initialized before the connection opens**) and a **separate Linux-CI re-validation** (GRDB does not test it upstream; the vec binding ships its own connection). A stock `DatabaseMigrator` **cannot** create a `vec0` table. It stays strictly behind a protocol and deferred; risk = High (§18).

@@ -121,7 +121,8 @@ private extension DoctorHealthStoreReadTests {
       scheduleCommands: ScheduleCommandStoreGRDB(writer: writer),
       approvals: ApprovalStoreGRDB(writer: writer),
       coderJobs: CoderJobStoreGRDB(writer: writer),
-      learning: ScheduledLearningStoreGRDB(writer: writer)
+      learning: ScheduledLearningStoreGRDB(writer: writer),
+      journal: JournalStoreGRDB(writer: writer)
     )
   }
 
