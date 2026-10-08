@@ -219,14 +219,16 @@ struct ToolPolicyGateTests {
 
   private func makeGate(
     privateFiles: [String] = [ToolPolicyGateTests.memoryText],
-    execEnabled: Bool = false
+    execEnabled: Bool = false,
+    journalEnabled: Bool = false
   ) -> ToolPolicyGate {
     ToolPolicyGate(
       argGuard: ExfilArgGuard(secretValues: ["s3cret-value-1"]),
       privateFileLoader: {
         privateFiles
       },
-      enabledDangerousTools: execEnabled ? [ExecuteCodeTool.name] : []
+      enabledDangerousTools: execEnabled ? [ExecuteCodeTool.name] : [],
+      journalEnabled: journalEnabled
     )
   }
 
@@ -307,6 +309,32 @@ struct ToolPolicyGateTests {
     #expect(recorded.tool == "send_webhook")
     #expect(recorded.canonicalTarget == "https://example.com/hook")
     #expect(recorded.reason == .exfilTrifecta)
+  }
+
+  @Test(arguments: [Self.memoryText, "The owner's profile records a distinctive private interest."])
+  func journalScanDoesNotChangeApprovalPredicate(privateText: String) async {
+    // given — the same loader serves MEMORY and USER; the clean turn has no trifecta legs.
+    let gate = makeGate(privateFiles: [privateText], journalEnabled: true)
+    let substring = String(privateText.dropFirst(10).prefix(16))
+
+    // when
+    let matching = await gate.evaluate(
+      call: fetchCall("https://example.com/?body=" + substring),
+      tool: FetchLikeTool(),
+      context: makeContext()
+    )
+    let unmatched = await gate.evaluate(
+      call: fetchCall("https://example.com/a"),
+      tool: FetchLikeTool(),
+      context: makeContext()
+    )
+
+    // then
+    #expect(blocksOnPrivateData(matching))
+    guard case .allow = unmatched else {
+      Issue.record("Expected an allowed unmatched fetch")
+      return
+    }
   }
 
   @Test

@@ -203,10 +203,18 @@ private extension BudgetFitter {
         continue
       }
 
-      let prefixCount = available - truncationMarker.count
-      let prefix = String(unit.content.prefix(prefixCount))
+      let content: String
+      if section.id == .journal {
+        guard let fitted = journalTail(unit.content, maxCount: available) else {
+          break
+        }
+        content = fitted
+      } else {
+        let prefixCount = available - truncationMarker.count
+        content = String(unit.content.prefix(prefixCount)) + truncationMarker
+      }
       kept.append(
-        SectionUnit(id: unit.id, content: prefix + truncationMarker, canTruncate: unit.canTruncate)
+        SectionUnit(id: unit.id, content: content, canTruncate: unit.canTruncate)
       )
       break
     }
@@ -214,10 +222,25 @@ private extension BudgetFitter {
     return markedRow(for: section, kept: kept, maxCount: effectiveMax)
   }
 
+  /// A journal unit starts with its date label; shortening only its body preserves both the
+  /// calendar identity and the newest notes when the overall budget squeezes it a second time.
+  static func journalTail(_ content: String, maxCount: Int) -> String? {
+    guard let newline = content.firstIndex(of: "\n") else {
+      return nil
+    }
+    let bodyStart = content.index(after: newline)
+    let label = String(content[..<bodyStart])
+    let suffixCount = maxCount - label.count - truncationMarker.count
+    guard suffixCount > 0 else {
+      return nil
+    }
+    return label + truncationMarker + content[bodyStart...].suffix(suffixCount)
+  }
+
   /// Rows whose units mean something in order: history must stay a contiguous newest-first window,
-  /// and the skills index drops as a prefix so its "N of M" marker describes a real slice.
+  /// the journal favors today over yesterday, and the skills count marker describes a real slice.
   static func keepsContiguousPrefix(_ id: ContextRowID) -> Bool {
-    id == .history || id == .skills
+    id == .history || id == .skills || id == .journal
   }
 
   /// Appends the row's drop marker when the budget left units out. The marker shares the cap with

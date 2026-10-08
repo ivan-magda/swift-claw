@@ -74,7 +74,8 @@ struct PolicyFingerprintTests {
     search: Bool = false,
     root: String = "/workspace",
     exempt: [CIDR] = [],
-    exec: ExecConfig = .disabledDefault
+    exec: ExecConfig = .disabledDefault,
+    journalEnabled: Bool = false
   ) -> String {
     PolicyFingerprint.staticSubhash(
       inputs: PolicyFingerprint.StaticInputs(
@@ -83,7 +84,8 @@ struct PolicyFingerprintTests {
         searchEndpointPresent: search,
         workspaceRoot: root,
         webFetchExemptCIDRs: exempt,
-        exec: exec
+        exec: exec,
+        journalEnabled: journalEnabled
       )
     )
   }
@@ -245,6 +247,12 @@ struct PolicyFingerprintTests {
   func workspaceRootIsAnInputClass() {
     // given / when / then — the canonical workspace root is a hashed config class (§3.2)
     #expect(subhash(root: "/a") != subhash(root: "/b"))
+  }
+
+  @Test
+  func journalScanningIsAPolicyInput() {
+    // given / when / then — scan configuration must invalidate parked approvals.
+    #expect(subhash(journalEnabled: true) != subhash(journalEnabled: false))
   }
 
   @Test

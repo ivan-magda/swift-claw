@@ -24,15 +24,18 @@ public struct ToolPolicyGate: Sendable {
   private let argGuard: ExfilArgGuard
   private let privateFileLoader: @Sendable () -> [String]
   private let enabledDangerousTools: Set<String>
+  private let journalEnabled: Bool
 
   public init(
     argGuard: ExfilArgGuard,
     privateFileLoader: @escaping @Sendable () -> [String],
-    enabledDangerousTools: Set<String>
+    enabledDangerousTools: Set<String>,
+    journalEnabled: Bool = false
   ) {
     self.argGuard = argGuard
     self.privateFileLoader = privateFileLoader
     self.enabledDangerousTools = enabledDangerousTools
+    self.journalEnabled = journalEnabled
   }
 
   public func evaluate(
@@ -207,7 +210,8 @@ private extension ToolPolicyGate {
   /// tainted(session ∪ run) && privateData(assembly ∪ run ∪ session) — the session flag survives a
   /// window roll, closing the over-cap gap the per-assembly leg cannot. When it holds, conditional
   /// scanning runs and a redaction block WINS over approval; the private files are read from disk at
-  /// gate time.
+  /// gate time. Personal journaling also enables this scan in clean turns, without changing the
+  /// approval predicate.
   func scanArguments(call: ToolCall, context: ToolDispatchContext) -> ArgumentScan {
     let unconditional = argGuard.evaluateUnconditional(argsJSON: call.argumentsJSON)
     if let rule = unconditional.blockedRule {
@@ -217,7 +221,8 @@ private extension ToolPolicyGate {
     let tainted = context.sessionTainted || context.runIngestedUntrusted
     let privateData =
       context.assemblyPrivateData || context.runPrivateData || context.sessionHasPrivateData
-    guard tainted && privateData else {
+    let trifectaHeld = tainted && privateData
+    guard journalEnabled || trifectaHeld else {
       return .cleared(argsRedacted: unconditional.redactedArgs, trifectaHeld: false)
     }
 
@@ -228,7 +233,7 @@ private extension ToolPolicyGate {
     if let rule = conditional.blockedRule {
       return .blocked(blockedArgs(rule: rule, argsRedacted: conditional.redactedArgs))
     }
-    return .cleared(argsRedacted: conditional.redactedArgs, trifectaHeld: true)
+    return .cleared(argsRedacted: conditional.redactedArgs, trifectaHeld: trifectaHeld)
   }
 }
 

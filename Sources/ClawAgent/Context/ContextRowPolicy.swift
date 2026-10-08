@@ -4,8 +4,8 @@ import Foundation
 extension ContextRowID {
   /// The grapheme cap this row is assembled under, or nil when it is uncapped. The four system rows
   /// carry no cap, and neither does the lessons row — its content is already capped at three
-  /// lessons and 1536 bytes when the set is built. The four truncatable rows are scaled against
-  /// whatever the fixed sections left.
+  /// lessons and 1536 bytes when the set is built. Memory/history/recall/skills caps scale against
+  /// what the fixed sections leave; the journal has its own cap and spends space by priority.
   func resolve(in budget: ContextBudget, residualGraphemes: Int?) -> Int? {
     switch self {
     case .policy, .systemWorkspace, .tools, .metadata, .lessons:
@@ -20,6 +20,8 @@ extension ContextRowID {
         budget: budget,
         residualGraphemes: residualGraphemes
       )
+    case .journal:
+      JournalLimits.contextGraphemes
     case .history:
       scaledTruncatableCap(
         absolute: budget.historyCap,
@@ -105,6 +107,12 @@ enum ContextRowPolicy {
       truncatable: true
     ),
     RowSpec(id: .history, tier: .mixed, priority: ContextPriority(70), truncatable: true),
+    RowSpec(
+      id: .journal,
+      tier: .untrustedLabeled,
+      priority: ContextPriority(75),
+      truncatable: true
+    ),
     RowSpec(id: .recall, tier: .untrustedLabeled, priority: ContextPriority(80), truncatable: true),
     RowSpec(id: .skills, tier: .untrustedLabeled, priority: ContextPriority(90), truncatable: true),
   ]
