@@ -7,7 +7,7 @@ import GRDB
 extension RunStoreGRDB {
   public func journalExchangeInput(runID: Int64) throws(StoreError) -> JournalExchangeInput? {
     try database.readMapping { db in
-      let row = try Row.fetchOne(
+      let runRow = try Row.fetchOne(
         db,
         sql: """
           SELECT run.session_id, run.trigger_message_id, run.journal_admission, message.content
@@ -16,16 +16,19 @@ extension RunStoreGRDB {
           """,
         arguments: [runID, RunOrigin.interactive.rawValue]
       )
-      guard let row, let encodedAdmission: Data = row["journal_admission"],
-            let admission = try? JSONDecoder().decode(
-              JournalExchangeAdmission.self,
-              from: encodedAdmission
-            )
-      else {
+      guard let runRow, let encodedAdmission: Data = runRow["journal_admission"] else {
         return nil
       }
-      let sessionID: Int64 = row["session_id"]
-      let triggerMessageID: Int64 = row["trigger_message_id"]
+      let admission = try? JSONDecoder().decode(
+        JournalExchangeAdmission.self,
+        from: encodedAdmission
+      )
+      guard let admission else {
+        return nil
+      }
+
+      let sessionID: Int64 = runRow["session_id"]
+      let triggerMessageID: Int64 = runRow["trigger_message_id"]
       let proposalRow = try Row.fetchOne(
         db,
         sql: """
@@ -44,19 +47,20 @@ extension RunStoreGRDB {
           RunState.done.rawValue,
         ]
       )
-      let proposal: JournalExchangeInput.Proposal? = proposalRow.map { proposal in
-        let proposalTriggerID: Int64 = proposal["proposal_source_id"]
+      let supportingProposal: JournalExchangeInput.Proposal? = proposalRow.map { proposalRow in
+        let proposalSourceID: Int64 = proposalRow["proposal_source_id"]
         return JournalExchangeInput.Proposal(
-          sourceID: "message:\(proposalTriggerID)",
-          text: proposal["content"]
+          sourceID: "message:\(proposalSourceID)",
+          text: proposalRow["content"]
         )
       }
+
       return JournalExchangeInput(
         admission: admission,
         sessionID: sessionID,
         triggerMessageID: triggerMessageID,
-        ownerText: row["content"],
-        supportingProposal: proposal
+        ownerText: runRow["content"],
+        supportingProposal: supportingProposal
       )
     }
   }
@@ -69,24 +73,29 @@ extension RunStoreGRDB {
     guard let capture = turn.journalCapture else {
       return
     }
+
     JournalStoreGRDB.captureBestEffort(db, capture: capture, now: now) {
-      let row = try Row.fetchOne(
+      let runRow = try Row.fetchOne(
         db,
         sql: "SELECT trigger_message_id, journal_admission FROM runs WHERE id = ?",
         arguments: [turn.runID]
       )
-      guard let row, let encoded: Data = row["journal_admission"] else {
+      guard let runRow, let encodedAdmission: Data = runRow["journal_admission"] else {
         return false
       }
-      let admission = try JSONDecoder().decode(JournalExchangeAdmission.self, from: encoded)
+      let admission = try JSONDecoder().decode(
+        JournalExchangeAdmission.self,
+        from: encodedAdmission
+      )
       guard capture.scope == admission.scope else {
         return false
       }
       guard case .source(let source) = capture else {
         return true
       }
-      let triggerID: Int64 = row["trigger_message_id"]
-      return source.id == "message:\(triggerID)" && source.sessionID == turn.sessionID
+
+      let triggerMessageID: Int64 = runRow["trigger_message_id"]
+      return source.id == "message:\(triggerMessageID)" && source.sessionID == turn.sessionID
         && source.scope == admission.scope && source.occurredAt == admission.sourceTimestamp
         && source.day == admission.sourceDay && source.coderJobID == nil
     }

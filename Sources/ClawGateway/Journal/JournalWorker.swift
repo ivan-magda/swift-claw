@@ -56,6 +56,7 @@ public actor JournalWorker: Service {
     self.now = now
     self.logger = logger
     self.callIDs = callIDs
+
     let signal = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
     notifications = signal.stream
     notification = signal.continuation
@@ -67,13 +68,15 @@ public actor JournalWorker: Service {
   }
 
   func sweep(now: Date) async {
-    guard let task = enqueueSweep(now: now) else {
+    let drainTask = enqueueSweep(now: now)
+    guard let drainTask else {
       return
     }
+
     await withTaskCancellationHandler {
-      await task.value
+      await drainTask.value
     } onCancel: {
-      task.cancel()
+      drainTask.cancel()
     }
   }
 
@@ -88,6 +91,7 @@ public actor JournalWorker: Service {
     guard !running, !stopping else {
       return
     }
+
     running = true
     await cancelWhenGracefulShutdown {
       await withTaskGroup(of: Void.self) { group in
@@ -99,6 +103,7 @@ public actor JournalWorker: Service {
             _ = await self.enqueueSweep(now: self.now())
           }
         }
+
         group.addTask {
           while !Task.isCancelled {
             _ = await self.enqueueSweep(now: self.now())
@@ -109,10 +114,12 @@ public actor JournalWorker: Service {
             }
           }
         }
+
         await group.next()
         group.cancelAll()
       }
     }
+
     await shutdown()
   }
 }
@@ -124,21 +131,24 @@ private extension JournalWorker {
     guard !stopping else {
       return nil
     }
+
     pendingSweep = now
     if let drain {
       return drain
     }
-    let task = Task {
+
+    let drainTask = Task {
       await self.drainPending()
     }
-    drain = task
-    return task
+    drain = drainTask
+    return drainTask
   }
 
   func drainPending() async {
     defer {
       drain = nil
     }
+
     while !stopping, !Task.isCancelled, let sweepTime = pendingSweep {
       pendingSweep = nil
       do {
@@ -153,16 +163,16 @@ private extension JournalWorker {
 
   func drainCandidates(now: Date) async throws {
     var candidates = try store.pendingSources(ownerUserID: ownerUserID, now: now)
-    while !stopping, !Task.isCancelled, let first = candidates.first {
-      let daySources = candidates.filter {
-        $0.day == first.day
+    while !stopping, !Task.isCancelled, let firstCandidate = candidates.first {
+      let daySources = candidates.filter { source in
+        source.day == firstCandidate.day
       }
-      let binding = roster.startingRoute(
-        primaryIsCooling: await cooldown?.isCooling() == true
-      ).binding
+      let primaryIsCooling = await cooldown?.isCooling() == true
+      let binding = roster.startingRoute(primaryIsCooling: primaryIsCooling).binding
       guard !stopping, !Task.isCancelled else {
         return
       }
+
       let prepared: JournalPreparedSummary
       do {
         prepared = try codec.prepare(sources: daySources, binding: binding, budget: budget)
@@ -173,45 +183,50 @@ private extension JournalWorker {
         }
         continue
       }
+
       let callID = callIDs.next()
-      let source = prepared.sources[0]
-      let savedUsage = prepared.accountant.conservativeRow(
+      let firstSource = prepared.sources[0]
+      let conservativeUsage = prepared.accountant.conservativeRow(
         callID: callID,
         context: prepared.request.messages,
         observedCompletionTokens: 0,
         runID: nil,
-        sessionID: source.sessionID
+        sessionID: firstSource.sessionID
       )
-      let request = JournalStartRequest(
+      let startRequest = JournalStartRequest(
         sourceIDs: prepared.sources.map(\.id),
-        scope: source.scope,
-        day: source.day,
-        sessionID: source.sessionID,
+        scope: firstSource.scope,
+        day: firstSource.day,
+        sessionID: firstSource.sessionID,
         providerCallID: callID,
         estimate: prepared.estimate,
-        conservativeUsage: savedUsage,
+        conservativeUsage: conservativeUsage,
         budget: budget,
         costPolicy: binding.costPolicy
       )
+
+      let startOutcome = try store.startBatch(startRequest, now: self.now())
       let batch: JournalBatch
-      switch try store.startBatch(request, now: self.now()) {
+      switch startOutcome {
       case .deferred:
         pendingSweep = nil
         return
       case .obsolete:
-        let selected = Set(request.sourceIDs)
-        candidates.removeAll {
-          selected.contains($0.id)
+        let selectedSourceIDs = Set(startRequest.sourceIDs)
+        candidates.removeAll { source in
+          selectedSourceIDs.contains(source.id)
         }
         continue
       case .started(let started):
         batch = started
       }
-      let result = await summarizer.summarize(prepared, binding: binding, callID: callID)
-      try await publish(result, prepared: prepared, batch: batch)
-      let selected = Set(batch.sourceIDs)
-      candidates.removeAll {
-        selected.contains($0.id)
+
+      let summaryResult = await summarizer.summarize(prepared, binding: binding, callID: callID)
+      try await publish(summaryResult, prepared: prepared, batch: batch)
+
+      let selectedSourceIDs = Set(batch.sourceIDs)
+      candidates.removeAll { source in
+        selectedSourceIDs.contains(source.id)
       }
     }
   }
@@ -241,16 +256,19 @@ private extension JournalWorker {
       case .failed:
         outcome = .failed(redactedReason: result.redactedReason ?? "Journal summary failed")
       }
-      if try store.canPublish(batchID: batch.id), result.outcome == .notes {
+
+      let canPublish = try store.canPublish(batchID: batch.id)
+      if canPublish && result.outcome == .notes {
         do {
-          let text = codec.render(notes: result.notes, sources: prepared.sources)
-          if !text.isEmpty {
-            try files.append(day: batch.day, text: text)
+          let journalText = codec.render(notes: result.notes, sources: prepared.sources)
+          if !journalText.isEmpty {
+            try files.append(day: batch.day, text: journalText)
           }
         } catch {
           outcome = .failed(redactedReason: Self.fileFailureReason(error))
         }
       }
+
       try store.finishBatch(id: batch.id, outcome: outcome, usage: result.usage, now: finishedAt)
     }
   }

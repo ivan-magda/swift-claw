@@ -50,6 +50,7 @@ struct JournalHandlers: Sendable {
     guard isOwner(message) else {
       return await replies.sendPrivateBot(updateID: message.updateID, target: .chat(message.chatID))
     }
+
     do {
       return try await handleOwner(command, message: message)
     } catch {
@@ -65,25 +66,30 @@ struct JournalHandlers: Sendable {
     guard ownerUserID > 0, ownerUserID == surface.policy.ownerUserID else {
       return JournalDeleteResult(outcome: .failed, cancelledPendingCount: 0)
     }
+
     let store = surface.store
     let files = surface.files
     return await surface.mutationGate.perform {
-      let cancelled: Int
+      let cancelledPendingCount: Int
       do {
-        cancelled = try store.cancelDay(day, ownerUserID: ownerUserID, now: now)
+        cancelledPendingCount = try store.cancelDay(day, ownerUserID: ownerUserID, now: now)
       } catch {
         return JournalDeleteResult(outcome: .failed, cancelledPendingCount: 0)
       }
+
       // Cancellation commits first. File failure must not restore queued publication.
       let snapshot = files.load(day: day)
       do {
         try files.delete(day: day)
         return JournalDeleteResult(
           outcome: snapshot.outcome == .missing ? .missing : .deleted,
-          cancelledPendingCount: cancelled
+          cancelledPendingCount: cancelledPendingCount
         )
       } catch {
-        return JournalDeleteResult(outcome: .failed, cancelledPendingCount: cancelled)
+        return JournalDeleteResult(
+          outcome: .failed,
+          cancelledPendingCount: cancelledPendingCount
+        )
       }
     }
   }
@@ -96,21 +102,22 @@ private extension JournalHandlers {
     _ command: JournalCommand,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
-    let text: String
+    let replyText: String
     switch command {
     case .invalid:
-      text = CommandReplies.journalUsage
+      replyText = CommandReplies.journalUsage
     case .show(let day):
-      text = show(day: day)
+      replyText = show(day: day)
     case .status:
-      text = try await status(message: message)
+      replyText = try await status(message: message)
     case .delete(let day):
       return try await requestDelete(day: day, message: message)
     }
+
     return await replies.sendCanned(
       updateID: message.updateID,
       target: .chat(message.chatID),
-      text: text
+      text: replyText
     )
   }
 
@@ -122,15 +129,19 @@ private extension JournalHandlers {
     ) {
       try surface.store.status(ownerUserID: message.userID, now: now())
     }
-    let dates: String
+
+    let recentDates: String
     do {
-      dates = try surface.files.recentDays(limit: 10).map(\.isoDate).joined(separator: ", ")
+      recentDates = try surface.files.recentDays(limit: 10)
+        .map(\.isoDate)
+        .joined(separator: ", ")
     } catch {
       return JournalHealth.render(policy: surface.policy, status: status)
         + "\nRecent dates: unavailable"
     }
+
     return JournalHealth.render(policy: surface.policy, status: status)
-      + "\nRecent dates: \(dates.isEmpty ? "none" : dates)"
+      + "\nRecent dates: \(recentDates.isEmpty ? "none" : recentDates)"
   }
 
   func show(day: JournalDay) -> String {
@@ -146,6 +157,7 @@ private extension JournalHandlers {
       let heading = "Journal \(day.isoDate)\n"
       let notice = "\n[Shortened; read the workspace file for the full text.]"
       let limit = TelegramMessageLimits.maxPlainMessageCharacters
+
       if heading.count + snapshot.text.count <= limit {
         return heading + snapshot.text
       }
@@ -157,14 +169,15 @@ private extension JournalHandlers {
     day: JournalDay,
     message: IncomingMessage
   ) async throws(RoutingHalt) -> HandleOutcome {
-    let count = try await replies.perform(
+    let pendingSourceCount = try await replies.perform(
       "journal pending count",
       updateID: message.updateID,
       target: .chat(message.chatID)
     ) {
       try surface.store.pendingCount(day: day, ownerUserID: message.userID)
     }
-    let claim = try await replies.perform(
+
+    let claimOutcome = try await replies.perform(
       "journal delete claim",
       updateID: message.updateID,
       target: .chat(message.chatID)
@@ -175,15 +188,18 @@ private extension JournalHandlers {
         now: now()
       )
     }
-    guard case .claimed(let sessionID) = claim else {
+    guard case .claimed(let sessionID) = claimOutcome else {
       return replies.skipDuplicate(updateID: message.updateID)
     }
+
     await pendingConfirmations.park(.journalDelete(day: day), sessionID: sessionID)
+
     return await replies.sendCommandAck(
       updateID: message.updateID,
       target: .chat(message.chatID),
       text: """
-        Delete journal \(day.isoDate), including your edits, and cancel \(count) pending sources?
+        Delete journal \(day.isoDate), including your edits, and \
+        cancel \(pendingSourceCount) pending sources?
         In-flight summaries retain usage but cannot publish. Other days, conversations and \
         running Coder jobs remain. Later activity may recreate this date.
         Reply yes to confirm, or no to cancel.

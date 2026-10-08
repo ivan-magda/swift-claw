@@ -32,6 +32,7 @@ package struct JournalSummaryCodec: Sendable {
     guard sources.isEmpty == false else {
       throw JournalSummaryPreparationError.noSources
     }
+
     let outputCap = min(JournalLimits.outputTokens, budget.maxOutputTokens)
     let accountant = ProviderUsageAccountant(
       configuredReference: binding.configuredReference,
@@ -40,38 +41,46 @@ package struct JournalSummaryCodec: Sendable {
       costResolver: costResolver,
       outputCap: outputCap
     )
-    var candidates = Array(sources.prefix(JournalLimits.batchSources))
-    while let first = candidates.first {
+
+    var candidateSources = Array(sources.prefix(JournalLimits.batchSources))
+    while let firstSource = candidateSources.first {
       for reduction in Reduction.allCases {
-        let fitted: [JournalSource]
+        let fittedSources: [JournalSource]
         do {
-          fitted = try candidates.map {
+          fittedSources = try candidateSources.map {
             try fit($0, reduction: reduction)
           }
         } catch JournalValueError.sourceTooLarge {
           // Redaction can enlarge a bounded source; a tighter excerpt may still be representable.
           continue
         }
-        let request = try makeRequest(sources: fitted, binding: binding, outputCap: outputCap)
-        let bytes = try serializedRequest(request).count
+
+        let request = try makeRequest(
+          sources: fittedSources,
+          binding: binding,
+          outputCap: outputCap
+        )
+        let requestByteCount = try serializedRequest(request).count
         let estimate = accountant.preflightEstimate(context: request.messages)
-        guard bytes + Self.adapterEnvelopeAllowanceBytes <= JournalLimits.requestBytes,
+        guard requestByteCount + Self.adapterEnvelopeAllowanceBytes <= JournalLimits.requestBytes,
               estimate.inputTokens <= min(JournalLimits.inputTokens, budget.maxInputTokens)
         else {
           continue
         }
+
         return JournalPreparedSummary(
-          sources: fitted,
+          sources: fittedSources,
           request: request,
           accountant: accountant,
           estimate: estimate,
-          serializedRequestBytes: bytes
+          serializedRequestBytes: requestByteCount
         )
       }
-      guard candidates.count > 1 else {
-        throw JournalSummaryPreparationError.unrepresentableSource(id: first.id)
+
+      guard candidateSources.count > 1 else {
+        throw JournalSummaryPreparationError.unrepresentableSource(id: firstSource.id)
       }
-      candidates.removeLast()
+      candidateSources.removeLast()
     }
     throw JournalSummaryPreparationError.noSources
   }
@@ -80,41 +89,48 @@ package struct JournalSummaryCodec: Sendable {
     guard response.utf8.count <= JournalLimits.requestBytes else {
       throw JournalSummaryValidationError.invalidOutput
     }
+
     let content = FencedJSONReply.unfenced(response)
     let output = try JSONDecoder().decode(Output.self, from: Data(content.utf8))
     guard output.notes.count <= JournalLimits.notes else {
       throw JournalSummaryValidationError.invalidOutput
     }
+
     var notes: [JournalNote] = []
-    var total = 0
-    var originalTotal = 0
+    var redactedGraphemeTotal = 0
+    var originalGraphemeTotal = 0
     for note in output.notes {
-      let cited = sources.filter {
+      let citedSources = sources.filter {
         note.sourceIDs.contains($0.id)
       }
       guard !note.sourceIDs.isEmpty, Set(note.sourceIDs).count == note.sourceIDs.count,
-            cited.count == note.sourceIDs.count,
+            citedSources.count == note.sourceIDs.count,
             !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             note.text.count <= JournalLimits.noteGraphemes
       else {
         throw JournalSummaryValidationError.invalidOutput
       }
-      if note.attribution == .observedOperation, !cited.allSatisfy(Self.hasObservedEvidence) {
+      if note.attribution == .observedOperation,
+         !citedSources.allSatisfy(Self.hasObservedEvidence)
+      {
         throw JournalSummaryValidationError.unsupportedObservation
       }
-      originalTotal += note.text.count
-      let text = redact(note.text)
-      total += text.count
-      guard text.count <= JournalLimits.noteGraphemes, total <= JournalLimits.totalNoteGraphemes,
-            originalTotal <= JournalLimits.totalNoteGraphemes
+
+      originalGraphemeTotal += note.text.count
+      let redactedText = redact(note.text)
+      redactedGraphemeTotal += redactedText.count
+      guard redactedText.count <= JournalLimits.noteGraphemes,
+            redactedGraphemeTotal <= JournalLimits.totalNoteGraphemes,
+            originalGraphemeTotal <= JournalLimits.totalNoteGraphemes
       else {
         throw JournalSummaryValidationError.invalidOutput
       }
+
       notes.append(
         JournalNote(
           kind: note.kind,
           attribution: note.attribution,
-          text: text,
+          text: redactedText,
           sourceIDs: note.sourceIDs
         )
       )
@@ -126,27 +142,34 @@ package struct JournalSummaryCodec: Sendable {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "HH:mm"
+
     let lines = notes.map { note in
-      let cited = sources.filter {
+      let citedSources = sources.filter {
         note.sourceIDs.contains($0.id)
       }
-      let earliest = cited.min {
+      let earliestSource = citedSources.min {
         $0.occurredAt < $1.occurredAt
       }
       formatter.timeZone =
-        earliest.flatMap {
+        earliestSource.flatMap {
           TimeZone(identifier: $0.scope.timeZoneID)
         } ?? .gmt
       let time =
-        earliest.map {
+        earliestSource.map {
           formatter.string(from: $0.occurredAt)
         } ?? ""
-      let references = cited.map { source in
-        source.coderJobID.map {
-          "coder:" + $0.uuidString
-        } ?? source.id
-      }.joined(separator: ", ")
-      let text = redact(note.text).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+
+      let references =
+        citedSources
+        .map { source in
+          source.coderJobID.map {
+            "coder:" + $0.uuidString
+          } ?? source.id
+        }
+        .joined(separator: ", ")
+      let text = redact(note.text)
+        .split(whereSeparator: \.isWhitespace)
+        .joined(separator: " ")
       return "- [\(time)] \(text) (\(note.attribution.rawValue); \(references))"
     }
     return redact(lines.joined(separator: "\n"))
@@ -241,30 +264,33 @@ private extension JournalSummaryCodec {
     binding: LLMRouteBinding,
     outputCap: Int
   ) throws -> ChatRequest {
-    let ids = Set(sources.map(\.id))
-    var support: [JournalProposal] = []
-    var supportIDs: Set<String> = []
+    let activitySourceIDs = Set(sources.map(\.id))
+    var supportOnlyProposals: [JournalProposal] = []
+    var supportOnlySourceIDs: Set<String> = []
     let activities = try sources.map { source in
       let proposal = source.supportingProposal
-      if let proposal, !ids.contains(proposal.sourceID),
-         supportIDs.insert(proposal.sourceID).inserted
+      if let proposal, !activitySourceIDs.contains(proposal.sourceID),
+         supportOnlySourceIDs.insert(proposal.sourceID).inserted
       {
-        support.append(proposal)
+        supportOnlyProposals.append(proposal)
       }
       return try Activity(
         source: replacing(source, proposal: nil),
         supportingProposalID: proposal?.sourceID
       )
     }
+
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
-    let data = try encoder.encode(Records(activities: activities, supportOnly: support))
+    let recordsData = try encoder.encode(
+      Records(activities: activities, supportOnly: supportOnlyProposals)
+    )
     return ChatRequest(
       model: binding.wireModel,
       messages: [
         ChatMessage(role: .system, content: Self.systemPrompt),
         ChatMessage(role: .system, content: Self.outputSchema),
-        ChatMessage(role: .user, content: String(decoding: data, as: UTF8.self)),
+        ChatMessage(role: .user, content: String(decoding: recordsData, as: UTF8.self)),
       ],
       maxOutputTokens: outputCap,
       sessionID: sources.first.map {
@@ -306,6 +332,7 @@ private extension JournalSummaryCodec {
         )
       )
     }
+
     var evidence = try source.evidence.map {
       try JournalSanitizer.evidence($0, redact: redact)
     }
@@ -322,27 +349,32 @@ private extension JournalSummaryCodec {
         )
       }
     }
-    let ownerLimit: Int
-    let answerLimit: Int
+
+    let ownerTextLimit: Int
+    let assistantTextLimit: Int
     switch reduction {
     case .usefulExcerpt:
-      ownerLimit = 256
-      answerLimit = 512
+      ownerTextLimit = 256
+      assistantTextLimit = 512
     case .preferredText:
-      ownerLimit = JournalLimits.fittedOwnerTextGraphemes
-      answerLimit = JournalLimits.fittedAssistantTextGraphemes
+      ownerTextLimit = JournalLimits.fittedOwnerTextGraphemes
+      assistantTextLimit = JournalLimits.fittedAssistantTextGraphemes
     default:
-      ownerLimit = JournalLimits.ownerTextGraphemes
-      answerLimit = JournalLimits.assistantTextGraphemes
+      ownerTextLimit = JournalLimits.ownerTextGraphemes
+      assistantTextLimit = JournalLimits.assistantTextGraphemes
     }
+
     return try JournalSource(
       id: source.id,
       scope: source.scope,
       sessionID: source.sessionID,
       occurredAt: source.occurredAt,
       day: source.day,
-      ownerText: JournalSanitizer.shortened(redact(source.ownerText), limit: ownerLimit),
-      assistantText: JournalSanitizer.shortened(redact(source.assistantText), limit: answerLimit),
+      ownerText: JournalSanitizer.shortened(redact(source.ownerText), limit: ownerTextLimit),
+      assistantText: JournalSanitizer.shortened(
+        redact(source.assistantText),
+        limit: assistantTextLimit
+      ),
       supportingProposal: proposal,
       coderJobID: source.coderJobID,
       evidence: evidence

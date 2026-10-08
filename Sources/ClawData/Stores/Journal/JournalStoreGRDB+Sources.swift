@@ -7,7 +7,7 @@ import GRDB
 extension JournalStoreGRDB {
   public func pendingSources(ownerUserID: Int64, now: Date) throws(StoreError) -> [JournalSource] {
     try database.writeMapping { db in
-      let rows = try Row.fetchAll(
+      let candidateRows = try Row.fetchAll(
         db,
         sql: """
           SELECT * FROM journal_sources WHERE owner_user_id = ? AND state = ?
@@ -15,19 +15,25 @@ extension JournalStoreGRDB {
           """,
         arguments: [ownerUserID, SourceState.pending.rawValue, JournalLimits.sweepCandidates]
       )
-      var sources: [JournalSource] = []
-      for row in rows {
-        let source = try Self.decodeSource(row)
-        guard try Self.keepPending(db, source: source, now: now) else {
+
+      var pendingSources: [JournalSource] = []
+      for sourceRow in candidateRows {
+        let source = try Self.decodeSource(sourceRow)
+        let sourceRemainsPending = try Self.keepPending(db, source: source, now: now)
+        guard sourceRemainsPending else {
           continue
         }
-        sources.append(source)
+        pendingSources.append(source)
       }
+
       // Determine due days before returning their sources, even when frozen timezones differ.
-      for source in sources where try Self.dayIsDue(db, source: source, now: now) {
-        try Self.markDayDue(db, ownerUserID: ownerUserID, day: source.day)
+      for source in pendingSources {
+        let sourceDayIsDue = try Self.dayIsDue(db, source: source, now: now)
+        if sourceDayIsDue {
+          try Self.markDayDue(db, ownerUserID: ownerUserID, day: source.day)
+        }
       }
-      return try sources.filter { source in
+      return try pendingSources.filter { source in
         try Self.dayIsDue(db, source: source, now: now)
       }
     }
@@ -35,21 +41,22 @@ extension JournalStoreGRDB {
 
   public func skipSources(ids: [String], reason: String, now: Date) throws(StoreError) {
     try database.writeMapping { db in
-      for id in Set(ids) {
-        guard let row = try Row.fetchOne(
+      for sourceID in Set(ids) {
+        let sourceRow = try Row.fetchOne(
           db,
           sql: """
-              SELECT * FROM journal_sources WHERE source_id = ? AND state = ?
-              """,
-          arguments: [id, SourceState.pending.rawValue]
+            SELECT * FROM journal_sources WHERE source_id = ? AND state = ?
+            """,
+          arguments: [sourceID, SourceState.pending.rawValue]
         )
-        else {
+        guard let sourceRow else {
           continue
         }
-        try Self.closeSource(db, id: id)
+
+        try Self.closeSource(db, id: sourceID)
         try Self.recordStatus(
           db,
-          ownerUserID: row["owner_user_id"],
+          ownerUserID: sourceRow["owner_user_id"],
           outcome: .skipped(redactedReason: reason),
           now: now,
           skipped: 1,
@@ -72,9 +79,11 @@ extension JournalStoreGRDB {
   ) {
     do {
       try db.inSavepoint {
-        guard try eligible() else {
+        let captureIsEligible = try eligible()
+        guard captureIsEligible else {
           return .commit
         }
+
         switch capture {
         case .source(let source):
           try insertSource(db, source: source)
@@ -221,9 +230,9 @@ extension JournalStoreGRDB {
     guard let row else {
       return false
     }
-    let count: Int = row["count"]
-    let due: Bool = row["due"] ?? false
-    return due || count >= JournalLimits.batchSources
+    let pendingSourceCount: Int = row["count"]
+    let hasDueMark: Bool = row["due"] ?? false
+    return hasDueMark || pendingSourceCount >= JournalLimits.batchSources
   }
 
   static func markDayDue(_ db: Database, ownerUserID: Int64, day: JournalDay) throws {

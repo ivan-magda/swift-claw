@@ -30,7 +30,7 @@ package struct JournalSummarizer: Sendable {
     binding: LLMRouteBinding,
     callID: ProviderCallID
   ) async -> JournalSummaryResult {
-    let outcome = await ProviderDeadlineCoordinator.raceBuffered(
+    let providerOutcome = await ProviderDeadlineCoordinator.raceBuffered(
       deadlineSeconds: JournalLimits.inferenceDeadlineSeconds,
       clock: clock
     ) {
@@ -40,9 +40,10 @@ package struct JournalSummarizer: Sendable {
         return .failed(error)
       }
     }
-    switch outcome {
+
+    switch providerOutcome {
     case .response(let response):
-      let usage = reconciled(response, prepared: prepared, callID: callID)
+      let usage = reconciledUsage(response, prepared: prepared, callID: callID)
       do {
         guard response.toolCalls.isEmpty else {
           throw JournalSummaryValidationError.invalidOutput
@@ -66,9 +67,13 @@ package struct JournalSummarizer: Sendable {
       let usage: ProviderUsage? =
         switch accounting {
         case .completed(let response):
-          reconciled(response, prepared: prepared, callID: callID)
-        case .mayHaveStarted(let observed):
-          conservative(prepared, callID: callID, observed: observed)
+          reconciledUsage(response, prepared: prepared, callID: callID)
+        case .mayHaveStarted(let observedCompletionTokens):
+          conservativeUsage(
+            prepared,
+            callID: callID,
+            observedCompletionTokens: observedCompletionTokens
+          )
         case .notStarted:
           nil
         }
@@ -83,8 +88,12 @@ package struct JournalSummarizer: Sendable {
         switch Self.failureAccounting(error) {
         case .notStarted:
           nil
-        case .mayHaveStarted(let observed):
-          conservative(prepared, callID: callID, observed: observed)
+        case .mayHaveStarted(let observedCompletionTokens):
+          conservativeUsage(
+            prepared,
+            callID: callID,
+            observedCompletionTokens: observedCompletionTokens
+          )
         }
       return JournalSummaryResult(
         outcome: .failed,
@@ -109,7 +118,7 @@ private extension JournalSummarizer {
     return ProviderFailureAccounting.classify(error)
   }
 
-  func reconciled(
+  func reconciledUsage(
     _ response: ChatResponse,
     prepared: JournalPreparedSummary,
     callID: ProviderCallID
@@ -123,15 +132,15 @@ private extension JournalSummarizer {
     )
   }
 
-  func conservative(
+  func conservativeUsage(
     _ prepared: JournalPreparedSummary,
     callID: ProviderCallID,
-    observed: Int
+    observedCompletionTokens: Int
   ) -> ProviderUsage {
     prepared.accountant.conservativeRow(
       callID: callID,
       context: prepared.request.messages,
-      observedCompletionTokens: observed,
+      observedCompletionTokens: observedCompletionTokens,
       runID: nil,
       sessionID: prepared.sources[0].sessionID
     )

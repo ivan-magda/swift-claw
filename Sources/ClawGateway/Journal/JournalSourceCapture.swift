@@ -12,8 +12,10 @@ public struct JournalSourceCapture: Sendable {
   }
 
   public func scope(userID: Int64, chatID: Int64, mode: ChatMode) -> JournalScope? {
-    guard mode == .direct, let scope = policy.scope,
-          userID == scope.ownerUserID, chatID == scope.ownerUserID
+    guard mode == .direct,
+          let scope = policy.scope,
+          userID == scope.ownerUserID,
+          chatID == scope.ownerUserID
     else {
       return nil
     }
@@ -21,12 +23,14 @@ public struct JournalSourceCapture: Sendable {
   }
 
   public func admission(message: IncomingMessage, mode: ChatMode) -> JournalExchangeAdmission? {
-    guard let scope = scope(userID: message.userID, chatID: message.chatID, mode: mode),
+    let scope = scope(userID: message.userID, chatID: message.chatID, mode: mode)
+    guard let scope,
           let sourceTimestamp = message.sourceTimestamp,
           let timeZone = TimeZone(identifier: scope.timeZoneID)
     else {
       return nil
     }
+
     return JournalExchangeAdmission(
       scope: scope,
       sourceTimestamp: sourceTimestamp,
@@ -42,12 +46,14 @@ public struct JournalSourceCapture: Sendable {
     guard policy.scope?.ownerUserID == input.admission.scope.ownerUserID else {
       return nil
     }
-    let proposal = input.supportingProposal.flatMap { proposal in
+
+    let supportingProposal = input.supportingProposal.flatMap { proposal in
       try? JournalProposal(
         sourceID: proposal.sourceID,
         text: bounded(proposal.text, limit: JournalLimits.proposalGraphemes)
       )
     }
+
     do {
       let source = try JournalSource(
         id: "message:\(input.triggerMessageID)",
@@ -57,11 +63,12 @@ public struct JournalSourceCapture: Sendable {
         day: input.admission.sourceDay,
         ownerText: bounded(input.ownerText, limit: JournalLimits.ownerTextGraphemes),
         assistantText: bounded(reply, limit: JournalLimits.assistantTextGraphemes),
-        supportingProposal: proposal,
+        supportingProposal: supportingProposal,
         coderJobID: nil,
-        evidence: evidence.prefix(JournalLimits.evidenceEntries).compactMap {
-          try? JournalSanitizer.evidence($0, redact: redact)
-        }
+        evidence: evidence.prefix(JournalLimits.evidenceEntries)
+          .compactMap {
+            try? JournalSanitizer.evidence($0, redact: redact)
+          }
       )
       return .source(source)
     } catch {
@@ -74,12 +81,16 @@ public struct JournalSourceCapture: Sendable {
     result: CoderResult,
     completedAt: Date
   ) -> JournalCaptureOutcome? {
-    guard let scope = job.journalScope, policy.scope?.ownerUserID == scope.ownerUserID,
-          job.origin.requesterUserID == scope.ownerUserID, job.origin.chatID == scope.ownerUserID,
-          result.state.isTerminal, let timeZone = TimeZone(identifier: scope.timeZoneID)
+    guard let scope = job.journalScope,
+          policy.scope?.ownerUserID == scope.ownerUserID,
+          job.origin.requesterUserID == scope.ownerUserID,
+          job.origin.chatID == scope.ownerUserID,
+          result.state.isTerminal,
+          let timeZone = TimeZone(identifier: scope.timeZoneID)
     else {
       return nil
     }
+
     var evidence = [
       try? JournalEvidence(
         outcome: .coder(result.state),
@@ -96,22 +107,28 @@ public struct JournalSourceCapture: Sendable {
     ].compactMap {
       $0
     }
+
     for check in result.reportedChecks.prefix(JournalLimits.evidenceEntries - evidence.count) {
-      if let entry = try? JournalEvidence(
+      let checkEvidence = try? JournalEvidence(
         outcome: .workerReportedChecks,
         jobID: job.id,
         name: "Worker-reported check",
         detail: bounded(check, limit: JournalLimits.evidenceFieldGraphemes)
-      ) {
-        evidence.append(entry)
+      )
+      if let checkEvidence {
+        evidence.append(checkEvidence)
       }
     }
-    let task = [
+
+    let taskText = [
       job.prepared.request.task ?? job.prepared.canonicalSource,
       job.prepared.request.instructions,
-    ].compactMap {
+    ]
+    .compactMap {
       $0
-    }.joined(separator: "\n")
+    }
+    .joined(separator: "\n")
+
     do {
       let source = try JournalSource(
         id: "coder:\(job.id.uuidString)",
@@ -119,7 +136,7 @@ public struct JournalSourceCapture: Sendable {
         sessionID: job.origin.sessionID,
         occurredAt: completedAt,
         day: JournalDay.containing(completedAt, timeZone: timeZone),
-        ownerText: bounded(task, limit: JournalLimits.ownerTextGraphemes),
+        ownerText: bounded(taskText, limit: JournalLimits.ownerTextGraphemes),
         assistantText: bounded(result.summary, limit: JournalLimits.assistantTextGraphemes),
         supportingProposal: nil,
         coderJobID: job.id,
@@ -132,16 +149,17 @@ public struct JournalSourceCapture: Sendable {
   }
 
   func toolEvidence(exchanges: [ToolExchange]) -> [JournalEvidence] {
-    exchanges.flatMap(\.observations).prefix(JournalLimits.evidenceEntries).compactMap {
-      observation in
-      // Persisted prose is not proof of an operation. Only the dispatcher-owned status is evidence.
-      try? JournalEvidence(
-        outcome: .tool(observation.status),
-        jobID: nil,
-        name: bounded(observation.toolName, limit: JournalLimits.evidenceFieldGraphemes),
-        detail: nil
-      )
-    }
+    exchanges.flatMap(\.observations)
+      .prefix(JournalLimits.evidenceEntries)
+      .compactMap { observation in
+        // Persisted prose is not proof of an operation. Only the dispatcher-owned status is evidence.
+        try? JournalEvidence(
+          outcome: .tool(observation.status),
+          jobID: nil,
+          name: bounded(observation.toolName, limit: JournalLimits.evidenceFieldGraphemes),
+          detail: nil
+        )
+      }
   }
 }
 
@@ -149,6 +167,7 @@ public struct JournalSourceCapture: Sendable {
 
 private extension JournalSourceCapture {
   func bounded(_ text: String, limit: Int) -> String {
-    JournalSanitizer.shortened(redact(text), limit: limit)
+    let redactedText = redact(text)
+    return JournalSanitizer.shortened(redactedText, limit: limit)
   }
 }

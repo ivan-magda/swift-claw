@@ -13,11 +13,12 @@ public struct JournalStoreGRDB: JournalStore {
 
   public func canPublish(batchID: UUID) throws(StoreError) -> Bool {
     try database.readMapping { db in
-      try String.fetchOne(
+      let batchState = try String.fetchOne(
         db,
         sql: "SELECT state FROM journal_batches WHERE id = ?",
         arguments: [batchID.uuidString]
-      ) == BatchState.started.rawValue
+      )
+      return batchState == BatchState.started.rawValue
     }
   }
 
@@ -33,7 +34,8 @@ public struct JournalStoreGRDB: JournalStore {
     now: Date
   ) throws(StoreError) -> Int {
     try database.writeMapping { db in
-      let count = try Self.unpublishedCount(db, ownerUserID: ownerUserID, day: day)
+      let unpublishedSourceCount = try Self.unpublishedCount(db, ownerUserID: ownerUserID, day: day)
+
       try db.execute(
         sql: """
           UPDATE journal_sources SET state = ?, payload = NULL
@@ -60,7 +62,8 @@ public struct JournalStoreGRDB: JournalStore {
           BatchState.started.rawValue,
         ]
       )
-      if count > 0 {
+
+      if unpublishedSourceCount > 0 {
         try Self.recordStatus(
           db,
           ownerUserID: ownerUserID,
@@ -70,27 +73,30 @@ public struct JournalStoreGRDB: JournalStore {
           interrupted: 0
         )
       }
-      return count
+      return unpublishedSourceCount
     }
   }
 
   public func status(ownerUserID: Int64, now: Date) throws(StoreError) -> JournalStatus {
     try database.readMapping { db in
-      let row = try Row.fetchOne(
+      let statusRow = try Row.fetchOne(
         db,
         sql: "SELECT * FROM journal_status WHERE owner_user_id = ?",
         arguments: [ownerUserID]
       )
-      let outcomeData: Data? = row?["last_outcome"]
+      let encodedLastOutcome: Data? = statusRow?["last_outcome"]
+
+      let unpublishedSourceCount = try Self.unpublishedCount(db, ownerUserID: ownerUserID, day: nil)
+      let lastOutcome = try encodedLastOutcome.map { encodedOutcome in
+        try JSONDecoder().decode(JournalOutcome.self, from: encodedOutcome)
+      }
       return JournalStatus(
-        pendingCount: try Self.unpublishedCount(db, ownerUserID: ownerUserID, day: nil),
-        lastOutcome: try outcomeData.map {
-          try JSONDecoder().decode(JournalOutcome.self, from: $0)
-        },
-        lastOutcomeAt: row?["last_outcome_ts"],
-        skippedCount: row?["skipped_count"] ?? 0,
-        interruptedCount: row?["interrupted_count"] ?? 0,
-        lastRedactedError: row?["last_redacted_error"]
+        pendingCount: unpublishedSourceCount,
+        lastOutcome: lastOutcome,
+        lastOutcomeAt: statusRow?["last_outcome_ts"],
+        skippedCount: statusRow?["skipped_count"] ?? 0,
+        interruptedCount: statusRow?["interrupted_count"] ?? 0,
+        lastRedactedError: statusRow?["last_redacted_error"]
       )
     }
   }
@@ -139,7 +145,7 @@ extension JournalStoreGRDB {
     skipped: Int,
     interrupted: Int
   ) throws {
-    let reason: String? =
+    let redactedErrorReason: String? =
       switch outcome {
       case .invalidSummary(let reason), .failed(let reason), .skipped(let reason):
         reason
@@ -162,7 +168,7 @@ extension JournalStoreGRDB {
         now,
         skipped,
         interrupted,
-        reason,
+        redactedErrorReason,
       ]
     )
   }
