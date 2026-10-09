@@ -55,10 +55,7 @@ struct RepositoryInventory: Sendable, Equatable {
     var entries: [String: Entry] = [:]
     var remaining = byteLimit
     for raw in Set(rawPaths) {
-      try Task.checkCancellation()
-      guard ContinuousClock.now < git.deadline else {
-        throw CoderGitFailure.deadline
-      }
+      _ = try CoderCommand.remainingTime(until: git.deadline)
       guard let path = String(bytes: raw, encoding: .utf8) else {
         throw Failure.unavailable
       }
