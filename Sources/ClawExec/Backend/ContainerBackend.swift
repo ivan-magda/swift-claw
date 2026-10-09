@@ -24,6 +24,10 @@ public actor ContainerBackend {
   // Head start the host watchdog grants the runner's own timeout + teardown, so in the
   // cooperative case the runner always reports its typed outcome before the watchdog fires.
   static let hostWatchdogSlack: Duration = .seconds(2)
+  /// Why this host cannot run the sandbox at all; reported before any subprocess starts.
+  static let unsupportedHostReason = "execute_code requires macOS 26 or newer on arm64"
+  /// The failure recorded when shutdown overtakes sandbox preparation.
+  static let shuttingDownReason = "sandbox backend is shutting down"
 
   let settings: ExecSandboxSettings
   let stateRoot: URL
@@ -103,7 +107,7 @@ public actor ContainerBackend {
 
   public func versionAvailability() async -> BackendAvailability {
     guard supportedHost() else {
-      return .unavailable(reason: ownerSafe("execute_code requires macOS 26 or newer on arm64"))
+      return .unavailable(reason: ownerSafe(Self.unsupportedHostReason))
     }
 
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
@@ -139,7 +143,7 @@ public actor ContainerBackend {
 
   public func probe() async -> BackendAvailability {
     guard supportedHost() else {
-      return .unavailable(reason: ownerSafe("execute_code requires macOS 26 or newer on arm64"))
+      return .unavailable(reason: ownerSafe(Self.unsupportedHostReason))
     }
 
     let deadline = now().advanced(by: Self.ordinaryCommandTimeout)
