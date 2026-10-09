@@ -8,7 +8,7 @@ enum ScheduleReplies {
   /// The confirm prompt previews the next 3 fire times.
   static let confirmPreviewCount = 3
 
-  static let exampleLine = "Example: /schedule every weekday at 07:00, summarize my unread items"
+  static let exampleLine = ScheduleDraftProblem.example
 
   static var parseFailed: String {
     "I couldn't turn that into a schedule. \(exampleLine)"
