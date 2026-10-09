@@ -5,8 +5,6 @@ import Foundation
 import Logging
 import Testing
 
-@testable import ClawGateway
-
 @Suite
 struct AcceptanceTests {
   // Survives restart: the offset persists and a redelivered update is deduped.

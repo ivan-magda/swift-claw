@@ -1,4 +1,3 @@
-import ClawAuth
 import ClawCore
 import ClawTestSupport
 import Foundation

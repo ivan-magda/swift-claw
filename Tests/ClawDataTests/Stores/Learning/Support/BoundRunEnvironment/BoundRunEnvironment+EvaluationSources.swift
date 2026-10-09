@@ -2,8 +2,6 @@ import ClawCore
 import Foundation
 import GRDB
 
-@testable import ClawData
-
 enum EvaluationCorruption: CaseIterable {
   case missing
   case duplicate

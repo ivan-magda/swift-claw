@@ -1,4 +1,3 @@
-import ClawAgent
 import ClawData
 import ClawTestSupport
 import ClawWorkspace

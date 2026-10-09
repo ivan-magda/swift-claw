@@ -4,7 +4,6 @@ import ClawCore
 import ClawData
 import ClawTelegram
 import ClawTestSupport
-import ClawWorkspace
 import Foundation
 import GRDB
 import Logging
