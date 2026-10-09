@@ -152,6 +152,29 @@ public enum ProgressText {
     return prefix + leaf.suffix(limit - prefix.count)
   }
 
+  /// Whether a `file_read`/`file_write` path may be shown as a preview: workspace-relative, with no
+  /// home, drive or backslash form, no control characters, and no empty, `.` or `..` component.
+  /// Dispatch and the reducer both apply it, so neither layer trusts the other to have vetted it.
+  package static func isWorkspaceRelativePath(_ path: String) -> Bool {
+    guard !path.isEmpty, !path.hasPrefix("/"), !path.hasPrefix("~"),
+          !path.contains("\\"), !path.contains(":")
+    else {
+      return false
+    }
+
+    let hasControlCharacters = path.unicodeScalars.contains { scalar in
+      CharacterSet.controlCharacters.contains(scalar)
+    }
+    guard !hasControlCharacters else {
+      return false
+    }
+
+    let components = path.split(separator: "/", omittingEmptySubsequences: false)
+    return components.allSatisfy { component in
+      !component.isEmpty && component != "." && component != ".."
+    }
+  }
+
   public static func preview(_ text: String, secretValues: [String], limit: Int) -> String {
     var originalRedactor = StreamingSecretRedactor(
       secretValues: secretValues,

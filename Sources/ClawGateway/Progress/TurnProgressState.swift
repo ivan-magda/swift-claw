@@ -235,7 +235,7 @@ private extension TurnProgressState {
 
       selectedPreview = page
     case BuiltinToolNames.fileRead, BuiltinToolNames.fileWrite:
-      guard isWorkspaceRelativePath(preview) else {
+      guard ProgressText.isWorkspaceRelativePath(preview) else {
         return nil
       }
 
@@ -268,26 +268,6 @@ private extension TurnProgressState {
     }
 
     return ProgressText.webPagePreview(url, secretValues: secretValues)
-  }
-
-  func isWorkspaceRelativePath(_ path: String) -> Bool {
-    guard !path.isEmpty, !path.hasPrefix("/"), !path.hasPrefix("~"),
-          !path.contains("\\"), !path.contains(":")
-    else {
-      return false
-    }
-
-    let hasControlCharacters = path.unicodeScalars.contains { scalar in
-      CharacterSet.controlCharacters.contains(scalar)
-    }
-    guard !hasControlCharacters else {
-      return false
-    }
-
-    let components = path.split(separator: "/", omittingEmptySubsequences: false)
-    return components.allSatisfy { component in
-      !component.isEmpty && component != "." && component != ".."
-    }
   }
 }
 
