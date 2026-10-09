@@ -218,3 +218,30 @@ private extension CodexBackendTests {
     }
   }
 }
+
+// MARK: - Command deadline
+
+extension CodexBackendTests {
+  @Test
+  func commandIsRefusedOnceTheJobDeadlineHasPassed() throws {
+    // given
+    let context = CodexCommandContext(
+      environment: [:],
+      directory: FileManager.default.temporaryDirectory.path,
+      tracking: .preApprovalReadOnly,
+      phase: .prepare,
+      deadline: ContinuousClock.now.advanced(by: .seconds(-1))
+    )
+
+    // when
+    let failure = #expect(throws: CoderGitFailure.self) {
+      try context.command(executable: "/usr/bin/true", arguments: [])
+    }
+
+    // then
+    guard case .deadline = failure else {
+      Issue.record("Expected the exhausted job deadline, got \(String(describing: failure))")
+      return
+    }
+  }
+}
