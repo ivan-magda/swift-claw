@@ -308,10 +308,8 @@ private extension ScheduledLearningStoreGRDB {
     if let payloadBytes {
       guard eligibility.reachesEvaluator,
             exclusion == nil,
-            let decoded = try? JSONDecoder().decode(EvidencePayload.self, from: payloadBytes),
+            let decoded = CanonicalJSON.decodeExactly(EvidencePayload.self, from: payloadBytes),
             decoded.schemaVersion == EvidenceLimits.schemaVersion,
-            let canonical = try? CanonicalJSON.data(encoding: decoded),
-            canonical == payloadBytes,
             digest(runID: runID, eligibility: eligibility, payloadBytes: payloadBytes).rawValue
             == digestRaw
       else {

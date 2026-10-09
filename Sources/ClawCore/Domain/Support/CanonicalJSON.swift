@@ -33,6 +33,25 @@ public enum CanonicalJSON {
     return try data(fromJSONObject: JSONSerialization.jsonObject(with: encoded))
   }
 
+  /// Decodes `bytes` only when they are already the canonical encoding of the decoded value.
+  ///
+  /// Decoding alone tolerates unknown keys, reordered keys and alternate JSON spellings, so a
+  /// persisted record could change on disk and still decode to the same value. Re-encoding and
+  /// comparing the bytes closes that gap.
+  package static func decodeExactly<Value: Codable>(
+    _ type: Value.Type,
+    from bytes: Data
+  ) -> Value? {
+    guard let value = try? JSONDecoder().decode(type, from: bytes),
+          let canonicalBytes = try? data(encoding: value),
+          canonicalBytes == bytes
+    else {
+      return nil
+    }
+
+    return value
+  }
+
   /// JSONSerialization bridges booleans through NSNumber; exclude CFBoolean before accepting an
   /// integer so strict frozen schemas cannot treat `true` as `1`.
   package static func integer(_ value: Any?) -> Int? {
